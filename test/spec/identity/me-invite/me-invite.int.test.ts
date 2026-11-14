@@ -296,6 +296,21 @@ it('[AC-B1-11k#12] 本人未成年隐藏本人码但保留已绑定状态，其�
     WHERE app_id = ${f.appId} AND id = ${f.uid}`.execute(kit.db);
   await sql`UPDATE app.users SET nickname = '私有邀请人昵称'
     WHERE app_id = ${parent.appId} AND id = ${parent.uid}`.execute(kit.db);
+  // B1-02zzza: phone_bound=true needs a real encrypted number so masked_phone can be derived.
+  const number = '13800138000';
+  const { FIELD_CRYPTO } = await import('../../../../apps/api/src/modules/platform/index.ts');
+  type FieldCrypto = import('../../../../apps/api/src/modules/platform/index.ts').FieldCrypto;
+  const crypto = kit.app.get<FieldCrypto>(FIELD_CRYPTO);
+  await kit.db
+    .withSchema('app')
+    .updateTable('users')
+    .set({
+      phone_hmac: crypto.blindIndex(number, 'users.phone'),
+      phone_cipher: Buffer.from(crypto.encrypt(number, 'users.phone'), 'utf8'),
+    })
+    .where('app_id', '=', f.appId)
+    .where('id', '=', f.uid)
+    .execute();
   await verified(kit, f, '2010-05-20');
   const userBefore = await sql`SELECT * FROM app.users WHERE id = ${f.uid}`.execute(kit.db);
   const realnameBefore = await sql`SELECT * FROM app.realname WHERE user_id = ${f.uid}`.execute(
@@ -311,6 +326,7 @@ it('[AC-B1-11k#12] 本人未成年隐藏本人码但保留已绑定状态，其�
     invite_backfill: { eligible: false, deadline_at: null },
     identity_level: 'realname',
     phone_bound: true,
+    masked_phone: '138****8000',
     balance: { available_fen: 0, withdrawable_fen: 0, estimated_total_fen: 0 },
     union_bindings: [
       { platform: 'taobao', status: 'unbound' },

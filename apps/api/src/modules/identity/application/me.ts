@@ -22,10 +22,16 @@
 //   (at most one, unique index appeals_processing_target_key), read-only from app.appeals (risk
 //   is its single writer; never written here); null otherwise, and null when there is no
 //   processing account appeal (a value outside frozen / banned is a broken row and also null).
+// - masked_phone (B1-02zzza, BR-ID-08: the number a step_up code goes to, for display only): the
+//   current users.phone_cipher of this account, decrypted here and masked with the domain's
+//   maskPhone (BR-TEXT-02 手机号脱敏, 138****8000); null when no phone is bound (phone_hmac null).
+//   D10-1610: a bound phone whose cipher is missing or fails to decrypt is shown as null and the
+//   read still succeeds, with one warn carrying only the user id and the reason. The full number
+//   never leaves read().
 import type { components } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
-import type { Clock, RootLogger } from '../../platform/index.ts';
+import type { Clock, FieldCrypto, RootLogger } from '../../platform/index.ts';
 import type { RiskStateService } from '../../risk/index.ts';
 import type { SmsConfigReader } from './sms-codes.ts';
 import {
@@ -35,7 +41,8 @@ import {
   withinBackfill,
 } from '@couli/domain';
 import { currentStates } from '../domain/login.ts';
-import { DEFAULT_AVATAR } from '../domain/registration.ts';
+import { maskPhone } from '../domain/mask-phone.ts';
+import { DEFAULT_AVATAR, PHONE_CIPHER_CONTEXT } from '../domain/registration.ts';
 import { userConsentRecords } from '../infra/consent-records.ts';
 import type { RealnameStatusReader } from './identity-level.ts';
 import type { RealnameReader } from '../infra/realname-reader.ts';
@@ -73,6 +80,8 @@ export interface MeServiceOptions {
    * check (B1-13d's reader). The name and birth date never reach the response or the logs.
    */
   readonly realname: RealnameStatusReader & Pick<RealnameReader, 'verified'>;
+  /** The field cipher, to show the bound phone masked (masked_phone); the number is not kept. */
+  readonly crypto: Pick<FieldCrypto, 'decrypt'>;
 }
 
 export interface MeService {
@@ -112,8 +121,41 @@ function configuredNumber(value: unknown, key: string): number {
   return value;
 }
 
+/**
+ * masked_phone of a bound phone (phone_hmac set; the caller returns null when unbound). D10-1610:
+ * a cipher that is missing or does not decrypt is a broken row; GET /v1/me still answers, with
+ * null and one warn naming only the user and the reason (never the number, the cipher or the
+ * error text).
+ */
+export function maskedBoundPhone(
+  deps: Pick<MeServiceOptions, 'crypto' | 'logger'>,
+  cipher: Uint8Array | null,
+  userId: string,
+): string | null {
+  const { crypto, logger } = deps;
+  if (cipher === null) {
+    logger.warn(
+      { user_id: userId, reason: 'phone_cipher_missing' },
+      'identity_me_masked_phone_unavailable',
+    );
+    return null;
+  }
+  let phone: string;
+  try {
+    phone = crypto.decrypt(Buffer.from(cipher).toString('utf8'), PHONE_CIPHER_CONTEXT);
+  } catch {
+    logger.warn(
+      { user_id: userId, reason: 'phone_decrypt_failed' },
+      'identity_me_masked_phone_unavailable',
+    );
+    return null;
+  }
+  return maskPhone(phone);
+}
+
 export function createMeService(options: MeServiceOptions): MeService {
-  const { clock, config, logger, risk, balance, unionBindings, activity, realname } = options;
+  const { clock, config, logger, risk, balance, unionBindings, activity, realname, crypto } =
+    options;
   const db = options.db.withSchema('app');
   // Same module: the reader runs on options.db (GET /v1/me opens no transaction).
   const deletionStages = createDeletionStageReader({ db: options.db });
@@ -177,6 +219,9 @@ export function createMeService(options: MeServiceOptions): MeService {
         eligible = orders === 0 && !claims && !children;
       }
       const phoneBound = user.phone_hmac !== null;
+      const maskedPhone = phoneBound
+        ? maskedBoundPhone({ crypto, logger }, user.phone_cipher, subject.userId)
+        : null;
       const verifiedRealname =
         realnameStatus === 'verified'
           ? await realname.verified(db, { app_id: subject.appId, user_id: subject.userId })
@@ -217,6 +262,7 @@ export function createMeService(options: MeServiceOptions): MeService {
             ? 'realname'
             : 'phone',
         phone_bound: phoneBound,
+        masked_phone: maskedPhone,
         balance: summary,
         union_bindings: [
           { platform: 'taobao', status: taobao },
