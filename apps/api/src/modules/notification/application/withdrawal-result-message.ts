@@ -22,6 +22,7 @@ import type {
   RootLogger,
 } from '../../platform/index.ts';
 import type { PushEvent, PushSendCore } from './push-send.ts';
+import { withdrawFailReasonText } from './withdraw-fail-texts.ts';
 import { withdrawRejectReasonText } from './withdraw-reject-texts.ts';
 
 /** D10-260: the wallet.withdrawal_changed payload, frozen. */
@@ -97,15 +98,6 @@ const CHANNEL_NAMES: Readonly<Record<string, string>> = Object.freeze({
   wechat: '微信零钱',
 });
 
-/** BR-TEXT-08 失败原因映射 (withdraw_fail_reason), and its WeChat items (BR-WDR-33 ⑥). */
-const FAIL_REASONS: Readonly<Record<string, string>> = Object.freeze({
-  PAYEE_NOT_EXIST: '收款支付宝账号不存在',
-  PAYEE_USER_INFO_ERROR: '收款账号姓名与实名信息不一致',
-  PAYEE_ACCOUNT_STATUS_ERROR: '收款支付宝账号状态异常',
-  USER_CONFIRM_TIMEOUT: '没有在规定时间内到微信确认收款',
-  USER_REQUEST_CANCEL: '已按你的要求取消',
-});
-
 /**
  * BR-TEXT-08 细则「修改收款账号」= 显示, code by code (D10-229, not a PAYEE_ prefix); the same list
  * as payout's isAccountFailure (domain/display.ts), which this synchronous renderer cannot import.
@@ -116,8 +108,6 @@ const ACCOUNT_FAILURE_CODES: ReadonlySet<string> = new Set([
   'PAYEE_ACCOUNT_STATUS_ERROR',
 ]);
 
-/** BR-TEXT-08 细则 (D10-228): the fallback used as {reason}, without an amount. */
-const FAIL_FALLBACK = '收款渠道未能完成这笔转账';
 /** Appended after the WD_FAILED sentence for an account-type failure code. */
 const CHANGE_ACCOUNT = '，可修改收款账号后重试';
 
@@ -125,14 +115,11 @@ function isAccountFailure(code: string | null): boolean {
   return code !== null && ACCOUNT_FAILURE_CODES.has(code);
 }
 
-function lookup(table: Readonly<Record<string, string>>, code: string | null): string | null {
-  return code !== null && Object.hasOwn(table, code) ? (table[code] as string) : null;
-}
-
 function reasonOf(code: WithdrawalResultCode, facts: WithdrawalResultFacts): string {
   // BR-TEXT-08 驳回原因: contracts/texts.default.json withdraw_reject_reason.<CODE>.title (CT-26zo).
   if (code === 'WD_REJECTED') return withdrawRejectReasonText(facts.reject_reason_code);
-  if (code === 'WD_FAILED') return lookup(FAIL_REASONS, facts.fail_code) ?? FAIL_FALLBACK;
+  // BR-TEXT-08 失败原因映射 + 兜底 (D10-228): withdraw_fail_reason.<CODE>.title (CT-26zp).
+  if (code === 'WD_FAILED') return withdrawFailReasonText(facts.fail_code);
   return '';
 }
 

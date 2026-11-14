@@ -1,0 +1,98 @@
+{
+  "risk_note": "RV1 (contracts, notification). CT-26zp (D10-1525): the six withdraw_fail_reason.*.title keys enter contracts/texts.default.json word for word — PAYEE_NOT_EXIST, PAYEE_USER_INFO_ERROR, PAYEE_ACCOUNT_STATUS_ERROR (BR-TEXT-08 失败原因映射), USER_CONFIRM_TIMEOUT, USER_REQUEST_CANCEL (BR-TEXT-08 / BR-WDR-33 ⑥) and the {reason} fallback without an amount (D10-228); notification's WD_FAILED {reason} now reads them (application/withdraw-fail-texts.ts, like CT-26zo's withdraw-reject-texts.ts) and the FAIL_REASONS / FAIL_FALLBACK constants are gone, so there is one copy; push sentences unchanged, ACCOUNT_FAILURE_CODES untouched. Host (local-heavy): test/spec content + notification + contracts 5228, notification + content unit 997, tsc -b apps/api test / depcruise 0. Codex is out of quota until 11-20 (D10-1604): rule tests, spec-test review and code review by three separate fresh desktop Claude subagents (model opus), the implementation by a fourth.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Fresh desktop Claude subagent (prompt = claude-run.sh review --review-type general --dry-run, read-only, not the implementer's or the test writer's context), base = rule-test head eecfe123e. Round 1: pass, no findings; validate-output ok. couli-runs/CT-26zp/review-general-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests test/spec/content/withdraw-fail-reason-texts/** by a fresh desktop Claude subagent (tester claude-independent, approvals #36, D10-1604). spec-test r1 by another fresh desktop Claude subagent (read-only): pass, no findings, 1 out-of-scope (the change-account judgement for unlisted PAYEE_ codes, logged); validate-output ok. Container red/1 ok, problems 0, 16 red."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#1] 字典恰含六个失败原因键（五个码 + 兜底），值逐字原句，版本不变",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#2] 六个实际登记的失败原因键均由已有前缀唯一归为资金术语",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#3] PAYEE_NOT_EXIST 取字典原句，WD_FAILED 完整推送逐字不变",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#3] PAYEE_USER_INFO_ERROR 取字典原句，WD_FAILED 完整推送逐字不变",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#3] PAYEE_ACCOUNT_STATUS_ERROR 取字典原句，WD_FAILED 完整推送逐字不变",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#3] USER_CONFIRM_TIMEOUT 取字典原句，WD_FAILED 完整推送逐字不变",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#3] USER_REQUEST_CANCEL 取字典原句，WD_FAILED 完整推送逐字不变",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码 UNKNOWN_FAIL_CODE 使用兜底句及默认推送",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码 SYSTEM_ERROR 使用兜底句及默认推送",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码  使用兜底句及默认推送",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码 toString 使用兜底句及默认推送",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码 constructor 使用兜底句及默认推送",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码 __proto__ 使用兜底句及默认推送",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码 null 使用兜底句及默认推送",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#5] 其余变体 WD_SUCCESS、WD_REJECTED 推送不受影响",
+    "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#6] 通知渲染及字典读取入口不再另存六句失败原因文案（含兜底句）"
+  ],
+  "task": "CT-26zp",
+  "spec_commit": "eecfe123e6afe448ca0e678bbfd9390a509595f3",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "eecfe123e6afe448ca0e678bbfd9390a509595f3",
+      "tree": "b211e9b92b3847f6dd0abe944f65913676ece289",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-14T06:18:00Z",
+      "finished_at": "2026-11-14T06:18:04Z",
+      "red_tests": [
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#1] 字典恰含六个失败原因键（五个码 + 兜底），值逐字原句，版本不变",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#2] 六个实际登记的失败原因键均由已有前缀唯一归为资金术语",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#3] PAYEE_NOT_EXIST 取字典原句，WD_FAILED 完整推送逐字不变",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#3] PAYEE_USER_INFO_ERROR 取字典原句，WD_FAILED 完整推送逐字不变",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#3] PAYEE_ACCOUNT_STATUS_ERROR 取字典原句，WD_FAILED 完整推送逐字不变",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#3] USER_CONFIRM_TIMEOUT 取字典原句，WD_FAILED 完整推送逐字不变",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#3] USER_REQUEST_CANCEL 取字典原句，WD_FAILED 完整推送逐字不变",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码 UNKNOWN_FAIL_CODE 使用兜底句及默认推送",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码 SYSTEM_ERROR 使用兜底句及默认推送",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码  使用兜底句及默认推送",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码 toString 使用兜底句及默认推送",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码 constructor 使用兜底句及默认推送",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码 __proto__ 使用兜底句及默认推送",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#4] 未知或缺失失败码 null 使用兜底句及默认推送",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#5] 其余变体 WD_SUCCESS、WD_REJECTED 推送不受影响",
+        "test/spec/content/withdraw-fail-reason-texts/rules.test.ts > [AC-CT-26zp#6] 通知渲染及字典读取入口不再另存六句失败原因文案（含兜底句）"
+      ],
+      "expected": ["test/spec/content/withdraw-fail-reason-texts/rules.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "0e96e4ac2185a3f59b15270404acb0f78b761608f9fcf91fe59846f3a5b95ba1"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "e0c7fc7b6a4ba803d7f20c8caee732a82709aaaa",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  }
+}
