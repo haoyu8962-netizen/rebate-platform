@@ -89,3 +89,9 @@ GET /admin/v1/recon-diffs/{recon_diff_id} added the new `blacklist_after_credit`
 POST /admin/v1/recon-diffs/{recon_diff_id}/close added the new `blacklist_after_credit` enum value to the `data/recon_diff/type` response property for the response status `200`
 POST /admin/v1/recon-diffs/{recon_diff_id}/restore added the new `blacklist_after_credit` enum value to the `data/recon_diff/type` response property for the response status `200`
 POST /admin/v1/recon-diffs/{recon_diff_id}/write-off added the new `blacklist_after_credit` enum value to the `data/recon_diff/type` response property for the response status `200`
+# B1-02zzz (D10-1566 W-2 / D10-1567, accepted by D10-1598): SendSmsCodeRequest makes phone conditionally
+# required (if purpose is login / bind then phone is required); purpose=step_up no longer takes a phone
+# and is sent to the account's bound phone. Intentional: no released client sends step_up with a phone
+# (the native step-up pages are not live), login / bind requests stay valid unchanged.
+POST /v1/auth/sms-codes added 'if' subschema to the request body
+POST /v1/auth/sms-codes added 'then' subschema to the request body

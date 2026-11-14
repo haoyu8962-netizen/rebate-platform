@@ -60,6 +60,11 @@ import {
 import { createTipsService, type TipsService } from './application/tips.ts';
 import { createMeService, type MeService, type MeReadPorts } from './application/me.ts';
 import {
+  createBoundPhoneReader,
+  createSmsCodeRequestService,
+  type SmsCodeRequestService,
+} from './application/sms-code-requests.ts';
+import {
   createPayoutAccountReader,
   type PayoutAccountConfigPort,
   type PayoutAccountReader,
@@ -186,6 +191,7 @@ import {
   REFRESH,
   REVERIFY,
   SMS_CODES,
+  SMS_CODE_REQUESTS,
   SMS_LOGIN,
   STEP_UP,
   THIRD_PARTY_IDENTITY,
@@ -891,6 +897,26 @@ export class IdentityModule {
                   hooks: { ...(risk === null ? {} : risk.smsHooks), ...smsRisk.smsHooks },
                   appEnv: config.appEnv,
                   stagingTestPhones,
+                }),
+        },
+        {
+          // B1-02zzz (BR-ID-08): step_up codes go to the token account's bound phone.
+          provide: SMS_CODE_REQUESTS,
+          inject: [
+            SMS_CODES,
+            { token: DB, optional: true },
+            { token: FIELD_CRYPTO, optional: true },
+          ],
+          useFactory: (
+            sms: SmsCodeService | null,
+            db?: Kysely<Database>,
+            fieldCrypto?: FieldCrypto,
+          ): SmsCodeRequestService | null =>
+            sms === null || db === undefined || fieldCrypto === undefined
+              ? null
+              : createSmsCodeRequestService({
+                  sms,
+                  boundPhone: createBoundPhoneReader(db, fieldCrypto),
                 }),
         },
         {

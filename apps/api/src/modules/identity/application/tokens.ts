@@ -9,6 +9,12 @@ export const IDENTITY_CONFIG = Symbol('IDENTITY_CONFIG');
 /** The SmsCodeService; null when the process has no Redis or no configuration reader. */
 export const SMS_CODES = Symbol('SMS_CODES');
 
+/**
+ * The public send of POST /v1/auth/sms-codes (sms-code-requests.ts, B1-02zzz): the step_up number
+ * from the token account; null when the process has no SMS codes, database or field cipher.
+ */
+export const SMS_CODE_REQUESTS = Symbol('SMS_CODE_REQUESTS');
+
 // Nest tokens of the session wiring (B1-02h, identity.module.ts).
 
 /** The TokenKeyProvider (access-tokens.ts): configured key, or an ephemeral one in local / test. */

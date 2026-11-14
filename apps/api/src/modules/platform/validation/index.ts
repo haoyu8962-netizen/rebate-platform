@@ -48,7 +48,10 @@
 //   error's instancePath; a name is the path from the part's root, its JSON-pointer segments
 //   unescaped (~1 → /, ~0 → ~) and joined with '.', array indexes included (items.0.price). An
 //   error at the root of a part with no property (for example a missing body) names the part
-//   itself ('body', 'querystring', 'params', 'headers'). `msg` is a non-empty fallback text
+//   itself ('body', 'querystring', 'params', 'headers'). An `if` error (Ajv's companion of a
+//   failed `then` / `else`, reported at the `if` schema's location) is left out when the same
+//   validation has any error with another keyword, which already names the offending field; when
+//   only `if` errors remain they are kept, so `fields` is never empty. `msg` is a non-empty fallback text
 //   that never repeats a submitted value. Any other error (not FST_ERR_VALIDATION, or without
 //   an array `validation`) → undefined: the caller handles it as before.
 //
@@ -251,8 +254,11 @@ export function validationErrorEnvelope(
     return undefined;
 
   const part = 'validationContext' in error ? String(error.validationContext) : 'body';
+  const issues = error.validation as ValidationIssue[];
+  const hasNonIf = issues.some((issue) => issue.keyword !== 'if');
   const fields = new Set<string>();
-  for (const issue of error.validation as ValidationIssue[]) {
+  for (const issue of issues) {
+    if (issue.keyword === 'if' && hasNonIf) continue;
     const segments =
       issue.instancePath === ''
         ? []
