@@ -1,0 +1,112 @@
+{
+  "risk_note": "CT-13i (FU-CT13G-DEDUP-HARDEN + FU-EVENT-DEDUP-APP-KEY; 编排 D10-1519 / D10-1520 / D10-1553 / D10-1580 / D10-1597 / D10-1604). Migration 0143_event-dedup-app-key.sql re-adds event_dedup_pkey as PRIMARY KEY (app_id, event_type, event_id) (规划/02 §12.3: business unique keys start with app_id). Safe with data: app_id NOT NULL since 0140 and the old key (event_type, event_id) was stricter, so existing rows always satisfy the new key; the cost is the ACCESS EXCLUSIVE lock during the index build, removed before go-live under FU-MIGRATION-INDEX-CONCURRENTLY. db/schema.sql: only the pkey line changes (local snapshot, D10-1553 fixed practice; main's schema / migrations unchanged since). recordEvents: in-batch dedupe (first wins, duplicates counted as before), inserts in ascending (app_id, event_type, event_id) order (no 40P01 between reverse-order concurrent batches), ON CONFLICT on the new key, clock read once per call. Rule tests: attempt 1 (Codex) 5 cases in test/spec/analytics/record-events-harden/** (#3 / #6 moved to CT-13j, merged); attempt 2 (fresh independent Claude via claude-run.sh, Codex out of quota, D10-1604) only the two ledger-declared blocks of the frozen CT-13e test/spec/db/events/storage.int.test.ts, reason ruling_correction (overturned D10-1488 → ruling D10-1519, basis 规划/02 §12.3; CT-06zzzzzh #113): #1 primary key columns now (app_id, event_type, event_id), #2 the same key in another app is insertable while the same app still gets 23505. Red with the current trusted root: red/8 PASS (5 rule tests red for the right reason; CT-13e changes only in the 2 declared blocks). Test machine (couli-runs/CT-13i/run9/): without the implementation the CT-13e file has exactly #1 and #2 red (tests/3, the old rule); with the implementation verify:fast green and test/spec/db + test/spec/analytics 216 files 2361/2361 green (tests/4; D10-1580: test/spec/db/** before pushing a table change). The CT-13j frozen tests stay green. No money / attribution path.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Codex money r1 pass (no findings, before the CT-13e change). Codex out of quota until 11-20 (D10-1604, approvals 36): money re-reviewed by a fresh independent Claude via claude-run.sh; attempt 2 gave no usable output (checklist cited 0143 lines outside the diff, validation failed, counted), attempt 3 pass with no findings, full scope (couli-runs/CT-13i/review-claude-money-r3.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "r1 pass (no findings) on the 5 Codex rule tests; r2 incremental pass: the increment in the task's test paths is only the two declared CT-13e blocks (couli-runs/CT-13i/review-claude-spec-test-r2.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/analytics/record-events-harden/app-key.int.test.ts > [AC-CT-13i#1] 去重表的真实主键依次为 app_id、event_type、event_id，不绑定迁移编号",
+    "test/spec/analytics/record-events-harden/app-key.int.test.ts > [AC-CT-13i#2] 两 app 的同类型同 ID 各接受一次，各自读取原内容；重放只在本 app 内去重",
+    "test/spec/analytics/record-events-harden/batch.int.test.ts > [AC-CT-13i#5] 入库前批内去重并按完整键升序提交，重复保留首条且逐条计数",
+    "test/spec/analytics/record-events-harden/concurrency.int.test.ts > [AC-CT-13i#4] 反序批次 [A,B]/[B,A]（same-type）真实重叠仍均成功，无 40P01 且每键仅一行",
+    "test/spec/analytics/record-events-harden/concurrency.int.test.ts > [AC-CT-13i#4] 反序批次 [A,B]/[B,A]（different-types）真实重叠仍均成功，无 40P01 且每键仅一行"
+  ],
+  "modify_existing": [
+    {
+      "file": "test/spec/db/events/storage.int.test.ts",
+      "test": "[AC-CT-13e#1] events has the analytics columns, nullable identities and RANGE(server_at); dedup is unpartitioned",
+      "reason": "ruling_correction",
+      "overturned": "D10-1488",
+      "basis": "规划/02 §12.3",
+      "before": "it('[AC-CT-13e#1] events has the analytics columns, nullable identities and RANGE(server_at); dedup is unpartitioned', async () => {\n  await ready(h);\n  const columns = await sql`SELECT table_name, column_name, udt_name, is_nullable\n    FROM information_schema.columns WHERE table_schema = 'app'\n    AND table_name IN ('events', 'event_dedup')`.execute(h.app);\n  for (const [table, fields] of [\n    [\n      'events',\n      [\n        ['app_id', 'text', 'NO'],\n        ['event_id', 'uuid', 'NO'],\n        ['event_type', 'text', 'NO'],\n        ['name', 'text', 'NO'],\n        ['props', 'jsonb', 'NO'],\n        ['user_id', 'uuid', 'YES'],\n        ['device_id', 'uuid', 'YES'],\n        ['client_at', 'timestamptz', 'NO'],\n        ['server_at', 'timestamptz', 'NO'],\n      ],\n    ],\n    [\n      'event_dedup',\n      [\n        ['app_id', 'text', 'NO'],\n        ['event_type', 'text', 'NO'],\n        ['event_id', 'uuid', 'NO'],\n        ['created_at', 'timestamptz', 'NO'],\n      ],\n    ],\n  ] as const) {\n    for (const [column, type, nullable] of fields) {\n      expect(columns.rows).toContainEqual({\n        table_name: table,\n        column_name: column,\n        udt_name: type,\n        is_nullable: nullable,\n      });\n    }\n  }\n  const shape = await sql`SELECT relname::text AS name, relkind::text AS kind,\n    pg_get_partkeydef(oid) AS key FROM pg_class\n    WHERE oid IN (to_regclass('app.events'), to_regclass('app.event_dedup')) ORDER BY relname`.execute(\n    h.app,\n  );\n  expect(shape.rows).toEqual([\n    { name: 'event_dedup', kind: 'r', key: null },\n    { name: 'events', kind: 'p', key: 'RANGE (server_at)' },\n  ]);\n  const primaryKey = await sql`SELECT ARRAY(\n    SELECT a.attname::text FROM unnest(c.conkey) WITH ORDINALITY k(num, pos)\n    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.num ORDER BY k.pos\n    ) AS columns FROM pg_constraint c\n    WHERE c.conrelid = to_regclass('app.event_dedup') AND c.contype = 'p'`.execute(h.app);\n  expect(primaryKey.rows).toEqual([{ columns: ['event_type', 'event_id'] }]);\n});",
+      "after": "it('[AC-CT-13e#1] events has the analytics columns, nullable identities and RANGE(server_at); dedup is unpartitioned', async () => {\n  await ready(h);\n  const columns = await sql`SELECT table_name, column_name, udt_name, is_nullable\n    FROM information_schema.columns WHERE table_schema = 'app'\n    AND table_name IN ('events', 'event_dedup')`.execute(h.app);\n  for (const [table, fields] of [\n    [\n      'events',\n      [\n        ['app_id', 'text', 'NO'],\n        ['event_id', 'uuid', 'NO'],\n        ['event_type', 'text', 'NO'],\n        ['name', 'text', 'NO'],\n        ['props', 'jsonb', 'NO'],\n        ['user_id', 'uuid', 'YES'],\n        ['device_id', 'uuid', 'YES'],\n        ['client_at', 'timestamptz', 'NO'],\n        ['server_at', 'timestamptz', 'NO'],\n      ],\n    ],\n    [\n      'event_dedup',\n      [\n        ['app_id', 'text', 'NO'],\n        ['event_type', 'text', 'NO'],\n        ['event_id', 'uuid', 'NO'],\n        ['created_at', 'timestamptz', 'NO'],\n      ],\n    ],\n  ] as const) {\n    for (const [column, type, nullable] of fields) {\n      expect(columns.rows).toContainEqual({\n        table_name: table,\n        column_name: column,\n        udt_name: type,\n        is_nullable: nullable,\n      });\n    }\n  }\n  const shape = await sql`SELECT relname::text AS name, relkind::text AS kind,\n    pg_get_partkeydef(oid) AS key FROM pg_class\n    WHERE oid IN (to_regclass('app.events'), to_regclass('app.event_dedup')) ORDER BY relname`.execute(\n    h.app,\n  );\n  expect(shape.rows).toEqual([\n    { name: 'event_dedup', kind: 'r', key: null },\n    { name: 'events', kind: 'p', key: 'RANGE (server_at)' },\n  ]);\n  const primaryKey = await sql`SELECT ARRAY(\n    SELECT a.attname::text FROM unnest(c.conkey) WITH ORDINALITY k(num, pos)\n    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.num ORDER BY k.pos\n    ) AS columns FROM pg_constraint c\n    WHERE c.conrelid = to_regclass('app.event_dedup') AND c.contype = 'p'`.execute(h.app);\n  expect(primaryKey.rows).toEqual([{ columns: ['app_id', 'event_type', 'event_id'] }]);\n});",
+      "mutation": [
+        {
+          "mutant": "the old rule: migration 0143 and the CT-13i implementation not in the tree (primary key still (event_type, event_id)); couli-ci --tests test/spec/db/events/storage.int.test.ts (CT-13i tests/3) put this test red, the other tests of the file green",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/db/events/storage.int.test.ts",
+      "test": "[AC-CT-13e#2] dedup rejects repeats across dates and apps; distinct type or UUID remains insertable",
+      "reason": "ruling_correction",
+      "overturned": "D10-1488",
+      "basis": "规划/02 §12.3",
+      "before": "it('[AC-CT-13e#2] dedup rejects repeats across dates and apps; distinct type or UUID remains insertable', async () => {\n  await ready(h);\n  const row = dedup();\n  await insert(h.app, 'event_dedup', row);\n  for (const override of [{}, { created_at: '2027-01-01T00:00:00Z' }, { app_id: 'other-app' }]) {\n    expect(await state(insert(h.app, 'event_dedup', { ...row, ...override }))).toBe('23505');\n  }\n  expect(await state(insert(h.app, 'event_dedup', { ...row, event_type: 'link_jump' }))).toBe('ok');\n  expect(await state(insert(h.app, 'event_dedup', { ...row, event_id: randomUUID() }))).toBe('ok');\n  expect(await read(h, 'event_dedup', row['event_id'])).toHaveLength(2);\n});",
+      "after": "it('[AC-CT-13e#2] dedup rejects repeats across dates and apps; distinct type or UUID remains insertable', async () => {\n  await ready(h);\n  const row = dedup();\n  await insert(h.app, 'event_dedup', row);\n  for (const override of [{}, { created_at: '2027-01-01T00:00:00Z' }]) {\n    expect(await state(insert(h.app, 'event_dedup', { ...row, ...override }))).toBe('23505');\n  }\n  expect(await state(insert(h.app, 'event_dedup', { ...row, app_id: 'other-app' }))).toBe('ok');\n  expect(await state(insert(h.app, 'event_dedup', { ...row, event_type: 'link_jump' }))).toBe('ok');\n  expect(await state(insert(h.app, 'event_dedup', { ...row, event_id: randomUUID() }))).toBe('ok');\n  expect(await read(h, 'event_dedup', row['event_id'])).toHaveLength(3);\n});",
+      "mutation": [
+        {
+          "mutant": "the old rule: migration 0143 and the CT-13i implementation not in the tree (primary key still (event_type, event_id)); couli-ci --tests test/spec/db/events/storage.int.test.ts (CT-13i tests/3) put this test red, the other tests of the file green",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "task": "CT-13i",
+  "spec_commit": "d3618f232a9c6650c4aad2f4ac32533c3437ae4f",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d3618f232a9c6650c4aad2f4ac32533c3437ae4f",
+      "tree": "7ff36de682e8b6e90272eb963615dbdefe08c380",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-14T05:28:28Z",
+      "finished_at": "2026-11-14T05:28:36Z",
+      "red_tests": [
+        "test/spec/analytics/record-events-harden/app-key.int.test.ts > [AC-CT-13i#1] 去重表的真实主键依次为 app_id、event_type、event_id，不绑定迁移编号",
+        "test/spec/analytics/record-events-harden/app-key.int.test.ts > [AC-CT-13i#2] 两 app 的同类型同 ID 各接受一次，各自读取原内容；重放只在本 app 内去重",
+        "test/spec/analytics/record-events-harden/batch.int.test.ts > [AC-CT-13i#5] 入库前批内去重并按完整键升序提交，重复保留首条且逐条计数",
+        "test/spec/analytics/record-events-harden/concurrency.int.test.ts > [AC-CT-13i#4] 反序批次 [A,B]/[B,A]（same-type）真实重叠仍均成功，无 40P01 且每键仅一行",
+        "test/spec/analytics/record-events-harden/concurrency.int.test.ts > [AC-CT-13i#4] 反序批次 [A,B]/[B,A]（different-types）真实重叠仍均成功，无 40P01 且每键仅一行"
+      ],
+      "expected": [
+        "test/spec/analytics/record-events-harden/app-key.int.test.ts",
+        "test/spec/analytics/record-events-harden/batch.int.test.ts",
+        "test/spec/analytics/record-events-harden/concurrency.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "542d68b49d5f5a279b98dcc4835cce06d342eead948d07370caca4d66ecc9364"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "98bb018ad50be631d7967a395f2c0397153ded98",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  }
+}
