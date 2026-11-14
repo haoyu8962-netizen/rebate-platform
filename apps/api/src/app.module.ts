@@ -44,7 +44,7 @@ import {
   type StreamReviewOptions,
 } from './modules/agent/index.ts';
 import { AgentAdminModule } from './modules/agent/http/admin/index.ts';
-import { AdminAgentReportsModule } from './modules/admin/admin.module.ts';
+import { AdminAgentReportsModule, AdminDashboardModule } from './modules/admin/admin.module.ts';
 import { createEarningsReads } from './agent-earnings-reads.ts';
 import {
   CatalogAdminModule,
@@ -5051,6 +5051,10 @@ export class AppModule {
               AdminAgentReportsModule.forAdmin(),
             ]
           : []),
+        // admin's workbench GET /admin/v1/dashboard (B1-10w, 编排 D10-1401): guarded by
+        // AdminOperationGuard (dashboard.view, read only, no step-up, no audit row); cards trimmed
+        // to the account's points, each count through its module's exported count function.
+        ...(options.entry === 'admin' ? [AdminDashboardModule.forAdmin()] : []),
         // risk's /admin/v1 appeal console reads (B1-03zd, CT-24r; BR-ID-36): guarded by
         // AdminOperationGuard (risk.appeal, read only); identity's masked phones, normaliser and
         // phone holders, admin's display names and orders' sub-order numbers through ports; only a

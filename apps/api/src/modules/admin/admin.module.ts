@@ -5,9 +5,12 @@
 // (./admin-auth.module.ts, admin entry only), as are step-up and me/permissions (F1-06l).
 // B1-10t (编排 D10-1539): AdminAgentReportsModule mounts the agent report handling route
 // (adminHandleAgentReport) on the admin entry only; admin owns its transaction and its audit row.
+// B1-10w (编排 D10-1401): AdminDashboardModule mounts the workbench read (adminGetDashboard) on
+// the admin entry only, with one content config reader per process for its status switches.
 import { type DynamicModule, Global, Module } from '@nestjs/common';
 import type { DB as Database } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
+import { createContentReader } from '../content/index.ts';
 import {
   AUDIT_PORT,
   CLOCK,
@@ -20,11 +23,16 @@ import {
   createAgentReportHandler,
   type AgentReportHandler,
 } from './application/agent-report-handle.ts';
+import type { AdminDashboardDeps } from './application/dashboard.ts';
 import type { TotpReplayStore } from './domain/totp.ts';
 import {
   ADMIN_AGENT_REPORT_HANDLE,
   AdminAgentReportHandleController,
 } from './http/admin/agent-reports.controller.ts';
+import {
+  ADMIN_DASHBOARD_DEPS,
+  AdminDashboardController,
+} from './http/admin/dashboard.controller.ts';
 import { createAdminDisplayNameReader } from './infra/admin-display-names.ts';
 import { createAuditWriter } from './infra/audit-writer.ts';
 import { createPgTotpReplayStore } from './infra/totp-replay-pg.ts';
@@ -103,6 +111,41 @@ export class AdminAgentReportsModule {
                     createAuditWriter({ db: trx, clock, sensitiveKeys: SENSITIVE_KEYS }),
                   namesOn: (trx: Transaction<Database>) => createAdminDisplayNameReader(trx),
                 }),
+        },
+      ],
+    };
+  }
+}
+
+/**
+ * The workbench read (B1-10w, adminGetDashboard), admin entry only (app.module): guarded by
+ * platform's AdminOperationGuard (dashboard.view, read only, no step-up), which adminAuthModule
+ * provides on that entry. Read only, no audit row. Without the database the route registers and
+ * fails closed (50001).
+ */
+@Module({})
+export class AdminDashboardModule {
+  static forAdmin(): DynamicModule {
+    return {
+      module: AdminDashboardModule,
+      controllers: [AdminDashboardController],
+      providers: [
+        {
+          provide: ADMIN_DASHBOARD_DEPS,
+          inject: [CLOCK, { token: DB, optional: true }],
+          useFactory: (
+            clock: Clock,
+            db: Kysely<Database> | undefined,
+          ): AdminDashboardDeps | null => {
+            if (db === undefined) return null;
+            const reader = createContentReader({ db, clock });
+            return {
+              db,
+              clock,
+              config: async (appId: string, key: string) =>
+                (await reader.configValue(appId, key))?.value,
+            };
+          },
         },
       ],
     };

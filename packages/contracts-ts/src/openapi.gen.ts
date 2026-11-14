@@ -3286,10 +3286,13 @@ export interface paths {
          *       beneficiary_held_overdue `risk.freeze`, union_auth_expiring `union.account_auth` (counting
          *       rules in the BR each enum value names). A card the account may see is returned with
          *       `count=0` when nothing is waiting (the card still shows). A card whose module has not
-         *       shipped yet is left out exactly like a card without the point: the three fund cards
-         *       (withdraw_review_pending, settle_bill_pending, recon_diff_open) appear once the fund
-         *       line's console tasks ship. `route` is the console route the card opens, with its
-         *       filter; settle_bill_pending opens `/settle-bills?awaiting_confirm=true` and its `count`
+         *       shipped yet is left out exactly like a card without the point:
+         *       beneficiary_held_overdue is not returned for now, whatever the account holds (even
+         *       `risk.freeze`; 编排裁定 D10-1402); the other seven cards are returned, each counted by
+         *       its owning module (D10-1401), in enum order. `route` is the console route the card
+         *       opens, with its filter (withdraw_review_pending `/withdrawals?status=PENDING_REVIEW`,
+         *       recon_diff_open `/recon?status=open`, the others as in the examples);
+         *       settle_bill_pending opens `/settle-bills?awaiting_confirm=true` and its `count`
          *       equals the `total` of GET /admin/v1/settle-bills with `awaiting_confirm=true` (bills
          *       whose latest round has a DRAFT batch, AdminSettleBillAwaitingConfirm; 编排裁定
          *       D10-1402); `oldest_at` (optional, nullable) is the earliest waiting item's time;
