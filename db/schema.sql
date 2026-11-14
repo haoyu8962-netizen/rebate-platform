@@ -7767,7 +7767,7 @@ ALTER TABLE ONLY app.dict_items
 --
 
 ALTER TABLE ONLY app.event_dedup
-    ADD CONSTRAINT event_dedup_pkey PRIMARY KEY (event_type, event_id);
+    ADD CONSTRAINT event_dedup_pkey PRIMARY KEY (app_id, event_type, event_id);
 
 
 --
