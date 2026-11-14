@@ -3291,7 +3291,8 @@ export interface paths {
          *       `risk.freeze`; 编排裁定 D10-1402); the other seven cards are returned, each counted by
          *       its owning module (D10-1401), in enum order. `route` is the console route the card
          *       opens, with its filter (withdraw_review_pending `/withdrawals?status=PENDING_REVIEW`,
-         *       recon_diff_open `/recon?status=open`, the others as in the examples);
+         *       recon_diff_open `/recon?status=open`, union_auth_expiring `/unions` without a filter (the
+         *       few accounts each show their auth state; 编排裁定 D10-1651), the others as in the examples);
          *       settle_bill_pending opens `/settle-bills?awaiting_confirm=true` and its `count`
          *       equals the `total` of GET /admin/v1/settle-bills with `awaiting_confirm=true` (bills
          *       whose latest round has a DRAFT batch, AdminSettleBillAwaitingConfirm; 编排裁定

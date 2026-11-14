@@ -115,7 +115,7 @@ const CARDS: readonly CardSpec[] = [
   {
     key: 'union_auth_expiring',
     point: 'union.account_auth',
-    route: '/union/accounts?auth=expiring',
+    route: '/unions',
     count: plain(countUnionAuthPending),
   },
 ];
