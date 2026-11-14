@@ -1,0 +1,25 @@
+id: F1-08ba
+repo: rebate-platform
+title: 后台打款页（只读）：提现页签「打款队列」「结果待确认」——队列概览卡（adminGetPayoutOverview）、队列表（listAdminWithdrawals）、结果待确认表（adminListUnknownPayouts）、打款记录抽屉
+type: impl
+# 2026-11-14 入账（前端线 fe，编排 D10-1517 第一批 ②，打款页 design/specs/admin-payouts.md（负责人 2026-10-18 后台第 2 批定稿），拆四张依次做、不并行：F1-08ba 只读 → F1-08bb 执行所选 → F1-08bc 录入余额 → F1-08bd 解除暂停）。路由按规格：后台资源 withdrawals 的页签「打款队列」「结果待确认」；写操作以主干契约为准。
+# 资金页面（apps/admin/src/**/withdrawals/** 属 RV2）：Codex 额度用尽至 11-20（D10-1604），规则测试由独立 Claude 写、另一独立 Claude 审（approvals 第 36 条）；实现 Claude Opus；代码评审 money。写操作每次 StepUpModal（totp 档，BR-ID-34），提交中禁用、对话框保留；按钮按状态与权限点隐藏不置灰；阈值、时效从接口与配置取不写死；金额只经 @couli/money。任务书带 D10-1477、D10-1503。
+# 范围：只读。概览卡（开关、队列暂停、各通道水位 W / P、今日已发 / 限额，取 adminGetPayoutOverview，阈值不写死）；打款队列表（待执行 / 打款中，取 listAdminWithdrawals 的契约筛选）；结果待确认表（adminListUnknownPayouts，行【处置】进提现单详情，处置本身已由 F1-08aj 做）；行【打款记录】抽屉（详情 attempts 渲染）。不做：执行所选（F1-08bb）、录入余额（F1-08bc）、解除暂停（F1-08bd）——这些入口本单不出现。持 fund.view 或 payout.execute 才见页签。
+refs: [BR-WDR-14, BR-WDR-17, BR-WDR-18]
+refs_hash:
+  BR-WDR-14: 6328f3cda2e6
+  BR-WDR-17: f6119a685e00
+  BR-WDR-18: 9247640dde57
+deps: [F1-14c]
+paths:
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/texts/withdrawals.ts'
+test_paths:
+  - 'test/spec/frontend/admin-payouts-readonly/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-payouts-readonly/**'
+status: todo
+pr: null
