@@ -1,0 +1,72 @@
+{
+  "risk_note": "CT-13n (FU-EVENTS-CONTRACT-STORED-TEXT; 编排 D10-1626, openapi contract slot). Only the description of operationId ingestEvents in contracts/openapi.yaml changes (+8/−5): the dedup sentence now names (app_id, event_type, event_id) (CT-13i #92), and the outdated 'in the first step only the link_jump reports are stored (B1-06zo); the other events are accepted and not stored' becomes: every conforming event is stored (app.events), deduplicated by (app_id, event_type, event_id), a duplicate is neither an error nor counted in data.dropped_count; only a link_jump with the user's own access token additionally records link_open_attempts.jump_reported_at. No schema, parameter, requestBody, response or error-code change; codegen changed only the matching doc comment in packages/contracts-ts/src/openapi.gen.ts. Rule tests (independent Claude, D10-1604): 3 cases in test/spec/contracts/events-stored-text/** plus a kit guarding the requestBody / responses shape verbatim; red/1 PASS. Test machine: verify:fast green (includes contracts:check), test/spec/contracts 66 files 658/658 green.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Fresh independent Claude via claude-run.sh (Codex out of quota, D10-1604): contract r1 pass, no findings (couli-runs/CT-13n/review-claude-contract-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "spec-test r1 pass with one S2: [AC-CT-13n#2]'s 'stored' check would also accept a rewording that limits storage to link_jump events; left as a follow-up (FU-CT13N-STORED-TEXT-SCOPE) — the merged text states every conforming event is stored (couli-runs/CT-13n/review-claude-spec-test-r1.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/contracts/events-stored-text/stored-text.test.ts > [AC-CT-13n#1] ingestEvents 说明不再有「其余事件只受理不保存」「只有 link_jump 被保存」这类只收不存的说法",
+    "test/spec/contracts/events-stored-text/stored-text.test.ts > [AC-CT-13n#2] ingestEvents 说明写明合规事件落库，按 (app_id, event_type, event_id) 去重，旧的 (event_type, event_id) 说法不再出现",
+    "test/spec/contracts/events-stored-text/stored-text.test.ts > [AC-CT-13n#3] ingestEvents 说明写明只有带本人令牌的 link_jump 会写外跳上报时刻"
+  ],
+  "task": "CT-13n",
+  "spec_commit": "b3b3589d18c4efed53f2437fd96ca3dce9475599",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b3b3589d18c4efed53f2437fd96ca3dce9475599",
+      "tree": "2c7892825be8cdc01a76adb0fd9a9d354384e6ff",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-14T09:54:26Z",
+      "finished_at": "2026-11-14T09:54:29Z",
+      "red_tests": [
+        "test/spec/contracts/events-stored-text/stored-text.test.ts > [AC-CT-13n#1] ingestEvents 说明不再有「其余事件只受理不保存」「只有 link_jump 被保存」这类只收不存的说法",
+        "test/spec/contracts/events-stored-text/stored-text.test.ts > [AC-CT-13n#2] ingestEvents 说明写明合规事件落库，按 (app_id, event_type, event_id) 去重，旧的 (event_type, event_id) 说法不再出现",
+        "test/spec/contracts/events-stored-text/stored-text.test.ts > [AC-CT-13n#3] ingestEvents 说明写明只有带本人令牌的 link_jump 会写外跳上报时刻"
+      ],
+      "expected": ["test/spec/contracts/events-stored-text/stored-text.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "ac13abb3b20d960ab646fd56928670de973249b7d7a79e44d3df8290b36fe84b"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f2811d74f8ebdae087bd7be0d8681286d2234804",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  }
+}

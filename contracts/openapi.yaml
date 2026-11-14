@@ -2722,9 +2722,9 @@ paths:
         event_type is its `name`. Every event carries a client-generated `event_id` (UUID) created
         when the state transition happens and stored with it; 网络重试与队列重投沿用同一个 event_id，
         不换 (retries and redeliveries reuse it unchanged). The server deduplicates by
-        (event_type, event_id) (按 (event_type, event_id) 去重, 03 §6.2 第 9 条): a replayed
-        exposure, click or link_jump yields no second business event, and a duplicate is not an
-        error and is not counted as dropped.
+        (app_id, event_type, event_id) (按 (app_id, event_type, event_id) 去重, 03 §6.2 第 9 条):
+        a replayed exposure, click or link_jump yields no second business event, and a duplicate
+        is not an error and is not counted as dropped.
 
         受理语义 (D10-1471): one non-conforming event never fails the batch. The batch is accepted
         as a whole; each event that is not an object or does not conform to specs/events.yaml
@@ -2738,8 +2738,11 @@ paths:
         client's acknowledgement: on code=0 it removes the batch from its queue); on any failure it
         keeps the batch and later resends the same batch, which is safe because of the
         deduplication above. 受理只表示已收到并校验，不承诺已保存 (accepted does not mean
-        persisted): in the first step only the link_jump reports are stored (B1-06zo); the other
-        events are accepted and not stored.
+        persisted). Every conforming event is stored (合规事件落库, app.events), deduplicated by
+        (app_id, event_type, event_id): a duplicate is not an error and is not counted in
+        `data.dropped_count`. Only a link_jump sent with the user's own access token (带本人令牌)
+        additionally records the jump report time on that user's attempt
+        (link_open_attempts.jump_reported_at, 外跳上报时刻).
 
         link_jump (外跳每一步的结果) carries the `attempt_id` of the open (or H5 convert) response
         (§8.4) and `result` ∈ {requested, failed, unknown} (03 §4.5; replaces the former launched /
