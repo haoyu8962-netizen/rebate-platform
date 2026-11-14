@@ -8,6 +8,7 @@ type: impl
 # 规则测试（Codex，新目录只新增，CT-13g 的冻结用例一字不动、不需要 modify_existing，D10-1520）：两个 app 用同一个 event_id 各自都落库、互不可见；两次并发调用真的重叠（如用 advisory 锁 / 屏障让两边都进事务后再继续）；每条事件各读一次时钟测不过（用会前进的 Clock）；反序并发批次不死锁、各自计数正确。
 # 本机重活（D10-1477）：写手自检只对改动的文件跑 eslint 与 prettier；全量 typecheck / lint / 任何 vitest 不在本机裸跑，要跑就加 zsh ~/couli-orch/local-heavy.sh；交回后由本线在测试机跑 verify:fast。depcruise：只有 *.int.test.ts 能 import @couli/db/testing。
 # 2026-11-14 补（编排 D10-1553；以本条为准，取代 D10-1551 的 red_exempt）：原 #3（同键并发真重叠）、#6（每次调用只读一次 Clock）主干即绿，red_exempt 对新文件不生效，已由新鲜独立 Claude 逐字搬到 CT-13j（test/spec/analytics/record-events-behaviour/，改号 [AC-CT-13j#1] / [AC-CT-13j#2]）、以变异代替先红；本单只留 5 条照常先红，CT-13j 合并后那两条是冻结用例，本单实现须保持其绿。
+# 2026-11-14 补（编排 D10-1580 / D10-1597 / D10-1604；CT-06zzzzzh #113 已合并）：#92 复活。CT-13e 冻结用例 test/spec/db/events/storage.int.test.ts 的 #1（主键正好是 event_type, event_id）、#2（跨 app 同键被拒）钉的是 D10-1488 的旧口径，D10-1519 改为按 app 隔离（规划/02 §12.3「业务唯一键以 app_id 开头」）；按新原因 ruling_correction 登记修改（不挂 BR）。由不带实现上下文的独立 Claude（claude-run.sh，Codex 额度用尽至 11-20，D10-1604 / approvals 36）只改这两个块：#1 主键断言改为 (app_id, event_type, event_id)；#2 跨 app 同键改为两边都能插入、同 app 同键仍被拒。故 tester 改为 claude-independent（已写好的 5 条规则测试仍是 Codex 写的，证据如实记）。迁移号落地时重取（0143 不保留，D10-1580）。
 refs: []
 refs_hash: {}
 deps: [CT-13g]
@@ -18,9 +19,25 @@ paths:
   - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/analytics/record-events-harden/**'
+  - 'test/spec/db/events/storage.int.test.ts' # D10-1580：只改 CT-13e #1、#2（见 modify_existing）
 impl: claude
-tester: codex
+tester: claude-independent
 accept:
   - 'pnpm verify'
 status: todo
+modify_existing:
+  - file: 'test/spec/db/events/storage.int.test.ts'
+    test: '[AC-CT-13e#1] events has the analytics columns, nullable identities and RANGE(server_at); dedup is unpartitioned'
+    reason: ruling_correction
+    overturned: D10-1488
+    ruling: D10-1519
+    basis: '规划/02 §12.3'
+    note: '依 D10-1519 / D10-1580：去重表主键由 (event_type, event_id) 改为 (app_id, event_type, event_id)（规划/02 §12.3 业务唯一键以 app_id 开头，形状规则，08 无对应 BR）；本块只把主键列断言改成新三列，其余断言不动；反向验证：放回旧主键（不跑 0143）→ 本块变红'
+  - file: 'test/spec/db/events/storage.int.test.ts'
+    test: '[AC-CT-13e#2] dedup rejects repeats across dates and apps; distinct type or UUID remains insertable'
+    reason: ruling_correction
+    overturned: D10-1488
+    ruling: D10-1519
+    basis: '规划/02 §12.3'
+    note: '依 D10-1519 / D10-1580：跨 app 同 (event_type, event_id) 由「被 23505 拒」改为两边各自可插入，同 app 同键（跨日期）仍被拒、不同类型或 UUID 仍可插入；反向验证：放回旧主键（不跑 0143）→ 本块变红'
 pr: null
