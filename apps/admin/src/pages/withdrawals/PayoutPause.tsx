@@ -141,6 +141,11 @@ export function PauseEntry(props: PauseEntryProps): ReactElement {
     readonly reason: string;
     body?: KillSwitchUpdate;
   }>(undefined);
+  /**
+   * 上一次 PUT 结果未定（网络错误或 5xx，服务端可能已经写入）的操作 id。
+   * 再试时若开关已是目标值，多半就是那次写已生效，按已生效提示，而不是报「他人修改」。
+   */
+  const unknownRef = useRef<string>(undefined);
   const alive = useRef(true);
 
   useEffect(() => {
@@ -239,6 +244,8 @@ export function PauseEntry(props: PauseEntryProps): ReactElement {
     const pending = pendingRef.current;
     if (pending === undefined) return;
     const target = targetOf(pending.action);
+    const id = actionId(pending.action);
+    let putSent = false;
     try {
       if (pending.body === undefined) {
         // 每次提交（含失败后再试）都重新读开关列表取当前 version；10003 重验后沿用原请求体。
@@ -249,16 +256,30 @@ export function PauseEntry(props: PauseEntryProps): ReactElement {
           return;
         }
         if ((found.value ?? found.default) === target.value) {
+          if (unknownRef.current === id) {
+            // 上次 PUT 结果未定、现在已是目标值：那次写其实已生效，不再发写请求，提示已生效并刷新。
+            unknownRef.current = undefined;
+            pendingRef.current = undefined;
+            setPhase('idle');
+            setReasonError(undefined);
+            void notify.success(t.appliedEarlier(doneOf(pending.action)));
+            onClose();
+            onChanged();
+            return;
+          }
           // 已经是目标值（别人刚改过）：不发写请求，按状态已变化处理。
           moved();
           return;
         }
+        // 不是目标值：上次未定的写没有生效（或已被覆盖），按新读到的 version 正常提交。
+        unknownRef.current = undefined;
         pending.body = {
           value: target.value,
           expected_version: found.version,
           ...(pending.reason.trim() === '' ? {} : { reason: pending.reason }),
         };
       }
+      putSent = true;
       await customOf()({
         url: killSwitchUrl(target.key),
         method: 'put',
@@ -266,6 +287,7 @@ export function PauseEntry(props: PauseEntryProps): ReactElement {
         meta: { stepUpToken },
       });
       pendingRef.current = undefined;
+      unknownRef.current = undefined;
       if (!alive.current) return;
       setPhase('idle');
       setReasonError(undefined);
@@ -280,6 +302,12 @@ export function PauseEntry(props: PauseEntryProps): ReactElement {
         setPhase('verify');
         return;
       }
+      // PUT 已发出却遇到网络错误或 5xx：结果未定，记下以便再试时识别「其实已生效」。
+      unknownRef.current =
+        putSent &&
+        (!(cause instanceof AdminApiError) || cause.kind === 'network' || cause.httpStatus >= 500)
+          ? id
+          : undefined;
       failed(cause);
     }
   };

@@ -340,7 +340,7 @@ export const withdrawalsTexts = {
   /** 「打款队列」「结果待确认」与打款记录抽屉（规格 admin-payouts.md，只读）。 */
   payouts: {
     readOnlyNotice:
-      '持 payout.execute 时可勾选待执行的单【执行所选】；持 fund.cash_entry 时可录入企业支付宝余额与微信运营账户余额；暂停与解除暂停尚未接入；结果待确认的单在提现单详情处置。',
+      '持 payout.execute 时可勾选待执行的单【执行所选】；持 fund.cash_entry 时可录入企业支付宝余额与微信运营账户余额；持 switch.payout 或 switch.all 时可【暂停队列】【解除暂停】，并在已暂停的通道卡上【解除通道暂停】；结果待确认的单在提现单详情处置。',
     overviewLoading: '正在读取打款概览…',
     overviewFailed: '打款概览读取失败',
     overviewFailedDescription: '网络错误或服务异常，点【重试】重新读取。',
@@ -617,6 +617,8 @@ export const withdrawalsTexts = {
     cancel: '取消',
     stepUpAgain: '动态码凭证已失效，请重新输入动态码',
     conflict: '开关状态已被他人修改，已刷新为最新状态，请核对后重试',
+    /** 上次提交结果未定、再试时发现开关已是目标值（那次写已生效，不再重发）。 */
+    appliedEarlier: (done: string): string => `${done}（上次提交已生效，已刷新为最新状态）`,
     forbidden: '无权限执行此操作（需要 switch.payout 或 switch.all 权限点）',
     invalid: '提交内容有误，请检查后重试',
     network: '网络错误，请检查网络后重试；未确认前不会重复提交',
