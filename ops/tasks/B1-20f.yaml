@@ -8,7 +8,7 @@ type: test-change
 # 新鲜 Claude 改、另一位只读复核（Codex 优先）；改第一类保护路径，按 #24 由编排加标签。不涉及资金。本机循环跑撞出 403 以确认码值，撞不出如实写「未复现，按代码路径推定」。
 refs: [BR-ID-01, BR-ID-06, BR-ID-28]
 refs_hash:
-  BR-ID-01: 5884d69e6b20
+  BR-ID-01: fa91c30c2e54
   BR-ID-06: 379a6a53b315
   BR-ID-28: 205ab4bdd1d4
 deps: [B1-20c]

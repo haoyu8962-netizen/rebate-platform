@@ -11,7 +11,7 @@ type: impl
 # D10-1665 / D10-1666 收窄（标题不改，以本条为准）：负责人定提现不再要二次验证，本单只做 payout_account_change 的摘要绑定；提现那一半（withdraw 摘要、提现锁内比对、payout/** 改动）全部不做、回主干；签发对 withdraw 不要 summary，带了 → 20001 fields=[summary]（与 phone_change / account_deletion 同口径）。规则测试删 withdraw 部分，「withdraw 带 summary → 20001」一条按 D10-1666 改断言。提现去掉 step-up 由 B1-02zzzc 做。
 refs: [BR-ID-08, BR-WDR-02, BR-WDR-33]
 refs_hash:
-  BR-ID-08: 9ae5b5206173
+  BR-ID-08: a2e69361dbee
   BR-WDR-02: b8ce66617ed9
   BR-WDR-33: '7886471e9297'
 deps: [B1-02zzz]

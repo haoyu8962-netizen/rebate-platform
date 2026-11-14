@@ -7,7 +7,7 @@ type: impl
 # 冻结 [AC-B2-05d#1] 钉的是 Z：照 D10-327 / D10-1036，由新鲜独立 Claude 只改该用例里这两个时刻字段的期望，另一位只读复核，落地按 #24 报核；同文件其余用例逐字不动，登 red_exempt。money 评审独立 Claude（Codex 额度用尽至 11-15）。
 refs: [BR-WDR-03]
 refs_hash:
-  BR-WDR-03: 9120874c20b6
+  BR-WDR-03: c1b5f37a0dd1
 deps: [B2-05d]
 paths:
   - 'apps/api/src/modules/payout/application/withdraw-apply.ts'

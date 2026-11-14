@@ -13,7 +13,7 @@ type: impl
 # D10-1598（#109 退回后收口）：Me.masked_phone 拆到 B1-02zzza（契约 Me 字段、me.ts / me-reads.ts、step-up-bound-phone/me.int.test.ts 与 contract.test.ts 的 [AC-B1-02zzz#3]、冻结 me.int [AC-B1-02z#1] 与 me-invite [AC-B1-11k#12] 都归它），本单只留发码一半；标题里的「GET /v1/me 加 masked_phone」由 B1-02zzza 完成。冻结 landing-sms [AC-B1-11g#15] 的 step_up 段改为带本人令牌、不带 phone，发送代码原样搬用 sms-codes/http.int.test.ts 已评审的写法，限频断言不改（新鲜独立 Claude 机械搬用，不计试次）。oasdiff 的 request-body-if-added / then-added 写进 contracts/oasdiff-accepted.txt（D10-1598 ①）。
 refs: [BR-ID-08]
 refs_hash:
-  BR-ID-08: 9ae5b5206173
+  BR-ID-08: a2e69361dbee
 deps: []
 paths:
   - 'contracts/openapi.yaml'

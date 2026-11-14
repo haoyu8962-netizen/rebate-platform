@@ -12,7 +12,7 @@ type: impl
 # D10-1610 实现口径：phone_hmac 非空但 phone_cipher 为空或解密失败时 masked_phone 返回 null、/v1/me 照常成功，记 warn 日志（只带用户 id 与原因，不带号码），加单测钉住。
 refs: [BR-ID-08]
 refs_hash:
-  BR-ID-08: 9ae5b5206173
+  BR-ID-08: a2e69361dbee
 deps: [B1-02zzz]
 paths:
   - 'contracts/openapi.yaml'
