@@ -14,7 +14,6 @@ export function meUser(db: Kysely<DB>, subject: MeSubject) {
       'parent_id',
       'self_bind_used',
       'phone_hmac',
-      'phone_cipher',
       'created_at',
       'status',
     ])

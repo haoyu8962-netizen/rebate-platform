@@ -22,13 +22,10 @@
 //   (at most one, unique index appeals_processing_target_key), read-only from app.appeals (risk
 //   is its single writer; never written here); null otherwise, and null when there is no
 //   processing account appeal (a value outside frozen / banned is a broken row and also null).
-// - masked_phone (B1-02zzz, BR-ID-08: the number a step_up code goes to, for display only): the
-//   current users.phone_cipher of this account, decrypted here and masked with the domain's
-//   maskPhone (138****8000); null when no phone is bound. The full number never leaves read().
 import type { components } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
-import type { Clock, FieldCrypto, RootLogger } from '../../platform/index.ts';
+import type { Clock, RootLogger } from '../../platform/index.ts';
 import type { RiskStateService } from '../../risk/index.ts';
 import type { SmsConfigReader } from './sms-codes.ts';
 import {
@@ -38,8 +35,7 @@ import {
   withinBackfill,
 } from '@couli/domain';
 import { currentStates } from '../domain/login.ts';
-import { maskPhone } from '../domain/mask-phone.ts';
-import { DEFAULT_AVATAR, PHONE_CIPHER_CONTEXT } from '../domain/registration.ts';
+import { DEFAULT_AVATAR } from '../domain/registration.ts';
 import { userConsentRecords } from '../infra/consent-records.ts';
 import type { RealnameStatusReader } from './identity-level.ts';
 import type { RealnameReader } from '../infra/realname-reader.ts';
@@ -77,8 +73,6 @@ export interface MeServiceOptions {
    * check (B1-13d's reader). The name and birth date never reach the response or the logs.
    */
   readonly realname: RealnameStatusReader & Pick<RealnameReader, 'verified'>;
-  /** The field cipher, to show the bound phone masked (masked_phone); the number is not kept. */
-  readonly crypto: Pick<FieldCrypto, 'decrypt'>;
 }
 
 export interface MeService {
@@ -119,8 +113,7 @@ function configuredNumber(value: unknown, key: string): number {
 }
 
 export function createMeService(options: MeServiceOptions): MeService {
-  const { clock, config, logger, risk, balance, unionBindings, activity, realname, crypto } =
-    options;
+  const { clock, config, logger, risk, balance, unionBindings, activity, realname } = options;
   const db = options.db.withSchema('app');
   // Same module: the reader runs on options.db (GET /v1/me opens no transaction).
   const deletionStages = createDeletionStageReader({ db: options.db });
@@ -184,11 +177,6 @@ export function createMeService(options: MeServiceOptions): MeService {
         eligible = orders === 0 && !claims && !children;
       }
       const phoneBound = user.phone_hmac !== null;
-      // A bound phone whose cipher is missing is a broken row: shown as bound, nothing to mask.
-      const maskedPhone =
-        phoneBound && user.phone_cipher !== null
-          ? maskPhone(crypto.decrypt(user.phone_cipher.toString('utf8'), PHONE_CIPHER_CONTEXT))
-          : null;
       const verifiedRealname =
         realnameStatus === 'verified'
           ? await realname.verified(db, { app_id: subject.appId, user_id: subject.userId })
@@ -229,7 +217,6 @@ export function createMeService(options: MeServiceOptions): MeService {
             ? 'realname'
             : 'phone',
         phone_bound: phoneBound,
-        masked_phone: maskedPhone,
         balance: summary,
         union_bindings: [
           { platform: 'taobao', status: taobao },

@@ -14059,14 +14059,6 @@ export interface components {
             identity_level: "basic" | "guest" | "member" | "phone" | "realname";
             /** @description Whether a phone number is bound (BR-ID-01). */
             phone_bound: boolean;
-            /**
-             * @description The bound phone masked for display only (「验证码将发送至 138****8000」 before a step_up
-             *     code, BR-ID-08; task B1-02zzz): an 11-digit mainland number shows its first 3 and last 4
-             *     digits with `****` between (BR-TEXT-02 细则 手机号脱敏, the BR-ID-33 default mask), any
-             *     other stored value one `*` per character. Read from the account's current binding on
-             *     every request; null when no phone is bound. Never the full number.
-             */
-            masked_phone: string | null;
             balance: components["schemas"]["MeBalance"];
             union_bindings: components["schemas"]["UnionBindingState"][];
             /**
@@ -25948,7 +25940,6 @@ export interface operations {
                      *         },
                      *         "identity_level": "phone",
                      *         "phone_bound": true,
-                     *         "masked_phone": "138****8000",
                      *         "balance": {
                      *           "available_fen": 1234,
                      *           "withdrawable_fen": 1000,
