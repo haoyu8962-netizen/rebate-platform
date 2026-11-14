@@ -6,7 +6,6 @@
 export const plannedOperations: ReadonlySet<string> = new Set([
   "adminChangeInviter",
   "adminChangeUserLevel",
-  "adminGetDashboard",
   "adminListInvitees",
   "adminSearch",
   "bindOauthIdentity",

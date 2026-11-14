@@ -1,0 +1,99 @@
+{
+  "risk_note": "RV2 (admin/**). B1-10w (D10-1401 / D10-1402 / D10-1403 / D10-1638): GET /admin/v1/dashboard (adminGetDashboard) leaves planned. readAdminDashboard trims to the account's points: seven to-do cards, each count from the owning module's exported function (countWithdrawReviewPending, countClaimsPendingReview with breakdown, countSettleBillPending, countReconDiffOpen, countProcessingAppeals, countOverdueAgentReports at the injected clock, countUnionAuthPending), beneficiary_held_overdue not returned (D10-1402), oldest_at not returned this phase (D10-1638); yesterday from readDashboardYesterday (B1-34q, nullable per CT-24zzk); status only with fund.view (switches through content config with registry defaults, W null). Read only, no audit. Contract: planned removed, routes for withdraw_review_pending and recon_diff_open added (accepted in D10-1638), union_auth_expiring routed to /unions without a filter (D10-1651; the rule test's expected route and #7 title changed mechanically by another fresh subagent in f12041f62), examples without oldest_at and with all seven cards. Host (local-heavy): integration spec/admin/dashboard + contracts/admin-dashboard-yesterday 34/34, spec contracts + frontend 3235 (contracts 656 after the last example fix), admin unit 179, tsc -b apps/api test / depcruise 0. Codex is out of quota until 11-20 (D10-1604): rule tests (two attempts), the two spec-test rounds and the money review were each a separate fresh desktop Claude subagent (model opus); the implementation another.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Fresh desktop Claude subagent (prompt = claude-run.sh review --review-type money --dry-run, read-only, not the implementer's or test writers' context), base = rule-test head 14dbddc8a, full review of the implementation and the contract changes: pass; 1 S2 (the superAdmin example listed four cards) fixed in 690af70f0; checklist rounding/sign/clock/app_id ok, idempotency/concurrency/partial_refund na; validate-output --money ok. couli-runs/B1-10w/review-money-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests test/spec/admin/dashboard/** by a fresh desktop Claude subagent (tester claude-independent, approvals #36, D10-1604). spec-test r1 (another fresh subagent): fail, 1 S1 (five cards seeded with the same row count, so swapping two cards' count functions went unnoticed) and 1 S2 (oldest_at untested); attempt 2 seeded 1..7 / 8..14 with a distinctness check and asserted oldest_at null on zero cards. r2 (a third fresh subagent): pass, both closed. validate-output ok. Container red/2 ok, problems 0, 12 red."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/admin/dashboard/access.int.test.ts > [AC-B1-10w#1] 只认 dashboard.view：持有时 200（不持任何卡点：todo 为空数组、yesterday 照返回、没有 status 键）；不持 dashboard.view（什么都不持、持全部卡点与 fund.view、持 risk.freeze）→ 10403 data.reason=admin_permission_denied；不带令牌 → 10001",
+    "test/spec/admin/dashboard/access.int.test.ts > [AC-B1-10w#2] 逐张裁剪：dashboard.view 加某一张卡的点 → todo 恰好只有那张卡；加 risk.freeze → 不出 beneficiary_held_overdue（todo 为空）；加 fund.view → todo 为空、带 status",
+    "test/spec/admin/dashboard/access.int.test.ts > [AC-B1-10w#3] 超级管理员与持全部点的账号：七张卡全出，恰为契约 enum 去掉 beneficiary_held_overdue 的七个 key、按 enum 顺序；beneficiary_held_overdue 不出现（即使持 risk.freeze）；都带 status",
+    "test/spec/admin/dashboard/contract.test.ts > [AC-B1-10w#12] 契约去 planned：GET /admin/v1/dashboard（adminGetDashboard）不再带 x-implementation，生成的 planned 清单不含 adminGetDashboard",
+    "test/spec/admin/dashboard/counts.int.test.ts > [AC-B1-10w#4] 计数正确：本 app 每张卡都有待办时，每张卡 count = 直接调用对应模块导出计数函数的结果（同一库、同一 app，agent 用注入时钟）；claim_review_pending 带 breakdown（auto_matched / manual_review 与计数函数一致）且两项之和 = count",
+    "test/spec/admin/dashboard/counts.int.test.ts > [AC-B1-10w#5] 没有数据时可见的卡照样返回、count = 0（与计数函数一致），claim_review_pending 的 breakdown 两项都是 0",
+    "test/spec/admin/dashboard/counts.int.test.ts > [AC-B1-10w#6] 跨 app 不串：另一 app 写入更多待办后，本 app 的每张卡计数不变且仍等于本 app 的计数函数结果；另一 app 的管理员看到的是它自己的计数",
+    "test/spec/admin/dashboard/counts.int.test.ts > [AC-B1-10w#7] route 与契约逐字一致：settle_bill_pending → /settle-bills?awaiting_confirm=true、appeal_pending → /risk/appeals?status=processing、claim_review_pending → /claims?status=manual_review、agent_report_overdue → /agent/reports?overdue=true、union_auth_expiring → /unions；有无数据 route 都一样",
+    "test/spec/admin/dashboard/yesterday-status.int.test.ts > [AC-B1-10w#8] yesterday：没有任何聚合行 → null（键仍在）；有行时各字段等于 readDashboardYesterday 的结果（昨天那行；今天的行不取）；只取本 app 的行",
+    "test/spec/admin/dashboard/yesterday-status.int.test.ts > [AC-B1-10w#9] yesterday：昨天没有行时取不晚于昨天的最新一行，date 与 as_of 如实（与 readDashboardYesterday 一致）",
+    "test/spec/admin/dashboard/yesterday-status.int.test.ts > [AC-B1-10w#10] status 只给 fund.view：没有 fund.view 无 status 键；有 fund.view 时未配置取默认（队列未暂停、无通道暂停、自动结算开），balance_w_expired 为 null",
+    "test/spec/admin/dashboard/yesterday-status.int.test.ts > [AC-B1-10w#11] status 三个开关按配置取值：队列暂停、bank_card 与 wechat 暂停、自动结算关 → 读到这些值；改回后（缓存过期）读到新值；另一 app 的配置不影响；W 始终为 null"
+  ],
+  "task": "B1-10w",
+  "spec_commit": "f9089ac2d0234b65858fc173c3fbf3d4293db28b",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "f9089ac2d0234b65858fc173c3fbf3d4293db28b",
+      "tree": "009d8f32d0f40615c7cbf480b0efaec296704bf7",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-14T11:43:41Z",
+      "finished_at": "2026-11-14T11:44:01Z",
+      "red_tests": [
+        "test/spec/admin/dashboard/access.int.test.ts > [AC-B1-10w#1] 只认 dashboard.view：持有时 200（不持任何卡点：todo 为空数组、yesterday 照返回、没有 status 键）；不持 dashboard.view（什么都不持、持全部卡点与 fund.view、持 risk.freeze）→ 10403 data.reason=admin_permission_denied；不带令牌 → 10001",
+        "test/spec/admin/dashboard/access.int.test.ts > [AC-B1-10w#2] 逐张裁剪：dashboard.view 加某一张卡的点 → todo 恰好只有那张卡；加 risk.freeze → 不出 beneficiary_held_overdue（todo 为空）；加 fund.view → todo 为空、带 status",
+        "test/spec/admin/dashboard/access.int.test.ts > [AC-B1-10w#3] 超级管理员与持全部点的账号：七张卡全出，恰为契约 enum 去掉 beneficiary_held_overdue 的七个 key、按 enum 顺序；beneficiary_held_overdue 不出现（即使持 risk.freeze）；都带 status",
+        "test/spec/admin/dashboard/contract.test.ts > [AC-B1-10w#12] 契约去 planned：GET /admin/v1/dashboard（adminGetDashboard）不再带 x-implementation，生成的 planned 清单不含 adminGetDashboard",
+        "test/spec/admin/dashboard/counts.int.test.ts > [AC-B1-10w#4] 计数正确：本 app 每张卡都有待办时，每张卡 count = 直接调用对应模块导出计数函数的结果（同一库、同一 app，agent 用注入时钟）；claim_review_pending 带 breakdown（auto_matched / manual_review 与计数函数一致）且两项之和 = count",
+        "test/spec/admin/dashboard/counts.int.test.ts > [AC-B1-10w#5] 没有数据时可见的卡照样返回、count = 0（与计数函数一致），claim_review_pending 的 breakdown 两项都是 0",
+        "test/spec/admin/dashboard/counts.int.test.ts > [AC-B1-10w#6] 跨 app 不串：另一 app 写入更多待办后，本 app 的每张卡计数不变且仍等于本 app 的计数函数结果；另一 app 的管理员看到的是它自己的计数",
+        "test/spec/admin/dashboard/counts.int.test.ts > [AC-B1-10w#7] route 与契约逐字一致：settle_bill_pending → /settle-bills?awaiting_confirm=true、appeal_pending → /risk/appeals?status=processing、claim_review_pending → /claims?status=manual_review、agent_report_overdue → /agent/reports?overdue=true、union_auth_expiring → /unions；有无数据 route 都一样",
+        "test/spec/admin/dashboard/yesterday-status.int.test.ts > [AC-B1-10w#8] yesterday：没有任何聚合行 → null（键仍在）；有行时各字段等于 readDashboardYesterday 的结果（昨天那行；今天的行不取）；只取本 app 的行",
+        "test/spec/admin/dashboard/yesterday-status.int.test.ts > [AC-B1-10w#9] yesterday：昨天没有行时取不晚于昨天的最新一行，date 与 as_of 如实（与 readDashboardYesterday 一致）",
+        "test/spec/admin/dashboard/yesterday-status.int.test.ts > [AC-B1-10w#10] status 只给 fund.view：没有 fund.view 无 status 键；有 fund.view 时未配置取默认（队列未暂停、无通道暂停、自动结算开），balance_w_expired 为 null",
+        "test/spec/admin/dashboard/yesterday-status.int.test.ts > [AC-B1-10w#11] status 三个开关按配置取值：队列暂停、bank_card 与 wechat 暂停、自动结算关 → 读到这些值；改回后（缓存过期）读到新值；另一 app 的配置不影响；W 始终为 null"
+      ],
+      "expected": [
+        "test/spec/admin/dashboard/access.int.test.ts",
+        "test/spec/admin/dashboard/contract.test.ts",
+        "test/spec/admin/dashboard/counts.int.test.ts",
+        "test/spec/admin/dashboard/yesterday-status.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "6e5771467f62bdd5dcc62354318cd2e2086e159be9c5d250fee2f93e13925e71"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "e292fe86c98b7f4b7cdb7623ef46a29b47d1bdbf5086ee5a972233b0234974b4"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "cac397c1d924b2442dd0cf0ab274e5b03e3e696f",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  }
+}
