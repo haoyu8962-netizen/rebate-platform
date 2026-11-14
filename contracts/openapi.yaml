@@ -8795,6 +8795,9 @@ paths:
                     msg: ''
                     data:
                       todo:
+                        - key: withdraw_review_pending
+                          count: 3
+                          route: /withdrawals?status=PENDING_REVIEW
                         - key: claim_review_pending
                           count: 7
                           route: /claims?status=manual_review
@@ -8803,6 +8806,12 @@ paths:
                               count: 4
                             - key: manual_review
                               count: 3
+                        - key: settle_bill_pending
+                          count: 1
+                          route: /settle-bills?awaiting_confirm=true
+                        - key: recon_diff_open
+                          count: 2
+                          route: /recon?status=open
                         - key: appeal_pending
                           count: 2
                           route: /risk/appeals?status=processing
