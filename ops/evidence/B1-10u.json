@@ -1,0 +1,90 @@
+{
+  "risk_note": "RV1 (agent). B1-10u (D10-1382 ②, D10-1399 (a); BR-ID-15 ④): the one 'is this AI reply report overdue' rule (pending, reported_at set, now >= reported_at + 48 h, injected clock) and the per-app count, exported from agent/index.ts. application/report-overdue.ts is now the only source of the 48-hour constant, the deadline and the cutoff; the admin report list (B1-10t) calls it for each row's overdue / deadline_at and for the overdue filter. countOverdueAgentReports and the list's total share one store query (countReports, app-scoped, status=pending, overdue=true), so the workbench card agent_report_overdue equals the list's total. Read only. Host (local-heavy): integration spec/agent/report-overdue + admin-reports 15/15, decide + foreign-db-handoff rule 23, agent unit 567, tsc -b apps/api test / depcruise 0. The implementation was a fresh desktop Claude subagent (model opus) in place of claude -p on the terminal accounts (DESKTOP-common-20261113).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex is out of quota until 11-20, so the code review goes to an independent Claude (D10-1604, approvals #36): a fresh desktop Claude subagent (model opus, prompt = claude-run.sh review --review-type general --dry-run, read-only, not the implementer's context), base = rule-test head 48292d9ce. Round 1: pass, no findings; output checked by validate-output.ts. couli-runs/B1-10u/review-general-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6-astra",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests test/spec/agent/report-overdue/** by independent Claude (tester claude-independent). spec-test r1 (claude-independent): pass with 1 S2 (the property test must take runs and seed through propParams), taken in round 2. r2: the claude-independent run was cut by a 403 (no output, not counted), rerun by Codex: pass. The prop test then got its explicit 900_000 timeout for test-guard (mechanical). Container red/1 ok, problems 0, 8 red."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/agent/report-overdue/count.int.test.ts > [AC-B1-10u#5][BR-ID-15] 计数只算本 app 待处理且已到期的举报：恰好满 48 小时计入、差 1 毫秒不计；已处理、未到期、未被举报、别的 app 都不计；没有举报的 app 为 0",
+    "test/spec/agent/report-overdue/count.int.test.ts > [AC-B1-10u#6][BR-ID-15] 计数按传入的 now 判定（不取数据库时钟）：同一批数据，now 早 1 毫秒少计恰满 48 小时的一条，晚 1 毫秒多计差 1 毫秒的一条，再过 47 小时待处理的全部计入",
+    "test/spec/agent/report-overdue/count.int.test.ts > [AC-B1-10u#7][BR-ID-15] 只读：计数前后 agent_messages（及其余 agent 表）逐行不变",
+    "test/spec/agent/report-overdue/decide.test.ts > [AC-B1-10u#1][BR-ID-15] 待处理举报：恰好满 48 小时（10-01 10:00 整）算超时，差 1 毫秒不算；更晚恒为超时，提交时刻与之前不算；结果只看传入的 now，入参不被改动",
+    "test/spec/agent/report-overdue/decide.test.ts > [AC-B1-10u#2][BR-ID-15] 已处理（handled）的举报恒不超时：无论举报多久之前、是否恰好满 48 小时",
+    "test/spec/agent/report-overdue/decide.test.ts > [AC-B1-10u#3][BR-ID-15] 未被举报（report_status 为 null）恒不超时：reported_at 为 null，或即便带着时刻",
+    "test/spec/agent/report-overdue/decide.test.ts > [AC-B1-10u#4][BR-ID-15] 性质：任意提交时刻与任意 now，结果 = 待处理且 now − reported_at ≥ 48 小时（毫秒精度，48 小时整两侧加密采样）",
+    "test/spec/agent/report-overdue/list-parity.int.test.ts > [AC-B1-10u#8][BR-ID-15] 计数 = 列表页：同一批夹具、同一个注入时钟下，countOverdueAgentReports 等于后台举报列表（持 agent.trace）status=pending&overdue=true 的 total 且是同一批消息；列表每行 overdue 与 isAgentReportOverdue 一致；时钟前进 1 毫秒后差 1 毫秒的那条一起变为超时，两边仍相等"
+  ],
+  "task": "B1-10u",
+  "spec_commit": "48292d9ce17ab41357fc09778a72b3f8f670c011",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "48292d9ce17ab41357fc09778a72b3f8f670c011",
+      "tree": "511444dcaa8493530101317a1ceb81965274d401",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-14T05:48:08Z",
+      "finished_at": "2026-11-14T05:48:37Z",
+      "red_tests": [
+        "test/spec/agent/report-overdue/count.int.test.ts > [AC-B1-10u#5][BR-ID-15] 计数只算本 app 待处理且已到期的举报：恰好满 48 小时计入、差 1 毫秒不计；已处理、未到期、未被举报、别的 app 都不计；没有举报的 app 为 0",
+        "test/spec/agent/report-overdue/count.int.test.ts > [AC-B1-10u#6][BR-ID-15] 计数按传入的 now 判定（不取数据库时钟）：同一批数据，now 早 1 毫秒少计恰满 48 小时的一条，晚 1 毫秒多计差 1 毫秒的一条，再过 47 小时待处理的全部计入",
+        "test/spec/agent/report-overdue/count.int.test.ts > [AC-B1-10u#7][BR-ID-15] 只读：计数前后 agent_messages（及其余 agent 表）逐行不变",
+        "test/spec/agent/report-overdue/decide.test.ts > [AC-B1-10u#1][BR-ID-15] 待处理举报：恰好满 48 小时（10-01 10:00 整）算超时，差 1 毫秒不算；更晚恒为超时，提交时刻与之前不算；结果只看传入的 now，入参不被改动",
+        "test/spec/agent/report-overdue/decide.test.ts > [AC-B1-10u#2][BR-ID-15] 已处理（handled）的举报恒不超时：无论举报多久之前、是否恰好满 48 小时",
+        "test/spec/agent/report-overdue/decide.test.ts > [AC-B1-10u#3][BR-ID-15] 未被举报（report_status 为 null）恒不超时：reported_at 为 null，或即便带着时刻",
+        "test/spec/agent/report-overdue/decide.test.ts > [AC-B1-10u#4][BR-ID-15] 性质：任意提交时刻与任意 now，结果 = 待处理且 now − reported_at ≥ 48 小时（毫秒精度，48 小时整两侧加密采样）",
+        "test/spec/agent/report-overdue/list-parity.int.test.ts > [AC-B1-10u#8][BR-ID-15] 计数 = 列表页：同一批夹具、同一个注入时钟下，countOverdueAgentReports 等于后台举报列表（持 agent.trace）status=pending&overdue=true 的 total 且是同一批消息；列表每行 overdue 与 isAgentReportOverdue 一致；时钟前进 1 毫秒后差 1 毫秒的那条一起变为超时，两边仍相等"
+      ],
+      "expected": [
+        "test/spec/agent/report-overdue/count.int.test.ts",
+        "test/spec/agent/report-overdue/decide.test.ts",
+        "test/spec/agent/report-overdue/list-parity.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "3db9053ddd5a929fb3b9b4bee7c667abc2c62554d0191f7dfaa98c9c00cf231b"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "c704c79c76ec3940861dddeb78bb2e860249f4827e562a1b55eee9daa72daebd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b59162f1eda6b0cd11a91dcd7c4698dcdd77afa6",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  }
+}

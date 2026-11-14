@@ -3,8 +3,9 @@
 // 处理人查看对话、标记已处理并填写处理说明，写审计；48 小时时限从举报提交起算，超时告警),
 // BR-AI-19 (后台查看 trace 需要权限点 agent.trace).
 // The list reads the app's reported assistant replies (store/admin-reports) and writes nothing;
-// deadline_at = reported_at + 48 hours, overdue = pending and now ≥ deadline_at (reportOverdue,
-// the one place this rule is written; B1-10u moves it to a shared home). The handlers' display
+// deadline_at = reported_at + 48 hours, overdue = pending and now ≥ deadline_at, and the overdue
+// filter's cutoff all come from report-overdue.ts (B1-10u: the one place this rule is written,
+// shared with the workbench card's count). The handlers' display
 // names come from a reader app.module has already bound to the pool (admin's): agent never hands
 // it a database handle (BR-AI-02 ③).
 // The handling (adminHandleAgentReport) is admin's (编排 D10-1539): admin opens the transaction
@@ -27,14 +28,13 @@ import {
   type ReportStatus,
 } from '../store/admin-reports/index.ts';
 import { isUuid } from '../store/index.ts';
+import { isAgentReportOverdue, overdueCutoff, reportDeadline } from './report-overdue.ts';
 
 export type { ReportRecord, ReportStatus } from '../store/admin-reports/index.ts';
 
 /** Contract AdminPage / AdminPageSize defaults. */
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
-/** BR-ID-15 ④: a report is handled within 48 hours of its submission. */
-export const REPORT_DEADLINE_MS = 48 * 3_600_000;
 
 export type AdminAgentReport = Schema<'AdminAgentReport'>;
 export type AdminAgentReportPage = Schema<'AdminAgentReportPage'>;
@@ -85,28 +85,6 @@ export class AdminReportFieldsError extends Error {
   }
 }
 
-/** `instant` moved by `ms` as a new Date (the input is never modified, no wall clock read). */
-function shiftMs(instant: Date, ms: number): Date {
-  const result = structuredClone(instant);
-  result.setTime(instant.getTime() + ms);
-  return result;
-}
-
-/** BR-ID-15: the instant by which the report must be handled. */
-export function reportDeadline(reportedAt: Date): Date {
-  return shiftMs(reportedAt, REPORT_DEADLINE_MS);
-}
-
-/** BR-ID-15: pending and now ≥ reported_at + 48 hours (exactly at the deadline counts). */
-export function reportOverdue(status: ReportStatus, reportedAt: Date, now: Date): boolean {
-  return status === 'pending' && now.getTime() >= reportDeadline(reportedAt).getTime();
-}
-
-/** The latest reported_at that is overdue at `now` (the list filter's form of reportOverdue). */
-function overdueCutoff(now: Date): Date {
-  return shiftMs(now, -REPORT_DEADLINE_MS);
-}
-
 function iso(at: Date | null): string | null {
   return at === null ? null : at.toISOString();
 }
@@ -128,7 +106,7 @@ export function agentReportView(
     report_reason: record.reportReason,
     report_status: record.reportStatus,
     deadline_at: reportDeadline(record.reportedAt).toISOString(),
-    overdue: reportOverdue(record.reportStatus, record.reportedAt, now),
+    overdue: isAgentReportOverdue(record, now),
     handled_at: iso(record.handledAt),
     handler_id: record.handlerId,
     handler_name: record.handlerId === null ? null : (names.get(record.handlerId) ?? null),
