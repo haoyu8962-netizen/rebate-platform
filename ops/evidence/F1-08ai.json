@@ -1,0 +1,108 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-withdrawal-batch-approve/errors.test.ts > [AC-F1-08ai-ERROR#1] 10003 重新索要动态码，验证前不重发；验证后更新凭据且沿用原幂等标识与整批请求体",
+    "test/spec/frontend/admin-withdrawal-batch-approve/errors.test.ts > [AC-F1-08ai-ERROR#2] 10403 完整提示缺审核权限，20001 按 data.fields 区分编号错误和普通输入错误；不报成功、不重发",
+    "test/spec/frontend/admin-withdrawal-batch-approve/errors.test.ts > [AC-F1-08ai-ERROR#3] 20901 与 40901 提示提交失败，网络错误明确提示未确认不重复提交，均不自动重新验证或重发整批",
+    "test/spec/frontend/admin-withdrawal-batch-approve/flow.test.ts > [AC-F1-08ai-PREVIEW#1] 本地确认表按列表顺序列全选中单的单号、用户、金额及将通过，说明不自动打款；取消不发请求且焦点返回",
+    "test/spec/frontend/admin-withdrawal-batch-approve/flow.test.ts > [AC-F1-08ai-SUBMIT#1] 一次动态码覆盖整批；按列表顺序去重提交，连点与在途再次点击不重发，原确认框保留且两处提交按钮禁用",
+    "test/spec/frontend/admin-withdrawal-batch-approve/flow.test.ts > [AC-F1-08ai-RESULT#1] 一批混合成功和四种跳过逐行对应显示；刷新待审列表及计数，已选全部清空，消失的单仍保留结果",
+    "test/spec/frontend/admin-withdrawal-batch-approve/flow.test.ts > [AC-F1-08ai-RESULT#2] 全部 skipped 仍逐单显示原因、清空选择并刷新列表，不把 HTTP 成功误报为已通过",
+    "test/spec/frontend/admin-withdrawal-batch-approve/flow.test.ts > [AC-F1-08ai-CANCEL#1] 取消动态码不提交批量通过；关闭确认框后焦点回到批量入口，再操作仍须动态码",
+    "test/spec/frontend/admin-withdrawal-batch-approve/follow-up.test.ts > [AC-F1-08ai-SUBMIT#2] 同页完成 A、B 后勾选 C 是新一批，两次请求的幂等标识均非空且不同",
+    "test/spec/frontend/admin-withdrawal-batch-approve/follow-up.test.ts > [AC-F1-08ai-SUBMIT#3] 同一张单被跳过后重新勾选提交是新操作，即使请求体相同也必须更换幂等标识",
+    "test/spec/frontend/admin-withdrawal-batch-approve/follow-up.test.ts > [AC-F1-08ai-PREVIEW#2] 确认框说明全文只有既定后果说明，不追加冻结或封禁会员不能审核通过等说明",
+    "test/spec/frontend/admin-withdrawal-batch-approve/follow-up.test.ts > [AC-F1-08ai-PREVIEW#3] 受阻待审单可与正常待审单同时勾选，预览分别写明阻断跳过与将通过，提交仍携带全部编号",
+    "test/spec/frontend/admin-withdrawal-batch-approve/network-replay.test.ts > [AC-F1-08ai-ERROR#4] 网络错误后保留勾选与确认框，手动重提同批沿用原幂等标识及请求体，返回后逐单显示结果",
+    "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts > [AC-F1-08ai-ACCESS#1] 只读和其他资金权限没有勾选或批量通过；审核权限与超管可勾选，未勾选不出现批量栏",
+    "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts > [AC-F1-08ai-SELECT#1] 按真实 PENDING_REVIEW 限制勾选，APPROVED 即使展示状态同为 pending_review 也不可勾；其余状态没有可用勾选框",
+    "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts > [AC-F1-08ai-SELECT#2] 批量栏随勾选出现，aria-live 精确播报张数及合计实付；取消全部后入口与统计消失",
+    "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts > [AC-F1-08ai-FILTER#1] 改筛选未查询仍保留原选择；查询应用新条件后清空全部已选，再勾选只统计新选择"
+  ],
+  "risk_note": "F1-08ai (orchestrator D10-1517 batch 1 item 1, second of three). The admin withdrawal review list gets checkboxes and 批量通过: only an account with withdraw.review sees checkboxes, and only PENDING_REVIEW rows can be ticked; the batch bar (count and total via @couli/money, aria-live) appears only once at least one row is ticked, so the frozen F1-08a READONLY#1 / BROWSER#1 list checks still hold unchanged and no frozen case is modified. 批量通过 opens a confirmation dialog (per row 将通过, or 跳过 with the reason for a blocked pending row; the explanation never names a frozen member as skipped, per BR-WDR-10), then the shared StepUpModal (totp, BR-ID-34), then exactly one POST /admin/v1/withdrawals/batch-approve with only withdrawal_ids; per-row results (approved / skipped with not_found, not_pending, negative_balance, blocked) are shown, then the selection is cleared and the list re-read. Idempotency-Key: kept on a 10003 re-verify and on a manual resubmit after a network error with the same selection, renewed after a completed batch or a changed selection. 10403, 20001, 20901, 40901 and network errors show a failure and never resend automatically. Rule tests by Codex in three rounds (hand-written brief: the generated one was 34.9KB, over the 24KB limit); independent Claude spec-test r1 void (position check: a ledger branch of this lane was created mid-review) with one S1 (key never renewed) and two S2s, r2 pass with two S2s (frozen named as a skip reason in the dialog text; network resubmit key), r3 pass after Codex fixed both. Red on couli-ci for spec commit 3a07a528 (17 tests in 5 files, right reason). Implementation by Opus 5.5 in two rounds; r1 couli-ci verify:fast run 2 and --browser run 1 green; Codex money r1 fail with one S1 (the key was dropped after a 40901 or 5xx, so a retry after the in-flight request finished took a new key and showed the approved rows as not_pending); r2 keeps the key on every unsettled failure (network, 40901, 5xx) and drops it only on a settled 4xx rejection, couli-ci verify:fast run 4 green. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 fail (S1: key dropped after 40901/5xx, fixed in impl r2); Codex then hit its usage limit (until 2026-11-20), so per ops/approvals.yaml #36 the money review of r2 is by an independent Claude (claude-run.sh, fresh context): pass, 0 S2"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "tests by Codex; independent Claude spec-test r1 void (position check, S1 key renewal), r2 pass with two S2, r3 pass after both fixed"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08ai",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "spec_commit": "9d500de602c98c3d0f9ac3631f134da023125768",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "9d500de602c98c3d0f9ac3631f134da023125768",
+      "tree": "36a375c7a66fcd5281196f5e4ba7d8d2bb83fb7a",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-14T03:47:50Z",
+      "finished_at": "2026-11-14T03:48:07Z",
+      "red_tests": [
+        "test/spec/frontend/admin-withdrawal-batch-approve/errors.test.ts > [AC-F1-08ai-ERROR#1] 10003 重新索要动态码，验证前不重发；验证后更新凭据且沿用原幂等标识与整批请求体",
+        "test/spec/frontend/admin-withdrawal-batch-approve/errors.test.ts > [AC-F1-08ai-ERROR#2] 10403 完整提示缺审核权限，20001 按 data.fields 区分编号错误和普通输入错误；不报成功、不重发",
+        "test/spec/frontend/admin-withdrawal-batch-approve/errors.test.ts > [AC-F1-08ai-ERROR#3] 20901 与 40901 提示提交失败，网络错误明确提示未确认不重复提交，均不自动重新验证或重发整批",
+        "test/spec/frontend/admin-withdrawal-batch-approve/flow.test.ts > [AC-F1-08ai-PREVIEW#1] 本地确认表按列表顺序列全选中单的单号、用户、金额及将通过，说明不自动打款；取消不发请求且焦点返回",
+        "test/spec/frontend/admin-withdrawal-batch-approve/flow.test.ts > [AC-F1-08ai-SUBMIT#1] 一次动态码覆盖整批；按列表顺序去重提交，连点与在途再次点击不重发，原确认框保留且两处提交按钮禁用",
+        "test/spec/frontend/admin-withdrawal-batch-approve/flow.test.ts > [AC-F1-08ai-RESULT#1] 一批混合成功和四种跳过逐行对应显示；刷新待审列表及计数，已选全部清空，消失的单仍保留结果",
+        "test/spec/frontend/admin-withdrawal-batch-approve/flow.test.ts > [AC-F1-08ai-RESULT#2] 全部 skipped 仍逐单显示原因、清空选择并刷新列表，不把 HTTP 成功误报为已通过",
+        "test/spec/frontend/admin-withdrawal-batch-approve/flow.test.ts > [AC-F1-08ai-CANCEL#1] 取消动态码不提交批量通过；关闭确认框后焦点回到批量入口，再操作仍须动态码",
+        "test/spec/frontend/admin-withdrawal-batch-approve/follow-up.test.ts > [AC-F1-08ai-SUBMIT#2] 同页完成 A、B 后勾选 C 是新一批，两次请求的幂等标识均非空且不同",
+        "test/spec/frontend/admin-withdrawal-batch-approve/follow-up.test.ts > [AC-F1-08ai-SUBMIT#3] 同一张单被跳过后重新勾选提交是新操作，即使请求体相同也必须更换幂等标识",
+        "test/spec/frontend/admin-withdrawal-batch-approve/follow-up.test.ts > [AC-F1-08ai-PREVIEW#2] 确认框说明全文只有既定后果说明，不追加冻结或封禁会员不能审核通过等说明",
+        "test/spec/frontend/admin-withdrawal-batch-approve/follow-up.test.ts > [AC-F1-08ai-PREVIEW#3] 受阻待审单可与正常待审单同时勾选，预览分别写明阻断跳过与将通过，提交仍携带全部编号",
+        "test/spec/frontend/admin-withdrawal-batch-approve/network-replay.test.ts > [AC-F1-08ai-ERROR#4] 网络错误后保留勾选与确认框，手动重提同批沿用原幂等标识及请求体，返回后逐单显示结果",
+        "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts > [AC-F1-08ai-ACCESS#1] 只读和其他资金权限没有勾选或批量通过；审核权限与超管可勾选，未勾选不出现批量栏",
+        "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts > [AC-F1-08ai-SELECT#1] 按真实 PENDING_REVIEW 限制勾选，APPROVED 即使展示状态同为 pending_review 也不可勾；其余状态没有可用勾选框",
+        "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts > [AC-F1-08ai-SELECT#2] 批量栏随勾选出现，aria-live 精确播报张数及合计实付；取消全部后入口与统计消失",
+        "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts > [AC-F1-08ai-FILTER#1] 改筛选未查询仍保留原选择；查询应用新条件后清空全部已选，再勾选只统计新选择"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-withdrawal-batch-approve/errors.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-approve/flow.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-approve/follow-up.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-approve/network-replay.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "0a02c15b7add3f4cd58c3fd9e83eec80fbc5fe5e6a9eba6e64c81334d02435ba"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "153e2a5abc0176084462c392abfd4b926c6b35aa",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  }
+}
