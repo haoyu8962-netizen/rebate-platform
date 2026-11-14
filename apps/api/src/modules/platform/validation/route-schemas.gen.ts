@@ -293,7 +293,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "description": "With purpose=step_up the client always sends the action the code is for; the version\ngate and the session scope are decided from it (BR-ID-01 细则): only\naction=account_deletion is exempt, and a step_up request without action is gated.\npurpose=login is exempt regardless of action; purpose=bind is gated.\n",
           "type": "string",
           "enum": [
-            "withdraw",
             "payout_account_change",
             "phone_change",
             "account_deletion"
@@ -536,9 +535,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
         },
         "action": {
           "type": "string",
-          "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5).",
+          "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5). A\nwithdrawal needs no step-up, so withdraw is not an action (BR-ID-08, D10-1665).\n",
           "enum": [
-            "withdraw",
             "payout_account_change",
             "phone_change",
             "account_deletion"
@@ -571,9 +569,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
             },
             "action": {
               "type": "string",
-              "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5).",
+              "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5). A\nwithdrawal needs no step-up, so withdraw is not an action (BR-ID-08, D10-1665).\n",
               "enum": [
-                "withdraw",
                 "payout_account_change",
                 "phone_change",
                 "account_deletion"
@@ -611,9 +608,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
             "properties": {
               "action": {
                 "type": "string",
-                "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5).",
+                "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5). A\nwithdrawal needs no step-up, so withdraw is not an action (BR-ID-08, D10-1665).\n",
                 "enum": [
-                  "withdraw",
                   "payout_account_change",
                   "phone_change",
                   "account_deletion"
@@ -644,9 +640,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
             "properties": {
               "action": {
                 "type": "string",
-                "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5).",
+                "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5). A\nwithdrawal needs no step-up, so withdraw is not an action (BR-ID-08, D10-1665).\n",
                 "enum": [
-                  "withdraw",
                   "payout_account_change",
                   "phone_change",
                   "account_deletion"
@@ -1110,9 +1105,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "properties": {
             "action": {
               "type": "string",
-              "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5).",
+              "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5). A\nwithdrawal needs no step-up, so withdraw is not an action (BR-ID-08, D10-1665).\n",
               "enum": [
-                "withdraw",
                 "payout_account_change",
                 "phone_change",
                 "account_deletion"
@@ -1123,29 +1117,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
               "pattern": "^[0-9]{6}$"
             },
             "summary": {
-              "description": "The business summary bound into a withdraw or payout_account_change step-up token\n(BR-ID-08 细则「绑定业务摘要」): a withdrawal (payout_account_id of GET\n/v1/me/payout-account and amount_fen), or the new payout account to be saved. Which shape\ngoes with which action is checked by the server (20001 data.fields=[summary]). No payee\nname and no client-computed fingerprint.\n",
+              "description": "The business summary bound into a payout_account_change step-up token (BR-ID-08 细则\n「绑定业务摘要」): the new payout account to be saved. Whether a summary goes with the\naction is checked by the server (20001 data.fields=[summary]). No payee name and no\nclient-computed fingerprint. A withdrawal needs no step-up, so it has no summary\n(D10-1665).\n",
               "oneOf": [
-                {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "payout_account_id",
-                    "amount_fen"
-                  ],
-                  "properties": {
-                    "payout_account_id": {
-                      "type": "string",
-                      "description": "Entity id, a UUIDv7 string (04 §5).",
-                      "minLength": 1,
-                      "maxLength": 64
-                    },
-                    "amount_fen": {
-                      "type": "integer",
-                      "format": "int64",
-                      "minimum": 1
-                    }
-                  }
-                },
                 {
                   "type": "object",
                   "additionalProperties": false,
@@ -1228,9 +1201,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "properties": {
             "action": {
               "type": "string",
-              "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5).",
+              "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5). A\nwithdrawal needs no step-up, so withdraw is not an action (BR-ID-08, D10-1665).\n",
               "enum": [
-                "withdraw",
                 "payout_account_change",
                 "phone_change",
                 "account_deletion"
@@ -1255,29 +1227,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
               "maxLength": 4096
             },
             "summary": {
-              "description": "The business summary bound into a withdraw or payout_account_change step-up token\n(BR-ID-08 细则「绑定业务摘要」): a withdrawal (payout_account_id of GET\n/v1/me/payout-account and amount_fen), or the new payout account to be saved. Which shape\ngoes with which action is checked by the server (20001 data.fields=[summary]). No payee\nname and no client-computed fingerprint.\n",
+              "description": "The business summary bound into a payout_account_change step-up token (BR-ID-08 细则\n「绑定业务摘要」): the new payout account to be saved. Whether a summary goes with the\naction is checked by the server (20001 data.fields=[summary]). No payee name and no\nclient-computed fingerprint. A withdrawal needs no step-up, so it has no summary\n(D10-1665).\n",
               "oneOf": [
-                {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "payout_account_id",
-                    "amount_fen"
-                  ],
-                  "properties": {
-                    "payout_account_id": {
-                      "type": "string",
-                      "description": "Entity id, a UUIDv7 string (04 §5).",
-                      "minLength": 1,
-                      "maxLength": 64
-                    },
-                    "amount_fen": {
-                      "type": "integer",
-                      "format": "int64",
-                      "minimum": 1
-                    }
-                  }
-                },
                 {
                   "type": "object",
                   "additionalProperties": false,
@@ -1361,9 +1312,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "properties": {
             "action": {
               "type": "string",
-              "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5).",
+              "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5). A\nwithdrawal needs no step-up, so withdraw is not an action (BR-ID-08, D10-1665).\n",
               "enum": [
-                "withdraw",
                 "payout_account_change",
                 "phone_change",
                 "account_deletion"
@@ -1394,29 +1344,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
               "maxLength": 4096
             },
             "summary": {
-              "description": "The business summary bound into a withdraw or payout_account_change step-up token\n(BR-ID-08 细则「绑定业务摘要」): a withdrawal (payout_account_id of GET\n/v1/me/payout-account and amount_fen), or the new payout account to be saved. Which shape\ngoes with which action is checked by the server (20001 data.fields=[summary]). No payee\nname and no client-computed fingerprint.\n",
+              "description": "The business summary bound into a payout_account_change step-up token (BR-ID-08 细则\n「绑定业务摘要」): the new payout account to be saved. Whether a summary goes with the\naction is checked by the server (20001 data.fields=[summary]). No payee name and no\nclient-computed fingerprint. A withdrawal needs no step-up, so it has no summary\n(D10-1665).\n",
               "oneOf": [
-                {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "payout_account_id",
-                    "amount_fen"
-                  ],
-                  "properties": {
-                    "payout_account_id": {
-                      "type": "string",
-                      "description": "Entity id, a UUIDv7 string (04 §5).",
-                      "minLength": 1,
-                      "maxLength": 64
-                    },
-                    "amount_fen": {
-                      "type": "integer",
-                      "format": "int64",
-                      "minimum": 1
-                    }
-                  }
-                },
                 {
                   "type": "object",
                   "additionalProperties": false,
@@ -1499,9 +1428,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "properties": {
             "action": {
               "type": "string",
-              "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5).",
+              "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5). A\nwithdrawal needs no step-up, so withdraw is not an action (BR-ID-08, D10-1665).\n",
               "enum": [
-                "withdraw",
                 "payout_account_change",
                 "phone_change",
                 "account_deletion"
@@ -1526,29 +1454,8 @@ export const CONTRACT_ROUTE_SCHEMAS = {
               "maxLength": 4096
             },
             "summary": {
-              "description": "The business summary bound into a withdraw or payout_account_change step-up token\n(BR-ID-08 细则「绑定业务摘要」): a withdrawal (payout_account_id of GET\n/v1/me/payout-account and amount_fen), or the new payout account to be saved. Which shape\ngoes with which action is checked by the server (20001 data.fields=[summary]). No payee\nname and no client-computed fingerprint.\n",
+              "description": "The business summary bound into a payout_account_change step-up token (BR-ID-08 细则\n「绑定业务摘要」): the new payout account to be saved. Whether a summary goes with the\naction is checked by the server (20001 data.fields=[summary]). No payee name and no\nclient-computed fingerprint. A withdrawal needs no step-up, so it has no summary\n(D10-1665).\n",
               "oneOf": [
-                {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "payout_account_id",
-                    "amount_fen"
-                  ],
-                  "properties": {
-                    "payout_account_id": {
-                      "type": "string",
-                      "description": "Entity id, a UUIDv7 string (04 §5).",
-                      "minLength": 1,
-                      "maxLength": 64
-                    },
-                    "amount_fen": {
-                      "type": "integer",
-                      "format": "int64",
-                      "minimum": 1
-                    }
-                  }
-                },
                 {
                   "type": "object",
                   "additionalProperties": false,
@@ -4375,10 +4282,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 8,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "maxLength": 2048
         }
       },
       "required": [
@@ -7255,7 +7158,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       "properties": {
         "action": {
           "type": "string",
-          "description": "Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5).",
+          "description": "The sensitive operation whose idempotency key POST /v1/idempotency-keys/abandon abandons,\none per x-sensitive-operation operation (BR-ID-10 细则「敏感操作的幂等键」; withdraw stays:\n【放弃上一笔提现】, BR-WDR-07).\n",
           "enum": [
             "withdraw",
             "payout_account_change",

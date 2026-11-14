@@ -284,7 +284,7 @@ export type { AccountAssetsPort, AccountRiskPort } from './application/bind-phon
 // B1-20c: the account merge's cross-module ports (POST /v1/auth/merge), assembled by app.module.
 export type { AccountMergePort } from './application/merge-conditions.ts';
 // Stage ⑫ step-up check (BR-ID-08, B1-02y): app.module hands the check to RiskModule; the handlers
-// of the four x-step-up operations run their idempotent call through withStepUp.
+// of the three x-step-up operations run their idempotent call through withStepUp.
 export { STEP_UP_CHECK, createStepUpCheck, withStepUp } from './application/step-up-verify.ts';
 export type { StepUpCheckOptions, StepUpHttpRequest } from './application/step-up-verify.ts';
 // The token stages ② ③ (BR-ID-01) for the api entry's request check plan (app.module).

@@ -347,20 +347,19 @@ export interface paths {
          *     When action=phone_change and the phone change switch is off, 30414 is returned early: after
          *     10405 and before the SMS code (or third-party credential) is checked (BR-ID-06 细则); the
          *     30414 of the phone change operation itself stays the final check.
-         *     Business summary (BR-ID-08 细则「绑定业务摘要」): for action withdraw or
-         *     payout_account_change the body must carry `summary` (any of the four ways); its shape pairs
-         *     with the action — withdraw takes `payout_account_id` and `amount_fen`, payout_account_change
-         *     takes the new account to be saved (alipay `alipay_logon_id`, bank_card `card_no`, wechat
-         *     the payout_bind `attempt_id`; no payee_name, no client fingerprint: the server normalises the
-         *     account and computes its HMAC). A missing summary for these two actions, a shape that does
-         *     not pair with the action, or a summary with any other action (phone_change,
-         *     account_deletion are not bound) → 20001 with data.fields=[summary]; the schema leaves
-         *     `summary` optional and the server decides. The server writes it into the token as one
-         *     string claim (withdraw `w:<payout_account_id>:<amount_fen>`, payout account change
-         *     `p:<payout_method>:<HMAC of the normalised account>`, wechat `p:wechat:<attempt_id>`).
-         *     The withdrawal or the payout account save compares it inside the business lock: a mismatch
-         *     is 10003, the token's jti reservation is released and the token is not consumed; an
-         *     idempotent replay is not compared.
+         *     A withdrawal needs no step-up (BR-ID-08, BR-WDR-01, D10-1665): action=withdraw is not an
+         *     action of StepUpAction and is refused by the schema (20001).
+         *     Business summary (BR-ID-08 细则「绑定业务摘要」): for action payout_account_change the body
+         *     must carry `summary` (any of the four ways): the new account to be saved (alipay
+         *     `alipay_logon_id`, bank_card `card_no`, wechat the payout_bind `attempt_id`; no
+         *     payee_name, no client fingerprint: the server normalises the account and computes its
+         *     HMAC). A missing summary for this action, or a summary with any other action
+         *     (phone_change, account_deletion are not bound) → 20001 with data.fields=[summary]; the
+         *     schema leaves `summary` optional and the server decides. The server writes it into the
+         *     token as one string claim (`p:<payout_method>:<HMAC of the normalised account>`, wechat
+         *     `p:wechat:<attempt_id>`). The payout account save compares it inside the business lock: a
+         *     mismatch is 10003, the token's jti reservation is released and the token is not consumed;
+         *     an idempotent replay is not compared.
          */
         post: operations["stepUp"];
         delete?: never;
@@ -1299,20 +1298,20 @@ export interface paths {
          *     check order BR-WDR-03. Not signed the labor agreement → 10004 with
          *     data.consent_type=labor_agreement. Stopped by a precondition the user must complete (10001,
          *     10004 of any consent_type, 10005, 30304 / 30305 / 30307): not replayed; after completing
-         *     it the user submits again on Withdraw with a new Idempotency-Key. Only 10003, 10002 and
-         *     10402 resend with the same key. When the result is unknown the key is kept: the page waits
+         *     it the user submits again on Withdraw with a new Idempotency-Key. Only 10002 and 10402
+         *     resend with the same key (no step-up, so no 10003: BR-ID-08, BR-WDR-01, D10-1665). When the result is unknown the key is kept: the page waits
          *     for the user to confirm (same key) or give up (POST /v1/idempotency-keys/abandon); an
          *     abandoned key is 20903 at the idempotency check, without comparing the body or running the
          *     business, and a business write that finds it abandoned is rolled back with 20903 (BR-WDR-07
-         *     细则「前置步骤的回流」, BR-ID-10 细则「敏感操作的幂等键」). Needs X-Step-Up-Token for action
-         *     withdraw. The user cannot cancel after submitting (customer service rejects with
+         *     细则「前置步骤的回流」, BR-ID-10 细则「敏感操作的幂等键」). No second verification (BR-ID-08,
+         *     BR-WDR-01; BR-WDR-03 ② retired). The user cannot cancel after submitting (customer service rejects with
          *     USER_REQUEST, 拍板第二批 FUND-20); review_mode is decided after submission (BR-WDR-30).
          *     An account flagged for re-verification (旧号加验) on a device not yet re-verified → 10010
          *     with data.method (BR-WDR-03 ③b, after ③a the blacklist 44001; BR-WDR-01 细则「位置与返回码」).
          *     On this POST 30304 not realname still answers first (08 细则「提交接口的检查顺序」, D10-233 ①:
          *     30304 precedes ③a and ③b); ③a → ③b → ④ is the order of GET /v1/withdrawals/rules.
          *     10010 is a 1xxxx code: no idempotency result is
-         *     written and the step-up token is not consumed; after re-verifying on Reverify the user
+         *     written; after re-verifying on Reverify the user
          *     submits again with a new Idempotency-Key, nothing is replayed (BR-WDR-07).
          *     The response is the withdrawal as in GET /v1/withdrawals/{withdrawal_id}, time points and
          *     sub_text_branch included (CT-20b). Version gate: applied.
@@ -1838,8 +1837,7 @@ export interface paths {
         /**
          * My current payout account (masked)
          * @description Only payout_account_id (the id of the current payout account row; a change creates a new
-         *     row, so the id changes with it; used for the `summary` of the withdraw step-up, never to
-         *     pick an account), payout_method, masked_account, bank_name (bank card only),
+         *     row, so the id changes with it; never used to pick an account), payout_method, masked_account, bank_name (bank card only),
          *     masked_payee_name and change_remaining_this_month (changes left this natural month, BR-WDR-02 ④, never below 0);
          *     an empty object when nothing is bound. Never the ID number, the full logon id or card
          *     number, the card BIN or the full name; masking is done by the server (BR-ID-33 细则
@@ -2288,11 +2286,13 @@ export interface paths {
         put?: never;
         /**
          * Abandon the idempotency key of a sensitive operation whose result is unknown
-         * @description Only for the pending state of the four x-step-up operations (04 §5 step-up row) after a
-         *     send whose result is unknown; the user chose to give up instead of confirming (BR-ID-10
-         *     细则「敏感操作的幂等键」). The server locates the idempotency record from the token's app_id
-         *     and user, the method and path that `action` maps to (the x-step-up table in
-         *     info.description) and `idempotency_key`:
+         * @description Only for the pending state of the four sensitive operations (x-sensitive-operation; the
+         *     withdrawal included, although it needs no step-up) after a send whose result is unknown;
+         *     the user chose to give up instead of confirming (BR-ID-10 细则「敏感操作的幂等键」, BR-WDR-07
+         *     细则「前置步骤的回流」). The server locates the idempotency record from the token's app_id
+         *     and user, the method and path that `action` (IdempotencyAbandonAction: withdraw → POST
+         *     /v1/withdrawals, payout_account_change → PUT /v1/me/payout-account, phone_change → POST
+         *     /v1/me/phone, account_deletion → POST /v1/me/deletion) maps to and `idempotency_key`:
          *     - no record for the key → writes an abandoned record, `outcome=abandoned`, `original=null`;
          *     - already abandoned → `outcome=abandoned` again (repeated calls give the same result);
          *     - a completed record → `outcome=completed` and `original` = the stored response envelope
@@ -11847,17 +11847,25 @@ export interface components {
             trace_id: components["schemas"]["TraceId"];
         };
         /**
-         * @description Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5).
+         * @description Action a step_up_token is bound to; one per x-step-up operation (04 §2.5, §5). A
+         *     withdrawal needs no step-up, so withdraw is not an action (BR-ID-08, D10-1665).
          * @enum {string}
          */
-        StepUpAction: "withdraw" | "payout_account_change" | "phone_change" | "account_deletion";
+        StepUpAction: "payout_account_change" | "phone_change" | "account_deletion";
+        /**
+         * @description The sensitive operation whose idempotency key POST /v1/idempotency-keys/abandon abandons,
+         *     one per x-sensitive-operation operation (BR-ID-10 细则「敏感操作的幂等键」; withdraw stays:
+         *     【放弃上一笔提现】, BR-WDR-07).
+         * @enum {string}
+         */
+        IdempotencyAbandonAction: "withdraw" | "payout_account_change" | "phone_change" | "account_deletion";
         /**
          * @description Result of POST /v1/idempotency-keys/abandon (04 §6.1).
          * @enum {string}
          */
         IdempotencyAbandonOutcome: "abandoned" | "completed";
         AbandonIdempotencyKeyRequest: {
-            action: components["schemas"]["StepUpAction"];
+            action: components["schemas"]["IdempotencyAbandonAction"];
             idempotency_key: components["schemas"]["IdempotencyKey"];
         };
         /**
@@ -12193,18 +12201,13 @@ export interface components {
             summary?: components["schemas"]["StepUpSummary"];
         };
         /**
-         * @description The business summary bound into a withdraw or payout_account_change step-up token
-         *     (BR-ID-08 细则「绑定业务摘要」): a withdrawal (payout_account_id of GET
-         *     /v1/me/payout-account and amount_fen), or the new payout account to be saved. Which shape
-         *     goes with which action is checked by the server (20001 data.fields=[summary]). No payee
-         *     name and no client-computed fingerprint.
+         * @description The business summary bound into a payout_account_change step-up token (BR-ID-08 细则
+         *     「绑定业务摘要」): the new payout account to be saved. Whether a summary goes with the
+         *     action is checked by the server (20001 data.fields=[summary]). No payee name and no
+         *     client-computed fingerprint. A withdrawal needs no step-up, so it has no summary
+         *     (D10-1665).
          */
-        StepUpSummary: components["schemas"]["StepUpSummaryWithdraw"] | components["schemas"]["StepUpSummaryAlipay"] | components["schemas"]["StepUpSummaryBankCard"] | components["schemas"]["StepUpSummaryWechat"];
-        StepUpSummaryWithdraw: {
-            payout_account_id: components["schemas"]["Id"];
-            /** Format: int64 */
-            amount_fen: number;
-        };
+        StepUpSummary: components["schemas"]["StepUpSummaryAlipay"] | components["schemas"]["StepUpSummaryBankCard"] | components["schemas"]["StepUpSummaryWechat"];
         StepUpSummaryAlipay: {
             /** @enum {string} */
             payout_method: "alipay";
@@ -22721,8 +22724,9 @@ export interface components {
         /**
          * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
          *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-         *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-         *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+         *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+         *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+         *     without comparing the body (04 §5「幂等」).
          */
         IdempotencyKey: components["schemas"]["IdempotencyKey"];
         /** @description Platform code (enum platform). */
@@ -23769,8 +23773,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -24250,8 +24255,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -24476,8 +24482,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -26044,17 +26051,11 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                /**
-                 * @description step_up_token from POST /v1/auth/step-up for the operation's x-step-up action (04 §5). Missing,
-                 *     empty, expired or for another action → 10003 (not 20001; that is why the header is optional
-                 *     and has no minimum length). A replay of a finished Idempotency-Key never looks at it
-                 *     (BR-WDR-01 细则, BR-ID-08).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["StepUpToken"];
             };
             path?: never;
             cookie?: never;
@@ -26218,8 +26219,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -26615,8 +26617,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
@@ -26695,8 +26698,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -26852,8 +26856,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -26959,8 +26964,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -27033,8 +27039,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -27109,8 +27116,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -27225,8 +27233,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
@@ -27306,8 +27315,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -27421,8 +27431,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -27824,8 +27835,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
@@ -28137,8 +28149,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -28668,8 +28681,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -28751,8 +28765,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -29104,8 +29119,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -29167,8 +29183,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -29226,8 +29243,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -29365,8 +29383,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -29434,8 +29453,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -29735,8 +29755,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -40826,8 +40847,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -41132,8 +41154,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -41456,8 +41479,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -41552,8 +41576,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -41661,8 +41686,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -41726,8 +41752,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -41964,8 +41991,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -42140,8 +42168,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -42227,8 +42256,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -42402,8 +42432,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -42567,8 +42598,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -42650,8 +42682,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -42721,8 +42754,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -43117,8 +43151,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -43203,8 +43238,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -43379,8 +43415,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -43451,8 +43488,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -43525,8 +43563,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -43914,8 +43953,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -44468,8 +44508,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -44560,8 +44601,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -44651,8 +44693,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -44827,8 +44870,9 @@ export interface operations {
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
-                 *     the first result (拍板第二批 TRADE-22). On the x-step-up operations a key abandoned through
-                 *     POST /v1/idempotency-keys/abandon → 20903, without comparing the body (04 §5「幂等」).
+                 *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
+                 *     (x-sensitive-operation) a key abandoned through POST /v1/idempotency-keys/abandon → 20903,
+                 *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };

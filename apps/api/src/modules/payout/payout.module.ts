@@ -142,7 +142,7 @@ export interface PayoutModuleOptions {
   /** A ready use case (tests), or a factory over the entry's providers (app.module). */
   rules?: WithdrawRulesService | Factory<WithdrawRulesService>;
   apply?: WithdrawApplyService | Factory<WithdrawApplyService>;
-  /** identity's withStepUp (app.module); without it POST /v1/withdrawals refuses with 50001. */
+  /** identity's withStepUp (app.module); unused since B1-02zzzc (a withdrawal needs no step-up). */
   stepUp?: WithdrawStepUp;
   /**
    * B2-05f: the process's snapshot decryption for the records (a factory over the entry's field

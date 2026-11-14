@@ -8,17 +8,18 @@
 // false, never an error envelope.
 //
 // B2-05d: POST /v1/withdrawals (createWithdrawal; 规划/04 §6.4; 08 BR-WDR-01, BR-WDR-03, BR-WDR-07).
-// x-auth realname, signed, idempotent, x-step-up withdraw, version gate. Before the handler the
+// x-auth realname, signed, idempotent, x-sensitive-operation, version gate. Before the handler the
 // request checks judged the signature, the token (h5_token 10403), the version gate, the risk
 // state (10006) and the real name (30304); the claim of idempotency.executeInTransaction answers
-// a replay, 20001 (missing key), 20901, 20903 and 40901 itself and judges the step-up token on
-// the post-miss path (identity's stage ⑫, 10003). The handler runs the application use case on
-// the claim's transaction: code 0 and 3xxxx are stored with the key (BR-WDR-07 ⑧), everything
-// else rolls back and leaves the key reusable; withStepUp consumes the step-up token on code 0
-// and releases it otherwise (BR-WDR-01). `msg` is the package default text
+// a replay, 20001 (missing key), 20901, 20903 and 40901 itself. B1-02zzzc (D10-1665 / D10-1666;
+// BR-ID-08, BR-WDR-01, BR-WDR-03 ② retired): a withdrawal needs no step-up — no X-Step-Up-Token
+// is read and identity's withStepUp no longer wraps the call (stage ⑫ does not map this path), so
+// the chain's ② is passed as satisfied. The handler runs the application use case on the claim's
+// transaction: code 0 and 3xxxx are stored with the key (BR-WDR-07 ⑧), everything else rolls back
+// and leaves the key reusable. `msg` is the package default text
 // (contracts/texts.default.json) and `data` only what the result carries.
 // B2-05q (BR-ID-36 细则「被拦截请求申诉」): a 44001 the handler produced in this call has its hit
-// recorded after executeInTransaction (and the step-up wrapper) returned — the application's
+// recorded after executeInTransaction returned — the application's
 // transaction has rolled back and released its connection — and before the answer is written; an
 // answer of the idempotency layer (source other than 'handler') records nothing. A failed record
 // throws (5xx, as identity's bind-phone): the refusal stays, nothing was created or stored.
@@ -106,9 +107,9 @@ export interface CreateWithdrawalHttpRequest extends CheckedRequest {
 }
 
 /**
- * Identity's withStepUp (stage ⑫ context + settlement of the step-up reservation), handed in by
- * app.module: the controller never imports identity's barrel, which carries Nest controllers the
- * `test` project (erasable syntax only) must not compile.
+ * Identity's withStepUp (stage ⑫ context + settlement of the step-up reservation), still handed
+ * in by app.module (PayoutModuleOptions.stepUp) but no longer used: since B1-02zzzc a withdrawal
+ * needs no step-up (D10-1665). Kept so the module's wiring keeps its shape.
  */
 export type WithdrawStepUp = (
   request: CreateWithdrawalHttpRequest,
@@ -185,7 +186,6 @@ export class WithdrawalsController {
   readonly #handle: Kysely<DB> | null;
   readonly #apply: WithdrawApplyService | null;
   readonly #idempotency: Idempotency | undefined;
-  readonly #stepUp: WithdrawStepUp | null;
   readonly #reads: DecryptWithdrawalAccount | null;
   readonly #clock: Clock | null;
   readonly #logger: RootLogger | null;
@@ -195,7 +195,8 @@ export class WithdrawalsController {
     handle: Kysely<DB> | null,
     apply: WithdrawApplyService | null,
     idempotency?: Idempotency,
-    stepUp?: WithdrawStepUp | null,
+    // Position 4 (WITHDRAW_STEP_UP) is still injected but unused since B1-02zzzc (D10-1665).
+    _stepUp?: WithdrawStepUp | null,
     reads?: DecryptWithdrawalAccount | null,
     clock?: Clock | null,
     logger?: RootLogger | null,
@@ -204,7 +205,6 @@ export class WithdrawalsController {
     this.#handle = handle;
     this.#apply = apply;
     this.#idempotency = idempotency;
-    this.#stepUp = stepUp ?? null;
     this.#reads = reads ?? null;
     this.#clock = clock ?? null;
     this.#logger = logger ?? null;
@@ -278,41 +278,36 @@ export class WithdrawalsController {
     const actor = this.#actor(request);
     const apply = this.#apply;
     const idempotency = this.#idempotency;
-    const stepUp = this.#stepUp;
-    if (apply === null || idempotency === undefined || stepUp === null) {
-      throw new Error(
-        'payout: the withdrawal application needs the database, idempotency and the step-up wrapper',
-      );
+    if (apply === null || idempotency === undefined) {
+      throw new Error('payout: the withdrawal application needs the database and idempotency');
     }
     const header = request.headers['idempotency-key'];
     const key = typeof header === 'string' ? header : undefined;
     const body = request.body;
     // The hit record of this call's own 44001 (B2-05q); set by the handler only.
     const blocked: { record: (() => Promise<void>) | null } = { record: null };
-    const response = await stepUp(request, () =>
-      idempotency.executeInTransaction(
-        {
-          appId: actor.appId,
-          actor: { userId: actor.userId, deviceId: actor.deviceId, phoneHmac: null },
-          method: 'POST',
-          path: WITHDRAWALS_PATH,
-          key,
-          body,
-          traceId: request.id,
-        },
-        async (trx) => {
-          // The claim answered 20001 before the handler when the key is missing.
-          if (key === undefined) throw new Error('payout: withdrawal application without a key');
-          // Stage ⑫ judged the step-up token on the post-miss path: the chain's ② holds here.
-          const result = await apply.apply(trx, {
-            ...actor,
-            amountFen: BigInt(body.amount_fen),
-            stepUpValid: true,
-          });
-          blocked.record = isWithdrawAccepted(result) ? null : (result.recordBlocked ?? null);
-          return applyResult(result, request.id);
-        },
-      ),
+    const response = await idempotency.executeInTransaction(
+      {
+        appId: actor.appId,
+        actor: { userId: actor.userId, deviceId: actor.deviceId, phoneHmac: null },
+        method: 'POST',
+        path: WITHDRAWALS_PATH,
+        key,
+        body,
+        traceId: request.id,
+      },
+      async (trx) => {
+        // The claim answered 20001 before the handler when the key is missing.
+        if (key === undefined) throw new Error('payout: withdrawal application without a key');
+        // No step-up for a withdrawal (BR-WDR-03 ② retired, D10-1665): the chain's ② holds.
+        const result = await apply.apply(trx, {
+          ...actor,
+          amountFen: BigInt(body.amount_fen),
+          stepUpValid: true,
+        });
+        blocked.record = isWithdrawAccepted(result) ? null : (result.recordBlocked ?? null);
+        return applyResult(result, request.id);
+      },
     );
     if (blocked.record !== null && response.source === 'handler') await blocked.record();
     const envelope = JSON.parse(response.body) as unknown;
