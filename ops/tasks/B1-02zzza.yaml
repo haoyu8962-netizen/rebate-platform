@@ -9,6 +9,7 @@ type: impl
 # 规则测试：B1-02zzz 已由 Codex 写过、经独立 Claude 评审的 Me 部分（step-up-bound-phone/me.int.test.ts，contract.test.ts 的 [AC-B1-02zzz#3]）原样移到本任务的规则测试目录 test/spec/identity/me-masked-phone/**；冻结 me/me.int.test.ts [AC-B1-02z#1] 与 me-invite/me-invite.int.test.ts [AC-B1-11k#12] 对 Me 整体全等，只在期望里补 masked_phone（见 modify_existing）。
 # 推之前在测试机跑 test/spec/identity 整目录（D10-1598 e）。契约槽：排在 B1-02zzz 之后。
 # 2026-11-14 13:0x：Codex 写测试第 1 次被额度挡下（codex-run.sh：model capacity error or usage limit: usage limit, try again at Nov 20th, 2026 1:01 PM；未计试次），按 ops/approvals.yaml 第 36 条改由无上下文的独立 Claude 经 tools/agent/claude-run.sh 写规则测试，tester 改为 claude-independent。
+# D10-1610 实现口径：phone_hmac 非空但 phone_cipher 为空或解密失败时 masked_phone 返回 null、/v1/me 照常成功，记 warn 日志（只带用户 id 与原因，不带号码），加单测钉住。
 refs: [BR-ID-08]
 refs_hash:
   BR-ID-08: 9ae5b5206173
@@ -45,4 +46,4 @@ modify_existing:
     reason: rule_change
     br: [BR-ID-08]
     ruling: D10-1598
-    note: '依 D10-1598：本行对 Me 整体全等，只在期望里补 masked_phone（按该用例账号的绑定状态取值），其余断言不动；是加字段不是放宽；反向验证：去掉实现里的 masked_phone → 本行变红'
+    note: '依 D10-1598 / D10-1610：本行对 Me 整体全等，只在期望里补 masked_phone，其余断言不动；该用例账号 phone_bound=true 但 me-invite/kit.ts 夹具只写随机 phone_hmac、不写 phone_cipher，故在用例块内给该账号写一份加密手机号（照 sms-codes/http.int.test.ts 已评审的 FIELD_CRYPTO 写法），期望 BR-TEXT-02 脱敏串；只改块内，不碰 kit.ts；是加字段不是放宽；反向验证：去掉实现里的 masked_phone → 本行变红'
