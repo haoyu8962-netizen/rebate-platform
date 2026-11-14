@@ -1,0 +1,96 @@
+{
+  "task": "B3-05s",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "spec_commit": "d9d219e6be8c327f83d6011ebd6c30d892352ddf",
+  "red_tests": [
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#1][BR-AI-06] 模型检索词中的元金额命中：整条只搜建议消失，其余两条和金额留痕保留",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#2][BR-AI-06] 模型检索词中的货币符号命中：不把见卡片替换结果放进只搜建议",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#3][BR-AI-06] 模型检索词含 HTTP 链接：不出只搜建议并留痕 url",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#4][BR-AI-06] 模型检索词含 scheme：第 1、3 条保留且不泄露跳转串",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#5][BR-AI-06] 模型检索词含无协议短链：第 2 条删除并留痕 url",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#6][BR-AI-06] 模型检索词含复制打开口令：第 2 条删除并留痕 tpwd",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#7][BR-AI-06] 审核桩只拦模型检索词：不出第 2 条，其他建议照出且记 output_filtered",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#8][BR-AI-06][BR-TEXT-22] 同一编排实例里金额词被拦，普通词仍取前 8 码点且留痕不串轮",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#9][BR-AI-06][BR-TEXT-22] 同样含金额的检索词：服务端意图兜底代调照旧，模型工具参数才删除第 2 条",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#10][BR-AI-06][BR-TEXT-22] 换一批 续搜无结果：沿用模型词须过滤，沿用服务端关键词照旧",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#11][BR-AI-06][BR-TEXT-22] 换到京东 续搜无结果：沿用模型词须过滤，沿用服务端关键词照旧",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#12][BR-AI-06][BR-TEXT-22] 价格改成五十元以内 续搜无结果：沿用模型词须过滤，沿用服务端关键词照旧",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#13][BR-AI-06] 回答价格追问后服务端沿用模型检索词：无结果时仍须过滤只搜建议",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#14][BR-AI-06] 检索词 99元耳机 被拦仅删除第 2 条建议，模型说明文字原样下发",
+    "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#15][BR-AI-06] 检索词 合成审核拦截词 被拦仅删除第 2 条建议，模型说明文字原样下发"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d9d219e6be8c327f83d6011ebd6c30d892352ddf",
+      "tree": "72f1004e9ca429fc83d7474e63b906353dd9eee7",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-14T00:29:03Z",
+      "finished_at": "2026-11-14T00:29:09Z",
+      "red_tests": [
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#1][BR-AI-06] 模型检索词中的元金额命中：整条只搜建议消失，其余两条和金额留痕保留",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#2][BR-AI-06] 模型检索词中的货币符号命中：不把见卡片替换结果放进只搜建议",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#3][BR-AI-06] 模型检索词含 HTTP 链接：不出只搜建议并留痕 url",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#4][BR-AI-06] 模型检索词含 scheme：第 1、3 条保留且不泄露跳转串",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#5][BR-AI-06] 模型检索词含无协议短链：第 2 条删除并留痕 url",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#6][BR-AI-06] 模型检索词含复制打开口令：第 2 条删除并留痕 tpwd",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#7][BR-AI-06] 审核桩只拦模型检索词：不出第 2 条，其他建议照出且记 output_filtered",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#8][BR-AI-06][BR-TEXT-22] 同一编排实例里金额词被拦，普通词仍取前 8 码点且留痕不串轮",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#9][BR-AI-06][BR-TEXT-22] 同样含金额的检索词：服务端意图兜底代调照旧，模型工具参数才删除第 2 条",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#10][BR-AI-06][BR-TEXT-22] 换一批 续搜无结果：沿用模型词须过滤，沿用服务端关键词照旧",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#11][BR-AI-06][BR-TEXT-22] 换到京东 续搜无结果：沿用模型词须过滤，沿用服务端关键词照旧",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#12][BR-AI-06][BR-TEXT-22] 价格改成五十元以内 续搜无结果：沿用模型词须过滤，沿用服务端关键词照旧",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#13][BR-AI-06] 回答价格追问后服务端沿用模型检索词：无结果时仍须过滤只搜建议",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#14][BR-AI-06] 检索词 99元耳机 被拦仅删除第 2 条建议，模型说明文字原样下发",
+        "test/spec/agent/q-short-output-guard/model-query.test.ts > [AC-B3-05s#15][BR-AI-06] 检索词 合成审核拦截词 被拦仅删除第 2 条建议，模型说明文字原样下发"
+      ],
+      "expected": ["test/spec/agent/q-short-output-guard/model-query.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "31169ccd55aaf07ad5908af9115359d69f4e81a9abca3ad673c9af9196c8c326"
+        }
+      ]
+    }
+  ],
+  "risk_note": "RV1 (agent orchestrator). C-32 (D10-1469; BR-AI-06 细则 line 322: suggestions from the model must pass OutputGuard): a search term from the model's tool call is checked before it fills {q_short} of agent.suggest.no_result.2 — the whole q_short (first 8 code points) is run once through the guard's filter rules (amount, link / token / short link) and, with no hit, the run's own review port (timeout retried once like the guard; still not passing → no suggestion 2); a hit or a review block leaves out suggestion 2, keeps 1 and 3, and merges output_filtered / filter_hits into the run's trace. The check is a separate per-run query checker and never touches the run's own explanation guard (no sentence buffer, no two-sentence budget). The source travels with the chain id: a chain opened by a model call gets a 'model-' prefixed id, and every server continuation (refine, next batch, platform, price change, price answer, withoutCondition, cheaper) keeps base.chain_id, so the flag follows and cannot be forged by the model; keyword chains (server's own term) are unchanged. Not stored in conditions because frozen tests compare conditions exactly. Codex general r1 pass with one S2 (a multi-sentence term like 茶。杯。好。9元 slipped past the guard's two-sentence cut) fixed in round 2 (whole q_short checked at once, unit tests pin it); r2 incremental pass. Out of scope, logged for later: review-timeout fail-close pinned by rule tests; banned words in the OutputGuard. Rule tests by Codex (2 attempts), independent Claude spec-test r1 fail → r2 pass. Test machine: red/2 PASS (15 tests) at the spec commit; verify:fast green twice (D10-1503); full verification is the required CI checks (approvals #21).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 2,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "Codex general r1 pass with one S2 (multi-sentence term bypassing the two-sentence cut), fixed in round 2; r2 incremental pass, no findings (couli-runs/B3-05s/review-codex-general-r1.json, -r2.json)."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "395f7e17e221a4cced79be4459440565c953c51f",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Fresh independent Claude reviewers as Opus subagents of the desktop line (trusted review-spec-test prompt via claude-run.sh --dry-run, validated, worktree unchanged after each). r1 fail (S1: model term reused by server continuations; S2: explanation text untouched) → Codex attempt 2 → r2 incremental pass with one S2 (withoutCondition continuation) made an implementation requirement and covered (couli-runs/B3-05s/desktop-spectest/review-r1.json, -r2.json)."
+  }
+}
