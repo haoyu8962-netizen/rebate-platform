@@ -511,3 +511,57 @@ export function redReport(name: string, tests: RedTest[]) {
     ],
   };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Round 2 (review-claude-1 S1-1): a branch whose rule-test commit comes after the base.
+
+/**
+ * A task branch base → rule-test commit with `spec` (the evidence's spec_commit) → a commit with
+ * `later` (may be empty) → the evidence, whose modify_existing list is `records` (OMIT: no such
+ * key); null removes a file. Returns the head and the rule-test commit.
+ */
+export function branchVia(
+  repo: Repo,
+  name: string,
+  spec: Record<string, string | null>,
+  later: Record<string, string | null>,
+  records: unknown,
+): { head: string; spec: string } {
+  repo.n += 1;
+  git(repo.dir, ['checkout', '-q', '-B', `${name}-${repo.n}`, repo.base]);
+  const apply = (changes: Record<string, string | null>, message: string): string => {
+    for (const [file, text] of Object.entries(changes)) {
+      if (text === null) rmSync(join(repo.dir, file));
+      else write(repo.dir, { [file]: text });
+    }
+    git(repo.dir, ['add', '-A']);
+    git(repo.dir, ['commit', '-q', '--allow-empty', '-m', message]);
+    return git(repo.dir, ['rev-parse', 'HEAD']);
+  };
+  const specCommit = apply(spec, `test: ${name} (rule tests)`);
+  apply(later, `feat: ${name}`);
+  const tree = git(repo.dir, ['rev-parse', 'HEAD:test']);
+  const doc = {
+    task: TASK,
+    spec_ref: SPEC_REF,
+    spec_commit: specCommit,
+    runs: [],
+    reviews: [
+      {
+        reviewer: 'codex',
+        engine: 'codex',
+        model: 'gpt-6-astra',
+        verdict: 'pass',
+        open_s0_s1: 0,
+        checklist_complete: true,
+      },
+    ],
+    trees: { test: tree },
+    longrun: { runs: 1000000, seed: 1, passed: true, tree },
+    ...(records === OMIT ? {} : { modify_existing: records }),
+  };
+  write(repo.dir, { [`ops/evidence/${TASK}.json`]: `${JSON.stringify(doc, null, 2)}\n` });
+  git(repo.dir, ['add', '-A']);
+  git(repo.dir, ['commit', '-q', '-m', 'evidence']);
+  return { head: git(repo.dir, ['rev-parse', 'HEAD']), spec: specCommit };
+}
