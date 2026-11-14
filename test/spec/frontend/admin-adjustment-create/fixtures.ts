@@ -115,6 +115,15 @@ export const SUMMARY = {
   newAmount: '红冲金额',
 } as const;
 export const SUMMARY_LABELS: readonly string[] = Object.values(SUMMARY);
+/**
+ * The reversal dialog's balance lines (BR-FUND-24 ④, adminGetAdjustment balance_preview): the
+ * dialog is where the reversal is approved and executed at once, so it shows `available` before
+ * and after, each through @couli/money (a negative after is shown as the negative it is).
+ */
+export const BALANCE = {
+  before: '红冲前可用余额',
+  after: '红冲后可用余额',
+} as const;
 
 /** Local checks (nothing is sent while one fails) and the contract's refusals, as shown. */
 export const ERROR = {
@@ -162,6 +171,27 @@ export const PLATFORM_NAMES: readonly string[] = [
   '饿了么',
   '快手',
   '苏宁',
+];
+export type ContraSubject = NonNullable<CreateNew['contra_subject']>;
+export type ContraPlatform = NonNullable<CreateNew['contra_platform']>;
+/** Each choosable 对方科目 by its name, with the code the body must carry. */
+export const SUBJECT_CHOICES: readonly (readonly [string, ContraSubject])[] = [
+  ['佣金收入', 'COMMISSION_REVENUE'],
+  ['联盟应收', 'UNION_RECEIVABLE'],
+  ['坏账', 'BAD_DEBT'],
+  ['营销费用', 'MKT_EXPENSE'],
+];
+/** Each platform (contracts/enums/platform.yaml order) by its name, with the code of the body. */
+export const PLATFORM_CHOICES: readonly (readonly [string, ContraPlatform])[] = [
+  ['淘宝', 'taobao'],
+  ['京东', 'jd'],
+  ['拼多多', 'pdd'],
+  ['美团', 'meituan'],
+  ['唯品会', 'vip'],
+  ['抖音', 'douyin'],
+  ['饿了么', 'eleme'],
+  ['快手', 'kuaishou'],
+  ['苏宁', 'suning'],
 ];
 /** The reason codes a person may choose (RESTORE and ACCOUNT_CLOSED never offered). */
 export const CHOOSABLE_REASONS = ['RECON_FIX', 'PAYOUT_RECOVERY', 'OTHER'] as const;
@@ -215,6 +245,36 @@ export const NOTE = {
 } as const;
 /** available before every write of the fake server. */
 export const AVAILABLE_BEFORE = 50000;
+
+/** An APPROVED PAYOUT_RECOVERY decrease of 3000 fen, not reversed (older than every sample). */
+export const OPEN_DECREASE = 'ad100009-0000-4000-8000-000000000009';
+export const OPEN_DECREASE_FEN = 3000;
+/** The sample behind OPEN_DECREASE (pass it as `extra`; it lists after ADJUSTMENT_ORDER). */
+export function openDecrease(): Adjustment {
+  return {
+    adjust_id: OPEN_DECREASE,
+    user_id: USER.payee,
+    direction: 'decrease',
+    amount_fen: OPEN_DECREASE_FEN,
+    reason_code: 'PAYOUT_RECOVERY',
+    status: 'APPROVED',
+    refs: [
+      { ref_type: 'withdrawal', ref_id: DOC.withdrawal },
+      { ref_type: 'recon_diff', ref_id: DOC.payoutDiff },
+    ],
+    contra_subject: 'CASH_ALIPAY',
+    contra_platform: null,
+    note: '重复打款，追回',
+    reverses_adjust_id: null,
+    reversed_by_adjust_id: null,
+    created_by: ADMIN.first,
+    created_at: '2026-11-01T10:00:00+08:00',
+    reviewed_by: ADMIN.first,
+    reviewed_at: '2026-11-01T10:00:00+08:00',
+    reject_note: null,
+    voucher_id: 'f1000009-0000-4000-8000-000000000009',
+  };
+}
 
 // ---- envelopes -----------------------------------------------------------------------------
 
@@ -270,6 +330,8 @@ export interface WriteServerOptions {
   readonly permissions?: Grants;
   /** false: the account has no registered verify phone (10003 verify_phone_missing). */
   readonly verifyPhone?: boolean;
+  /** Further forms after the eight samples (e.g. openDecrease()). */
+  readonly extra?: readonly Adjustment[];
 }
 
 const POSITIVE = /^[1-9][0-9]*$/;
@@ -419,7 +481,7 @@ type Draft = Omit<Adjustment, 'adjust_id' | 'created_at' | 'reviewed_at' | 'vouc
  * frozen mount / openDetail / settled helpers take it.
  */
 export function createWriteServer(options: WriteServerOptions = {}) {
-  const forms: Adjustment[] = structuredClone(adjustments());
+  const forms: Adjustment[] = structuredClone([...adjustments(), ...(options.extra ?? [])]);
   const candidates = structuredClone(writeoffs());
   const log: RequestLog[] = [];
   const overrides: { method: string; path: string; when: When | undefined; reply: Reply }[] = [];
