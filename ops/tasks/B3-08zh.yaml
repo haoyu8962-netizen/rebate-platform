@@ -97,5 +97,5 @@ red_exempt:
 red_exempt_outside:
   - file: 'test/spec/agent/trace-retry/queue.test.ts'
     reason: '用例外只删了两个失用导入（APP、SESSION，随 pendingCard 断言删除而失用），未改的用例体一字不动'
-status: todo
-pr: null
+status: done
+pr: 84
