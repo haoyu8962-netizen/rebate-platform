@@ -16,7 +16,10 @@ const PRINCIPAL: TokenPrincipal = {
 };
 const OK: SmsResult = { code: 0, data: { resend_after_sec: 60, expires_in_sec: 300 } };
 
-function setup(bound: string | null | undefined = '13912345678') {
+// No argument → a user with a bound phone; an explicit undefined → no user row (BoundPhoneReader's
+// contract), which a default parameter would silently replace with the default phone.
+function setup(...args: [bound?: string | null | undefined]) {
+  const bound = args.length === 0 ? '13912345678' : args[0];
   const send = vi.fn(async (request: SmsRequest) => {
     void request;
     return OK;
