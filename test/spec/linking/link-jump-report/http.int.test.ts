@@ -13,6 +13,7 @@ it('[AC-B1-06zo#8] 真实 HTTP optional：游客与本人令牌都 200，身份�
   const attempt = await h.attempt(owner);
   const event = jump({ ...attempt, user_id: randomUUID(), device_id: 'forged-device' });
   const before = await h.row(attempt);
+  const evidence = await h.evidence(owner.appId);
   h.clearObserved();
   await accepted(await h.post(owner, { events: [event] }, { authorization: undefined }));
   expect(await h.row(attempt)).toEqual(before);
@@ -22,7 +23,19 @@ it('[AC-B1-06zo#8] 真实 HTTP optional：游客与本人令牌都 200，身份�
     userId: null,
     deviceId: owner.deviceId,
   });
-  expect(h.mutations).toEqual([]);
+  expect(without(await h.evidence(owner.appId), 'events')).toEqual(without(evidence, 'events'));
+  // Any newly inserted rows may belong only to the two analytics tables.
+  for (const mutation of h.mutations) {
+    expect(JSON.parse(mutation)).toMatchObject({
+      kind: 'InsertQueryNode',
+      into: {
+        table: {
+          schema: { name: 'app' },
+          identifier: { name: expect.stringMatching(/^(events|event_dedup)$/u) },
+        },
+      },
+    });
+  }
 
   h.clearObserved();
   await rejected(
@@ -83,9 +96,24 @@ it.each(['requested', 'unknown'] as const)(
       dismissed_at: original.dismissed_at,
     });
     expect(await h.row(another)).toEqual(untouched);
-    expect(await h.evidence(owner.appId)).toEqual(evidence);
-    expect(h.mutations.length).toBeGreaterThan(0);
-    for (const mutation of h.mutations) {
+    expect(without(await h.evidence(owner.appId), 'events')).toEqual(without(evidence, 'events'));
+    const businessMutations = h.mutations.filter((mutation) => {
+      const node = JSON.parse(mutation) as { kind: string };
+      if (node.kind !== 'InsertQueryNode') return true;
+      // New rows are allowed only in analytics; all other writes retain the original checks.
+      expect(node).toMatchObject({
+        kind: 'InsertQueryNode',
+        into: {
+          table: {
+            schema: { name: 'app' },
+            identifier: { name: expect.stringMatching(/^(events|event_dedup)$/u) },
+          },
+        },
+      });
+      return false;
+    });
+    expect(businessMutations.length).toBeGreaterThan(0);
+    for (const mutation of businessMutations) {
       expect(JSON.parse(mutation)).toMatchObject({
         kind: 'UpdateQueryNode',
         table: { kind: 'TableNode', table: { identifier: { name: 'link_open_attempts' } } },
@@ -322,16 +350,46 @@ it('[AC-B1-06zo#18] 最低版本闸门 10405、无效令牌 10002、令牌 app �
   expect((await h.row(attempt)).jump_reported_at?.toISOString()).toBe(NOW);
 });
 
-it('[AC-B1-06zo#19] 其他全部已登记事件收下且不写库，不承诺 saved，也不生成业务事件或修改点击证据', async () => {
+it('[AC-B1-06zo#19] 其他全部已登记事件收下并落进 app.events（app / 用户 / 设备取自服务端），不承诺 saved，仍不生成业务事件、不修改点击证据', async () => {
   const owner = await h.user();
   const attempt = await h.attempt(owner);
   const before = await h.row(attempt);
   const evidence = await h.evidence(owner.appId);
+  const events = allEvents()
+    .filter((event) => event['name'] !== 'link_jump')
+    .map((event): Record<string, unknown> => ({
+      ...event,
+      app_id: 'forged-app',
+      user_id: randomUUID(),
+      device_id: randomUUID(),
+    }));
   h.clearObserved();
-  await accepted(
-    await h.post(owner, { events: allEvents().filter((event) => event['name'] !== 'link_jump') }),
+  await accepted(await h.post(owner, { events }));
+  const after = await h.evidence(owner.appId);
+  expect(without(after, 'events')).toEqual(without(evidence, 'events'));
+  expect(after.events).toHaveLength(events.length);
+  expect(after.events.map((row) => row.event_id).sort()).toEqual(
+    events.map((event) => event['event_id']).sort(),
   );
-  expect(await h.evidence(owner.appId)).toEqual(evidence);
+  for (const event of events) {
+    expect(after.events.find((row) => row.event_id === event['event_id'])).toMatchObject({
+      event_id: event['event_id'],
+      name: event['name'],
+      app_id: owner.appId,
+      user_id: owner.uid,
+      device_id: owner.deviceId,
+    });
+  }
   expect(await h.row(attempt)).toEqual(before);
-  expect(h.mutations).toEqual([]);
+  for (const mutation of h.mutations) {
+    expect(JSON.parse(mutation)).toMatchObject({
+      kind: 'InsertQueryNode',
+      into: {
+        table: {
+          schema: { name: 'app' },
+          identifier: { name: expect.stringMatching(/^(events|event_dedup)$/u) },
+        },
+      },
+    });
+  }
 });
