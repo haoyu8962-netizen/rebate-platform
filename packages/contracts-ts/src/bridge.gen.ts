@@ -1417,8 +1417,8 @@ export const routes = {
     "phase": "M-公开",
     "since": {
       "ios": null,
-      "android": null,
-      "harmony": null
+      "android": "1.0.0",
+      "harmony": "1.0.0"
     },
     "debug_only": false,
     "entry": [

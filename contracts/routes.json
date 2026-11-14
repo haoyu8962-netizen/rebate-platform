@@ -674,8 +674,8 @@
       "auth": "login",
       "since": {
         "ios": null,
-        "android": null,
-        "harmony": null
+        "android": "1.0.0",
+        "harmony": "1.0.0"
       },
       "phase": "M-公开",
       "params": {
