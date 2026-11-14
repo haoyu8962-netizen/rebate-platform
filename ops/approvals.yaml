@@ -555,3 +555,9 @@ approvals:
     granted: true
     date: '2026-11-14'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（试次属门禁流程小改动）：前四次里第 2、3 次用在摸清冻结 it.each 的登记方式（approvals 88），第 4 次已把那处改好并通过先红检查。这一次是实现交回后对出来的两处：一处是规则测试的期望与 08 原文不符（受限会话调用表外接口应为 10405，测试写成了 10403），一处是给 Me 加 masked_phone 必然碰到一条对整个对象做全等比较的冻结用例。两处都是具体、互不相关的小改，不是同一处反复不过。收口：这是本任务最后一次追加；之后若还要再改规则测试，停下报编排，把 Me.masked_phone 拆成单独任务重新起算，不再追加。编排按 approvals 16 / 24 登记。'
+  - id: 90
+    row: 4
+    title: 'CT-06zzzzzh：modify_existing（改动已冻结用例）新增第四种原因 ruling_correction（裁定更正）——冻结用例钉的是一条后来被推翻的编排裁定、依据在规划/02、04 的形状规则或 ADR 而不在 08 时使用；条目必须写 overturned（被推翻的裁定，不得等于 ruling）、ruling（推翻它的裁定）、basis（以「规划/」或「docs/adr/」开头的出处），不得写 br；其余校验（前后原文逐字、反向验证 mutation、批准标签）与 rule_change 相同；资金与归属类用例（MONEY_PATHS、test/properties、test/replay，及 test/ 下目录名含资金 / 归属关键词的）一律不得使用，台账整份拒读'
+    granted: true
+    date: '2026-11-14'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/lib、tools/ci、tools/guard）：起因 D10-1580——CT-13i 把 event_dedup 主键改为以 app_id 开头（D10-1519 推翻 D10-1488，依据 规划/02 §12.3「业务唯一键以 app_id 开头」），CT-13e 的冻结用例钉着旧口径，而 rule_change 只能引 08 的 BR，形状规则没有 BR，硬挂不相干的 BR 等于造假。本条只给这种情形一个如实的名字与更多留痕（两个裁定号与出处），不放宽任何判定：ruling_correction 在三个读者里都走 rule_change 的同一段校验，只是把 br 换成 overturned / ruling / basis；资金与归属类用例被工具拒绝使用它（这类仍只能走 rule_change 并由负责人本人确认，D10-1356），拦截名单只宽不窄——MONEY_PATHS 原样从 evidence-check 移到 tools/lib/task-file.ts 共用，evidence-check 照旧导出同名常量。编排核过实际差异（D10-1603）。'
