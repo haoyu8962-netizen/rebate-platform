@@ -36,6 +36,21 @@ import {
 const t = withdrawalsTexts.batchApprove;
 const review = withdrawalsTexts.review;
 const STEP_UP_REFUSED = 10003;
+const IN_FLIGHT = 40901;
+
+/**
+ * 服务端已确定拒绝本次操作（HTTP 4xx 的业务错误，40901 除外）：同键再发只会得到同样的拒绝，
+ * 键可以清空。网络错误、40901、5xx 及其他无法判定的失败，结果都未确定，返回 false。
+ */
+function isSettledRejection(cause: unknown): boolean {
+  return (
+    cause instanceof AdminApiError &&
+    cause.kind === 'api' &&
+    cause.code !== IN_FLIGHT &&
+    cause.httpStatus >= 400 &&
+    cause.httpStatus < 500
+  );
+}
 
 type ApprovePayload = Schema<'AdminWithdrawalBatchApproveRequest'>;
 type ApproveResult = Schema<'AdminWithdrawalBatchApprove'>;
@@ -210,8 +225,11 @@ export function BatchApprove({ rows, onFinished, onBusyChange }: BatchApprovePro
         return;
       }
       pendingKey.current = undefined;
-      // 网络错误时结果未确认：保留原键，不改勾选手动重提仍是同一次操作。
-      if (!(cause instanceof AdminApiError && cause.kind === 'network')) keyRef.current = undefined;
+      // 只有服务端确定拒绝（4xx 业务错误，如 10403、20001、20901）才清空幂等键。
+      // 结果未确定的失败——网络错误、40901（同键仍在处理）、5xx（已通过的保留、同键重跑其余）
+      // 以及其他无法判定的错误——都保留原键：不改勾选手动重提沿用原键，服务端返回首次结果，
+      // 不会因换新键把已通过的单显示成 not_pending 跳过。任何错误都不自动重发。
+      if (isSettledRejection(cause)) keyRef.current = undefined;
       setPhase('preview');
       void notify.error(failureNotice(cause));
     }
