@@ -138,10 +138,13 @@
 //              test/replay) needs the same label. After spec_commit its file's changes outside the
 //              it / test blocks are let through, unless a changed line there (removed at
 //              spec_commit, added at the head) holds an assertion call (test-blocks.ts
-//              ASSERTION_CALL, or a line inside an assertion expression): refused, naming the file
-//              and the lines; a block added, removed, moved, or changed without its own block
-//              entry is refused as before (a file may carry block entries besides; each covers
-//              its block). A file without a support entry is judged exactly as before. Its record
+//              ASSERTION_CALL, ASSERTION_HELPER_CALL — an `expect…(` / `assert…(` helper called,
+//              round 2, review S1-2 — or a line inside an assertion expression): refused, naming
+//              the file and the lines; a block added, removed, moved, or changed without its own
+//              block entry is refused as before (a file may carry block entries besides; each
+//              covers its block). The same is judged from the merge base to the head on the
+//              file's record (round 2, review S1-1: changes in the rule-test commit too).
+//              A file without a support entry is judged exactly as before. Its record
 //              is { file, scope: 'support', reason, before_sha256, after_sha256, reverse_red,
 //              br? / overturned? / basis? } (br / overturned / basis as a block record of the
 //              same reason): the sha256 of the file at the merge base and at the head (lower-case
@@ -594,12 +597,14 @@ function modifiedHitProblem(
 }
 
 /**
- * Why the spec_commit → head change of a file with a file-level support entry (CT-06zzzzzi,
- * D10-1662 ①③) is not let through, or null when it is: its block entries (`declared`) locate
+ * Why the change of a file with a file-level support entry (CT-06zzzzzi, D10-1662 ①③) from
+ * `before` to `after` is not let through, or null when it is: its block entries (`declared`) locate
  * their blocks as before (compareModifiedBlocks), no block is added, removed or moved, every
- * changed block has its block entry, and no changed line outside the blocks (removed at
- * spec_commit, added at the head) holds an assertion call (compareSupportFile). The differences
- * outside the blocks are otherwise let through: that is what the entry declares.
+ * changed block has its block entry, and no changed line outside the blocks (removed from
+ * `before`, added at `after`) holds an assertion call (compareSupportFile). The differences
+ * outside the blocks are otherwise let through: that is what the entry declares. Judged twice
+ * (round 2, review-claude-1 S1-1): spec_commit → head for the class 1 hit (modifiedHitProblem),
+ * and merge base → head for the file's record (supportRecordProblems).
  */
 function supportHitProblem(
   before: string,
@@ -645,6 +650,9 @@ const SHA256_HEX = /^[0-9a-f]{64}$/;
  * shows it, lower-case hex, compared exactly; a file that is not valid UTF-8 cannot match),
  * reverse_red the full names of at least one test that turns red when the file is put back to the
  * base on the new implementation. A file the same at both ends makes the entry redundant.
+ * Round 2 (review-claude-1 S1-1): the change from the merge base to the head is judged as the
+ * class 1 hit is (supportHitProblem): assertion lines outside the blocks and undeclared changed
+ * blocks are refused, also when they were changed in the rule-test commit.
  */
 function supportRecordProblems(
   record: Record<string, unknown>,
@@ -714,6 +722,17 @@ function supportRecordProblems(
     at(where, 'the file is gone at the head (a removal is not a change of a frozen file)');
   if (before !== null && after !== null && before === after) {
     at(where, "the file is the merge base's: the entry is redundant");
+  }
+  // CT-06zzzzzi round 2 (D10-1662 ①③, review-claude-1 S1-1): the file is judged from the merge
+  // base to the head, the two ends of its sha256 record, not only after spec_commit: the rule-test
+  // author changes support files in the rule-test commit (base..spec_commit), the usual flow of a
+  // task with a rule-test author. Assertion lines outside the blocks, and blocks changed without
+  // their own block entry, are refused over that whole range (the spec_commit → head check of the
+  // class 1 hits stays as it is).
+  if (before !== null && after !== null && before !== after) {
+    const declared = blockEntries(modify.entries).filter((e) => e.file === entry.file);
+    const why = supportHitProblem(before, after, declared);
+    if (why !== null) at(where, `${entry.file} (merge base → head): ${why}`);
   }
   for (const [key, text, side] of [
     ['before_sha256', before, 'the merge base'],

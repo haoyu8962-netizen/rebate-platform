@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import {
   ASSERTION_CALL,
+  ASSERTION_HELPER_CALL,
   ASSERTION_NAME,
   type ComparedBlock,
   type Module,
@@ -4152,4 +4153,60 @@ it('[CT-06zzzzzi] compareSupportFile: a block changed without a block entry, add
   // An assertion line inside a block is the block's (its entry judges it), not the file's.
   expect(compareSupportFile(SUP_TEST, changed, ['[AC-2] b'])).toMatchObject({ assertions: [] });
   expect(compareSupportFile('const x = (', SUP_TEST)).toMatchObject({ ok: false });
+});
+
+// CT-06zzzzzi / D10-1662 round 2 (review-claude-1 S1-2): a call of an assertion helper — an
+// identifier starting with `expect` or `assert`, called — counts as an assertion line; names that
+// are not called do not.
+it('[CT-06zzzzzi] ASSERTION_HELPER_CALL: expect… / assert… helpers called, on their own or as members; not the same names uncalled', () => {
+  for (const line of [
+    "expectMentions(rows[0]!, { ids: ['a'] });",
+    'await assertTable(db);',
+    "await helpers.expectSchema('200', body);",
+    'helpers.assertNoRows (db);',
+    'obj?.expectX?.(1);',
+    'expectRows<Row>(rows);',
+    'assertOnlyReads();',
+    'export function expectSummary(t: Token) {',
+  ]) {
+    expect(ASSERTION_HELPER_CALL.test(line), line).toBe(true);
+  }
+  for (const line of [
+    'const expected = [1n, 2n];',
+    "expectedRows.push({ id: 'a' });",
+    'const asserted = rows.length;',
+    'return { expectedRows, asserted };',
+    'const total = toTotal(expected[0]);',
+    'unexpected(1);',
+    'reassert(1);',
+  ]) {
+    expect(ASSERTION_HELPER_CALL.test(line), line).toBe(false);
+  }
+});
+
+it('[CT-06zzzzzi] compareSupportFile round 2: an assertion helper call removed, changed (an argument on a line of its own too) or added outside the blocks is named; uncalled expected… names may change', () => {
+  const kit = [
+    'export function check(rows: Row[], db: Db) {',
+    '  const expected = [1n, 2n];',
+    '  expectMentions(rows[0]!, {',
+    "    ids: ['a'],",
+    '  });',
+    '  assertOnlyReads();',
+    '  return expected;',
+    '}',
+    '',
+  ].join('\n');
+  const removed = compareSupportFile(kit, kit.replace('  assertOnlyReads();\n', ''));
+  expect(removed.ok && removed.assertions).toEqual([
+    { side: 'base', line: 6, text: '  assertOnlyReads();' },
+  ]);
+  const arg = compareSupportFile(kit, kit.replace("    ids: ['a'],", "    ids: ['b'],"));
+  expect(arg.ok && arg.assertions.map((l) => `${l.side}:${l.line}`)).toEqual(['base:4', 'head:4']);
+  const added = compareSupportFile(
+    kit,
+    kit.replace('  return expected;', '  await helpers.assertNoRows(db);\n  return expected;'),
+  );
+  expect(added.ok && added.assertions.map((l) => `${l.side}:${l.line}`)).toEqual(['head:7']);
+  const plain = compareSupportFile(kit, kit.replace('[1n, 2n]', '[1n, 3n]'));
+  expect(plain).toEqual({ ok: true, changed: true, blocks: [], assertions: [] });
 });

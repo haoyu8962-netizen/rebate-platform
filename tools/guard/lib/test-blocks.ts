@@ -2583,7 +2583,9 @@ export function compareModifiedBlocks(
 //   counts when any of its non-blank characters lies outside every block) that hold an assertion
 //   call: ASSERTION_CALL or ASSERTION_NAME on the line, or a line inside an assertion expression (from `expect` /
 //   `expectTypeOf` / `assert` through its call and chained members and calls, so an argument on a
-//   line of its own counts too). Removed lines are given by their base line number, added lines
+//   line of its own counts too), or a call of an assertion helper (ASSERTION_HELPER_CALL on the
+//   line, or a line inside such a call and its chain; CT-06zzzzzi / D10-1662 round 2, review
+//   S1-2). Removed lines are given by their base line number, added lines
 //   by their head line number. A support file changes data and calls only; an assertion changes
 //   in a block, declared block by block.
 // - `changed`: the file differs from the base at all.
@@ -2598,6 +2600,22 @@ export function compareModifiedBlocks(
  */
 export const ASSERTION_CALL =
   /\bexpect\s*\(|\bexpectTypeOf\s*\(|\bassert\s*\(|\b(?:assert|expect)\s*\.\s*[A-Za-z_$][\w$]*\s*\(|\.\s*to[A-Z][\w$]*\s*\(|\.\s*(?:rejects|resolves)\b/;
+
+/**
+ * A call of an assertion helper on a line (CT-06zzzzzi, D10-1662 round 2, review-claude-1 S1-2):
+ * an identifier that starts with `expect` or `assert` called right after it — blanks, an optional
+ * `?.` and type arguments allowed before the `(` — on its own or as a member (`expectMentions(`,
+ * `assertTable(`, `helpers.expectSchema(`, `obj.assertNoRows(`, `expectRows<Row>(`). Such a
+ * helper asserts for its callers: removing the call or changing its arguments changes what they
+ * assert. A name that is not called is another word (`expected`, `expectedRows.push(` — push is
+ * the call —, `asserted`). The declaration `function expectX(` matches too: changing an assertion
+ * helper's parameters changes what it asserts (strict on purpose, as ASSERTION_CALL).
+ */
+export const ASSERTION_HELPER_CALL =
+  /(?<![\w$])(?:expect|assert)[\w$]*\s*(?:\?\.\s*)?(?:<[^()]*>\s*)?\(/;
+
+/** An identifier that, called, is an assertion helper (ASSERTION_HELPER_CALL, CT-06zzzzzi). */
+const ASSERTION_HELPER_NAME = /^(?:expect|assert)[\w$]*$/;
 
 /**
  * The assertion functions named at all (CT-06zzzzzi): a changed line outside the blocks that
@@ -2676,9 +2694,16 @@ function supportView(source: string): SupportView {
   // Assertion expressions: the head, its call, then chained members and calls.
   const asserting = new Set<number>();
   tokens.forEach((t, i) => {
-    if (t.kind !== 'id' || !ASSERTION_HEADS.has(t.text)) return;
+    if (t.kind !== 'id') return;
     const next = tokens[i + 1]?.text;
-    if (next !== '(' && next !== '.' && next !== '?.') return;
+    if (ASSERTION_HEADS.has(t.text)) {
+      if (next !== '(' && next !== '.' && next !== '?.') return;
+    } else {
+      // CT-06zzzzzi round 2 (review S1-2): an assertion helper called (`expectX(`, `assertX?.(`).
+      if (!ASSERTION_HELPER_NAME.test(t.text)) return;
+      const called = next === '(' || (next === '?.' && tokens[i + 2]?.text === '(');
+      if (!called) return;
+    }
     let last = i;
     let j = i + 1;
     for (;;) {
@@ -2687,6 +2712,9 @@ function supportView(source: string): SupportView {
       if (u.text === '(' && u.kind === 'punct') {
         last = match[j] as number;
         j = last + 1;
+      } else if (u.text === '?.' && tokens[j + 1]?.text === '(') {
+        // An optional call `?.(`: the call follows.
+        j += 1;
       } else if ((u.text === '.' || u.text === '?.') && tokens[j + 1]?.kind === 'id') {
         last = j + 1;
         j += 2;
@@ -2783,6 +2811,7 @@ export function compareSupportFile(
     view.outside[l] === true &&
     (ASSERTION_CALL.test(view.lines[l] as string) ||
       ASSERTION_NAME.test(view.lines[l] as string) ||
+      ASSERTION_HELPER_CALL.test(view.lines[l] as string) ||
       view.asserting.has(l));
   before.lines.forEach((text, l) => {
     if (!kept.has(l) && hit(before, l)) assertions.push({ side: 'base', line: l + 1, text });

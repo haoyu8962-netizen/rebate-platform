@@ -3580,3 +3580,52 @@ it('[CT-06zzzzzi] evidence-check: a support entry lets the helper change outside
     'modify_existing[0].test: unknown field for a support record (rule_change)',
   );
 });
+
+// CT-06zzzzzi / D10-1662 round 2 (review-claude-1 S1-1, S1-2): the rule-test author changes the
+// support file in the rule-test commit (spec_commit after the merge base) and nothing changes it
+// after: the file is judged from the merge base to the head on its record, so an assertion line
+// (an assertion helper call too) or an undeclared changed block in that commit is refused; data
+// changes there pass.
+function supBranchVia(name: string, content: string): string {
+  git(modRepo, ['checkout', '-q', '-B', name, modBase]);
+  write(modRepo, { [MOD_FILE]: content });
+  git(modRepo, ['add', '-A']);
+  git(modRepo, ['commit', '-q', '-m', `test(spec): ${name}`]);
+  const spec = git(modRepo, ['rev-parse', 'HEAD']);
+  const tree = git(modRepo, ['rev-parse', 'HEAD:test/spec']);
+  const doc = { ...modEvidence([supRecord(content)])(tree), spec_commit: spec };
+  write(modRepo, { 'ops/evidence/B2-09v.json': `${JSON.stringify(doc, null, 2)}\n` });
+  git(modRepo, ['add', '-A']);
+  git(modRepo, ['commit', '-q', '-m', 'evidence']);
+  return git(modRepo, ['rev-parse', 'HEAD']);
+}
+
+it('[CT-06zzzzzi] evidence-check round 2: a support file changed in the rule-test commit is judged from the merge base to the head (assertion lines, assertion helper calls, undeclared blocks)', () => {
+  const trusted = supTrusted('trusted-support-r2');
+  const where = `modify_existing[0]: ${MOD_FILE} (merge base → head): declared in modify_existing (scope: support), but`;
+  // Data only, in the rule-test commit: passes.
+  const good = modSource(MOD_OLD, { extra: SUP_HELPER_NEW });
+  const g = supBranchVia('sup-r2-good', good);
+  expect(modCheck(g, trusted, approved(g)).problems).toEqual([]);
+  // An assertion line added in the rule-test commit: no class 1 hit after spec_commit, still refused.
+  const asserting = modSource(MOD_OLD, {
+    extra: 'const check = (v: number) => expect(v).toBe(1);',
+  });
+  const a = supBranchVia('sup-r2-assert', asserting);
+  const ra = modCheck(a, trusted, approved(a)).problems.join('\n');
+  expect(ra).not.toContain('rule tests changed after the rule-test commit');
+  expect(ra).toContain(`${where} an assertion line changed outside the test blocks`);
+  expect(ra).toContain('head line 2: `const check = (v: number) => expect(v).toBe(1);`');
+  // An assertion helper called (S1-2), in the rule-test commit.
+  const helper = modSource(MOD_OLD, { extra: 'void helpers.expectAmount(1);' });
+  const h = supBranchVia('sup-r2-helper', helper);
+  expect(modCheck(h, trusted, approved(h)).problems.join('\n')).toContain(
+    'head line 2: `void helpers.expectAmount(1);`',
+  );
+  // A block changed in the rule-test commit without its block entry.
+  const block = modSource(MOD_NEW, { extra: SUP_HELPER_NEW });
+  const b = supBranchVia('sup-r2-block', block);
+  expect(modCheck(b, trusted, approved(b)).problems.join('\n')).toContain(
+    `${where} test block 2 ("${MOD_TEST}") is not declared and differs from the base`,
+  );
+});
