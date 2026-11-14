@@ -1,0 +1,18 @@
+id: F1-08caa
+repo: rebate-platform
+title: F1-08caa：冻结工作台菜单测试 [AC-F1-14a-MENU#3] / [AC-F1-14a-MENU#4] 的落地菜单由将上线的 /adjustments 改为仍是占位页的菜单（F1-08ca 前置；断言含义不变）
+type: test-change
+# 2026-11-15 入账（前端线 fe，编排 D10-1724，先例 F1-08aa → F1-08gaa #1889）。F1-08ca 让「调账与核销」/adjustments 成为真页面（进页即读调账单列表），这两条「落第一个获准菜单、显示『尚未接入』占位、MENU#3 不发请求 / MENU#4 只请求 dashboard」不能再成立。
+# 只改两条的 permissions 样例与落地路径期望：fund.adjust 换成仍无页面、显示占位的菜单的权限点（App.tsx 尚未分发的只剩 content、commission-rules，由新鲜独立 Claude 选定一个并在 PR 写明；样例里排在它之前的已上线菜单的权限点一并换掉）；「尚未接入」与请求断言的含义不变。**换完后占位菜单只剩一个**——登 FU-F114A-MENU-PLACEHOLDER-LAST：最后一个占位菜单接入前，先定这两条用例作废还是改断言对象，到时报编排。
+# 改既有规则测试属第一类保护路径：非 task 分支、不带证据文件；新鲜独立 Claude 改、另一新鲜独立 Claude 只读复审 pass（写进 PR 正文）；报头后编排按 #24 核对挂 owner-approved（D10-1724）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/frontend/admin-dashboard/menu.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
