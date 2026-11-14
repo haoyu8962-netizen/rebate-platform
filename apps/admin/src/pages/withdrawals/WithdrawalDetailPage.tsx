@@ -4,6 +4,8 @@
 // 脱敏值）、批次与批次明细、转账尝试摘要、生效的提现冻结、处理记录（单据上的各时间点）。
 // 持 withdraw.review 或 fund.view 可看；20001 显示未找到，10403 显示无权限。标题行的【审核通过】
 // 【驳回】见 ReviewActions.tsx（F1-08ah，持 withdraw.review 且状态可审时显示），写后重新拉详情。
+// 结果未知转人工的单（PAYING + needs_manual）的【立即查询】【人工处置】见 UnknownPayoutActions.tsx
+// （F1-08aj，持 payout.execute 时显示），写后同样重新拉详情。
 // TODO(规划/11 §7): 【执行打款】【手动成功】【撤销微信转账】【重新计算】与手机号 / 收款账号的
 // 【查看】全量 — blocked on 契约未出
 import { ReloadOutlined } from '@ant-design/icons';
@@ -44,6 +46,7 @@ import {
   type WithdrawalDetail,
 } from './model.ts';
 import { ReviewActions } from './ReviewActions.tsx';
+import { UnknownPayoutActions } from './UnknownPayoutActions.tsx';
 import { Forbidden, marksOf } from './WithdrawalsPage.tsx';
 
 const t = withdrawalsTexts.detail;
@@ -151,9 +154,10 @@ function DetailContent({
           {state.status === 'ready' ? state.data.out_biz_no : t.crumb}
         </Typography.Title>
         {state.status === 'ready' ? (
-          <div style={{ marginInlineStart: 'auto' }}>
+          <Flex gap={8} wrap style={{ marginInlineStart: 'auto' }}>
             <ReviewActions item={state.data} access={access} onChanged={reload} />
-          </div>
+            <UnknownPayoutActions item={state.data} access={access} onChanged={reload} />
+          </Flex>
         ) : null}
       </Flex>
       {body}
