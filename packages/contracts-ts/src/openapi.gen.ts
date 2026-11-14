@@ -14059,6 +14059,14 @@ export interface components {
             identity_level: "basic" | "guest" | "member" | "phone" | "realname";
             /** @description Whether a phone number is bound (BR-ID-01). */
             phone_bound: boolean;
+            /**
+             * @description The bound phone number masked for display, so the step-up sheet can say where the code
+             *     goes (BR-ID-08: a phone-bound user's step_up code is sent to the bound number; B1-02zzza,
+             *     D10-1598). Masked by BR-TEXT-02 细则 手机号脱敏: first 3 and last 4 digits (138****8000).
+             *     Null when no phone is bound (phone_bound=false), and also null when the bound number
+             *     cannot be read (D10-1610). The full number is never returned.
+             */
+            masked_phone: string | null;
             balance: components["schemas"]["MeBalance"];
             union_bindings: components["schemas"]["UnionBindingState"][];
             /**
@@ -25940,6 +25948,7 @@ export interface operations {
                      *         },
                      *         "identity_level": "phone",
                      *         "phone_bound": true,
+                     *         "masked_phone": "138****8000",
                      *         "balance": {
                      *           "available_fen": 1234,
                      *           "withdrawable_fen": 1000,

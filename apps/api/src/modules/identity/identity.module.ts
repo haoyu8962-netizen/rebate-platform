@@ -1452,6 +1452,7 @@ export class IdentityModule {
                     read: (handle, subject) => status.read(handle, subject),
                     verified: createRealnameReader(crypto).verified,
                   },
+                  crypto,
                   ...ports,
                 }),
         },
