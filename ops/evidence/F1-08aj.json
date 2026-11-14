@@ -1,0 +1,115 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/entry.test.ts > [AC-F1-08aj-ENTRY#1] 结果未知转人工的单：只持 withdraw.review / fund.view / 线下补录点时没有【立即查询】【人工处置】；持 payout.execute 或超管时两个入口都可用，不点不发写请求",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/entry.test.ts > [AC-F1-08aj-ENTRY#2] 入口只看 PAYING 且 needs_manual=true：未转人工的打款中单、其余各状态（含已处置的 needs_manual 单）、付款方侧失败退回的已通过单都没有入口；转人工的单有入口且没有执行打款、手动成功、撤销、重新计算、上传",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts > [AC-F1-08aj-ERROR#1] 判已到账的七个 20001 reason 逐个给出 BR-TEXT-14 全文提示，不报成功；对话框与已填内容保留；改正流水号后的请求沿用原 Idempotency-Key（契约：2xxxx 拒绝不存），最终成功",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts > [AC-F1-08aj-ERROR#2] 只带 data.fields 的 20001 按字段提示：凭证、流水号、实付时间、结论（通用）、提现单不存在；对话框与已填内容保留、不报成功、不自动重发",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts > [AC-F1-08aj-ERROR#3] 处置返回 20902：提示状态已变化并重新读取详情，不重发；对话框关闭，刷新为接口打款成功后入口消失",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts > [AC-F1-08aj-ERROR#4] 处置返回 10003：重新要动态码，验证前不重发；验证后新凭证、原 Idempotency-Key、原请求体再发，成功后刷新",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts > [AC-F1-08aj-ERROR#5] 处置返回 10403 提示缺 payout.execute，20901 提示提交失败；对话框保留、只发一次、不自动重新验证或重发，仍是打款中",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts > [AC-F1-08aj-ERROR#6] 结果未定的失败（网络错误、40901）：提示后不自动重发，对话框与内容保留；手动再提交沿用原 Idempotency-Key 与整份请求体，成功后提示",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#1] 【立即查询】先弹动态码，验证后只发一次 POST …/query（请求体 {}、X-Step-Up-Token、Idempotency-Key），提示已提交查询并重新读取详情；即使通道已答成功，页面仍是打款中、不报成功，入口仍在",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#2] 连点【立即查询】与验证只发一次；在途时入口禁用、再点不发；结束后再点是新的查询：重新要动态码、换新的 Idempotency-Key",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#3] 查询被拒或未确认：10403 无权限、20001 无此单、20901 / 40901 提交失败、网络错误未确认；只发一次、不自动重发，不提示已提交，仍是打款中",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#4] 查询返回 10003：重新要动态码，验证前不重发；验证后用新凭证、原 Idempotency-Key 与原请求体再发一次",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#5] 查询返回 20902：提示状态已变化并重新读取详情，不重发；刷新为接口打款成功后入口消失",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#6] 取消动态码不发查询，焦点回【立即查询】；再按仍须重新验证",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#7] 查询成功后再做人工处置是新操作：重新要动态码，处置请求用新的 Idempotency-Key，不沿用查询的凭证",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts > [AC-F1-08aj-RESOLVE#1] 人工处置判已到账：对话框列单号与实付金额、paid / failed 两个未选的结论、只收文字凭证；确认后动态码，只发一次 POST …/resolve，请求体按契约整份；成功后提示、刷新为接口打款成功、入口消失",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts > [AC-F1-08aj-RESOLVE#2] 判失败照常可选可提交（先填过的流水号与时间不随 failed 发出）；服务端今天一律拒绝，三个 reason 分别给出全文提示，对话框与已填内容保留，修正前后沿用原 Idempotency-Key，页面不自行判成失败或成功",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts > [AC-F1-08aj-RESOLVE#3] 本地校验不过不验证不提交、对话框保留：未选结论、凭证纯空白、流水号为空 / 含空白 / 超 64、实付时间为空或不是有效的北京时间；64 位流水号与 YYYY-MM-DD HH:mm:ss 时间按契约整份送出",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts > [AC-F1-08aj-RESOLVE#4] 凭证按 Unicode 码点限 4000：4001 个非 BMP 字符不能提交并提示当前字数，4000 个完整送出、不按 UTF-16 截断",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts > [AC-F1-08aj-RESOLVE#5] 连点确认与验证只发一次处置；请求在途时对话框保留、【确认处置】禁用，再点不发",
+    "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts > [AC-F1-08aj-RESOLVE#6] 取消处置对话框不发请求、焦点回【人工处置】；取消动态码不提交，关闭后焦点同样返回"
+  ],
+  "risk_note": "F1-08aj (orchestrator D10-1517 batch 1 item 1, third of three). The admin withdrawal detail page gets 立即查询 and 人工处置 for a PAYING withdrawal with needs_manual=true, shown only with payout.execute (hidden otherwise). 立即查询 goes through the shared StepUpModal (totp, BR-ID-34) and sends exactly one POST /admin/v1/withdrawals/{id}/query; the page says the query was submitted and re-reads the detail, never shows a status change and never sends any transfer or execute request (BR-WDR-14). 人工处置 requires a resolution (paid / failed) and the proof text (not blank, at most 4000 code points), and with paid the channel serial and paid time; then 确认处置, step-up, exactly one POST …/resolve with the exact contract body (failed carries no channel_order_id or paid_at). Every 20001 data.reason of the contract gets its own message (the resolve_* sentences of BR-TEXT-14 table B), the dialog stays with what was typed; 20902 refreshes; failed is refused by the server today (D10-625 / D10-626) and the page only shows the reason. Idempotency-Key: kept on 10003 and on every unsettled failure (network, 40901, 5xx), renewed after a success. Codex is out of quota until 2026-11-20 (D10-1604), so per ops/approvals.yaml #36 the rule tests were written by an independent Claude (claude-run.sh, fresh context; ledger tester claude-independent, #121): 21 tests in 4 files; independent Claude spec-test r1 pass with one S2 (no test of a 5xx keeping the key; required in the implementation brief). Red on couli-ci for the spec commit (21 tests, right reason). Implementation by Opus 5.5 (another context); couli-ci verify:fast run 3 green (run 2 had one red: a status name hard-coded in texts, now read from the admin dictionary) and --browser run 1 green. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex out of quota until 2026-11-20 (D10-1604): money review by an independent Claude per ops/approvals.yaml #36 (claude-run.sh, fresh context), r1 pass, 0 S2"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude (Codex out of quota, approvals #36); spec-test by another independent Claude context r1 pass, one S2 (5xx key) covered in the implementation brief"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08aj",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "spec_commit": "a6141a9a8eedd278ecab6a6687479b8f9952f020",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a6141a9a8eedd278ecab6a6687479b8f9952f020",
+      "tree": "a8226e44248c7a3b986b54bdab4776d874fec8a0",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-14T08:42:53Z",
+      "finished_at": "2026-11-14T08:43:05Z",
+      "red_tests": [
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/entry.test.ts > [AC-F1-08aj-ENTRY#1] 结果未知转人工的单：只持 withdraw.review / fund.view / 线下补录点时没有【立即查询】【人工处置】；持 payout.execute 或超管时两个入口都可用，不点不发写请求",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/entry.test.ts > [AC-F1-08aj-ENTRY#2] 入口只看 PAYING 且 needs_manual=true：未转人工的打款中单、其余各状态（含已处置的 needs_manual 单）、付款方侧失败退回的已通过单都没有入口；转人工的单有入口且没有执行打款、手动成功、撤销、重新计算、上传",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts > [AC-F1-08aj-ERROR#1] 判已到账的七个 20001 reason 逐个给出 BR-TEXT-14 全文提示，不报成功；对话框与已填内容保留；改正流水号后的请求沿用原 Idempotency-Key（契约：2xxxx 拒绝不存），最终成功",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts > [AC-F1-08aj-ERROR#2] 只带 data.fields 的 20001 按字段提示：凭证、流水号、实付时间、结论（通用）、提现单不存在；对话框与已填内容保留、不报成功、不自动重发",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts > [AC-F1-08aj-ERROR#3] 处置返回 20902：提示状态已变化并重新读取详情，不重发；对话框关闭，刷新为接口打款成功后入口消失",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts > [AC-F1-08aj-ERROR#4] 处置返回 10003：重新要动态码，验证前不重发；验证后新凭证、原 Idempotency-Key、原请求体再发，成功后刷新",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts > [AC-F1-08aj-ERROR#5] 处置返回 10403 提示缺 payout.execute，20901 提示提交失败；对话框保留、只发一次、不自动重新验证或重发，仍是打款中",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts > [AC-F1-08aj-ERROR#6] 结果未定的失败（网络错误、40901）：提示后不自动重发，对话框与内容保留；手动再提交沿用原 Idempotency-Key 与整份请求体，成功后提示",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#1] 【立即查询】先弹动态码，验证后只发一次 POST …/query（请求体 {}、X-Step-Up-Token、Idempotency-Key），提示已提交查询并重新读取详情；即使通道已答成功，页面仍是打款中、不报成功，入口仍在",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#2] 连点【立即查询】与验证只发一次；在途时入口禁用、再点不发；结束后再点是新的查询：重新要动态码、换新的 Idempotency-Key",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#3] 查询被拒或未确认：10403 无权限、20001 无此单、20901 / 40901 提交失败、网络错误未确认；只发一次、不自动重发，不提示已提交，仍是打款中",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#4] 查询返回 10003：重新要动态码，验证前不重发；验证后用新凭证、原 Idempotency-Key 与原请求体再发一次",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#5] 查询返回 20902：提示状态已变化并重新读取详情，不重发；刷新为接口打款成功后入口消失",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#6] 取消动态码不发查询，焦点回【立即查询】；再按仍须重新验证",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts > [AC-F1-08aj-QUERY#7] 查询成功后再做人工处置是新操作：重新要动态码，处置请求用新的 Idempotency-Key，不沿用查询的凭证",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts > [AC-F1-08aj-RESOLVE#1] 人工处置判已到账：对话框列单号与实付金额、paid / failed 两个未选的结论、只收文字凭证；确认后动态码，只发一次 POST …/resolve，请求体按契约整份；成功后提示、刷新为接口打款成功、入口消失",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts > [AC-F1-08aj-RESOLVE#2] 判失败照常可选可提交（先填过的流水号与时间不随 failed 发出）；服务端今天一律拒绝，三个 reason 分别给出全文提示，对话框与已填内容保留，修正前后沿用原 Idempotency-Key，页面不自行判成失败或成功",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts > [AC-F1-08aj-RESOLVE#3] 本地校验不过不验证不提交、对话框保留：未选结论、凭证纯空白、流水号为空 / 含空白 / 超 64、实付时间为空或不是有效的北京时间；64 位流水号与 YYYY-MM-DD HH:mm:ss 时间按契约整份送出",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts > [AC-F1-08aj-RESOLVE#4] 凭证按 Unicode 码点限 4000：4001 个非 BMP 字符不能提交并提示当前字数，4000 个完整送出、不按 UTF-16 截断",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts > [AC-F1-08aj-RESOLVE#5] 连点确认与验证只发一次处置；请求在途时对话框保留、【确认处置】禁用，再点不发",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts > [AC-F1-08aj-RESOLVE#6] 取消处置对话框不发请求、焦点回【人工处置】；取消动态码不提交，关闭后焦点同样返回"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/entry.test.ts",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/errors.test.ts",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/query.test.ts",
+        "test/spec/frontend/admin-withdrawal-unknown-resolve/resolve.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "06f17600c7ccde35135a2f521f10a05d08dc4d9b42feaf00d9f1a5c09e85a13d"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "918a01d2fee5502b7c12b8a1ce1f56e6d3eee7d2",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  }
+}

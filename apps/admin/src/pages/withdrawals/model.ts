@@ -351,3 +351,50 @@ export function reasonOf(cause: unknown): string | undefined {
     return typeof data.reason === 'string' ? data.reason : undefined;
   return undefined;
 }
+
+/** 结果未知转人工的单：【立即查询】与【人工处置】共用的权限点（totp 档 step-up）。 */
+export const EXECUTE_PERMISSION = 'payout.execute';
+
+export const queryUrl = (id: string): string => `${itemUrl(id)}/query`;
+export const resolveUrl = (id: string): string => `${itemUrl(id)}/resolve`;
+
+/** The longest proof_text, in Unicode code points (contract maxLength). */
+export const PROOF_MAX = 4000;
+const ORDER_ID_MAX = 64;
+
+/** Only a PAYING withdrawal past T+24h (needs_manual) takes the query and the disposal. */
+export const canHandleUnknown = (item: {
+  readonly status: WithdrawalStatus;
+  readonly needs_manual: boolean;
+}): boolean => item.status === 'PAYING' && item.needs_manual;
+
+/** channel_order_id: 1 to 64 code points, no whitespace or NUL (compared exactly, not trimmed). */
+export function checkOrderId(value: string): boolean {
+  const count = Array.from(value).length;
+  return count >= 1 && count <= ORDER_ID_MAX && /^[^\s\u0000]+$/u.test(value);
+}
+
+const BEIJING_INPUT = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
+
+/**
+ * A typed Beijing time `YYYY-MM-DD HH:mm:ss` (surrounding blanks ignored) as ISO 8601 with
+ * +08:00; undefined when the shape or the calendar value is not valid.
+ */
+export function parseBeijingTime(value: string): string | undefined {
+  const text = value.trim();
+  const match = BEIJING_INPUT.exec(text);
+  if (match === null) return undefined;
+  const [year, month, day, hour, minute, second] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  if (hour > 23 || minute > 59 || second > 59) return undefined;
+  const d = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day)
+    return undefined;
+  return `${text.slice(0, 10)}T${text.slice(11)}+08:00`;
+}
