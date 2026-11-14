@@ -4,6 +4,7 @@ title: 契约文案：texts 补 step_up.sms.sent_to「验证码将发送至 {mas
 type: contract
 # 2026-11-15 w1 入账（编排 D10-1677 ①、D10-1679、D10-1721；规划 couli#3 2eddf5a 补出处，SPEC_REF 6674cd02）。三端 FU-*-STEPUP-MASKED-PHONE 要用这条键：二次验证面板「验证码将发送至 138****5678」，{masked_phone} 取 GET /v1/me 的 masked_phone。
 # 三处：① contracts/texts.default.json 新增键 step_up.sms.sent_to，句子逐字取自 08 BR-TEXT-14 表 C；version 不改。② contracts/openapi.yaml 的 Me.masked_phone 说明里「Masked by BR-TEXT-02 细则 手机号脱敏」改引 BR-ID-33 细则（3+4 规则不变）。③ recordConsent 说明里「Login is not required (04 §6.1 鉴权 none)」改成与 x-auth: optional 一致（规划 04 §6.1 已随 couli#4 改 optional）。只动说明文字与一条文案键，不改任何 schema 形状、枚举、x- 扩展；重出生成物，pnpm contracts:check 要过（只改 description，oasdiff 不应报破坏）。
+# 台账补丁 1（2026-11-15 w1）：texts 新键须先在 specs/fund-term-keys.yaml 归类、codegen 才过（实现 r1 报出），paths 补该文件与生成物 apps/api/src/modules/content/specs/fund-term-keys.gen.ts。归类建议 ordinary.keys（同组 step_up.oauth.* / step_up.summary.* 都在普通段，句子无金额变量与资金关键词；08 BR-TEXT-12 未写本键归类），以编排裁定为准。
 # 契约槽：openapi 类，w1 持槽（D10-1677）；与 B1-02zzzc 同槽，本单先、B1-02zzzc 后。
 refs: [BR-TEXT-14, BR-ID-33]
 refs_hash:
@@ -12,6 +13,8 @@ refs_hash:
 deps: []
 paths:
   - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
   - 'contracts/openapi.yaml'
   - 'packages/contracts-ts/**'
   - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
