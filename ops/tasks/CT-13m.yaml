@@ -12,16 +12,13 @@ type: impl
 #    - app.purge_expired_link_log_evidence(p_now)：删除两类证据。一是引用它的 claim_item 全部有 decided_at、且最晚的 decided_at 早于运行当日 00:00（+08:00）− 180 天；二是已没有任何 claim_item 引用（D10-1625 补一，比如注销清理删掉了认领）。180 天只写在函数里。
 # ② 维护第 I 节：每天 04:00 后删日分区之后调用证据清理；失败照第 N 节。
 # ③ linking 给 orders 的「按 id 取 link_logs 时间与场景」读取口（linking/index.ts，B1-10j）：先查 link_logs，查不到的再查 link_log_evidence，都没有才略过。
-# 规则测试（独立 Claude，D10-1604）须钉住：
-#    - 被引用的行在分区删除后仍能从证据表、经读取口读到；未被引用的行照删；
-#    - 复制失败时分区不删；
-#    - 有一项未结案就不删；最晚 decided_at 满 180 天才删，差 1 毫秒保留；
-#    - 无引用的证据下一次清理就删；
-#    - 证据表授权（app / readonly 只读，maint 写）。
+# 规则测试（独立 Claude，D10-1604）须钉住：被引用的行在分区删除后仍能从证据表、经读取口读到；未被引用的行照删；复制失败时分区不删；有一项未结案就不删；最晚 decided_at 满 180 天才删，差 1 毫秒保留；无引用的证据下一次清理就删；证据表授权（app / readonly 只读，maint 写）。
 # 带迁移：落地前测试机跑 test/spec/db/** 与相关目录（D10-1580），本机 snapshot（D10-1553），推前请冻结。CT-13l（DEFAULT 删除）接在本单之后、复用复制函数。
-refs: [BR-ID-30]
+# 2026-11-14 补（编排 D10-1648）：verify:fast 红在 tools/ci/lint-migrations.test.ts 的资金 / 归属表期望清单缺 link_log_evidence（迁移门禁按 link_* 前缀判它为归属表，判定正确），按 #16 把该文件加进 paths、只加一行；refs 补 BR-ATTR-14。spec-test r1 S1：规则测试只直接调 SQL 函数，没有钉住维护每天 04:00（+08:00）后、用本次运行的 now 调用证据清理——写测试第 2 次在 test/spec/linking/link-log-evidence/ 内补一条维护调度用例（假库，照 test/spec/platform/events-retention/kit.ts 的写法）。
+refs: [BR-ID-30, BR-ATTR-14]
 refs_hash:
   BR-ID-30: 8ea92988c8cd
+  BR-ATTR-14: 50aecaf956b8
 deps: [CT-13f]
 paths:
   - 'db/migrations/*_link-log-evidence.sql'
@@ -29,6 +26,7 @@ paths:
   - 'packages/db/src/db.gen.ts'
   - 'apps/api/src/modules/platform/maintenance/**'
   - 'apps/api/src/modules/linking/**'
+  - 'tools/ci/lint-migrations.test.ts' # D10-1648：只在 funds 集合加 'link_log_evidence'（附注 CT-13m / D10-1648），不改别的断言；#16
 test_paths:
   - 'test/spec/linking/link-log-evidence/**'
 impl: claude
