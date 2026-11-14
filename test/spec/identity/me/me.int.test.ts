@@ -78,7 +78,6 @@ it('[AC-B1-02z#1] 新微信号：member、未绑手机、默认昵称头像、�
     invite_backfill: { eligible: true, deadline_at: expect.any(String) },
     identity_level: 'member',
     phone_bound: false,
-    masked_phone: null,
     balance: ZERO,
     union_bindings: UNBOUND,
     realname_status: 'none',

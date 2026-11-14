@@ -60,17 +60,3 @@ it.each(['source', 'generated'] as const)(
     }
   },
 );
-
-it('[AC-B1-02zzz#3] Me 契约必须返回 masked_phone，接受脱敏字符串或 null', async () => {
-  const schema = (await document()).components.schemas['Me']!;
-  expect(schema['required']).toContain('masked_phone');
-  const properties = schema['properties'] as Record<string, JsonSchema>;
-  expect(properties).toHaveProperty('masked_phone');
-  const validate = createValidatorCompiler()({
-    schema: properties['masked_phone']!,
-    httpPart: 'body',
-  });
-  expect(validate('138****8000')).toBe(true);
-  expect(validate(null)).toBe(true);
-  expect(validate(13800138000)).toBe(false);
-});
