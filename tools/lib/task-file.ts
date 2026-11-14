@@ -4,6 +4,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { valueChangeRefusal, valueSkeleton } from '../guard/lib/test-blocks.ts';
+import { matchesAny } from './glob.ts';
 import { repoRoot } from './paths.ts';
 import { parseYamlLite } from './yaml-lite.ts';
 
@@ -165,8 +166,85 @@ export type RedExemptRowDeclaration = {
  * weakening a money test, still needs the owner's own confirmation first; a br list and a ruling
  * id do not stand in for it. No tool here tells a rewrite that follows the rule from one that
  * weakens it, so none of them grants that confirmation.
+ *
+ * `ruling_correction` (CT-06zzzzzh, D10-1580 ②c / D10-1597): the frozen test pins an orchestrator
+ * ruling that a later ruling overturned, and the basis is a shape rule of 规划/02 or 规划/04 (or an
+ * ADR), not a BR of 08. The entry names the overturned ruling (`overturned`), the overturning one
+ * (`ruling`) and the source (`basis`); it is otherwise judged as rule_change. A money or
+ * attribution test (isMoneyOrAttributionTest) may not use it: parseTaskFile refuses the ledger.
  */
-export const MODIFY_EXISTING_REASONS = ['flake_fix', 'tighten_only', 'rule_change'] as const;
+export const MODIFY_EXISTING_REASONS = [
+  'flake_fix',
+  'tighten_only',
+  'rule_change',
+  'ruling_correction',
+] as const;
+
+/**
+ * The prefixes a ruling_correction entry's `basis` starts with (CT-06zzzzzh, D10-1580): a section
+ * of the planning documents (`规划/02 §12.3`) or an ADR (`docs/adr/0001-…`), never 08's BRs.
+ */
+export const RULING_CORRECTION_BASIS_PREFIXES = ['规划/', 'docs/adr/'] as const;
+
+/**
+ * Money and attribution implementation paths (owner decision 2026-10-02): a PR touching any of
+ * them needs the evidence file even with an owner approval label. Matched case-insensitively.
+ * The one list (CT-06zzzzzh, D10-1597): tools/ci/evidence-check.ts re-exports it, and
+ * isMoneyOrAttributionTest starts from it.
+ */
+export const MONEY_PATHS: readonly string[] = [
+  'packages/money/src/**',
+  'packages/domain/src/**',
+  'apps/api/src/modules/{ledger,commission,settlement,payout,withdrawals,reconciliation,orders,linking,union,payment}/**',
+  'db/migrations/**',
+];
+
+/** Rule-test directories that are money or attribution tests as a whole (CT-06zzzzzh, D10-1597). */
+export const MONEY_TEST_PATHS: readonly string[] = ['test/properties/**', 'test/replay/**'];
+
+/**
+ * Funds and attribution keywords (CT-06zzzzzh, D10-1597): a path under test/ whose directory
+ * segments (not the file name) contain one of them, case-insensitively, is a money or attribution
+ * test.
+ */
+export const MONEY_TEST_DIR_KEYWORDS: readonly string[] = [
+  'ledger',
+  'commission',
+  'settle',
+  'payout',
+  'payment',
+  'withdraw',
+  'wallet',
+  'reconcil',
+  'refund',
+  'adjust',
+  'order',
+  'union',
+  'linking',
+  'attribution',
+  'money',
+  'domain',
+  'split',
+  'rebate',
+  'balance',
+  'fund',
+];
+
+/**
+ * Whether a repository path is a money or attribution test, which a ruling_correction entry may
+ * not name (CT-06zzzzzh): such a test's expected values change only through rule_change with the
+ * owner's own confirmation (D10-1356, approvals #24), never on an orchestrator ruling alone
+ * (D10-1580). Deliberately wide (D10-1597: only wider, never narrower than MONEY_PATHS): any path
+ * MONEY_PATHS matches, any path under MONEY_TEST_PATHS, and any path under test/ with a directory
+ * segment containing one of MONEY_TEST_DIR_KEYWORDS; all case-insensitive.
+ */
+export function isMoneyOrAttributionTest(path: string): boolean {
+  const lower = path.toLowerCase();
+  if (matchesAny(lower, MONEY_PATHS) || matchesAny(lower, MONEY_TEST_PATHS)) return true;
+  if (!lower.startsWith('test/')) return false;
+  const dirs = lower.split('/').slice(0, -1);
+  return dirs.some((dir) => MONEY_TEST_DIR_KEYWORDS.some((k) => dir.includes(k)));
+}
 
 /** A business rule id of a rule_change entry's `br` (CT-06zzzzw): `BR-<DOMAIN>-<number>[a-z]`. */
 export const BR_ID_PATTERN = /^BR-[A-Z]+-[0-9]+[a-z]?$/;
@@ -201,6 +279,18 @@ export type ModifyExistingDeclaration = {
    * confirmation (MODIFY_EXISTING_REASONS).
    */
   br?: string[];
+  /**
+   * The overturned orchestrator ruling of a `ruling_correction` entry (CT-06zzzzzh, D10-1580):
+   * RULING_PATTERN, not the entry's `ruling` (the one that overturned it). Required for that
+   * reason, refused for the others; absent (no key) otherwise.
+   */
+  overturned?: string;
+  /**
+   * The source of a `ruling_correction` entry (CT-06zzzzzh, D10-1580): a shape rule of 规划/02 or
+   * 规划/04 or an ADR, starting with one of RULING_CORRECTION_BASIS_PREFIXES (`规划/02 §12.3`).
+   * Required for that reason, refused for the others; absent (no key) otherwise.
+   */
+  basis?: string;
 };
 
 /** The [AC-…] ids of a test name, in order (CT-06zzzzr: a rename keeps them character for character). */
@@ -550,7 +640,10 @@ function redExemptOutsideList(value: unknown, problems: string[]): RedExemptOuts
  * retitle_to. An entry with reason `rule_change` (CT-06zzzzw, D10-1299 ③) must carry `br`: a
  * non-empty list of BR_ID_PATTERN ids without duplicates, each in `refs` (the ledger's own refs,
  * CT-06zzzzzb / D10-1356 ②: one problem per entry naming every missing id); the other reasons may
- * not carry it. The cap shared with red_exempt is checked by parseTaskFile; whether the file is a
+ * not carry it. An entry with reason `ruling_correction` (CT-06zzzzzh, D10-1580 / D10-1597) must
+ * carry `overturned` (RULING_PATTERN, not its `ruling`) and `basis` (rulingCorrectionBasisProblem),
+ * may not carry `br`, and may not name a money or attribution test (isMoneyOrAttributionTest); the
+ * other reasons may not carry `overturned` or `basis`. The cap shared with red_exempt is checked by parseTaskFile; whether the file is a
  * rule-test file of the task that exists at the base by tools/ops/task.ts.
  */
 function modifyExistingList(
@@ -561,8 +654,9 @@ function modifyExistingList(
   const label = 'modify_existing';
   const fields = ['file', 'test', 'reason', 'ruling', 'note'];
   // CT-06zzzzr: retitle_to is optional; CT-06zzzzw: br goes with rule_change only. The messages
-  // keep naming the five required fields.
-  const allowed = [...fields, 'retitle_to', 'br'];
+  // keep naming the five required fields. CT-06zzzzzh: overturned and basis go with
+  // ruling_correction only.
+  const allowed = [...fields, 'retitle_to', 'br', 'overturned', 'basis'];
   if (!Array.isArray(value)) {
     problems.push(`${label}: must be a list of mappings (${fields.join(' / ')})`);
     return [];
@@ -652,8 +746,58 @@ function modifyExistingList(
         }
       }
     } else if (hasBr) {
-      problems.push(`${at}.br: only an entry with reason rule_change names the BR ids it follows`);
+      problems.push(
+        reason === 'ruling_correction'
+          ? `${at}.br: only an entry with reason rule_change names the BR ids it follows (a ruling_correction entry names overturned / ruling / basis instead, no BR)`
+          : `${at}.br: only an entry with reason rule_change names the BR ids it follows`,
+      );
       ok = false;
+    }
+    // CT-06zzzzzh (D10-1580 / D10-1597): overturned and basis are a ruling_correction entry's,
+    // and only that; a money or attribution test may not use the reason at all.
+    const hasOverturned = Object.hasOwn(item, 'overturned');
+    const overturned = item['overturned'];
+    const hasBasis = Object.hasOwn(item, 'basis');
+    const basis = item['basis'];
+    if (reason === 'ruling_correction') {
+      if (!hasOverturned) {
+        problems.push(
+          `${at}.overturned: missing (a ruling_correction entry names the overturned orchestrator ruling, D10-<number>)`,
+        );
+        ok = false;
+      } else if (typeof overturned !== 'string' || !RULING_PATTERN.test(overturned)) {
+        problems.push(
+          `${at}.overturned: must be the overturned orchestrator ruling id, D10-<number>`,
+        );
+        ok = false;
+      } else if (overturned === ruling) {
+        problems.push(
+          `${at}.overturned: must differ from ruling (ruling is the later ruling that overturned it)`,
+        );
+        ok = false;
+      }
+      const basisProblem = rulingCorrectionBasisProblem(hasBasis, basis);
+      if (basisProblem !== null) {
+        problems.push(`${at}.basis: ${basisProblem}`);
+        ok = false;
+      }
+      if (typeof file === 'string' && isMoneyOrAttributionTest(file)) {
+        problems.push(
+          `${at}.file: "${file}" is a money or attribution test: reason ruling_correction may not change it (D10-1356 / D10-1597: such a test changes only through rule_change with the owner's own confirmation)`,
+        );
+        ok = false;
+      }
+    } else {
+      if (hasOverturned) {
+        problems.push(
+          `${at}.overturned: only an entry with reason ruling_correction names the overturned ruling`,
+        );
+        ok = false;
+      }
+      if (hasBasis) {
+        problems.push(`${at}.basis: only an entry with reason ruling_correction names a basis`);
+        ok = false;
+      }
     }
     if (!ok) return;
     const key = `${file as string}\u0000${test as string}`;
@@ -671,6 +815,10 @@ function modifyExistingList(
     };
     if (hasRetitle) entry.retitle_to = retitle as string;
     if (reason === 'rule_change') entry.br = [...(br as string[])];
+    if (reason === 'ruling_correction') {
+      entry.overturned = overturned as string;
+      entry.basis = basis as string;
+    }
     out.push(entry);
     indexes.push(index);
   });
@@ -707,6 +855,19 @@ function brListProblem(present: boolean, value: unknown): string | null {
     if (seen.has(id)) return `"${id}" is listed twice`;
     seen.add(id);
   }
+  return null;
+}
+
+/**
+ * Why a ruling_correction entry's `basis` is not a source (CT-06zzzzzh, D10-1580), or null: a
+ * string starting with one of RULING_CORRECTION_BASIS_PREFIXES with something after the prefix.
+ */
+function rulingCorrectionBasisProblem(present: boolean, value: unknown): string | null {
+  const want = `the source a ruling_correction entry follows: a section of 规划/02 or 规划/04 or an ADR, starting with ${RULING_CORRECTION_BASIS_PREFIXES.join(' or ')} (e.g. 规划/02 §12.3)`;
+  if (!present) return `missing (${want})`;
+  if (typeof value !== 'string') return `must be ${want}`;
+  const prefix = RULING_CORRECTION_BASIS_PREFIXES.find((p) => value.startsWith(p));
+  if (prefix === undefined || value.slice(prefix.length).trim() === '') return `must be ${want}`;
   return null;
 }
 

@@ -113,8 +113,13 @@
 //              rule_change (CT-06zzzzw, D10-1299 ③: the frozen test follows a changed BR) the
 //              same `mutation` as tighten_only — the reverse check, the implementation put back
 //              to the old rule turns the test red — and `br` exactly as the ledger entry's (same
-//              ids, same order), never `loops`; br on another reason's record is refused; a record
-//              too many or too few is refused. With the label, a listed file that changed after
+//              ids, same order), never `loops`; br on another reason's record is refused; for
+//              ruling_correction (CT-06zzzzzh, D10-1580 / D10-1597: the frozen test pins an
+//              overturned orchestrator ruling, the basis a shape rule of 规划/02, 04 or an ADR) the
+//              same `mutation` as rule_change and `overturned` and `basis` exactly as the ledger
+//              entry's, never `br` or `loops` (overturned / basis on another reason's record are
+//              refused; a money or attribution test never gets here, parseTaskFile refuses such a
+//              ledger); a record too many or too few is refused. With the label, a listed file that changed after
 //              spec_commit (modified, not removed or renamed) is no longer a class 1 hit when every
 //              difference between its spec_commit and head content lies inside the declared
 //              blocks (compareModifiedBlocks: the code outside the tests and every other test
@@ -151,7 +156,7 @@ import { join, resolve } from 'node:path';
 import { git, tryGit } from '../lib/git.ts';
 import type { Change } from '../lib/git.ts';
 import { loadLegacyTasks } from '../lib/legacy-tasks.ts';
-import { parseTaskFile } from '../lib/task-file.ts';
+import { MONEY_PATHS, parseTaskFile } from '../lib/task-file.ts';
 import type {
   ExpectedValueDeclaration,
   ModifyExistingDeclaration,
@@ -177,16 +182,12 @@ import { loadRiskMap, riskOfPaths } from '../guard/lib/risk.ts';
 import { COMMIT_ID, isAncestor } from '../guard/lib/spec-base.ts';
 import type { RiskLevel } from '../guard/lib/risk.ts';
 
-/**
- * Money and attribution implementation paths (owner decision 2026-10-02): a PR touching any of
- * them needs the evidence file even with an owner approval label. Matched case-insensitively.
- */
-export const MONEY_PATHS: readonly string[] = [
-  'packages/money/src/**',
-  'packages/domain/src/**',
-  'apps/api/src/modules/{ledger,commission,settlement,payout,withdrawals,reconciliation,orders,linking,union,payment}/**',
-  'db/migrations/**',
-];
+// Money and attribution implementation paths (owner decision 2026-10-02): a PR touching any of
+// them needs the evidence file even with an owner approval label; matched case-insensitively.
+// Since CT-06zzzzzh (D10-1597) the one list lives in tools/lib/task-file.ts (a ruling_correction
+// entry may not name a money or attribution test, a superset of it); re-exported here under the
+// same name for the existing importers.
+export { MONEY_PATHS };
 
 /**
  * Branch of a pure migration rename hotfix (ops/approvals.yaml id 32): `fix/migration-<NNNN>-collision`,
@@ -624,7 +625,9 @@ function modifyRecordProblems(
         ? ['mutation']
         : entry.reason === 'rule_change'
           ? ['mutation', 'br']
-          : ['loops'];
+          : entry.reason === 'ruling_correction'
+            ? ['mutation', 'overturned', 'basis']
+            : ['loops'];
     // CT-06zzzzr (D10-1278 ②): retitle_to only for an entry that renames its test.
     const allowed = ['file', 'test', 'reason', 'before', 'after', 'note', ...extra];
     if (entry.retitle_to !== undefined) allowed.push('retitle_to');
@@ -660,6 +663,17 @@ function modifyRecordProblems(
         );
       }
     }
+    // CT-06zzzzzh (D10-1580): a ruling_correction record repeats the ledger's overturned and basis.
+    if (entry.reason === 'ruling_correction') {
+      for (const key of ['overturned', 'basis'] as const) {
+        if (record[key] !== entry[key]) {
+          at(
+            `${where}.${key}`,
+            `must be ${JSON.stringify(entry[key] ?? '')}, the ledger entry's ${key} character for character`,
+          );
+        }
+      }
+    }
     const found = actual(entry.file);
     const block =
       typeof found === 'string' || !found.ok
@@ -688,7 +702,11 @@ function modifyRecordProblems(
         at(`${where}.after`, "must be the block's text at the head, character for character");
       }
     }
-    if (entry.reason === 'tighten_only' || entry.reason === 'rule_change') {
+    if (
+      entry.reason === 'tighten_only' ||
+      entry.reason === 'rule_change' ||
+      entry.reason === 'ruling_correction'
+    ) {
       const mutation = record['mutation'];
       const good =
         Array.isArray(mutation) &&
@@ -706,7 +724,7 @@ function modifyRecordProblems(
           `${where}.mutation`,
           entry.reason === 'tighten_only'
             ? 'a tighten_only record lists at least one { mutant, result: "killed" }: a mutant the tightened test kills and the old one did not'
-            : 'a rule_change record lists at least one { mutant, result: "killed" }: the reverse check, the implementation put back to the old rule turns the changed test red',
+            : `a ${entry.reason} record lists at least one { mutant, result: "killed" }: the reverse check, the implementation put back to the old rule turns the changed test red`,
         );
       }
     } else {
