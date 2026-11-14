@@ -63,6 +63,7 @@ import {
   canSeePayouts,
   conditionLabel,
   detailRoute,
+  CASH_ENTRY_PERMISSION,
   EXECUTE_PERMISSION,
   draftFromSearch,
   listQuery,
@@ -141,7 +142,11 @@ export function WithdrawalsPage({ access }: WithdrawalsPageProps): ReactElement 
               key: 'queue',
               label: t.pageTabs.queue,
               children: (
-                <PayoutQueuePanel canList={reader} canExecute={access.can(EXECUTE_PERMISSION)} />
+                <PayoutQueuePanel
+                  canList={reader}
+                  canExecute={access.can(EXECUTE_PERMISSION)}
+                  canEnter={access.can(CASH_ENTRY_PERMISSION)}
+                />
               ),
             },
             {

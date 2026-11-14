@@ -340,7 +340,7 @@ export const withdrawalsTexts = {
   /** 「打款队列」「结果待确认」与打款记录抽屉（规格 admin-payouts.md，只读）。 */
   payouts: {
     readOnlyNotice:
-      '持 payout.execute 时可勾选待执行的单【执行所选】；录入企业支付宝余额、暂停与解除暂停尚未接入；结果待确认的单在提现单详情处置。',
+      '持 payout.execute 时可勾选待执行的单【执行所选】；持 fund.cash_entry 时可录入企业支付宝余额与微信运营账户余额；暂停与解除暂停尚未接入；结果待确认的单在提现单详情处置。',
     overviewLoading: '正在读取打款概览…',
     overviewFailed: '打款概览读取失败',
     overviewFailedDescription: '网络错误或服务异常，点【重试】重新读取。',
@@ -524,6 +524,49 @@ export const withdrawalsTexts = {
       `进入打款 ${paying} 张，留在待执行 ${left} 张；队列与概览已刷新。`,
     forbidden: '无权限执行此操作（需要 payout.execute 权限点）',
     idsInvalid: '提现单编号有误，请刷新页面后重试',
+    invalid: '提交内容有误，请检查后重试',
+    network: '网络错误，请检查网络后重试；未确认前不会重复提交',
+    failed: '提交失败，请稍后重试',
+  },
+  /** 【录入企业支付宝余额】【录入运营账户余额】（F1-08bc；契约 adminCreatePayoutWatermark，BR-WDR-18）。 */
+  watermark: {
+    /** 入口名（按通道；银行卡没有入口）。 */
+    entries: {
+      alipay: '录入企业支付宝余额',
+      wechat: '录入运营账户余额',
+    },
+    title: (channel: string): string => `录入余额 · ${channel}`,
+    account: '账户',
+    current: '当前余额 W',
+    currentAt: '当前取数时间',
+    unentered: '未录入',
+    purpose:
+      '录入的余额 W 用于执行打款时的水位检查：取数超过 2 小时即视为过期，执行会被拒绝；录入记入历史，不能修改或删除。',
+    available: '可用余额（元）',
+    availableExtra: '账户里当前可用的余额，单位元，最多两位小数。',
+    measuredAt: '取数时间',
+    measuredAtPlaceholder: 'YYYY-MM-DD HH:mm:ss',
+    measuredAtExtra:
+      '查看余额的时间，北京时间。不能晚于当前时间 5 分钟以上、不能早于当前时间 2 小时以上，也不能早于该账户上次录入的取数时间。',
+    note: '备注（选填）',
+    noteExtra: (count: number, max: number): string => `${count} / ${max} 字`,
+    amountRequired: '请输入可用余额',
+    amountInvalid: '请输入不小于 0 的金额，最多两位小数',
+    timeRequired: '请输入取数时间',
+    timeInvalid: '取数时间格式为 YYYY-MM-DD HH:mm:ss（北京时间）',
+    noteBlank: '备注去掉首尾空白后不能为空',
+    noteLong: '备注不能超过 500 字',
+    serverTime:
+      '取数时间不符合要求（不能晚于当前时间 5 分钟以上、不能早于当前时间 2 小时以上、不能早于该账户上次录入的取数时间），请核对后修改',
+    serverAmount: '可用余额不符合要求，请核对后修改',
+    serverNote: '备注不符合要求（去掉首尾空白后 1–500 字），请修改后再提交',
+    submit: '确认录入',
+    cancel: '取消',
+    operation: '录入余额',
+    stepUpTarget: (channel: string): string => `账户：${channel}`,
+    stepUpAgain: '动态码凭证已失效，请重新输入动态码',
+    done: '余额已录入',
+    forbidden: '无权限执行此操作（需要 fund.cash_entry 权限点）',
     invalid: '提交内容有误，请检查后重试',
     network: '网络错误，请检查网络后重试；未确认前不会重复提交',
     failed: '提交失败，请稍后重试',
