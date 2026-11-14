@@ -5,8 +5,10 @@ type: impl
 # 2026-11-13 be 入账（编排 D10-1487 / D10-1488；C-31 第二步的服务端落库部分，第九批 docs/changes/20261113-裁定回写第九批.md §3.1）。不动 contracts/openapi.yaml、不占契约槽；接口契约与接收路由归 w1（CT-13d / B1-06zo），三端与 H5 生成代码、报表查询不在范围。
 # 只接线：接收处（B1-06zo 在 linking 模块里）把整批已校验事件连同服务端注入的 user_id / device_id 交给 CT-13g 的写入函数；link_jump 写 link_open_attempts 的既有逻辑不变。入参以 w1 在 notices 里回的已校验形状为准。依赖 B1-06zo 与 CT-13g。
 # 本机重活（D10-1477）：写手自检只对改动的文件跑 eslint 与 prettier；全量 typecheck / lint / 任何 vitest 不在本机裸跑，要跑就加 zsh ~/couli-orch/local-heavy.sh；交回后由本线在测试机跑 verify:fast。
-refs: []
-refs_hash: {}
+# 2026-11-14 补（编排 D10-1589）：接线后 B1-06zo 冻结 test/spec/linking/link-jump-report/http.int.test.ts 的 #19、#8、#9×2 钉的是 C-31 第一步「只收不存」（阶段性安排），必然红；按 rule_change 登记修改，br [BR-ID-30]（细则 ③ events 留存 90 天，即第二步落库所实现的规则；同 F1-08ah 先例）。由新鲜 Codex 会话只改该文件里这四个展开行：#19 retitle_to 并把期望改为落进 app.events（条数、app / 用户 / 设备取自服务端）、仍不生成业务事件、不改点击证据；#8、#9 只把 h.mutations / h.evidence 的比较排除 app.events 与 app.event_dedup，其余表一字不动，并各加「新增的行只出现在这两张表里」的正向断言。共用夹具 http-kit.ts / vectors.ts 不改。#8、#9 属归属证据类用例，owner-approved 待负责人本人确认（D10-1356）。
+refs: [BR-ID-30]
+refs_hash:
+  BR-ID-30: 8ea92988c8cd
 deps: [B1-06zo, CT-13g]
 paths:
   - 'apps/api/src/modules/linking/**'
@@ -14,9 +16,36 @@ paths:
   - 'apps/api/src/app.module.ts'
 test_paths:
   - 'test/spec/analytics/events-intake-wiring/**'
+  - 'test/spec/linking/link-jump-report/http.int.test.ts' # D10-1589：只改 #19、#8、#9×2（见 modify_existing）
 impl: claude
 tester: codex
 accept:
   - 'pnpm verify'
 status: todo
+modify_existing:
+  - file: 'test/spec/linking/link-jump-report/http.int.test.ts'
+    test: '[AC-B1-06zo#19] 其他全部已登记事件收下且不写库，不承诺 saved，也不生成业务事件或修改点击证据'
+    retitle_to: '[AC-B1-06zo#19] 其他全部已登记事件收下并落进 app.events（app / 用户 / 设备取自服务端），不承诺 saved，仍不生成业务事件、不修改点击证据'
+    reason: rule_change
+    br: [BR-ID-30]
+    ruling: D10-1589
+    note: '依 D10-1589：C-31 第二步落库（BR-ID-30 ③ events 留存 90 天所实现的规则）；期望由「不写库」改为落进 app.events（条数、app / 用户 / 设备取自服务端），「不生成业务事件、不改点击证据」两半原样保留；反向验证：去掉 CT-13h 接线 → 本行变红'
+  - file: 'test/spec/linking/link-jump-report/http.int.test.ts'
+    test: '[AC-B1-06zo#8] 真实 HTTP optional：游客与本人令牌都 200，身份与 deviceId 从服务端取并整理为约定形状'
+    reason: rule_change
+    br: [BR-ID-30]
+    ruling: D10-1589
+    note: '依 D10-1589：只把 h.mutations / h.evidence 的比较排除 app.events 与 app.event_dedup，其余表一字不动、仍须完全相等 / 为空；加正向断言「新增的行只出现在这两张表里」；反向验证用探针（接线顺手改一行 link_open_attempts 或点击证据 → 本行变红），记为「探针，非旧规则」；归属证据类，owner-approved 待负责人本人确认（D10-1356）'
+  - file: 'test/spec/linking/link-jump-report/http.int.test.ts'
+    test: '[AC-B1-06zo#9] 本人 requested 只写本次尝试，时间取 Clock，open 时间、关闭时间与其他业务证据不变'
+    reason: rule_change
+    br: [BR-ID-30]
+    ruling: D10-1589
+    note: '依 D10-1589：it.each 展开行，只把 h.evidence（及 h.mutations，如有）的比较排除 app.events 与 app.event_dedup，其余表一字不动；加正向断言「新增的行只出现在这两张表里」；反向验证用探针（接线顺手改一行点击证据 → 本行变红），记为「探针，非旧规则」；归属证据类，owner-approved 待负责人本人确认（D10-1356）'
+  - file: 'test/spec/linking/link-jump-report/http.int.test.ts'
+    test: '[AC-B1-06zo#9] 本人 unknown 只写本次尝试，时间取 Clock，open 时间、关闭时间与其他业务证据不变'
+    reason: rule_change
+    br: [BR-ID-30]
+    ruling: D10-1589
+    note: '依 D10-1589：it.each 展开行，只把 h.evidence（及 h.mutations，如有）的比较排除 app.events 与 app.event_dedup，其余表一字不动；加正向断言「新增的行只出现在这两张表里」；反向验证用探针（接线顺手改一行点击证据 → 本行变红），记为「探针，非旧规则」；归属证据类，owner-approved 待负责人本人确认（D10-1356）'
 pr: null
