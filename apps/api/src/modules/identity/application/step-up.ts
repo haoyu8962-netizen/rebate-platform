@@ -22,17 +22,16 @@
 //
 // Business digest (B1-02zzzb; BR-ID-08 细则「绑定业务摘要」; contract POST /v1/auth/step-up
 // `summary`, CT-26c): judged first, before either way reads, checks or consumes anything (a code or
-// an attempt is only consumed for a body that can be issued). withdraw and payout_account_change
-// must carry the `summary` that pairs with the action (withdraw: payout_account_id + amount_fen;
-// payout_account_change: alipay / bank_card / wechat); a missing one, a shape of the other action
-// or any summary with phone_change / account_deletion → 20001 data.fields=[summary], nothing
-// issued or consumed. The server computes the digest (domain/step-up-digest.ts) and signs it as the
-// string claim `summary`: the withdrawal values are copied as sent (ownership and balance are the
-// withdrawal's to judge); the Alipay logon id / card number is normalised as the payout account
-// save normalises it (BR-WDR-02) and only its blind index (the payout_accounts contexts) enters
-// the claim, never the plaintext and never a client fingerprint; WeChat takes the attempt_id. An
-// Alipay logon id that cannot be normalised has no fingerprint → 20001 data.fields=[summary].
-// The digest and the account are never logged.
+// an attempt is only consumed for a body that can be issued). Only payout_account_change is bound:
+// it must carry a `summary` of the payout_account_change shape (alipay / bank_card / wechat); a
+// missing one or another shape → 20001 data.fields=[summary], nothing issued or consumed. withdraw,
+// phone_change and account_deletion carry no summary and are issued as before without a digest;
+// any summary with them → 20001 data.fields=[summary]. The server computes the digest
+// (domain/step-up-digest.ts) and signs it as the string claim `summary`: the Alipay logon id /
+// card number is normalised as the payout account save normalises it (BR-WDR-02) and only its
+// blind index (the payout_accounts contexts) enters the claim, never the plaintext and never a
+// client fingerprint; WeChat takes the attempt_id. An Alipay logon id that cannot be normalised
+// has no fingerprint → 20001 data.fields=[summary]. The digest and the account are never logged.
 //
 // Also compiled by the `test` project: erasable syntax only, `import type` for types, `.ts`
 // relative imports, no decorators.
@@ -51,7 +50,6 @@ import {
   isDigestAction,
   payoutAccountDigest,
   wechatPayoutDigest,
-  withdrawDigest,
 } from '../domain/step-up-digest.ts';
 import { STEP_UP_AUDIENCE, signScopedToken, type TokenKeyProvider } from './access-tokens.ts';
 import { configuredSeconds, instantPlus } from './config-seconds.ts';
@@ -169,20 +167,6 @@ export function stepUpDigest(
   }
   const value = summary as Readonly<Record<string, unknown>>;
   const method = value['payout_method'];
-  if (action === 'withdraw') {
-    const accountId = stringField(value, 'payout_account_id');
-    const amount = value['amount_fen'];
-    if (
-      method !== undefined ||
-      accountId === undefined ||
-      typeof amount !== 'number' ||
-      !Number.isSafeInteger(amount) ||
-      amount < 1
-    ) {
-      return SUMMARY_REFUSED;
-    }
-    return { code: 0, digest: withdrawDigest(accountId, BigInt(amount)) };
-  }
   const contexts = blocklistHmacContexts();
   if (method === 'alipay') {
     const logon = stringField(value, 'alipay_logon_id');

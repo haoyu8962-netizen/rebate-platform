@@ -1178,12 +1178,7 @@ it('[AC-B1-02zza#u11] identity.module passes APP_ENV and the opened test phones 
   const result = await service.verify({
     principal: { uid, app_id: 'couli', sid: 's', device_id: 'd', scp: 'full' },
     verifiedDevice: { appId: 'couli', deviceId: 'd' },
-    // B1-02zzzb: a withdraw step-up carries its summary (BR-ID-08 细则「绑定业务摘要」).
-    body: {
-      action: 'withdraw',
-      code: TEST_CODE,
-      summary: { payout_account_id: '019a0000-0000-7000-8000-0000000000bb', amount_fen: 10000 },
-    },
+    body: { action: 'withdraw', code: TEST_CODE },
   });
   expect(result.code).toBe(0);
   const audit = lines

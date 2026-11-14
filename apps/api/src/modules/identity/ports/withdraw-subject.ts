@@ -58,8 +58,6 @@ export function createWithdrawSubjectReader(): WithdrawSubjectReader {
  * payout_accounts.bank_card contexts, B1-13e / B1-13f). On the caller's handle, no writes.
  */
 export interface WithdrawPayeeSnapshot {
-  /** B1-02zzzb: the current payout account row's id (the withdraw step-up digest's account). */
-  payout_account_id: string;
   payout_method: 'alipay' | 'bank_card';
   payee_name: string;
   payee_account_cipher: Buffer;
@@ -85,7 +83,6 @@ export function createWithdrawPayeeSnapshotReader(
         .withSchema('app')
         .selectFrom('payout_accounts')
         .select([
-          'id',
           'payout_method',
           'payee_name',
           'alipay_hmac',
@@ -105,7 +102,6 @@ export function createWithdrawPayeeSnapshotReader(
         }
         const cipher = Buffer.from(row.alipay_logon_id_cipher);
         return {
-          payout_account_id: row.id,
           payout_method: 'alipay',
           payee_name: row.payee_name,
           payee_account_cipher: cipher,
@@ -120,7 +116,6 @@ export function createWithdrawPayeeSnapshotReader(
         }
         const cipher = Buffer.from(row.bank_card_no_cipher);
         return {
-          payout_account_id: row.id,
           payout_method: 'bank_card',
           payee_name: row.payee_name,
           payee_account_cipher: cipher,
