@@ -14,7 +14,7 @@
 // `w:<payout_account_id>:<amount_fen>` / `p:<payout_method>:<HMAC>` / `p:wechat:<attempt_id>`; its
 // name is only the contract line's suggestion). Only the orchestrator runs these fixtures, inside
 // the isolated integration-test container.
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { expect } from 'vitest';
 import type { SmsCodeService } from '../../../../apps/api/src/modules/identity/application/sms-codes.ts';
@@ -43,8 +43,17 @@ type FakeSms = typeof import('../../../../apps/api/src/modules/identity/infra/fa
 
 export const STEP_UP = '/v1/auth/step-up';
 export const WITHDRAW = '/v1/withdrawals';
-/** The bound phone of every payout-account kit fixture user (users.phone_cipher). */
-export const PHONE = '13800138000';
+/**
+ * BR-ID-05 counts the SMS send quota per phone over every app (60 s interval, daily cap), so
+ * every member gets its own bound phone: the prefix 139 (not an 08 default blocked prefix), a
+ * random block of 4 digits drawn once per file, and a 4-digit serial of the member in this file.
+ */
+const PHONE_BLOCK = String(randomInt(0, 10_000)).padStart(4, '0');
+let phoneSerial = 0;
+function nextPhone(): string {
+  phoneSerial += 1;
+  return `139${PHONE_BLOCK}${String(phoneSerial).padStart(4, '0')}`;
+}
 export const BALANCE = 50_000n;
 export const TIMEOUT = 60_000;
 /** BR-ID-08: a step_up_token lives 5 minutes. */
@@ -146,6 +155,19 @@ export async function member(
   options: { readonly withdraw?: boolean; readonly balance?: bigint } = {},
 ) {
   const f = await cardFixture(kit);
+  // This member's own bound phone (users.phone_hmac / phone_cipher, written as
+  // test/spec/identity/sms-codes/http.int.test.ts writes them): the step-up SMS goes to the
+  // account's own number.
+  const phone = nextPhone();
+  await kit.db
+    .updateTable('users')
+    .set({
+      phone_hmac: kit.crypto.blindIndex(phone, 'users.phone'),
+      phone_cipher: Buffer.from(kit.crypto.encrypt(phone, 'users.phone'), 'utf8'),
+    })
+    .where('app_id', '=', f.appId)
+    .where('id', '=', f.uid)
+    .execute();
   const tokensModule = (await import(
     new URL('apps/api/src/modules/identity/application/tokens.ts', ROOT).href
   )) as Tokens;
@@ -224,7 +246,7 @@ export async function member(
     sent += 1;
     const result = await sms.send({
       app_id: f.appId,
-      phone: PHONE,
+      phone,
       purpose: 'step_up',
       action,
       device_id: deviceId,
@@ -322,6 +344,8 @@ export async function member(
     uid: f.uid,
     appId: f.appId,
     deviceId,
+    /** This member's bound phone (users.phone_cipher), for the privacy checks. */
+    phone,
     bodies,
     /** The current payout account row (withdraw members only). */
     current(): { id: string; hmac: string } {
