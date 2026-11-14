@@ -1414,11 +1414,11 @@ export const routes = {
     "kind": "native",
     "h5_path": null,
     "auth": "login",
-    "phase": "M-公开",
+    "phase": "M-内测",
     "since": {
       "ios": null,
-      "android": null,
-      "harmony": null
+      "android": "1.0.0",
+      "harmony": "1.0.0"
     },
     "debug_only": false,
     "entry": [
