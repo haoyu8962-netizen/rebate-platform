@@ -7,6 +7,7 @@ type: impl
 # 不在本单：/risk/appeals 还没有页面（等 CT-24r）；/union/accounts?auth=expiring 控制台没有这个路径，列表接口也没有 auth 参数——已报编排另定。
 # 行为：进页时地址里的 status 若是契约枚举（WithdrawalStatus / AdminReconDiffStatus）里的合法值，就作为该筛选的初始值，首个列表请求即带上；不合法或缺省照旧（不报错、不带）。之后用户改筛选、【重置】照常。冻结测试（admin-withdrawals 等，进页不带参数）全绿。
 # 提现页属 RV2（apps/admin/src/**/withdrawals/**）：Codex 额度用尽至 11-20（D10-1604），规则测试由独立 Claude 写（approvals 第 36 条）、另一独立 Claude 审；实现 Claude Opus；代码评审 money（独立 Claude）。任务书带 D10-1477、D10-1503。
+# 2026-11-14 补丁 1（fe，编排 D10-1653）：不加卡片守卫——外壳对未接入路径已显示「尚未接入」占位页，满足「不跳未知页」；D10-1651「只显示计数、不可点」作废，F1-14a 冻结用例与 dashboard-fixtures 样例不动；paths 不加 dashboard，范围仍是提现、对账两页读 ?status=。union_auth_expiring 改指 /unions 由后台与工作台在 B1-10w 做（不在本单）。
 refs: []
 refs_hash: {}
 deps: [F1-08aj]
