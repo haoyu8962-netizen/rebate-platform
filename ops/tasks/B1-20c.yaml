@@ -11,7 +11,7 @@ refs_hash:
   BR-ID-05: 0737ee3b67e2
   BR-ID-07: 4f2a4bdf0a2a
   BR-ID-37: b93e6a37d3dc
-  BR-WDR-01: 6c6d0b8c5854
+  BR-WDR-01: 3116933082da
 deps: [B1-01zzs, B1-20a, B1-20e, B1-02zp]
 paths:
   - 'apps/api/src/modules/identity/**'

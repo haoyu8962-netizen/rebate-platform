@@ -8,7 +8,7 @@ type: impl
 # Codex 到 11-17 不可用：规则测试与评审照 approvals 36 由独立 Claude（claude-run.sh，证据记 claude-independent）承担；Opus 实现。
 refs: [BR-TEXT-14, BR-TEXT-12]
 refs_hash:
-  BR-TEXT-14: d33bc225dc22
+  BR-TEXT-14: 98dd80cf2ab5
   BR-TEXT-12: 8073a2f9cb65
 deps: []
 paths:

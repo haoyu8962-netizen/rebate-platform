@@ -9,7 +9,7 @@ type: migration
 # 不变量 06 由规则测试作者（Codex）写在 db/invariants/ledger/06_*.sql（BR-FUND-14：frozen = Σ 非终态单金额），运行器按目录执行（ledger-plan D10）。
 refs: [BR-WDR-07, BR-WDR-08, BR-WDR-05]
 refs_hash:
-  BR-WDR-07: 488ce83ba0e3
+  BR-WDR-07: 3eaedce150d8
   BR-WDR-08: 8c55a3ce6b57
   BR-WDR-05: 99e2e2654ce0
 deps: [B2-05a, B2-02f]
