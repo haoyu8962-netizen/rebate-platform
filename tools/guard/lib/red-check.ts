@@ -232,8 +232,12 @@
 // `br`, and is judged exactly as the other two — green on the old code accepted, red too — its
 // note naming the reason and br; green adds one more line of its own, CT-06zzzzzb / D10-1356 ④,
 // naming rule_change and br and asking to check that the rewrite really follows the changed rule,
-// the verdict unchanged; a changed expectation of a money or attribution test still needs the
-// owner's own confirmation, approvals #24, which no tool here grants;
+// the verdict unchanged; a ruling_correction entry, CT-06zzzzzh / D10-1580 / D10-1597, a frozen
+// test pinning an overturned orchestrator ruling, names `overturned` and `basis` instead of br and
+// is judged exactly as rule_change, its green line naming ruling_correction, overturned → ruling
+// and basis; a changed expectation of a money or attribution test still needs the
+// owner's own confirmation, approvals #24, which no tool here grants (parseTaskFile refuses a
+// ruling_correction entry on such a test);
 // tools/lib/task-file.ts, tools/ops/task.ts). For a file it names, ruleTestBaselines asks
 // test-blocks.ts compareModifiedBlocks, against the same base the blocks were compared with,
 // which block each name is: exactly one block with a static title on each side. In
@@ -748,9 +752,14 @@ export function modifiedOnlyFiles(
  * The separate line for a declared rule_change test green on the old code (CT-06zzzzzb, D10-1356
  * ④): it follows a changed BR, so the old implementation should usually fail it; green is
  * accepted (the verdict does not change) but asks for a check of the rewrite. Written after the
- * test's exemption note, never for a red test or another reason.
+ * test's exemption note, never for a red test or another reason; a ruling_correction test
+ * (CT-06zzzzzh, D10-1580) gets the same kind of line, naming overturned → ruling and basis.
  */
 function ruleChangeGreenNote(file: string, name: string, d: ModifyExistingDeclaration): string {
+  // CT-06zzzzzh (D10-1580): a ruling_correction test follows the later ruling; the line names the
+  // overturned and the overturning ruling and the basis instead of br.
+  if (d.reason === 'ruling_correction')
+    return `${file} > ${name}: ATTENTION ruling_correction (${d.overturned ?? ''} → ${d.ruling}; basis: ${d.basis ?? ''}) is green on the old code: check that the rewrite really follows the later ruling (a test that follows an overturning ruling is usually red on the old implementation; the verdict is unchanged)`;
   return `${file} > ${name}: ATTENTION rule_change (br: ${(d.br ?? []).join(', ')}; ${d.ruling}) is green on the old code: check that the rewrite really follows the changed rule (a test that follows a changed BR is usually red on the old implementation; the verdict is unchanged)`;
 }
 
@@ -1756,7 +1765,7 @@ export function checkRedReports(
               : { file, test: name, status, declared: true, reason: declaration.reason };
       const exemptNote = (how: string): string =>
         modifiedEntry !== null
-          ? `${file} > ${name}: a changed frozen test declared in modify_existing (${modifiedEntry.reason}, ${modifiedEntry.ruling}; ${modifiedEntry.br === undefined ? '' : `follows ${modifiedEntry.br.join(', ')} (br); `}${modifiedEntry.retitle_to === undefined ? '' : `renamed from "${modifiedEntry.test}" to "${modifiedEntry.retitle_to}" (retitle_to); `}${how}; note: ${modifiedEntry.note}), not held to the red rule; ${modifiedConfirmation}`
+          ? `${file} > ${name}: a changed frozen test declared in modify_existing (${modifiedEntry.reason}, ${modifiedEntry.ruling}; ${modifiedEntry.br === undefined ? '' : `follows ${modifiedEntry.br.join(', ')} (br); `}${modifiedEntry.overturned === undefined ? '' : `overturns ${modifiedEntry.overturned} (overturned), basis ${modifiedEntry.basis ?? ''}; `}${modifiedEntry.retitle_to === undefined ? '' : `renamed from "${modifiedEntry.test}" to "${modifiedEntry.retitle_to}" (retitle_to); `}${how}; note: ${modifiedEntry.note}), not held to the red rule; ${modifiedConfirmation}`
           : row !== null
             ? `${file} > ${name}: a kept row of an .each table whose title template, callback and rows are the base's (rows removed only), exempt by the task's red_exempt_rows declaration (${how}; reason: ${row.reason}); ${rowConfirmation}`
             : declaration === null
@@ -1768,7 +1777,11 @@ export function checkRedReports(
           notes.push(exemptNote('green'));
           // CT-06zzzzzb (D10-1356 ④): a test that follows a changed BR is mostly red on the old
           // code; green is accepted as before, but gets a line of its own for the orchestrator.
-          if (modifiedEntry?.reason === 'rule_change')
+          // CT-06zzzzzh (D10-1580): ruling_correction is judged as rule_change, its own line too.
+          if (
+            modifiedEntry?.reason === 'rule_change' ||
+            modifiedEntry?.reason === 'ruling_correction'
+          )
             notes.push(ruleChangeGreenNote(file, name, modifiedEntry));
           continue;
         }

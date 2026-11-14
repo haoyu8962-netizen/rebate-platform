@@ -4348,3 +4348,102 @@ it('[CT-06zzzzzb] no green line when the rule_change test is red on the old code
     expect(rwExemptNotes(green.notes, '[AC-2] late'), reason).toHaveLength(1);
   }
 });
+
+// CT-06zzzzzh (D10-1580 ②c, D10-1597): a frozen test that pins an overturned orchestrator ruling
+// (reason ruling_correction, with overturned and basis instead of br) is judged exactly as
+// rule_change: green on the old code accepted with one ATTENTION line of its own naming
+// ruling_correction, overturned → ruling and basis; red accepted too, with no such line.
+const RC_BASIS = '规划/02 §12.3';
+const rulingCorrectionDeclared = (tests: string[] = ['[AC-2] late']): ModifyExistingDeclaration[] =>
+  modDeclared(tests).map((d) => ({
+    ...d,
+    reason: 'ruling_correction' as const,
+    ruling: 'D10-1519',
+    overturned: 'D10-1488',
+    basis: RC_BASIS,
+  }));
+const RC_GREEN_FLAG = 'ATTENTION ruling_correction';
+
+it('[CT-06zzzzzh] a ruling_correction test green on the old code is accepted as rule_change is and adds one ATTENTION line naming ruling_correction, overturned → ruling and basis', () => {
+  const b = modBaselines(MOD_HEAD, rulingCorrectionDeclared());
+  const result = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    b,
+    [],
+    [],
+    rulingCorrectionDeclared(),
+  );
+  const rw = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    modBaselines(MOD_HEAD, rwDeclared()),
+    [],
+    [],
+    rwDeclared(),
+  );
+  // The verdict is rule_change's, field by field.
+  expect(result.problems).toEqual([]);
+  expect(result.ok).toBe(true);
+  expect(result.red).toEqual([`${MOD} > [AC-4] new`]);
+  expect(result.exempt).toContainEqual({
+    file: MOD,
+    test: '[AC-2] late',
+    status: 'passed',
+    declared: true,
+    reason: MOD_NOTE,
+    modified: true,
+  });
+  expect(result.ok).toBe(rw.ok);
+  expect(result.problems).toEqual(rw.problems);
+  expect(result.red).toEqual(rw.red);
+  expect(result.exempt).toEqual(rw.exempt);
+  expect(result.notes).toHaveLength(rw.notes.length);
+  // One ATTENTION line of its own.
+  const flagged = result.notes.filter((n) => n.includes(RC_GREEN_FLAG));
+  expect(flagged).toHaveLength(1);
+  const line = flagged[0] ?? '';
+  expect(line.startsWith(`${MOD} > [AC-2] late: ATTENTION ruling_correction`)).toBe(true);
+  expect(line).toContain('D10-1488 → D10-1519');
+  expect(line).toContain(`basis: ${RC_BASIS}`);
+  expect(line).toMatch(/green on the old code/);
+  expect(line).not.toContain('br:');
+  expect(line).not.toContain('rule_change');
+  // The exemption note names the reason, both rulings and the basis.
+  const exemptNotes = rwExemptNotes(result.notes, '[AC-2] late');
+  expect(exemptNotes).toHaveLength(1);
+  expect(exemptNotes[0]).not.toContain(RC_GREEN_FLAG);
+  expect(exemptNotes[0]).toContain('ruling_correction');
+  expect(exemptNotes[0]).toContain('D10-1519');
+  expect(exemptNotes[0]).toContain('D10-1488');
+  expect(exemptNotes[0]).toContain(RC_BASIS);
+  // rule_change's line is not written for it.
+  expect(rwFlagged(result.notes).filter((n) => n.includes('ATTENTION rule_change'))).toEqual([]);
+});
+
+it('[CT-06zzzzzh] a ruling_correction test red on the old code is accepted and gets no ATTENTION line', () => {
+  const b = modBaselines(MOD_HEAD, rulingCorrectionDeclared());
+  const red = checkRedReports(
+    [
+      redReport(
+        MOD,
+        MOD_TESTS.map((t): RedTest =>
+          t[0] === '[AC-2] late' ? [t[0], 'failed', 'AssertionError: expected 1 to be 2'] : t,
+        ),
+      ),
+    ],
+    [MOD],
+    ROOT,
+    b,
+    [],
+    [],
+    rulingCorrectionDeclared(),
+  );
+  expect(red.problems).toEqual([]);
+  expect(red.ok).toBe(true);
+  expect(red.red).toEqual([`${MOD} > [AC-2] late`, `${MOD} > [AC-4] new`]);
+  expect(red.notes.filter((n) => n.includes('ATTENTION'))).toEqual([]);
+  expect(rwExemptNotes(red.notes, '[AC-2] late')).toHaveLength(1);
+});

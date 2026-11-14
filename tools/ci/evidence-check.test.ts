@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import {
   CI_REFUSED,
+  MONEY_PATHS,
   checkEvidence,
   engineProblem,
   evidenceProblems,
@@ -17,6 +18,7 @@ import {
 } from './evidence-check.ts';
 import type { HandoverPolicy, RedRequirement } from './evidence-check.ts';
 import { loadProtected } from '../guard/lib/protected.ts';
+import { MONEY_PATHS as TASK_FILE_MONEY_PATHS } from '../lib/task-file.ts';
 import { loadRiskMap } from '../guard/lib/risk.ts';
 
 const REPO = resolve(import.meta.dirname, '../..');
@@ -3302,4 +3304,202 @@ it('[CT-06zzzzzb] a rule_change record whose before or after differs from the ac
       /^ops\/evidence\/B2-09v\.json: modify_existing\[0\]\.after: must be the block's text at the head/,
     ),
   ]);
+});
+
+// CT-06zzzzzh (D10-1580 ②c, D10-1597): a frozen test that pins an overturned orchestrator ruling
+// is declared with reason ruling_correction (overturned, ruling, basis; no br). Its record needs
+// what a rule_change record needs (before / after character for character, the reverse check in
+// `mutation`) and overturned and basis exactly as the ledger's; br and loops are refused. The file
+// here is no money or attribution test (test/spec/db/events), which parseTaskFile would refuse.
+const RC_FILE = 'test/spec/db/events/storage.int.test.ts';
+const RC_BASIS = '规划/02 §12.3';
+let rcRepo = '';
+let rcBase = '';
+const rcLedger = (file: string = RC_FILE): string =>
+  modLedger('tighten_only')
+    .split(MOD_FILE)
+    .join(file)
+    .replace(
+      '    reason: tighten_only\n',
+      `    reason: ruling_correction\n    overturned: D10-1488\n    basis: '${RC_BASIS}'\n`,
+    )
+    .replace('    ruling: D10-701\n', '    ruling: D10-1519\n');
+const rcTrusted = (name: string, ledger: string = rcLedger()): string => {
+  const dir = modTrusted(name, 'tighten_only');
+  write(dir, { 'ops/tasks/B2-09v.yaml': ledger });
+  return dir;
+};
+/** The fixture repository of these tests: RC_FILE at the base holds MOD_OLD (once). */
+function rcInit(): void {
+  if (rcRepo !== '') return;
+  rcRepo = join(SCRATCH, 'ruling-correction-repo');
+  mkdirSync(rcRepo, { recursive: true });
+  git(rcRepo, ['init', '-q', '-b', 'main']);
+  write(rcRepo, { SPEC_REF: `${SPEC_REF}\n`, [RC_FILE]: modSource(MOD_OLD) });
+  git(rcRepo, ['add', '-A']);
+  git(rcRepo, ['commit', '-q', '-m', 'base']);
+  rcBase = git(rcRepo, ['rev-parse', 'HEAD']);
+}
+/** A task branch of rcRepo whose RC_FILE is `content`, plus its evidence; the head. */
+function rcBranch(name: string, content: string, records: unknown[]): string {
+  rcInit();
+  git(rcRepo, ['checkout', '-q', '-B', name, rcBase]);
+  write(rcRepo, { [RC_FILE]: content });
+  git(rcRepo, ['add', '-A']);
+  git(rcRepo, ['commit', '-q', '--allow-empty', '-m', `test: ${name}`]);
+  const tree = git(rcRepo, ['rev-parse', 'HEAD:test/spec']);
+  const doc = { ...modEvidence(records)(tree), spec_commit: rcBase };
+  write(rcRepo, { 'ops/evidence/B2-09v.json': `${JSON.stringify(doc, null, 2)}\n` });
+  git(rcRepo, ['add', '-A']);
+  git(rcRepo, ['commit', '-q', '-m', 'evidence']);
+  return git(rcRepo, ['rev-parse', 'HEAD']);
+}
+const rcCheck = (head: string, trusted: string, approval?: ReturnType<typeof approved>) =>
+  checkEvidence({
+    prDir: rcRepo,
+    base: rcBase,
+    head,
+    headRef: 'task/B2-09v',
+    trusted,
+    ...(approval === undefined ? {} : { approval }),
+  });
+const rcRecord = (extra: Evidence = {}): Evidence =>
+  Object.fromEntries(
+    Object.entries(
+      modRecord({
+        file: RC_FILE,
+        reason: 'ruling_correction',
+        overturned: 'D10-1488',
+        basis: RC_BASIS,
+        mutation: REVERSE,
+        ...extra,
+      }),
+    ).filter(([, v]) => v !== undefined),
+  );
+
+it('[CT-06zzzzzh] MONEY_PATHS is still exported by evidence-check: the one list of tools/lib/task-file.ts', () => {
+  expect(MONEY_PATHS).toBe(TASK_FILE_MONEY_PATHS);
+  expect(MONEY_PATHS).toContain('db/migrations/**');
+  expect(MONEY_PATHS).toContain('packages/money/src/**');
+});
+
+it('[CT-06zzzzzh] a ruling_correction record with mutation and the ledger overturned and basis passes with the label after spec_commit; without the label it does not apply', () => {
+  const trusted = rcTrusted('trusted-ruling-correction');
+  const ledger = readFileSync(join(trusted, 'ops/tasks/B2-09v.yaml'), 'utf8');
+  expect(ledger).toContain(
+    `    reason: ruling_correction\n    overturned: D10-1488\n    basis: '${RC_BASIS}'\n    ruling: D10-1519\n`,
+  );
+  const head = rcBranch('rc-good', modSource(MOD_NEW), [rcRecord()]);
+  const ok = rcCheck(head, trusted, approved(head));
+  expect(ok.problems).toEqual([]);
+  expect(ok).toMatchObject({ ok: true, risk: 'RV2', task: 'B2-09v', approval_wanted: true });
+  const noted = rcBranch('rc-good-note', modSource(MOD_NEW), [
+    rcRecord({ note: 'the later ruling put back to the old one: the test turns red' }),
+  ]);
+  expect(rcCheck(noted, trusted, approved(noted)).problems).toEqual([]);
+  const local = rcCheck(head, trusted);
+  expect(local.ok).toBe(false);
+  expect(local.problems.join('\n')).toContain(
+    `spec_commit: rule tests changed after the rule-test commit: ${RC_FILE} (M) [declared in modify_existing, but without the owner approval label]`,
+  );
+});
+
+it('[CT-06zzzzzh] a ruling_correction record is refused without a killed mutant, with overturned or basis missing or not the ledger, with br or loops, under another reason, or with before / after off', () => {
+  const trusted = rcTrusted('trusted-ruling-correction');
+  const cases: [string, Evidence, RegExp][] = [
+    [
+      'no mutation',
+      { mutation: undefined },
+      /modify_existing\[0\]\.mutation: a ruling_correction record/,
+    ],
+    ['empty mutation', { mutation: [] }, /modify_existing\[0\]\.mutation: /],
+    [
+      'survived',
+      { mutation: [{ mutant: 'old ruling', result: 'survived' }] },
+      /modify_existing\[0\]\.mutation: /,
+    ],
+    [
+      'no overturned',
+      { overturned: undefined },
+      /modify_existing\[0\]\.overturned: must be "D10-1488"/,
+    ],
+    ['overturned other', { overturned: 'D10-1487' }, /modify_existing\[0\]\.overturned: /],
+    ['overturned is ruling', { overturned: 'D10-1519' }, /modify_existing\[0\]\.overturned: /],
+    ['no basis', { basis: undefined }, /modify_existing\[0\]\.basis: must be "规划\/02 §12\.3"/],
+    ['basis other', { basis: '规划/02 §12.4' }, /modify_existing\[0\]\.basis: /],
+    ['basis with a space', { basis: `${RC_BASIS} ` }, /modify_existing\[0\]\.basis: /],
+    ['br', { br: ['BR-FUND-16'] }, /modify_existing\[0\]\.br: unknown field/],
+    ['loops', { loops: LOOPS }, /modify_existing\[0\]\.loops: unknown field/],
+    [
+      'reason rule_change',
+      { reason: 'rule_change' },
+      /modify_existing\[0\]\.reason: must be "ruling_correction"/,
+    ],
+    [
+      'before is the head block',
+      { before: MOD_NEW },
+      /modify_existing\[0\]\.before: must be the block's text at the merge base/,
+    ],
+    [
+      'after with a trailing space',
+      { after: `${MOD_NEW} ` },
+      /modify_existing\[0\]\.after: must be the block's text at the head/,
+    ],
+  ];
+  for (const [name, extra, want] of cases) {
+    const head = rcBranch(`rc-rec-${name.replace(/ /g, '-')}`, modSource(MOD_NEW), [
+      rcRecord(extra),
+    ]);
+    const report = rcCheck(head, trusted, approved(head));
+    expect(report.ok, name).toBe(false);
+    expect(report.problems.join('\n'), name).toMatch(want);
+  }
+  // The only fault of a record whose basis is off: the basis.
+  const off = rcBranch('rc-basis-only', modSource(MOD_NEW), [rcRecord({ basis: '规划/04 §3' })]);
+  expect(rcCheck(off, trusted, approved(off)).problems).toEqual([
+    expect.stringMatching(/^ops\/evidence\/B2-09v\.json: modify_existing\[0\]\.basis: must be /),
+  ]);
+});
+
+it('[CT-06zzzzzh] tighten_only and rule_change records may not carry overturned or basis (unknown field)', () => {
+  for (const key of ['overturned', 'basis'] as const) {
+    const value = key === 'overturned' ? 'D10-1488' : RC_BASIS;
+    const tight = modBranch(
+      `rc-tight-${key}`,
+      modSource(MOD_NEW),
+      modEvidence([modRecord({ [key]: value })]),
+    );
+    const t = modCheck(tight, modTrusted('trusted-modify', 'tighten_only'), approved(tight));
+    expect(t.ok, key).toBe(false);
+    expect(t.problems.join('\n'), key).toContain(`modify_existing[0].${key}: unknown field`);
+    const rw = modBranch(
+      `rc-rw-${key}`,
+      modSource(MOD_NEW),
+      modEvidence([rwRecord({ [key]: value })]),
+    );
+    const r = modCheck(rw, rwTrusted('trusted-rule-change'), approved(rw));
+    expect(r.ok, key).toBe(false);
+    expect(r.problems.join('\n'), key).toContain(`modify_existing[0].${key}: unknown field`);
+  }
+});
+
+it('[CT-06zzzzzh] a trusted ledger whose ruling_correction entry names a money or attribution test cannot be read: the declared change does not apply', () => {
+  // MOD_FILE is test/spec/payout/…: a ruling_correction on it is refused by parseTaskFile.
+  const trusted = rcTrusted('trusted-ruling-correction-money', rcLedger(MOD_FILE));
+  const head = modBranch(
+    'rc-money',
+    modSource(MOD_NEW),
+    modEvidence([rcRecord({ file: MOD_FILE })]),
+  );
+  const report = modCheck(head, trusted, approved(head));
+  expect(report.ok).toBe(false);
+  expect(report.approval_wanted).toBe(false);
+  const text = report.problems.join('\n');
+  expect(text).toContain(
+    `spec_commit: rule tests changed after the rule-test commit: ${MOD_FILE} (M)`,
+  );
+  expect(text).not.toContain('[declared in modify_existing');
+  expect(text).toContain(
+    'modify_existing: the trusted ledger declares no modify_existing: a record without a ledger entry is refused',
+  );
 });

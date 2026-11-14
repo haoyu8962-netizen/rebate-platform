@@ -7,8 +7,13 @@ import {
   EXPECTED_VALUE_SHAPE,
   EXPECTED_VALUES_MAX,
   MODIFY_EXISTING_REASONS,
+  MONEY_PATHS,
+  MONEY_TEST_DIR_KEYWORDS,
+  MONEY_TEST_PATHS,
   RENAME_CONTENT_MIN,
   RENAMES_MAX,
+  RULING_CORRECTION_BASIS_PREFIXES,
+  isMoneyOrAttributionTest,
   listTaskIds,
   loadTask,
   parseTaskFile,
@@ -649,8 +654,13 @@ describe('parseTaskFile', () => {
   const BR_PROBLEM = (i: number): RegExp =>
     new RegExp(`modify_existing\\[${i}\\]\\.br: (?!unknown field)`);
 
-  it('[CT-06zzzzw] modify_existing rule_change: accepted with br, the BR ids kept in order; the three reasons; without br the entry has no br key', () => {
-    expect([...MODIFY_EXISTING_REASONS]).toEqual(['flake_fix', 'tighten_only', 'rule_change']);
+  it('[CT-06zzzzw] modify_existing rule_change: accepted with br, the BR ids kept in order; the reasons (ruling_correction since CT-06zzzzzh); without br the entry has no br key', () => {
+    expect([...MODIFY_EXISTING_REASONS]).toEqual([
+      'flake_fix',
+      'tighten_only',
+      'rule_change',
+      'ruling_correction',
+    ]);
     const one = rwDeclared(rwEntry(RW_TEST));
     expect(messageOf(one, 'B2-02a.yaml')).toBe('');
     expect(parseTaskFile(one, 'B2-02a.yaml').modify_existing).toEqual([
@@ -1568,4 +1578,276 @@ describe('tester: claude-independent (ops/approvals.yaml id 36)', () => {
       messageOf(EXAMPLE.replace('impl: codex', 'impl: claude-independent'), 'B2-02a.yaml'),
     ).toContain('impl: must be one of codex / claude');
   });
+});
+
+// CT-06zzzzzh (D10-1580 ②c, D10-1597): a frozen test that pins an orchestrator ruling a later ruling
+// overturned, its basis a shape rule of 规划/02 or 04 (or an ADR) and no BR of 08, is declared with
+// reason ruling_correction: overturned (the old ruling), ruling (the new one) and basis (the
+// source); no br. A money or attribution test may not use the reason (D10-1356): parseTaskFile
+// refuses the ledger whole.
+const RC_FILE = 'test/spec/db/events/storage.int.test.ts';
+const RC_TEST = '[AC-CT-13e#1] event_dedup 主键';
+const rcDeclared = (entries: string): string =>
+  EXAMPLE.replace('tester: claude', `tester: claude\nmodify_existing:${entries}`);
+const rcEntry = (test: string, fields: Record<string, string> = {}): string => {
+  const all: Record<string, string> = {
+    file: RC_FILE,
+    test: `'${test}'`,
+    reason: 'ruling_correction',
+    overturned: 'D10-1488',
+    ruling: 'D10-1519',
+    basis: "'规划/02 §12.3'",
+    note: "'去重键按 D10-1519 改成 (app_id, event_type, event_id)'",
+    ...fields,
+  };
+  const lines = Object.entries(all)
+    .filter(([, v]) => v !== '')
+    .map(([k, v], i) => `${i === 0 ? '  - ' : '    '}${k}: ${v}`);
+  return `\n${lines.join('\n')}`;
+};
+const rcLines = (message: string, i: number, field: string): string[] =>
+  message.split('\n').filter((l) => l.includes(`modify_existing[${i}].${field}:`));
+
+it('[CT-06zzzzzh] modify_existing ruling_correction: accepted with overturned, ruling and basis; no br key; retitle_to as for rule_change', () => {
+  expect(MODIFY_EXISTING_REASONS).toContain('ruling_correction');
+  expect([...RULING_CORRECTION_BASIS_PREFIXES]).toEqual(['规划/', 'docs/adr/']);
+  const one = rcDeclared(rcEntry(RC_TEST));
+  expect(messageOf(one, 'B2-02a.yaml')).toBe('');
+  expect(parseTaskFile(one, 'B2-02a.yaml').modify_existing).toEqual([
+    {
+      file: RC_FILE,
+      test: RC_TEST,
+      reason: 'ruling_correction',
+      ruling: 'D10-1519',
+      note: '去重键按 D10-1519 改成 (app_id, event_type, event_id)',
+      overturned: 'D10-1488',
+      basis: '规划/02 §12.3',
+    },
+  ]);
+  // An ADR as basis, and 规划/04.
+  for (const basis of ["'docs/adr/0001-技术栈基线.md §3'", "'规划/04 §3'"]) {
+    expect(messageOf(rcDeclared(rcEntry(RC_TEST, { basis })), 'B2-02a.yaml'), basis).toBe('');
+  }
+  // Together with retitle_to.
+  const renamed = rcDeclared(
+    rcEntry(RC_TEST, { retitle_to: "'[AC-CT-13e#1] event_dedup 新主键'" }),
+  );
+  expect(parseTaskFile(renamed, 'B2-02a.yaml').modify_existing[0]).toMatchObject({
+    reason: 'ruling_correction',
+    retitle_to: '[AC-CT-13e#1] event_dedup 新主键',
+    overturned: 'D10-1488',
+    basis: '规划/02 §12.3',
+  });
+  // Other reasons have no overturned / basis key at all.
+  const others = parseTaskFile(
+    rcDeclared(
+      rcEntry('[AC-1] a', { reason: 'tighten_only', overturned: '', basis: '' }) +
+        rcEntry('[AC-1] b'),
+    ),
+    'B2-02a.yaml',
+  ).modify_existing;
+  expect(others.map((e) => [Object.hasOwn(e, 'overturned'), Object.hasOwn(e, 'basis')])).toEqual([
+    [false, false],
+    [true, true],
+  ]);
+  expect(Object.hasOwn(others[1] ?? {}, 'br')).toBe(false);
+});
+
+it('[CT-06zzzzzh] modify_existing ruling_correction refused: overturned missing or malformed, overturned equal to ruling', () => {
+  const cases: [string, string][] = [
+    ['missing', ''],
+    ['null', 'null'],
+    ['not a ruling id', 'D10-x'],
+    ['a BR id', 'BR-AI-14'],
+    ['zero-led', 'D10-0'],
+  ];
+  for (const [name, overturned] of cases) {
+    const message = messageOf(rcDeclared(rcEntry(RC_TEST, { overturned })), 'B2-02a.yaml');
+    expect(message, name).toContain('B2-02a.yaml: invalid task file');
+    expect(rcLines(message, 0, 'overturned'), name).toHaveLength(1);
+    expect(message, name).not.toContain('modify_existing[0].reason:');
+    expect(message, name).not.toContain('modify_existing[0].basis:');
+  }
+  expect(messageOf(rcDeclared(rcEntry(RC_TEST, { overturned: '' })), 'B2-02a.yaml')).toContain(
+    'modify_existing[0].overturned: missing',
+  );
+  const same = messageOf(rcDeclared(rcEntry(RC_TEST, { overturned: 'D10-1519' })), 'B2-02a.yaml');
+  expect(same).toContain('modify_existing[0].overturned: must differ from ruling');
+  // The index is the entry's own.
+  expect(
+    messageOf(
+      rcDeclared(rcEntry('[AC-1] ok') + rcEntry(RC_TEST, { overturned: '' })),
+      'B2-02a.yaml',
+    ),
+  ).toContain('modify_existing[1].overturned: missing');
+});
+
+it('[CT-06zzzzzh] modify_existing ruling_correction refused: basis missing, empty, not a string, not 规划/ or docs/adr/, the prefix alone', () => {
+  const cases: [string, string][] = [
+    ['missing', ''],
+    ['empty string', "''"],
+    ['null', 'null'],
+    ['a list', "['规划/02 §12.3']"],
+    ['a BR', "'BR-FUND-16'"],
+    ['08 by name', "'08 §3'"],
+    ['no slash', "'规划02 §12.3'"],
+    ['leading space', "' 规划/02 §12.3'"],
+    ['another directory', "'docs/research/x.md'"],
+    ['the prefix alone', "'规划/'"],
+    ['the ADR prefix alone with spaces', "'docs/adr/  '"],
+  ];
+  for (const [name, basis] of cases) {
+    const message = messageOf(rcDeclared(rcEntry(RC_TEST, { basis })), 'B2-02a.yaml');
+    expect(rcLines(message, 0, 'basis'), name).toHaveLength(1);
+    expect(message, name).not.toContain('modify_existing[0].overturned:');
+    expect(message, name).not.toContain('modify_existing[0].reason:');
+  }
+});
+
+it('[CT-06zzzzzh] modify_existing ruling_correction refuses br; overturned and basis are refused on every other reason', () => {
+  const withBr = messageOf(rcDeclared(rcEntry(RC_TEST, { br: '[BR-FUND-13]' })), 'B2-02a.yaml');
+  expect(rcLines(withBr, 0, 'br')).toHaveLength(1);
+  expect(rcLines(withBr, 0, 'br')[0]).toContain('ruling_correction');
+  expect(withBr).not.toContain('modify_existing[0].br: unknown field');
+  expect(messageOf(rcDeclared(rcEntry(RC_TEST, { br: '[]' })), 'B2-02a.yaml')).toMatch(
+    /modify_existing\[0\]\.br: /,
+  );
+  for (const reason of ['tighten_only', 'flake_fix', 'rule_change']) {
+    const extra = reason === 'rule_change' ? { br: '[BR-FUND-13]' } : {};
+    const both = messageOf(rcDeclared(rcEntry(RC_TEST, { reason, ...extra })), 'B2-02a.yaml');
+    expect(rcLines(both, 0, 'overturned'), reason).toHaveLength(1);
+    expect(rcLines(both, 0, 'basis'), reason).toHaveLength(1);
+    expect(both, reason).not.toContain('unknown field');
+    const onlyBasis = messageOf(
+      rcDeclared(rcEntry(RC_TEST, { reason, overturned: '', ...extra })),
+      'B2-02a.yaml',
+    );
+    expect(rcLines(onlyBasis, 0, 'basis'), reason).toHaveLength(1);
+    expect(rcLines(onlyBasis, 0, 'overturned'), reason).toEqual([]);
+    const onlyOverturned = messageOf(
+      rcDeclared(rcEntry(RC_TEST, { reason, basis: '', ...extra })),
+      'B2-02a.yaml',
+    );
+    expect(rcLines(onlyOverturned, 0, 'overturned'), reason).toHaveLength(1);
+    expect(rcLines(onlyOverturned, 0, 'basis'), reason).toEqual([]);
+    // Without either, the entry is valid as before.
+    expect(
+      messageOf(
+        rcDeclared(rcEntry(RC_TEST, { reason, overturned: '', basis: '', ...extra })),
+        'B2-02a.yaml',
+      ),
+      reason,
+    ).toBe('');
+  }
+});
+
+it('[CT-06zzzzzh] isMoneyOrAttributionTest: MONEY_PATHS, test/properties and test/replay, and test/ directories with a funds or attribution keyword; the events storage test is not one', () => {
+  expect([...MONEY_TEST_DIR_KEYWORDS]).toEqual([
+    'ledger',
+    'commission',
+    'settle',
+    'payout',
+    'payment',
+    'withdraw',
+    'wallet',
+    'reconcil',
+    'refund',
+    'adjust',
+    'order',
+    'union',
+    'linking',
+    'attribution',
+    'money',
+    'domain',
+    'split',
+    'rebate',
+    'balance',
+    'fund',
+  ]);
+  expect([...MONEY_TEST_PATHS]).toEqual(['test/properties/**', 'test/replay/**']);
+  // a. MONEY_PATHS, case-insensitively.
+  expect(MONEY_PATHS).toContain('packages/money/src/**');
+  for (const path of [
+    'packages/money/src/split.test.ts',
+    'packages/domain/src/clock.test.ts',
+    'apps/api/src/modules/ledger/post.test.ts',
+    'apps/api/src/modules/Payout/x.test.ts',
+    'apps/api/src/modules/reconciliation/a.int.test.ts',
+    'db/migrations/0001_init.sql',
+  ])
+    expect(isMoneyOrAttributionTest(path), path).toBe(true);
+  // b. test/properties and test/replay, whatever the directory names below.
+  for (const path of ['test/properties/x.test.ts', 'test/replay/agent/y.test.ts'])
+    expect(isMoneyOrAttributionTest(path), path).toBe(true);
+  // c. A keyword in a directory segment under test/, case-insensitively.
+  for (const path of [
+    'test/spec/db/ledger/entries.int.test.ts',
+    'test/spec/contracts/admin-ledger-read/read.test.ts',
+    'test/spec/frontend/admin-withdrawals/list.test.ts',
+    'test/spec/linking/link-jump-report/report.test.ts',
+    'test/spec/orders/a.test.ts',
+    'test/acceptance/Settlement/b.test.ts',
+    'test/spec/db/fund-flow/c.test.ts',
+    'test/spec/h5/order-detail/d.test.ts',
+  ])
+    expect(isMoneyOrAttributionTest(path), path).toBe(true);
+  // Allowed: no keyword in the directories (a keyword in the file name alone does not count),
+  // and outside test/ only MONEY_PATHS count.
+  for (const path of [
+    'test/spec/db/events/storage.int.test.ts',
+    'test/spec/agent/intent.test.ts',
+    'test/spec/db/events/ledger.test.ts',
+    'apps/api/src/modules/agent/ledger.test.ts',
+    'tools/ledger/x.test.ts',
+  ])
+    expect(isMoneyOrAttributionTest(path), path).toBe(false);
+});
+
+it('[CT-06zzzzzh] parseTaskFile refuses the ledger whole when a ruling_correction entry names a money or attribution test; the events storage test is accepted', () => {
+  for (const file of [
+    'packages/money/src/split.test.ts',
+    'apps/api/src/modules/payout/worker.test.ts',
+    'test/properties/money.test.ts',
+    'test/replay/union/a.test.ts',
+    'test/spec/db/ledger/entries.int.test.ts',
+    'test/spec/contracts/admin-ledger-read/read.test.ts',
+    'test/spec/frontend/admin-withdrawals/list.test.ts',
+    'test/spec/linking/link-jump-report/report.test.ts',
+  ]) {
+    const text = rcDeclared(rcEntry(RC_TEST, { file }));
+    const message = messageOf(text, 'B2-02a.yaml');
+    expect(message, file).toContain('B2-02a.yaml: invalid task file');
+    const lines = rcLines(message, 0, 'file');
+    expect(lines, file).toHaveLength(1);
+    expect(lines[0], file).toContain(file);
+    expect(lines[0], file).toContain('money or attribution test');
+    expect(lines[0], file).toContain('rule_change');
+    expect(() => parseTaskFile(text, 'B2-02a.yaml'), file).toThrow(/modify_existing\[0\]\.file: /);
+  }
+  // The index is the entry's own; a valid entry next to it does not save the ledger.
+  expect(
+    messageOf(
+      rcDeclared(
+        rcEntry('[AC-1] ok') + rcEntry(RC_TEST, { file: 'test/spec/db/ledger/x.int.test.ts' }),
+      ),
+      'B2-02a.yaml',
+    ),
+  ).toContain('modify_existing[1].file: ');
+  // The other reasons may still name such a file (rule_change with the owner's confirmation).
+  expect(
+    messageOf(
+      rcDeclared(
+        rcEntry(RC_TEST, {
+          file: 'test/spec/db/ledger/x.int.test.ts',
+          reason: 'rule_change',
+          overturned: '',
+          basis: '',
+          br: '[BR-FUND-13]',
+        }),
+      ),
+      'B2-02a.yaml',
+    ),
+  ).toBe('');
+  // The allowed example: the events storage test.
+  expect(messageOf(rcDeclared(rcEntry(RC_TEST)), 'B2-02a.yaml')).toBe('');
 });
