@@ -28,24 +28,33 @@ import {
 
 const h = useHarness();
 
+// Every card gets a different number of waiting rows, in SOME (1..7) and in MORE (8..14), so the
+// seven count functions return pairwise distinct values: swapping two cards' count functions, or
+// wiring a card to the wrong one, changes at least one card's count. settle_bill_pending stays at
+// most 9 (its bill ids are 2026-01 … 2026-09).
 const SOME: Amounts = {
+  settle_bill_pending: 1,
   withdraw_review_pending: 2,
   claim_review_pending: 3,
-  settle_bill_pending: 2,
-  recon_diff_open: 2,
-  appeal_pending: 2,
-  agent_report_overdue: 2,
-  union_auth_expiring: 2,
+  recon_diff_open: 4,
+  appeal_pending: 5,
+  agent_report_overdue: 6,
+  union_auth_expiring: 7,
 };
 const MORE: Amounts = {
-  withdraw_review_pending: 3,
-  claim_review_pending: 4,
-  settle_bill_pending: 3,
-  recon_diff_open: 4,
-  appeal_pending: 3,
-  agent_report_overdue: 3,
-  union_auth_expiring: 3,
+  settle_bill_pending: 8,
+  withdraw_review_pending: 9,
+  claim_review_pending: 10,
+  recon_diff_open: 11,
+  appeal_pending: 12,
+  agent_report_overdue: 13,
+  union_auth_expiring: 14,
 };
+
+/** The expected counts are pairwise distinct (what makes a swap of two cards visible). */
+function expectDistinct(counts: Record<string, number>): void {
+  expect(new Set(Object.values(counts)).size, JSON.stringify(counts)).toBe(CARD_KEYS.length);
+}
 
 function countsOf(d: Dashboard): Record<string, number> {
   return Object.fromEntries(d.cards.map((card) => [card.key, card.count]));
@@ -64,6 +73,7 @@ it(
     expect(keysOf(got)).toEqual([...CARD_KEYS]);
     const { counts, claims } = await expectedCounts(h, appId, d.f.clock.now());
     for (const key of CARD_KEYS) expect(counts[key], `${key} seeded`).toBeGreaterThan(0);
+    expectDistinct(counts);
     expect(countsOf(got)).toEqual(counts);
     const claim = cardOf(got, 'claim_review_pending');
     const breakdown = breakdownOf(claim);
@@ -87,6 +97,10 @@ it(
     const zero = Object.fromEntries(CARD_KEYS.map((key) => [key, 0]));
     expect(counts).toEqual(zero);
     expect(countsOf(got)).toEqual(zero);
+    // Contract AdminDashboardTodo.oldest_at: null when count is 0 (the key may also be absent).
+    for (const card of got.cards) {
+      expect(card.oldest_at ?? null, `${card.key} oldest_at`).toBeNull();
+    }
     const claim = cardOf(got, 'claim_review_pending');
     expect(breakdownOf(claim)).toEqual({ auto_matched: 0, manual_review: 0 });
   },
@@ -108,9 +122,12 @@ it(
     const now = d.f.clock.now();
     const afterA = countsOf(await dashboard(await d.get(adminA)));
     expect(afterA).toEqual(before);
-    expect(afterA).toEqual((await expectedCounts(h, a, now)).counts);
+    const expectedA = (await expectedCounts(h, a, now)).counts;
+    expectDistinct(expectedA);
+    expect(afterA).toEqual(expectedA);
     const gotB = await dashboard(await d.get(adminB));
     const expectedB = (await expectedCounts(h, b, now)).counts;
+    expectDistinct(expectedB);
     expect(countsOf(gotB)).toEqual(expectedB);
     for (const key of CARD_KEYS) expect(expectedB[key], key).not.toBe(afterA[key]);
   },
