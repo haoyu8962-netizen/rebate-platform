@@ -21,6 +21,7 @@ paths:
   - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
   - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts' # 2026-11-14 补：去 planned 后 generate-route-schemas 重出（入账时漏列）
   - 'ops/evidence/B1-10w.json'
 test_paths:
   - 'test/spec/admin/dashboard/**'
