@@ -1,0 +1,25 @@
+id: F1-08ce
+repo: rebate-platform
+title: 后台调账新建 / 红冲「结果未知」锁表单与原键原体重试、新建成功提示加调账前后可用余额（D10-1731 / D10-1732 / D10-1734）
+type: impl
+# 2026-11-15 入账（前端线 fe，编排 D10-1734）。F1-08cb 原范围在 f7d4ffbd 已做完并过 money r1；D10-1731 / 1732 是评审通过后加的范围，因 F1-08cb 撞独立 Claude 每任务 10 次熔断（规划/11 §2.5）单开本张。**须与 F1-08cb 紧挨着发布（cb → ce）；本单合并前后台不得晋升到生产。**
+# 范围：① F1-08cb 的 [AC-F1-08cb-ERROR#4] 去掉 networkDown 情形（只改该用例块；cb 进主干后登 modify_existing，rule_change，br BR-FUND-24，ruling D10-1731 + D10-1734）；② 提交没拿到带统一外壳的响应即「结果未知」：保留原键、表单锁定，只给【重试】（原键原体原样重发）与【去列表核对】，明示「上次提交结果未知」，拿到确定结果才解锁；重新打开新建抽屉先刷新列表；红冲对话框同样处理（D10-1731）；③ 新建成功提示保留新单号并加「调账前可用余额」「调账后可用余额」（取成功响应 available_before / after，D10-1732，BR-FUND-24 ④）；④ money 评审。F1-08cb 第 5 轮写好的用例（task/F1-08cb 的 b70145c6）挪进本单，不重写。
+# 资金页面（RV2）：Codex 额度用尽（D10-1604），规则测试独立 Claude 写、另一独立 Claude 审（approvals 第 36 条）；实现 Claude Opus；代码评审 money（独立 Claude）。测试写作第 3 轮 spec-test 仍 fail 即停下报编排（D10-1734）。测试机不可用期间按 D10-1693 本机推进。
+refs: [BR-FUND-24, BR-ID-34, BR-ID-10]
+refs_hash:
+  BR-FUND-24: 0f1a6ecb3334
+  BR-ID-34: 6a2bdd4ca3ce
+  BR-ID-10: 7bc8a1bfa5f1
+deps: [F1-08cb]
+paths:
+  - 'apps/admin/src/pages/adjustments/**'
+  - 'apps/admin/src/texts/adjustments.ts'
+test_paths:
+  - 'test/spec/frontend/admin-adjustment-create/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-adjustment-create/**'
+status: todo
+pr: null
