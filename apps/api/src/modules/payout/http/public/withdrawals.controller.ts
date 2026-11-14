@@ -62,7 +62,7 @@ import {
   type IdempotentResponse,
   type TokenPrincipal,
 } from '../../../platform/index.ts';
-import { STEP_UP_FAILURE } from '../../../identity/index.ts';
+import { STEP_UP_FAILURE } from '../../domain/step-up-failure.ts';
 import {
   isWithdrawAccepted,
   type WithdrawApplyResult,
