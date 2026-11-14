@@ -22,5 +22,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-withdrawal-batch-approve/**'
-status: todo
-pr: null
+status: done
+pr: 115
