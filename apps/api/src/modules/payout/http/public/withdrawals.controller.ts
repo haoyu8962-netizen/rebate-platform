@@ -62,6 +62,7 @@ import {
   type IdempotentResponse,
   type TokenPrincipal,
 } from '../../../platform/index.ts';
+import { STEP_UP_FAILURE } from '../../../identity/index.ts';
 import {
   isWithdrawAccepted,
   type WithdrawApplyResult,
@@ -126,7 +127,8 @@ export interface WithdrawStepUpContext {
 /** HTTP status and package default text of the chain's codes (contracts/error-codes.yaml, texts.default.json). */
 const APPLY_ERRORS: Readonly<Record<number, { readonly status: number; readonly msg: string }>> =
   Object.freeze({
-    10003: { status: 403, msg: '为保障资金安全，请先完成短信验证' },
+    // BR-ID-08: any step-up failure (here the digest not binding) is stage ⑫'s 10003 body.
+    10003: { status: STEP_UP_FAILURE.status, msg: STEP_UP_FAILURE.msg },
     10004: { status: 403, msg: '请先阅读并同意相关授权' },
     10006: { status: 403, msg: '账号已被限制使用' },
     10010: { status: 403, msg: '需要先核实是你本人' },
@@ -157,7 +159,7 @@ const REASON_TEXTS: Readonly<Record<string, string>> = Object.freeze({
 });
 
 /** The contract envelope of a use case result; bigint data (remaining_fen) becomes a JSON number. */
-function applyResult(result: WithdrawApplyResult, traceId: string): HandlerResult {
+export function applyResult(result: WithdrawApplyResult, traceId: string): HandlerResult {
   if (isWithdrawAccepted(result)) {
     const envelope: Schema<'WithdrawalResponse'> = {
       code: 0,

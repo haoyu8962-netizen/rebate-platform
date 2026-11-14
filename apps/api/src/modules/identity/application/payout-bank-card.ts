@@ -142,8 +142,8 @@ export interface BankCardSubmitCommand extends PayoutAccountSubject {
   readonly payeeName: string;
   /** The request's Idempotency-Key (validated by the claim), bound to the record it reserves. */
   readonly idempotencyKey: string;
-  /** B1-02zzzb: the step_up_token's digest (null: none); undefined compares nothing. */
-  readonly stepUpSummary?: string | null;
+  /** B1-02zzzb: the step_up_token's digest (null: none, never matches; file header). */
+  readonly stepUpSummary: string | null;
 }
 
 export type BankCardSubmitResult =
@@ -429,9 +429,7 @@ export function createBankCardBinding(options: BankCardBindingOptions): BankCard
         bankName: request.bank.bank_name,
         cardBin: request.bank.bin,
         attemptReservedAt: attempt.reserved_at,
-        ...(request.command.stepUpSummary === undefined
-          ? {}
-          : { stepUpSummary: request.command.stepUpSummary }),
+        stepUpSummary: request.command.stepUpSummary,
       });
     } catch (error) {
       // trx rolls back: the vendor's answer is still recorded.

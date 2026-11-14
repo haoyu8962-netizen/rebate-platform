@@ -286,6 +286,9 @@ export type { AccountMergePort } from './application/merge-conditions.ts';
 // Stage ⑫ step-up check (BR-ID-08, B1-02y): app.module hands the check to RiskModule; the handlers
 // of the four x-step-up operations run their idempotent call through withStepUp.
 export { STEP_UP_CHECK, createStepUpCheck, withStepUp } from './application/step-up-verify.ts';
+// B1-02zzzb (BR-ID-08): the one step-up failure answer (10003, 403, stage ⑫'s text); a business
+// that refuses a token whose digest does not bind its request answers with the same body.
+export { STEP_UP_FAILURE } from './domain/step-up-digest.ts';
 export type {
   StepUpCheckOptions,
   StepUpContext,

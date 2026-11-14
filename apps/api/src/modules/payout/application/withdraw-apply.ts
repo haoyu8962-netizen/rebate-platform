@@ -29,8 +29,10 @@
 // (the row the withdrawal is about to take, and the request's amount) must equal it; otherwise —
 // another amount, a binding changed since the token, no row id on the snapshot or no digest —
 // 10003 without data through the locked refusal (nothing created, nothing frozen; the caller does
-// not store it and its withStepUp releases the token). stepUpSummary undefined (a direct use-case
-// call outside POST /v1/withdrawals) compares nothing. An idempotent replay never reaches apply().
+// not store it and its withStepUp releases the token). stepUpSummary is required of every caller
+// (a direct use-case call too): there is no "compare nothing" value, and anything that is not the
+// matching string — null, or a missing value from an untyped caller — is 10003 (fails closed). An
+// idempotent replay never reaches apply().
 // Answers (not exceptions) for the chain's refusals, so the caller stores 3xxxx with the key;
 // infrastructure failures throw and roll everything back. Nothing of the payee (name, account,
 // cipher, HMAC) is logged.
@@ -125,8 +127,8 @@ export interface WithdrawApplyOptions extends WithdrawApplyRiskOptions {
 export interface WithdrawApplyCommand extends WithdrawActor {
   amountFen: bigint;
   stepUpValid: boolean;
-  /** B1-02zzzb: the step_up_token's digest (null: none); undefined compares nothing (header). */
-  stepUpSummary?: string | null;
+  /** B1-02zzzb: the step_up_token's digest (null: none, never matches; file header). */
+  stepUpSummary: string | null;
 }
 
 /**
@@ -138,13 +140,14 @@ export function withdrawStepUpDigest(payoutAccountId: string, amountFen: bigint)
 }
 
 /** B1-02zzzb (file header): does the token's digest bind this snapshot's account and amount? */
-function stepUpBindsWithdrawal(
-  stepUpSummary: string | null | undefined,
+export function stepUpBindsWithdrawal(
+  stepUpSummary: string | null,
   snapshot: Pick<WithdrawPayeeSnapshot, 'payout_account_id'>,
   amountFen: bigint,
 ): boolean {
-  if (stepUpSummary === undefined) return true;
-  if (stepUpSummary === null || snapshot.payout_account_id === undefined) return false;
+  if (typeof stepUpSummary !== 'string' || typeof snapshot.payout_account_id !== 'string') {
+    return false;
+  }
   return stepUpSummary === withdrawStepUpDigest(snapshot.payout_account_id, amountFen);
 }
 

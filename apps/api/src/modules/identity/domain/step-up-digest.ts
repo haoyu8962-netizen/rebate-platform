@@ -9,6 +9,18 @@
 //
 // Also compiled by the `test` project: erasable syntax only, `.ts` relative imports.
 
+/**
+ * The one answer of every step-up failure (BR-ID-08: 10003, HTTP 403, no data, no reason told
+ * apart): stage ⑫ and the step_up_token verifier refuse with it, and a business that finds the
+ * token's digest not binding its request (or no digest) answers with exactly the same status and
+ * text, so the response body is the same apart from trace_id.
+ */
+export const STEP_UP_FAILURE = Object.freeze({
+  code: 10003,
+  status: 403,
+  msg: '需要二次验证',
+} as const);
+
 /** Name of the digest claim in the step_up_token. */
 export const STEP_UP_SUMMARY_CLAIM = 'summary';
 
@@ -33,15 +45,10 @@ export function wechatPayoutDigest(attemptId: string): string {
 }
 
 /**
- * Inside the business lock: does the token's digest bind this business request? `undefined` means
- * the caller judged no step-up context (a direct service call that is not one of the HTTP
- * operations); the HTTP operations always pass the token's digest or null (none in the claims),
- * and null never matches.
+ * Inside the business lock: does the token's digest bind this business request? Every caller
+ * passes the token's digest, or null when the claims carry none (or no token was judged); null
+ * never matches, and neither does anything that is not a string (fails closed).
  */
-export function digestMatches(
-  claimed: string | null | undefined,
-  expected: string | null,
-): boolean {
-  if (claimed === undefined) return true;
-  return claimed !== null && expected !== null && claimed === expected;
+export function digestMatches(claimed: string | null, expected: string | null): boolean {
+  return typeof claimed === 'string' && typeof expected === 'string' && claimed === expected;
 }

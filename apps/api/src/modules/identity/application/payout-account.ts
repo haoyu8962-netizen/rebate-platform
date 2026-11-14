@@ -75,8 +75,10 @@
 // the users row lock, before ⓪ and the「same account」answer, the request's account — normalised
 // above exactly as stored — is turned into `p:<payout_method>:<HMAC>` and compared; a different
 // method or account, a WeChat digest or no digest → 10003 (no data), nothing written; being a
-// non-zero answer, the caller's withStepUp releases the token (not consumed). stepUpSummary
-// undefined (a direct service call outside PUT /v1/me/payout-account) compares nothing.
+// non-zero answer, the caller's withStepUp releases the token (not consumed). stepUpSummary is
+// required of every caller (a direct service call too): there is no "compare nothing" value, and
+// anything that is not the matching string — null, or a missing value from an untyped caller — is
+// 10003 (fails closed).
 //
 // Cipher AAD and blind-index context of the logon id: payout_accounts.alipay (the card number:
 // payout_accounts.bank_card), the contexts risk's blocklist hashes with (blocklistHmacContexts),
@@ -116,11 +118,14 @@ export interface PayoutAccountSubject {
 export interface SaveAlipayCommand extends PayoutAccountSubject {
   readonly alipayLogonId: string;
   readonly payeeName: string;
-  /** B1-02zzzb: the step_up_token's digest (null: none); undefined compares nothing (header). */
-  readonly stepUpSummary?: string | null;
+  /** B1-02zzzb: the step_up_token's digest (null: none, never matches; file header). */
+  readonly stepUpSummary: string | null;
 }
 
-/** B1-02zzzb: the step_up_token does not bind this account (BR-ID-08); no data, never stored. */
+/**
+ * B1-02zzzb: the step_up_token does not bind this account (BR-ID-08); no data, never stored. The
+ * controller answers it with STEP_UP_FAILURE's status and text (stage ⑫'s 10003 body).
+ */
 export const STEP_UP_MISMATCH = Object.freeze({ code: 10003 } as const);
 
 export type SaveAlipayResult =
@@ -144,8 +149,8 @@ export interface SaveBankCardCommand extends PayoutAccountSubject {
   readonly cardBin: string;
   /** reserved_at of the verification record this save rests on (file header: B1-27l). */
   readonly attemptReservedAt?: Date;
-  /** B1-02zzzb: the step_up_token's digest (null: none); undefined compares nothing (header). */
-  readonly stepUpSummary?: string | null;
+  /** B1-02zzzb: the step_up_token's digest (null: none, never matches; file header). */
+  readonly stepUpSummary: string | null;
 }
 
 /** The refusals of the lock phase, shared by both methods and the verification reservation. */
@@ -431,7 +436,7 @@ export function createPayoutAccountReader(
  * account this request saves? `target` is the normalised account's method and blind index.
  */
 export function stepUpBindsAccount(
-  stepUpSummary: string | null | undefined,
+  stepUpSummary: string | null,
   target: Pick<PayoutAccountTarget, 'method' | 'hmac'>,
 ): boolean {
   return digestMatches(stepUpSummary, payoutAccountDigest(target.method, target.hmac));

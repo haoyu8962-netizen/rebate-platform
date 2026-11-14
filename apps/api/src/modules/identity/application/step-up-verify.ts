@@ -52,6 +52,7 @@ import {
   type RootLogger,
   type TokenPrincipal,
 } from '../../platform/index.ts';
+import { STEP_UP_FAILURE } from '../domain/step-up-digest.ts';
 import { createStepUpTokenVerifier, type TokenKeyProvider } from './access-tokens.ts';
 import { RiskModule } from '../../risk/index.ts';
 
@@ -101,7 +102,8 @@ export interface StepUpContext {
 }
 
 const SCOPE = new AsyncLocalStorage<StepUpScope>();
-const required = () => new RequestRejection(10003, 403, '需要二次验证');
+const required = () =>
+  new RequestRejection(STEP_UP_FAILURE.code, STEP_UP_FAILURE.status, STEP_UP_FAILURE.msg);
 const unavailable = () => new RequestRejection(50001, 500, '服务端错误');
 
 /**

@@ -15,7 +15,8 @@
 // everything else rolls back and leaves the key reusable (idempotency module rule).
 // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): the business receives the digest of the token stage ⑫
 // passed (withStepUp's StepUpContext; null when the claims carry none) and compares it inside the
-// users row lock; a mismatch is 10003 without data, not stored, the token released.
+// users row lock; a mismatch is 10003 without data, not stored, the token released — status and
+// msg are STEP_UP_FAILURE, so the body is stage ⑫'s 10003 byte for byte apart from trace_id.
 // `msg` is the package default text of contracts/texts.default.json without placeholders; `data`
 // carries only what the result defines (fields, reason, risk_msg_code), never a submitted value.
 import { Controller, Get, Inject, Optional, Put, Req, Res } from '@nestjs/common';
@@ -36,6 +37,7 @@ import type {
 } from '../../application/payout-bank-card.ts';
 import type { ReverifyRefusal } from '../../application/reverify-gate.ts';
 import { withStepUp } from '../../application/step-up-verify.ts';
+import { STEP_UP_FAILURE } from '../../domain/step-up-digest.ts';
 import { PAYOUT_ACCOUNT_CHANGE, PAYOUT_ACCOUNT_READER } from '../../application/tokens.ts';
 import { identityFailure } from './error-envelopes.ts';
 
@@ -57,7 +59,8 @@ type ChangeResult = SaveAlipayResult | BankCardSubmitResult | ReverifyRefusal;
 
 const ERRORS: Readonly<Record<number, { readonly status: number; readonly msg: string }>> =
   Object.freeze({
-    10003: { status: 403, msg: '为保障资金安全，请先完成短信验证' },
+    // BR-ID-08: the token does not bind this account — the same body as stage ⑫'s 10003.
+    10003: { status: STEP_UP_FAILURE.status, msg: STEP_UP_FAILURE.msg },
     10010: { status: 403, msg: '需要先核实是你本人' },
     20001: { status: 400, msg: '填写内容有误，请检查' },
     // The key's verification record is of another card: the idempotency module's own 20901
@@ -81,7 +84,7 @@ const REASON_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   payout_account_verify_limit: '今日收款账号核验次数已用完，请明天再试',
 });
 
-function handlerResult(result: ChangeResult, traceId: string): HandlerResult {
+export function handlerResult(result: ChangeResult, traceId: string): HandlerResult {
   if (result.code === 0) {
     const envelope: Schema<'PayoutAccountResponse'> = {
       code: 0,

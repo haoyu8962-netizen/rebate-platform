@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { DB } from '@couli/db';
+import { normalizeBankCardNo } from '@couli/domain';
 import {
   DummyDriver,
   Kysely,
@@ -12,6 +13,7 @@ import {
 } from 'kysely';
 import { afterEach, expect, it, vi } from 'vitest';
 import { FixedClock, createRootLogger, type FieldCrypto } from '../../platform/index.ts';
+import { payoutAccountDigest } from '../domain/step-up-digest.ts';
 import type { BankCardVerifierPort, CardBinPort } from '../ports/bank-card-verifier.ts';
 import {
   createBankCardBinding,
@@ -141,6 +143,14 @@ const crypto = {
   encrypt: (plain: string) => plain,
 } as unknown as FieldCrypto;
 
+/** B1-02zzzb: the payout_account_change step-up digest of a card (as the token would carry it). */
+function cardDigest(cardNo: string): string {
+  return payoutAccountDigest(
+    'bank_card',
+    crypto.blindIndex(normalizeBankCardNo(cardNo), 'payout_accounts.bank_card'),
+  );
+}
+
 /** The request fingerprint the flow builds: realname record id and the card's blind index. */
 function fingerprintOf(cardNo: string, realnameId = 'rn-1'): string {
   return `${realnameId}:${crypto.blindIndex(cardNo, 'payout_accounts.bank_card')}`;
@@ -162,6 +172,8 @@ const command: BankCardSubmitCommand = {
   cardNo: `${CARD.slice(0, 4)} ${CARD.slice(4, 8)}-${CARD.slice(8)}`,
   payeeName: NAME,
   idempotencyKey: 'this-key-001',
+  // B1-02zzzb: the token's digest binds the submitted card (submit() recomputes it per card).
+  stepUpSummary: cardDigest(CARD),
 };
 
 const SAVED: SaveBankCardResult = {
@@ -238,9 +250,14 @@ async function harness(
   };
   const binding = createBankCardBinding(bindingOptions);
   const submit = (input: Partial<BankCardSubmitCommand> = {}) =>
-    claim
-      .transaction()
-      .execute((trx) => binding.submit(trx as Transaction<DB>, { ...command, ...input }));
+    claim.transaction().execute((trx) =>
+      binding.submit(trx as Transaction<DB>, {
+        ...command,
+        // B1-02zzzb: a token for the card submitted, unless the test gives its own digest.
+        stepUpSummary: cardDigest(input.cardNo ?? command.cardNo),
+        ...input,
+      }),
+    );
   const writes = (on: 'claim' | 'pool') =>
     events.flatMap((event) =>
       event.on === on &&
@@ -323,6 +340,23 @@ it('[AC-B1-13f] a failing BIN lookup is 50301 and its error is not logged', asyn
   expect(JSON.stringify(f.lines)).not.toContain(CARD);
 });
 
+it.each([
+  ['a token for another card', (): string | null => cardDigest(demoCard(3))],
+  ['an Alipay digest', (): string | null => 'p:alipay:h1'],
+  ['a WeChat digest', (): string | null => 'p:wechat:019a0000-0000-7000-8000-0000000000aa'],
+  ['no digest (null)', (): string | null => null],
+] as const)(
+  '[AC-B1-02zzzb#4] submit with %s: 10003 without data under the users lock, nothing reserved, verified or saved',
+  async (_name, digest) => {
+    const f = await harness();
+    expect(await f.submit({ stepUpSummary: digest() })).toEqual({ code: 10003 });
+    expect(f.writes('pool')).toEqual([]);
+    expect(f.writes('claim')).toEqual([]);
+    expect(f.verify).not.toHaveBeenCalled();
+    expect(f.saveBankCard).not.toHaveBeenCalled();
+  },
+);
+
 it('[AC-B1-13f] new verification: reserve in a committed pool transaction, then the vendor, then matched with the save', async () => {
   const f = await harness();
   expect(await f.submit()).toEqual(SAVED);
@@ -361,6 +395,7 @@ it('[AC-B1-13f] new verification: reserve in a committed pool transaction, then 
     bankName: '示例银行',
     cardBin: '990001',
     attemptReservedAt: new Date(NOW),
+    stepUpSummary: cardDigest(CARD),
   });
   const text = JSON.stringify(f.lines);
   for (const secret of [CARD, ID_NO, NAME]) expect(text).not.toContain(secret);

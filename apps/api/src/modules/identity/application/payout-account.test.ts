@@ -63,6 +63,8 @@ const command: SaveAlipayCommand = {
   userId: '00000000-0000-7000-8000-000000000001',
   alipayLogonId: 'zhang.san@example.com',
   payeeName: '张三',
+  // B1-02zzzb: required; these cases refuse before the users lock, where it is compared.
+  stepUpSummary: null,
 };
 
 it('[AC-B1-13e] save: the injected port decides payout_methods before any query or lock', async () => {
@@ -236,6 +238,8 @@ async function bankCardHarness(realname: { verified_at: Date; row_version: numbe
         bankName: '示例银行',
         cardBin: '990001',
         ...(attemptReservedAt === undefined ? {} : { attemptReservedAt }),
+        // B1-02zzzb: the token's digest of this card (the scripted blind index is hmac:<value>).
+        stepUpSummary: 'p:bank_card:hmac:9900010000000019',
       }),
     );
   const accountWrites = () =>

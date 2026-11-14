@@ -3,6 +3,7 @@ import {
   digestMatches,
   isDigestAction,
   payoutAccountDigest,
+  STEP_UP_FAILURE,
   wechatPayoutDigest,
   withdrawDigest,
 } from './step-up-digest.ts';
@@ -30,6 +31,12 @@ it('[AC-B1-02zzzb#6] digestMatches: equal strings only; a token without digest (
   expect(digestMatches('p:alipay:h1', 'p:bank_card:h1')).toBe(false);
   expect(digestMatches(null, 'p:alipay:h1')).toBe(false);
   expect(digestMatches(`p:wechat:${ID}`, 'p:alipay:h1')).toBe(false);
-  // No step-up context (a direct service call): nothing compared.
-  expect(digestMatches(undefined, 'p:alipay:h1')).toBe(true);
+  // Fails closed: a value that is not a string (an untyped caller passing nothing) never matches.
+  expect(digestMatches(undefined as unknown as null, 'p:alipay:h1')).toBe(false);
+  expect(digestMatches('p:alipay:h1', null)).toBe(false);
+});
+
+it('[AC-B1-02zzzb#6] STEP_UP_FAILURE is the one step-up failure: 10003, HTTP 403, the stage ⑫ text', () => {
+  expect(STEP_UP_FAILURE).toEqual({ code: 10003, status: 403, msg: '需要二次验证' });
+  expect(Object.isFrozen(STEP_UP_FAILURE)).toBe(true);
 });

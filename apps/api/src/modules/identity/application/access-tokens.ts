@@ -73,6 +73,7 @@ import {
   type RequestCheckInput,
   type TokenPrincipal,
 } from '../../platform/index.ts';
+import { STEP_UP_FAILURE } from '../domain/step-up-digest.ts';
 
 /** BR-ID-07: an access token is valid for 2 hours. */
 export const ACCESS_TOKEN_TTL_SECONDS = 2 * 60 * 60;
@@ -220,7 +221,8 @@ export function createStepUpTokenVerifier(
 ) {
   const publicKeys = new Map(keys.publicKeys);
   return async (token: string): Promise<StepUpClaims> => {
-    const reject = () => new RequestRejection(10003, 403, '需要二次验证');
+    const reject = () =>
+      new RequestRejection(STEP_UP_FAILURE.code, STEP_UP_FAILURE.status, STEP_UP_FAILURE.msg);
     let payload: JWTPayload;
     try {
       ({ payload } = await jwtVerify(
