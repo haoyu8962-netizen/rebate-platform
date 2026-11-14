@@ -68,19 +68,20 @@ it('[AC-CT-13e#1] events has the analytics columns, nullable identities and RANG
     JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.num ORDER BY k.pos
     ) AS columns FROM pg_constraint c
     WHERE c.conrelid = to_regclass('app.event_dedup') AND c.contype = 'p'`.execute(h.app);
-  expect(primaryKey.rows).toEqual([{ columns: ['event_type', 'event_id'] }]);
+  expect(primaryKey.rows).toEqual([{ columns: ['app_id', 'event_type', 'event_id'] }]);
 });
 
 it('[AC-CT-13e#2] dedup rejects repeats across dates and apps; distinct type or UUID remains insertable', async () => {
   await ready(h);
   const row = dedup();
   await insert(h.app, 'event_dedup', row);
-  for (const override of [{}, { created_at: '2027-01-01T00:00:00Z' }, { app_id: 'other-app' }]) {
+  for (const override of [{}, { created_at: '2027-01-01T00:00:00Z' }]) {
     expect(await state(insert(h.app, 'event_dedup', { ...row, ...override }))).toBe('23505');
   }
+  expect(await state(insert(h.app, 'event_dedup', { ...row, app_id: 'other-app' }))).toBe('ok');
   expect(await state(insert(h.app, 'event_dedup', { ...row, event_type: 'link_jump' }))).toBe('ok');
   expect(await state(insert(h.app, 'event_dedup', { ...row, event_id: randomUUID() }))).toBe('ok');
-  expect(await read(h, 'event_dedup', row['event_id'])).toHaveLength(2);
+  expect(await read(h, 'event_dedup', row['event_id'])).toHaveLength(3);
 });
 
 it('[AC-CT-13e#3] concurrent dedup inserts have exactly one winner at the PG unique constraint', async () => {
