@@ -20,5 +20,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/q-short-output-guard/**'
-status: todo
-pr: null
+status: done
+pr: 103
