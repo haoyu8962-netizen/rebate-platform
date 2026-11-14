@@ -8,10 +8,11 @@ type: impl
 # ① 新迁移（号落地时取下一个空号，现在 0144，文件名以 _link-logs-default-purge.sql 结尾）：app.purge_expired_link_logs_default(p_now timestamptz) RETURNS bigint。只删 app.link_logs_default 里 created_at 早于截断的行，截断与 drop_expired_day_partitions('link_logs', p_now) 逐字同一算法；90 天只写在函数里，不设配置项（同 D10-1500 (a)）；SECURITY DEFINER、函数级设置与授权照 0140 / 0142 的先例，只授 couli_maint。
 # ② 维护第 I 节：删 link_logs 日分区之后调用；失败照第 N 节（记日志、计入 failed、跑完其余再抛原错误、成功才记当日已清）；pino 记删除行数。
 # 规则测试（独立 Claude，D10-1604；新目录只新增）须钉住四件：a) 同一时刻，被删的最晚一个日分区与 DEFAULT 里被删的最晚一行落在同一截断的同一侧，最早保留的日分区与 DEFAULT 里保留的最早一行落在另一侧；b) DEFAULT 里 created_at 落在预建范围之后（未来日期）的行不动；c) link_open_attempts 与 claim_items 清理前后逐行不变；d) 失败照第 N 节。带迁移，落地前推之前测试机跑 test/spec/db/** 与相关目录（D10-1580）。本机重活（D10-1477）只在测试机跑。
+# 2026-11-14 补（编排 D10-1624 / D10-1625）：先停在实现前，接在 CT-13m（link_log_evidence）之后；DEFAULT 删除走同一「先复制被引用的、再删」路径，复用 CT-13m 的 app.copy_referenced_link_logs，两条删除路径共用一份复制逻辑。
 refs: [BR-ID-30]
 refs_hash:
   BR-ID-30: 8ea92988c8cd
-deps: [CT-13f]
+deps: [CT-13m]
 paths:
   - 'db/migrations/*_link-logs-default-purge.sql'
   - 'db/schema.sql'
