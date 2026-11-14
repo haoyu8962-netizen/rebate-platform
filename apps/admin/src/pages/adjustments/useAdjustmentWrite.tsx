@@ -3,7 +3,10 @@
 // 通过后带 X-Step-Up-Token 与 Idempotency-Key 只发一次 POST /admin/v1/adjustments。
 // - 10003 data.reason=verify_phone_missing（发码或写入时）：不弹验证、不发写请求，此后本次表单不再发码。
 // - 写入返回 10003（验证已失效）：重新发码、再验证，用新的验证重放同一请求体与同一个键。
-// - 结果未定（网络、无法解析、5xx、40901）：下次提交沿用原键；其余确定的回答（成功、20001、20901、
+// - 没拿到带统一外壳的回答（网络错误、无法解析）：进入「结果未知」（编排 D10-1731）——保留原键与原请求体，
+//   表单由调用方锁定，只能【重试】（原键、同一个请求体对象逐字节相同地重发，需要时重新短信验证）或去列表核对；
+//   重试拿到确定的回答（成功、确定的拒绝）才退出；重试又遇 5xx / 40901 仍留在结果未知。
+// - 带外壳的结果未定（5xx、40901）：提示失败，下次提交沿用原键；其余确定的回答（成功、20001、20901、
 //   20902、10403 等）后下次提交换新键。任何失败都不自动重发。
 // 一次打开（抽屉或对话框）一个实例；卸载后迟到的回答被丢弃。
 import { useDataProvider } from '@refinedev/core';
@@ -14,6 +17,7 @@ import { adjustmentsTexts } from '../../texts/adjustments.ts';
 import { ADJUSTMENTS_URL } from './model.ts';
 import {
   newRequestKey,
+  noEnvelope,
   outcomeUnknown,
   phoneMissing as isPhoneMissing,
   type CreateRequest,
@@ -39,8 +43,15 @@ export interface AdjustmentWrite {
   readonly busy: boolean;
   /** The account has no registered verify phone (10003 verify_phone_missing). */
   readonly phoneMissing: boolean;
-  /** Starts one submission of `body` (ignored while busy or without a verify phone). */
+  /**
+   * The last submission got no reply in the unified envelope: the form stays locked and only
+   * retry() (or checking the list) is offered.
+   */
+  readonly unknown: boolean;
+  /** Starts one submission of `body` (ignored while busy, unknown or without a verify phone). */
   submit(body: CreateRequest): void;
+  /** Sends the unknown submission again: the same key and the same body (verified again). */
+  retry(): void;
   /** The sms-tier verification dialog (render it once). */
   readonly stepUp: ReactElement;
 }
@@ -62,6 +73,8 @@ export function useAdjustmentWrite({
   const phaseRef = useRef<Phase>('idle');
   const [missing, setMissingValue] = useState(false);
   const missingRef = useRef(false);
+  const [unknown, setUnknownValue] = useState(false);
+  const unknownRef = useRef(false);
   const bodyRef = useRef<CreateRequest | undefined>(undefined);
   /** The Idempotency-Key of the submission whose outcome is still open; undefined: take a new one. */
   const keyRef = useRef<string | undefined>(undefined);
@@ -77,6 +90,10 @@ export function useAdjustmentWrite({
   const setPhase = (next: Phase) => {
     phaseRef.current = next;
     setPhaseValue(next);
+  };
+  const setUnknown = (next: boolean) => {
+    unknownRef.current = next;
+    setUnknownValue(next);
   };
   const markMissing = () => {
     missingRef.current = true;
@@ -113,9 +130,15 @@ export function useAdjustmentWrite({
   };
 
   const submit = (body: CreateRequest) => {
-    if (phaseRef.current !== 'idle' || missingRef.current) return;
+    if (phaseRef.current !== 'idle' || missingRef.current || unknownRef.current) return;
     bodyRef.current = body;
     keyRef.current ??= newRequestKey();
+    void requestCode();
+  };
+
+  const retry = () => {
+    if (phaseRef.current !== 'idle' || missingRef.current || !unknownRef.current) return;
+    if (bodyRef.current === undefined || keyRef.current === undefined) return;
     void requestCode();
   };
 
@@ -152,6 +175,7 @@ export function useAdjustmentWrite({
       });
       if (!alive.current) return;
       keyRef.current = undefined;
+      setUnknown(false);
       setPhase('idle');
       onDone(response.data);
     } catch (cause) {
@@ -165,7 +189,16 @@ export function useAdjustmentWrite({
         void requestCode();
         return;
       }
-      if (!outcomeUnknown(cause)) keyRef.current = undefined;
+      if (noEnvelope(cause)) {
+        // It may have taken effect: keep the key and the body, lock, no failure prompt.
+        setUnknown(true);
+        setPhase('idle');
+        return;
+      }
+      if (!outcomeUnknown(cause)) {
+        keyRef.current = undefined;
+        setUnknown(false);
+      }
       setPhase('idle');
       onFailed(cause);
     }
@@ -196,5 +229,5 @@ export function useAdjustmentWrite({
     />
   );
 
-  return { busy: phase !== 'idle', phoneMissing: missing, submit, stepUp };
+  return { busy: phase !== 'idle', phoneMissing: missing, unknown, submit, retry, stepUp };
 }

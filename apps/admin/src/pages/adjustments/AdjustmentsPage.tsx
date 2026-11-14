@@ -3,17 +3,18 @@
 // adminListBadDebtWriteoffs），缺读权限点的页签不出现；三个读权限点都没有时本页说明无权限、不发请求。
 // 菜单仍按 resources（fund.adjust 或 fund.writeoff），fund.view 经直达地址只读。
 // 持 fund.adjust（超管含）时标题行有【新建调账】（F1-08cb，CreateDrawer），行与详情有【红冲】；两者都走
-// adminCreateAdjustment 一步提交并生效，成功后在标题下提示新单号并刷新调账单列表。
+// adminCreateAdjustment 一步提交并生效，成功后在标题下提示新单号与前后可用余额并刷新调账单列表。
+// 新建结果未知时【去列表核对】关抽屉、刷新列表；此后再按【新建调账】先读一次列表，读完才显示空白表单。
 // TODO(规划/11 §7): 批准 / 驳回系统预填单（F1-08cc）、批准核销（F1-08cd） — blocked on 后续任务
 import { PlusOutlined } from '@ant-design/icons';
 import { Alert, Button, Card, Flex, Result, Tabs, Typography } from 'antd';
-import { useRef, useState, type ReactElement } from 'react';
+import { useCallback, useRef, useState, type ReactElement } from 'react';
 import { PlannedPage, plannedButtonProps, usePlanned } from '../../components/planned/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { adjustmentsTexts as t } from '../../texts/adjustments.ts';
 import { AdjustmentsTab, type Notice } from './AdjustmentsTab.tsx';
 import { CreateDrawer } from './CreateDrawer.tsx';
-import { canReadAdjustments, canReadWriteoffs } from './model.ts';
+import { canReadAdjustments, canReadWriteoffs, money } from './model.ts';
 import { WriteoffsTab } from './WriteoffsTab.tsx';
 import type { Executed } from './write.ts';
 
@@ -39,14 +40,33 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
   /** Bumped after every write: the 调账单 list and an open detail are read again. */
   const [version, setVersion] = useState(0);
   const [notice, setNotice] = useState<Notice>();
+  /** After 【去列表核对】: the next opening reads the list first. */
+  const [recheck, setRecheck] = useState(false);
+  /** The opening waits for the list read of this version (undefined: none waits). */
+  const [waitingFor, setWaitingFor] = useState<number>();
+  const listRead = useCallback(
+    (read: number) => {
+      if (waitingFor === undefined || read < waitingFor) return;
+      setWaitingFor(undefined);
+      setCreateOpen(true);
+    },
+    [waitingFor],
+  );
   if (planned) return <PlannedPage title={t.title} />;
   const readsAdjustments = canReadAdjustments(access);
   const readsWriteoffs = canReadWriteoffs(access);
   const canAdjust = access.can('fund.adjust');
 
   const openCreate = () => {
+    if (waitingFor !== undefined) return;
     setCreateSession((value) => value + 1);
-    setCreateOpen(true);
+    if (!recheck) {
+      setCreateOpen(true);
+      return;
+    }
+    setRecheck(false);
+    setWaitingFor(version + 1);
+    setVersion(version + 1);
   };
   const cancelCreate = () => {
     setCreateOpen(false);
@@ -54,7 +74,20 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
   };
   const created = (executed: Executed) => {
     setCreateOpen(false);
-    setNotice({ type: 'success', text: t.write.created(executed.adjustment.adjust_id) });
+    setNotice({
+      type: 'success',
+      lines: [
+        t.write.created(executed.adjustment.adjust_id),
+        t.write.createdBefore(money(executed.available_before_fen)),
+        t.write.createdAfter(money(executed.available_after_fen)),
+      ],
+    });
+    setVersion((value) => value + 1);
+  };
+  /** 【去列表核对】 of a new adjustment whose result is unknown. */
+  const checkCreate = () => {
+    cancelCreate();
+    setRecheck(true);
     setVersion((value) => value + 1);
   };
   if (!readsAdjustments && !readsWriteoffs) {
@@ -79,6 +112,7 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
                 planned={writePlanned}
                 version={version}
                 onNotice={setNotice}
+                onListRead={listRead}
               />
             ),
           },
@@ -111,7 +145,13 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
           type={notice.type}
           showIcon
           closable
-          message={notice.text}
+          message={
+            <div>
+              {notice.lines.map((line, index) => (
+                <div key={index}>{line}</div>
+              ))}
+            </div>
+          }
           onClose={() => setNotice(undefined)}
         />
       )}
@@ -123,6 +163,7 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
           planned={writePlanned}
           onClose={cancelCreate}
           onCreated={created}
+          onCheck={checkCreate}
         />
       ) : null}
     </Flex>

@@ -250,6 +250,16 @@ export function outcomeUnknown(cause: unknown): boolean {
   return cause.httpStatus >= 500 || cause.code === 40901;
 }
 
+/**
+ * The write got no reply in the unified envelope (network failure, a reply that cannot be read as
+ * the envelope): it may have taken effect. The form locks; only a byte-for-byte retry under the
+ * same Idempotency-Key, or checking the list, is offered (编排 D10-1731).
+ */
+export function noEnvelope(cause: unknown): boolean {
+  if (!(cause instanceof AdminApiError)) return true;
+  return cause.kind === 'network' || cause.kind === 'parse';
+}
+
 /** The prompt of a failed write. */
 export function writeErrorText(cause: unknown): string {
   if (!(cause instanceof AdminApiError)) return e.failed;

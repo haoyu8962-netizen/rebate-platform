@@ -2,7 +2,8 @@
 // 调减）、金额（元，只经 @couli/money 换成整数分，不设上限）、原因码（对账修正 / 打款追回 / 其他）、关联单据
 // （单据类型 + 单据号逐张添加，≤ 10、不重复）、原因说明、对方科目（只对账修正与其他，四选一；联盟应收另选
 // 平台）。本地校验不过不发任何请求；通过后短信验证、只发一次 POST（流程见 useAdjustmentWrite）。
-// 写入被拒时抽屉保留、已填不丢；成功后由页面关抽屉、提示新单号并刷新列表。
+// 写入被拒时抽屉保留、已填不丢；成功后由页面关抽屉、提示新单号与调账前后可用余额并刷新列表。
+// 结果未知（没拿到带统一外壳的回答）时所有输入锁定、不能关闭，只有【重试】（原键原请求体）与【去列表核对】。
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   Alert,
@@ -57,6 +58,8 @@ export interface CreateDrawerProps {
   readonly planned: boolean;
   readonly onClose: () => void;
   readonly onCreated: (executed: Executed) => void;
+  /** 【去列表核对】 while the result is unknown: close and read the list again. */
+  readonly onCheck: () => void;
 }
 
 const DIRECTIONS: readonly Direction[] = ['increase', 'decrease'];
@@ -67,6 +70,7 @@ export function CreateDrawer({
   planned,
   onClose,
   onCreated,
+  onCheck,
 }: CreateDrawerProps): ReactElement {
   const { token } = theme.useToken();
   const ids = {
@@ -94,10 +98,13 @@ export function CreateDrawer({
     onFailed: (cause) => setWriteError(writeErrorText(cause)),
   });
 
+  /** The result of the last submission is unknown: nothing can be changed. */
+  const locked = write.unknown;
   const errors = checked ? checkNew(draft) : {};
   const change = (patch: Partial<NewDraft>) => setDraft((previous) => ({ ...previous, ...patch }));
 
   const addRef = () => {
+    if (locked) return;
     const error = refAddError(draft.refs, refType, refId);
     if (error !== undefined || refType === undefined) {
       setAddError(error);
@@ -108,19 +115,30 @@ export function CreateDrawer({
     setRefId('');
     setAddError(undefined);
   };
-  const removeRef = (index: number) =>
+  const removeRef = (index: number) => {
+    if (locked) return;
     change({ refs: draft.refs.filter((_, position) => position !== index) });
+  };
 
   const submit = () => {
-    if (write.busy || write.phoneMissing || planned) return;
+    if (write.busy || write.phoneMissing || locked || planned) return;
     setChecked(true);
     if (hasErrors(checkNew(draft))) return;
     setWriteError(undefined);
     write.submit(newBody(draft));
   };
   const close = () => {
-    if (write.busy) return;
+    if (write.busy || locked) return;
     onClose();
+  };
+  const retry = () => {
+    if (write.busy || !locked) return;
+    setWriteError(undefined);
+    write.retry();
+  };
+  const check = () => {
+    if (write.busy || !locked) return;
+    onCheck();
   };
 
   const fen = amountFen(draft.amount);
@@ -135,7 +153,16 @@ export function CreateDrawer({
   const code = { fontFamily: token.fontFamilyCode, wordBreak: 'break-all' } as const;
   const item = { marginBottom: token.margin } as const;
 
-  const footer = (
+  const footer = locked ? (
+    <Flex justify="flex-end" gap={8}>
+      <Button autoInsertSpace={false} disabled={write.busy} onClick={check}>
+        {w.check}
+      </Button>
+      <Button type="primary" autoInsertSpace={false} disabled={write.busy} onClick={retry}>
+        {w.retry}
+      </Button>
+    </Flex>
+  ) : (
     <Flex justify="flex-end" gap={8}>
       <Button autoInsertSpace={false} disabled={write.busy} onClick={close}>
         {w.cancel}
@@ -161,6 +188,8 @@ export function CreateDrawer({
       title={w.createTitle}
       destroyOnHidden
       maskClosable={false}
+      closable={!locked}
+      keyboard={!locked}
       footer={footer}
       onClose={close}
     >
@@ -171,6 +200,7 @@ export function CreateDrawer({
             <Input
               id={ids.user}
               value={draft.user}
+              disabled={locked}
               autoComplete="off"
               style={code}
               onChange={(event) => change({ user: event.target.value })}
@@ -179,6 +209,7 @@ export function CreateDrawer({
           <Form.Item label={l.direction} {...feedback(errors.direction)} style={item}>
             <Radio.Group
               value={draft.direction ?? null}
+              disabled={locked}
               options={DIRECTIONS.map((value) => ({ value, label: directionLabel(value) }))}
               onChange={(event) => change({ direction: event.target.value as Direction })}
             />
@@ -192,6 +223,7 @@ export function CreateDrawer({
             <Input
               id={ids.amount}
               value={draft.amount}
+              disabled={locked}
               inputMode="decimal"
               autoComplete="off"
               style={{ width: 240, fontVariantNumeric: 'tabular-nums' }}
@@ -207,6 +239,7 @@ export function CreateDrawer({
             <Select<ChoosableReason>
               id={ids.reason}
               value={draft.reason ?? null}
+              disabled={locked}
               virtual={false}
               style={{ width: 240 }}
               options={CHOOSABLE_REASONS.map((value) => ({ value, label: reasonLabel(value) }))}
@@ -222,6 +255,7 @@ export function CreateDrawer({
               <Select<RefType>
                 id={ids.refType}
                 value={refType ?? null}
+                disabled={locked}
                 virtual={false}
                 style={{ width: 160 }}
                 options={REF_TYPES.map((value) => ({ value, label: refTypeLabel(value) }))}
@@ -241,6 +275,7 @@ export function CreateDrawer({
                 <Input
                   id={ids.refId}
                   value={refId}
+                  disabled={locked}
                   autoComplete="off"
                   style={code}
                   onChange={(event) => {
@@ -252,6 +287,7 @@ export function CreateDrawer({
                 <Button
                   icon={<PlusOutlined aria-hidden />}
                   autoInsertSpace={false}
+                  disabled={locked}
                   onClick={addRef}
                 >
                   {w.addRef}
@@ -288,6 +324,7 @@ export function CreateDrawer({
                         type="link"
                         size="small"
                         danger
+                        disabled={locked}
                         icon={<DeleteOutlined aria-hidden />}
                         aria-label={`${w.removeRef} ${refTypeLabel(ref.ref_type)} ${ref.ref_id}`}
                         onClick={() => removeRef(index)}
@@ -308,6 +345,7 @@ export function CreateDrawer({
             <Input.TextArea
               id={ids.note}
               value={draft.note}
+              disabled={locked}
               autoSize={{ minRows: 3, maxRows: 8 }}
               onChange={(event) => change({ note: event.target.value })}
             />
@@ -322,6 +360,7 @@ export function CreateDrawer({
               <Select<ChoosableSubject>
                 id={ids.subject}
                 value={draft.subject ?? null}
+                disabled={locked}
                 virtual={false}
                 style={{ width: 240 }}
                 options={CHOOSABLE_SUBJECTS.map((value) => ({
@@ -347,6 +386,7 @@ export function CreateDrawer({
               <Select<PlatformCode>
                 id={ids.platform}
                 value={draft.platform ?? null}
+                disabled={locked}
                 virtual={false}
                 style={{ width: 240 }}
                 options={PLATFORMS.map((value) => ({
@@ -364,6 +404,7 @@ export function CreateDrawer({
             <Alert type="warning" showIcon message={stepUpTexts.verifyPhoneMissing} />
           </div>
         ) : null}
+        {locked ? <Alert type="warning" showIcon message={w.unknown} /> : null}
         {writeError === undefined ? null : <Alert type="error" showIcon message={writeError} />}
       </Flex>
       {write.stepUp}

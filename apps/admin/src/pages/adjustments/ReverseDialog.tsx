@@ -2,6 +2,7 @@
 // 红冲方向一律取原单方向的相反、红冲金额等于原单（整笔，不支持部分红冲）；红冲前 / 后可用余额按
 // adminGetAdjustment 的 balance_preview（打开时重新读取，经 @couli/money，为负照实显示负数）。唯一的输入是
 // 红冲原因；请求体只有 reverses_adjust_id 与去空白的 note。20902（已被别人红冲）交回页面刷新。
+// 结果未知（没拿到带统一外壳的回答）时红冲原因锁定、不能关闭，只有【重试】（原键原请求体）与【去列表核对】。
 import { Alert, Button, Descriptions, Flex, Form, Input, Modal, theme } from 'antd';
 import { useId, useState, type ReactElement, type ReactNode } from 'react';
 import { plannedButtonProps } from '../../components/planned/index.ts';
@@ -38,6 +39,8 @@ export interface ReverseDialogProps {
   readonly onReversed: (executed: Executed) => void;
   /** 20902: the original was reversed meanwhile (the page refreshes and says so). */
   readonly onStale: () => void;
+  /** 【去列表核对】 while the result is unknown: close and read the list again. */
+  readonly onCheck: () => void;
 }
 
 export function ReverseDialog({
@@ -46,6 +49,7 @@ export function ReverseDialog({
   onClose,
   onReversed,
   onStale,
+  onCheck,
 }: ReverseDialogProps): ReactElement {
   const { token } = theme.useToken();
   const ids = { note: useId(), phone: useId() };
@@ -64,18 +68,29 @@ export function ReverseDialog({
     },
   });
 
+  /** The result of the last submission is unknown: nothing can be changed. */
+  const locked = write.unknown;
   const noteError = checked ? reverseNoteError(note) : undefined;
 
   const submit = () => {
-    if (write.busy || write.phoneMissing || planned) return;
+    if (write.busy || write.phoneMissing || locked || planned) return;
     setChecked(true);
     if (reverseNoteError(note) !== undefined) return;
     setWriteError(undefined);
     write.submit({ reverses_adjust_id: item.adjust_id, note: note.trim() });
   };
   const close = () => {
-    if (write.busy) return;
+    if (write.busy || locked) return;
     onClose();
+  };
+  const retry = () => {
+    if (write.busy || !locked) return;
+    setWriteError(undefined);
+    write.retry();
+  };
+  const check = () => {
+    if (write.busy || !locked) return;
+    onCheck();
   };
 
   const code = { fontFamily: token.fontFamilyCode, wordBreak: 'break-all' } as const;
@@ -102,23 +117,38 @@ export function ReverseDialog({
     after = r.balanceLoading;
   }
 
-  const footer = [
-    <Button key="cancel" autoInsertSpace={false} disabled={write.busy} onClick={close}>
-      {w.cancel}
-    </Button>,
-    <Button
-      key="submit"
-      type="primary"
-      autoInsertSpace={false}
-      disabled={write.busy}
-      aria-disabled={write.phoneMissing ? true : undefined}
-      aria-describedby={write.phoneMissing ? ids.phone : undefined}
-      {...plannedButtonProps(planned)}
-      onClick={submit}
-    >
-      {w.submit}
-    </Button>,
-  ];
+  const footer = locked
+    ? [
+        <Button key="check" autoInsertSpace={false} disabled={write.busy} onClick={check}>
+          {w.check}
+        </Button>,
+        <Button
+          key="retry"
+          type="primary"
+          autoInsertSpace={false}
+          disabled={write.busy}
+          onClick={retry}
+        >
+          {w.retry}
+        </Button>,
+      ]
+    : [
+        <Button key="cancel" autoInsertSpace={false} disabled={write.busy} onClick={close}>
+          {w.cancel}
+        </Button>,
+        <Button
+          key="submit"
+          type="primary"
+          autoInsertSpace={false}
+          disabled={write.busy}
+          aria-disabled={write.phoneMissing ? true : undefined}
+          aria-describedby={write.phoneMissing ? ids.phone : undefined}
+          {...plannedButtonProps(planned)}
+          onClick={submit}
+        >
+          {w.submit}
+        </Button>,
+      ];
 
   return (
     <Modal
@@ -126,7 +156,8 @@ export function ReverseDialog({
       width={560}
       title={r.title}
       maskClosable={false}
-      keyboard={!write.busy}
+      keyboard={!write.busy && !locked}
+      closable={!locked}
       destroyOnHidden
       footer={footer}
       onCancel={close}
@@ -171,6 +202,7 @@ export function ReverseDialog({
             <Input.TextArea
               id={ids.note}
               value={note}
+              disabled={locked}
               autoSize={{ minRows: 3, maxRows: 6 }}
               onChange={(event) => setNote(event.target.value)}
             />
@@ -181,6 +213,7 @@ export function ReverseDialog({
             <Alert type="warning" showIcon message={stepUpTexts.verifyPhoneMissing} />
           </div>
         ) : null}
+        {locked ? <Alert type="warning" showIcon message={w.unknown} /> : null}
         {writeError === undefined ? null : <Alert type="error" showIcon message={writeError} />}
       </Flex>
       {write.stepUp}
