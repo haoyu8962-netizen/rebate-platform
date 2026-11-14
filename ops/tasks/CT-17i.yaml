@@ -1,0 +1,21 @@
+id: CT-17i
+repo: rebate-platform
+title: routes.json DeleteAccount（账号注销）安卓、鸿蒙 since 填 1.0.0、phase 改 M-内测；iOS 仍为 null（D10-1566 W-3）
+type: contract
+# 2026-11-14 w1 入账（编排 D10-1566 W-3：B1-02zzz 合并后做；B1-02zzz #109 已于 2026-11-14 合并，step_up 发码已能发往绑定手机）。
+# 依据：NATIVE/needs-triage-20261114.md 的 since 建议；安卓、鸿蒙注销页已具备（发码走 B1-02zzz 的 step_up），iOS 注销页未交付，since 仍为 null。
+# 只改 contracts/routes.json 里 DeleteAccount 的 since.android、since.harmony（null → "1.0.0"）与 phase（M-公开 → M-内测），其余字段与其他路由不动；按 contracts/README.md 重新生成 bridge.gen.ts 并提交，pnpm contracts:check 要过。不动 openapi 及其生成物（D10-1582 ② 类，不占契约槽）。
+# 推之前在测试机跑引用 DeleteAccount 的测试目录（test/spec/agent、test/spec/frontend/h5-messages）与 verify:fast（D10-1598 e）。
+refs: []
+refs_hash: {}
+deps: [B1-02zzz]
+paths:
+  - 'contracts/routes.json'
+  - 'contracts/README.md'
+  - 'packages/contracts-ts/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
