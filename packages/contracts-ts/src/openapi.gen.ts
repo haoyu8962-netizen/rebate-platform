@@ -109,6 +109,16 @@ export interface paths {
          *     without action or with another action). Session scopes: a deletion_only session is accepted
          *     only for purpose=login and for purpose=step_up with action=account_deletion. Both conditions
          *     follow BR-ID-01 细则, which wins on any difference.
+         *     Login is optional (BR-ID-08, task B1-02zzz): purpose=login and purpose=bind work as before,
+         *     anonymous or logged in, and always carry `phone` (the number the code goes to).
+         *     purpose=step_up requires the caller's own access token (none → 10001; a token of another
+         *     app → 10403) and carries no `phone`: the server sends the code to the phone currently bound
+         *     to the token's account (read from the database, never from the request, the device or the
+         *     session), so the per-phone limits above count against that bound number. A step_up request
+         *     that contains a `phone` property (any value) → 20001 with `data.fields=[phone]`, no SMS,
+         *     nothing counted. An account without a bound phone → 20001 with `data.fields=[code]` and no
+         *     SMS, as `POST /v1/auth/step-up` answers it: such an account verifies by authorizing again
+         *     with a provider of its user_oauth (BR-ID-08, `POST /v1/auth/oauth-attempts`).
          */
         post: operations["sendSmsCode"];
         delete?: never;
@@ -11664,8 +11674,15 @@ export interface components {
          *     the normaliser, and adding a bound to a request property is a breaking change (oasdiff).
          */
         Phone: string;
+        /**
+         * @description `phone` is required for purpose=login and purpose=bind; purpose=step_up carries none (the
+         *     server uses the token account's bound phone, BR-ID-08; a step_up body with `phone` is
+         *     20001 with `data.fields=[phone]`). The `if` / `then` pair only states that condition; their
+         *     `additionalProperties: true` keeps them from closing the object, which stays closed by the
+         *     `additionalProperties: false` here.
+         */
         SendSmsCodeRequest: {
-            phone: components["schemas"]["Phone"];
+            phone?: components["schemas"]["Phone"];
             /**
              * @description contracts/enums/identity.yaml sms_purpose.
              * @enum {string}
@@ -14042,6 +14059,14 @@ export interface components {
             identity_level: "basic" | "guest" | "member" | "phone" | "realname";
             /** @description Whether a phone number is bound (BR-ID-01). */
             phone_bound: boolean;
+            /**
+             * @description The bound phone masked for display only (「验证码将发送至 138****8000」 before a step_up
+             *     code, BR-ID-08; task B1-02zzz): an 11-digit mainland number shows its first 3 and last 4
+             *     digits with `****` between (BR-TEXT-02 细则 手机号脱敏, the BR-ID-33 default mask), any
+             *     other stored value one `*` per character. Read from the account's current binding on
+             *     every request; null when no phone is bound. Never the full number.
+             */
+            masked_phone: string | null;
             balance: components["schemas"]["MeBalance"];
             union_bindings: components["schemas"]["UnionBindingState"][];
             /**
@@ -25923,6 +25948,7 @@ export interface operations {
                      *         },
                      *         "identity_level": "phone",
                      *         "phone_bound": true,
+                     *         "masked_phone": "138****8000",
                      *         "balance": {
                      *           "available_fen": 1234,
                      *           "withdrawable_fen": 1000,

@@ -243,11 +243,33 @@ export const CONTRACT_ROUTE_SCHEMAS = {
     },
     "body": {
       "type": "object",
+      "description": "`phone` is required for purpose=login and purpose=bind; purpose=step_up carries none (the\nserver uses the token account's bound phone, BR-ID-08; a step_up body with `phone` is\n20001 with `data.fields=[phone]`). The `if` / `then` pair only states that condition; their\n`additionalProperties: true` keeps them from closing the object, which stays closed by the\n`additionalProperties: false` here.\n",
       "additionalProperties": false,
       "required": [
-        "phone",
         "purpose"
       ],
+      "if": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "purpose": {
+            "enum": [
+              "login",
+              "bind"
+            ]
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "phone": true
+        },
+        "required": [
+          "phone"
+        ]
+      },
       "properties": {
         "phone": {
           "type": "string",

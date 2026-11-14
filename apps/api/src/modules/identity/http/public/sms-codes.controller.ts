@@ -1,9 +1,15 @@
 import { Controller, HttpCode, HttpException, Inject, Post, Req, Res } from '@nestjs/common';
 import { RouteSchema } from '@nestjs/platform-fastify';
 import type { Schema } from '@couli/contracts-ts';
-import { contractRouteSchema, type CheckedRequest } from '../../../platform/index.ts';
-import type { SmsCodeService, SmsResult } from '../../application/sms-codes.ts';
-import { SMS_CODES } from '../../application/tokens.ts';
+import {
+  contractRouteSchema,
+  tokenPrincipal,
+  type CheckedRequest,
+} from '../../../platform/index.ts';
+import type { SmsCodeRequestService } from '../../application/sms-code-requests.ts';
+import type { SmsResult } from '../../application/sms-codes.ts';
+import { SMS_CODE_REQUESTS } from '../../application/tokens.ts';
+import { identityFailure } from './error-envelopes.ts';
 
 type SendSmsCodeResponse = Schema<'SendSmsCodeResponse'>;
 
@@ -95,15 +101,16 @@ export function smsErrorResponse(
 
 @Controller('v1')
 export class SmsCodesController {
-  constructor(@Inject(SMS_CODES) private readonly smsCodes: SmsCodeService | null) {}
+  constructor(@Inject(SMS_CODE_REQUESTS) private readonly smsCodes: SmsCodeRequestService | null) {}
 
   /**
-   * Contract operation `sendSmsCode` (BR-ID-05): x-auth none, x-signed. Stage ① (request
-   * signature) has already run; the app of the code is the verified device's app_id, as for the
-   * nonce (X-App-Id is compared with it at stage ③). The device id and the client IP go to the
-   * insertion points (B1-03g limits). The version gate and the session scope
-   * (x-min-version-gate conditional) belong to B1-03c; captcha_token is accepted and not checked
-   * here (B1-03g).
+   * Contract operation `sendSmsCode` (BR-ID-05, BR-ID-08): x-auth optional, x-signed. Stage ①
+   * (request signature) and the token stages ② ③ have already run; the app of the code is the
+   * verified device's app_id, as for the nonce. login / bind send to the body's phone, anonymous or
+   * logged in; step_up needs the caller's own token, takes no phone and sends to the token
+   * account's bound phone (application/sms-code-requests.ts). The device id and the client IP go
+   * to the insertion points (B1-03g limits). The version gate and the session scope
+   * (x-min-version-gate conditional, x-session-scopes) are stage ④a's, before this handler.
    */
   @Post('auth/sms-codes')
   @HttpCode(200)
@@ -116,16 +123,14 @@ export class SmsCodesController {
     if (this.smsCodes === null || device === undefined) {
       throw new Error('identity: SMS codes need Redis, the database and a verified device');
     }
-    const { phone, purpose, captcha_token: captchaToken, action } = request.body;
+    const principal = tokenPrincipal(request);
     const result = await this.smsCodes.send({
-      app_id: device.appId,
-      phone,
-      purpose,
-      device_id: device.deviceId,
+      body: request.body,
+      verifiedDevice: device,
       client_ip: request.ip,
-      ...(captchaToken === undefined ? {} : { captcha_token: captchaToken }),
-      ...(action === undefined ? {} : { action }),
+      ...(principal === undefined ? {} : { principal }),
     });
+    if ('refused' in result) throw identityFailure(result.refused, request.id);
     if (result.code === 0) {
       return { code: 0, msg: '', data: result.data, trace_id: request.id };
     }

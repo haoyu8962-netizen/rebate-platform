@@ -19,7 +19,7 @@ export const CONTRACT_AUTH_ROUTES = [
   {
     "method": "POST",
     "path": "/v1/auth/sms-codes",
-    "auth": "none"
+    "auth": "optional"
   },
   {
     "method": "POST",

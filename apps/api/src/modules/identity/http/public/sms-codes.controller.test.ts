@@ -5,6 +5,7 @@ import { dereference } from '@readme/openapi-parser';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import ajvFormats from 'ajv-formats';
 import type { OpenAPIV3_1 } from 'openapi-types';
+import type { Schema } from '@couli/contracts-ts';
 import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { createHttpApp } from '../../../../bootstrap.ts';
 import {
@@ -13,7 +14,8 @@ import {
   createRootLogger,
   loadConfig,
 } from '../../../platform/index.ts';
-import type { SmsCodeService, SmsRequest, SmsResult } from '../../application/sms-codes.ts';
+import type { SmsRequest, SmsResult } from '../../application/sms-codes.ts';
+import { createSmsCodeRequestService } from '../../application/sms-code-requests.ts';
 import { SMS_CODES } from '../../application/tokens.ts';
 import { smsSenderToken, type FakeSmsSender } from '../../infra/fake-sms.ts';
 import { SmsCodesController, smsErrorResponse } from './sms-codes.controller.ts';
@@ -88,29 +90,50 @@ it('[BR-ID-05] every failed send maps to its contract status and a valid ErrorEn
   expect(smsErrorResponse({ code: 42901, retryAfterSec: 60 }, TRACE).retryAfterSec).toBe(60);
 });
 
+const BOUND = '13912345678';
+
 function controller(result: SmsResult | null) {
   const send = vi.fn(async (request: SmsRequest) => {
     void request;
     return result!;
   });
-  const service = result === null ? null : ({ send } as unknown as SmsCodeService);
+  const boundPhone = vi.fn(async (appId: string, uid: string) => {
+    void appId;
+    void uid;
+    return BOUND as string | null | undefined;
+  });
+  const service =
+    result === null ? null : createSmsCodeRequestService({ sms: { send }, boundPhone });
   const headers: [string, string][] = [];
   const reply = { header: (name: string, value: string) => headers.push([name, value]) };
   const request = {
     id: TRACE,
     ip: '203.0.113.7',
     verifiedDevice: { deviceId: 'd1', appId: 'couli' },
+    principal: {
+      uid: 'u1',
+      app_id: 'couli',
+      sid: 's1',
+      device_id: 'd1',
+      scp: 'full' as const,
+    },
     body: {
-      phone: '+86 139 1234 5678',
       purpose: 'step_up' as const,
       captcha_token: 'cap',
       action: 'account_deletion' as const,
-    },
+    } as Schema<'SendSmsCodeRequest'>,
   };
-  return { target: new SmsCodesController(service), send, headers, reply, request };
+  return {
+    target: new SmsCodesController(service),
+    send,
+    boundPhone,
+    headers,
+    reply,
+    request,
+  };
 }
 
-it('[BR-ID-05] the controller passes the verified app and device, the client IP and the body, and answers 200 per contract', async () => {
+it('[BR-ID-05][BR-ID-08] the controller passes the verified app and device, the client IP, the body and the bound phone of the token account, and answers 200 per contract', async () => {
   const c = controller({ code: 0, data: { resend_after_sec: 60, expires_in_sec: 300 } });
   const body = await c.target.send(c.request, c.reply);
   valid('200', body);
@@ -120,9 +143,10 @@ it('[BR-ID-05] the controller passes the verified app and device, the client IP 
     data: { resend_after_sec: 60, expires_in_sec: 300 },
     trace_id: TRACE,
   });
+  expect(c.boundPhone).toHaveBeenCalledWith('couli', 'u1');
   expect(c.send).toHaveBeenCalledWith({
     app_id: 'couli',
-    phone: '+86 139 1234 5678',
+    phone: BOUND,
     purpose: 'step_up',
     device_id: 'd1',
     client_ip: '203.0.113.7',
@@ -142,6 +166,35 @@ it('[BR-ID-05] a 42901 sets Retry-After (a contract integer ≥ 1) and throws th
   const ajv = new Ajv2020({ strict: false });
   ajvFormats.default(ajv);
   expect(ajv.compile(retryAfterSchema)(79_801)).toBe(true);
+});
+
+it('[BR-ID-08] step_up refusals decided before the send are contract envelopes and send nothing', async () => {
+  const anonymous = controller({ code: 0, data: { resend_after_sec: 60, expires_in_sec: 300 } });
+  const { principal, ...withoutToken } = anonymous.request;
+  void principal;
+  const cases: [Promise<unknown>, number, number, object | undefined][] = [
+    [anonymous.target.send(withoutToken, anonymous.reply), 401, 10001, undefined],
+    [
+      anonymous.target.send(
+        { ...anonymous.request, body: { ...anonymous.request.body, phone: BOUND } },
+        anonymous.reply,
+      ),
+      400,
+      20001,
+      { fields: ['phone'] },
+    ],
+  ];
+  for (const [pending, status, code, data] of cases) {
+    const error = await pending.catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).getStatus()).toBe(status);
+    const body = (error as HttpException).getResponse() as Record<string, unknown>;
+    valid('4XX', body);
+    expect(body).toMatchObject({ code, trace_id: TRACE });
+    if (data === undefined) expect(body).not.toHaveProperty('data');
+    else expect(body['data']).toEqual(data);
+  }
+  expect(anonymous.send).not.toHaveBeenCalled();
 });
 
 it('[BR-ID-05] without the service (no Redis or no database) or a verified device the request fails closed', async () => {
