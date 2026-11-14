@@ -5,6 +5,7 @@ type: impl
 # 2026-11-14 入账（前端线 fe，编排 D10-1517 第一批 ②，打款页 design/specs/admin-payouts.md（负责人 2026-10-18 后台第 2 批定稿），拆四张依次做、不并行：F1-08ba 只读 → F1-08bb 执行所选 → F1-08bc 录入余额 → F1-08bd 解除暂停）。路由按规格：后台资源 withdrawals 的页签「打款队列」「结果待确认」；写操作以主干契约为准。
 # 资金页面（apps/admin/src/**/withdrawals/** 属 RV2）：Codex 额度用尽至 11-20（D10-1604），规则测试由独立 Claude 写、另一独立 Claude 审（approvals 第 36 条）；实现 Claude Opus；代码评审 money。写操作每次 StepUpModal（totp 档，BR-ID-34），提交中禁用、对话框保留；按钮按状态与权限点隐藏不置灰；阈值、时效从接口与配置取不写死；金额只经 @couli/money。任务书带 D10-1477、D10-1503。
 # 范围：标题行与通道卡的录入入口（fund.cash_entry），录入对话框（账户、当前 W、可用余额、取数时间、备注；取数时间晚于现在或早于上次不能保存，20001 按 data.fields / data.reason 提示）、StepUpModal、只发一次 POST /admin/v1/payout-watermarks，成功后刷新概览。
+# 2026-11-15 补丁 1（fe，编排 D10-1712）：F1-08ba [AC-F1-08ba-READONLY#1] 与 F1-08bb [AC-F1-08bb-ACCESS#1] 的超管写入口清单随本单落地改为「恰为当时已落地的入口」（严格相等），未落地的【解除暂停】【解除通道暂停】继续禁，另补反向用例（无 fund.cash_entry 看不到录入入口）；两文件先列进 test_paths。modify_existing（rule_change，br BR-WDR-18，ruling D10-1712）要等两文件随 F1-08ba / bb 进主干后才能登（台账检查只认主干已有的冻结文件），届时另开补丁 2。20001 取数时间提示以契约为准（允许超前 5 分钟）。
 refs: [BR-WDR-18, BR-FUND-20, BR-ID-34]
 refs_hash:
   BR-WDR-18: 9247640dde57
@@ -16,6 +17,8 @@ paths:
   - 'apps/admin/src/texts/withdrawals.ts'
 test_paths:
   - 'test/spec/frontend/admin-payout-watermark/**'
+  - 'test/spec/frontend/admin-payouts-readonly/readonly.test.ts'
+  - 'test/spec/frontend/admin-payout-execute/access.test.ts'
 impl: claude
 tester: claude-independent
 accept:
