@@ -6,6 +6,7 @@ type: impl
 # 契约（contracts/openapi.yaml）：StepUpAction 去 withdraw；StepUpSummary 去 StepUpSummaryWithdraw；POST /v1/withdrawals 去 x-step-up、StepUpToken 参数、x-error-codes 的 10003 与相关描述；AbandonIdempotencyKeyRequest.action 改用新枚举 IdempotencyAbandonAction（withdraw、payout_account_change、phone_change、account_deletion），放弃上一笔提现照旧可用；oasdiff 去枚举值属破坏兼容，accepted 加行注明 D10-1665；重生成生成物；packages/contracts-ts/scripts/conformance.ts 的 STEP_UP_OPERATIONS 去 withdraw。
 # 实现：identity application/step-up-verify.ts 的 ⑫ 映射去 'POST /v1/withdrawals'；payout 提现控制器去掉 withStepUp 包装，服务层 stepUpValid 照传 true（直调服务的冻结用例不动）；risk-state.ts 的敏感操作表不动（提现仍是 realname 敏感操作）。
 # 冻结用例：「提现无令牌 → 10003」改「照常受理」、「用 withdraw 取令牌」改用仍需 step-up 的动作或改断言为 20001——资金类，按 D10-1356 由负责人确认后 rule_change 登记（br 待 refs 定后填）。
+# D10-1671 补（台账补丁 1）：「四个敏感操作」（提现、改收款、换号、注销）不再靠 x-step-up 识别——契约给这四个 operation 另加独立扩展标记 `x-sensitive-operation: true`（四个都带），x-step-up 只留在仍要二次验证的三个（改收款、换号、注销）；packages/contracts-ts/scripts/conformance.ts 同步检查两份清单（敏感四个、step-up 三个）；生成物里凡按 x-step-up 推出「敏感操作」的改读新标记。三端升到本版契约时改读新标记并钉住「提现仍是敏感操作：不自动重放、结果未知不换键」（三端各自任务，不在本单）。目前只有 staging，后端与三端同版本落地，不做旧客户端过渡期签发。规划里统称「四个敏感操作」。
 # 契约槽：openapi 类，排 B1-10w 之后；deps B1-02zzzb。refs 等规划回写 PR（docs/changes/20261114-提现免二次验证.md）合并、SPEC_REF 升级后再填并哈希（预计 BR-ID-08、BR-WDR-01、BR-WDR-03）。
 refs: []
 refs_hash: {}
