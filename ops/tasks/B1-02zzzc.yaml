@@ -7,6 +7,7 @@ type: impl
 # 实现：identity application/step-up-verify.ts 的 ⑫ 映射去 'POST /v1/withdrawals'；payout 提现控制器去掉 withStepUp 包装，服务层 stepUpValid 照传 true（直调服务的冻结用例不动）；risk-state.ts 的敏感操作表不动（提现仍是 realname 敏感操作）。
 # 冻结用例：「提现无令牌 → 10003」改「照常受理」、「用 withdraw 取令牌」改用仍需 step-up 的动作或改断言为 20001——资金类，按 D10-1356 由负责人确认后 rule_change 登记（br 待 refs 定后填）。
 # D10-1671 补（台账补丁 1）：「四个敏感操作」（提现、改收款、换号、注销）不再靠 x-step-up 识别——契约给这四个 operation 另加独立扩展标记 `x-sensitive-operation: true`（四个都带），x-step-up 只留在仍要二次验证的三个（改收款、换号、注销）；packages/contracts-ts/scripts/conformance.ts 同步检查两份清单（敏感四个、step-up 三个）；生成物里凡按 x-step-up 推出「敏感操作」的改读新标记。三端升到本版契约时改读新标记并钉住「提现仍是敏感操作：不自动重放、结果未知不换键」（三端各自任务，不在本单）。目前只有 staging，后端与三端同版本落地，不做旧客户端过渡期签发。规划里统称「四个敏感操作」。
+# D10-1701 补（台账补丁 2）：contracts/enums/identity.yaml 的 step_up_action 去 withdraw（规划 04 §2.5 已如此；conformance.ts 核它与 STEP_UP_OPERATIONS 一致），台账原漏列，补进 paths；生成物 packages/contracts-ts/src/enums.gen.ts 已在 packages/contracts-ts/** 内。不涉迁移。
 # 契约槽：openapi 类，排 B1-10w 之后；deps B1-02zzzb。refs 按规划 dd297a79（couli#2 合并、SPEC_REF #150）填并哈希（台账补丁 1）。
 refs: [BR-ID-08, BR-WDR-01, BR-WDR-03, BR-WDR-07]
 refs_hash:
@@ -18,6 +19,7 @@ deps: [B1-02zzzb]
 paths:
   - 'contracts/openapi.yaml'
   - 'contracts/oasdiff-accepted.txt'
+  - 'contracts/enums/identity.yaml'
   - 'packages/contracts-ts/**'
   - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
   - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
