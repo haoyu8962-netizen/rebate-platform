@@ -135,7 +135,7 @@ it(
 );
 
 it(
-  '[AC-B1-10w#7] route 与契约逐字一致：settle_bill_pending → /settle-bills?awaiting_confirm=true、appeal_pending → /risk/appeals?status=processing、claim_review_pending → /claims?status=manual_review、agent_report_overdue → /agent/reports?overdue=true、union_auth_expiring → /union/accounts?auth=expiring；有无数据 route 都一样',
+  '[AC-B1-10w#7] route 与契约逐字一致：settle_bill_pending → /settle-bills?awaiting_confirm=true、appeal_pending → /risk/appeals?status=processing、claim_review_pending → /claims?status=manual_review、agent_report_overdue → /agent/reports?overdue=true、union_auth_expiring → /unions；有无数据 route 都一样',
   async () => {
     const d = await desk(h);
     const appId = newApp('routes');

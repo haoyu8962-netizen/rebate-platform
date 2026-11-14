@@ -101,7 +101,7 @@ export const ROUTES: Readonly<Partial<Record<CardKey, string>>> = {
   settle_bill_pending: '/settle-bills?awaiting_confirm=true',
   appeal_pending: '/risk/appeals?status=processing',
   agent_report_overdue: '/agent/reports?overdue=true',
-  union_auth_expiring: '/union/accounts?auth=expiring',
+  union_auth_expiring: '/unions',
 };
 
 /** The config keys of the status object (contract AdminDashboardStatus descriptions). */
