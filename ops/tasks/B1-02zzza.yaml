@@ -1,0 +1,47 @@
+id: B1-02zzza
+repo: rebate-platform
+title: GET /v1/me 加 masked_phone（绑定手机脱敏展示，供二次验证界面写明「验证码将发送至…」；从 B1-02zzz 拆出，D10-1598）
+type: impl
+# 2026-11-14 w1 入账（编排 D10-1598 b：照 D10-1588 收口，把 Me.masked_phone 从 B1-02zzz 拆出另立；本任务计数从头算）。
+# 依据：D10-1566 W-2 / D10-1567 方案的第 ② 部分；BR-ID-08（二次验证向绑定手机号发码，界面要能展示发送目标）。
+# 契约（contracts/openapi.yaml）：Me 加 masked_phone（string | null，必填；脱敏格式照 BR-TEXT-02 细则手机号脱敏，如 138****8000；未绑手机为 null），描述写明出处；重生成生成物，不手改。
+# identity：application/me.ts、infra/me-reads.ts 读绑定手机（字段加密解密）后脱敏返回；未绑为 null。
+# 规则测试：B1-02zzz 已由 Codex 写过、经独立 Claude 评审的 Me 部分（step-up-bound-phone/me.int.test.ts，contract.test.ts 的 [AC-B1-02zzz#3]）原样移到本任务的规则测试目录 test/spec/identity/me-masked-phone/**；冻结 me/me.int.test.ts [AC-B1-02z#1] 与 me-invite/me-invite.int.test.ts [AC-B1-11k#12] 对 Me 整体全等，只在期望里补 masked_phone（见 modify_existing）。
+# 推之前在测试机跑 test/spec/identity 整目录（D10-1598 e）。契约槽：排在 B1-02zzz 之后。
+refs: [BR-ID-08]
+refs_hash:
+  BR-ID-08: 9ae5b5206173
+deps: [B1-02zzz]
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/api/src/modules/identity/**'
+test_paths:
+  - 'test/spec/identity/me-masked-phone/**'
+  - 'test/spec/identity/me/me.int.test.ts' # 只改 [AC-B1-02z#1]（见 modify_existing）
+  - 'test/spec/identity/me-invite/me-invite.int.test.ts' # 只改 [AC-B1-11k#12]（见 modify_existing）
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+  - 'test/spec/identity/me-masked-phone/**'
+status: todo
+modify_existing:
+  - file: 'test/spec/identity/me/me.int.test.ts'
+    test: '[AC-B1-02z#1] 新微信号：member、未绑手机、默认昵称头像、可补填且截止为建号 +168h、余额 0、两平台未授权、实名 none'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1598
+    note: '依 D10-1567 / D10-1588 / D10-1598：GET /v1/me 新增 masked_phone（未绑手机为 null，BR-ID-08 二次验证界面展示发送目标）；本行对 Me（除 invite_code）整体 toEqual，只在期望里补 masked_phone，其余断言不动；是加字段不是放宽；反向验证：去掉实现里的 masked_phone → 本行变红'
+  - file: 'test/spec/identity/me-invite/me-invite.int.test.ts'
+    test: '[AC-B1-11k#12] 本人未成年隐藏本人码但保留已绑定状态，其余字段不变，不透露邀请人或实名资料'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1598
+    note: '依 D10-1598：本行对 Me 整体全等，只在期望里补 masked_phone（按该用例账号的绑定状态取值），其余断言不动；是加字段不是放宽；反向验证：去掉实现里的 masked_phone → 本行变红'

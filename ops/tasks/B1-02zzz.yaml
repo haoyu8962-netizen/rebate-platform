@@ -10,6 +10,7 @@ type: impl
 # 顺带核（D10-1567）：提现、新增 / 修改收款账号、更换手机号等其他要 step_up 的操作，在本单合并后发码是否同样走通——在实现输出 notes 里逐个写结论与证据（文件:行），不另改它们的代码；不通的另报。
 # 契约槽：排在 B1-10t 之后，等编排点名。
 # D10-1588（实现 r1 交回后）：① 规则测试 [AC-B1-02zzz#12] 改为 10405（以 08 BR-ID-01「受限会话」与 minimum-version.ts 为准）；② 测试不动，paths 加 platform/validation/index.ts（及单测）：validationErrorEnvelope 汇总 fields 时跳过 Ajv 的伴随错误 keyword=if，仅当同一次校验另有别的错误时才跳过（只剩它时保留），评审核其他接口 fields 是否因此变化；③ 冻结 me.int.test.ts [AC-B1-02z#1] 只在期望里补 masked_phone（见 modify_existing）。写测试追加试次 approvals 89，只限 ①③，本任务最后一次。
+# D10-1598（#109 退回后收口）：Me.masked_phone 拆到 B1-02zzza（契约 Me 字段、me.ts / me-reads.ts、step-up-bound-phone/me.int.test.ts 与 contract.test.ts 的 [AC-B1-02zzz#3]、冻结 me.int [AC-B1-02z#1] 与 me-invite [AC-B1-11k#12] 都归它），本单只留发码一半；标题里的「GET /v1/me 加 masked_phone」由 B1-02zzza 完成。冻结 landing-sms [AC-B1-11g#15] 的 step_up 段改为带本人令牌、不带 phone，发送代码原样搬用 sms-codes/http.int.test.ts 已评审的写法，限频断言不改（新鲜独立 Claude 机械搬用，不计试次）。oasdiff 的 request-body-if-added / then-added 写进 contracts/oasdiff-accepted.txt（D10-1598 ①）。
 refs: [BR-ID-08]
 refs_hash:
   BR-ID-08: 9ae5b5206173
@@ -28,7 +29,7 @@ paths:
 test_paths:
   - 'test/spec/identity/step-up-bound-phone/**'
   - 'test/spec/identity/sms-codes/http.int.test.ts' # D10-1572：只改 it.each 的 step_up 一行（见 modify_existing）
-  - 'test/spec/identity/me/me.int.test.ts' # D10-1588 ③：[AC-B1-02z#1] 期望补 masked_phone（见 modify_existing）
+  - 'test/spec/identity/landing-sms/http.int.test.ts' # D10-1598 ③c：只改 [AC-B1-11g#15] 的 step_up 发送段（见 modify_existing）
 impl: claude
 tester: codex
 accept:
@@ -55,9 +56,9 @@ modify_existing:
     br: [BR-ID-08]
     ruling: D10-1579
     note: '依 D10-1579：bind 行的请求、行为与断言都没变，只因三行共用的回调体改了（加了 step_up 分支）才登记；反向验证用探针变异（如发码成功但不落发件箱）证明仍有牙，记为「探针，非旧规则」，测试机实跑后还原'
-  - file: 'test/spec/identity/me/me.int.test.ts'
-    test: '[AC-B1-02z#1] 新微信号：member、未绑手机、默认昵称头像、可补填且截止为建号 +168h、余额 0、两平台未授权、实名 none'
+  - file: 'test/spec/identity/landing-sms/http.int.test.ts'
+    test: '[AC-B1-11g#15] 手机号 login、bind、step_up 三种 purpose 与落地页合计限频'
     reason: rule_change
     br: [BR-ID-08]
-    ruling: D10-1588
-    note: '依 D10-1567 / D10-1588：GET /v1/me 新增 masked_phone（未绑手机为 null，供二次验证界面展示发送目标，BR-ID-08）；本行对 Me（除 invite_code）整体 toEqual，只在期望里补 masked_phone，其余断言不动；是加字段不是放宽；反向验证：去掉实现里的 masked_phone → 本行变红'
+    ruling: D10-1598
+    note: '依 D10-1567 / D10-1598：step_up 段改为带已绑该号码会员的本人令牌、不带 phone 发码（BR-ID-08「已绑手机用户向绑定手机号发 purpose=step_up 验证码」），发送代码原样搬用 sms-codes/http.int.test.ts 已评审的写法；login / bind 段与全部限频断言不改；反向验证：放回旧规则（匿名带 phone 发 step_up）→ 本行变红'
