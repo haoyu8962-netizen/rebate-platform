@@ -1,0 +1,26 @@
+id: F1-08bb
+repo: rebate-platform
+title: 后台打款队列【执行所选】：勾选待执行单 → 执行确认（执行前检查清单）→ 动态码 → adminCreatePayoutBatch，整批拒绝原因与逐单结果
+type: impl
+# 2026-11-14 入账（前端线 fe，编排 D10-1517 第一批 ②，打款页 design/specs/admin-payouts.md（负责人 2026-10-18 后台第 2 批定稿），拆四张依次做、不并行：F1-08ba 只读 → F1-08bb 执行所选 → F1-08bc 录入余额 → F1-08bd 解除暂停）。路由按规格：后台资源 withdrawals 的页签「打款队列」「结果待确认」；写操作以主干契约为准。
+# 资金页面（apps/admin/src/**/withdrawals/** 属 RV2）：Codex 额度用尽至 11-20（D10-1604），规则测试由独立 Claude 写、另一独立 Claude 审（approvals 第 36 条）；实现 Claude Opus；代码评审 money。写操作每次 StepUpModal（totp 档，BR-ID-34），提交中禁用、对话框保留；按钮按状态与权限点隐藏不置灰；阈值、时效从接口与配置取不写死；金额只经 @couli/money。任务书带 D10-1477、D10-1503。
+# 范围：队列表勾选（只能勾可执行的 APPROVED 单）、批量栏、执行确认对话框（本地预览将执行清单与执行前检查：开关、队列暂停、W 时效、可用额度、限额，均取 overview 不写死；服务端再查）、StepUpModal、只发一次 POST /admin/v1/payout-batches；整批拒绝的原因与逐单结果按响应显示；暂停态【执行所选】隐藏或说明原因（按测试）；幂等键规则同 F1-08ai（结果未定的失败沿用原键）。
+refs: [BR-WDR-11, BR-WDR-12, BR-WDR-13, BR-ID-34]
+refs_hash:
+  BR-WDR-11: 9193f1c7ed27
+  BR-WDR-12: 37adcd14e97f
+  BR-WDR-13: 11b5c3e1a9b3
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [F1-08ba]
+paths:
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/texts/withdrawals.ts'
+test_paths:
+  - 'test/spec/frontend/admin-payout-execute/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-payout-execute/**'
+status: todo
+pr: null
