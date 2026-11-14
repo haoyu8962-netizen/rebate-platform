@@ -24,8 +24,7 @@ paths:
   - 'apps/api/src/app.module.ts'
   - 'infra/monitoring/rules/couli.yaml'
   - 'apps/api/src/modules/platform/metrics/dashboard-day-lag{,.test}.ts'
-  - 'apps/api/src/modules/platform/metrics/registry.ts'
-  - 'apps/api/src/modules/platform/metrics/index.ts'
+  - 'apps/api/src/modules/platform/metrics/{registry,index}.ts'
   - 'apps/api/src/entry.ts'
   - 'ops/evidence/B1-34q.json'
 test_paths:
@@ -53,4 +52,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/admin/dashboard-yesterday/**'
-status: todo
+status: done
+pr: 68
