@@ -1,5 +1,5 @@
 // 调账与核销页文案（资源 adjustments，菜单 资金 / 调账与核销；F1-08ca 只读：调账单列表与详情、坏账核销
-// 候选单）。调账单状态、原因码、候选单状态的中文名只从后台字典读（BR-TEXT-25
+// 候选单；F1-08cb 新建调账与红冲，一步提交并生效）。调账单状态、原因码、候选单状态的中文名只从后台字典读（BR-TEXT-25
 // admin_dict.admin_adjustments.*、admin_dict.bad_debt_writeoff.*，contracts/texts.admin.default.json），
 // 缺键显示编码，所以这里不写这些名字。方向、关联单据类型、对方科目按 contracts/enums/fund.yaml 的值名。
 export const adjustmentsTexts = {
@@ -8,7 +8,7 @@ export const adjustmentsTexts = {
   /** created_by null: a form the system prefilled. */
   system: '系统',
   readOnlyNotice:
-    '新建调账、红冲、批准与驳回系统预填单、批准坏账核销等操作尚未接入，接口定稿后开放；本页先提供只读查看。',
+    '批准与驳回系统预填单、批准坏账核销尚未接入，接口定稿后开放；新建调账与红冲一步提交并生效。',
   forbidden: '无权限查看调账与核销',
   forbiddenDescription:
     '当前账号缺少资金权限点（fund.adjust、fund.writeoff 或 fund.view），请联系超管勾选。',
@@ -28,6 +28,7 @@ export const adjustmentsTexts = {
     failedDescription: '网络错误或服务异常，点【重试】重新请求。',
     reversed: '已红冲',
     detailEntry: '详情',
+    reverseEntry: '红冲',
     filter: {
       status: '状态',
       reason: '原因',
@@ -115,6 +116,104 @@ export const adjustmentsTexts = {
     CASH_ALIPAY: '支付宝现金',
     CASH_WECHAT: '微信现金',
     CASH_BANK: '银行现金',
+  },
+  /** contracts/enums/platform.yaml platform（后台平台名）。 */
+  platform: {
+    taobao: '淘宝',
+    jd: '京东',
+    pdd: '拼多多',
+    meituan: '美团',
+    vip: '唯品会',
+    douyin: '抖音',
+    eleme: '饿了么',
+    kuaishou: '快手',
+    suning: '苏宁',
+  },
+  /** 新建调账抽屉与红冲对话框（adminCreateAdjustment，fund.adjust，短信档二次验证）。 */
+  write: {
+    createEntry: '新建调账',
+    createTitle: '新建调账',
+    oneStep:
+      '一步提交并生效：短信验证通过后立即记账，不保存待批、不可撤回；已生效的调账只能整笔红冲后另开新单。',
+    submit: '提交并短信验证',
+    cancel: '取消',
+    addRef: '添加单据',
+    removeRef: '移除',
+    noRefs: '尚未添加关联单据',
+    otherRefsHint: '原因码为「其他」且没有可关联单据时，在原因说明里写明客服处理说明代替。',
+    payoutSubjectHint: '打款追回的对方科目由服务端按提现通道取现金科目，不需选择。',
+    preview: (user: string, direction: string, amount: string, reason: string): string =>
+      `预览：用户 ${user} ${direction} ${amount}，原因：${reason}`,
+    created: (adjustId: string): string => `调账已生效，调账单号 ${adjustId}`,
+    reversed: (adjustId: string): string => `红冲已生效，红冲单号 ${adjustId}`,
+    /** StepUpModal 的「本次操作」。 */
+    createOperation: '新建调账（一步提交并生效）',
+    reverseOperation: '红冲调账单（整笔冲回）',
+    /** 短信发往的号码（权限快照没有掩码号码时的说法）。 */
+    verifyPhone: '本账号登记的验证手机号',
+    labels: {
+      user: '用户 ID',
+      direction: '方向',
+      amount: '金额（元）',
+      reason: '原因码',
+      refType: '单据类型',
+      refId: '单据号',
+      note: '原因说明',
+      subject: '对方科目',
+      platform: '平台',
+    },
+    refColumns: {
+      type: '单据类型',
+      id: '单据号',
+      actions: '操作',
+    },
+    reverse: {
+      title: '红冲调账单',
+      notice:
+        '红冲按原调账单整笔冲回：方向相反、金额等于原单，不能部分红冲；要改金额请红冲后另开新单。',
+      noteLabel: '红冲原因',
+      balanceLoading: '正在读取余额…',
+      balanceFailed: '余额读取失败',
+      summary: {
+        id: '原调账单',
+        user: '用户',
+        direction: '方向',
+        amount: '金额',
+        reason: '原因',
+        newDirection: '红冲方向',
+        newAmount: '红冲金额',
+        before: '红冲前可用余额',
+        after: '红冲后可用余额',
+      },
+    },
+    errors: {
+      userRequired: '请输入用户 ID',
+      directionRequired: '请选择方向',
+      amountInvalid: '请输入大于 0、最多两位小数的金额',
+      reasonRequired: '请选择原因码',
+      subjectRequired: '请选择对方科目',
+      platformRequired: '请选择平台',
+      noteRequired: '请填写原因说明',
+      noteTooLong: '原因说明最多 500 字',
+      reconFixRefs: '对账修正须关联至少 1 张差错单',
+      payoutRefs: '打款追回须关联恰好 1 张提现单和至少 1 张差错单',
+      refTypeRequired: '请选择单据类型',
+      refIdRequired: '请输入单据号',
+      refIdTooLong: '单据号最多 128 个字符',
+      refDuplicate: '该单据已添加',
+      refLimit: '关联单据最多 10 张',
+      reverseNoteRequired: '请填写红冲原因',
+      reverseNoteTooLong: '红冲原因最多 500 字',
+      userUnknown: '用户不存在，请核对用户 ID',
+      refInvalid: '关联单据不存在、不属于该用户或不能用于调账，请核对',
+      userDeleted: '该用户已注销或正在注销，不能调账',
+      reverseNotAllowed: '该调账单不能红冲：未生效或本身是红冲单',
+      originalMissing: '原调账单不存在或已不可见，请刷新后重试',
+      invalid: '提交内容未通过服务端校验，请核对后重试',
+      alreadyReversed: '该调账单已被红冲，已刷新',
+      forbidden: '无权限执行调账',
+      failed: '提交失败，请稍后重试',
+    },
   },
   /** 对方科目连同平台（contra_platform，只 UNION_RECEIVABLE 有）。 */
   subjectWithPlatform: (subject: string, platform: string): string => `${subject}（${platform}）`,
