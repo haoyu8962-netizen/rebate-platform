@@ -56,15 +56,89 @@ it.each(['login', 'bind', 'step_up'])(
     expect(app).toBeDefined();
     const send = await device(app!, clock);
     const number = phone();
+    let sendStepUp: typeof send | undefined;
+    if (purpose === 'step_up') {
+      const { randomBytes } = await import('node:crypto');
+      const { createSession } =
+        await import('../../../../apps/api/src/modules/identity/application/sessions.ts');
+      const { TOKEN_SERVICE } =
+        await import('../../../../apps/api/src/modules/identity/application/tokens.ts');
+      const { FIELD_CRYPTO } = await import('../../../../apps/api/src/modules/platform/index.ts');
+      const { seedUser } = await import('../registration/kit.ts');
+      const { sign } = await import('../../risk/signature/kit.ts');
+      type TokenService =
+        import('../../../../apps/api/src/modules/identity/application/access-tokens.ts').TokenService;
+      type FieldCrypto = import('../../../../apps/api/src/modules/platform/index.ts').FieldCrypto;
+      const headers = {
+        'content-type': 'application/json',
+        'x-app-id': 'couli',
+        'x-platform': 'ios',
+        'x-app-version': '1.2.3',
+      };
+      const created = await app!.inject({
+        method: 'POST',
+        url: '/v1/devices',
+        headers,
+        payload: JSON.stringify({
+          device_hash: randomBytes(32).toString('hex'),
+          id_source: 'idfv',
+        }),
+      });
+      expect(created.statusCode).toBe(200);
+      expect(created.json()).toMatchObject({ code: 0 });
+      const { data } = created.json<{ data: { device_id: string; install_secret: string } }>();
+      const scopedDb = db!.withSchema('app');
+      const crypto = app!.get<FieldCrypto>(FIELD_CRYPTO);
+      const uid = await seedUser(scopedDb, 'couli');
+      await scopedDb
+        .updateTable('users')
+        .set({
+          phone_hmac: crypto.blindIndex(number, 'users.phone'),
+          phone_cipher: Buffer.from(crypto.encrypt(number, 'users.phone'), 'utf8'),
+        })
+        .where('id', '=', uid)
+        .execute();
+      const tokens = app!.get<TokenService>(TOKEN_SERVICE);
+      const session = await scopedDb
+        .transaction()
+        .execute((trx) =>
+          createSession(
+            trx,
+            { uid, app_id: 'couli', device_id: data.device_id, scp: 'full' },
+            { clock, tokens },
+          ),
+        );
+      sendStepUp = (payload) => {
+        const path = '/v1/auth/sms-codes';
+        const raw = JSON.stringify(payload);
+        const timestamp = String(Math.floor(clock.now().getTime() / 1000));
+        const nonce = randomBytes(16).toString('hex');
+        return app!.inject({
+          method: 'POST',
+          url: path,
+          payload: raw,
+          headers: {
+            ...headers,
+            authorization: `Bearer ${session.access_token}`,
+            'x-device-id': data.device_id,
+            'x-timestamp': timestamp,
+            'x-nonce': nonce,
+            'x-sign': sign('POST', path, Buffer.from(raw), timestamp, nonce, data.install_secret),
+          },
+        });
+      };
+    }
     const input = `+86 ${number}`;
     const captcha = `captcha-${randomUUID()}`;
     const start = lines.length;
-    const response = await send({
-      phone: input,
-      purpose,
-      captcha_token: captcha,
-      ...(purpose === 'step_up' ? { action: 'account_deletion' } : {}),
-    });
+    const response = sendStepUp
+      ? await sendStepUp({ purpose, captcha_token: captcha, action: 'account_deletion' })
+      : await send({
+          phone: input,
+          purpose,
+          captcha_token: captcha,
+          ...(purpose === 'step_up' ? { action: 'account_deletion' } : {}),
+        });
     expect(response.statusCode).toBe(200);
     const body = response.json<{ code: number; data: unknown }>();
     const { validate } = await responseValidator();
