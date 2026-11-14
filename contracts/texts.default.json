@@ -975,6 +975,7 @@
     "step_up.no_available_method": "请先绑定手机号，或在支持该登录方式的设备上操作",
     "step_up.oauth.action": "用{provider_name}重新授权",
     "step_up.oauth.desc": "这个账号没有绑定手机号，需要用登录时的{provider_name}重新授权一次，确认是你本人操作",
+    "step_up.sms.sent_to": "验证码将发送至 {masked_phone}",
     "step_up.summary.deletion": "申请注销账号",
     "step_up.summary.phone_change": "更换手机号 · 新手机号 {phone}",
     "tag.presale": "预售",

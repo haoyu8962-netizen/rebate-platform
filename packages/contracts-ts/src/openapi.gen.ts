@@ -431,8 +431,8 @@ export interface paths {
         put?: never;
         /**
          * Record a consent or its withdrawal
-         * @description Inserts one consent_records row (insert only, BR-ID-12). Login is not required (04 §6.1
-         *     鉴权 none): with a valid access token the row is user level (user_id and this device_id);
+         * @description Inserts one consent_records row (insert only, BR-ID-12). Login is optional (04 §6.1 鉴权
+         *     optional): with a valid access token the row is user level (user_id and this device_id);
          *     without one it is device level (device_id from X-Device-Id, user_id empty). A device
          *     without a registered device_id cannot record (BR-ID-12: the first-launch consent is kept
          *     locally and reported right after device registration). The current state of a subject and
@@ -14069,7 +14069,7 @@ export interface components {
             /**
              * @description The bound phone number masked for display, so the step-up sheet can say where the code
              *     goes (BR-ID-08: a phone-bound user's step_up code is sent to the bound number; B1-02zzza,
-             *     D10-1598). Masked by BR-TEXT-02 细则 手机号脱敏: first 3 and last 4 digits (138****8000).
+             *     D10-1598). Masked by BR-ID-33 细则: first 3 and last 4 digits (138****8000).
              *     Null when no phone is bound (phone_bound=false), and also null when the bound number
              *     cannot be read (D10-1610). The full number is never returned.
              */
