@@ -30628,7 +30628,6 @@ paths:
         Undeclared query parameters follow the global rule.
         The rows carry no device identifier, phone number or message text; the conversation is opened with GET /admin/v1/agent-traces/sessions/{session_id}.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403
@@ -30753,7 +30752,6 @@ paths:
         An overdue report (past the 48 hours of BR-ID-15) can still be marked handled: overdue is only a flag, it is not rejected.
         The response is the report row after the change, the same shape as a row of GET /admin/v1/agent-traces/reports (`overdue` false).
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403

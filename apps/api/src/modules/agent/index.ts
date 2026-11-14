@@ -6,6 +6,10 @@ export type {
   HandleAgentReportInput,
   HandleAgentReportResult,
 } from './application/agent-report.ts';
+// B1-10t (编排 D10-1539): admin's report handling reads the row in its own transaction and answers
+// it in the list's shape, through agent's read and projection (the overdue rule stays in agent).
+export { agentReportView, handlerIds, readAgentReport } from './application/admin-reports.ts';
+export type { AdminAgentReport, ReportRecord } from './application/admin-reports.ts';
 // B3-03d adds the HTTP layer and the session store; B3-03h the worker assembly of the left-over
 // run sweeper (AgentModule.forWorker, agentSweeperToken); the HTTP mount is B3-03f.
 // B3-09i: the deletion cleanup port of B3-09e (BR-AI-22), for app.module's deletionCleanupPorts.

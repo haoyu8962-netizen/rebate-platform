@@ -44,6 +44,7 @@ import {
   type StreamReviewOptions,
 } from './modules/agent/index.ts';
 import { AgentAdminModule } from './modules/agent/http/admin/index.ts';
+import { AdminAgentReportsModule } from './modules/admin/admin.module.ts';
 import { createEarningsReads } from './agent-earnings-reads.ts';
 import {
   CatalogAdminModule,
@@ -5034,7 +5035,22 @@ export class AppModule {
         // AdminOperationGuard (agent.trace, read only, no step-up); reads only agent's own tables,
         // scoped to the console's app; each successful session read writes one agent_trace_view
         // audit row (AUDIT_PORT), the list none.
-        ...(options.entry === 'admin' ? [AgentAdminModule.forAdmin()] : []),
+        // B1-10t: the report list (agent.trace) reads the handlers' display names through admin's
+        // reader, bound to the pool here (agent hands it no handle, BR-AI-02 ③); the report
+        // handling (agent.report) is admin's route (AdminAgentReportsModule, 编排 D10-1539): admin
+        // opens the transaction, calls agent's handleAgentReport and writes its audit row in it.
+        ...(options.entry === 'admin'
+          ? [
+              AgentAdminModule.forAdmin({
+                adminNames: {
+                  inject: [{ token: DB, optional: true }],
+                  useFactory: (db?: Kysely<Database>) =>
+                    db === undefined ? null : createAdminDisplayNameReader(db),
+                },
+              }),
+              AdminAgentReportsModule.forAdmin(),
+            ]
+          : []),
         // risk's /admin/v1 appeal console reads (B1-03zd, CT-24r; BR-ID-36): guarded by
         // AdminOperationGuard (risk.appeal, read only); identity's masked phones, normaliser and
         // phone holders, admin's display names and orders' sub-order numbers through ports; only a

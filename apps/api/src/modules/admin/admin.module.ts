@@ -3,9 +3,11 @@
 // and the durable TOTP replay store (admin_users.totp_last_step) for admin's own later use.
 // The console login, first binding and admin_token check (F1-06k) are AdminAuthModule
 // (./admin-auth.module.ts, admin entry only), as are step-up and me/permissions (F1-06l).
-import { Global, Module } from '@nestjs/common';
+// B1-10t (编排 D10-1539): AdminAgentReportsModule mounts the agent report handling route
+// (adminHandleAgentReport) on the admin entry only; admin owns its transaction and its audit row.
+import { type DynamicModule, Global, Module } from '@nestjs/common';
 import type { DB as Database } from '@couli/db';
-import type { Kysely } from 'kysely';
+import type { Kysely, Transaction } from 'kysely';
 import {
   AUDIT_PORT,
   CLOCK,
@@ -14,7 +16,16 @@ import {
   type AuditPort,
   type Clock,
 } from '../platform/index.ts';
+import {
+  createAgentReportHandler,
+  type AgentReportHandler,
+} from './application/agent-report-handle.ts';
 import type { TotpReplayStore } from './domain/totp.ts';
+import {
+  ADMIN_AGENT_REPORT_HANDLE,
+  AdminAgentReportHandleController,
+} from './http/admin/agent-reports.controller.ts';
+import { createAdminDisplayNameReader } from './infra/admin-display-names.ts';
 import { createAuditWriter } from './infra/audit-writer.ts';
 import { createPgTotpReplayStore } from './infra/totp-replay-pg.ts';
 
@@ -62,3 +73,38 @@ function unavailableReplayStore(): TotpReplayStore {
   exports: [AUDIT_PORT],
 })
 export class AdminModule {}
+
+/**
+ * The agent report handling route (B1-10t, CT-24zzi adminHandleAgentReport), admin entry only
+ * (app.module): guarded by platform's AdminOperationGuard (agent.report, no step-up), which
+ * adminAuthModule provides on that entry. Without the database the route registers and fails
+ * closed (50001).
+ */
+@Module({})
+export class AdminAgentReportsModule {
+  static forAdmin(): DynamicModule {
+    return {
+      module: AdminAgentReportsModule,
+      controllers: [AdminAgentReportHandleController],
+      providers: [
+        {
+          provide: ADMIN_AGENT_REPORT_HANDLE,
+          inject: [CLOCK, { token: DB, optional: true }],
+          useFactory: (
+            clock: Clock,
+            db: Kysely<Database> | undefined,
+          ): AgentReportHandler | null =>
+            db === undefined
+              ? null
+              : createAgentReportHandler({
+                  db,
+                  clock,
+                  auditOn: (trx: Transaction<Database>) =>
+                    createAuditWriter({ db: trx, clock, sensitiveKeys: SENSITIVE_KEYS }),
+                  namesOn: (trx: Transaction<Database>) => createAdminDisplayNameReader(trx),
+                }),
+        },
+      ],
+    };
+  }
+}

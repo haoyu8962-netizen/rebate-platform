@@ -1,0 +1,118 @@
+{
+  "risk_note": "RV2 by the risk map (apps/api/src/app.module.ts is outside the allow-list; the code is in the agent module, RV1), precedent B1-10q. Admin AI report list and handling, D1 part 2 (D10-1287 ⑤, D10-1310): adminListAgentReports (agent.trace) and adminHandleAgentReport (agent.report) leave planned. Handling lives in the admin module (D10-1539 (b), after the first verify:fast hit the frozen rule [AC-B3-08k#1], BR-AI-02 ③: agent never hands a database handle to a foreign callee): admin opens the transaction, locks and reads the old values through agent's exported read, calls agent's handleAgentReport(trx) (B3-08zf, the only writer of report_status via transitionAgentReport), then writes one agent_report_handle audit row (target agent_messages:<id>, status and note, never the message text) with its own createAuditWriter on the same transaction; refusals write nothing. Path, operationId and contract unchanged. The list's deadline_at / overdue (now >= reported_at + 48 h, injected clock) is one small function, to be shared by B1-10u. app.module mounts admin's AdminAgentReportsModule on the admin entry and gives agent's list a display-name reader already bound to the pool (no handle passed by agent). Host (local-heavy): integration spec/agent/admin-reports + admin-traces 27/27, handoff rule + contract 53, agent + admin unit 720, tsc -b apps/api test / depcruise 0. The implementation was a fresh desktop Claude subagent (model opus) in place of claude -p on the terminal accounts (DESKTOP-common-20261113); the lane fixed one line after the first integration run (forUpdate('m') does not compile a table alias in kysely 0.29 and every handle answered 500; now sql`for update of m`).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "codex-run.sh review --review-type money (RV2, medium), base = rule-test head 5906cf0a2. r1: pass but handed the stale spec-test brief by the lane's script (not counted as the code review, kept as review-money-r1-stale-brief.json). r2 (correct brief, first implementation): pass, no findings. r3 after the move to admin (D10-1539): pass, no findings. couli-runs/B1-10t/review-money-r3.json."
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "admin/** is RV2, so a second, independent Claude review was added (D10-1539): a fresh desktop Claude subagent (model opus, prompt = claude-run.sh review --review-type money --dry-run, read-only, not the implementer's context), full review of 5906cf0a2..2713feba6, output checked by validate-output.ts --money: pass, no findings, checklist rounding/sign/partial_refund na, idempotency/concurrency/clock/app_id ok. Not counted as a separate round (the shared code-review limit is 3). couli-runs/B1-10t/review-money-claude-independent.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests test/spec/agent/admin-reports/** and the CT-24zzi registration change by a fresh independent Claude (claude-run.sh, tester claude-independent, approvals #36). spec-test r1 by another fresh independent Claude session (claude-run.sh review, not the writer's context): pass, no findings. Container red/1 ok, problems 0, 15 red. The ledger's 3 red exemptions ([AC-CT-24zzi#1], #2, #6 in test/spec/contracts/admin-agent-traces/registration.test.ts) were confirmed by a separate fresh desktop Claude subagent (read-only, not the writer's or implementer's context): the three blocks and everything outside the changed #3/#4/#5 blocks are identical to main, and they test operations B1-10q already implemented (couli-runs/B1-10t/red-exempt-confirm.json).",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/agent/admin-reports/access.int.test.ts > [AC-B1-10t#1] 权限：列表只认 agent.trace（只持 agent.report、什么都不持、只持别的点 → 10403 data.reason=admin_permission_denied，带 step-up 令牌仍是 10403）；处理只认 agent.report（只持 agent.trace → 10403）；两个操作都不要 step-up（带有效或乱写的令牌结果不变）；不带令牌 → 10001；被拒的请求不改任何 agent_* 行、不写审计，列表从不写审计",
+    "test/spec/agent/admin-reports/contract.test.ts > [AC-B1-10t#12] 契约去 planned：GET /admin/v1/agent-traces/reports（adminListAgentReports）与 POST /admin/v1/agent-traces/reports/{message_id}/handle（adminHandleAgentReport）不再带 x-implementation（不是 planned），生成的 planned 清单不含这两个操作，也不含会话的两个操作",
+    "test/spec/agent/admin-reports/handle.int.test.ts > [AC-B1-10t#6] 处理成功：待处理 → 已处理，库里写 report_status=handled、report_handler_id=当前账号、report_handled_at=注入时钟、report_note=去首尾空白后的说明、row_version + 1，其余列与别的行不变；响应恰为该举报行（与列表行同形且相同：overdue false、handled_at、handler_id、handler_name 为当前账号展示名）；恰写一条审计 agent_report_handle，操作人为当前账号、目标 agent_messages:<message_id>、前值含 pending、后值含 handled 与说明，审计与响应都不含消息文本",
+    "test/spec/agent/admin-reports/handle.int.test.ts > [AC-B1-10t#7] 超时后照样可处理（超时只是标记，不拒绝）：已超 48 小时的待处理举报处理成功，此后 overdue 为 false、overdue=true 筛选不再含它；说明恰 500 字照存；说明首尾的空格、制表符、换行去掉、中间空白保留；游客会话的举报 user_id 为 null；每次成功各写一条审计",
+    "test/spec/agent/admin-reports/handle.int.test.ts > [AC-B1-10t#8] 请求体：说明为空串、只有空白（空格 / 制表符 / 换行）、超 500 字、不是字符串、缺失 → 20001 data.fields=[note]；expected_row_version 缺失、负数、字符串 → 20001 [expected_row_version]；请求体带契约以外的字段 → 20001（fields 为该字段）；这些都不改库、不写审计，之后用正确的请求照常处理",
+    "test/spec/agent/admin-reports/handle.int.test.ts > [AC-B1-10t#9] message_id：不存在的消息、别的 app 的举报、本 app 未被举报的回复、用户消息 → 都是 20001 data.fields=[message_id]，响应除 trace_id 外完全一致（不可探测）；不改任何 app 的库、不写审计；持 agent.trace 与 agent.report 两个点也一样；本 app 的举报照常可处理",
+    "test/spec/agent/admin-reports/handle.int.test.ts > [AC-B1-10t#10] CAS：expected_row_version 比库里小、大或为 0 → 20902 data.resource=agent_report；已是已处理的举报（带旧版本、带当前版本、换一个账号）→ 20902；20902 时库里不变、不写审计、已存的说明不被覆盖；只有版本相符的待处理举报处理成功",
+    "test/spec/agent/admin-reports/handle.int.test.ts > [AC-B1-10t#11] 并发：同一举报两个处理请求（两个持 agent.report 的账号）同时带同一 expected_row_version → 恰一个成功、另一个 20902 data.resource=agent_report；库里是胜者的处理人与说明、row_version 只 + 1；每个举报只写一条审计（操作人为胜者）；连做四个举报",
+    "test/spec/agent/admin-reports/list.int.test.ts > [AC-B1-10t#2] 列表字段与口径：每项恰为契约 13 个字段且逐字段等于库里的举报（deadline_at = reported_at + 48 小时；overdue 只对待处理且已到 deadline_at 的为 true，已处理恒 false，含超时后才处理的；handler_name 为处理人后台账号的展示名；游客会话与注销后会话 user_id 为 null，登录用户会话带其 user_id；注销后 report_reason 为 null 照样列出）；别的 app 的举报不出现、不计 total；未被举报的回复与用户消息不出现；响应里查不到消息文本、设备标识、手机号、user_hash、app_id；列表不改库、不写审计",
+    "test/spec/agent/admin-reports/list.int.test.ts > [AC-B1-10t#3] 48 小时边界（BR-ID-15 例：9-29 10:00 提交 → 10-01 10:00 到期）：deadline_at = reported_at + 48 小时；恰好满 48 小时算超时、差 1 秒不算、多 1 秒算；注入时钟走 1 秒后差 1 秒那条变为超时；已处理恒 false；overdue=true / false 筛选与每行的 overdue 一致",
+    "test/spec/agent/admin-reports/list.int.test.ts > [AC-B1-10t#4] 列表筛选：status、overdue、from / to（按 reported_at，from 含、to 不含，带 +08:00 或 Z 都行）各自生效且可组合（AND）；total 与筛选一致、不计别的 app；from 不早于 to（相等也算）→ 20001 data.fields=[from, to]；status 取值以外 → 20001 [status]；page_size 超 200 → 20001 [page_size]",
+    "test/spec/agent/admin-reports/list.int.test.ts > [AC-B1-10t#5] 列表排序与翻页：待处理在前按 reported_at 升序、已处理在后按 handled_at 倒序（与 reported_at 先后无关）；同一时刻的多行翻完所有页恰得全集、不重不漏（page_size 3 与 4）；末页之后 items 为空；每页 total 都是筛选后的总数、page / page_size 照回；带筛选翻页同样不重不漏",
+    "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#3] 登记 GET /admin/v1/agent-traces/reports：adminListAgentReports、admin、已实现（不再 planned）、agent.trace、无 step-up、错误码恰为 10001/10403/20001",
+    "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#4] 登记 POST /admin/v1/agent-traces/reports/{message_id}/handle：adminHandleAgentReport、admin、已实现（不再 planned）、agent.report、无 step-up 与 Idempotency-Key、错误码恰为 10001/10403/20001/20902",
+    "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#5] 顶层 tags 登记 admin-agent-traces；生成的 planned 清单不含 #1 / #2 / #3 / #4 四个已实现（不再 planned）的操作"
+  ],
+  "task": "B1-10t",
+  "spec_commit": "8b087cffb33942547b1f7c8666a70788c21e3164",
+  "spec_ref": "009592348c33b9fd5a32c6b37137ed3e99ebc52c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "8b087cffb33942547b1f7c8666a70788c21e3164",
+      "tree": "fc12a85c2f630bb864485002298f295cf500d74a",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-13T23:54:04Z",
+      "finished_at": "2026-11-13T23:54:21Z",
+      "red_tests": [
+        "test/spec/agent/admin-reports/access.int.test.ts > [AC-B1-10t#1] 权限：列表只认 agent.trace（只持 agent.report、什么都不持、只持别的点 → 10403 data.reason=admin_permission_denied，带 step-up 令牌仍是 10403）；处理只认 agent.report（只持 agent.trace → 10403）；两个操作都不要 step-up（带有效或乱写的令牌结果不变）；不带令牌 → 10001；被拒的请求不改任何 agent_* 行、不写审计，列表从不写审计",
+        "test/spec/agent/admin-reports/contract.test.ts > [AC-B1-10t#12] 契约去 planned：GET /admin/v1/agent-traces/reports（adminListAgentReports）与 POST /admin/v1/agent-traces/reports/{message_id}/handle（adminHandleAgentReport）不再带 x-implementation（不是 planned），生成的 planned 清单不含这两个操作，也不含会话的两个操作",
+        "test/spec/agent/admin-reports/handle.int.test.ts > [AC-B1-10t#6] 处理成功：待处理 → 已处理，库里写 report_status=handled、report_handler_id=当前账号、report_handled_at=注入时钟、report_note=去首尾空白后的说明、row_version + 1，其余列与别的行不变；响应恰为该举报行（与列表行同形且相同：overdue false、handled_at、handler_id、handler_name 为当前账号展示名）；恰写一条审计 agent_report_handle，操作人为当前账号、目标 agent_messages:<message_id>、前值含 pending、后值含 handled 与说明，审计与响应都不含消息文本",
+        "test/spec/agent/admin-reports/handle.int.test.ts > [AC-B1-10t#7] 超时后照样可处理（超时只是标记，不拒绝）：已超 48 小时的待处理举报处理成功，此后 overdue 为 false、overdue=true 筛选不再含它；说明恰 500 字照存；说明首尾的空格、制表符、换行去掉、中间空白保留；游客会话的举报 user_id 为 null；每次成功各写一条审计",
+        "test/spec/agent/admin-reports/handle.int.test.ts > [AC-B1-10t#8] 请求体：说明为空串、只有空白（空格 / 制表符 / 换行）、超 500 字、不是字符串、缺失 → 20001 data.fields=[note]；expected_row_version 缺失、负数、字符串 → 20001 [expected_row_version]；请求体带契约以外的字段 → 20001（fields 为该字段）；这些都不改库、不写审计，之后用正确的请求照常处理",
+        "test/spec/agent/admin-reports/handle.int.test.ts > [AC-B1-10t#9] message_id：不存在的消息、别的 app 的举报、本 app 未被举报的回复、用户消息 → 都是 20001 data.fields=[message_id]，响应除 trace_id 外完全一致（不可探测）；不改任何 app 的库、不写审计；持 agent.trace 与 agent.report 两个点也一样；本 app 的举报照常可处理",
+        "test/spec/agent/admin-reports/handle.int.test.ts > [AC-B1-10t#10] CAS：expected_row_version 比库里小、大或为 0 → 20902 data.resource=agent_report；已是已处理的举报（带旧版本、带当前版本、换一个账号）→ 20902；20902 时库里不变、不写审计、已存的说明不被覆盖；只有版本相符的待处理举报处理成功",
+        "test/spec/agent/admin-reports/handle.int.test.ts > [AC-B1-10t#11] 并发：同一举报两个处理请求（两个持 agent.report 的账号）同时带同一 expected_row_version → 恰一个成功、另一个 20902 data.resource=agent_report；库里是胜者的处理人与说明、row_version 只 + 1；每个举报只写一条审计（操作人为胜者）；连做四个举报",
+        "test/spec/agent/admin-reports/list.int.test.ts > [AC-B1-10t#2] 列表字段与口径：每项恰为契约 13 个字段且逐字段等于库里的举报（deadline_at = reported_at + 48 小时；overdue 只对待处理且已到 deadline_at 的为 true，已处理恒 false，含超时后才处理的；handler_name 为处理人后台账号的展示名；游客会话与注销后会话 user_id 为 null，登录用户会话带其 user_id；注销后 report_reason 为 null 照样列出）；别的 app 的举报不出现、不计 total；未被举报的回复与用户消息不出现；响应里查不到消息文本、设备标识、手机号、user_hash、app_id；列表不改库、不写审计",
+        "test/spec/agent/admin-reports/list.int.test.ts > [AC-B1-10t#3] 48 小时边界（BR-ID-15 例：9-29 10:00 提交 → 10-01 10:00 到期）：deadline_at = reported_at + 48 小时；恰好满 48 小时算超时、差 1 秒不算、多 1 秒算；注入时钟走 1 秒后差 1 秒那条变为超时；已处理恒 false；overdue=true / false 筛选与每行的 overdue 一致",
+        "test/spec/agent/admin-reports/list.int.test.ts > [AC-B1-10t#4] 列表筛选：status、overdue、from / to（按 reported_at，from 含、to 不含，带 +08:00 或 Z 都行）各自生效且可组合（AND）；total 与筛选一致、不计别的 app；from 不早于 to（相等也算）→ 20001 data.fields=[from, to]；status 取值以外 → 20001 [status]；page_size 超 200 → 20001 [page_size]",
+        "test/spec/agent/admin-reports/list.int.test.ts > [AC-B1-10t#5] 列表排序与翻页：待处理在前按 reported_at 升序、已处理在后按 handled_at 倒序（与 reported_at 先后无关）；同一时刻的多行翻完所有页恰得全集、不重不漏（page_size 3 与 4）；末页之后 items 为空；每页 total 都是筛选后的总数、page / page_size 照回；带筛选翻页同样不重不漏",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#3] 登记 GET /admin/v1/agent-traces/reports：adminListAgentReports、admin、已实现（不再 planned）、agent.trace、无 step-up、错误码恰为 10001/10403/20001",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#4] 登记 POST /admin/v1/agent-traces/reports/{message_id}/handle：adminHandleAgentReport、admin、已实现（不再 planned）、agent.report、无 step-up 与 Idempotency-Key、错误码恰为 10001/10403/20001/20902",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts > [AC-CT-24zzi#5] 顶层 tags 登记 admin-agent-traces；生成的 planned 清单不含 #1 / #2 / #3 / #4 四个已实现（不再 planned）的操作"
+      ],
+      "expected": [
+        "test/spec/agent/admin-reports/access.int.test.ts",
+        "test/spec/agent/admin-reports/contract.test.ts",
+        "test/spec/agent/admin-reports/handle.int.test.ts",
+        "test/spec/agent/admin-reports/list.int.test.ts",
+        "test/spec/contracts/admin-agent-traces/registration.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "399203495ae7a01d49996b46e387362b48e90e67014cfbb60ebee5b25a7cb841"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "75b6c999eb6c49044be8997b97fd16a33c4dcec3db3f3e99016152c17a74641f"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "140ca6f1886e5fd258785d5a54c5098f99be4bd7",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  }
+}
