@@ -117,6 +117,14 @@ function record(row: ReportRow): ReportRecord {
   };
 }
 
+/** The number of the app's reports matching `filter` (the list's total; read only). */
+export async function countReports(db: Kysely<DB>, filter: ReportFilter): Promise<number> {
+  const { total } = await filtered(db, filter)
+    .select(sql<string>`count(*)`.as('total'))
+    .executeTakeFirstOrThrow();
+  return Number(total);
+}
+
 /**
  * Pending first by reported_at ascending, then handled by handled_at descending; the message id
  * as the stable last key (pages never repeat or skip a row).
@@ -127,9 +135,7 @@ export async function listReports(
   page: number,
   pageSize: number,
 ): Promise<{ rows: ReportRecord[]; total: number }> {
-  const { total } = await filtered(db, filter)
-    .select(sql<string>`count(*)`.as('total'))
-    .executeTakeFirstOrThrow();
+  const total = await countReports(db, filter);
   const rows = await filtered(db, filter)
     .select([...COLUMNS])
     .orderBy(sql`(m.report_status = 'pending')`, 'desc')
@@ -139,7 +145,7 @@ export async function listReports(
     .limit(pageSize)
     .offset((page - 1) * pageSize)
     .execute();
-  return { rows: rows.map(record), total: Number(total) };
+  return { rows: rows.map(record), total };
 }
 
 /** One reported reply of the app (null: unknown, another app's, a user message, never reported). */
