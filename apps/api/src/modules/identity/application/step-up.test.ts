@@ -10,7 +10,7 @@ import {
 import type { TokenKeyProvider } from './access-tokens.ts';
 import type { OauthAttemptService } from './oauth-attempts.ts';
 import type { SmsCodeService } from './sms-codes.ts';
-import { createStepUpService, type ThirdPartyIdentityPort } from './step-up.ts';
+import { createStepUpService, stepUpDigest, type ThirdPartyIdentityPort } from './step-up.ts';
 
 const PRINCIPAL: TokenPrincipal = {
   uid: '019a0000-0000-7000-8000-000000000010',
@@ -22,6 +22,11 @@ const PRINCIPAL: TokenPrincipal = {
 const DEVICE = { appId: 'couli', deviceId: PRINCIPAL.device_id };
 const PHONE = '+8613800000000';
 const ATTEMPT = '019a0000-0000-7000-8000-0000000000aa';
+/** B1-02zzzb: a withdraw step-up carries its summary (BR-ID-08 细则「绑定业务摘要」). */
+const WITHDRAW_SUMMARY = {
+  payout_account_id: '019a0000-0000-7000-8000-0000000000bb',
+  amount_fen: 10000,
+};
 
 /** Kysely stand-in: each table answers its one row (or none) to executeTakeFirst. */
 function tables(rows: Record<string, object | undefined>) {
@@ -88,7 +93,7 @@ it('[BR-ID-08] SMS: the account phone with purpose step_up; a token bound to uid
   const result = await context.service.verify({
     principal: PRINCIPAL,
     verifiedDevice: DEVICE,
-    body: { action: 'withdraw', code: '123456' },
+    body: { action: 'withdraw', code: '123456', summary: WITHDRAW_SUMMARY },
   });
   expect(context.verifyAndConsume).toHaveBeenCalledExactlyOnceWith({
     app_id: 'couli',
@@ -112,6 +117,7 @@ it('[BR-ID-08] SMS: the account phone with purpose step_up; a token bound to uid
     device_id: PRINCIPAL.device_id,
     action: 'withdraw',
     jti: expect.any(String),
+    summary: `w:${WITHDRAW_SUMMARY.payout_account_id}:10000`,
   });
   expect((payload.exp ?? 0) - (payload.iat ?? 0)).toBe(300);
 });
@@ -122,7 +128,7 @@ it('[BR-ID-08] SMS refusals: no bound phone 20001 [code]; 20002 / 20003 passed t
     await unbound.service.verify({
       principal: PRINCIPAL,
       verifiedDevice: DEVICE,
-      body: { action: 'withdraw', code: '123456' },
+      body: { action: 'withdraw', code: '123456', summary: WITHDRAW_SUMMARY },
     }),
   ).toEqual({ code: 20001, data: { fields: ['code'] } });
   expect(unbound.verifyAndConsume).not.toHaveBeenCalled();
@@ -131,7 +137,7 @@ it('[BR-ID-08] SMS refusals: no bound phone 20001 [code]; 20002 / 20003 passed t
       await setup({ bound: true, verify: { code } }).service.verify({
         principal: PRINCIPAL,
         verifiedDevice: DEVICE,
-        body: { action: 'withdraw', code: '123456' },
+        body: { action: 'withdraw', code: '123456', summary: WITHDRAW_SUMMARY },
       }),
     ).toEqual({ code });
   }
@@ -212,7 +218,7 @@ it('[BR-ID-07] a token of another app than the signing device is 10403 before an
     await context.service.verify({
       principal: PRINCIPAL,
       verifiedDevice: { ...DEVICE, appId: 'another_app' },
-      body: { action: 'withdraw', code: '123456' },
+      body: { action: 'withdraw', code: '123456', summary: WITHDRAW_SUMMARY },
     }),
   ).toEqual({ code: 10403 });
   const third = setup({ bound: false, union: 'u1' });
@@ -255,7 +261,7 @@ it('[AC-B1-02zza#u6] a staging test phone’s SMS step-up writes one pino audit 
   const command = {
     principal: PRINCIPAL,
     verifiedDevice: DEVICE,
-    body: { action: 'withdraw' as const, code: '864213' },
+    body: { action: 'withdraw' as const, code: '864213', summary: WITHDRAW_SUMMARY },
   };
   verifyAndConsume.mockResolvedValueOnce({ code: 20002 });
   expect(await service.verify(command)).toEqual({ code: 20002 });
@@ -277,4 +283,68 @@ it('[AC-B1-02zza#u6] a staging test phone’s SMS step-up writes one pino audit 
   ]);
   expect(lines.join('')).not.toContain(phone);
   expect(lines.join('')).not.toContain('864213');
+});
+
+it('[AC-B1-02zzzb#1] summary refusals: missing, unpaired or on an unbound action → 20001 [summary], no code or attempt consumed', async () => {
+  const cases: [string, unknown][] = [
+    ['withdraw', undefined],
+    ['payout_account_change', undefined],
+    ['withdraw', { payout_method: 'alipay', alipay_logon_id: 'b@example.com' }],
+    ['payout_account_change', WITHDRAW_SUMMARY],
+    ['phone_change', WITHDRAW_SUMMARY],
+    ['account_deletion', { payout_method: 'wechat', attempt_id: ATTEMPT }],
+    ['payout_account_change', { payout_method: 'alipay', alipay_logon_id: '12345' }],
+  ];
+  for (const [action, summary] of cases) {
+    const sms = setup({ bound: true });
+    const body = { action, code: '123456', ...(summary === undefined ? {} : { summary }) };
+    expect(
+      await sms.service.verify({ principal: PRINCIPAL, verifiedDevice: DEVICE, body } as never),
+    ).toEqual({ code: 20001, data: { fields: ['summary'] } });
+    expect(sms.verifyAndConsume).not.toHaveBeenCalled();
+    const third = setup({ bound: false, union: 'u1' });
+    const oauth = { ...WECHAT, action, ...(summary === undefined ? {} : { summary }) };
+    expect(
+      await third.service.verify({
+        principal: PRINCIPAL,
+        verifiedDevice: DEVICE,
+        body: oauth,
+      } as never),
+    ).toEqual({ code: 20001, data: { fields: ['summary'] } });
+    expect(third.consume).not.toHaveBeenCalled();
+  }
+});
+
+it('[AC-B1-02zzzb#4] stepUpDigest: the server normalises the account and signs only its blind index', () => {
+  const contexts: string[] = [];
+  const blind = {
+    blindIndex: (value: string, context: string) => {
+      contexts.push(context);
+      return `H(${value})`;
+    },
+  };
+  expect(
+    stepUpDigest(blind, 'payout_account_change', {
+      payout_method: 'alipay',
+      alipay_logon_id: '+86 139-0013-9000',
+    }),
+  ).toEqual({ code: 0, digest: 'p:alipay:H(13900139000)' });
+  expect(
+    stepUpDigest(blind, 'payout_account_change', {
+      payout_method: 'bank_card',
+      card_no: '6222 0200-0000 1234',
+    }),
+  ).toEqual({ code: 0, digest: 'p:bank_card:H(6222020000001234)' });
+  expect(contexts).toEqual(['payout_accounts.alipay', 'payout_accounts.bank_card']);
+  expect(
+    stepUpDigest(blind, 'payout_account_change', { payout_method: 'wechat', attempt_id: ATTEMPT }),
+  ).toEqual({ code: 0, digest: `p:wechat:${ATTEMPT}` });
+  expect(stepUpDigest(blind, 'withdraw', WITHDRAW_SUMMARY)).toEqual({
+    code: 0,
+    digest: `w:${WITHDRAW_SUMMARY.payout_account_id}:10000`,
+  });
+  expect(stepUpDigest(blind, 'phone_change', undefined)).toEqual({ code: 0, digest: undefined });
+  expect(stepUpDigest(blind, 'withdraw', { ...WITHDRAW_SUMMARY, amount_fen: 1.5 })).toMatchObject({
+    code: 20001,
+  });
 });

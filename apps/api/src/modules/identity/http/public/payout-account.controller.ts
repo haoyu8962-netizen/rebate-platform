@@ -13,6 +13,9 @@
 // usable). The business: alipay → B1-13e's save in the claim's transaction; bank_card → the
 // verification flow of application/payout-bank-card.ts. 0 and 3xxxx are stored with the key;
 // everything else rolls back and leaves the key reusable (idempotency module rule).
+// B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): the business receives the digest of the token stage ⑫
+// passed (withStepUp's StepUpContext; null when the claims carry none) and compares it inside the
+// users row lock; a mismatch is 10003 without data, not stored, the token released.
 // `msg` is the package default text of contracts/texts.default.json without placeholders; `data`
 // carries only what the result defines (fields, reason, risk_msg_code), never a submitted value.
 import { Controller, Get, Inject, Optional, Put, Req, Res } from '@nestjs/common';
@@ -54,6 +57,7 @@ type ChangeResult = SaveAlipayResult | BankCardSubmitResult | ReverifyRefusal;
 
 const ERRORS: Readonly<Record<number, { readonly status: number; readonly msg: string }>> =
   Object.freeze({
+    10003: { status: 403, msg: '为保障资金安全，请先完成短信验证' },
     10010: { status: 403, msg: '需要先核实是你本人' },
     20001: { status: 400, msg: '填写内容有误，请检查' },
     // The key's verification record is of another card: the idempotency module's own 20901
@@ -149,7 +153,7 @@ export class PayoutAccountController {
       userId: principal.uid,
       deviceId: principal.device_id,
     };
-    const response = await withStepUp(request, () =>
+    const response = await withStepUp(request, (stepUp) =>
       idempotency.executeInTransaction(
         {
           appId: principal.app_id,
@@ -165,18 +169,22 @@ export class PayoutAccountController {
         async (trx) => {
           // The claim answered 20001 before the handler when the key is missing.
           if (key === undefined) throw new Error('identity: payout account change without a key');
+          // Read after stage ⑫ judged the token in the claim's post-miss checks.
+          const stepUpSummary = stepUp.summary();
           const result =
             body.payout_method === 'alipay'
               ? await change.saveAlipay(trx, {
                   ...subject,
                   alipayLogonId: body.alipay_logon_id,
                   payeeName: body.payee_name,
+                  stepUpSummary,
                 })
               : await change.submitBankCard(trx, {
                   ...subject,
                   cardNo: body.card_no,
                   payeeName: body.payee_name,
                   idempotencyKey: key,
+                  stepUpSummary,
                 });
           return handlerResult(result, request.id);
         },

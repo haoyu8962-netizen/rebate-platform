@@ -1,0 +1,35 @@
+import { expect, it } from 'vitest';
+import {
+  digestMatches,
+  isDigestAction,
+  payoutAccountDigest,
+  wechatPayoutDigest,
+  withdrawDigest,
+} from './step-up-digest.ts';
+
+const ID = '019a0000-0000-7000-8000-0000000000bb';
+
+it('[AC-B1-02zzzb#1] digest strings follow the contract: w:<id>:<amount_fen>, p:<method>:<hmac>, p:wechat:<attempt>', () => {
+  expect(withdrawDigest(ID, 10000n)).toBe(`w:${ID}:10000`);
+  expect(payoutAccountDigest('alipay', 'h1')).toBe('p:alipay:h1');
+  expect(payoutAccountDigest('bank_card', 'h2')).toBe('p:bank_card:h2');
+  expect(wechatPayoutDigest(ID)).toBe(`p:wechat:${ID}`);
+  expect(withdrawDigest(ID, 9_999_900n)).toBe(`w:${ID}:9999900`);
+});
+
+it('[AC-B1-02zzzb#8] only withdraw and payout_account_change are bound', () => {
+  expect(isDigestAction('withdraw')).toBe(true);
+  expect(isDigestAction('payout_account_change')).toBe(true);
+  expect(isDigestAction('phone_change')).toBe(false);
+  expect(isDigestAction('account_deletion')).toBe(false);
+});
+
+it('[AC-B1-02zzzb#6] digestMatches: equal strings only; a token without digest (null) never matches', () => {
+  expect(digestMatches('p:alipay:h1', 'p:alipay:h1')).toBe(true);
+  expect(digestMatches('p:alipay:h1', 'p:alipay:h2')).toBe(false);
+  expect(digestMatches('p:alipay:h1', 'p:bank_card:h1')).toBe(false);
+  expect(digestMatches(null, 'p:alipay:h1')).toBe(false);
+  expect(digestMatches(`p:wechat:${ID}`, 'p:alipay:h1')).toBe(false);
+  // No step-up context (a direct service call): nothing compared.
+  expect(digestMatches(undefined, 'p:alipay:h1')).toBe(true);
+});

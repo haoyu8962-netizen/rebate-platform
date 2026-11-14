@@ -20,15 +20,39 @@
 // Only issued here; its jti is consumed by the operations that require it (BR-ID-08), not here.
 // Nothing is logged: no code, phone, token or credential.
 //
+// Business digest (B1-02zzzb; BR-ID-08 细则「绑定业务摘要」; contract POST /v1/auth/step-up
+// `summary`, CT-26c): judged first, before either way reads, checks or consumes anything (a code or
+// an attempt is only consumed for a body that can be issued). withdraw and payout_account_change
+// must carry the `summary` that pairs with the action (withdraw: payout_account_id + amount_fen;
+// payout_account_change: alipay / bank_card / wechat); a missing one, a shape of the other action
+// or any summary with phone_change / account_deletion → 20001 data.fields=[summary], nothing
+// issued or consumed. The server computes the digest (domain/step-up-digest.ts) and signs it as the
+// string claim `summary`: the withdrawal values are copied as sent (ownership and balance are the
+// withdrawal's to judge); the Alipay logon id / card number is normalised as the payout account
+// save normalises it (BR-WDR-02) and only its blind index (the payout_accounts contexts) enters
+// the claim, never the plaintext and never a client fingerprint; WeChat takes the attempt_id. An
+// Alipay logon id that cannot be normalised has no fingerprint → 20001 data.fields=[summary].
+// The digest and the account are never logged.
+//
 // Also compiled by the `test` project: erasable syntax only, `import type` for types, `.ts`
 // relative imports, no decorators.
 import { randomUUID } from 'node:crypto';
 import type { Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
+import { normalizeBankCardNo } from '@couli/domain';
 import type { Clock, FieldCrypto, RootLogger, TokenPrincipal } from '../../platform/index.ts';
+import { blocklistHmacContexts } from '../../risk/index.ts';
+import { normalizeAlipayLogonId } from '../domain/alipay-logon.ts';
 import { maskPhone } from '../domain/mask-phone.ts';
 import { PHONE_CIPHER_CONTEXT } from '../domain/registration.ts';
+import {
+  STEP_UP_SUMMARY_CLAIM,
+  isDigestAction,
+  payoutAccountDigest,
+  wechatPayoutDigest,
+  withdrawDigest,
+} from '../domain/step-up-digest.ts';
 import { STEP_UP_AUDIENCE, signScopedToken, type TokenKeyProvider } from './access-tokens.ts';
 import { configuredSeconds, instantPlus } from './config-seconds.ts';
 import type { OauthAttemptService } from './oauth-attempts.ts';
@@ -116,6 +140,78 @@ function isSmsBody(body: SmsBody | OauthBody): body is SmsBody {
   return !('provider' in body);
 }
 
+const SUMMARY_REFUSED = Object.freeze({
+  code: 20001,
+  data: Object.freeze({ fields: Object.freeze(['summary']) }),
+} as const);
+
+/** A string field of an untrusted object, or undefined. */
+function stringField(value: Readonly<Record<string, unknown>>, key: string): string | undefined {
+  const field = value[key];
+  return typeof field === 'string' && field.length > 0 ? field : undefined;
+}
+
+/**
+ * The digest claim of this body (file header), undefined for an action that is not bound, or
+ * 20001 fields=[summary]. Reads nothing and writes nothing; the shapes are re-checked here even
+ * though the contract schema validated them.
+ */
+export function stepUpDigest(
+  crypto: Pick<FieldCrypto, 'blindIndex'>,
+  action: string,
+  summary: unknown,
+): { readonly code: 0; readonly digest: string | undefined } | typeof SUMMARY_REFUSED {
+  if (!isDigestAction(action)) {
+    return summary === undefined ? { code: 0, digest: undefined } : SUMMARY_REFUSED;
+  }
+  if (typeof summary !== 'object' || summary === null || Array.isArray(summary)) {
+    return SUMMARY_REFUSED;
+  }
+  const value = summary as Readonly<Record<string, unknown>>;
+  const method = value['payout_method'];
+  if (action === 'withdraw') {
+    const accountId = stringField(value, 'payout_account_id');
+    const amount = value['amount_fen'];
+    if (
+      method !== undefined ||
+      accountId === undefined ||
+      typeof amount !== 'number' ||
+      !Number.isSafeInteger(amount) ||
+      amount < 1
+    ) {
+      return SUMMARY_REFUSED;
+    }
+    return { code: 0, digest: withdrawDigest(accountId, BigInt(amount)) };
+  }
+  const contexts = blocklistHmacContexts();
+  if (method === 'alipay') {
+    const logon = stringField(value, 'alipay_logon_id');
+    if (logon === undefined) return SUMMARY_REFUSED;
+    const normalized = normalizeAlipayLogonId(logon);
+    if (normalized.code !== 0) return SUMMARY_REFUSED;
+    return {
+      code: 0,
+      digest: payoutAccountDigest('alipay', crypto.blindIndex(normalized.logon, contexts.alipay)),
+    };
+  }
+  if (method === 'bank_card') {
+    const cardNo = stringField(value, 'card_no');
+    if (cardNo === undefined) return SUMMARY_REFUSED;
+    const normalized = normalizeBankCardNo(cardNo);
+    if (normalized.length === 0) return SUMMARY_REFUSED;
+    return {
+      code: 0,
+      digest: payoutAccountDigest('bank_card', crypto.blindIndex(normalized, contexts.bank_card)),
+    };
+  }
+  if (method === 'wechat') {
+    const attemptId = stringField(value, 'attempt_id');
+    if (attemptId === undefined) return SUMMARY_REFUSED;
+    return { code: 0, digest: wechatPayoutDigest(attemptId) };
+  }
+  return SUMMARY_REFUSED;
+}
+
 /** The provider's credential fields of the body, without action and attempt_id. */
 export function credentialsOf(body: OauthCredentialFields): ThirdPartyCredentials {
   switch (body.provider) {
@@ -149,6 +245,7 @@ export function createStepUpService(options: StepUpOptions): StepUpService {
   async function issue(
     principal: TokenPrincipal,
     action: Schema<'StepUpAction'>,
+    digest: string | undefined,
   ): Promise<StepUpResult> {
     const ttlSeconds = await configuredSeconds(
       config,
@@ -167,6 +264,7 @@ export function createStepUpService(options: StepUpOptions): StepUpService {
         device_id: principal.device_id,
         action,
         jti: randomUUID(),
+        ...(digest === undefined ? {} : { [STEP_UP_SUMMARY_CLAIM]: digest }),
       },
       issuedAt,
       ttlSeconds,
@@ -175,7 +273,11 @@ export function createStepUpService(options: StepUpOptions): StepUpService {
     return { code: 0, data: { step_up_token: token, expire_at: expireAt.toISOString() } };
   }
 
-  async function bySms(principal: TokenPrincipal, body: SmsBody): Promise<StepUpResult> {
+  async function bySms(
+    principal: TokenPrincipal,
+    body: SmsBody,
+    digest: string | undefined,
+  ): Promise<StepUpResult> {
     const user = await account(principal);
     if (user === undefined || user.phone_hmac === null || user.phone_cipher === null) {
       return { code: 20001, data: { fields: ['code'] } };
@@ -188,7 +290,7 @@ export function createStepUpService(options: StepUpOptions): StepUpService {
       code: body.code,
     });
     if (verified.code !== 0) return { code: verified.code };
-    const issued = await issue(principal, body.action);
+    const issued = await issue(principal, body.action, digest);
     if (verified.staging_test_phone === true && issued.code === 0) {
       // B1-02zza (D10-611 (4)): the audit line of a staging test phone's step-up; masked number
       // only, never the full number or the code.
@@ -211,6 +313,7 @@ export function createStepUpService(options: StepUpOptions): StepUpService {
     principal: TokenPrincipal,
     device: { readonly appId: string; readonly deviceId: string },
     body: OauthBody,
+    digest: string | undefined,
   ): Promise<StepUpResult> {
     const user = await account(principal);
     // BR-ID-08: the third-party way is only for an account without a bound phone.
@@ -255,7 +358,7 @@ export function createStepUpService(options: StepUpOptions): StepUpService {
       const refreshToken = identity.apple_refresh_token;
       // Read configuration and sign before taking a pooled transaction connection.
       // The token is returned only after the binding update commits.
-      const issued = await issue(principal, body.action);
+      const issued = await issue(principal, body.action, digest);
       return db.transaction().execute(async (trx) => {
         await replaceAppleRefreshToken(
           trx,
@@ -270,7 +373,7 @@ export function createStepUpService(options: StepUpOptions): StepUpService {
         return issued;
       });
     }
-    return issue(principal, body.action);
+    return issue(principal, body.action, digest);
   }
 
   return Object.freeze({
@@ -280,9 +383,12 @@ export function createStepUpService(options: StepUpOptions): StepUpService {
       // principal.app_id is that checked app_id (attempt keys, users, user_oauth, the token).
       if (principal.app_id !== verifiedDevice.appId) return { code: 10403 };
       const body = command.body as SmsBody | OauthBody;
+      // B1-02zzzb: the summary before either way reads, checks or consumes anything.
+      const digest = stepUpDigest(crypto, body.action, body.summary);
+      if (digest.code !== 0) return digest;
       return isSmsBody(body)
-        ? bySms(principal, body)
-        : byThirdParty(principal, verifiedDevice, body);
+        ? bySms(principal, body, digest.digest)
+        : byThirdParty(principal, verifiedDevice, body, digest.digest);
     },
   });
 }

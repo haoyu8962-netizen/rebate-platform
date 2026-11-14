@@ -112,8 +112,16 @@ export interface CreateWithdrawalHttpRequest extends CheckedRequest {
  */
 export type WithdrawStepUp = (
   request: CreateWithdrawalHttpRequest,
-  execute: () => Promise<IdempotentResponse>,
+  execute: (context?: WithdrawStepUpContext) => Promise<IdempotentResponse>,
 ) => Promise<IdempotentResponse>;
+
+/**
+ * B1-02zzzb: what identity's withStepUp hands the handler — the business digest of the token stage
+ * ⑫ passed (null: none). Without a context the digest is null, so the withdrawal answers 10003.
+ */
+export interface WithdrawStepUpContext {
+  summary(): string | null;
+}
 
 /** HTTP status and package default text of the chain's codes (contracts/error-codes.yaml, texts.default.json). */
 const APPLY_ERRORS: Readonly<Record<number, { readonly status: number; readonly msg: string }>> =
@@ -289,7 +297,7 @@ export class WithdrawalsController {
     const body = request.body;
     // The hit record of this call's own 44001 (B2-05q); set by the handler only.
     const blocked: { record: (() => Promise<void>) | null } = { record: null };
-    const response = await stepUp(request, () =>
+    const response = await stepUp(request, (stepUpContext) =>
       idempotency.executeInTransaction(
         {
           appId: actor.appId,
@@ -304,10 +312,12 @@ export class WithdrawalsController {
           // The claim answered 20001 before the handler when the key is missing.
           if (key === undefined) throw new Error('payout: withdrawal application without a key');
           // Stage ⑫ judged the step-up token on the post-miss path: the chain's ② holds here.
+          // B1-02zzzb: the token's digest, compared by apply() inside the withdrawal lock.
           const result = await apply.apply(trx, {
             ...actor,
             amountFen: BigInt(body.amount_fen),
             stepUpValid: true,
+            stepUpSummary: stepUpContext?.summary() ?? null,
           });
           blocked.record = isWithdrawAccepted(result) ? null : (result.recordBlocked ?? null);
           return applyResult(result, request.id);

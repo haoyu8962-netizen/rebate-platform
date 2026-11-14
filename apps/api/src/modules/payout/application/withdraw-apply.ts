@@ -22,6 +22,15 @@
 //                available −amount / frozen +amount); the idempotency result is the caller's ⑧.
 //   events       wallet.withdrawal_changed and withdrawal.created on the same transaction (ids,
 //                status and an integer amount only; no payee data), when a bus is wired.
+// B1-02zzzb (BR-ID-08 细则「绑定业务摘要」action=withdraw, BR-WDR-07 建单锁内): the command's
+// stepUpSummary is the digest of the withdraw step_up_token stage ⑫ passed (the controller always
+// passes it: a string, or null when the claims carry none). Under the three locks, once the payee
+// snapshot is read and before the re-check ④, `w:<snapshot's payout account row id>:<amount_fen>`
+// (the row the withdrawal is about to take, and the request's amount) must equal it; otherwise —
+// another amount, a binding changed since the token, no row id on the snapshot or no digest —
+// 10003 without data through the locked refusal (nothing created, nothing frozen; the caller does
+// not store it and its withStepUp releases the token). stepUpSummary undefined (a direct use-case
+// call outside POST /v1/withdrawals) compares nothing. An idempotent replay never reaches apply().
 // Answers (not exceptions) for the chain's refusals, so the caller stores 3xxxx with the key;
 // infrastructure failures throw and roll everything back. Nothing of the payee (name, account,
 // cipher, HMAC) is logged.
@@ -66,6 +75,11 @@ import {
 
 /** Identity supplies the current, encrypted payee snapshot on the caller's handle. */
 export interface WithdrawPayeeSnapshot {
+  /**
+   * B1-02zzzb: the current payout account row's id, compared with the withdraw step-up digest;
+   * a snapshot without it never matches a digest.
+   */
+  payout_account_id?: string;
   payout_method: 'alipay' | 'bank_card';
   payee_name: string;
   payee_account_cipher: Buffer;
@@ -111,6 +125,27 @@ export interface WithdrawApplyOptions extends WithdrawApplyRiskOptions {
 export interface WithdrawApplyCommand extends WithdrawActor {
   amountFen: bigint;
   stepUpValid: boolean;
+  /** B1-02zzzb: the step_up_token's digest (null: none); undefined compares nothing (header). */
+  stepUpSummary?: string | null;
+}
+
+/**
+ * The withdraw step-up digest (contract POST /v1/auth/step-up, CT-26c): `w:<payout_account_id>:
+ * <amount_fen>`, the format identity signs (identity/domain/step-up-digest.ts).
+ */
+export function withdrawStepUpDigest(payoutAccountId: string, amountFen: bigint): string {
+  return `w:${payoutAccountId}:${amountFen.toString()}`;
+}
+
+/** B1-02zzzb (file header): does the token's digest bind this snapshot's account and amount? */
+function stepUpBindsWithdrawal(
+  stepUpSummary: string | null | undefined,
+  snapshot: Pick<WithdrawPayeeSnapshot, 'payout_account_id'>,
+  amountFen: bigint,
+): boolean {
+  if (stepUpSummary === undefined) return true;
+  if (stepUpSummary === null || snapshot.payout_account_id === undefined) return false;
+  return stepUpSummary === withdrawStepUpDigest(snapshot.payout_account_id, amountFen);
 }
 
 export interface WithdrawAccepted {
@@ -361,6 +396,10 @@ export function createWithdrawApply(options: WithdrawApplyOptions): WithdrawAppl
       await sql`SELECT pg_advisory_xact_lock(hashtext(${`${actor.appId}:${snapshot.payee_hmac}`})::bigint)`.execute(
         trx,
       );
+      // B1-02zzzb: the token's digest against the row the snapshot takes and the amount (header).
+      if (!stepUpBindsWithdrawal(command.stepUpSummary, snapshot, amount)) {
+        return refuse({ code: 10003, data: {} });
+      }
       const locked = await readWithdrawInput(trx, actor, command.stepUpValid, rules);
       const again = validateLockedWithdrawal(locked, amount);
       if (again !== null) return refuse(again);

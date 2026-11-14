@@ -63,6 +63,12 @@
 // of reverify-gate.ts first, for both methods: the claim's post-miss checks judged the step-up token
 // before the handler, and nothing is read, reserved or written after a 10010.
 //
+// Business digest (B1-02zzzb; BR-ID-08 细则「绑定业务摘要」): the command's stepUpSummary (the
+// payout_account_change token's digest, see payout-account.ts) is compared under the users row
+// lock of every reservation pass, before ⓪ and before any record, quota or vendor call — a token
+// for another card or method, a WeChat digest or none → 10003, nothing reserved, verified or
+// saved — and again by saveBankCard under its own lock.
+//
 // Invariant: a record's answer only ever binds the card it verified. saveMatched and mismatched
 // refuse (throw) a record whose fingerprint is not this request's; every path that reaches them
 // has compared it already (the key's record above; the fingerprint's records by construction).
@@ -97,6 +103,8 @@ import {
   payoutMethods,
   project,
   readConfig,
+  STEP_UP_MISMATCH,
+  stepUpBindsAccount,
   type PayoutAccountConfigPort,
   type PayoutAccountRefusal,
   type PayoutAccountService,
@@ -134,6 +142,8 @@ export interface BankCardSubmitCommand extends PayoutAccountSubject {
   readonly payeeName: string;
   /** The request's Idempotency-Key (validated by the claim), bound to the record it reserves. */
   readonly idempotencyKey: string;
+  /** B1-02zzzb: the step_up_token's digest (null: none); undefined compares nothing. */
+  readonly stepUpSummary?: string | null;
 }
 
 export type BankCardSubmitResult =
@@ -271,6 +281,10 @@ export function createBankCardBinding(options: BankCardBindingOptions): BankCard
     return db.transaction().execute(async (tx) => {
       const handle = tx.withSchema('app');
       const user = await lockPayoutUser(handle, subject);
+      // B1-02zzzb: the token's digest first, inside the lock (file header).
+      if (!stepUpBindsAccount(command.stepUpSummary, { method: 'bank_card', hmac: request.hmac })) {
+        return { kind: 'answer', result: STEP_UP_MISMATCH };
+      }
       const now = clock.now();
       if (expiry !== undefined) {
         // Conditional: a recheck that landed meanwhile (background or another request) wins.
@@ -415,6 +429,9 @@ export function createBankCardBinding(options: BankCardBindingOptions): BankCard
         bankName: request.bank.bank_name,
         cardBin: request.bank.bin,
         attemptReservedAt: attempt.reserved_at,
+        ...(request.command.stepUpSummary === undefined
+          ? {}
+          : { stepUpSummary: request.command.stepUpSummary }),
       });
     } catch (error) {
       // trx rolls back: the vendor's answer is still recorded.

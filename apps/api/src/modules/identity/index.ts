@@ -286,7 +286,11 @@ export type { AccountMergePort } from './application/merge-conditions.ts';
 // Stage ⑫ step-up check (BR-ID-08, B1-02y): app.module hands the check to RiskModule; the handlers
 // of the four x-step-up operations run their idempotent call through withStepUp.
 export { STEP_UP_CHECK, createStepUpCheck, withStepUp } from './application/step-up-verify.ts';
-export type { StepUpCheckOptions, StepUpHttpRequest } from './application/step-up-verify.ts';
+export type {
+  StepUpCheckOptions,
+  StepUpContext,
+  StepUpHttpRequest,
+} from './application/step-up-verify.ts';
 // The token stages ② ③ (BR-ID-01) for the api entry's request check plan (app.module).
 export { CONSENT_SIGNATURE_CHECK, TOKEN_CHECK } from './application/tokens.ts';
 export { isRecordConsentRoute } from './application/consent-signature.ts';

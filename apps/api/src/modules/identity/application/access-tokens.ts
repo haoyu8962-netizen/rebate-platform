@@ -206,6 +206,11 @@ export interface StepUpClaims {
   readonly action: string;
   readonly jti: string;
   readonly exp: number;
+  /**
+   * B1-02zzzb: the business digest claim (`summary`, BR-ID-08 细则「绑定业务摘要」) when it is a
+   * string, else null. Compared by the business inside its lock, never here.
+   */
+  readonly summary: string | null;
 }
 
 /** Same local keys / issuer as access tokens, but a separate audience and rejection code. */
@@ -252,7 +257,8 @@ export function createStepUpTokenVerifier(
     ) {
       throw reject();
     }
-    return Object.freeze({ uid, app_id, device_id, action, jti, exp });
+    const summary = typeof payload['summary'] === 'string' ? payload['summary'] : null;
+    return Object.freeze({ uid, app_id, device_id, action, jti, exp, summary });
   };
 }
 
