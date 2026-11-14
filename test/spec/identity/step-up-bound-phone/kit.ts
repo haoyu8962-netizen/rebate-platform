@@ -3,9 +3,32 @@
 import { expect } from 'vitest';
 import { createSession } from '../../../../apps/api/src/modules/identity/application/sessions.ts';
 import { outbox } from '../sms-codes/http-kit.ts';
-import { fixture, type Fixture, type HttpKit, accepted } from '../step-up/http-kit.ts';
+import {
+  fixture,
+  type Fixture,
+  type HttpKit,
+  accepted,
+  rejected as baseRejected,
+  validate,
+} from '../step-up/http-kit.ts';
 
-export { openHttpKit, closeHttpKit, rejected, type HttpKit } from '../step-up/http-kit.ts';
+export { openHttpKit, closeHttpKit, type HttpKit } from '../step-up/http-kit.ts';
+type Response = Parameters<typeof validate>[2];
+export function rejected(
+  kit: HttpKit,
+  path: string,
+  response: Response,
+  code: number,
+  data?: object,
+): void {
+  if (code !== 10405) {
+    baseRejected(kit, path, response, code, data);
+    return;
+  }
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toMatchObject({ code, ...(data === undefined ? {} : { data }) });
+  validate(kit, path, response);
+}
 export const SMS = '/v1/auth/sms-codes';
 export const ACTIONS = [
   'withdraw',

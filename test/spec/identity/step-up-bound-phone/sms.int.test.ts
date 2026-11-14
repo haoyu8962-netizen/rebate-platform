@@ -204,14 +204,14 @@ it('[AC-B1-02zzz#12] deletion_only 只放行 login 与注销 step_up；其他用
       kit,
       SMS,
       await f.post(SMS, { purpose: 'step_up', action }, session.access_token),
-      10403,
+      10405,
     );
   }
   rejected(
     kit,
     SMS,
     await f.post(SMS, { purpose: 'bind', phone: phone('138') }, session.access_token),
-    10403,
+    10405,
   );
   expect(messages(f)).toEqual([]);
   accepted(
