@@ -1,6 +1,7 @@
 // evidence-check.ts against a fixture repository: an RV2 branch with and without a complete
 // evidence file, an RV0 branch, and each field that must make the check fail.
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -3501,5 +3502,81 @@ it('[CT-06zzzzzh] a trusted ledger whose ruling_correction entry names a money o
   expect(text).not.toContain('[declared in modify_existing');
   expect(text).toContain(
     'modify_existing: the trusted ledger declares no modify_existing: a record without a ledger entry is refused',
+  );
+});
+
+// CT-06zzzzzi (D10-1662): a file-level support entry (scope: support) of a frozen rule-test file:
+// its code outside the blocks may change after spec_commit, with the label and the file's record;
+// an assertion line there, or a block changed without its own entry, is refused. On the
+// CT-06zzzg fixture repository (modRepo, built by the first [CT-06zzzg] case above).
+const SUP_HELPER_NEW = "const amount = (n: number, summary = 'withdraw:1') => ({ n, summary });";
+const supLedger = (): string =>
+  modLedger(null)
+    .replace('refs: []\nrefs_hash: {}', 'refs: [BR-PAY-01]\nrefs_hash:\n  BR-PAY-01: 0123456789ab')
+    .replace(
+      'status: todo\n',
+      [
+        'status: todo',
+        'modify_existing:',
+        `  - file: ${MOD_FILE}`,
+        '    scope: support',
+        '    reason: rule_change',
+        '    br: [BR-PAY-01]',
+        '    ruling: D10-1662',
+        "    note: 'the helper takes the summary; no assertion changes'",
+        '',
+      ].join('\n'),
+    );
+const supTrusted = (name: string): string => {
+  const dir = modTrusted(name, null);
+  write(dir, { 'ops/tasks/B2-09v.yaml': supLedger() });
+  return dir;
+};
+const sha = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
+const supRecord = (head: string, extra: Evidence = {}): Evidence => ({
+  file: MOD_FILE,
+  scope: 'support',
+  reason: 'rule_change',
+  before_sha256: sha(modSource(MOD_OLD)),
+  after_sha256: sha(head),
+  reverse_red: [`${MOD_FILE} > ${MOD_TEST}`],
+  br: ['BR-PAY-01'],
+  ...extra,
+});
+
+it('[CT-06zzzzzi] evidence-check: a support entry lets the helper change outside the blocks through; an assertion line or an undeclared changed block is refused; an unchanged file is redundant', () => {
+  const trusted = supTrusted('trusted-support');
+  expect(supLedger()).toContain('scope: support');
+  const good = modSource(MOD_OLD, { extra: SUP_HELPER_NEW });
+  const head = modBranch('sup-good', good, modEvidence([supRecord(good)]));
+  const ok = modCheck(head, trusted, approved(head));
+  expect(ok.problems).toEqual([]);
+  expect(ok.approval_wanted).toBe(true);
+  // An added line outside the blocks with an assertion: named with its head line (line 2).
+  const asserting = modSource(MOD_OLD, {
+    extra: 'const check = (v: number) => expect(v).toBe(1);',
+  });
+  const a = modBranch('sup-assert', asserting, modEvidence([supRecord(asserting)]));
+  const refused = modCheck(a, trusted, approved(a)).problems.join('\n');
+  expect(refused).toContain(
+    `${MOD_FILE} (M) [declared in modify_existing (scope: support), but an assertion line`,
+  );
+  expect(refused).toContain('head line 2: `const check = (v: number) => expect(v).toBe(1);`');
+  // The declared-block change without a block entry: the support entry does not cover it.
+  const block = modSource(MOD_NEW, { extra: SUP_HELPER_NEW });
+  const b = modBranch('sup-block', block, modEvidence([supRecord(block)]));
+  expect(modCheck(b, trusted, approved(b)).problems.join('\n')).toContain(
+    `test block 2 ("${MOD_TEST}") is not declared and differs from the base`,
+  );
+  // The file unchanged at the head: the record says so and the entry is redundant.
+  const same = modSource(MOD_OLD);
+  const c = modBranch('sup-same', same, modEvidence([supRecord(same)]));
+  expect(modCheck(c, trusted, approved(c)).problems.join('\n')).toContain(
+    "modify_existing[0]: the file is the merge base's: the entry is redundant",
+  );
+  // A block record shape on a support entry: test / before / after / mutation are unknown fields.
+  const d = modBranch('sup-shape', good, modEvidence([{ ...supRecord(good), test: MOD_TEST }]));
+  expect(modCheck(d, trusted, approved(d)).problems.join('\n')).toContain(
+    'modify_existing[0].test: unknown field for a support record (rule_change)',
   );
 });

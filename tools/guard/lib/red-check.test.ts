@@ -31,6 +31,7 @@ import {
   smokeCauseVerdict,
   smokeDiagnosticsOf,
   smokeDiagnosticsVerdict,
+  supportEntryNote,
   wrongRedReason,
 } from './red-check.ts';
 import type { ModifyExistingDeclaration } from '../../lib/task-file.ts';
@@ -4446,4 +4447,80 @@ it('[CT-06zzzzzh] a ruling_correction test red on the old code is accepted and g
   expect(red.red).toEqual([`${MOD} > [AC-2] late`, `${MOD} > [AC-4] new`]);
   expect(red.notes.filter((n) => n.includes('ATTENTION'))).toEqual([]);
   expect(rwExemptNotes(red.notes, '[AC-2] late')).toHaveLength(1);
+});
+
+// CT-06zzzzzi (D10-1662): a file-level support entry of modify_existing (scope: support) is no test
+// of the red run: next to block entries it changes neither the baselines, the left-out files nor
+// the verdict; it is listed in the notes, one line per entry.
+const supportDeclared = (file = MOD): ModifyExistingDeclaration[] => [
+  {
+    file,
+    scope: 'support',
+    reason: 'rule_change',
+    br: ['BR-ID-08'],
+    ruling: 'D10-1662',
+    note: 'the shared helper takes the summary; no assertion changes',
+  },
+];
+
+it('[CT-06zzzzzi] support entries next to block entries leave the baselines, the left-out files and the verdict as the block entries alone make them', () => {
+  const both = [...supportDeclared(), ...modDeclared()];
+  expect(modBaselines(MOD_HEAD, both)).toEqual(modBaselines(MOD_HEAD, modDeclared()));
+  const only = file(spec('[AC-1] a'), MOD_TIGHT, spec('[AC-3] c'));
+  const read = reader({ [MOD]: MOD_BASE }, { [MOD]: only });
+  expect(modifiedOnlyFiles([MOD], read, both)).toEqual([{ file: MOD, tests: ['[AC-2] late'] }]);
+  // A support entry alone leaves no file out (its file stays judged as before).
+  expect(modifiedOnlyFiles([MOD], read, supportDeclared())).toEqual([]);
+  const withSupport = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    modBaselines(),
+    [],
+    [],
+    both,
+  );
+  const blocksOnly = checkRedReports(
+    [redReport(MOD, MOD_TESTS)],
+    [MOD],
+    ROOT,
+    modBaselines(),
+    [],
+    [],
+    modDeclared(),
+  );
+  expect(withSupport.ok).toBe(true);
+  expect(withSupport.problems).toEqual(blocksOnly.problems);
+  expect(withSupport.red).toEqual(blocksOnly.red);
+  expect(withSupport.exempt).toEqual(blocksOnly.exempt);
+  const [entry] = supportDeclared();
+  expect(withSupport.notes).toEqual([
+    ...blocksOnly.notes,
+    supportEntryNote(entry as Extract<ModifyExistingDeclaration, { scope: 'support' }>),
+  ]);
+});
+
+it('[CT-06zzzzzi] supportEntryNote: the file, scope: support, the reason with its br or rulings, and not run, not judged', () => {
+  const [entry] = supportDeclared('test/spec/identity/step-up/http-kit.ts');
+  const note = supportEntryNote(entry as Extract<ModifyExistingDeclaration, { scope: 'support' }>);
+  expect(note.startsWith('test/spec/identity/step-up/http-kit.ts: ')).toBe(true);
+  for (const part of [
+    'scope: support',
+    'rule_change',
+    'br: BR-ID-08',
+    'D10-1662',
+    'not run, not judged',
+  ]) {
+    expect(note, part).toContain(part);
+  }
+  const rc = supportEntryNote({
+    file: 'test/spec/identity/reverify/kit.ts',
+    scope: 'support',
+    reason: 'ruling_correction',
+    overturned: 'D10-1500',
+    ruling: 'D10-1662',
+    basis: '规划/02 §12.3',
+    note: 'the shared helper takes the summary; no assertion changes',
+  });
+  expect(rc).toContain('D10-1500 → D10-1662; basis: 规划/02 §12.3');
 });

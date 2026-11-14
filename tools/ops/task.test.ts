@@ -1541,3 +1541,46 @@ it('[approvals 36] tester: claude-independent passes check on a new ledger; RV2 
     'test_paths: required for a task with a rule-test author (tester: claude-independent)',
   );
 });
+
+// CT-06zzzzzi (D10-1662): a file-level support entry (scope: support) may name a shared fixture
+// that is no *.test.ts file; scope (paths or test_paths), class 1 and the base are checked as for
+// a block entry, and a block entry of the same file still needs a rule-test file.
+it('[CT-06zzzzzi] task check: a support entry of a fixture that exists at the base passes; a block entry of it, a missing file and a file outside the scope are refused', () => {
+  const KIT = 'test/spec/supdemo/kit.ts';
+  const support = (file: string): string =>
+    `\n  - file: '${file}'\n    scope: support\n    reason: tighten_only\n    ruling: D10-1662\n    note: the fixture takes the summary, no assertion changes`;
+  const block = (file: string): string =>
+    `\n  - file: '${file}'\n    test: '[AC-1] a'\n    reason: tighten_only\n    ruling: D10-1662\n    note: the fixture takes the summary, no assertion changes`;
+  const task = (id: string, entries: string): string =>
+    good({
+      id,
+      type: 'test-change',
+      impl: 'claude',
+      tester: 'none',
+      paths: "\n  - 'test/spec/supdemo/**'",
+      modify_existing: entries,
+    });
+  writeFiles(root, {
+    'tools/guard/protected-paths.json': JSON.stringify({
+      class1_add_only: ['test/spec/**', 'test/properties/**', 'test/replay/**'],
+      class2_verify_config: [],
+      class3_gates: [],
+    }),
+    [KIT]: 'export const kit = 1;\n',
+    'test/spec/other/kit.ts': 'export const kit = 1;\n',
+    'ops/tasks/X1-02ia.yaml': task('X1-02ia', support(KIT)),
+    'ops/tasks/X1-02ib.yaml': task('X1-02ib', support(KIT) + block(KIT)),
+    'ops/tasks/X1-02ic.yaml': task('X1-02ic', support('test/spec/supdemo/missing.ts')),
+    'ops/tasks/X1-02id.yaml': task('X1-02id', support('test/spec/other/kit.ts')),
+  });
+  expect(checkTask('X1-02ia', opts('RV1'))).toEqual([]);
+  expect(checkTask('X1-02ib', opts('RV1'))).toEqual([
+    `modify_existing: "${KIT}" is not a rule-test file (*.test.ts)`,
+  ]);
+  expect(checkTask('X1-02ic', opts('RV1')).join('\n')).toContain(
+    'modify_existing: "test/spec/supdemo/missing.ts" does not exist at the base',
+  );
+  expect(checkTask('X1-02id', opts('RV1')).join('\n')).toContain(
+    `modify_existing: "test/spec/other/kit.ts" is not inside the task's paths (tester: none)`,
+  );
+});

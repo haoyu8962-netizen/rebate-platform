@@ -166,6 +166,12 @@ FU-STATE-HYGIENE，编排 D10-900。台账是事实来源，`couli-runs/state/` 
   - 已知冲突：可信根 `tools/guard/codex-impl-tasks.json` 的 `mechanical_paths` 白名单（冻结，第三类保护路径）只有 `contracts/openapi.yaml`、`openapi.gen.ts`、`route-schemas.gen.ts` 三份，不含 `planned-operations.gen.ts`。所以只在 `mechanical_paths` 写契约的 Codex 台账两头都过不了：不列它被本规则拦，列了又被白名单拒（`task.test.ts` 用例钉住，不会静默通过）。遇到这种台账就停，不改台账绕过，另开第三类任务改白名单（需负责人 `owner-approved-<头提交前 12 位>` 标签）。改动时（c5f973f3）没有这种未完成台账。
 - `brief.ts`：`paths` 碰到 `contracts/openapi.yaml` 的任务，第 3 节路径清单后加一句提示：增删操作（含 planned）后要重跑 `pnpm codegen` 与 apps/api 下 generate-auth-routes / generate-signing-routes / generate-min-version-routes / generate-route-schemas 脚本。
 
+### modify_existing 的文件级「支撑文件」条目（`task.ts check`，CT-06zzzzzi）
+
+- 编排 D10-1662：冻结的共用夹具 / 顶层辅助（常常没有 it 块）只改块外、不改断言时，台账 `modify_existing` 可写一条文件级条目：不写 `test`，写 `scope: support`，reason / br / ruling / note（及 ruling_correction 的 overturned / basis）同块级条目。`parseTaskFile` 拒：scope 不是 `support`、同时有 `test` 与 `scope`、带 `retitle_to`、文件不在 `test/spec/**` / `test/properties/**` / `test/replay/**` 下、同一文件第二条文件级条目、资金与归属类文件用了 rule_change 以外的 reason；条数与块级条目、`red_exempt` 合计 ≤ 300。
+- `task.ts check`：文件级条目点名的文件不要求是 `*.test.ts`（同一文件另有块级条目时仍要求）；照旧要求在 test_paths（`tester: none` 时为 paths）内、属第一类规则测试资产、在基线（可信根）已存在。
+- 放行与证据（负责人标签、块外断言行、整文件 sha256 与 reverse_red）在 `tools/ci/evidence-check.ts`，见 `tools/README.md` 同名一段。
+
 ### 任务书（`brief.ts`）
 
 - 八节与固定句照规划仓库 `docs/templates/task-brief.md`。规则原文只经 `git show $SPEC_REF:<路径>` 读，表格行去掉「影响面」一列；一跳引用只带表格行。不带第 7 节失败输出时整份超过 24KB 的（CT-06o），`refs` 的表格行与细则照旧全文，「一跳引用」改为 `| 编号 | 标题 | 状态 |` 精简表（标题取规则格的粗体开头，没有粗体时取首句、超过 40 字截断加「…」），表前注明原文见 SPEC_REF 版本的规划/08；格式定了再按剩余空间截第 7 节，仍超限照常拒写，提示里写明已用精简表。契约任务不受影响。

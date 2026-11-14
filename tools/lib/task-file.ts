@@ -90,6 +90,12 @@ export type TaskFile = {
    * (tools/ci/evidence-check.ts). Removing a test or loosening it is not covered. Read from the
    * trusted root like red_exempt; together with red_exempt at most RED_EXEMPT_MAX entries.
    * Optional, [] when absent.
+   *
+   * CT-06zzzzzi (D10-1662): an entry may instead be a file-level support entry (no `test`,
+   * `scope: support`; ModifyExistingSupportDeclaration) for a frozen shared fixture or top-level
+   * helper under test/spec/**, test/properties/** or test/replay/**: it covers the file's changes
+   * outside its it / test blocks only, never a changed block nor a changed assertion line
+   * (evidence-check). Both kinds share this list in ledger order; isSupportEntry tells them apart.
    */
   modify_existing: ModifyExistingDeclaration[];
   /**
@@ -253,7 +259,7 @@ export const BR_ID_PATTERN = /^BR-[A-Z]+-[0-9]+[a-z]?$/;
 export const RULING_PATTERN = /^D10-[1-9][0-9]*$/;
 
 /** One declared change of a frozen test that stays green (CT-06zzzg, D10-701). */
-export type ModifyExistingDeclaration = {
+export type ModifyExistingBlockDeclaration = {
   /** The rule-test file, repository-relative, existing at the base (tools/ops/task.ts). */
   file: string;
   /** The test's full name as the red reporter writes it (`describe > … > title`). */
@@ -292,6 +298,66 @@ export type ModifyExistingDeclaration = {
    */
   basis?: string;
 };
+
+/**
+ * The directories a file-level support entry may name (CT-06zzzzzi, D10-1662 ①): the rule-test
+ * assets with frozen shared fixtures and top-level helpers.
+ */
+export const SUPPORT_ENTRY_DIRS: readonly string[] = [
+  'test/spec/',
+  'test/properties/',
+  'test/replay/',
+];
+
+/**
+ * One file-level support entry of modify_existing (CT-06zzzzzi, D10-1662): a frozen shared fixture
+ * or top-level helper (often a file without it blocks) whose code outside its it / test blocks
+ * changes. No `test` (the file as a whole), `scope: 'support'`, never `retitle_to`; reason, ruling,
+ * note, br, overturned and basis as a block entry's (ModifyExistingBlockDeclaration), except that
+ * a money or attribution test (isMoneyOrAttributionTest) takes reason rule_change only. A file
+ * has at most one; it may have block entries besides, each covering its own block (a changed
+ * block is never covered by the support entry). evidence-check refuses an assertion line among
+ * the changed lines outside the blocks and wants the file's before / after sha256 and reverse_red.
+ */
+export type ModifyExistingSupportDeclaration = {
+  /** Repository-relative, under SUPPORT_ENTRY_DIRS, existing at the base (tools/ops/task.ts). */
+  file: string;
+  scope: 'support';
+  reason: (typeof MODIFY_EXISTING_REASONS)[number];
+  ruling: string;
+  note: string;
+  br?: string[];
+  overturned?: string;
+  basis?: string;
+};
+
+/**
+ * One modify_existing entry: a block entry (CT-06zzzg) or a file-level support entry
+ * (CT-06zzzzzi, D10-1662). Readers that locate blocks take blockEntries only.
+ */
+export type ModifyExistingDeclaration =
+  ModifyExistingBlockDeclaration | ModifyExistingSupportDeclaration;
+
+/** Whether a modify_existing entry is a file-level support entry (CT-06zzzzzi, D10-1662). */
+export function isSupportEntry(
+  d: ModifyExistingDeclaration,
+): d is ModifyExistingSupportDeclaration {
+  return 'scope' in d && d.scope === 'support';
+}
+
+/** The block entries of a modify_existing list, in ledger order (CT-06zzzzzi). */
+export function blockEntries(
+  list: readonly ModifyExistingDeclaration[],
+): ModifyExistingBlockDeclaration[] {
+  return list.filter((d): d is ModifyExistingBlockDeclaration => !isSupportEntry(d));
+}
+
+/** The file-level support entries of a modify_existing list, in ledger order (CT-06zzzzzi). */
+export function supportEntries(
+  list: readonly ModifyExistingDeclaration[],
+): ModifyExistingSupportDeclaration[] {
+  return list.filter(isSupportEntry);
+}
 
 /** The [AC-…] ids of a test name, in order (CT-06zzzzr: a rename keeps them character for character). */
 export function acIdsOf(name: string): string[] {
@@ -645,6 +711,13 @@ function redExemptOutsideList(value: unknown, problems: string[]): RedExemptOuts
  * may not carry `br`, and may not name a money or attribution test (isMoneyOrAttributionTest); the
  * other reasons may not carry `overturned` or `basis`. The cap shared with red_exempt is checked by parseTaskFile; whether the file is a
  * rule-test file of the task that exists at the base by tools/ops/task.ts.
+ *
+ * CT-06zzzzzi (D10-1662): an entry with a `scope` key is a file-level support entry
+ * (ModifyExistingSupportDeclaration): scope exactly `support`, no `test`, no `retitle_to`, the
+ * file under SUPPORT_ENTRY_DIRS, at most one per file; reason / br / ruling / note / overturned /
+ * basis judged exactly as for a block entry, and a money or attribution file
+ * (isMoneyOrAttributionTest) takes rule_change only (flake_fix / tighten_only refused on .reason,
+ * ruling_correction on .file as CT-06zzzzzh). Without `scope` an entry is read as before.
  */
 function modifyExistingList(
   value: unknown,
@@ -664,14 +737,22 @@ function modifyExistingList(
   const out: ModifyExistingDeclaration[] = [];
   const indexes: number[] = [];
   const seen = new Set<string>();
+  // CT-06zzzzzi (D10-1662 ①): the files that already have a file-level support entry.
+  const seenSupport = new Set<string>();
   value.forEach((item, index) => {
     const at = `${label}[${index}]`;
     if (!isRecord(item)) {
       problems.push(`${at}: must be a mapping (${fields.join(' / ')})`);
       return;
     }
+    // CT-06zzzzzi (D10-1662): an entry with a `scope` key is a file-level support entry (no test,
+    // no retitle_to); without it the entry is a block entry, read exactly as before.
+    const support = Object.hasOwn(item, 'scope');
     for (const key of Object.keys(item)) {
-      if (!allowed.includes(key)) problems.push(`${at}.${key}: unknown field`);
+      if (support && (key === 'test' || key === 'retitle_to')) continue; // said below
+      if (!allowed.includes(key) && !(support && key === 'scope')) {
+        problems.push(`${at}.${key}: unknown field`);
+      }
     }
     const file = item['file'];
     const test = item['test'];
@@ -689,7 +770,46 @@ function modifyExistingList(
         ok = false;
       }
     }
-    if (typeof test !== 'string' || test.trim() === '') {
+    if (support) {
+      // CT-06zzzzzi (D10-1662 ①): scope is `support`, the file lies under SUPPORT_ENTRY_DIRS, and
+      // neither test nor retitle_to is written (the entry covers the file outside its blocks).
+      if (item['scope'] !== 'support') {
+        problems.push(
+          `${at}.scope: must be "support" (a file-level support entry, CT-06zzzzzi / D10-1662; a block entry names its test and has no scope)`,
+        );
+        ok = false;
+      }
+      if (Object.hasOwn(item, 'test')) {
+        problems.push(
+          `${at}: has both test and scope: an entry is either a block entry (test) or a file-level support entry (scope: support, no test), CT-06zzzzzi / D10-1662`,
+        );
+        ok = false;
+      }
+      if (Object.hasOwn(item, 'retitle_to')) {
+        problems.push(
+          `${at}.retitle_to: a file-level support entry (scope: support) renames no test; rename a test with a block entry`,
+        );
+        ok = false;
+      }
+      if (typeof file === 'string' && !SUPPORT_ENTRY_DIRS.some((d) => file.startsWith(d))) {
+        problems.push(
+          `${at}.file: "${file}" is not under ${SUPPORT_ENTRY_DIRS.join(', ')}: a file-level support entry names a frozen rule-test asset there (CT-06zzzzzi / D10-1662)`,
+        );
+        ok = false;
+      }
+      // CT-06zzzzzi (D10-1662 ②): a money or attribution file changes only through rule_change
+      // (ruling_correction is refused below with the CT-06zzzzzh message on .file).
+      if (
+        typeof file === 'string' &&
+        isMoneyOrAttributionTest(file) &&
+        (reason === 'flake_fix' || reason === 'tighten_only')
+      ) {
+        problems.push(
+          `${at}.reason: "${file}" is a money or attribution test: its file-level support entry takes reason rule_change only (CT-06zzzzzi / D10-1662; D10-1356: such a file changes only with the owner's own confirmation)`,
+        );
+        ok = false;
+      }
+    } else if (typeof test !== 'string' || test.trim() === '') {
       problems.push(`${at}.test: must be the test's full name (non-empty)`);
       ok = false;
     }
@@ -707,7 +827,8 @@ function modifyExistingList(
       );
       ok = false;
     }
-    const hasRetitle = Object.hasOwn(item, 'retitle_to');
+    // CT-06zzzzzi: a support entry's retitle_to is refused above.
+    const hasRetitle = !support && Object.hasOwn(item, 'retitle_to');
     const retitle = item['retitle_to'];
     if (hasRetitle) {
       if (typeof retitle !== 'string' || retitle.trim() === '') {
@@ -800,16 +921,41 @@ function modifyExistingList(
       }
     }
     if (!ok) return;
+    if (support) {
+      // CT-06zzzzzi (D10-1662 ①): at most one file-level support entry per file.
+      if (seenSupport.has(file as string)) {
+        problems.push(
+          `${at}: "${file as string}" has a second file-level support entry (scope: support): a file has at most one (CT-06zzzzzi / D10-1662)`,
+        );
+        return;
+      }
+      seenSupport.add(file as string);
+      const entry: ModifyExistingSupportDeclaration = {
+        file: file as string,
+        scope: 'support',
+        reason: reason as ModifyExistingSupportDeclaration['reason'],
+        ruling: ruling as string,
+        note: note as string,
+      };
+      if (reason === 'rule_change') entry.br = [...(br as string[])];
+      if (reason === 'ruling_correction') {
+        entry.overturned = overturned as string;
+        entry.basis = basis as string;
+      }
+      out.push(entry);
+      indexes.push(index);
+      return;
+    }
     const key = `${file as string}\u0000${test as string}`;
     if (seen.has(key)) {
       problems.push(`${at}: "${file as string} > ${test as string}" is declared twice`);
       return;
     }
     seen.add(key);
-    const entry: ModifyExistingDeclaration = {
+    const entry: ModifyExistingBlockDeclaration = {
       file: file as string,
       test: test as string,
-      reason: reason as ModifyExistingDeclaration['reason'],
+      reason: reason as ModifyExistingBlockDeclaration['reason'],
       ruling: ruling as string,
       note: note as string,
     };
@@ -824,11 +970,13 @@ function modifyExistingList(
   });
   // CT-06zzzzr: in one file a new name is never another entry's test nor another entry's new name
   // (a swap, a merge or a rename onto a declared test would make the blocks ambiguous).
+  // CT-06zzzzzi: support entries name no test and never rename one.
   out.forEach((entry, k) => {
-    if (entry.retitle_to === undefined) return;
+    if (isSupportEntry(entry) || entry.retitle_to === undefined) return;
     const clash = out.find(
-      (other, j) =>
+      (other, j): other is ModifyExistingBlockDeclaration =>
         j !== k &&
+        !isSupportEntry(other) &&
         other.file === entry.file &&
         (other.test === entry.retitle_to || other.retitle_to === entry.retitle_to),
     );
@@ -1143,6 +1291,7 @@ export function parseTaskFile(text: string, fileName: string): TaskFile {
     : [];
   // CT-06zzzg (D10-701): modify_existing shares RED_EXEMPT_MAX with red_exempt; a test is either
   // an unchanged declared block (red_exempt, red_exempt_rows) or a changed one (modify_existing).
+  // CT-06zzzzzi (D10-1662 ⑤): file-level support entries are counted with the block entries.
   if (Object.hasOwn(doc, 'modify_existing') && Array.isArray(doc['modify_existing'])) {
     const total =
       (doc['modify_existing'] as unknown[]).length +
@@ -1153,7 +1302,8 @@ export function parseTaskFile(text: string, fileName: string): TaskFile {
       );
     }
   }
-  for (const entry of modifyExisting) {
+  // CT-06zzzzzi: a support entry names no test, so it never clashes with an exemption.
+  for (const entry of blockEntries(modifyExisting)) {
     for (const [section, list] of [
       ['red_exempt', redExempt],
       ['red_exempt_rows', redExemptRows],

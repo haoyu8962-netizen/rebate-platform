@@ -133,6 +133,21 @@
 //              head (compareModifiedBlocks' headNames), here, after spec_commit and for the
 //              expected list alike; its record repeats `retitle_to` exactly as the ledger has it
 //              (an entry without one: a record with one is refused), `test` staying the old name.
+//              A file-level support entry (CT-06zzzzzi, D10-1662: no `test`, `scope: support`; a
+//              frozen shared fixture or top-level helper under test/spec, test/properties or
+//              test/replay) needs the same label. After spec_commit its file's changes outside the
+//              it / test blocks are let through, unless a changed line there (removed at
+//              spec_commit, added at the head) holds an assertion call (test-blocks.ts
+//              ASSERTION_CALL, or a line inside an assertion expression): refused, naming the file
+//              and the lines; a block added, removed, moved, or changed without its own block
+//              entry is refused as before (a file may carry block entries besides; each covers
+//              its block). A file without a support entry is judged exactly as before. Its record
+//              is { file, scope: 'support', reason, before_sha256, after_sha256, reverse_red,
+//              br? / overturned? / basis? } (br / overturned / basis as a block record of the
+//              same reason): the sha256 of the file at the merge base and at the head (lower-case
+//              hex, exact), and the full names of at least one test that turns red when the file
+//              is put back to the base on the new implementation; the record of a file unchanged
+//              at the head is refused as redundant.
 //              CI records (`mode: ci`) in the evidence file are refused (CR2-06): nothing a copied
 //              record says can be checked against a run; the CI checks count by themselves.
 //              Owner waiver (owner decision 2026-10-02, ops/approvals.yaml id 12): on a branch
@@ -151,19 +166,32 @@
 // TODO(规划/11 §3.2): `run_attempt` > 1 on funds paths (不许重跑到绿) needs the Actions API and
 //   a remote — blocked on GitHub remote.
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { git, tryGit } from '../lib/git.ts';
 import type { Change } from '../lib/git.ts';
 import { loadLegacyTasks } from '../lib/legacy-tasks.ts';
-import { MONEY_PATHS, parseTaskFile } from '../lib/task-file.ts';
+import {
+  MONEY_PATHS,
+  blockEntries,
+  isSupportEntry,
+  parseTaskFile,
+  supportEntries,
+} from '../lib/task-file.ts';
 import type {
   ExpectedValueDeclaration,
+  ModifyExistingBlockDeclaration,
   ModifyExistingDeclaration,
+  ModifyExistingSupportDeclaration,
   RenameDeclaration,
   TaskFile,
 } from '../lib/task-file.ts';
-import { compareModifiedBlocks } from '../guard/lib/test-blocks.ts';
+import {
+  compareModifiedBlocks,
+  compareSupportFile,
+  supportLinesText,
+} from '../guard/lib/test-blocks.ts';
 import type { ModifiedComparison } from '../guard/lib/test-blocks.ts';
 import {
   expectedRuleTests,
@@ -534,9 +562,11 @@ function modifiedHitProblem(
   hit: { path: string; status: string },
   modify: ModifyRequirement | undefined,
 ): string | null {
-  const declared = (modify?.entries ?? []).filter((e) => e.file === hit.path);
+  const declared = blockEntries(modify?.entries ?? []).filter((e) => e.file === hit.path);
   const names = declared.map((e) => e.test);
-  if (modify === undefined || names.length === 0) return '';
+  // CT-06zzzzzi (D10-1662): a file-level support entry of the file.
+  const support = supportEntries(modify?.entries ?? []).find((e) => e.file === hit.path);
+  if (modify === undefined || (names.length === 0 && support === undefined)) return '';
   if (modifyApprovalProblem(modify, head) !== null) {
     return 'declared in modify_existing, but without the owner approval label';
   }
@@ -544,6 +574,7 @@ function modifiedHitProblem(
   const before = showOrNull(prDir, from, hit.path);
   const after = showOrNull(prDir, head, hit.path);
   if (before === null || after === null) return 'declared in modify_existing, but unreadable';
+  if (support !== undefined) return supportHitProblem(before, after, declared);
   // CT-06zzzzr (D10-1278 ②): a renamed entry's block is its retitle_to at the head.
   const compared = compareModifiedBlocks(
     before,
@@ -563,8 +594,156 @@ function modifiedHitProblem(
 }
 
 /**
+ * Why the spec_commit → head change of a file with a file-level support entry (CT-06zzzzzi,
+ * D10-1662 ①③) is not let through, or null when it is: its block entries (`declared`) locate
+ * their blocks as before (compareModifiedBlocks), no block is added, removed or moved, every
+ * changed block has its block entry, and no changed line outside the blocks (removed at
+ * spec_commit, added at the head) holds an assertion call (compareSupportFile). The differences
+ * outside the blocks are otherwise let through: that is what the entry declares.
+ */
+function supportHitProblem(
+  before: string,
+  after: string,
+  declared: readonly ModifyExistingBlockDeclaration[],
+): string | null {
+  const names = declared.map((e) => e.test);
+  const retitles = declared.map((e) => e.retitle_to);
+  if (names.length > 0) {
+    const compared = compareModifiedBlocks(before, after, names, retitles);
+    if (!compared.ok) return `declared in modify_existing, but ${compared.reason}`;
+    const missing = compared.blocks.find((b) => !b.found);
+    if (missing !== undefined && !missing.found) {
+      return `declared in modify_existing, but "${missing.test}": ${missing.reason}`;
+    }
+  }
+  const support = compareSupportFile(before, after, names, retitles);
+  if (!support.ok) return `declared in modify_existing (scope: support), but ${support.reason}`;
+  const why = [...support.blocks];
+  if (support.assertions.length > 0) {
+    why.push(
+      `an assertion line changed outside the test blocks (a file-level support entry, CT-06zzzzzi / D10-1662, covers data and calls only; an assertion changes inside a block declared by its own block entry): ${supportLinesText(support.assertions)}`,
+    );
+  }
+  return why.length === 0
+    ? null
+    : `declared in modify_existing (scope: support), but ${why.join('; ')}`;
+}
+
+/** The sha256 of a text as git shows it, lower-case hex (CT-06zzzzzi: support records). */
+function sha256Hex(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+/** A lower-case sha256 in hex (CT-06zzzzzi). */
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+/**
+ * Problems of the record of a file-level support entry (CT-06zzzzzi, D10-1662 ④): `{ file, scope:
+ * 'support', reason, before_sha256, after_sha256, reverse_red, note? }`, with br (rule_change) or
+ * overturned / basis (ruling_correction) as a block record of the same reason. before_sha256 is
+ * the file at the merge base, after_sha256 the file at the head (sha256 of the content as git
+ * shows it, lower-case hex, compared exactly; a file that is not valid UTF-8 cannot match),
+ * reverse_red the full names of at least one test that turns red when the file is put back to the
+ * base on the new implementation. A file the same at both ends makes the entry redundant.
+ */
+function supportRecordProblems(
+  record: Record<string, unknown>,
+  entry: ModifyExistingSupportDeclaration,
+  where: string,
+  modify: ModifyRequirement,
+  prDir: string,
+  head: string,
+): string[] {
+  const problems: string[] = [];
+  const at = (field: string, message: string): void => {
+    problems.push(`${field}: ${message}`);
+  };
+  const extra =
+    entry.reason === 'rule_change'
+      ? ['br']
+      : entry.reason === 'ruling_correction'
+        ? ['overturned', 'basis']
+        : [];
+  const allowed = [
+    'file',
+    'scope',
+    'reason',
+    'before_sha256',
+    'after_sha256',
+    'reverse_red',
+    'note',
+    ...extra,
+  ];
+  for (const key of Object.keys(record)) {
+    if (!allowed.includes(key))
+      at(`${where}.${key}`, `unknown field for a support record (${entry.reason})`);
+  }
+  if (record['file'] !== entry.file) at(`${where}.file`, `must be "${entry.file}" (ledger order)`);
+  if (record['scope'] !== 'support') {
+    at(`${where}.scope`, 'must be "support": the ledger entry is a file-level support entry');
+  }
+  if (record['reason'] !== entry.reason) at(`${where}.reason`, `must be "${entry.reason}"`);
+  if (entry.reason === 'rule_change') {
+    const want = entry.br ?? [];
+    const br = record['br'];
+    if (
+      !Array.isArray(br) ||
+      br.length !== want.length ||
+      br.some((id: unknown, k) => id !== want[k])
+    ) {
+      at(
+        `${where}.br`,
+        `must be ${JSON.stringify(want)}, the ledger entry's br character for character and in order`,
+      );
+    }
+  }
+  if (entry.reason === 'ruling_correction') {
+    for (const key of ['overturned', 'basis'] as const) {
+      if (record[key] !== entry[key]) {
+        at(
+          `${where}.${key}`,
+          `must be ${JSON.stringify(entry[key] ?? '')}, the ledger entry's ${key} character for character`,
+        );
+      }
+    }
+  }
+  const before = showOrNull(prDir, modify.base, entry.file);
+  const after = showOrNull(prDir, head, entry.file);
+  if (before === null) at(where, 'the file does not exist at the merge base');
+  if (after === null)
+    at(where, 'the file is gone at the head (a removal is not a change of a frozen file)');
+  if (before !== null && after !== null && before === after) {
+    at(where, "the file is the merge base's: the entry is redundant");
+  }
+  for (const [key, text, side] of [
+    ['before_sha256', before, 'the merge base'],
+    ['after_sha256', after, 'the head'],
+  ] as const) {
+    const value = record[key];
+    if (typeof value !== 'string' || !SHA256_HEX.test(value)) {
+      at(`${where}.${key}`, `must be the sha256 of the file at ${side}, 64 lower-case hex digits`);
+    } else if (text !== null && value !== sha256Hex(text)) {
+      at(`${where}.${key}`, `is not the sha256 of the file at ${side}`);
+    }
+  }
+  const reverse = record['reverse_red'];
+  if (
+    !Array.isArray(reverse) ||
+    reverse.length === 0 ||
+    reverse.some((name: unknown) => typeof name !== 'string' || name.trim() === '')
+  ) {
+    at(
+      `${where}.reverse_red`,
+      'lists the full name of at least one test (non-empty strings) that turns red on the new implementation when the file is put back to the merge base',
+    );
+  }
+  return problems;
+}
+
+/**
  * Problems of the evidence's `modify_existing` list against the ledger entries (CT-06zzzg): one
  * record per entry in ledger order, its blocks the actual ones of the merge base and the head.
+ * CT-06zzzzzi (D10-1662): a file-level support entry's record is judged by supportRecordProblems.
  */
 function modifyRecordProblems(
   value: unknown,
@@ -590,7 +769,7 @@ function modifyRecordProblems(
   }
   const cache = new Map<string, ModifiedComparison | string>();
   const actual = (file: string): ModifiedComparison | string => {
-    const declared = modify.entries.filter((e) => e.file === file);
+    const declared = blockEntries(modify.entries).filter((e) => e.file === file);
     let got = cache.get(file);
     if (got === undefined) {
       const before = showOrNull(prDir, modify.base, file);
@@ -616,6 +795,11 @@ function modifyRecordProblems(
     const record: unknown = value[i];
     if (!isRecord(record)) {
       if (i < value.length) at(where, 'must be an object');
+      return;
+    }
+    // CT-06zzzzzi (D10-1662 ④): a file-level support entry has its own record.
+    if (isSupportEntry(entry)) {
+      problems.push(...supportRecordProblems(record, entry, where, modify, prDir, head));
       return;
     }
     // CT-06zzzzw (D10-1299 ③): a rule_change record has the reverse check in `mutation`, as

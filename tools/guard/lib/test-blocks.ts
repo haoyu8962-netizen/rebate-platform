@@ -2568,6 +2568,240 @@ export function compareModifiedBlocks(
   return { ok: true, blocks, outside };
 }
 
+// A file-level support entry of modify_existing (CT-06zzzzzi; orchestrator ruling D10-1662, after
+// B1-02zzzb, which adds a step-up summary to about 18 frozen shared fixtures and top-level
+// helpers that have no it block): the entry covers the file's changes outside its it / test
+// blocks, and nothing else. compareSupportFile tells, for the base and the head of such a file:
+// - `blocks`: what is wrong with the blocks — a block added or removed, a block moved (its
+//   describes, the depth of brackets around it or the token right before it differ: into or out
+//   of a describe, function, loop or branch, `if (…) it(…)`), or a block that is not declared by a block entry (`names`, `headNames` as
+//   compareModifiedBlocks takes them) and whose text differs from the base. The support entry
+//   never lets a changed block through; its block entry does (compareModifiedBlocks judges it).
+//   Blocks are compared by their describes and text, not by their anchor in the shared rest
+//   (that moves with every change of the code before them).
+// - `assertions`: the changed lines outside the blocks (a line diff of the whole file; a line
+//   counts when any of its non-blank characters lies outside every block) that hold an assertion
+//   call: ASSERTION_CALL or ASSERTION_NAME on the line, or a line inside an assertion expression (from `expect` /
+//   `expectTypeOf` / `assert` through its call and chained members and calls, so an argument on a
+//   line of its own counts too). Removed lines are given by their base line number, added lines
+//   by their head line number. A support file changes data and calls only; an assertion changes
+//   in a block, declared block by block.
+// - `changed`: the file differs from the base at all.
+// A file the lexer cannot read, or a diff of more than OUTSIDE_EDITS_MAX lines, is not judged
+// (`ok: false`): the entry does not apply.
+
+/**
+ * An assertion call on a line (CT-06zzzzzi, D10-1662 ③): `expect(`, `expectTypeOf(`, `assert(`,
+ * `assert.<name>(`, `expect.<name>(` (soft / poll / assertions …), any `.to<Upper…>(` matcher,
+ * `.rejects`, `.resolves`; blanks allowed between the parts. Comments and strings are not told
+ * apart: such a line is refused too (strict on purpose).
+ */
+export const ASSERTION_CALL =
+  /\bexpect\s*\(|\bexpectTypeOf\s*\(|\bassert\s*\(|\b(?:assert|expect)\s*\.\s*[A-Za-z_$][\w$]*\s*\(|\.\s*to[A-Z][\w$]*\s*\(|\.\s*(?:rejects|resolves)\b/;
+
+/**
+ * The assertion functions named at all (CT-06zzzzzi): a changed line outside the blocks that
+ * names `expect`, `expectTypeOf` or `assert` as a word (an import of them, a local `expect` that
+ * shadows Vitest's, one passed on as a value) is refused like an assertion call: it changes what
+ * the file's assertions do. `expected`, `asserted` and the like are other words.
+ */
+export const ASSERTION_NAME = /(?<![\w$])(?:expect|expectTypeOf|assert)(?![\w$])/;
+
+/** A changed line outside the blocks that holds an assertion (compareSupportFile). */
+export type SupportLine = { side: 'base' | 'head'; line: number; text: string };
+
+export type SupportComparison =
+  | { ok: false; reason: string }
+  | {
+      ok: true;
+      /** The file differs from the base. */
+      changed: boolean;
+      /** What is wrong with the test blocks (see above); empty when nothing. */
+      blocks: string[];
+      /** Changed lines outside the blocks holding an assertion, base lines first. */
+      assertions: SupportLine[];
+    };
+
+type SupportView = {
+  lines: string[];
+  /** Per line (0-based): a non-blank character of it lies outside every test block. */
+  outside: boolean[];
+  /** 0-based lines inside an assertion expression. */
+  asserting: Set<number>;
+  blocks: {
+    pattern: RegExp;
+    title: string;
+    describes: string;
+    text: string;
+    depth: number;
+    /** What stands before the block: `stmt` after `;`, `{`, `}` or at the start, else the token. */
+    lead: string;
+  }[];
+};
+
+const ASSERTION_HEADS = new Set(['expect', 'expectTypeOf', 'assert']);
+
+function supportView(source: string): SupportView {
+  const { tokens, match, tests } = scanTests(source);
+  const parsed = parseTestFile(source);
+  const lines = source.split('\n');
+  const starts: number[] = [];
+  let offset = 0;
+  for (const l of lines) {
+    starts.push(offset);
+    offset += l.length + 1;
+  }
+  const lineAt = (pos: number): number => {
+    let lo = 0;
+    let hi = starts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if ((starts[mid] as number) <= pos) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
+  const begin = (k: number): number => (tokens[k] as Token).start ?? 0;
+  const finish = (k: number): number => begin(k) + (tokens[k] as Token).text.length;
+  // Characters inside a test block.
+  const inBlock = new Uint8Array(source.length);
+  for (const c of tests) inBlock.fill(1, begin(c.start), finish(c.end));
+  const outside = lines.map((l, i) => {
+    const from = starts[i] as number;
+    for (let p = 0; p < l.length; p += 1) {
+      if (!/\s/.test(l[p] as string) && inBlock[from + p] !== 1) return true;
+    }
+    return false;
+  });
+  // Assertion expressions: the head, its call, then chained members and calls.
+  const asserting = new Set<number>();
+  tokens.forEach((t, i) => {
+    if (t.kind !== 'id' || !ASSERTION_HEADS.has(t.text)) return;
+    const next = tokens[i + 1]?.text;
+    if (next !== '(' && next !== '.' && next !== '?.') return;
+    let last = i;
+    let j = i + 1;
+    for (;;) {
+      const u = tokens[j];
+      if (u === undefined) break;
+      if (u.text === '(' && u.kind === 'punct') {
+        last = match[j] as number;
+        j = last + 1;
+      } else if ((u.text === '.' || u.text === '?.') && tokens[j + 1]?.kind === 'id') {
+        last = j + 1;
+        j += 2;
+      } else break;
+    }
+    const to = lineAt(Math.max(begin(i), finish(last) - 1));
+    for (let l = lineAt(begin(i)); l <= to; l += 1) asserting.add(l);
+  });
+  // Bracket depth before each test block (a block moved into a function, loop or branch).
+  const depthAt = new Int32Array(tokens.length + 1);
+  let depth = 0;
+  tokens.forEach((t, k) => {
+    if (t.kind === 'punct' && (t.text === ')' || t.text === ']' || t.text === '}')) depth -= 1;
+    depthAt[k] = depth;
+    if (t.kind === 'punct' && (t.text === '(' || t.text === '[' || t.text === '{')) depth += 1;
+  });
+  const blocks = parsed.blocks.map((b, i) => {
+    const parts = b.key.split('\u0000');
+    const start = (tests[i] as Call).start;
+    const prev = tokens[start - 1];
+    const lead =
+      prev === undefined || (prev.kind === 'punct' && [';', '{', '}'].includes(prev.text))
+        ? 'stmt'
+        : prev.kind === 'id' || prev.kind === 'punct'
+          ? prev.text
+          : prev.kind;
+    return {
+      pattern: b.pattern,
+      title: b.title,
+      describes: parts[1] ?? '',
+      text: parts.slice(2).join('\u0000'),
+      depth: depthAt[start] as number,
+      lead,
+    };
+  });
+  return { lines, outside, asserting, blocks };
+}
+
+/** See the comment above ASSERTION_CALL (CT-06zzzzzi, D10-1662). */
+export function compareSupportFile(
+  base: string,
+  head: string,
+  names: readonly string[] = [],
+  headNames?: readonly (string | undefined)[],
+): SupportComparison {
+  let before: SupportView;
+  let after: SupportView;
+  try {
+    before = supportView(base);
+  } catch (err) {
+    return { ok: false, reason: `the file at the base cannot be read (${String(err)})` };
+  }
+  try {
+    after = supportView(head);
+  } catch (err) {
+    return { ok: false, reason: `the file at the head cannot be read (${String(err)})` };
+  }
+  const aligned = alignUnits(before.lines, after.lines, OUTSIDE_EDITS_MAX);
+  if (aligned === null) {
+    return {
+      ok: false,
+      reason: `more than ${OUTSIDE_EDITS_MAX} lines changed: too many to judge line by line`,
+    };
+  }
+  const blocks: string[] = [];
+  if (before.blocks.length !== after.blocks.length) {
+    blocks.push(
+      `the file has ${after.blocks.length} test block(s), at the base ${before.blocks.length}: a test was added or removed (a file-level support entry covers only the code outside the test blocks)`,
+    );
+  } else {
+    after.blocks.forEach((y, i) => {
+      const x = before.blocks[i] as SupportView['blocks'][number];
+      if (x.describes !== y.describes || x.depth !== y.depth || x.lead !== y.lead) {
+        blocks.push(
+          `test block ${i + 1} ("${y.title}") moved (its describes, the brackets around it or what stands right before it differ from the base: into or out of a describe, function, loop or branch)`,
+        );
+        return;
+      }
+      const declared = names.some(
+        (name, k) => x.pattern.test(name) && y.pattern.test(headNames?.[k] ?? name),
+      );
+      if (!declared && x.text !== y.text) {
+        blocks.push(
+          `test block ${i + 1} ("${y.title}") is not declared and differs from the base (a file-level support entry never covers a changed block: declare it with a block entry)`,
+        );
+      }
+    });
+  }
+  const { matchB } = aligned;
+  const kept = new Set<number>();
+  for (const i of matchB) if (i >= 0) kept.add(i);
+  const assertions: SupportLine[] = [];
+  const hit = (view: SupportView, l: number): boolean =>
+    view.outside[l] === true &&
+    (ASSERTION_CALL.test(view.lines[l] as string) ||
+      ASSERTION_NAME.test(view.lines[l] as string) ||
+      view.asserting.has(l));
+  before.lines.forEach((text, l) => {
+    if (!kept.has(l) && hit(before, l)) assertions.push({ side: 'base', line: l + 1, text });
+  });
+  matchB.forEach((i, l) => {
+    if (i < 0 && hit(after, l)) {
+      assertions.push({ side: 'head', line: l + 1, text: after.lines[l] as string });
+    }
+  });
+  return { ok: true, changed: base !== head, blocks, assertions };
+}
+
+/** "base line 26: `…`; head line 20: `…`" for a refusal (CT-06zzzzzi). */
+export function supportLinesText(lines: readonly SupportLine[]): string {
+  return lines
+    .map((l) => `${l.side} line ${l.line}: \`${l.text.trim().slice(0, 120)}\``)
+    .join('; ');
+}
+
 /**
  * Whether a report test (its full name) is exempt from the red requirement: exactly one block's
  * pattern matches it and that block is unchanged.
