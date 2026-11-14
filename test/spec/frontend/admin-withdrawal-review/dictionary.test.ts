@@ -97,7 +97,9 @@ it(
         within(area.parentElement).queryAllByRole('radio').length === 1
       )
         area = area.parentElement;
-      expect(area.textContent?.replace(/\s+/g, '')).toContain('风险嫌疑');
+      expect(area.textContent?.replace(/\s+/g, '')).toBe(
+        '风险嫌疑（RISK_SUSPECT）用户看到：风险嫌疑',
+      );
       expect(modal.textContent).not.toContain(REASONS[0].text);
       expect(modal.textContent).not.toContain('字典试验甲：请联系客服核实账户');
       expect(server.writes()).toEqual([]);
