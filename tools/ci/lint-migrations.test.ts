@@ -193,6 +193,8 @@ it('classifies every table of db/schema.sql: the funds and attribution tables an
     'links',
     'link_logs',
     'link_logs_default',
+    // CT-13m (D10-1648): BR-ATTR-14 attribution evidence (link_* prefix).
+    'link_log_evidence',
     'link_open_attempts',
     'processed_events',
     'idempotency_keys',

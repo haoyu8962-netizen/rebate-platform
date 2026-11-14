@@ -60,6 +60,77 @@ CREATE TYPE pgboss.job_state AS ENUM (
 
 
 --
+-- Name: copy_referenced_link_logs(text, timestamp with time zone, timestamp with time zone); Type: FUNCTION; Schema: app; Owner: -
+--
+
+CREATE FUNCTION app.copy_referenced_link_logs(p_partition text, p_before timestamp with time zone, p_copied_at timestamp with time zone) RETURNS bigint
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    SET lock_timeout TO '5s'
+    SET "DateStyle" TO 'ISO, YMD'
+    SET "TimeZone" TO 'UTC'
+    AS $_$
+DECLARE
+  v_copied bigint;
+BEGIN
+  IF p_partition IS NULL OR p_before IS NULL OR p_copied_at IS NULL THEN
+    RAISE EXCEPTION 'copy_referenced_link_logs: p_partition, p_before and p_copied_at are required'
+      USING ERRCODE = 'null_value_not_allowed';
+  END IF;
+
+  IF NOT isfinite(p_copied_at) THEN
+    RAISE EXCEPTION 'copy_referenced_link_logs: p_copied_at must be finite'
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+
+  -- Only a direct child of app.link_logs, never another table.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_inherits i
+    JOIN pg_class c ON c.oid = i.inhrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    JOIN pg_class pc ON pc.oid = i.inhparent
+    JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+    WHERE pn.nspname = 'app' AND pc.relname = 'link_logs'
+      AND n.nspname = 'app' AND c.relname = p_partition AND c.relkind = 'r'
+  ) THEN
+    RAISE EXCEPTION 'copy_referenced_link_logs: app.% is not a partition of app.link_logs', p_partition
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+
+  -- A plain INSERT … ON CONFLICT: an evidence row of the same id that an uncommitted purge is
+  -- deleting is waited for (lock_timeout), not skipped, so the record cannot be lost.
+  EXECUTE format(
+    $sql$
+      INSERT INTO app.link_log_evidence (
+        id, app_id, link_id, event, user_id, opener_user_id, platform, product_key, raw_item_id,
+        shop_id, scene, pid_scene, spm, pid, relation_id, client, cache_hit, expired,
+        quoted_price_fen, no_rebate, no_rebate_reason, agent_session_id, agent_message_id,
+        prompt_version, model, result_code, latency_ms, created_at, copied_at)
+      SELECT l.id, l.app_id, l.link_id, l.event, l.user_id, l.opener_user_id, l.platform,
+             l.product_key, l.raw_item_id, l.shop_id, l.scene, l.pid_scene, l.spm, l.pid,
+             l.relation_id, l.client, l.cache_hit, l.expired, l.quoted_price_fen, l.no_rebate,
+             l.no_rebate_reason, l.agent_session_id, l.agent_message_id, l.prompt_version, l.model,
+             l.result_code, l.latency_ms, l.created_at, $2
+      FROM app.%I l
+      WHERE l.created_at < $1
+        AND l.id IN (
+          SELECT r.id
+          FROM app.claim_items ci
+          CROSS JOIN LATERAL unnest(ci.evidence_link_log_ids) AS r(id)
+        )
+      ON CONFLICT (id) DO NOTHING
+    $sql$,
+    p_partition
+  ) USING p_before, p_copied_at;
+  GET DIAGNOSTICS v_copied = ROW_COUNT;
+
+  RETURN v_copied;
+END
+$_$;
+
+
+--
 -- Name: delete_expired_agent_traces(timestamp with time zone, integer, integer); Type: FUNCTION; Schema: app; Owner: -
 --
 
@@ -782,6 +853,11 @@ BEGIN
     IF NOT isfinite(v_bounds[2]::timestamptz) OR v_bounds[2]::timestamptz > v_cutoff THEN
       CONTINUE;
     END IF;
+
+    -- CT-13m (BR-ATTR-14): copy the rows referenced by claim items into app.link_log_evidence in
+    -- this transaction, under the parent lock taken above (references committed while this call
+    -- waited for it are seen). A failing copy raises: nothing is dropped and nothing is copied.
+    PERFORM app.copy_referenced_link_logs(v_partition.name, v_bounds[2]::timestamptz, p_now);
 
     -- created_at is the partition key: an upper bound <= cutoff guarantees that
     -- every row is strictly older than cutoff, without scanning or deleting rows.
@@ -1641,6 +1717,57 @@ BEGIN
   -- DEFAULT partition only: day partitions are removed whole by the drop function, and
   -- app.event_dedup has its own cleanup. Waits (ensure's DEFAULT scan) are bounded by 5s.
   DELETE FROM ONLY app.events_default WHERE server_at < v_cutoff;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  RETURN v_deleted;
+END
+$$;
+
+
+--
+-- Name: purge_expired_link_log_evidence(timestamp with time zone); Type: FUNCTION; Schema: app; Owner: -
+--
+
+CREATE FUNCTION app.purge_expired_link_log_evidence(p_now timestamp with time zone) RETURNS bigint
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    SET lock_timeout TO '5s'
+    SET "DateStyle" TO 'ISO, YMD'
+    SET "TimeZone" TO 'UTC'
+    AS $$
+DECLARE
+  v_cutoff  timestamptz;
+  v_deleted bigint;
+BEGIN
+  IF p_now IS NULL THEN
+    RAISE EXCEPTION 'purge_expired_link_log_evidence: p_now is required'
+      USING ERRCODE = 'null_value_not_allowed';
+  END IF;
+
+  IF NOT isfinite(p_now) THEN
+    RAISE EXCEPTION 'purge_expired_link_log_evidence: p_now must be finite'
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+
+  -- BR-ID-30 ②: 180 days after the ticket closed, counted from midnight of the supplied +08:00
+  -- calendar day (BR-ID-30 正文). Fixed UTC+08:00, never the session TimeZone.
+  v_cutoff := (((p_now AT TIME ZONE INTERVAL '8 hours')::date - 180)::timestamp
+    AT TIME ZONE INTERVAL '8 hours');
+
+  -- An evidence row stays while some claim item that references it is undecided or was decided at
+  -- or after the cutoff; every other row goes, including rows no claim item references any more
+  -- (D10-1625 补一). One pass over claim_items, then an anti-join on the evidence key.
+  DELETE FROM app.link_log_evidence e
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM (
+      SELECT r.id
+      FROM app.claim_items ci
+      CROSS JOIN LATERAL unnest(ci.evidence_link_log_ids) AS r(id)
+      WHERE ci.decided_at IS NULL OR ci.decided_at >= v_cutoff
+    ) AS kept
+    WHERE kept.id = e.id
+  );
   GET DIAGNOSTICS v_deleted = ROW_COUNT;
 
   RETURN v_deleted;
@@ -4159,6 +4286,43 @@ ALTER TABLE app.level_change_logs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTI
     NO MINVALUE
     NO MAXVALUE
     CACHE 1
+);
+
+
+--
+-- Name: link_log_evidence; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.link_log_evidence (
+    id bigint NOT NULL,
+    app_id text NOT NULL,
+    link_id uuid,
+    event text NOT NULL,
+    user_id uuid,
+    opener_user_id uuid,
+    platform text,
+    product_key text,
+    raw_item_id text,
+    shop_id text,
+    scene text,
+    pid_scene text,
+    spm text,
+    pid text,
+    relation_id text,
+    client text,
+    cache_hit boolean NOT NULL,
+    expired boolean NOT NULL,
+    quoted_price_fen bigint,
+    no_rebate boolean NOT NULL,
+    no_rebate_reason text,
+    agent_session_id uuid,
+    agent_message_id uuid,
+    prompt_version text,
+    model text,
+    result_code integer NOT NULL,
+    latency_ms integer,
+    created_at timestamp with time zone NOT NULL,
+    copied_at timestamp with time zone NOT NULL
 );
 
 
@@ -7936,6 +8100,14 @@ ALTER TABLE ONLY app.ledger_vouchers
 
 ALTER TABLE ONLY app.level_change_logs
     ADD CONSTRAINT level_change_logs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: link_log_evidence link_log_evidence_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.link_log_evidence
+    ADD CONSTRAINT link_log_evidence_pkey PRIMARY KEY (id);
 
 
 --
@@ -13040,6 +13212,14 @@ GRANT USAGE ON SCHEMA pgboss TO couli_payout;
 
 
 --
+-- Name: FUNCTION copy_referenced_link_logs(p_partition text, p_before timestamp with time zone, p_copied_at timestamp with time zone); Type: ACL; Schema: app; Owner: -
+--
+
+REVOKE ALL ON FUNCTION app.copy_referenced_link_logs(p_partition text, p_before timestamp with time zone, p_copied_at timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION app.copy_referenced_link_logs(p_partition text, p_before timestamp with time zone, p_copied_at timestamp with time zone) TO couli_maint;
+
+
+--
 -- Name: FUNCTION delete_expired_agent_traces(p_now timestamp with time zone, p_days integer, p_batch_size integer); Type: ACL; Schema: app; Owner: -
 --
 
@@ -13202,6 +13382,14 @@ GRANT ALL ON FUNCTION app.purge_expired_event_dedup(p_now timestamp with time zo
 
 REVOKE ALL ON FUNCTION app.purge_expired_events_default(p_now timestamp with time zone) FROM PUBLIC;
 GRANT ALL ON FUNCTION app.purge_expired_events_default(p_now timestamp with time zone) TO couli_maint;
+
+
+--
+-- Name: FUNCTION purge_expired_link_log_evidence(p_now timestamp with time zone); Type: ACL; Schema: app; Owner: -
+--
+
+REVOKE ALL ON FUNCTION app.purge_expired_link_log_evidence(p_now timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION app.purge_expired_link_log_evidence(p_now timestamp with time zone) TO couli_maint;
 
 
 --
@@ -15709,6 +15897,15 @@ GRANT SELECT ON TABLE app.ledger_vouchers TO couli_readonly;
 
 GRANT SELECT,INSERT ON TABLE app.level_change_logs TO couli_app;
 GRANT SELECT ON TABLE app.level_change_logs TO couli_readonly;
+
+
+--
+-- Name: TABLE link_log_evidence; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT ON TABLE app.link_log_evidence TO couli_app;
+GRANT SELECT ON TABLE app.link_log_evidence TO couli_readonly;
+GRANT SELECT ON TABLE app.link_log_evidence TO couli_maint;
 
 
 --

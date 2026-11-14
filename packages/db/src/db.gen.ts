@@ -927,6 +927,38 @@ export interface LevelChangeLogs {
   user_id: string;
 }
 
+export interface LinkLogEvidence {
+  agent_message_id: string | null;
+  agent_session_id: string | null;
+  app_id: string;
+  cache_hit: boolean;
+  client: string | null;
+  copied_at: Timestamp;
+  created_at: Timestamp;
+  event: string;
+  expired: boolean;
+  id: ColumnType<bigint, bigint, bigint>;
+  latency_ms: number | null;
+  link_id: string | null;
+  model: string | null;
+  no_rebate: boolean;
+  no_rebate_reason: string | null;
+  opener_user_id: string | null;
+  pid: string | null;
+  pid_scene: string | null;
+  platform: string | null;
+  product_key: string | null;
+  prompt_version: string | null;
+  quoted_price_fen: ColumnType<bigint, bigint, bigint> | null;
+  raw_item_id: string | null;
+  relation_id: string | null;
+  result_code: number;
+  scene: string | null;
+  shop_id: string | null;
+  spm: string | null;
+  user_id: string | null;
+}
+
 export interface LinkLogs {
   agent_message_id: string | null;
   agent_session_id: string | null;
@@ -2431,6 +2463,7 @@ export interface DB {
   ledger_entries: LedgerEntries;
   ledger_vouchers: LedgerVouchers;
   level_change_logs: LevelChangeLogs;
+  link_log_evidence: LinkLogEvidence;
   link_logs: LinkLogs;
   link_open_attempts: LinkOpenAttempts;
   links: Links;

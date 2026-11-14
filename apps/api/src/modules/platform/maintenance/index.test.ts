@@ -86,7 +86,7 @@ async function fixture(instant = '2026-11-20T03:04:05Z', dayPartitions = false) 
         /drop_expired_(month|day|union_raw_payload|events_day)_partitions/.test(query.sql)
       ) {
         rows = [{ partitions: [] }];
-      } else if (/purge_expired_(events_default|event_dedup)/.test(query.sql)) {
+      } else if (/purge_expired_(events_default|event_dedup|link_log_evidence)/.test(query.sql)) {
         rows = [{ deleted: 0n }];
       } else if (query.sql.includes('delete_expired_agent_traces')) {
         rows = AGENT_TRACE_TABLES.map((table_name) => ({ table_name, deleted: 0n }));
@@ -1566,5 +1566,108 @@ it('[AC-CT-13f#5] 第 N 节删除行数 > 0 时各记一行 retention_purged；�
   await expect(g.maintenance.runOnce()).rejects.toBeInstanceOf(RangeError);
   expect(g.logger.error.mock.calls).toEqual([
     [{ table: 'event_dedup', sqlstate: null }, 'events_retention_failed'],
+  ]);
+});
+
+/** Section O (CT-13m): the link_logs evidence purge call. */
+const EVIDENCE_PURGE = 'app.purge_expired_link_log_evidence(';
+
+it('[AC-CT-13m#3] 第 O 节：04:00 起在 link_logs 删日分区之后、打开尝试清理之前调用一次证据清理，用同一 now；0 行不写日志；同日不再调', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  const report = await f.maintenance.runOnce();
+  const order = f.queries.map((q) => q.sql);
+  const purges = f.queries.filter((q) => q.sql.includes(EVIDENCE_PURGE));
+  expect(purges.map((q) => q.parameters)).toEqual([[f.now.mock.results[0]!.value]]);
+  const purgeAt = order.findIndex((sql) => sql.includes(EVIDENCE_PURGE));
+  expect(order.findLastIndex((sql) => sql.includes('drop_expired_day_partitions'))).toBeLessThan(
+    purgeAt,
+  );
+  expect(purgeAt).toBeLessThan(order.findIndex((sql) => sql.includes(OPEN_ATTEMPTS)));
+  expect(f.now).toHaveBeenCalledTimes(1);
+  expect(report).toMatchObject({ failed: 0 });
+  expect(f.logger.info.mock.calls).toEqual([
+    [{ ensured: ALL_ENSURED, dropped: 0, failed: 0 }, 'partition_maintenance_done'],
+  ]);
+
+  f.queries.length = 0;
+  await f.maintenance.runOnce();
+  expect(f.queries.filter((q) => q.sql.includes(EVIDENCE_PURGE))).toEqual([]);
+});
+
+it('[AC-CT-13m#3] 第 O 节：04:00 前、dayPartitions 关闭时都不调用；跨到下一个 +08:00 日的 04:00 再调', async () => {
+  const early = await fixture('2026-10-08T19:59:59.999Z', true);
+  await early.maintenance.runOnce();
+  expect(early.queries.some((q) => q.sql.includes(EVIDENCE_PURGE))).toBe(false);
+
+  const off = await fixture('2026-10-08T20:00:00.000Z', false);
+  await off.maintenance.runOnce();
+  expect(off.queries.some((q) => q.sql.includes(EVIDENCE_PURGE))).toBe(false);
+
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  await f.maintenance.runOnce();
+  f.clock.set('2026-10-09T19:59:59.999Z');
+  await f.maintenance.runOnce();
+  f.clock.set('2026-10-09T20:00:00.000Z');
+  await f.maintenance.runOnce();
+  expect(f.queries.filter((q) => q.sql.includes(EVIDENCE_PURGE)).map((q) => q.parameters)).toEqual([
+    [new Date('2026-10-08T20:00:00.000Z')],
+    [new Date('2026-10-09T20:00:00.000Z')],
+  ]);
+});
+
+it('[AC-CT-13m#3] 第 O 节删除行数 > 0 时记一行 retention_purged（link_log_evidence）', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  f.control.respond = async (query) =>
+    query.sql.includes(EVIDENCE_PURGE) ? [{ deleted: 4n }] : undefined;
+  expect(await f.maintenance.runOnce()).toMatchObject({ failed: 0 });
+  expect(f.logger.info.mock.calls[0]).toEqual([
+    { table: 'link_log_evidence', rows: 4 },
+    'retention_purged',
+  ]);
+});
+
+it('[AC-CT-13m#3] 第 O 节失败：记 retention_purge_failed、计入 failed，其余各节照常跑完，随后以原错误拒绝；同日下一轮重试', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  const failure = { code: '55P03', message: 'private SQL' };
+  let fail = true;
+  f.control.respond = async (query) => {
+    if (query.sql.includes(EVIDENCE_PURGE) && fail) throw failure;
+    return undefined;
+  };
+  await expect(f.maintenance.runOnce()).rejects.toBe(failure);
+  const order = f.queries.map((q) => q.sql);
+  expect(order.some((sql) => sql.includes(OPEN_ATTEMPTS))).toBe(true);
+  expect(order.filter((sql) => EVENTS_CLEANUP.test(sql))).toHaveLength(3);
+  expect(order.at(-1)).toContain('partition_default_rows');
+  expect(f.logger.error.mock.calls).toEqual([
+    [{ table: 'link_log_evidence', sqlstate: '55P03' }, 'retention_purge_failed'],
+  ]);
+  expect(f.logger.info.mock.calls).toEqual([
+    [{ ensured: ALL_ENSURED, dropped: 0, failed: 1 }, 'partition_maintenance_done'],
+  ]);
+  expect(JSON.stringify(f.logger.error.mock.calls)).not.toContain('private');
+
+  fail = false;
+  f.queries.length = 0;
+  expect(await f.maintenance.runOnce()).toMatchObject({ failed: 0 });
+  expect(f.queries.filter((q) => q.sql.includes(EVIDENCE_PURGE))).toHaveLength(1);
+  f.queries.length = 0;
+  await f.maintenance.runOnce();
+  expect(f.queries.filter((q) => q.sql.includes(EVIDENCE_PURGE))).toEqual([]);
+});
+
+it('[AC-CT-13m#3] 第 O 节与第 N 节都失败时以先发生的（第 O 节的）错误拒绝', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  const evidence = { code: '55P03' };
+  const events = { code: '57014' };
+  f.control.respond = async (query) => {
+    if (query.sql.includes(EVIDENCE_PURGE)) throw evidence;
+    if (query.sql.includes('purge_expired_events_default')) throw events;
+    return undefined;
+  };
+  await expect(f.maintenance.runOnce()).rejects.toBe(evidence);
+  expect(f.logger.info.mock.calls.at(-1)).toEqual([
+    { ensured: ALL_ENSURED, dropped: 0, failed: 2 },
+    'partition_maintenance_done',
   ]);
 });
