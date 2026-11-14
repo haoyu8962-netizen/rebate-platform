@@ -39,7 +39,7 @@ export type ResultItem = Schema<'AdminWithdrawalBatchApproveItem'>;
 
 // Independent full-copy expectations, not imports of the implementation's text dictionary.
 export const CONSEQUENCE =
-  '通过后单据进入待执行打款，金额仍冻结，打款另由【执行打款】办理；冻结、余额为负等阻断由服务端判定，被跳过时这里会写明原因。';
+  '通过后单据进入待执行打款，金额仍冻结，打款另由【执行打款】办理；余额为负、受阻等不能通过的单由服务端判定，被跳过时这里会写明原因。';
 export const RESULT_TEXT = {
   approved: '已通过',
   not_found: '未找到该提现单（不存在或不属于本应用），本次未处理',
