@@ -28,6 +28,7 @@ import {
   APPROVE_URL,
   STEP_UP_URL,
   fieldsOf,
+  isSettledRejection,
   money,
   newRequestKey,
   type WithdrawalRow,
@@ -36,21 +37,6 @@ import {
 const t = withdrawalsTexts.batchApprove;
 const review = withdrawalsTexts.review;
 const STEP_UP_REFUSED = 10003;
-const IN_FLIGHT = 40901;
-
-/**
- * 服务端已确定拒绝本次操作（HTTP 4xx 的业务错误，40901 除外）：同键再发只会得到同样的拒绝，
- * 键可以清空。网络错误、40901、5xx 及其他无法判定的失败，结果都未确定，返回 false。
- */
-function isSettledRejection(cause: unknown): boolean {
-  return (
-    cause instanceof AdminApiError &&
-    cause.kind === 'api' &&
-    cause.code !== IN_FLIGHT &&
-    cause.httpStatus >= 400 &&
-    cause.httpStatus < 500
-  );
-}
 
 type ApprovePayload = Schema<'AdminWithdrawalBatchApproveRequest'>;
 type ApproveResult = Schema<'AdminWithdrawalBatchApprove'>;

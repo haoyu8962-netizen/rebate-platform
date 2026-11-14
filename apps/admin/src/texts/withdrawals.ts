@@ -340,7 +340,7 @@ export const withdrawalsTexts = {
   /** 「打款队列」「结果待确认」与打款记录抽屉（规格 admin-payouts.md，只读）。 */
   payouts: {
     readOnlyNotice:
-      '本页只读：执行打款、录入企业支付宝余额、暂停与解除暂停尚未接入；结果待确认的单在提现单详情处置。',
+      '持 payout.execute 时可勾选待执行的单【执行所选】；录入企业支付宝余额、暂停与解除暂停尚未接入；结果待确认的单在提现单详情处置。',
     overviewLoading: '正在读取打款概览…',
     overviewFailed: '打款概览读取失败',
     overviewFailedDescription: '网络错误或服务异常，点【重试】重新读取。',
@@ -452,5 +452,80 @@ export const withdrawalsTexts = {
       subCode: '响应子码',
     },
     attemptsEmpty: '暂无打款记录',
+  },
+  /** 打款队列【执行所选】（F1-08bb；契约 adminCreatePayoutBatch，BR-WDR-11 / 12 / 13）。 */
+  execute: {
+    entry: '执行所选',
+    selected: (count: number, total: string): string => `已选 ${count} 张，合计实付 ${total}`,
+    offPayout: '打款开关已关闭：不能执行打款',
+    offQueue: '打款队列已暂停：不能执行打款',
+    noOverview: '打款概览未读取到：暂不能执行打款，请先重试读取概览',
+    title: (count: number): string => `执行打款确认 · ${count} 张`,
+    resultTitle: (count: number): string => `执行结果 · ${count} 张`,
+    number: '提现单号',
+    user: '用户',
+    net: '实付金额',
+    result: '执行结果',
+    checkTitle: '执行前检查',
+    /** One pre-check item: label, value and whether it holds. */
+    check: (label: string, value: string, met: boolean): string =>
+      `${label}：${value}（${met ? '满足' : '未满足'}）`,
+    payout: '打款开关',
+    payoutOn: '已开启',
+    payoutOff: '已关闭',
+    queue: '队列运行状态',
+    queueRunning: '运行中',
+    queuePaused: '已暂停',
+    balance: (channel: string): string => `${channel}余额 W`,
+    unentered: '未录入',
+    fresh: (w: string, time: string): string => `${w}，取数时间 ${time}`,
+    stale: (w: string, time: string): string => `${w}，取数时间 ${time}，已过期`,
+    level: (channel: string): string => `${channel}水位`,
+    levelValue: (w: string, p: string, level: string): string =>
+      `W ${w}，预计提现 P ${p}，${level}`,
+    noLevel: '无结论',
+    daily: '单日限额余量',
+    dailyValue: (left: string, sum: string): string => `${left}，本次合计 ${sum}`,
+    recheck: (time: string): string =>
+      `以上按打款概览（数据时间 ${time}）预检；提交后服务端会再检查一次，以服务端结果为准。`,
+    consequence:
+      '执行后通过检查的单进入打款中、按单发起转账；未通过的单留在待执行，并在结果里写明原因。',
+    submit: '确认执行',
+    cancel: '取消',
+    close: '关闭',
+    operation: '执行打款',
+    stepUpTarget: (count: number): string => `提现单：${count} 张`,
+    stepUpAgain: '动态码凭证已失效，请重新输入动态码',
+    batch: '新批次号',
+    paying: '已发起打款',
+    noResult: '服务端未返回该单的执行结果，请刷新后核对',
+    left: {
+      not_approved: '单据已不是待执行状态（已被处理或状态已变化），本次未执行',
+      member_blocked: '会员有提现阻断，本次未执行',
+      has_transfer_attempt: '已有转账记录，只能手动成功或驳回，本次未执行',
+      channel_disabled: '该单的打款通道未开通或已暂停，本次未执行',
+      watermark_stale: '所在通道的余额 W 未录入或已过期，本次未执行',
+      watermark_below_forecast: '所在通道的余额 W 低于预计提现 P，本次未执行',
+      watermark_usable_exceeded: '所在通道在途与本批合计超过可用余额，本次未执行',
+    } as Readonly<Record<string, string>>,
+    leftOther: (reason: string): string => `本次未执行：${reason}`,
+    refused: {
+      payout_disabled: (): string => '整批未执行：打款开关已关闭',
+      queue_paused: (): string => '整批未执行：打款队列已暂停',
+      watermark_stale: (channel: string): string =>
+        `整批未执行：${channel}余额 W 未录入或已过期，请录入最新余额后重新提交`,
+      watermark_below_forecast: (channel: string): string =>
+        `整批未执行：${channel}余额 W 低于预计提现 P`,
+      watermark_usable_exceeded: (channel: string): string =>
+        `整批未执行：${channel}在途与本批合计超过可用余额（W × 可用比例），请拆分批次`,
+    } as Readonly<Record<string, (channel: string) => string>>,
+    refusedOther: (reason: string): string => `整批未执行：${reason}`,
+    summary: (paying: number, left: number): string =>
+      `进入打款 ${paying} 张，留在待执行 ${left} 张；队列与概览已刷新。`,
+    forbidden: '无权限执行此操作（需要 payout.execute 权限点）',
+    idsInvalid: '提现单编号有误，请刷新页面后重试',
+    invalid: '提交内容有误，请检查后重试',
+    network: '网络错误，请检查网络后重试；未确认前不会重复提交',
+    failed: '提交失败，请稍后重试',
   },
 } as const;

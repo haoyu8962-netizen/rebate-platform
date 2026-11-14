@@ -4,9 +4,10 @@
 // 打款中 / 待执行各读一个状态并分页），行【详情】进 withdrawals/{id}、【打款记录】开抽屉读该单详情
 // 的 payout_attempts；「结果待确认」——GET /admin/v1/unknown-payouts（adminListUnknownPayouts），
 // 行【处置】进 withdrawals/{id}（处置在详情页办理）。
-// 本页只读：开关、暂停、水位只用文字与 Tag 展示，不放任何开关控件，只发 GET。
-// TODO(规划/11 §7): 【执行所选】、【录入企业支付宝余额】、【暂停队列】/【解除暂停】、【解除通道暂停】
-// — blocked on F1-08bb–bd
+// 开关、暂停、水位只用文字与 Tag 展示，不放任何开关控件。持 payout.execute 时「打款队列」的待执行单
+// 可勾选，批量栏【执行所选】见 PayoutExecute.tsx（F1-08bb）；执行后重新读队列与概览。
+// TODO(规划/11 §7): 【录入企业支付宝余额】、【暂停队列】/【解除暂停】、【解除通道暂停】
+// — blocked on F1-08bc–bd
 import { ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import {
@@ -30,16 +31,25 @@ import {
   type TableColumnsType,
   type TablePaginationConfig,
 } from 'antd';
-import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type Key,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { useNavigate } from 'react-router';
 import { withdrawalsTexts } from '../../texts/withdrawals.ts';
 import { delayedLoading, useLoadingClock } from '../../motion.ts';
+import { PayoutExecute } from './PayoutExecute.tsx';
 import {
   OVERVIEW_URL,
   PAGE_SIZE,
   QUEUE_TABS,
   UNKNOWN_URL,
   beijingTime,
+  canExecute,
   channelLabel,
   codeOf,
   detailRoute,
@@ -296,7 +306,16 @@ function ChannelCard({ channel }: { readonly channel: PayoutOverviewChannel }): 
   );
 }
 
-function OverviewArea(): ReactElement {
+interface OverviewRead {
+  readonly status: ReadStatus;
+  readonly overview: PayoutOverview | undefined;
+  /** Shows the loading line and reads again (【重试】). */
+  readonly retry: () => void;
+  /** Reads again while the cards stay (after a batch was executed). */
+  readonly refresh: () => void;
+}
+
+function useOverview(): OverviewRead {
   const getProvider = useDataProvider();
   const [status, setStatus] = useState<ReadStatus>('loading');
   const [overview, setOverview] = useState<PayoutOverview>();
@@ -321,11 +340,16 @@ function OverviewArea(): ReactElement {
     };
   }, [getProvider, attempt]);
 
-  const retry = () => {
+  const retry = useCallback(() => {
     setStatus('loading');
     setAttempt((value) => value + 1);
-  };
+  }, []);
+  const refresh = useCallback(() => setAttempt((value) => value + 1), []);
+  return { status, overview: status === 'ready' ? overview : undefined, retry, refresh };
+}
 
+function OverviewArea({ read }: { readonly read: OverviewRead }): ReactElement {
+  const { status, overview, retry } = read;
   if (status === 'forbidden')
     return (
       <Card size="small">
@@ -364,7 +388,15 @@ interface QueueData {
   readonly truncated: boolean;
 }
 
-function QueueArea({ canList }: { readonly canList: boolean }): ReactElement {
+function QueueArea(props: {
+  readonly canList: boolean;
+  /** payout.execute: the APPROVED rows can be ticked for 【执行所选】. */
+  readonly canExecute: boolean;
+  readonly overview: PayoutOverview | undefined;
+  /** A batch was executed: read the overview again. */
+  readonly onExecuted: () => void;
+}): ReactElement {
+  const { canList, canExecute: executor, overview, onExecuted } = props;
   const getProvider = useDataProvider();
   const navigate = useNavigate();
   const loadingClock = useLoadingClock();
@@ -375,6 +407,8 @@ function QueueArea({ canList }: { readonly canList: boolean }): ReactElement {
   const [status, setStatus] = useState<ReadStatus>(canList ? 'loading' : 'forbidden');
   const [data, setData] = useState<QueueData>();
   const [drawerRow, setDrawerRow] = useState<WithdrawalRow | null>(null);
+  const [selected, setSelected] = useState<readonly string[]>([]);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!canList) return;
@@ -424,18 +458,31 @@ function QueueArea({ canList }: { readonly canList: boolean }): ReactElement {
 
   const changeTab = (key: string) => {
     const next = QUEUE_TABS.find((item) => item === key);
-    if (next === undefined || next === tab) return;
+    if (next === undefined || next === tab || busy) return;
     setTab(next);
     setPage(1);
     setData(undefined);
+    setSelected([]);
     if (canList) setStatus('loading');
   };
 
   const changePage = (pagination: TablePaginationConfig) => {
-    if (pagination.current === undefined || pagination.current === page) return;
+    if (pagination.current === undefined || pagination.current === page || busy) return;
     setStatus('loading');
+    setSelected([]);
     setPage(pagination.current);
   };
+
+  const executed = useCallback(() => {
+    setSelected([]);
+    setStatus('loading');
+    setAttempt((value) => value + 1);
+    onExecuted();
+  }, [onExecuted]);
+
+  // 勾选只认当前列表里仍是待执行的单，按列表顺序。
+  const tickable = (data?.items ?? []).filter(canExecute);
+  const tickedRows = executor ? tickable.filter((row) => selected.includes(row.withdrawal_id)) : [];
 
   const code = { fontFamily: token.fontFamilyCode, wordBreak: 'break-all' } as const;
   const secondary = { fontSize: token.fontSizeSM, color: token.colorTextSecondary } as const;
@@ -554,6 +601,18 @@ function QueueArea({ canList }: { readonly canList: boolean }): ReactElement {
           rowKey="withdrawal_id"
           columns={columns}
           dataSource={data.items as WithdrawalRow[]}
+          {...(executor
+            ? {
+                rowSelection: {
+                  hideSelectAll: true,
+                  selectedRowKeys: tickedRows.map((row) => row.withdrawal_id),
+                  getCheckboxProps: (row: WithdrawalRow) => ({
+                    disabled: busy || !canExecute(row),
+                  }),
+                  onChange: (keys: Key[]) => setSelected(keys.map(String)),
+                },
+              }
+            : {})}
           loading={delayedLoading(status === 'loading', loadingClock)}
           scroll={{ x: 'max-content' }}
           locale={{ emptyText: <EmptyText text={p.queueEmpty} /> }}
@@ -583,6 +642,14 @@ function QueueArea({ canList }: { readonly canList: boolean }): ReactElement {
         style={{ paddingInline: token.padding }}
         items={QUEUE_TABS.map((key) => ({ key, label: p.queueTabs[key] }))}
       />
+      {executor ? (
+        <PayoutExecute
+          rows={tickedRows}
+          overview={overview}
+          onFinished={executed}
+          onBusyChange={setBusy}
+        />
+      ) : null}
       {body}
       <AttemptsDrawer row={drawerRow} onClose={() => setDrawerRow(null)} />
     </Card>
@@ -724,13 +791,25 @@ function AttemptsBody({ id }: { readonly id: string }): ReactElement {
   );
 }
 
-/** 「打款队列」：状态卡、通道卡与队列表（两者各自加载、互不遮挡）。 */
-export function PayoutQueuePanel({ canList }: { readonly canList: boolean }): ReactElement {
+/**
+ * 「打款队列」：状态卡、通道卡与队列表（两者各自加载、互不遮挡）；持 payout.execute 时待执行单可勾选
+ * 【执行所选】，执行前检查取同一份概览，执行后队列与概览都重新读取。
+ */
+export function PayoutQueuePanel(props: {
+  readonly canList: boolean;
+  readonly canExecute: boolean;
+}): ReactElement {
+  const read = useOverview();
   return (
     <Flex vertical gap={16}>
       <Alert type="info" showIcon role="note" message={p.readOnlyNotice} />
-      <OverviewArea />
-      <QueueArea canList={canList} />
+      <OverviewArea read={read} />
+      <QueueArea
+        canList={props.canList}
+        canExecute={props.canExecute}
+        overview={read.overview}
+        onExecuted={read.refresh}
+      />
     </Flex>
   );
 }
