@@ -1,0 +1,18 @@
+id: CT-13k
+repo: rebate-platform
+title: FU-CT13F-PURGE-FAIL-NOT-DONE（test-change）：events 清理当日失败不得记成已完成——04:00 后某一步失败，同一 +08:00 日内下一轮重新执行三个删除步骤，成功一次后当日不再重删；主干绿 + 变异实跑代替先红
+type: test-change
+# 2026-11-14 be 入账（编排 D10-1530：CT-13f 评审 S2「清理失败不得把当日记成已完成」，实现上是成功后才记，只差用例钉住，按 test-change 补一条用例、带变异证据；先例 CT-13j、B3-08zg）。
+# 做法：由不是原写手的新鲜独立 Claude 只新增 test/spec/platform/events-retention-retry/**（新目录，不进 CT-13f 的 events-retention/）。夹具能引 events-retention/kit.ts 就引（schedule.test.ts 的 fakeDb / workerAt / STEPS 写法），不能就在新目录自带。用例：04:00 之后的同一 +08:00 日，第一轮某一步失败（逐个删除步骤各一次）→ 第二轮（不再注入失败）三个删除步骤按序重新执行；第三轮不再执行。不改实现、不改已有用例。
+# 验收：测试机主干基线绿；变异 M1 把 maintenance 第 N 节的 eventsCleanedDay = today 挪到 cleanupEvents 之前（失败也记当日已清）→ 新用例红，跑后还原。清单与结果进 PR 说明。非 task 分支、不带证据文件，标签由编排按 #24 核后加。本机重活（D10-1477）只在测试机跑。
+refs: []
+refs_hash: {}
+deps: [CT-13f]
+paths:
+  - 'test/spec/platform/events-retention-retry/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
