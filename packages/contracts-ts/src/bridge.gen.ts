@@ -1902,4 +1902,17 @@ export const apps = {
 export type AppTarget = keyof typeof apps;
 /** SDK query entries and inbound callbacks (contracts/apps.json), input of the CT-05 generators. */
 export const sdkQueries = [] as const;
-export const inbound = [] as const;
+export const inbound = [
+  {
+    "kind": "custom_scheme",
+    "purpose": "自有 scheme：外部回跳本 App 与站外唤起（规划/06 Q-A5）",
+    "source_sdk": null,
+    "platforms": [
+      "ios",
+      "android",
+      "harmony"
+    ],
+    "scheme": "couli",
+    "template": false
+  }
+] as const;

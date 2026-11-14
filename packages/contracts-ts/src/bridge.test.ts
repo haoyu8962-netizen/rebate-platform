@@ -53,10 +53,19 @@ it('routes carry their entry list and release builds drop debug_only routes (BR-
   expect(bridge.releaseRouteNames).toContain('AuthManage');
 });
 
-it('every external target is trade_only; SDK queries and inbound start empty (04 §9)', () => {
+it('every external target is trade_only; SDK queries stay empty and inbound holds only our own scheme couli (04 §9, 06 Q-A5)', () => {
   for (const app of Object.values(bridge.apps)) expect(app.trade_only).toBe(true);
   expect(bridge.sdkQueries).toEqual([]);
-  expect(bridge.inbound).toEqual([]);
+  expect(bridge.inbound).toEqual([
+    {
+      kind: 'custom_scheme',
+      purpose: '自有 scheme：外部回跳本 App 与站外唤起（规划/06 Q-A5）',
+      source_sdk: null,
+      platforms: ['ios', 'android', 'harmony'],
+      scheme: 'couli',
+      template: false,
+    },
+  ]);
 });
 
 it('clipboard.write stays L0 but needs a user gesture; L2 methods imply one (04 §9, 03 §5.3)', () => {
