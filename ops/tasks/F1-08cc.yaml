@@ -5,6 +5,7 @@ type: impl
 # 2026-11-15 入账（前端线 fe，编排 D10-1517 第一批 ③，调账页 design/specs/admin-adjustments.md（负责人 2026-10-18 后台第 2 批定稿；决定 ②：人工调账与红冲一步提交并生效，待批列表只留系统预填的 ACCOUNT_CLOSED 单），拆四张依次做、不并行：F1-08ca 只读 → F1-08cb 新建与红冲 → F1-08cc 批准 / 驳回系统预填单 → F1-08cd 批准核销）。契约七个接口均已实现。
 # 资金页面（apps/admin/src/**/adjustments/** 属 RV2）：Codex 额度用尽至 11-20（D10-1604），规则测试由独立 Claude 写、另一独立 Claude 审（approvals 第 36 条）；实现 Claude Opus；代码评审 money。写操作每次 StepUpModal（**短信档**，BR-ID-34；未登记验证手机号的账号按契约提示），提交中禁用、对话框保留；按钮按状态与权限点隐藏不置灰；金额只经 @couli/money（整数分）；文案按 BR-TEXT-25 / BR-TEXT-19，缺行显示编码。测试机不可用期间按 D10-1693 本机推进，正式验证待测试机。任务书带 D10-1477。
 # 范围：待批准（系统预填 ACCOUNT_CLOSED）单的批准对话框（重读余额前后、后果说明，短信动态码）与驳回（必填原因，不需二次验证）；状态已变按契约提示刷新。
+# 2026-11-15 补丁 1（fe，编排 D10-1733，同 D10-1712 (a)）：F1-08cb 的 [AC-F1-08cb-ENTRY#1] / [#2] / [#4] 对 fund.adjust / 超管的入口清单随本单落地改为「恰为当时已落地的入口」（严格相等），未落地的【批准核销】继续禁，另补反向用例（无 fund.adjust 看不到批准 / 驳回）；entry.test.ts 先列进 test_paths。modify_existing（rule_change，br BR-FUND-24，ruling D10-1733）等该文件随 F1-08cb 进主干后另开补丁登记。
 refs: [BR-FUND-24, BR-ID-34]
 refs_hash:
   BR-FUND-24: 0f1a6ecb3334
@@ -15,6 +16,7 @@ paths:
   - 'apps/admin/src/texts/adjustments.ts'
 test_paths:
   - 'test/spec/frontend/admin-adjustment-approve/**'
+  - 'test/spec/frontend/admin-adjustment-create/entry.test.ts'
 impl: claude
 tester: claude-independent
 accept:
