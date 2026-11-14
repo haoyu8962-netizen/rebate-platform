@@ -1,0 +1,24 @@
+id: F1-14c
+repo: rebate-platform
+title: 工作台待办卡跳转页进页读地址 ?status= 作初始筛选（提现审核 status=PENDING_REVIEW、对账差错 status=open；FU-ADMIN-ROUTE-STATUS-PARAM）
+type: impl
+# 2026-11-14 入账（前端线 fe，编排 D10-1638 ③ / D10-1650：FU-ADMIN-ROUTE-STATUS-PARAM，排在 F1-08aj 之后、② admin-payouts 之前；B1-10w 工作台接口即将落地）。
+# 七张卡的 route 由 B1-10w 后端给（apps/api/src/modules/admin/application/dashboard.ts）。只读排查（fe 2026-11-14）：claims（?status=manual_review）、settle-bills（?awaiting_confirm=true）、agent/reports（?overdue=true）三页已读地址，本单不动；/withdrawals?status=PENDING_REVIEW 与 /recon?status=open 两页进页不读地址，是本单范围。
+# 不在本单：/risk/appeals 还没有页面（等 CT-24r）；/union/accounts?auth=expiring 控制台没有这个路径，列表接口也没有 auth 参数——已报编排另定。
+# 行为：进页时地址里的 status 若是契约枚举（WithdrawalStatus / AdminReconDiffStatus）里的合法值，就作为该筛选的初始值，首个列表请求即带上；不合法或缺省照旧（不报错、不带）。之后用户改筛选、【重置】照常。冻结测试（admin-withdrawals 等，进页不带参数）全绿。
+# 提现页属 RV2（apps/admin/src/**/withdrawals/**）：Codex 额度用尽至 11-20（D10-1604），规则测试由独立 Claude 写（approvals 第 36 条）、另一独立 Claude 审；实现 Claude Opus；代码评审 money（独立 Claude）。任务书带 D10-1477、D10-1503。
+refs: []
+refs_hash: {}
+deps: [F1-08aj]
+paths:
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/pages/recon/**'
+test_paths:
+  - 'test/spec/frontend/admin-route-status-param/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-route-status-param/**'
+status: todo
+pr: null
