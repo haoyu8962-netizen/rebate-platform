@@ -1,0 +1,39 @@
+id: CT-13m
+repo: rebate-platform
+title: CT-13m：link_log_evidence——被认领引用的 link_logs 行在分区删除前同一事务复制到证据表（复制失败则不删），证据在引用子项全部结案（最晚 decided_at）满 180 天后删、无任何引用的下一次 04:00 删；后台审核先查 link_logs 再查证据
+type: impl
+# 2026-11-14 be 入账（编排 D10-1624 / D10-1625；08 BR-ATTR-14「被工单引用的记录在分区删除前复制到 link_log_evidence」、BR-ID-30 ②「link_log_evidence 工单关闭后 180 天」；补负责人已定规则的实现，不另请负责人）。
+# 已核：① 主干上引用 link_logs 的工单只有认领（app.claim_items.evidence_link_log_ids bigint[]，按 id、无外键）。appeals 没有 link_logs 字段；recon_diffs 的 ref_type 现有取值都不指向它；联盟维权表不存在。② decided_at 只由审核路径写（orders infra/claim-review-store.ts）；主干上还没有把认领整单置 cancelled 的写路径，所以现在没有「结案不写 decided_at」的缺口；将来加撤销路径时必须写 decided_at（否则证据只会等到引用消失）。③ 冻结用例 test/spec/db/partitions/{day-drop,day-functions}.int.test.ts、test/spec/db/events/partitions.int.test.ts 只按行为钉 drop_expired_day_partitions，不钉函数原文；路径不在 CT-06zzzzzh 的资金 / 归属名单内。无引用时行为不变，预期照绿；若被钉住，先报编排。
+# 做法：
+# ① 新迁移（号落地时取下一个空号，文件名以 _link-log-evidence.sql 结尾）：
+#    - app.link_log_evidence：列与 app.link_logs 完全相同（04 第 438 行），不分区，主键 (id)，另加 copied_at。couli_maint 写；couli_app、couli_readonly 只读。存的是个人数据，别的模块不得读写（D10-1625 补二）。
+#    - app.copy_referenced_link_logs(…)：把待删范围内被任一 claim_items.evidence_link_log_ids 引用的行插入证据表，ON CONFLICT (id) DO NOTHING。只授 couli_maint。
+#    - 用 CREATE OR REPLACE 改写 app.drop_expired_day_partitions：每个待删分区先在同一事务里复制，再 DROP；复制失败则整体抛错、分区不删（D10-1625 ③）。
+#    - app.purge_expired_link_log_evidence(p_now)：删除两类证据。一是引用它的 claim_item 全部有 decided_at、且最晚的 decided_at 早于运行当日 00:00（+08:00）− 180 天；二是已没有任何 claim_item 引用（D10-1625 补一，比如注销清理删掉了认领）。180 天只写在函数里。
+# ② 维护第 I 节：每天 04:00 后删日分区之后调用证据清理；失败照第 N 节。
+# ③ linking 给 orders 的「按 id 取 link_logs 时间与场景」读取口（linking/index.ts，B1-10j）：先查 link_logs，查不到的再查 link_log_evidence，都没有才略过。
+# 规则测试（独立 Claude，D10-1604）须钉住：
+#    - 被引用的行在分区删除后仍能从证据表、经读取口读到；未被引用的行照删；
+#    - 复制失败时分区不删；
+#    - 有一项未结案就不删；最晚 decided_at 满 180 天才删，差 1 毫秒保留；
+#    - 无引用的证据下一次清理就删；
+#    - 证据表授权（app / readonly 只读，maint 写）。
+# 带迁移：落地前测试机跑 test/spec/db/** 与相关目录（D10-1580），本机 snapshot（D10-1553），推前请冻结。CT-13l（DEFAULT 删除）接在本单之后、复用复制函数。
+refs: [BR-ID-30]
+refs_hash:
+  BR-ID-30: 8ea92988c8cd
+deps: [CT-13f]
+paths:
+  - 'db/migrations/*_link-log-evidence.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+  - 'apps/api/src/modules/platform/maintenance/**'
+  - 'apps/api/src/modules/linking/**'
+test_paths:
+  - 'test/spec/linking/link-log-evidence/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
