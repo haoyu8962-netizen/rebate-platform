@@ -41,4 +41,5 @@ red_exempt:
   - file: test/spec/contracts/admin-agent-traces/registration.test.ts
     test: '[AC-CT-24zzi#6] 错误码目录 20902 的 data.resource 登记 agent_report'
     reason: '冻结 CT-24zzi 契约用例，测试体未改；本任务只把同文件的 [AC-CT-24zzi#3] / [#4] / [#5] 从 planned 改成已实现（先例 B1-10q、B1-28s）。同文件被整体判定'
-status: todo
+status: done
+pr: 99
