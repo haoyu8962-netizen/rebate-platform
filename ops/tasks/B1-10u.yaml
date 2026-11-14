@@ -20,4 +20,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/report-overdue/**'
-status: todo
+status: done
+pr: 123
