@@ -6,31 +6,18 @@
 //   sender's outbox (the fixture user has a bound phone, so the SMS way applies), or — for a token
 //   whose claims carry no summary — are signed exactly as that route signs them (signScopedToken with
 //   the application's TOKEN_KEYS, aud=step_up, claims uid, app_id, sid, device_id, action, jti);
-// - withdrawals go through the real POST /v1/withdrawals (precedent test/spec/payout/apply/
-//   http.int.test.ts: funded balance, labor agreement consent, unlimited counts);
 // - payout account saves go through the real PUT /v1/me/payout-account (payout-bank-card kit's
 //   submit).
 // The digest claim is found by its value, not by its name (the contract fixes one string claim
-// `w:<payout_account_id>:<amount_fen>` / `p:<payout_method>:<HMAC>` / `p:wechat:<attempt_id>`; its
-// name is only the contract line's suggestion). Only the orchestrator runs these fixtures, inside
+// `p:<payout_method>:<HMAC>` / `p:wechat:<attempt_id>`; its name is only the contract line's
+// suggestion). Only the orchestrator runs these fixtures, inside
 // the isolated integration-test container.
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
-import { sql } from 'kysely';
 import { expect } from 'vitest';
 import type { SmsCodeService } from '../../../../apps/api/src/modules/identity/application/sms-codes.ts';
 import type { FakeSmsSender } from '../../../../apps/api/src/modules/identity/infra/fake-sms.ts';
-import { createLedger } from '../../../../apps/api/src/modules/ledger/index.ts';
-import { fund } from '../../payout/apply/kit.ts';
 import { sign } from '../../risk/signature/kit.ts';
-import {
-  ALIPAY_CONTEXT,
-  LOGIN,
-  ROOT,
-  account,
-  config,
-  state,
-  type Response,
-} from '../payout-account/kit.ts';
+import { ALIPAY_CONTEXT, ROOT, state, type Response } from '../payout-account/kit.ts';
 import { envelope, fixture as cardFixture, type Kit } from '../payout-bank-card/kit.ts';
 
 export { open, close, reset, card, bankBody, NAME } from '../payout-bank-card/kit.ts';
@@ -42,7 +29,6 @@ type Tokens = typeof import('../../../../apps/api/src/modules/identity/applicati
 type FakeSms = typeof import('../../../../apps/api/src/modules/identity/infra/fake-sms.ts');
 
 export const STEP_UP = '/v1/auth/step-up';
-export const WITHDRAW = '/v1/withdrawals';
 /**
  * BR-ID-05 counts the SMS send quota per phone over every app (60 s interval, daily cap), so
  * every member gets its own bound phone: the prefix 139 (not an 08 default blocked prefix), a
@@ -54,24 +40,11 @@ function nextPhone(): string {
   phoneSerial += 1;
   return `139${PHONE_BLOCK}${String(phoneSerial).padStart(4, '0')}`;
 }
-export const BALANCE = 50_000n;
 export const TIMEOUT = 60_000;
 /** BR-ID-08: a step_up_token lives 5 minutes. */
 const TTL_SECONDS = 300;
 /** BR-ID-05: one SMS per 60 s for (app, phone, purpose); the fixture clock moves past it. */
 const RESEND_MS = 61_000;
-/** Withdrawal prerequisites as test/spec/payout/apply/http.int.test.ts sets them. */
-const WITHDRAW_CONFIG: Readonly<Record<string, unknown>> = Object.freeze({
-  'legal.labor_agreement.version': 1,
-  'legal.labor_agreement.text_url': 'https://example.test/labor',
-  'legal.labor_agreement.text_sha256': 'a'.repeat(64),
-  'legal.labor_agreement.resign_from_version': 1,
-  'withdraw.daily_count_per_user': 0,
-  'withdraw.monthly_count_per_user': 0,
-  'withdraw.payee_daily_count': 0,
-  'withdraw.payee_daily_distinct_users': 0,
-});
-
 export type StepUpAction =
   'withdraw' | 'payout_account_change' | 'phone_change' | 'account_deletion';
 export type Summary = Readonly<Record<string, unknown>>;
@@ -147,13 +120,9 @@ export function saved(kit: Kit, response: Response) {
 
 /**
  * One realname-verified member with a bound phone and a registered device (payout-bank-card kit's
- * fixture). `withdraw: true` also binds the Alipay account LOGIN as the current payout account,
- * funds `balance` and writes the withdrawal prerequisites.
+ * fixture).
  */
-export async function member(
-  kit: Kit,
-  options: { readonly withdraw?: boolean; readonly balance?: bigint } = {},
-) {
+export async function member(kit: Kit) {
   const f = await cardFixture(kit);
   // This member's own bound phone (users.phone_hmac / phone_cipher, written as
   // test/spec/identity/sms-codes/http.int.test.ts writes them): the step-up SMS goes to the
@@ -176,7 +145,6 @@ export async function member(
   )) as FakeSms;
   const sms = kit.app.get<SmsCodeService>(tokensModule.SMS_CODES);
   const sender = kit.app.get<FakeSmsSender>(fakeSms.smsSenderToken());
-  const ledger = createLedger({ clock: kit.clock });
   const deviceId = f.device.device_id;
   const session = await kit.db
     .transaction()
@@ -187,17 +155,6 @@ export async function member(
         { clock: kit.clock, tokens: kit.tokens },
       ),
     );
-  let bound: { id: string; hmac: string } | null = null;
-  if (options.withdraw === true) {
-    const row = await account(kit, f, LOGIN);
-    bound = { id: row.id, hmac: row.alipay_hmac! };
-    await fund(kit.db, ledger, { appId: f.appId, userId: f.uid }, options.balance ?? BALANCE);
-    for (const [key, value] of Object.entries(WITHDRAW_CONFIG)) await config(kit, f, key, value);
-    await sql`INSERT INTO app.consent_records
-      (app_id,subject_type,user_id,device_id,type,version,accepted,channel,text_sha256,signer_snapshot,client_at,server_at)
-      VALUES (${f.appId},'user',${f.uid},${deviceId},'labor_agreement',1,true,'withdraw_flow',${'a'.repeat(64)},
-        '{}'::jsonb,${kit.clock.now()},${kit.clock.now()})`.execute(kit.db);
-  }
   /** Every response body this member received, for the privacy checks. */
   const bodies: string[] = [];
   const headers = {
@@ -291,13 +248,6 @@ export async function member(
     });
   }
 
-  /** POST /v1/withdrawals; `stepUpToken` null sends no X-Step-Up-Token. */
-  function withdraw(amountFen: number, stepUpToken: string | null, key: string = randomUUID()) {
-    const extra: Record<string, string> = { 'idempotency-key': key };
-    if (stepUpToken !== null) extra['x-step-up-token'] = stepUpToken;
-    return post(WITHDRAW, { amount_fen: amountFen }, extra);
-  }
-
   /** PUT /v1/me/payout-account with this step_up_token. */
   async function save(
     body: unknown,
@@ -309,36 +259,6 @@ export async function member(
     return response;
   }
 
-  /**
-   * Another device / request changed the binding: the current row is retired and a new current
-   * Alipay row `value` is written (what the withdrawal lock then reads as the current binding).
-   */
-  async function rebind(value: string) {
-    await kit.db
-      .updateTable('payout_accounts')
-      .set({ is_current: false })
-      .where('app_id', '=', f.appId)
-      .where('user_id', '=', f.uid)
-      .where('is_current', '=', true)
-      .execute();
-    const row = await account(kit, f, value);
-    bound = { id: row.id, hmac: row.alipay_hmac! };
-    return bound;
-  }
-
-  async function withdrawState() {
-    return {
-      withdrawals: await kit.db
-        .withSchema('app')
-        .selectFrom('withdrawals')
-        .selectAll()
-        .where('app_id', '=', f.appId)
-        .orderBy('id')
-        .execute(),
-      balances: await ledger.getBalances(kit.db, { appId: f.appId, userIds: [f.uid] }),
-    };
-  }
-
   return {
     f,
     uid: f.uid,
@@ -347,18 +267,10 @@ export async function member(
     /** This member's bound phone (users.phone_cipher), for the privacy checks. */
     phone,
     bodies,
-    /** The current payout account row (withdraw members only). */
-    current(): { id: string; hmac: string } {
-      expect(bound, 'member() without withdraw: no current payout account').not.toBeNull();
-      return bound!;
-    },
     stepUp,
     token,
     mint,
-    withdraw,
     save,
-    rebind,
-    withdrawState,
     accounts: () => state(kit, f),
     alipayHmac: (logon: string) => kit.crypto.blindIndex(logon, ALIPAY_CONTEXT),
   };

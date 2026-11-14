@@ -1,7 +1,8 @@
 // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」, 上送与签发): POST /v1/auth/step-up takes `summary` for
-// withdraw and payout_account_change only, its shape paired with the action (else 20001
-// data.fields=[summary], no token), and writes it into the token as one string claim — computed by
-// the server, never the plaintext account. Real AppModule, PG and Redis (kit.ts).
+// payout_account_change only, its shape paired with the action (else 20001 data.fields=[summary],
+// no token; withdraw, phone_change and account_deletion take none), and writes it into the token as
+// one string claim — computed by the server, never the plaintext account. Real AppModule, PG and
+// Redis (kit.ts).
 import { randomUUID } from 'node:crypto';
 import {
   acquireTestRedis,
@@ -56,7 +57,6 @@ const BANK_SHAPE: Summary = { payout_method: 'bank_card', card_no: card(7) };
 const WECHAT_SHAPE: Summary = { payout_method: 'wechat', attempt_id: randomUUID() };
 
 const REFUSED: [string, StepUpAction, Summary | undefined][] = [
-  ['withdraw 不带 summary', 'withdraw', undefined],
   ['payout_account_change 不带 summary', 'payout_account_change', undefined],
   ['withdraw 带支付宝形状', 'withdraw', ALIPAY_SHAPE],
   ['withdraw 带银行卡形状', 'withdraw', BANK_SHAPE],
@@ -76,35 +76,6 @@ it.each(REFUSED)(
     const body = answered(kit, STEP_UP, 'post', response, 20001);
     expect(body.data).toEqual({ fields: ['summary'] });
     expect(response.body).not.toContain('step_up_token');
-  },
-  TIMEOUT,
-);
-
-it(
-  '[AC-B1-02zzzb#1] withdraw 摘要写进 token：恰一个摘要 claim = w:<payout_account_id>:<amount_fen>，其余 claims 照旧',
-  async () => {
-    const m = await member(kit, { withdraw: true });
-    const current = m.current();
-    const token = await m.token('withdraw', { payout_account_id: current.id, amount_fen: 10000 });
-    expect(claimsOf(token)).toMatchObject({
-      uid: m.uid,
-      app_id: m.appId,
-      device_id: m.deviceId,
-      action: 'withdraw',
-      aud: 'step_up',
-    });
-    expect(digestsOf(token)).toEqual([`w:${current.id}:10000`]);
-  },
-  TIMEOUT,
-);
-
-it(
-  '[AC-B1-02zzzb#1] 签发不校验摘要内容：不属于本人的账号行 ID、超出余额的金额也照写进 claims（留给业务请求判）',
-  async () => {
-    const m = await member(kit, { withdraw: true, balance: 100n });
-    const foreign = randomUUID();
-    const token = await m.token('withdraw', { payout_account_id: foreign, amount_fen: 9_999_900 });
-    expect(digestsOf(token)).toEqual([`w:${foreign}:9999900`]);
   },
   TIMEOUT,
 );
@@ -192,15 +163,21 @@ it(
 );
 
 it(
-  '[AC-B1-02zzzb#8] 只有 withdraw / payout_account_change 绑摘要：phone_change、account_deletion 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 不带 summary 则 20001',
+  '[AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001',
   async () => {
     const m = await member(kit);
-    for (const action of ['phone_change', 'account_deletion'] as const) {
+    for (const action of ['phone_change', 'account_deletion', 'withdraw'] as const) {
       const token = await m.token(action);
       expect(claimsOf(token)).toMatchObject({ uid: m.uid, action, aud: 'step_up' });
       expect(digestsOf(token)).toEqual([]);
     }
-    const refused = answered(kit, STEP_UP, 'post', await m.stepUp('withdraw'), 20001);
+    const refused = answered(
+      kit,
+      STEP_UP,
+      'post',
+      await m.stepUp('withdraw', WITHDRAW_SHAPE),
+      20001,
+    );
     expect(refused.data).toEqual({ fields: ['summary'] });
   },
   TIMEOUT,

@@ -13,7 +13,6 @@ import {
   LOGIN,
   NAME,
   TIMEOUT,
-  WITHDRAW,
   bankBody,
   card,
   claimsOf,
@@ -24,7 +23,6 @@ import {
   privateDataAbsent,
   reset,
   saveRefused,
-  stepUpRequired,
   type Kit,
 } from './kit.ts';
 
@@ -57,7 +55,7 @@ function fingerprintOf(digest: string): string {
 it(
   '[AC-B1-02zzzb#9] 签发与比对全程：日志、响应与 token claims 不含明文收款账号 / 卡号 / 支付宝登录号，摘要原文不进日志与响应',
   async () => {
-    const m = await member(kit, { withdraw: true });
+    const m = await member(kit);
     const logon = 'secret.payee@example.com';
     const other = 'other.payee@example.com';
     const digits = card(3);
@@ -70,19 +68,14 @@ it(
       payout_method: 'bank_card',
       card_no: digits,
     });
-    const forWithdraw = await m.token('withdraw', {
-      payout_account_id: m.current().id,
-      amount_fen: 10000,
-    });
     const alipayBody = { payout_method: 'alipay', alipay_logon_id: other, payee_name: NAME };
     saveRefused(kit, await m.save(alipayBody, forAlipay));
     saveRefused(kit, await m.save(bankBody(otherCard), forCard));
-    stepUpRequired(kit, WITHDRAW, 'post', await m.withdraw(20000, forWithdraw));
-    const tokens = [forAlipay, forCard, forWithdraw];
+    const tokens = [forAlipay, forCard];
     const secrets = [logon, other, digits, otherCard, LOGIN];
     privateDataAbsent(kit, [...m.bodies, ...tokens.map((token) => claimsOf(token))], secrets);
     const digests = tokens.flatMap((token) => digestsOf(token));
-    expect(digests).toHaveLength(3);
+    expect(digests).toHaveLength(2);
     // The fingerprints (and the digest strings) stay in the token: no log line, no response body.
     const fingerprints = digests.filter((digest) => digest.startsWith('p:')).map(fingerprintOf);
     expect(fingerprints).toHaveLength(2);
