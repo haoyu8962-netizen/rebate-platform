@@ -67,10 +67,14 @@ it(
     cleanup();
 
     // Since F1-08bc (D10-1712 (a)) a super admin (holding fund.cash_entry) also gets exactly the two
-    // balance entries landed with it; fund.view + payout.execute does not. The pause entries
-    // (F1-08bd) stay forbidden.
+    // balance entries landed with it; fund.view + payout.execute does not. Since F1-08bd the super
+    // admin (holding switch.payout) also gets the pause entries of this overview: the queue runs,
+    // so 【暂停队列】, and 【解除通道暂停】 on the paused 微信零钱 card.
+    const pauses = ['暂停队列', '解除通道暂停'];
     const landed = (account: typeof SUPER): string[] =>
-      account === SUPER ? [ENTRY, '录入企业支付宝余额', '录入运营账户余额'].sort() : [ENTRY];
+      account === SUPER
+        ? [ENTRY, '录入企业支付宝余额', '录入运营账户余额', ...pauses].sort()
+        : [ENTRY];
     for (const account of [EXECUTOR, SUPER]) {
       const server = serverFor({ permissions: VIEW_EXECUTE });
       const panel = await openQueue(server, account);

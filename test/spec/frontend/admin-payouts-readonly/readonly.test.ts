@@ -37,8 +37,16 @@ it(
   async () => {
     // Since F1-08bc (D10-1712 (a)) the entries landed so far are exactly 【录入企业支付宝余额】 and
     // 【录入运营账户余额】 (fund.cash_entry, which a super admin holds and ALL does not), on the
-    // 打款队列 tab whatever its sub-tab; the pause entries (F1-08bd) stay forbidden.
-    const landed = ['录入企业支付宝余额', '录入运营账户余额'].sort();
+    // 打款队列 tab whatever its sub-tab; since F1-08bd also the pause entries (switch.payout, which
+    // a super admin holds and ALL does not): the queue is paused here, so 【解除暂停】, and one
+    // 【解除通道暂停】 for each paused channel (企业支付宝 and 微信零钱).
+    const landed = [
+      '录入企业支付宝余额',
+      '录入运营账户余额',
+      '解除暂停',
+      '解除通道暂停',
+      '解除通道暂停',
+    ].sort();
     const accounts = [everyGrant(ALL), SUPER];
     for (const snapshot of accounts) {
       const server = createPayoutServer({
