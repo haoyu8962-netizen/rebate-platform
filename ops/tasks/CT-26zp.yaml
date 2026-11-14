@@ -18,7 +18,7 @@ paths:
 test_paths:
   - 'test/spec/content/withdraw-fail-reason-texts/**'
 impl: claude
-tester: codex
+tester: claude-independent # 2026-11-14 改：Codex 额度到 11-20（D10-1604，approvals 36）
 accept:
   - 'pnpm verify'
   - 'test/spec/content/withdraw-fail-reason-texts/**'
