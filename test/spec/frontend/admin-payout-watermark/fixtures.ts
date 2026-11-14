@@ -162,9 +162,15 @@ export const FIELD_TEXT = {
   timeInvalid: '取数时间格式为 YYYY-MM-DD HH:mm:ss（北京时间）',
   noteBlank: '备注去掉首尾空白后不能为空',
   noteLong: '备注不能超过 500 字',
-  /** 20001 data.fields=[measured_at]: too far ahead, too old, or before the channel's latest. */
+  /**
+   * 20001 data.fields=[measured_at]. The contract rejects a measured_at more than 5 minutes after
+   * now, more than 2 hours before now, or before the channel's latest (up to 5 minutes ahead is
+   * clock skew and accepted; the same as the latest is accepted). Its 20001 carries no data.reason
+   * (example AdminPayoutWatermarkMeasuredAtInvalid: data.fields only), so one message covers all
+   * three cases.
+   */
   serverTime:
-    '取数时间不符合要求（不能晚于当前时间、不能超过时效、不能早于该账户上次录入的取数时间），请核对后修改',
+    '取数时间不符合要求（不能晚于当前时间 5 分钟以上、不能早于当前时间 2 小时以上、不能早于该账户上次录入的取数时间），请核对后修改',
   /** 20001 data.fields=[available_fen]. */
   serverAmount: '可用余额不符合要求，请核对后修改',
   /** 20001 data.fields=[note]. */

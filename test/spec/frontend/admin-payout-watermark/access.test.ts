@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup } from '@testing-library/react';
 import { expect, it } from 'vitest';
+import type {
+  KnownPermission,
+  PermissionSnapshot,
+  StepUpAnnotation,
+} from '../../../../apps/admin/src/providers/access-control/index.ts';
+import { ALL } from '../admin-payouts-readonly/fixtures.ts';
 import { CASHIER, CASHIER_GRANTS, ENTRY, EXECUTOR, VIEWER, type Grants } from './fixtures.ts';
 import {
   FLOW_TIMEOUT,
@@ -70,6 +76,50 @@ it(
       const label = `the 录入 entries for ${account.grants.join(' + ')}`;
       expect(entryNames().sort(), label).toEqual(account.names);
       expect(server.writes(), 'only GET').toEqual([]);
+      cleanup();
+    }
+  },
+);
+
+/** A snapshot of `grants` (fund.cash_entry and payout.execute at the totp tier, BR-ID-34). */
+function accountOf(grants: Grants): PermissionSnapshot {
+  const stepUp: Partial<Record<KnownPermission, StepUpAnnotation>> = {};
+  for (const point of grants) {
+    const totp = point === 'fund.cash_entry' || point === 'payout.execute';
+    stepUp[point] = { tier: totp ? 'totp' : null, operations: {} };
+  }
+  return { isSuper: false, permissions: grants, stepUp };
+}
+
+it(
+  '[AC-F1-08bc-ACCESS#3] 录入入口按权限点 fund.cash_entry 判、不按角色判：只持 fund.view、只持 payout.execute、持 fund.view + payout.execute、持除 fund.cash_entry 外的全部财务权限点，都没有任何录入入口（含隐藏、置灰）；持 payout.execute + fund.cash_entry（不持 fund.view）与超管都恰有【录入企业支付宝余额】【录入运营账户余额】；只发 GET',
+  { timeout: 2 * MULTI_TIMEOUT },
+  async () => {
+    const both = [ENTRY.alipay, ENTRY.wechat].sort();
+    const superAdmin: PermissionSnapshot = { isSuper: true, permissions: [] };
+    const accounts: readonly Account[] = [
+      { snapshot: accountOf(['fund.view']), grants: ['fund.view'], names: [] },
+      { snapshot: accountOf(['payout.execute']), grants: ['payout.execute'], names: [] },
+      {
+        snapshot: accountOf(['fund.view', 'payout.execute']),
+        grants: ['fund.view', 'payout.execute'],
+        names: [],
+      },
+      { snapshot: accountOf(ALL), grants: ALL, names: [] },
+      {
+        snapshot: accountOf(['payout.execute', 'fund.cash_entry']),
+        grants: ['payout.execute', 'fund.cash_entry'],
+        names: both,
+      },
+      { snapshot: superAdmin, grants: [...ALL, 'fund.cash_entry'], names: both },
+    ];
+    for (const account of accounts) {
+      const server = serverFor({ permissions: account.grants });
+      await openPanel(server, account.snapshot);
+      await settled(server);
+      const who = account.snapshot.isSuper ? 'a super admin' : account.grants.join(' + ');
+      expect(entryNames().sort(), `the 录入 entries for ${who}`).toEqual(account.names);
+      expect(server.writes(), `${who}: only GET`).toEqual([]);
       cleanup();
     }
   },

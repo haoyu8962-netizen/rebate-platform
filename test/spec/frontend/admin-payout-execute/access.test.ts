@@ -66,6 +66,11 @@ it(
     expect(viewing.writes()).toEqual([]);
     cleanup();
 
+    // Since F1-08bc (D10-1712 (a)) a super admin (holding fund.cash_entry) also gets exactly the two
+    // balance entries landed with it; fund.view + payout.execute does not. The pause entries
+    // (F1-08bd) stay forbidden.
+    const landed = (account: typeof SUPER): string[] =>
+      account === SUPER ? [ENTRY, '录入企业支付宝余额', '录入运营账户余额'].sort() : [ENTRY];
     for (const account of [EXECUTOR, SUPER]) {
       const server = serverFor({ permissions: VIEW_EXECUTE });
       const panel = await openQueue(server, account);
@@ -77,7 +82,7 @@ it(
       expect(liveTexts(panel), 'no selection bar before a tick').toEqual([]);
       await select(panel, [QNO.approvedA]);
       expect(disabled(button(panel, ENTRY))).toBe(false);
-      expect(writeEntries(panel), 'the only write entry').toEqual([ENTRY]);
+      expect(writeEntries(panel).sort(), 'the landed write entries').toEqual(landed(account));
       expect(server.writes()).toEqual([]);
       cleanup();
     }

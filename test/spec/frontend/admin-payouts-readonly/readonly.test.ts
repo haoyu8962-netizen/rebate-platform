@@ -35,6 +35,10 @@ it(
   '[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET',
   { timeout: MULTI_TIMEOUT },
   async () => {
+    // Since F1-08bc (D10-1712 (a)) the entries landed so far are exactly 【录入企业支付宝余额】 and
+    // 【录入运营账户余额】 (fund.cash_entry, which a super admin holds and ALL does not), on the
+    // 打款队列 tab whatever its sub-tab; the pause entries (F1-08bd) stay forbidden.
+    const landed = ['录入企业支付宝余额', '录入运营账户余额'].sort();
     const accounts = [everyGrant(ALL), SUPER];
     for (const snapshot of accounts) {
       const server = createPayoutServer({
@@ -46,11 +50,12 @@ it(
       await listed(queue, ALL_ROWS);
       await waitFor(() => expect(server.overviewReads()).toHaveLength(1));
       await settled(server);
-      expect(writeEntries(queue), 'no write entry in 全部').toEqual([]);
+      const queueEntries = snapshot === SUPER ? landed : [];
+      expect(writeEntries(queue).sort(), 'the write entries of 全部').toEqual(queueEntries);
       for (const tab of [SUB_TAB.paying, SUB_TAB.approved]) {
         await selectTab(queue, tab);
         await settled(server);
-        expect(writeEntries(queue), `no write entry in ${tab}`).toEqual([]);
+        expect(writeEntries(queue).sort(), `the write entries of ${tab}`).toEqual(queueEntries);
       }
       await selectTab(queue, SUB_TAB.all);
       await listed(queue, ALL_ROWS);
