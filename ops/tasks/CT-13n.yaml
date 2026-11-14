@@ -1,0 +1,25 @@
+id: CT-13n
+repo: rebate-platform
+title: FU-EVENTS-CONTRACT-STORED-TEXT：契约 ingestEvents 说明照实改——合规事件落库并按 (app_id, event_type, event_id) 去重、只有本人令牌的 link_jump 写外跳上报时刻；只动描述不动形状
+type: impl
+# 2026-11-14 be 入账（编排 D10-1626：openapi 类契约槽轮到本单，B1-10w 排在之后）。起因：CT-13h（#110）接线后，ingestEvents 说明里「in the first step only the link_jump reports are stored (B1-06zo); the other events are accepted and not stored」与「deduplicates by (event_type, event_id)」都已过时（CT-13i #92 去重键改为 (app_id, event_type, event_id)）。
+# 只改 contracts/openapi.yaml 里 ingestEvents 的 description：①「受理只表示已收到并校验，不承诺已保存」一句保留语义，改写后半句为「合规事件落库（events，按 (app_id, event_type, event_id) 去重，重复不报错、不计入 dropped_count）；只有本人令牌的 link_jump 另写外跳上报时刻（link_open_attempts.jump_reported_at）」；② 去重键那句同步改。不动 schema、参数、响应、错误码。重出生成物（pnpm codegen；描述若进生成文件则随之变），oasdiff 应无破坏性差异。规则测试（独立 Claude，D10-1604；新目录只新增）读 contracts/openapi.yaml 的 ingestEvents description，钉住：不再含「accepted and not stored」；写明合规事件落库、去重键为 (app_id, event_type, event_id)；写明只有本人令牌的 link_jump 写外跳上报时刻；schema 与响应形状不变（与主干逐字相同）。评审由独立 Claude 做 contract 类（Codex 额度用尽）。
+refs: []
+refs_hash: {}
+deps: [CT-13h]
+paths:
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/events-stored-text/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
+pr: null
