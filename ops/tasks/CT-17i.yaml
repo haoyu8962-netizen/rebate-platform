@@ -6,6 +6,7 @@ type: contract
 # 依据：NATIVE/needs-triage-20261114.md 的 since 建议；安卓、鸿蒙注销页已具备（发码走 B1-02zzz 的 step_up），iOS 注销页未交付，since 仍为 null。
 # 只改 contracts/routes.json 里 DeleteAccount 的 since.android、since.harmony（null → "1.0.0"）与 phase（M-公开 → M-内测），其余字段与其他路由不动；按 contracts/README.md 重新生成 bridge.gen.ts 并提交，pnpm contracts:check 要过。不动 openapi 及其生成物（D10-1582 ② 类，不占契约槽）。
 # 推之前在测试机跑引用 DeleteAccount 的测试目录（test/spec/agent、test/spec/frontend/h5-messages）与 verify:fast（D10-1598 e）。
+# D10-1611 更正（以本条为准，标题不改）：phase 保持 M-公开、不改 M-内测——D10-1566 W-3 让改 M-内测与负责人 2026-10-04 确认的 08 BR-ID-27 细则「内测包不显示注销入口」（注销属 M-公开）相冲；本单只把 since.android / since.harmony 由 null 填 "1.0.0"，iOS 仍 null。实现里 phase 那一行改回主干原样按机械改动处理（新鲜独立 Claude，不计实现试次）。
 refs: []
 refs_hash: {}
 deps: [B1-02zzz]
