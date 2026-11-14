@@ -3295,7 +3295,7 @@ export interface paths {
          *       settle_bill_pending opens `/settle-bills?awaiting_confirm=true` and its `count`
          *       equals the `total` of GET /admin/v1/settle-bills with `awaiting_confirm=true` (bills
          *       whose latest round has a DRAFT batch, AdminSettleBillAwaitingConfirm; 编排裁定
-         *       D10-1402); `oldest_at` (optional, nullable) is the earliest waiting item's time;
+         *       D10-1402); `oldest_at` (optional, nullable) is the earliest waiting item's time and is not returned in this phase (编排裁定 D10-1638);
          *       `breakdown` (optional) splits the count by a card-specific sub-key (for
          *       claim_review_pending `auto_matched` and `manual_review`); clients ignore keys they do
          *       not know.
@@ -15504,7 +15504,7 @@ export interface components {
             route: string;
             /**
              * Format: date-time
-             * @description Time of the earliest waiting item; null when count is 0.
+             * @description Time of the earliest waiting item; null when count is 0. Not returned in this phase (编排裁定 D10-1638).
              */
             oldest_at?: string | null;
             /** @description Sub-counts of the card; their sum equals count. */

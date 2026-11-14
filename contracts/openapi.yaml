@@ -8747,7 +8747,7 @@ paths:
           settle_bill_pending opens `/settle-bills?awaiting_confirm=true` and its `count`
           equals the `total` of GET /admin/v1/settle-bills with `awaiting_confirm=true` (bills
           whose latest round has a DRAFT batch, AdminSettleBillAwaitingConfirm; 编排裁定
-          D10-1402); `oldest_at` (optional, nullable) is the earliest waiting item's time;
+          D10-1402); `oldest_at` (optional, nullable) is the earliest waiting item's time and is not returned in this phase (编排裁定 D10-1638);
           `breakdown` (optional) splits the count by a card-specific sub-key (for
           claim_review_pending `auto_matched` and `manual_review`); clients ignore keys they do
           not know.
@@ -8798,7 +8798,6 @@ paths:
                         - key: claim_review_pending
                           count: 7
                           route: /claims?status=manual_review
-                          oldest_at: '2026-10-17T09:12:00+08:00'
                           breakdown:
                             - key: auto_matched
                               count: 4
@@ -8807,11 +8806,9 @@ paths:
                         - key: appeal_pending
                           count: 2
                           route: /risk/appeals?status=processing
-                          oldest_at: '2026-10-18T15:40:00+08:00'
                         - key: agent_report_overdue
                           count: 0
                           route: /agent/reports?overdue=true
-                          oldest_at: null
                         - key: union_auth_expiring
                           count: 1
                           route: /union/accounts?auth=expiring
@@ -8839,7 +8836,6 @@ paths:
                         - key: claim_review_pending
                           count: 0
                           route: /claims?status=manual_review
-                          oldest_at: null
                       yesterday:
                         date: '2026-10-18'
                         links: 1284
@@ -44244,7 +44240,7 @@ components:
             - string
             - 'null'
           format: date-time
-          description: Time of the earliest waiting item; null when count is 0.
+          description: Time of the earliest waiting item; null when count is 0. Not returned in this phase (编排裁定 D10-1638).
         breakdown:
           type: array
           description: Sub-counts of the card; their sum equals count.
