@@ -33,9 +33,9 @@ export const ENUM_BINDINGS: Readonly<Record<string, string>> = {
   'ProductTlj/properties/kind': 'tlj_kind',
   'ProductCard/properties/match_tag': 'match_tag',
   'InputHit/properties/kind': 'input_kind',
-  // B1-02zzzc (D10-1665): the abandon action keeps all four sensitive operations, withdraw included;
-  // StepUpAction lost withdraw and is a subset (ENUM_SUBSETS) until contracts/enums follows.
-  IdempotencyAbandonAction: 'step_up_action',
+  StepUpAction: 'step_up_action',
+  // IdempotencyAbandonAction (the four sensitive operations, withdraw included; B1-02zzzc,
+  // D10-1665) has no enum in contracts/enums: it is pinned to SENSITIVE_OPERATIONS instead.
   PlatformSearchStatus: 'platform_search_status',
   LinkPatternCategory: 'link_pattern_category',
   IdempotencyAbandonOutcome: 'idempotency_abandon_outcome',
@@ -287,8 +287,6 @@ const STEP_UP_CODES = [10003];
 
 /** Inline enums that may only use a subset of an enum of contracts/enums. */
 export const ENUM_SUBSETS: Readonly<Record<string, string>> = {
-  // B1-02zzzc (D10-1665): withdraw is no step-up action; contracts/enums step_up_action still lists it.
-  StepUpAction: 'step_up_action',
   'ParseInputRequest/properties/scene': 'scene',
   'ConvertLinkRequest/properties/scene': 'scene',
   'StepUpByWechatRequest/properties/provider': 'login_provider',

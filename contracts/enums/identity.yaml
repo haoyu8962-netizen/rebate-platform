@@ -61,7 +61,6 @@ enums:
     source: 规划/04 §2.5、§5；BR-ID-08
     description: step_up_token 的 action，须与所调接口一致
     values:
-      withdraw: POST /v1/withdrawals
       payout_account_change: PUT /v1/me/payout-account
       phone_change: POST /v1/me/phone（更换）
       account_deletion: POST /v1/me/deletion
