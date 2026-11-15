@@ -1,0 +1,36 @@
+id: CT-07e
+repo: rebate-platform
+title: 商品池标签（负责人 11-15 定本期做）：pool_items 加 tags（迁移）、后台条目读写带 tags 且列表可按 tag 筛选、首页配置 product_pool 数据源加可选标签筛选、首页读池按标签取条目（对外形状不变、兜底池不筛）——契约 + 后端（D10-1758 / D10-1761 / D10-1764 / D10-1765）
+type: impl
+# 2026-11-15 w1 入账（编排 D10-1758、D10-1761、D10-1762 ②、D10-1764、D10-1765；规划 couli#6 09bdad0：01 F-ADM-10、04 §3.2 pool_items.tags；08 无对应 BR，refs 留空）。字段形状全文 couli-runs/CT-pool-tags/shape.md（编排 D10-1763 认），要点：
+#   后台条目 AdminPoolItem 带 tags（字符串数组、必有、可为空，每项 1–16 个码点、最多 10 项，返回规范化后的值）；adminAddPoolItem 的 tags 可选：新入库缺省 []，重复入库（覆盖）不带 = 保留原有、带了整体替换（[] 清空，同 #place 现有覆盖语义 {...before, ...window, ...recheck}）；adminUpdatePoolItem 的 tags 可选：不带 = 不改、带了整体替换。
+#   规范化：NFKC → 去首尾空白 → 内部连续空白并一 → 空串丢弃 → 规范化后相同的只留一个（保序、大小写不折叠）；规范化后超 16 个码点、超 10 项或含控制字符 → 20001 data.fields=[tags]，不静默截断。
+#   adminListPoolItems 加查询参数 tag（单个；同一套规范化；规范化后超 16、含控制字符或为空串 → 20001 data.fields=[tag]；只有不带才不筛；按规范化后完全相等匹配「条目 tags 含它」）。
+#   contracts/home-schema.json 的 product_pool 数据源（后台配置侧）加可选 tags（1–10 项，每项同上规则）；首页读池只取与之有交集的条目（命中任一），不带或 [] 不筛；兜底池 feed.fallback_pool_id 不受标签筛选；下发给 App / H5 的页面配置与商品卡都不带标签字段（服务端筛选后下发，三端与 H5 不改）。
+# 迁移：db/migrations 新增一条：pool_items 加 tags text[] NOT NULL DEFAULT '{}'（已有条目为空数组）；列表按 tag 筛选是否建 GIN 索引由实现按查询量定并写明。迁移号与冻结在落地时向编排要（D10-1762）；db/schema.sql 与 packages/db/src/db.gen.ts 由沙箱外 pnpm db:snapshot 生成（outside_needed）。
+# 契约槽：openapi 类，w1 持槽，排 B1-02zzzc、CT-24zzl、CT-24zzm 之后（顺序 w1 定，D10-1758）。门禁等测试机。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/home-schema.json'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/api/src/modules/catalog/**'
+  - 'apps/api/src/modules/content/**'
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/catalog/pool-tags/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+  - 'test/spec/catalog/pool-tags/**'
+status: todo
