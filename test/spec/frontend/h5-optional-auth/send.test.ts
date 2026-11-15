@@ -5,6 +5,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { SignedOperationError } from '../../../../apps/h5/src/shared/api/signed.ts';
 import {
   appApi,
+  deferred,
+  drain,
   expectContract,
   httpServer,
   key,
@@ -19,6 +21,8 @@ import {
   send,
   settle,
   SIGNED_OPERATIONS,
+  type Operation,
+  type TokenAnswer,
 } from './optional-kit.ts';
 
 afterEach(() => {
@@ -50,6 +54,49 @@ it('[AC-F1-01qa-OPT#1] 登录态（standard 令牌）发 H5 直接发的每个 o
   for (const [index, authorization] of http.authorizations().entries()) {
     expect(bearers, key(OPTIONAL_OPERATIONS[index]!)).toContain(authorization);
   }
+});
+
+/** The optional GET of OPTIONAL_OPERATIONS with this path template. */
+function optionalGet(path: string): Operation {
+  const found = OPTIONAL_OPERATIONS.find((op) => op.method === 'GET' && op.path === path);
+  expect(found, path).toBeDefined();
+  return found!;
+}
+
+it('[AC-F1-01qa-OPT#14] 同一客户端同时发起的多个 optional 请求单飞：整批只调 auth.getH5Token 恰好 1 次、都带同一个令牌；之后同会话顺序再发 optional 请求复用未过期令牌、不再向原生要', async () => {
+  const batch = [
+    optionalGet('/v1/pages/{page_key}'),
+    optionalGet('/v1/pages/{page_key}/sections/{section_id}/items'),
+    optionalGet('/v1/rank/hot'),
+  ];
+  expectContract(batch, { auth: 'optional', signed: false });
+  // Native holds its first token answer until every request of the batch has had a chance to ask.
+  const first = deferred<TokenAnswer>('standard');
+  const native = optionalBridge((call) => (call === 1 ? first.promise : 'standard'));
+  const http = httpServer(echo);
+  const api = appApi(native, http);
+  // Started together; none of them is awaited before the next one starts.
+  const pending = Promise.all(batch.map((operation) => settle(send(api, operation))));
+  await drain();
+  expect(native.tokenCalls(), 'the whole batch shares one auth.getH5Token').toBe(1);
+  first.resolve('standard');
+  const results = await pending;
+  for (const [index, result] of results.entries()) {
+    expect(result.status, key(batch[index]!)).toBe('fulfilled');
+  }
+  expect(native.tokenCalls(), 'still one auth.getH5Token after the batch').toBe(1);
+  const issued = native.issued();
+  expect(issued).toHaveLength(1);
+  const token = `Bearer ${issued[0]!.token}`;
+  expect(http.requests).toHaveLength(batch.length);
+  const same = batch.map(() => token);
+  expect(http.authorizations(), 'one token for the whole batch').toEqual(same);
+
+  // Same session, token not expired: the cached token is reused, native is not asked again.
+  expect((await settle(send(api, PRODUCT))).status).toBe('fulfilled');
+  expect(http.requests).toHaveLength(batch.length + 1);
+  expect(http.authorizations()[batch.length]).toBe(token);
+  expect(native.tokenCalls(), 'a later optional request reuses the cached token').toBe(1);
 });
 
 it('[AC-F1-01qa-OPT#2] read_only 令牌同样带上（GET 商品详情与 POST /v1/events），由服务端按作用域判', async () => {

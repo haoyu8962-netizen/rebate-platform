@@ -15,11 +15,21 @@ import { ENV, NATIVE_ENV, requiredText } from '../h5-app-api/kit.ts';
 
 export { outcome };
 
-/** What native answers to one auth.getH5Token call. */
-export type TokenAnswer = H5Token['scope'] | 'not-logged-in' | 'timeout' | 'malformed';
+/**
+ * getH5Token failures of D10-1745 ① ("90401 或任何失败"): 90401, a timeout (90003), a malformed
+ * result, and native answering 90001 (method not supported). The other "not supported" shape,
+ * native not declaring auth.getH5Token at all, is built with optionalBridge's methods argument.
+ */
+export const TOKEN_FAILURES = ['not-logged-in', 'timeout', 'malformed', 'unsupported'] as const;
 
-/** The three getH5Token failures of D10-1745 ①: 90401, a timeout (90003), a malformed result. */
-export const TOKEN_FAILURES = ['not-logged-in', 'timeout', 'malformed'] as const;
+/** What native answers to one auth.getH5Token call. */
+export type TokenAnswer = H5Token['scope'] | (typeof TOKEN_FAILURES)[number];
+
+/** The only bridge methods H5 may call while it sends optional requests (no prompt, no login). */
+export const QUIET_METHODS: readonly string[] = ['app.getEnv', 'auth.getH5Token'];
+
+/** Contract bridge methods a wrong implementation could use to prompt or start a login. */
+export const PROMPT_METHODS: readonly string[] = ['ui.toast', 'ui.showLoading', 'auth.login'];
 
 export interface IssuedToken {
   account: string;
@@ -57,6 +67,8 @@ function answer(request: BridgeRequest, account: string, call: number, value: To
     response = { id: request.id, code: 90401, msg: 'not logged in' };
   } else if (value === 'timeout') {
     response = { id: request.id, code: 90003, msg: 'timed out' };
+  } else if (value === 'unsupported') {
+    response = { id: request.id, code: 90001, msg: 'not supported' };
   } else {
     // Code 0 with a result outside contracts/bridge.schema.json (empty token, no expire_at).
     response = { id: request.id, code: 0, msg: '', data: { token: '', scope: 'standard' } };
