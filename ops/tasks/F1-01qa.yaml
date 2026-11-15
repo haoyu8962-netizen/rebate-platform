@@ -1,0 +1,23 @@
+id: F1-01qa
+repo: rebate-platform
+title: H5 可选登录接口按 D10-1745 口径发送（FU-H5-OPTIONAL-AUTH）：x-auth optional 的请求取得到令牌就带（read_only 照带），取不到（90401 或任何失败）照现在匿名发、不拦不等；带令牌的请求 10002 续不上不降成匿名重放；auth.changed 后旧令牌与按旧身份取到的结果不残留
+type: impl
+# 2026-11-15 入账（前端线 fe，编排 D10-1744）。来由：CT-13d 评审 S2（ops/evidence/CT-13d.json）——apps/h5/src/shared/api/app-api.ts 把 anonymous.ts 名单里的操作（security [] 与 optional {} 混在一起）一律交给不带令牌管理器的客户端，已登录用户在 H5 发的 optional 请求（POST /v1/events 的 link_jump、GET /v1/pages/*、/v1/products/*、/v1/rank/hot、GET /v1/links/{id} 等）也不带令牌，服务端只能按游客处理。
+# 依据：编排 D10-1745（H5 口径，与原生规划/03 §4.2 D10-1709「身份未知不发」不同——H5 不自己发登记归属的请求：解析 / 打开是 signed、H5 不发，转链走桥 trade.convertAndOpen 由原生发；H5 直接发的 optional 只有读类与 events，匿名的后果只是会员看到游客报价、link_jump 不带人，不是归属丢失）。90401 的「确认游客」语义不在本单定、不动桥契约，另登 FU-BRIDGE-H5TOKEN-GUEST-CODE 备着。
+# 本单范围：① 网络层把 x-auth none（security []）与 optional（{}）分开：none 照旧不取令牌、不带 Authorization，取令牌不得阻塞 none 操作；optional 先经现有令牌管理器（bridge-sdk createH5TokenManager，单飞）取令牌，取到就带 Bearer 发，scope 为 read_only 的令牌照带（服务端按作用域判）。② 取不到令牌（getH5Token 返回 90401 或任何失败：超时、不合法、不支持）照现在不带令牌匿名发，不本地拒绝、不等待、不提示；同一会话世代内不对 getH5Token 反复重试（auth.changed 后重来）。③ 带令牌发出的请求收到 10002：沿用 token.ts 续一次重放；续不上的，这一次不降成匿名重发同一请求，按现有失败态交页面重试。④ auth.changed 之后：丢掉旧令牌；按旧身份发出、尚未返回或已取到的 optional 结果（商品 / 报价等）不交给新身份的页面（作废或丢弃），新页面按新身份重取；壳层现有的作废令牌、清缓存、重挂页面（F1-01s）不回退。⑤ signed 操作（/v1/inputs/parse、/v1/links/{id}/open、商品反馈等）照旧本地拒绝；/v1/config 走桥 app.getConfig 不改。anonymous.ts 的契约对照单测随之改为区分 none / optional。用例（D10-1745 ④）：登录态 optional 带令牌（含 read_only）；getH5Token 失败匿名照发；10002 续不上不降匿名重放；auth.changed 后旧报价不残留。
+# 非资金（apps/h5，RV1）：Codex 额度用尽（D10-1604），规则测试独立 Claude 写、另一独立 Claude 审（approvals 第 36 条）；实现 Claude Opus；代码评审 general（独立 Claude）。第 3 轮 spec-test 仍 fail 即停报编排（D10-1734）。测试机不可用期间按 D10-1693 本机推进，合并门禁只认测试机。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/h5/src/shared/api/**'
+  - 'apps/h5/src/entries/app/app-shell.tsx'
+test_paths:
+  - 'test/spec/frontend/h5-optional-auth/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/h5-optional-auth/**'
+status: todo
+pr: null
