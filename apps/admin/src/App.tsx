@@ -46,6 +46,7 @@ import { ConfigCenterPage } from './pages/config-center/index.ts';
 import { DashboardPage, dashboardTargetOf } from './pages/dashboard/index.ts';
 import { ExportsPage } from './pages/exports/index.ts';
 import { FundLedgerPage } from './pages/fund-ledger/index.ts';
+import { LedgerPage } from './pages/ledger/index.ts';
 import { InviteRewardsPage } from './pages/invite-rewards/index.ts';
 import { HomeConfigPage } from './pages/home-config/index.ts';
 import { KillSwitchesPage } from './pages/kill-switches/index.ts';
@@ -113,6 +114,7 @@ const USERS_MENU_ID = 'users';
 const CLAIMS_MENU_ID = 'claims';
 const RECON_MENU_ID = 'recon';
 const FUND_LEDGER_MENU_ID = 'fund-ledger';
+const LEDGER_MENU_ID = 'ledger';
 const AGENT_TRACES_MENU_ID = 'agent-traces';
 /** The workbench card agent_report_overdue (/agent/reports?overdue=true): AI 助手记录, AI 举报 tab. */
 const AGENT_REPORTS_ROUTE = 'agent/reports';
@@ -688,6 +690,9 @@ function ShellFrame({
     } else if (match !== undefined && match.item.id === RECON_MENU_ID) {
       // 对账与差错: fund.recon or fund.view reads; only fund.recon closes a difference.
       content = <ReconPage access={access} />;
+    } else if (match !== undefined && match.item.id === LEDGER_MENU_ID) {
+      // 余额流水: fund.view or user.lookup reads one user's summary and ledger (read only).
+      content = <LedgerPage access={access} />;
     } else if (match !== undefined && match.item.id === FUND_LEDGER_MENU_ID) {
       // 平台资金台账: fund.view reads the daily ledger; fund.cash_entry alone gets the page's notice.
       content = <FundLedgerPage access={access} />;
@@ -763,6 +768,10 @@ function ShellFrame({
         ) : (
           <SettleBillDetailPage key={settleBillId} access={access} billId={settleBillId} />
         );
+    } else if (menuId === LEDGER_MENU_ID && (snapshot.isSuper || snapshot.permissions.length > 0)) {
+      // A direct address to /ledger without the menu (user.lookup alone reads; without a read key
+      // the page itself says so and sends nothing).
+      content = <LedgerPage access={access} />;
     } else if (
       menuId === FUND_LEDGER_MENU_ID &&
       (snapshot.isSuper || snapshot.permissions.length > 0)
