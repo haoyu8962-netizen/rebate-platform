@@ -1,18 +1,26 @@
 id: F1-08da
 repo: rebate-platform
-title: F1-08da：冻结月结账单只读测试 [AC-F1-08d-READONLY#1] / [#2] 账号样例改为只持 fund.view、[AC-F1-08d-SOURCE#1] 去掉动态码导入禁令（F1-08db 前置；其余断言不变）
-type: test-change
-# 2026-10-31 入账（前端线 f1-frontend-7，先例 F1-13ba #1940 / F1-08eba #1955）。F1-08d 时月结账单页只读：READONLY#1 用持 settle.bill 的账号、READONLY#2 用超管，断言列表与详情没有可用的确认 / 定时 / 驳回 / 撤销定时 / 继续执行 / 补充批次等写入口；SOURCE#1 断言 pages/settle-bills 不引用 components/step-up。F1-08db 给 settle.bill 持有者（超管持全部）加上这些入口，且写操作按契约 CT-24zd 要动态码，三条与 F1-08db 同一入参不能同时满足。
-# 只改：READONLY#1 / #2 的权限样例改为只持 fund.view（读权限，契约 listAdminSettleBills / getAdminSettleBill 允许 settle.bill 或 fund.view），标题措辞同步，其余断言（无可用写入口、只发三个 GET、不弹动态码）零改动；SOURCE#1 只删动态码导入禁令（regex 与对应 expect）与标题里「不用动态码」字样，其余源码检查与 SOURCE#2 不变。settle.bill / 超管看得到入口由 F1-08db 新测试覆盖。现行主干改前改后都绿，可先于 F1-08db 合并。
-# 改既有规则测试属第一类保护路径：非 task 分支、不带证据文件；新鲜独立 Claude 改、另一新鲜独立 Claude 只读复审 pass（写进 PR 正文）；标签由编排核对后加（#24）。
-refs: []
-refs_hash: {}
-deps: [F1-08d]
+title: 后台余额流水查询页（只读）：按 UID 查一个用户的流水与资金摘要（adminListLedgerEntries、adminGetUserFundSummary）
+type: impl
+# 2026-11-15 入账（前端线 fe，编排 D10-1517 第一批 ④，规格 design/specs/admin-ledger.md，负责人 2026-10-18 后台第 2 批定稿）。菜单「资金 / 余额流水」（resources 已登记 id ledger，权限 fund.view），App.tsx 按菜单 id 分发到新页面。
+# 范围：UID 输入查询（必填）→ 资金摘要（adminGetUserFundSummary）+ 流水表（adminListLedgerEntries：分页 ≤200，筛选 ledger_type / sub_type / sub_account / 会计日起止 / ref，金额为用户视角带符号，balance_after 可空）；流水类型 / 子户名取后台字典，缺行显示编码；金额只经 @couli/money；三态与 10403。不做：【导出当前筛选】——契约 export_resource 尚无 ledger（已报编排）；导出记录页已有（F1-10j #1035）；用户详情「余额与流水」页签另定。
+# 只读页面（RV1）：Codex 额度用尽（D10-1604），规则测试独立 Claude 写、另一独立 Claude 审（approvals 第 36 条）；实现 Claude Opus；代码评审 general（独立 Claude）。第 3 轮 spec-test 仍 fail 即停报编排（D10-1734）。测试机不可用期间按 D10-1693 本机推进。
+refs: [BR-FUND-13, BR-FUND-15, BR-FUND-16]
+refs_hash:
+  BR-FUND-13: ad7aad8f8846
+  BR-FUND-15: 849cd1eab9f2
+  BR-FUND-16: 077f6d412d5a
+deps: []
 paths:
-  - 'test/spec/frontend/admin-settle-bills/readonly.test.ts'
-  - 'test/spec/frontend/admin-settle-bills/source.test.ts'
+  - 'apps/admin/src/pages/ledger/**'
+  - 'apps/admin/src/texts/ledger.ts'
+  - 'apps/admin/src/App.tsx'
+test_paths:
+  - 'test/spec/frontend/admin-ledger-readonly/**'
 impl: claude
-tester: none
+tester: claude-independent
 accept:
   - 'pnpm verify'
-status: done
+  - 'test/spec/frontend/admin-ledger-readonly/**'
+status: todo
+pr: null
