@@ -1,0 +1,21 @@
+id: B1-34r
+repo: rebate-platform
+title: B1-34r：审计视图登记申诉相关 5 个动作——appeal_register / appeal_claim / appeal_resolve 的 target_type appeal、blocklist_remove 的 target_type blocklist（target 均为裸 id）、五个动作的 permission risk.appeal；按 target_type 与 target_id 都能查到，历史记录登记后自动可查
+type: impl
+# 2026-11-15 be 入账（编排 D10-1759；w1 19:08 核出：这 5 个动作不在 admin/domain/audit-log-view.ts 的 RULES 表，读出 target_type、target_id、permission 都是 null，按对象查不到）。范围只在审计视图（读侧推导），不动写入侧（risk admin-appeals-*.ts、admin/infra/audit-writer.ts）。
+# 已核：① 契约 AdminAuditLogListItem.target_type 是自由文本（description「Object type derived from the record (free text)」，maxLength 64），没有枚举，所以不需要走契约、不报 w1；取值照 RULES 现有风格用表名单数：appeal（app.appeals）、blocklist（app.blocklist）。② 写入 target：appeal_register / appeal_claim / appeal_resolve 写 appealId（裸 id，prefix null）；blocklist_remove 写 entry.id（裸 id）。③ 五个动作的守卫点都是 risk.appeal（risk/http/admin/appeals*.controller.ts）。④ **blocked_request_lookup 写 target: null**（按手机号查被拦请求，没有单一对象），视图里 target_id 为 null 时 target_type 也按设计为 null——只登记 permission（risk.appeal），按对象查不到是写入侧的事，已报编排（不在本单改）。⑤ 推导在读时进行，RULES 一登记，历史记录自动可查（同一张表驱动 *Match 过滤计划）。
+# 规则测试（独立 Claude 写、另一独立 Claude 审，D10-1604）：新目录 test/spec/admin/audit-view-appeal/**，照 test/spec/admin/audit-view-withdrawal/ 的 harness 写法：4 个有对象的动作各写一条审计后，列表读出的 target_type / target_id / permission 正确，按 target_type 与按 target_id 过滤都能查到、别的类型查不到；blocked_request_lookup 读出 permission risk.appeal、target_type / target_id 为 null；在登记前写入的历史行（直接插 audit_logs）登记后同样可查。本机重活（D10-1477）只在测试机跑；要连库的集成测试跑前在 notices 说一声（D10-1693）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
+  - 'apps/api/src/modules/admin/domain/audit-log-view.test.ts'
+test_paths:
+  - 'test/spec/admin/audit-view-appeal/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
