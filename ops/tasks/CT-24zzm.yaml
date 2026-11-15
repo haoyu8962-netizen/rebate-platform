@@ -1,0 +1,33 @@
+id: CT-24zzm
+repo: rebate-platform
+title: 后台导出加余额流水：export_resource 加 ledger（filters 同 adminListLedgerEntries，导出列 = 其响应字段，脱敏照 04 §11.1），契约 + 后端导出实现（D10-1740 / D10-1742）
+type: impl
+# 2026-11-15 w1 入账（编排 D10-1740 ②、D10-1742 选 (a)；需求 01 F-ADM-08「余额流水查询与导出」、规格 design/specs/admin-ledger.md【导出当前筛选】）。fe 随后开 F1-08fb 加按钮。
+# 契约：contracts/enums/admin.yaml 的 export_resource 加值 ledger（description 写：余额流水 GET /admin/v1/ledger，权限点同该列表 fund.view 或 user.lookup 任一 + export；filters 同 adminListLedgerEntries 的查询参数 user_id（必填）、ledger_type、sub_type、sub_account、accounting_date_from / to、ref；导出列与脱敏见下；编排默认，待规划回写（D10-1742））；openapi 里 adminCreateExport / export 相关说明同步，重出生成物。
+# 导出列（编排默认，待规划回写，D10-1742）= adminListLedgerEntries 的 items 字段逐个：entry_id、booked_at、accounting_date、ledger_type、sub_type、sub_account、amount_fen（用户视角带符号）、balance_after_fen（可空）、voucher.voucher_id、voucher.uniq_key、voucher.biz_type、voucher.biz_id、link.type、link.id（可空）。按 04 §11.1 的 pii 规则逐个核过：**没有一列属于 pii**（无手机号、身份证号、收款账号、实名；全是编号、金额、日期与枚举），所以有无 pii.* 导出内容相同；以后若流水响应加了 pii 字段，再按 §11.1 脱敏。金额只用整数分（硬规则 1），不做格式化换算。
+# 后端：admin 模块导出任务（admin-exports.ts / export-worker.ts）接 ledger 资源，取数经 ledger 模块的只读入口（admin-ledger-read，与列表同一查询与排序），不在 admin 里直读 ledger 表；权限与可见范围、重试、过期、停用取消照 BR-ID-42 现有导出流程。
+# 契约槽：openapi 类（改 enums 与 openapi 说明），w1 持槽，排 B1-02zzzc、CT-24zzl 之后。门禁等测试机。
+refs: [BR-ID-42, BR-FUND-16]
+refs_hash:
+  BR-ID-42: 2f9cd1710ed3
+  BR-FUND-16: 077f6d412d5a
+deps: []
+paths:
+  - 'contracts/enums/admin.yaml'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/api/src/modules/admin/**'
+  - 'apps/api/src/modules/ledger/**'
+test_paths:
+  - 'test/spec/admin/export-ledger/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+  - 'test/spec/admin/export-ledger/**'
+status: todo
