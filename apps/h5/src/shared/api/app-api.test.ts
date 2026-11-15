@@ -129,7 +129,7 @@ it('a 10002 answer arriving after the account changed is not renewed or replayed
   expect(http.requests).toHaveLength(1);
 });
 
-it('anonymous operations are unaffected by the account change and carry no token', async () => {
+it('x-auth none operations are unaffected by the account change and carry no token', async () => {
   const native = nativeBridge();
   const http = wire(() => reply({ items: [], next_cursor: null }));
   const api = createAppApi({ env: ENV, fetch: http.fetch })!;
@@ -138,4 +138,26 @@ it('anonymous operations are unaffected by the account change and carry no token
   expect(native.tokens).toHaveLength(0);
   expect(http.requests).toHaveLength(1);
   expect(http.requests[0]!.headers.has('Authorization')).toBe(false);
+});
+
+it('x-auth optional operations carry the token when native gives one and go anonymously when it fails', async () => {
+  const native = nativeBridge();
+  const http = wire(() => reply({ items: [] }));
+  const api = createAppApi({ env: ENV, fetch: http.fetch })!;
+  const signedOut = api.request('GET', '/v1/rank/hot', {
+    params: { query: { platform: 'taobao' } },
+  });
+  await vi.waitFor(() => expect(native.tokens).toHaveLength(1));
+  native.tokens[0]!.reject(new Error('native refused'));
+  expect(await signedOut).toEqual({ items: [] });
+  const signedIn = api.request('GET', '/v1/rank/hot', {
+    params: { query: { platform: 'taobao' } },
+  });
+  await vi.waitFor(() => expect(native.tokens).toHaveLength(2));
+  native.tokens[1]!.resolve(token('A'));
+  expect(await signedIn).toEqual({ items: [] });
+  expect(http.requests.map((request) => request.headers.get('Authorization'))).toEqual([
+    null,
+    'Bearer h5-unit-A',
+  ]);
 });
