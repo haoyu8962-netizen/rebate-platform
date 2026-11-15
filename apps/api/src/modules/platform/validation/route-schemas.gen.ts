@@ -14270,11 +14270,11 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "type": "integer",
           "format": "int32",
           "minimum": 1,
-          "description": "Where re-consent or re-signing starts; not below the current version's, not above the new version; for sdk_list and collect_list exactly the new version (D10-465)."
+          "description": "The oldest version still valid (BR-ID-12, BR-WDR-31); at least 1, not below the current version's min_version, not above the new version; for sdk_list and collect_list exactly the new version (D10-465). Otherwise 20001 with data.fields=[min_version]."
         },
         "requires_resign": {
           "type": "boolean",
-          "description": "Whether the new version requires a new signature; must agree with the publish rules for the type and min_version."
+          "description": "Must be true for labor_agreement when min_version equals the new version, false for labor_agreement otherwise and false for every other type; any other value is 20001 with data.fields=[requires_resign] (the server does not fill it in)."
         },
         "legal_confirmed_by": {
           "type": "string",
