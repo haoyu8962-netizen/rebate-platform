@@ -1,0 +1,29 @@
+id: CT-24zzl
+repo: rebate-platform
+title: 契约同步（后台第二批三页 B 堆 ①，D10-1757）：把已实现的行为写进 openapi 说明与示例——adminStepUp 令牌消耗规则、协议发布的 requires_resign 规则与 min_version 描述、劳务协议示例、申诉审计记录的 target_type、adminUpdatePoolItem 原样重发安全；只改说明 / 示例 / 漏声明，不改行为
+type: contract
+# 2026-11-15 w1 入账（编排 D10-1757；来源 couli-runs/admin-batch2-design/pending-triage.md「交契约线 w1」）。只收「把已有实现或已有规则写进契约」的同步缺陷，不改任何行为、不加接口：
+#   申诉 P-23 / 内容 P-12：adminStepUp（及使用 X-Step-Up-Token 的后台写接口说明）写明现行规则——令牌在业务成功（HTTP 2xx 且 code 0）时作废，被拒或出错时释放、有效期内可再用（admin permission-guard 现行实现，AC-B1-34h）。
+#   内容 P-09：协议发布写明后端已实现的规则——劳务协议 requires_resign 必须等于「min_version = 本版」，其他类型必须为假；min_version 的描述与 BR-ID-12 对齐（重新同意规则本身不变）。
+#   内容 P-11：协议示例按「每类协议一篇文章、逐版加版本」改（劳务协议 v2 / v3 用同一 article_id），说明同步。
+#   申诉 P-21：adminListAuditLogs 写明申诉相关记录现行写入的 target_type 取值（照 risk 模块实际写入的值）。
+#   商品池 P-24 前半：adminUpdatePoolItem 写明「设为目标值、原样重发安全」（若实现确是如此）；版本核对不加（属新行为，归 ②）。
+# 实现须逐条对照后端代码核实；某条实际行为与上面不符或并未实现，就不写、在输出里报，不在本单改代码。
+# 不收（新字段 / 新接口 / 要先定的，归 ②，等负责人对三页定稿）：申诉 P-01 / P-04（44001 data 现只有 risk_msg_code，加 ref_id 是行为改动）/ P-06 / P-10 / P-26，内容 P-01 / P-02 / P-03 / P-06 / P-08 / P-14，商品池 P-06 / P-07 / P-08 / P-24 后半 / P-26。
+# 契约槽：openapi 类，w1 持槽，排 CT-17j、B1-02zzzc 之后；门禁等测试机。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
