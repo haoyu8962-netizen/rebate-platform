@@ -6,6 +6,7 @@ type: impl
 # 契约：contracts/enums/admin.yaml 的 export_resource 加值 ledger（description 写：余额流水 GET /admin/v1/ledger，权限点同该列表 fund.view 或 user.lookup 任一 + export；filters 同 adminListLedgerEntries 的查询参数 user_id（必填）、ledger_type、sub_type、sub_account、accounting_date_from / to、ref；导出列与脱敏见下；编排默认，待规划回写（D10-1742））；openapi 里 adminCreateExport / export 相关说明同步，重出生成物。
 # 导出列（编排默认，待规划回写，D10-1742）= adminListLedgerEntries 的 items 字段逐个：entry_id、booked_at、accounting_date、ledger_type、sub_type、sub_account、amount_fen（用户视角带符号）、balance_after_fen（可空）、voucher.voucher_id、voucher.uniq_key、voucher.biz_type、voucher.biz_id、link.type、link.id（可空）。按 04 §11.1 的 pii 规则逐个核过：**没有一列属于 pii**（无手机号、身份证号、收款账号、实名；全是编号、金额、日期与枚举），所以有无 pii.* 导出内容相同；以后若流水响应加了 pii 字段，再按 §11.1 脱敏。金额只用整数分（硬规则 1），不做格式化换算。
 # 后端：admin 模块导出任务（admin-exports.ts / export-worker.ts）接 ledger 资源，取数经 ledger 模块的只读入口（admin-ledger-read，与列表同一查询与排序），不在 admin 里直读 ledger 表；权限与可见范围、重试、过期、停用取消照 BR-ID-42 现有导出流程。
+# 2026-11-16 补（D10-1849）：app.export_tasks 的 resource CHECK（0115）只收 users / audit_logs / tax_withdrawals，放宽加 ledger 要两条迁移（照 0115 / 0116：DROP + ADD CHECK … NOT VALID，再 VALIDATE），号暂写 0146 / 0147，落地排在 CT-13l 之后、拿到冻结再取主干最大号 + 1，db/schema.sql 由沙箱外 pnpm db:snapshot 重出；冻结 [AC-B1-34b#4] 钉死恰三值，按 rule_change 改并在同文件加 1 条新块（D10-1812 (乙) 先例，只用该文件已有 import 与辅助、块外不动），其余 14 条登 red_exempt，由增量 spec-test 逐条确认。export_tasks 不是资金表，不进 APPROVED_GUARD_CHANGES。
 # 契约槽：openapi 类（改 enums 与 openapi 说明），w1 持槽，排 B1-02zzzc、CT-24zzl 之后。门禁等测试机。
 refs: [BR-ID-42, BR-FUND-16]
 refs_hash:
@@ -22,8 +23,63 @@ paths:
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
   - 'apps/api/src/modules/admin/**'
   - 'apps/api/src/modules/ledger/**'
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/admin/export-ledger/**'
+  - 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts' # 只改 [AC-B1-34b#4] 并加 1 条新块（见 modify_existing，D10-1849）
+modify_existing:
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#4] resource is limited to users, audit_logs and tax_withdrawals by a database CHECK'
+    retitle_to: '[AC-B1-34b#4] resource is limited to users, audit_logs, tax_withdrawals and ledger by a database CHECK'
+    reason: rule_change
+    br: [BR-ID-42]
+    ruling: D10-1849
+    note: '依 D10-1849（D10-1740 / D10-1742：export_resource 加 ledger）：resource 的 CHECK 放宽为四值；本块只把 toEqual 的期望集合加 ledger、正例循环加 ledger，反例（''''、orders、USERS、audit_log）与其余断言不动；标题按 retitle_to 只把三值改为四值。反向验证：基线为旧 CHECK（三值），正式先红中本条因断言而红（red for a valid reason），不另编探针。'
+red_exempt:
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#1] all export columns have the specified SQL types and nullability'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#2] INSERT round-trips filters and separate public id, defaults row_version to 1 and leaves optional fields null'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#3] required columns reject explicit NULL even when they have defaults'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#5] status CHECK accepts exactly the six contract values on INSERT and UPDATE'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#6] audit exports must be masked while user exports allow either masking choice'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#7] progress accepts NULL and 0 through 100, rejecting either out-of-range boundary'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#8] row_count accepts NULL, zero and positive int32 values but rejects negatives'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#9] public_id is unique within an app, reusable across apps, and the internal id stays globally unique'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#10] created_by references an existing admin in the same app without cascading'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#11] valid indexes support listing, creator lookup, active cancellation and done expiry cleanup'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#12] couli_app has SELECT/INSERT and exactly the worker column UPDATE grants, without DELETE or TRUNCATE'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#13] couli_app can write worker results, preserve supplied timestamps and clear nullable fields'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#14] couli_app cannot UPDATE identity, creator, request parameters or creation time'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
+  - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
+    test: '[AC-B1-34b#15] couli_readonly can read every column but cannot insert, update or delete'
+    reason: '冻结用例、测试体未改：不涉及 resource 的取值集合，缺新迁移（旧 CHECK 三值）时照旧绿；同文件因 modify_existing [AC-B1-34b#4] 与新块整份重判（D10-1849 / D10-1812）'
 impl: claude
 tester: claude-independent
 accept:
