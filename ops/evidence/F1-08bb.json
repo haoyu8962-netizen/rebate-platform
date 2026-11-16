@@ -1,0 +1,127 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求",
+    "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bb-SELECT#1] 批量栏随勾选出现：aria-live 精确为「已选 N 张，合计实付 ¥…」（实付合计经 @couli/money），取消勾选后随之更新，全部取消后批量栏与【执行所选】消失；「待执行」页签里的待执行单同样可勾",
+    "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bb-PAUSED#1] 概览为打款开关关闭或队列暂停时：待执行单仍可勾、批量栏照常统计，但【执行所选】不渲染（含隐藏、置灰），批量栏写明原因（开关关闭、队列暂停各一句，按概览字段逐项出现）；不发写请求",
+    "test/spec/frontend/admin-payout-execute/daily.test.ts > [AC-F1-08bb-PREVIEW#4] 单日限额余量取等：daily_cap_fen − daily_sent_fen 恰等于所勾 A+C 实付合计（¥599.88）→ 该项满足；余量少 1 分（¥599.87）→ 未满足；其余各项不变，【确认执行】都可用",
+    "test/spec/frontend/admin-payout-execute/errors.test.ts > [AC-F1-08bb-ERROR#1] 10003：重新弹出动态码并提示凭证失效，验证前不重发；验证后以新凭证重发，沿用原 Idempotency-Key 与整个请求体，executed 后逐单显示结果",
+    "test/spec/frontend/admin-payout-execute/errors.test.ts > [AC-F1-08bb-ERROR#2] 10403 提示「无权限执行此操作（需要 payout.execute 权限点）」；20001 data.fields=[withdrawal_ids] 提示提现单编号有误，其他字段提示提交内容有误；不报成功、不重发，对话框与勾选保留",
+    "test/spec/frontend/admin-payout-execute/errors.test.ts > [AC-F1-08bb-ERROR#3] 20901 与 40901 提示「提交失败，请稍后重试」；不报成功、不自动重新验证或重发，对话框与勾选保留",
+    "test/spec/frontend/admin-payout-execute/errors.test.ts > [AC-F1-08bb-ERROR#4] 5xx 提示「提交失败，请稍后重试」，网络错误提示「网络错误，请检查网络后重试；未确认前不会重复提交」；不报成功、不自动重发，对话框与勾选保留",
+    "test/spec/frontend/admin-payout-execute/preview.test.ts > [AC-F1-08bb-PREVIEW#1] 倒序勾 C、A 后点【执行所选】：执行确认对话框按列表顺序列 A、C 的单号、用户、实付金额；执行前检查逐项全文（开关已开启、队列运行中、企业支付宝 W 与取数时间、W 对 P 与水位结论、单日限额余量对本次合计，均满足）与服务端再查的说明；不发请求；【取消】后焦点回【执行所选】、勾选保留",
+    "test/spec/frontend/admin-payout-execute/preview.test.ts > [AC-F1-08bb-PREVIEW#2] 勾企业支付宝单 A 与银行卡单 B：执行前检查按概览的通道顺序列两个通道（银行卡没有 W：未录入、无结论，均未满足），单日限额余量对 A+B 合计；未满足的余额项不阻止【确认执行】",
+    "test/spec/frontend/admin-payout-execute/preview.test.ts > [AC-F1-08bb-PREVIEW#3] 执行前检查随概览字段变化、不写死阈值：W 已过期（概览无水位结论）→ W 项「已过期」、水位「无结论」均未满足，单日余量 ¥100.00 不够本次合计也未满足；W 低于 P → 水位项未满足；W 充足、结论正常 → 满足；说明里的数据时间取 as_of；各情形【确认执行】都可用",
+    "test/spec/frontend/admin-payout-execute/rebatch.test.ts > [AC-F1-08bb-SELECT#2] 已挂在别的批次上的待执行单也能勾：经 W9 退回（hold_reason=daily_cap、execute_seq=1、batch_id 指向旧人工批次）的 H 与自动批次因通道未开通留下的 U 在「全部」「待执行」都有一个可用、未勾的勾选框；倒序勾 U、H、A 后批量栏精确统计三张，执行确认清单按列表顺序列 A、H、U 与执行前检查全文；确认 → 动态码 → 一次 POST，请求体为 [A, H, U]；executed 后三单都显示已发起打款",
+    "test/spec/frontend/admin-payout-execute/reject.test.ts > [AC-F1-08bb-REJECT#1] rejected（watermark_stale，channel=alipay）：显示整批未执行与企业支付宝 W 过期的原因，不显示已发起打款与批次号，勾选保留；关掉后再点【执行所选】提交是新操作：请求体相同、Idempotency-Key 换新，executed 后逐单显示已发起打款",
+    "test/spec/frontend/admin-payout-execute/reject.test.ts > [AC-F1-08bb-REJECT#2] rejected 的开关类原因：payout_disabled 显示「整批未执行：打款开关已关闭」、queue_paused 显示「整批未执行：打款队列已暂停」；均不显示成功与批次号、勾选保留、不自动重发",
+    "test/spec/frontend/admin-payout-execute/reject.test.ts > [AC-F1-08bb-REJECT#3] rejected 的水位类原因带通道名：watermark_below_forecast + bank_card →「银行卡余额 W 低于预计提现 P」，watermark_usable_exceeded + alipay →「企业支付宝在途与本批合计超过可用余额（W × 可用比例），请拆分批次」；均不显示成功与批次号、勾选保留",
+    "test/spec/frontend/admin-payout-execute/reopen.test.ts > [AC-F1-08bb-REPLAY#5] 网络错误后关闭执行确认对话框、勾选不变，再点【执行所选】并确认（需要时再过动态码）：第二次 POST 的请求体与第一次相同、Idempotency-Key 沿用原键；返回 executed 后逐单显示结果并清空已选",
+    "test/spec/frontend/admin-payout-execute/replay.test.ts > [AC-F1-08bb-REPLAY#1] 网络错误后保留对话框与勾选，手动再点【确认执行】重提同批：请求体相同、沿用原 Idempotency-Key，返回 executed 后逐单显示结果并清空已选",
+    "test/spec/frontend/admin-payout-execute/replay.test.ts > [AC-F1-08bb-REPLAY#2] 40901（同键仍在处理）与 5xx 后手动重提同批：请求体相同、沿用原 Idempotency-Key",
+    "test/spec/frontend/admin-payout-execute/replay.test.ts > [AC-F1-08bb-REPLAY#3] 网络错误后改了勾选（取消 C）再提交是新操作：请求体只有 A、Idempotency-Key 换新",
+    "test/spec/frontend/admin-payout-execute/replay.test.ts > [AC-F1-08bb-REPLAY#4] 同页 executed 一批 A 之后再勾 C 执行是新一批：两次 Idempotency-Key 均非空且不同，请求体各自只含本批",
+    "test/spec/frontend/admin-payout-execute/result.test.ts > [AC-F1-08bb-RESULT#1] executed 混合：显示新批次号；A 已发起打款，C 已不是待执行、B 通道未开通、F1 会员阻断、F2 已有转账记录各显示对应提示，按列表顺序一单一行；完成后清空已选、批量栏消失，并在 POST 之后重新读队列与概览（A 变打款中、不可再勾）",
+    "test/spec/frontend/admin-payout-execute/result.test.ts > [AC-F1-08bb-RESULT#2] executed 但 paying 为空（多通道各因水位留下）：仍显示新批次号，A 与 B 逐单显示各自的水位原因（低于 P / 超可用额度、W 过期），不出现「已发起打款」；清空已选并重新读队列与概览",
+    "test/spec/frontend/admin-payout-execute/submit.test.ts > [AC-F1-08bb-SUBMIT#1] 一次动态码覆盖整批：倒序勾选、取消再勾不改变请求体顺序；连点【确认执行】与【验证并继续】、在途时再点入口与提交都只发一次 POST /admin/v1/payout-batches（请求体只有 withdrawal_ids，列表顺序，带 X-Step-Up-Token 与 Idempotency-Key），在途时对话框保留、两处按钮禁用",
+    "test/spec/frontend/admin-payout-execute/submit.test.ts > [AC-F1-08bb-SUBMIT#2] 取消动态码不提交；关闭执行确认对话框后焦点回【执行所选】、勾选保留；再次执行仍须动态码，期间不发验证以外的写请求"
+  ],
+  "risk_note": "F1-08bb (orchestrator D10-1517 batch 1 ②; landed per D10-1772, stacked on #180 F1-08ba and rebased onto main). Payout queue 执行所选: ticked pending rows → execution confirm with the pre-execution checklist (rows already in a batch, the daily cap compared inclusively) → SMS step-up code → adminCreatePayoutBatch; a whole-batch rejection shows its reason, per-row results go back to the list. One Idempotency-Key per confirmation; closing and reopening keeps the original key and body, and an unknown result is only retried with the original key and body (BR-WDR-14). Amounts only through @couli/money. Codex is out of quota until 2026-11-20 (D10-1604), so per ops/approvals.yaml #36 the rule tests were written by an independent Claude (claude-run.sh, fresh context): 24 tests; another independent Claude spec-test r1 fail (S1: samples never had a row already in a batch) and, after a second test round, pass. Implementation by Opus 5.5 (another context); after the rebase couli-ci verify:fast run 1 and --browser run 1 green. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex out of quota until 2026-11-20 (D10-1604): money review by an independent Claude per ops/approvals.yaml #36 (claude-run.sh, fresh context), r1 pass, 0 S2"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude (Codex out of quota, approvals #36); spec-test by another independent Claude context r1 fail (S1 rows already in a batch; S2 cap boundary, replay after reopen), round-2 tests, r2 pass"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08bb",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "9df2c5d9eec1f81a450c78af19aecfafb9d80109",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "9df2c5d9eec1f81a450c78af19aecfafb9d80109",
+      "tree": "4197c873dff98bf58778d5fe4f5a60f57d4514fb",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-16T06:42:37Z",
+      "finished_at": "2026-11-16T06:43:09Z",
+      "red_tests": [
+        "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求",
+        "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bb-SELECT#1] 批量栏随勾选出现：aria-live 精确为「已选 N 张，合计实付 ¥…」（实付合计经 @couli/money），取消勾选后随之更新，全部取消后批量栏与【执行所选】消失；「待执行」页签里的待执行单同样可勾",
+        "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bb-PAUSED#1] 概览为打款开关关闭或队列暂停时：待执行单仍可勾、批量栏照常统计，但【执行所选】不渲染（含隐藏、置灰），批量栏写明原因（开关关闭、队列暂停各一句，按概览字段逐项出现）；不发写请求",
+        "test/spec/frontend/admin-payout-execute/daily.test.ts > [AC-F1-08bb-PREVIEW#4] 单日限额余量取等：daily_cap_fen − daily_sent_fen 恰等于所勾 A+C 实付合计（¥599.88）→ 该项满足；余量少 1 分（¥599.87）→ 未满足；其余各项不变，【确认执行】都可用",
+        "test/spec/frontend/admin-payout-execute/errors.test.ts > [AC-F1-08bb-ERROR#1] 10003：重新弹出动态码并提示凭证失效，验证前不重发；验证后以新凭证重发，沿用原 Idempotency-Key 与整个请求体，executed 后逐单显示结果",
+        "test/spec/frontend/admin-payout-execute/errors.test.ts > [AC-F1-08bb-ERROR#2] 10403 提示「无权限执行此操作（需要 payout.execute 权限点）」；20001 data.fields=[withdrawal_ids] 提示提现单编号有误，其他字段提示提交内容有误；不报成功、不重发，对话框与勾选保留",
+        "test/spec/frontend/admin-payout-execute/errors.test.ts > [AC-F1-08bb-ERROR#3] 20901 与 40901 提示「提交失败，请稍后重试」；不报成功、不自动重新验证或重发，对话框与勾选保留",
+        "test/spec/frontend/admin-payout-execute/errors.test.ts > [AC-F1-08bb-ERROR#4] 5xx 提示「提交失败，请稍后重试」，网络错误提示「网络错误，请检查网络后重试；未确认前不会重复提交」；不报成功、不自动重发，对话框与勾选保留",
+        "test/spec/frontend/admin-payout-execute/preview.test.ts > [AC-F1-08bb-PREVIEW#1] 倒序勾 C、A 后点【执行所选】：执行确认对话框按列表顺序列 A、C 的单号、用户、实付金额；执行前检查逐项全文（开关已开启、队列运行中、企业支付宝 W 与取数时间、W 对 P 与水位结论、单日限额余量对本次合计，均满足）与服务端再查的说明；不发请求；【取消】后焦点回【执行所选】、勾选保留",
+        "test/spec/frontend/admin-payout-execute/preview.test.ts > [AC-F1-08bb-PREVIEW#2] 勾企业支付宝单 A 与银行卡单 B：执行前检查按概览的通道顺序列两个通道（银行卡没有 W：未录入、无结论，均未满足），单日限额余量对 A+B 合计；未满足的余额项不阻止【确认执行】",
+        "test/spec/frontend/admin-payout-execute/preview.test.ts > [AC-F1-08bb-PREVIEW#3] 执行前检查随概览字段变化、不写死阈值：W 已过期（概览无水位结论）→ W 项「已过期」、水位「无结论」均未满足，单日余量 ¥100.00 不够本次合计也未满足；W 低于 P → 水位项未满足；W 充足、结论正常 → 满足；说明里的数据时间取 as_of；各情形【确认执行】都可用",
+        "test/spec/frontend/admin-payout-execute/rebatch.test.ts > [AC-F1-08bb-SELECT#2] 已挂在别的批次上的待执行单也能勾：经 W9 退回（hold_reason=daily_cap、execute_seq=1、batch_id 指向旧人工批次）的 H 与自动批次因通道未开通留下的 U 在「全部」「待执行」都有一个可用、未勾的勾选框；倒序勾 U、H、A 后批量栏精确统计三张，执行确认清单按列表顺序列 A、H、U 与执行前检查全文；确认 → 动态码 → 一次 POST，请求体为 [A, H, U]；executed 后三单都显示已发起打款",
+        "test/spec/frontend/admin-payout-execute/reject.test.ts > [AC-F1-08bb-REJECT#1] rejected（watermark_stale，channel=alipay）：显示整批未执行与企业支付宝 W 过期的原因，不显示已发起打款与批次号，勾选保留；关掉后再点【执行所选】提交是新操作：请求体相同、Idempotency-Key 换新，executed 后逐单显示已发起打款",
+        "test/spec/frontend/admin-payout-execute/reject.test.ts > [AC-F1-08bb-REJECT#2] rejected 的开关类原因：payout_disabled 显示「整批未执行：打款开关已关闭」、queue_paused 显示「整批未执行：打款队列已暂停」；均不显示成功与批次号、勾选保留、不自动重发",
+        "test/spec/frontend/admin-payout-execute/reject.test.ts > [AC-F1-08bb-REJECT#3] rejected 的水位类原因带通道名：watermark_below_forecast + bank_card →「银行卡余额 W 低于预计提现 P」，watermark_usable_exceeded + alipay →「企业支付宝在途与本批合计超过可用余额（W × 可用比例），请拆分批次」；均不显示成功与批次号、勾选保留",
+        "test/spec/frontend/admin-payout-execute/reopen.test.ts > [AC-F1-08bb-REPLAY#5] 网络错误后关闭执行确认对话框、勾选不变，再点【执行所选】并确认（需要时再过动态码）：第二次 POST 的请求体与第一次相同、Idempotency-Key 沿用原键；返回 executed 后逐单显示结果并清空已选",
+        "test/spec/frontend/admin-payout-execute/replay.test.ts > [AC-F1-08bb-REPLAY#1] 网络错误后保留对话框与勾选，手动再点【确认执行】重提同批：请求体相同、沿用原 Idempotency-Key，返回 executed 后逐单显示结果并清空已选",
+        "test/spec/frontend/admin-payout-execute/replay.test.ts > [AC-F1-08bb-REPLAY#2] 40901（同键仍在处理）与 5xx 后手动重提同批：请求体相同、沿用原 Idempotency-Key",
+        "test/spec/frontend/admin-payout-execute/replay.test.ts > [AC-F1-08bb-REPLAY#3] 网络错误后改了勾选（取消 C）再提交是新操作：请求体只有 A、Idempotency-Key 换新",
+        "test/spec/frontend/admin-payout-execute/replay.test.ts > [AC-F1-08bb-REPLAY#4] 同页 executed 一批 A 之后再勾 C 执行是新一批：两次 Idempotency-Key 均非空且不同，请求体各自只含本批",
+        "test/spec/frontend/admin-payout-execute/result.test.ts > [AC-F1-08bb-RESULT#1] executed 混合：显示新批次号；A 已发起打款，C 已不是待执行、B 通道未开通、F1 会员阻断、F2 已有转账记录各显示对应提示，按列表顺序一单一行；完成后清空已选、批量栏消失，并在 POST 之后重新读队列与概览（A 变打款中、不可再勾）",
+        "test/spec/frontend/admin-payout-execute/result.test.ts > [AC-F1-08bb-RESULT#2] executed 但 paying 为空（多通道各因水位留下）：仍显示新批次号，A 与 B 逐单显示各自的水位原因（低于 P / 超可用额度、W 过期），不出现「已发起打款」；清空已选并重新读队列与概览",
+        "test/spec/frontend/admin-payout-execute/submit.test.ts > [AC-F1-08bb-SUBMIT#1] 一次动态码覆盖整批：倒序勾选、取消再勾不改变请求体顺序；连点【确认执行】与【验证并继续】、在途时再点入口与提交都只发一次 POST /admin/v1/payout-batches（请求体只有 withdrawal_ids，列表顺序，带 X-Step-Up-Token 与 Idempotency-Key），在途时对话框保留、两处按钮禁用",
+        "test/spec/frontend/admin-payout-execute/submit.test.ts > [AC-F1-08bb-SUBMIT#2] 取消动态码不提交；关闭执行确认对话框后焦点回【执行所选】、勾选保留；再次执行仍须动态码，期间不发验证以外的写请求"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-payout-execute/access.test.ts",
+        "test/spec/frontend/admin-payout-execute/daily.test.ts",
+        "test/spec/frontend/admin-payout-execute/errors.test.ts",
+        "test/spec/frontend/admin-payout-execute/preview.test.ts",
+        "test/spec/frontend/admin-payout-execute/rebatch.test.ts",
+        "test/spec/frontend/admin-payout-execute/reject.test.ts",
+        "test/spec/frontend/admin-payout-execute/reopen.test.ts",
+        "test/spec/frontend/admin-payout-execute/replay.test.ts",
+        "test/spec/frontend/admin-payout-execute/result.test.ts",
+        "test/spec/frontend/admin-payout-execute/submit.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "accafc6cd575918ceabce58048057f5f7ec4090c3904c4282a7e41b50801d96c"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "957bdffcf4e81db7bdc5f814383c2df9b1c6f79e",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}

@@ -140,7 +140,9 @@ export function WithdrawalsPage({ access }: WithdrawalsPageProps): ReactElement 
             {
               key: 'queue',
               label: t.pageTabs.queue,
-              children: <PayoutQueuePanel canList={reader} />,
+              children: (
+                <PayoutQueuePanel canList={reader} canExecute={access.can(EXECUTE_PERMISSION)} />
+              ),
             },
             {
               key: 'unknown',

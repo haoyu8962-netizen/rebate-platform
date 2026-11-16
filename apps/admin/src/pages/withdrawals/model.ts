@@ -477,3 +477,31 @@ export function marksOf(row: WithdrawalRow): string[] {
   if (row.hold_reason !== null) marks.push(t.holdReason(row.hold_reason));
   return marks;
 }
+
+// ---- 打款队列【执行所选】（F1-08bb） -------------------------------------------------------------
+
+/** POST adminCreatePayoutBatch (payout.execute, totp step-up, Idempotency-Key). */
+export const PAYOUT_BATCHES_URL = '/admin/v1/payout-batches';
+export type PayoutBatchRequest = Schema<'AdminPayoutBatchCreateRequest'>;
+export type PayoutBatchResult = Schema<'AdminPayoutBatchResult'>;
+export type PayoutBatchLeftItem = Schema<'AdminPayoutBatchLeftItem'>;
+
+/** Only an APPROVED withdrawal (待执行) can be ticked, whatever batch it is on. */
+export const canExecute = (row: WithdrawalRow): boolean => row.status === 'APPROVED';
+
+const IN_FLIGHT = 40901;
+
+/**
+ * The server has settled a refusal of this operation (an HTTP 4xx business error other than
+ * 40901): the same key would only get the same refusal, so the key may be dropped. A network
+ * error, 40901, 5xx or anything else leaves the result unknown: false.
+ */
+export function isSettledRejection(cause: unknown): boolean {
+  return (
+    cause instanceof AdminApiError &&
+    cause.kind === 'api' &&
+    cause.code !== IN_FLIGHT &&
+    cause.httpStatus >= 400 &&
+    cause.httpStatus < 500
+  );
+}
