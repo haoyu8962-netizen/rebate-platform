@@ -21,6 +21,19 @@ test_paths:
   - 'test/spec/frontend/admin-payout-execute/access.test.ts'
 impl: claude
 tester: claude-independent
+red_exempt:
+  - file: test/spec/frontend/admin-payout-execute/access.test.ts
+    test: '[AC-F1-08bb-SELECT#1] 批量栏随勾选出现：aria-live 精确为「已选 N 张，合计实付 ¥…」（实付合计经 @couli/money），取消勾选后随之更新，全部取消后批量栏与【执行所选】消失；「待执行」页签里的待执行单同样可勾'
+    reason: 'F1-08bb 冻结原有用例，块体未改；该文件 import 的 ./fixtures.ts 依赖 @couli/money、red-check 解析不闭合，整份文件被判定；本条在新旧实现下都成立（基线已带前序任务实现；它用的账号不持 switch.payout，本单新增的暂停类入口不出现）'
+  - file: test/spec/frontend/admin-payout-execute/access.test.ts
+    test: '[AC-F1-08bb-PAUSED#1] 概览为打款开关关闭或队列暂停时：待执行单仍可勾、批量栏照常统计，但【执行所选】不渲染（含隐藏、置灰），批量栏写明原因（开关关闭、队列暂停各一句，按概览字段逐项出现）；不发写请求'
+    reason: 'F1-08bb 冻结原有用例，块体未改；该文件 import 的 ./fixtures.ts 依赖 @couli/money、red-check 解析不闭合，整份文件被判定；本条在新旧实现下都成立（基线已带前序任务实现；它用的账号不持 switch.payout，本单新增的暂停类入口不出现）'
+  - file: test/spec/frontend/admin-payout-execute/access.test.ts
+    test: '[AC-F1-08bc-FROZEN#2] 录入入口与【执行所选】各按自己的权限点：持 fund.view + fund.cash_entry（不持 payout.execute）时打款队列没有勾选框与【执行所选】，写入口恰为【录入企业支付宝余额】【录入运营账户余额】，按【录入运营账户余额】打开一个写着微信零钱的对话框；再加 payout.execute 时未勾选前写入口恰为这两个，勾一张后恰为这两个加【执行所选】；全程不发写请求'
+    reason: 'F1-08bc 新增块（D10-1816），块体未改；该文件 import 的 ./fixtures.ts 依赖 @couli/money、red-check 解析不闭合，整份文件被判定；本条在新旧实现下都成立（基线已带前序任务实现；它用的账号不持 switch.payout，本单新增的暂停类入口不出现）'
+  - file: test/spec/frontend/admin-payouts-readonly/readonly.test.ts
+    test: '[AC-F1-08bc-FROZEN#1] 非超管、持全部财务权限点再加 fund.cash_entry：「打款队列」的全部 / 打款中 / 待执行上写入口恰为【录入企业支付宝余额】【录入运营账户余额】，「结果待确认」没有写入口；回到「打款队列」按【录入企业支付宝余额】打开一个写着企业支付宝的对话框；全程只发 GET'
+    reason: 'F1-08bc 新增块（D10-1816），块体未改；该文件 import 的 ./fixtures.ts 依赖 @couli/money、red-check 解析不闭合，整份文件被判定；本条在新旧实现下都成立（基线已带前序任务实现；它用的账号不持 switch.payout，本单新增的暂停类入口不出现）'
 modify_existing:
   - file: 'test/spec/frontend/admin-payouts-readonly/readonly.test.ts'
     test: '[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET'
