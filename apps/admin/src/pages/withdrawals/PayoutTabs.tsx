@@ -5,9 +5,10 @@
 // 的 payout_attempts；「结果待确认」——GET /admin/v1/unknown-payouts（adminListUnknownPayouts），
 // 行【处置】进 withdrawals/{id}（处置在详情页办理）。
 // 开关、暂停、水位只用文字与 Tag 展示，不放任何开关控件。持 payout.execute 时「打款队列」的待执行单
-// 可勾选，批量栏【执行所选】见 PayoutExecute.tsx（F1-08bb）；执行后重新读队列与概览。
-// TODO(规划/11 §7): 【录入企业支付宝余额】、【暂停队列】/【解除暂停】、【解除通道暂停】
-// — blocked on F1-08bc–bd
+// 可勾选，批量栏【执行所选】见 PayoutExecute.tsx（F1-08bb）；执行后重新读队列与概览。持 fund.cash_entry
+// 时标题行有【录入企业支付宝余额】、微信零钱通道卡有【录入运营账户余额】，见 PayoutWatermark.tsx
+// （F1-08bc）；录入后重新读概览。
+// TODO(规划/11 §7): 【暂停队列】/【解除暂停】、【解除通道暂停】 — blocked on F1-08bd
 import { ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import {
@@ -34,6 +35,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type Key,
   type ReactElement,
@@ -43,6 +45,7 @@ import { useNavigate } from 'react-router';
 import { withdrawalsTexts } from '../../texts/withdrawals.ts';
 import { delayedLoading, useLoadingClock } from '../../motion.ts';
 import { PayoutExecute } from './PayoutExecute.tsx';
+import { WatermarkEntry, WatermarkEntryButton } from './PayoutWatermark.tsx';
 import {
   OVERVIEW_URL,
   PAGE_SIZE,
@@ -71,6 +74,7 @@ import {
   type QueueTab,
   type UnknownPayoutItem,
   type UnknownPayoutPage,
+  type WatermarkChannel,
   type WithdrawalDetail,
   type WithdrawalPage,
   type WithdrawalRow,
@@ -81,6 +85,9 @@ const p = withdrawalsTexts.payouts;
 
 /** Descriptions items (always given). */
 type Items = NonNullable<DescriptionsProps['items']>;
+
+/** Opens the balance entry of a channel (undefined: no fund.cash_entry, no entry). */
+type OnEnter = ((channel: WatermarkChannel, trigger: HTMLElement) => void) | undefined;
 
 type ReadStatus = 'loading' | 'ready' | 'failed' | 'forbidden';
 
@@ -154,7 +161,11 @@ function Fields({ items }: { readonly items: Items }): ReactElement {
   return <Descriptions bordered size="small" column={1} items={items} />;
 }
 
-function OverviewCards({ overview }: { readonly overview: PayoutOverview }): ReactElement {
+function OverviewCards(props: {
+  readonly overview: PayoutOverview;
+  readonly onEnter: OnEnter;
+}): ReactElement {
+  const { overview, onEnter } = props;
   const { token } = theme.useToken();
   const amount = { whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' } as const;
   const alipay = overview.channels.find((channel) => channel.channel === 'alipay');
@@ -271,7 +282,7 @@ function OverviewCards({ overview }: { readonly overview: PayoutOverview }): Rea
       <Row gutter={[16, 16]}>
         {overview.channels.map((channel) => (
           <Col key={channel.channel} xs={24} md={8}>
-            <ChannelCard channel={channel} />
+            <ChannelCard channel={channel} onEnter={onEnter} />
           </Col>
         ))}
       </Row>
@@ -282,7 +293,16 @@ function OverviewCards({ overview }: { readonly overview: PayoutOverview }): Rea
   );
 }
 
-function ChannelCard({ channel }: { readonly channel: PayoutOverviewChannel }): ReactElement {
+function ChannelCard(props: {
+  readonly channel: PayoutOverviewChannel;
+  readonly onEnter: OnEnter;
+}): ReactElement {
+  const { channel, onEnter } = props;
+  // 只有微信零钱通道卡放【录入运营账户余额】；企业支付宝的入口在标题行，银行卡没有入口。
+  const entry =
+    onEnter !== undefined && channel.channel === 'wechat' ? (
+      <WatermarkEntryButton channel="wechat" onEnter={onEnter} />
+    ) : undefined;
   const items: Items = [
     {
       key: 'enabled',
@@ -300,7 +320,7 @@ function ChannelCard({ channel }: { readonly channel: PayoutOverviewChannel }): 
     },
   ];
   return (
-    <Card size="small" title={nameOr(p.channelTitles, channel.channel)}>
+    <Card size="small" title={nameOr(p.channelTitles, channel.channel)} extra={entry}>
       <Fields items={items} />
     </Card>
   );
@@ -348,8 +368,11 @@ function useOverview(): OverviewRead {
   return { status, overview: status === 'ready' ? overview : undefined, retry, refresh };
 }
 
-function OverviewArea({ read }: { readonly read: OverviewRead }): ReactElement {
-  const { status, overview, retry } = read;
+function OverviewArea(props: {
+  readonly read: OverviewRead;
+  readonly onEnter: OnEnter;
+}): ReactElement {
+  const { status, overview, retry } = props.read;
   if (status === 'forbidden')
     return (
       <Card size="small">
@@ -376,7 +399,7 @@ function OverviewArea({ read }: { readonly read: OverviewRead }): ReactElement {
         <LoadingLine text={p.overviewLoading} />
       </Card>
     );
-  return <OverviewCards overview={overview} />;
+  return <OverviewCards overview={overview} onEnter={props.onEnter} />;
 }
 
 // ---- 打款队列：队列表 --------------------------------------------------------------------------
@@ -793,17 +816,53 @@ function AttemptsBody({ id }: { readonly id: string }): ReactElement {
 
 /**
  * 「打款队列」：状态卡、通道卡与队列表（两者各自加载、互不遮挡）；持 payout.execute 时待执行单可勾选
- * 【执行所选】，执行前检查取同一份概览，执行后队列与概览都重新读取。
+ * 【执行所选】，执行前检查取同一份概览，执行后队列与概览都重新读取。持 fund.cash_entry 时概览读到后
+ * 出现两个余额录入入口，录入后重新读概览。
  */
 export function PayoutQueuePanel(props: {
   readonly canList: boolean;
   readonly canExecute: boolean;
+  readonly canEnter: boolean;
 }): ReactElement {
   const read = useOverview();
+  const [entering, setEntering] = useState<WatermarkChannel>();
+  const [trigger, setTrigger] = useState<HTMLElement>();
+  const closedRef = useRef(false);
+
+  // 录入对话框关闭后焦点回到触发它的入口（入口已不在页面上时不处理）。
+  useEffect(() => {
+    if (entering !== undefined || !closedRef.current) return;
+    closedRef.current = false;
+    if (trigger?.isConnected === true) trigger.focus();
+  }, [entering, trigger]);
+
+  const enter = useCallback((channel: WatermarkChannel, node: HTMLElement) => {
+    setTrigger(node);
+    setEntering((current) => current ?? channel);
+  }, []);
+  const closeEntry = useCallback(() => {
+    closedRef.current = true;
+    setEntering(undefined);
+  }, []);
+  const onEnter: OnEnter = props.canEnter ? enter : undefined;
+
   return (
     <Flex vertical gap={16}>
+      {onEnter !== undefined && read.overview !== undefined ? (
+        <Flex justify="end" gap={8} wrap>
+          <WatermarkEntryButton channel="alipay" onEnter={onEnter} />
+        </Flex>
+      ) : null}
       <Alert type="info" showIcon role="note" message={p.readOnlyNotice} />
-      <OverviewArea read={read} />
+      <OverviewArea read={read} onEnter={onEnter} />
+      {props.canEnter ? (
+        <WatermarkEntry
+          channel={entering}
+          overview={read.overview}
+          onClose={closeEntry}
+          onEntered={read.refresh}
+        />
+      ) : null}
       <QueueArea
         canList={props.canList}
         canExecute={props.canExecute}

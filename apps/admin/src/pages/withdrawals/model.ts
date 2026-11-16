@@ -505,3 +505,14 @@ export function isSettledRejection(cause: unknown): boolean {
     cause.httpStatus < 500
   );
 }
+
+// ---- 打款队列【录入企业支付宝余额】【录入运营账户余额】（F1-08bc） -------------------------------
+
+/** POST adminCreatePayoutWatermark (fund.cash_entry, totp step-up, Idempotency-Key). */
+export const WATERMARKS_URL = '/admin/v1/payout-watermarks';
+/** The permission point of the balance entries (a super admin holds every point). */
+export const CASH_ENTRY_PERMISSION = 'fund.cash_entry';
+export type WatermarkChannel = Schema<'AdminPayoutWatermarkChannel'>;
+export type WatermarkRequest = Schema<'AdminPayoutWatermarkCreateRequest'>;
+/** AdminPayoutWatermarkCreateRequest.note maxLength (Unicode code points). */
+export const WATERMARK_NOTE_MAX = 500;

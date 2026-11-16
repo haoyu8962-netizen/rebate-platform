@@ -1,0 +1,143 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求",
+    "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bc-FROZEN#2] 录入入口与【执行所选】各按自己的权限点：持 fund.view + fund.cash_entry（不持 payout.execute）时打款队列没有勾选框与【执行所选】，写入口恰为【录入企业支付宝余额】【录入运营账户余额】，按【录入运营账户余额】打开一个写着微信零钱的对话框；再加 payout.execute 时未勾选前写入口恰为这两个，勾一张后恰为这两个加【执行所选】；全程不发写请求",
+    "test/spec/frontend/admin-payout-watermark/access.test.ts > [AC-F1-08bc-ACCESS#1] 持 fund.view + fund.cash_entry：页面有且只有一个可用的【录入企业支付宝余额】，微信零钱通道卡上有一个【录入运营账户余额】，银行卡通道卡没有录入入口；页面上的录入入口只有这两个，进页只发 GET",
+    "test/spec/frontend/admin-payout-watermark/access.test.ts > [AC-F1-08bc-ACCESS#2] 入口只认 fund.cash_entry：持 fund.view + fund.cash_entry 时两个入口都在；只持 fund.view、或持 fund.view + payout.execute 时没有【录入企业支付宝余额】【录入运营账户余额】（含隐藏、置灰），概览照常显示，只发 GET",
+    "test/spec/frontend/admin-payout-watermark/access.test.ts > [AC-F1-08bc-ACCESS#3] 录入入口按权限点 fund.cash_entry 判、不按角色判：只持 fund.view、只持 payout.execute、持 fund.view + payout.execute、持除 fund.cash_entry 外的全部财务权限点，都没有任何录入入口（含隐藏、置灰）；持 payout.execute + fund.cash_entry（不持 fund.view）与超管都恰有【录入企业支付宝余额】【录入运营账户余额】；只发 GET",
+    "test/spec/frontend/admin-payout-watermark/dialog.test.ts > [AC-F1-08bc-DIALOG#1] 对话框显示账户与该通道当前 W：企业支付宝 ¥30,000.00 / 2026-11-14 09:00:00；微信零钱 无行时「未录入」/「—」；企业支付宝无行时「未录入」/「—」；微信零钱已录入时 ¥1,234.56 / 2026-11-14 08:30:00；打开对话框不发写请求",
+    "test/spec/frontend/admin-payout-watermark/dialog.test.ts > [AC-F1-08bc-DIALOG#2] 本地校验：可用余额为空、负数、超过两位小数、非数字，取数时间为空、格式不对、日期不存在，备注全空白、超过 500 字时不弹动态码、不发请求，提示落在对应字段；改正后提示消失，只发一次请求",
+    "test/spec/frontend/admin-payout-watermark/dialog.test.ts > [AC-F1-08bc-DIALOG#3] 金额只按 @couli/money 换成整数分、时间按北京时间带 +08:00 发送：0 → 0 分、0.5 → 50 分、100 → 10000 分、1234567.8 → 123456780 分；00:10 不换成 UTC；备注正好 500 字照发",
+    "test/spec/frontend/admin-payout-watermark/errors.test.ts > [AC-F1-08bc-ERROR#1] 20001 data.fields=[measured_at]（服务端判取数时间晚于现在 5 分钟以上、早于 2 小时以上或早于该通道最近一次）：提示落在取数时间字段，对话框保留、已填不丢、不自动重发；改正取数时间后重提，请求体按新内容、换新的 Idempotency-Key，成功后关闭",
+    "test/spec/frontend/admin-payout-watermark/errors.test.ts > [AC-F1-08bc-ERROR#2] 20001 data.fields=[available_fen] 提示落在可用余额、[note] 提示落在备注；data.fields 为空或只有 channel 时在对话框提示「提交内容有误，请检查后重试」、不落字段；都不报成功、不重发，对话框与已填保留",
+    "test/spec/frontend/admin-payout-watermark/errors.test.ts > [AC-F1-08bc-ERROR#3] 10003：重新弹出动态码并提示凭证失效，验证前不重发；验证后以新凭证重发，沿用原 Idempotency-Key 与整个请求体，成功后关闭",
+    "test/spec/frontend/admin-payout-watermark/errors.test.ts > [AC-F1-08bc-ERROR#4] 10403 提示「无权限执行此操作（需要 fund.cash_entry 权限点）」，20901 提示「提交失败，请稍后重试」；不报成功、不自动重新验证或重发，对话框与已填保留",
+    "test/spec/frontend/admin-payout-watermark/errors.test.ts > [AC-F1-08bc-ERROR#5] 40901、5xx 提示「提交失败，请稍后重试」，网络错误提示「网络错误，请检查网络后重试；未确认前不会重复提交」；不报成功、不自动重发，对话框与已填保留；再点【确认录入】沿用原 Idempotency-Key 与整个请求体",
+    "test/spec/frontend/admin-payout-watermark/submit.test.ts > [AC-F1-08bc-SUBMIT#1] 企业支付宝：连点【确认录入】与【验证并继续】、在途时再点都只发一次 POST /admin/v1/payout-watermarks（整个请求体 channel=alipay、available_fen=3456789、measured_at=2026-11-14T09:50:00+08:00、note，带 X-Step-Up-Token 与 Idempotency-Key）；在途时对话框保留、【确认录入】禁用；成功后关闭、提示「余额已录入」、重新读概览并显示新 W",
+    "test/spec/frontend/admin-payout-watermark/submit.test.ts > [AC-F1-08bc-SUBMIT#2] 微信运营账户：不填备注时请求体只有 channel=wechat、available_fen、measured_at（不带 note）；成功后再打开对话框显示新 W，再录入一次是新请求、换新的 Idempotency-Key",
+    "test/spec/frontend/admin-payout-watermark/submit.test.ts > [AC-F1-08bc-SUBMIT#3] 取消动态码不提交、对话框保留且已填不丢；关闭对话框后焦点回到触发它的入口（微信通道卡上的【录入运营账户余额】）",
+    "test/spec/frontend/admin-payouts-readonly/readonly.test.ts > [AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET",
+    "test/spec/frontend/admin-payouts-readonly/readonly.test.ts > [AC-F1-08bc-FROZEN#1] 非超管、持全部财务权限点再加 fund.cash_entry：「打款队列」的全部 / 打款中 / 待执行上写入口恰为【录入企业支付宝余额】【录入运营账户余额】，「结果待确认」没有写入口；回到「打款队列」按【录入企业支付宝余额】打开一个写着企业支付宝的对话框；全程只发 GET"
+  ],
+  "risk_note": "F1-08bc (orchestrator D10-1517 batch 1 ②, D10-1712, D10-1816; landed per D10-1772, stacked on #189 F1-08bb and rebased onto main). Payout queue 录入企业支付宝余额 / 录入运营账户余额 for fund.cash_entry: amount and measured-at time, SMS step-up, adminCreatePayoutWatermark; the measured-at time is checked as the contract says and 20001 data.fields is shown; amounts only through @couli/money; an unknown write result is retried only with the original key and body (D10-1731). Frozen cases (same as D10-1733): F1-08ba READONLY#1 and F1-08bb ACCESS#1 only change the super-admin write-entry list to exactly the landed entries (modify_existing, ledger #194); per D10-1816 each of the two files gets one new it block ([AC-F1-08bc-FROZEN#1]/[#2]) using only that file's existing imports and helpers, nothing outside the blocks changed. Codex is out of quota until 2026-11-20 (D10-1604), so per ops/approvals.yaml #36 the rule tests were written by independent Claude contexts in three rounds; spec-test: r1 fail, r2 pass, r3 (approvals #96) of the two new blocks only, pass. Implementation by Opus 5.5 (another context); couli-ci verify:fast and --browser green after the rebase and the new blocks. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex out of quota until 2026-11-20 (D10-1604): money review by an independent Claude per ops/approvals.yaml #36 (claude-run.sh, fresh context), r1 pass, 0 S2"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "豁免确认为门禁口径补录（D10-1833 / D10-1835，先例 D10-848 ③），第 3 轮评审只审新增块（approvals 96）。补录两次：第 1 次评审读不到受信根台账、没有确认任何一条；第 2 次把主干台账两条声明逐字贴入任务书，SELECT#1、PAUSED#1 全部确认（另附 2 条 S2：dialog.test.ts 未冻结时钟、最大金额低于 2^31，评审自注不挡）。tests by independent Claude contexts (approvals #36): test writing 3 / 3; spec-test 3 (r1 fail, r2 pass, r3 per approvals 96 of the two new blocks, pass).",
+    "model": "claude-opus-5-5",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-payouts-readonly/readonly.test.ts",
+      "test": "[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    const accounts = [everyGrant(ALL), SUPER];\n    for (const snapshot of accounts) {\n      const server = createPayoutServer({\n        overview: pausedOverview(),\n        permissions: snapshot === SUPER ? VIEW_EXECUTE : ALL,\n      });\n      await mount(server, snapshot);\n      const queue = await openTab(TAB.queue);\n      await listed(queue, ALL_ROWS);\n      await waitFor(() => expect(server.overviewReads()).toHaveLength(1));\n      await settled(server);\n      expect(writeEntries(queue), 'no write entry in 全部').toEqual([]);\n      for (const tab of [SUB_TAB.paying, SUB_TAB.approved]) {\n        await selectTab(queue, tab);\n        await settled(server);\n        expect(writeEntries(queue), `no write entry in ${tab}`).toEqual([]);\n      }\n      await selectTab(queue, SUB_TAB.all);\n      await listed(queue, ALL_ROWS);\n      const grid = gridWith(queue, COLUMN.net);\n      await click(entry(rowIn(grid, QNO.paying), ENTRY.attempts));\n      const drawer = await openDialog();\n      await settled(server);\n      expect(writeEntries(drawer), 'no write entry in the drawer').toEqual([]);\n\n      const unknown = await openTab(TAB.unknown);\n      await listed(unknown, [QNO.stuck, QNO.untried]);\n      await settled(server);\n      expect(writeEntries(unknown), 'no write entry in 结果待确认').toEqual([]);\n      expect(server.writes(), 'no request other than GET').toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "after": "it(\n  '[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    // Since F1-08bc (D10-1712 (a)) the entries landed so far are exactly 【录入企业支付宝余额】 and\n    // 【录入运营账户余额】 (fund.cash_entry, which a super admin holds and ALL does not), on the\n    // 打款队列 tab whatever its sub-tab; the pause entries (F1-08bd) stay forbidden.\n    const landed = ['录入企业支付宝余额', '录入运营账户余额'].sort();\n    const accounts = [everyGrant(ALL), SUPER];\n    for (const snapshot of accounts) {\n      const server = createPayoutServer({\n        overview: pausedOverview(),\n        permissions: snapshot === SUPER ? VIEW_EXECUTE : ALL,\n      });\n      await mount(server, snapshot);\n      const queue = await openTab(TAB.queue);\n      await listed(queue, ALL_ROWS);\n      await waitFor(() => expect(server.overviewReads()).toHaveLength(1));\n      await settled(server);\n      const queueEntries = snapshot === SUPER ? landed : [];\n      expect(writeEntries(queue).sort(), 'the write entries of 全部').toEqual(queueEntries);\n      for (const tab of [SUB_TAB.paying, SUB_TAB.approved]) {\n        await selectTab(queue, tab);\n        await settled(server);\n        expect(writeEntries(queue).sort(), `the write entries of ${tab}`).toEqual(queueEntries);\n      }\n      await selectTab(queue, SUB_TAB.all);\n      await listed(queue, ALL_ROWS);\n      const grid = gridWith(queue, COLUMN.net);\n      await click(entry(rowIn(grid, QNO.paying), ENTRY.attempts));\n      const drawer = await openDialog();\n      await settled(server);\n      expect(writeEntries(drawer), 'no write entry in the drawer').toEqual([]);\n\n      const unknown = await openTab(TAB.unknown);\n      await listed(unknown, [QNO.stuck, QNO.untried]);\n      await settled(server);\n      expect(writeEntries(unknown), 'no write entry in 结果待确认').toEqual([]);\n      expect(server.writes(), 'no request other than GET').toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为前序任务 F1-08ba / F1-08bb 版本（旧规则：打款队列没有【录入企业支付宝余额】【录入运营账户余额】入口，超管写入口清单为空），即本单正式先红的基线；couli-runs/F1-08bc/red/1（couli-ci，spec df18501b）中本条 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-18"]
+    },
+    {
+      "file": "test/spec/frontend/admin-payout-execute/access.test.ts",
+      "test": "[AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    const viewing = serverFor({ permissions: VIEW });\n    const viewPanel = await openQueue(viewing, VIEWER);\n    expect(within(viewPanel).queryAllByRole('checkbox'), 'fund.view: no checkbox').toEqual([]);\n    expect(buttons(viewPanel, ENTRY), 'fund.view: no 执行所选').toEqual([]);\n    expect(writeEntries(viewPanel), 'fund.view: no write entry').toEqual([]);\n    expect(liveTexts(viewPanel), 'fund.view: no selection bar').toEqual([]);\n    expect(viewing.writes()).toEqual([]);\n    cleanup();\n\n    for (const account of [EXECUTOR, SUPER]) {\n      const server = serverFor({ permissions: VIEW_EXECUTE });\n      const panel = await openQueue(server, account);\n      for (const number of APPROVED)\n        expect(checkbox(panel, number).checked, `${number} not ticked`).toBe(false);\n      for (const number of PAYING)\n        expect(choicesOf(queueRow(panel, number)), `${number}: no usable checkbox`).toEqual([]);\n      expect(buttons(panel, ENTRY), 'no 执行所选 before a tick').toEqual([]);\n      expect(liveTexts(panel), 'no selection bar before a tick').toEqual([]);\n      await select(panel, [QNO.approvedA]);\n      expect(disabled(button(panel, ENTRY))).toBe(false);\n      expect(writeEntries(panel), 'the only write entry').toEqual([ENTRY]);\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "after": "it(\n  '[AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    const viewing = serverFor({ permissions: VIEW });\n    const viewPanel = await openQueue(viewing, VIEWER);\n    expect(within(viewPanel).queryAllByRole('checkbox'), 'fund.view: no checkbox').toEqual([]);\n    expect(buttons(viewPanel, ENTRY), 'fund.view: no 执行所选').toEqual([]);\n    expect(writeEntries(viewPanel), 'fund.view: no write entry').toEqual([]);\n    expect(liveTexts(viewPanel), 'fund.view: no selection bar').toEqual([]);\n    expect(viewing.writes()).toEqual([]);\n    cleanup();\n\n    // Since F1-08bc (D10-1712 (a)) a super admin (holding fund.cash_entry) also gets exactly the two\n    // balance entries landed with it; fund.view + payout.execute does not. The pause entries\n    // (F1-08bd) stay forbidden.\n    const landed = (account: typeof SUPER): string[] =>\n      account === SUPER ? [ENTRY, '录入企业支付宝余额', '录入运营账户余额'].sort() : [ENTRY];\n    for (const account of [EXECUTOR, SUPER]) {\n      const server = serverFor({ permissions: VIEW_EXECUTE });\n      const panel = await openQueue(server, account);\n      for (const number of APPROVED)\n        expect(checkbox(panel, number).checked, `${number} not ticked`).toBe(false);\n      for (const number of PAYING)\n        expect(choicesOf(queueRow(panel, number)), `${number}: no usable checkbox`).toEqual([]);\n      expect(buttons(panel, ENTRY), 'no 执行所选 before a tick').toEqual([]);\n      expect(liveTexts(panel), 'no selection bar before a tick').toEqual([]);\n      await select(panel, [QNO.approvedA]);\n      expect(disabled(button(panel, ENTRY))).toBe(false);\n      expect(writeEntries(panel).sort(), 'the landed write entries').toEqual(landed(account));\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为前序任务 F1-08bb 版本（旧规则：打款队列没有【录入企业支付宝余额】【录入运营账户余额】入口，超管写入口清单为恰为【执行所选】），即本单正式先红的基线；couli-runs/F1-08bc/red/1（couli-ci，spec df18501b）中本条 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-18"]
+    }
+  ],
+  "task": "F1-08bc",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "a6bbc8a4c00151e220978661afdf1f22edd84aaa",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a6bbc8a4c00151e220978661afdf1f22edd84aaa",
+      "tree": "1fa470baeb701e717d1c0deb02ac1c316ab39f6e",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-16T11:38:57Z",
+      "finished_at": "2026-11-16T11:39:16Z",
+      "red_tests": [
+        "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求",
+        "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bc-FROZEN#2] 录入入口与【执行所选】各按自己的权限点：持 fund.view + fund.cash_entry（不持 payout.execute）时打款队列没有勾选框与【执行所选】，写入口恰为【录入企业支付宝余额】【录入运营账户余额】，按【录入运营账户余额】打开一个写着微信零钱的对话框；再加 payout.execute 时未勾选前写入口恰为这两个，勾一张后恰为这两个加【执行所选】；全程不发写请求",
+        "test/spec/frontend/admin-payout-watermark/access.test.ts > [AC-F1-08bc-ACCESS#1] 持 fund.view + fund.cash_entry：页面有且只有一个可用的【录入企业支付宝余额】，微信零钱通道卡上有一个【录入运营账户余额】，银行卡通道卡没有录入入口；页面上的录入入口只有这两个，进页只发 GET",
+        "test/spec/frontend/admin-payout-watermark/access.test.ts > [AC-F1-08bc-ACCESS#2] 入口只认 fund.cash_entry：持 fund.view + fund.cash_entry 时两个入口都在；只持 fund.view、或持 fund.view + payout.execute 时没有【录入企业支付宝余额】【录入运营账户余额】（含隐藏、置灰），概览照常显示，只发 GET",
+        "test/spec/frontend/admin-payout-watermark/access.test.ts > [AC-F1-08bc-ACCESS#3] 录入入口按权限点 fund.cash_entry 判、不按角色判：只持 fund.view、只持 payout.execute、持 fund.view + payout.execute、持除 fund.cash_entry 外的全部财务权限点，都没有任何录入入口（含隐藏、置灰）；持 payout.execute + fund.cash_entry（不持 fund.view）与超管都恰有【录入企业支付宝余额】【录入运营账户余额】；只发 GET",
+        "test/spec/frontend/admin-payout-watermark/dialog.test.ts > [AC-F1-08bc-DIALOG#1] 对话框显示账户与该通道当前 W：企业支付宝 ¥30,000.00 / 2026-11-14 09:00:00；微信零钱 无行时「未录入」/「—」；企业支付宝无行时「未录入」/「—」；微信零钱已录入时 ¥1,234.56 / 2026-11-14 08:30:00；打开对话框不发写请求",
+        "test/spec/frontend/admin-payout-watermark/dialog.test.ts > [AC-F1-08bc-DIALOG#2] 本地校验：可用余额为空、负数、超过两位小数、非数字，取数时间为空、格式不对、日期不存在，备注全空白、超过 500 字时不弹动态码、不发请求，提示落在对应字段；改正后提示消失，只发一次请求",
+        "test/spec/frontend/admin-payout-watermark/dialog.test.ts > [AC-F1-08bc-DIALOG#3] 金额只按 @couli/money 换成整数分、时间按北京时间带 +08:00 发送：0 → 0 分、0.5 → 50 分、100 → 10000 分、1234567.8 → 123456780 分；00:10 不换成 UTC；备注正好 500 字照发",
+        "test/spec/frontend/admin-payout-watermark/errors.test.ts > [AC-F1-08bc-ERROR#1] 20001 data.fields=[measured_at]（服务端判取数时间晚于现在 5 分钟以上、早于 2 小时以上或早于该通道最近一次）：提示落在取数时间字段，对话框保留、已填不丢、不自动重发；改正取数时间后重提，请求体按新内容、换新的 Idempotency-Key，成功后关闭",
+        "test/spec/frontend/admin-payout-watermark/errors.test.ts > [AC-F1-08bc-ERROR#2] 20001 data.fields=[available_fen] 提示落在可用余额、[note] 提示落在备注；data.fields 为空或只有 channel 时在对话框提示「提交内容有误，请检查后重试」、不落字段；都不报成功、不重发，对话框与已填保留",
+        "test/spec/frontend/admin-payout-watermark/errors.test.ts > [AC-F1-08bc-ERROR#3] 10003：重新弹出动态码并提示凭证失效，验证前不重发；验证后以新凭证重发，沿用原 Idempotency-Key 与整个请求体，成功后关闭",
+        "test/spec/frontend/admin-payout-watermark/errors.test.ts > [AC-F1-08bc-ERROR#4] 10403 提示「无权限执行此操作（需要 fund.cash_entry 权限点）」，20901 提示「提交失败，请稍后重试」；不报成功、不自动重新验证或重发，对话框与已填保留",
+        "test/spec/frontend/admin-payout-watermark/errors.test.ts > [AC-F1-08bc-ERROR#5] 40901、5xx 提示「提交失败，请稍后重试」，网络错误提示「网络错误，请检查网络后重试；未确认前不会重复提交」；不报成功、不自动重发，对话框与已填保留；再点【确认录入】沿用原 Idempotency-Key 与整个请求体",
+        "test/spec/frontend/admin-payout-watermark/submit.test.ts > [AC-F1-08bc-SUBMIT#1] 企业支付宝：连点【确认录入】与【验证并继续】、在途时再点都只发一次 POST /admin/v1/payout-watermarks（整个请求体 channel=alipay、available_fen=3456789、measured_at=2026-11-14T09:50:00+08:00、note，带 X-Step-Up-Token 与 Idempotency-Key）；在途时对话框保留、【确认录入】禁用；成功后关闭、提示「余额已录入」、重新读概览并显示新 W",
+        "test/spec/frontend/admin-payout-watermark/submit.test.ts > [AC-F1-08bc-SUBMIT#2] 微信运营账户：不填备注时请求体只有 channel=wechat、available_fen、measured_at（不带 note）；成功后再打开对话框显示新 W，再录入一次是新请求、换新的 Idempotency-Key",
+        "test/spec/frontend/admin-payout-watermark/submit.test.ts > [AC-F1-08bc-SUBMIT#3] 取消动态码不提交、对话框保留且已填不丢；关闭对话框后焦点回到触发它的入口（微信通道卡上的【录入运营账户余额】）",
+        "test/spec/frontend/admin-payouts-readonly/readonly.test.ts > [AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET",
+        "test/spec/frontend/admin-payouts-readonly/readonly.test.ts > [AC-F1-08bc-FROZEN#1] 非超管、持全部财务权限点再加 fund.cash_entry：「打款队列」的全部 / 打款中 / 待执行上写入口恰为【录入企业支付宝余额】【录入运营账户余额】，「结果待确认」没有写入口；回到「打款队列」按【录入企业支付宝余额】打开一个写着企业支付宝的对话框；全程只发 GET"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-payout-execute/access.test.ts",
+        "test/spec/frontend/admin-payout-watermark/access.test.ts",
+        "test/spec/frontend/admin-payout-watermark/dialog.test.ts",
+        "test/spec/frontend/admin-payout-watermark/errors.test.ts",
+        "test/spec/frontend/admin-payout-watermark/submit.test.ts",
+        "test/spec/frontend/admin-payouts-readonly/readonly.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "9279f6419c96230390d1847f45e04bff1b4029d69849cadc715bc1a150bea293"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "28e13f446e9e97f0b6a44035f481ccf5e233ae8e",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
