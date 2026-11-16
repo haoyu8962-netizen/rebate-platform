@@ -882,6 +882,7 @@ export const FUND_TERM_KEYS = {
       "step_up.no_available_method",
       "step_up.oauth.action",
       "step_up.oauth.desc",
+      "step_up.sms.sent_to",
       "step_up.summary.deletion",
       "step_up.summary.phone_change",
       "tag.presale",

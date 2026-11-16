@@ -59,6 +59,8 @@
 # CT-26zn：08 BR-TEXT-12 细则（2026-11-12 裁定回写第八批，D10-1315）写明 BR-TEXT-14 表 C 补登的 52 个 AI 助手页界面键
 # （agent.new_chat 至 agent.action_failed）归普通，逐键列出、不加 agent.report.、agent.quota. 一类前缀；同批的
 # agent.earnings.updated_at 在已有的 agent.earnings. 前缀内归 fund_terms，不再单列。
+# CT-17j：08 BR-TEXT-12 细则未写归类的 step_up.sms.sent_to（BR-TEXT-14 表 C「验证码将发送至 {masked_phone}」）与同组
+# step_up.oauth.*、step_up.summary.* 一样逐键归 ordinary（编排者默认，待规划回写；编排 D10-1729）。
 fund_terms:
   prefixes:
     - order_status.
@@ -950,6 +952,7 @@ ordinary:
     - step_up.no_available_method
     - step_up.oauth.action
     - step_up.oauth.desc
+    - step_up.sms.sent_to
     - step_up.summary.deletion
     - step_up.summary.phone_change
     - tag.presale

@@ -1,0 +1,37 @@
+{
+  "task": "CT-17j",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "c6962af321867516010e00ce780ff55c903084a0",
+  "red_tests": [],
+  "risk_note": "RV1 by path (contracts/**, packages/contracts-ts/**, specs/fund-term-keys.yaml and generated files). CT-17j (D10-1679 / D10-1721 / D10-1729): contracts/texts.default.json adds step_up.sms.sent_to「验证码将发送至 {masked_phone}」verbatim from 08 BR-TEXT-14 table C (couli#3); specs/fund-term-keys.yaml files it under ordinary.keys (orchestrator default pending planning write-back, D10-1729; same section as step_up.oauth.* / step_up.summary.*); openapi Me.masked_phone description now cites BR-ID-33 细则 (masking rule unchanged); recordConsent description says login is optional, matching x-auth: optional (04 §6.1 after couli#4). Descriptions and one text key only, no schema shape change; generated files regenerated. Ledger tester none: no rule tests, so no red run.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude money review via tools/agent/claude-run.sh, required by the header of specs/fund-term-keys.yaml (classification changes are reviewed as fund changes, D10-1729): r1 pass, 0 findings, 0 out of scope. Codex usage limit until 2026-11-20 (D10-1604; ops/approvals.yaml #36)."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "73e8c6ef3fe00b4c9ad081beaaa1ee3441c2d57d",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
