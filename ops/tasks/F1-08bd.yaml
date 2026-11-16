@@ -21,6 +21,19 @@ test_paths:
   - 'test/spec/frontend/admin-payout-execute/access.test.ts'
 impl: claude
 tester: claude-independent
+modify_existing:
+  - file: 'test/spec/frontend/admin-payouts-readonly/readonly.test.ts'
+    test: '[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET'
+    reason: rule_change
+    br: [BR-WDR-17]
+    ruling: D10-1712
+    note: '同 D10-1733 / D10-1816 通例：F1-08bd 落地暂停类入口（switch.payout）后，超管在「打款队列」各子页签的写入口清单改为恰为当时已落地的入口——【录入企业支付宝余额】【录入运营账户余额】【解除暂停】与每个暂停通道一个【解除通道暂停】（排序后 toEqual 严格相等）；持全部打款权限点但无 switch.payout / fund.cash_entry 的账号仍为空；其余断言不变'
+  - file: 'test/spec/frontend/admin-payout-execute/access.test.ts'
+    test: '[AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求'
+    reason: rule_change
+    br: [BR-WDR-17]
+    ruling: D10-1712
+    note: '同 D10-1733 / D10-1816 通例：勾一张后的写入口清单，持 fund.view + payout.execute 仍恰好【执行所选】；超管（另持 fund.cash_entry、switch.payout）恰为【执行所选】【录入企业支付宝余额】【录入运营账户余额】【暂停队列】【解除通道暂停】（排序后 toEqual 严格相等）；其余断言不变'
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-payout-unpause/**'
