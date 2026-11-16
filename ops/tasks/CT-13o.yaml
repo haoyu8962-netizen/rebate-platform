@@ -1,0 +1,33 @@
+id: CT-13o
+repo: rebate-platform
+title: CT-13o（FU-LINKLOGS-DEFAULT-PURGE-BATCH）：link_logs DEFAULT 过期行清理改为分批——每次调用只删有上限的一批、维护第 P 节循环到删净或到上限，大积压也能逐轮减少（D10-1832 / D10-1874）
+type: impl
+# 2026-11-16 be 入账（编排 D10-1874；来源 CT-13l 代码评审 r2b 的 S2，0145:169）：DEFAULT 若积压数百万过期行（日分区预建停摆 14 天以上），CT-13l 的
+#   app.purge_expired_link_logs_default 单条不分批 DELETE 逐行过触发器，可能每轮撞第 P 节 60s statement_timeout 整体回滚、永远删不掉（每小时记 retention_purge_failed）。
+# 范围（只这些）：① 新迁移用 CREATE OR REPLACE FUNCTION 只换 app.purge_expired_link_logs_default（签名可加批大小参数则同时 DROP 旧签名并重授 EXECUTE 只给 couli_maint；属主、
+#   SECURITY DEFINER、函数级设置、专用咨询锁、lock_timeout 5s、截断表达式、先 copy_referenced_link_logs 再删、跳过被引用未复制的行、DELETE 后复位标记都照 0145 原样）；
+#   每次调用最多删一批（批大小写死在函数里或作参数，取值实现方定并写明理由），返回本次删除行数。② 维护第 P 节：同一 +08:00 日 04:00 起循环调用直到返回 0 或达到本轮批次上限
+#   （照第 K 节 open-attempts 的写法），每批各自在短事务里设 60s statement_timeout（D10-1826 常量不变）；全部删净才记当天已清，未删净留到下一轮继续；失败照现有失败路径。
+# 不许动：触发器函数 app.reject_link_logs_update_delete() 与它的四个放行条件一字不动（动了就是护栏改动，要重新走 D10-1829 并问负责人）；link_logs_append_only 不改；
+#   不在 APPROVED_GUARD_CHANGES 加登记（不应触发 lint-migrations 的护栏拦截，若拦就停下报编排）；公用 app.reject_update_delete() 不动。
+# 规则测试（Codex，D10-1872；新目录只新增）至少钉：积压超过一批时多次调用 / 多轮后删净、每次删除不超过批大小；部分删除后中断不丢证据（被引用的仍先复制）；截断与 CT-13l 同口径；
+#   第 P 节循环到 0 才记已清、达到批次上限未删净则当天不记已清下一轮继续；CT-13l 的 test/spec/platform/link-logs-default-purge/** 与冻结用例照旧绿。
+# 排在 CT-06zzzzzj 之后（D10-1874）；带迁移，推前测试机跑 test/spec/db、test/spec/platform；迁移号落地时设冻结取主干最大号 + 1（D10-1800）。
+refs: [BR-ID-30, BR-ATTR-14]
+refs_hash:
+  BR-ID-30: 8ea92988c8cd
+  BR-ATTR-14: 50aecaf956b8
+deps: [CT-13l]
+paths:
+  - 'db/migrations/*_link-logs-default-purge-batch.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+  - 'apps/api/src/modules/platform/maintenance/**'
+test_paths:
+  - 'test/spec/platform/link-logs-default-purge-batch/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
