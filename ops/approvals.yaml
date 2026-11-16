@@ -585,3 +585,9 @@ approvals:
     granted: true
     date: '2026-11-16'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/guard、tools/ci、tools/lib），D10-1662 / D10-1689 / D10-1775 / D10-1779 / D10-1780 / D10-1793 / D10-1795 / D10-1799：CT-06zzzzzi #188 门禁改动，编排按 #24 核后加标签。起因 B1-02zzzb / B1-02zzzc 要在冻结夹具块外补二次验证摘要。规则测试 #1–#46 由独立 Claude 写（第 4 次为编排例外 approvals 92；#46 夹具机械修正 D10-1787、为回归用例 D10-1789）；全新独立 Claude money 全量评审 r3 pass，两条 S2（刻意构造的原地改写放行）按 D10-1795 另开 CT-06zzzzzj 改为放行清单，过渡期凡用文件级条目的 PR 一律报编排按 #24 逐行核冻结文件的每一处插入，核过才挂守候；测试机规则测试 46/46、verify:fast 绿。编排按 approvals 16 / 24 登记。'
+  - id: 95
+    row: 4
+    title: 'CT-13l 任务专属一次性追加：写规则测试第 4 次与规则测试评审（spec-test）第 3 次——写测试只在 test/spec/platform/maintenance/worker-day-partitions.int.test.ts 另加恰好 1 个新 it 块（只用该文件已有的 import 与辅助，块外一字不动）；评审只审增量（D10-1802 改写的那一块 + 新增的一块），都由全新独立 Claude 做；照常不调 bump-attempt（上限已满，按编排例外轮记），其余口径与次数上限不变'
+    granted: true
+    date: '2026-11-16'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（试次属门禁流程小改动），D10-1813：CT-13l 给 link_logs DEFAULT 补 BR-ID-30 ② 删除路径，必须改写冻结用例 worker-day-partitions.int.test.ts 第 172 行那一块（modify_existing rule_change，D10-1802，台账 #192）。red-check 对「在基线已存在、只有登记改动没有新红」的文件报 nothing is shown red，登 red_exempt 也过不了（fe F1-08ce 同一情形），所以该文件须另有 1 条在基线上因断言失败而红的真新用例；改写已用掉写测试第 3 次，新块要第 4 次。评审：两次 spec-test 里第 1 次 fail（S1 只被已结案子项引用的过期行未覆盖）、第 2 次 pass；这一轮同时给块改写一次独立评审（D10-1802 ① (3) 改为并进这一轮）。非资金；起因是先红规则的要求，不是测试质量问题。收口：这一轮若 fail，停下报编排，不再加轮。编排按 approvals 16 / 24 登记。'
