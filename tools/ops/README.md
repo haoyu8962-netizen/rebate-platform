@@ -171,7 +171,7 @@ FU-STATE-HYGIENE，编排 D10-900。台账是事实来源，`couli-runs/state/` 
 - 编排 D10-1662：冻结的共用夹具 / 顶层辅助（常常没有 it 块）只改块外、不改断言时，台账 `modify_existing` 可写一条文件级条目：不写 `test`，写 `scope: support`，reason / br / ruling / note（及 ruling_correction 的 overturned / basis）同块级条目。`parseTaskFile` 拒：scope 不是 `support`、同时有 `test` 与 `scope`、带 `retitle_to`、文件不在 `test/spec/**` / `test/properties/**` / `test/replay/**` 下、同一文件第二条文件级条目、资金与归属类文件用了 rule_change 以外的 reason；条数与块级条目、`red_exempt` 合计 ≤ 300。
 - `task.ts check`：文件级条目点名的文件不要求是 `*.test.ts`（同一文件另有块级条目时仍要求）；照旧要求在 test_paths（`tester: none` 时为 paths）内、属第一类规则测试资产、在基线（可信根）已存在。
 - 放行与证据（负责人标签、块外只许按 token 纯插入的白名单、整文件 sha256 与 reverse_red）在 `tools/ci/evidence-check.ts`，见 `tools/README.md` 同名一段与「块外白名单」一段。
-- 块外白名单（第 3、4 轮，编排 D10-1689 / D10-1775 / D10-1779 / D10-1780）：冻结支撑文件块外的原有 token 一个不删不改不挪，只许插入；插入部分不得有控制流、三元、短路与可选链、箭头函数 / function / class、逗号表达式、跳过与 mock（含 `vi.hoisted`）、测试钩子（beforeEach / afterEach / beforeAll / afterAll，D10-1793）、断言调用，不得与基线重名，不得带默认值，不得给原有名字赋值，含断言调用的既有语句里不许插。要分支或函数的辅助放本任务 test_paths 下的新文件，冻结文件里只插 import 与调用。
+- 块外白名单（第 3、4 轮，编排 D10-1689 / D10-1775 / D10-1779 / D10-1780）：冻结支撑文件块外的原有 token 一个不删不改不挪，只许插入；插入部分不得有控制流、三元、短路与可选链、箭头函数 / function / class、逗号表达式、跳过与 mock（含 `vi.hoisted`）、测试钩子（beforeEach / afterEach / beforeAll / afterAll，D10-1793）、断言调用，不得与基线重名，不得带默认值，不得给原有名字赋值，含断言调用的既有语句里不许插。CT-06zzzzzj（编排 D10-1795 / D10-1880 / D10-1888）起再加放行清单、默认拒：插入只能是整句（带绑定的 import、单名 const、裸标识符调用、`<基线局部名>.push(…)`、文件末尾 `export { … }`）、列表尾部追加（实参、对象属性 / 展开、可选形参；import 花括号里加名字不限位置）、类型标注与可选成员、尾逗号，表达式只用标识符、`a.b`、字面量、对象 / 数组字面量、裸标识符调用、`Promise.resolve(…)`、`await`，运算符只在新 const 初值里；详见 `tools/README.md`「块外白名单」一段。要分支或函数的辅助放本任务 test_paths 下的新文件，冻结文件里只插 import、调用与上述追加。
 
 ### 任务书（`brief.ts`）
 

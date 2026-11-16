@@ -142,7 +142,13 @@
 //              ones hold no control flow, conditional, short circuit, optional chain, function,
 //              comma expression, test modifier, vi mock or assertion call, declare no name the
 //              base file holds, set no default value, assign no existing name, and stand in no
-//              existing statement holding an assertion call; refused naming the file and the
+//              existing statement holding an assertion call; since CT-06zzzzzj (D10-1795 /
+//              D10-1880 / D10-1888) each inserted token is also on the allow list (default deny):
+//              positions P1 whole statements (an import with a binding, one-name const, [await]
+//              call of a bare identifier, <base local>.push(…), export { … } at the end), P2
+//              items appended at the end of a call, an object literal or a parameter list (names
+//              anywhere in import braces), P3 types and optional members, P4 trailing commas ×
+//              the expression grammar (support-tokens.ts rule 5); refused naming the file and the
 //              base line of a removed or changed token (with the round 2 wording when that line
 //              holds an assertion call) or the head line of an inserted one; a block added,
 //              removed, moved, or changed without its own block entry is refused as before (a
@@ -635,10 +641,11 @@ function supportHitProblem(
       `an assertion line changed outside the test blocks (a file-level support entry, CT-06zzzzzi / D10-1662, covers data and calls only; an assertion changes inside a block declared by its own block entry): ${supportLinesText(support.assertions)}`,
     );
   }
-  // Round 3 / 4 (D10-1689 whitelist A, D10-1775, D10-1779, D10-1780 ⑦ A): tokens only inserted.
+  // Round 3 / 4 (D10-1689 whitelist A, D10-1775, D10-1779, D10-1780 ⑦ A): tokens only inserted;
+  // CT-06zzzzzj (D10-1795 / D10-1880 / D10-1888): and only those on the allow list.
   if (support.tokens.length > 0) {
     why.push(
-      `outside the test blocks a support file may only gain tokens, none of a refused kind (CT-06zzzzzi, D10-1689 / D10-1775: no control flow, conditional, short circuit, optional chain, function, comma expression, test modifier, vi mock, assertion call, name the base file holds, default value, assignment to an existing name, nor any token inside an existing statement holding an assertion call): ${supportTokensText(support.tokens)}`,
+      `outside the test blocks a support file may only gain tokens, each on the allow list and none of a refused kind (CT-06zzzzzj, D10-1880 / D10-1888: whole statements — an import with a binding, const <one name> = <expression>, [await] <call of a bare identifier>, <base local>.push(…), export { … } at the end —, arguments, properties or optional parameters appended at the end of a list, names inside import braces, type annotations and optional members; expressions of names, a.b, literals, object / array literals, calls of a bare identifier, Promise.resolve(…), await, operators only in a new const's value; CT-06zzzzzi, D10-1689 / D10-1775: no control flow, conditional, short circuit, optional chain, function, comma expression, test modifier, vi mock, assertion call, name the base file holds, default value, assignment to an existing name, nor any token inside an existing statement holding an assertion call): ${supportTokensText(support.tokens)}`,
     );
   }
   return why.length === 0
