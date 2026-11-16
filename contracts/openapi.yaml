@@ -18557,7 +18557,8 @@ paths:
         returns no 10004; for labor_agreement a signature below it must be redone, BR-WDR-31); it
         is at least 1, not below the current version's min_version (never lowered) and not above
         the new version; sdk_list and collect_list take no part in consent (D10-465), so their
-        min_version must equal the new version. `requires_resign` is not chosen freely: for
+        min_version must equal the new version and requires_resign must be false.
+        `requires_resign` is not chosen freely: for
         labor_agreement it must be true exactly when min_version equals the new version (false
         otherwise), for every other type it must be false; the server checks the value sent and
         does not fill it in. The re-consent rules themselves are those of BR-ID-12 and
