@@ -16,6 +16,7 @@
 | 契约与生成物 | `contracts/**`（唯一来源）、`packages/contracts-ts/**` | 字段、枚举、错误码与规划 04 / 08 不符；不兼容改动会同时打坏四个客户端 |
 | Agent 工具与身份注入 | `apps/api/src/modules/agent/tools/registry/**`、`apps/api/src/modules/agent/guard/**`、`apps/api/src/modules/identity/ports/request-context.ts` | 工具白名单（BR-AI-02）；身份参数由服务端注入、不取自客户端或模型输出（BR-AI-03） |
 | 密钥与外部调用 | `apps/api/src/modules/platform/{crypto,config,masking,logging}/**`、`apps/api/src/modules/union/**` 的适配器 | 密钥或个人信息进日志、错误信息、夹具、仓库；非生产调用真实联盟 / 支付 / 短信；外部写未先落单；平台差异漏出适配器 |
+| 冻结用例的文件级支撑条目 | 台账 `modify_existing` 里 `scope: support` 的条目（CT-06zzzzzi；`tools/guard/lib/support-tokens.ts`） | 整份读冻结文件 import 的新 helper 文件（在本任务 test_paths 下），查全局改写：`expect.extend`、`vi.mock` / `stubGlobal`、给全局或被测模块赋值、吞异常；并逐行读冻结文件里的每一处插入，查工具不拦的原地改写：已有实参前插入、插入运算符、已有调用后接 `.then` / `.catch`、`function` 后插 `*`、任何 `vi.` 调用、`Object.assign` 或起别名后给已有对象赋值（D10-1793 / D10-1795，CT-06zzzzzj 收口前有效） |
 
 ## 2. 严重度
 
