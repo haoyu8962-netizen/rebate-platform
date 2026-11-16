@@ -1,0 +1,103 @@
+{
+  "risk_note": "CT-13m (link_log_evidence; 编排 D10-1624 / D10-1625 / D10-1648 / D10-1649; BR-ATTR-14 default 'claim-referenced records are copied to link_log_evidence before partition deletion', BR-ID-30 ② 'link_log_evidence 工单关闭后 180 天'). Migration 0144_link-log-evidence.sql: app.link_log_evidence (all link_logs columns + copied_at, not partitioned, pk (id); couli_app / couli_readonly / couli_maint SELECT only, writes only through SECURITY DEFINER functions); app.copy_referenced_link_logs(p_partition, p_before, p_copied_at) copies rows referenced by any claim_items.evidence_link_log_ids (ON CONFLICT (id) DO NOTHING; EXECUTE couli_maint only); app.drop_expired_day_partitions is CREATE OR REPLACE word for word 0012 plus one PERFORM of the copy after the ACCESS EXCLUSIVE lock and before each DROP, so a copy failure rolls back and drops nothing; app.purge_expired_link_log_evidence(p_now) deletes evidence whose referencing items are all decided with the latest decided_at < +08:00 day 00:00 − 180 days, and evidence no claim_item references (D10-1625 补一); 180 only inside the function. Maintenance section O calls the purge once per +08:00 day from 04:00 after the link_logs day-partition drop, failure logged, counted, rethrown at the end, day marked only on success. linking's createLinkLogMomentReader falls back to link_log_evidence for ids not in link_logs. tools/ci/lint-migrations.test.ts: one line, link_log_evidence added to the funds / attribution set (D10-1648, #16). db/schema.sql and db.gen.ts from the local snapshot (D10-1553). Only claim_items references link_logs today; decided_at is written by the review path only and there is no whole-claim cancel path on main yet. Rule tests (independent Claude, 3 attempts): 13 cases in test/spec/linking/link-log-evidence/** (attempt 2 added the maintenance-schedule test for spec-test r1's S1, attempt 3 removed two SCHEDULE rounds that contradicted the file's own 04:00 gate). Red with the current trusted root: red/3 PASS (13 in 6 files). Test machine, rebased on main c6962af32 (couli-runs/CT-13m/run4, head 2cd677dc7, real runs, no cache, D10-1772): verify:fast green; test/spec/linking/link-log-evidence + test/spec/db + test/spec/platform 491 files 4547/4547 green (frozen partition tests included). Earlier run3 on the old base was green as well.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Fresh independent Claude via claude-run.sh (Codex out of quota, D10-1604): money r1 pass, no findings (couli-runs/CT-13m/review-claude-money-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "r1 fail with one S1 (the 04:00 maintenance call of the evidence purge was not pinned) → test attempts 2 and 3 → r2 incremental pass; one out-of-scope S2 kept for later: couli_app must not execute the copy and purge functions (largely pinned by the grants test) (couli-runs/CT-13m/review-claude-spec-test-r1.json, -r2.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/linking/link-log-evidence/copy-failure.int.test.ts > [BR-ATTR-14 复制失败则不删; D10-1624; CT-13m 2] 复制失败时 drop_expired_day_partitions 抛错、分区与其中的行都还在、证据表不变；失败原因消失后同一调用复制并删除",
+    "test/spec/linking/link-log-evidence/copy.int.test.ts > [规划/04 link_logs / link_log_evidence 同一组字段; CT-13m 1] link_log_evidence 有 link_logs 的每一列，类型相同",
+    "test/spec/linking/link-log-evidence/copy.int.test.ts > [BR-ATTR-14 默认值; CT-13m 1] 日分区过期被删时，被认领子项引用的行（子项待审或已结案、一个或多个子项、与未知 id 同列）逐列原样进证据表、每个 id 一行；未被引用的行与未过期分区里被引用的行都不进；删除结果同 I1b",
+    "test/spec/linking/link-log-evidence/copy.int.test.ts > [BR-ATTR-14 默认值; CT-13m 1] 一次删多个分区时各分区被引用的行都复制；再删一次（没有可删的分区）不重复复制、不报错",
+    "test/spec/linking/link-log-evidence/copy.int.test.ts > [BR-ATTR-14 默认值; ADR-0001 §4.2 #4 并发; CT-13m 1] 删除等表锁期间另一事务提交了对该行的引用：删除在锁等待结束后照常完成，该行进证据表",
+    "test/spec/linking/link-log-evidence/grants.int.test.ts > [db/AGENTS.md 迁移规则 4; D10-1625; CT-13m 4] couli_app、couli_readonly 能读证据表，增、改、删、清空都是 42501；表里的行不受影响",
+    "test/spec/linking/link-log-evidence/grants.int.test.ts > [ADR-0001 §4.2 #4、#8; D10-1625; CT-13m 4] couli_maint 能执行清理函数与（带复制的）删分区函数；couli_app、couli_readonly、couli_payout 执行它们都是 42501；名字含 link_log_evidence 的函数这三个角色都不能执行",
+    "test/spec/linking/link-log-evidence/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13m S1] 04:00 的一轮调用一次证据清理，参数是本次注入时钟的 now，位置在删 link_logs 日分区之后",
+    "test/spec/linking/link-log-evidence/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13m S1] +08:00 的 04:00 前不调用；当天第一轮调用一次、后续轮次不再调用；跨到下一天后等到 04:00 再调用一次",
+    "test/spec/linking/link-log-evidence/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13m S1] 证据清理失败：其余部分照常跑完，runOnce 以原错误拒绝；当天不记为已清，同日下一轮再调用，成功后不再调用",
+    "test/spec/linking/link-log-evidence/purge.int.test.ts > [BR-ID-30 ② 工单关闭后 180 天、运行当日 00:00（+08:00）; CT-13m 3] 最晚 decided_at 早于截止即删、等于截止（差 1 毫秒）留；p_now 跨过 +08:00 的午夜截止前移一天；会话时区 Pacific/Kiritimati 不改变结果；没有任何引用的行第一次运行就删；重复运行不再删",
+    "test/spec/linking/link-log-evidence/purge.int.test.ts > [BR-ID-30 ② 工单关闭后; D10-1625 全部结案、最晚 decided_at; CT-13m 3] 引用它的子项有一项未结案就不删（多远的 p_now 都不删）；全部结案后按最晚的 decided_at 算，不按最早的",
+    "test/spec/linking/link-log-evidence/reader.int.test.ts > [BR-ATTR-14; D10-1625 先查 link_logs 再查证据; B1-10j; CT-13m 5] createLinkLogMomentReader 对只剩在证据表里的 id 也返回原时间与场景；还在 link_logs 的照常返回；两边都没有的 id、另一 App 的证据都略过"
+  ],
+  "task": "CT-13m",
+  "spec_commit": "df1faeb3fec21fea4e0b8b7fb98f8c88e163ec1a",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "df1faeb3fec21fea4e0b8b7fb98f8c88e163ec1a",
+      "tree": "25d4264de2f1c5806f881dbb8cf148ea1666aad5",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-16T03:33:06Z",
+      "finished_at": "2026-11-16T03:33:18Z",
+      "red_tests": [
+        "test/spec/linking/link-log-evidence/copy-failure.int.test.ts > [BR-ATTR-14 复制失败则不删; D10-1624; CT-13m 2] 复制失败时 drop_expired_day_partitions 抛错、分区与其中的行都还在、证据表不变；失败原因消失后同一调用复制并删除",
+        "test/spec/linking/link-log-evidence/copy.int.test.ts > [规划/04 link_logs / link_log_evidence 同一组字段; CT-13m 1] link_log_evidence 有 link_logs 的每一列，类型相同",
+        "test/spec/linking/link-log-evidence/copy.int.test.ts > [BR-ATTR-14 默认值; CT-13m 1] 日分区过期被删时，被认领子项引用的行（子项待审或已结案、一个或多个子项、与未知 id 同列）逐列原样进证据表、每个 id 一行；未被引用的行与未过期分区里被引用的行都不进；删除结果同 I1b",
+        "test/spec/linking/link-log-evidence/copy.int.test.ts > [BR-ATTR-14 默认值; CT-13m 1] 一次删多个分区时各分区被引用的行都复制；再删一次（没有可删的分区）不重复复制、不报错",
+        "test/spec/linking/link-log-evidence/copy.int.test.ts > [BR-ATTR-14 默认值; ADR-0001 §4.2 #4 并发; CT-13m 1] 删除等表锁期间另一事务提交了对该行的引用：删除在锁等待结束后照常完成，该行进证据表",
+        "test/spec/linking/link-log-evidence/grants.int.test.ts > [db/AGENTS.md 迁移规则 4; D10-1625; CT-13m 4] couli_app、couli_readonly 能读证据表，增、改、删、清空都是 42501；表里的行不受影响",
+        "test/spec/linking/link-log-evidence/grants.int.test.ts > [ADR-0001 §4.2 #4、#8; D10-1625; CT-13m 4] couli_maint 能执行清理函数与（带复制的）删分区函数；couli_app、couli_readonly、couli_payout 执行它们都是 42501；名字含 link_log_evidence 的函数这三个角色都不能执行",
+        "test/spec/linking/link-log-evidence/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13m S1] 04:00 的一轮调用一次证据清理，参数是本次注入时钟的 now，位置在删 link_logs 日分区之后",
+        "test/spec/linking/link-log-evidence/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13m S1] +08:00 的 04:00 前不调用；当天第一轮调用一次、后续轮次不再调用；跨到下一天后等到 04:00 再调用一次",
+        "test/spec/linking/link-log-evidence/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13m S1] 证据清理失败：其余部分照常跑完，runOnce 以原错误拒绝；当天不记为已清，同日下一轮再调用，成功后不再调用",
+        "test/spec/linking/link-log-evidence/purge.int.test.ts > [BR-ID-30 ② 工单关闭后 180 天、运行当日 00:00（+08:00）; CT-13m 3] 最晚 decided_at 早于截止即删、等于截止（差 1 毫秒）留；p_now 跨过 +08:00 的午夜截止前移一天；会话时区 Pacific/Kiritimati 不改变结果；没有任何引用的行第一次运行就删；重复运行不再删",
+        "test/spec/linking/link-log-evidence/purge.int.test.ts > [BR-ID-30 ② 工单关闭后; D10-1625 全部结案、最晚 decided_at; CT-13m 3] 引用它的子项有一项未结案就不删（多远的 p_now 都不删）；全部结案后按最晚的 decided_at 算，不按最早的",
+        "test/spec/linking/link-log-evidence/reader.int.test.ts > [BR-ATTR-14; D10-1625 先查 link_logs 再查证据; B1-10j; CT-13m 5] createLinkLogMomentReader 对只剩在证据表里的 id 也返回原时间与场景；还在 link_logs 的照常返回；两边都没有的 id、另一 App 的证据都略过"
+      ],
+      "expected": [
+        "test/spec/linking/link-log-evidence/copy-failure.int.test.ts",
+        "test/spec/linking/link-log-evidence/copy.int.test.ts",
+        "test/spec/linking/link-log-evidence/grants.int.test.ts",
+        "test/spec/linking/link-log-evidence/maintenance-schedule.test.ts",
+        "test/spec/linking/link-log-evidence/purge.int.test.ts",
+        "test/spec/linking/link-log-evidence/reader.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "b3b398596b2bba0ba33aaca3f86a2142822429130c0f33161fe61302b5163ea9"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "041d501b32be031705a173631d93574f1c003cc06bd63def3e7deddb364e58c1"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "29eb6864edb7945f517261a080c6a7a9ad419ea1",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  }
+}
