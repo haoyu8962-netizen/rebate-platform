@@ -51,6 +51,7 @@ import {
   PAGE_SIZE,
   REVIEW_MODES,
   REVIEW_PERMISSION,
+  SWITCH_PERMISSIONS,
   RISK_FLAGS,
   STATUSES,
   STATUS_TABS,
@@ -146,6 +147,7 @@ export function WithdrawalsPage({ access }: WithdrawalsPageProps): ReactElement 
                   canList={reader}
                   canExecute={access.can(EXECUTE_PERMISSION)}
                   canEnter={access.can(CASH_ENTRY_PERMISSION)}
+                  canSwitch={SWITCH_PERMISSIONS.some((point) => access.can(point))}
                 />
               ),
             },

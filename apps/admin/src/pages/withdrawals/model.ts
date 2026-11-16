@@ -516,3 +516,21 @@ export type WatermarkChannel = Schema<'AdminPayoutWatermarkChannel'>;
 export type WatermarkRequest = Schema<'AdminPayoutWatermarkCreateRequest'>;
 /** AdminPayoutWatermarkCreateRequest.note maxLength (Unicode code points). */
 export const WATERMARK_NOTE_MAX = 500;
+
+// ---- 打款队列【暂停队列】【解除暂停】【解除通道暂停】（F1-08bd） ---------------------------------
+
+/** GET adminListKillSwitches / PUT adminUpdateKillSwitch (totp step-up, CAS expected_version). */
+export const KILL_SWITCHES_URL = '/admin/v1/kill-switches';
+export const killSwitchUrl = (key: string): string =>
+  `${KILL_SWITCHES_URL}/${encodeURIComponent(key)}`;
+/** Either point may change payout.queue_paused and payout.channel_paused.* (super holds both). */
+export const SWITCH_PERMISSIONS: readonly string[] = ['switch.payout', 'switch.all'];
+/** AdminConfigReason maxLength (Unicode code points, sent as typed). */
+export const SWITCH_REASON_MAX = 200;
+/** The largest page_size of adminListKillSwitches. */
+export const SWITCH_PAGE_SIZE = 200;
+export const QUEUE_PAUSED_KEY = 'payout.queue_paused';
+export const channelPausedKey = (channel: string): string => `payout.channel_paused.${channel}`;
+export type KillSwitch = Schema<'AdminKillSwitch'>;
+export type KillSwitchPage = Schema<'AdminKillSwitchPage'>;
+export type KillSwitchUpdate = Schema<'AdminKillSwitchUpdateRequest'>;

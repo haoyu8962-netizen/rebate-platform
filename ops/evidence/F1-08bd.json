@@ -1,0 +1,143 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求",
+    "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bd-FROZEN#2] 暂停类入口与【执行所选】各按自己的权限点：持 fund.view + payout.execute + switch.payout（非超管）、队列运行且微信零钱暂停时，未勾选前写入口恰为【暂停队列】【解除通道暂停】，勾一张后恰为这两个加【执行所选】；队列暂停时勾选前后写入口都恰为【解除暂停】【解除通道暂停】、没有【执行所选】；持 fund.view + payout.execute + switch.pay（不持 switch.payout）时勾一张后写入口恰为【执行所选】；全程不发写请求",
+    "test/spec/frontend/admin-payout-unpause/access.test.ts > [AC-F1-08bd-ACCESS#1] 持 fund.view + switch.payout：队列运行时标题行恰有一个可用的【暂停队列】、没有【解除暂停】；队列暂停时恰有【解除暂停】、没有【暂停队列】；只有暂停的通道卡上各有一个【解除通道暂停】，未暂停的通道卡上没有任何按钮；没有暂停通道、开通或打款开关的入口；进页只发 GET、不读开关列表",
+    "test/spec/frontend/admin-payout-unpause/access.test.ts > [AC-F1-08bd-ACCESS#2] 入口按权限点 switch.payout / switch.all 判、不按角色判：队列与企业支付宝、微信零钱都暂停时，只持 fund.view、持 fund.view + payout.execute、持 fund.view + fund.cash_entry、持 fund.view + payout.execute + fund.cash_entry、持除开关外的全部财务权限点、持 fund.view + switch.pay，都没有【暂停队列】【解除暂停】【解除通道暂停】（含隐藏、置灰）；持 fund.view + switch.payout、持 fund.view + switch.all 与超管都恰有【解除暂停】与两个【解除通道暂停】；只发 GET",
+    "test/spec/frontend/admin-payout-unpause/access.test.ts > [AC-F1-08bd-ACCESS#3] 打款概览读取失败时（不知道队列与通道是否暂停）没有【暂停队列】【解除暂停】【解除通道暂停】；点【重试】读到概览后才出现对应入口",
+    "test/spec/frontend/admin-payout-unpause/dialog.test.ts > [AC-F1-08bd-DIALOG#1] 【暂停队列】【解除暂停】【解除通道暂停】（企业支付宝、微信零钱）各自打开确认对话框：标题与后果说明逐字如约（暂停后【执行所选】不可用；解除后执行仍过水位检查、队列与通道分开解除），有一个原因输入框、确认按钮与【取消】；打开时不弹动态码、不发写请求；【取消】关闭、不发请求，焦点回到入口",
+    "test/spec/frontend/admin-payout-unpause/dialog.test.ts > [AC-F1-08bd-DIALOG#2] 原因按 Unicode 码点计：201 码点时点确认不弹动态码、不发请求，对话框与已填保留；改成 199 个汉字 + 1 个「𠮷」（200 码点）后确认 → 动态码 → 请求体 reason 恰为所填原值",
+    "test/spec/frontend/admin-payout-unpause/errors.test.ts > [AC-F1-08bd-ERROR#1] 20902（别人刚解除了暂停，version 已变）：提示「开关状态已被他人修改，已刷新为最新状态，请核对后重试」、重新读概览，标题行随之换成【暂停队列】；不报成功、不自动重发",
+    "test/spec/frontend/admin-payout-unpause/errors.test.ts > [AC-F1-08bd-ERROR#2] 20902（别人改过又改回，仍是暂停、version 前进了 2）：提示并刷新、不自动重发，【解除暂停】仍在；再试时重新读开关列表，按新的 expected_version=9 发出，成功后标题行换成【暂停队列】",
+    "test/spec/frontend/admin-payout-unpause/errors.test.ts > [AC-F1-08bd-ERROR#3] 10003：重新弹出动态码并提示「动态码凭证已失效，请重新输入动态码」，验证前不重发；验证后以新凭证原样重发（整个请求体相同、expected_version 仍为 7），成功后关闭",
+    "test/spec/frontend/admin-payout-unpause/errors.test.ts > [AC-F1-08bd-ERROR#4] 10403 提示「无权限执行此操作（需要 switch.payout 或 switch.all 权限点）」；20001 data.fields=[reason] 提示落在原因输入框，data.fields 为 [value]、[key] 或空时在对话框提示「提交内容有误，请检查后重试」、不落字段；都不报成功、不自动重新验证或重发，对话框与已填原因保留",
+    "test/spec/frontend/admin-payout-unpause/errors.test.ts > [AC-F1-08bd-ERROR#5] 5xx 提示「提交失败，请稍后重试」，网络错误提示「网络错误，请检查网络后重试；未确认前不会重复提交」；不报成功、不自动重发，对话框与已填原因保留；其间开关 version 又前进了 1，再试时重新读开关列表，按 expected_version=8 发出，成功后关闭",
+    "test/spec/frontend/admin-payout-unpause/submit.test.ts > [AC-F1-08bd-SUBMIT#1] 【解除暂停】：连点确认与【验证并继续】、在途时再点都只发一次 PUT /admin/v1/kill-switches/payout.queue_paused（整个请求体 value=false、expected_version=7（开关列表里该开关的 version）、reason；带 X-Step-Up-Token，不带 Idempotency-Key）；在途时对话框保留、确认按钮禁用；成功后关闭、提示「打款队列已解除暂停」、重新读概览，标题行换成【暂停队列】，两个通道暂停不随之解除",
+    "test/spec/frontend/admin-payout-unpause/submit.test.ts > [AC-F1-08bd-SUBMIT#2] 【暂停队列】（开关从未写过，version 为 0）：不填原因时请求体恰为 value=true、expected_version=0（不带 reason）；成功后提示「打款队列已暂停」，标题行换成【解除暂停】；已勾选待执行单时【执行所选】随之不再提供、批量栏写明队列已暂停",
+    "test/spec/frontend/admin-payout-unpause/submit.test.ts > [AC-F1-08bd-SUBMIT#3] 【解除通道暂停】分通道、与队列分开：微信零钱卡上的入口发 PUT payout.channel_paused.wechat（value=false、expected_version=5、reason），成功后微信零钱卡显示未暂停且没有入口，企业支付宝卡的入口与【解除暂停】仍在；再解除企业支付宝（不填原因）发 PUT payout.channel_paused.alipay（value=false、expected_version=3），之后只剩【解除暂停】",
+    "test/spec/frontend/admin-payout-unpause/submit.test.ts > [AC-F1-08bd-SUBMIT#4] 取消动态码不提交、对话框保留且原因不丢；【取消】关闭对话框后焦点回到【解除暂停】，全程不发写请求、入口不变",
+    "test/spec/frontend/admin-payouts-readonly/readonly.test.ts > [AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET",
+    "test/spec/frontend/admin-payouts-readonly/readonly.test.ts > [AC-F1-08bd-FROZEN#1] 非超管、持全部财务权限点再加 switch.payout（不持 fund.cash_entry）：队列暂停、企业支付宝与微信零钱暂停时，「打款队列」的全部 / 打款中 / 待执行上写入口恰为【解除暂停】与两个【解除通道暂停】；队列运行而两个通道仍暂停时恰为【暂停队列】与两个【解除通道暂停】；「结果待确认」没有写入口；同一概览下只持全部财务权限点（不持 switch.payout）时都没有写入口；全程只发 GET"
+  ],
+  "risk_note": "F1-08bd (orchestrator D10-1517 batch 1 ②, D10-1712, D10-1816, D10-1863; landed per D10-1772, stacked on #203 F1-08bc and rebased onto main). Payout queue pause controls for switch.payout or switch.all: 暂停队列 / 解除暂停 by the overview state and 解除通道暂停 for a paused channel, confirm, SMS step-up, adminUpdateKillSwitch with expected_version; an unknown write result is retried only with the original key and body (D10-1731). Frozen cases (same as D10-1733): F1-08ba READONLY#1 and F1-08bb ACCESS#1 only change the super-admin write-entry list to exactly the landed entries (modify_existing, ledger #212); per D10-1816 each of the two files gets one new it block ([AC-F1-08bd-FROZEN#1]/[#2]). The rule tests were written by independent Claude contexts (ledger tester claude-independent; ops/approvals.yaml #36 at the time) in two rounds; spec-test r1 pass, r2 (new blocks only) pass. Implementation by Opus 5.5 (another context, r1 plus an r2 fix); couli-ci verify:fast and --browser green after the rebase and the new blocks. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "money review by an independent Claude per ops/approvals.yaml #36 (claude-run.sh, fresh context; Codex was unavailable when this review ran, D10-1604), r2 pass, 1 S2"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "豁免确认为门禁口径补录（D10-1833 / D10-1863 / D10-1865 / D10-1875，先例 D10-848 ③），一次完成：主干台账 4 条 red_exempt 声明逐字贴入任务书，独立 Claude 逐条确认，末行「全部确认」，verdict pass。评审旁注：readonly.test.ts 那条声明写的 red-check 成因（fixtures.ts 依赖 @couli/money）字面不准，该文件的 @couli/money 依赖经 ./helpers.ts → apps/admin/src/App.tsx 引入；不影响所核三点。spec-test 第 2 轮只审新增 2 块（D10-1816），pass。tests by independent Claude contexts (ledger tester claude-independent): test writing 2 / 3; spec-test 2 / 2.",
+    "model": "claude-opus-5-5",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-payouts-readonly/readonly.test.ts",
+      "test": "[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    // Since F1-08bc (D10-1712 (a)) the entries landed so far are exactly 【录入企业支付宝余额】 and\n    // 【录入运营账户余额】 (fund.cash_entry, which a super admin holds and ALL does not), on the\n    // 打款队列 tab whatever its sub-tab; the pause entries (F1-08bd) stay forbidden.\n    const landed = ['录入企业支付宝余额', '录入运营账户余额'].sort();\n    const accounts = [everyGrant(ALL), SUPER];\n    for (const snapshot of accounts) {\n      const server = createPayoutServer({\n        overview: pausedOverview(),\n        permissions: snapshot === SUPER ? VIEW_EXECUTE : ALL,\n      });\n      await mount(server, snapshot);\n      const queue = await openTab(TAB.queue);\n      await listed(queue, ALL_ROWS);\n      await waitFor(() => expect(server.overviewReads()).toHaveLength(1));\n      await settled(server);\n      const queueEntries = snapshot === SUPER ? landed : [];\n      expect(writeEntries(queue).sort(), 'the write entries of 全部').toEqual(queueEntries);\n      for (const tab of [SUB_TAB.paying, SUB_TAB.approved]) {\n        await selectTab(queue, tab);\n        await settled(server);\n        expect(writeEntries(queue).sort(), `the write entries of ${tab}`).toEqual(queueEntries);\n      }\n      await selectTab(queue, SUB_TAB.all);\n      await listed(queue, ALL_ROWS);\n      const grid = gridWith(queue, COLUMN.net);\n      await click(entry(rowIn(grid, QNO.paying), ENTRY.attempts));\n      const drawer = await openDialog();\n      await settled(server);\n      expect(writeEntries(drawer), 'no write entry in the drawer').toEqual([]);\n\n      const unknown = await openTab(TAB.unknown);\n      await listed(unknown, [QNO.stuck, QNO.untried]);\n      await settled(server);\n      expect(writeEntries(unknown), 'no write entry in 结果待确认').toEqual([]);\n      expect(server.writes(), 'no request other than GET').toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "after": "it(\n  '[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    // Since F1-08bc (D10-1712 (a)) the entries landed so far are exactly 【录入企业支付宝余额】 and\n    // 【录入运营账户余额】 (fund.cash_entry, which a super admin holds and ALL does not), on the\n    // 打款队列 tab whatever its sub-tab; since F1-08bd also the pause entries (switch.payout, which\n    // a super admin holds and ALL does not): the queue is paused here, so 【解除暂停】, and one\n    // 【解除通道暂停】 for each paused channel (企业支付宝 and 微信零钱).\n    const landed = [\n      '录入企业支付宝余额',\n      '录入运营账户余额',\n      '解除暂停',\n      '解除通道暂停',\n      '解除通道暂停',\n    ].sort();\n    const accounts = [everyGrant(ALL), SUPER];\n    for (const snapshot of accounts) {\n      const server = createPayoutServer({\n        overview: pausedOverview(),\n        permissions: snapshot === SUPER ? VIEW_EXECUTE : ALL,\n      });\n      await mount(server, snapshot);\n      const queue = await openTab(TAB.queue);\n      await listed(queue, ALL_ROWS);\n      await waitFor(() => expect(server.overviewReads()).toHaveLength(1));\n      await settled(server);\n      const queueEntries = snapshot === SUPER ? landed : [];\n      expect(writeEntries(queue).sort(), 'the write entries of 全部').toEqual(queueEntries);\n      for (const tab of [SUB_TAB.paying, SUB_TAB.approved]) {\n        await selectTab(queue, tab);\n        await settled(server);\n        expect(writeEntries(queue).sort(), `the write entries of ${tab}`).toEqual(queueEntries);\n      }\n      await selectTab(queue, SUB_TAB.all);\n      await listed(queue, ALL_ROWS);\n      const grid = gridWith(queue, COLUMN.net);\n      await click(entry(rowIn(grid, QNO.paying), ENTRY.attempts));\n      const drawer = await openDialog();\n      await settled(server);\n      expect(writeEntries(drawer), 'no write entry in the drawer').toEqual([]);\n\n      const unknown = await openTab(TAB.unknown);\n      await listed(unknown, [QNO.stuck, QNO.untried]);\n      await settled(server);\n      expect(writeEntries(unknown), 'no write entry in 结果待确认').toEqual([]);\n      expect(server.writes(), 'no request other than GET').toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为前序任务 F1-08ba / bb / bc 版本（旧规则：打款队列没有暂停类入口【暂停队列】【解除暂停】【解除通道暂停】，超管写入口清单为恰为【录入企业支付宝余额】【录入运营账户余额】），即本单正式先红的基线；couli-runs/F1-08bd/red/1（couli-ci，spec 93ee3f8b4）中本条为红、列在 red_tests（该次运行时 modify_existing 尚未合入主干台账，故没有「red for a valid reason」判定字样；落地 land-ci 的正式先红会再跑一次）——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-17"]
+    },
+    {
+      "file": "test/spec/frontend/admin-payout-execute/access.test.ts",
+      "test": "[AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    const viewing = serverFor({ permissions: VIEW });\n    const viewPanel = await openQueue(viewing, VIEWER);\n    expect(within(viewPanel).queryAllByRole('checkbox'), 'fund.view: no checkbox').toEqual([]);\n    expect(buttons(viewPanel, ENTRY), 'fund.view: no 执行所选').toEqual([]);\n    expect(writeEntries(viewPanel), 'fund.view: no write entry').toEqual([]);\n    expect(liveTexts(viewPanel), 'fund.view: no selection bar').toEqual([]);\n    expect(viewing.writes()).toEqual([]);\n    cleanup();\n\n    // Since F1-08bc (D10-1712 (a)) a super admin (holding fund.cash_entry) also gets exactly the two\n    // balance entries landed with it; fund.view + payout.execute does not. The pause entries\n    // (F1-08bd) stay forbidden.\n    const landed = (account: typeof SUPER): string[] =>\n      account === SUPER ? [ENTRY, '录入企业支付宝余额', '录入运营账户余额'].sort() : [ENTRY];\n    for (const account of [EXECUTOR, SUPER]) {\n      const server = serverFor({ permissions: VIEW_EXECUTE });\n      const panel = await openQueue(server, account);\n      for (const number of APPROVED)\n        expect(checkbox(panel, number).checked, `${number} not ticked`).toBe(false);\n      for (const number of PAYING)\n        expect(choicesOf(queueRow(panel, number)), `${number}: no usable checkbox`).toEqual([]);\n      expect(buttons(panel, ENTRY), 'no 执行所选 before a tick').toEqual([]);\n      expect(liveTexts(panel), 'no selection bar before a tick').toEqual([]);\n      await select(panel, [QNO.approvedA]);\n      expect(disabled(button(panel, ENTRY))).toBe(false);\n      expect(writeEntries(panel).sort(), 'the landed write entries').toEqual(landed(account));\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "after": "it(\n  '[AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    const viewing = serverFor({ permissions: VIEW });\n    const viewPanel = await openQueue(viewing, VIEWER);\n    expect(within(viewPanel).queryAllByRole('checkbox'), 'fund.view: no checkbox').toEqual([]);\n    expect(buttons(viewPanel, ENTRY), 'fund.view: no 执行所选').toEqual([]);\n    expect(writeEntries(viewPanel), 'fund.view: no write entry').toEqual([]);\n    expect(liveTexts(viewPanel), 'fund.view: no selection bar').toEqual([]);\n    expect(viewing.writes()).toEqual([]);\n    cleanup();\n\n    // Since F1-08bc (D10-1712 (a)) a super admin (holding fund.cash_entry) also gets exactly the two\n    // balance entries landed with it; fund.view + payout.execute does not. Since F1-08bd the super\n    // admin (holding switch.payout) also gets the pause entries of this overview: the queue runs,\n    // so 【暂停队列】, and 【解除通道暂停】 on the paused 微信零钱 card.\n    const pauses = ['暂停队列', '解除通道暂停'];\n    const landed = (account: typeof SUPER): string[] =>\n      account === SUPER\n        ? [ENTRY, '录入企业支付宝余额', '录入运营账户余额', ...pauses].sort()\n        : [ENTRY];\n    for (const account of [EXECUTOR, SUPER]) {\n      const server = serverFor({ permissions: VIEW_EXECUTE });\n      const panel = await openQueue(server, account);\n      for (const number of APPROVED)\n        expect(checkbox(panel, number).checked, `${number} not ticked`).toBe(false);\n      for (const number of PAYING)\n        expect(choicesOf(queueRow(panel, number)), `${number}: no usable checkbox`).toEqual([]);\n      expect(buttons(panel, ENTRY), 'no 执行所选 before a tick').toEqual([]);\n      expect(liveTexts(panel), 'no selection bar before a tick').toEqual([]);\n      await select(panel, [QNO.approvedA]);\n      expect(disabled(button(panel, ENTRY))).toBe(false);\n      expect(writeEntries(panel).sort(), 'the landed write entries').toEqual(landed(account));\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为前序任务 F1-08bb / bc 版本（旧规则：打款队列没有暂停类入口【暂停队列】【解除暂停】【解除通道暂停】，超管写入口清单为恰为【执行所选】【录入企业支付宝余额】【录入运营账户余额】），即本单正式先红的基线；couli-runs/F1-08bd/red/1（couli-ci，spec 93ee3f8b4）中本条为红、列在 red_tests（该次运行时 modify_existing 尚未合入主干台账，故没有「red for a valid reason」判定字样；落地 land-ci 的正式先红会再跑一次）——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-17"]
+    }
+  ],
+  "task": "F1-08bd",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "c1dcc59a6236dc5da916c0c63d8257df4b58e22c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c1dcc59a6236dc5da916c0c63d8257df4b58e22c",
+      "tree": "51158a5c73a7ebab1d769c45c368c9120ac4d779",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-16T14:42:27Z",
+      "finished_at": "2026-11-16T14:42:56Z",
+      "red_tests": [
+        "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求",
+        "test/spec/frontend/admin-payout-execute/access.test.ts > [AC-F1-08bd-FROZEN#2] 暂停类入口与【执行所选】各按自己的权限点：持 fund.view + payout.execute + switch.payout（非超管）、队列运行且微信零钱暂停时，未勾选前写入口恰为【暂停队列】【解除通道暂停】，勾一张后恰为这两个加【执行所选】；队列暂停时勾选前后写入口都恰为【解除暂停】【解除通道暂停】、没有【执行所选】；持 fund.view + payout.execute + switch.pay（不持 switch.payout）时勾一张后写入口恰为【执行所选】；全程不发写请求",
+        "test/spec/frontend/admin-payout-unpause/access.test.ts > [AC-F1-08bd-ACCESS#1] 持 fund.view + switch.payout：队列运行时标题行恰有一个可用的【暂停队列】、没有【解除暂停】；队列暂停时恰有【解除暂停】、没有【暂停队列】；只有暂停的通道卡上各有一个【解除通道暂停】，未暂停的通道卡上没有任何按钮；没有暂停通道、开通或打款开关的入口；进页只发 GET、不读开关列表",
+        "test/spec/frontend/admin-payout-unpause/access.test.ts > [AC-F1-08bd-ACCESS#2] 入口按权限点 switch.payout / switch.all 判、不按角色判：队列与企业支付宝、微信零钱都暂停时，只持 fund.view、持 fund.view + payout.execute、持 fund.view + fund.cash_entry、持 fund.view + payout.execute + fund.cash_entry、持除开关外的全部财务权限点、持 fund.view + switch.pay，都没有【暂停队列】【解除暂停】【解除通道暂停】（含隐藏、置灰）；持 fund.view + switch.payout、持 fund.view + switch.all 与超管都恰有【解除暂停】与两个【解除通道暂停】；只发 GET",
+        "test/spec/frontend/admin-payout-unpause/access.test.ts > [AC-F1-08bd-ACCESS#3] 打款概览读取失败时（不知道队列与通道是否暂停）没有【暂停队列】【解除暂停】【解除通道暂停】；点【重试】读到概览后才出现对应入口",
+        "test/spec/frontend/admin-payout-unpause/dialog.test.ts > [AC-F1-08bd-DIALOG#1] 【暂停队列】【解除暂停】【解除通道暂停】（企业支付宝、微信零钱）各自打开确认对话框：标题与后果说明逐字如约（暂停后【执行所选】不可用；解除后执行仍过水位检查、队列与通道分开解除），有一个原因输入框、确认按钮与【取消】；打开时不弹动态码、不发写请求；【取消】关闭、不发请求，焦点回到入口",
+        "test/spec/frontend/admin-payout-unpause/dialog.test.ts > [AC-F1-08bd-DIALOG#2] 原因按 Unicode 码点计：201 码点时点确认不弹动态码、不发请求，对话框与已填保留；改成 199 个汉字 + 1 个「𠮷」（200 码点）后确认 → 动态码 → 请求体 reason 恰为所填原值",
+        "test/spec/frontend/admin-payout-unpause/errors.test.ts > [AC-F1-08bd-ERROR#1] 20902（别人刚解除了暂停，version 已变）：提示「开关状态已被他人修改，已刷新为最新状态，请核对后重试」、重新读概览，标题行随之换成【暂停队列】；不报成功、不自动重发",
+        "test/spec/frontend/admin-payout-unpause/errors.test.ts > [AC-F1-08bd-ERROR#2] 20902（别人改过又改回，仍是暂停、version 前进了 2）：提示并刷新、不自动重发，【解除暂停】仍在；再试时重新读开关列表，按新的 expected_version=9 发出，成功后标题行换成【暂停队列】",
+        "test/spec/frontend/admin-payout-unpause/errors.test.ts > [AC-F1-08bd-ERROR#3] 10003：重新弹出动态码并提示「动态码凭证已失效，请重新输入动态码」，验证前不重发；验证后以新凭证原样重发（整个请求体相同、expected_version 仍为 7），成功后关闭",
+        "test/spec/frontend/admin-payout-unpause/errors.test.ts > [AC-F1-08bd-ERROR#4] 10403 提示「无权限执行此操作（需要 switch.payout 或 switch.all 权限点）」；20001 data.fields=[reason] 提示落在原因输入框，data.fields 为 [value]、[key] 或空时在对话框提示「提交内容有误，请检查后重试」、不落字段；都不报成功、不自动重新验证或重发，对话框与已填原因保留",
+        "test/spec/frontend/admin-payout-unpause/errors.test.ts > [AC-F1-08bd-ERROR#5] 5xx 提示「提交失败，请稍后重试」，网络错误提示「网络错误，请检查网络后重试；未确认前不会重复提交」；不报成功、不自动重发，对话框与已填原因保留；其间开关 version 又前进了 1，再试时重新读开关列表，按 expected_version=8 发出，成功后关闭",
+        "test/spec/frontend/admin-payout-unpause/submit.test.ts > [AC-F1-08bd-SUBMIT#1] 【解除暂停】：连点确认与【验证并继续】、在途时再点都只发一次 PUT /admin/v1/kill-switches/payout.queue_paused（整个请求体 value=false、expected_version=7（开关列表里该开关的 version）、reason；带 X-Step-Up-Token，不带 Idempotency-Key）；在途时对话框保留、确认按钮禁用；成功后关闭、提示「打款队列已解除暂停」、重新读概览，标题行换成【暂停队列】，两个通道暂停不随之解除",
+        "test/spec/frontend/admin-payout-unpause/submit.test.ts > [AC-F1-08bd-SUBMIT#2] 【暂停队列】（开关从未写过，version 为 0）：不填原因时请求体恰为 value=true、expected_version=0（不带 reason）；成功后提示「打款队列已暂停」，标题行换成【解除暂停】；已勾选待执行单时【执行所选】随之不再提供、批量栏写明队列已暂停",
+        "test/spec/frontend/admin-payout-unpause/submit.test.ts > [AC-F1-08bd-SUBMIT#3] 【解除通道暂停】分通道、与队列分开：微信零钱卡上的入口发 PUT payout.channel_paused.wechat（value=false、expected_version=5、reason），成功后微信零钱卡显示未暂停且没有入口，企业支付宝卡的入口与【解除暂停】仍在；再解除企业支付宝（不填原因）发 PUT payout.channel_paused.alipay（value=false、expected_version=3），之后只剩【解除暂停】",
+        "test/spec/frontend/admin-payout-unpause/submit.test.ts > [AC-F1-08bd-SUBMIT#4] 取消动态码不提交、对话框保留且原因不丢；【取消】关闭对话框后焦点回到【解除暂停】，全程不发写请求、入口不变",
+        "test/spec/frontend/admin-payouts-readonly/readonly.test.ts > [AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET",
+        "test/spec/frontend/admin-payouts-readonly/readonly.test.ts > [AC-F1-08bd-FROZEN#1] 非超管、持全部财务权限点再加 switch.payout（不持 fund.cash_entry）：队列暂停、企业支付宝与微信零钱暂停时，「打款队列」的全部 / 打款中 / 待执行上写入口恰为【解除暂停】与两个【解除通道暂停】；队列运行而两个通道仍暂停时恰为【暂停队列】与两个【解除通道暂停】；「结果待确认」没有写入口；同一概览下只持全部财务权限点（不持 switch.payout）时都没有写入口；全程只发 GET"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-payout-execute/access.test.ts",
+        "test/spec/frontend/admin-payout-unpause/access.test.ts",
+        "test/spec/frontend/admin-payout-unpause/dialog.test.ts",
+        "test/spec/frontend/admin-payout-unpause/errors.test.ts",
+        "test/spec/frontend/admin-payout-unpause/submit.test.ts",
+        "test/spec/frontend/admin-payouts-readonly/readonly.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "53073cec3bc6e02d24cf3d4094f4fec119e4035121144ce2840074360c60242c"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b62f8715e38982de27327ff3e6632f0e669ba52f",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}

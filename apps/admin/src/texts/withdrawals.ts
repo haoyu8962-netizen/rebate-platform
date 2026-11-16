@@ -340,7 +340,7 @@ export const withdrawalsTexts = {
   /** 「打款队列」「结果待确认」与打款记录抽屉（规格 admin-payouts.md，只读）。 */
   payouts: {
     readOnlyNotice:
-      '持 payout.execute 时可勾选待执行的单【执行所选】；持 fund.cash_entry 时可录入企业支付宝余额与微信运营账户余额；暂停与解除暂停尚未接入；结果待确认的单在提现单详情处置。',
+      '持 payout.execute 时可勾选待执行的单【执行所选】；持 fund.cash_entry 时可录入企业支付宝余额与微信运营账户余额；持 switch.payout 或 switch.all 时可【暂停队列】【解除暂停】，并在已暂停的通道卡上【解除通道暂停】；结果待确认的单在提现单详情处置。',
     overviewLoading: '正在读取打款概览…',
     overviewFailed: '打款概览读取失败',
     overviewFailedDescription: '网络错误或服务异常，点【重试】重新读取。',
@@ -567,6 +567,59 @@ export const withdrawalsTexts = {
     stepUpAgain: '动态码凭证已失效，请重新输入动态码',
     done: '余额已录入',
     forbidden: '无权限执行此操作（需要 fund.cash_entry 权限点）',
+    invalid: '提交内容有误，请检查后重试',
+    network: '网络错误，请检查网络后重试；未确认前不会重复提交',
+    failed: '提交失败，请稍后重试',
+  },
+  /**
+   * 【暂停队列】【解除暂停】（标题行）与【解除通道暂停】（暂停的通道卡）（F1-08bd；契约
+   * adminUpdateKillSwitch，BR-WDR-17、BR-WDR-33 ①）。
+   */
+  pause: {
+    entries: {
+      pause: '暂停队列',
+      resume: '解除暂停',
+      channel: '解除通道暂停',
+    },
+    titles: {
+      pause: '暂停打款队列',
+      resume: '解除打款队列暂停',
+      channel: (channel: string): string => `解除通道暂停 · ${channel}`,
+    },
+    texts: {
+      pause:
+        '暂停后【执行所选】不可用，不再发起新的转账；已投递但还没发出转账的单回到待执行，已发出转账的单照常查询。',
+      resume:
+        '解除后可以重新执行待执行的单；执行时仍要通过水位检查（所在通道的余额 W 未录入、已过期或低于预计提现 P 时仍会被拒绝）。已暂停的通道不随队列解除，需在通道卡上分别解除。',
+      channel: (channel: string): string =>
+        `解除后${channel}通道恢复发起转账，其他通道不受影响；打款队列的暂停不随通道解除。执行时仍要通过水位检查（所在通道的余额 W 未录入、已过期或低于预计提现 P 时仍会被拒绝）。`,
+    },
+    submits: {
+      pause: '确认暂停',
+      resume: '确认解除',
+      channel: '确认解除',
+    },
+    done: {
+      pause: '打款队列已暂停',
+      resume: '打款队列已解除暂停',
+      channel: (channel: string): string => `${channel}通道已解除暂停`,
+    },
+    operations: {
+      pause: '暂停打款队列',
+      resume: '解除打款队列暂停',
+      channel: '解除通道暂停',
+    },
+    stepUpTarget: (target: string): string => `开关：${target}`,
+    reason: '原因（选填）',
+    reasonExtra: (count: number, max: number): string => `${count} / ${max} 字`,
+    reasonLong: '原因不能超过 200 字',
+    serverReason: '原因不符合要求（1–200 字），请修改后再提交',
+    cancel: '取消',
+    stepUpAgain: '动态码凭证已失效，请重新输入动态码',
+    conflict: '开关状态已被他人修改，已刷新为最新状态，请核对后重试',
+    /** 上次提交结果未定、再试时发现开关已是目标值（那次写已生效，不再重发）。 */
+    appliedEarlier: (done: string): string => `${done}（上次提交已生效，已刷新为最新状态）`,
+    forbidden: '无权限执行此操作（需要 switch.payout 或 switch.all 权限点）',
     invalid: '提交内容有误，请检查后重试',
     network: '网络错误，请检查网络后重试；未确认前不会重复提交',
     failed: '提交失败，请稍后重试',

@@ -37,8 +37,16 @@ it(
   async () => {
     // Since F1-08bc (D10-1712 (a)) the entries landed so far are exactly 【录入企业支付宝余额】 and
     // 【录入运营账户余额】 (fund.cash_entry, which a super admin holds and ALL does not), on the
-    // 打款队列 tab whatever its sub-tab; the pause entries (F1-08bd) stay forbidden.
-    const landed = ['录入企业支付宝余额', '录入运营账户余额'].sort();
+    // 打款队列 tab whatever its sub-tab; since F1-08bd also the pause entries (switch.payout, which
+    // a super admin holds and ALL does not): the queue is paused here, so 【解除暂停】, and one
+    // 【解除通道暂停】 for each paused channel (企业支付宝 and 微信零钱).
+    const landed = [
+      '录入企业支付宝余额',
+      '录入运营账户余额',
+      '解除暂停',
+      '解除通道暂停',
+      '解除通道暂停',
+    ].sort();
     const accounts = [everyGrant(ALL), SUPER];
     for (const snapshot of accounts) {
       const server = createPayoutServer({
@@ -109,5 +117,45 @@ it(
     await settled(server);
     expect(dialog.textContent ?? '', 'the dialog is for 企业支付宝').toContain('企业支付宝');
     expect(server.writes(), 'no request other than GET').toEqual([]);
+  },
+);
+
+it(
+  '[AC-F1-08bd-FROZEN#1] 非超管、持全部财务权限点再加 switch.payout（不持 fund.cash_entry）：队列暂停、企业支付宝与微信零钱暂停时，「打款队列」的全部 / 打款中 / 待执行上写入口恰为【解除暂停】与两个【解除通道暂停】；队列运行而两个通道仍暂停时恰为【暂停队列】与两个【解除通道暂停】；「结果待确认」没有写入口；同一概览下只持全部财务权限点（不持 switch.payout）时都没有写入口；全程只发 GET',
+  { timeout: MULTI_TIMEOUT },
+  async () => {
+    // F1-08bd (D10-1712 ④): the pause entries follow the point switch.payout, not the super flag;
+    // the title-row entry follows queue_paused while each paused channel keeps its own entry.
+    const grants: typeof ALL = [...ALL, 'switch.payout'];
+    const running = { ...pausedOverview(), queue_paused: false };
+    const scenarios = [
+      { view: pausedOverview(), grants, names: ['解除暂停', '解除通道暂停', '解除通道暂停'] },
+      { view: running, grants, names: ['暂停队列', '解除通道暂停', '解除通道暂停'] },
+      { view: running, grants: ALL, names: [] },
+    ];
+    for (const scenario of scenarios) {
+      const server = createPayoutServer({ overview: scenario.view, permissions: scenario.grants });
+      await mount(server, everyGrant(scenario.grants));
+      const queue = await openTab(TAB.queue);
+      await listed(queue, ALL_ROWS);
+      await waitFor(() => expect(server.overviewReads()).toHaveLength(1));
+      await settled(server);
+      const who = scenario.grants === ALL ? 'without switch.payout' : 'with switch.payout';
+      const state = scenario.view.queue_paused ? 'queue paused' : 'queue running';
+      const names = [...scenario.names].sort();
+      expect(writeEntries(queue).sort(), `${who}, ${state}: 全部`).toEqual(names);
+      for (const tab of [SUB_TAB.paying, SUB_TAB.approved]) {
+        await selectTab(queue, tab);
+        await settled(server);
+        expect(writeEntries(queue).sort(), `${who}, ${state}: ${tab}`).toEqual(names);
+      }
+
+      const unknown = await openTab(TAB.unknown);
+      await listed(unknown, [QNO.stuck, QNO.untried]);
+      await settled(server);
+      expect(writeEntries(unknown), `${who}: no write entry in 结果待确认`).toEqual([]);
+      expect(server.writes(), `${who}: no request other than GET`).toEqual([]);
+      cleanup();
+    }
   },
 );
