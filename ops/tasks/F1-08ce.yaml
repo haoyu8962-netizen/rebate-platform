@@ -20,13 +20,13 @@ impl: claude
 tester: claude-independent
 red_exempt_outside:
   - file: test/spec/frontend/admin-adjustment-create/create.test.ts
-    reason: '用例块外只在 import 里加一个新夹具 prompted（D10-1732 成功提示整段比对用）；块外其余代码与基线逐字相同'
+    reason: '用例块外只在已有 import 语句里追加名字：prompted（D10-1732 成功提示整段比对）、executedWith、replyId、type Written（D10-1812 新块 [AC-F1-08ce-NEW#2] 用）；没有删改其他块外代码'
   - file: test/spec/frontend/admin-adjustment-create/errors.test.ts
-    reason: '用例块外只删去顶层常量 networkDown（D10-1731：网络断开改归 unknown.test.ts 的结果未知用例）；块外其余代码与基线逐字相同'
+    reason: '用例块外：删去顶层常量 networkDown（D10-1731：网络断开改归结果未知）；在已有 import 语句里追加 networkDown（改从 fixtures.ts 导入，只给 [AC-F1-08ce-NEW#1] 用）、assertSameWrites、assertUnknown、prompted、retryWithSms；没有删改其他块外代码'
   - file: test/spec/frontend/admin-adjustment-create/reversal.test.ts
-    reason: '用例块外只在 import 里加一个新夹具 prompted（D10-1732）；块外其余代码与基线逐字相同'
+    reason: '用例块外只在已有 import 语句里追加名字：prompted（D10-1732）、networkDown、assertUnknown、shows、usable（D10-1812 新块 [AC-F1-08ce-NEW#3] 用）；没有删改其他块外代码'
   - file: test/spec/frontend/admin-adjustment-create/supplement.test.ts
-    reason: '用例块外只在 import 里加一个新夹具 prompted（D10-1732）；块外其余代码与基线逐字相同'
+    reason: '用例块外只在已有 import 语句里追加名字：prompted（D10-1732）、ADJUSTMENTS、executedWith、replyId、type Written（D10-1812 新块 [AC-F1-08ce-NEW#4] 用）；没有删改其他块外代码'
 red_exempt:
   - file: test/spec/frontend/admin-adjustment-create/create.test.ts
     test: '[AC-F1-08cb-CREATE#1] 【新建调账】打开抽屉「新建调账」：一步提交并生效的说明、用户 ID / 调增调减 / 金额（元）/ 原因码 / 单据类型 + 单据号 / 原因说明各 1 个；原因码只给对账修正、打款追回、其他（不出现订单恢复、注销余额转平台收入）；对方科目只在对账修正与其他出现、四选一，联盟应收才出现平台（九个平台）；打款追回不出现对方科目与平台；打开与选择都不发请求'
