@@ -146,3 +146,50 @@ it(
     }
   },
 );
+
+it(
+  '[AC-F1-08bc-FROZEN#2] 录入入口与【执行所选】各按自己的权限点：持 fund.view + fund.cash_entry（不持 payout.execute）时打款队列没有勾选框与【执行所选】，写入口恰为【录入企业支付宝余额】【录入运营账户余额】，按【录入运营账户余额】打开一个写着微信零钱的对话框；再加 payout.execute 时未勾选前写入口恰为这两个，勾一张后恰为这两个加【执行所选】；全程不发写请求',
+  { timeout: MULTI_TIMEOUT },
+  async () => {
+    const balances = ['录入企业支付宝余额', '录入运营账户余额'].sort();
+    const cashier: typeof SUPER = {
+      isSuper: false,
+      permissions: ['fund.view', 'fund.cash_entry'],
+      stepUp: {
+        'fund.view': { tier: null, operations: {} },
+        'fund.cash_entry': { tier: 'totp', operations: {} },
+      },
+    };
+    const cashing = serverFor({ permissions: ['fund.view', 'fund.cash_entry'] });
+    const cashPanel = await openQueue(cashing, cashier);
+    expect(within(cashPanel).queryAllByRole('checkbox'), 'no checkbox').toEqual([]);
+    expect(buttons(cashPanel, ENTRY), 'no 执行所选').toEqual([]);
+    expect(writeEntries(cashPanel).sort(), 'the two balance entries only').toEqual(balances);
+    await click(button(cashPanel, '录入运营账户余额'));
+    const opened = await within(document.body).findAllByRole('dialog');
+    expect(opened, 'one dialog').toHaveLength(1);
+    expect(opened[0]!.textContent ?? '', 'the dialog is for 微信零钱').toContain('微信零钱');
+    await settled(cashing);
+    expect(cashing.writes(), 'nothing sent on opening').toEqual([]);
+    cleanup();
+
+    const both: typeof SUPER = {
+      isSuper: false,
+      permissions: ['fund.view', 'payout.execute', 'fund.cash_entry'],
+      stepUp: {
+        'fund.view': { tier: null, operations: {} },
+        'payout.execute': { tier: 'totp', operations: {} },
+        'fund.cash_entry': { tier: 'totp', operations: {} },
+      },
+    };
+    const server = serverFor({ permissions: ['fund.view', 'payout.execute', 'fund.cash_entry'] });
+    const panel = await openQueue(server, both);
+    expect(buttons(panel, ENTRY), 'no 执行所选 before a tick').toEqual([]);
+    expect(writeEntries(panel).sort(), 'the two balance entries before a tick').toEqual(balances);
+    await select(panel, [QNO.approvedA]);
+    expect(disabled(button(panel, ENTRY))).toBe(false);
+    const afterTick = [ENTRY, ...balances].sort();
+    expect(writeEntries(panel).sort(), 'with 执行所选 after a tick').toEqual(afterTick);
+    expect(server.writes()).toEqual([]);
+  },
+);

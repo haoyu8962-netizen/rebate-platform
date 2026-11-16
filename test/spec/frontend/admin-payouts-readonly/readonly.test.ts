@@ -74,3 +74,40 @@ it(
     }
   },
 );
+
+it(
+  '[AC-F1-08bc-FROZEN#1] 非超管、持全部财务权限点再加 fund.cash_entry：「打款队列」的全部 / 打款中 / 待执行上写入口恰为【录入企业支付宝余额】【录入运营账户余额】，「结果待确认」没有写入口；回到「打款队列」按【录入企业支付宝余额】打开一个写着企业支付宝的对话框；全程只发 GET',
+  { timeout: MULTI_TIMEOUT },
+  async () => {
+    // F1-08bc: the entries follow the point fund.cash_entry, not the super flag.
+    const grants: typeof ALL = [...ALL, 'fund.cash_entry'];
+    const landed = ['录入企业支付宝余额', '录入运营账户余额'].sort();
+    const server = createPayoutServer({ permissions: grants });
+    await mount(server, everyGrant(grants));
+    const queue = await openTab(TAB.queue);
+    await listed(queue, ALL_ROWS);
+    await waitFor(() => expect(server.overviewReads().length).toBeGreaterThan(0));
+    await settled(server);
+    expect(writeEntries(queue).sort(), 'the write entries of 全部').toEqual(landed);
+    for (const tab of [SUB_TAB.paying, SUB_TAB.approved]) {
+      await selectTab(queue, tab);
+      await settled(server);
+      expect(writeEntries(queue).sort(), `the write entries of ${tab}`).toEqual(landed);
+    }
+
+    const unknown = await openTab(TAB.unknown);
+    await listed(unknown, [QNO.stuck, QNO.untried]);
+    await settled(server);
+    expect(writeEntries(unknown), 'no write entry in 结果待确认').toEqual([]);
+
+    const back = await openTab(TAB.queue);
+    await selectTab(back, SUB_TAB.all);
+    await listed(back, ALL_ROWS);
+    await settled(server);
+    await click(entry(back, '录入企业支付宝余额'));
+    const dialog = await openDialog();
+    await settled(server);
+    expect(dialog.textContent ?? '', 'the dialog is for 企业支付宝').toContain('企业支付宝');
+    expect(server.writes(), 'no request other than GET').toEqual([]);
+  },
+);
