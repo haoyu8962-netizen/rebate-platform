@@ -451,6 +451,24 @@
 //    - Errors are not swallowed: a failure logs `events_retention_failed` (error) { table, sqlstate },
 //      counts in `failed`, the rest of the run (other tables, C.5, the done line) still goes on, and
 //      runOnce then rejects with that very error instead of resolving the report.
+//
+// O. link_logs evidence (task CT-13m). Basis: BR-ATTR-14 默认值 (被工单引用的记录在分区删除前复制到
+//    link_log_evidence), BR-ID-30 ② (link_log_evidence 工单关闭后 180 天); orchestrator rulings D10-1624,
+//    D10-1625. The contract is the header of test/spec/linking/link-log-evidence/kit.ts; the SQL is in
+//    `0144_link-log-evidence.sql`: app.drop_expired_day_partitions (I1b, unchanged signature and result)
+//    copies, in its own transaction and before each DROP, the rows referenced by claim items into
+//    app.link_log_evidence (a failing copy fails the call, nothing dropped); and
+//    `app.purge_expired_link_log_evidence(p_now timestamptz) RETURNS bigint` deletes the evidence rows
+//    no claim item still needs. No configuration item: the 180 days live only in that function.
+//    Module — only when `dayPartitions` is true, with the same single `now`:
+//    - Inside the C.4 gate (04:00 (+08:00) or later), right after the day-partition drop of link_logs
+//      (whether or not that drop succeeded), at most one successful purge per +08:00 day per instance
+//      (a failed one is tried again by the next run): one `SELECT
+//      app.purge_expired_link_log_evidence(<now>)` statement.
+//    - Logs: `retention_purged` (info) { table: 'link_log_evidence', rows } when rows > 0.
+//    - Errors as section N: `retention_purge_failed` (error) { table: 'link_log_evidence', sqlstate },
+//      counts in `failed`, the rest of the run still goes on, and runOnce then rejects with that very
+//      error (the first failure of sections N and O in run order) instead of resolving the report.
 import {
   MONTH_PARTITIONED_TABLES,
   MONTHS_AHEAD,
@@ -696,6 +714,8 @@ export function createPartitionMaintenance(
   let scheduled: Promise<void> | undefined;
   /** The +08:00 day ('YYYY-MM-DD') of this instance's last successful events cleanup (section N). */
   let eventsCleanedDay: string | undefined;
+  /** The +08:00 day ('YYYY-MM-DD') of this instance's last successful evidence purge (section O). */
+  let evidencePurgedDay: string | undefined;
 
   /** Section N: pre-create the events day partitions; the first failure rejects. */
   async function ensureEventsDays(days: readonly string[]): Promise<void> {
@@ -736,6 +756,21 @@ export function createPartitionMaintenance(
       if (dedupRows > 0) logger.info({ table, rows: dedupRows }, 'retention_purged');
     } catch (error) {
       logger.error({ table, sqlstate: sqlstate(error) }, 'events_retention_failed');
+      throw error;
+    }
+  }
+
+  /** Section O: one call of the link_logs evidence purge; a failure is logged here and rejects. */
+  async function purgeLinkLogEvidence(now: Date): Promise<void> {
+    const table = 'link_log_evidence';
+    try {
+      const result = await sql<{ deleted: bigint }>`
+        SELECT app.purge_expired_link_log_evidence(${now}::timestamptz) AS deleted
+      `.execute(db);
+      const rows = deletedCount(result.rows);
+      if (rows > 0) logger.info({ table, rows }, 'retention_purged');
+    } catch (error) {
+      logger.error({ table, sqlstate: sqlstate(error) }, 'retention_purge_failed');
       throw error;
     }
   }
@@ -961,6 +996,8 @@ export function createPartitionMaintenance(
     let failed = 0;
     // Section N: the first events failure, passed on after the rest of the run.
     let eventsFailure: { readonly error: unknown } | undefined;
+    // Sections N and O: the first of their failures in run order, passed on after the rest of the run.
+    let firstFailure: { readonly error: unknown } | undefined;
     // Section K's configuration: read at most once per run, on first use (K from 04:00, M from 03:00).
     let settings: ReadonlyMap<string, unknown> | null | undefined;
     const loadSettings = async (): Promise<ReadonlyMap<string, unknown> | null> => {
@@ -994,6 +1031,7 @@ export function createPartitionMaintenance(
     }
 
     const days = dayPartitionDays(now);
+    const today = days[0]!;
     if (dayPartitions) {
       for (const table of DAY_PARTITIONED_TABLES) {
         for (const day of days) {
@@ -1016,6 +1054,7 @@ export function createPartitionMaintenance(
       } catch (error) {
         failed += 1;
         eventsFailure = { error };
+        firstFailure ??= eventsFailure;
       }
     }
 
@@ -1050,6 +1089,16 @@ export function createPartitionMaintenance(
             logger.error({ table, sqlstate: sqlstate(error) }, 'partition_drop_failed');
           }
         }
+        // Section O: once per +08:00 day, after the link_logs drop (which copies the evidence).
+        if (evidencePurgedDay !== today) {
+          try {
+            await purgeLinkLogEvidence(now);
+            evidencePurgedDay = today;
+          } catch (error) {
+            failed += 1;
+            firstFailure ??= { error };
+          }
+        }
         if (!(await deleteExpiredOpenAttempts(now))) failed += 1;
         // Load first: `failed += await …` would read `failed` before loadSettings counts a failure.
         const loaded = await loadSettings();
@@ -1064,7 +1113,6 @@ export function createPartitionMaintenance(
     }
 
     // Section N: once per +08:00 day from 04:00, only after the events days were ensured.
-    const today = days[0]!;
     if (dayPartitions && hour >= 4 && eventsFailure === undefined && eventsCleanedDay !== today) {
       try {
         await cleanupEvents(now, dropped);
@@ -1072,6 +1120,7 @@ export function createPartitionMaintenance(
       } catch (error) {
         failed += 1;
         eventsFailure = { error };
+        firstFailure ??= eventsFailure;
       }
     }
 
@@ -1109,8 +1158,8 @@ export function createPartitionMaintenance(
       { ensured: ensured.length, dropped: dropped.length, failed },
       'partition_maintenance_done',
     );
-    // Section N: never swallowed — the caller gets the original error.
-    if (eventsFailure !== undefined) throw eventsFailure.error;
+    // Sections N and O: never swallowed — the caller gets the original error.
+    if (firstFailure !== undefined) throw firstFailure.error;
     return { ensured, dropped, defaultRows, failed };
   }
 
