@@ -135,15 +135,20 @@
 //              (an entry without one: a record with one is refused), `test` staying the old name.
 //              A file-level support entry (CT-06zzzzzi, D10-1662: no `test`, `scope: support`; a
 //              frozen shared fixture or top-level helper under test/spec, test/properties or
-//              test/replay) needs the same label. After spec_commit its file's changes outside the
-//              it / test blocks are let through, unless a changed line there (removed at
-//              spec_commit, added at the head) holds an assertion call (test-blocks.ts
-//              ASSERTION_CALL, ASSERTION_HELPER_CALL — an `expect…(` / `assert…(` helper called,
-//              round 2, review S1-2 — or a line inside an assertion expression): refused, naming
-//              the file and the lines; a block added, removed, moved, or changed without its own
-//              block entry is refused as before (a file may carry block entries besides; each
-//              covers its block). The same is judged from the merge base to the head on the
-//              file's record (round 2, review S1-1: changes in the rule-test commit too).
+//              test/replay) needs the same label. Its file's code outside the it / test blocks
+//              may only gain tokens (round 3 / 4, D10-1689 whitelist A, D10-1775, D10-1779,
+//              D10-1780 ⑦ A; test-blocks.ts compareSupportFile, support-tokens.ts): comments
+//              aside, every original token stays, in order and in its brackets, and the inserted
+//              ones hold no control flow, conditional, short circuit, optional chain, function,
+//              comma expression, test modifier, vi mock or assertion call, declare no name the
+//              base file holds, set no default value, assign no existing name, and stand in no
+//              existing statement holding an assertion call; refused naming the file and the
+//              base line of a removed or changed token (with the round 2 wording when that line
+//              holds an assertion call) or the head line of an inserted one; a block added,
+//              removed, moved, or changed without its own block entry is refused as before (a
+//              file may carry block entries besides; each covers its block). Judged after
+//              spec_commit and from the merge base to the head on the file's record (round 2,
+//              review S1-1: changes in the rule-test commit too).
 //              A file without a support entry is judged exactly as before. Its record
 //              is { file, scope: 'support', reason, before_sha256, after_sha256, reverse_red,
 //              br? / overturned? / basis? } (br / overturned / basis as a block record of the
@@ -194,6 +199,7 @@ import {
   compareModifiedBlocks,
   compareSupportFile,
   supportLinesText,
+  supportTokensText,
 } from '../guard/lib/test-blocks.ts';
 import type { ModifiedComparison } from '../guard/lib/test-blocks.ts';
 import {
@@ -600,9 +606,9 @@ function modifiedHitProblem(
  * Why the change of a file with a file-level support entry (CT-06zzzzzi, D10-1662 ①③) from
  * `before` to `after` is not let through, or null when it is: its block entries (`declared`) locate
  * their blocks as before (compareModifiedBlocks), no block is added, removed or moved, every
- * changed block has its block entry, and no changed line outside the blocks (removed from
- * `before`, added at `after`) holds an assertion call (compareSupportFile). The differences
- * outside the blocks are otherwise let through: that is what the entry declares. Judged twice
+ * changed block has its block entry, and outside the blocks tokens are only inserted, none of a
+ * refused kind (compareSupportFile: round 3 / 4, whitelist A; a removed or changed token on an
+ * assertion line keeps the round 2 wording). Judged twice
  * (round 2, review-claude-1 S1-1): spec_commit → head for the class 1 hit (modifiedHitProblem),
  * and merge base → head for the file's record (supportRecordProblems).
  */
@@ -627,6 +633,12 @@ function supportHitProblem(
   if (support.assertions.length > 0) {
     why.push(
       `an assertion line changed outside the test blocks (a file-level support entry, CT-06zzzzzi / D10-1662, covers data and calls only; an assertion changes inside a block declared by its own block entry): ${supportLinesText(support.assertions)}`,
+    );
+  }
+  // Round 3 / 4 (D10-1689 whitelist A, D10-1775, D10-1779, D10-1780 ⑦ A): tokens only inserted.
+  if (support.tokens.length > 0) {
+    why.push(
+      `outside the test blocks a support file may only gain tokens, none of a refused kind (CT-06zzzzzi, D10-1689 / D10-1775: no control flow, conditional, short circuit, optional chain, function, comma expression, test modifier, vi mock, assertion call, name the base file holds, default value, assignment to an existing name, nor any token inside an existing statement holding an assertion call): ${supportTokensText(support.tokens)}`,
     );
   }
   return why.length === 0

@@ -34,6 +34,7 @@ import {
   topLevelHelpers,
   valueSkeleton,
   supportLinesText,
+  supportTokensText,
 } from './test-blocks.ts';
 
 const HEADER = "import { describe, expect, it } from 'vitest';";
@@ -4076,6 +4077,8 @@ it('[CT-06zzzzzi] ASSERTION_CALL and ASSERTION_NAME: the assertion calls and nam
     'const asserted = toTotal(expected);',
     'x.total(1)',
     'x.rejectsCount',
+    'const at = new Date(0).toISOString();',
+    'const s = n.toString(16);',
   ]) {
     expect(ASSERTION_CALL.test(line), line).toBe(false);
     expect(ASSERTION_NAME.test(line), line).toBe(false);
@@ -4084,7 +4087,7 @@ it('[CT-06zzzzzi] ASSERTION_CALL and ASSERTION_NAME: the assertion calls and nam
   expect(ASSERTION_NAME.test("import assert from 'node:assert';")).toBe(true);
 });
 
-it('[CT-06zzzzzi] compareSupportFile: data and calls outside the blocks may change; an assertion line, removed or added, is named with its side and line', () => {
+it('[CT-06zzzzzi] compareSupportFile: tokens inserted outside the blocks pass; a removed or changed token is named by its base line, with the assertion wording on an assertion line (round 3, D10-1689)', () => {
   const plain = SUP_KIT.replace(
     "  return { id, purpose: 'payout' };",
     "  return { id, purpose: 'payout', summary: 'withdraw:100' };",
@@ -4094,31 +4097,45 @@ it('[CT-06zzzzzi] compareSupportFile: data and calls outside the blocks may chan
     changed: true,
     blocks: [],
     assertions: [],
+    tokens: [],
   });
   expect(compareSupportFile(SUP_KIT, SUP_KIT)).toEqual({
     ok: true,
     changed: false,
     blocks: [],
     assertions: [],
+    tokens: [],
   });
   // An argument of a multi-line assertion on a line of its own counts as an assertion line.
   const arg = SUP_KIT.replace('    t.summary,', '    t.purpose,');
   const r = compareSupportFile(SUP_KIT, arg);
   expect(r).toMatchObject({ ok: true, blocks: [] });
-  expect(r.ok && r.assertions).toEqual([
-    { side: 'base', line: 9, text: '    t.summary,' },
-    { side: 'head', line: 9, text: '    t.purpose,' },
+  expect(r.ok && r.assertions).toEqual([{ side: 'base', line: 9, text: '    t.summary,' }]);
+  expect(r.ok && r.tokens).toEqual([
+    {
+      side: 'base',
+      line: 9,
+      reason: '`summary` removed or changed (the base tokens must stay, in order)',
+    },
   ]);
-  expect(supportLinesText(r.ok ? r.assertions : [])).toBe(
-    'base line 9: `t.summary,`; head line 9: `t.purpose,`',
+  expect(supportLinesText(r.ok ? r.assertions : [])).toBe('base line 9: `t.summary,`');
+  expect(supportTokensText(r.ok ? r.tokens : [])).toBe(
+    'base line 9: `summary` removed or changed (the base tokens must stay, in order)',
   );
-  // A local expect that shadows Vitest's.
+  // A local expect that shadows Vitest's: the import line is gone.
   const shadow = SUP_KIT.replace(
     "import { expect } from 'vitest';",
     'const expect = (v: unknown) => ({ toBe: () => v });',
   );
   const s = compareSupportFile(SUP_KIT, shadow);
-  expect(s.ok && s.assertions.map((l) => `${l.side}:${l.line}`)).toEqual(['base:1', 'head:1']);
+  expect(s.ok && s.assertions.map((l) => `${l.side}:${l.line}`)).toEqual(['base:1']);
+  expect(s.ok && s.tokens.map((l) => `${l.side}:${l.line}`)).toEqual(['base:1']);
+  // A comment holding "expect(" changed: no token changed.
+  const comment = SUP_KIT.replace(
+    'export function token(',
+    '// expect(x) elsewhere\nexport function token(',
+  );
+  expect(compareSupportFile(SUP_KIT, comment)).toMatchObject({ assertions: [], tokens: [] });
 });
 
 it('[CT-06zzzzzi] compareSupportFile: a block changed without a block entry, added, or moved under a branch or into a function is named; a declared block may change', () => {
@@ -4127,6 +4144,7 @@ it('[CT-06zzzzzi] compareSupportFile: a block changed without a block entry, add
     ok: true,
     blocks: [],
     assertions: [],
+    tokens: [],
   });
   const changed = helper.replace('toBe(2);', 'toBe(3);');
   const undeclared = compareSupportFile(SUP_TEST, changed);
@@ -4184,7 +4202,7 @@ it('[CT-06zzzzzi] ASSERTION_HELPER_CALL: expect… / assert… helpers called, o
   }
 });
 
-it('[CT-06zzzzzi] compareSupportFile round 2: an assertion helper call removed, changed (an argument on a line of its own too) or added outside the blocks is named; uncalled expected… names may change', () => {
+it('[CT-06zzzzzi] compareSupportFile round 2 / 3: an assertion helper call removed or changed (an argument on a line of its own too) is named as an assertion line, one added as an inserted assertion call; an uncalled expected… name changed is a changed token', () => {
   const kit = [
     'export function check(rows: Row[], db: Db) {',
     '  const expected = [1n, 2n];',
@@ -4201,12 +4219,17 @@ it('[CT-06zzzzzi] compareSupportFile round 2: an assertion helper call removed, 
     { side: 'base', line: 6, text: '  assertOnlyReads();' },
   ]);
   const arg = compareSupportFile(kit, kit.replace("    ids: ['a'],", "    ids: ['b'],"));
-  expect(arg.ok && arg.assertions.map((l) => `${l.side}:${l.line}`)).toEqual(['base:4', 'head:4']);
+  expect(arg.ok && arg.assertions.map((l) => `${l.side}:${l.line}`)).toEqual(['base:4']);
   const added = compareSupportFile(
     kit,
     kit.replace('  return expected;', '  await helpers.assertNoRows(db);\n  return expected;'),
   );
-  expect(added.ok && added.assertions.map((l) => `${l.side}:${l.line}`)).toEqual(['head:7']);
+  expect(added.ok && added.assertions).toEqual([]);
+  // Round 3 (D10-1689): only the base side is listed; the inserted helper call is a token problem.
+  expect(added.ok && added.tokens.map((p) => `${p.side}:${p.line} ${p.reason}`)).toContain(
+    'head:7 an assertion call inserted (`assertNoRows`)',
+  );
   const plain = compareSupportFile(kit, kit.replace('[1n, 2n]', '[1n, 3n]'));
-  expect(plain).toEqual({ ok: true, changed: true, blocks: [], assertions: [] });
+  expect(plain).toMatchObject({ ok: true, changed: true, blocks: [], assertions: [] });
+  expect(plain.ok && plain.tokens.map((p) => `${p.side}:${p.line}`)).toEqual(['base:2']);
 });

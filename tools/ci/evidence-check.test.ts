@@ -3509,7 +3509,8 @@ it('[CT-06zzzzzh] a trusted ledger whose ruling_correction entry names a money o
 // its code outside the blocks may change after spec_commit, with the label and the file's record;
 // an assertion line there, or a block changed without its own entry, is refused. On the
 // CT-06zzzg fixture repository (modRepo, built by the first [CT-06zzzg] case above).
-const SUP_HELPER_NEW = "const amount = (n: number, summary = 'withdraw:1') => ({ n, summary });";
+// Round 3 (D10-1689 whitelist A): a new const, tokens only inserted (no arrow, no default value).
+const SUP_HELPER_NEW = "const amount = { n: 1, summary: 'withdraw:1' };";
 const supLedger = (): string =>
   modLedger(null)
     .replace('refs: []\nrefs_hash: {}', 'refs: [BR-PAY-01]\nrefs_hash:\n  BR-PAY-01: 0123456789ab')
@@ -3544,7 +3545,7 @@ const supRecord = (head: string, extra: Evidence = {}): Evidence => ({
   ...extra,
 });
 
-it('[CT-06zzzzzi] evidence-check: a support entry lets the helper change outside the blocks through; an assertion line or an undeclared changed block is refused; an unchanged file is redundant', () => {
+it('[CT-06zzzzzi] evidence-check: a support entry lets tokens inserted outside the blocks through; an inserted assertion, a removed assertion line or an undeclared changed block is refused; an unchanged file is redundant', () => {
   const trusted = supTrusted('trusted-support');
   expect(supLedger()).toContain('scope: support');
   const good = modSource(MOD_OLD, { extra: SUP_HELPER_NEW });
@@ -3559,9 +3560,21 @@ it('[CT-06zzzzzi] evidence-check: a support entry lets the helper change outside
   const a = modBranch('sup-assert', asserting, modEvidence([supRecord(asserting)]));
   const refused = modCheck(a, trusted, approved(a)).problems.join('\n');
   expect(refused).toContain(
-    `${MOD_FILE} (M) [declared in modify_existing (scope: support), but an assertion line`,
+    `${MOD_FILE} (M) [declared in modify_existing (scope: support), but outside the test blocks a support file may only gain tokens`,
   );
-  expect(refused).toContain('head line 2: `const check = (v: number) => expect(v).toBe(1);`');
+  expect(refused).toContain('head line 2: an arrow function `=>` inserted');
+  expect(refused).toContain('head line 2: an assertion call inserted (`expect`)');
+  // The import of expect removed outside the blocks: named with its base line and the assertion
+  // wording.
+  const unimported = modSource(MOD_OLD).replace(
+    "import { expect, it } from 'vitest';",
+    "import { it } from 'vitest';",
+  );
+  const u = modBranch('sup-unimport', unimported, modEvidence([supRecord(unimported)]));
+  const ru = modCheck(u, trusted, approved(u)).problems.join('\n');
+  expect(ru).toContain('an assertion line changed outside the test blocks');
+  expect(ru).toContain("base line 1: `import { expect, it } from 'vitest';`");
+  expect(ru).toContain('base line 1: `expect` removed or changed');
   // The declared-block change without a block entry: the support entry does not cover it.
   const block = modSource(MOD_NEW, { extra: SUP_HELPER_NEW });
   const b = modBranch('sup-block', block, modEvidence([supRecord(block)]));
@@ -3614,13 +3627,13 @@ it('[CT-06zzzzzi] evidence-check round 2: a support file changed in the rule-tes
   const a = supBranchVia('sup-r2-assert', asserting);
   const ra = modCheck(a, trusted, approved(a)).problems.join('\n');
   expect(ra).not.toContain('rule tests changed after the rule-test commit');
-  expect(ra).toContain(`${where} an assertion line changed outside the test blocks`);
-  expect(ra).toContain('head line 2: `const check = (v: number) => expect(v).toBe(1);`');
+  expect(ra).toContain(`${where} outside the test blocks a support file may only gain tokens`);
+  expect(ra).toContain('head line 2: an assertion call inserted (`expect`)');
   // An assertion helper called (S1-2), in the rule-test commit.
   const helper = modSource(MOD_OLD, { extra: 'void helpers.expectAmount(1);' });
   const h = supBranchVia('sup-r2-helper', helper);
   expect(modCheck(h, trusted, approved(h)).problems.join('\n')).toContain(
-    'head line 2: `void helpers.expectAmount(1);`',
+    'head line 2: an assertion call inserted (`expectAmount`)',
   );
   // A block changed in the rule-test commit without its block entry.
   const block = modSource(MOD_NEW, { extra: SUP_HELPER_NEW });
