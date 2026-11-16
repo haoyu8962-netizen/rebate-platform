@@ -469,6 +469,27 @@
 //    - Errors as section N: `retention_purge_failed` (error) { table: 'link_log_evidence', sqlstate },
 //      counts in `failed`, the rest of the run still goes on, and runOnce then rejects with that very
 //      error (the first failure of sections N and O in run order) instead of resolving the report.
+//
+// P. link_logs DEFAULT purge (task CT-13l). Basis: BR-ID-30 正文 (每日 04:00（+08:00）删除任务) and ②
+//    (link_logs 90 天), BR-ATTR-14 默认值; orchestrator rulings D10-1623, D10-1649, D10-1693. The
+//    contract is the header of test/spec/platform/link-logs-default-purge/kit.ts; the SQL is in
+//    `0145_link-logs-default-purge.sql`: `app.purge_expired_link_logs_default(p_now timestamptz)
+//    RETURNS bigint` deletes the rows of app.link_logs_default strictly before the cutoff of I1b
+//    (copying the claim-referenced ones into app.link_log_evidence first, in its own transaction).
+//    No configuration item: the 90 days live only in the SQL functions.
+//    Module — only when `dayPartitions` is true, with the same single `now`:
+//    - Inside the C.4 gate (04:00 (+08:00) or later), right after the day-partition drop of link_logs
+//      (whether or not that drop succeeded) and before section O's evidence purge, at most one
+//      successful purge per +08:00 day per instance (a failed one is tried again by the next run):
+//      one short transaction of exactly two statements, `SELECT set_config('statement_timeout',
+//      LINK_LOGS_DEFAULT_PURGE_STATEMENT_TIMEOUT, true)` then `SELECT
+//      app.purge_expired_link_logs_default(<now>)` (D10-1826: a function-level SET cannot bound the
+//      statement that calls the function, so the bound is set here, as C.3 does for lock_timeout).
+//      A timeout (57014) is a failure like any other: the whole call rolls back.
+//    - Logs: `retention_purged` (info) { table: 'link_logs_default', rows } when rows > 0.
+//    - Errors as section O: `retention_purge_failed` (error) { table: 'link_logs_default', sqlstate },
+//      counts in `failed`, the rest of the run still goes on, and runOnce then rejects with that very
+//      error (the first failure of sections N, O and P in run order) instead of resolving the report.
 import {
   MONTH_PARTITIONED_TABLES,
   MONTHS_AHEAD,
@@ -494,6 +515,12 @@ export const OPEN_ATTEMPTS_BATCH_SIZE = 1000;
 
 /** Most deletion batches of link_open_attempts in one run (section J). */
 export const OPEN_ATTEMPTS_MAX_BATCHES = 100;
+
+/**
+ * statement_timeout of the section P call (D10-1826): a DEFAULT partition grown far beyond normal
+ * makes the call fail and roll back instead of running without bound; the next run tries again.
+ */
+const LINK_LOGS_DEFAULT_PURGE_STATEMENT_TIMEOUT = '60s';
 
 /** Rows per call of the retention functions (section K). */
 const RETENTION_BATCH_SIZE = 1000;
@@ -716,6 +743,8 @@ export function createPartitionMaintenance(
   let eventsCleanedDay: string | undefined;
   /** The +08:00 day ('YYYY-MM-DD') of this instance's last successful evidence purge (section O). */
   let evidencePurgedDay: string | undefined;
+  /** The +08:00 day ('YYYY-MM-DD') of this instance's last successful DEFAULT purge (section P). */
+  let defaultPurgedDay: string | undefined;
 
   /** Section N: pre-create the events day partitions; the first failure rejects. */
   async function ensureEventsDays(days: readonly string[]): Promise<void> {
@@ -760,19 +789,44 @@ export function createPartitionMaintenance(
     }
   }
 
-  /** Section O: one call of the link_logs evidence purge; a failure is logged here and rejects. */
-  async function purgeLinkLogEvidence(now: Date): Promise<void> {
-    const table = 'link_log_evidence';
+  /** Sections O and P: one purge call; logs the rows or the failure here, and rejects on failure. */
+  async function purgeOnce(
+    table: string,
+    purge: () => Promise<{ rows: { deleted?: bigint | number | string | null }[] }>,
+  ): Promise<void> {
     try {
-      const result = await sql<{ deleted: bigint }>`
-        SELECT app.purge_expired_link_log_evidence(${now}::timestamptz) AS deleted
-      `.execute(db);
-      const rows = deletedCount(result.rows);
+      const rows = deletedCount((await purge()).rows);
       if (rows > 0) logger.info({ table, rows }, 'retention_purged');
     } catch (error) {
       logger.error({ table, sqlstate: sqlstate(error) }, 'retention_purge_failed');
       throw error;
     }
+  }
+
+  /** Section O: one call of the link_logs evidence purge. */
+  async function purgeLinkLogEvidence(now: Date): Promise<void> {
+    await purgeOnce('link_log_evidence', () =>
+      sql<{ deleted: bigint }>`
+        SELECT app.purge_expired_link_log_evidence(${now}::timestamptz) AS deleted
+      `.execute(db),
+    );
+  }
+
+  /**
+   * Section P: one call of the link_logs DEFAULT purge (it copies the referenced rows first), in a
+   * short transaction that bounds it with LINK_LOGS_DEFAULT_PURGE_STATEMENT_TIMEOUT (D10-1826).
+   */
+  async function purgeLinkLogsDefault(now: Date): Promise<void> {
+    await purgeOnce('link_logs_default', () =>
+      db.transaction().execute(async (trx) => {
+        await sql`
+          SELECT set_config('statement_timeout', ${LINK_LOGS_DEFAULT_PURGE_STATEMENT_TIMEOUT}::text, true)
+        `.execute(trx);
+        return sql<{ deleted: bigint }>`
+          SELECT app.purge_expired_link_logs_default(${now}::timestamptz) AS deleted
+        `.execute(trx);
+      }),
+    );
   }
 
   /** Section J: bounded batches, each its own statement; resolves false when a batch failed. */
@@ -996,7 +1050,7 @@ export function createPartitionMaintenance(
     let failed = 0;
     // Section N: the first events failure, passed on after the rest of the run.
     let eventsFailure: { readonly error: unknown } | undefined;
-    // Sections N and O: the first of their failures in run order, passed on after the rest of the run.
+    // Sections N, O and P: the first of their failures in run order, passed on after the run.
     let firstFailure: { readonly error: unknown } | undefined;
     // Section K's configuration: read at most once per run, on first use (K from 04:00, M from 03:00).
     let settings: ReadonlyMap<string, unknown> | null | undefined;
@@ -1089,6 +1143,16 @@ export function createPartitionMaintenance(
             logger.error({ table, sqlstate: sqlstate(error) }, 'partition_drop_failed');
           }
         }
+        // Section P: once per +08:00 day, after the link_logs drop and before the evidence purge.
+        if (defaultPurgedDay !== today) {
+          try {
+            await purgeLinkLogsDefault(now);
+            defaultPurgedDay = today;
+          } catch (error) {
+            failed += 1;
+            firstFailure ??= { error };
+          }
+        }
         // Section O: once per +08:00 day, after the link_logs drop (which copies the evidence).
         if (evidencePurgedDay !== today) {
           try {
@@ -1158,7 +1222,7 @@ export function createPartitionMaintenance(
       { ensured: ensured.length, dropped: dropped.length, failed },
       'partition_maintenance_done',
     );
-    // Sections N and O: never swallowed — the caller gets the original error.
+    // Sections N, O and P: never swallowed — the caller gets the original error.
     if (firstFailure !== undefined) throw firstFailure.error;
     return { ensured, dropped, defaultRows, failed };
   }

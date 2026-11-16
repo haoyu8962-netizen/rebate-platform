@@ -169,7 +169,7 @@ const warnRows = (table: string, rows: number): Record<string, unknown> =>
 const dropped = (partition: string): Record<string, unknown> =>
   line('info', 'partition_dropped', { table: 'link_logs', partition });
 
-it('[ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据即告警、#5; BR-ID-30 ② 每日 04:00（+08:00）删除; worker 契约 8.2、8.3、8.4] worker 的维护实例：每轮在 8 个月分区之后预建 link_logs 2026-11-20 至 12-04 共 15 个日分区；03:59:59.999（+08:00）不删、04:00:00.000 删掉过期的 link_logs_p20260801；link_logs_default 的 2 行与 event_log_default 的 1 行每轮都 warn（不记 partition_default_rows_expected），旧行留在 DEFAULT；报告与日志确切、不含行内容', async () => {
+it('[ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据即告警、#5; BR-ID-30 ② 每日 04:00（+08:00）删除; worker 契约 8.2、8.3、8.4] worker 的维护实例：每轮在 8 个月分区之后预建 link_logs 2026-11-20 至 12-04 共 15 个日分区；03:59:59.999（+08:00）不删、04:00:00.000 删掉过期的 link_logs_p20260801；link_logs_default 与 event_log_default 有行的每轮都 warn（不记 partition_default_rows_expected），04:00 起 link_logs_default 里过期的旧行被删、未过期的留在 DEFAULT；报告与日志确切、不含行内容', async () => {
   await withWorld(async (maint, app) => {
     expect(await ensureDays(maint, 'link_logs', ['2026-08-01'])).toEqual(['link_logs_p20260801']);
     expect(await insertOldEvent(app)).toBe('app.event_log_default');
@@ -184,6 +184,11 @@ it('[ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据
     const defaultRows = [
       { table: 'event_log', partition: 'event_log_default', rows: 1 },
       { table: 'link_logs', partition: 'link_logs_default', rows: 2 },
+    ];
+    // From 04:00 the DEFAULT purge (cutoff 2026-08-22 00:00 +08:00) deletes the 06-01 row only.
+    const purgedDefaultRows = [
+      { table: 'event_log', partition: 'event_log_default', rows: 1 },
+      { table: 'link_logs', partition: 'link_logs_default', rows: 1 },
     ];
     const beforeFour = {
       report: await report(w.maintenance.runOnce()),
@@ -207,24 +212,29 @@ it('[ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据
         report: {
           ensured: [...MONTH_NAMES_NOV, ...days],
           dropped: ['link_logs_p20260801'],
-          defaultRows,
+          defaultRows: purgedDefaultRows,
           failed: 0,
         },
         lines: [
           dropped('link_logs_p20260801'),
+          line('info', 'retention_purged', { table: 'link_logs_default', rows: 1 }),
           warnRows('event_log', 1),
-          warnRows('link_logs', 2),
+          warnRows('link_logs', 1),
           done(ALL_ENSURED, 1, 0),
         ],
         linkLogs: ['link_logs_default', ...days],
       },
       again: {
-        report: { ensured: [...MONTH_NAMES_NOV, ...days], dropped: [], defaultRows, failed: 0 },
-        lines: [warnRows('event_log', 1), warnRows('link_logs', 2), done(ALL_ENSURED, 0, 0)],
+        report: {
+          ensured: [...MONTH_NAMES_NOV, ...days],
+          dropped: [],
+          defaultRows: purgedDefaultRows,
+          failed: 0,
+        },
+        lines: [warnRows('event_log', 1), warnRows('link_logs', 1), done(ALL_ENSURED, 0, 0)],
       },
     });
     expect(await linkLogRows(app)).toEqual([
-      { part: 'app.link_logs_default', at: '2026-06-01T01:00:00.000Z' },
       { part: 'app.link_logs_default', at: '2026-11-19T10:00:00.000Z' },
     ]);
     expect(w.lines.join('')).not.toMatch(/item-|order_id/);
@@ -283,6 +293,84 @@ it('[ADR-0001 §4.2 #4 DEFAULT 有数据须先迁出才能建对应区间的分�
     expect(await linkLogRows(app)).toEqual([
       { part: 'app.link_logs_default', at: '2026-11-22T04:00:00.000Z' },
     ]);
+    expect(w.lines.join('')).not.toMatch(/item-/);
+  });
+}, 60_000);
+
+it('[AC-CT-13l#8; BR-ID-30 ② link_logs 90 天、每日 04:00（+08:00）删除; worker 契约 8.3] worker 的维护实例清理 link_logs_default 的截断边界：2026-11-20 04:00（+08:00）那轮截断 08-22 00:00（+08:00），早 1 毫秒的行被删（retention_purged rows 1）、恰在截断时刻的行与预建范围之后 12-10 的未来行留下；11-21 03:59:59.999 不删；11-21 04:00 截断后移一天，恰在旧截断时刻的那行被删、未来行仍不动', async () => {
+  await withWorld(async (maint, app) => {
+    // Cutoff of 2026-11-20 04:00 (+08:00): 2026-08-22 00:00 (+08:00) = 2026-08-21T16:00:00.000Z.
+    expect([
+      await insertLinkLog(app, '2026-08-21T15:59:59.999Z'),
+      await insertLinkLog(app, '2026-08-21T16:00:00.000Z'),
+      // +08:00 day 2026-12-10: after every pre-created window below, so its creation is never tried.
+      await insertLinkLog(app, '2026-12-10T12:00:00+08:00'),
+    ]).toEqual(['app.link_logs_default', 'app.link_logs_default', 'app.link_logs_default']);
+    const purgedLine = line('info', 'retention_purged', { table: 'link_logs_default', rows: 1 });
+    const daysOf20 = dayNames('link_logs', dayRange('2026-11-20', '2026-12-04'));
+    const daysOf21 = dayNames('link_logs', dayRange('2026-11-21', '2026-12-05'));
+    const linkDefault = (rows: number): Array<Record<string, unknown>> => [
+      { table: 'link_logs', partition: 'link_logs_default', rows },
+    ];
+    // 2026-11-20 04:00:00.000 +08:00.
+    const w = workerAt(maint, '2026-11-19T20:00:00.000Z');
+    const atFour = {
+      report: await report(w.maintenance.runOnce()),
+      lines: w.fresh(),
+      rows: await linkLogRows(app),
+    };
+    // 2026-11-21 03:59:59.999 +08:00: a new day, but before its 04:00.
+    w.clock.set('2026-11-20T19:59:59.999Z');
+    const nextBeforeFour = {
+      report: await report(w.maintenance.runOnce()),
+      lines: w.fresh(),
+      rows: await linkLogRows(app),
+    };
+    // 2026-11-21 04:00:00.000 +08:00: cutoff 2026-08-23 00:00 (+08:00) = 2026-08-22T16:00:00.000Z.
+    w.clock.set('2026-11-20T20:00:00.000Z');
+    const nextAtFour = {
+      report: await report(w.maintenance.runOnce()),
+      lines: w.fresh(),
+      rows: await linkLogRows(app),
+    };
+    expect({ atFour, nextBeforeFour, nextAtFour }).toEqual({
+      atFour: {
+        report: {
+          ensured: [...MONTH_NAMES_NOV, ...daysOf20],
+          dropped: [],
+          defaultRows: linkDefault(2),
+          failed: 0,
+        },
+        lines: [purgedLine, warnRows('link_logs', 2), done(ALL_ENSURED, 0, 0)],
+        rows: [
+          { part: 'app.link_logs_default', at: '2026-08-21T16:00:00.000Z' },
+          { part: 'app.link_logs_default', at: '2026-12-10T04:00:00.000Z' },
+        ],
+      },
+      nextBeforeFour: {
+        report: {
+          ensured: [...MONTH_NAMES_NOV, ...daysOf21],
+          dropped: [],
+          defaultRows: linkDefault(2),
+          failed: 0,
+        },
+        lines: [warnRows('link_logs', 2), done(ALL_ENSURED, 0, 0)],
+        rows: [
+          { part: 'app.link_logs_default', at: '2026-08-21T16:00:00.000Z' },
+          { part: 'app.link_logs_default', at: '2026-12-10T04:00:00.000Z' },
+        ],
+      },
+      nextAtFour: {
+        report: {
+          ensured: [...MONTH_NAMES_NOV, ...daysOf21],
+          dropped: [],
+          defaultRows: linkDefault(1),
+          failed: 0,
+        },
+        lines: [purgedLine, warnRows('link_logs', 1), done(ALL_ENSURED, 0, 0)],
+        rows: [{ part: 'app.link_logs_default', at: '2026-12-10T04:00:00.000Z' }],
+      },
+    });
     expect(w.lines.join('')).not.toMatch(/item-/);
   });
 }, 60_000);

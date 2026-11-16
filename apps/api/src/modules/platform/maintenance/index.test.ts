@@ -86,7 +86,11 @@ async function fixture(instant = '2026-11-20T03:04:05Z', dayPartitions = false) 
         /drop_expired_(month|day|union_raw_payload|events_day)_partitions/.test(query.sql)
       ) {
         rows = [{ partitions: [] }];
-      } else if (/purge_expired_(events_default|event_dedup|link_log_evidence)/.test(query.sql)) {
+      } else if (
+        /purge_expired_(events_default|event_dedup|link_log_evidence|link_logs_default)/.test(
+          query.sql,
+        )
+      ) {
         rows = [{ deleted: 0n }];
       } else if (query.sql.includes('delete_expired_agent_traces')) {
         rows = AGENT_TRACE_TABLES.map((table_name) => ({ table_name, deleted: 0n }));
@@ -1670,4 +1674,188 @@ it('[AC-CT-13m#3] 第 O 节与第 N 节都失败时以先发生的（第 O 节�
     { ensured: ALL_ENSURED, dropped: 0, failed: 2 },
     'partition_maintenance_done',
   ]);
+});
+
+/** Section P (CT-13l): the link_logs DEFAULT purge call. */
+const DEFAULT_PURGE = 'app.purge_expired_link_logs_default(';
+
+/** The transactions that contain the DEFAULT purge: their statements in order, timeout, outcome. */
+function purgeTransactions(
+  transactions: readonly { queries: CompiledQuery[]; outcome: string }[],
+): { statements: string[]; timeout: unknown; outcome: string }[] {
+  return transactions
+    .filter((t) => t.queries.some((q) => q.sql.includes(DEFAULT_PURGE)))
+    .map((t) => ({
+      statements: t.queries.map((q) =>
+        q.sql.includes(DEFAULT_PURGE)
+          ? 'purge'
+          : q.sql.includes("set_config('statement_timeout'")
+            ? 'statement_timeout'
+            : q.sql,
+      ),
+      timeout: t.queries.find((q) => q.sql.includes("set_config('statement_timeout'"))
+        ?.parameters[0],
+      outcome: t.outcome,
+    }));
+}
+
+it('[AC-CT-13l#1] 第 P 节：04:00 起在 link_logs 删日分区之后、证据清理之前调用一次 DEFAULT 清理，用同一 now；0 行不写日志；同日不再调', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  const report = await f.maintenance.runOnce();
+  const order = f.queries.map((q) => q.sql);
+  const purges = f.queries.filter((q) => q.sql.includes(DEFAULT_PURGE));
+  expect(purges.map((q) => q.parameters)).toEqual([[f.now.mock.results[0]!.value]]);
+  const purgeAt = order.findIndex((sql) => sql.includes(DEFAULT_PURGE));
+  const linkLogsDrop = f.queries.findLastIndex(
+    (q) => q.sql.includes('drop_expired_day_partitions') && q.parameters[0] === 'link_logs',
+  );
+  expect(linkLogsDrop).toBeGreaterThanOrEqual(0);
+  expect(linkLogsDrop).toBeLessThan(purgeAt);
+  expect(purgeAt).toBeLessThan(order.findIndex((sql) => sql.includes(EVIDENCE_PURGE)));
+  expect(purgeTransactions(f.transactions)).toEqual([
+    { statements: ['statement_timeout', 'purge'], timeout: '60s', outcome: 'committed' },
+  ]);
+  expect(f.now).toHaveBeenCalledTimes(1);
+  expect(report).toMatchObject({ dropped: [], failed: 0 });
+  expect(f.logger.info.mock.calls).toEqual([
+    [{ ensured: ALL_ENSURED, dropped: 0, failed: 0 }, 'partition_maintenance_done'],
+  ]);
+
+  f.queries.length = 0;
+  f.clock.set('2026-10-09T15:59:59.999Z'); // 10-09 23:59:59.999 (+08:00)
+  await f.maintenance.runOnce();
+  expect(f.queries.filter((q) => q.sql.includes(DEFAULT_PURGE))).toEqual([]);
+});
+
+it('[AC-CT-13l#1] 第 P 节：04:00 前、dayPartitions 关闭时都不调用；跨到下一个 +08:00 日先等 04:00 再调', async () => {
+  const early = await fixture('2026-10-08T19:59:59.999Z', true);
+  await early.maintenance.runOnce();
+  expect(early.queries.some((q) => q.sql.includes(DEFAULT_PURGE))).toBe(false);
+
+  const off = await fixture('2026-10-08T20:00:00.000Z', false);
+  await off.maintenance.runOnce();
+  expect(off.queries.some((q) => q.sql.includes(DEFAULT_PURGE))).toBe(false);
+
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  await f.maintenance.runOnce();
+  f.clock.set('2026-10-09T16:00:00.000Z'); // 10-10 00:00 (+08:00)
+  await f.maintenance.runOnce();
+  f.clock.set('2026-10-09T19:59:59.999Z'); // 10-10 03:59:59.999 (+08:00)
+  await f.maintenance.runOnce();
+  f.clock.set('2026-10-09T20:00:00.000Z'); // 10-10 04:00 (+08:00)
+  await f.maintenance.runOnce();
+  f.clock.set('2026-10-09T23:00:00.000Z'); // 10-10 07:00 (+08:00)
+  await f.maintenance.runOnce();
+  expect(f.queries.filter((q) => q.sql.includes(DEFAULT_PURGE)).map((q) => q.parameters)).toEqual([
+    [new Date('2026-10-08T20:00:00.000Z')],
+    [new Date('2026-10-09T20:00:00.000Z')],
+  ]);
+});
+
+it('[AC-CT-13l#2] 第 P 节删除行数 > 0 时记一行 retention_purged（link_logs_default），报告不变；行数超出安全整数按失败拒绝', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  f.control.respond = async (query) =>
+    query.sql.includes(DEFAULT_PURGE) ? [{ deleted: 3n }] : undefined;
+  expect(await f.maintenance.runOnce()).toMatchObject({ dropped: [], failed: 0 });
+  expect(f.logger.info.mock.calls).toEqual([
+    [{ table: 'link_logs_default', rows: 3 }, 'retention_purged'],
+    [{ ensured: ALL_ENSURED, dropped: 0, failed: 0 }, 'partition_maintenance_done'],
+  ]);
+
+  const g = await fixture('2026-10-08T20:00:00.000Z', true);
+  g.control.respond = async (query) =>
+    query.sql.includes(DEFAULT_PURGE) ? [{ deleted: 2n ** 60n }] : undefined;
+  await expect(g.maintenance.runOnce()).rejects.toBeInstanceOf(RangeError);
+  expect(g.logger.error.mock.calls).toEqual([
+    [{ table: 'link_logs_default', sqlstate: null }, 'retention_purge_failed'],
+  ]);
+});
+
+it('[AC-CT-13l#3] 第 P 节失败：记 retention_purge_failed、计入 failed，证据清理与其余各节照常跑完，随后以原错误拒绝；当天不记为已清，同日下一轮重试，成功后不再调', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  const failure = { code: '55P03', message: 'private SQL', detail: 'private row data' };
+  let fail = true;
+  f.control.respond = async (query) => {
+    if (query.sql.includes(DEFAULT_PURGE) && fail) throw failure;
+    return undefined;
+  };
+  await expect(f.maintenance.runOnce()).rejects.toBe(failure);
+  const order = f.queries.map((q) => q.sql);
+  expect(order.filter((sql) => sql.includes(EVIDENCE_PURGE))).toHaveLength(1);
+  expect(order.some((sql) => sql.includes(OPEN_ATTEMPTS))).toBe(true);
+  expect(order.filter((sql) => EVENTS_CLEANUP.test(sql))).toHaveLength(3);
+  expect(order.at(-1)).toContain('partition_default_rows');
+  expect(f.logger.error.mock.calls).toEqual([
+    [{ table: 'link_logs_default', sqlstate: '55P03' }, 'retention_purge_failed'],
+  ]);
+  expect(f.logger.info.mock.calls).toEqual([
+    [{ ensured: ALL_ENSURED, dropped: 0, failed: 1 }, 'partition_maintenance_done'],
+  ]);
+  expect(JSON.stringify(f.logger.error.mock.calls)).not.toContain('private');
+
+  fail = false;
+  f.queries.length = 0;
+  f.clock.set('2026-10-08T21:00:00.000Z'); // 10-09 05:00 (+08:00)
+  expect(await f.maintenance.runOnce()).toMatchObject({ failed: 0 });
+  expect(f.queries.filter((q) => q.sql.includes(DEFAULT_PURGE)).map((q) => q.parameters)).toEqual([
+    [new Date('2026-10-08T21:00:00.000Z')],
+  ]);
+  // Section O succeeded in the first run: it is not called again that day.
+  expect(f.queries.filter((q) => q.sql.includes(EVIDENCE_PURGE))).toEqual([]);
+  f.queries.length = 0;
+  await f.maintenance.runOnce();
+  expect(f.queries.filter((q) => q.sql.includes(DEFAULT_PURGE))).toEqual([]);
+});
+
+it('[AC-CT-13l#3] 第 P、O 两节都失败时以先发生的（第 P 节的）错误拒绝，各记一行、failed 计 2', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  const purge = { code: '55P03' };
+  const evidence = { code: '57014' };
+  f.control.respond = async (query) => {
+    if (query.sql.includes(DEFAULT_PURGE)) throw purge;
+    if (query.sql.includes(EVIDENCE_PURGE)) throw evidence;
+    return undefined;
+  };
+  await expect(f.maintenance.runOnce()).rejects.toBe(purge);
+  expect(f.logger.error.mock.calls).toEqual([
+    [{ table: 'link_logs_default', sqlstate: '55P03' }, 'retention_purge_failed'],
+    [{ table: 'link_log_evidence', sqlstate: '57014' }, 'retention_purge_failed'],
+  ]);
+  expect(f.logger.info.mock.calls.at(-1)).toEqual([
+    { ensured: ALL_ENSURED, dropped: 0, failed: 2 },
+    'partition_maintenance_done',
+  ]);
+});
+
+it('[AC-CT-13l#8] 第 P 节撞 statement_timeout（57014）：短事务回滚，记 retention_purge_failed、计入 failed，其余各节照常，以原错误拒绝；当天不记已清，同日下一轮在新的短事务里重试', async () => {
+  const f = await fixture('2026-10-08T20:00:00.000Z', true);
+  const timeout = { code: '57014', message: 'canceling statement due to statement timeout' };
+  let fail = true;
+  f.control.respond = async (query) => {
+    if (query.sql.includes(DEFAULT_PURGE) && fail) throw timeout;
+    return undefined;
+  };
+  await expect(f.maintenance.runOnce()).rejects.toBe(timeout);
+  expect(purgeTransactions(f.transactions)).toEqual([
+    { statements: ['statement_timeout', 'purge'], timeout: '60s', outcome: 'rolled back' },
+  ]);
+  expect(f.queries.filter((q) => q.sql.includes(EVIDENCE_PURGE))).toHaveLength(1);
+  expect(f.queries.at(-1)!.sql).toContain('partition_default_rows');
+  expect(f.logger.error.mock.calls).toEqual([
+    [{ table: 'link_logs_default', sqlstate: '57014' }, 'retention_purge_failed'],
+  ]);
+  expect(f.logger.info.mock.calls).toEqual([
+    [{ ensured: ALL_ENSURED, dropped: 0, failed: 1 }, 'partition_maintenance_done'],
+  ]);
+
+  fail = false;
+  f.transactions.length = 0;
+  f.clock.set('2026-10-08T21:00:00.000Z'); // 10-09 05:00 (+08:00)
+  expect(await f.maintenance.runOnce()).toMatchObject({ failed: 0 });
+  expect(purgeTransactions(f.transactions)).toEqual([
+    { statements: ['statement_timeout', 'purge'], timeout: '60s', outcome: 'committed' },
+  ]);
+  f.transactions.length = 0;
+  await f.maintenance.runOnce();
+  expect(purgeTransactions(f.transactions)).toEqual([]);
 });

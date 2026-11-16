@@ -1,0 +1,138 @@
+{
+  "risk_note": "CT-13l (BR-ID-30 ② link_logs 90 days also for the DEFAULT partition; BR-ATTR-14 claim-referenced rows copied to link_log_evidence first; 编排 D10-1623 / D10-1802 / D10-1825 / D10-1826 / D10-1839 / D10-1841; owner agreed to the trigger exemption D10-1829). Migration 0145_link-logs-default-purge.sql (sha256 f6fe95124dce56a65f95dddb43713feefa4351d85bbf6b09a531f8f9dbf533a6, pinned by #206): app.reject_link_logs_update_delete() — UPDATE always 23001; DELETE only when the table is app.link_logs_default, current_user is the purge function owner, the purge set its transaction-local marker, and OLD.created_at is before the marker cutoff; link_logs_append_only re-pointed to it (shared app.reject_update_delete() and all other triggers unchanged); app.purge_expired_link_logs_default(p_now): advisory lock, lock_timeout 5s like drop_expired_day_partitions, copy_referenced_link_logs first, then DELETE of expired DEFAULT rows (skipping referenced rows without an evidence copy), marker reset, no table-level heavy lock on link_logs or users; cutoff expression word for word as the day-partition drop. Maintenance section P: once per +08:00 day from 04:00 after the day-partition drop, in a short transaction with statement_timeout 60s (LINK_LOGS_DEFAULT_PURGE_STATEMENT_TIMEOUT, D10-1826), failure logged / counted / rethrown, retried the same day. DETACH / ATTACH was tried first and withdrawn (it created and dropped FK action triggers on app.users and held ACCESS EXCLUSIVE without a bound; money r1 S1 x2). New integration test apps/api/src/modules/platform/maintenance/link-logs-default-purge.int.test.ts (9 it blocks). Frozen worker-day-partitions block rewritten (modify_existing rule_change, D10-1802, retitle_to) plus one new block [AC-CT-13l#8]; one unchanged block declared red_exempt (#201). Test machine (couli-runs/CT-13l/run4, (b) implementation): 499 files, all green except the lint-migrations real-repo groups before the #206 pin; verify:fast on the committed head red only on guard-approvals before #206; rerun on the landed head by land.sh / CI.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Fresh independent Claude via claude-run.sh, money full review r2 pass, no findings; five questions answered (couli-runs/CT-13l/review-money-r2.json). r1 (DETACH / ATTACH) failed with two S1 and was withdrawn by D10-1825."
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Second, unrelated fresh independent Claude (D10-1826 two reviews): pass, one S2 (unbatched DELETE could hit the 60s timeout on a huge backlog) moved to FU-LINKLOGS-DEFAULT-PURGE-BATCH (D10-1832) (couli-runs/CT-13l/review-money-r2b.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude",
+    "model": "claude-opus-5-5",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "r1 fail (S1: an expired DEFAULT row referenced only by a decided item was not covered) → test attempt 2 → r2 pass; round 3 (approvals 95, D10-1813) reviewed only the rewritten worker-day-partitions block and the new [AC-CT-13l#8] block, pass. The red_exempt of the unchanged worker-day-partitions block (#201) was confirmed afterwards by a gate-wording supplement (门禁口径补录, D10-1850 / D10-1833 (2)): claude-run had reached the per-task cap of 10 independent calls, so per the exception the owner approved on 2026-11-16 (负责人 2026-11-16 批准的例外，D10-1858) it ran once in a fresh-context Claude subagent of the be session (model opus; recorded as engine claude, not claude-independent, since it did not go through claude-run.sh) with the ledger declaration pasted verbatim; it confirmed the block body is identical at the merge base and the head, the row (2026-11-22 +08:00) is not expired at the 11-23 04:00 cutoff (08-25) so the block is green on the baseline, and why the file is judged as a whole (couli-runs/CT-13l/red-exempt-confirm.md)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/platform/link-logs-default-purge/copy-failure.int.test.ts > [BR-ATTR-14 复制失败则不删; D10-1624; CT-13l c] 复制失败时 purge_expired_link_logs_default 抛错、DEFAULT 一行不删、证据表不变；失败原因消失后同一调用复制被引用的行并删除全部过期行",
+    "test/spec/platform/link-logs-default-purge/copy.int.test.ts > [BR-ATTR-14 默认值; CT-13l c] DEFAULT 里过期且被认领子项引用的行（子项待审或已结案、一个或多个子项、与未知 id 同列）逐列原样进证据表、每个 id 一行，然后被删；未被引用的过期行直接删、不进证据表；截断当刻被引用的行不复制也不删；再调一次不重复复制",
+    "test/spec/platform/link-logs-default-purge/cutoff.int.test.ts > [BR-ID-30 删除条件; ② link_logs 90 天; CT-13l a] p_now 2026-10-08T15:59:59.999Z：DEFAULT 清理与删日分区同一截断——被删的最晚日分区里的行与 DEFAULT 被删的行同在截断前（前 1 天 / 1 毫秒 / 1 微秒），保留的最早日分区与 DEFAULT 保留的行同在截断及以后；不受会话时区影响",
+    "test/spec/platform/link-logs-default-purge/cutoff.int.test.ts > [BR-ID-30 删除条件; ② link_logs 90 天; CT-13l a] p_now 2026-10-08T16:00:00.000Z：DEFAULT 清理与删日分区同一截断——被删的最晚日分区里的行与 DEFAULT 被删的行同在截断前（前 1 天 / 1 毫秒 / 1 微秒），保留的最早日分区与 DEFAULT 保留的行同在截断及以后；不受会话时区影响",
+    "test/spec/platform/link-logs-default-purge/cutoff.int.test.ts > [BR-ID-30 删除条件; ② link_logs 90 天; CT-13l a] p_now 2026-12-31T16:00:00.000Z：DEFAULT 清理与删日分区同一截断——被删的最晚日分区里的行与 DEFAULT 被删的行同在截断前（前 1 天 / 1 毫秒 / 1 微秒），保留的最早日分区与 DEFAULT 保留的行同在截断及以后；不受会话时区影响",
+    "test/spec/platform/link-logs-default-purge/cutoff.int.test.ts > [BR-ID-30 删除条件; ② link_logs 90 天; CT-13l a] p_now 2028-02-29T20:00:00.000Z：DEFAULT 清理与删日分区同一截断——被删的最晚日分区里的行与 DEFAULT 被删的行同在截断前（前 1 天 / 1 毫秒 / 1 微秒），保留的最早日分区与 DEFAULT 保留的行同在截断及以后；不受会话时区影响",
+    "test/spec/platform/link-logs-default-purge/grants.int.test.ts > [db/AGENTS.md 迁移规则 4; ADR-0001 §4.2 #4、#8; CT-13l e] 只有 couli_maint 能执行 purge_expired_link_logs_default；couli_app、couli_readonly、couli_payout 执行得 42501，过期行不动",
+    "test/spec/platform/link-logs-default-purge/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13l f] 04:00 的一轮调用一次 DEFAULT 清理，参数是本次注入时钟的 now（时钟只读一次），位置在删 link_logs 日分区之后",
+    "test/spec/platform/link-logs-default-purge/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13l f] +08:00 的 04:00 前不调用（00:00、03:00、03:59:59.999）；04:00 起才调用",
+    "test/spec/platform/link-logs-default-purge/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13l f] 当天第一轮（04:00 起）调用一次、后续轮次不再调用；跨到下一天后等到 04:00 再调用一次",
+    "test/spec/platform/link-logs-default-purge/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13l f] DEFAULT 清理失败：其余部分（证据清理、events 清理、DEFAULT 检查、完成日志）照常跑完，runOnce 以原错误拒绝；当天不记为已清，同日下一轮再调用，成功后不再调用",
+    "test/spec/platform/link-logs-default-purge/other-tables.int.test.ts > [BR-ID-30 ②; D10-1693; CT-13l d] DEFAULT 清理前后 link_open_attempts、links、claims、claim_items 逐行不变（含已过期的打开尝试）；证据表里已有的行（含已无引用、可被证据清理删掉的行）原样保留",
+    "test/spec/platform/link-logs-default-purge/retained.int.test.ts > [BR-ID-30 删除条件; ② link_logs 90 天; CT-13l b] DEFAULT 里早于截断的行（各 app）被删、返回删除行数；截断当刻及以后的行（含预建范围之后的未来日期与 2099 年）原样保留；日分区里的行（含未删的过期日分区）与分区本身都不动；再调一次删 0 行",
+    "test/spec/platform/maintenance/worker-day-partitions.int.test.ts > [ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据即告警、#5; BR-ID-30 ② 每日 04:00（+08:00）删除; worker 契约 8.2、8.3、8.4] worker 的维护实例：每轮在 8 个月分区之后预建 link_logs 2026-11-20 至 12-04 共 15 个日分区；03:59:59.999（+08:00）不删、04:00:00.000 删掉过期的 link_logs_p20260801；link_logs_default 与 event_log_default 有行的每轮都 warn（不记 partition_default_rows_expected），04:00 起 link_logs_default 里过期的旧行被删、未过期的留在 DEFAULT；报告与日志确切、不含行内容",
+    "test/spec/platform/maintenance/worker-day-partitions.int.test.ts > [AC-CT-13l#8; BR-ID-30 ② link_logs 90 天、每日 04:00（+08:00）删除; worker 契约 8.3] worker 的维护实例清理 link_logs_default 的截断边界：2026-11-20 04:00（+08:00）那轮截断 08-22 00:00（+08:00），早 1 毫秒的行被删（retention_purged rows 1）、恰在截断时刻的行与预建范围之后 12-10 的未来行留下；11-21 03:59:59.999 不删；11-21 04:00 截断后移一天，恰在旧截断时刻的那行被删、未来行仍不动"
+  ],
+  "modify_existing": [
+    {
+      "file": "test/spec/platform/maintenance/worker-day-partitions.int.test.ts",
+      "test": "[ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据即告警、#5; BR-ID-30 ② 每日 04:00（+08:00）删除; worker 契约 8.2、8.3、8.4] worker 的维护实例：每轮在 8 个月分区之后预建 link_logs 2026-11-20 至 12-04 共 15 个日分区；03:59:59.999（+08:00）不删、04:00:00.000 删掉过期的 link_logs_p20260801；link_logs_default 的 2 行与 event_log_default 的 1 行每轮都 warn（不记 partition_default_rows_expected），旧行留在 DEFAULT；报告与日志确切、不含行内容",
+      "retitle_to": "[ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据即告警、#5; BR-ID-30 ② 每日 04:00（+08:00）删除; worker 契约 8.2、8.3、8.4] worker 的维护实例：每轮在 8 个月分区之后预建 link_logs 2026-11-20 至 12-04 共 15 个日分区；03:59:59.999（+08:00）不删、04:00:00.000 删掉过期的 link_logs_p20260801；link_logs_default 与 event_log_default 有行的每轮都 warn（不记 partition_default_rows_expected），04:00 起 link_logs_default 里过期的旧行被删、未过期的留在 DEFAULT；报告与日志确切、不含行内容",
+      "reason": "rule_change",
+      "br": ["BR-ID-30"],
+      "before": "it('[ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据即告警、#5; BR-ID-30 ② 每日 04:00（+08:00）删除; worker 契约 8.2、8.3、8.4] worker 的维护实例：每轮在 8 个月分区之后预建 link_logs 2026-11-20 至 12-04 共 15 个日分区；03:59:59.999（+08:00）不删、04:00:00.000 删掉过期的 link_logs_p20260801；link_logs_default 的 2 行与 event_log_default 的 1 行每轮都 warn（不记 partition_default_rows_expected），旧行留在 DEFAULT；报告与日志确切、不含行内容', async () => {\n  await withWorld(async (maint, app) => {\n    expect(await ensureDays(maint, 'link_logs', ['2026-08-01'])).toEqual(['link_logs_p20260801']);\n    expect(await insertOldEvent(app)).toBe('app.event_log_default');\n    // +08:00 days 2026-06-01 and 2026-11-19: before the window, so their creation is never tried.\n    expect([\n      await insertLinkLog(app, '2026-06-01T09:00:00+08:00'),\n      await insertLinkLog(app, '2026-11-19T18:00:00+08:00'),\n    ]).toEqual(['app.link_logs_default', 'app.link_logs_default']);\n    // 2026-11-20 03:59:59.999 +08:00.\n    const w = workerAt(maint, '2026-11-19T19:59:59.999Z');\n    const days = dayNames('link_logs', dayRange('2026-11-20', '2026-12-04'));\n    const defaultRows = [\n      { table: 'event_log', partition: 'event_log_default', rows: 1 },\n      { table: 'link_logs', partition: 'link_logs_default', rows: 2 },\n    ];\n    const beforeFour = {\n      report: await report(w.maintenance.runOnce()),\n      lines: w.fresh(),\n      linkLogs: await partitionNames(app, 'link_logs'),\n    };\n    w.clock.set('2026-11-19T20:00:00.000Z');\n    const atFour = {\n      report: await report(w.maintenance.runOnce()),\n      lines: w.fresh(),\n      linkLogs: await partitionNames(app, 'link_logs'),\n    };\n    const again = { report: await report(w.maintenance.runOnce()), lines: w.fresh() };\n    expect({ beforeFour, atFour, again }).toEqual({\n      beforeFour: {\n        report: { ensured: [...MONTH_NAMES_NOV, ...days], dropped: [], defaultRows, failed: 0 },\n        lines: [warnRows('event_log', 1), warnRows('link_logs', 2), done(ALL_ENSURED, 0, 0)],\n        linkLogs: ['link_logs_default', 'link_logs_p20260801', ...days],\n      },\n      atFour: {\n        report: {\n          ensured: [...MONTH_NAMES_NOV, ...days],\n          dropped: ['link_logs_p20260801'],\n          defaultRows,\n          failed: 0,\n        },\n        lines: [\n          dropped('link_logs_p20260801'),\n          warnRows('event_log', 1),\n          warnRows('link_logs', 2),\n          done(ALL_ENSURED, 1, 0),\n        ],\n        linkLogs: ['link_logs_default', ...days],\n      },\n      again: {\n        report: { ensured: [...MONTH_NAMES_NOV, ...days], dropped: [], defaultRows, failed: 0 },\n        lines: [warnRows('event_log', 1), warnRows('link_logs', 2), done(ALL_ENSURED, 0, 0)],\n      },\n    });\n    expect(await linkLogRows(app)).toEqual([\n      { part: 'app.link_logs_default', at: '2026-06-01T01:00:00.000Z' },\n      { part: 'app.link_logs_default', at: '2026-11-19T10:00:00.000Z' },\n    ]);\n    expect(w.lines.join('')).not.toMatch(/item-|order_id/);\n  });\n}, 60_000);",
+      "after": "it('[ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据即告警、#5; BR-ID-30 ② 每日 04:00（+08:00）删除; worker 契约 8.2、8.3、8.4] worker 的维护实例：每轮在 8 个月分区之后预建 link_logs 2026-11-20 至 12-04 共 15 个日分区；03:59:59.999（+08:00）不删、04:00:00.000 删掉过期的 link_logs_p20260801；link_logs_default 与 event_log_default 有行的每轮都 warn（不记 partition_default_rows_expected），04:00 起 link_logs_default 里过期的旧行被删、未过期的留在 DEFAULT；报告与日志确切、不含行内容', async () => {\n  await withWorld(async (maint, app) => {\n    expect(await ensureDays(maint, 'link_logs', ['2026-08-01'])).toEqual(['link_logs_p20260801']);\n    expect(await insertOldEvent(app)).toBe('app.event_log_default');\n    // +08:00 days 2026-06-01 and 2026-11-19: before the window, so their creation is never tried.\n    expect([\n      await insertLinkLog(app, '2026-06-01T09:00:00+08:00'),\n      await insertLinkLog(app, '2026-11-19T18:00:00+08:00'),\n    ]).toEqual(['app.link_logs_default', 'app.link_logs_default']);\n    // 2026-11-20 03:59:59.999 +08:00.\n    const w = workerAt(maint, '2026-11-19T19:59:59.999Z');\n    const days = dayNames('link_logs', dayRange('2026-11-20', '2026-12-04'));\n    const defaultRows = [\n      { table: 'event_log', partition: 'event_log_default', rows: 1 },\n      { table: 'link_logs', partition: 'link_logs_default', rows: 2 },\n    ];\n    // From 04:00 the DEFAULT purge (cutoff 2026-08-22 00:00 +08:00) deletes the 06-01 row only.\n    const purgedDefaultRows = [\n      { table: 'event_log', partition: 'event_log_default', rows: 1 },\n      { table: 'link_logs', partition: 'link_logs_default', rows: 1 },\n    ];\n    const beforeFour = {\n      report: await report(w.maintenance.runOnce()),\n      lines: w.fresh(),\n      linkLogs: await partitionNames(app, 'link_logs'),\n    };\n    w.clock.set('2026-11-19T20:00:00.000Z');\n    const atFour = {\n      report: await report(w.maintenance.runOnce()),\n      lines: w.fresh(),\n      linkLogs: await partitionNames(app, 'link_logs'),\n    };\n    const again = { report: await report(w.maintenance.runOnce()), lines: w.fresh() };\n    expect({ beforeFour, atFour, again }).toEqual({\n      beforeFour: {\n        report: { ensured: [...MONTH_NAMES_NOV, ...days], dropped: [], defaultRows, failed: 0 },\n        lines: [warnRows('event_log', 1), warnRows('link_logs', 2), done(ALL_ENSURED, 0, 0)],\n        linkLogs: ['link_logs_default', 'link_logs_p20260801', ...days],\n      },\n      atFour: {\n        report: {\n          ensured: [...MONTH_NAMES_NOV, ...days],\n          dropped: ['link_logs_p20260801'],\n          defaultRows: purgedDefaultRows,\n          failed: 0,\n        },\n        lines: [\n          dropped('link_logs_p20260801'),\n          line('info', 'retention_purged', { table: 'link_logs_default', rows: 1 }),\n          warnRows('event_log', 1),\n          warnRows('link_logs', 1),\n          done(ALL_ENSURED, 1, 0),\n        ],\n        linkLogs: ['link_logs_default', ...days],\n      },\n      again: {\n        report: {\n          ensured: [...MONTH_NAMES_NOV, ...days],\n          dropped: [],\n          defaultRows: purgedDefaultRows,\n          failed: 0,\n        },\n        lines: [warnRows('event_log', 1), warnRows('link_logs', 1), done(ALL_ENSURED, 0, 0)],\n      },\n    });\n    expect(await linkLogRows(app)).toEqual([\n      { part: 'app.link_logs_default', at: '2026-11-19T10:00:00.000Z' },\n    ]);\n    expect(w.lines.join('')).not.toMatch(/item-|order_id/);\n  });\n}, 60_000);",
+      "mutation": [
+        {
+          "mutant": "基线无 DEFAULT 清理（旧规则：旧行留在 DEFAULT；合并基上没有 app.purge_expired_link_logs_default 与维护第 P 节），即本单正式先红的基线；red/3 中本条 red for a valid reason（couli-runs/CT-13l/red/3）",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "task": "CT-13l",
+  "spec_commit": "b9565f838bb363d23b92bbb2211e7ff86256f606",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b9565f838bb363d23b92bbb2211e7ff86256f606",
+      "tree": "99832d9ef1ea682f0804e1af880b1aefdf0d89f8",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-16T12:51:56Z",
+      "finished_at": "2026-11-16T12:52:06Z",
+      "red_tests": [
+        "test/spec/platform/link-logs-default-purge/copy-failure.int.test.ts > [BR-ATTR-14 复制失败则不删; D10-1624; CT-13l c] 复制失败时 purge_expired_link_logs_default 抛错、DEFAULT 一行不删、证据表不变；失败原因消失后同一调用复制被引用的行并删除全部过期行",
+        "test/spec/platform/link-logs-default-purge/copy.int.test.ts > [BR-ATTR-14 默认值; CT-13l c] DEFAULT 里过期且被认领子项引用的行（子项待审或已结案、一个或多个子项、与未知 id 同列）逐列原样进证据表、每个 id 一行，然后被删；未被引用的过期行直接删、不进证据表；截断当刻被引用的行不复制也不删；再调一次不重复复制",
+        "test/spec/platform/link-logs-default-purge/cutoff.int.test.ts > [BR-ID-30 删除条件; ② link_logs 90 天; CT-13l a] p_now 2026-10-08T15:59:59.999Z：DEFAULT 清理与删日分区同一截断——被删的最晚日分区里的行与 DEFAULT 被删的行同在截断前（前 1 天 / 1 毫秒 / 1 微秒），保留的最早日分区与 DEFAULT 保留的行同在截断及以后；不受会话时区影响",
+        "test/spec/platform/link-logs-default-purge/cutoff.int.test.ts > [BR-ID-30 删除条件; ② link_logs 90 天; CT-13l a] p_now 2026-10-08T16:00:00.000Z：DEFAULT 清理与删日分区同一截断——被删的最晚日分区里的行与 DEFAULT 被删的行同在截断前（前 1 天 / 1 毫秒 / 1 微秒），保留的最早日分区与 DEFAULT 保留的行同在截断及以后；不受会话时区影响",
+        "test/spec/platform/link-logs-default-purge/cutoff.int.test.ts > [BR-ID-30 删除条件; ② link_logs 90 天; CT-13l a] p_now 2026-12-31T16:00:00.000Z：DEFAULT 清理与删日分区同一截断——被删的最晚日分区里的行与 DEFAULT 被删的行同在截断前（前 1 天 / 1 毫秒 / 1 微秒），保留的最早日分区与 DEFAULT 保留的行同在截断及以后；不受会话时区影响",
+        "test/spec/platform/link-logs-default-purge/cutoff.int.test.ts > [BR-ID-30 删除条件; ② link_logs 90 天; CT-13l a] p_now 2028-02-29T20:00:00.000Z：DEFAULT 清理与删日分区同一截断——被删的最晚日分区里的行与 DEFAULT 被删的行同在截断前（前 1 天 / 1 毫秒 / 1 微秒），保留的最早日分区与 DEFAULT 保留的行同在截断及以后；不受会话时区影响",
+        "test/spec/platform/link-logs-default-purge/grants.int.test.ts > [db/AGENTS.md 迁移规则 4; ADR-0001 §4.2 #4、#8; CT-13l e] 只有 couli_maint 能执行 purge_expired_link_logs_default；couli_app、couli_readonly、couli_payout 执行得 42501，过期行不动",
+        "test/spec/platform/link-logs-default-purge/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13l f] 04:00 的一轮调用一次 DEFAULT 清理，参数是本次注入时钟的 now（时钟只读一次），位置在删 link_logs 日分区之后",
+        "test/spec/platform/link-logs-default-purge/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13l f] +08:00 的 04:00 前不调用（00:00、03:00、03:59:59.999）；04:00 起才调用",
+        "test/spec/platform/link-logs-default-purge/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13l f] 当天第一轮（04:00 起）调用一次、后续轮次不再调用；跨到下一天后等到 04:00 再调用一次",
+        "test/spec/platform/link-logs-default-purge/maintenance-schedule.test.ts > [BR-ID-30 每日 04:00（+08:00）删除任务; CT-13l f] DEFAULT 清理失败：其余部分（证据清理、events 清理、DEFAULT 检查、完成日志）照常跑完，runOnce 以原错误拒绝；当天不记为已清，同日下一轮再调用，成功后不再调用",
+        "test/spec/platform/link-logs-default-purge/other-tables.int.test.ts > [BR-ID-30 ②; D10-1693; CT-13l d] DEFAULT 清理前后 link_open_attempts、links、claims、claim_items 逐行不变（含已过期的打开尝试）；证据表里已有的行（含已无引用、可被证据清理删掉的行）原样保留",
+        "test/spec/platform/link-logs-default-purge/retained.int.test.ts > [BR-ID-30 删除条件; ② link_logs 90 天; CT-13l b] DEFAULT 里早于截断的行（各 app）被删、返回删除行数；截断当刻及以后的行（含预建范围之后的未来日期与 2099 年）原样保留；日分区里的行（含未删的过期日分区）与分区本身都不动；再调一次删 0 行",
+        "test/spec/platform/maintenance/worker-day-partitions.int.test.ts > [ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据即告警、#5; BR-ID-30 ② 每日 04:00（+08:00）删除; worker 契约 8.2、8.3、8.4] worker 的维护实例：每轮在 8 个月分区之后预建 link_logs 2026-11-20 至 12-04 共 15 个日分区；03:59:59.999（+08:00）不删、04:00:00.000 删掉过期的 link_logs_p20260801；link_logs_default 与 event_log_default 有行的每轮都 warn（不记 partition_default_rows_expected），04:00 起 link_logs_default 里过期的旧行被删、未过期的留在 DEFAULT；报告与日志确切、不含行内容",
+        "test/spec/platform/maintenance/worker-day-partitions.int.test.ts > [AC-CT-13l#8; BR-ID-30 ② link_logs 90 天、每日 04:00（+08:00）删除; worker 契约 8.3] worker 的维护实例清理 link_logs_default 的截断边界：2026-11-20 04:00（+08:00）那轮截断 08-22 00:00（+08:00），早 1 毫秒的行被删（retention_purged rows 1）、恰在截断时刻的行与预建范围之后 12-10 的未来行留下；11-21 03:59:59.999 不删；11-21 04:00 截断后移一天，恰在旧截断时刻的那行被删、未来行仍不动"
+      ],
+      "expected": [
+        "test/spec/platform/link-logs-default-purge/copy-failure.int.test.ts",
+        "test/spec/platform/link-logs-default-purge/copy.int.test.ts",
+        "test/spec/platform/link-logs-default-purge/cutoff.int.test.ts",
+        "test/spec/platform/link-logs-default-purge/grants.int.test.ts",
+        "test/spec/platform/link-logs-default-purge/maintenance-schedule.test.ts",
+        "test/spec/platform/link-logs-default-purge/other-tables.int.test.ts",
+        "test/spec/platform/link-logs-default-purge/retained.int.test.ts",
+        "test/spec/platform/maintenance/worker-day-partitions.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "0edb9292ad8915fd7caad42b0d97d637708fc3f13bbf015fa4500ec7bfa85ce4"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "76cd9f9808ddfd770b83541e0e7d10b04558898fd690802f430d98bca47681a0"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "1ccdac25f2f1dcb6679d40d2ebe019ca5e4a7f9f",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
