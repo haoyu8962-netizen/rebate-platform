@@ -16,6 +16,7 @@ paths:
   - 'db/schema.sql'
   - 'packages/db/src/db.gen.ts'
   - 'apps/api/src/modules/platform/maintenance/**'
+  - 'tools/ci/lint-migrations.ts' # 只加 APPROVED_GUARD_CHANGES 里 0145 一行（link_logs_append_only 改挂专用函数，D10-1825 / D10-1826）
 test_paths:
   - 'test/spec/platform/link-logs-default-purge/**'
   - 'test/spec/platform/maintenance/worker-day-partitions.int.test.ts' # 只改 172 行那条 it（见 modify_existing）
