@@ -1,0 +1,25 @@
+id: F1-08cf
+repo: rebate-platform
+title: F1-08cf：调账新建 / 红冲「结果未知」后按【重试】、重试收到带外壳的 40901 / 50001 时仍保持结果未知、锁定、沿用原 Idempotency-Key 与原请求体（只补用例；FU-F108CE-RETRY-ENVELOPED-UNKNOWN）
+type: test-change
+# 2026-11-16 入账（前端线 fe，编排 D10-1840）。来由：F1-08ce 豁免门禁口径补录时，独立评审另提范围外 S1（unknown.test.ts:326）——结果未知后按【重试】，重试收到带统一外壳的 40901 / 50001，没有用例断言仍保持结果未知、输入锁定、沿用原键与原体；若实现把它当普通 ERROR#4 失败而解锁，操作员改金额再提交 → 20901 → 换新键 → 可能重复调增。F1-08ce 现实现按代码看行为正确（40901 / 50001 属 outcomeUnknown，不清 key、不解除结果未知），缺的是钉住它的用例；F1-08ce 独立调用已 9 / 10，不在 ce 里补。
+# 范围：只新增用例，新建与红冲各 2 条（40901、50001 各 1 条），放新目录 test/spec/frontend/admin-adjustment-unknown-retry/，可 import F1-08ce 的 admin-adjustment-create 夹具与辅助，不改任何已有文件。每条断言：重试收到 40901 / 50001 后仍显示「上次提交结果未知」、输入锁定、提交按钮不出现、只剩【重试】【去列表核对】；再按【重试】仍用原 Idempotency-Key 与逐字节相同的请求体；最终只生效一张（D10-1731）。
+# 有牙的证明（D10-1840）：F1-08ce 合并后实现已满足，这 4 条在主干上为绿，正式先红无法显示红——改以变异探针证明：临时把实现改成「重试收到 40901 / 50001 即解除结果未知并解锁」或「换新键」，这 4 条应变红；临时提交、测试机跑、撤回、不推，证据如实记 mutation。先红如何记由编排定。
+# 资金页（RV2）：规则测试由全新独立 Claude 写、另一全新独立 Claude 做 spec-test（approvals 第 36 条；Codex 额度到 11-20）；第 3 轮 spec-test 仍 fail 即停报编排（D10-1734）。排位：F1-08ce 合并后、F1-08cc / cd 之前（D10-1840）。
+refs: [BR-FUND-24, BR-ID-34, BR-ID-10]
+refs_hash:
+  BR-FUND-24: 0f1a6ecb3334
+  BR-ID-34: 6a2bdd4ca3ce
+  BR-ID-10: 7bc8a1bfa5f1
+deps: [F1-08ce]
+paths:
+  - 'test/spec/frontend/admin-adjustment-unknown-retry/**'
+test_paths:
+  - 'test/spec/frontend/admin-adjustment-unknown-retry/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-adjustment-unknown-retry/**'
+status: todo
+pr: null
