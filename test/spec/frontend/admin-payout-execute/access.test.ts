@@ -197,3 +197,59 @@ it(
     expect(server.writes()).toEqual([]);
   },
 );
+
+it(
+  '[AC-F1-08bd-FROZEN#2] 暂停类入口与【执行所选】各按自己的权限点：持 fund.view + payout.execute + switch.payout（非超管）、队列运行且微信零钱暂停时，未勾选前写入口恰为【暂停队列】【解除通道暂停】，勾一张后恰为这两个加【执行所选】；队列暂停时勾选前后写入口都恰为【解除暂停】【解除通道暂停】、没有【执行所选】；持 fund.view + payout.execute + switch.pay（不持 switch.payout）时勾一张后写入口恰为【执行所选】；全程不发写请求',
+  { timeout: MULTI_TIMEOUT },
+  async () => {
+    // F1-08bd (D10-1712 ④): the pause entries follow switch.payout, 【执行所选】 payout.execute.
+    const points: typeof VIEW_EXECUTE = ['fund.view', 'payout.execute', 'switch.payout'];
+    const switcher: typeof SUPER = {
+      isSuper: false,
+      permissions: points,
+      stepUp: {
+        'fund.view': { tier: null, operations: {} },
+        'payout.execute': { tier: 'totp', operations: {} },
+        'switch.payout': { tier: 'totp', operations: {} },
+      },
+    };
+    const running = ['暂停队列', '解除通道暂停'];
+    const server = serverFor({ permissions: points });
+    const panel = await openQueue(server, switcher);
+    expect(buttons(panel, ENTRY), 'no 执行所选 before a tick').toEqual([]);
+    expect(writeEntries(panel).sort(), 'the pause entries before a tick').toEqual(running.sort());
+    await select(panel, [QNO.approvedA]);
+    expect(disabled(button(panel, ENTRY))).toBe(false);
+    const withEntry = [ENTRY, ...running].sort();
+    expect(writeEntries(panel).sort(), 'with 执行所选 after a tick').toEqual(withEntry);
+    expect(server.writes()).toEqual([]);
+    cleanup();
+
+    const paused = ['解除暂停', '解除通道暂停'].sort();
+    const halted = serverFor({ overview: switchedOverview(true, true), permissions: points });
+    const haltedPanel = await openQueue(halted, switcher);
+    expect(writeEntries(haltedPanel).sort(), 'queue paused, before a tick').toEqual(paused);
+    await select(haltedPanel, [QNO.approvedA]);
+    expect(buttons(haltedPanel, ENTRY), 'no 执行所选 while the queue is paused').toEqual([]);
+    expect(writeEntries(haltedPanel).sort(), 'queue paused, after a tick').toEqual(paused);
+    expect(halted.writes()).toEqual([]);
+    cleanup();
+
+    const lookalike: typeof VIEW_EXECUTE = ['fund.view', 'payout.execute', 'switch.pay'];
+    const other: typeof SUPER = {
+      isSuper: false,
+      permissions: lookalike,
+      stepUp: {
+        'fund.view': { tier: null, operations: {} },
+        'payout.execute': { tier: 'totp', operations: {} },
+        'switch.pay': { tier: 'totp', operations: {} },
+      },
+    };
+    const plain = serverFor({ permissions: lookalike });
+    const plainPanel = await openQueue(plain, other);
+    expect(writeEntries(plainPanel), 'switch.pay: no pause entry before a tick').toEqual([]);
+    await select(plainPanel, [QNO.approvedA]);
+    expect(writeEntries(plainPanel), 'switch.pay: only 执行所选 after a tick').toEqual([ENTRY]);
+    expect(plain.writes()).toEqual([]);
+  },
+);
