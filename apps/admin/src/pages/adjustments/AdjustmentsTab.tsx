@@ -2,7 +2,9 @@
 // 行【详情】打开调账单详情抽屉（adminGetAdjustment）。持 fund.adjust 时已生效、非红冲单、未被红冲的行与
 // 详情另有【红冲】（F1-08cb，ReverseDialog）；成功或 20902 后列表与打开着的详情重新读取，提示交给页面。
 // 页面的 `version` 变了（新建调账生效）也重新读取；每次列表读有了回答都告诉页面（`onListRead`）。
-// 红冲结果未知时【去列表核对】关对话框并重新读取。批准、驳回入口留给 F1-08cc。
+// 红冲结果未知时【去列表核对】关对话框并重新读取。持 fund.adjust 时待批准（系统预填）的行与详情另有
+// 【批准】（F1-08cc，ApproveDialog：批准并短信验证 / 驳回）；成功、20902、结果未定后读回已不是待批准，或结果
+// 未知时【去列表核对】，都关对话框并重新读取列表与打开着的详情。
 import { ReloadOutlined } from '@ant-design/icons';
 import {
   Button,
@@ -21,9 +23,10 @@ import {
   type TablePaginationConfig,
 } from 'antd';
 import { useEffect, useId, useState, type ReactElement } from 'react';
-import { plannedButtonProps } from '../../components/planned/index.ts';
+import { plannedButtonProps, usePlanned } from '../../components/planned/index.ts';
 import { delayedLoading, useLoadingClock } from '../../motion.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
+import { ApproveDialog } from './ApproveDialog.tsx';
 import { DetailDrawer, type DetailState } from './DetailDrawer.tsx';
 import { ReverseDialog } from './ReverseDialog.tsx';
 import {
@@ -51,7 +54,7 @@ import {
   type ReasonCode,
 } from './model.ts';
 import { useRead } from './useRead.ts';
-import { reversible, type Executed } from './write.ts';
+import { reversible, type Executed, type Rejection } from './write.ts';
 
 const t = adjustmentsTexts.adjustments;
 
@@ -63,7 +66,7 @@ export interface Notice {
 }
 
 export interface AdjustmentsTabProps {
-  /** fund.adjust: 【红冲】 entries. */
+  /** fund.adjust: 【红冲】 and 【批准】 entries. */
   readonly canAdjust: boolean;
   /** adminCreateAdjustment is still planned: the entries are greyed out. */
   readonly planned: boolean;
@@ -77,6 +80,12 @@ export interface AdjustmentsTabProps {
 interface Reversal {
   readonly item: Adjustment;
   /** The 【红冲】 that opened the dialog (focus goes back to it on cancel). */
+  readonly trigger: HTMLElement;
+}
+
+interface Approval {
+  readonly item: Adjustment;
+  /** The 【批准】 that opened the dialog (focus goes back to it on cancel). */
   readonly trigger: HTMLElement;
 }
 
@@ -100,6 +109,11 @@ export function AdjustmentsTab({
   const [detailAttempt, setDetailAttempt] = useState(0);
   /** The open reversal dialog (undefined: closed). */
   const [reversal, setReversal] = useState<Reversal>();
+  /** The open approval dialog (undefined: closed). */
+  const [approval, setApproval] = useState<Approval>();
+  const approvePlanned = usePlanned('adminApproveAdjustment');
+  const rejectPlanned = usePlanned('adminRejectAdjustment');
+  const entryPlanned = approvePlanned && rejectPlanned;
 
   // Both reads are also repeated whenever the page bumps `version` (attempt + version grows).
   const list = useRead<AdjustmentPage>(
@@ -151,6 +165,47 @@ export function AdjustmentsTab({
   /** 【去列表核对】 of a reversal whose result is unknown. */
   const checkReverse = () => {
     cancelReverse();
+    refresh();
+  };
+  const openApprove = (item: Adjustment, trigger: HTMLElement) => setApproval({ item, trigger });
+  const cancelApprove = (uncertain: boolean) => {
+    const trigger = approval?.trigger;
+    setApproval(undefined);
+    if (uncertain) refresh();
+    if (trigger?.isConnected === true) trigger.focus();
+  };
+  const approved = (executed: Executed) => {
+    setApproval(undefined);
+    const w = adjustmentsTexts.write;
+    onNotice({
+      type: 'success',
+      lines: [
+        adjustmentsTexts.approve.approved(
+          executed.adjustment.adjust_id,
+          money(executed.adjustment.amount_fen),
+        ),
+        w.createdBefore(money(executed.available_before_fen)),
+        w.createdAfter(money(executed.available_after_fen)),
+      ],
+    });
+    refresh();
+  };
+  const rejected = (rejection: Rejection) => {
+    setApproval(undefined);
+    onNotice({
+      type: 'success',
+      lines: [adjustmentsTexts.approve.rejected(rejection.adjustment.adjust_id)],
+    });
+    refresh();
+  };
+  const approvalStale = () => {
+    setApproval(undefined);
+    onNotice({ type: 'warning', lines: [adjustmentsTexts.approve.errors.stale] });
+    refresh();
+  };
+  /** 【去列表核对】 of a decision whose result is unknown. */
+  const checkApprove = () => {
+    cancelApprove(false);
     refresh();
   };
   const openForm = (adjustId: string) => {
@@ -264,6 +319,17 @@ export function AdjustmentsTab({
               onClick={(event) => openReverse(row, event.currentTarget)}
             >
               {t.reverseEntry}
+            </Button>
+          ) : null}
+          {canAdjust && row.status === 'PENDING' ? (
+            <Button
+              type="link"
+              size="small"
+              autoInsertSpace={false}
+              {...plannedButtonProps(entryPlanned)}
+              onClick={(event) => openApprove(row, event.currentTarget)}
+            >
+              {t.approveEntry}
             </Button>
           ) : null}
         </Flex>
@@ -404,8 +470,9 @@ export function AdjustmentsTab({
         onClose={() => setTarget(undefined)}
         onRetry={() => setDetailAttempt((value) => value + 1)}
         onOpenForm={openForm}
-        {...(canAdjust ? { onReverse: openReverse } : {})}
+        {...(canAdjust ? { onReverse: openReverse, onApprove: openApprove } : {})}
         planned={planned}
+        approvePlanned={entryPlanned}
       />
       {reversal === undefined ? null : (
         <ReverseDialog
@@ -416,6 +483,19 @@ export function AdjustmentsTab({
           onReversed={reversed}
           onStale={stale}
           onCheck={checkReverse}
+        />
+      )}
+      {approval === undefined ? null : (
+        <ApproveDialog
+          key={approval.item.adjust_id}
+          item={approval.item}
+          approvePlanned={approvePlanned}
+          rejectPlanned={rejectPlanned}
+          onClose={cancelApprove}
+          onApproved={approved}
+          onRejected={rejected}
+          onStale={approvalStale}
+          onCheck={checkApprove}
         />
       )}
     </Flex>

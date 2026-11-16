@@ -1,5 +1,5 @@
 // 调账与核销页文案（资源 adjustments，菜单 资金 / 调账与核销；F1-08ca 只读：调账单列表与详情、坏账核销
-// 候选单；F1-08cb 新建调账与红冲，一步提交并生效）。调账单状态、原因码、候选单状态的中文名只从后台字典读（BR-TEXT-25
+// 候选单；F1-08cb 新建调账与红冲，一步提交并生效；F1-08cc 批准 / 驳回系统预填单）。调账单状态、原因码、候选单状态的中文名只从后台字典读（BR-TEXT-25
 // admin_dict.admin_adjustments.*、admin_dict.bad_debt_writeoff.*，contracts/texts.admin.default.json），
 // 缺键显示编码，所以这里不写这些名字。方向、关联单据类型、对方科目按 contracts/enums/fund.yaml 的值名。
 export const adjustmentsTexts = {
@@ -8,7 +8,7 @@ export const adjustmentsTexts = {
   /** created_by null: a form the system prefilled. */
   system: '系统',
   readOnlyNotice:
-    '批准与驳回系统预填单、批准坏账核销尚未接入，接口定稿后开放；新建调账与红冲一步提交并生效。',
+    '批准坏账核销尚未接入，接口定稿后开放；新建调账与红冲一步提交并生效；系统预填的待批准单经【批准】批准或驳回。',
   forbidden: '无权限查看调账与核销',
   forbiddenDescription:
     '当前账号缺少资金权限点（fund.adjust、fund.writeoff 或 fund.view），请联系超管勾选。',
@@ -29,6 +29,7 @@ export const adjustmentsTexts = {
     reversed: '已红冲',
     detailEntry: '详情',
     reverseEntry: '红冲',
+    approveEntry: '批准',
     filter: {
       status: '状态',
       reason: '原因',
@@ -223,6 +224,54 @@ export const adjustmentsTexts = {
       alreadyReversed: '该调账单已被红冲，已刷新',
       forbidden: '无权限执行调账',
       failed: '提交失败，请稍后重试',
+    },
+  },
+  /**
+   * 批准对话框（系统预填的 ACCOUNT_CLOSED 待批准单，fund.adjust）：adminApproveAdjustment（短信档二次验证，
+   * 请求体 {}，金额由服务端按批准时可用余额取）与 adminRejectAdjustment（不验证，只有驳回原因）。
+   */
+  approve: {
+    title: '批准调账单',
+    approve: '批准并短信验证',
+    reject: '驳回',
+    cancel: '取消',
+    consequence:
+      '批准后按批准时的可用余额整笔调减，转入平台佣金收入并立即记账，不可撤回；驳回不记账，注销仍待处理，系统次日重新预填。',
+    actualAmount: '实际调减金额以批准时的可用余额为准，可能与预览不同。',
+    reasonLabel: '驳回原因',
+    balanceLoading: '正在读取余额…',
+    balanceFailed: '余额读取失败',
+    /** 结果未定后正在重新读取该单（读回前两个决定都不可用）。 */
+    rechecking: '上次提交结果未定，正在重新读取该调账单，读取完成前不能再次提交。',
+    /** 决定没拿到带统一外壳的回答（网络错误、无法解析）：结果未知，只能原样重试或去列表核对。 */
+    unknown:
+      '上次提交结果未知：可能已经生效。重新读取后仍待批准时，再按同一个决定用原内容原样重新提交（不会重复执行），或按【去列表核对】查看是否已处理。',
+    /** StepUpModal 的「本次操作」。 */
+    operation: '批准系统预填调账单（注销放弃余额）',
+    approved: (adjustId: string, amount: string): string =>
+      `已批准，调账单号 ${adjustId}，实际调减 ${amount}`,
+    rejected: (adjustId: string): string => `已驳回，调账单号 ${adjustId}`,
+    summary: {
+      id: '调账单号',
+      user: '用户',
+      direction: '方向',
+      reason: '原因',
+      subject: '对方科目',
+      creator: '创建人',
+      created: '创建时间',
+    },
+    balance: {
+      before: '批准前可用余额',
+      amount: '预计调减金额',
+      after: '批准后可用余额',
+    },
+    errors: {
+      reasonRequired: '请填写驳回原因',
+      reasonTooLong: '驳回原因最多 200 字',
+      reasonInvalid: '驳回原因须为 1–200 字，请修改后重试',
+      noBalance: '可用余额不大于 0，不能批准，请驳回',
+      missing: '调账单不存在或已不可见，请刷新后重试',
+      stale: '该调账单已不是待批准状态，已刷新',
     },
   },
   /** 对方科目连同平台（contra_platform，只 UNION_RECEIVABLE 有）。 */

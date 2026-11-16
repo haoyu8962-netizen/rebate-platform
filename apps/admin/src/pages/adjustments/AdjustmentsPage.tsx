@@ -5,7 +5,8 @@
 // 持 fund.adjust（超管含）时标题行有【新建调账】（F1-08cb，CreateDrawer），行与详情有【红冲】；两者都走
 // adminCreateAdjustment 一步提交并生效，成功后在标题下提示新单号与前后可用余额并刷新调账单列表。
 // 新建结果未知时【去列表核对】关抽屉、刷新列表；此后再按【新建调账】先读一次列表，读完才显示空白表单。
-// TODO(规划/11 §7): 批准 / 驳回系统预填单（F1-08cc）、批准核销（F1-08cd） — blocked on 后续任务
+// 待批准（系统预填）的行与详情有【批准】（F1-08cc，批准并短信验证 / 驳回），结果提示同样在标题下。
+// TODO(规划/11 §7): 批准核销（F1-08cd） — blocked on 后续任务
 import { PlusOutlined } from '@ant-design/icons';
 import { Alert, Button, Card, Flex, Result, Tabs, Typography } from 'antd';
 import { useCallback, useRef, useState, type ReactElement } from 'react';
