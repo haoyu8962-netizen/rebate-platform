@@ -142,6 +142,13 @@ export const APPROVED_GUARD_CHANGES: Readonly<Record<string, string>> = {
   // (BR-ATTR-26 manual review of a credited order); it only widens. Validated in 0137.
   '0136_recon-diff-type-blacklist.sql':
     '2450e3975462d41bc793a543ab519c31984a3c359e2261383bd9218f4512b74f',
+  // CT-13l (BR-ID-30 ② link_logs 90 天删除补到 DEFAULT 分区；编排 D10-1825 / D10-1826，负责人同意 D10-1829):
+  // link_logs_append_only re-pointed from the shared app.reject_update_delete() (unchanged) to the
+  // dedicated app.reject_link_logs_update_delete(): UPDATE always refused; DELETE only on
+  // app.link_logs_default, as the purge function's owner, with the purge's transaction-local marker,
+  // for rows older than its cutoff. Money full review r2 and a second independent review.
+  '0145_link-logs-default-purge.sql':
+    'f6fe95124dce56a65f95dddb43713feefa4351d85bbf6b09a531f8f9dbf533a6',
 };
 /** Extensions node-pg-migrate would run from db/migrations besides SQL. */
 const SCRIPT_MIGRATION = /\.(?:js|cjs|mjs|ts|cts|mts|jsx|tsx)$/;
