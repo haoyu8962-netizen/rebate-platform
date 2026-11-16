@@ -1,6 +1,7 @@
 // evidence-check.ts against a fixture repository: an RV2 branch with and without a complete
 // evidence file, an RV0 branch, and each field that must make the check fail.
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -3501,5 +3502,143 @@ it('[CT-06zzzzzh] a trusted ledger whose ruling_correction entry names a money o
   expect(text).not.toContain('[declared in modify_existing');
   expect(text).toContain(
     'modify_existing: the trusted ledger declares no modify_existing: a record without a ledger entry is refused',
+  );
+});
+
+// CT-06zzzzzi (D10-1662): a file-level support entry (scope: support) of a frozen rule-test file:
+// its code outside the blocks may change after spec_commit, with the label and the file's record;
+// an assertion line there, or a block changed without its own entry, is refused. On the
+// CT-06zzzg fixture repository (modRepo, built by the first [CT-06zzzg] case above).
+// Round 3 (D10-1689 whitelist A): a new const, tokens only inserted (no arrow, no default value).
+const SUP_HELPER_NEW = "const amount = { n: 1, summary: 'withdraw:1' };";
+const supLedger = (): string =>
+  modLedger(null)
+    .replace('refs: []\nrefs_hash: {}', 'refs: [BR-PAY-01]\nrefs_hash:\n  BR-PAY-01: 0123456789ab')
+    .replace(
+      'status: todo\n',
+      [
+        'status: todo',
+        'modify_existing:',
+        `  - file: ${MOD_FILE}`,
+        '    scope: support',
+        '    reason: rule_change',
+        '    br: [BR-PAY-01]',
+        '    ruling: D10-1662',
+        "    note: 'the helper takes the summary; no assertion changes'",
+        '',
+      ].join('\n'),
+    );
+const supTrusted = (name: string): string => {
+  const dir = modTrusted(name, null);
+  write(dir, { 'ops/tasks/B2-09v.yaml': supLedger() });
+  return dir;
+};
+const sha = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
+const supRecord = (head: string, extra: Evidence = {}): Evidence => ({
+  file: MOD_FILE,
+  scope: 'support',
+  reason: 'rule_change',
+  before_sha256: sha(modSource(MOD_OLD)),
+  after_sha256: sha(head),
+  reverse_red: [`${MOD_FILE} > ${MOD_TEST}`],
+  br: ['BR-PAY-01'],
+  ...extra,
+});
+
+it('[CT-06zzzzzi] evidence-check: a support entry lets tokens inserted outside the blocks through; an inserted assertion, a removed assertion line or an undeclared changed block is refused; an unchanged file is redundant', () => {
+  const trusted = supTrusted('trusted-support');
+  expect(supLedger()).toContain('scope: support');
+  const good = modSource(MOD_OLD, { extra: SUP_HELPER_NEW });
+  const head = modBranch('sup-good', good, modEvidence([supRecord(good)]));
+  const ok = modCheck(head, trusted, approved(head));
+  expect(ok.problems).toEqual([]);
+  expect(ok.approval_wanted).toBe(true);
+  // An added line outside the blocks with an assertion: named with its head line (line 2).
+  const asserting = modSource(MOD_OLD, {
+    extra: 'const check = (v: number) => expect(v).toBe(1);',
+  });
+  const a = modBranch('sup-assert', asserting, modEvidence([supRecord(asserting)]));
+  const refused = modCheck(a, trusted, approved(a)).problems.join('\n');
+  expect(refused).toContain(
+    `${MOD_FILE} (M) [declared in modify_existing (scope: support), but outside the test blocks a support file may only gain tokens`,
+  );
+  expect(refused).toContain('head line 2: an arrow function `=>` inserted');
+  expect(refused).toContain('head line 2: an assertion call inserted (`expect`)');
+  // The import of expect removed outside the blocks: named with its base line and the assertion
+  // wording.
+  const unimported = modSource(MOD_OLD).replace(
+    "import { expect, it } from 'vitest';",
+    "import { it } from 'vitest';",
+  );
+  const u = modBranch('sup-unimport', unimported, modEvidence([supRecord(unimported)]));
+  const ru = modCheck(u, trusted, approved(u)).problems.join('\n');
+  expect(ru).toContain('an assertion line changed outside the test blocks');
+  expect(ru).toContain("base line 1: `import { expect, it } from 'vitest';`");
+  expect(ru).toContain('base line 1: `expect` removed or changed');
+  // The declared-block change without a block entry: the support entry does not cover it.
+  const block = modSource(MOD_NEW, { extra: SUP_HELPER_NEW });
+  const b = modBranch('sup-block', block, modEvidence([supRecord(block)]));
+  expect(modCheck(b, trusted, approved(b)).problems.join('\n')).toContain(
+    `test block 2 ("${MOD_TEST}") is not declared and differs from the base`,
+  );
+  // The file unchanged at the head: the record says so and the entry is redundant.
+  const same = modSource(MOD_OLD);
+  const c = modBranch('sup-same', same, modEvidence([supRecord(same)]));
+  expect(modCheck(c, trusted, approved(c)).problems.join('\n')).toContain(
+    "modify_existing[0]: the file is the merge base's: the entry is redundant",
+  );
+  // A block record shape on a support entry: test / before / after / mutation are unknown fields.
+  const d = modBranch('sup-shape', good, modEvidence([{ ...supRecord(good), test: MOD_TEST }]));
+  expect(modCheck(d, trusted, approved(d)).problems.join('\n')).toContain(
+    'modify_existing[0].test: unknown field for a support record (rule_change)',
+  );
+});
+
+// CT-06zzzzzi / D10-1662 round 2 (review-claude-1 S1-1, S1-2): the rule-test author changes the
+// support file in the rule-test commit (spec_commit after the merge base) and nothing changes it
+// after: the file is judged from the merge base to the head on its record, so an assertion line
+// (an assertion helper call too) or an undeclared changed block in that commit is refused; data
+// changes there pass.
+function supBranchVia(name: string, content: string): string {
+  git(modRepo, ['checkout', '-q', '-B', name, modBase]);
+  write(modRepo, { [MOD_FILE]: content });
+  git(modRepo, ['add', '-A']);
+  git(modRepo, ['commit', '-q', '-m', `test(spec): ${name}`]);
+  const spec = git(modRepo, ['rev-parse', 'HEAD']);
+  const tree = git(modRepo, ['rev-parse', 'HEAD:test/spec']);
+  const doc = { ...modEvidence([supRecord(content)])(tree), spec_commit: spec };
+  write(modRepo, { 'ops/evidence/B2-09v.json': `${JSON.stringify(doc, null, 2)}\n` });
+  git(modRepo, ['add', '-A']);
+  git(modRepo, ['commit', '-q', '-m', 'evidence']);
+  return git(modRepo, ['rev-parse', 'HEAD']);
+}
+
+it('[CT-06zzzzzi] evidence-check round 2: a support file changed in the rule-test commit is judged from the merge base to the head (assertion lines, assertion helper calls, undeclared blocks)', () => {
+  const trusted = supTrusted('trusted-support-r2');
+  const where = `modify_existing[0]: ${MOD_FILE} (merge base → head): declared in modify_existing (scope: support), but`;
+  // Data only, in the rule-test commit: passes.
+  const good = modSource(MOD_OLD, { extra: SUP_HELPER_NEW });
+  const g = supBranchVia('sup-r2-good', good);
+  expect(modCheck(g, trusted, approved(g)).problems).toEqual([]);
+  // An assertion line added in the rule-test commit: no class 1 hit after spec_commit, still refused.
+  const asserting = modSource(MOD_OLD, {
+    extra: 'const check = (v: number) => expect(v).toBe(1);',
+  });
+  const a = supBranchVia('sup-r2-assert', asserting);
+  const ra = modCheck(a, trusted, approved(a)).problems.join('\n');
+  expect(ra).not.toContain('rule tests changed after the rule-test commit');
+  expect(ra).toContain(`${where} outside the test blocks a support file may only gain tokens`);
+  expect(ra).toContain('head line 2: an assertion call inserted (`expect`)');
+  // An assertion helper called (S1-2), in the rule-test commit.
+  const helper = modSource(MOD_OLD, { extra: 'void helpers.expectAmount(1);' });
+  const h = supBranchVia('sup-r2-helper', helper);
+  expect(modCheck(h, trusted, approved(h)).problems.join('\n')).toContain(
+    'head line 2: an assertion call inserted (`expectAmount`)',
+  );
+  // A block changed in the rule-test commit without its block entry.
+  const block = modSource(MOD_NEW, { extra: SUP_HELPER_NEW });
+  const b = supBranchVia('sup-r2-block', block);
+  expect(modCheck(b, trusted, approved(b)).problems.join('\n')).toContain(
+    `${where} test block 2 ("${MOD_TEST}") is not declared and differs from the base`,
   );
 });

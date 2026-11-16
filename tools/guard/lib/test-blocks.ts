@@ -87,30 +87,18 @@
 //
 // Node built-ins only; pure functions (the caller reads the files).
 
+import { NOT_MATCHERS, judgeInsertions } from './support-tokens.ts';
+import type { OutsideToken, TokenProblem } from './support-tokens.ts';
+import type { Token } from './token.ts';
+
+export type { Token } from './token.ts';
+
 export class TestParseError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'TestParseError';
   }
 }
-
-export type Token = {
-  kind: 'id' | 'num' | 'str' | 'tpl' | 're' | 'punct';
-  /** Raw source text (a template literal includes its `${…}` expressions). */
-  text: string;
-  /** A line break occurs in the whitespace or comments before the token. */
-  nl: boolean;
-  /** Offset of the token in the source. */
-  start?: number;
-  /** The exact whitespace and comments between the previous token and this one. */
-  gap?: string;
-  /** str: the cooked value (null when an escape cannot be decoded for certain). */
-  value?: string | null;
-  /** tpl: the cooked static parts around the `${…}` expressions (null when not decodable). */
-  parts?: (string | null)[];
-  /** tpl: the tokens of its `${…}` expressions, in order. */
-  inner?: Token[];
-};
 
 const PUNCTUATORS = [
   '>>>=',
@@ -2566,6 +2554,468 @@ export function compareModifiedBlocks(
     }
   }
   return { ok: true, blocks, outside };
+}
+
+// A file-level support entry of modify_existing (CT-06zzzzzi; orchestrator ruling D10-1662, after
+// B1-02zzzb, which adds a step-up summary to about 18 frozen shared fixtures and top-level
+// helpers that have no it block): the entry covers the file's changes outside its it / test
+// blocks, and nothing else. compareSupportFile tells, for the base and the head of such a file:
+// - `blocks`: what is wrong with the blocks — a block added or removed, a block moved (its
+//   describes, the depth of brackets around it or the token right before it differ: into or out
+//   of a describe, function, loop or branch, `if (…) it(…)`), or a block that is not declared by
+//   a block entry (`names`, `headNames` as compareModifiedBlocks takes them) and whose text
+//   differs from the base. The support entry never lets a changed block through; its block entry
+//   does (compareModifiedBlocks judges it). Blocks are compared by their describes and text, not
+//   by their anchor in the shared rest (that moves with every change of the code before them).
+// - `tokens` (round 3 / 4: orchestrator rulings D10-1689 whitelist A, D10-1775, D10-1779,
+//   D10-1780 ⑦ A; support-tokens.ts judgeInsertions): outside the blocks (comments are no tokens,
+//   a block is one token) the head must be the base with tokens only inserted — none removed,
+//   changed, moved or regrouped — and the inserted ones hold no control flow, conditional, short
+//   circuit, optional chain, function, comma expression, test modifier, vi mock, assertion call,
+//   name the base file holds, default value or assignment to an existing name, and stand in no
+//   existing statement holding an assertion call. Several alignments of the two token sequences
+//   are tried (line by line and then token by token inside the changed lines; token by token
+//   from the start; from the end): the change passes when one shows such a pure insertion,
+//   otherwise the problems of the first are given (a removed or changed token by its base line,
+//   an inserted one by its head line; the first without a removal when there is one).
+// - `assertions`: the base lines of removed or changed tokens that hold an assertion call
+//   (ASSERTION_CALL, ASSERTION_NAME or ASSERTION_HELPER_CALL on the line with its comments and
+//   string contents blanked, or a line inside an assertion expression: from `expect` /
+//   `expectTypeOf` / `assert` or a called assertion helper through its call and chained members
+//   and calls, so an argument on a line of its own counts too). The round 2 wording, next to
+//   `tokens`: a support file changes data and calls only; an assertion changes in a block,
+//   declared block by block.
+// - `changed`: the file differs from the base at all.
+// A file the lexer cannot read, or a change of more than OUTSIDE_EDITS_MAX lines or tokens, is not
+// judged (`ok: false`): the entry does not apply.
+
+const NOT_MATCHER_NAMES = [...NOT_MATCHERS].join('|');
+
+/**
+ * An assertion call on a line (CT-06zzzzzi, D10-1662 ③): `expect(`, `expectTypeOf(`, `assert(`,
+ * `assert.<name>(`, `expect.<name>(` (soft / poll / assertions …), any `.to<Upper…>(` matcher
+ * (not the language's own `.toString(` / `.toISOString(` …, NOT_MATCHERS), `.rejects`,
+ * `.resolves`; blanks allowed between the parts. compareSupportFile tests it on a line whose
+ * comments and string contents are blanked.
+ */
+export const ASSERTION_CALL = new RegExp(
+  String.raw`\bexpect\s*\(|\bexpectTypeOf\s*\(|\bassert\s*\(|\b(?:assert|expect)\s*\.\s*[A-Za-z_$][\w$]*\s*\(|\.\s*(?!(?:${NOT_MATCHER_NAMES})(?![\w$]))to[A-Z][\w$]*\s*\(|\.\s*(?:rejects|resolves)\b`,
+);
+
+/**
+ * A call of an assertion helper on a line (CT-06zzzzzi, D10-1662 round 2, review-claude-1 S1-2):
+ * an identifier that starts with `expect` or `assert` called right after it — blanks, an optional
+ * `?.` and type arguments allowed before the `(` — on its own or as a member (`expectMentions(`,
+ * `assertTable(`, `helpers.expectSchema(`, `obj.assertNoRows(`, `expectRows<Row>(`). Such a
+ * helper asserts for its callers: removing the call or changing its arguments changes what they
+ * assert. A name that is not called is another word (`expected`, `expectedRows.push(` — push is
+ * the call —, `asserted`). The declaration `function expectX(` matches too: changing an assertion
+ * helper's parameters changes what it asserts (strict on purpose, as ASSERTION_CALL).
+ */
+export const ASSERTION_HELPER_CALL =
+  /(?<![\w$])(?:expect|assert)[\w$]*\s*(?:\?\.\s*)?(?:<[^()]*>\s*)?\(/;
+
+/** An identifier that, called, is an assertion helper (ASSERTION_HELPER_CALL, CT-06zzzzzi). */
+const ASSERTION_HELPER_NAME = /^(?:expect|assert)[\w$]*$/;
+
+/**
+ * The assertion functions named at all (CT-06zzzzzi): a changed line outside the blocks that
+ * names `expect`, `expectTypeOf` or `assert` as a word (an import of them, a local `expect` that
+ * shadows Vitest's, one passed on as a value) is an assertion line: it changes what the file's
+ * assertions do. `expected`, `asserted` and the like are other words.
+ */
+export const ASSERTION_NAME = /(?<![\w$])(?:expect|expectTypeOf|assert)(?![\w$])/;
+
+/** A base line outside the blocks holding an assertion whose tokens changed (compareSupportFile). */
+export type SupportLine = { side: 'base' | 'head'; line: number; text: string };
+
+export type SupportComparison =
+  | { ok: false; reason: string }
+  | {
+      ok: true;
+      /** The file differs from the base. */
+      changed: boolean;
+      /** What is wrong with the test blocks (see above); empty when nothing. */
+      blocks: string[];
+      /** Base lines outside the blocks holding an assertion whose tokens changed. */
+      assertions: SupportLine[];
+      /** What is wrong with the tokens outside the blocks (whitelist A); empty when nothing. */
+      tokens: TokenProblem[];
+    };
+
+type SupportView = {
+  lines: string[];
+  /** Per line (0-based), comments and string contents blanked. */
+  masked: string[];
+  /** Per line (0-based): a non-blank character of it lies outside every test block. */
+  outside: boolean[];
+  /** 0-based lines inside an assertion expression. */
+  asserting: Set<number>;
+  /** The tokens outside the test blocks, each block one token. */
+  out: OutsideToken[];
+  /** Every identifier of the file but member names after `.` (blocks and templates too). */
+  ids: Set<string>;
+  blocks: {
+    pattern: RegExp;
+    title: string;
+    describes: string;
+    text: string;
+    depth: number;
+    /** What stands before the block: `stmt` after `;`, `{`, `}` or at the start, else the token. */
+    lead: string;
+  }[];
+};
+
+const ASSERTION_HEADS = new Set(['expect', 'expectTypeOf', 'assert']);
+
+/** The text that stands for a test block among the tokens outside the blocks (support-tokens.ts). */
+const BLOCK_TOKEN = '\u0000test block';
+
+function supportView(source: string): SupportView {
+  const { tokens, match, tests } = scanTests(source);
+  const parsed = parseTestFile(source);
+  const lines = source.split('\n');
+  const starts: number[] = [];
+  let offset = 0;
+  for (const l of lines) {
+    starts.push(offset);
+    offset += l.length + 1;
+  }
+  const lineAt = (pos: number): number => {
+    let lo = 0;
+    let hi = starts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if ((starts[mid] as number) <= pos) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
+  const begin = (k: number): number => (tokens[k] as Token).start ?? 0;
+  const finish = (k: number): number => begin(k) + (tokens[k] as Token).text.length;
+  // Characters inside a test block.
+  const inBlock = new Uint8Array(source.length);
+  for (const c of tests) inBlock.fill(1, begin(c.start), finish(c.end));
+  const outside = lines.map((l, i) => {
+    const from = starts[i] as number;
+    for (let p = 0; p < l.length; p += 1) {
+      if (!/\s/.test(l[p] as string) && inBlock[from + p] !== 1) return true;
+    }
+    return false;
+  });
+  // The lines with comments and string contents blanked (round 3: a comment is no assertion).
+  const chars: string[] = source.split('').map((c) => (c === '\n' ? '\n' : ' '));
+  const ids = new Set<string>();
+  const paint = (ts: readonly Token[]): void => {
+    ts.forEach((t, k) => {
+      const s = t.start ?? 0;
+      const e = s + t.text.length - 1;
+      // A member name (`x.summary`) is no name an inserted declaration could shadow.
+      const member = ts[k - 1]?.text === '.' || ts[k - 1]?.text === '?.';
+      if (t.kind === 'id' && !member) ids.add(t.text);
+      if (t.kind === 'str' || t.kind === 'tpl') {
+        chars[s] = t.text[0] as string;
+        chars[e] = t.text[t.text.length - 1] as string;
+        paint(t.inner ?? []);
+      } else {
+        for (let p = 0; p < t.text.length; p += 1) chars[s + p] = t.text[p] as string;
+      }
+    });
+  };
+  paint(tokens);
+  const masked = chars.join('').split('\n');
+  // The tokens outside the blocks.
+  const out: OutsideToken[] = [];
+  const blockAt = new Map(tests.map((c) => [c.start, c]));
+  for (let k = 0; k < tokens.length; k += 1) {
+    const t = tokens[k] as Token;
+    const line = lineAt(begin(k)) + 1;
+    const call = blockAt.get(k);
+    if (call !== undefined) {
+      out.push({ kind: 'id', text: BLOCK_TOKEN, nl: t.nl, line, block: true });
+      k = call.end;
+      continue;
+    }
+    out.push({
+      kind: t.kind,
+      text: t.text,
+      nl: t.nl,
+      line,
+      ...(t.inner === undefined ? {} : { inner: t.inner }),
+    });
+  }
+  // Assertion expressions: the head, its call, then chained members and calls.
+  const asserting = new Set<number>();
+  tokens.forEach((t, i) => {
+    if (t.kind !== 'id') return;
+    const next = tokens[i + 1]?.text;
+    if (ASSERTION_HEADS.has(t.text)) {
+      if (next !== '(' && next !== '.' && next !== '?.') return;
+    } else {
+      // CT-06zzzzzi round 2 (review S1-2): an assertion helper called (`expectX(`, `assertX?.(`).
+      if (!ASSERTION_HELPER_NAME.test(t.text)) return;
+      const called = next === '(' || (next === '?.' && tokens[i + 2]?.text === '(');
+      if (!called) return;
+    }
+    let last = i;
+    let j = i + 1;
+    for (;;) {
+      const u = tokens[j];
+      if (u === undefined) break;
+      if (u.text === '(' && u.kind === 'punct') {
+        last = match[j] as number;
+        j = last + 1;
+      } else if (u.text === '?.' && tokens[j + 1]?.text === '(') {
+        // An optional call `?.(`: the call follows.
+        j += 1;
+      } else if ((u.text === '.' || u.text === '?.') && tokens[j + 1]?.kind === 'id') {
+        last = j + 1;
+        j += 2;
+      } else break;
+    }
+    const to = lineAt(Math.max(begin(i), finish(last) - 1));
+    for (let l = lineAt(begin(i)); l <= to; l += 1) asserting.add(l);
+  });
+  // Bracket depth before each test block (a block moved into a function, loop or branch).
+  const depthAt = new Int32Array(tokens.length + 1);
+  let depth = 0;
+  tokens.forEach((t, k) => {
+    if (t.kind === 'punct' && (t.text === ')' || t.text === ']' || t.text === '}')) depth -= 1;
+    depthAt[k] = depth;
+    if (t.kind === 'punct' && (t.text === '(' || t.text === '[' || t.text === '{')) depth += 1;
+  });
+  const blocks = parsed.blocks.map((b, i) => {
+    const parts = b.key.split('\u0000');
+    const start = (tests[i] as Call).start;
+    const prev = tokens[start - 1];
+    const lead =
+      prev === undefined || (prev.kind === 'punct' && [';', '{', '}'].includes(prev.text))
+        ? 'stmt'
+        : prev.kind === 'id' || prev.kind === 'punct'
+          ? prev.text
+          : prev.kind;
+    return {
+      pattern: b.pattern,
+      title: b.title,
+      describes: parts[1] ?? '',
+      text: parts.slice(2).join('\u0000'),
+      depth: depthAt[start] as number,
+      lead,
+    };
+  });
+  return { lines, masked, outside, asserting, out, ids, blocks };
+}
+
+/**
+ * Alignments of the tokens outside the blocks at the base (`a`) and the head (`b`), computed
+ * when asked for, in the order compareSupportFile tries them: for each head token the base token
+ * it is (-1: inserted); null when more than OUTSIDE_EDITS_MAX edits are needed. Line by line
+ * first (a line is its tokens; whole inserted lines stay whole), then token by token inside each
+ * run of changed lines; token by token over the file; the same from the end (a statement
+ * inserted before one that starts alike).
+ */
+function supportAlignments(
+  a: readonly OutsideToken[],
+  b: readonly OutsideToken[],
+): (() => Int32Array | null)[] {
+  const ta = a.map((t) => t.text);
+  const tb = b.map((t) => t.text);
+  const linesOf = (ts: readonly OutsideToken[]) => {
+    const out: { text: string[]; from: number; to: number }[] = [];
+    ts.forEach((t, k) => {
+      const last = out[out.length - 1];
+      if (last !== undefined && (ts[last.from] as OutsideToken).line === t.line) {
+        last.text.push(t.text);
+        last.to = k;
+      } else {
+        out.push({ text: [t.text], from: k, to: k });
+      }
+    });
+    return out.map((l) => ({ ...l, key: JSON.stringify(l.text) }));
+  };
+  const byLines = (): Int32Array | null => {
+    const la = linesOf(a);
+    const lb = linesOf(b);
+    const lm = alignUnits(
+      la.map((l) => l.key),
+      lb.map((l) => l.key),
+      OUTSIDE_EDITS_MAX,
+    );
+    if (lm === null) return null;
+    const out = new Int32Array(b.length).fill(-1);
+    let x0 = 0;
+    let y0 = 0;
+    /** Token by token, base tokens [af, at] against head tokens [bf, bt]. */
+    const tokens = (af: number, at: number, bf: number, bt: number): boolean => {
+      const r = alignUnits(ta.slice(af, at + 1), tb.slice(bf, bt + 1), OUTSIDE_EDITS_MAX);
+      if (r === null) return false;
+      r.matchB.forEach((i, j) => {
+        if (i >= 0) out[bf + j] = af + i;
+      });
+      return true;
+    };
+    /**
+     * The base lines [x0, x1) against the head lines [y0, y1): each base line, in order, in the
+     * first head line left whose tokens hold it as a subsequence (whole inserted lines stay
+     * whole; a line that gained tokens is aligned with itself); else token by token.
+     */
+    const run = (x1: number, y1: number): boolean => {
+      if (x0 >= x1 || y0 >= y1) return true;
+      const pairs: [number, number][] = [];
+      let y = y0;
+      for (let x = x0; x < x1 && pairs.length === x - x0; x += 1) {
+        const want = (la[x] as { text: string[] }).text;
+        for (; y < y1; y += 1) {
+          const have = (lb[y] as { text: string[] }).text;
+          let i = 0;
+          for (const t of have) if (i < want.length && t === want[i]) i += 1;
+          if (i === want.length) {
+            pairs.push([x, y]);
+            y += 1;
+            break;
+          }
+        }
+      }
+      if (pairs.length === x1 - x0) {
+        return pairs.every(([x, y]) => {
+          const l = la[x] as { from: number; to: number };
+          const m = lb[y] as { from: number; to: number };
+          return tokens(l.from, l.to, m.from, m.to);
+        });
+      }
+      const af = (la[x0] as { from: number }).from;
+      const at = (la[x1 - 1] as { to: number }).to;
+      const bf = (lb[y0] as { from: number }).from;
+      const bt = (lb[y1 - 1] as { to: number }).to;
+      return tokens(af, at, bf, bt);
+    };
+    for (let y = 0; y < lb.length; y += 1) {
+      const x = lm.matchB[y] as number;
+      if (x < 0) continue;
+      if (!run(x, y)) return null;
+      const from = (la[x] as { from: number }).from;
+      const line = lb[y] as { from: number; to: number };
+      for (let k = line.from; k <= line.to; k += 1) out[k] = from + (k - line.from);
+      x0 = x + 1;
+      y0 = y + 1;
+    }
+    return run(la.length, lb.length) ? out : null;
+  };
+  const byTokens = (): Int32Array | null => alignUnits(ta, tb, OUTSIDE_EDITS_MAX)?.matchB ?? null;
+  const fromEnd = (): Int32Array | null => {
+    const r = alignUnits([...ta].reverse(), [...tb].reverse(), OUTSIDE_EDITS_MAX);
+    if (r === null) return null;
+    const out = new Int32Array(tb.length).fill(-1);
+    r.matchB.forEach((i, j) => {
+      if (i >= 0) out[tb.length - 1 - j] = ta.length - 1 - i;
+    });
+    return out;
+  };
+  return [byLines, byTokens, fromEnd];
+}
+
+/** See the comment above ASSERTION_CALL (CT-06zzzzzi, D10-1662). */
+export function compareSupportFile(
+  base: string,
+  head: string,
+  names: readonly string[] = [],
+  headNames?: readonly (string | undefined)[],
+): SupportComparison {
+  let before: SupportView;
+  let after: SupportView;
+  try {
+    before = supportView(base);
+  } catch (err) {
+    return { ok: false, reason: `the file at the base cannot be read (${String(err)})` };
+  }
+  try {
+    after = supportView(head);
+  } catch (err) {
+    return { ok: false, reason: `the file at the head cannot be read (${String(err)})` };
+  }
+  const blocks: string[] = [];
+  if (before.blocks.length !== after.blocks.length) {
+    blocks.push(
+      `the file has ${after.blocks.length} test block(s), at the base ${before.blocks.length}: a test was added or removed (a file-level support entry covers only the code outside the test blocks)`,
+    );
+  } else {
+    after.blocks.forEach((y, i) => {
+      const x = before.blocks[i] as SupportView['blocks'][number];
+      if (x.describes !== y.describes || x.depth !== y.depth || x.lead !== y.lead) {
+        blocks.push(
+          `test block ${i + 1} ("${y.title}") moved (its describes, the brackets around it or what stands right before it differ from the base: into or out of a describe, function, loop or branch)`,
+        );
+        return;
+      }
+      const declared = names.some(
+        (name, k) => x.pattern.test(name) && y.pattern.test(headNames?.[k] ?? name),
+      );
+      if (!declared && x.text !== y.text) {
+        blocks.push(
+          `test block ${i + 1} ("${y.title}") is not declared and differs from the base (a file-level support entry never covers a changed block: declare it with a block entry)`,
+        );
+      }
+    });
+  }
+  // Round 3 / 4 (whitelist A): the first alignment showing a pure insertion of allowed tokens,
+  // else the problems of the first one (the first without a removed token when there is one).
+  let chosen: { matchB: Int32Array; tokens: TokenProblem[] } | null = null;
+  for (const align of supportAlignments(before.out, after.out)) {
+    const matchB = align();
+    if (matchB === null) continue;
+    const tokens = judgeInsertions(before.out, after.out, matchB, before.ids);
+    const removal = tokens.some((p) => p.side === 'base');
+    if (tokens.length === 0) {
+      chosen = { matchB, tokens };
+      break;
+    }
+    if (chosen === null || (chosen.tokens.some((p) => p.side === 'base') && !removal)) {
+      chosen = { matchB, tokens };
+    }
+  }
+  if (chosen === null) {
+    return {
+      ok: false,
+      reason: `more than ${OUTSIDE_EDITS_MAX} lines or tokens changed outside the blocks: too many to judge`,
+    };
+  }
+  // The base lines of removed or changed tokens that hold an assertion (the round 2 wording).
+  const kept = new Uint8Array(before.out.length);
+  for (const i of chosen.matchB) if (i >= 0) kept[i] = 1;
+  const removedLines = new Set<number>();
+  before.out.forEach((t, i) => {
+    if (kept[i] !== 1) removedLines.add(t.line - 1);
+  });
+  const hit = (view: SupportView, l: number): boolean =>
+    view.outside[l] === true &&
+    (ASSERTION_CALL.test(view.masked[l] ?? '') ||
+      ASSERTION_NAME.test(view.masked[l] ?? '') ||
+      ASSERTION_HELPER_CALL.test(view.masked[l] ?? '') ||
+      view.asserting.has(l));
+  const assertions: SupportLine[] = [...removedLines]
+    .sort((p, q) => p - q)
+    .filter((l) => hit(before, l))
+    .map((l) => ({ side: 'base', line: l + 1, text: before.lines[l] as string }));
+  return { ok: true, changed: base !== head, blocks, assertions, tokens: chosen.tokens };
+}
+
+/** "base line 26: `…`; head line 20: `…`" for a refusal (CT-06zzzzzi). */
+export function supportLinesText(lines: readonly SupportLine[]): string {
+  return lines
+    .map((l) => `${l.side} line ${l.line}: \`${l.text.trim().slice(0, 120)}\``)
+    .join('; ');
+}
+
+/** The number of token problems supportTokensText names; the rest are counted. */
+export const SUPPORT_TOKENS_SHOWN = 8;
+
+/** "base line 26: `0` removed or changed …; head line 31: control flow `if` inserted" (CT-06zzzzzi). */
+export function supportTokensText(problems: readonly TokenProblem[]): string {
+  const shown = problems
+    .slice(0, SUPPORT_TOKENS_SHOWN)
+    .map((p) => `${p.side} line ${p.line}: ${p.reason}`);
+  const more = problems.length - SUPPORT_TOKENS_SHOWN;
+  return more > 0 ? `${shown.join('; ')}; and ${more} more` : shown.join('; ');
 }
 
 /**

@@ -16,7 +16,7 @@ import {
 } from '../lib/codex-impl-tasks.ts';
 import { loadLegacyTasks, needsTestPaths } from '../lib/legacy-tasks.ts';
 import { repoRoot } from '../lib/paths.ts';
-import { listTaskIds, parseTaskFile } from '../lib/task-file.ts';
+import { isSupportEntry, listTaskIds, parseTaskFile } from '../lib/task-file.ts';
 import type { TaskFile } from '../lib/task-file.ts';
 import { assertTaskId, CheckError, runGuard, runMain, TASK_ID, UsageError } from './cli.ts';
 import { globsMayOverlap, literalPrefix } from './overlap.ts';
@@ -560,8 +560,14 @@ export function checkTask(id: string, opts: CheckOptions = {}): string[] {
     } catch (err) {
       problems.push(`modify_existing: ${err instanceof Error ? err.message : String(err)}`);
     }
+    // CT-06zzzzzi (D10-1662 ①): a file named only by file-level support entries (scope: support)
+    // may be a shared fixture or helper (not *.test.ts); its directory is checked by
+    // parseTaskFile, and it still lies in the scope, is class 1 and exists at the base.
+    const blockFiles = new Set(
+      task.modify_existing.filter((d) => !isSupportEntry(d)).map((d) => d.file),
+    );
     for (const file of new Set(task.modify_existing.map((d) => d.file))) {
-      if (!RULE_TEST_FILE.test(file)) {
+      if (blockFiles.has(file) && !RULE_TEST_FILE.test(file)) {
         problems.push(`modify_existing: "${file}" is not a rule-test file (*.test.ts)`);
       } else if (!matchesAny(file, scope)) {
         problems.push(`modify_existing: "${file}" is not inside the task's ${scopeName}`);

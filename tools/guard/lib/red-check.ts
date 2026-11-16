@@ -259,10 +259,12 @@
 // the old-named test is judged as any other.
 import { matchesAny } from '../../lib/glob.ts';
 import type { Change } from '../../lib/git.ts';
-import { RED_EXEMPT_REASON_MIN } from '../../lib/task-file.ts';
+import { RED_EXEMPT_REASON_MIN, blockEntries, supportEntries } from '../../lib/task-file.ts';
 import type {
   ExpectedValueDeclaration,
+  ModifyExistingBlockDeclaration,
   ModifyExistingDeclaration,
+  ModifyExistingSupportDeclaration,
   RedExemptDeclaration,
   RedExemptOutsideDeclaration,
   RedExemptRowDeclaration,
@@ -723,8 +725,11 @@ export type ModifiedOnly = { file: string; tests: string[] };
 export function modifiedOnlyFiles(
   files: readonly string[],
   read: Pick<BaselineReader, 'base' | 'head'>,
-  modified: readonly ModifyExistingDeclaration[],
+  declarations: readonly ModifyExistingDeclaration[],
 ): ModifiedOnly[] {
+  // CT-06zzzzzi (D10-1662): file-level support entries leave no file out (a file with one keeps
+  // being judged as before, by its block entries alone).
+  const modified = blockEntries(declarations);
   if (modified.length === 0) return [];
   const listed = new Set(modified.map((d) => d.file));
   const out: ModifiedOnly[] = [];
@@ -755,12 +760,30 @@ export function modifiedOnlyFiles(
  * test's exemption note, never for a red test or another reason; a ruling_correction test
  * (CT-06zzzzzh, D10-1580) gets the same kind of line, naming overturned → ruling and basis.
  */
-function ruleChangeGreenNote(file: string, name: string, d: ModifyExistingDeclaration): string {
+function ruleChangeGreenNote(
+  file: string,
+  name: string,
+  d: ModifyExistingBlockDeclaration,
+): string {
   // CT-06zzzzzh (D10-1580): a ruling_correction test follows the later ruling; the line names the
   // overturned and the overturning ruling and the basis instead of br.
   if (d.reason === 'ruling_correction')
     return `${file} > ${name}: ATTENTION ruling_correction (${d.overturned ?? ''} → ${d.ruling}; basis: ${d.basis ?? ''}) is green on the old code: check that the rewrite really follows the later ruling (a test that follows an overturning ruling is usually red on the old implementation; the verdict is unchanged)`;
   return `${file} > ${name}: ATTENTION rule_change (br: ${(d.br ?? []).join(', ')}; ${d.ruling}) is green on the old code: check that the rewrite really follows the changed rule (a test that follows a changed BR is usually red on the old implementation; the verdict is unchanged)`;
+}
+
+/**
+ * The note that lists a file-level support entry of modify_existing (CT-06zzzzzi, D10-1662 ⑤),
+ * one line per entry, as red_exempt_outside files are listed: not a test of the red run.
+ */
+export function supportEntryNote(d: ModifyExistingSupportDeclaration): string {
+  const why =
+    d.reason === 'rule_change'
+      ? `br: ${(d.br ?? []).join(', ')}`
+      : d.reason === 'ruling_correction'
+        ? `${d.overturned ?? ''} → ${d.ruling}; basis: ${d.basis ?? ''}`
+        : d.reason;
+  return `${d.file}: declared in modify_existing with scope: support (CT-06zzzzzi / D10-1662; reason ${d.reason}, ${why}; ${d.ruling}): a file-level support entry, not a test of the red run (not run, not judged, the red verdict is the other tests'); evidence-check lets its changes outside the test blocks through only with the owner's approval label, no assertion line among them, and the record of the file (before / after sha256, reverse_red)`;
 }
 
 /** The note that says a file was left out by modify_existing (CT-06zzzg, D10-701). */
@@ -788,8 +811,10 @@ export function ruleTestBaselines(
   expectedValues: readonly ExpectedValueDeclaration[] = [],
   outside: readonly RedExemptOutsideDeclaration[] = [],
   rowsDeclared: readonly RedExemptRowDeclaration[] = [],
-  modified: readonly ModifyExistingDeclaration[] = [],
+  declarations: readonly ModifyExistingDeclaration[] = [],
 ): Map<string, RuleTestBaseline> {
+  // CT-06zzzzzi (D10-1662): only block entries name blocks; support entries are not compared here.
+  const modified = blockEntries(declarations);
   const out = new Map<string, RuleTestBaseline>();
   const support = new Set<string>();
   for (const c of changes) {
@@ -1476,10 +1501,13 @@ export function checkRedReports(
   baselines?: ReadonlyMap<string, RuleTestBaseline>,
   declared: readonly RedExemptDeclaration[] = [],
   rows: readonly RedExemptRowDeclaration[] = [],
-  modified: readonly ModifyExistingDeclaration[] = [],
+  declarations: readonly ModifyExistingDeclaration[] = [],
   /** CT-06zzzg: files left out by modifiedOnlyFiles (their entries are not redundant). */
   modifiedLeftOut: readonly string[] = [],
 ): RedResult {
+  // CT-06zzzzzi (D10-1662 ⑤): file-level support entries are no tests of the red run: they are
+  // neither run, judged nor redundant here, and only listed in the notes (supportEntryNote).
+  const modified = blockEntries(declarations);
   const problems: RedProblem[] = [];
   const red: string[] = [];
   const notes: string[] = [];
@@ -1491,7 +1519,7 @@ export function checkRedReports(
   // Declarations that named an expected file (the others are said in the notes at the end).
   const declaredSeen = new Set<RedExemptDeclaration>();
   const rowsSeen = new Set<RedExemptRowDeclaration>();
-  const modifiedSeen = new Set<ModifyExistingDeclaration>();
+  const modifiedSeen = new Set<ModifyExistingBlockDeclaration>();
   const modifiedConfirmation =
     "evidence-check requires the owner's approval label on the PR head and the block before and after (evidence modify_existing)";
   const prefix = root.endsWith('/') ? root : `${root}/`;
@@ -1671,8 +1699,8 @@ export function checkRedReports(
     // CT-06zzze: the blocks a kept-row declaration is judged against (kind tests or support).
     const compared = blocks ?? declarable;
     // CT-06zzzg (D10-701): the declared changed frozen tests that may pass green here.
-    const modifiable = new Map<string, ModifyExistingDeclaration>();
-    const modifiedMatched = new Set<ModifyExistingDeclaration>();
+    const modifiable = new Map<string, ModifyExistingBlockDeclaration>();
+    const modifiedMatched = new Set<ModifyExistingBlockDeclaration>();
     if (compared !== null && modifiedHere.length > 0) {
       const result = baseline?.modified;
       if (result === undefined) {
@@ -1745,7 +1773,7 @@ export function checkRedReports(
         }
       }
       // CT-06zzzg (D10-701): a declared changed frozen test (its block located and changed).
-      let modifiedEntry: ModifyExistingDeclaration | null = null;
+      let modifiedEntry: ModifyExistingBlockDeclaration | null = null;
       if (!unchanged && fullName !== '') {
         const d = modifiable.get(fullName);
         if (d !== undefined) {
@@ -1908,6 +1936,7 @@ export function checkRedReports(
       }
     }
   }
+  for (const d of supportEntries(declarations)) notes.push(supportEntryNote(d));
   return {
     ok: problems.length === 0,
     red,

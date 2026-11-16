@@ -13,10 +13,14 @@ import {
   RENAME_CONTENT_MIN,
   RENAMES_MAX,
   RULING_CORRECTION_BASIS_PREFIXES,
+  SUPPORT_ENTRY_DIRS,
+  blockEntries,
   isMoneyOrAttributionTest,
+  isSupportEntry,
   listTaskIds,
   loadTask,
   parseTaskFile,
+  supportEntries,
 } from './task-file.ts';
 
 const EXAMPLE = [
@@ -1850,4 +1854,93 @@ it('[CT-06zzzzzh] parseTaskFile refuses the ledger whole when a ruling_correctio
   ).toBe('');
   // The allowed example: the events storage test.
   expect(messageOf(rcDeclared(rcEntry(RC_TEST)), 'B2-02a.yaml')).toBe('');
+});
+
+// CT-06zzzzzi (D10-1662): a file-level support entry of modify_existing (no test, scope: support)
+// for a frozen shared fixture or top-level helper; the rule tests are test/spec/ci/
+// modify-existing-support/. These cases pin the split helpers and the block path left as before.
+const SUP_FILE = 'test/spec/identity/step-up/http-kit.ts';
+const supEntry = (fields: Record<string, string> = {}): string => {
+  const all: Record<string, string> = {
+    file: SUP_FILE,
+    scope: 'support',
+    reason: 'rule_change',
+    br: '[BR-FUND-13]',
+    ruling: 'D10-1662',
+    note: "'共用夹具补摘要参数，不动断言'",
+    ...fields,
+  };
+  const lines = Object.entries(all)
+    .filter(([, v]) => v !== '')
+    .map(([k, v], i) => `${i === 0 ? '  - ' : '    '}${k}: ${v}`);
+  return `\n${lines.join('\n')}`;
+};
+
+it('[CT-06zzzzzi] isSupportEntry, blockEntries and supportEntries split a parsed modify_existing list in ledger order', () => {
+  expect([...SUPPORT_ENTRY_DIRS]).toEqual(['test/spec/', 'test/properties/', 'test/replay/']);
+  const text = rcDeclared(
+    supEntry() +
+      rcEntry(RC_TEST) +
+      supEntry({ file: 'test/spec/identity/reverify/kit.ts', reason: 'tighten_only', br: '' }),
+  );
+  expect(messageOf(text, 'B2-02a.yaml')).toBe('');
+  const list = parseTaskFile(text, 'B2-02a.yaml').modify_existing;
+  expect(list.map(isSupportEntry)).toEqual([true, false, true]);
+  expect(blockEntries(list).map((d) => d.test)).toEqual([RC_TEST]);
+  expect(supportEntries(list).map((d) => d.file)).toEqual([
+    SUP_FILE,
+    'test/spec/identity/reverify/kit.ts',
+  ]);
+  expect(list[0]).toEqual({
+    file: SUP_FILE,
+    scope: 'support',
+    reason: 'rule_change',
+    br: ['BR-FUND-13'],
+    ruling: 'D10-1662',
+    note: '共用夹具补摘要参数，不动断言',
+  });
+  expect(list[2]).toEqual({
+    file: 'test/spec/identity/reverify/kit.ts',
+    scope: 'support',
+    reason: 'tighten_only',
+    ruling: 'D10-1662',
+    note: '共用夹具补摘要参数，不动断言',
+  });
+});
+
+it('[CT-06zzzzzi] a support entry: scope only support, no test or retitle_to, a file under test/spec, test/properties or test/replay, one per file; br outside refs refused as for a block entry', () => {
+  const at = (fields: Record<string, string>, field: string): string[] =>
+    rcLines(messageOf(rcDeclared(supEntry(fields)), 'B2-02a.yaml'), 0, field);
+  expect(at({ scope: 'Support' }, 'scope')).toHaveLength(1);
+  expect(at({ scope: "''" }, 'scope')).toHaveLength(1);
+  expect(at({ retitle_to: "'[AC-1] b'" }, 'retitle_to')).toHaveLength(1);
+  expect(at({ file: 'test/acceptance/kit.ts' }, 'file')[0]).toContain('test/acceptance/kit.ts');
+  expect(at({ file: 'test/spec' }, 'file')).toHaveLength(1);
+  expect(at({ br: '[BR-FUND-99]' }, 'br')[0]).toContain('BR-FUND-99 not in the task');
+  const both = messageOf(rcDeclared(supEntry({ test: "'[AC-1] a'" })), 'B2-02a.yaml');
+  expect(both).toContain('modify_existing[0]: has both test and scope');
+  // Not "unknown field" for test / scope / retitle_to of a support entry: said once, as above.
+  expect(both).not.toContain('.test: unknown field');
+  expect(messageOf(rcDeclared(supEntry() + supEntry()), 'B2-02a.yaml')).toContain(
+    `modify_existing[1]: "${SUP_FILE}" has a second file-level support entry`,
+  );
+  // A money or attribution file: rule_change only (tighten_only on .reason).
+  const money = messageOf(
+    rcDeclared(supEntry({ file: 'test/spec/payout/kit.ts', reason: 'tighten_only', br: '' })),
+    'B2-02a.yaml',
+  );
+  expect(rcLines(money, 0, 'reason')[0]).toContain('money or attribution test');
+  expect(messageOf(rcDeclared(supEntry({ file: 'test/spec/payout/kit.ts' })), 'B2-02a.yaml')).toBe(
+    '',
+  );
+});
+
+it('[CT-06zzzzzi] without scope an entry is a block entry exactly as before: no test is refused on .test, scope is no field of it', () => {
+  const noTest = messageOf(rcDeclared(rcEntry(RC_TEST, { test: '' })), 'B2-02a.yaml');
+  expect(rcLines(noTest, 0, 'test')).toEqual([
+    "  - modify_existing[0].test: must be the test's full name (non-empty)",
+  ]);
+  const parsed = parseTaskFile(rcDeclared(rcEntry(RC_TEST)), 'B2-02a.yaml').modify_existing;
+  expect(parsed.map(isSupportEntry)).toEqual([false]);
+  expect(Object.keys(parsed[0] ?? {})).not.toContain('scope');
 });
