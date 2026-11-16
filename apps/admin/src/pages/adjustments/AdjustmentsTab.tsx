@@ -1,5 +1,7 @@
-// 「调账单」页签（adminListAdjustments，只读）：状态 / 原因 / 用户 ID 筛选（契约只有这三项，AND），
-// 页码分页，行【详情】打开调账单详情抽屉（adminGetAdjustment）。不出现新建、红冲、批准、驳回入口。
+// 「调账单」页签（adminListAdjustments）：状态 / 原因 / 用户 ID 筛选（契约只有这三项，AND），页码分页，
+// 行【详情】打开调账单详情抽屉（adminGetAdjustment）。持 fund.adjust 时已生效、非红冲单、未被红冲的行与
+// 详情另有【红冲】（F1-08cb，ReverseDialog）；成功或 20902 后列表与打开着的详情重新读取，提示交给页面。
+// 页面的 `version` 变了（新建调账生效）也重新读取。批准、驳回入口留给 F1-08cc。
 import { ReloadOutlined } from '@ant-design/icons';
 import {
   Button,
@@ -18,9 +20,11 @@ import {
   type TablePaginationConfig,
 } from 'antd';
 import { useId, useState, type ReactElement } from 'react';
+import { plannedButtonProps } from '../../components/planned/index.ts';
 import { delayedLoading, useLoadingClock } from '../../motion.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
 import { DetailDrawer, type DetailState } from './DetailDrawer.tsx';
+import { ReverseDialog } from './ReverseDialog.tsx';
 import {
   ADJUSTMENTS_URL,
   EMPTY_DRAFT,
@@ -46,10 +50,38 @@ import {
   type ReasonCode,
 } from './model.ts';
 import { useRead } from './useRead.ts';
+import { reversible, type Executed } from './write.ts';
 
 const t = adjustmentsTexts.adjustments;
 
-export function AdjustmentsTab(): ReactElement {
+/** A prompt of the page after a write (success, or the original reversed meanwhile). */
+export interface Notice {
+  readonly type: 'success' | 'warning';
+  readonly text: string;
+}
+
+export interface AdjustmentsTabProps {
+  /** fund.adjust: 【红冲】 entries. */
+  readonly canAdjust: boolean;
+  /** adminCreateAdjustment is still planned: the entries are greyed out. */
+  readonly planned: boolean;
+  /** Bumped by the page after a write: the list (and an open detail) is read again. */
+  readonly version: number;
+  readonly onNotice: (notice: Notice) => void;
+}
+
+interface Reversal {
+  readonly item: Adjustment;
+  /** The 【红冲】 that opened the dialog (focus goes back to it on cancel). */
+  readonly trigger: HTMLElement;
+}
+
+export function AdjustmentsTab({
+  canAdjust,
+  planned,
+  version,
+  onNotice,
+}: AdjustmentsTabProps): ReactElement {
   const loadingClock = useLoadingClock();
   const { token } = theme.useToken();
   const ids = { status: useId(), reason: useId(), user: useId() };
@@ -61,15 +93,46 @@ export function AdjustmentsTab(): ReactElement {
   const [target, setTarget] = useState<string>();
   /** Bumped on every open and retry of the drawer: each one is a new read. */
   const [detailAttempt, setDetailAttempt] = useState(0);
+  /** The open reversal dialog (undefined: closed). */
+  const [reversal, setReversal] = useState<Reversal>();
 
-  const list = useRead<AdjustmentPage>(ADJUSTMENTS_URL, adjustmentsQuery(filters, page), attempt);
+  // Both reads are also repeated whenever the page bumps `version` (attempt + version grows).
+  const list = useRead<AdjustmentPage>(
+    ADJUSTMENTS_URL,
+    adjustmentsQuery(filters, page),
+    attempt + version,
+  );
   const detail = useRead<AdjustmentDetail>(
     target === undefined ? undefined : adjustmentUrl(target),
     undefined,
-    detailAttempt,
+    detailAttempt + version,
   );
 
   const reload = () => setAttempt((value) => value + 1);
+  /** After a reversal (or a 20902): the list and the open detail are read again. */
+  const refresh = () => {
+    reload();
+    setDetailAttempt((value) => value + 1);
+  };
+  const openReverse = (item: Adjustment, trigger: HTMLElement) => setReversal({ item, trigger });
+  const cancelReverse = () => {
+    const trigger = reversal?.trigger;
+    setReversal(undefined);
+    if (trigger?.isConnected === true) trigger.focus();
+  };
+  const reversed = (executed: Executed) => {
+    setReversal(undefined);
+    onNotice({
+      type: 'success',
+      text: adjustmentsTexts.write.reversed(executed.adjustment.adjust_id),
+    });
+    refresh();
+  };
+  const stale = () => {
+    setReversal(undefined);
+    onNotice({ type: 'warning', text: adjustmentsTexts.write.errors.alreadyReversed });
+    refresh();
+  };
   const openForm = (adjustId: string) => {
     setTarget(adjustId);
     setDetailAttempt((value) => value + 1);
@@ -162,14 +225,28 @@ export function AdjustmentsTab(): ReactElement {
       title: c.actions,
       fixed: 'right',
       render: (_, row) => (
-        <Button
-          type="link"
-          size="small"
-          autoInsertSpace={false}
-          onClick={() => openForm(row.adjust_id)}
-        >
-          {t.detailEntry}
-        </Button>
+        <Flex gap={4} wrap={false}>
+          <Button
+            type="link"
+            size="small"
+            autoInsertSpace={false}
+            onClick={() => openForm(row.adjust_id)}
+          >
+            {t.detailEntry}
+          </Button>
+          {canAdjust && reversible(row) ? (
+            <Button
+              type="link"
+              size="small"
+              danger
+              autoInsertSpace={false}
+              {...plannedButtonProps(planned)}
+              onClick={(event) => openReverse(row, event.currentTarget)}
+            >
+              {t.reverseEntry}
+            </Button>
+          ) : null}
+        </Flex>
       ),
     },
   ];
@@ -307,7 +384,19 @@ export function AdjustmentsTab(): ReactElement {
         onClose={() => setTarget(undefined)}
         onRetry={() => setDetailAttempt((value) => value + 1)}
         onOpenForm={openForm}
+        {...(canAdjust ? { onReverse: openReverse } : {})}
+        planned={planned}
       />
+      {reversal === undefined ? null : (
+        <ReverseDialog
+          key={reversal.item.adjust_id}
+          item={reversal.item}
+          planned={planned}
+          onClose={cancelReverse}
+          onReversed={reversed}
+          onStale={stale}
+        />
+      )}
     </Flex>
   );
 }

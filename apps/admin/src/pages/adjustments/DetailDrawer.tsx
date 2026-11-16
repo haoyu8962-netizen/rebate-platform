@@ -1,10 +1,11 @@
 // 调账单详情抽屉（adminGetAdjustment，只读）：单号、用户、方向、金额、原因与状态（后台字典名）、对方科目
 // （连同 contra_platform）、说明、凭证、原调账单 / 红冲单（链接，点开在同一抽屉里读那张单）、创建与审核、
-// 驳回原因；关联单据逐行；reversed_by_adjust_id 有值时另有「已红冲」标记（不是状态）。不提供任何写入口；
-// balance_preview 留给批准与红冲（F1-08cb / cc）。
+// 驳回原因；关联单据逐行；reversed_by_adjust_id 有值时另有「已红冲」标记（不是状态）。持 fund.adjust 时
+// 已生效、非红冲单、未被红冲的单另有【红冲】（F1-08cb，对话框由页签打开）；批准 / 驳回留给 F1-08cc。
 import { Button, Descriptions, Drawer, Flex, Result, Table, Tag, Typography, theme } from 'antd';
 import type { ReactElement, ReactNode } from 'react';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
+import { plannedButtonProps } from '../../components/planned/index.ts';
 import {
   beijingTime,
   directionLabel,
@@ -15,6 +16,7 @@ import {
   subjectLabel,
   type Adjustment,
 } from './model.ts';
+import { reversible } from './write.ts';
 
 const t = adjustmentsTexts.detail;
 const f = t.fields;
@@ -33,6 +35,10 @@ export interface DetailDrawerProps {
   readonly onRetry: () => void;
   /** Opens another form (原调账单 / 红冲单) in this drawer. */
   readonly onOpenForm: (adjustId: string) => void;
+  /** 【红冲】 of a reversible form (undefined: no fund.adjust, no entry). */
+  readonly onReverse?: (item: Adjustment, trigger: HTMLElement) => void;
+  /** adminCreateAdjustment is still planned: 【红冲】 is greyed out. */
+  readonly planned?: boolean;
 }
 
 type Ref = Adjustment['refs'][number];
@@ -43,6 +49,8 @@ export function DetailDrawer({
   onClose,
   onRetry,
   onOpenForm,
+  onReverse,
+  planned = false,
 }: DetailDrawerProps): ReactElement {
   const { token } = theme.useToken();
   const code = { fontFamily: token.fontFamilyCode, wordBreak: 'break-all' } as const;
@@ -88,6 +96,7 @@ export function DetailDrawer({
     );
   } else {
     const item = state.data;
+    const reverse = onReverse !== undefined && reversible(item);
     body = (
       <Flex vertical gap={16}>
         {item.reversed_by_adjust_id === null ? null : (
@@ -97,6 +106,18 @@ export function DetailDrawer({
             </Tag>
           </Flex>
         )}
+        {reverse ? (
+          <Flex justify="flex-end">
+            <Button
+              danger
+              autoInsertSpace={false}
+              {...plannedButtonProps(planned)}
+              onClick={(event) => onReverse?.(item, event.currentTarget)}
+            >
+              {adjustmentsTexts.adjustments.reverseEntry}
+            </Button>
+          </Flex>
+        ) : null}
         <Descriptions
           bordered
           size="small"
