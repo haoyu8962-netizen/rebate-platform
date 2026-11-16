@@ -228,6 +228,18 @@ const RULES: readonly ActionRule[] = Object.freeze([
   ...rules(['agent_trace_view'], 'agent_session', 'agent_sessions:', fixed('agent.trace')),
   // agent (D1 second part, not yet written): marking an AI report handled, target the message.
   ...rules(['agent_report_handle'], 'agent_message', 'agent_messages:', fixed('agent.report')),
+  // risk (admin-appeals-write.ts, admin-appeals-read.ts; D10-1759): all five under risk.appeal,
+  // the blocklist removal of a revocation included. Target the bare appeal / app.blocklist id;
+  // blocked_request_lookup stores no target, so its object derives null and no target_type /
+  // target_id filter matches it (both need a non-null stored target); only its point is derived.
+  ...rules(
+    ['appeal_register', 'appeal_claim', 'appeal_resolve'],
+    'appeal',
+    null,
+    fixed('risk.appeal'),
+  ),
+  ...rules(['blocklist_remove'], 'blocklist', null, fixed('risk.appeal')),
+  ...rules(['blocked_request_lookup'], 'blocked_request', null, fixed('risk.appeal')),
 ]);
 
 const BY_ACTION: ReadonlyMap<string, ActionRule> = new Map(

@@ -1,0 +1,76 @@
+{
+  "risk_note": "B1-34r (admin audit view, D10-1759 / D10-1760; RV2 by path). Only apps/api/src/modules/admin/domain/audit-log-view.ts RULES gains three rows: appeal_register / appeal_claim / appeal_resolve -> targetType 'appeal', prefix null (writers in risk/application/admin-appeals-write.ts store the bare appealId), permission risk.appeal; blocklist_remove -> 'blocklist', null (bare app.blocklist id), risk.appeal; blocked_request_lookup -> placeholder targetType 'blocked_request' with prefix null: admin-appeals-read.ts writes target null, so deriveAudit reads the object as null and no target_type / target_id filter matches it (the target condition needs l.target is not null); only the permission risk.appeal is derived. risk.appeal is the PERMISSION of both appeals controllers and a valid AdminPermission. No write-side change (D10-1760); the lookup already records phone_masked in after. Rule tests (independent Claude): 5 cases in test/spec/admin/audit-view-appeal/** ; red/1 PASS 5/5 on the trusted root be2cand; one unused variable (user2, eslint no-unused-vars) removed from the rule test by a fresh independent Claude (test attempt 2) and folded into the rule-test commit. Test machine: test/spec/admin 85 files 827 tests green; verify:fast green (B1-34r/run2).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Fresh independent Claude via claude-run.sh: money full review r1 pass, no findings (couli-runs/B1-34r/review-money-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "r1 fail with one S1 that was a process slip, not a test defect (the implementation was in the worktree before the rule-test commit, so red could not be shown); the implementation was moved out, r2 pass with no findings (couli-runs/B1-34r/review-r1.json, review-r2.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/admin/audit-view-appeal/appeal-actions.int.test.ts > [AC-B1-34r#1] 申诉登记、领取、处理与解除黑名单：列表与详情读出 appeal / blocklist、存的裸 id 与 risk.appeal",
+    "test/spec/admin/audit-view-appeal/appeal-actions.int.test.ts > [AC-B1-34r#2] 按 target_type=appeal 只出三个申诉动作、按 blocklist 只出解除黑名单，彼此不串、近似类型不命中",
+    "test/spec/admin/audit-view-appeal/appeal-actions.int.test.ts > [AC-B1-34r#3] 按 target_id 精确查到申诉与黑名单条目的行；带前缀、截断或改大小写的 id 不命中",
+    "test/spec/admin/audit-view-appeal/appeal-actions.int.test.ts > [AC-B1-34r#4] blocked_request_lookup 读出权限 risk.appeal、对象为 null，按任何 target_type / target_id 都筛不到它",
+    "test/spec/admin/audit-view-appeal/appeal-actions.int.test.ts > [AC-B1-34r#5] 历史可查：登记前写下的申诉审计行（直接在表里）读时就推出对象与权限，读取不改表"
+  ],
+  "task": "B1-34r",
+  "spec_commit": "4137935c20b683184f89ac90603d4a4b7509517a",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "4137935c20b683184f89ac90603d4a4b7509517a",
+      "tree": "ce7d06effc008f2f1cd0b70bf0d1772c8fd1adbc",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-16T12:51:03Z",
+      "finished_at": "2026-11-16T12:51:17Z",
+      "red_tests": [
+        "test/spec/admin/audit-view-appeal/appeal-actions.int.test.ts > [AC-B1-34r#1] 申诉登记、领取、处理与解除黑名单：列表与详情读出 appeal / blocklist、存的裸 id 与 risk.appeal",
+        "test/spec/admin/audit-view-appeal/appeal-actions.int.test.ts > [AC-B1-34r#2] 按 target_type=appeal 只出三个申诉动作、按 blocklist 只出解除黑名单，彼此不串、近似类型不命中",
+        "test/spec/admin/audit-view-appeal/appeal-actions.int.test.ts > [AC-B1-34r#3] 按 target_id 精确查到申诉与黑名单条目的行；带前缀、截断或改大小写的 id 不命中",
+        "test/spec/admin/audit-view-appeal/appeal-actions.int.test.ts > [AC-B1-34r#4] blocked_request_lookup 读出权限 risk.appeal、对象为 null，按任何 target_type / target_id 都筛不到它",
+        "test/spec/admin/audit-view-appeal/appeal-actions.int.test.ts > [AC-B1-34r#5] 历史可查：登记前写下的申诉审计行（直接在表里）读时就推出对象与权限，读取不改表"
+      ],
+      "expected": ["test/spec/admin/audit-view-appeal/appeal-actions.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "649043a63e16bd62c00059ad6affd7a4061f2b6b3b3762227c52ebd616cdb327"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "e7e3582e813c47fe328b0690f4641781a00e23a7",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
