@@ -88,6 +88,33 @@ export const TEXT = {
   /** Success prompts (the new adjust_id of the response). */
   created: (adjustId: string): string => `调账已生效，调账单号 ${adjustId}`,
   reversed: (adjustId: string): string => `红冲已生效，红冲单号 ${adjustId}`,
+  /**
+   * The whole success prompt of a new adjustment (编排 D10-1732, BR-FUND-24 ④): three lines, each
+   * an element of its own inside one prompt — the line with the new adjust_id, then
+   * `available_before_fen` and `available_after_fen` of the response (AdminAdjustmentExecuted),
+   * each through @couli/money (a negative after is shown as the negative it is).
+   */
+  createdPrompt: (adjustId: string, before: string, after: string): readonly string[] => [
+    `调账已生效，调账单号 ${adjustId}`,
+    `调账前可用余额：${before}`,
+    `调账后可用余额：${after}`,
+  ],
+  /** The whole success prompt of a reversal (the same response schema, the reversal's labels). */
+  reversedPrompt: (adjustId: string, before: string, after: string): readonly string[] => [
+    `红冲已生效，红冲单号 ${adjustId}`,
+    `红冲前可用余额：${before}`,
+    `红冲后可用余额：${after}`,
+  ],
+  /**
+   * 编排 D10-1731: a submission that got no reply in the unified envelope (a network error, a
+   * reply that cannot be parsed) may have taken effect. The drawer / dialog then shows this notice,
+   * locks every input and offers only 【重试】 (the same Idempotency-Key and the same body) and
+   * 【去列表核对】 (close and refresh the list).
+   */
+  unknown:
+    '上次提交结果未知：可能已经生效。请按【重试】用原内容原样重新提交（不会重复记账），或按【去列表核对】查看是否已生效。',
+  retry: '重试',
+  check: '去列表核对',
 } as const;
 
 /** Labels of the drawer's controls (direction is a radio group of 调增 / 调减). */
@@ -320,6 +347,17 @@ export function stillRunning(): Response {
 export function conflict(): Response {
   return failure(20901, undefined, '幂等键冲突');
 }
+/** A gateway page instead of the unified envelope (the write did not reach the service). */
+export function unparsable(): Response {
+  return new Response('<html><body><h1>502 Bad Gateway</h1></body></html>', {
+    status: 502,
+    headers: { 'Content-Type': 'text/html' },
+  });
+}
+/** The connection drops before any reply (a write it answers did not reach the service). */
+export function networkDown(): Promise<Response> {
+  return Promise.reject(new TypeError('Failed to fetch'));
+}
 
 // ---- fake server ---------------------------------------------------------------------------
 
@@ -484,6 +522,10 @@ export function createWriteServer(options: WriteServerOptions = {}) {
   const forms: Adjustment[] = structuredClone([...adjustments(), ...(options.extra ?? [])]);
   const candidates = structuredClone(writeoffs());
   const log: RequestLog[] = [];
+  /** The body of each request exactly as sent (for byte-for-byte comparisons). */
+  const raws = new WeakMap<RequestLog, string>();
+  /** The writes that passed the permission and step-up checks (reached the body checks). */
+  const admitted = new WeakSet<RequestLog>();
   const overrides: { method: string; path: string; when: When | undefined; reply: Reply }[] = [];
   const permissions: Grants = options.permissions ?? ['fund.adjust'];
   const verifyPhone = options.verifyPhone ?? true;
@@ -655,6 +697,7 @@ export function createWriteServer(options: WriteServerOptions = {}) {
     const pass = request.headers.get('X-Step-Up-Token');
     if (pass === null || !passes.has(pass)) return stepUpRequired();
     passes.delete(pass);
+    admitted.add(request);
     const idem = request.headers.get('Idempotency-Key') ?? '';
     if (idem === '') return rejected(['Idempotency-Key']);
     const text = JSON.stringify(request.body);
@@ -695,6 +738,7 @@ export function createWriteServer(options: WriteServerOptions = {}) {
       body: typeof raw === 'string' && raw !== '' ? (JSON.parse(raw) as unknown) : undefined,
     };
     log.push(request);
+    raws.set(request, typeof raw === 'string' ? raw : '');
     inFlight += 1;
     try {
       const index = overrides.findIndex(
@@ -757,6 +801,29 @@ export function createWriteServer(options: WriteServerOptions = {}) {
     once(method: string, path: string, reply: Reply, when?: When) {
       overrides.push({ method, path, when, reply });
     },
+    /** `request` is a write that passed the permission and step-up checks. */
+    admitted(request: RequestLog): boolean {
+      return admitted.has(request);
+    },
+    /** The body text of `request` exactly as the page sent it. */
+    rawOf(request: RequestLog): string | undefined {
+      return raws.get(request);
+    },
+    /**
+     * The next matching request is handled as usual (a write takes effect and its result is kept
+     * under its Idempotency-Key), then the reply is lost: the page sees a network error.
+     */
+    lose(method: string, path: string, when?: When) {
+      overrides.push({
+        method,
+        path,
+        when,
+        reply: (request) => {
+          normal(request);
+          return networkDown();
+        },
+      });
+    },
     hold(method: string, path: string, when?: When) {
       const gate = Promise.withResolvers<void>();
       overrides.push({
@@ -773,3 +840,63 @@ export function createWriteServer(options: WriteServerOptions = {}) {
   };
 }
 export type WriteServer = ReturnType<typeof createWriteServer>;
+
+// ---- F1-08ce: replies whose balances only the server's transaction knows --------------------
+
+/** adjust_id of the form `n` an executedWith reply writes (1-based, ≤ 8; never a createdId). */
+export const replyId = (n: number): string => `ad30000${n}-0000-4000-8000-00000000000${n}`;
+
+/** What a form written by an executedWith reply holds besides what the server fills in. */
+export type Written = Pick<
+  Adjustment,
+  | 'user_id'
+  | 'direction'
+  | 'amount_fen'
+  | 'reason_code'
+  | 'refs'
+  | 'contra_subject'
+  | 'contra_platform'
+  | 'note'
+  | 'reverses_adjust_id'
+>;
+
+/**
+ * A reply of adminCreateAdjustment (pass it to server.once) that writes the form `n` in effect as
+ * the server would — kept with the forms, newer than every sample, so the list reads it back; a
+ * reversal marks its original reversed — and answers AdminAdjustmentExecuted with
+ * `availableBefore` / `availableAfter`: `available` as read in the transaction that wrote the
+ * voucher (BR-FUND-24 ①④), values the page cannot know before the reply (they differ from
+ * AVAILABLE_BEFORE and from any preview).
+ */
+export function executedWith(
+  server: WriteServer,
+  n: number,
+  written: Written,
+  availableBefore: number,
+  availableAfter: number,
+): () => Response {
+  return () => {
+    const at = `2026-12-2${n}T10:00:00+08:00`;
+    const adjustment: Adjustment = {
+      ...written,
+      adjust_id: replyId(n),
+      status: 'APPROVED',
+      reversed_by_adjust_id: null,
+      created_by: ADMIN.first,
+      created_at: at,
+      reviewed_by: ADMIN.first,
+      reviewed_at: at,
+      reject_note: null,
+      voucher_id: `f930000${n}-0000-4000-8000-000000000000`,
+    };
+    server.forms.push(structuredClone(adjustment));
+    const original = server.forms.find((form) => form.adjust_id === written.reverses_adjust_id);
+    if (original !== undefined) original.reversed_by_adjust_id = adjustment.adjust_id;
+    const executed: Executed = {
+      adjustment,
+      available_before_fen: availableBefore,
+      available_after_fen: availableAfter,
+    };
+    return ok(executed);
+  };
+}

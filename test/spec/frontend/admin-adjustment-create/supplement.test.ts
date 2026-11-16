@@ -3,6 +3,7 @@ import { waitFor } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import {
   ADJ,
+  ADJUSTMENTS,
   ADJUSTMENT_ORDER,
   AVAILABLE_BEFORE,
   BALANCE,
@@ -24,14 +25,17 @@ import {
   USER,
   createWriteServer,
   createdId,
+  executedWith,
   fenOf,
   openDecrease,
   passOf,
   reasonName,
+  replyId,
   statusName,
   yuan,
   type CreateNew,
   type CreateReversal,
+  type Written,
 } from './fixtures.ts';
 import {
   assertWrite,
@@ -52,6 +56,7 @@ import {
   panel,
   pick,
   pressSubmit,
+  prompted,
   refRows,
   rowReverse,
   rowWith,
@@ -165,7 +170,8 @@ it(
     assertWrite(server, request, body, passOf(1));
     expect(server.writes()).toHaveLength(1);
 
-    await waitFor(() => expect(hasText(document.body, TEXT.reversed(createdId(1)))).toBe(true));
+    const prompt = TEXT.reversedPrompt(createdId(1), '¥500.00', '¥530.00');
+    await waitFor(() => expect(prompted(prompt)).toBe(true));
     await waitFor(() => expect(dialogsTitled(TEXT.reverseTitle)).toEqual([]));
     await waitColumn(COLUMN.id, [createdId(1), ...WITH_DECREASE]);
     expect(pick(rowWith(panel(), COLUMN.id, createdId(1)), ROW_TITLES)).toEqual({
@@ -315,6 +321,9 @@ it(
       contra_subject: 'BAD_DEBT',
     };
     assertWrite(server, request, body, passOf(1));
+    expect(yuan(AVAILABLE_BEFORE + 3000000000)).toBe('¥30,000,500.00');
+    const prompt = TEXT.createdPrompt(createdId(1), '¥500.00', '¥30,000,500.00');
+    await waitFor(() => expect(prompted(prompt)).toBe(true));
     await created(1);
     await waitColumn(COLUMN.id, [createdId(1), ...ADJUSTMENT_ORDER]);
     expect(pick(rowWith(panel(), COLUMN.id, createdId(1)), ROW_TITLES)).toEqual({
@@ -360,6 +369,61 @@ it(
     };
     assertWrite(server, request, body, passOf(1));
     await created(1);
+    expect(server.writes()).toHaveLength(1);
+  },
+);
+
+it(
+  '[AC-F1-08ce-NEW#4] 红冲成功提示的红冲前 / 后可用余额取成功响应（写凭证的事务里读到的 available，BR-FUND-24 ①④），不沿用对话框打开时的 balance_preview：红冲打款追回调减 ¥30.00，对话框显示 ¥500.00 → ¥530.00；其间用户余额已变，回答 available_before_fen=12000、available_after_fen=15000 → 提示恰为三行「红冲已生效，红冲单号 …」「红冲前可用余额：¥120.00」「红冲后可用余额：¥150.00」；关对话框、列表刷新红冲单在首行、原单已红冲',
+  { timeout: 90_000 },
+  async () => {
+    const server = createWriteServer({ extra: [openDecrease()] });
+    await ready(server, WITH_DECREASE);
+    const dialog = await openReverse(rowOf(OPEN_DECREASE));
+    await waitFor(() =>
+      expect(fields(dialog, BALANCE_LABELS)).toEqual({
+        [BALANCE.before]: '¥500.00',
+        [BALANCE.after]: '¥530.00',
+      }),
+    );
+    await typeInto(dialog, LABEL.reverseNote, NOTE.reversal);
+    const original = openDecrease();
+    const before = 12000;
+    const after = before + OPEN_DECREASE_FEN;
+    const written: Written = {
+      user_id: original.user_id,
+      direction: 'increase',
+      amount_fen: OPEN_DECREASE_FEN,
+      reason_code: original.reason_code,
+      refs: [],
+      contra_subject: original.contra_subject,
+      contra_platform: original.contra_platform,
+      note: NOTE.reversal,
+      reverses_adjust_id: OPEN_DECREASE,
+    };
+    server.once('POST', ADJUSTMENTS, executedWith(server, 1, written, before, after));
+
+    const request = await submitWithSms(server, dialog);
+    const body: CreateReversal = { reverses_adjust_id: OPEN_DECREASE, note: NOTE.reversal };
+    assertWrite(server, request, body, passOf(1));
+    expect(yuan(before)).toBe('¥120.00');
+    expect(yuan(after)).toBe('¥150.00');
+    const prompt = TEXT.reversedPrompt(replyId(1), '¥120.00', '¥150.00');
+    await waitFor(() => expect(prompted(prompt)).toBe(true));
+    const previewed = TEXT.reversedPrompt(replyId(1), '¥500.00', '¥530.00');
+    expect(prompted(previewed), 'not the preview read when the dialog opened').toBe(false);
+    await waitFor(() => expect(dialogsTitled(TEXT.reverseTitle)).toEqual([]));
+    await waitColumn(COLUMN.id, [replyId(1), ...WITH_DECREASE]);
+    expect(pick(rowWith(panel(), COLUMN.id, replyId(1)), ROW_TITLES)).toEqual({
+      [COLUMN.direction]: '调增',
+      [COLUMN.amount]: '¥30.00',
+      [COLUMN.reason]: reasonName('PAYOUT_RECOVERY'),
+      [COLUMN.status]: statusName('APPROVED'),
+    });
+    expect(rowWith(panel(), COLUMN.id, OPEN_DECREASE).cells[COLUMN.reversal]).toBe(
+      READ_TEXT.reversed,
+    );
+    expect(rowReverse(OPEN_DECREASE)).toEqual([]);
     expect(server.writes()).toHaveLength(1);
   },
 );

@@ -1,7 +1,8 @@
 // 「调账单」页签（adminListAdjustments）：状态 / 原因 / 用户 ID 筛选（契约只有这三项，AND），页码分页，
 // 行【详情】打开调账单详情抽屉（adminGetAdjustment）。持 fund.adjust 时已生效、非红冲单、未被红冲的行与
 // 详情另有【红冲】（F1-08cb，ReverseDialog）；成功或 20902 后列表与打开着的详情重新读取，提示交给页面。
-// 页面的 `version` 变了（新建调账生效）也重新读取。批准、驳回入口留给 F1-08cc。
+// 页面的 `version` 变了（新建调账生效）也重新读取；每次列表读有了回答都告诉页面（`onListRead`）。
+// 红冲结果未知时【去列表核对】关对话框并重新读取。批准、驳回入口留给 F1-08cc。
 import { ReloadOutlined } from '@ant-design/icons';
 import {
   Button,
@@ -19,7 +20,7 @@ import {
   type TableColumnsType,
   type TablePaginationConfig,
 } from 'antd';
-import { useId, useState, type ReactElement } from 'react';
+import { useEffect, useId, useState, type ReactElement } from 'react';
 import { plannedButtonProps } from '../../components/planned/index.ts';
 import { delayedLoading, useLoadingClock } from '../../motion.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
@@ -57,7 +58,8 @@ const t = adjustmentsTexts.adjustments;
 /** A prompt of the page after a write (success, or the original reversed meanwhile). */
 export interface Notice {
   readonly type: 'success' | 'warning';
-  readonly text: string;
+  /** One element per line (the new form id, then the available balance before / after). */
+  readonly lines: readonly string[];
 }
 
 export interface AdjustmentsTabProps {
@@ -68,6 +70,8 @@ export interface AdjustmentsTabProps {
   /** Bumped by the page after a write: the list (and an open detail) is read again. */
   readonly version: number;
   readonly onNotice: (notice: Notice) => void;
+  /** The list read for `version` has answered (ready or failed). */
+  readonly onListRead?: (version: number) => void;
 }
 
 interface Reversal {
@@ -81,6 +85,7 @@ export function AdjustmentsTab({
   planned,
   version,
   onNotice,
+  onListRead,
 }: AdjustmentsTabProps): ReactElement {
   const loadingClock = useLoadingClock();
   const { token } = theme.useToken();
@@ -108,6 +113,11 @@ export function AdjustmentsTab({
     detailAttempt + version,
   );
 
+  const answered = list.status === 'ready' || list.status === 'failed';
+  useEffect(() => {
+    if (answered) onListRead?.(version);
+  }, [answered, version, onListRead]);
+
   const reload = () => setAttempt((value) => value + 1);
   /** After a reversal (or a 20902): the list and the open detail are read again. */
   const refresh = () => {
@@ -122,15 +132,25 @@ export function AdjustmentsTab({
   };
   const reversed = (executed: Executed) => {
     setReversal(undefined);
+    const w = adjustmentsTexts.write;
     onNotice({
       type: 'success',
-      text: adjustmentsTexts.write.reversed(executed.adjustment.adjust_id),
+      lines: [
+        w.reversed(executed.adjustment.adjust_id),
+        w.reversedBefore(money(executed.available_before_fen)),
+        w.reversedAfter(money(executed.available_after_fen)),
+      ],
     });
     refresh();
   };
   const stale = () => {
     setReversal(undefined);
-    onNotice({ type: 'warning', text: adjustmentsTexts.write.errors.alreadyReversed });
+    onNotice({ type: 'warning', lines: [adjustmentsTexts.write.errors.alreadyReversed] });
+    refresh();
+  };
+  /** 【去列表核对】 of a reversal whose result is unknown. */
+  const checkReverse = () => {
+    cancelReverse();
     refresh();
   };
   const openForm = (adjustId: string) => {
@@ -395,6 +415,7 @@ export function AdjustmentsTab({
           onClose={cancelReverse}
           onReversed={reversed}
           onStale={stale}
+          onCheck={checkReverse}
         />
       )}
     </Flex>

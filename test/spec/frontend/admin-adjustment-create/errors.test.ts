@@ -18,6 +18,7 @@ import {
   createdId,
   denied,
   fenOf,
+  networkDown,
   passOf,
   reasonName,
   rejected,
@@ -28,6 +29,8 @@ import {
   type RequestLog,
 } from './fixtures.ts';
 import {
+  assertSameWrites,
+  assertUnknown,
   assertWrite,
   button,
   buttons,
@@ -42,7 +45,9 @@ import {
   nonReadsSince,
   openCreate,
   pressSubmit,
+  prompted,
   refRows,
+  retryWithSms,
   settle,
   settled,
   shows,
@@ -92,7 +97,6 @@ function kept(root: HTMLElement, user: string): void {
   expect(refRows(root)).toEqual([[REF_TYPE_NAME.recon_diff, DOC.reconDiff]]);
 }
 const userDeleted = (): Response => rejected(['user_id'], 'adjust_user_deleted');
-const networkDown = (): Promise<Response> => Promise.reject(new TypeError('Failed to fetch'));
 
 it(
   '[AC-F1-08cb-ERROR#1] 20001 data.fields=[user_id]（用户不存在）：抽屉保留、已填不丢，提示「用户不存在，请核对用户 ID」；改正 UID 再提交时重新短信验证、换新的 Idempotency-Key（20001 已确定拒绝，改过的请求体沿用原键会被契约判 20901），请求体按改正后的值，成功后提示新单号',
@@ -166,7 +170,7 @@ it(
 );
 
 it(
-  '[AC-F1-08cb-ERROR#4] 结果未定的失败（网络断开、50001、40901）：每次提示「提交失败，请稍后重试」、抽屉保留、不自动重发；再次提交重新短信验证并沿用同一个 Idempotency-Key 与同一请求体，最终成功只生效一张',
+  '[AC-F1-08cb-ERROR#4] 结果未定的失败（50001、40901）：每次提示「提交失败，请稍后重试」、抽屉保留、不自动重发；再次提交重新短信验证并沿用同一个 Idempotency-Key 与同一请求体，最终成功只生效一张',
   { timeout: 180_000 },
   async () => {
     const server = createWriteServer();
@@ -175,7 +179,7 @@ it(
     await fillForm(root, reconFix(USER.recon));
     const body = reconFixBody(USER.recon);
     const sent: RequestLog[] = [];
-    for (const reply of [networkDown, unavailable, stillRunning]) {
+    for (const reply of [unavailable, stillRunning]) {
       server.once('POST', ADJUSTMENTS, reply);
       sent.push(await submitWithSms(server, root));
       await waitFor(() => expect(shows(ERROR.failed)).toBe(true));
@@ -186,11 +190,11 @@ it(
     const last = await submitWithSms(server, root);
     sent.push(last);
     sent.forEach((request, index) => assertWrite(server, request, body, passOf(index + 1)));
-    expect(sent.map(idemOf)).toEqual(Array.from({ length: 4 }, () => idemOf(sent[0]!)));
+    expect(sent.map(idemOf)).toEqual(Array.from({ length: 3 }, () => idemOf(sent[0]!)));
     await waitFor(() => expect(shows(TEXT.created(createdId(1)))).toBe(true));
     await waitFor(() => expect(dialogsTitled(TEXT.createTitle)).toEqual([]));
     await waitColumn(COLUMN.id, [createdId(1), ...ADJUSTMENT_ORDER]);
-    expect(server.writes()).toHaveLength(4);
+    expect(server.writes()).toHaveLength(3);
   },
 );
 
@@ -315,5 +319,41 @@ it(
     await waitFor(() => expect(document.activeElement).toBe(entry));
     await settled(server);
     expect(nonReadsSince(server, since)).toEqual([]);
+  },
+);
+
+it(
+  '[AC-F1-08ce-NEW#1] 网络断开（fetch 抛 TypeError「Failed to fetch」，写请求没到达服务端）：不再提示「提交失败，请稍后重试」，抽屉进入结果未知——提示「上次提交结果未知……」、已填内容保留但全部锁定、提交按钮去掉、只剩【重试】【去列表核对】、不自动重发；【重试】用原 Idempotency-Key 与逐字节相同的请求体重发（需要时重新短信验证），服务端第一次收到即生效：提示新单号与调账前 ¥500.00 / 调账后 ¥508.80、关抽屉、列表刷新，只生效一张',
+  { timeout: 180_000 },
+  async () => {
+    const server = createWriteServer();
+    await ready(server);
+    const root = await openCreate();
+    await fillForm(root, reconFix(USER.recon));
+    const body = reconFixBody(USER.recon);
+    server.once('POST', ADJUSTMENTS, networkDown);
+    const first = await submitWithSms(server, root);
+    assertWrite(server, first, body, passOf(1));
+    expect(server.admitted(first), 'the dropped write reached no service').toBe(false);
+    expect(server.forms).toHaveLength(ADJUSTMENT_ORDER.length);
+
+    await waitFor(() => expect(hasText(createDrawer(), TEXT.unknown)).toBe(true));
+    expect(shows(ERROR.failed)).toBe(false);
+    kept(root, USER.recon);
+    assertUnknown(root);
+    await settled(server);
+    expect(server.writes()).toHaveLength(1);
+    expect(stepUpDialogs()).toEqual([]);
+
+    const second = await retryWithSms(server, root);
+    assertWrite(server, second, body, passOf(server.verifications().length));
+    assertSameWrites(server, body);
+    const prompt = TEXT.createdPrompt(createdId(1), '¥500.00', '¥508.80');
+    await waitFor(() => expect(prompted(prompt)).toBe(true));
+    await waitFor(() => expect(dialogsTitled(TEXT.createTitle)).toEqual([]));
+    await waitColumn(COLUMN.id, [createdId(1), ...ADJUSTMENT_ORDER]);
+    expect(shows(ERROR.failed)).toBe(false);
+    expect(server.forms).toHaveLength(ADJUSTMENT_ORDER.length + 1);
+    expect(server.unexpected()).toEqual([]);
   },
 );

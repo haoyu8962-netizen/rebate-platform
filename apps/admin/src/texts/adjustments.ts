@@ -146,6 +146,16 @@ export const adjustmentsTexts = {
       `预览：用户 ${user} ${direction} ${amount}，原因：${reason}`,
     created: (adjustId: string): string => `调账已生效，调账单号 ${adjustId}`,
     reversed: (adjustId: string): string => `红冲已生效，红冲单号 ${adjustId}`,
+    /** 成功提示的余额两行（AdminAdjustmentExecuted 的 available_before_fen / available_after_fen）。 */
+    createdBefore: (amount: string): string => `调账前可用余额：${amount}`,
+    createdAfter: (amount: string): string => `调账后可用余额：${amount}`,
+    reversedBefore: (amount: string): string => `红冲前可用余额：${amount}`,
+    reversedAfter: (amount: string): string => `红冲后可用余额：${amount}`,
+    /** 提交没拿到带统一外壳的回答（网络错误、无法解析）：结果未知，只能原样重试或去列表核对。 */
+    unknown:
+      '上次提交结果未知：可能已经生效。请按【重试】用原内容原样重新提交（不会重复记账），或按【去列表核对】查看是否已生效。',
+    retry: '重试',
+    check: '去列表核对',
     /** StepUpModal 的「本次操作」。 */
     createOperation: '新建调账（一步提交并生效）',
     reverseOperation: '红冲调账单（整笔冲回）',

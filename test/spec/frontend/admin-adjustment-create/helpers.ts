@@ -1,4 +1,4 @@
-import { waitFor, within } from '@testing-library/react';
+import { act, fireEvent, waitFor, within } from '@testing-library/react';
 import { expect } from 'vitest';
 import type { Schema } from '../../../../packages/contracts-ts/src/index.ts';
 import type { PermissionSnapshot } from '../../../../apps/admin/src/providers/access-control/index.ts';
@@ -7,8 +7,10 @@ import {
   buttons,
   choose,
   click,
+  compact,
   fill,
   hasText,
+  isDisabled,
   main,
   mount as mountShell,
   norm,
@@ -272,4 +274,123 @@ export function nonReadsSince(server: WriteServer, since = 0): RequestLog[] {
 /** One 【提交并短信验证】 shown in `root` and none usable: the submission is in flight. */
 export function submitLocked(root: HTMLElement): boolean {
   return buttons(root, TEXT.submit).length === 1 && usable(root, TEXT.submit).length === 0;
+}
+
+// ---- prompts and the result-unknown state ----------------------------------------------------
+
+/**
+ * One element of the page reads exactly `lines` one after another (whitespace aside), each line
+ * a visible element of its own whose whole text is that line: the whole of a success prompt.
+ */
+export function prompted(lines: readonly string[]): boolean {
+  const whole = compact(lines.join(''));
+  return Array.from(document.body.querySelectorAll<HTMLElement>('*')).some(
+    (node) =>
+      shown(node) &&
+      compact(node.textContent) === whole &&
+      lines.every((line) => hasText(node, line)),
+  );
+}
+
+const CONTROLS = 'input, textarea, select, [role="combobox"], [role="radio"], [contenteditable]';
+/** A control a person can still change: not disabled, and a text field not read-only. */
+function changeable(node: HTMLElement): boolean {
+  if (node instanceof HTMLInputElement && node.type === 'hidden') return false;
+  if (!shown(node) || isDisabled(node)) return false;
+  if (node.getAttribute('contenteditable') === 'false') return false;
+  const combo = node.getAttribute('role') === 'combobox' || node instanceof HTMLSelectElement;
+  if (combo || (node instanceof HTMLInputElement && ['radio', 'checkbox'].includes(node.type)))
+    return true;
+  const fixed =
+    node.getAttribute('aria-readonly') === 'true' ||
+    ((node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) && node.readOnly);
+  return !fixed;
+}
+/** The controls of `root` a person can still change (none while the result is unknown). */
+export function changeableControls(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(CONTROLS)).filter(changeable);
+}
+/** Names of the visible, usable buttons and links of `root` (text without spaces, or aria-label). */
+export function usableNames(root: HTMLElement): string[] {
+  const all = root.querySelectorAll<HTMLElement>('button, a, [role="button"], [role="link"]');
+  return Array.from(all)
+    .filter((node) => shown(node) && !isDisabled(node))
+    .map((node) => compact(node.textContent) || norm(node.getAttribute('aria-label')))
+    .sort(byCode);
+}
+function byCode(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+/** The two operations of the result-unknown state, as usableNames lists them. */
+export const UNKNOWN_OPERATIONS: readonly string[] = [TEXT.check, TEXT.retry].sort(byCode);
+
+/**
+ * `root` is in the result-unknown state: the notice shown, no control changeable, the submit
+ * button gone and only 【重试】 and 【去列表核对】 usable.
+ */
+export function assertUnknown(root: HTMLElement): void {
+  expect(hasText(root, TEXT.unknown), 'the result-unknown notice').toBe(true);
+  expect(changeableControls(root), 'every input locked').toEqual([]);
+  expect(buttons(root, TEXT.submit), 'no submit button').toEqual([]);
+  expect(usableNames(root)).toEqual(UNKNOWN_OPERATIONS);
+}
+
+/** Presses Escape inside `root` (a dialog or drawer that closes on Escape would close). */
+export async function pressEscape(root: HTMLElement): Promise<void> {
+  const active = document.activeElement;
+  const target = active !== null && root.contains(active) ? active : root;
+  await act(async () => {
+    fireEvent.keyDown(target, { key: 'Escape', code: 'Escape', keyCode: 27 });
+  });
+  await settle();
+}
+
+/** Passes each sms verification the page asks for (at most three) until `done()` holds. */
+export async function verifyUntil(server: WriteServer, done: () => boolean): Promise<void> {
+  const asked = (): boolean => done() || dialogsTitled(SMS_TITLE).length === 1;
+  for (let round = 0; round < 3; round += 1) {
+    await waitFor(() => expect(asked(), 'done, or the sms step-up asked for').toBe(true));
+    if (done()) return;
+    await verifySms(server);
+  }
+  await waitFor(() => expect(done()).toBe(true));
+}
+
+/**
+ * Presses 【重试】 of `root` and passes each sms verification asked for (the page may first send
+ * the spent step-up pass and get 10003, or verify first) until a write passes the step-up
+ * checks; returns that write once everything has settled.
+ */
+export async function retryWithSms(server: WriteServer, root: HTMLElement): Promise<RequestLog> {
+  const since = server.writes().length;
+  await click(button(root, TEXT.retry));
+  await settle();
+  const passed = (): RequestLog | undefined =>
+    server.writes().find((one, index) => index >= since && server.admitted(one));
+  await verifyUntil(server, () => passed() !== undefined);
+  await settled(server);
+  await waitFor(() => expect(stepUpDialogs()).toEqual([]));
+  const found = passed();
+  expect(found, 'the retried write passed the step-up').toBeDefined();
+  return found!;
+}
+
+/**
+ * Every write of `server` is the first one again, byte for byte: the same body text, the same
+ * body, the same Idempotency-Key, POST /admin/v1/adjustments with the admin bearer.
+ */
+export function assertSameWrites(server: WriteServer, body: unknown): void {
+  const all = server.writes();
+  expect(all.length).toBeGreaterThan(0);
+  const first = all[0]!;
+  const text = server.rawOf(first);
+  expect(text).toEqual(expect.stringMatching(/\S/));
+  for (const one of all) {
+    expect(one.method).toBe('POST');
+    expect(one.query).toEqual({});
+    expect(one.body).toEqual(body);
+    expect(server.rawOf(one)).toBe(text);
+    expect(one.headers.get('Authorization')).toBe('Bearer example-admin-token');
+    expect(idemOf(one)).toBe(idemOf(first));
+  }
 }
