@@ -24,11 +24,22 @@ type SuccessData<Responses> = {
 export type ApiData<M extends ApiMethod, P extends ApiPath<M>> =
   Operation<M, P> extends { responses: infer Responses } ? SuccessData<Responses> : never;
 
+/** Sends the request once; with Authorization: Bearer when a token is given. */
+export type SendRequest = (token?: string) => Promise<H5ApiResponse<unknown>>;
+
+/**
+ * Decides how a request is authorized and calls send (an H5TokenManager, or the App API's wrapper
+ * for x-auth optional operations that may call send without a token).
+ */
+export interface RequestAuthorizer {
+  request(method: string, send: SendRequest): Promise<H5ApiResponse<unknown>>;
+}
+
 export interface ApiClientOptions {
   baseUrl: string;
   /** Supplied by the caller; no brand, platform, signing or device defaults in this layer. */
   headers: () => HeadersInit | Promise<HeadersInit>;
-  tokenManager?: H5TokenManager;
+  tokenManager?: RequestAuthorizer | H5TokenManager;
   fetch?: typeof globalThis.fetch;
 }
 

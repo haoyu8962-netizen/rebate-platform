@@ -2,8 +2,8 @@ import * as bridgeSdk from '@couli/bridge-sdk';
 import type { BridgeMethods, H5ApiResponse, H5TokenManager } from '@couli/bridge-sdk';
 import { createContext, createElement, useContext, type ReactElement, type ReactNode } from 'react';
 import { readAppApiEnv, type AppApiEnv } from '../env.ts';
-import { createApiClient, type H5ApiClient } from './index.ts';
-import { isAnonymousOperation } from './anonymous.ts';
+import { createApiClient, type H5ApiClient, type RequestAuthorizer } from './index.ts';
+import { isNoneAuthOperation, isOptionalAuthOperation } from './anonymous.ts';
 import { isSignedOperation, SignedOperationError } from './signed.ts';
 
 /** Injectable SDK facade; the default is @couli/bridge-sdk, never the native global. */
@@ -31,9 +31,10 @@ type NativeEnv = BridgeMethods['app.getEnv']['result'];
 export interface AppApiClient extends H5ApiClient {
   /**
    * Account switch or logout (bridge auth.changed, subscribed by the shell): retires the H5 token
-   * session. Authenticated requests started before it fail with AccountChangedError without asking
-   * native for another token or sending anything more; later requests use a new token manager and
-   * ask native for a new token.
+   * session. Authenticated and x-auth optional requests started before it (sent with the old token,
+   * sent anonymously, or still acquiring) fail with AccountChangedError without asking native for
+   * another token or sending anything more; later requests use a new token manager and ask native
+   * for a new token.
    */
   invalidateToken(): void;
 }
@@ -46,11 +47,22 @@ export class AccountChangedError extends Error {
   }
 }
 
-/** One account session: its own token manager and authenticated client, retired on switch. */
+/**
+ * One account session: its own token manager, an authenticated client (x-auth required) and an
+ * optional-auth client (x-auth optional), retired on switch.
+ */
 interface TokenSession {
   readonly manager: H5TokenManager;
   readonly client: H5ApiClient;
+  readonly optional: H5ApiClient;
   retired: boolean;
+}
+
+/** The session, unless auth.changed retired it since the request started. */
+function liveSession(session: () => TokenSession): TokenSession {
+  const current = session();
+  if (current.retired) throw new AccountChangedError();
+  return current;
 }
 
 /**
@@ -59,11 +71,7 @@ interface TokenSession {
  * itself is not invalidated: that would make a waiter re-acquire through native.
  */
 function guardedManager(session: () => TokenSession): H5TokenManager {
-  const live = (): TokenSession => {
-    const current = session();
-    if (current.retired) throw new AccountChangedError();
-    return current;
-  };
+  const live = (): TokenSession => liveSession(session);
   return {
     getToken: async (options) => {
       const token = await live().manager.getToken(options);
@@ -83,6 +91,38 @@ function guardedManager(session: () => TokenSession): H5TokenManager {
         live();
         return response;
       }),
+  };
+}
+
+/**
+ * x-auth optional (D10-1745): the request goes through the session's guarded manager, so it carries
+ * the h5_token (read_only too), shares the single-flight acquisition and keeps the one renewal and
+ * replay on 10002. Only when no token could be had before anything was sent (90401, timeout,
+ * malformed result, auth.getH5Token not supported, any other failure) is it sent once without
+ * Authorization: no local refusal, no prompt, no other bridge call. A failure after the request
+ * went out with a token (10002 not renewed, or still 10002 after the replay) is returned as is,
+ * never resent anonymously. The anonymous send is gated by the same session as the guarded one.
+ */
+function optionalAuthorizer(
+  session: () => TokenSession,
+  guarded: H5TokenManager,
+): RequestAuthorizer {
+  return {
+    request: async (method, send) => {
+      let sent = false;
+      try {
+        return await guarded.request(method, (token) => {
+          sent = true;
+          return send(token);
+        });
+      } catch (error) {
+        if (sent || error instanceof AccountChangedError) throw error;
+      }
+      liveSession(session);
+      const response = await send();
+      liveSession(session);
+      return response;
+    },
   };
 }
 
@@ -150,15 +190,21 @@ export function createAppApi(options: AppApiOptions = {}): AppApiClient | null {
     const manager = bridge.createH5TokenManager();
     // An injected factory might hand back the same manager; then at least drop its token.
     if (manager === previous) manager.invalidate();
+    const current = (): TokenSession => created;
+    const guarded = guardedManager(current);
     const created: TokenSession = {
       manager,
-      client: createApiClient({ ...transport, tokenManager: guardedManager(() => created) }),
+      client: createApiClient({ ...transport, tokenManager: guarded }),
+      optional: createApiClient({
+        ...transport,
+        tokenManager: optionalAuthorizer(current, guarded),
+      }),
       retired: false,
     };
     return created;
   };
   let session = startSession();
-  // Operations without required auth (security [] or optional): no token, no Authorization.
+  // x-auth none (security []): no token, no Authorization, unaffected by account sessions.
   const anonymous = createApiClient(transport);
 
   return {
@@ -169,7 +215,11 @@ export function createAppApi(options: AppApiOptions = {}): AppApiClient | null {
         return Promise.reject(new SignedOperationError(method, path));
       }
       // The session is bound when the request starts, before the async header read.
-      const client = isAnonymousOperation(method, path) ? anonymous : session.client;
+      const client = isNoneAuthOperation(method, path)
+        ? anonymous
+        : isOptionalAuthOperation(method, path)
+          ? session.optional
+          : session.client;
       return client.request(method, path, init);
     },
     invalidateToken() {

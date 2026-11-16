@@ -1,8 +1,15 @@
 import { expect, it } from 'vitest';
 import openapi from '../../../../../contracts/openapi.yaml?raw';
-import { anonymousOperations, isAnonymousOperation } from './anonymous.ts';
+import {
+  anonymousOperations,
+  isAnonymousOperation,
+  isNoneAuthOperation,
+  isOptionalAuthOperation,
+  noneAuthOperations,
+  optionalAuthOperations,
+} from './anonymous.ts';
 
-type Auth = 'anonymous' | 'bearer';
+type Auth = 'none' | 'optional' | 'bearer';
 
 /** Line reader for the contract layout (2-space paths, 4-space methods, 6-space security). */
 function contractAuth(): Map<string, Auth | 'undeclared'> {
@@ -30,7 +37,8 @@ function contractAuth(): Map<string, Auth | 'undeclared'> {
     for (let next = index + 1; lines[next]?.startsWith('        - ') === true; next += 1) {
       items.push(lines[next]!.trim().slice(2));
     }
-    if (inline === '[]' || items.includes('{}')) result.set(operation, 'anonymous');
+    if (inline === '[]') result.set(operation, 'none');
+    else if (items.includes('{}')) result.set(operation, 'optional');
     else if (inline === '' && items.length === 1 && items[0] === 'bearerAuth: []') {
       result.set(operation, 'bearer');
     } else throw new Error(`unexpected security on ${operation}: ${line} ${items.join(',')}`);
@@ -38,20 +46,29 @@ function contractAuth(): Map<string, Auth | 'undeclared'> {
   return result;
 }
 
-it('anonymous operation list equals the contract operations with security [] or optional {}', () => {
+it('none and optional lists equal the contract operations with security [] and optional {}', () => {
   const auth = contractAuth();
   expect(auth.size).toBeGreaterThan(0);
   expect([...auth].filter(([, kind]) => kind === 'undeclared')).toEqual([]);
-  const expected = [...auth].filter(([, kind]) => kind === 'anonymous').map(([op]) => op);
-  expect([...anonymousOperations].sort()).toEqual(expected.sort());
-  expect(auth.get('GET /v1/articles')).toBe('anonymous');
+  const of = (kind: Auth) => [...auth].filter(([, k]) => k === kind).map(([op]) => op);
+  expect([...noneAuthOperations].sort()).toEqual(of('none').sort());
+  expect([...optionalAuthOperations].sort()).toEqual(of('optional').sort());
+  expect([...anonymousOperations].sort()).toEqual([...of('none'), ...of('optional')].sort());
+  expect(auth.get('GET /v1/articles')).toBe('none');
+  expect(auth.get('GET /v1/products/{product_key}')).toBe('optional');
   expect(auth.get('GET /v1/me')).toBe('bearer');
 });
 
 it('matches method and path template exactly', () => {
   expect(isAnonymousOperation('GET', '/v1/articles/{article_id}')).toBe(true);
   expect(isAnonymousOperation('get', '/v1/articles')).toBe(true);
+  expect(isAnonymousOperation('get', '/v1/rank/hot')).toBe(true);
   expect(isAnonymousOperation('POST', '/v1/articles')).toBe(false);
   expect(isAnonymousOperation('GET', '/v1/articles/fixture-article')).toBe(false);
   expect(isAnonymousOperation('GET', '/v1/me')).toBe(false);
+  expect(isNoneAuthOperation('get', '/v1/articles')).toBe(true);
+  expect(isNoneAuthOperation('GET', '/v1/rank/hot')).toBe(false);
+  expect(isOptionalAuthOperation('post', '/v1/events')).toBe(true);
+  expect(isOptionalAuthOperation('GET', '/v1/articles')).toBe(false);
+  expect(isOptionalAuthOperation('GET', '/v1/me')).toBe(false);
 });
