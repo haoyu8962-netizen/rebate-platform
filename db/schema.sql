@@ -1776,6 +1776,68 @@ $$;
 
 
 --
+-- Name: purge_expired_link_logs_default(timestamp with time zone); Type: FUNCTION; Schema: app; Owner: -
+--
+
+CREATE FUNCTION app.purge_expired_link_logs_default(p_now timestamp with time zone) RETURNS bigint
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    SET lock_timeout TO '5s'
+    SET "DateStyle" TO 'ISO, YMD'
+    SET "TimeZone" TO 'UTC'
+    AS $$
+DECLARE
+  v_cutoff  timestamptz;
+  v_deleted bigint;
+BEGIN
+  IF p_now IS NULL THEN
+    RAISE EXCEPTION 'purge_expired_link_logs_default: p_now is required'
+      USING ERRCODE = 'null_value_not_allowed';
+  END IF;
+
+  IF NOT isfinite(p_now) THEN
+    RAISE EXCEPTION 'purge_expired_link_logs_default: p_now must be finite'
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+
+  -- BR-ID-30: midnight of the supplied +08:00 calendar day minus 90 days — the same expression as
+  -- app.drop_expired_day_partitions for link_logs. Rows strictly before it are expired.
+  v_cutoff := (((p_now AT TIME ZONE INTERVAL '8 hours')::date - 90)::timestamp
+    AT TIME ZONE INTERVAL '8 hours');
+
+  -- Serialise calls of this function.
+  PERFORM pg_advisory_xact_lock(hashtextextended('app.purge_expired_link_logs_default', 0));
+
+  -- BR-ATTR-14: the referenced expired rows go to the evidence table first, in this transaction.
+  -- A failing copy raises: nothing is deleted.
+  PERFORM app.copy_referenced_link_logs('link_logs_default', v_cutoff, p_now);
+
+  -- The only DELETE app.reject_link_logs_update_delete() lets through: owner (this SECURITY DEFINER
+  -- function), DEFAULT partition, rows before the cutoff carried here, transaction-local and reset
+  -- right after the statement.
+  PERFORM set_config('couli.link_logs_default_purge_before', v_cutoff::text, true);
+
+  DELETE FROM ONLY app.link_logs_default l
+  WHERE l.created_at < v_cutoff
+    AND (
+      l.id NOT IN (
+        SELECT r.id
+        FROM app.claim_items ci
+        CROSS JOIN LATERAL unnest(ci.evidence_link_log_ids) AS r(id)
+        WHERE r.id IS NOT NULL
+      )
+      OR l.id IN (SELECT e.id FROM app.link_log_evidence e)
+    );
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  PERFORM set_config('couli.link_logs_default_purge_before', '', true);
+
+  RETURN v_deleted;
+END
+$$;
+
+
+--
 -- Name: read_retention_settings(text); Type: FUNCTION; Schema: app; Owner: -
 --
 
@@ -2067,6 +2129,38 @@ BEGIN
       USING ERRCODE = 'restrict_violation';
   END IF;
   RETURN NEW;
+END
+$$;
+
+
+--
+-- Name: reject_link_logs_update_delete(); Type: FUNCTION; Schema: app; Owner: -
+--
+
+CREATE FUNCTION app.reject_link_logs_update_delete() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+DECLARE
+  v_before text;
+BEGIN
+  IF TG_OP = 'DELETE' AND TG_TABLE_SCHEMA = 'app' AND TG_TABLE_NAME = 'link_logs_default' THEN
+    v_before := current_setting('couli.link_logs_default_purge_before', true);
+    IF v_before IS NOT NULL AND v_before <> ''
+      AND current_user = (
+        SELECT pg_get_userbyid(p.proowner)
+        FROM pg_proc p
+        WHERE p.oid = to_regprocedure('app.purge_expired_link_logs_default(timestamp with time zone)')
+      )
+      AND OLD.created_at < v_before::timestamptz
+    THEN
+      RETURN OLD;
+    END IF;
+  END IF;
+
+  RAISE EXCEPTION '% on %.% is not allowed: append-only table',
+    TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME
+    USING ERRCODE = 'restrict_violation';
 END
 $$;
 
@@ -11380,7 +11474,7 @@ CREATE TRIGGER level_change_logs_append_only BEFORE DELETE OR UPDATE ON app.leve
 -- Name: link_logs link_logs_append_only; Type: TRIGGER; Schema: app; Owner: -
 --
 
-CREATE TRIGGER link_logs_append_only BEFORE DELETE OR UPDATE ON app.link_logs FOR EACH ROW EXECUTE FUNCTION app.reject_update_delete();
+CREATE TRIGGER link_logs_append_only BEFORE DELETE OR UPDATE ON app.link_logs FOR EACH ROW EXECUTE FUNCTION app.reject_link_logs_update_delete();
 
 
 --
@@ -13393,6 +13487,14 @@ GRANT ALL ON FUNCTION app.purge_expired_link_log_evidence(p_now timestamp with t
 
 
 --
+-- Name: FUNCTION purge_expired_link_logs_default(p_now timestamp with time zone); Type: ACL; Schema: app; Owner: -
+--
+
+REVOKE ALL ON FUNCTION app.purge_expired_link_logs_default(p_now timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION app.purge_expired_link_logs_default(p_now timestamp with time zone) TO couli_maint;
+
+
+--
 -- Name: FUNCTION read_retention_settings(p_app_id text); Type: ACL; Schema: app; Owner: -
 --
 
@@ -13461,6 +13563,13 @@ REVOKE ALL ON FUNCTION app.reject_device_registration_rewrite() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION app.reject_event_rewrite() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION reject_link_logs_update_delete(); Type: ACL; Schema: app; Owner: -
+--
+
+REVOKE ALL ON FUNCTION app.reject_link_logs_update_delete() FROM PUBLIC;
 
 
 --
