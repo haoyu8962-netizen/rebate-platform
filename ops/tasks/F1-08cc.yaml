@@ -19,6 +19,25 @@ test_paths:
   - 'test/spec/frontend/admin-adjustment-create/entry.test.ts'
 impl: claude
 tester: claude-independent
+modify_existing:
+  - file: 'test/spec/frontend/admin-adjustment-create/entry.test.ts'
+    test: '[AC-F1-08cb-ENTRY#1] 持 fund.adjust：标题行（页签外）恰 1 个可用【新建调账】；【红冲】只在已生效、非红冲单、未被红冲的三行（对账修正、其他、订单恢复），每行 1 个可用；不出现【批准】【驳回】【批准核销】【撤回】【保存待批】；进页不发任何写请求'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-1733
+    note: '同 D10-1733 / D10-1816 通例：列表页之后才落地的写入口清单（LATER_ENTRIES）由空改为恰为【批准】（F1-08cc 落地；系统预填待批行），toEqual 严格相等；【驳回】【批准核销】【撤回】【保存待批】仍不出现；其余断言不变'
+  - file: 'test/spec/frontend/admin-adjustment-create/entry.test.ts'
+    test: '[AC-F1-08cb-ENTRY#2] 持 fund.adjust 的详情：已生效未红冲单（对账修正）有 1 个可用【红冲】；已被红冲的原单、红冲单本身、系统预填待批单、已驳回单都没有【红冲】，也没有【批准】【驳回】'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-1733
+    note: '同 D10-1733 / D10-1816 通例：各详情的之后才落地入口由空改为恰为【批准】，并加一行逐详情核对：只有系统预填待批单的详情有【批准】、其余详情为空（toEqual）；其余断言不变'
+  - file: 'test/spec/frontend/admin-adjustment-create/entry.test.ts'
+    test: '[AC-F1-08cb-ENTRY#4] 超管：标题行恰 1 个可用【新建调账】，【红冲】同样只在三行可红冲的单上；不出现后续任务的写入口'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-1733
+    note: '同 D10-1733 / D10-1816 通例：超管列表页之后才落地的写入口清单由空改为恰为【批准】（toEqual）；其余断言不变'
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-adjustment-approve/**'
