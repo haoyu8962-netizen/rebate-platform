@@ -2,14 +2,10 @@ id: CT-13l
 repo: rebate-platform
 title: CT-13l：link_logs DEFAULT 分区的过期行补删除路径——新迁移加 app.purge_expired_link_logs_default(p_now)，截断与 drop_expired_day_partitions 对 link_logs 逐字同口径（+08:00 当日 0 点往前 90 天、严格早于才删），维护第 I 节删日分区之后调用；未来日期进 DEFAULT 的行与其他表不动
 type: impl
-# 2026-11-14 be 入账（编排 D10-1623；BR-ID-30 ②「link_logs：90 天，按日分区删除，不得短于 W_claim + W_backfill」——日分区里的行每天在删，DEFAULT 里同样过期的行没有删除路径，补执行漏洞，不改留存期、不请负责人）。
-# 动手前已核（D10-1623 d）：没有外键引用 link_logs；按 id 引用的只有 app.claim_items.evidence_link_log_ids（bigint[]）。后台认领审核按 id 读 link_logs 时，查不到的 id 直接略过（orders application/admin-claims.ts「unknown ids left out」）。日分区删除路径不检查这些引用，靠的是留存期 90 天 ≥ W_claim + W_backfill（45 天）。DEFAULT 删除照同一做法，不另查引用；日分区路径本身未发现引用处理问题。
-# 与 D10-1623 原文的两处出入（以实际库表为准，请编排核）：① link_logs 的分区键是 created_at（主键 (id, created_at)），不是 server_at，所以条件 b 的「只删早于截断的行」按 created_at；② 主干上没有 link_log_evidence 这张表，条件 c 改为钉住 link_open_attempts 与 claim_items 在清理前后不变。
-# ① 新迁移（号落地时取下一个空号，现在 0144，文件名以 _link-logs-default-purge.sql 结尾）：app.purge_expired_link_logs_default(p_now timestamptz) RETURNS bigint。只删 app.link_logs_default 里 created_at 早于截断的行，截断与 drop_expired_day_partitions('link_logs', p_now) 逐字同一算法；90 天只写在函数里，不设配置项（同 D10-1500 (a)）；SECURITY DEFINER、函数级设置与授权照 0140 / 0142 的先例，只授 couli_maint。
-# ② 维护第 I 节：删 link_logs 日分区之后调用；失败照第 N 节（记日志、计入 failed、跑完其余再抛原错误、成功才记当日已清）；pino 记删除行数。
+# 2026-11-14 be 入账（编排 D10-1623；BR-ID-30 ②「link_logs：90 天，按日分区删除，不得短于 W_claim + W_backfill」——日分区里的行每天在删，DEFAULT 里同样过期的行没有删除路径，补执行漏洞，不改留存期、不请负责人）。 动手前已核（D10-1623 d）：没有外键引用 link_logs；按 id 引用的只有 app.claim_items.evidence_link_log_ids（bigint[]）。后台认领审核按 id 读 link_logs 时，查不到的 id 直接略过（orders application/admin-claims.ts「unknown ids left out」）。日分区删除路径不检查这些引用，靠的是留存期 90 天 ≥ W_claim + W_backfill（45 天）。DEFAULT 删除照同一做法，不另查引用；日分区路径本身未发现引用处理问题。 与 D10-1623 原文的两处出入（以实际库表为准，请编排核）：① link_logs 的分区键是 created_at（主键 (id, created_at)），不是 server_at，所以条件 b 的「只删早于截断的行」按 created_at；② 主干上没有 link_log_evidence 这张表，条件 c 改为钉住 link_open_attempts 与 claim_items 在清理前后不变。
+# ① 新迁移（号落地时取下一个空号，现在 0144，文件名以 _link-logs-default-purge.sql 结尾）：app.purge_expired_link_logs_default(p_now timestamptz) RETURNS bigint。只删 app.link_logs_default 里 created_at 早于截断的行，截断与 drop_expired_day_partitions('link_logs', p_now) 逐字同一算法；90 天只写在函数里，不设配置项（同 D10-1500 (a)）；SECURITY DEFINER、函数级设置与授权照 0140 / 0142 的先例，只授 couli_maint。 ② 维护第 I 节：删 link_logs 日分区之后调用；失败照第 N 节（记日志、计入 failed、跑完其余再抛原错误、成功才记当日已清）；pino 记删除行数。
 # 规则测试（独立 Claude，D10-1604；新目录只新增）须钉住四件：a) 同一时刻，被删的最晚一个日分区与 DEFAULT 里被删的最晚一行落在同一截断的同一侧，最早保留的日分区与 DEFAULT 里保留的最早一行落在另一侧；b) DEFAULT 里 created_at 落在预建范围之后（未来日期）的行不动；c) link_open_attempts 与 claim_items 清理前后逐行不变；d) 失败照第 N 节。带迁移，落地前推之前测试机跑 test/spec/db/** 与相关目录（D10-1580）。本机重活（D10-1477）只在测试机跑。
-# 2026-11-14 补（编排 D10-1624 / D10-1625）：先停在实现前，接在 CT-13m（link_log_evidence）之后；DEFAULT 删除走同一「先复制被引用的、再删」路径，复用 CT-13m 的 app.copy_referenced_link_logs，两条删除路径共用一份复制逻辑。
-# 2026-11-15 补（编排 D10-1649 / D10-1693）：refs 补 BR-ATTR-14（DEFAULT 删除同样要先复制被认领引用的行）；复用 CT-13m 迁移 0144 的 app.copy_referenced_link_logs(p_partition, p_before, p_copied_at)（它接受 app.link_logs_default），在 purge_expired_link_logs_default 删除前同一事务调用，复制失败则不删。
+# 2026-11-14 补（编排 D10-1624 / D10-1625）：先停在实现前，接在 CT-13m（link_log_evidence）之后；DEFAULT 删除走同一「先复制被引用的、再删」路径，复用 CT-13m 的 app.copy_referenced_link_logs，两条删除路径共用一份复制逻辑。 2026-11-15 补（编排 D10-1649 / D10-1693）：refs 补 BR-ATTR-14（DEFAULT 删除同样要先复制被认领引用的行）；复用 CT-13m 迁移 0144 的 app.copy_referenced_link_logs(p_partition, p_before, p_copied_at)（它接受 app.link_logs_default），在 purge_expired_link_logs_default 删除前同一事务调用，复制失败则不删。
 refs: [BR-ID-30, BR-ATTR-14]
 refs_hash:
   BR-ID-30: 8ea92988c8cd
@@ -31,6 +27,10 @@ modify_existing:
     br: [BR-ID-30]
     ruling: D10-1802
     note: '依 D10-1802：本单给 link_logs DEFAULT 补 BR-ID-30 ② 的 90 天删除路径，2026-06-01 那行在 2026-11-20 04:00 截断 2026-08-22 前过期必被删；只改 04:00 那轮及其后一轮的 DEFAULT 行数、多出的清理日志行、末尾 linkLogRows 只剩 11-19 那行，04:00 之前那轮、event_log 与其余断言不动；反向验证：去掉维护第 P 节调用 → 本行变红'
+red_exempt:
+  - file: 'test/spec/platform/maintenance/worker-day-partitions.int.test.ts'
+    test: '[ADR-0001 §4.2 #4 DEFAULT 有数据须先迁出才能建对应区间的分区; worker 契约 8.4 不做迁出] link_logs_default 里有 2026-11-22（+08:00）的 1 行：worker 每轮建 11-22 都失败 23514（partition_ensure_failed { table, day, sqlstate }，failed 1，其余 14 天照建）并 warn；时钟走到 11-23 04:00（+08:00）后 11-22 已出窗口，不再失败，warn 照旧，行仍在 DEFAULT'
+    reason: '冻结用例、测试体未改：其 DEFAULT 行 2026-11-22 未过期，本单清理不碰它，缺实现时照旧绿；同文件因 modify_existing 与新块 [AC-CT-13l#8] 整份重判（D10-1802 / D10-1813）'
 impl: claude
 tester: claude-independent
 accept:
