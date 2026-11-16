@@ -8,7 +8,10 @@
 //     B1-34a's reader with its own-records rule; both are keyset walks over the set fixed at the
 //     claim's Clock instant, count and rows under the same bound; tax_withdrawals, B2-08e, through
 //     ./tax-export-source.ts, cursor pages of payout's port with identity's batch real names, a
-//     note line above the header, an unreadable real name failing the whole task), write progress,
+//     note line above the header, an unreadable real name failing the whole task; ledger,
+//     CT-24zzm, through ledger's readAdminLedgerExportPage: GET /admin/v1/ledger's own filters,
+//     checks, order and item values, keyset pages, one row per entry, always masked — no column
+//     is pii under 04 §11.1), write progress,
 //     enforce
 //     admin.export.max_rows on the rows actually read, build one CSV (UTF-8 BOM, RFC 4180,
 //     formula guard), put it into the private export store, then running → done in one
@@ -56,6 +59,11 @@ import { transitionExportTask, type ExportTaskState } from '@couli/domain';
 import { sql, type Kysely, type Selectable, type Transaction } from 'kysely';
 import type { ContentReader } from '../../content/index.ts';
 import type { ExportUsersReader } from '../../identity/index.ts';
+import {
+  AdminLedgerReadFieldsError,
+  type AdminLedgerExportPage,
+  type AdminLedgerExportPageInput,
+} from '../../ledger/index.ts';
 import { taxExportQuarterRange } from '../../payout/index.ts';
 import type {
   Clock,
@@ -84,11 +92,60 @@ export interface ExportWorkerOptions {
   readonly auditLogs: AuditLogsReader;
   /** Quarterly tax export (B2-08e); without it a tax_withdrawals task fails, nothing is guessed. */
   readonly tax?: TaxExportPorts;
+  /** One user's ledger (CT-24zzm), ledger's read-only export page; without it a ledger task fails. */
+  readonly ledger?: LedgerExportReader;
   readonly profiles: AdminProfiles;
   readonly config: Pick<ContentReader, 'configValue'>;
   readonly logger: RootLogger;
   /** Extra audit snapshot keys to redact (the Nest assembly passes platform's SENSITIVE_KEYS). */
   readonly sensitiveKeys?: readonly string[];
+}
+
+/** ledger's readAdminLedgerExportPage with its ports bound (the module assembles it). */
+export type LedgerExportReader = (
+  input: AdminLedgerExportPageInput,
+) => Promise<AdminLedgerExportPage>;
+
+/**
+ * Columns of a ledger file (D10-1742): the item fields of adminListLedgerEntries one by one, the
+ * voucher's and the link's fields flattened in their order.
+ */
+export const LEDGER_EXPORT_HEADER: readonly string[] = [
+  'entry_id',
+  'booked_at',
+  'accounting_date',
+  'ledger_type',
+  'sub_type',
+  'sub_account',
+  'amount_fen',
+  'balance_after_fen',
+  'voucher_id',
+  'uniq_key',
+  'biz_type',
+  'biz_id',
+  'link_type',
+  'link_id',
+];
+
+/** One list item as a file row: values as the list answers them, null as an empty cell. */
+export function ledgerExportCells(item: AdminLedgerExportPage['items'][number]): (string | null)[] {
+  return [
+    item.entry_id,
+    item.booked_at,
+    item.accounting_date,
+    item.ledger_type,
+    item.sub_type,
+    item.sub_account,
+    // Integer fen exactly as the list's JSON number (signed from the user's view), never scaled.
+    String(item.amount_fen),
+    item.balance_after_fen === null ? null : String(item.balance_after_fen),
+    item.voucher.voucher_id,
+    item.voucher.uniq_key,
+    item.voucher.biz_type,
+    item.voucher.biz_id,
+    item.link?.type ?? null,
+    item.link?.id ?? null,
+  ];
 }
 
 export interface ExportWorker {
@@ -118,6 +175,8 @@ export const EXPORT_CAPACITY_RETRY_SECONDS = 15;
 
 const USERS_PAGE_SIZE = 500;
 const TAX_PAGE_SIZE = 500;
+/** The ledger list's page_size maximum. */
+const LEDGER_PAGE_SIZE = 200;
 /** The audit search's contract page_size maximum. */
 const AUDIT_PAGE_SIZE = 200;
 const FAILURE_REASON_MAX = 200;
@@ -217,10 +276,14 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
 }
 
-/** One CSV cell: formula guard (OWASP CSV injection), then RFC 4180 quoting. */
+/**
+ * One CSV cell: formula guard (OWASP CSV injection), then RFC 4180 quoting. A bare integer
+ * (optional minus, digits only — the ledger's signed fen) is a plain number in any spreadsheet and
+ * stays as it is; every other cell starting with a formula character gets the prefix.
+ */
 export function csvCell(value: string | null): string {
   let text = value ?? '';
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  if (/^[=+\-@\t\r]/.test(text) && !/^-?\d+$/.test(text)) text = `'${text}`;
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
@@ -324,7 +387,7 @@ export function createExportCanceller(options: {
 }
 
 export function createExportWorker(options: ExportWorkerOptions): ExportWorker {
-  const { clock, queue, store, users, auditLogs, tax, profiles, config, logger } = options;
+  const { clock, queue, store, users, auditLogs, tax, ledger, profiles, config, logger } = options;
   const db = options.db.withSchema('app');
   const canceller = createExportCanceller({
     clock,
@@ -788,6 +851,38 @@ export function createExportWorker(options: ExportWorkerOptions): ExportWorker {
         },
       };
     }
+    if (task.resource === 'ledger') {
+      // No column is pii (04 §11.1, D10-1742): a ledger task is always masked, by the request schema.
+      if (!task.masked) throw new SourceFiltersError();
+      if (ledger === undefined) throw new Error('export: the ledger reader is not assembled');
+      const ledgerFilters: Readonly<Record<string, unknown>> = filters;
+      // Keyset walk in the list's order (booked_at, entry id descending); the rows read decide.
+      let after: string | null = null;
+      let finished = false;
+      return {
+        header: LEDGER_EXPORT_HEADER,
+        pageSize: LEDGER_PAGE_SIZE,
+        async page(_page, pageSize) {
+          if (finished) return { rows: [], total: 0 };
+          let result: AdminLedgerExportPage;
+          try {
+            result = await ledger({
+              appId: task.app_id,
+              filters: ledgerFilters,
+              after,
+              limit: pageSize,
+            });
+          } catch (error) {
+            // The list's own refusals (unknown user, bad filter): the task's filters are invalid.
+            if (error instanceof AdminLedgerReadFieldsError) throw new SourceFiltersError();
+            throw error;
+          }
+          if (result.next === null) finished = true;
+          else after = result.next;
+          return { rows: result.items.map(ledgerExportCells), total: 0 };
+        },
+      };
+    }
     throw new SourceFiltersError();
   }
 
@@ -935,7 +1030,11 @@ export function createExportWorker(options: ExportWorkerOptions): ExportWorker {
         );
         await fail(
           lease,
-          error instanceof TaxRealnameUnreadableError ? REASON_REALNAME : REASON_SOURCE,
+          error instanceof TaxRealnameUnreadableError
+            ? REASON_REALNAME
+            : error instanceof SourceFiltersError
+              ? REASON_FILTERS
+              : REASON_SOURCE,
         );
         return;
       }

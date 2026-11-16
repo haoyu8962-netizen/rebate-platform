@@ -10,6 +10,8 @@
 // on that point for the totp step-up. List, download and retry enter on either point without a
 // token (readOnly); the use case decides per task what tax.export_full reaches. No branch here
 // skips the guard for a super admin.
+// ledger (CT-24zzm): `export` plus fund.view or user.lookup (use case), always masked, so it never
+// reaches the second guard call.
 // Served by the admin entry only.
 import {
   Body,
@@ -86,6 +88,8 @@ function commandOf(body: Schema<'AdminExportCreateRequest'>): ExportCreateComman
     if (typeof value === 'string') filters[key] = value;
   }
   if (body.resource === 'audit_logs') return { resource: 'audit_logs', filters };
+  // Always masked (CT-24zzm): the schema's ledger branch takes neither unmasked nor reason.
+  if (body.resource === 'ledger') return { resource: 'ledger', filters };
   return {
     resource: body.resource,
     filters,

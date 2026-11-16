@@ -3809,7 +3809,8 @@ export interface paths {
          * Create an export task from a list's filters (asynchronous CSV, masked by default)
          * @description Permission point `export` (04 §11.1) and, in addition, the permission of the source list
          *     itself (enum export_resource: `users` needs `user.list`; `audit_logs` needs no more than
-         *     being signed in; `tax_withdrawals` has its own rule, see below); lacking either is 10403
+         *     being signed in; `ledger` needs `fund.view` or `user.lookup`, either one, as GET
+         *     /admin/v1/ledger; `tax_withdrawals` has its own rule, see below); lacking either is 10403
          *     with `data.reason=admin_permission_denied`. The
          *     task is generated asynchronously as one CSV file in a private object-storage bucket
          *     (BR-ID-34 细则「后台导出任务」); the response is 202 with the new task in status pending.
@@ -3818,7 +3819,10 @@ export interface paths {
          *     and is judged like them: `users` takes `risk_state` (GET /admin/v1/users); `audit_logs`
          *     takes `actor_id`, `target_type`, `target_id`, `permission`, `from`, `to` (GET
          *     /admin/v1/audit-logs; `from` later than `to` is 20001 with `data.fields=[from, to]`, as on
-         *     the list). The file holds the rows the source list would
+         *     the list); `ledger` takes `user_id` (required), `ledger_type`, `sub_type`, `sub_account`,
+         *     `accounting_date_from`, `accounting_date_to`, `ref` (GET /admin/v1/ledger; from later
+         *     than to is 20001 with `data.fields=[accounting_date_from, accounting_date_to]`, as on the
+         *     list). The file holds the rows the source list would
          *     show for these filters to the creator, with the list's columns. An `audit_logs` export
          *     applies the same own-records rule as the list (04 §11.1 `audit.view_all`): without
          *     `audit.view_all` the server forces `actor_id` to the creator, and another account's
@@ -3840,6 +3844,19 @@ export interface paths {
          *     filters, masked). An unmasked task writes its own audit record as well (action
          *     export_unmasked: task id, resource, reason and, once generated, the row count; never a
          *     value).
+         *     Ledger export (`resource=ledger`, GET /admin/v1/ledger; D10-1740 / D10-1742, agent
+         *     default awaiting the planning write-back): `export` and either `fund.view` or
+         *     `user.lookup` (the list's own rule), re-checked on download and retry. The file holds
+         *     every entry the list gives for these filters, in the list's order (latest `booked_at`
+         *     first, then `entry_id` descending), one row per entry with the list item's fields as
+         *     columns: entry_id, booked_at, accounting_date, ledger_type, sub_type, sub_account,
+         *     amount_fen (integer fen, signed from the user's view), balance_after_fen (empty when
+         *     null), voucher_id, uniq_key, biz_type, biz_id, link_type, link_id (both empty without a
+         *     link). No column is personal data under 04 §11.1 (ids, amounts, dates and codes only; no
+         *     internal notes), so the file is the same with or without `pii.*`: a `ledger` task is
+         *     always masked (`masked=true`) and the request takes neither `unmasked` nor `reason`
+         *     (either one is 20001). A user who is unknown or of another app fails the task (20001 for
+         *     the list).
          *     Quarterly tax export (`resource=tax_withdrawals`, BR-WDR-21): `filters.quarter` selects the
          *     natural quarter by `paid_at` (+08:00).
          *     Masked version: `export` and `fund.view`, no step-up, no `reason` (`reason` without
@@ -3895,7 +3912,8 @@ export interface paths {
          *     `data.reason=admin_permission_denied`. Only the creator of the task can download it, even
          *     with `audit.view_all` (BR-ID-34 细则「后台导出任务」). Every call is authorized again and
          *     signs a new link; no long-lived link is issued. The server also checks that the creator
-         *     still holds the permission of the source list (`users` → `user.list`) and, for an unmasked
+         *     still holds the permission of the source list (`users` → `user.list`; `ledger` → `fund.view`
+         *     or `user.lookup`, either one) and, for an unmasked
          *     file (`masked=false`), still holds the pii point it was made under (`pii.reveal_phone`, or
          *     `tax.export_full` for a `tax_withdrawals` file).
          *     Another account's task, an unknown id, a task of another app, and a creator who no longer
@@ -3940,7 +3958,8 @@ export interface paths {
          *     Only a failed task can be retried; any other status is 30417 with `data.status` (pending,
          *     running, done, expired, cancelled; the same code as a download in the wrong status).
          *     The checks of creating are made again on the caller's current points: the permission of
-         *     the source list (`users` → `user.list`) and, for an unmasked task (`masked=false`),
+         *     the source list (`users` → `user.list`; `ledger` → `fund.view` or `user.lookup`, either
+         *     one) and, for an unmasked task (`masked=false`),
          *     `pii.reveal_phone` (`tax.export_full` for a `tax_withdrawals` task), both 10403 when lacking. An unmasked task also needs a new totp-tier
          *     `X-Step-Up-Token` (missing, expired or lower → 10003 with `data.tier=totp`) and a new
          *     `reason` (1–200 characters; missing → 20001 with `data.fields=[reason]`): every
@@ -17406,10 +17425,11 @@ export interface components {
          * @description Source list of an export task (enum export_resource): users = GET /admin/v1/users
          *     (needs user.list), audit_logs = GET /admin/v1/audit-logs (signed in is enough; own
          *     records only without audit.view_all), tax_withdrawals = the quarterly tax export of
-         *     BR-WDR-21, which has no source list (see POST /admin/v1/exports).
+         *     BR-WDR-21, which has no source list (see POST /admin/v1/exports), ledger = GET
+         *     /admin/v1/ledger (needs fund.view or user.lookup; always masked).
          * @enum {string}
          */
-        AdminExportResource: "users" | "audit_logs" | "tax_withdrawals";
+        AdminExportResource: "users" | "audit_logs" | "tax_withdrawals" | "ledger";
         /** @description Filters of a users export, the query parameters of GET /admin/v1/users without paging. */
         AdminExportUserFilters: {
             risk_state?: components["schemas"]["AdminUserRiskStateCode"];
@@ -17442,6 +17462,34 @@ export interface components {
              *     is 20001.
              */
             quarter: string;
+        };
+        /**
+         * @description Filters of a ledger export, the query parameters of GET /admin/v1/ledger without paging,
+         *     judged the same way (user_id required; accounting_date_from later than
+         *     accounting_date_to is 20001). Each property has the list parameter's own schema; the
+         *     user id must also be a UUID, which the list itself answers with 20001 [user_id] (here it
+         *     is refused by the request schema already, so no task is created for it).
+         */
+        AdminExportLedgerFilters: {
+            user_id: components["schemas"]["Id"];
+            ledger_type?: components["schemas"]["AdminLedgerType"];
+            sub_type?: string;
+            sub_account?: components["schemas"]["AdminLedgerSubAccount"];
+            /**
+             * Format: date
+             * @description First accounting date of the voucher, inclusive.
+             */
+            accounting_date_from?: string;
+            /**
+             * Format: date
+             * @description Last accounting date of the voucher, inclusive.
+             */
+            accounting_date_to?: string;
+            /** @description Exact voucher biz_id. */
+            ref?: string;
+        } & {
+            /** Format: uuid */
+            user_id: string;
         };
         /**
          * @description Export of the users list. unmasked true asks for the full phone numbers (pii.reveal_phone,
@@ -17481,10 +17529,19 @@ export interface components {
             reason?: components["schemas"]["AdminUserReason"];
         };
         /**
+         * @description Export of one user's ledger (GET /admin/v1/ledger); always masked (no column is personal
+         *     data), so neither unmasked nor reason is accepted.
+         */
+        AdminExportCreateLedgerRequest: {
+            /** @enum {string} */
+            resource: "ledger";
+            filters: components["schemas"]["AdminExportLedgerFilters"];
+        };
+        /**
          * @description One branch per source list (enum export_resource), told apart by `resource`; `filters`
          *     follows that list's query parameters (`tax_withdrawals` has no list, only `quarter`).
          */
-        AdminExportCreateRequest: components["schemas"]["AdminExportCreateUsersRequest"] | components["schemas"]["AdminExportCreateAuditLogsRequest"] | components["schemas"]["AdminExportCreateTaxWithdrawalsRequest"];
+        AdminExportCreateRequest: components["schemas"]["AdminExportCreateUsersRequest"] | components["schemas"]["AdminExportCreateAuditLogsRequest"] | components["schemas"]["AdminExportCreateTaxWithdrawalsRequest"] | components["schemas"]["AdminExportCreateLedgerRequest"];
         /**
          * @description Empty for a masked task. For an unmasked task (masked false) reason is required, with a
          *     new totp-tier X-Step-Up-Token; for a masked task reason is 20001.

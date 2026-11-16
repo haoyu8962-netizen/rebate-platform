@@ -107,7 +107,7 @@ it('[CT-24k] enums export_status and export_resource match the contract schemas'
     'expired',
     'cancelled',
   ]);
-  expect(enums.export_resource).toEqual(['users', 'audit_logs', 'tax_withdrawals']);
+  expect(enums.export_resource).toEqual(['users', 'audit_logs', 'tax_withdrawals', 'ledger']);
   expect(contract.components.schemas['AdminExportStatus']!.enum).toEqual(enums.export_status);
   expect(contract.components.schemas['AdminExportResource']!.enum).toEqual(enums.export_resource);
 });

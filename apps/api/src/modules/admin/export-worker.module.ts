@@ -10,13 +10,17 @@
 // EXPORT_WORKER also carries cancelByCreator for the later account-disable wiring.
 // B2-08e: the quarterly tax export's two ports (payout's B2-08d reader, identity's batch real names)
 // come from app.module the same way; the option is required, so the entry cannot leave them out.
+// CT-24zzm: the ledger export reads ledger's readAdminLedgerExportPage (the GET /admin/v1/ledger
+// query) with identity's users-of-the-app check, the same port app.module gives that list; the
+// option overrides it, and without it this default is built here from the two modules' index.ts.
 //
 // Also compiled by the `test` project: a class decorator only (dependencies through factories).
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { DB as Database } from '@couli/db';
 import type { Kysely } from 'kysely';
 import type { ContentReader } from '../content/index.ts';
-import type { ExportUsersReader } from '../identity/index.ts';
+import { createUserDeletionStatusReader, type ExportUsersReader } from '../identity/index.ts';
+import { readAdminLedgerExportPage } from '../ledger/index.ts';
 import {
   CLOCK,
   DB,
@@ -37,6 +41,7 @@ import {
   EXPORT_QUEUE,
   createExportWorker,
   type ExportWorker,
+  type LedgerExportReader,
 } from './application/export-worker.ts';
 import type { ConfigPermissions } from './domain/audit-log-view.ts';
 import { createAdminProfiles } from './infra/admin-profiles.ts';
@@ -57,8 +62,33 @@ export interface ExportWorkerModuleOptions {
   readonly tax: (crypto: FieldCrypto) => TaxExportPorts;
   /** content's configuration reader (admin.export.* overrides; code defaults otherwise). */
   readonly config: (db: Kysely<Database>, clock: Clock) => Pick<ContentReader, 'configValue'>;
+  /** One user's ledger for the ledger export (CT-24zzm); the default below when absent. */
+  readonly ledger?: (db: Kysely<Database>) => LedgerExportReader;
   /** Configuration key → its permission point, for the audit search's derived permission. */
   readonly configPermissions?: ConfigPermissions;
+}
+
+/**
+ * ledger's export page over identity's users of the app (a users row of this app, whatever its
+ * deletion status: the list's own userExists port), every check on the page's transaction.
+ */
+export function defaultLedgerExportReader(db: Kysely<Database>): LedgerExportReader {
+  return (input) =>
+    readAdminLedgerExportPage(
+      {
+        db,
+        ports: {
+          userExists: async (handle, who) =>
+            (
+              await createUserDeletionStatusReader({ db: handle }).read(handle, {
+                app_id: who.appId,
+                user_ids: [who.userId],
+              })
+            ).has(who.userId),
+        },
+      },
+      input,
+    );
 }
 
 @Module({})
@@ -107,6 +137,7 @@ export class ExportWorkerModule {
               store,
               users: options.users(db, crypto),
               tax: options.tax(crypto),
+              ledger: (options.ledger ?? defaultLedgerExportReader)(db),
               auditLogs: createAuditLogsReader({
                 store: createAuditLogStore({ db }),
                 profiles,

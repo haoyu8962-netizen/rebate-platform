@@ -252,3 +252,14 @@ export type {
   ClosingAdjustmentPrefillRequest,
   ClosingAdjustmentSubject,
 } from './application/admin-adjustment-closing.ts';
+// CT-24zzm (D10-1740 / D10-1742): admin's export of one user's ledger reads GET /admin/v1/ledger's
+// own query through this read-only page (same filters, order and values; keyset pages).
+export {
+  AdminLedgerReadFieldsError,
+  readAdminLedgerExportPage,
+} from './application/admin-ledger-read.ts';
+export type {
+  AdminLedgerExportPage,
+  AdminLedgerExportPageInput,
+  AdminLedgerReadPorts,
+} from './application/admin-ledger-read.ts';

@@ -29,6 +29,11 @@
 // a super admin too). tax.export_full opens nothing but the full tax file: an account passing the
 // guard by that point alone lists only its own tax tasks, and any other task is 20001 [id], which
 // the source point cannot decide for audit_logs (it has none), so it is refused by the task itself.
+// Ledger export (CT-24zzm, D10-1740 / D10-1742): the source list GET /admin/v1/ledger opens on
+// fund.view or user.lookup, either one, so the source point here is that pair (any one held),
+// checked at create and again at download and retry on the creator's current points. A ledger
+// task is always masked (no column is pii, 04 §11.1); the request schema refuses unmasked and
+// reason, and the list's from ≤ to rule is 20001 [accounting_date_from, accounting_date_to].
 // Time only from the injected Clock. Logs nothing (no value, link or token reaches a log line).
 //
 // Pure module (no decorators, erasable syntax).
@@ -44,14 +49,19 @@ import { taxExportQuarterRange } from '../../payout/index.ts';
 import { auditRangeInvalid } from './audit-logs-read.ts';
 import { EXPORT_GENERATE_JOB, EXPORT_QUEUE } from './export-worker.ts';
 
-export type ExportResource = 'users' | 'audit_logs' | 'tax_withdrawals';
+export type ExportResource = 'users' | 'audit_logs' | 'tax_withdrawals' | 'ledger';
 export type ExportStatus = ExportTaskState;
 
-/** Source list → the point the list itself needs (audit_logs: signed in is enough). */
-const SOURCE_POINT: Readonly<Record<ExportResource, string | null>> = {
-  users: 'user.list',
+/** Points of which any one opens a source list (null: signed in is enough). */
+type SourcePoints = readonly string[] | null;
+
+/** Source list → the points the list itself needs, any one of them (audit_logs: signed in). */
+const SOURCE_POINT: Readonly<Record<ExportResource, SourcePoints>> = {
+  users: ['user.list'],
   audit_logs: null,
-  tax_withdrawals: 'fund.view',
+  tax_withdrawals: ['fund.view'],
+  // adminListLedgerEntries: fund.view or user.lookup (04 §11.1).
+  ledger: ['fund.view', 'user.lookup'],
 };
 /** The permission point of every export operation (04 §11.1; no step-up). */
 export const EXPORT_POINT = 'export';
@@ -81,6 +91,18 @@ const SUMMARY_MAX = 500;
 const ADMIN_ACTIVE_CREATOR = 'active';
 
 const TAX_RESOURCE = 'tax_withdrawals';
+const LEDGER_RESOURCE = 'ledger';
+const RESOURCES: ReadonlySet<string> = new Set([
+  'users',
+  'audit_logs',
+  TAX_RESOURCE,
+  LEDGER_RESOURCE,
+]);
+
+const LEDGER_SUB_ACCOUNT_NAMES: Readonly<Record<string, string>> = {
+  available: '可用',
+  frozen: '冻结',
+};
 
 type TaskRow = Selectable<DB['export_tasks']>;
 
@@ -89,18 +111,20 @@ export function exportFullPoint(resource: ExportResource): string {
   return resource === TAX_RESOURCE ? EXPORT_TAX_FULL_POINT : EXPORT_PII_POINT;
 }
 
-/** The point standing for the source list of a task: a full tax file has tax.export_full only. */
-function sourcePointOf(resource: ExportResource, masked: boolean): string | null {
-  return resource === TAX_RESOURCE && !masked ? EXPORT_TAX_FULL_POINT : SOURCE_POINT[resource];
+/** The points standing for the source list of a task: a full tax file has tax.export_full only. */
+function sourcePointOf(resource: ExportResource, masked: boolean): SourcePoints {
+  return resource === TAX_RESOURCE && !masked ? [EXPORT_TAX_FULL_POINT] : SOURCE_POINT[resource];
 }
 
 /** Only a full tax task is reachable without export. */
 const needsExport = (resource: ExportResource, masked: boolean): boolean =>
   resource !== TAX_RESOURCE || masked;
 
-/** The create command's version: audit logs are always masked, whatever the request says. */
+/** The create command's version: audit logs and ledgers are always masked, whatever the request says. */
 const maskedOf = (command: ExportCreateCommand): boolean =>
-  command.resource === 'audit_logs' || command.unmasked !== true;
+  command.resource === 'audit_logs' ||
+  command.resource === LEDGER_RESOURCE ||
+  command.unmasked !== true;
 
 /** The creator was disabled (or vanished) after its admin_token was checked: 10001, nothing written. */
 export class ExportCreatorInactiveError extends Error {
@@ -241,10 +265,8 @@ function statusOf(row: TaskRow): ExportStatus {
 }
 
 function resourceOf(row: TaskRow): ExportResource {
-  if (row.resource !== 'users' && row.resource !== 'audit_logs' && row.resource !== TAX_RESOURCE) {
-    throw new Error('admin export: unknown task resource');
-  }
-  return row.resource;
+  if (!RESOURCES.has(row.resource)) throw new Error('admin export: unknown task resource');
+  return row.resource as ExportResource;
 }
 
 /** yyyy-MM-dd HH:mm at +08:00 (display only), from an ISO 8601 instant. */
@@ -275,6 +297,22 @@ export function filtersSummary(
   let summary: string;
   if (resource === TAX_RESOURCE) {
     summary = `季度：${text('quarter') ?? ''}`;
+  } else if (resource === LEDGER_RESOURCE) {
+    const parts: string[] = [`用户：${text('user_id') ?? ''}`];
+    const type = text('ledger_type');
+    if (type !== undefined) parts.push(`流水类型：${type}`);
+    const subType = text('sub_type');
+    if (subType !== undefined) parts.push(`子类型：${subType}`);
+    const sub = text('sub_account');
+    if (sub !== undefined) parts.push(`子户：${LEDGER_SUB_ACCOUNT_NAMES[sub] ?? sub}`);
+    const from = text('accounting_date_from');
+    const to = text('accounting_date_to');
+    if (from !== undefined || to !== undefined) {
+      parts.push(`会计日：${from ?? '不限'} 至 ${to ?? '不限'}`);
+    }
+    const ref = text('ref');
+    if (ref !== undefined) parts.push(`关联单号：${ref}`);
+    summary = parts.join('；');
   } else if (resource === 'users') {
     const risk = text('risk_state');
     summary = `风控状态：${risk === undefined ? '全部' : (RISK_STATE_NAMES[risk] ?? risk)}`;
@@ -338,8 +376,15 @@ export function createAdminExports(deps: AdminExportsDeps): AdminExports {
   const pointsOf = async (actor: AdminActor): Promise<ReadonlySet<string>> =>
     new Set(await profiles.permissionKeys(actor.appId, actor.adminId));
 
-  const holds = (actor: AdminActor, points: ReadonlySet<string>, point: string | null): boolean =>
-    point === null || actor.isSuper || points.has(point);
+  /** Whether the actor holds the point, or any one of the points (null: nothing is needed). */
+  const holds = (
+    actor: AdminActor,
+    points: ReadonlySet<string>,
+    point: string | SourcePoints,
+  ): boolean =>
+    point === null ||
+    actor.isSuper ||
+    (typeof point === 'string' ? points.has(point) : point.some((one) => points.has(one)));
 
   const nameOf = async (appId: string, adminId: string): Promise<string | null> =>
     (await names.displayNames(appId, [adminId])).get(adminId) ?? null;
@@ -382,6 +427,17 @@ export function createAdminExports(deps: AdminExportsDeps): AdminExports {
       if (command.resource === 'audit_logs') {
         if (auditRangeInvalid(command.filters['from'], command.filters['to'])) {
           throw new ExportFieldsError(['from', 'to']);
+        }
+      } else if (command.resource === LEDGER_RESOURCE) {
+        // Always masked: the schema refuses unmasked and reason; the list's own range rule.
+        if (command.unmasked !== undefined || command.reason !== undefined) {
+          throw new ExportFieldsError(command.reason !== undefined ? ['reason'] : ['unmasked']);
+        }
+        const from = command.filters['accounting_date_from'];
+        const to = command.filters['accounting_date_to'];
+        // Both are YYYY-MM-DD (schema), so the text order is the date order, as on the list.
+        if (from !== undefined && to !== undefined && from > to) {
+          throw new ExportFieldsError(['accounting_date_from', 'accounting_date_to']);
         }
       } else if (masked === (command.reason !== undefined)) {
         // reason goes with unmasked: true only, and is required there (length by the schema).
