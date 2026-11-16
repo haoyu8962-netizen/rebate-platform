@@ -138,6 +138,10 @@ it(
     // blacklist_after_credit, validated in 0137 (orchestrator ruling D10-1101 ③). Same pinning as 0057.
     const b204zzlt = '0136_recon-diff-type-blacklist.sql';
     const b204zzltHash = '2450e3975462d41bc793a543ab519c31984a3c359e2261383bd9218f4512b74f';
+    // CT-13l (guard-change, D10-1825 / D10-1826 / D10-1839; owner agreed D10-1829): 0145 re-points
+    // link_logs_append_only to the dedicated app.reject_link_logs_update_delete(). Same pinning as 0057.
+    const ct13l = '0145_link-logs-default-purge.sql';
+    const ct13lHash = 'f6fe95124dce56a65f95dddb43713feefa4351d85bbf6b09a531f8f9dbf533a6';
     expect(module.APPROVED_GUARD_CHANGES).toEqual({
       [APPROVED_FILE]: createHash('sha256').update(bytes).digest('hex'),
       [ct25d]: ct25dHash,
@@ -148,6 +152,7 @@ it(
       [b204rb]: b204rbHash,
       [b104zv]: b104zvHash,
       [b204zzlt]: b204zzltHash,
+      [ct13l]: ct13lHash,
     });
     const ct25dPath = join(ROOT, 'db/migrations', ct25d);
     if (existsSync(ct25dPath)) {
