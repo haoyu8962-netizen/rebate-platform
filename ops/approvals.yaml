@@ -597,3 +597,9 @@ approvals:
     granted: true
     date: '2026-11-16'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（评审轮次属门禁流程小改动），D10-1816 / D10-1818 / D10-1820：三张都按 D10-1712 / D10-1733 改写了前序任务的冻结用例（modify_existing），red-check 对「在基线已存在、只有登记改动没有新红」的文件报 nothing is shown red，所以每个被改的冻结文件须另有 1 条在基线上因断言失败而红的真新用例（同 D10-1816 通例），新用例要过一次独立评审；三张的 spec-test 已各用 2 次（ce：11-14 一次输出格式被校验拒、一次 pass；bc：11-14 一次 fail、一次 pass；cc：11-14 两次），这一轮是各自第 3 次。写测试不超限（ce 第 3 次含 11-16 被位置检查作废、计了次的那一次；bc 第 3 次；cc 第 3 次）。只新增用例、收紧不放宽，不改金额计算与订单归属规则、不放宽密钥扫描、不删不削弱资金测试、不涉生产，故不属须先问负责人的情形（先例 approvals 60 / 62 / 65 / 91 / 95）；起因是先红规则的要求，不是测试质量问题。F1-08ce 改写的 8 块期望负责人已确认（D10-1819），不在本条范围。编排按 approvals 16 / 24 登记。'
+  - id: 97
+    row: 4
+    title: 'CT-13l 任务专属一次性追加：熔断例外——独立 Claude 每任务 10 次上限（规划/11 §2.5 task_calls）已满后，再做 1 次 red_exempt 门禁口径补录确认，只确认 #201 登记的 1 条声明（worker-day-partitions.int.test.ts「DEFAULT 有数据须先迁出…」块）；claude-run 的熔断与计数不改，由会话内全新上下文子代理（model opus）做，证据如实记 engine claude；其余口径与次数上限不变'
+    granted: true
+    date: '2026-11-16'
+    note: '负责人 2026-11-16 在编排会话原话「可以」（D10-1858；编排 D10-1851 按 规划/11 §7.1 第 6 行先请示）。起因：spec-test 第 3 轮（approvals 95）在 #201 登记 red_exempt 之前跑，evidence-check 要 spec_test_review.red_exempt_confirmed，D10-1850 要求补录，而 CT-13l 的独立 Claude 调用已满 10 次（写测试 4、spec-test 3、money 3）。补录结论：块体在合并基与头逐字相同、该行 2026-11-22 在 11-23 04:00 截断（08-25）后不过期故基线为绿、同文件因 modify_existing 改写块与新块 [AC-CT-13l#8] 整份重判，三样都确认（couli-runs/CT-13l/red-exempt-confirm.md）；#211 已合并。此后本任务再要独立调用一律先报编排。编排按 approvals 16 / 24 登记。'
