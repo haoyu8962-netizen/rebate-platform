@@ -7,25 +7,37 @@ import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { ok, text, type View } from '../exports/kit.ts';
 import {
+  AT_1,
+  AT_4,
   books,
   colleague,
   COLUMN,
   DAY_MS,
+  EARLY,
   EXPORT,
   expectSameAsList,
   exported,
   fileOf,
   harness,
   INTERNAL_TEXT,
+  LAST_SECOND,
+  type LedgerFile,
   ledgerBody,
   LOOKUP,
+  MIDNIGHT,
   openConsole,
   PII_POINTS,
+  type Posted,
   rowsOf,
   seedStory,
   setMaxRows,
   VIEW,
 } from './kit.ts';
+
+/** The voucher ids of a file, top to bottom. */
+const vouchersOf = (file: LedgerFile) => file.rows.map((cells) => cells[COLUMN.voucherId]);
+/** Newest first: the reverse of posting order (booked_at, then entry_id, both ascending). */
+const newestFirst = (posted: readonly Posted[]) => [...posted].reverse().map((v) => v.voucherId);
 
 const h = harness(createTestDatabase, acquireTestRedis);
 
@@ -188,3 +200,112 @@ it('[AC-CT-24zzm#19] 用户不属于本 App 或不存在：不导出任何分录
   expect(raw).not.toContain(posted.uniqKey);
   expect(raw).not.toContain(stranger.userId);
 });
+
+it('[AC-CT-24zzm#27] 会计日按 00:00 +08:00 日切：23:59:59 记的属当天，00:00 与 07:30 记的属次日（UTC 日期仍是前一天），accounting_date 列与会计日起止都按它', async () => {
+  const f = await openConsole(h, [EXPORT, VIEW]);
+  const b = books(h, f.appId);
+  const a = await b.member();
+  // Posted in time order; the UTC date of e2, e3 and e4 is 2026-10-08 alike.
+  const e1 = await b.credit(a, AT_1, 1_000n);
+  const e2 = await b.credit(a, LAST_SECOND, 300n);
+  const e3 = await b.credit(a, MIDNIGHT, 200n);
+  const e4 = await b.credit(a, EARLY, 50n);
+  const e5 = await b.credit(a, AT_4, 20n);
+  const user_id = a.userId;
+
+  const all = await exported(f, { user_id });
+  expect(all.row).toMatchObject({ status: 'done', row_count: 5 });
+  const file = await expectSameAsList(f, all.view.id, { user_id });
+  expect(vouchersOf(file)).toEqual(newestFirst([e1, e2, e3, e4, e5]));
+  const expected: [Posted, string, string, string, string][] = [
+    [e1, AT_1, '2026-10-07', '1000', '1000'],
+    [e2, LAST_SECOND, '2026-10-08', '300', '1300'],
+    [e3, MIDNIGHT, '2026-10-09', '200', '1500'],
+    [e4, EARLY, '2026-10-09', '50', '1550'],
+    [e5, AT_4, '2026-10-09', '20', '1570'],
+  ];
+  for (const [voucher, at, day, amount, after] of expected) {
+    const [cells] = rowsOf(file, voucher);
+    expect(cells, `${at} 的分录须在文件里`).toBeDefined();
+    expect(Date.parse(cells![COLUMN.bookedAt]!), `${at} 的 booked_at`).toBe(Date.parse(at));
+    expect(cells![COLUMN.accountingDate], `${at} 的会计日`).toBe(day);
+    expect(cells![COLUMN.amount]).toBe(amount);
+    expect(cells![COLUMN.balanceAfter]).toBe(after);
+  }
+
+  const cases: [Record<string, string>, Posted[]][] = [
+    [{ user_id, accounting_date_from: '2026-10-08', accounting_date_to: '2026-10-08' }, [e2]],
+    [{ user_id, accounting_date_to: '2026-10-08' }, [e1, e2]],
+    [{ user_id, accounting_date_from: '2026-10-09' }, [e3, e4, e5]],
+    [
+      { user_id, accounting_date_from: '2026-10-09', accounting_date_to: '2026-10-09' },
+      [e3, e4, e5],
+    ],
+    [{ user_id, accounting_date_to: '2026-10-07' }, [e1]],
+    [{ user_id, ref: e3.bizId, accounting_date_to: '2026-10-08' }, []],
+    [{ user_id, ref: e4.bizId, accounting_date_from: '2026-10-09' }, [e4]],
+  ];
+  for (const [filters, vouchers] of cases) {
+    const { view, row } = await exported(f, filters);
+    expect(row, JSON.stringify(filters)).toMatchObject({
+      status: 'done',
+      row_count: vouchers.length,
+    });
+    const narrowed = await expectSameAsList(f, view.id, filters);
+    expect(vouchersOf(narrowed), JSON.stringify(filters)).toEqual(newestFirst(vouchers));
+  }
+});
+
+/** Bursts of PER_INSTANT vouchers, one minute apart from 2026-10-05 23:00 +08:00 on. */
+const BURSTS = 150;
+const PER_INSTANT = 7;
+const two = (n: number) => String(n).padStart(2, '0');
+/** The burst g: 15:00Z + g minutes (g < 180, so within 15:00–17:59Z of 2026-10-05). */
+const burstAt = (g: number) => `2026-10-05T${two(15 + Math.floor(g / 60))}:${two(g % 60)}:00.000Z`;
+/** The first burst at or after 00:00 +08:00 of 2026-10-06 (16:00Z). */
+const FIRST_OF_06 = 60;
+
+it('[AC-CT-24zzm#28] 多页：1050 条流水多于数据源任何一页，每 7 张凭证同一时刻（页界落在同一时刻的凭证之间），文件 = 列表逐页拼起来，不重不漏、同序同值；跨日切的会计日筛选同样', async () => {
+  const f = await openConsole(h, [EXPORT, VIEW]);
+  const b = books(h, f.appId);
+  const a = await b.member();
+  const posted: Posted[] = [];
+  for (let g = 0; g < BURSTS; g++) {
+    const fens = Array.from({ length: PER_INSTANT }, (_, i) =>
+      BigInt(1 + ((g * PER_INSTANT + i) % 97)),
+    );
+    posted.push(...(await b.burst(a, burstAt(g), fens)));
+  }
+  const user_id = a.userId;
+  const cut = FIRST_OF_06 * PER_INSTANT;
+  const cases: [Record<string, string>, Posted[]][] = [
+    [{ user_id }, posted],
+    [{ user_id, accounting_date_from: '2026-10-06' }, posted.slice(cut)],
+    [{ user_id, accounting_date_to: '2026-10-05' }, posted.slice(0, cut)],
+  ];
+  const files: LedgerFile[] = [];
+  for (const [filters, vouchers] of cases) {
+    const { view, row } = await exported(f, filters);
+    expect(row, JSON.stringify(filters)).toMatchObject({
+      status: 'done',
+      row_count: vouchers.length,
+    });
+    const file = await expectSameAsList(f, view.id, filters);
+    // By hand as well: every voucher once, newest first, ties at one instant by entry_id descending.
+    expect(vouchersOf(file), JSON.stringify(filters)).toEqual(newestFirst(vouchers));
+    expect(new Set(file.rows.map((cells) => cells[COLUMN.entryId])).size).toBe(vouchers.length);
+    files.push(file);
+  }
+  // The first and the last entry of the whole file by hand: amounts 1 + (n mod 97), running sum.
+  const full = files[0]!;
+  const total = posted.reduce((sum, _, n) => sum + 1 + (n % 97), 0);
+  const top = full.rows[0]!;
+  expect(Date.parse(top[COLUMN.bookedAt]!)).toBe(Date.parse(burstAt(BURSTS - 1)));
+  expect(top[COLUMN.accountingDate]).toBe('2026-10-06');
+  expect(top[COLUMN.amount]).toBe(String(1 + ((BURSTS * PER_INSTANT - 1) % 97)));
+  expect(top[COLUMN.balanceAfter]).toBe(String(total));
+  const bottom = full.rows[full.rows.length - 1]!;
+  expect(Date.parse(bottom[COLUMN.bookedAt]!)).toBe(Date.parse(burstAt(0)));
+  expect(bottom[COLUMN.accountingDate]).toBe('2026-10-05');
+  expect([bottom[COLUMN.amount], bottom[COLUMN.balanceAfter]]).toEqual(['1', '1']);
+}, 300_000);

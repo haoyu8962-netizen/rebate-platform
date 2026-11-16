@@ -16,6 +16,8 @@
 // Ledger tasks are only ever created over HTTP: until the implementation opens the resource, the
 // route schema refuses it and the table's CHECK does too, and a red must be an assertion.
 // Provisioners are passed in by the *.int.test.ts files.
+import type { DB } from '@couli/db';
+import type { Transaction } from 'kysely';
 import { randomUUID } from 'node:crypto';
 import { expect } from 'vitest';
 import { createLedger, type PostingEntry } from '../../../../apps/api/src/modules/ledger/index.ts';
@@ -92,6 +94,14 @@ export const AT_2 = '2026-10-08T03:00:00.000Z';
 export const AT_3 = '2026-10-08T05:00:00.000Z';
 /** 2026-10-09 09:00 +08:00 (two vouchers at this same instant). */
 export const AT_4 = '2026-10-09T01:00:00.000Z';
+// Around the +08:00 day cut (BR-FUND-16: 00:00 +08:00): the UTC date of these instants is 10-08
+// while the accounting date of the last two is 10-09.
+/** 2026-10-08 23:59:59 +08:00, accounting date 2026-10-08. */
+export const LAST_SECOND = '2026-10-08T15:59:59.000Z';
+/** 2026-10-09 00:00:00 +08:00, accounting date 2026-10-09 (UTC date 2026-10-08). */
+export const MIDNIGHT = '2026-10-08T16:00:00.000Z';
+/** 2026-10-09 07:30 +08:00, accounting date 2026-10-09 (UTC date 2026-10-08). */
+export const EARLY = '2026-10-08T23:30:00.000Z';
 
 export interface Owner {
   readonly userId: string;
@@ -138,6 +148,41 @@ export function books(h: Harness, appId: string) {
   /** One voucher of `who` at `at`: the user lines, then the platform balancing line. */
   async function post(who: Owner, at: string, seed: VoucherSeed, targetApp = appId) {
     clock.set(at);
+    return h.db.transaction().execute(async (trx) => {
+      await ledger.lockBalances(trx, { appId: targetApp, userIds: [who.userId] });
+      return postIn(trx, who, seed, targetApp);
+    });
+  }
+
+  /**
+   * One credit of `who` per amount, all in one transaction: the ledger books every voucher of a
+   * transaction at the same instant, so they all carry booked_at `at` (entry ids in this order).
+   */
+  async function burst(who: Owner, at: string, fens: readonly bigint[]): Promise<Posted[]> {
+    clock.set(at);
+    return h.db.transaction().execute(async (trx) => {
+      await ledger.lockBalances(trx, { appId, userIds: [who.userId] });
+      const posted: Posted[] = [];
+      for (const fen of fens) {
+        posted.push(
+          await postIn(
+            trx,
+            who,
+            { ledgerType: 'REBATE_CREDIT', lines: [{ sub: 'available', fen: -fen }] },
+            appId,
+          ),
+        );
+      }
+      return posted;
+    });
+  }
+
+  async function postIn(
+    trx: Transaction<DB>,
+    who: Owner,
+    seed: VoucherSeed,
+    targetApp: string,
+  ): Promise<Posted> {
     const bizId = seed.bizId ?? randomUUID();
     const bizType = seed.bizType ?? 'FIXTURE';
     const uniqKey = seed.uniqKey ?? `fixture:${randomUUID()}`;
@@ -161,21 +206,18 @@ export function books(h: Harness, appId: string) {
         income_type: null,
       });
     }
-    const result = await h.db.transaction().execute(async (trx) => {
-      await ledger.lockBalances(trx, { appId: targetApp, userIds: [who.userId] });
-      return ledger.post(trx, {
-        appId: targetApp,
-        uniqKey,
-        bizType,
-        bizId,
-        operator: seed.operator ?? 'system',
-        memo: seed.memo ?? null,
-        orderKey: null,
-        beneficiaryUserId: null,
-        role: null,
-        voucherKind: null,
-        entries,
-      });
+    const result = await ledger.post(trx, {
+      appId: targetApp,
+      uniqKey,
+      bizType,
+      bizId,
+      operator: seed.operator ?? 'system',
+      memo: seed.memo ?? null,
+      orderKey: null,
+      beneficiaryUserId: null,
+      role: null,
+      voucherKind: null,
+      entries,
     });
     expect(result.kind).toBe('posted');
     return { voucherId: result.voucherId, uniqKey, bizType, bizId } satisfies Posted;
@@ -189,7 +231,7 @@ export function books(h: Harness, appId: string) {
       lines: [{ sub: 'available', fen: -fen }],
     });
 
-  return { clock, ledger, member, post, credit };
+  return { clock, ledger, member, post, burst, credit };
 }
 export type Books = ReturnType<typeof books>;
 
@@ -310,25 +352,43 @@ export interface LedgerItem {
   readonly link: { readonly type: string; readonly id: string } | null;
 }
 
-/** GET /admin/v1/ledger with the filters as the creator, every row (page_size 200, the maximum). */
+/** The list's largest page (adminListLedgerEntries page_size ≤ 200). */
+const LIST_PAGE = 200;
+
+/**
+ * GET /admin/v1/ledger with the filters as the creator, every row: pages 1, 2, … of page_size 200
+ * (the maximum) concatenated, until the list's total is reached.
+ */
 export async function listed(
   f: Console,
   filters: Readonly<Record<string, string>>,
   token?: string,
 ): Promise<{ readonly items: readonly LedgerItem[]; readonly total: number }> {
-  const query = new URLSearchParams({ ...filters, page: '1', page_size: '200' }).toString();
-  const response: Response = await f.request(
-    'GET',
-    `${LEDGER_PATH}?${query}`,
-    undefined,
-    undefined,
-    token,
-  );
-  expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
-  const data = response.json<{ code: number; data: { items: LedgerItem[]; total: number } }>();
-  expect(data.code).toBe(0);
-  expect(data.data.total, '样本须在一页之内').toBeLessThanOrEqual(200);
-  return { items: data.data.items, total: data.data.total };
+  const items: LedgerItem[] = [];
+  let total = 0;
+  for (let page = 1; ; page++) {
+    const query = new URLSearchParams({
+      ...filters,
+      page: String(page),
+      page_size: String(LIST_PAGE),
+    }).toString();
+    const response: Response = await f.request(
+      'GET',
+      `${LEDGER_PATH}?${query}`,
+      undefined,
+      undefined,
+      token,
+    );
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const data = response.json<{ code: number; data: { items: LedgerItem[]; total: number } }>();
+    expect(data.code).toBe(0);
+    total = data.data.total;
+    items.push(...data.data.items);
+    if (data.data.items.length < LIST_PAGE || items.length >= total) break;
+  }
+  expect(items, '列表逐页拼起来须正好是 total 条').toHaveLength(total);
+  expect(new Set(items.map((item) => item.entry_id)).size, '列表各页不得重复').toBe(total);
+  return { items, total };
 }
 
 /** The cells a list item must become: values as the response gives them, null as empty. */
