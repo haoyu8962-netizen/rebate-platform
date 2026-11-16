@@ -117,10 +117,14 @@ export const SUPPORT_BASE = [
   '',
 ].join('\n');
 
-/** The same fixture at the head: the token now carries the summary (no assertion line touched). */
+/**
+ * The same fixture at the head: the token now carries the step-up summary (no assertion line
+ * touched). Since D10-1775 only tokens inserted: an optional parameter whose name the base does
+ * not hold (not `summary`, a property name of the base) and a property appended to the literal.
+ */
 export const SUPPORT_HEAD = SUPPORT_BASE.replace(
   "export function stepUpToken(userId: string) {\n  return { userId, purpose: 'payout' };",
-  "export function stepUpToken(userId: string, summary = 'withdraw:100') {\n  return { userId, purpose: 'payout', summary };",
+  "export function stepUpToken(userId: string, stepUp?: string) {\n  return { userId, purpose: 'payout', stepUp };",
 );
 
 /** SUPPORT_BASE with `line` inserted right after the `return` line of stepUpToken. */
@@ -130,11 +134,11 @@ export function supportWith(line: string, text: string = SUPPORT_BASE): string {
   return text.replace(anchor, `${anchor}\n${line}`);
 }
 
-/** A plain kit with one factory; `summary` adds the summary parameter and field. */
+/** A plain kit with one factory; `summary` adds the (optional) summary parameter and field. */
 export function kitSource(fn: string, summary: boolean): string {
   return [
     ...PAD,
-    `export function ${fn}(id: string${summary ? ", summary = 'withdraw:100'" : ''}) {`,
+    `export function ${fn}(id: string${summary ? ', summary?: string' : ''}) {`,
     `  return { id${summary ? ', summary' : ''} };`,
     '}',
     '',
@@ -153,7 +157,7 @@ export const T2_HEAD = itBlock(
 
 const HELPER_PLAIN = 'function applyInput(amount: number) {\n  return { amount };\n}';
 const HELPER_SUMMARY =
-  "function applyInput(amount: number, summary = 'withdraw:100') {\n  return { amount, summary };\n}";
+  'function applyInput(amount: number, summary?: string) {\n  return { amount, summary };\n}';
 
 /** HELPER_TEST: `helper` the top-level helper's text, then the two blocks. */
 export function helperTest(
@@ -565,3 +569,208 @@ export function branchVia(
   git(repo.dir, ['commit', '-q', '-m', 'evidence']);
   return { head: git(repo.dir, ['rev-parse', 'HEAD']), spec: specCommit };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Round 3 (orchestrator ruling D10-1689, whitelist A, after review-claude-2): outside its it /
+// test blocks a support file may only gain tokens. From the merge base to the head, the tokens
+// outside the blocks keep every base token, in order (none removed, none changed); the inserted
+// tokens hold no control flow and no assertion call; comments are not compared.
+// Round 4 (D10-1775): the base tokens are an ordered subsequence of the head's (moved or swapped
+// tokens are refused); inserted tokens hold no `?.`, `=>`, `function`, `class`, comma expression,
+// test modifier (skip, only, todo, failing, skipIf, runIf) or vi mock / doMock / stubGlobal,
+// declare no name the base file already holds, and none is inserted into a statement holding an
+// assertion call; code wrapped into a comment or a template counts as removed.
+
+/** 1-based number of the line of `text` that is exactly `line` (found once). */
+export function lineAt(text: string, line: string): number {
+  const lines = text.split('\n');
+  const at = lines.indexOf(line);
+  if (at < 0 || lines.indexOf(line, at + 1) >= 0) {
+    throw new Error(`fixture: line "${line}" not found exactly once`);
+  }
+  return at + 1;
+}
+
+/** `text` with the line `line` (exactly, found once) replaced by `to` (null: removed). */
+export function replaceLine(text: string, line: string, to: string | null): string {
+  const lines = text.split('\n');
+  const at = lines.indexOf(line);
+  if (at < 0 || lines.indexOf(line, at + 1) >= 0) {
+    throw new Error(`fixture: line "${line}" not found exactly once`);
+  }
+  if (to === null) lines.splice(at, 1);
+  else lines[at] = to;
+  return lines.join('\n');
+}
+
+/** `text` with `added` (one or more lines) inserted right after the line `after`. */
+export function insertAfter(text: string, after: string, added: string): string {
+  return replaceLine(text, after, `${after}\n${added}`);
+}
+
+/** `text` with the substring `from` (found once) replaced by `to`. */
+export function replaceOnce(text: string, from: string, to: string): string {
+  const at = text.indexOf(from);
+  if (at < 0 || text.indexOf(from, at + 1) >= 0) {
+    throw new Error(`fixture: "${from}" not found exactly once`);
+  }
+  return `${text.slice(0, at)}${to}${text.slice(at + from.length)}`;
+}
+
+/**
+ * The problem that refuses a change outside the blocks of a support file (round 3): it names
+ * `file` and one of `lines` (a merge-base or head line number) as a number of its own, as #19 /
+ * #20 pin it. No wording is pinned.
+ */
+export function lineProblem(
+  report: EvidenceReport,
+  file: string,
+  lines: readonly number[],
+): string | undefined {
+  return report.problems.find(
+    (p) =>
+      p.includes(file) &&
+      lines.some((n) => new RegExp(`(?<![0-9A-Fa-f])${n}(?![0-9A-Fa-f])`).test(p)),
+  );
+}
+
+/**
+ * A money fixture (a ledger directory: rule_change only, with the owner label) after the frozen
+ * test/spec/ledger/admin-adjustments/kit.ts of review-claude-2 S1: assertion helpers whose names
+ * do not start with expect / assert (`conforms`, `answer`, `denied`) called outside any block.
+ */
+export const ADMIN_KIT = 'test/spec/ledger/admin-adjustments/kit.ts';
+
+/** Lines of ADMIN_BASE the round 3 cases edit or insert after (each exactly once in the file). */
+export const ADMIN = {
+  vitest: "import { expect } from 'vitest';",
+  send: "import { send } from './http.ts';",
+  plan: '// assertions (status, code, schema) live in answer() and conforms().',
+  answerDoc: '/** Status and code, then the contract schema. */',
+  order: '  // expect(body.code) first: a wrong code reads better than a schema diff',
+  json: '  const body = sent.json();',
+  code: '  expect(body.code).toBe(code);',
+  conforms: '  await conforms(sent);',
+  returnBody: '  return body;',
+  denied: "  return answer(sent, 10403, { reason: 'admin_permission_denied' });",
+  executed: '  const body = await answer(sent, 0);',
+  adjustment: '  expectAdjustment(body.data);',
+  adjust: 'export async function adjust(app: App, body: AdjustBody) {',
+  post: "  const sent = await send(app, 'POST', '/admin/adjustments', body);",
+  total: '  return { sent, total: body.amount + body.fee };',
+  part: "    if (part === '') void part;",
+  raw: "  const raw = sent.headers['x-step-up'];",
+  // Round 4 (D10-1775): an assertion over two lines and an assertion helper call over three.
+  validate: '  expect(validate(schema, sent.json()))',
+  toBeTrue: '    .toBe(true);',
+  adjustOpen: '  expectAdjustment(',
+  adjustArg: '    sent.json(),',
+  adjustClose: '  );',
+  status: '  expect(sent.statusCode).toBe(HTTP_STATUS[code]);',
+  stepUpOf: 'export function stepUpOf(sent: AdminSent) {',
+  // Round 4: an interface, a type literal and existing control flow (settle()).
+  path: '  path: string;',
+  bodyType: 'export type AdjustBody = { amount: number; fee: number };',
+  settle: 'export async function settle(app: App, sent: AdminSent) {',
+  settlePost: "    await send(app, 'POST', '/admin/settle', sent.json());",
+  finally: '  } finally {',
+  finallyBody: '    void app;',
+  close: "    await send(app, 'POST', '/admin/close', { id: sent.path });",
+  catchBody: '    void sent.path;',
+  switchOn: '  switch (sent.path) {',
+  caseBody: '      void sent;',
+  left: '  let left = 3;',
+  beforeWhile: '  void left;',
+  loopBody: '    left -= 1;',
+  ifBody: '    void left;',
+} as const;
+
+/** ADMIN_KIT at the merge base (eighteen comment lines first: every edited line is past 18). */
+export const ADMIN_BASE = [
+  ...PAD,
+  ADMIN.vitest,
+  "import { contractPaths, validate } from '../../../support/contract.ts';",
+  ADMIN.send,
+  '',
+  ADMIN.plan,
+  '',
+  "/** The response body conforms to its operation's schema. */",
+  'export async function conforms(sent: AdminSent): Promise<void> {',
+  '  const schema = (await contractPaths())[sent.path];',
+  ADMIN.validate,
+  ADMIN.toBeTrue,
+  ADMIN.adjustOpen,
+  ADMIN.adjustArg,
+  ADMIN.adjustClose,
+  '}',
+  '',
+  'export function expectAdjustment(data: unknown) {',
+  "  expect(Object.keys(data as object).sort()).toEqual(['adjustment', 'available_after_fen']);",
+  '}',
+  '',
+  ADMIN.answerDoc,
+  'export async function answer(sent: AdminSent, code: number, data?: unknown) {',
+  ADMIN.status,
+  ADMIN.json,
+  ADMIN.order,
+  ADMIN.code,
+  ADMIN.conforms,
+  ADMIN.returnBody,
+  '}',
+  '',
+  '/** 10403 of an account without the permission point. */',
+  'export function denied(sent: AdminSent) {',
+  ADMIN.denied,
+  '}',
+  '',
+  'export async function executed(sent: AdminSent) {',
+  ADMIN.executed,
+  ADMIN.adjustment,
+  '  return body.data;',
+  '}',
+  '',
+  ADMIN.adjust,
+  ADMIN.post,
+  ADMIN.total,
+  '}',
+  '',
+  ADMIN.stepUpOf,
+  "  for (const part of String(sent.headers['x-step-up']).split(',')) {",
+  ADMIN.part,
+  '  }',
+  ADMIN.raw,
+  '}',
+  '',
+  'export interface AdminSent {',
+  ADMIN.path,
+  '  statusCode: number;',
+  '}',
+  '',
+  ADMIN.bodyType,
+  '',
+  ADMIN.settle,
+  '  try {',
+  ADMIN.settlePost,
+  ADMIN.finally,
+  ADMIN.finallyBody,
+  '  }',
+  '  try {',
+  ADMIN.close,
+  '  } catch {',
+  ADMIN.catchBody,
+  '  }',
+  ADMIN.switchOn,
+  "    case '/admin/adjustments':",
+  ADMIN.caseBody,
+  '  }',
+  ADMIN.left,
+  ADMIN.beforeWhile,
+  '  while (left > 0) {',
+  ADMIN.loopBody,
+  '  }',
+  '  if (left === 0) {',
+  ADMIN.ifBody,
+  '  }',
+  '}',
+  '',
+].join('\n');

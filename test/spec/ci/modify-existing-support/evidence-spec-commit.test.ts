@@ -40,11 +40,14 @@ beforeAll(() => {
 });
 afterAll(cleanup);
 
-/** The data change of SUPPORT_HEAD (stepUpToken gets the summary), applicable to any variant. */
+/**
+ * The data change of SUPPORT_HEAD (stepUpToken gets the step-up summary, tokens only inserted),
+ * applicable to any variant.
+ */
 const DATA_FROM =
   "export function stepUpToken(userId: string) {\n  return { userId, purpose: 'payout' };";
 const DATA_TO =
-  "export function stepUpToken(userId: string, summary = 'withdraw:100') {\n  return { userId, purpose: 'payout', summary };";
+  "export function stepUpToken(userId: string, stepUp?: string) {\n  return { userId, purpose: 'payout', stepUp };";
 const withData = (text: string): string => {
   if (!text.includes(DATA_FROM)) throw new Error('fixture: data anchor missing');
   return text.replace(DATA_FROM, DATA_TO);

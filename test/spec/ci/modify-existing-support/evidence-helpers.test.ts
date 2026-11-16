@@ -4,7 +4,8 @@
 // `expectMentions(`, `assertTable(`, `helpers.expectSchema(`, `assertOnlyReads(` … — is refused,
 // naming the file and the line, in a money or attribution fixture too (rule_change with the owner
 // label). Names that are not called (`expected`, `expectedRows.push(`, `asserted`) are other words:
-// changing such lines passes.
+// new lines holding them may be inserted; since round 3 (D10-1689, whitelist A) changing an
+// original such line is refused like any changed token (#32).
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import {
   type Repo,
@@ -15,6 +16,7 @@ import {
   cleanup,
   ledger,
   lineOf,
+  lineProblem,
   makeRepo,
   problemsOf,
   refusal,
@@ -191,30 +193,51 @@ it(
 );
 
 it(
-  '[CT-06zzzzzi#32] lines naming expected / expectedRows.push( / asserted without calling an expect… or assert… identifier may change outside the blocks',
+  '[CT-06zzzzzi#32] new lines naming expected / expectedRows.push( / asserted (no expect… or assert… identifier called) may be inserted outside the blocks; changing the original such lines is refused, naming the file and the line (round 3, D10-1689)',
   () => {
     const dir = trusted('helpers-plain', ledger([support(DEVICES)]));
-    const changes: [string, string][] = [
-      [EXPECTED, '  const expected = [1n, 3n];'],
-      [EXPECTED_ROWS, "  expectedRows.push({ id: 'a', amount: 200n });"],
-      [ASSERTED, '  const asserted = rows.length + 1;'],
+    // Inserted after the base's `asserted` line: no control flow, no assertion call.
+    const inserts = [
+      '  const expectedMore = [3n];',
+      "  expectedRows.push({ id: 'b', amount: 300n });",
+      '  const assertedToo = rows.length + 1;',
     ];
-    changes.forEach(([from, to], i) => {
-      const head = edit(DEVICES_BASE, from, to);
-      expect(head).not.toBe(DEVICES_BASE);
+    inserts.forEach((line, i) => {
+      const head = add(DEVICES_BASE, ASSERTED, line);
       const report = check(repo, supportBranch(`plain-${i}`, DEVICES, DEVICES_BASE, head), dir);
-      expect(report.problems, to).toEqual([]);
+      expect(report.problems, line).toEqual([]);
     });
     // All three at once, and in the money fixture with the owner label.
-    const all = changes.reduce((text, [from, to]) => edit(text, from, to), DEVICES_BASE);
+    const all = add(DEVICES_BASE, ASSERTED, inserts.join('\n'));
     expect(
       check(repo, supportBranch('plain-all', DEVICES, DEVICES_BASE, all), dir).problems,
     ).toEqual([]);
     const money = trusted('helpers-plain-money', ledger([support(CLOSING)]));
-    const closing = changes.reduce((text, [from, to]) => edit(text, from, to), CLOSING_BASE);
+    const closing = add(CLOSING_BASE, ASSERTED, inserts.join('\n'));
     const report = check(repo, supportBranch('plain-money', CLOSING, CLOSING_BASE, closing), money);
     expect(report.problems).toEqual([]);
     expect(report.ok).toBe(true);
+    // The original lines changed (a value, an identifier): refused, naming the file and the line.
+    const changes: [string, string][] = [
+      [EXPECTED, '  const expected = [1n, 3n];'],
+      [EXPECTED_ROWS, "  expectedRows.push({ id: 'a', amount: 200n });"],
+      [ASSERTED, '  const asserted = rows.size;'],
+    ];
+    changes.forEach(([from, to], i) => {
+      const head = edit(DEVICES_BASE, from, to);
+      expect(head).not.toBe(DEVICES_BASE);
+      const r = check(repo, supportBranch(`plain-x-${i}`, DEVICES, DEVICES_BASE, head), dir);
+      expect(r.ok, to).toBe(false);
+      const line = lineOf(DEVICES_BASE, from);
+      expect(lineProblem(r, DEVICES, [line]), `${to}\n${problemsOf(r)}`).toBeDefined();
+    });
+    const [moneyFrom, moneyTo] = changes[1] ?? ['', ''];
+    const changed = edit(CLOSING_BASE, moneyFrom, moneyTo);
+    const m = check(repo, supportBranch('plain-x-money', CLOSING, CLOSING_BASE, changed), money);
+    expect(m.ok).toBe(false);
+    expect(m.approval_wanted).toBe(true);
+    const moneyLine = lineOf(CLOSING_BASE, moneyFrom);
+    expect(lineProblem(m, CLOSING, [moneyLine]), problemsOf(m)).toBeDefined();
   },
   SLOW,
 );
