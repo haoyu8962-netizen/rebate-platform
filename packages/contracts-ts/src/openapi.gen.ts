@@ -3152,9 +3152,17 @@ export interface paths {
          *     /admin/v1/me/permissions (04 §11 step-up column).
          *     `tier=sms` on an account without a registered verify phone is 10003 with `data.tier=sms`
          *     and `data.reason=verify_phone_missing`. A wrong code is 20002 without a reason; an expired
-         *     or voided SMS code is 20003. Not fixed by BR-ID-34 and left open here: whether wrong
-         *     step-up codes count towards the login-failure lock, and the token lifetime and number of
-         *     uses (the response carries `expire_at`; the server decides).
+         *     or voided SMS code is 20003.
+         *     Token use (BR-ID-08 「只能用于 1 次成功的业务请求」 as the admin side follows it): a token
+         *     is spent only by a business success of an operation that checks it (HTTP 2xx with
+         *     `code=0`); then it is void and a repeat with it is 10003. When that operation is rejected
+         *     or fails (any other status or code, or a server error) the token is released and stays
+         *     usable until `expire_at`, so the console may replay the request with the same token and
+         *     asks for a new code only when the answer is 10003. While one request holds the token,
+         *     another request with it is 10003. An operation that needs no step-up ignores a token sent
+         *     with it. Not fixed by BR-ID-34 and left open here: whether wrong step-up codes count
+         *     towards the login-failure lock, and the token lifetime (the response carries `expire_at`;
+         *     the server decides).
          */
         post: operations["adminStepUp"];
         delete?: never;
@@ -6668,21 +6676,32 @@ export interface paths {
          *     valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`; 04 §11.2 动态码, OPS-14).
          *     The version number is the type's current newest version + 1 (1 for the first), set by the
          *     server. `title` and `body` (tiptap JSON as a string, nodes and marks within the agreement
-         *     body whitelist) are the text; `min_version` is where re-consent (privacy, agreement,
-         *     BR-ID-12) or re-signing (labor_agreement, BR-WDR-31) starts; sdk_list and collect_list
-         *     take no part in consent (D10-465), so their min_version must equal the new version and
-         *     requires_resign must be false; `legal_confirmed_by`,
+         *     body whitelist) are the text; `min_version` is the oldest version still valid (BR-ID-12:
+         *     for privacy it becomes legal.privacy.min_version, and a signed-in user whose user-level
+         *     privacy consent is below it gets 10004 with consent_type=privacy on x-auth≥login
+         *     operations; for agreement it becomes legal.agreement.min_version, for which BR-ID-12
+         *     returns no 10004; for labor_agreement a signature below it must be redone, BR-WDR-31); it
+         *     is at least 1, not below the current version's min_version (never lowered) and not above
+         *     the new version; sdk_list and collect_list take no part in consent (D10-465), so their
+         *     min_version must equal the new version and requires_resign must be false.
+         *     `requires_resign` is not chosen freely: for
+         *     labor_agreement it must be true exactly when min_version equals the new version (false
+         *     otherwise), for every other type it must be false; the server checks the value sent and
+         *     does not fill it in. The re-consent rules themselves are those of BR-ID-12 and
+         *     BR-WDR-31, not this flag. `legal_confirmed_by`,
          *     `legal_confirm_note` and `legal_confirmed_on` record the legal confirmation (OPS-14,
-         *     BR-ID-12). A failed check is 20001 with `data.fields` naming the field: min_version below
-         *     the current version's min_version or above the new version, requires_resign not as the
-         *     publish rules require for the type and min_version, a legal confirmation field missing or
-         *     blank, or a body outside the whitelist. CAS: `expected_version` is the type's newest
+         *     BR-ID-12). A failed check is 20001 with `data.fields` naming every field that failed:
+         *     `min_version` (out of the range above), `requires_resign` (not the value the rule above
+         *     gives for the type and min_version), a legal confirmation field missing or blank, or
+         *     `body` outside the whitelist. CAS: `expected_version` is the type's newest
          *     version as the console showed it (0 when none is published yet); a mismatch → 20902 with
          *     `data.resource=agreement`, refresh and retry (04 §6.6). In one transaction the server
-         *     inserts the agreement article (category agreement) and the agreements row, and for
-         *     privacy and agreement also writes legal.<type>.version (privacy also
-         *     legal.privacy.min_version, 04 §10.1). Writes an audit record with the legal confirmer,
-         *     the confirmation date and min_version and requires_resign before and after (BR-ID-12).
+         *     inserts the agreement article revision (category agreement) and the agreements row, and for
+         *     privacy and agreement also writes legal.<type>.version and legal.<type>.min_version
+         *     (04 §10.1). Each type has one agreement article: the first publish of a type creates it,
+         *     every later version adds a new revision of the same article (same `article_id`,
+         *     the next `article_version`), so all versions of a type share one `article_id`. Writes an
+         *     audit record with the legal confirmer, the confirmation date and min_version and requires_resign before and after (BR-ID-12).
          *     Published versions are never changed or deleted. The response is the new version. No
          *     Idempotency-Key (04 §6.6; the CAS keeps a retry from publishing twice).
          */
@@ -6944,6 +6963,12 @@ export interface paths {
          *     Changes without that re-check (`sort`, `start_at`, `end_at`, `status=offline`, or `status=online`
          *     on an item already online) never return 30147. An unknown `pool_id` or a `product_key` not in
          *     the pool → 30701.
+         *     Target-value semantics, so sending the same body again is safe: each field sent is set to the
+         *     value given (fields left out keep theirs), never moved relative to the stored value. A repeat of
+         *     a request that succeeded finds the item already in that state and changes nothing further
+         *     (`status=online` on an item already online runs no re-check); only `updated_at` moves and one
+         *     more audit record is written. A repeat after a 200 that left the item offline from the re-check,
+         *     or after 30147 or 50401 (nothing changed), runs the re-check again as a new attempt.
          *     Written to the audit log in the same transaction (action pool_item_update, before and after).
          */
         patch: operations["adminUpdatePoolItem"];
@@ -16125,10 +16150,10 @@ export interface components {
             version: number;
             /**
              * Format: int32
-             * @description Where re-consent (privacy, agreement, BR-ID-12) or re-signing (labor_agreement, BR-WDR-31) starts; equals version for sdk_list and collect_list (D10-465).
+             * @description The oldest version still valid (BR-ID-12; for privacy legal.privacy.min_version, below it a signed-in user gets 10004; for agreement legal.agreement.min_version; for labor_agreement signatures below it are redone, BR-WDR-31); equals version for sdk_list and collect_list (D10-465).
              */
             min_version: number;
-            /** @description Whether this version is marked as requiring a new signature (04 §6.2). */
+            /** @description Whether this version is marked as requiring a new signature (04 §6.2); by the publish rule true exactly for a labor_agreement version whose min_version equals its version, false for every other type. */
             requires_resign: boolean;
             article_id: components["schemas"]["Id"];
             /**
@@ -16158,10 +16183,10 @@ export interface components {
             version: number;
             /**
              * Format: int32
-             * @description Where re-consent (privacy, agreement, BR-ID-12) or re-signing (labor_agreement, BR-WDR-31) starts; equals version for sdk_list and collect_list (D10-465).
+             * @description The oldest version still valid (BR-ID-12; for privacy legal.privacy.min_version, below it a signed-in user gets 10004; for agreement legal.agreement.min_version; for labor_agreement signatures below it are redone, BR-WDR-31); equals version for sdk_list and collect_list (D10-465).
              */
             min_version: number;
-            /** @description Whether this version is marked as requiring a new signature (04 §6.2). */
+            /** @description Whether this version is marked as requiring a new signature (04 §6.2); by the publish rule true exactly for a labor_agreement version whose min_version equals its version, false for every other type. */
             requires_resign: boolean;
             article_id: components["schemas"]["Id"];
             /**
@@ -16221,10 +16246,10 @@ export interface components {
             body: string;
             /**
              * Format: int32
-             * @description Where re-consent or re-signing starts; not below the current version's, not above the new version; for sdk_list and collect_list exactly the new version (D10-465).
+             * @description The oldest version still valid (BR-ID-12, BR-WDR-31); at least 1, not below the current version's min_version, not above the new version; for sdk_list and collect_list exactly the new version (D10-465). Otherwise 20001 with data.fields=[min_version].
              */
             min_version: number;
-            /** @description Whether the new version requires a new signature; must agree with the publish rules for the type and min_version. */
+            /** @description Must be true for labor_agreement when min_version equals the new version, false for labor_agreement otherwise and false for every other type; any other value is 20001 with data.fields=[requires_resign] (the server does not fill it in). */
             requires_resign: boolean;
             /** @description Who confirmed the version for legal (OPS-14). */
             legal_confirmed_by: string;
@@ -22397,6 +22422,9 @@ export interface components {
          *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
          *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
          *     optional). Only on admin console operations; app operations use StepUpToken.
+         *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+         *     error it is released and can be sent again until its expire_at (see POST
+         *     /admin/v1/auth/step-up).
          */
         AdminStepUpToken: string;
         /** @description Template code (code of GET /admin/v1/notify-channels); not a template code of the app → 20001 with data.fields=[code]. */
@@ -29689,6 +29717,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -29925,6 +29956,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -30060,6 +30094,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -30131,6 +30168,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -30209,6 +30249,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -30279,6 +30322,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -30367,6 +30413,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -30516,6 +30565,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -30956,6 +31008,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -31081,6 +31136,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -31635,6 +31693,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -31705,6 +31766,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -31755,6 +31819,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -31834,6 +31901,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -31913,6 +31983,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32064,6 +32137,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32148,6 +32224,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32226,6 +32305,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32558,6 +32640,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32628,6 +32713,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32787,6 +32875,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32860,6 +32951,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -33387,6 +33481,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -33718,6 +33815,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -34314,6 +34414,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -34457,6 +34560,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -34587,6 +34693,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -34670,6 +34779,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -34862,6 +34974,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -34929,6 +35044,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -35006,6 +35124,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -35098,6 +35219,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36508,6 +36632,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36551,7 +36678,7 @@ export interface operations {
                      *         "version": 3,
                      *         "min_version": 3,
                      *         "requires_resign": true,
-                     *         "article_id": "0199a3b4-0000-7000-8000-000000000004",
+                     *         "article_id": "0199a3b4-0000-7000-8000-000000000003",
                      *         "article_version": 3,
                      *         "text_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
                      *         "url": "https://cdn.example.test/legal/labor-agreement-v3.html",
@@ -37803,6 +37930,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -37950,6 +38080,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -38321,6 +38454,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -38436,6 +38572,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -38592,6 +38731,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -38724,6 +38866,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -38976,6 +39121,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -39154,6 +39302,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -39232,6 +39383,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -39690,6 +39844,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -40087,6 +40244,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -40859,6 +41019,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -40965,6 +41128,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -41027,6 +41193,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -41204,6 +41373,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -41377,6 +41549,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -41636,6 +41811,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -41798,6 +41976,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -41878,6 +42059,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -41946,6 +42130,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -42339,6 +42526,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -42422,6 +42612,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -42595,6 +42788,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -42664,6 +42860,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -42735,6 +42934,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -43056,6 +43258,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -43118,6 +43323,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -43285,6 +43493,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -43340,6 +43551,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -43396,6 +43610,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -43660,6 +43877,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -43749,6 +43969,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -43837,6 +44060,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -43917,6 +44143,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -44199,6 +44428,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -44366,6 +44598,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -44524,6 +44759,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -44679,6 +44917,9 @@ export interface operations {
                  *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
                  *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
                  *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };

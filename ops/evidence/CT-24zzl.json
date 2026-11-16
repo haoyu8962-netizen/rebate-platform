@@ -1,0 +1,48 @@
+{
+  "task": "CT-24zzl",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "db1f1e4b087050b4e6a4f46dbb3daa326ace4119",
+  "red_tests": [],
+  "risk_note": "RV1 by path (contracts/openapi.yaml, packages/contracts-ts/**, generated route schemas). CT-24zzl (D10-1757 ①): writes already-implemented behaviour into openapi descriptions and examples only — admin step-up token consumption (adminStepUp / AdminStepUpToken: spent on 2xx with code 0, released on refusal or error and reusable before expire_at; permission-guard.ts), agreement publish rules (requires_resign only for labor_agreement with min_version equal to the new version, others false, 20001 otherwise; min_version described per BR-ID-12 / BR-WDR-31), labor agreement examples share one article_id, adminUpdatePoolItem is safe to resend as-is. Appeal audit target_type (P-21) was not written: the backend does not register appeal actions in audit-log-view RULES (behaviour gap, ruled D10-1759 to a be task). No schema shape, enum, required or x- extension change; no code change. Ledger tester none: no rule tests, so no red run.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Independent Claude contract review via tools/agent/claude-run.sh (Codex usage limit until 2026-11-20, D10-1604; ops/approvals.yaml #36): r1 pass, 0 findings, 0 out of scope; each new statement checked against the code and the planning text at SPEC_REF."
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "Incremental round per REVIEW.md §5 (bef6c37f5 → c2962eaf7: one clause restored in the adminPublishAgreementVersion description for frozen [AC-F1-02zzs#6], plus its openapi.gen.ts line): pass, 0 findings, 0 out of scope; clause matches the content-module validator."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "7328bfe6c43fbbd63ad7aa42dc77fd2d6f2cdf6c",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head.",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
