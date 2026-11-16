@@ -39,6 +39,7 @@ modify_existing:
     note: '依 D10-1732：调账成功提示由只显示单号改为单号 + 调账前 / 后可用余额三行整段（金额由夹具固定值算出）；请求体、请求次数、列表刷新等其余断言不变。资金冻结用例改期望：按 D10-1670 / D10-1808 负责人本人确认后才加标签'
   - file: 'test/spec/frontend/admin-adjustment-create/errors.test.ts'
     test: '[AC-F1-08cb-ERROR#4] 结果未定的失败（网络断开、50001、40901）：每次提示「提交失败，请稍后重试」、抽屉保留、不自动重发；再次提交重新短信验证并沿用同一个 Idempotency-Key 与同一请求体，最终成功只生效一张'
+    retitle_to: '[AC-F1-08cb-ERROR#4] 结果未定的失败（50001、40901）：每次提示「提交失败，请稍后重试」、抽屉保留、不自动重发；再次提交重新短信验证并沿用同一个 Idempotency-Key 与同一请求体，最终成功只生效一张'
     reason: rule_change
     br: [BR-ID-10]
     ruling: D10-1731
