@@ -591,3 +591,9 @@ approvals:
     granted: true
     date: '2026-11-16'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（试次属门禁流程小改动），D10-1813：CT-13l 给 link_logs DEFAULT 补 BR-ID-30 ② 删除路径，必须改写冻结用例 worker-day-partitions.int.test.ts 第 172 行那一块（modify_existing rule_change，D10-1802，台账 #192）。red-check 对「在基线已存在、只有登记改动没有新红」的文件报 nothing is shown red，登 red_exempt 也过不了（fe F1-08ce 同一情形），所以该文件须另有 1 条在基线上因断言失败而红的真新用例；改写已用掉写测试第 3 次，新块要第 4 次。评审：两次 spec-test 里第 1 次 fail（S1 只被已结案子项引用的过期行未覆盖）、第 2 次 pass；这一轮同时给块改写一次独立评审（D10-1802 ① (3) 改为并进这一轮）。非资金；起因是先红规则的要求，不是测试质量问题。收口：这一轮若 fail，停下报编排，不再加轮。编排按 approvals 16 / 24 登记。'
+  - id: 96
+    row: 4
+    title: 'F1-08ce / F1-08bc / F1-08cc 任务专属一次性追加：规则测试评审（spec-test）各第 3 次——只审本次为 red-check 新增的块（F1-08ce：create / errors / reversal / supplement 四个文件各 1 个 it 块，[AC-F1-08ce-NEW#1]–[#4]；F1-08bc：readonly.test.ts、access.test.ts 各 1 个 it 块，[AC-F1-08bc-FROZEN#1]、[#2]；F1-08cc：被改的冻结文件各 1 个 it 块），由全新独立 Claude 做；照常不调 bump-attempt（按编排例外轮记），其余口径与次数上限不变；任一张这一轮 fail 即停下报编排，不再加轮'
+    granted: true
+    date: '2026-11-16'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（评审轮次属门禁流程小改动），D10-1816 / D10-1818 / D10-1820：三张都按 D10-1712 / D10-1733 改写了前序任务的冻结用例（modify_existing），red-check 对「在基线已存在、只有登记改动没有新红」的文件报 nothing is shown red，所以每个被改的冻结文件须另有 1 条在基线上因断言失败而红的真新用例（同 D10-1816 通例），新用例要过一次独立评审；三张的 spec-test 已各用 2 次（ce：11-14 一次输出格式被校验拒、一次 pass；bc：11-14 一次 fail、一次 pass；cc：11-14 两次），这一轮是各自第 3 次。写测试不超限（ce 第 3 次含 11-16 被位置检查作废、计了次的那一次；bc 第 3 次；cc 第 3 次）。只新增用例、收紧不放宽，不改金额计算与订单归属规则、不放宽密钥扫描、不删不削弱资金测试、不涉生产，故不属须先问负责人的情形（先例 approvals 60 / 62 / 65 / 91 / 95）；起因是先红规则的要求，不是测试质量问题。F1-08ce 改写的 8 块期望负责人已确认（D10-1819），不在本条范围。编排按 approvals 16 / 24 登记。'
