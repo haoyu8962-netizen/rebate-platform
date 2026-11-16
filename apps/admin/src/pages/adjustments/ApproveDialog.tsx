@@ -1,5 +1,6 @@
 // 「批准调账单」对话框（系统预填的 ACCOUNT_CLOSED 待批准单，fund.adjust，BR-FUND-24 ①⑧）：只读的单据摘要、
 // 关联单据、余额前后预览（adminGetAdjustment 的 balance_preview，打开时重新读取，经 @couli/money）与后果说明；
+// 前后余额显示前（读单在途或失败）【批准并短信验证】不可用，失败时给【重新读取】，【驳回】不受影响（BR-FUND-24 ④）；
 // 唯一的输入是驳回原因（只给【驳回】用）。
 // - 【批准并短信验证】：短信档二次验证后只发一次 POST …/approve，请求体恰为 {}（金额由服务端按批准时可用
 //   余额取，可能与预览不同）；20001 adjust_no_balance 提示改为驳回。
@@ -167,10 +168,12 @@ export function ApproveDialog({
   /** A decision got no reply in the unified envelope: the dialog cannot be closed, only checked. */
   const unknown = approval.unknown || rejection.unknown;
   const reasonLocked = openRejection !== undefined;
+  /** BR-FUND-24 ④: approval needs the balance before and after shown (the read has answered). */
+  const approveLocked = locked || detail.status !== 'ready';
   const reasonError = checked && !reasonLocked ? rejectReasonError(reason) : undefined;
 
   const approve = () => {
-    if (locked || approval.phoneMissing || approvePlanned) return;
+    if (approveLocked || approval.phoneMissing || approvePlanned) return;
     setWriteError(undefined);
     if (approval.unknown) approval.retry();
     else approval.submit(APPROVE_BODY);
@@ -220,9 +223,9 @@ export function ApproveDialog({
   } else if (detail.status === 'failed') {
     before = (
       <Flex align="center" gap={8}>
-        {a.balanceFailed}
+        <span>{a.readFailed}</span>
         <Button size="small" onClick={() => setAttempt((value) => value + 1)}>
-          {adjustmentsTexts.retry}
+          {a.reread}
         </Button>
       </Flex>
     );
@@ -258,7 +261,7 @@ export function ApproveDialog({
       key="approve"
       type="primary"
       autoInsertSpace={false}
-      disabled={locked}
+      disabled={approveLocked}
       aria-disabled={approval.phoneMissing ? true : undefined}
       aria-describedby={approval.phoneMissing ? ids.phone : undefined}
       {...plannedButtonProps(approvePlanned)}
