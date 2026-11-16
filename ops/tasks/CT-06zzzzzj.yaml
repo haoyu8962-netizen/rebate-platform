@@ -1,0 +1,35 @@
+id: CT-06zzzzzj
+repo: rebate-platform
+title: CT-06zzzzzj（FU-SUPPORT-TOKENS-HARDEN）：文件级支撑条目的块外判定改为放行清单——冻结文件里只认七类插入，其余一律拒（D10-1795）
+type: guard-change
+# 2026-11-16 be 入账（编排 D10-1795；合并后取当时主干最大 approvals id + 1 登记，规划/11 §7.1 第 5 行例外）。起因：CT-06zzzzzi 的白名单 (A) 是「纯插入 + 拒绝清单」，四轮评审每轮都找出清单外的
+#   原地改写（代码评审 r3 两条 S2：已有实参前插入、插入运算符、已有调用后接 .then / .catch、function 后插 *、vi.spyOn / vi.stubEnv、Object.assign、别名后赋值）。改做法：只认放行清单。
+# 放行清单（块外、合并基→头；注释不算 token；原有 token 仍须按序原样保留、括号树不变，CT-06zzzzzi 已有）：
+#   ① import 行，来源在本任务 test_paths 下；② 形参表末尾追加可选形参（x?: T），不带默认值、不与基线重名；
+#   ③ 对象字面量末尾追加属性（键: 标识符 / 字面量）或展开标识符（...name）；④ 已有调用的实参表末尾追加标识符或字面量；
+#   ⑤ 独立成句的调用：被调函数是本次 import 进来的名字，实参只有标识符 / 字面量；⑥ 文件末尾 export { … }；⑦ 类型标注与可选标记。
+#   其余任何插入一律拒，报错点名文件与插入 token 所在行。CT-06zzzzzi 的拒绝清单（控制流、断言、钩子、vi.*、重名、默认值、赋值、⑦A 等）在放行清单之下自然覆盖，保留其单测。
+# 验收：规则测试把 CT-06zzzzzi 代码评审 r3（couli-runs/CT-06zzzzzi/review-money-r3b.json）S2-1 / S2-2 的全部例子写成「拒」；回放 w1 已落地的冻结改写
+#   （B1-02zzzb / B1-02zzzc 合并后的块外差异，couli-runs/W1-search-linking/whitelist-1773/ 及其落地版本）全部「放行」；CT-06zzzzzi 的 #1–#46 照绿。判不了或会误伤 w1 落地改写的报编排。
+# 过渡期（本单合并前）：凡用文件级条目的 PR 一律报编排按 approvals 24 核，核过才挂守候（D10-1795）。tools/README.md 那段「评审须逐行读冻结文件里的插入」在本单合并后改写为放行清单。
+# 分工：规则测试与对抗评审都是全新独立 Claude（claude-run.sh，approvals 36），实现是另一个子代理；本机不跑全量，测试机跑。排在 be 线 CT-13l 之后；B1-02zzzb / zzzc 不等它。
+refs: []
+refs_hash: {}
+deps:
+  - CT-06zzzzzi
+paths:
+  - 'tools/guard/**'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzzj.yaml'
+test_paths:
+  - 'test/spec/ci/support-allowlist/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/support-allowlist/**'
+  - 'test/spec/ci/modify-existing-support/**'
+status: todo
