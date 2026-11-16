@@ -6876,7 +6876,13 @@ export interface paths {
          *     price fields are the pool's last successful refresh and `quoted_at` is that refresh time
          *     (BR-PRICE-11); they are never edited by hand (BR-PRICE-16). `invalid_reason` is the reason shown to
          *     the operator when the system took the item offline or a re-check failed (BR-PROD-05 结果分类 ①,
-         *     BR-PROD-08 ③), null otherwise. `status` filters by item status. An unknown `pool_id` → 30701.
+         *     BR-PROD-08 ③), null otherwise. `status` filters by item status. `tags` is the item's stored tags
+         *     (CT-07e). `tag` keeps only the items whose `tags` contain it, compared after the same
+         *     normalization as a write (NFKC, leading and trailing whitespace removed, every inner run of
+         *     whitespace one space; case is kept) by exact equality, `total` counting the matches; with
+         *     `status` and the pages as usual; absent, no filter. A `tag` that is empty after normalization
+         *     (only whitespace included), longer than 16 code points after it, or carrying a control character
+         *     → 20001 `data.fields=[tag]`, never read as no filter or no match. An unknown `pool_id` → 30701.
          */
         get: operations["adminListPoolItems"];
         put?: never;
@@ -6901,6 +6907,14 @@ export interface paths {
          *     The pool item key is (app_id, pool_id, product_key) (BR-PROD-08 ③). `sort`, `start_at` and
          *     `end_at` are required, null for no bound, so a repeat overwrites with exactly what was submitted;
          *     `end_at` not later than `start_at` → 20001 `data.fields=[end_at]`.
+         *
+         *     `tags` (CT-07e) is optional. The server normalizes it: each tag NFKC, leading and trailing
+         *     whitespace removed, every inner run of whitespace one space; empty tags dropped; a tag equal to an
+         *     earlier one after that dropped, the first kept in place (case is kept). After normalization a tag
+         *     longer than 16 code points, more than 10 tags, or a control character → 20001
+         *     `data.fields=[tags]`, nothing written and nothing truncated. A new key without `tags` stores [].
+         *     A key already in the pool keeps its stored tags when the body has no `tags`, and takes the
+         *     normalized `tags` when it has them ([] clears), whatever the re-check answers, like the window.
          *
          *     A new key inserts an online item whose price fields and `quoted_at` come from the union answer of
          *     this call. A new key the union explicitly reports as off shelf → 30141 and no item is inserted,
@@ -6963,7 +6977,9 @@ export interface paths {
         /**
          * Change the order, window or shelf status of a pool item
          * @description Permission point `content.pool`. At least one field is required, an empty body → 20001
-         *     `data.fields=[body]`. `start_at` and `end_at` take null for no bound; after the change `end_at`
+         *     `data.fields=[body]`. `tags` (CT-07e) absent leaves the item's tags; present replaces them as a
+         *     whole with its normalized value ([] clears; normalization and refusal as in adminAddPoolItem,
+         *     20001 `data.fields=[tags]`), so resending the same body gives the same tags. `start_at` and `end_at` take null for no bound; after the change `end_at`
          *     not later than `start_at` → 20001 `data.fields=[end_at]`. `status=offline` takes the item off the
          *     shelf at once. `status=online` on an offline item first runs one union re-check (BR-PROD-05 结果
          *     分类 ①, BR-PROD-08 ③): passed → online, `invalid_reason` cleared and the price fields refreshed;
@@ -13160,6 +13176,20 @@ export interface components {
          */
         AdminPoolItemStatus: "online" | "offline";
         /**
+         * @description The tags of a pool item (CT-07e; 01 F-ADM-10, 04 §3.2 pool_items.tags), as stored: already
+         *     normalized (NFKC, trimmed, inner whitespace one space, no duplicates, case kept), in the order
+         *     written; [] when the item has none. Console only: no card or page delivered to the apps carries
+         *     them.
+         */
+        AdminPoolItemTags: string[];
+        /**
+         * @description Tags as the operator typed them (CT-07e). The server normalizes them and refuses the result
+         *     with 20001 `data.fields=[tags]` when a tag is longer than 16 code points, there are more than 10,
+         *     or one carries a control character (see adminAddPoolItem); the bounds here only cap the size of
+         *     what is sent, since blanks and duplicates are dropped before counting.
+         */
+        AdminPoolItemTagsInput: string[];
+        /**
          * Format: int32
          * @description Ascending; lower comes first.
          */
@@ -13241,6 +13271,7 @@ export interface components {
             end_at: string | null;
             /** @description Why the system took it offline or a re-check failed; shown to the operator. */
             invalid_reason: string | null;
+            tags: components["schemas"]["AdminPoolItemTags"];
             created_by: components["schemas"]["Id"];
             /** Format: date-time */
             created_at: string;
@@ -13281,6 +13312,7 @@ export interface components {
             sort: components["schemas"]["AdminPoolSort"];
             start_at: string | null;
             end_at: string | null;
+            tags?: components["schemas"]["AdminPoolItemTagsInput"];
         } & ({
             link_text: string;
         } | {
@@ -13292,6 +13324,7 @@ export interface components {
             start_at?: string | null;
             end_at?: string | null;
             status?: components["schemas"]["AdminPoolItemStatus"];
+            tags?: components["schemas"]["AdminPoolItemTagsInput"];
         };
         /**
          * @description One union search row for adminAddPoolItem: prices without any rebate, and no link_id
@@ -37149,6 +37182,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["AdminPoolItemStatus"];
+                /** @description One tag; only the items whose tags contain it (normalized as a write, CT-07e). */
+                tag?: string;
                 /** @description Page number of an admin list, from 1 (04 §5 后台分页). */
                 page?: components["parameters"]["AdminPage"];
                 /** @description Page size of an admin list, at most 200 (04 §5 后台分页); above that → 20001. */
@@ -37196,6 +37231,10 @@ export interface operations {
                      *             "start_at": null,
                      *             "end_at": "2026-11-11T00:00:00+08:00",
                      *             "invalid_reason": null,
+                     *             "tags": [
+                     *               "新品",
+                     *               "618 大促"
+                     *             ],
                      *             "created_by": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b05",
                      *             "created_at": "2026-10-20T10:00:00+08:00",
                      *             "updated_at": "2026-10-22T10:00:00+08:00"
@@ -37272,6 +37311,9 @@ export interface operations {
                      *         "start_at": null,
                      *         "end_at": "2026-11-11T00:00:00+08:00",
                      *         "invalid_reason": null,
+                     *         "tags": [
+                     *           "新品"
+                     *         ],
                      *         "created_by": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b05",
                      *         "created_at": "2026-10-20T10:00:00+08:00",
                      *         "updated_at": "2026-10-22T10:00:00+08:00"
@@ -37341,6 +37383,9 @@ export interface operations {
                      *         "start_at": null,
                      *         "end_at": "2026-11-11T00:00:00+08:00",
                      *         "invalid_reason": null,
+                     *         "tags": [
+                     *           "新品"
+                     *         ],
                      *         "created_by": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b05",
                      *         "created_at": "2026-10-20T10:00:00+08:00",
                      *         "updated_at": "2026-10-22T10:00:00+08:00"
@@ -37420,6 +37465,9 @@ export interface operations {
                      *         "start_at": null,
                      *         "end_at": "2026-11-11T00:00:00+08:00",
                      *         "invalid_reason": null,
+                     *         "tags": [
+                     *           "新品"
+                     *         ],
                      *         "created_by": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b05",
                      *         "created_at": "2026-10-20T10:00:00+08:00",
                      *         "updated_at": "2026-10-22T10:00:00+08:00"

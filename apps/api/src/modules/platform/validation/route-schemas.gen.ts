@@ -14701,6 +14701,10 @@ export const CONTRACT_ROUTE_SCHEMAS = {
             "offline"
           ]
         },
+        "tag": {
+          "type": "string",
+          "maxLength": 256
+        },
         "page": {
           "type": "integer",
           "format": "int32",
@@ -14825,6 +14829,15 @@ export const CONTRACT_ROUTE_SCHEMAS = {
               "type": "null"
             }
           ]
+        },
+        "tags": {
+          "type": "array",
+          "description": "Tags as the operator typed them (CT-07e). The server normalizes them and refuses the result\nwith 20001 `data.fields=[tags]` when a tag is longer than 16 code points, there are more than 10,\nor one carries a control character (see adminAddPoolItem); the bounds here only cap the size of\nwhat is sent, since blanks and duplicates are dropped before counting.\n",
+          "maxItems": 100,
+          "items": {
+            "type": "string",
+            "maxLength": 256
+          }
         }
       }
     }
@@ -14941,6 +14954,15 @@ export const CONTRACT_ROUTE_SCHEMAS = {
             "online",
             "offline"
           ]
+        },
+        "tags": {
+          "type": "array",
+          "description": "Tags as the operator typed them (CT-07e). The server normalizes them and refuses the result\nwith 20001 `data.fields=[tags]` when a tag is longer than 16 code points, there are more than 10,\nor one carries a control character (see adminAddPoolItem); the bounds here only cap the size of\nwhat is sent, since blanks and duplicates are dropped before counting.\n",
+          "maxItems": 100,
+          "items": {
+            "type": "string",
+            "maxLength": 256
+          }
         }
       }
     }

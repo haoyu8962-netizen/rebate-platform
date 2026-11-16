@@ -45,6 +45,7 @@ const ITEM: PoolItemRow = {
   start_at: null,
   end_at: null,
   invalid_reason: null,
+  tags: [],
   created_by: 'creator',
   created_at: NOW,
   updated_at: NOW,

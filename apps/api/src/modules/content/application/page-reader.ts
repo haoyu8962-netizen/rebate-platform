@@ -6,6 +6,7 @@
 import type { Schema } from '@couli/contracts-ts';
 import type { Clock } from '../../platform/index.ts';
 import { CONTENT_CACHE_TTL_MS } from '../domain/cache-policy.ts';
+import { deliveredSections } from '../domain/pages/delivered-sections.ts';
 import { effectivePage, slotOf } from '../domain/pages/schedule.ts';
 import {
   neededAudienceFacts,
@@ -81,10 +82,10 @@ export class PageReader {
       page_key: pageKey,
       version: served.version,
       ttl_sec: PAGE_TTL_SEC,
-      sections: selectSections(
-        served.sections,
-        audience === undefined ? viewer : { ...viewer, audience },
-      ) as Record<string, unknown>[],
+      // CT-07e: a product_pool source's tags stay on the server (section() still has them).
+      sections: deliveredSections(
+        selectSections(served.sections, audience === undefined ? viewer : { ...viewer, audience }),
+      ),
     };
   }
 

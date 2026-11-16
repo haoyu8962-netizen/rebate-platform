@@ -11,11 +11,18 @@
 //   not passed (ref_expired, 结果分类 ②; a flagged price): only this row stays or goes offline
 //           with the reason, its price untouched and the overwrite standing; a new key is refused
 //           with the source's code, nothing written
+//
+// CT-07e tags (D10-1758 / D10-1764 / D10-1765): every write stores the normalized value of
+// domain/pool-tags.ts and refuses an invalid one with 20001 data.fields=[tags] before anything is
+// asked or written. A new key without tags stores []; an overwrite and an edit without tags keep the
+// stored ones, with tags replace them ([] clears), whatever the re-check answers. The list filter
+// `tag` is normalized the same way and refused with data.fields=[tag].
 import type { Schema } from '@couli/contracts-ts';
 import { fenToJsonNumber } from '@couli/money';
 import type { AuditInput, Clock } from '../../platform/index.ts';
 import type { Platform } from '../../union/index.ts';
 import { toPlusEight } from '../domain/card.ts';
+import { normalizePoolTagFilter, normalizePoolTags } from '../domain/pool-tags.ts';
 import { CatalogError } from '../domain/rules.ts';
 import type { ProductCapabilities, ProductRef } from '../domain/types.ts';
 import type { PoolCandidateList, PoolCandidateQuery } from './pool-candidates.ts';
@@ -39,6 +46,8 @@ export interface PoolListQuery {
 
 export interface PoolItemListQuery {
   readonly status?: PoolItemStatus;
+  /** CT-07e: only the items whose tags contain this value (normalized); absent, no filter. */
+  readonly tag?: string;
   readonly page?: number;
   readonly page_size?: number;
 }
@@ -75,6 +84,8 @@ export interface PoolItemRow {
   readonly start_at: Date | null;
   readonly end_at: Date | null;
   readonly invalid_reason: string | null;
+  /** CT-07e: normalized, in the order written; [] when the item has none. */
+  readonly tags: readonly string[];
   readonly created_by: string;
   readonly created_at: Date;
   readonly updated_at: Date;
@@ -111,6 +122,8 @@ export interface PoolAdminReads {
     status: PoolItemStatus | undefined,
     page: number,
     pageSize: number,
+    /** Normalized; only the rows whose tags contain it. Undefined, no filter. */
+    tag?: string,
   ): Promise<PoolPage<PoolItemRow>>;
   item(appId: string, poolId: string, productKey: string): Promise<PoolItemRow | null>;
 }
@@ -227,6 +240,7 @@ function itemOf(row: PoolItemRow): Schema<'AdminPoolItem'> {
     start_at: nullableInstant(row.start_at),
     end_at: nullableInstant(row.end_at),
     invalid_reason: row.invalid_reason,
+    tags: [...row.tags],
     created_by: row.created_by,
     created_at: instant(row.created_at),
     updated_at: instant(row.updated_at),
@@ -243,6 +257,14 @@ function assertWindow(start: Date | string | null, end: Date | string | null): v
   const startMs = typeof start === 'string' ? Date.parse(start) : start.getTime();
   const endMs = typeof end === 'string' ? Date.parse(end) : end.getTime();
   if (endMs <= startMs) throw new PoolFieldsError(['end_at']);
+}
+
+/** The normalized tags of a body; undefined when it has none; 20001 data.fields=[tags] if refused. */
+function tagsOf(tags: readonly string[] | undefined): readonly string[] | undefined {
+  if (tags === undefined) return undefined;
+  const normalized = normalizePoolTags(tags);
+  if (normalized === null) throw new PoolFieldsError(['tags']);
+  return normalized;
 }
 
 function liveFields(product: Extract<PoolProduct, { kind: 'live' }>) {
@@ -381,6 +403,12 @@ export class PoolAdmin {
     query: PoolItemListQuery,
   ): Promise<Schema<'AdminPoolItemList'>> {
     await this.#existing(appId, poolId);
+    let tag: string | undefined;
+    if (query.tag !== undefined) {
+      const normalized = normalizePoolTagFilter(query.tag);
+      if (normalized === null) throw new PoolFieldsError(['tag']);
+      tag = normalized;
+    }
     const page = query.page ?? DEFAULT_PAGE;
     const pageSize = query.page_size ?? DEFAULT_PAGE_SIZE;
     const { rows, total } = await this.#options.store.items(
@@ -389,6 +417,7 @@ export class PoolAdmin {
       query.status,
       page,
       pageSize,
+      tag,
     );
     return { items: rows.map(itemOf), page, page_size: pageSize, total };
   }
@@ -401,13 +430,16 @@ export class PoolAdmin {
     const { appId } = actor;
     await this.#existing(appId, poolId);
     assertWindow(input.start_at, input.end_at);
+    const tags = tagsOf(input.tags);
     const window: Window = { sort: input.sort, start_at: input.start_at, end_at: input.end_at };
     const { source, store } = this.#options;
     const product =
       input.item_ref === undefined
         ? await source.fromLink(appId, input.link_text!)
         : await source.fromItemRef(appId, input.item_ref);
-    const row = await store.transaction((tx) => this.#place(tx, actor, poolId, product, window));
+    const row = await store.transaction((tx) =>
+      this.#place(tx, actor, poolId, product, window, tags),
+    );
     if (product.kind === 'off_shelf') await this.#dropCache(appId, product.productKey);
     if (row === null) {
       if (product.kind === 'not_passed') throw product.refusal;
@@ -425,6 +457,7 @@ export class PoolAdmin {
     const { appId } = actor;
     const stored = await this.#existingItem(appId, poolId, productKey);
     assertWindow(...windowAfter(stored, input));
+    const tags = tagsOf(input.tags);
     const recheck =
       input.status === 'online' && stored.status === 'offline' ? await this.#recheck(stored) : null;
     const row = await this.#options.store.transaction(async (tx) => {
@@ -444,6 +477,7 @@ export class PoolAdmin {
         sort: input.sort ?? before.sort,
         start_at: startAt,
         end_at: endAt,
+        tags: tags ?? before.tags,
         ...(recheck === null
           ? { status: input.status === 'offline' ? 'offline' : before.status }
           : recheckFields(recheck)),
@@ -503,6 +537,7 @@ export class PoolAdmin {
     poolId: string,
     product: PoolProduct,
     window: Window,
+    tags: readonly string[] | undefined,
   ): Promise<PoolItemRow | null> {
     const { appId } = actor;
     const { productKey } = product;
@@ -523,6 +558,7 @@ export class PoolAdmin {
           platform: product.platform,
           ...liveFields(product),
           ...window,
+          tags: tags ?? [],
           created_by: actor.adminId,
           created_at: now,
           updated_at: now,
@@ -540,6 +576,8 @@ export class PoolAdmin {
       ...before,
       ...window,
       ...recheckFields(product),
+      // D10-1764: like the window, submitted tags overwrite; absent, the stored ones stay.
+      tags: tags ?? before.tags,
       updated_at: now,
     });
     await this.#auditAdd(tx, actor, before, after);
