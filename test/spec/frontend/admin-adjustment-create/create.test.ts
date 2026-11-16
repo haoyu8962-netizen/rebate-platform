@@ -16,12 +16,15 @@ import {
   USER,
   createWriteServer,
   createdId,
+  executedWith,
   fenOf,
   passOf,
   reasonName,
+  replyId,
   statusName,
   yuan,
   type CreateNew,
+  type Written,
 } from './fixtures.ts';
 import {
   assertWrite,
@@ -270,6 +273,70 @@ it(
     await waitFor(() => expect(prompted(twoPrompt)).toBe(true));
     await waitColumn(COLUMN.id, [createdId(2), createdId(1), ...ADJUSTMENT_ORDER]);
     expect(server.writes()).toHaveLength(2);
+    expect(server.unexpected()).toEqual([]);
+  },
+);
+
+it(
+  '[AC-F1-08ce-NEW#2] 新建成功提示的调账前 / 后可用余额取成功响应（AdminAdjustmentExecuted：写凭证的事务里读到的 available），不按本地推算：余额已为负的用户再对账修正调减 ¥600.00，回答 available_before_fen=-2345、available_after_fen=-62345 → 提示恰为三行「调账已生效，调账单号 …」「调账前可用余额：-¥23.45」「调账后可用余额：-¥623.45」（经 @couli/money，负数照实显示），关抽屉、列表刷新新单在首行',
+  { timeout: 90_000 },
+  async () => {
+    const server = createWriteServer();
+    await ready(server);
+    const root = await openCreate();
+    await fillForm(root, {
+      user: USER.negative,
+      direction: '调减',
+      amount: '600',
+      reason: reasonName('RECON_FIX'),
+      refs: [['recon_diff', DOC.reconDiff]],
+      note: NOTE.reconFix,
+      subject: '坏账',
+    });
+    const amount = fenOf('600');
+    expect(amount).toBe(60000);
+    const before = -2345;
+    const after = before - amount;
+    const written: Written = {
+      user_id: USER.negative,
+      direction: 'decrease',
+      amount_fen: amount,
+      reason_code: 'RECON_FIX',
+      refs: [{ ref_type: 'recon_diff', ref_id: DOC.reconDiff }],
+      contra_subject: 'BAD_DEBT',
+      contra_platform: null,
+      note: NOTE.reconFix,
+      reverses_adjust_id: null,
+    };
+    server.once('POST', ADJUSTMENTS, executedWith(server, 1, written, before, after));
+
+    const request = await submitWithSms(server, root);
+    const body: CreateNew = {
+      user_id: USER.negative,
+      direction: 'decrease',
+      amount_fen: amount,
+      reason_code: 'RECON_FIX',
+      refs: [{ ref_type: 'recon_diff', ref_id: DOC.reconDiff }],
+      note: NOTE.reconFix,
+      contra_subject: 'BAD_DEBT',
+    };
+    assertWrite(server, request, body, passOf(1));
+    expect(yuan(before)).toBe('-¥23.45');
+    expect(yuan(after)).toBe('-¥623.45');
+    const prompt = TEXT.createdPrompt(replyId(1), '-¥23.45', '-¥623.45');
+    await waitFor(() => expect(prompted(prompt)).toBe(true));
+    const local = TEXT.createdPrompt(replyId(1), yuan(50000), yuan(50000 - amount));
+    expect(prompted(local), 'not worked out from a balance the page assumed').toBe(false);
+    await waitFor(() => expect(dialogsTitled(TEXT.createTitle)).toEqual([]));
+    await waitColumn(COLUMN.id, [replyId(1), ...ADJUSTMENT_ORDER]);
+    expect(pick(rowWith(panel(), COLUMN.id, replyId(1)), ROW_TITLES)).toEqual({
+      [COLUMN.user]: USER.negative,
+      [COLUMN.direction]: '调减',
+      [COLUMN.amount]: yuan(amount),
+      [COLUMN.reason]: reasonName('RECON_FIX'),
+      [COLUMN.status]: statusName('APPROVED'),
+    });
+    expect(server.writes()).toHaveLength(1);
     expect(server.unexpected()).toEqual([]);
   },
 );

@@ -840,3 +840,63 @@ export function createWriteServer(options: WriteServerOptions = {}) {
   };
 }
 export type WriteServer = ReturnType<typeof createWriteServer>;
+
+// ---- F1-08ce: replies whose balances only the server's transaction knows --------------------
+
+/** adjust_id of the form `n` an executedWith reply writes (1-based, ≤ 8; never a createdId). */
+export const replyId = (n: number): string => `ad30000${n}-0000-4000-8000-00000000000${n}`;
+
+/** What a form written by an executedWith reply holds besides what the server fills in. */
+export type Written = Pick<
+  Adjustment,
+  | 'user_id'
+  | 'direction'
+  | 'amount_fen'
+  | 'reason_code'
+  | 'refs'
+  | 'contra_subject'
+  | 'contra_platform'
+  | 'note'
+  | 'reverses_adjust_id'
+>;
+
+/**
+ * A reply of adminCreateAdjustment (pass it to server.once) that writes the form `n` in effect as
+ * the server would — kept with the forms, newer than every sample, so the list reads it back; a
+ * reversal marks its original reversed — and answers AdminAdjustmentExecuted with
+ * `availableBefore` / `availableAfter`: `available` as read in the transaction that wrote the
+ * voucher (BR-FUND-24 ①④), values the page cannot know before the reply (they differ from
+ * AVAILABLE_BEFORE and from any preview).
+ */
+export function executedWith(
+  server: WriteServer,
+  n: number,
+  written: Written,
+  availableBefore: number,
+  availableAfter: number,
+): () => Response {
+  return () => {
+    const at = `2026-12-2${n}T10:00:00+08:00`;
+    const adjustment: Adjustment = {
+      ...written,
+      adjust_id: replyId(n),
+      status: 'APPROVED',
+      reversed_by_adjust_id: null,
+      created_by: ADMIN.first,
+      created_at: at,
+      reviewed_by: ADMIN.first,
+      reviewed_at: at,
+      reject_note: null,
+      voucher_id: `f930000${n}-0000-4000-8000-000000000000`,
+    };
+    server.forms.push(structuredClone(adjustment));
+    const original = server.forms.find((form) => form.adjust_id === written.reverses_adjust_id);
+    if (original !== undefined) original.reversed_by_adjust_id = adjustment.adjust_id;
+    const executed: Executed = {
+      adjustment,
+      available_before_fen: availableBefore,
+      available_after_fen: availableAfter,
+    };
+    return ok(executed);
+  };
+}

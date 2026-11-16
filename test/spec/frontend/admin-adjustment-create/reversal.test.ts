@@ -19,6 +19,7 @@ import {
   alreadyReversed,
   createWriteServer,
   createdId,
+  networkDown,
   passOf,
   reasonName,
   rejected,
@@ -27,6 +28,7 @@ import {
   type CreateReversal,
 } from './fixtures.ts';
 import {
+  assertUnknown,
   assertWrite,
   button,
   buttons,
@@ -48,10 +50,12 @@ import {
   rowReverse,
   rowWith,
   settled,
+  shows,
   stepUpDialogs,
   submitWithSms,
   textbox,
   typeInto,
+  usable,
   valueOf,
   waitColumn,
   type WriteServer,
@@ -250,5 +254,49 @@ it(
     await waitFor(() => expect(document.activeElement).toBe(entry));
     await settled(server);
     expect(nonReadsSince(server, since)).toEqual([]);
+  },
+);
+
+it(
+  '[AC-F1-08ce-NEW#3] 红冲提交时网络断开（fetch 抛 TypeError，写请求没到达服务端）：对话框进入结果未知（提示、红冲原因锁定、只剩【重试】【去列表核对】），不提示「提交失败」；【去列表核对】关对话框、列表刷新，原单仍未红冲、行上仍有【红冲】，不再发写请求；再按该行【红冲】打开的是空白的新对话框：红冲原因为空、没有结果未知提示与【重试】【去列表核对】、提交按钮可用',
+  { timeout: 120_000 },
+  async () => {
+    const server = createWriteServer();
+    await ready(server);
+    const dialog = await openReverse(rowOf(ADJ.reconFix));
+    await typeInto(dialog, LABEL.reverseNote, NOTE.reversal);
+    server.once('POST', ADJUSTMENTS, networkDown);
+    const first = await submitWithSms(server, dialog);
+    expect(first.body).toEqual({ reverses_adjust_id: ADJ.reconFix, note: NOTE.reversal });
+    expect(server.admitted(first), 'the dropped write reached no service').toBe(false);
+
+    await waitFor(() => expect(hasText(reverseDialog(), TEXT.unknown)).toBe(true));
+    expect(reverseDialog()).toBe(dialog);
+    assertUnknown(dialog);
+    expect(valueOf(dialog, LABEL.reverseNote)).toBe(NOTE.reversal);
+    expect(shows(ERROR.failed)).toBe(false);
+    await settled(server);
+    expect(server.writes()).toHaveLength(1);
+    const reads = server.tableReads(ADJUSTMENTS).length;
+    const since = server.log.length;
+
+    await click(button(dialog, TEXT.check));
+    await waitFor(() => expect(dialogsTitled(TEXT.reverseTitle)).toEqual([]));
+    await waitFor(() => expect(server.tableReads(ADJUSTMENTS).length).toBeGreaterThan(reads));
+    await settled(server);
+    await waitColumn(COLUMN.id, ADJUSTMENT_ORDER);
+    expect(rowWith(panel(), COLUMN.id, ADJ.reconFix).cells[COLUMN.reversal]).toBe(READ_TEXT.dash);
+    expect(rowReverse(ADJ.reconFix)).toHaveLength(1);
+
+    const again = await openReverse(rowOf(ADJ.reconFix));
+    expect(valueOf(again, LABEL.reverseNote)).toBe('');
+    expect(hasText(again, TEXT.unknown)).toBe(false);
+    expect(buttons(again, TEXT.retry)).toEqual([]);
+    expect(buttons(again, TEXT.check)).toEqual([]);
+    expect(usable(again, TEXT.submit)).toHaveLength(1);
+    await settled(server);
+    expect(nonReadsSince(server, since)).toEqual([]);
+    expect(server.writes()).toHaveLength(1);
+    expect(server.forms).toHaveLength(ADJUSTMENT_ORDER.length);
   },
 );
