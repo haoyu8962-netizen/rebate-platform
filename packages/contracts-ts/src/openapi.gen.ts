@@ -13178,15 +13178,21 @@ export interface components {
         /**
          * @description The tags of a pool item (CT-07e; 01 F-ADM-10, 04 §3.2 pool_items.tags), as stored: already
          *     normalized (NFKC, trimmed, inner whitespace one space, no duplicates, case kept), in the order
-         *     written; [] when the item has none. Console only: no card or page delivered to the apps carries
+         *     written; [] when the item has none. Declared at the real bounds (at most 10 tags of 1–16 code
+         *     points, no control character). Console only: no card or page delivered to the apps carries
          *     them.
          */
         AdminPoolItemTags: string[];
         /**
-         * @description Tags as the operator typed them (CT-07e). The server normalizes them and refuses the result
-         *     with 20001 `data.fields=[tags]` when a tag is longer than 16 code points, there are more than 10,
-         *     or one carries a control character (see adminAddPoolItem); the bounds here only cap the size of
-         *     what is sent, since blanks and duplicates are dropped before counting.
+         * @description Tags as the operator typed them (CT-07e, D10-1777), the `tags` of adminAddPoolItem and
+         *     adminUpdatePoolItem. Two layers of bounds:
+         *     1. This schema only declares the outer edge — at most 100 items of at most 256 characters — to
+         *        refuse oversized requests; it is not the rule.
+         *     2. The real bounds are judged by the server after normalization (NFKC, trimmed, inner
+         *        whitespace one space, blanks dropped, duplicates kept once in first-seen order, case kept):
+         *        every tag 1–16 code points, at most 10 tags, no control character. Any miss is 20001 with
+         *        `data.fields=[tags]` — the whole field, never an index path such as `tags.9` — and nothing is
+         *        written. Blanks and duplicates are dropped before counting, so the outer edge stays wider.
          */
         AdminPoolItemTagsInput: string[];
         /**

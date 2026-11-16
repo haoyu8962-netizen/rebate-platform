@@ -29,6 +29,10 @@ import {
   isSchedulable,
   slotDelaySeconds,
 } from '../domain/pages/schedule.ts';
+import {
+  emptiedPoolSourceTagFields,
+  normalizePoolSourceTags,
+} from '../domain/pages/pool-source-tags.ts';
 import { instantOf } from './article-admin.ts';
 
 export type PageView = Schema<'AdminPageConfig'>;
@@ -312,8 +316,13 @@ export class PageConfigAdmin {
     body: Schema<'AdminPageConfigDraftRequest'>,
   ): Promise<PageVersionView> {
     return this.#store.transaction(async (tx) => {
+      // CT-07e (D10-1777 ②): product_pool tags are normalized first and the normalized sections are
+      // what is checked and saved; tags that normalize to [] (all blanks) are refused on their own.
+      const emptied = emptiedPoolSourceTagFields(body.sections);
+      if (emptied.length > 0) throw new PageFieldsError(emptied);
+      const sections = normalizePoolSourceTags(body.sections) as typeof body.sections;
       // Sections depend only on the request: checked before the page row is touched (F1).
-      this.#validate(body.sections, await tx.unionHostBlock(actor.appId));
+      this.#validate(sections, await tx.unionHostBlock(actor.appId));
       const at = this.#clock.now();
       await tx.ensurePage(actor.appId, key, at);
       const locked = await tx.lock(actor.appId, key);
@@ -325,7 +334,7 @@ export class PageConfigAdmin {
         appId: actor.appId,
         key,
         version,
-        sections: body.sections,
+        sections,
         adminId: actor.adminId,
         at,
       });
