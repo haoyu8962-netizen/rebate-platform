@@ -5,7 +5,7 @@ type: impl
 # 2026-11-15 入账（前端线 fe，编排 D10-1517 第一批 ④，D10-1740 / D10-1741；编排裁定里称「F1-08da」的即本单——原编号主干已占用，改用 F1-08fa）。规格 design/specs/admin-ledger.md，负责人 2026-10-18 后台第 2 批定稿。菜单「资金 / 余额流水」（resources 已登记 id ledger，权限 fund.view），App.tsx 按菜单 id 分发到新页面（从主干起分支，不叠调账页那串；App.tsx 分发那行落地时再解）。
 # 范围：UID 输入查询（必填）→ 资金摘要（adminGetUserFundSummary）+ 流水表（adminListLedgerEntries：分页 ≤200，筛选 ledger_type / sub_type / sub_account / 会计日起止 / ref，金额为用户视角带符号，balance_after 可空）；流水类型 / 子户名取后台字典，缺行显示编码；金额只经 @couli/money；三态与 10403；【导出记录】入口（跳导出记录页 /exports，F1-10j #1035 已有）。**不出【导出当前筛选】（隐藏，不置灰，D10-1740）**——导出 ledger 资源另登契约单（w1，排 B1-02zzzc 之后），契约落地后另开 F1-08fb（编排裁定里称「F1-08db」）加按钮。用户详情「余额与流水」页签另定。
 # 若菜单 [AC-F1-14a-MENU#3] / [#4] 因 ledger 变真页面再红，照 D10-1724 办，换前先数剩余占位菜单，只剩一个可换先报编排（FU-F114A-MENU-PLACEHOLDER-LAST）。
-# 只读页面（RV1）：Codex 额度用尽（D10-1604），规则测试独立 Claude 写、另一独立 Claude 审（approvals 第 36 条）；实现 Claude Opus；代码评审 general（独立 Claude）。第 3 轮 spec-test 仍 fail 即停报编排（D10-1734）。测试机不可用期间按 D10-1693 本机推进。
+# 只读页面，但 apps/admin/src/pages/ledger/** 按 ops/risk-map.yaml 属 RV2（未列入白名单），工具判须 money 评审——实际按 money 评审（D10-1744 改注释）：Codex 额度用尽（D10-1604），规则测试独立 Claude 写、另一独立 Claude 审（approvals 第 36 条）；实现 Claude Opus；代码评审 money（独立 Claude）。第 3 轮 spec-test 仍 fail 即停报编排（D10-1734）。测试机不可用期间按 D10-1693 本机推进。
 refs: [BR-FUND-13, BR-FUND-15, BR-FUND-16]
 refs_hash:
   BR-FUND-13: ad7aad8f8846
