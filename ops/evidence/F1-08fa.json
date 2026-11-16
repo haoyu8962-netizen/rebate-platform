@@ -1,0 +1,135 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-ledger-readonly/dictionary.test.ts > [AC-F1-08fa-DICT#1] 字典有行：流水类型、子户、冻结种类显示字典名；没行的类型（WITHDRAW_FEE、REWARD）与冻结种类（recon_diff）显示编码",
+    "test/spec/frontend/admin-ledger-readonly/dictionary.test.ts > [AC-F1-08fa-DICT#2] 筛选下拉用字典名：选「提现冻结」「冻结」后请求里是 ledger_type=WITHDRAW_FREEZE、sub_account=frozen",
+    "test/spec/frontend/admin-ledger-readonly/filter.test.ts > [AC-F1-08fa-FILTER#1] 六个筛选都填后【查询】：只读流水（不重读摘要），查询对象恰为 user_id、ledger_type、sub_type、sub_account、会计日起止、ref、page=1、page_size=20，表格只列命中的那条",
+    "test/spec/frontend/admin-ledger-readonly/filter.test.ts > [AC-F1-08fa-FILTER#2] 只按子户「冻结」筛：查询对象只多 sub_account=frozen，空着的筛选不带参数",
+    "test/spec/frontend/admin-ledger-readonly/filter.test.ts > [AC-F1-08fa-FILTER#3] 【重置】清空全部筛选并重读第 1 页（查询对象回到只有 user_id、page、page_size），再【查询】也不带旧筛选",
+    "test/spec/frontend/admin-ledger-readonly/filter.test.ts > [AC-F1-08fa-FILTER#4] 会计日起晚于止：【查询】时在会计日字段旁提示「会计日起不能晚于会计日止」，不发请求，表格保持原样",
+    "test/spec/frontend/admin-ledger-readonly/filter.test.ts > [AC-F1-08fa-FILTER#5] 分页：25 条时第 1 页列 20 条；点「下一页」读 page=2（page_size 不变），列剩下 5 条",
+    "test/spec/frontend/admin-ledger-readonly/filter.test.ts > [AC-F1-08fa-FILTER#6] 带筛选翻页：第 2 页沿用已查询的筛选；改筛选再【查询】回到第 1 页",
+    "test/spec/frontend/admin-ledger-readonly/menu.test.ts > [AC-F1-08fa-MENU#1] 持 fund.view 直达 /ledger：侧栏「余额流水」高亮、面包屑「资金 / 余额流水」、页标题「余额流水」，只有 UID 输入，没有摘要、筛选与表格，不发任何请求",
+    "test/spec/frontend/admin-ledger-readonly/menu.test.ts > [AC-F1-08fa-MENU#2] 只持 user.lookup：侧栏没有「余额流水」，直达 /ledger 照常显示 UID 输入，【查询】读该用户的资金摘要与流水第 1 页",
+    "test/spec/frontend/admin-ledger-readonly/menu.test.ts > [AC-F1-08fa-MENU#3] 既无 fund.view 也无 user.lookup：直达 /ledger 显示无权限标题与说明，没有 UID 输入，不发任何请求",
+    "test/spec/frontend/admin-ledger-readonly/menu.test.ts > [AC-F1-08fa-MENU#4] 超管：菜单可见，直达 /ledger 只有 UID 输入、不先发请求",
+    "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#1] UID 为空时【查询】：UID 旁提示「请输入用户 UID」，不发请求",
+    "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#2] 【查询】：恰好一次读资金摘要（路径带 user_id、无查询参数）与一次读流水第 1 页（查询对象只有 user_id、page=1、page_size=20），只发 GET",
+    "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#3] 资金摘要逐项：用户 UID、可用余额（负数照实 -¥12.00）、冻结金额、负余额起始日、已提现、提现限制（冻结种类按字典名，缺行显示编码，用「、」连接）",
+    "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#4] 无冻结、未转负的摘要：负余额起始日「—」、冻结金额与已提现 ¥0.00、提现限制「无」",
+    "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#5] 流水表表头恰为九列，行按返回顺序，每格整串等于契约字段的显示值",
+    "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#6] 金额与余额的写法：扣回 -¥1,234.56 与余额 -¥12.00 照实为负；0 元手续费金额 ¥0.00、余额 0 显示 ¥0.00；余额未记录（null）显示「—」；子类型为空显示「—」；UTC 记账时间换成北京时间",
+    "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#7] 没有流水的用户：摘要照常显示，表格位置显示「暂无余额流水」，没有数据行",
+    "test/spec/frontend/admin-ledger-readonly/readonly.test.ts > [AC-F1-08fa-READONLY#1] 进入时与查过用户后，名字含「导出」的控件都恰好只有【导出记录】一个（没有【导出当前筛选】），且可点",
+    "test/spec/frontend/admin-ledger-readonly/readonly.test.ts > [AC-F1-08fa-READONLY#2] 点【导出记录】：地址变为 /exports、面包屑「系统 / 操作日志 / 导出记录」，不发任何非 GET 请求，也不重读流水",
+    "test/spec/frontend/admin-ledger-readonly/readonly.test.ts > [AC-F1-08fa-READONLY#3] 进入、查询、出数后都没有任何写入口（按钮或链接），整页只发 GET",
+    "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#1] 未知 UID（20001 data.fields=[user_id]）：UID 旁提示「UID 不存在或格式不对」，不显示摘要与表格",
+    "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#2] 格式不对的 UID 由契约校验：照样请求，服务端 20001 [user_id] 时 UID 旁同一句提示",
+    "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#3] 先查到一个用户、再查他 app 的 UID（20001 [user_id]）：旧摘要与旧流水都不再显示，只有 UID 旁的提示",
+    "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#4] 服务端 10403（权限已撤回）：显示无权限标题与说明，不显示摘要与表格",
+    "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#5] 加载中：流水请求未返回时显示加载状态、没有数据行，返回后逐行列出",
+    "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#6] 流水读取失败：表格位置显示「余额流水加载失败」与一个【重试】，摘要照常；重试只重读流水、查询对象不变，成功后列出",
+    "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#7] 摘要读取失败：显示「资金摘要加载失败」与一个【重试】，流水照常；重试只重读摘要，成功后显示摘要",
+    "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#8] 流水请求单独回 20001 [user_id]（摘要已成功）：也按 UID 提示处理，不显示摘要与表格"
+  ],
+  "risk_note": "F1-08fa (orchestrator D10-1517 batch 1 ④, D10-1740 / D10-1741; landed per D10-1772). Read-only admin balance ledger page under the menu id ledger: a required UID query, then the user's fund summary (adminGetUserFundSummary) and the ledger entries (adminListLedgerEntries: paging, filters by type / sub-type / sub-account / accounting day / ref, amounts signed from the user's view, a null balance_after shown as —), and an 导出记录 entry to /exports. No 导出当前筛选 button (D10-1740: the ledger export resource is a separate contract task, button follows as F1-08fb). Amounts only through @couli/money; type and sub-account names from the admin dictionary, the code shown when a row is missing. Codex is out of quota until 2026-11-20 (D10-1604), so per ops/approvals.yaml #36 the rule tests were written by an independent Claude (claude-run.sh, fresh context): 30 tests; another independent Claude spec-test pass with one S2. Implementation by Opus 5.5 (another context); couli-ci verify:fast run 1 and --browser run 1 green before rebase. The path is RV2 by ops/risk-map.yaml, so the code review is a money review (the tool refused general). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex out of quota until 2026-11-20 (D10-1604): money review by an independent Claude per ops/approvals.yaml #36 (claude-run.sh, fresh context), r1 pass, 0 S2"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude (Codex out of quota, approvals #36); spec-test by another independent Claude context: r1 output rejected by the validator (out_of_scope key format), rerun pass with one S2 (a hard-coded ledger-type list)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08fa",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "e13151ba4b1b2d603ce33be951e62f563c1d8446",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "e13151ba4b1b2d603ce33be951e62f563c1d8446",
+      "tree": "14c8d147e92890d88d9b0431aea24ae16694eee0",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-16T06:24:24Z",
+      "finished_at": "2026-11-16T06:24:49Z",
+      "red_tests": [
+        "test/spec/frontend/admin-ledger-readonly/dictionary.test.ts > [AC-F1-08fa-DICT#1] 字典有行：流水类型、子户、冻结种类显示字典名；没行的类型（WITHDRAW_FEE、REWARD）与冻结种类（recon_diff）显示编码",
+        "test/spec/frontend/admin-ledger-readonly/dictionary.test.ts > [AC-F1-08fa-DICT#2] 筛选下拉用字典名：选「提现冻结」「冻结」后请求里是 ledger_type=WITHDRAW_FREEZE、sub_account=frozen",
+        "test/spec/frontend/admin-ledger-readonly/filter.test.ts > [AC-F1-08fa-FILTER#1] 六个筛选都填后【查询】：只读流水（不重读摘要），查询对象恰为 user_id、ledger_type、sub_type、sub_account、会计日起止、ref、page=1、page_size=20，表格只列命中的那条",
+        "test/spec/frontend/admin-ledger-readonly/filter.test.ts > [AC-F1-08fa-FILTER#2] 只按子户「冻结」筛：查询对象只多 sub_account=frozen，空着的筛选不带参数",
+        "test/spec/frontend/admin-ledger-readonly/filter.test.ts > [AC-F1-08fa-FILTER#3] 【重置】清空全部筛选并重读第 1 页（查询对象回到只有 user_id、page、page_size），再【查询】也不带旧筛选",
+        "test/spec/frontend/admin-ledger-readonly/filter.test.ts > [AC-F1-08fa-FILTER#4] 会计日起晚于止：【查询】时在会计日字段旁提示「会计日起不能晚于会计日止」，不发请求，表格保持原样",
+        "test/spec/frontend/admin-ledger-readonly/filter.test.ts > [AC-F1-08fa-FILTER#5] 分页：25 条时第 1 页列 20 条；点「下一页」读 page=2（page_size 不变），列剩下 5 条",
+        "test/spec/frontend/admin-ledger-readonly/filter.test.ts > [AC-F1-08fa-FILTER#6] 带筛选翻页：第 2 页沿用已查询的筛选；改筛选再【查询】回到第 1 页",
+        "test/spec/frontend/admin-ledger-readonly/menu.test.ts > [AC-F1-08fa-MENU#1] 持 fund.view 直达 /ledger：侧栏「余额流水」高亮、面包屑「资金 / 余额流水」、页标题「余额流水」，只有 UID 输入，没有摘要、筛选与表格，不发任何请求",
+        "test/spec/frontend/admin-ledger-readonly/menu.test.ts > [AC-F1-08fa-MENU#2] 只持 user.lookup：侧栏没有「余额流水」，直达 /ledger 照常显示 UID 输入，【查询】读该用户的资金摘要与流水第 1 页",
+        "test/spec/frontend/admin-ledger-readonly/menu.test.ts > [AC-F1-08fa-MENU#3] 既无 fund.view 也无 user.lookup：直达 /ledger 显示无权限标题与说明，没有 UID 输入，不发任何请求",
+        "test/spec/frontend/admin-ledger-readonly/menu.test.ts > [AC-F1-08fa-MENU#4] 超管：菜单可见，直达 /ledger 只有 UID 输入、不先发请求",
+        "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#1] UID 为空时【查询】：UID 旁提示「请输入用户 UID」，不发请求",
+        "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#2] 【查询】：恰好一次读资金摘要（路径带 user_id、无查询参数）与一次读流水第 1 页（查询对象只有 user_id、page=1、page_size=20），只发 GET",
+        "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#3] 资金摘要逐项：用户 UID、可用余额（负数照实 -¥12.00）、冻结金额、负余额起始日、已提现、提现限制（冻结种类按字典名，缺行显示编码，用「、」连接）",
+        "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#4] 无冻结、未转负的摘要：负余额起始日「—」、冻结金额与已提现 ¥0.00、提现限制「无」",
+        "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#5] 流水表表头恰为九列，行按返回顺序，每格整串等于契约字段的显示值",
+        "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#6] 金额与余额的写法：扣回 -¥1,234.56 与余额 -¥12.00 照实为负；0 元手续费金额 ¥0.00、余额 0 显示 ¥0.00；余额未记录（null）显示「—」；子类型为空显示「—」；UTC 记账时间换成北京时间",
+        "test/spec/frontend/admin-ledger-readonly/query.test.ts > [AC-F1-08fa-QUERY#7] 没有流水的用户：摘要照常显示，表格位置显示「暂无余额流水」，没有数据行",
+        "test/spec/frontend/admin-ledger-readonly/readonly.test.ts > [AC-F1-08fa-READONLY#1] 进入时与查过用户后，名字含「导出」的控件都恰好只有【导出记录】一个（没有【导出当前筛选】），且可点",
+        "test/spec/frontend/admin-ledger-readonly/readonly.test.ts > [AC-F1-08fa-READONLY#2] 点【导出记录】：地址变为 /exports、面包屑「系统 / 操作日志 / 导出记录」，不发任何非 GET 请求，也不重读流水",
+        "test/spec/frontend/admin-ledger-readonly/readonly.test.ts > [AC-F1-08fa-READONLY#3] 进入、查询、出数后都没有任何写入口（按钮或链接），整页只发 GET",
+        "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#1] 未知 UID（20001 data.fields=[user_id]）：UID 旁提示「UID 不存在或格式不对」，不显示摘要与表格",
+        "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#2] 格式不对的 UID 由契约校验：照样请求，服务端 20001 [user_id] 时 UID 旁同一句提示",
+        "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#3] 先查到一个用户、再查他 app 的 UID（20001 [user_id]）：旧摘要与旧流水都不再显示，只有 UID 旁的提示",
+        "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#4] 服务端 10403（权限已撤回）：显示无权限标题与说明，不显示摘要与表格",
+        "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#5] 加载中：流水请求未返回时显示加载状态、没有数据行，返回后逐行列出",
+        "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#6] 流水读取失败：表格位置显示「余额流水加载失败」与一个【重试】，摘要照常；重试只重读流水、查询对象不变，成功后列出",
+        "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#7] 摘要读取失败：显示「资金摘要加载失败」与一个【重试】，流水照常；重试只重读摘要，成功后显示摘要",
+        "test/spec/frontend/admin-ledger-readonly/states.test.ts > [AC-F1-08fa-STATE#8] 流水请求单独回 20001 [user_id]（摘要已成功）：也按 UID 提示处理，不显示摘要与表格"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-ledger-readonly/dictionary.test.ts",
+        "test/spec/frontend/admin-ledger-readonly/filter.test.ts",
+        "test/spec/frontend/admin-ledger-readonly/menu.test.ts",
+        "test/spec/frontend/admin-ledger-readonly/query.test.ts",
+        "test/spec/frontend/admin-ledger-readonly/readonly.test.ts",
+        "test/spec/frontend/admin-ledger-readonly/states.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "f2af7b71faaaf412ca7451c7faad38c7cd52a28c1d443e99f7fa2fabb64488d7"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "a1ddef6618e889931809146bcc8c33a486e5de41",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
