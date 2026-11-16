@@ -26,6 +26,7 @@ test_paths:
 modify_existing:
   - file: 'test/spec/platform/maintenance/worker-day-partitions.int.test.ts'
     test: '[ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据即告警、#5; BR-ID-30 ② 每日 04:00（+08:00）删除; worker 契约 8.2、8.3、8.4] worker 的维护实例：每轮在 8 个月分区之后预建 link_logs 2026-11-20 至 12-04 共 15 个日分区；03:59:59.999（+08:00）不删、04:00:00.000 删掉过期的 link_logs_p20260801；link_logs_default 的 2 行与 event_log_default 的 1 行每轮都 warn（不记 partition_default_rows_expected），旧行留在 DEFAULT；报告与日志确切、不含行内容'
+    retitle_to: '[ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据即告警、#5; BR-ID-30 ② 每日 04:00（+08:00）删除; worker 契约 8.2、8.3、8.4] worker 的维护实例：每轮在 8 个月分区之后预建 link_logs 2026-11-20 至 12-04 共 15 个日分区；03:59:59.999（+08:00）不删、04:00:00.000 删掉过期的 link_logs_p20260801；link_logs_default 与 event_log_default 有行的每轮都 warn（不记 partition_default_rows_expected），04:00 起 link_logs_default 里过期的旧行被删、未过期的留在 DEFAULT；报告与日志确切、不含行内容'
     reason: rule_change
     br: [BR-ID-30]
     ruling: D10-1802
