@@ -22,6 +22,15 @@ paths:
   - 'apps/api/src/modules/platform/maintenance/**'
 test_paths:
   - 'test/spec/platform/link-logs-default-purge/**'
+  - 'test/spec/platform/maintenance/worker-day-partitions.int.test.ts' # 只改 172 行那条 it（见 modify_existing）
+modify_existing:
+  - file: 'test/spec/platform/maintenance/worker-day-partitions.int.test.ts'
+    test: '[ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据即告警、#5; BR-ID-30 ② 每日 04:00（+08:00）删除; worker 契约 8.2、8.3、8.4] worker 的维护实例：每轮在 8 个月分区之后预建 link_logs 2026-11-20 至 12-04 共 15 个日分区；03:59:59.999（+08:00）不删、04:00:00.000 删掉过期的 link_logs_p20260801；link_logs_default 的 2 行与 event_log_default 的 1 行每轮都 warn（不记 partition_default_rows_expected），旧行留在 DEFAULT；报告与日志确切、不含行内容'
+    retitle_to: '[ADR-0001 §4.2 #4 按日的表预建未来 14 天、DEFAULT 分区有数据即告警、#5; BR-ID-30 ② 每日 04:00（+08:00）删除; worker 契约 8.2、8.3、8.4] worker 的维护实例：每轮在 8 个月分区之后预建 link_logs 2026-11-20 至 12-04 共 15 个日分区；03:59:59.999（+08:00）不删、04:00:00.000 删掉过期的 link_logs_p20260801；link_logs_default 与 event_log_default 有行的每轮都 warn（不记 partition_default_rows_expected），04:00 起 link_logs_default 里过期的旧行被删、未过期的留在 DEFAULT；报告与日志确切、不含行内容'
+    reason: rule_change
+    br: [BR-ID-30]
+    ruling: D10-1802
+    note: '依 D10-1802：本单给 link_logs DEFAULT 补 BR-ID-30 ② 的 90 天删除路径，2026-06-01 那行在 2026-11-20 04:00 截断 2026-08-22 前过期必被删；只改 04:00 那轮及其后一轮的 DEFAULT 行数、多出的清理日志行、末尾 linkLogRows 只剩 11-19 那行，04:00 之前那轮、event_log 与其余断言不动；反向验证：去掉维护第 P 节调用 → 本行变红'
 impl: claude
 tester: claude-independent
 accept:
