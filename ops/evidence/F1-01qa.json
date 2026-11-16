@@ -1,0 +1,104 @@
+{
+  "red_tests": [
+    "test/spec/frontend/h5-optional-auth/fallback.test.ts > [AC-F1-01qa-OPT#4] getH5Token 失败（90401 / 90003 超时 / 返回不合法数据）时 optional 请求照常匿名发出、不带 Authorization，响应原样交回，一个请求只向原生要一次令牌",
+    "test/spec/frontend/h5-optional-auth/fallback.test.ts > [AC-F1-01qa-OPT#5] 取令牌失败后匿名发出的 optional 请求，服务端业务错误也原样交回（不吞、不改码、不重发）",
+    "test/spec/frontend/h5-optional-auth/fallback.test.ts > [AC-F1-01qa-OPT#15] 原生不支持 auth.getH5Token（调用返回 90001，或桥上根本不声明该方法）：optional 请求照常匿名发出、不带 Authorization、不本地拒绝，桥上只有 app.getEnv / auth.getH5Token 调用",
+    "test/spec/frontend/h5-optional-auth/renewal.test.ts > [AC-F1-01qa-OPT#6] 带令牌的 optional 请求收到 10002：续期成功后用新令牌重放一次，结果交回调用方",
+    "test/spec/frontend/h5-optional-auth/renewal.test.ts > [AC-F1-01qa-OPT#7] 带令牌的 optional 请求收到 10002 而续期失败（90401 / 超时 / 不合法数据）：该请求以失败交回，之后线上没有它不带 Authorization 的重发",
+    "test/spec/frontend/h5-optional-auth/renewal.test.ts > [AC-F1-01qa-OPT#8] 续期后的重放仍是 10002：以 10002 失败交回，不再续取、不降成匿名第三次发送",
+    "test/spec/frontend/h5-optional-auth/send.test.ts > [AC-F1-01qa-OPT#1] 登录态（standard 令牌）发 H5 直接发的每个 optional 操作都带 Authorization: Bearer 该令牌，响应照常交回",
+    "test/spec/frontend/h5-optional-auth/send.test.ts > [AC-F1-01qa-OPT#14] 同一客户端同时发起的多个 optional 请求单飞：整批只调 auth.getH5Token 恰好 1 次、都带同一个令牌；之后同会话顺序再发 optional 请求复用未过期令牌、不再向原生要",
+    "test/spec/frontend/h5-optional-auth/send.test.ts > [AC-F1-01qa-OPT#2] read_only 令牌同样带上（GET 商品详情与 POST /v1/events），由服务端按作用域判",
+    "test/spec/frontend/h5-optional-auth/send.test.ts > [AC-F1-01qa-OPT#3] x-auth none 操作不带 Authorization、不为它向原生要令牌；同一会话里 optional 操作照样带令牌",
+    "test/spec/frontend/h5-optional-auth/send.test.ts > [AC-F1-01qa-OPT#13] 签名操作（解析、打开）登录态下仍本地拒绝 SignedOperationError、线上无请求；同路径的 GET 链接详情照 optional 带令牌发出",
+    "test/spec/frontend/h5-optional-auth/switch-shell.test.ts > [AC-F1-01qa-OPT#12] 壳层 auth.changed 后 A 身份取到的商品报价不残留：缓存清掉，再取带 B 的令牌、只拿到 B 的报价",
+    "test/spec/frontend/h5-optional-auth/switch.test.ts > [AC-F1-01qa-OPT#9] auth.changed 时带 A 令牌在途的 optional 请求：A 的响应不交回调用方；之后的请求向原生重新要令牌并带 B 的令牌",
+    "test/spec/frontend/h5-optional-auth/switch.test.ts > [AC-F1-01qa-OPT#10] auth.changed 时因取不到令牌而匿名在途的 optional 请求：游客响应不交回调用方；之后的请求带 B 的令牌",
+    "test/spec/frontend/h5-optional-auth/switch.test.ts > [AC-F1-01qa-OPT#11] auth.changed 时 A 的取令牌还没回来：晚到的 A 令牌不上线，该请求不交回结果；之后的请求带 B 的令牌"
+  ],
+  "risk_note": "F1-01qa (FU-H5-OPTIONAL-AUTH from the CT-13d review S2; orchestrator D10-1744 / D10-1745; landed per D10-1772). The H5 app API now separates x-auth none (security []) from optional ({}): optional requests go through the current session and carry the H5 token when native hands one out (read_only included); when getting a token fails (90401, timeout, malformed, 90001 or no such method) and nothing was sent yet, the request goes out once without a token, no local refusal and no prompt; a failure after the token was sent (10002 not renewable, replay still 10002) is returned as is, never re-sent anonymously; after auth.changed every optional request of the old session is dropped with AccountChangedError. none operations never ask for a token; signed operations are still refused locally. No bridge contract change; the guest meaning of 90401 is parked as FU-BRIDGE-H5TOKEN-GUEST-CODE. Codex is out of quota until 2026-11-20 (D10-1604), so per ops/approvals.yaml #36 the rule tests were written by an independent Claude (claude-run.sh, fresh context): 15 tests; another independent Claude spec-test r1 fail (S1: concurrent requests not pinned to one token acquisition) and r2 pass after a second test round. Implementation by Opus 5.5 (another context); couli-ci verify:fast run 1 and --browser run 1 green. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex out of quota until 2026-11-20 (D10-1604): general review by an independent Claude per ops/approvals.yaml #36 (claude-run.sh, fresh context), r1 pass, 1 S2"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude (Codex out of quota, approvals #36); spec-test by another independent Claude context r1 fail (S1 concurrent single-flight; S2 unsupported getH5Token, no-prompt not observable), round-2 tests, r2 pass"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-01qa",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "b2e1a3724448add1e4a5b9e00bd9785b36cad58c",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b2e1a3724448add1e4a5b9e00bd9785b36cad58c",
+      "tree": "566662dfc39a79ec21d1eed14f19da7a12fb75a1",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-16T06:57:27Z",
+      "finished_at": "2026-11-16T06:57:34Z",
+      "red_tests": [
+        "test/spec/frontend/h5-optional-auth/fallback.test.ts > [AC-F1-01qa-OPT#4] getH5Token 失败（90401 / 90003 超时 / 返回不合法数据）时 optional 请求照常匿名发出、不带 Authorization，响应原样交回，一个请求只向原生要一次令牌",
+        "test/spec/frontend/h5-optional-auth/fallback.test.ts > [AC-F1-01qa-OPT#5] 取令牌失败后匿名发出的 optional 请求，服务端业务错误也原样交回（不吞、不改码、不重发）",
+        "test/spec/frontend/h5-optional-auth/fallback.test.ts > [AC-F1-01qa-OPT#15] 原生不支持 auth.getH5Token（调用返回 90001，或桥上根本不声明该方法）：optional 请求照常匿名发出、不带 Authorization、不本地拒绝，桥上只有 app.getEnv / auth.getH5Token 调用",
+        "test/spec/frontend/h5-optional-auth/renewal.test.ts > [AC-F1-01qa-OPT#6] 带令牌的 optional 请求收到 10002：续期成功后用新令牌重放一次，结果交回调用方",
+        "test/spec/frontend/h5-optional-auth/renewal.test.ts > [AC-F1-01qa-OPT#7] 带令牌的 optional 请求收到 10002 而续期失败（90401 / 超时 / 不合法数据）：该请求以失败交回，之后线上没有它不带 Authorization 的重发",
+        "test/spec/frontend/h5-optional-auth/renewal.test.ts > [AC-F1-01qa-OPT#8] 续期后的重放仍是 10002：以 10002 失败交回，不再续取、不降成匿名第三次发送",
+        "test/spec/frontend/h5-optional-auth/send.test.ts > [AC-F1-01qa-OPT#1] 登录态（standard 令牌）发 H5 直接发的每个 optional 操作都带 Authorization: Bearer 该令牌，响应照常交回",
+        "test/spec/frontend/h5-optional-auth/send.test.ts > [AC-F1-01qa-OPT#14] 同一客户端同时发起的多个 optional 请求单飞：整批只调 auth.getH5Token 恰好 1 次、都带同一个令牌；之后同会话顺序再发 optional 请求复用未过期令牌、不再向原生要",
+        "test/spec/frontend/h5-optional-auth/send.test.ts > [AC-F1-01qa-OPT#2] read_only 令牌同样带上（GET 商品详情与 POST /v1/events），由服务端按作用域判",
+        "test/spec/frontend/h5-optional-auth/send.test.ts > [AC-F1-01qa-OPT#3] x-auth none 操作不带 Authorization、不为它向原生要令牌；同一会话里 optional 操作照样带令牌",
+        "test/spec/frontend/h5-optional-auth/send.test.ts > [AC-F1-01qa-OPT#13] 签名操作（解析、打开）登录态下仍本地拒绝 SignedOperationError、线上无请求；同路径的 GET 链接详情照 optional 带令牌发出",
+        "test/spec/frontend/h5-optional-auth/switch-shell.test.ts > [AC-F1-01qa-OPT#12] 壳层 auth.changed 后 A 身份取到的商品报价不残留：缓存清掉，再取带 B 的令牌、只拿到 B 的报价",
+        "test/spec/frontend/h5-optional-auth/switch.test.ts > [AC-F1-01qa-OPT#9] auth.changed 时带 A 令牌在途的 optional 请求：A 的响应不交回调用方；之后的请求向原生重新要令牌并带 B 的令牌",
+        "test/spec/frontend/h5-optional-auth/switch.test.ts > [AC-F1-01qa-OPT#10] auth.changed 时因取不到令牌而匿名在途的 optional 请求：游客响应不交回调用方；之后的请求带 B 的令牌",
+        "test/spec/frontend/h5-optional-auth/switch.test.ts > [AC-F1-01qa-OPT#11] auth.changed 时 A 的取令牌还没回来：晚到的 A 令牌不上线，该请求不交回结果；之后的请求带 B 的令牌"
+      ],
+      "expected": [
+        "test/spec/frontend/h5-optional-auth/fallback.test.ts",
+        "test/spec/frontend/h5-optional-auth/renewal.test.ts",
+        "test/spec/frontend/h5-optional-auth/send.test.ts",
+        "test/spec/frontend/h5-optional-auth/switch-shell.test.ts",
+        "test/spec/frontend/h5-optional-auth/switch.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "a523eabfdcd400828816817a24c862766d2ba4f1383495d560a6b3d972da2194"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "449d3bf5fa269f857ec7d461731e9f84c829cfb4",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
