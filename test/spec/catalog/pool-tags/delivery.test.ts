@@ -2,13 +2,18 @@
 // apps and H5 (getPage, content's PageReader.read) carries no tag field in a product_pool data source,
 // everything else of the section as stored; the section that listPageSectionItems reads on the
 // server (PageReader.section) still has the tags, and serving a page never strips them from the
-// stored or cached version.
+// stored or cached version. The App's HomePreview (previewPage, content's PagePreviewService.read)
+// is a /v1 delivery too: its sections carry no tag field either, and the stored version is untouched.
 import { expect, it } from 'vitest';
 import {
   PageReader,
   type PageStore,
   type PageVersion,
 } from '../../../../apps/api/src/modules/content/application/page-reader.ts';
+import {
+  PagePreviewService,
+  type PagePreviewStore,
+} from '../../../../apps/api/src/modules/content/application/page-preview.ts';
 import { FixedClock } from '../../../../apps/api/src/modules/platform/index.ts';
 
 const APP = 'app_ct07e';
@@ -75,4 +80,31 @@ it('[CT-07e][D10-1758] 服务端读卡片仍拿到 tags；下发页面不改动�
   expect(second?.sections[0]).toEqual(withoutTags(TAGGED));
   expect(section).toEqual(TAGGED);
   expect(stored).toEqual(TAGGED);
+});
+
+/** previewPage (/v1, the App's HomePreview): one saved version, opened by a live token. */
+function previewer(sections: unknown[]) {
+  const store: PagePreviewStore = {
+    transaction: () => Promise.reject(new Error('preview read issues nothing')),
+    consume: () => Promise.resolve(3),
+    sections: (appId, pageKey, version) =>
+      Promise.resolve(appId === APP && pageKey === 'home' && version === 3 ? sections : undefined),
+  };
+  return new PagePreviewService({ store, clock: new FixedClock('2026-11-16T10:00:00+08:00') });
+}
+
+it('[CT-07e][D10-1758] 预览页（previewPage）下发的 product_pool 数据源同样不带 tags，其余与存储一致，不改动存储的版本', async () => {
+  const stored = [TAGGED, PLAIN, MATERIAL].map((section) => structuredClone(section));
+  const previews = previewer(stored);
+
+  const first = await previews.read(APP, 'home', 'token-1');
+  const second = await previews.read(APP, 'home', 'token-1');
+
+  for (const preview of [first, second]) {
+    expect(preview.page_key).toBe('home');
+    expect(preview.version).toBe(3);
+    expect(preview.sections).toEqual([withoutTags(TAGGED), PLAIN, MATERIAL]);
+    expect(JSON.stringify(preview)).not.toContain('"tags"');
+  }
+  expect(stored).toEqual([TAGGED, PLAIN, MATERIAL]);
 });

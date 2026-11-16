@@ -108,7 +108,7 @@ it('[CT-07e][D10-1758] 任意输入：结果与规则逐步算出的一致；通
     fc.property(fc.array(RAW_TAG, { maxLength: 14 }), (input) => {
       const result = normalizePoolTags(input);
       expect(result).toEqual(modelTags(input));
-      if (result === null) return;
+      if (result === null) return true;
       expect(result.length).toBeLessThanOrEqual(10);
       expect(new Set(result).size).toBe(result.length);
       for (const tag of result) {
@@ -118,6 +118,7 @@ it('[CT-07e][D10-1758] 任意输入：结果与规则逐步算出的一致；通
         expect(hasControl(tag)).toBe(false);
       }
       expect(normalizePoolTags(result)).toEqual(result);
+      return true;
     }),
     { numRuns: propRuns(), seed: propSeed() },
   );
@@ -127,6 +128,7 @@ it('[CT-07e][D10-1765] 任意输入：列表筛选 tag 与写入单项的规范�
   fc.assert(
     fc.property(RAW_TAG, (input) => {
       expect(normalizePoolTagFilter(input)).toBe(modelTag(input));
+      return true;
     }),
     { numRuns: propRuns(), seed: propSeed() },
   );

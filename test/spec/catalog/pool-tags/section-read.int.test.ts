@@ -224,6 +224,7 @@ it(
           .map(([name]) => title(name));
         expect(allTitles(pages)).toEqual(want);
         for (const page of pages) expect(page.items.length).toBeLessThanOrEqual(limit);
+        return true;
       }),
       { numRuns: LIST_RUNS, seed: propSeed() },
     );
