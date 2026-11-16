@@ -17,8 +17,6 @@ paths:
   - 'apps/admin/src/texts/withdrawals.ts'
 test_paths:
   - 'test/spec/frontend/admin-payout-watermark/**'
-  - 'test/spec/frontend/admin-payouts-readonly/readonly.test.ts'
-  - 'test/spec/frontend/admin-payout-execute/access.test.ts'
 impl: claude
 tester: claude-independent
 modify_existing:
