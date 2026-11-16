@@ -1,0 +1,147 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-adjustments-readonly/access.test.ts > [AC-F1-08ca-ACCESS#1] 只持 fund.adjust：菜单「调账与核销」恰 1 个，页签只有「调账单」并按返回顺序列出八张调账单；不请求坏账核销候选单",
+    "test/spec/frontend/admin-adjustments-readonly/access.test.ts > [AC-F1-08ca-ACCESS#2] 只持 fund.writeoff：菜单恰 1 个，页签只有「坏账核销」并列出四张候选单；不发任何调账单请求",
+    "test/spec/frontend/admin-adjustments-readonly/access.test.ts > [AC-F1-08ca-ACCESS#3] 只持 fund.view：菜单不出现（菜单不改），直达 /adjustments 照常只读：两个页签「调账单」「坏账核销」，先列出调账单",
+    "test/spec/frontend/admin-adjustments-readonly/access.test.ts > [AC-F1-08ca-ACCESS#4] 超管：菜单恰 1 个，两个页签，先列出调账单",
+    "test/spec/frontend/admin-adjustments-readonly/access.test.ts > [AC-F1-08ca-ACCESS#5] fund.adjust / fund.writeoff / fund.view 都没有（只持 withdraw.review）：直达 /adjustments 显示「无权限查看调账与核销」，没有页签与表格，两个列表都不请求",
+    "test/spec/frontend/admin-adjustments-readonly/access.test.ts > [AC-F1-08ca-ACCESS#6] 列表返回 10403（本地快照有 fund.adjust / fund.writeoff、服务端不认）：各自显示「无权限查看调账与核销」，不显示行",
+    "test/spec/frontend/admin-adjustments-readonly/detail.test.ts > [AC-F1-08ca-DETAIL#1] 已被红冲的打款追回单：【详情】只发 GET /admin/v1/adjustments/{adjust_id}（无查询参数），抽屉「调账单详情」逐项显示单号、用户、方向、金额、原因、状态、对方科目、说明、凭证、原调账单、红冲单、创建与审核、驳回原因，关联单据两行，并有「已红冲」标记",
+    "test/spec/frontend/admin-adjustments-readonly/detail.test.ts > [AC-F1-08ca-DETAIL#2] 红冲单号是链接：点开读红冲单，同一个抽屉改为显示红冲单（调增、原调账单指向原单、红冲单「—」、无关联单据），不再有「已红冲」标记",
+    "test/spec/frontend/admin-adjustments-readonly/detail.test.ts > [AC-F1-08ca-DETAIL#3] 系统预填的注销单（PENDING，金额与创建人为空）与已驳回的注销单：金额「—」、创建人「系统」、对方科目「佣金收入」，驳回单显示审核人、审核时间与驳回原因；关联单据为注销单",
+    "test/spec/frontend/admin-adjustments-readonly/detail.test.ts > [AC-F1-08ca-DETAIL#4] 关联单据按返回顺序逐行：订单恢复单显示「子订单」+ order_key 原样、「差错单」+ 差错单 id；OTHER 单对方科目「营销费用」，说明代替单据（refs 为空）时显示「无关联单据」",
+    "test/spec/frontend/admin-adjustments-readonly/detail.test.ts > [AC-F1-08ca-DETAIL#5] 详情返回 20001（data.fields=[adjust_id]，契约无 404）：抽屉内显示「调账单不存在或已不可见」，不显示该单的项目；列表照旧",
+    "test/spec/frontend/admin-adjustments-readonly/detail.test.ts > [AC-F1-08ca-DETAIL#6] 详情读取失败（50001）：抽屉内显示「调账单读取失败」与【重试】，重试再读一次后显示该单",
+    "test/spec/frontend/admin-adjustments-readonly/dictionary.test.ts > [AC-F1-08ca-DICT#1] 后台字典缺行时：调账单的原因、状态列与详情、候选单的状态列整格显示原编码（如 PAYOUT_RECOVERY / APPROVED / PENDING），不显示键路径或空白",
+    "test/spec/frontend/admin-adjustments-readonly/filter.test.ts > [AC-F1-08ca-FILTER#1] 状态与原因两个下拉按契约顺序恰好提供全部枚举的字典名；选「已生效」+「打款追回」后【查询】，请求恰为 {page: 1, page_size: 20, status: APPROVED, reason_code: PAYOUT_RECOVERY}，只列出红冲单与原单",
+    "test/spec/frontend/admin-adjustments-readonly/filter.test.ts > [AC-F1-08ca-FILTER#2] 用户 ID 去掉首尾空格后作 user_id：请求恰为 {page: 1, page_size: 20, user_id}，列出该用户的驳回单与撤回单",
+    "test/spec/frontend/admin-adjustments-readonly/filter.test.ts > [AC-F1-08ca-FILTER#3] 【重置】清空三个条件并重读第 1 页：请求恰为 {page: 1, page_size: 20}，重新列出全部八张，用户 ID 输入框为空",
+    "test/spec/frontend/admin-adjustments-readonly/filter.test.ts > [AC-F1-08ca-FILTER#4] 筛选后翻页保留条件：状态「已生效」共 35 张，【下一页】请求恰为 {page: 2, page_size: 20, status: APPROVED}，列出第 21–35 张",
+    "test/spec/frontend/admin-adjustments-readonly/filter.test.ts > [AC-F1-08ca-FILTER#5] 没有匹配的调账单：显示「暂无调账单」，表格没有数据行",
+    "test/spec/frontend/admin-adjustments-readonly/list.test.ts > [AC-F1-08ca-LIST#1] 进入后只读第 1 页：表格请求的查询参数恰为 {page: 1, page_size: 20}（不带筛选），按返回顺序（created_at 倒序）列出八张调账单",
+    "test/spec/frontend/admin-adjustments-readonly/list.test.ts > [AC-F1-08ca-LIST#2] 每行在各自的列下显示：调账单号、用户、方向（调增 / 调减）、金额（@couli/money 元两位小数，预填单无金额为「—」）、原因与状态的字典名、红冲列「已红冲」、创建人（系统预填为「系统」）、创建时间（北京时间），每行恰有 1 个可用的【详情】",
+    "test/spec/frontend/admin-adjustments-readonly/list.test.ts > [AC-F1-08ca-LIST#3] 页码分页：38 张时第 1 页 20 行；【下一页】请求恰为 {page: 2, page_size: 20}，只显示第 21–38 张、不再显示第 1 页的行",
+    "test/spec/frontend/admin-adjustments-readonly/pages.browser.test.ts > [AC-F1-08ca-BROWSER#1] /adjustments（fund.view）：已红冲的打款追回单逐格显示金额、原因、状态、「已红冲」与北京时间；【详情】打开「调账单详情」抽屉，显示红冲单号与「已红冲」；只发本页的 GET",
+    "test/spec/frontend/admin-adjustments-readonly/readonly.test.ts > [AC-F1-08ca-READONLY#1] 只持 fund.view：调账单列表、已生效未红冲单与系统预填待批单的详情、坏账核销候选单（含 PENDING）都不出现【新建调账】【红冲】【批准并短信验证】【驳回】【批准核销】等写入口；全程只发三个 GET、不弹验证",
+    "test/spec/frontend/admin-adjustments-readonly/source.test.ts > [AC-F1-08ca-SOURCE#1] 页面在 pages/adjustments 并由 App.tsx 引入，文案在 texts/adjustments.ts，读经 data provider、不直接 fetch，金额经 @couli/money",
+    "test/spec/frontend/admin-adjustments-readonly/source.test.ts > [AC-F1-08ca-SOURCE#2] 状态与原因码的中文名取后台字典（admin_dict.admin_adjustments.* 与 admin_dict.bad_debt_writeoff.*），不在页面或 texts/adjustments.ts 里另写",
+    "test/spec/frontend/admin-adjustments-readonly/states.test.ts > [AC-F1-08ca-STATE#1] 加载中：调账单表格请求未返回时显示加载状态、没有数据行，返回后列出",
+    "test/spec/frontend/admin-adjustments-readonly/states.test.ts > [AC-F1-08ca-STATE#2] 出错可重试：调账单表格请求失败（50001）显示「调账单加载失败」与【重试】、没有数据行；重试成功后列出",
+    "test/spec/frontend/admin-adjustments-readonly/states.test.ts > [AC-F1-08ca-STATE#3] 空列表：显示「暂无调账单」，没有数据行，只发 GET",
+    "test/spec/frontend/admin-adjustments-readonly/writeoffs.test.ts > [AC-F1-08ca-WRITEOFF#1] 只持 fund.writeoff：读候选单第 1 页，查询参数恰为 {page: 1, page_size: 20}；按返回顺序逐列显示候选单号、用户、负余额起始日、负余额天数、生成时金额、当前可用余额、冻结、状态中文名、生成时间",
+    "test/spec/frontend/admin-adjustments-readonly/writeoffs.test.ts > [AC-F1-08ca-WRITEOFF#2] 只持 fund.view：先显示调账单页签；切到「坏账核销」后读候选单并列出四张，该页签内没有调账单的表格",
+    "test/spec/frontend/admin-adjustments-readonly/writeoffs.test.ts > [AC-F1-08ca-WRITEOFF#3] 没有候选单：显示「暂无核销候选单」，表格没有数据行",
+    "test/spec/frontend/admin-adjustments-readonly/writeoffs.test.ts > [AC-F1-08ca-WRITEOFF#4] 候选单读取失败（50001）：显示「核销候选单加载失败」与【重试】、没有行；重试成功后列出"
+  ],
+  "risk_note": "F1-08ca (orchestrator D10-1517 batch 1 ③; landed per D10-1772). Read-only admin adjustments page: adjustment list and detail (adminListAdjustments, adminGetAdjustment) and the bad-debt write-off candidates tab (adminListBadDebtWriteoffs). No write entry (create and review belong to F1-08cb / ce / cc / cd). Amounts only through @couli/money; types, subjects and statuses from the admin dictionary, the contra subject shown with its platform. The frozen dashboard cases [AC-F1-14a-MENU#3]/[#4] already land on /content since F1-08caa (#163, D10-1724); no frozen case is modified here. Codex is out of quota until 2026-11-20 (D10-1604), so per ops/approvals.yaml #36 the rule tests were written by an independent Claude (claude-run.sh, fresh context): 31 tests; another independent Claude spec-test r1 pass with two S2. Implementation by Opus 5.5 (another context); couli-ci --browser run 1 green before rebase; verify:fast before rebase was red only in MENU#3/#4 because the worktree predated #163, rerun by the required CI checks after rebase. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex out of quota until 2026-11-20 (D10-1604): money review by an independent Claude per ops/approvals.yaml #36 (claude-run.sh, fresh context), r1 pass, 0 S2"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude (Codex out of quota, approvals #36); spec-test by another independent Claude context r1 pass, two S2 (antd CJK button spacing; contra platform dropped)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08ca",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "6d20c00f0843d46e9f5eeaab1f52eaf7f700e2f0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "6d20c00f0843d46e9f5eeaab1f52eaf7f700e2f0",
+      "tree": "c2e7a1af22e4df1c6e5fc2d53668885126db4cc8",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-16T04:51:13Z",
+      "finished_at": "2026-11-16T04:54:17Z",
+      "red_tests": [
+        "test/spec/frontend/admin-adjustments-readonly/access.test.ts > [AC-F1-08ca-ACCESS#1] 只持 fund.adjust：菜单「调账与核销」恰 1 个，页签只有「调账单」并按返回顺序列出八张调账单；不请求坏账核销候选单",
+        "test/spec/frontend/admin-adjustments-readonly/access.test.ts > [AC-F1-08ca-ACCESS#2] 只持 fund.writeoff：菜单恰 1 个，页签只有「坏账核销」并列出四张候选单；不发任何调账单请求",
+        "test/spec/frontend/admin-adjustments-readonly/access.test.ts > [AC-F1-08ca-ACCESS#3] 只持 fund.view：菜单不出现（菜单不改），直达 /adjustments 照常只读：两个页签「调账单」「坏账核销」，先列出调账单",
+        "test/spec/frontend/admin-adjustments-readonly/access.test.ts > [AC-F1-08ca-ACCESS#4] 超管：菜单恰 1 个，两个页签，先列出调账单",
+        "test/spec/frontend/admin-adjustments-readonly/access.test.ts > [AC-F1-08ca-ACCESS#5] fund.adjust / fund.writeoff / fund.view 都没有（只持 withdraw.review）：直达 /adjustments 显示「无权限查看调账与核销」，没有页签与表格，两个列表都不请求",
+        "test/spec/frontend/admin-adjustments-readonly/access.test.ts > [AC-F1-08ca-ACCESS#6] 列表返回 10403（本地快照有 fund.adjust / fund.writeoff、服务端不认）：各自显示「无权限查看调账与核销」，不显示行",
+        "test/spec/frontend/admin-adjustments-readonly/detail.test.ts > [AC-F1-08ca-DETAIL#1] 已被红冲的打款追回单：【详情】只发 GET /admin/v1/adjustments/{adjust_id}（无查询参数），抽屉「调账单详情」逐项显示单号、用户、方向、金额、原因、状态、对方科目、说明、凭证、原调账单、红冲单、创建与审核、驳回原因，关联单据两行，并有「已红冲」标记",
+        "test/spec/frontend/admin-adjustments-readonly/detail.test.ts > [AC-F1-08ca-DETAIL#2] 红冲单号是链接：点开读红冲单，同一个抽屉改为显示红冲单（调增、原调账单指向原单、红冲单「—」、无关联单据），不再有「已红冲」标记",
+        "test/spec/frontend/admin-adjustments-readonly/detail.test.ts > [AC-F1-08ca-DETAIL#3] 系统预填的注销单（PENDING，金额与创建人为空）与已驳回的注销单：金额「—」、创建人「系统」、对方科目「佣金收入」，驳回单显示审核人、审核时间与驳回原因；关联单据为注销单",
+        "test/spec/frontend/admin-adjustments-readonly/detail.test.ts > [AC-F1-08ca-DETAIL#4] 关联单据按返回顺序逐行：订单恢复单显示「子订单」+ order_key 原样、「差错单」+ 差错单 id；OTHER 单对方科目「营销费用」，说明代替单据（refs 为空）时显示「无关联单据」",
+        "test/spec/frontend/admin-adjustments-readonly/detail.test.ts > [AC-F1-08ca-DETAIL#5] 详情返回 20001（data.fields=[adjust_id]，契约无 404）：抽屉内显示「调账单不存在或已不可见」，不显示该单的项目；列表照旧",
+        "test/spec/frontend/admin-adjustments-readonly/detail.test.ts > [AC-F1-08ca-DETAIL#6] 详情读取失败（50001）：抽屉内显示「调账单读取失败」与【重试】，重试再读一次后显示该单",
+        "test/spec/frontend/admin-adjustments-readonly/dictionary.test.ts > [AC-F1-08ca-DICT#1] 后台字典缺行时：调账单的原因、状态列与详情、候选单的状态列整格显示原编码（如 PAYOUT_RECOVERY / APPROVED / PENDING），不显示键路径或空白",
+        "test/spec/frontend/admin-adjustments-readonly/filter.test.ts > [AC-F1-08ca-FILTER#1] 状态与原因两个下拉按契约顺序恰好提供全部枚举的字典名；选「已生效」+「打款追回」后【查询】，请求恰为 {page: 1, page_size: 20, status: APPROVED, reason_code: PAYOUT_RECOVERY}，只列出红冲单与原单",
+        "test/spec/frontend/admin-adjustments-readonly/filter.test.ts > [AC-F1-08ca-FILTER#2] 用户 ID 去掉首尾空格后作 user_id：请求恰为 {page: 1, page_size: 20, user_id}，列出该用户的驳回单与撤回单",
+        "test/spec/frontend/admin-adjustments-readonly/filter.test.ts > [AC-F1-08ca-FILTER#3] 【重置】清空三个条件并重读第 1 页：请求恰为 {page: 1, page_size: 20}，重新列出全部八张，用户 ID 输入框为空",
+        "test/spec/frontend/admin-adjustments-readonly/filter.test.ts > [AC-F1-08ca-FILTER#4] 筛选后翻页保留条件：状态「已生效」共 35 张，【下一页】请求恰为 {page: 2, page_size: 20, status: APPROVED}，列出第 21–35 张",
+        "test/spec/frontend/admin-adjustments-readonly/filter.test.ts > [AC-F1-08ca-FILTER#5] 没有匹配的调账单：显示「暂无调账单」，表格没有数据行",
+        "test/spec/frontend/admin-adjustments-readonly/list.test.ts > [AC-F1-08ca-LIST#1] 进入后只读第 1 页：表格请求的查询参数恰为 {page: 1, page_size: 20}（不带筛选），按返回顺序（created_at 倒序）列出八张调账单",
+        "test/spec/frontend/admin-adjustments-readonly/list.test.ts > [AC-F1-08ca-LIST#2] 每行在各自的列下显示：调账单号、用户、方向（调增 / 调减）、金额（@couli/money 元两位小数，预填单无金额为「—」）、原因与状态的字典名、红冲列「已红冲」、创建人（系统预填为「系统」）、创建时间（北京时间），每行恰有 1 个可用的【详情】",
+        "test/spec/frontend/admin-adjustments-readonly/list.test.ts > [AC-F1-08ca-LIST#3] 页码分页：38 张时第 1 页 20 行；【下一页】请求恰为 {page: 2, page_size: 20}，只显示第 21–38 张、不再显示第 1 页的行",
+        "test/spec/frontend/admin-adjustments-readonly/pages.browser.test.ts > [AC-F1-08ca-BROWSER#1] /adjustments（fund.view）：已红冲的打款追回单逐格显示金额、原因、状态、「已红冲」与北京时间；【详情】打开「调账单详情」抽屉，显示红冲单号与「已红冲」；只发本页的 GET",
+        "test/spec/frontend/admin-adjustments-readonly/readonly.test.ts > [AC-F1-08ca-READONLY#1] 只持 fund.view：调账单列表、已生效未红冲单与系统预填待批单的详情、坏账核销候选单（含 PENDING）都不出现【新建调账】【红冲】【批准并短信验证】【驳回】【批准核销】等写入口；全程只发三个 GET、不弹验证",
+        "test/spec/frontend/admin-adjustments-readonly/source.test.ts > [AC-F1-08ca-SOURCE#1] 页面在 pages/adjustments 并由 App.tsx 引入，文案在 texts/adjustments.ts，读经 data provider、不直接 fetch，金额经 @couli/money",
+        "test/spec/frontend/admin-adjustments-readonly/source.test.ts > [AC-F1-08ca-SOURCE#2] 状态与原因码的中文名取后台字典（admin_dict.admin_adjustments.* 与 admin_dict.bad_debt_writeoff.*），不在页面或 texts/adjustments.ts 里另写",
+        "test/spec/frontend/admin-adjustments-readonly/states.test.ts > [AC-F1-08ca-STATE#1] 加载中：调账单表格请求未返回时显示加载状态、没有数据行，返回后列出",
+        "test/spec/frontend/admin-adjustments-readonly/states.test.ts > [AC-F1-08ca-STATE#2] 出错可重试：调账单表格请求失败（50001）显示「调账单加载失败」与【重试】、没有数据行；重试成功后列出",
+        "test/spec/frontend/admin-adjustments-readonly/states.test.ts > [AC-F1-08ca-STATE#3] 空列表：显示「暂无调账单」，没有数据行，只发 GET",
+        "test/spec/frontend/admin-adjustments-readonly/writeoffs.test.ts > [AC-F1-08ca-WRITEOFF#1] 只持 fund.writeoff：读候选单第 1 页，查询参数恰为 {page: 1, page_size: 20}；按返回顺序逐列显示候选单号、用户、负余额起始日、负余额天数、生成时金额、当前可用余额、冻结、状态中文名、生成时间",
+        "test/spec/frontend/admin-adjustments-readonly/writeoffs.test.ts > [AC-F1-08ca-WRITEOFF#2] 只持 fund.view：先显示调账单页签；切到「坏账核销」后读候选单并列出四张，该页签内没有调账单的表格",
+        "test/spec/frontend/admin-adjustments-readonly/writeoffs.test.ts > [AC-F1-08ca-WRITEOFF#3] 没有候选单：显示「暂无核销候选单」，表格没有数据行",
+        "test/spec/frontend/admin-adjustments-readonly/writeoffs.test.ts > [AC-F1-08ca-WRITEOFF#4] 候选单读取失败（50001）：显示「核销候选单加载失败」与【重试】、没有行；重试成功后列出"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-adjustments-readonly/access.test.ts",
+        "test/spec/frontend/admin-adjustments-readonly/detail.test.ts",
+        "test/spec/frontend/admin-adjustments-readonly/dictionary.test.ts",
+        "test/spec/frontend/admin-adjustments-readonly/filter.test.ts",
+        "test/spec/frontend/admin-adjustments-readonly/list.test.ts",
+        "test/spec/frontend/admin-adjustments-readonly/pages.browser.test.ts",
+        "test/spec/frontend/admin-adjustments-readonly/readonly.test.ts",
+        "test/spec/frontend/admin-adjustments-readonly/source.test.ts",
+        "test/spec/frontend/admin-adjustments-readonly/states.test.ts",
+        "test/spec/frontend/admin-adjustments-readonly/writeoffs.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-browser.json",
+          "sha256": "c470488597c5079aa6c6a976a94ece6b2e562edcd78a767ede11837cfe6f60d6"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "2b02845ff15dbbe74040ed70e0a34c610a0c9e543a923d67b29d2da9406a3a28"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "7328bfe6c43fbbd63ad7aa42dc77fd2d6f2cdf6c",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}

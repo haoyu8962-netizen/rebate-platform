@@ -36,6 +36,7 @@ import { PlannedOperationsContext } from './components/planned/index.ts';
 import { LoadFailedPage, NoPermissionPage, PagePending, WelcomePage } from './layout/pages.tsx';
 import { Sidebar } from './layout/Sidebar.tsx';
 import { TopBar } from './layout/TopBar.tsx';
+import { AdjustmentsPage } from './pages/adjustments/index.ts';
 import { AdminsPage } from './pages/admins/index.ts';
 import { AgentTracesPage, overdueOf } from './pages/agent-traces/index.ts';
 import { APP_VERSIONS_MENU_ID, AppVersionsPage, editTargetOf } from './pages/app-versions/index.ts';
@@ -116,6 +117,7 @@ const AGENT_TRACES_MENU_ID = 'agent-traces';
 /** The workbench card agent_report_overdue (/agent/reports?overdue=true): AI 助手记录, AI 举报 tab. */
 const AGENT_REPORTS_ROUTE = 'agent/reports';
 const SETTLE_BILLS_MENU_ID = 'settle-bills';
+const ADJUSTMENTS_MENU_ID = 'adjustments';
 const SETTLE_BILL_DETAIL = /^settle-bills\/([^/]+)$/;
 const PAY_ORDERS_MENU_ID = 'pay-orders';
 const PAY_ORDER_DETAIL = /^pay-orders\/([^/]+)$/;
@@ -692,6 +694,9 @@ function ShellFrame({
     } else if (match !== undefined && match.item.id === SETTLE_BILLS_MENU_ID) {
       // 月结账单: settle.bill or fund.view reads; the other menu points get the page's notice.
       content = <SettleBillsPage access={access} />;
+    } else if (match !== undefined && match.item.id === ADJUSTMENTS_MENU_ID) {
+      // 调账与核销: fund.adjust / fund.view read 调账单, fund.writeoff / fund.view read 坏账核销.
+      content = <AdjustmentsPage access={access} />;
     } else if (match !== undefined && match.item.id === WITHDRAWALS_MENU_ID) {
       // 提现审核: withdraw.review or fund.view reads; payout.* alone shows the menu but not the list.
       content = <WithdrawalsPage access={access} />;
@@ -772,6 +777,13 @@ function ShellFrame({
       // A direct address to /withdrawals without the menu (fund.view alone reads; no read key at
       // all: the page itself says so and sends nothing).
       content = <WithdrawalsPage access={access} />;
+    } else if (
+      menuId === ADJUSTMENTS_MENU_ID &&
+      (snapshot.isSuper || snapshot.permissions.length > 0)
+    ) {
+      // A direct address to /adjustments without the menu (fund.view alone reads both tabs; no
+      // read key at all: the page itself says so and sends nothing).
+      content = <AdjustmentsPage access={access} />;
     } else if (inviteRewardsRoute && (snapshot.isSuper || snapshot.permissions.length > 0)) {
       // A direct address without the 配置中心 menu (fund.view alone reads; without it the page
       // itself says so and sends nothing).
