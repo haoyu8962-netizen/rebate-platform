@@ -23,7 +23,7 @@ paths:
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
   - 'apps/api/src/modules/admin/**'
   - 'apps/api/src/modules/ledger/**'
-  - 'db/migrations/**'
+  - 'db/migrations/*_export-tasks-resource-ledger*.sql'
   - 'db/schema.sql'
   - 'packages/db/src/db.gen.ts'
 test_paths:
@@ -36,7 +36,7 @@ modify_existing:
     reason: rule_change
     br: [BR-ID-42]
     ruling: D10-1849
-    note: '依 D10-1849（D10-1740 / D10-1742：export_resource 加 ledger）：resource 的 CHECK 放宽为四值；本块只把 toEqual 的期望集合加 ledger、正例循环加 ledger，反例（''''、orders、USERS、audit_log）与其余断言不动；标题按 retitle_to 只把三值改为四值。反向验证：基线为旧 CHECK（三值），正式先红中本条因断言而红（red for a valid reason），不另编探针。'
+    note: "依 D10-1849（D10-1740 / D10-1742：export_resource 加 ledger）：resource 的 CHECK 放宽为四值；本块只把 toEqual 的期望集合加 ledger、正例循环加 ledger，反例（''、orders、USERS、audit_log）与其余断言不动；标题按 retitle_to 只把三值改为四值。反向验证：基线为旧 CHECK（三值），正式先红中本条因断言而红（red for a valid reason），不另编探针。"
 red_exempt:
   - file: 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
     test: '[AC-B1-34b#1] all export columns have the specified SQL types and nullability'
