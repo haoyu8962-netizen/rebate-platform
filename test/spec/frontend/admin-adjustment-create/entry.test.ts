@@ -147,3 +147,33 @@ it(
     expect(laterEntries()).toEqual(['批准']);
   },
 );
+
+it(
+  '[AC-F1-08cc-FROZEN#1] 逐行数【批准】：持 fund.adjust 时八行里只有系统预填的待批准行显示恰 1 个且可用的【批准】（其余七行 0 个），该行没有【红冲】；同一份数据换成只持 fund.view + fund.writeoff 的账号，八行都是 0 个、页面上也没有【批准】',
+  { timeout: 90_000 },
+  async () => {
+    const perRow = (count: (row: HTMLElement) => number): number[] =>
+      ADJUSTMENT_ORDER.map((adjustId) => count(rowWith(panel(), COLUMN.id, adjustId).element));
+    const shown = (): number[] => perRow((row) => buttons(row, '批准').length);
+    const open = (): number[] => perRow((row) => usable(row, '批准').length);
+    const onlyPrefilled = ADJUSTMENT_ORDER.map((adjustId) => (adjustId === ADJ.prefilled ? 1 : 0));
+
+    const server = createWriteServer();
+    await mount(server);
+    await waitColumn(COLUMN.id, ADJUSTMENT_ORDER);
+    await settled(server);
+    expect(shown()).toEqual(onlyPrefilled);
+    expect(open()).toEqual(onlyPrefilled);
+    expect(rowReverse(ADJ.prefilled)).toEqual([]);
+    expect(server.others()).toEqual([]);
+    cleanup();
+
+    const reader = createWriteServer({ permissions: ['fund.view', 'fund.writeoff'] });
+    await mount(reader, READER);
+    await waitColumn(COLUMN.id, ADJUSTMENT_ORDER);
+    await settled(reader);
+    expect(shown()).toEqual(ADJUSTMENT_ORDER.map(() => 0));
+    expect(laterEntries()).toEqual([]);
+    expect(reader.others()).toEqual([]);
+  },
+);
