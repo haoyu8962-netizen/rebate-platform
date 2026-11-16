@@ -6,8 +6,7 @@ type: guard-change
 #   共用夹具 / 顶层辅助里补摘要，这些文件没有 it 块，现行 modify_existing 只能按块登记（块外差异被 evidence-check 拒）。方案 couli-runs/B1-02zzzb/frozen-declare-plan.md。
 # 形状照 red_exempt_outside（CT-06zzzc）：条目没有 test 字段，写 scope: support。五条要求：① 只用于 test/spec/**、test/properties/**、test/replay/** 下、在基线（受信根）已存在的文件；该文件的改动必须全在 it / test 块之外。块内有改动的块仍须逐块登记，
 #   文件级条目不替它放行；同一文件可同时有文件级条目与块级条目，各管各的。同一文件至多一条文件级条目。
-# ② reason 与 br / ruling（含 ruling_correction 的 overturned / basis）的校验与块级条目完全相同；资金与归属类文件（isMoneyOrAttributionTest，CT-06zzzzzh 名单原样）
-#   只能用 rule_change，且照旧要负责人标签（D10-1356），不得用 ruling_correction。
+# ② reason 与 br / ruling（含 ruling_correction 的 overturned / basis）的校验与块级条目完全相同；资金与归属类文件（isMoneyOrAttributionTest，CT-06zzzzzh 名单原样）只能用 rule_change，且照旧要负责人标签（D10-1356），不得用 ruling_correction。
 # ③ 改动行里不得出现断言：文件级条目覆盖的块外差异行（加的、删的）只要含断言调用就拒——expect( / expectTypeOf( / assert( 与 assert.<名>( / 任意 .to<大写开头>( 匹配器
 #   （toBe、toEqual、toStrictEqual、toThrow、toMatchObject …）/ .rejects / .resolves。支撑文件只许改造数据和调用方式，断言改动回到 it 块逐条登记。
 # ④ 证据（evidence-check）：每条文件级条目记整文件 before / after 的 sha256（before 取基线、after 取头，与仓库实际一致），以及反向验证——把该文件改回基线后，
@@ -29,6 +28,7 @@ paths:
   - 'tools/ci/evidence-check.test.ts'
   - 'tools/README.md'
   - 'tools/ops/README.md'
+  - 'REVIEW.md' # D10-1793：审查重点加「用文件级条目的单须整份读新 helper 文件」一句
   - 'ops/tasks/CT-06zzzzzi.yaml'
 test_paths:
   - 'test/spec/ci/modify-existing-support/**'
