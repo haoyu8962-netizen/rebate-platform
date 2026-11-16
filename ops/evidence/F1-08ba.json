@@ -1,0 +1,126 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-payouts-readonly/attempts.test.ts > [AC-F1-08ba-ATTEMPTS#1] 打款中的 W20261113000202【打款记录】：抽屉读一次该单详情（不带参数），摘要 提现单号 / 实付金额 ¥98.00 / 提现状态 打款中；三条尝试按时间：转账·结果未知、查询·结果未知（SYSTEM_ERROR）、查询·处理中，首条响应码为 —；抽屉内无写入口",
+    "test/spec/frontend/admin-payouts-readonly/attempts.test.ts > [AC-F1-08ba-ATTEMPTS#2] 类型与结果没有字典行的尝试显示编码（reverse / timeout，响应码 X_PENDING）；没有尝试的单（待执行 W20261112000204）抽屉显示空态、摘要照常、没有尝试行",
+    "test/spec/frontend/admin-payouts-readonly/overview.test.ts > [AC-F1-08ba-OVERVIEW#1] 概览样例：可用余额 W ¥30,000.00、取数时间 2026-11-14 09:00:00、预计提现 P ¥21,000.00、水位结论「水位低」、可用比例 90.00%、今日已发出 ¥1,234.56、单日限额 ¥50,000.00、单笔上限 ¥5,000.00、打款开关已开启、队列运行状态运行中；通道卡 企业支付宝 已开通 / 未暂停，银行卡 未开通 / 未暂停，微信零钱 已开通 / 已暂停",
+    "test/spec/frontend/admin-payouts-readonly/overview.test.ts > [AC-F1-08ba-OVERVIEW#2] 另一组开关与阈值（打款关闭、队列暂停、企业支付宝通道暂停且无 W）：可用余额显示「未录入」而不是 ¥0.00，不显示水位高低结论，P ¥0.00、可用比例 85.00%、今日已发出 ¥0.00、单日限额 ¥40,000.00、单笔上限 ¥3,000.00、打款开关已关闭、队列运行状态已暂停；企业支付宝 已开通 / 已暂停",
+    "test/spec/frontend/admin-payouts-readonly/overview.test.ts > [AC-F1-08ba-OVERVIEW#3] 水位结论只照 water_level：normal 显示「正常」；W 已录入但 water_level 为 null（超过时效）时仍显示 W 与取数时间，不显示「水位低」或「正常」",
+    "test/spec/frontend/admin-payouts-readonly/overview.test.ts > [AC-F1-08ba-OVERVIEW#4] 只持 fund.view 进「打款队列」：照常读 payout-overview（一次、不带参数）并显示同样的卡片值",
+    "test/spec/frontend/admin-payouts-readonly/queue.test.ts > [AC-F1-08ba-QUEUE#1] 进「打款队列」：队列页签依次为「全部」「打款中」「待执行」、默认「全部」；全部 = 两个请求 {page:1, page_size, status:APPROVED} 与 {page:1, page_size, status:PAYING}（别无其他列表请求），列出 5 张已通过待打款与打款中的单（申请时间倒序），不列待审核与已成功的单",
+    "test/spec/frontend/admin-payouts-readonly/queue.test.ts > [AC-F1-08ba-QUEUE#2] 切「打款中」只发 {page:1, page_size, status:PAYING} 并列 3 张打款中的单；切「待执行」只发 {page:1, page_size, status:APPROVED} 并列 2 张；切回「全部」再发两个状态各一次并列 5 张",
+    "test/spec/frontend/admin-payouts-readonly/queue.test.ts > [AC-F1-08ba-QUEUE#3] 队列表的实付金额与状态列：实付经 @couli/money（¥500.00、¥98.00、¥1,210.11、¥100.00、¥200.00），状态列只显示后台字典的状态名（已通过待打款 / 打款中）",
+    "test/spec/frontend/admin-payouts-readonly/queue.test.ts > [AC-F1-08ba-QUEUE#4] 「待执行」42 张时分页照常：第 1 页 {page:1, page_size, status:APPROVED} 列前 page_size 张，点第 2 页只发 {page:2, page_size, status:APPROVED} 并列下一段（申请时间倒序）",
+    "test/spec/frontend/admin-payouts-readonly/queue.test.ts > [AC-F1-08ba-QUEUE#5] 队列行【详情】进 withdrawals/{id}：读该单详情并显示该单号",
+    "test/spec/frontend/admin-payouts-readonly/readonly.test.ts > [AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET",
+    "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#1] 加载中：payout-overview 与队列表请求未返回时「打款队列」显示加载中、不显示卡片值与行；返回后显示 W 与 5 张单、不再显示加载中；unknown-payouts 未返回时「结果待确认」同样显示加载中，返回后列出 2 张",
+    "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#2] payout-overview 失败（50001）：卡片处显示失败与【重试】、不显示 W，队列表照常列出 5 张；点【重试】再读一次 payout-overview 并显示 W ¥30,000.00",
+    "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#3] 队列表请求失败（50001）：队列表显示失败与【重试】、不显示行，卡片照常显示 W；点【重试】重读后列出 5 张",
+    "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#4] unknown-payouts 失败（50001）：「结果待确认」显示失败与【重试】、不显示行；点【重试】再读一次并列出 2 张",
+    "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#5] 空列表：队列没有待执行与打款中的单时「打款队列」显示空态、没有行（卡片照常）；unknown-payouts 为空时「结果待确认」显示空态、没有行",
+    "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#6] 10403（快照有 fund.view + payout.execute、服务端只认 withdraw.review）：payout-overview 与 unknown-payouts 各请求一次，两个页签都显示无权限、不显示 W 与结果待确认的行，队列表照常列出 5 张",
+    "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#7] 只持 payout.execute（读不了提现单）：「打款队列」卡片照常显示 W、队列表处显示无权限且没有行；只持 fund.view（读不了 unknown-payouts）：「结果待确认」显示无权限且没有行",
+    "test/spec/frontend/admin-payouts-readonly/tabs.test.ts > [AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts",
+    "test/spec/frontend/admin-payouts-readonly/tabs.test.ts > [AC-F1-08ba-TABS#2] 只持 fund.view、只持 payout.execute、超管：都见三个页签且默认审核列表（只持 payout.execute 时审核列表显示无权限、不读提现单）；只持 withdraw.review 或只持 user.lookup：不见「打款队列」「结果待确认」；未进页签时都不请求 payout-overview 与 unknown-payouts",
+    "test/spec/frontend/admin-payouts-readonly/tabs.test.ts > [AC-F1-08ba-TABS#3] 进「打款队列」只读一次 payout-overview（不带参数）、不读 unknown-payouts；进「结果待确认」只读一次 unknown-payouts；再回「审核列表」，审核列表的行照旧（全部状态、申请时间倒序）",
+    "test/spec/frontend/admin-payouts-readonly/unknown.test.ts > [AC-F1-08ba-UNKNOWN#1] 进「结果待确认」：只发一次 unknown-payouts（{page:1, page_size}）、不读提现单列表，按接口顺序列出 2 张；实付 ¥100.00 / ¥200.00，首次转账 2026-11-12 10:00:05 / —，最近一次查询「结果未知（只查询、不重发）2026-11-13 10:00:05」/ —，每行有可用的【处置】",
+    "test/spec/frontend/admin-payouts-readonly/unknown.test.ts > [AC-F1-08ba-UNKNOWN#2] 行【处置】进 withdrawals/{id}：读该单详情并显示该单号",
+    "test/spec/frontend/admin-payouts-readonly/unknown.test.ts > [AC-F1-08ba-UNKNOWN#3] 只持 payout.execute：「结果待确认」照常读 unknown-payouts 并列出 2 张"
+  ],
+  "risk_note": "F1-08ba (orchestrator D10-1517 batch 1 ②; landed per D10-1772). Read-only payout tabs on the admin withdrawals page: the queue overview card (adminGetPayoutOverview), the payout queue table (listAdminWithdrawals), the result-unknown table (adminListUnknownPayouts) and a per-withdrawal payout attempt drawer. No write entry at all (kill switch, retry and manual verdict belong to F1-08bb / bc / bd); a result-unknown payout is only shown, never re-sent (BR-WDR-14). Amounts only through @couli/money. Codex is out of quota until 2026-11-20 (D10-1604), so per ops/approvals.yaml #36 the rule tests were written by an independent Claude (claude-run.sh, fresh context; ledger tester claude-independent): 25 tests; another independent Claude spec-test r1 pass with one S2. Implementation by Opus 5.5 (another context); couli-ci verify:fast run 1 green and --browser run 1 green before rebase. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex out of quota until 2026-11-20 (D10-1604): money review by an independent Claude per ops/approvals.yaml #36 (claude-run.sh, fresh context), r1 pass, 0 S2"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude (Codex out of quota, approvals #36); spec-test by another independent Claude context r1 pass, one S2 (a kill-switch rendered as a Switch would pass the read-only check)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08ba",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "11ed2a36c1a5184b891ae4ef4a12b8af321df1f6",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "11ed2a36c1a5184b891ae4ef4a12b8af321df1f6",
+      "tree": "e3ad8e149f7eb40c700b38f6ea5fd343684f0c1b",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-16T04:18:49Z",
+      "finished_at": "2026-11-16T04:21:20Z",
+      "red_tests": [
+        "test/spec/frontend/admin-payouts-readonly/attempts.test.ts > [AC-F1-08ba-ATTEMPTS#1] 打款中的 W20261113000202【打款记录】：抽屉读一次该单详情（不带参数），摘要 提现单号 / 实付金额 ¥98.00 / 提现状态 打款中；三条尝试按时间：转账·结果未知、查询·结果未知（SYSTEM_ERROR）、查询·处理中，首条响应码为 —；抽屉内无写入口",
+        "test/spec/frontend/admin-payouts-readonly/attempts.test.ts > [AC-F1-08ba-ATTEMPTS#2] 类型与结果没有字典行的尝试显示编码（reverse / timeout，响应码 X_PENDING）；没有尝试的单（待执行 W20261112000204）抽屉显示空态、摘要照常、没有尝试行",
+        "test/spec/frontend/admin-payouts-readonly/overview.test.ts > [AC-F1-08ba-OVERVIEW#1] 概览样例：可用余额 W ¥30,000.00、取数时间 2026-11-14 09:00:00、预计提现 P ¥21,000.00、水位结论「水位低」、可用比例 90.00%、今日已发出 ¥1,234.56、单日限额 ¥50,000.00、单笔上限 ¥5,000.00、打款开关已开启、队列运行状态运行中；通道卡 企业支付宝 已开通 / 未暂停，银行卡 未开通 / 未暂停，微信零钱 已开通 / 已暂停",
+        "test/spec/frontend/admin-payouts-readonly/overview.test.ts > [AC-F1-08ba-OVERVIEW#2] 另一组开关与阈值（打款关闭、队列暂停、企业支付宝通道暂停且无 W）：可用余额显示「未录入」而不是 ¥0.00，不显示水位高低结论，P ¥0.00、可用比例 85.00%、今日已发出 ¥0.00、单日限额 ¥40,000.00、单笔上限 ¥3,000.00、打款开关已关闭、队列运行状态已暂停；企业支付宝 已开通 / 已暂停",
+        "test/spec/frontend/admin-payouts-readonly/overview.test.ts > [AC-F1-08ba-OVERVIEW#3] 水位结论只照 water_level：normal 显示「正常」；W 已录入但 water_level 为 null（超过时效）时仍显示 W 与取数时间，不显示「水位低」或「正常」",
+        "test/spec/frontend/admin-payouts-readonly/overview.test.ts > [AC-F1-08ba-OVERVIEW#4] 只持 fund.view 进「打款队列」：照常读 payout-overview（一次、不带参数）并显示同样的卡片值",
+        "test/spec/frontend/admin-payouts-readonly/queue.test.ts > [AC-F1-08ba-QUEUE#1] 进「打款队列」：队列页签依次为「全部」「打款中」「待执行」、默认「全部」；全部 = 两个请求 {page:1, page_size, status:APPROVED} 与 {page:1, page_size, status:PAYING}（别无其他列表请求），列出 5 张已通过待打款与打款中的单（申请时间倒序），不列待审核与已成功的单",
+        "test/spec/frontend/admin-payouts-readonly/queue.test.ts > [AC-F1-08ba-QUEUE#2] 切「打款中」只发 {page:1, page_size, status:PAYING} 并列 3 张打款中的单；切「待执行」只发 {page:1, page_size, status:APPROVED} 并列 2 张；切回「全部」再发两个状态各一次并列 5 张",
+        "test/spec/frontend/admin-payouts-readonly/queue.test.ts > [AC-F1-08ba-QUEUE#3] 队列表的实付金额与状态列：实付经 @couli/money（¥500.00、¥98.00、¥1,210.11、¥100.00、¥200.00），状态列只显示后台字典的状态名（已通过待打款 / 打款中）",
+        "test/spec/frontend/admin-payouts-readonly/queue.test.ts > [AC-F1-08ba-QUEUE#4] 「待执行」42 张时分页照常：第 1 页 {page:1, page_size, status:APPROVED} 列前 page_size 张，点第 2 页只发 {page:2, page_size, status:APPROVED} 并列下一段（申请时间倒序）",
+        "test/spec/frontend/admin-payouts-readonly/queue.test.ts > [AC-F1-08ba-QUEUE#5] 队列行【详情】进 withdrawals/{id}：读该单详情并显示该单号",
+        "test/spec/frontend/admin-payouts-readonly/readonly.test.ts > [AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET",
+        "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#1] 加载中：payout-overview 与队列表请求未返回时「打款队列」显示加载中、不显示卡片值与行；返回后显示 W 与 5 张单、不再显示加载中；unknown-payouts 未返回时「结果待确认」同样显示加载中，返回后列出 2 张",
+        "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#2] payout-overview 失败（50001）：卡片处显示失败与【重试】、不显示 W，队列表照常列出 5 张；点【重试】再读一次 payout-overview 并显示 W ¥30,000.00",
+        "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#3] 队列表请求失败（50001）：队列表显示失败与【重试】、不显示行，卡片照常显示 W；点【重试】重读后列出 5 张",
+        "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#4] unknown-payouts 失败（50001）：「结果待确认」显示失败与【重试】、不显示行；点【重试】再读一次并列出 2 张",
+        "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#5] 空列表：队列没有待执行与打款中的单时「打款队列」显示空态、没有行（卡片照常）；unknown-payouts 为空时「结果待确认」显示空态、没有行",
+        "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#6] 10403（快照有 fund.view + payout.execute、服务端只认 withdraw.review）：payout-overview 与 unknown-payouts 各请求一次，两个页签都显示无权限、不显示 W 与结果待确认的行，队列表照常列出 5 张",
+        "test/spec/frontend/admin-payouts-readonly/states.test.ts > [AC-F1-08ba-STATES#7] 只持 payout.execute（读不了提现单）：「打款队列」卡片照常显示 W、队列表处显示无权限且没有行；只持 fund.view（读不了 unknown-payouts）：「结果待确认」显示无权限且没有行",
+        "test/spec/frontend/admin-payouts-readonly/tabs.test.ts > [AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts",
+        "test/spec/frontend/admin-payouts-readonly/tabs.test.ts > [AC-F1-08ba-TABS#2] 只持 fund.view、只持 payout.execute、超管：都见三个页签且默认审核列表（只持 payout.execute 时审核列表显示无权限、不读提现单）；只持 withdraw.review 或只持 user.lookup：不见「打款队列」「结果待确认」；未进页签时都不请求 payout-overview 与 unknown-payouts",
+        "test/spec/frontend/admin-payouts-readonly/tabs.test.ts > [AC-F1-08ba-TABS#3] 进「打款队列」只读一次 payout-overview（不带参数）、不读 unknown-payouts；进「结果待确认」只读一次 unknown-payouts；再回「审核列表」，审核列表的行照旧（全部状态、申请时间倒序）",
+        "test/spec/frontend/admin-payouts-readonly/unknown.test.ts > [AC-F1-08ba-UNKNOWN#1] 进「结果待确认」：只发一次 unknown-payouts（{page:1, page_size}）、不读提现单列表，按接口顺序列出 2 张；实付 ¥100.00 / ¥200.00，首次转账 2026-11-12 10:00:05 / —，最近一次查询「结果未知（只查询、不重发）2026-11-13 10:00:05」/ —，每行有可用的【处置】",
+        "test/spec/frontend/admin-payouts-readonly/unknown.test.ts > [AC-F1-08ba-UNKNOWN#2] 行【处置】进 withdrawals/{id}：读该单详情并显示该单号",
+        "test/spec/frontend/admin-payouts-readonly/unknown.test.ts > [AC-F1-08ba-UNKNOWN#3] 只持 payout.execute：「结果待确认」照常读 unknown-payouts 并列出 2 张"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-payouts-readonly/attempts.test.ts",
+        "test/spec/frontend/admin-payouts-readonly/overview.test.ts",
+        "test/spec/frontend/admin-payouts-readonly/queue.test.ts",
+        "test/spec/frontend/admin-payouts-readonly/readonly.test.ts",
+        "test/spec/frontend/admin-payouts-readonly/states.test.ts",
+        "test/spec/frontend/admin-payouts-readonly/tabs.test.ts",
+        "test/spec/frontend/admin-payouts-readonly/unknown.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "376b72ae4d5855de342bd1eaea84826b1b04082dd76e0dcfdb5d39d1066a55b6"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c30edcec8863c26c5cf5793fa9f13f895fcbe195",
+    "specs": "fcf31d18cf23aa492ff2b675d0fe273c575c4348"
+  }
+}

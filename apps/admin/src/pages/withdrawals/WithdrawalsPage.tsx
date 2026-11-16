@@ -5,8 +5,11 @@
 // 持 withdraw.review 或 fund.view 可看；两者都没有时本页说明无权限、不发请求。
 // 持 withdraw.review（超管持有全部点）时待审核（PENDING_REVIEW）行可勾选，勾选后出现批量栏与
 // 【批量通过】（F1-08ai，BatchApprove.tsx）；【查询】【重置】、换页签或换页清空已选。
-// TODO(规划/11 §7): 【批量手动打款】【批量自动打款】与一键组批、【导出】、「打款队列」
-// 「结果待确认」「自动到账设置」页签与各页签计数 — blocked on 契约未出
+// 持 fund.view 或 payout.execute 时页面分三个页签「审核列表」「打款队列」「结果待确认」（F1-08ba，
+// PayoutTabs.tsx，只读）：审核列表为默认页签；后两个页签进入时才读各自的接口。两个都不持时只有审核列表、
+// 不出页签栏。
+// TODO(规划/11 §7): 【批量手动打款】【批量自动打款】与一键组批、【导出】、「自动到账设置」页签与
+// 各页签计数 — blocked on 契约未出
 import { ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import {
@@ -40,6 +43,7 @@ import { useLocation, useNavigate } from 'react-router';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { withdrawalsTexts as t } from '../../texts/withdrawals.ts';
 import { BatchApprove } from './BatchApprove.tsx';
+import { PayoutQueuePanel, UnknownPayoutsPanel } from './PayoutTabs.tsx';
 import {
   CHANNELS,
   EMPTY_DRAFT,
@@ -56,10 +60,13 @@ import {
   channelLabel,
   checkDraft,
   codeOf,
+  canSeePayouts,
   conditionLabel,
   detailRoute,
+  EXECUTE_PERMISSION,
   draftFromSearch,
   listQuery,
+  marksOf,
   money,
   reviewModeLabel,
   riskLabel,
@@ -103,21 +110,53 @@ export function Forbidden(): ReactElement {
   );
 }
 
+type PageTab = 'review' | 'queue' | 'unknown';
+
 export function WithdrawalsPage({ access }: WithdrawalsPageProps): ReactElement {
-  if (!canRead(access)) return <Forbidden />;
-  return <WithdrawalsList reviewer={access.can(REVIEW_PERMISSION)} />;
+  const reader = canRead(access);
+  const payouts = canSeePayouts(access);
+  const [tab, setTab] = useState<PageTab>('review');
+  if (!reader && !payouts) return <Forbidden />;
+  const review = reader ? (
+    <WithdrawalsList reviewer={access.can(REVIEW_PERMISSION)} />
+  ) : (
+    <Card>
+      <Result status="403" title={t.forbiddenTitle} subTitle={t.forbiddenDescription} />
+    </Card>
+  );
+  return (
+    <Flex vertical gap={16}>
+      <Typography.Title level={4} style={{ margin: 0 }}>
+        {t.title}
+      </Typography.Title>
+      {payouts ? (
+        <Tabs
+          activeKey={tab}
+          onChange={(key) => {
+            if (key === 'review' || key === 'queue' || key === 'unknown') setTab(key);
+          }}
+          items={[
+            { key: 'review', label: t.pageTabs.review, children: review },
+            {
+              key: 'queue',
+              label: t.pageTabs.queue,
+              children: <PayoutQueuePanel canList={reader} />,
+            },
+            {
+              key: 'unknown',
+              label: t.pageTabs.unknown,
+              children: <UnknownPayoutsPanel canList={access.can(EXECUTE_PERMISSION)} />,
+            },
+          ]}
+        />
+      ) : (
+        review
+      )}
+    </Flex>
+  );
 }
 
-/** The marks shown under a row's status (「暂停」, 执行受阻, needs_manual, hold_reason). */
-export function marksOf(row: WithdrawalRow): string[] {
-  const marks: string[] = [];
-  if (row.blocked_reason !== null) marks.push(t.paused(row.blocked_reason));
-  const blocked = row.auto_decision?.execute_blocked ?? null;
-  if (blocked !== null) marks.push(t.executeBlocked(blocked));
-  if (row.needs_manual) marks.push(t.needsManual);
-  if (row.hold_reason !== null) marks.push(t.holdReason(row.hold_reason));
-  return marks;
-}
+export { marksOf };
 
 function WithdrawalsList({ reviewer }: { readonly reviewer: boolean }): ReactElement {
   const loadingClock = useLoadingClock();
@@ -490,9 +529,6 @@ function WithdrawalsList({ reviewer }: { readonly reviewer: boolean }): ReactEle
 
   return (
     <Flex vertical gap={16}>
-      <Typography.Title level={4} style={{ margin: 0 }}>
-        {t.title}
-      </Typography.Title>
       <Alert type="info" showIcon role="note" message={t.readOnlyNotice} />
       <Card>
         <Form layout="vertical" component="div">
