@@ -1,0 +1,143 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-adjustment-create/create.test.ts > [AC-F1-08cb-CREATE#1] 【新建调账】打开抽屉「新建调账」：一步提交并生效的说明、用户 ID / 调增调减 / 金额（元）/ 原因码 / 单据类型 + 单据号 / 原因说明各 1 个；原因码只给对账修正、打款追回、其他（不出现订单恢复、注销余额转平台收入）；对方科目只在对账修正与其他出现、四选一，联盟应收才出现平台（九个平台）；打款追回不出现对方科目与平台；打开与选择都不发请求",
+    "test/spec/frontend/admin-adjustment-create/create.test.ts > [AC-F1-08cb-CREATE#2] 对账修正调增 ¥1,234,567.89：预览一行；短信验证后只发一次 POST /admin/v1/adjustments，请求体恰为 user_id / direction / amount_fen=123456789 / reason_code / refs / 去空白的 note / contra_subject（先选联盟应收 + 淘宝再改回佣金收入，不带 contra_platform）；带 X-Step-Up-Token 与 Idempotency-Key；成功提示新单号、关抽屉、列表刷新新单在首行",
+    "test/spec/frontend/admin-adjustment-create/create.test.ts > [AC-F1-08cb-CREATE#3] 打款追回调减 ¥19.99（先选对账修正 + 坏账再改原因码）：对方科目消失，请求体恰为 user_id / decrease / amount_fen=1999 / PAYOUT_RECOVERY / 两张单据（按添加顺序、去空白），不带 note、contra_subject、contra_platform；新单按返回显示在列表首行",
+    "test/spec/frontend/admin-adjustment-create/create.test.ts > [AC-F1-08cb-CREATE#4] 其他（客服处理说明代替单据）调增 ¥0.05、对方科目联盟应收 + 拼多多：请求体 refs 为空数组、note 去空白、contra_platform=pdd；成功后再开抽屉是空表单，下一单换新 Idempotency-Key、用新的验证",
+    "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#1] 持 fund.adjust：标题行（页签外）恰 1 个可用【新建调账】；【红冲】只在已生效、非红冲单、未被红冲的三行（对账修正、其他、订单恢复），每行 1 个可用；不出现【批准】【驳回】【批准核销】【撤回】【保存待批】；进页不发任何写请求",
+    "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#2] 持 fund.adjust 的详情：已生效未红冲单（对账修正）有 1 个可用【红冲】；已被红冲的原单、红冲单本身、系统预填待批单、已驳回单都没有【红冲】，也没有【批准】【驳回】",
+    "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#3] 只持 fund.view + fund.writeoff：列表、已生效未红冲单详情、坏账核销页签都没有【新建调账】【红冲】（不置灰，直接不出现）；只持 fund.writeoff 时标题行同样没有；同一页面换成持 fund.adjust 的账号才出现",
+    "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#4] 超管：标题行恰 1 个可用【新建调账】，【红冲】同样只在三行可红冲的单上；不出现后续任务的写入口",
+    "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#1] 20001 data.fields=[user_id]（用户不存在）：抽屉保留、已填不丢，提示「用户不存在，请核对用户 ID」；改正 UID 再提交时重新短信验证、换新的 Idempotency-Key（20001 已确定拒绝，改过的请求体沿用原键会被契约判 20901），请求体按改正后的值，成功后提示新单号",
+    "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#2] 20001 按 data.reason 提示在抽屉里：关联单据 adjust_ref_invalid → 「关联单据不存在、不属于该用户或不能用于调账，请核对」；adjust_user_deleted → 「该用户已注销或正在注销，不能调账」；抽屉保留、不自动重发",
+    "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#3] 10403（本地有 fund.adjust、服务端不认）：提示「无权限执行调账」，抽屉保留、已填不丢，不自动重发",
+    "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#4] 结果未定的失败（网络断开、50001、40901）：每次提示「提交失败，请稍后重试」、抽屉保留、不自动重发；再次提交重新短信验证并沿用同一个 Idempotency-Key 与同一请求体，最终成功只生效一张",
+    "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#5] 20901（同键不同请求体）：提示「提交失败，请稍后重试」、不自动重发；用户再次提交时换新的 Idempotency-Key（error-codes 20901：生成新幂等键后由用户重新提交）",
+    "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#6] POST 返回 10003 data.tier=sms（验证已失效）：重新发验证码、再弹短信验证，验证后用新的验证重放同一请求体与同一个 Idempotency-Key（契约：重放沿用原键），成功只生效一张",
+    "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#7] 未登记验证手机号（发码返回 10003 data.reason=verify_phone_missing）：提示「这项操作需要短信验证，请先登记验证手机号」，不弹验证、不发 POST，抽屉保留；再按提交也不再发码、不弹验证",
+    "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#8] 提交中：【提交并短信验证】不可用，再点不发第二次；返回成功后只有一次 POST",
+    "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#9] 新建抽屉【取消】：抽屉关闭、焦点回到【新建调账】，不发任何请求",
+    "test/spec/frontend/admin-adjustment-create/reversal.test.ts > [AC-F1-08cb-REVERSE#1] 行上【红冲】打开「红冲调账单」：原单摘要与新单预览（方向相反、金额等于原单，只读）；对话框里只有「红冲原因」一个输入，没有方向、金额、原因码、单据、科目可改；红冲原因只有空白时本地提示「请填写红冲原因」、不发请求",
+    "test/spec/frontend/admin-adjustment-create/reversal.test.ts > [AC-F1-08cb-REVERSE#2] 行上红冲提交：短信验证后只发一次 POST，请求体恰为 reverses_adjust_id + 去空白的 note（不带方向、金额、原因码、单据、科目），带 X-Step-Up-Token 与 Idempotency-Key；成功提示红冲单号、关对话框、列表刷新：红冲单在首行（调减、原金额、同原因、已生效），原单显示已红冲且不再有【红冲】",
+    "test/spec/frontend/admin-adjustment-create/reversal.test.ts > [AC-F1-08cb-REVERSE#3] 详情上【红冲】（其他、¥0.05）：摘要按该单；成功后详情重新读取，显示「已红冲」与红冲单号、不再有【红冲】，列表同时刷新",
+    "test/spec/frontend/admin-adjustment-create/reversal.test.ts > [AC-F1-08cb-REVERSE#4] 同一原单已被别人红冲：POST 返回 20902（data.resource=admin_adjustment）→ 提示「该调账单已被红冲，已刷新」，详情与列表重新读取后显示已红冲、不再有【红冲】；不自动重发",
+    "test/spec/frontend/admin-adjustment-create/reversal.test.ts > [AC-F1-08cb-REVERSE#5] 20001 按 data.reason 提示且对话框保留、红冲原因不丢：reverse_not_allowed → 「该调账单不能红冲：未生效或本身是红冲单」；adjust_user_deleted → 「该用户已注销或正在注销，不能调账」；每次都只发一次、不自动重发",
+    "test/spec/frontend/admin-adjustment-create/reversal.test.ts > [AC-F1-08cb-REVERSE#6] 红冲对话框【取消】：对话框关闭、焦点回到触发的【红冲】，不发任何请求",
+    "test/spec/frontend/admin-adjustment-create/supplement.test.ts > [AC-F1-08cb-REVERSE#7] 红冲对话框显示余额前后两行（adminGetAdjustment balance_preview，经 @couli/money）：行上红冲对账修正 ¥1,234,567.89 →「红冲前可用余额」¥500.00、「红冲后可用余额」-¥1,234,067.89（为负照实显示负数）；详情上红冲其他 ¥0.05 → ¥500.00、¥499.95；打开对话框不发写请求",
+    "test/spec/frontend/admin-adjustment-create/supplement.test.ts > [AC-F1-08cb-REVERSE#8] 红冲调减原单（打款追回调减 ¥30.00，已生效、未红冲）：红冲方向显示「调增」、红冲金额 ¥30.00、余额 ¥500.00 → ¥530.00；提交后请求体仍只有 reverses_adjust_id 与 note；红冲单在首行为调增、原单显示已红冲且不再有【红冲】",
+    "test/spec/frontend/admin-adjustment-create/supplement.test.ts > [AC-F1-08cb-CREATE#5] 对方科目四个选项各提交一次（对账修正调增 ¥8.80）：佣金收入 / 联盟应收（+ 京东）/ 坏账 / 营销费用 → 请求体 contra_subject 依次精确为 COMMISSION_REVENUE / UNION_RECEIVABLE / BAD_DEBT / MKT_EXPENSE，只有联盟应收带 contra_platform=jd",
+    "test/spec/frontend/admin-adjustment-create/supplement.test.ts > [AC-F1-08cb-CREATE#6] 联盟应收的平台九个值各提交一次（其他调减 ¥1.50，说明代替单据）：淘宝 / 京东 / 拼多多 / 美团 / 唯品会 / 抖音 / 饿了么 / 快手 / 苏宁 → 请求体 contra_platform 依次精确为 taobao / jd / pdd / meituan / vip / douyin / eleme / kuaishou / suning，contra_subject 都是 UNION_RECEIVABLE",
+    "test/spec/frontend/admin-adjustment-create/supplement.test.ts > [AC-F1-08cb-CREATE#7] 大金额 ¥30,000,000.00（3000000000 分，超过 2^31，契约不设上限）：预览整串为「¥30,000,000.00」，请求体 amount_fen 恰为 3000000000，新单在列表首行显示 ¥30,000,000.00",
+    "test/spec/frontend/admin-adjustment-create/supplement.test.ts > [AC-F1-08cb-CHECK#6] 打款追回恰好 1 张提现单、没有差错单：本地提示「打款追回须关联恰好 1 张提现单和至少 1 张差错单」、不发短信不发 POST、已填不丢；补 1 张差错单后提交，请求体按添加顺序带两张单据",
+    "test/spec/frontend/admin-adjustment-create/validation.test.ts > [AC-F1-08cb-CHECK#1] 什么都不填就提交：抽屉保留并同时提示「请输入用户 ID」「请选择方向」「请输入大于 0、最多两位小数的金额」「请选择原因码」；不发短信、不弹验证、不发 POST",
+    "test/spec/frontend/admin-adjustment-create/validation.test.ts > [AC-F1-08cb-CHECK#2] 金额按元输入只收大于 0、最多两位小数：0、0.00、-1、1.234、abc、1e3、空都在本地拦下且已填的其他项不丢；0.01 通过后请求体 amount_fen 为 1（整数分）",
+    "test/spec/frontend/admin-adjustment-create/validation.test.ts > [AC-F1-08cb-CHECK#3] 按原因码的关联单据与说明：对账修正只有子订单 → 「对账修正须关联至少 1 张差错单」；打款追回缺提现单或有两张提现单 → 「打款追回须关联恰好 1 张提现单和至少 1 张差错单」；其他的说明只有空白 → 「请填写原因说明」，超过 500 字 → 「原因说明最多 500 字」；都不发请求",
+    "test/spec/frontend/admin-adjustment-create/validation.test.ts > [AC-F1-08cb-CHECK#4] 对方科目：对账修正不选科目 → 「请选择对方科目」；选联盟应收不选平台 → 「请选择平台」；都不发请求",
+    "test/spec/frontend/admin-adjustment-create/validation.test.ts > [AC-F1-08cb-CHECK#5] 关联单据不重复、最多 10 张：同类型同单号（去空白后相同）再添加提示「该单据已添加」且不新增；加满 10 张后再添加提示「关联单据最多 10 张」且仍是 10 张；表格按添加顺序列出"
+  ],
+  "risk_note": "F1-08cb (orchestrator D10-1517 batch 1 ③, D10-1734; landed per D10-1772, stacked on #184 F1-08ca and rebased onto main). Admin adjustments 新建调账 and 红冲: one-step submit that takes effect, SMS step-up code, contra subject with platform, pre-submit checks; amounts only through @couli/money. RELEASE GUARD (D10-1734 / D10-1798): after this merges and before F1-08ce merges, the admin app must not be promoted to production, because alone it lets an operator edit the form after a lost reply and resubmit with a new key (possible double adjustment); F1-08ce (locked form, retry with the original key and body only) lands right after. Codex is out of quota until 2026-11-20 (D10-1604), so per ops/approvals.yaml #36 the rule tests were written by an independent Claude (claude-run.sh, fresh context) in four rounds; another independent Claude spec-test r1 and r2 fail (S1), r3 pass with one S2 (fixture date not zero-padded for the 9th write), round 4 only pads that date. A fifth round (D10-1731 result-unknown lock) moved to F1-08ce because the per-task limit of 10 independent calls was reached (D10-1734). Implementation by Opus 5.5 (another context); after the rebase couli-ci verify:fast run 1 and --browser run 1 green. Money review r1 pass with two S2, both addressed by F1-08ce (D10-1731, D10-1732). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex out of quota until 2026-11-20 (D10-1604): money review by an independent Claude per ops/approvals.yaml #36 (claude-run.sh, fresh context), r1 pass, 2 S2"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 4,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude (Codex out of quota, approvals #36); spec-test by another independent Claude context: r1 / r2 fail (S1), r3 pass with one S2 (fixture date padding), round-4 tests only pad that date; the D10-1731 round moved to F1-08ce (D10-1734)"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08cb",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "bc26f7ae55441832950ae0dfa0c27ce011c573e4",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "bc26f7ae55441832950ae0dfa0c27ce011c573e4",
+      "tree": "3389883d0bad5276a16b3fd1e4c72cd910228d7b",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-16T06:58:03Z",
+      "finished_at": "2026-11-16T06:58:22Z",
+      "red_tests": [
+        "test/spec/frontend/admin-adjustment-create/create.test.ts > [AC-F1-08cb-CREATE#1] 【新建调账】打开抽屉「新建调账」：一步提交并生效的说明、用户 ID / 调增调减 / 金额（元）/ 原因码 / 单据类型 + 单据号 / 原因说明各 1 个；原因码只给对账修正、打款追回、其他（不出现订单恢复、注销余额转平台收入）；对方科目只在对账修正与其他出现、四选一，联盟应收才出现平台（九个平台）；打款追回不出现对方科目与平台；打开与选择都不发请求",
+        "test/spec/frontend/admin-adjustment-create/create.test.ts > [AC-F1-08cb-CREATE#2] 对账修正调增 ¥1,234,567.89：预览一行；短信验证后只发一次 POST /admin/v1/adjustments，请求体恰为 user_id / direction / amount_fen=123456789 / reason_code / refs / 去空白的 note / contra_subject（先选联盟应收 + 淘宝再改回佣金收入，不带 contra_platform）；带 X-Step-Up-Token 与 Idempotency-Key；成功提示新单号、关抽屉、列表刷新新单在首行",
+        "test/spec/frontend/admin-adjustment-create/create.test.ts > [AC-F1-08cb-CREATE#3] 打款追回调减 ¥19.99（先选对账修正 + 坏账再改原因码）：对方科目消失，请求体恰为 user_id / decrease / amount_fen=1999 / PAYOUT_RECOVERY / 两张单据（按添加顺序、去空白），不带 note、contra_subject、contra_platform；新单按返回显示在列表首行",
+        "test/spec/frontend/admin-adjustment-create/create.test.ts > [AC-F1-08cb-CREATE#4] 其他（客服处理说明代替单据）调增 ¥0.05、对方科目联盟应收 + 拼多多：请求体 refs 为空数组、note 去空白、contra_platform=pdd；成功后再开抽屉是空表单，下一单换新 Idempotency-Key、用新的验证",
+        "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#1] 持 fund.adjust：标题行（页签外）恰 1 个可用【新建调账】；【红冲】只在已生效、非红冲单、未被红冲的三行（对账修正、其他、订单恢复），每行 1 个可用；不出现【批准】【驳回】【批准核销】【撤回】【保存待批】；进页不发任何写请求",
+        "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#2] 持 fund.adjust 的详情：已生效未红冲单（对账修正）有 1 个可用【红冲】；已被红冲的原单、红冲单本身、系统预填待批单、已驳回单都没有【红冲】，也没有【批准】【驳回】",
+        "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#3] 只持 fund.view + fund.writeoff：列表、已生效未红冲单详情、坏账核销页签都没有【新建调账】【红冲】（不置灰，直接不出现）；只持 fund.writeoff 时标题行同样没有；同一页面换成持 fund.adjust 的账号才出现",
+        "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#4] 超管：标题行恰 1 个可用【新建调账】，【红冲】同样只在三行可红冲的单上；不出现后续任务的写入口",
+        "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#1] 20001 data.fields=[user_id]（用户不存在）：抽屉保留、已填不丢，提示「用户不存在，请核对用户 ID」；改正 UID 再提交时重新短信验证、换新的 Idempotency-Key（20001 已确定拒绝，改过的请求体沿用原键会被契约判 20901），请求体按改正后的值，成功后提示新单号",
+        "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#2] 20001 按 data.reason 提示在抽屉里：关联单据 adjust_ref_invalid → 「关联单据不存在、不属于该用户或不能用于调账，请核对」；adjust_user_deleted → 「该用户已注销或正在注销，不能调账」；抽屉保留、不自动重发",
+        "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#3] 10403（本地有 fund.adjust、服务端不认）：提示「无权限执行调账」，抽屉保留、已填不丢，不自动重发",
+        "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#4] 结果未定的失败（网络断开、50001、40901）：每次提示「提交失败，请稍后重试」、抽屉保留、不自动重发；再次提交重新短信验证并沿用同一个 Idempotency-Key 与同一请求体，最终成功只生效一张",
+        "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#5] 20901（同键不同请求体）：提示「提交失败，请稍后重试」、不自动重发；用户再次提交时换新的 Idempotency-Key（error-codes 20901：生成新幂等键后由用户重新提交）",
+        "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#6] POST 返回 10003 data.tier=sms（验证已失效）：重新发验证码、再弹短信验证，验证后用新的验证重放同一请求体与同一个 Idempotency-Key（契约：重放沿用原键），成功只生效一张",
+        "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#7] 未登记验证手机号（发码返回 10003 data.reason=verify_phone_missing）：提示「这项操作需要短信验证，请先登记验证手机号」，不弹验证、不发 POST，抽屉保留；再按提交也不再发码、不弹验证",
+        "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#8] 提交中：【提交并短信验证】不可用，再点不发第二次；返回成功后只有一次 POST",
+        "test/spec/frontend/admin-adjustment-create/errors.test.ts > [AC-F1-08cb-ERROR#9] 新建抽屉【取消】：抽屉关闭、焦点回到【新建调账】，不发任何请求",
+        "test/spec/frontend/admin-adjustment-create/reversal.test.ts > [AC-F1-08cb-REVERSE#1] 行上【红冲】打开「红冲调账单」：原单摘要与新单预览（方向相反、金额等于原单，只读）；对话框里只有「红冲原因」一个输入，没有方向、金额、原因码、单据、科目可改；红冲原因只有空白时本地提示「请填写红冲原因」、不发请求",
+        "test/spec/frontend/admin-adjustment-create/reversal.test.ts > [AC-F1-08cb-REVERSE#2] 行上红冲提交：短信验证后只发一次 POST，请求体恰为 reverses_adjust_id + 去空白的 note（不带方向、金额、原因码、单据、科目），带 X-Step-Up-Token 与 Idempotency-Key；成功提示红冲单号、关对话框、列表刷新：红冲单在首行（调减、原金额、同原因、已生效），原单显示已红冲且不再有【红冲】",
+        "test/spec/frontend/admin-adjustment-create/reversal.test.ts > [AC-F1-08cb-REVERSE#3] 详情上【红冲】（其他、¥0.05）：摘要按该单；成功后详情重新读取，显示「已红冲」与红冲单号、不再有【红冲】，列表同时刷新",
+        "test/spec/frontend/admin-adjustment-create/reversal.test.ts > [AC-F1-08cb-REVERSE#4] 同一原单已被别人红冲：POST 返回 20902（data.resource=admin_adjustment）→ 提示「该调账单已被红冲，已刷新」，详情与列表重新读取后显示已红冲、不再有【红冲】；不自动重发",
+        "test/spec/frontend/admin-adjustment-create/reversal.test.ts > [AC-F1-08cb-REVERSE#5] 20001 按 data.reason 提示且对话框保留、红冲原因不丢：reverse_not_allowed → 「该调账单不能红冲：未生效或本身是红冲单」；adjust_user_deleted → 「该用户已注销或正在注销，不能调账」；每次都只发一次、不自动重发",
+        "test/spec/frontend/admin-adjustment-create/reversal.test.ts > [AC-F1-08cb-REVERSE#6] 红冲对话框【取消】：对话框关闭、焦点回到触发的【红冲】，不发任何请求",
+        "test/spec/frontend/admin-adjustment-create/supplement.test.ts > [AC-F1-08cb-REVERSE#7] 红冲对话框显示余额前后两行（adminGetAdjustment balance_preview，经 @couli/money）：行上红冲对账修正 ¥1,234,567.89 →「红冲前可用余额」¥500.00、「红冲后可用余额」-¥1,234,067.89（为负照实显示负数）；详情上红冲其他 ¥0.05 → ¥500.00、¥499.95；打开对话框不发写请求",
+        "test/spec/frontend/admin-adjustment-create/supplement.test.ts > [AC-F1-08cb-REVERSE#8] 红冲调减原单（打款追回调减 ¥30.00，已生效、未红冲）：红冲方向显示「调增」、红冲金额 ¥30.00、余额 ¥500.00 → ¥530.00；提交后请求体仍只有 reverses_adjust_id 与 note；红冲单在首行为调增、原单显示已红冲且不再有【红冲】",
+        "test/spec/frontend/admin-adjustment-create/supplement.test.ts > [AC-F1-08cb-CREATE#5] 对方科目四个选项各提交一次（对账修正调增 ¥8.80）：佣金收入 / 联盟应收（+ 京东）/ 坏账 / 营销费用 → 请求体 contra_subject 依次精确为 COMMISSION_REVENUE / UNION_RECEIVABLE / BAD_DEBT / MKT_EXPENSE，只有联盟应收带 contra_platform=jd",
+        "test/spec/frontend/admin-adjustment-create/supplement.test.ts > [AC-F1-08cb-CREATE#6] 联盟应收的平台九个值各提交一次（其他调减 ¥1.50，说明代替单据）：淘宝 / 京东 / 拼多多 / 美团 / 唯品会 / 抖音 / 饿了么 / 快手 / 苏宁 → 请求体 contra_platform 依次精确为 taobao / jd / pdd / meituan / vip / douyin / eleme / kuaishou / suning，contra_subject 都是 UNION_RECEIVABLE",
+        "test/spec/frontend/admin-adjustment-create/supplement.test.ts > [AC-F1-08cb-CREATE#7] 大金额 ¥30,000,000.00（3000000000 分，超过 2^31，契约不设上限）：预览整串为「¥30,000,000.00」，请求体 amount_fen 恰为 3000000000，新单在列表首行显示 ¥30,000,000.00",
+        "test/spec/frontend/admin-adjustment-create/supplement.test.ts > [AC-F1-08cb-CHECK#6] 打款追回恰好 1 张提现单、没有差错单：本地提示「打款追回须关联恰好 1 张提现单和至少 1 张差错单」、不发短信不发 POST、已填不丢；补 1 张差错单后提交，请求体按添加顺序带两张单据",
+        "test/spec/frontend/admin-adjustment-create/validation.test.ts > [AC-F1-08cb-CHECK#1] 什么都不填就提交：抽屉保留并同时提示「请输入用户 ID」「请选择方向」「请输入大于 0、最多两位小数的金额」「请选择原因码」；不发短信、不弹验证、不发 POST",
+        "test/spec/frontend/admin-adjustment-create/validation.test.ts > [AC-F1-08cb-CHECK#2] 金额按元输入只收大于 0、最多两位小数：0、0.00、-1、1.234、abc、1e3、空都在本地拦下且已填的其他项不丢；0.01 通过后请求体 amount_fen 为 1（整数分）",
+        "test/spec/frontend/admin-adjustment-create/validation.test.ts > [AC-F1-08cb-CHECK#3] 按原因码的关联单据与说明：对账修正只有子订单 → 「对账修正须关联至少 1 张差错单」；打款追回缺提现单或有两张提现单 → 「打款追回须关联恰好 1 张提现单和至少 1 张差错单」；其他的说明只有空白 → 「请填写原因说明」，超过 500 字 → 「原因说明最多 500 字」；都不发请求",
+        "test/spec/frontend/admin-adjustment-create/validation.test.ts > [AC-F1-08cb-CHECK#4] 对方科目：对账修正不选科目 → 「请选择对方科目」；选联盟应收不选平台 → 「请选择平台」；都不发请求",
+        "test/spec/frontend/admin-adjustment-create/validation.test.ts > [AC-F1-08cb-CHECK#5] 关联单据不重复、最多 10 张：同类型同单号（去空白后相同）再添加提示「该单据已添加」且不新增；加满 10 张后再添加提示「关联单据最多 10 张」且仍是 10 张；表格按添加顺序列出"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-adjustment-create/create.test.ts",
+        "test/spec/frontend/admin-adjustment-create/entry.test.ts",
+        "test/spec/frontend/admin-adjustment-create/errors.test.ts",
+        "test/spec/frontend/admin-adjustment-create/reversal.test.ts",
+        "test/spec/frontend/admin-adjustment-create/supplement.test.ts",
+        "test/spec/frontend/admin-adjustment-create/validation.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "5e26c926fc53723de86aff288fa854ad9f667bced2710c69804d8e134bf50db5"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "11c0acb8b7738d890dfbac21eafd276b607132b1",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
