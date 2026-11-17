@@ -10,6 +10,7 @@ import type { PreparedCard } from './application/card-assembler.ts';
 import type { CatalogCardEntry } from './application/card-entry.ts';
 import { blockedByCategory } from './application/category-block.ts';
 import type { PoolPageRequest, PoolReader } from './application/pool-read.ts';
+import { normalizePoolTagFilter } from './domain/pool-tags.ts';
 import { CatalogError } from './domain/rules.ts';
 import type { Catalog } from './domain/types.ts';
 import {
@@ -96,6 +97,8 @@ interface ChannelState {
 interface PoolDataSource {
   readonly poolId: string;
   readonly limit: number;
+  /** CT-07f (D10-1986): the configured tags, normalized; [] filters nothing. */
+  readonly tags: readonly string[];
 }
 
 function invalidCursor(): never {
@@ -129,7 +132,24 @@ function poolSourceOf(dataSource: unknown): PoolDataSource | null {
   const { pool_id: poolId, limit } = dataSource;
   if (typeof poolId !== 'string' || poolId === '') return null;
   if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1) return null;
-  return { poolId, limit };
+  return { poolId, limit, tags: sourceTags(dataSource['tags']) };
+}
+
+/**
+ * The tags of a product_pool source as the stored tags are written (domain/pool-tags.ts), so a
+ * saved value matches whatever spacing or width it was typed with. The save check already refused
+ * anything else; a value that still fails the normalization is kept as it is and matches nothing
+ * it should not (never widened to every row).
+ */
+function sourceTags(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) return [];
+  const tags: string[] = [];
+  for (const entry of value as unknown[]) {
+    if (typeof entry !== 'string') continue;
+    const tag = normalizePoolTagFilter(entry) ?? entry;
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+  return tags;
 }
 
 function encodeCursor(query: SectionItemsQuery, position: Record<string, unknown>): string {
@@ -318,6 +338,7 @@ export async function getSectionItems(
       poolId: source.poolId,
       offset: position === null ? 0 : poolOffset(position),
       limit: Math.min(source.limit, SECTION_PAGE_SIZE),
+      tags: source.tags,
     };
     return poolPage(query, poolReader, options, request, false);
   }

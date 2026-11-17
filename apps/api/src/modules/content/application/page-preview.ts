@@ -17,6 +17,7 @@
 // no cache.
 import { createHash, randomBytes } from 'node:crypto';
 import type { AuditInput, Clock } from '../../platform/index.ts';
+import { deliveredSections } from '../domain/pages/delivered-sections.ts';
 
 /** Lifetime of a preview token (04 §3.2: 10 minutes). */
 export const PREVIEW_TOKEN_TTL_MS = 600_000;
@@ -181,6 +182,7 @@ export class PagePreviewService {
     const sections = await this.#store.sections(appId, pageKey, version);
     // The token's foreign key pins an existing version; a missing row is a broken invariant.
     if (sections === undefined) throw new Error('content: preview token without its version');
-    return { page_key: pageKey, version, sections: sections as Record<string, unknown>[] };
+    // CT-07f: previewPage is a /v1 delivery too; a product_pool source's tags stay on the server.
+    return { page_key: pageKey, version, sections: deliveredSections(sections) };
   }
 }
