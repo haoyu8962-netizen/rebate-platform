@@ -32,7 +32,7 @@ import {
 const ALL_ROWS = [QNO.approvedA, QNO.paying, QNO.approvedB, QNO.stuck, QNO.untried];
 
 it(
-  '[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET',
+  '[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）只有已落地的写入口——全部打款权限点账号没有，超管恰为【录入企业支付宝余额】【录入运营账户余额】【解除暂停】与每个暂停通道一个【解除通道暂停】；打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET',
   { timeout: MULTI_TIMEOUT },
   async () => {
     // Since F1-08bc (D10-1712 (a)) the entries landed so far are exactly 【录入企业支付宝余额】 and
