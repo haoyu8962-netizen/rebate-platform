@@ -32,5 +32,5 @@ modify_existing:
     note: '只改标题（D10-1895）：用例体自 F1-08bc（余额录入两入口）与 F1-08bd（【暂停队列】与暂停通道的【解除通道暂停】）起已断言超管写入口恰为已落地入口，标题仍写「只出现【执行所选】这一个写入口」；断言一字不动'
 accept:
   - 'pnpm verify'
-status: todo
-pr: null
+status: done
+pr: 260
