@@ -14701,6 +14701,10 @@ export const CONTRACT_ROUTE_SCHEMAS = {
             "offline"
           ]
         },
+        "tag": {
+          "type": "string",
+          "maxLength": 256
+        },
         "page": {
           "type": "integer",
           "format": "int32",
@@ -14825,6 +14829,15 @@ export const CONTRACT_ROUTE_SCHEMAS = {
               "type": "null"
             }
           ]
+        },
+        "tags": {
+          "type": "array",
+          "description": "Tags as the operator typed them (CT-07e, D10-1777), the `tags` of adminAddPoolItem and\nadminUpdatePoolItem. Two layers of bounds:\n1. This schema only declares the outer edge — at most 100 items of at most 256 characters — to\n   refuse oversized requests; it is not the rule.\n2. The real bounds are judged by the server after normalization (NFKC, trimmed, inner\n   whitespace one space, blanks dropped, duplicates kept once in first-seen order, case kept):\n   every tag 1–16 code points, at most 10 tags, no control character. Any miss is 20001 with\n   `data.fields=[tags]` — the whole field, never an index path such as `tags.9` — and nothing is\n   written. Blanks and duplicates are dropped before counting, so the outer edge stays wider.\n",
+          "maxItems": 100,
+          "items": {
+            "type": "string",
+            "maxLength": 256
+          }
         }
       }
     }
@@ -14941,6 +14954,15 @@ export const CONTRACT_ROUTE_SCHEMAS = {
             "online",
             "offline"
           ]
+        },
+        "tags": {
+          "type": "array",
+          "description": "Tags as the operator typed them (CT-07e, D10-1777), the `tags` of adminAddPoolItem and\nadminUpdatePoolItem. Two layers of bounds:\n1. This schema only declares the outer edge — at most 100 items of at most 256 characters — to\n   refuse oversized requests; it is not the rule.\n2. The real bounds are judged by the server after normalization (NFKC, trimmed, inner\n   whitespace one space, blanks dropped, duplicates kept once in first-seen order, case kept):\n   every tag 1–16 code points, at most 10 tags, no control character. Any miss is 20001 with\n   `data.fields=[tags]` — the whole field, never an index path such as `tags.9` — and nothing is\n   written. Blanks and duplicates are dropped before counting, so the outer edge stays wider.\n",
+          "maxItems": 100,
+          "items": {
+            "type": "string",
+            "maxLength": 256
+          }
         }
       }
     }

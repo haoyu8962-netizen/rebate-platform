@@ -71,6 +71,7 @@ export const ITEM_SHAPE: Shape = {
   created_by: ['uuid', false, null],
   created_at: ['timestamptz', false, 'now()'],
   updated_at: ['timestamptz', false, 'now()'],
+  tags: ['_text', false, "'{}'::text[]"],
 };
 export const SHAPES: Record<Table, Shape> = { [POOLS]: POOL_SHAPE, [ITEMS]: ITEM_SHAPE };
 export const FEN_COLUMNS = ['price_fen', 'coupon_fen', 'final_price_fen'];

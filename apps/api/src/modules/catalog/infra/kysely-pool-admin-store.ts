@@ -1,8 +1,10 @@
 // B1-05q: product_pools and pool_items on the primary handle; catalog is their single writer.
 // Every statement is scoped by app_id. Admin's audit port and catalog's product_refs write share
 // each write transaction. Times are written explicitly from the injected Clock.
+// CT-07e: pool_items.tags (text[] NOT NULL DEFAULT '{}', migration 0145) is read with every row,
+// written as the use case normalized it, and filters the list by containment of one tag.
 import type { DB } from '@couli/db';
-import { sql, type Kysely } from 'kysely';
+import { sql, type ColumnType, type Kysely } from 'kysely';
 import type { AuditPort } from '../../platform/index.ts';
 import type { Catalog } from '../domain/types.ts';
 import type {
@@ -14,7 +16,18 @@ import type {
   PoolRow,
 } from '../application/pool-admin.ts';
 
-function reads(db: Kysely<DB>): PoolAdminReads {
+/**
+ * The tables with pool_items.tags as migration 0145 defines it. TODO(CT-07e): once `pnpm db:snapshot`
+ * has regenerated packages/db/src/db.gen.ts with the column, `PoolDb` can become `DB` again; until
+ * then the override keeps this file typed (the generated column type is the same shape).
+ */
+type PoolDb = Omit<DB, 'pool_items'> & {
+  pool_items: Omit<DB['pool_items'], 'tags'> & {
+    tags: ColumnType<string[], readonly string[] | undefined, readonly string[]>;
+  };
+};
+
+function reads(db: Kysely<PoolDb>): PoolAdminReads {
   return {
     async pools(appId, status, page, pageSize) {
       let scope = db.selectFrom('product_pools').where('app_id', '=', appId);
@@ -42,12 +55,14 @@ function reads(db: Kysely<DB>): PoolAdminReads {
       return row ?? null;
     },
 
-    async items(appId, poolId, status, page, pageSize) {
+    async items(appId, poolId, status, page, pageSize, tag) {
       let scope = db
         .selectFrom('pool_items')
         .where('app_id', '=', appId)
         .where('pool_id', '=', poolId);
       if (status !== undefined) scope = scope.where('status', '=', status);
+      // Exact equality of one element: the stored tags and the filter share one normalization.
+      if (tag !== undefined) scope = scope.where(sql<boolean>`tags @> ARRAY[${tag}]::text[]`);
       const [rows, count] = await Promise.all([
         scope
           .selectAll()
@@ -74,7 +89,7 @@ function reads(db: Kysely<DB>): PoolAdminReads {
   };
 }
 
-function writeTx(trx: Kysely<DB>, audit: AuditPort, products: Catalog): PoolAdminTx {
+function writeTx(trx: Kysely<PoolDb>, audit: AuditPort, products: Catalog): PoolAdminTx {
   return {
     async insertPool(row: PoolRow) {
       const inserted = await trx
@@ -153,6 +168,7 @@ function writeTx(trx: Kysely<DB>, audit: AuditPort, products: Catalog): PoolAdmi
           start_at: row.start_at,
           end_at: row.end_at,
           invalid_reason: row.invalid_reason,
+          tags: row.tags,
           updated_at: row.updated_at,
         })
         .where('app_id', '=', row.app_id)
@@ -194,9 +210,14 @@ export function createKyselyPoolAdminStore(
   auditWriter: (trx: Kysely<DB>) => AuditPort,
   catalogOn: (trx: Kysely<DB>) => Catalog,
 ): PoolAdminStore {
+  const pools = db as unknown as Kysely<PoolDb>;
   return {
-    ...reads(db),
+    ...reads(pools),
     transaction: (work) =>
-      db.transaction().execute((trx) => work(writeTx(trx, auditWriter(trx), catalogOn(trx)))),
+      db
+        .transaction()
+        .execute((trx) =>
+          work(writeTx(trx as unknown as Kysely<PoolDb>, auditWriter(trx), catalogOn(trx))),
+        ),
   };
 }
