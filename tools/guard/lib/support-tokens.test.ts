@@ -545,3 +545,199 @@ it('[CT-06zzzzzj] review r1 S2-2: a type literal is known by where its braces st
     ]);
   }
 });
+
+// CT-06zzzzzk (D10-1902 / D10-1916): an object type literal at any depth of a type is judged by
+// P3 (typeLiteral → inType: the enclosing tuple / parenthesized type, a conditional or function
+// type's branch or return, a named tuple element); a value nested alike stays P2.
+
+/** Base lines, each with one `{ a: number }` leaf in a type (1-based line = index + 1). */
+const NESTED = [
+  'type A = { id: string };',
+  'declare const raw: never;',
+  'export type T1 = [{ a: number }];',
+  'export type T2 = readonly [string, { a: number }];',
+  'export type T3 = [label: { a: number }];',
+  'export type T4 = (A | { a: number })[];',
+  'export type T5 = () => [{ a: number }];',
+  'export type T6<X> = X extends A ? [{ a: number }] : never;',
+  'export type T7<X> = X extends A ? never : [{ a: number }];',
+  'export const v1 = raw as Array<[{ a: number }]>;',
+  'export const v2 = raw as Record<string, { a: number }>;',
+  'export function g(cb: <X>(x: X) => [{ a: number }]) {',
+  '  return cb;',
+  '}',
+  '',
+];
+
+it('[CT-06zzzzzk] inType: a nested object type literal (tuple, readonly / named tuple, parenthesized, function type return, conditional branch, type arguments) takes optional members or a ? mark; a required member is refused at its line', () => {
+  const base = NESTED.join('\n');
+  const leaves = NESTED.map((l, i) => [l, i + 1] as const).filter(([l]) =>
+    l.includes('{ a: number }'),
+  );
+  expect(leaves.length).toBe(10);
+  for (const [line, at] of leaves) {
+    const edit = (to: string): string => base.replace(line, line.replace('{ a: number }', to));
+    for (const to of ['{ a: number; b?: string }', '{ a: number, b?: string }', '{ a?: number }']) {
+      expect(problemsOf(base, edit(to)), `${line} → ${to}`).toEqual([]);
+    }
+    for (const to of ['{ a: number; b: string }', '{ a: number, b: string }']) {
+      expect(problemsOf(base, edit(to)), `${line} → ${to}`).toEqual([
+        `head:${at} a required member inserted (only an optional one, \`x?: T\`)`,
+      ]);
+    }
+  }
+});
+
+it('[CT-06zzzzzk] inType: object literals nested in values stay P2 — in an array, a call argument, parentheses, a generic arrow body, a conditional expression branch, before as / satisfies — a property appended passes', () => {
+  const base = [
+    'declare const raw: boolean;',
+    'declare function f(value: unknown): void;',
+    'export const rows = [{ a: 1 }];',
+    'export const later = [0, { a: 1 }];',
+    'f([{ x: [{ a: 1 }] }]);',
+    'export const grouped = ({ a: 1 });',
+    'export const make = <T,>(x: T) => [{ a: x }];',
+    'export const pick = raw ? [{ a: 1 }] : [];',
+    'export const alt = raw ? [] : [{ a: 1 }];',
+    'export const asserted = [{ a: 1 }] as unknown;',
+    'export const checked = [{ a: 1 }] satisfies unknown;',
+    '',
+  ].join('\n');
+  for (const leaf of ['{ a: 1 }', '{ a: x }']) {
+    let from = 0;
+    for (;;) {
+      const at = base.indexOf(leaf, from);
+      if (at < 0) break;
+      const head = `${base.slice(0, at)}${leaf.replace(' }', ', b: 2 }')}${base.slice(at + leaf.length)}`;
+      expect(problemsOf(base, head), head.slice(at - 30, at + 20)).toEqual([]);
+      from = at + 1;
+    }
+  }
+});
+
+it('[CT-06zzzzzk] bindings: a `,` in the type arguments after as / satisfies in an initializer ends no declarator (no pattern read from the type literal)', () => {
+  const base = [
+    'declare const raw: never;',
+    'export const v = raw as Record<string, { a: number }>;',
+    'export const w = raw satisfies Map<string, { a: number }>;',
+    '',
+  ].join('\n');
+  for (const name of ['v', 'w']) {
+    const line = base.split('\n').find((l) => l.startsWith(`export const ${name} `)) as string;
+    const head = base.replace(line, line.replace('{ a: number }', '{ a: number; b?: string }'));
+    expect(problemsOf(base, head), head).toEqual([]);
+  }
+});
+
+// CT-06zzzzzk (D10-1924): skipping the type after as / satisfies hides no real declaration. The
+// base holds `dup`; a declarator of it after the type must still be named (rule 3), on its line.
+
+const HOLDS = [
+  'declare const raw: never;',
+  'declare const obj: { as: number; satisfies: number };',
+  'type T = { id: string };',
+  'export const dup = 0;',
+  '',
+].join('\n');
+/** The line of HOLDS + the first inserted line. */
+const AT = HOLDS.split('\n').length;
+const COMMA = `head:${AT} a comma expression inserted`;
+const holds = (line: number): string =>
+  `head:${line} declares \`dup\`, a name the base file already holds`;
+/** The problems of HOLDS with `lines` inserted at its end. */
+const appended = (lines: string): string[] => problemsOf(HOLDS, `${HOLDS}${lines}\n`);
+
+it('[CT-06zzzzzk] bindings (i): after `raw as T` a second declarator of a name the base holds is still refused for that name, on its own line; a fresh name gets only the comma expression', () => {
+  expect(appended('const v = raw as Record<string, number>, dup = 1;')).toEqual([COMMA, holds(AT)]);
+  expect(appended('const v = raw as Record<string, number>,\n  dup = 1;')).toEqual([
+    COMMA,
+    holds(AT + 1),
+  ]);
+  expect(appended('const v = raw as Record<string, number>,\n  fresh = 1;')).toEqual([COMMA]);
+});
+
+it('[CT-06zzzzzk] bindings (ii): `as unknown as T`, `as const` and `satisfies T` are skipped as types (an edit inside them declares nothing) and the declarator after them is still seen', () => {
+  for (const line of [
+    'export const v = raw as unknown as Record<string, { a: number }>, next = 1;',
+    'export const s = raw satisfies Map<string, { a: number }>, next = 1;',
+  ]) {
+    const base = `declare const raw: never;\n${line}\n`;
+    const head = base.replace('{ a: number }', '{ a: number; b?: string }');
+    expect(problemsOf(base, head), head).toEqual([]);
+  }
+  const frozen = 'declare const raw: never;\nexport const w = { a: 1 } as const, next = 1;\n';
+  expect(problemsOf(frozen, frozen.replace('{ a: 1 }', '{ a: 1, b: 2 }'))).toEqual([]);
+  for (const first of [
+    'const v = raw as unknown as T,',
+    'const v = [raw] as const,',
+    'const v = raw satisfies T,',
+  ]) {
+    expect(appended(`${first} dup = 1;`), first).toEqual([COMMA, holds(AT)]);
+    expect(appended(`${first}\n  dup = 1;`), first).toEqual([COMMA, holds(AT + 1)]);
+  }
+});
+
+it('[CT-06zzzzzk] bindings (iii): a member named `.as` / `.satisfies` starts no type: the declarator after it is seen, also where a skipped type would run on (`obj.as < 1, dup`)', () => {
+  expect(appended('const got = obj.as, dup = 1;')).toEqual([COMMA, holds(AT)]);
+  for (const member of ['as', 'satisfies']) {
+    // Read as a type, `< 1, dup = 1` would be its type arguments up to the `;`: dup hidden.
+    expect(appended(`const got = obj.${member} < 1,\n  dup = 1;`), member).toEqual([
+      COMMA,
+      holds(AT + 1),
+    ]);
+  }
+});
+
+it('[CT-06zzzzzk] bindings (iv): a type with commas, angles, braces and a function type after `as` ends at the `,` / `;` / line break after it: the next declarator or statement is seen on its line', () => {
+  const type = 'raw as Map<string, { a: () => void }>';
+  const arrow = `head:${AT} an arrow function \`=>\` inserted`;
+  expect(appended(`const v = ${type}, dup = 2;`)).toEqual([arrow, COMMA, holds(AT)]);
+  expect(appended(`const v = ${type},\n  dup = 2;`)).toEqual([arrow, COMMA, holds(AT + 1)]);
+  expect(appended(`const v = ${type};\nconst dup = 2;`)).toEqual([arrow, holds(AT + 1)]);
+  expect(appended(`const v = ${type}\nconst dup = 2`)).toEqual([arrow, holds(AT + 1)]);
+  const base = `declare const raw: never;\nexport const m = ${type}, next = 2;\n`;
+  const head = base.replace('{ a: () => void }', '{ a: () => void; b?: string }');
+  expect(problemsOf(base, head)).toEqual([]);
+});
+
+// CT-06zzzzzk code review r2 (S2): `as` / `satisfies` is the type operator only right after a whole
+// operand; a variable named `as` / `satisfies` (after `=`, `,`, an operator) is a name.
+
+it('[CT-06zzzzzk] review r2: a variable named as / satisfies starts no type: the declarator after `as < 1` stays a base local (push passes) and a repeated name is still seen', () => {
+  for (const word of ['as', 'satisfies']) {
+    const base = `const ${word} = 0;\nconst flag = ${word} < 1, rows: number[] = [];\n`;
+    expect(problemsOf(base, `${base}rows.push(2);\n`), word).toEqual([]);
+    expect(appended(`const flag = ${word} < 1, dup = 1;`), word).toEqual([COMMA, holds(AT)]);
+    expect(appended(`const flag = ${word} < 1,\n  dup = 1;`), word).toEqual([COMMA, holds(AT + 1)]);
+  }
+});
+
+it('[CT-06zzzzzk] review r2: after a variable named as / satisfies the operator is the next one (`as as T`): its type is skipped and the declarator after it is seen', () => {
+  for (const [name, op] of [
+    ['as', 'as'],
+    ['satisfies', 'satisfies'],
+    ['as', 'satisfies'],
+  ]) {
+    const first = `const v = ${name} ${op} T,`;
+    expect(appended(`${first} dup = 1;`), first).toEqual([COMMA, holds(AT)]);
+    expect(appended(`${first}\n  dup = 1;`), first).toEqual([COMMA, holds(AT + 1)]);
+  }
+  const base = `declare const as: never;\nexport const v = as as Record<string, { a: number }>, next = 1;\n`;
+  expect(problemsOf(base, base.replace('{ a: number }', '{ a: number; b?: string }'))).toEqual([]);
+});
+
+it('[CT-06zzzzzk] review r2: the operator follows any whole operand (a name, x!, a call, an array, a string, this, a member .as) and its type is skipped; a name as before `| { … }` is an operand, its object literal P2', () => {
+  for (const operand of ['raw', 'raw!', 'f(raw)', '[raw]', "'x'", 'this', 'obj.as']) {
+    const base = [
+      'declare const raw: never;',
+      'declare const obj: { as: number };',
+      'declare function f(v: unknown): unknown;',
+      `export const v = ${operand} as Map<string, { a: number }>, next = 1;`,
+      '',
+    ].join('\n');
+    const head = base.replace('{ a: number }', '{ a: number; b?: string }');
+    expect(problemsOf(base, head), operand).toEqual([]);
+  }
+  const named = 'declare const as: number;\nexport const v = as | { a: 1 };\n';
+  expect(problemsOf(named, named.replace('{ a: 1 }', '{ a: 1, b: 2 }'))).toEqual([]);
+});
