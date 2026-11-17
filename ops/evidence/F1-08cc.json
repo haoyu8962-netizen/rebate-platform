@@ -1,0 +1,213 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-adjustment-approve/approve.test.ts > [AC-F1-08cc-APPROVE#1] 行上【批准】打开「批准调账单」：单据摘要（单号、用户、调减、注销放弃余额、佣金收入、系统、创建时间）、关联注销单、余额前后预览（¥20.00 → ¥0.00）与「实际金额以批准时余额为准」、后果说明；唯一输入是「驳回原因」，没有金额等可改项；有可用的【取消】【驳回】【批准并短信验证】；打开不发写请求、不弹验证",
+    "test/spec/frontend/admin-adjustment-approve/approve.test.ts > [AC-F1-08cc-APPROVE#2] 行上【批准并短信验证】：先发验证码、短信验证通过后只发一次 POST …/approve，请求体恰为 {}（不带金额），带 X-Step-Up-Token 与 Idempotency-Key；成功提示单号与实际调减金额、关对话框、列表刷新：该行已生效、金额 ¥20.00、不再有【批准】",
+    "test/spec/frontend/admin-adjustment-approve/approve.test.ts > [AC-F1-08cc-APPROVE#3] 预览之后余额变了（¥20.00 → ¥25.00）且驳回原因框里已填字：批准请求体仍恰为 {}，提示与列表按服务端批准时取的金额 ¥25.00；不发驳回",
+    "test/spec/frontend/admin-adjustment-approve/approve.test.ts > [AC-F1-08cc-APPROVE#4] 详情上【批准】：对话框同样显示余额预览；批准成功后详情重新读取，显示已生效、金额 ¥20.00、审核人为批准人，不再有【批准】；列表同时刷新",
+    "test/spec/frontend/admin-adjustment-approve/approve.test.ts > [AC-F1-08cc-APPROVE#5] 预览后可用余额降到 0：批准返回 20001 adjust_no_balance → 对话框里提示「可用余额不大于 0，不能批准，请驳回」、对话框保留、单仍待批准，不自动重发；随后【驳回】不再验证、只发一次驳回即可处理",
+    "test/spec/frontend/admin-adjustment-approve/approve.test.ts > [AC-F1-08cc-APPROVE#6] 两张待批准单依次批准：各自短信验证一次、各发一次请求体 {} 的 POST 到各自的单号，两次的 Idempotency-Key 不同（成功后换新键）；两行都显示已生效与各自的金额",
+    "test/spec/frontend/admin-adjustment-approve/balance.test.ts > [AC-F1-08cc-BALANCE#1] 打开【批准】、读单（GET …/adjustments/{id}）未返回时：前后余额未显示，【批准并短信验证】显示但不可用、点了不发码不发请求，【驳回】可用；读单返回后显示调账前后余额（¥20.00 → ¥0.00），【批准并短信验证】才可用",
+    "test/spec/frontend/admin-adjustment-approve/balance.test.ts > [AC-F1-08cc-BALANCE#2] 读单失败（50001）：对话框里显示「调账单读取失败」与可用的【重新读取】，前后余额未显示，【批准并短信验证】不可用、点了不发码不发请求；【驳回】可用，填原因后只发一次驳回、全程不验证，成功提示并刷新列表",
+    "test/spec/frontend/admin-adjustment-approve/balance.test.ts > [AC-F1-08cc-BALANCE#3] 读单网络断开：显示「调账单读取失败」与【重新读取】、【批准并短信验证】不可用、【驳回】可用；按【重新读取】再读一次成功后读取失败提示消失、前后余额显示、【批准并短信验证】可用，之后批准照常：短信验证后只发一次 POST …/approve、请求体恰为 {}",
+    "test/spec/frontend/admin-adjustment-approve/balance.test.ts > [AC-F1-08cc-BALANCE#4] 读单成功、余额一显示（可用余额 ¥12.34 → ¥0.00）【批准并短信验证】即可用（同一时刻，不再另等）；批准后提示的实际调减为 ¥12.34",
+    "test/spec/frontend/admin-adjustment-approve/busy.test.ts > [AC-F1-08cc-BUSY#1] 批准提交中：【批准并短信验证】【驳回】【取消】都不可用、对话框保留，再点不发第二次、不发驳回、不再发码；返回成功后只有一次批准",
+    "test/spec/frontend/admin-adjustment-approve/busy.test.ts > [AC-F1-08cc-BUSY#2] 驳回提交中：【驳回】【批准并短信验证】【取消】都不可用、对话框保留，再点不发第二次、不发批准、不发码；返回成功后只有一次驳回",
+    "test/spec/frontend/admin-adjustment-approve/busy.test.ts > [AC-F1-08cc-BUSY#3] 对话框【取消】：行上打开的关闭后焦点回到该行【批准】，详情里打开的关闭后焦点回到详情的【批准】；都不发任何写请求、单仍待批准",
+    "test/spec/frontend/admin-adjustment-approve/entry.test.ts > [AC-F1-08cc-ENTRY#1] 持 fund.adjust：【批准】只在系统预填的待批准行上，恰 1 个可用；其余七行（已生效、红冲单、已被红冲、已驳回、已撤回）都没有；页面上（对话框外）没有【驳回】【批准并短信验证】；进页不发任何写请求",
+    "test/spec/frontend/admin-adjustment-approve/entry.test.ts > [AC-F1-08cc-ENTRY#2] 持 fund.adjust 的详情：待批准单的详情恰 1 个可用【批准】；已生效、红冲单、已被红冲、已驳回、已撤回单的详情都没有【批准】",
+    "test/spec/frontend/admin-adjustment-approve/entry.test.ts > [AC-F1-08cc-ENTRY#3] 超管：【批准】同样只在待批准行与其详情上，各恰 1 个可用",
+    "test/spec/frontend/admin-adjustment-approve/entry.test.ts > [AC-F1-08cc-ENTRY#4] 两张待批准单：每张待批准行各恰 1 个可用【批准】（列表顺序：新的在前），其余行没有",
+    "test/spec/frontend/admin-adjustment-approve/entry.test.ts > [AC-F1-08cc-ENTRY#5] 只持 fund.view + fund.writeoff：待批准行与其详情都没有【批准】【驳回】【批准并短信验证】（不置灰，直接不出现）；只持 fund.writeoff 也没有；同一页面换成持 fund.adjust 的账号才出现",
+    "test/spec/frontend/admin-adjustment-approve/errors.test.ts > [AC-F1-08cc-ERROR#1] 批准时单已被别人驳回：POST …/approve 返回 20902（data.resource=admin_adjustment）→ 提示「该调账单已不是待批准状态，已刷新」、关对话框、列表重新读取：该行已驳回、不再有【批准】；不自动重发",
+    "test/spec/frontend/admin-adjustment-approve/errors.test.ts > [AC-F1-08cc-ERROR#2] 详情上驳回时单已被别人批准：POST …/reject 返回 20902 → 提示「该调账单已不是待批准状态，已刷新」、关对话框，详情与列表重新读取后显示已生效、审核人为批准人、不再有【批准】；不自动重发、不弹验证",
+    "test/spec/frontend/admin-adjustment-approve/errors.test.ts > [AC-F1-08cc-ERROR#3] POST …/approve 返回 10003 data.tier=sms（验证已失效）：重新发验证码、再弹短信验证，验证后用新的验证重放请求体 {} 与同一个 Idempotency-Key（契约：重放沿用原键），成功只批准一次",
+    "test/spec/frontend/admin-adjustment-approve/errors.test.ts > [AC-F1-08cc-ERROR#4] 10403（本地有 fund.adjust、服务端不认）：批准与驳回各提示「无权限执行调账」，对话框保留、驳回原因不丢，都不自动重发",
+    "test/spec/frontend/admin-adjustment-approve/errors.test.ts > [AC-F1-08cc-ERROR#5] 20001 按 data.fields 提示：批准返回 fields=[adjust_id] → 「调账单不存在或已不可见，请刷新后重试」；驳回返回 fields=[reason] → 「驳回原因须为 1–200 字，请修改后重试」，驳回原因不丢；都只发一次、不自动重发",
+    "test/spec/frontend/admin-adjustment-approve/errors.test.ts > [AC-F1-08cc-ERROR#6] 20901（同键不同请求体）：提示「提交失败，请稍后重试」、对话框保留、不自动重发；再次批准时重新短信验证并换新的 Idempotency-Key（error-codes 20901：生成新幂等键后由用户重新提交），成功只批准一次",
+    "test/spec/frontend/admin-adjustment-approve/lost-reject.test.ts > [AC-F1-08cc-RETRY#5] 驳回其实已生效、只是回答丢了（网络断开）：重新读取该单返回前【驳回】【批准并短信验证】都不可用、再点不发任何请求；读取显示已驳回后提示「该调账单已不是待批准状态，已刷新」、关对话框、列表显示已驳回且不再有【批准】；只发过一次驳回，全程不验证",
+    "test/spec/frontend/admin-adjustment-approve/lost-reject.test.ts > [AC-F1-08cc-RETRY#6] 驳回其实已生效、回答是 40901：重新读取该单返回前【驳回】【批准并短信验证】都不可用、再点不发任何请求；读取显示已驳回后提示「该调账单已不是待批准状态，已刷新」、关对话框、列表显示已驳回且不再有【批准】；只发过一次驳回，全程不验证",
+    "test/spec/frontend/admin-adjustment-approve/reject.test.ts > [AC-F1-08cc-REJECT#1] 驳回原因本地校验：不填或只有空白时按【驳回】提示「请填写驳回原因」，去首尾空白后超过 200 字提示「驳回原因最多 200 字」；都不发请求、不弹验证，对话框保留、已填不丢",
+    "test/spec/frontend/admin-adjustment-approve/reject.test.ts > [AC-F1-08cc-REJECT#2] 行上【驳回】：不发验证码、不弹任何二次验证，只发一次 POST …/reject，请求体恰为去首尾空白的 reason（没有别的字段），不带 X-Step-Up-Token、带 Idempotency-Key；成功提示单号、关对话框、列表刷新：该行已驳回、不再有【批准】",
+    "test/spec/frontend/admin-adjustment-approve/reject.test.ts > [AC-F1-08cc-REJECT#3] 详情上【驳回】，原因恰 200 字（两端带空白）：请求体 reason 为去空白后的 200 字；成功后详情重新读取，显示已驳回、驳回原因原样、审核人为驳回人、金额仍「—」，不再有【批准】；列表同时刷新",
+    "test/spec/frontend/admin-adjustment-approve/reject.test.ts > [AC-F1-08cc-REJECT#4] 未登记验证手机号的账号：【批准并短信验证】发码返回 10003 verify_phone_missing → 提示「这项操作需要短信验证，请先登记验证手机号」、不弹验证、不发批准；同一对话框里【驳回】照常可用，只发一次驳回、不带 X-Step-Up-Token",
+    "test/spec/frontend/admin-adjustment-approve/retry.test.ts > [AC-F1-08cc-RETRY#1] 批准结果未定（网络断开、50001、40901）：每次提示「提交失败，请稍后重试」、对话框保留、不自动重发，并在失败后重新读取该单；再次批准重新短信验证、沿用同一个 Idempotency-Key 与请求体 {}，最终只批准一次",
+    "test/spec/frontend/admin-adjustment-approve/retry.test.ts > [AC-F1-08cc-RETRY#2] 先刷新再允许重提：批准网络失败后重新读取该单，读取返回前【批准并短信验证】【驳回】都不可用、再点不发码不发请求；读取返回仍待批准后才可用，再次批准沿用原键",
+    "test/spec/frontend/admin-adjustment-approve/retry.test.ts > [AC-F1-08cc-RETRY#3] 批准其实已生效、只是回答丢了（网络断开）：重新读取后单已是已生效 → 提示「该调账单已不是待批准状态，已刷新」、关对话框、列表显示已生效且不再有【批准】；不再发批准、不再发码",
+    "test/spec/frontend/admin-adjustment-approve/retry.test.ts > [AC-F1-08cc-RETRY#4] 驳回结果未定（50001）：提示「提交失败，请稍后重试」、对话框保留、驳回原因不丢，失败后重新读取该单；再次驳回沿用同一个 Idempotency-Key 与同一请求体，全程不验证，最终只驳回一次",
+    "test/spec/frontend/admin-adjustment-approve/roles.test.ts > [AC-F1-08cc-ENTRY#6] 没有 fund.adjust：只持 fund.view、持 fund.view + fund.writeoff 时，待批准行与其详情都没有【批准】【驳回】【批准并短信验证】（不置灰，直接不出现），也不发任何写请求；同一页面换成只持 fund.adjust 的账号才出现",
+    "test/spec/frontend/admin-adjustment-approve/roles.test.ts > [AC-F1-08cc-ENTRY#7] 持 fund.adjust 的各种组合（+ fund.view、+ fund.writeoff、三项全持）与超管：待批准行与其详情各恰 1 个可用【批准】，其余行没有",
+    "test/spec/frontend/admin-adjustment-approve/switch.test.ts > [AC-F1-08cc-SWITCH#1] 批准结果未定（带外壳的 40901）→ 重新读单仍待批准、两个决定都可用 → 改按【驳回】→ 20902（data.resource=admin_adjustment，单已被批准）→ 提示「该调账单已不是待批准状态，已刷新」、关对话框、列表重新读取显示已生效且不再有【批准】；不自动重发，全程写请求恰 2 次（1 次批准 + 1 次驳回）、只验证 1 次",
+    "test/spec/frontend/admin-adjustment-approve/switch.test.ts > [AC-F1-08cc-SWITCH#2] 详情上驳回结果未定（带外壳的 50001）→ 重新读单仍待批准、两个决定都可用 → 改按【批准并短信验证】→ 20902（单已被别人驳回）→ 提示「该调账单已不是待批准状态，已刷新」、关对话框、详情与列表重新读取显示已驳回、审核人为驳回人、不再有【批准】；不自动重发，全程写请求恰 2 次（1 次驳回 + 1 次批准）、只验证 1 次",
+    "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#1] 持 fund.adjust：标题行（页签外）恰 1 个可用【新建调账】；【红冲】只在已生效、非红冲单、未被红冲的三行（对账修正、其他、订单恢复），每行 1 个可用；不出现【驳回】【批准核销】【撤回】【保存待批】，系统预填待批行有【批准】；进页不发任何写请求",
+    "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#2] 持 fund.adjust 的详情：已生效未红冲单（对账修正）有 1 个可用【红冲】；已被红冲的原单、红冲单本身、系统预填待批单、已驳回单都没有【红冲】，也没有【驳回】；只有系统预填待批单的详情有【批准】",
+    "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#4] 超管：标题行恰 1 个可用【新建调账】，【红冲】同样只在三行可红冲的单上；后续任务的写入口只出现系统预填待批行的【批准】",
+    "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cc-FROZEN#1] 逐行数【批准】：持 fund.adjust 时八行里只有系统预填的待批准行显示恰 1 个且可用的【批准】（其余七行 0 个），该行没有【红冲】；同一份数据换成只持 fund.view + fund.writeoff 的账号，八行都是 0 个、页面上也没有【批准】"
+  ],
+  "risk_note": "F1-08cc (orchestrator D10-1517 batch 1 ③, D10-1733, D10-1772, D10-1890 / 1893 / 1895 / 1899 / 1900). Admin adjustments: approve (SMS step-up, one POST …/approve with body {}) and reject (no step-up, one POST …/reject with the trimmed reason) for system-prefilled pending adjustments. The approve dialog shows the available balance before and after and approval stays disabled until that balance is shown (in flight / read failure, with a re-read button; BR-FUND-24 ④, D10-1893). Every write goes through the F1-08ce result-unknown handling; after an enveloped 40901 / 5xx the page re-reads the adjustment and re-enables the decisions only if it is still pending (same key and body on replay; accepted by D10-1893); a later different decision that the server refuses with 20902 is shown and refreshed, never re-sent. Rebuilt on main after F1-08ce (rebase conflict, D10-1772 / D10-1890); money review r2 re-read the whole implementation. Frozen F1-08cb cases ENTRY#1 / #2 / #4 change only the later-entry lists (modify_existing with retitle_to, ledger #224; released by the orchestrator under D10-1899), ENTRY#3 is red_exempt, confirmed by a gate-record review. Rule tests by independent Claude contexts (ledger tester claude-independent), 3 rounds; spec-test 3 (third per approvals #96). Implementation by Opus 5.5 (another context). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "money review by an independent Claude per ops/approvals.yaml #36 (claude-run.sh, fresh context; reviewer kept from round 1 per D10-1872): r1 pass; r2 after the rebuild on main re-read the whole implementation (D10-1890), pass with one S2 (approval possible before the balance was shown), fixed in this task (D10-1893); r3 reviewed only that fix, pass, 0 findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "豁免确认为门禁口径补录（D10-1833 / D10-1900，先例 D10-848 ③；第 10 次独立调用，编排批（甲））：主干台账 red_exempt 一条（[AC-F1-08cb-ENTRY#3]）逐字贴入任务书，独立 Claude 逐条确认——块体与基线相同、在基线与本单实现下都成立（该账号无 fund.adjust，新增【批准】不出现）、标题逐字一致，末行「全部确认」，verdict pass 0 条。spec-test 3 次（第 3 次按 approvals 96 只审第 3 轮新增块），pass。",
+    "model": "claude-opus-5-5",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-adjustment-create/entry.test.ts",
+      "test": "[AC-F1-08cb-ENTRY#1] 持 fund.adjust：标题行（页签外）恰 1 个可用【新建调账】；【红冲】只在已生效、非红冲单、未被红冲的三行（对账修正、其他、订单恢复），每行 1 个可用；不出现【批准】【驳回】【批准核销】【撤回】【保存待批】；进页不发任何写请求",
+      "retitle_to": "[AC-F1-08cb-ENTRY#1] 持 fund.adjust：标题行（页签外）恰 1 个可用【新建调账】；【红冲】只在已生效、非红冲单、未被红冲的三行（对账修正、其他、订单恢复），每行 1 个可用；不出现【驳回】【批准核销】【撤回】【保存待批】，系统预填待批行有【批准】；进页不发任何写请求",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08cb-ENTRY#1] 持 fund.adjust：标题行（页签外）恰 1 个可用【新建调账】；【红冲】只在已生效、非红冲单、未被红冲的三行（对账修正、其他、订单恢复），每行 1 个可用；不出现【批准】【驳回】【批准核销】【撤回】【保存待批】；进页不发任何写请求',\n  { timeout: 60_000 },\n  async () => {\n    const server = createWriteServer();\n    await mount(server);\n    await waitColumn(COLUMN.id, ADJUSTMENT_ORDER);\n    await settled(server);\n    expect(usable(main(), TEXT.createEntry)).toHaveLength(1);\n    expect(buttons(main(), TEXT.createEntry)).toHaveLength(1);\n    expect(buttons(panel(), TEXT.createEntry)).toEqual([]);\n    expect(rowsWithReverse()).toEqual(REVERSIBLE);\n    expect(usableReverses()).toEqual([1, 1, 1]);\n    expect(laterEntries()).toEqual([]);\n    expect(server.unexpected()).toEqual([]);\n    expect(server.others()).toEqual([]);\n  },\n);",
+      "after": "it(\n  '[AC-F1-08cb-ENTRY#1] 持 fund.adjust：标题行（页签外）恰 1 个可用【新建调账】；【红冲】只在已生效、非红冲单、未被红冲的三行（对账修正、其他、订单恢复），每行 1 个可用；不出现【驳回】【批准核销】【撤回】【保存待批】，系统预填待批行有【批准】；进页不发任何写请求',\n  { timeout: 60_000 },\n  async () => {\n    const server = createWriteServer();\n    await mount(server);\n    await waitColumn(COLUMN.id, ADJUSTMENT_ORDER);\n    await settled(server);\n    expect(usable(main(), TEXT.createEntry)).toHaveLength(1);\n    expect(buttons(main(), TEXT.createEntry)).toHaveLength(1);\n    expect(buttons(panel(), TEXT.createEntry)).toEqual([]);\n    expect(rowsWithReverse()).toEqual(REVERSIBLE);\n    expect(usableReverses()).toEqual([1, 1, 1]);\n    expect(laterEntries()).toEqual(['批准']);\n    expect(server.unexpected()).toEqual([]);\n    expect(server.others()).toEqual([]);\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为前序任务 F1-08cb / ce / cf 版本（旧规则：调账页没有【批准】入口，持 fund.adjust 的列表页之后才落地写入口为空），即本单正式先红的基线；couli-runs/F1-08cc/red/1（couli-ci，spec ae7e090dc614）中本条为红、列在 red_tests（该次运行时 modify_existing 尚未合入主干台账，故无「red for a valid reason」判定字样；落地 land-ci 的正式先红会再跑一次）——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-FUND-24"]
+    },
+    {
+      "file": "test/spec/frontend/admin-adjustment-create/entry.test.ts",
+      "test": "[AC-F1-08cb-ENTRY#2] 持 fund.adjust 的详情：已生效未红冲单（对账修正）有 1 个可用【红冲】；已被红冲的原单、红冲单本身、系统预填待批单、已驳回单都没有【红冲】，也没有【批准】【驳回】",
+      "retitle_to": "[AC-F1-08cb-ENTRY#2] 持 fund.adjust 的详情：已生效未红冲单（对账修正）有 1 个可用【红冲】；已被红冲的原单、红冲单本身、系统预填待批单、已驳回单都没有【红冲】，也没有【驳回】；只有系统预填待批单的详情有【批准】",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08cb-ENTRY#2] 持 fund.adjust 的详情：已生效未红冲单（对账修正）有 1 个可用【红冲】；已被红冲的原单、红冲单本身、系统预填待批单、已驳回单都没有【红冲】，也没有【批准】【驳回】',\n  { timeout: 60_000 },\n  async () => {\n    const server = createWriteServer();\n    await mount(server);\n    await waitColumn(COLUMN.id, ADJUSTMENT_ORDER);\n    await settled(server);\n\n    await openDetail(server, ADJ.reconFix);\n    expect(usable(drawer(), TEXT.reverseEntry)).toHaveLength(1);\n    expect(buttons(drawer(), TEXT.reverseEntry)).toHaveLength(1);\n    for (const adjustId of [ADJ.recovery, ADJ.reversal, ADJ.prefilled, ADJ.rejected]) {\n      await openDetail(server, adjustId);\n      expect(buttons(drawer(), TEXT.reverseEntry), adjustId).toEqual([]);\n      expect(laterEntries(), adjustId).toEqual([]);\n    }\n    expect(server.others()).toEqual([]);\n  },\n);",
+      "after": "it(\n  '[AC-F1-08cb-ENTRY#2] 持 fund.adjust 的详情：已生效未红冲单（对账修正）有 1 个可用【红冲】；已被红冲的原单、红冲单本身、系统预填待批单、已驳回单都没有【红冲】，也没有【驳回】；只有系统预填待批单的详情有【批准】',\n  { timeout: 60_000 },\n  async () => {\n    const server = createWriteServer();\n    await mount(server);\n    await waitColumn(COLUMN.id, ADJUSTMENT_ORDER);\n    await settled(server);\n\n    await openDetail(server, ADJ.reconFix);\n    expect(usable(drawer(), TEXT.reverseEntry)).toHaveLength(1);\n    expect(buttons(drawer(), TEXT.reverseEntry)).toHaveLength(1);\n    for (const adjustId of [ADJ.recovery, ADJ.reversal, ADJ.prefilled, ADJ.rejected]) {\n      await openDetail(server, adjustId);\n      expect(buttons(drawer(), TEXT.reverseEntry), adjustId).toEqual([]);\n      expect(laterEntries(), adjustId).toEqual(['批准']);\n      const inDetail = LATER_ENTRIES.filter((name) => buttons(drawer(), name).length > 0);\n      expect(inDetail, adjustId).toEqual(adjustId === ADJ.prefilled ? ['批准'] : []);\n    }\n    expect(server.others()).toEqual([]);\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为前序任务 F1-08cb / ce / cf 版本（旧规则：调账页没有【批准】入口，各详情之后才落地写入口为空），即本单正式先红的基线；couli-runs/F1-08cc/red/1（couli-ci，spec ae7e090dc614）中本条为红、列在 red_tests（该次运行时 modify_existing 尚未合入主干台账，故无「red for a valid reason」判定字样；落地 land-ci 的正式先红会再跑一次）——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-FUND-24"]
+    },
+    {
+      "file": "test/spec/frontend/admin-adjustment-create/entry.test.ts",
+      "test": "[AC-F1-08cb-ENTRY#4] 超管：标题行恰 1 个可用【新建调账】，【红冲】同样只在三行可红冲的单上；不出现后续任务的写入口",
+      "retitle_to": "[AC-F1-08cb-ENTRY#4] 超管：标题行恰 1 个可用【新建调账】，【红冲】同样只在三行可红冲的单上；后续任务的写入口只出现系统预填待批行的【批准】",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08cb-ENTRY#4] 超管：标题行恰 1 个可用【新建调账】，【红冲】同样只在三行可红冲的单上；不出现后续任务的写入口',\n  { timeout: 60_000 },\n  async () => {\n    const server = createWriteServer({ permissions: ALL_FUND });\n    await mount(server, SUPER_ADMIN);\n    await waitColumn(COLUMN.id, ADJUSTMENT_ORDER);\n    await settled(server);\n    expect(usable(main(), TEXT.createEntry)).toHaveLength(1);\n    expect(rowsWithReverse()).toEqual(REVERSIBLE);\n    expect(usableReverses()).toEqual([1, 1, 1]);\n    expect(laterEntries()).toEqual([]);\n  },\n);",
+      "after": "it(\n  '[AC-F1-08cb-ENTRY#4] 超管：标题行恰 1 个可用【新建调账】，【红冲】同样只在三行可红冲的单上；后续任务的写入口只出现系统预填待批行的【批准】',\n  { timeout: 60_000 },\n  async () => {\n    const server = createWriteServer({ permissions: ALL_FUND });\n    await mount(server, SUPER_ADMIN);\n    await waitColumn(COLUMN.id, ADJUSTMENT_ORDER);\n    await settled(server);\n    expect(usable(main(), TEXT.createEntry)).toHaveLength(1);\n    expect(rowsWithReverse()).toEqual(REVERSIBLE);\n    expect(usableReverses()).toEqual([1, 1, 1]);\n    expect(laterEntries()).toEqual(['批准']);\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为前序任务 F1-08cb / ce / cf 版本（旧规则：调账页没有【批准】入口，超管列表页之后才落地写入口为空），即本单正式先红的基线；couli-runs/F1-08cc/red/1（couli-ci，spec ae7e090dc614）中本条为红、列在 red_tests（该次运行时 modify_existing 尚未合入主干台账，故无「red for a valid reason」判定字样；落地 land-ci 的正式先红会再跑一次）——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-FUND-24"]
+    }
+  ],
+  "task": "F1-08cc",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "ea5e77d23ab8312ea29d1e35c52515a1cf2a17ff",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "ea5e77d23ab8312ea29d1e35c52515a1cf2a17ff",
+      "tree": "d641bc434a685aa53de99d9452d375a7cd661201",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-17T02:31:13Z",
+      "finished_at": "2026-11-17T02:31:38Z",
+      "red_tests": [
+        "test/spec/frontend/admin-adjustment-approve/approve.test.ts > [AC-F1-08cc-APPROVE#1] 行上【批准】打开「批准调账单」：单据摘要（单号、用户、调减、注销放弃余额、佣金收入、系统、创建时间）、关联注销单、余额前后预览（¥20.00 → ¥0.00）与「实际金额以批准时余额为准」、后果说明；唯一输入是「驳回原因」，没有金额等可改项；有可用的【取消】【驳回】【批准并短信验证】；打开不发写请求、不弹验证",
+        "test/spec/frontend/admin-adjustment-approve/approve.test.ts > [AC-F1-08cc-APPROVE#2] 行上【批准并短信验证】：先发验证码、短信验证通过后只发一次 POST …/approve，请求体恰为 {}（不带金额），带 X-Step-Up-Token 与 Idempotency-Key；成功提示单号与实际调减金额、关对话框、列表刷新：该行已生效、金额 ¥20.00、不再有【批准】",
+        "test/spec/frontend/admin-adjustment-approve/approve.test.ts > [AC-F1-08cc-APPROVE#3] 预览之后余额变了（¥20.00 → ¥25.00）且驳回原因框里已填字：批准请求体仍恰为 {}，提示与列表按服务端批准时取的金额 ¥25.00；不发驳回",
+        "test/spec/frontend/admin-adjustment-approve/approve.test.ts > [AC-F1-08cc-APPROVE#4] 详情上【批准】：对话框同样显示余额预览；批准成功后详情重新读取，显示已生效、金额 ¥20.00、审核人为批准人，不再有【批准】；列表同时刷新",
+        "test/spec/frontend/admin-adjustment-approve/approve.test.ts > [AC-F1-08cc-APPROVE#5] 预览后可用余额降到 0：批准返回 20001 adjust_no_balance → 对话框里提示「可用余额不大于 0，不能批准，请驳回」、对话框保留、单仍待批准，不自动重发；随后【驳回】不再验证、只发一次驳回即可处理",
+        "test/spec/frontend/admin-adjustment-approve/approve.test.ts > [AC-F1-08cc-APPROVE#6] 两张待批准单依次批准：各自短信验证一次、各发一次请求体 {} 的 POST 到各自的单号，两次的 Idempotency-Key 不同（成功后换新键）；两行都显示已生效与各自的金额",
+        "test/spec/frontend/admin-adjustment-approve/balance.test.ts > [AC-F1-08cc-BALANCE#1] 打开【批准】、读单（GET …/adjustments/{id}）未返回时：前后余额未显示，【批准并短信验证】显示但不可用、点了不发码不发请求，【驳回】可用；读单返回后显示调账前后余额（¥20.00 → ¥0.00），【批准并短信验证】才可用",
+        "test/spec/frontend/admin-adjustment-approve/balance.test.ts > [AC-F1-08cc-BALANCE#2] 读单失败（50001）：对话框里显示「调账单读取失败」与可用的【重新读取】，前后余额未显示，【批准并短信验证】不可用、点了不发码不发请求；【驳回】可用，填原因后只发一次驳回、全程不验证，成功提示并刷新列表",
+        "test/spec/frontend/admin-adjustment-approve/balance.test.ts > [AC-F1-08cc-BALANCE#3] 读单网络断开：显示「调账单读取失败」与【重新读取】、【批准并短信验证】不可用、【驳回】可用；按【重新读取】再读一次成功后读取失败提示消失、前后余额显示、【批准并短信验证】可用，之后批准照常：短信验证后只发一次 POST …/approve、请求体恰为 {}",
+        "test/spec/frontend/admin-adjustment-approve/balance.test.ts > [AC-F1-08cc-BALANCE#4] 读单成功、余额一显示（可用余额 ¥12.34 → ¥0.00）【批准并短信验证】即可用（同一时刻，不再另等）；批准后提示的实际调减为 ¥12.34",
+        "test/spec/frontend/admin-adjustment-approve/busy.test.ts > [AC-F1-08cc-BUSY#1] 批准提交中：【批准并短信验证】【驳回】【取消】都不可用、对话框保留，再点不发第二次、不发驳回、不再发码；返回成功后只有一次批准",
+        "test/spec/frontend/admin-adjustment-approve/busy.test.ts > [AC-F1-08cc-BUSY#2] 驳回提交中：【驳回】【批准并短信验证】【取消】都不可用、对话框保留，再点不发第二次、不发批准、不发码；返回成功后只有一次驳回",
+        "test/spec/frontend/admin-adjustment-approve/busy.test.ts > [AC-F1-08cc-BUSY#3] 对话框【取消】：行上打开的关闭后焦点回到该行【批准】，详情里打开的关闭后焦点回到详情的【批准】；都不发任何写请求、单仍待批准",
+        "test/spec/frontend/admin-adjustment-approve/entry.test.ts > [AC-F1-08cc-ENTRY#1] 持 fund.adjust：【批准】只在系统预填的待批准行上，恰 1 个可用；其余七行（已生效、红冲单、已被红冲、已驳回、已撤回）都没有；页面上（对话框外）没有【驳回】【批准并短信验证】；进页不发任何写请求",
+        "test/spec/frontend/admin-adjustment-approve/entry.test.ts > [AC-F1-08cc-ENTRY#2] 持 fund.adjust 的详情：待批准单的详情恰 1 个可用【批准】；已生效、红冲单、已被红冲、已驳回、已撤回单的详情都没有【批准】",
+        "test/spec/frontend/admin-adjustment-approve/entry.test.ts > [AC-F1-08cc-ENTRY#3] 超管：【批准】同样只在待批准行与其详情上，各恰 1 个可用",
+        "test/spec/frontend/admin-adjustment-approve/entry.test.ts > [AC-F1-08cc-ENTRY#4] 两张待批准单：每张待批准行各恰 1 个可用【批准】（列表顺序：新的在前），其余行没有",
+        "test/spec/frontend/admin-adjustment-approve/entry.test.ts > [AC-F1-08cc-ENTRY#5] 只持 fund.view + fund.writeoff：待批准行与其详情都没有【批准】【驳回】【批准并短信验证】（不置灰，直接不出现）；只持 fund.writeoff 也没有；同一页面换成持 fund.adjust 的账号才出现",
+        "test/spec/frontend/admin-adjustment-approve/errors.test.ts > [AC-F1-08cc-ERROR#1] 批准时单已被别人驳回：POST …/approve 返回 20902（data.resource=admin_adjustment）→ 提示「该调账单已不是待批准状态，已刷新」、关对话框、列表重新读取：该行已驳回、不再有【批准】；不自动重发",
+        "test/spec/frontend/admin-adjustment-approve/errors.test.ts > [AC-F1-08cc-ERROR#2] 详情上驳回时单已被别人批准：POST …/reject 返回 20902 → 提示「该调账单已不是待批准状态，已刷新」、关对话框，详情与列表重新读取后显示已生效、审核人为批准人、不再有【批准】；不自动重发、不弹验证",
+        "test/spec/frontend/admin-adjustment-approve/errors.test.ts > [AC-F1-08cc-ERROR#3] POST …/approve 返回 10003 data.tier=sms（验证已失效）：重新发验证码、再弹短信验证，验证后用新的验证重放请求体 {} 与同一个 Idempotency-Key（契约：重放沿用原键），成功只批准一次",
+        "test/spec/frontend/admin-adjustment-approve/errors.test.ts > [AC-F1-08cc-ERROR#4] 10403（本地有 fund.adjust、服务端不认）：批准与驳回各提示「无权限执行调账」，对话框保留、驳回原因不丢，都不自动重发",
+        "test/spec/frontend/admin-adjustment-approve/errors.test.ts > [AC-F1-08cc-ERROR#5] 20001 按 data.fields 提示：批准返回 fields=[adjust_id] → 「调账单不存在或已不可见，请刷新后重试」；驳回返回 fields=[reason] → 「驳回原因须为 1–200 字，请修改后重试」，驳回原因不丢；都只发一次、不自动重发",
+        "test/spec/frontend/admin-adjustment-approve/errors.test.ts > [AC-F1-08cc-ERROR#6] 20901（同键不同请求体）：提示「提交失败，请稍后重试」、对话框保留、不自动重发；再次批准时重新短信验证并换新的 Idempotency-Key（error-codes 20901：生成新幂等键后由用户重新提交），成功只批准一次",
+        "test/spec/frontend/admin-adjustment-approve/lost-reject.test.ts > [AC-F1-08cc-RETRY#5] 驳回其实已生效、只是回答丢了（网络断开）：重新读取该单返回前【驳回】【批准并短信验证】都不可用、再点不发任何请求；读取显示已驳回后提示「该调账单已不是待批准状态，已刷新」、关对话框、列表显示已驳回且不再有【批准】；只发过一次驳回，全程不验证",
+        "test/spec/frontend/admin-adjustment-approve/lost-reject.test.ts > [AC-F1-08cc-RETRY#6] 驳回其实已生效、回答是 40901：重新读取该单返回前【驳回】【批准并短信验证】都不可用、再点不发任何请求；读取显示已驳回后提示「该调账单已不是待批准状态，已刷新」、关对话框、列表显示已驳回且不再有【批准】；只发过一次驳回，全程不验证",
+        "test/spec/frontend/admin-adjustment-approve/reject.test.ts > [AC-F1-08cc-REJECT#1] 驳回原因本地校验：不填或只有空白时按【驳回】提示「请填写驳回原因」，去首尾空白后超过 200 字提示「驳回原因最多 200 字」；都不发请求、不弹验证，对话框保留、已填不丢",
+        "test/spec/frontend/admin-adjustment-approve/reject.test.ts > [AC-F1-08cc-REJECT#2] 行上【驳回】：不发验证码、不弹任何二次验证，只发一次 POST …/reject，请求体恰为去首尾空白的 reason（没有别的字段），不带 X-Step-Up-Token、带 Idempotency-Key；成功提示单号、关对话框、列表刷新：该行已驳回、不再有【批准】",
+        "test/spec/frontend/admin-adjustment-approve/reject.test.ts > [AC-F1-08cc-REJECT#3] 详情上【驳回】，原因恰 200 字（两端带空白）：请求体 reason 为去空白后的 200 字；成功后详情重新读取，显示已驳回、驳回原因原样、审核人为驳回人、金额仍「—」，不再有【批准】；列表同时刷新",
+        "test/spec/frontend/admin-adjustment-approve/reject.test.ts > [AC-F1-08cc-REJECT#4] 未登记验证手机号的账号：【批准并短信验证】发码返回 10003 verify_phone_missing → 提示「这项操作需要短信验证，请先登记验证手机号」、不弹验证、不发批准；同一对话框里【驳回】照常可用，只发一次驳回、不带 X-Step-Up-Token",
+        "test/spec/frontend/admin-adjustment-approve/retry.test.ts > [AC-F1-08cc-RETRY#1] 批准结果未定（网络断开、50001、40901）：每次提示「提交失败，请稍后重试」、对话框保留、不自动重发，并在失败后重新读取该单；再次批准重新短信验证、沿用同一个 Idempotency-Key 与请求体 {}，最终只批准一次",
+        "test/spec/frontend/admin-adjustment-approve/retry.test.ts > [AC-F1-08cc-RETRY#2] 先刷新再允许重提：批准网络失败后重新读取该单，读取返回前【批准并短信验证】【驳回】都不可用、再点不发码不发请求；读取返回仍待批准后才可用，再次批准沿用原键",
+        "test/spec/frontend/admin-adjustment-approve/retry.test.ts > [AC-F1-08cc-RETRY#3] 批准其实已生效、只是回答丢了（网络断开）：重新读取后单已是已生效 → 提示「该调账单已不是待批准状态，已刷新」、关对话框、列表显示已生效且不再有【批准】；不再发批准、不再发码",
+        "test/spec/frontend/admin-adjustment-approve/retry.test.ts > [AC-F1-08cc-RETRY#4] 驳回结果未定（50001）：提示「提交失败，请稍后重试」、对话框保留、驳回原因不丢，失败后重新读取该单；再次驳回沿用同一个 Idempotency-Key 与同一请求体，全程不验证，最终只驳回一次",
+        "test/spec/frontend/admin-adjustment-approve/roles.test.ts > [AC-F1-08cc-ENTRY#6] 没有 fund.adjust：只持 fund.view、持 fund.view + fund.writeoff 时，待批准行与其详情都没有【批准】【驳回】【批准并短信验证】（不置灰，直接不出现），也不发任何写请求；同一页面换成只持 fund.adjust 的账号才出现",
+        "test/spec/frontend/admin-adjustment-approve/roles.test.ts > [AC-F1-08cc-ENTRY#7] 持 fund.adjust 的各种组合（+ fund.view、+ fund.writeoff、三项全持）与超管：待批准行与其详情各恰 1 个可用【批准】，其余行没有",
+        "test/spec/frontend/admin-adjustment-approve/switch.test.ts > [AC-F1-08cc-SWITCH#1] 批准结果未定（带外壳的 40901）→ 重新读单仍待批准、两个决定都可用 → 改按【驳回】→ 20902（data.resource=admin_adjustment，单已被批准）→ 提示「该调账单已不是待批准状态，已刷新」、关对话框、列表重新读取显示已生效且不再有【批准】；不自动重发，全程写请求恰 2 次（1 次批准 + 1 次驳回）、只验证 1 次",
+        "test/spec/frontend/admin-adjustment-approve/switch.test.ts > [AC-F1-08cc-SWITCH#2] 详情上驳回结果未定（带外壳的 50001）→ 重新读单仍待批准、两个决定都可用 → 改按【批准并短信验证】→ 20902（单已被别人驳回）→ 提示「该调账单已不是待批准状态，已刷新」、关对话框、详情与列表重新读取显示已驳回、审核人为驳回人、不再有【批准】；不自动重发，全程写请求恰 2 次（1 次驳回 + 1 次批准）、只验证 1 次",
+        "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#1] 持 fund.adjust：标题行（页签外）恰 1 个可用【新建调账】；【红冲】只在已生效、非红冲单、未被红冲的三行（对账修正、其他、订单恢复），每行 1 个可用；不出现【驳回】【批准核销】【撤回】【保存待批】，系统预填待批行有【批准】；进页不发任何写请求",
+        "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#2] 持 fund.adjust 的详情：已生效未红冲单（对账修正）有 1 个可用【红冲】；已被红冲的原单、红冲单本身、系统预填待批单、已驳回单都没有【红冲】，也没有【驳回】；只有系统预填待批单的详情有【批准】",
+        "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cb-ENTRY#4] 超管：标题行恰 1 个可用【新建调账】，【红冲】同样只在三行可红冲的单上；后续任务的写入口只出现系统预填待批行的【批准】",
+        "test/spec/frontend/admin-adjustment-create/entry.test.ts > [AC-F1-08cc-FROZEN#1] 逐行数【批准】：持 fund.adjust 时八行里只有系统预填的待批准行显示恰 1 个且可用的【批准】（其余七行 0 个），该行没有【红冲】；同一份数据换成只持 fund.view + fund.writeoff 的账号，八行都是 0 个、页面上也没有【批准】"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-adjustment-approve/approve.test.ts",
+        "test/spec/frontend/admin-adjustment-approve/balance.test.ts",
+        "test/spec/frontend/admin-adjustment-approve/busy.test.ts",
+        "test/spec/frontend/admin-adjustment-approve/entry.test.ts",
+        "test/spec/frontend/admin-adjustment-approve/errors.test.ts",
+        "test/spec/frontend/admin-adjustment-approve/lost-reject.test.ts",
+        "test/spec/frontend/admin-adjustment-approve/reject.test.ts",
+        "test/spec/frontend/admin-adjustment-approve/retry.test.ts",
+        "test/spec/frontend/admin-adjustment-approve/roles.test.ts",
+        "test/spec/frontend/admin-adjustment-approve/switch.test.ts",
+        "test/spec/frontend/admin-adjustment-create/entry.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "6618360a07ca5ebe34c8f700263bf861f638232ced56a0befb681154a59b05f7"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "83377d7d27944bd8661bdab30fe1e787b4a3865d",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
