@@ -1,0 +1,25 @@
+id: CT-07f
+repo: rebate-platform
+title: 首页配置引用商品池标签（D10-1984 / D10-1986，从 CT-07e 拆出）：首页 product_pool 数据源按标签取数、首页配置保存对 tags 的校验、下发与预览去掉 tags
+type: impl
+# 2026-11-17 w1 入账（编排 D10-1986）：从 CT-07e 拆出「首页配置引用标签」这一半；规则在 规划/01 F-ADM-10、04 §3.2（pool_items.tags），编排 D10-1758 / D10-1761 / D10-1764 / D10-1777 取值照 CT-07e 已定。
+# 范围：home-schema.json 的 product_pool 数据源加可选 tags（每项同 CT-07e 规范化规则）；首页配置保存时规范化去重、丢完为空拒（20001，data.fields 指向该数据源的 tags）；首页读池只取 tags 与之有交集的条目（命中任一），兜底池 feed.fallback_pool_id 不筛；正式下发与预览下发都从 product_pool 数据源去掉 tags，不改存储与缓存。
+# 规范化函数用 CT-07e 已落地的 catalog/domain/pool-tags.ts，不另写一套。CT-07e 分支上曾有的实现与用例存在 couli-runs/CT-07f/saved/（只作参考，规则测试照本单重写）。
+# 用例放 test/spec/catalog/pool-tags-home/**：先红在 CT-07e 已落地的基线上跑；home-config-save 那 5 条的保存调用放进函数再交给断言，让基线的同步抛错（PageFieldsError）落到断言上（D10-1986）。
+refs: []
+refs_hash: {}
+deps: [CT-07e]
+paths:
+  - 'contracts/home-schema.json'
+  - 'apps/api/src/modules/content/**'
+  - 'apps/api/src/modules/catalog/application/pool-read.ts'
+  - 'apps/api/src/modules/catalog/infra/kysely-pool-reader.ts'
+  - 'apps/api/src/modules/catalog/section-items.ts'
+test_paths:
+  - 'test/spec/catalog/pool-tags-home/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/catalog/pool-tags-home/**'
+status: todo
