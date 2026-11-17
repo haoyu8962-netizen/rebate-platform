@@ -1,0 +1,27 @@
+id: B2-07g
+repo: rebate-platform
+title: payout：打款批次只读的实现（CT-24zzo）——批次列表与批次成员表，成员的最近一次尝试、下次查询、has_transfer_attempt 由 payout_attempts 读出（D10-2017 ②）
+type: impl
+# 2026-11-18 be 入账（编排 D10-2017 ②）。只读，不改任何状态；payout 是 RV2 路径，规则测试与评审走独立 Claude（D10-2003）。
+# 取数：payout_batches、payout_batch_items（只插入不改，moved_out 行照原样给出）、withdrawals、payout_attempts；「下次查询」取查询任务的排程（与 BR-WDR-14 查询节奏同一来源，不另算）；has_transfer_attempt = 该单存在 kind=transfer 的尝试记录。
+# 规则测试要钉：BR-WDR-17 例（第 8 单 payer_side_after_transfer、第 9–20 单 queue_paused、第 1–7 单照常查询）读出的成员字段；moved_out 行；app 隔离；无权限 10403。
+refs: [BR-WDR-12, BR-WDR-14, BR-WDR-17]
+refs_hash:
+  BR-WDR-12: 37adcd14e97f
+  BR-WDR-14: 6328f3cda2e6
+  BR-WDR-17: f6119a685e00
+deps: [CT-24zzo]
+paths:
+  - 'apps/api/src/modules/payout/application/admin-payout-batches-read*.ts'
+  - 'apps/api/src/modules/payout/http/admin/payout-batches-read.controller*.ts'
+  - 'apps/api/src/modules/payout/infra/**'
+  - 'apps/api/src/modules/payout/payout.module.ts'
+test_paths:
+  - 'test/spec/payout/admin-payout-batches-read/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/admin-payout-batches-read/**'
+status: todo
+pr: null

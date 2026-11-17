@@ -1,0 +1,26 @@
+id: B2-08g
+repo: rebate-platform
+title: admin：提现单导出的实现（CT-24zzp）——导出 worker 接 withdrawals 资源，取数经 payout 只读入口（与 listAdminWithdrawals 同一查询与排序），恒为脱敏（D10-2017 ③）
+type: impl
+# 2026-11-18 be 入账（编排 D10-2017 ③）。照 CT-24zzm 的 ledger 导出：admin 模块导出任务（admin-exports.ts / export-worker.ts）接 withdrawals，取数经 payout 模块的只读入口，不在 admin 里直读 payout 表；权限与可见范围、重试、过期照已有资源。
+# 前置：app.export_tasks 的 resource CHECK 要加 withdrawals。照 CT-24zzma 先例另开 DB 单（两条迁移 NOT VALID 再 VALIDATE、db:snapshot 走 couli-ci、冻结 [AC-B1-34b#4] 按 rule_change 改并登 modify_existing / red_exempt）；本单开工前由 be 入账并报编排，本单 deps 届时补上。
+# 规则测试要钉：filters 与列表同形；只持 user.lookup 不带 user_id 拒；导出行与列表同一筛选的结果一致；手机号脱敏、无全量收款账号；带 unmasked 拒；app 隔离。
+refs: [BR-ID-42, BR-ID-33]
+refs_hash:
+  BR-ID-42: 2f9cd1710ed3
+  BR-ID-33: 01b25f773b29
+deps: [CT-24zzp]
+paths:
+  - 'apps/api/src/modules/admin/**'
+  - 'apps/api/src/modules/payout/application/admin-withdrawals*.ts'
+  - 'apps/api/src/modules/payout/index.ts'
+  - 'apps/api/src/modules/payout/read.ts'
+test_paths:
+  - 'test/spec/admin/export-withdrawals/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/admin/export-withdrawals/**'
+status: todo
+pr: null

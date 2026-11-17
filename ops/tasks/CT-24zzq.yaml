@@ -1,0 +1,30 @@
+id: CT-24zzq
+repo: rebate-platform
+title: 契约：提现单风险标签重新计算——POST /admin/v1/withdrawals/{withdrawal_id}/risk-flags/recalc（结果另存为新快照，不覆盖申请时快照、不改状态、不影响自动判定），getAdminWithdrawal 加最近一次重算结果（D10-2017 ④）
+type: contract
+# 2026-11-18 be 入账（编排 D10-2017 ④，排最后；缺口清单乙类 #12【重新计算】；规格 design/specs/admin-withdrawal-detail.md §2 风险标签、§4 adminRecalcRiskFlags）。契约由 Claude 写；实现另开 B2-11za。
+# 依据 BR-WDR-29 细则「快照」：risk_flags 是申请时刻快照，审核详情页可提供【重新计算】（代理可自定），结果另存，不覆盖快照。
+# 权限点 withdraw.review；step-up 档位 BR-ID-34 没有专门一行，契约线按 BR-ID-34 分档定并写明理由（不改余额与状态）。写审计。
+# getAdminWithdrawal 加只读字段：最近一次重算的标签列表（同 risk_flags 形状）与重算时刻、操作人，可空；risk_flags 本身不变。
+# 写明：重算结果不进 auto_decision、不参与 BR-WDR-30 ⑫ 判定（自动判定只读申请时快照），不改提现状态。
+refs: [BR-WDR-29, BR-ID-34]
+refs_hash:
+  BR-WDR-29: c576e429b058
+  BR-ID-34: 6a2bdd4ca3ce
+contract_sections: ['11.1']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
+pr: null

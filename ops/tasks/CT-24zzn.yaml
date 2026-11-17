@@ -1,0 +1,33 @@
+id: CT-24zzn
+repo: rebate-platform
+title: 契约：差错单按分录重算余额缓存——POST /admin/v1/recon-diffs/{recon_diff_id}/balance-recalc（只对未关闭的 ledger_mismatch；不收金额；短信档 step-up；不关差错单、不解除 withdraw_holds）（D10-2017 ①）
+type: contract
+# 2026-11-18 be 入账（编排 D10-2017 ①，缺口清单乙类 #14 剩下的一项；方案 couli-runs/BE-codex/gap-plan-B11-15-20261118.md）。契约由 Claude 写（本仓库 contracts/** 主实现 Claude，AGENTS.md §3），实现另开 B2-02x。
+# 依据 BR-FUND-19 细则「差异以分录为准修正」（负责人 2026-10-06 确认）：处理人在差错单里触发按分录重算，系统在 BR-FUND-16 细则「加锁流程」内把该用户的余额缓存（available_fen、frozen_fen）改为对应分录的合计；处理人不能填金额；不写凭证、分录不变；写 audit_logs，记重算前后的值。
+# 权限点 fund.recon；step-up 短信档（契约里已登记 operation fund.recon.balance_recalc tier sms，openapi 权限点表）。请求只有 reason（必填，长度照已有 recon-diff 写操作）；不收任何金额字段，多给字段照路由校验拒。
+# 适用：type=ledger_mismatch 且 status 不是 adjusted / written_off / closed 的差错单；其余类型或已关闭的给 20001（data.fields 照已有 recon-diff 写操作的写法），未知 / 别的 app 的单同样 20001，不给 404。错误码按 08 §13.11，不新造已有码能表达的。
+# 响应：user_id、重算前后的 available_fen / frozen_fen、是否有变化（前后相同也成功，照常记审计，便于复核）。
+# 不做（D10-2017 同意，写进契约说明）：本操作不关差错单、不改差错单状态、不解除 withdraw_holds；关单仍走已有 closeAdminReconDiff。查明是分录本身错的走调账（adminCreateAdjustment，RECON_FIX，ref_type=recon_diff），不在本接口。
+# 资金单：后续 B2-02x 强度 high、资金评审逐项、写测与评审独立 Claude（D10-2003）、合并前挂批准标签。本契约单只改契约与生成物。
+refs: [BR-FUND-19, BR-FUND-16, BR-ID-34]
+refs_hash:
+  BR-FUND-19: 34f619112535
+  BR-FUND-16: 077f6d412d5a
+  BR-ID-34: 6a2bdd4ca3ce
+contract_sections: ['11.1']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
+pr: null

@@ -1,0 +1,31 @@
+id: CT-24zzp
+repo: rebate-platform
+title: 契约：后台导出加提现单——export_resource 加 withdrawals（filters 同 listAdminWithdrawals 的查询参数，导出列 = 其列表项字段，恒为脱敏）（D10-2017 ③）
+type: contract
+# 2026-11-18 be 入账（编排 D10-2017 ③，缺口清单乙类 #13【导出】；规格 design/specs/admin-withdrawals.md §2 标题行、§4 adminCreateExport）。契约由 Claude 写；实现另开 B2-08g。照 CT-24zzm（ledger）写法。
+# contracts/enums/admin.yaml export_resource 加 withdrawals：权限点同该列表（withdraw.review、fund.view 或 user.lookup 任一；只持 user.lookup 的必须带 user_id，与列表同规则）+ export；filters 与 listAdminWithdrawals 的查询参数同形。
+# 恒为脱敏（D10-2017）：手机号只给 3 + 4 脱敏、不导出收款账号全量，不收 unmasked 与 reason（与 ledger 同）。导出列 = 列表项字段逐个。
+# oasdiff 判 response-property-enum-value-added 的照 D10-484 / D10-557 登 oasdiff-accepted.txt（CT-24zzm 先例）。
+# 落库前提：app.export_tasks 的 resource CHECK 只收 users / audit_logs / tax_withdrawals / ledger，B2-08g 前要照 CT-24zzma 先例放宽（含冻结 [AC-B1-34b#4] 改写），见 B2-08g 注释。
+refs: [BR-ID-42, BR-ID-33]
+refs_hash:
+  BR-ID-42: 2f9cd1710ed3
+  BR-ID-33: 01b25f773b29
+contract_sections: ['11.1']
+deps: []
+paths:
+  - 'contracts/enums/admin.yaml'
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
+pr: null

@@ -1,0 +1,27 @@
+id: B2-11za
+repo: rebate-platform
+title: payout：提现单风险标签重新计算的实现（CT-24zzq）——复用 B2-11a 的标签计算按当前时刻重算，结果另存，不覆盖申请时快照、不改状态、不进 auto_decision（D10-2017 ④）
+type: impl
+# 2026-11-18 be 入账（编排 D10-2017 ④）。计算函数复用 B2-11a（BR-WDR-29 ①–⑥ 与风控规则启停 B2-11f），t 取重算时刻（注入 Clock）；不另写口径。
+# 存放：申请时快照 withdrawals.risk_flags 不动；重算结果需新列或新表——要迁移的照 DB 单先例另拆（db:snapshot 走 couli-ci），本单开工前由 be 定存放并报编排，deps 届时补上。
+# 规则测试要钉：重算后 risk_flags 原值不变、新结果可读回；提现状态与 auto_decision 不变；app 隔离；无权限 10403。
+refs: [BR-WDR-29, BR-ID-34]
+refs_hash:
+  BR-WDR-29: c576e429b058
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [CT-24zzq]
+paths:
+  - 'apps/api/src/modules/payout/application/admin-risk-flags-recalc*.ts'
+  - 'apps/api/src/modules/payout/http/admin/risk-flags-recalc.controller*.ts'
+  - 'apps/api/src/modules/payout/application/admin-withdrawals*.ts'
+  - 'apps/api/src/modules/payout/infra/**'
+  - 'apps/api/src/modules/payout/payout.module.ts'
+test_paths:
+  - 'test/spec/payout/admin-risk-flags-recalc/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/admin-risk-flags-recalc/**'
+status: todo
+pr: null
