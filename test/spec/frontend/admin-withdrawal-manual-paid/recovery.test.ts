@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, waitFor, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
+import { ok } from '../admin-withdrawals/fixtures.ts';
 import {
   MANUAL,
   REASONS,
@@ -21,7 +22,6 @@ import {
   main,
   mount,
   notice,
-  ok,
   open,
   paid,
   reply,

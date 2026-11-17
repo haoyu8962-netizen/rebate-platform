@@ -47,7 +47,8 @@ vi.mock('../../../../apps/admin/src/pages/withdrawals/WithdrawalsPage.tsx', asyn
 
 // The frozen batch-approve helper registers afterEach that forbids manual-paid writes.
 configure({ asyncUtilTimeout: 10_000 });
-export { LIST, ok, samples };
+// Values (samples, ok) are NOT re-exported from here: with the hoisted vi.mock above, a
+// re-exported import binding is not callable at run time. Tests import them from fixtures.ts.
 export type { Withdrawal };
 export type Payload = Schema<'AdminWithdrawalBatchManualPaidRequest'>;
 export type ResultItem = Schema<'AdminWithdrawalBatchManualPaidItem'>;
@@ -331,6 +332,21 @@ export async function verify(twice = false): Promise<void> {
 export function writes(server: Server) {
   return server.requests('POST', MANUAL);
 }
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const SAME_INSTANT = 'checked separately as an instant';
+function withoutPaidAt(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null) return value;
+  const { items, ...rest } = value as { items?: unknown };
+  if (!Array.isArray(items)) return value;
+  return {
+    ...rest,
+    items: items.map((item: unknown) =>
+      typeof item === 'object' && item !== null && 'paid_at' in item
+        ? { ...item, paid_at: SAME_INSTANT }
+        : item,
+    ),
+  };
+}
 export function assertRequest(server: Server, body: Payload, count = 1): void {
   const sent = writes(server);
   expect(sent).toHaveLength(count);
@@ -338,7 +354,17 @@ export function assertRequest(server: Server, body: Payload, count = 1): void {
   expect(request.method).toBe('POST');
   expect(request.path).toBe(MANUAL);
   expect(request.query).toEqual({});
-  expect(request.body).toEqual(body);
+  // Everything except paid_at must equal exactly; paid_at may be any ISO 8601 form with an
+  // explicit offset or Z (contract: date-time) that denotes the expected instant.
+  expect(withoutPaidAt(request.body)).toEqual(withoutPaidAt(body));
+  const sentItems = (request.body as { items: { paid_at: unknown }[] }).items;
+  const sentAt = sentItems.map((item) => item.paid_at);
+  expect(sentAt.map((at) => typeof at === 'string' && ISO_INSTANT.test(at))).toEqual(
+    body.items.map(() => true),
+  );
+  expect(sentAt.map((at) => Date.parse(String(at)))).toEqual(
+    body.items.map((item) => Date.parse(item.paid_at)),
+  );
   expect(request.headers.get('Authorization')).toBe('Bearer example-admin-token');
   expect(request.headers.get('X-Step-Up-Token')).toBe(`manual-pass-${count}`);
   expect(request.headers.get('Idempotency-Key')).toEqual(expect.stringMatching(/^\S+$/));

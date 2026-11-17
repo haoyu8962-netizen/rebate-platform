@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { formatFen, parseFen } from '@couli/money';
 import { expect, it } from 'vitest';
+import { ok } from '../admin-withdrawals/fixtures.ts';
 import {
   GRANTS,
   INVALID,
@@ -19,7 +20,6 @@ import {
   fillRows,
   mount,
   notice,
-  ok,
   open,
   paid,
   rowOf,
@@ -38,7 +38,20 @@ it(
     await mount(server);
     await select(rows);
     const modal = await open();
+    // Nothing is prefilled: a prefilled amount (= net) or time (= now) would let a serial-only
+    // entry record paid_fen = net_fen without the finance user ever stating what was paid.
+    for (const item of rows) {
+      const row = rowOf(modal, item.out_biz_no);
+      expect(
+        ['通道流水号', '实付时间', '实付金额（元）'].map((label) => field(row, label).value),
+      ).toEqual(['', '', '']);
+    }
     expect(disabled(button(modal, '确认录入'))).toBe(true);
+    for (const [index, item] of rows.entries())
+      await fill(field(rowOf(modal, item.out_biz_no), '通道流水号'), `Serial-${index + 1}-Aa`);
+    expect(disabled(button(modal, '确认录入'))).toBe(true);
+    await click(button(modal, '确认录入'));
+    expect(server.writes()).toEqual([]);
     await fillRows(modal, rows);
     for (const item of rows)
       for (const scenario of [

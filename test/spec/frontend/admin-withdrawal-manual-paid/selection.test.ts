@@ -2,6 +2,7 @@
 import { formatYuanAdmin, parseFen } from '@couli/money';
 import { cleanup, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
+import { ok, samples } from '../admin-withdrawals/fixtures.ts';
 import {
   GRANTS,
   MANUAL,
@@ -18,11 +19,9 @@ import {
   main,
   mount,
   notice,
-  ok,
   open,
   paid,
   rowOf,
-  samples,
   select,
   serverFor,
   settled,
