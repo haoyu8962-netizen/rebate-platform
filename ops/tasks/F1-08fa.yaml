@@ -23,5 +23,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-ledger-readonly/**'
-status: todo
-pr: null
+status: done
+pr: 187

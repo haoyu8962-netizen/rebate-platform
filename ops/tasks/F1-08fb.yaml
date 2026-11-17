@@ -22,5 +22,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-ledger-export/**'
-status: todo
-pr: null
+status: done
+pr: 253

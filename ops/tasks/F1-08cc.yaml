@@ -48,5 +48,5 @@ modify_existing:
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-adjustment-approve/**'
-status: todo
-pr: null
+status: done
+pr: 228
