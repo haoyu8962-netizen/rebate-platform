@@ -534,3 +534,48 @@ export const channelPausedKey = (channel: string): string => `payout.channel_pau
 export type KillSwitch = Schema<'AdminKillSwitch'>;
 export type KillSwitchPage = Schema<'AdminKillSwitchPage'>;
 export type KillSwitchUpdate = Schema<'AdminKillSwitchUpdateRequest'>;
+
+// ---- 审核列表【批量手动打款】（F1-08al） ---------------------------------------------------------
+
+/** POST adminBatchManualPaid (payout.manual_entry, totp step-up, Idempotency-Key). */
+export const MANUAL_PAID_URL = `${LIST_URL}/batch-manual-paid`;
+/** The permission point of 【批量手动打款】 (a super admin holds every point). */
+export const MANUAL_ENTRY_PERMISSION = 'payout.manual_entry';
+/** Only an APPROVED withdrawal (W8 starts there, BR-WDR-16) can be recorded as paid offline. */
+export const canRecordPaid = (status: WithdrawalStatus): boolean => status === 'APPROVED';
+/** W8 is not open to a WeChat withdrawal (BR-WDR-33 ⑧): it is only marked as skipped. */
+export const manualPaidClosed = (row: WithdrawalRow): boolean => row.payout_channel === 'wechat';
+
+const ISO_INPUT =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{1,3})?(Z|[+-](\d{2}):(\d{2}))$/;
+
+/**
+ * A typed paid time: Beijing `YYYY-MM-DD HH:mm:ss`, or ISO 8601 with Z or an explicit offset
+ * (surrounding blanks ignored). Gives the instant (epoch ms) and the ISO 8601 text to send, or
+ * undefined when the shape or the calendar value is not valid. Nothing is filled in for the user.
+ */
+export function parsePaidAt(
+  value: string,
+): { readonly at: number; readonly iso: string } | undefined {
+  const beijing = parseBeijingTime(value);
+  if (beijing !== undefined) return { at: Date.parse(beijing), iso: beijing };
+  const text = value.trim();
+  const match = ISO_INPUT.exec(text);
+  if (match === null) return undefined;
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  if (hour > 23 || minute > 59 || second > 59) return undefined;
+  if (match[9] !== undefined && (Number(match[9]) > 23 || Number(match[10]) > 59)) return undefined;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day)
+    return undefined;
+  const at = Date.parse(text);
+  if (Number.isNaN(at)) return undefined;
+  return { at, iso: new Date(at).toISOString() };
+}

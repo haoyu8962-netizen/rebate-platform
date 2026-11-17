@@ -8,8 +8,11 @@
 // 持 fund.view 或 payout.execute 时页面分三个页签「审核列表」「打款队列」「结果待确认」（F1-08ba，
 // PayoutTabs.tsx，只读）：审核列表为默认页签；后两个页签进入时才读各自的接口。两个都不持时只有审核列表、
 // 不出页签栏。
-// TODO(规划/11 §7): 【批量手动打款】【批量自动打款】与一键组批、【导出】、「自动到账设置」页签与
-// 各页签计数 — blocked on 契约未出
+// 持 payout.manual_entry（超管持有全部点）时待执行（APPROVED，按真实 status）行可勾选，勾到待执行单时
+// 批量栏出现【批量手动打款】（F1-08al，ManualPaid.tsx，契约 adminBatchManualPaid）；待审核单的勾选与
+// 【批量通过】不受影响。页面时钟由 props 注入（clock，缺省为系统时钟）。
+// TODO(规划/11 §7): 【批量自动打款】与一键组批、【导出】、「自动到账设置」页签与各页签计数 — blocked on
+// 契约未出
 import { ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import {
@@ -43,6 +46,7 @@ import { useLocation, useNavigate } from 'react-router';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { withdrawalsTexts as t } from '../../texts/withdrawals.ts';
 import { BatchApprove } from './BatchApprove.tsx';
+import { ManualPaid, type ManualPaidClock } from './ManualPaid.tsx';
 import { PayoutQueuePanel, UnknownPayoutsPanel } from './PayoutTabs.tsx';
 import {
   CHANNELS,
@@ -57,6 +61,8 @@ import {
   STATUS_TABS,
   beijingTime,
   canApprove,
+  canRecordPaid,
+  MANUAL_ENTRY_PERMISSION,
   canRead,
   channelLabel,
   checkDraft,
@@ -97,7 +103,11 @@ interface ListData {
 
 export interface WithdrawalsPageProps {
   readonly access: AccessControl;
+  /** Injected clock (AGENTS.md §4 rule 5), epoch ms; the paid-time check of 【批量手动打款】. */
+  readonly clock?: ManualPaidClock | undefined;
 }
+
+const SYSTEM_CLOCK: ManualPaidClock = { now: () => Date.now() };
 
 export function Forbidden(): ReactElement {
   return (
@@ -114,13 +124,20 @@ export function Forbidden(): ReactElement {
 
 type PageTab = 'review' | 'queue' | 'unknown';
 
-export function WithdrawalsPage({ access }: WithdrawalsPageProps): ReactElement {
+export function WithdrawalsPage({
+  access,
+  clock = SYSTEM_CLOCK,
+}: WithdrawalsPageProps): ReactElement {
   const reader = canRead(access);
   const payouts = canSeePayouts(access);
   const [tab, setTab] = useState<PageTab>('review');
   if (!reader && !payouts) return <Forbidden />;
   const review = reader ? (
-    <WithdrawalsList reviewer={access.can(REVIEW_PERMISSION)} />
+    <WithdrawalsList
+      reviewer={access.can(REVIEW_PERMISSION)}
+      recorder={access.can(MANUAL_ENTRY_PERMISSION)}
+      clock={clock}
+    />
   ) : (
     <Card>
       <Result status="403" title={t.forbiddenTitle} subTitle={t.forbiddenDescription} />
@@ -167,7 +184,15 @@ export function WithdrawalsPage({ access }: WithdrawalsPageProps): ReactElement 
 
 export { marksOf };
 
-function WithdrawalsList({ reviewer }: { readonly reviewer: boolean }): ReactElement {
+interface WithdrawalsListProps {
+  /** withdraw.review: PENDING_REVIEW rows can be ticked for 【批量通过】. */
+  readonly reviewer: boolean;
+  /** payout.manual_entry: APPROVED rows can be ticked for 【批量手动打款】. */
+  readonly recorder: boolean;
+  readonly clock: ManualPaidClock;
+}
+
+function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): ReactElement {
   const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const navigate = useNavigate();
@@ -198,7 +223,15 @@ function WithdrawalsList({ reviewer }: { readonly reviewer: boolean }): ReactEle
   const [status, setStatus] = useState<ListStatus>('loading');
   const [data, setData] = useState<ListData>();
   const [selected, setSelected] = useState<readonly string[]>([]);
-  const [batchBusy, setBatchBusy] = useState(false);
+  const [approveBusy, setApproveBusy] = useState(false);
+  const [manualBusy, setManualBusy] = useState(false);
+  const batchBusy = approveBusy || manualBusy;
+  const selectable = reviewer || recorder;
+  const canTick = useCallback(
+    (row: WithdrawalRow) =>
+      (reviewer && canApprove(row.status)) || (recorder && canRecordPaid(row.status)),
+    [reviewer, recorder],
+  );
 
   // The list: page `page` of the status tab under the applied `filters`; `attempt` reads again.
   useEffect(() => {
@@ -232,13 +265,22 @@ function WithdrawalsList({ reviewer }: { readonly reviewer: boolean }): ReactEle
     setAttempt((value) => value + 1);
   };
 
-  // The selected PENDING_REVIEW rows of the current answer, in list order.
+  // The selected rows of the current answer that may be ticked, in list order.
   const selectedRows = useMemo(
     () =>
-      reviewer && data !== undefined
-        ? data.items.filter((row) => canApprove(row.status) && selected.includes(row.withdrawal_id))
+      data !== undefined
+        ? data.items.filter((row) => canTick(row) && selected.includes(row.withdrawal_id))
         : [],
-    [reviewer, data, selected],
+    [canTick, data, selected],
+  );
+  // 【批量通过】 takes the PENDING_REVIEW ones, 【批量手动打款】 the APPROVED ones.
+  const approveRows = useMemo(
+    () => (reviewer ? selectedRows.filter((row) => canApprove(row.status)) : []),
+    [reviewer, selectedRows],
+  );
+  const manualRows = useMemo(
+    () => (recorder ? selectedRows.filter((row) => canRecordPaid(row.status)) : []),
+    [recorder, selectedRows],
   );
 
   const batchFinished = useCallback(() => {
@@ -462,7 +504,7 @@ function WithdrawalsList({ reviewer }: { readonly reviewer: boolean }): ReactEle
         <Table<WithdrawalRow>
           rowKey="withdrawal_id"
           columns={columns}
-          {...(reviewer
+          {...(selectable
             ? {
                 rowSelection: {
                   selectedRowKeys: selectedRows.map((row) => row.withdrawal_id),
@@ -470,7 +512,7 @@ function WithdrawalsList({ reviewer }: { readonly reviewer: boolean }): ReactEle
                     if (!batchBusy) setSelected(keys.map(String));
                   },
                   getCheckboxProps: (row: WithdrawalRow) => ({
-                    disabled: batchBusy || !canApprove(row.status),
+                    disabled: batchBusy || !canTick(row),
                   }),
                 },
               }
@@ -642,9 +684,17 @@ function WithdrawalsList({ reviewer }: { readonly reviewer: boolean }): ReactEle
         />
         {reviewer ? (
           <BatchApprove
-            rows={selectedRows}
+            rows={approveRows}
             onFinished={batchFinished}
-            onBusyChange={setBatchBusy}
+            onBusyChange={setApproveBusy}
+          />
+        ) : null}
+        {recorder ? (
+          <ManualPaid
+            rows={manualRows}
+            clock={clock}
+            onFinished={batchFinished}
+            onBusyChange={setManualBusy}
           />
         ) : null}
         {body}
