@@ -54,7 +54,7 @@ const APPROVED = [QNO.approvedA, CNO, QNO.approvedB];
 const PAYING = [QNO.paying, QNO.stuck, QNO.untried];
 
 it(
-  '[AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求',
+  '[AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】；勾一张后 fund.view + payout.execute 只有【执行所选】这一个写入口，超管的写入口恰为【执行所选】【录入企业支付宝余额】【录入运营账户余额】【暂停队列】【解除通道暂停】；全程不发写请求',
   { timeout: MULTI_TIMEOUT },
   async () => {
     const viewing = serverFor({ permissions: VIEW });
