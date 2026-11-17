@@ -932,3 +932,305 @@ it('[CT-06zzzzzn] review r1: the keyword readings at the start of a statement st
     'for await (const { a } of as[{ a: 1 }.a]) void a;',
   ]);
 });
+
+// CT-06zzzzzo (D10-1989): member signatures without a body (memberParams), the object type after
+// a function type's `=>` (Tree.arrowType), a defaulted interface's body (headerKeyword), a
+// line-leading `as` / `satisfies` (no type operator, as in TypeScript), `as[n]` an index. Each
+// item pairs what this change turns (`now`) with what it must leave as it was (`kept`): the
+// kept rows were refused (or allowed) before CT-06zzzzzo and still are — no write refused before
+// becomes allowed but the fixed false refusals themselves.
+
+const GAPS = [
+  'declare const raw: never;',
+  'declare const cond: boolean;',
+  'declare const n: number;',
+  'declare function ping(): void;',
+  'declare function f(x: unknown): void;',
+  'declare function as<T>(x: T): T;',
+  'let dup = 1;',
+];
+const REQUIRED = 'a required member inserted (only an optional one, `x?: T`)';
+
+/** The problems of GAPS + rows → the same with `from` replaced once by `to`. */
+function gap(rows: readonly string[], from: string, to: string): string[] {
+  const base = [...GAPS, ...rows, ''].join('\n');
+  const at = base.indexOf(from);
+  expect(at >= 0 && base.indexOf(from, at + 1) < 0, from).toBe(true);
+  return problemsOf(base, `${base.slice(0, at)}${to}${base.slice(at + from.length)}`);
+}
+
+/** Whether `problems` name the head line `line` (1-based in the head), with `reason` in it. */
+function names(problems: readonly string[], line: number, reason = ''): boolean {
+  return problems.some((p) => p.startsWith(`head:${line} `) && p.includes(reason));
+}
+
+/** The 1-based line of GAPS + rows on which `row` starts. */
+const gapLine = (rows: readonly string[], row: string): number =>
+  [...GAPS, ...rows.slice(0, rows.indexOf(row))].join('\n').split('\n').length + 1;
+
+const SIGNATURES = [
+  'interface I { m(x: { a: number }): void; }',
+  'interface C { (x: { a: number }): void; new (x: { a: number }): C; }',
+  'interface G { get<T>(x: { a: T }): T; delete?(x: { a: number }): void; }',
+  'abstract class A { abstract m(x: { a: number }): void; }',
+  'class O { over(x: { a: number }): void; over(x: unknown) { void x; } }',
+  'class M { m<T>(x: { a: T }) { void x; } }',
+  'type T = { m(x: { a: number }): void };',
+];
+
+it('[CT-06zzzzzo] ① now: a member signature without a body (interface, call / construct signature, abstract, overload, generic method, type literal) judges its parameter types by P3 and appends only optional parameters — a required member or parameter, allowed before, is refused', () => {
+  for (const row of SIGNATURES) {
+    const line = gapLine(SIGNATURES, row);
+    const leaf = row.includes('a: T') ? '{ a: T }' : '{ a: number }';
+    const member = (to: string): string[] => gap(SIGNATURES, row, row.replace(leaf, to));
+    expect(member(leaf.replace(' }', ', b: string }')), row).toEqual([`head:${line} ${REQUIRED}`]);
+    expect(member(leaf.replace(' }', '\n  b: string }')), row).toEqual([
+      `head:${line + 1} ${REQUIRED}`,
+    ]);
+    // A required parameter (an argument of a call before) appended to the list.
+    const appended = gap(SIGNATURES, row, row.replace(`${leaf})`, `${leaf}, y)`));
+    expect(names(appended, line, 'a required parameter inserted'), row).toBe(true);
+    // Correct P3 / P2 in a parameter list (refused as a value before): optional ones pass.
+    expect(member(leaf.replace(' }', '; b?: string }')), row).toEqual([]);
+    expect(gap(SIGNATURES, row, row.replace(`(x: ${leaf}`, `(x?: ${leaf}`)), row).toEqual([]);
+    expect(gap(SIGNATURES, row, row.replace(`${leaf})`, `${leaf}, y?: number)`)), row).toEqual([]);
+  }
+});
+
+it('[CT-06zzzzzo] ① kept: calls and values stay P2 — a call argument, an object method with a body, a call statement in a block, a class field, a decorator, a `case (x):` — and a statement split off a member, a parameter name pushed on, a block after a class stay refused', () => {
+  const rows = [
+    'ping(); f({ a: 1 });',
+    'const o = { m(x: number): number { return x; }, k: f({ a: 1 }) };',
+    'class P { x = f({ a: 1 }); }',
+    'if (cond) { f({ a: 1 }); }',
+    'switch (n) { case (1): f({ a: 1 }); }',
+    'interface S { m(only: number): void; get(k: string): number; }',
+    'class K {}',
+    'function after() { ping(); }',
+  ];
+  for (const row of rows.slice(0, 5)) {
+    expect(gap(rows, row, row.replace('{ a: 1 }', '{ a: 1, b: 2 }')), row).toEqual([]);
+    expect(gap(rows, row, row.replace('{ a: 1 }', '{ a: 1, b?: 2 }')), row).not.toEqual([]);
+  }
+  const s = 'interface S { m(only: number): void; get(k: string): number; }';
+  const at = gapLine(rows, s);
+  // `m; (x…)` would make a property and a call signature of one method.
+  for (const to of [s.replace('m(only', 'm; (only'), s.replace('get(k', 'get, (k')]) {
+    expect(names(gap(rows, s, to), at, 'changed its meaning'), to).toBe(true);
+  }
+  // A signature's parameter is no local of the file (D10-1888 ③): no push on it.
+  const end = 'function after() { ping(); }';
+  expect(names(gap(rows, end, `${end}\nonly.push(1);`), at + 3, 'is no const, let')).toBe(true);
+  // A call statement in a block gains no return type; a body after a class is no class body.
+  expect(gap(rows, 'if (cond) { f(', 'if (cond) { f(raw): void; f(')).not.toEqual([]);
+  expect(gap(rows, end, 'function after() { ping(\n  b?: string); }')).not.toEqual([]);
+  expect(gap(rows, end, 'function after() { ping(); const extra = 2; }')).toEqual([]);
+});
+
+const RETURNS = [
+  'type F = () => { a: number };',
+  'type K = new () => { a: number };',
+  'let ann: (x: number) => { a: number } = raw;',
+  'function cb(c: () => { a: number }) { void c; }',
+  'const typed = raw as () => { a: number };',
+];
+
+it('[CT-06zzzzzo] ② now: the object type after the => of a function type (an alias, a constructor type, an annotation, a parameter type, after as) takes optional members (refused as statements before); a required member and a statement are refused', () => {
+  for (const row of RETURNS) {
+    const line = gapLine(RETURNS, row);
+    const edit = (to: string): string[] => gap(RETURNS, row, row.replace('{ a: number }', to));
+    expect(edit('{ a: number; b?: string }'), row).toEqual([]);
+    expect(edit('{ a: number, b?: string }'), row).toEqual([]);
+    expect(edit('{ a?: number }'), row).toEqual([]);
+    expect(edit('{ a: number; b: string }'), row).toEqual([`head:${line} ${REQUIRED}`]);
+    expect(edit('{ a: number\n  b: string\n}'), row).toEqual([`head:${line + 1} ${REQUIRED}`]);
+    // A statement in it (P1 in the block it was read as before) is refused now.
+    expect(edit('{ a: number; ping(); }'), row).not.toEqual([]);
+    expect(edit('{ a: number; const extra = 2; }'), row).not.toEqual([]);
+  }
+});
+
+const ARROWS = [
+  'const g = () => { ping(); };',
+  'f(() => { ping(); });',
+  'const h = (x: number): number => { ping(); return x; };',
+  'const lt = n < (() => { ping(); });',
+  'const tern = cond ? () => { ping(); } : null;',
+  'class X extends (() => { ping(); return Object; })() {}',
+  'export default () => { ping(); };',
+  'const gen = <T,>(x: T) => { ping(); return x; };',
+  'const o = { k: () => { ping(); } };',
+];
+
+it('[CT-06zzzzzo] ② kept: an arrow function body in a value (or an ambiguous place: after <, a class heritage) stays a block judged by P1 — a statement passes, an optional member, an assignment or a let are refused as before', () => {
+  for (const row of ARROWS) {
+    const line = gapLine(ARROWS, row);
+    const edit = (to: string): string[] => gap(ARROWS, row, row.replace('ping();', to));
+    expect(edit('ping(); const extra = 2;'), row).toEqual([]);
+    expect(edit('ping(); ping();'), row).toEqual([]);
+    expect(names(edit('ping();\n  b?: string;'), line + 1), row).toBe(true);
+    expect(names(edit('ping();\n  dup = 2;'), line + 1, 'an assignment'), row).toBe(true);
+    expect(names(edit('ping();\n  let extra = 2;'), line + 1), row).toBe(true);
+  }
+});
+
+it('[CT-06zzzzzo] ③ now: a conditional type whose check type is a function type returning an object type keeps both branches types (P3); a conditional expression stays P2', () => {
+  const rows = [
+    'type R<T> = T extends () => { a: 1 } ? [{ a: number }] : never;',
+    'type S<T> = T extends (x: A) => { a: 1 } ? never : [{ a: number }];',
+    'type A = number;',
+    'const v = cond ? [{ a: 1 }] : [];',
+  ];
+  for (const row of rows.slice(0, 2)) {
+    const line = gapLine(rows, row);
+    const edit = (to: string): string[] =>
+      gap(rows, row, row.replace('[{ a: number }]', `[${to}]`));
+    expect(edit('{ a: number; b?: string }'), row).toEqual([]);
+    expect(edit('{ a: number, b: string }'), row).toEqual([`head:${line} ${REQUIRED}`]);
+    // The check type's object type itself is a type literal now.
+    expect(gap(rows, row, row.replace('{ a: 1 }', '{ a: 1; b?: 2 }')), row).toEqual([]);
+    expect(gap(rows, row, row.replace('{ a: 1 }', '{ a: 1; b: 2 }')), row).toEqual([
+      `head:${line} ${REQUIRED}`,
+    ]);
+  }
+  const value = 'const v = cond ? [{ a: 1 }] : [];';
+  expect(gap(rows, value, value.replace('{ a: 1 }', '{ a: 1, b: 2 }'))).toEqual([]);
+});
+
+const AS_CALLS = [
+  'export const v = raw\nas({ a: 1 });',
+  'export const w = raw\nsatisfies({ a: 1 });',
+  'const typed = raw\nas<[{ a: number }]>(raw);',
+];
+
+it('[CT-06zzzzzo] ④ now: an existing line-leading as / satisfies is a call of that name (TypeScript ends the statement before it): its object argument takes a P2 property, and a whole statement may stand before it (both refused as a type assertion before)', () => {
+  for (const row of AS_CALLS.slice(0, 2)) {
+    expect(gap(AS_CALLS, row, row.replace('{ a: 1 }', '{ a: 1, b: 2 }')), row).toEqual([]);
+    expect(gap(AS_CALLS, row, row.replace('raw\n', 'raw\nping();\n')), row).toEqual([]);
+    expect(gap(AS_CALLS, row, row.replace('raw\n', 'raw\nconst extra = 2\n')), row).toEqual([]);
+  }
+});
+
+it('[CT-06zzzzzo] ④ now refused (allowed before): the object of a line-leading call takes no optional member or ? mark (a value); a line break added before an existing as / satisfies, or removed, changes its meaning; an inserted line-leading as after an operand names why', () => {
+  const rows = ['export const before = raw'];
+  const line = gapLine(rows, 'export const before = raw') + 1;
+  expect(
+    names(
+      gap(rows, 'export const before = raw', 'export const before = raw\nas(raw)'),
+      line,
+      'inserted at the start of a line after an operand',
+    ),
+  ).toBe(true);
+  // The object after a line-leading call is a value: no optional member, no ? mark.
+  const call = 'export const v = raw\nas({ a: 1 });';
+  expect(gap(AS_CALLS, call, call.replace('{ a: 1 }', '{ a: 1, b?: 2 }'))).not.toEqual([]);
+  expect(gap(AS_CALLS, call, call.replace('{ a: 1 }', '{ a?: 1 }'))).not.toEqual([]);
+  // The operator turned into a name (a re-wrap) or back (a join): existing code changed.
+  const typed = ['const w = raw as { a: number };', 'const c = raw\nas(n);'];
+  const w = gapLine(typed, 'const w = raw as { a: number };');
+  expect(gap(typed, 'raw as {', 'raw\nas {')).toEqual([
+    `head:${w + 1} \`as\` changed its meaning (a type operator → a name)`,
+  ]);
+  expect(gap(typed, 'raw\nas(n)', 'raw as(n)')).toEqual([
+    `head:${w + 1} \`as\` changed its meaning (a name → a type operator)`,
+  ]);
+});
+
+it('[CT-06zzzzzo] ④ kept: a line-leading as / satisfies inserted after an operand is refused on its line (also a call P1 would take); type arguments of a line-leading call stay P3; after a block it is a statement as before', () => {
+  const rows = ['export const before = raw', 'if (cond) { ping(); }'];
+  const line = gapLine(rows, 'export const before = raw') + 1;
+  for (const added of [
+    'as(dup = 2)',
+    'as < 1, dup = 2',
+    'as < 1',
+    'as({ a: 1, b: 2 })',
+    'as(raw)',
+    'satisfies(raw)',
+  ]) {
+    const got = gap(rows, 'export const before = raw', `export const before = raw\n${added}`);
+    expect(names(got, line), added).toBe(true);
+  }
+  const block = 'if (cond) { ping(); }';
+  expect(gap(rows, block, `${block}\nas(raw)`)).toEqual([]);
+  // Type arguments of the line-leading call stay a type.
+  const generic = 'const typed = raw\nas<[{ a: number }]>(raw);';
+  const at = gapLine(AS_CALLS, generic) + 1;
+  expect(
+    gap(AS_CALLS, generic, generic.replace('{ a: number }', '{ a: number, b: string }')),
+  ).toEqual([`head:${at} ${REQUIRED}`]);
+  expect(
+    gap(AS_CALLS, generic, generic.replace('{ a: number }', '{ a: number, b?: string }')),
+  ).toEqual([]);
+});
+
+const DEFAULTED = [
+  'interface I<T = { a: number }> { value: T; }',
+  'interface J<U, T = [{ a: number }]> extends Array<U | T> { value: T; }',
+  'interface K<T extends A | B = A> { value: T; }',
+  'type A = number;',
+  'type B = string;',
+];
+
+it('[CT-06zzzzzo] ⑤ now: the body of an interface with a defaulted (or union-constrained) type parameter is a type body — an optional member passes (refused as a statement before), a required member and a statement are refused', () => {
+  for (const row of DEFAULTED.slice(0, 3)) {
+    const line = gapLine(DEFAULTED, row);
+    const body = (to: string): string[] => gap(DEFAULTED, row, row.replace('{ value: T; }', to));
+    expect(body('{ value: T; b?: string; }'), row).toEqual([]);
+    expect(body('{\n  b?: string;\n  value: T; }'), row).toEqual([]);
+    expect(body('{ value?: T; }'), row).toEqual([]);
+    expect(body('{ value: T; b: string; }'), row).toEqual([`head:${line} ${REQUIRED}`]);
+    expect(body('{\n  b: string;\n  value: T; }'), row).toEqual([`head:${line + 1} ${REQUIRED}`]);
+    expect(body('{ value: T; ping(); }'), row).not.toEqual([]);
+    expect(body('{ value: T; const extra = 2; }'), row).not.toEqual([]);
+  }
+  // A class with a defaulted type parameter reads its member signatures (①).
+  const rows = [
+    'class Q<T = { a: number }> { m(x: { a: number }): void; m(x: unknown) { void x; } }',
+  ];
+  const q = rows[0] as string;
+  expect(gap(rows, q, q.replace('m(x: { a: number })', 'm(x: { a: number, b: string })'))).toEqual([
+    `head:${gapLine(rows, q)} ${REQUIRED}`,
+  ]);
+});
+
+it('[CT-06zzzzzo] ⑤ kept: a function or block after a defaulted interface or class is no type or class body (the header walk stops at the body before)', () => {
+  const rows = [
+    'interface I<T = { a: number }> { value: T; }',
+    'function make() { ping(); }',
+    'class Q<T = { a: number }> { m(x: { a: number }): void; m(x: unknown) { void x; } }',
+    'if (cond) { ping(); }',
+  ];
+  for (const row of ['function make() { ping(); }', 'if (cond) { ping(); }']) {
+    const line = gapLine(rows, row);
+    expect(gap(rows, row, row.replace('ping();', 'ping(); const extra = 2;')), row).toEqual([]);
+    expect(names(gap(rows, row, row.replace('ping();', 'ping();\n  b?: string;')), line + 1)).toBe(
+      true,
+    );
+    expect(gap(rows, row, row.replace('ping()', 'ping(\n  b?: string)')), row).not.toEqual([]);
+  }
+});
+
+it('[CT-06zzzzzo] ⑥ an insertion into the index after a variable named as / satisfies is refused as an index (the message only: refused as an array before); an array literal keeps its wording, a type after as[ stays P3', () => {
+  const rows = [
+    'declare const as: number[];',
+    'declare const satisfies: number[];',
+    'const v = as[n];',
+    'const w = satisfies[n];',
+    'const other = raw[n];',
+    'const values = [n];',
+    'type X = as[{ a: number }];',
+  ];
+  for (const row of ['const v = as[n];', 'const w = satisfies[n];', 'const other = raw[n];']) {
+    expect(gap(rows, row, row.replace('[n]', '[n\n  + 1\n]')), row).toEqual([
+      `head:${gapLine(rows, row) + 1} \`+\` inserted into an index (not on the allow list)`,
+    ]);
+  }
+  const array = 'const values = [n];';
+  expect(gap(rows, array, array.replace('[n]', '[n\n  + 1\n]'))).toEqual([
+    `head:${gapLine(rows, array) + 1} \`+\` inserted into an existing array (not on the allow list)`,
+  ]);
+  const typed = 'type X = as[{ a: number }];';
+  expect(gap(rows, typed, typed.replace('{ a: number }', '{ a: number, b: string }'))).toEqual([
+    `head:${gapLine(rows, typed)} ${REQUIRED}`,
+  ]);
+});
