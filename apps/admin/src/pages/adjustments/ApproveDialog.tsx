@@ -12,6 +12,7 @@
 // - 带外壳的结果未定（5xx、40901）：沿用原键（驳回原因同样锁定，原请求体重发）。
 // - 以上结果未定都提示失败，并先重新读取该单：读回前两个决定都不可用，读回仍待批准才放开，已不是待批准就
 //   交回页面提示并刷新、不再提交。20902 同样交回页面。
+// 打开时的读单与【重新读取】读回的单已不是待批准，同样交回页面提示并刷新，两个决定不可用（F1-08cg）。
 // 任何失败都不自动重发。
 import {
   Alert,
@@ -75,7 +76,7 @@ export interface ApproveDialogProps {
   readonly onClose: (uncertain: boolean) => void;
   readonly onApproved: (executed: Executed) => void;
   readonly onRejected: (rejection: Rejection) => void;
-  /** 20902, or the read after an unknown outcome found the form no longer PENDING. */
+  /** 20902, or any read of the form (opening, 【重新读取】, after an unknown outcome) found it no longer PENDING. */
   readonly onStale: () => void;
   /** 【去列表核对】 while a decision's result is unknown: close and read the list again. */
   readonly onCheck: () => void;
@@ -156,15 +157,17 @@ export function ApproveDialog({
   // useRead is ready only for the latest attempt: after an unknown outcome `fresh` is that read.
   const fresh = detail.status === 'ready' ? detail.data : undefined;
   const rechecking = checking && fresh?.adjustment.status !== 'PENDING';
+  /** Any read of the form (on opening, 【重新读取】 or after an unknown outcome) found it no longer PENDING. */
+  const notPending = fresh !== undefined && fresh.adjustment.status !== 'PENDING';
   useEffect(() => {
-    if (!checking || fresh === undefined || fresh.adjustment.status === 'PENDING') return;
+    if (!notPending) return;
     if (staleSent.current) return;
     staleSent.current = true;
     onStale();
-  }, [checking, fresh, onStale]);
+  }, [notPending, onStale]);
 
   const inFlight = approval.busy || rejection.busy;
-  const locked = inFlight || rechecking;
+  const locked = inFlight || rechecking || notPending;
   /** A decision got no reply in the unified envelope: the dialog cannot be closed, only checked. */
   const unknown = approval.unknown || rejection.unknown;
   const reasonLocked = openRejection !== undefined;
