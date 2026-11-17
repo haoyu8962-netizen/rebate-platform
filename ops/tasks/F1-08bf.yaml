@@ -1,0 +1,36 @@
+id: F1-08bf
+repo: rebate-platform
+title: F1-08bf：打款页两条冻结用例只改标题与现断言对齐——[AC-F1-08ba-READONLY#1]、[AC-F1-08bb-ACCESS#1]（retitle_to，断言一字不动；FU-F108-RETITLE-ENTRY-CASES）
+type: test-change
+# 2026-11-17 入账（前端线 fe，编排 D10-1895 登记、D10-1935 队列排在 F1-08fb 之后）。来由：F1-08bc（D10-1712 (a)）与 F1-08bd 落地时把这两条冻结用例的超管写入口清单由空改为「恰为已落地的入口」（toEqual 严格相等，modify_existing rule_change），但标题没改：READONLY#1 仍写「都没有任何写入口」、ACCESS#1 仍写「勾一张后只出现【执行所选】这一个写入口」，与现断言对不上（编排 D10-1895：bc / bd 时漏要求 retitle_to）。
+# 范围：只改这两条用例的标题字符串（retitle_to），用例体、断言、注释、文件其余部分一字不动；不加新用例，不改实现。走法照 D10-1843 / D10-1879（只改测试、实现已在主干）：推非 task/ 分支，由编排按 #24 核后加 owner-approved 标签；不跑正式先红、不登 red_exempt；改后在测试机跑这两个文件确认仍绿。
+# 这两条用例所在文件属打款页（资金页面），本单不碰任何实现文件；reason 沿用 bc / bd 原条目的 rule_change（br 与 ruling 同原条目），只是补上当时漏的 retitle_to。
+refs: [BR-WDR-17, BR-WDR-18]
+refs_hash:
+  BR-WDR-17: f6119a685e00
+  BR-WDR-18: 9247640dde57
+deps: [F1-08bc, F1-08bd]
+paths:
+  - 'test/spec/frontend/admin-payouts-readonly/readonly.test.ts'
+  - 'test/spec/frontend/admin-payout-execute/access.test.ts'
+impl: claude
+tester: none
+modify_existing:
+  - file: 'test/spec/frontend/admin-payouts-readonly/readonly.test.ts'
+    test: '[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）、打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET'
+    retitle_to: '[AC-F1-08ba-READONLY#1] 全部打款权限点与超管、队列与通道暂停时：「打款队列」（全部 / 打款中 / 待执行）只有已落地的写入口——全部打款权限点账号没有，超管恰为【录入企业支付宝余额】【录入运营账户余额】【解除暂停】与每个暂停通道一个【解除通道暂停】；打款记录抽屉与「结果待确认」都没有任何写入口（含隐藏、置灰），全程只发 GET'
+    reason: rule_change
+    br: [BR-WDR-17, BR-WDR-18]
+    ruling: D10-1895
+    note: '只改标题（D10-1895）：用例体自 F1-08bc（D10-1712 (a)，余额录入两入口）与 F1-08bd（暂停类入口）起已断言超管写入口恰为已落地入口，标题仍写「都没有任何写入口」；断言一字不动'
+  - file: 'test/spec/frontend/admin-payout-execute/access.test.ts'
+    test: '[AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】，勾一张后只出现【执行所选】这一个写入口；全程不发写请求'
+    retitle_to: '[AC-F1-08bb-ACCESS#1] 只持 fund.view：打款队列没有任何勾选框、批量栏与【执行所选】（含隐藏）；持 fund.view + payout.execute 与超管：待执行单各有一个可用、未勾的勾选框，打款中的单没有可用勾选框，未勾选时没有【执行所选】；勾一张后 fund.view + payout.execute 只有【执行所选】这一个写入口，超管的写入口恰为【执行所选】【录入企业支付宝余额】【录入运营账户余额】【暂停队列】【解除通道暂停】；全程不发写请求'
+    reason: rule_change
+    br: [BR-WDR-17, BR-WDR-18]
+    ruling: D10-1895
+    note: '只改标题（D10-1895）：用例体自 F1-08bc（余额录入两入口）与 F1-08bd（【暂停队列】与暂停通道的【解除通道暂停】）起已断言超管写入口恰为已落地入口，标题仍写「只出现【执行所选】这一个写入口」；断言一字不动'
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
