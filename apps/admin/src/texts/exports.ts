@@ -27,6 +27,7 @@ export const exportsTexts = {
   resource: {
     users: '用户列表',
     audit_logs: '操作日志',
+    ledger: '余额流水',
   },
   columns: {
     id: '任务编号',
