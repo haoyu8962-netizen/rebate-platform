@@ -609,3 +609,9 @@ approvals:
     granted: true
     date: '2026-11-17'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/guard/lib、tools/ci、tools/README.md、tools/ops/README.md）：FU-SUPPORT-TOKENS-HARDEN，口径 D10-1795 / D10-1874 / D10-1880 / D10-1888，七处实现者自定口径编排认可（D10-1902）。判定规则只收紧：支撑文件块外改动从「拒绝清单之外都放行」变为「放行清单之内才放行」；另有三处纠正误拒——对齐按簇局部修正、>> 后的花括号判为块、import 默认绑定后的逗号放行；括号树规则不放宽。规则测试 test/spec/ci/support-allowlist/**（38 条，独立 Claude 写，Codex spec-test r1 通过，先红 36 / 38 全断言），实现由另一全新子代理做；Codex money r1 通过（2 S2 已修）、r2 增量通过，余 1 条 S2（元组里嵌套类型字面量追加必填成员误放行，类型层）登 FU-SUPPORT-TOKENS-NESTED-TYPE；测试机 support-allowlist + modify-existing-support 全绿、verify:fast 绿；编排按 #24 核过实际差异（D10-1902），#225 合并。'
+  - id: 99
+    row: 4
+    title: 'CT-06zzzzzk：支撑文件放行清单——类型位置里任意嵌套深度的对象类型字面量（元组、数组、联合 / 交叉、泛型实参、嵌套成员类型、类型括号、条件类型分支、函数类型返回）按 P3 判，追加必填成员拒、只放行可选成员与加 ?（收紧）；声明扫描在完整操作数后的 as / satisfies 处跳过其后类型，不再把类型实参里的逗号读成声明分隔（一处纠正误拒）'
+    granted: true
+    date: '2026-11-17'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/guard/lib）：FU-SUPPORT-TOKENS-NESTED-TYPE（CT-06zzzzzj Codex 代码评审 r2 S2），口径 D10-1902 / D10-1916 / D10-1920。本单 = 收紧 + 一处纠正误拒：判定上，嵌套类型字面量追加必填成员由放行改为拒；另把 CT-06zzzzzi 规则 3 的声明扫描在 as / satisfies 后的类型上跳过，消除「raw as Record<string, { … }> 里类型实参的逗号被读成第二个声明」的误拒，编排在 D10-1924 放开台账「CT-06zzzzzi 原规则不许动」这一处，拒绝清单与重名规则不动；as / satisfies 只在跟在完整操作数后、且不是成员名时算类型运算符，认不出时声明扫描退回旧行为（偏严），不会把真声明藏起来（D10-1929）。规则测试 test/spec/ci/support-nested-type/**（12 条，Codex 写，独立 Claude spec-test r1 / r2 通过，先红 12 条全为断言失败）；实现由 Opus 子代理做，单测 28 条含 D10-1924 ① 四组防绕过；Codex money r1–r3 均通过、无 S0 / S1；测试机三组规则目录 96 / 96 与 verify:fast 绿；类型层遗留偏差（误放 3、误拒 2、文案 1）登 FU-SUPPORT-TOKENS-TYPE-POSITION-GAPS；编排按 #24 核过实际差异（D10-1929），#237 合并。'
