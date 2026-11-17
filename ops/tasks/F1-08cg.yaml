@@ -1,0 +1,24 @@
+id: F1-08cg
+repo: rebate-platform
+title: 调账批准对话框打开时读回的单已非待批准（PENDING）→ 直接走 onStale（提示已处理并刷新），不让操作员对着「—」批准（FU-F108CC-OPEN-READ-NOT-PENDING）
+type: impl
+# 2026-11-17 入账（前端线 fe，编排 D10-1912 队列；排 F1-08be 之后）。来由：#228（F1-08cc）编排核时提的后续——打开【批准】对话框后读单（GET /admin/v1/adjustments/{adjust_id}）返回的单若已不是 PENDING（已被别人批准 / 驳回 / 撤回），现在对话框仍打开、余额显示「—」，批准按钮因余额未就绪不可用但对话框不收；应直接按 onStale 处理：提示「该调账单已不是待批准状态，已刷新」（或已有同义文案键）、关闭对话框、刷新列表 / 详情，不发写请求。
+# 范围：只改 apps/admin/src/pages/adjustments/** 的批准对话框读单分支与必要文案键；不改批准 / 驳回的写请求路径与 F1-08ce / cf / cc 已钉住的行为。规则测试新目录 test/spec/frontend/admin-adjustment-approve-stale-open/**：打开对话框时读回已批准 / 已驳回 / 已撤回各 1 条 → 提示并刷新、对话框关闭、0 写请求；对照：读回仍待批准时照常显示余额、批准可用。
+# 资金页面（RV2）。D10-1872 起新入账：规则测试与评审优先 Codex（codex-run.sh），Codex 不可用时改独立 Claude 并如实记。
+refs: [BR-FUND-24, BR-ID-34]
+refs_hash:
+  BR-FUND-24: 0f1a6ecb3334
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [F1-08cc]
+paths:
+  - 'apps/admin/src/pages/adjustments/**'
+  - 'apps/admin/src/texts/adjustments.ts'
+test_paths:
+  - 'test/spec/frontend/admin-adjustment-approve-stale-open/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-adjustment-approve-stale-open/**'
+status: todo
+pr: null
