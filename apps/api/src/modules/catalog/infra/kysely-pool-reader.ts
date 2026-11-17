@@ -2,8 +2,6 @@
 // writer through infra/kysely-pool-admin-store.ts and worker/pool-refresh.ts). Every statement is
 // scoped by app_id. An aged row or one without a commission rate never leaves here, so the pages
 // stay full; no_rebate and an anomalous price are the card entry's to tell.
-// CT-07e: a page may be narrowed to the rows sharing a tag with the data source (pool_items.tags,
-// migration 0145); the filter is in the statement, so the offsets and pages count matching rows only.
 import type { DB } from '@couli/db';
 import { sql, type Kysely, type RawBuilder } from 'kysely';
 import type { Clock } from '../../platform/index.ts';
@@ -104,7 +102,7 @@ export function createKyselyPoolReader(options: KyselyPoolReaderOptions): PoolRe
   }
 
   return {
-    async page({ appId, poolId, offset, limit, tags = [] }) {
+    async page({ appId, poolId, offset, limit }) {
       if (!UUID.test(poolId)) return null;
       const pool = await db
         .withSchema('app')
@@ -126,8 +124,6 @@ export function createKyselyPoolReader(options: KyselyPoolReaderOptions): PoolRe
         .where('quoted_at', '>=', await oldestQuote(appId, now.getTime()))
         .where((eb) => eb.or([eb('start_at', 'is', null), eb('start_at', '<=', now)]))
         .where((eb) => eb.or([eb('end_at', 'is', null), eb('end_at', '>=', now)]))
-        // CT-07e: any shared tag; text[] && text[] compares the elements by equality.
-        .$if(tags.length > 0, (query) => query.where(sql<boolean>`tags && ${[...tags]}::text[]`))
         .orderBy('sort', 'asc')
         .orderBy('product_key', 'asc')
         .offset(offset)

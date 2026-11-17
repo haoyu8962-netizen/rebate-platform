@@ -247,18 +247,6 @@
           "type": "integer",
           "format": "int32",
           "minimum": 1
-        },
-        "tags": {
-          "type": "array",
-          "$comment": "Console side only (CT-07e, D10-1758 / D10-1761; 规划/04 §3.2): the home read delivers only the pool items whose tags share at least one value with these (exact equality after the server's normalization: NFKC, trimmed, inner whitespace one space); absent filters nothing (the read also treats [] so). Each tag has a character other than whitespace and no control character. The feed's fall-back pool (feed.fallback_pool_id) is never filtered. The page delivered to the apps and H5 never carries this field. Saving (adminCreatePageConfigVersion, D10-1777) applies the same normalization as pool items' tags (NFKC, trimmed, inner whitespace one space, blanks dropped) and keeps one of each duplicate in first-seen order, so the saved version holds the normalized list; a list that normalizes to an empty array (e.g. all blanks) is refused with 20001 on this data source's tags, because dropping every item would silently turn the source from 'only the items with these tags' into 'no filter'.",
-          "minItems": 1,
-          "maxItems": 10,
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 16,
-            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
-          }
         }
       }
     },

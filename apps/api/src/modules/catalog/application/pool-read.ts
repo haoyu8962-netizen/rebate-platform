@@ -38,11 +38,6 @@ export interface PoolPageRequest {
   readonly offset: number;
   /** At most this many rows are read: min(data source limit, 20). */
   readonly limit: number;
-  /**
-   * CT-07e (D10-1758): only the rows whose tags share at least one value with these (exact
-   * equality); absent or [] reads every row. The feed's fall-back pool never passes any (D10-1761).
-   */
-  readonly tags?: readonly string[];
 }
 
 export interface PoolPage {
