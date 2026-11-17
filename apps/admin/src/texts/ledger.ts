@@ -1,5 +1,6 @@
-// 余额流水页文案（资源 ledger，菜单 资金 / 余额流水；F1-08fa 只读：按 UID 查资金摘要与流水，
-// 字段以契约 adminGetUserFundSummary、adminListLedgerEntries 为准）。流水类型、子户、冻结种类的
+// 余额流水页文案（资源 ledger，菜单 资金 / 余额流水；F1-08fa 只读：按 UID 查资金摘要与流水；
+// F1-08fb 标题行【导出当前筛选】走 adminCreateExport resource=ledger；字段以契约
+// adminGetUserFundSummary、adminListLedgerEntries、adminCreateExport 为准）。流水类型、子户、冻结种类的
 // 中文名只从后台字典读（BR-TEXT-25 admin_dict.*，contracts/texts.admin.default.json），缺键显示
 // 编码，所以这里不写这些名字。错误措辞按 contracts/error-codes.yaml。
 export const ledgerTexts = {
@@ -9,6 +10,19 @@ export const ledgerTexts = {
   reset: '重置',
   retry: '重试',
   exportsEntry: '导出记录',
+  /** F1-08fb: adminCreateExport resource=ledger with the applied user and filters. */
+  export: {
+    action: '导出当前筛选',
+    created: (id: string): string => `已创建导出任务 ${id}，到导出记录下载`,
+    /** 10403 */
+    forbidden: '当前账号没有导出权限，未创建导出任务。',
+    /** 20001 data.fields with accounting_date_from / accounting_date_to */
+    dateRange: '会计日起不能晚于止，未创建导出任务。',
+    /** Any other definite refusal (other 20001, 5xx with the unified envelope, …). */
+    failed: '导出任务未能创建，请稍后再试。',
+    /** No answer in the unified envelope: the task may exist. */
+    unknown: '导出任务可能已创建，请先到【导出记录】核对，再决定是否重新导出。',
+  },
   uid: {
     label: '用户 UID',
     placeholder: '输入用户 UID 后点【查询】',

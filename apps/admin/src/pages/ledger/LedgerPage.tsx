@@ -1,10 +1,12 @@
 // 余额流水（资源 ledger，菜单 资金 / 余额流水；F1-08fa 只读）：按用户 UID 读资金摘要
 // （adminGetUserFundSummary）与该用户的余额流水（adminListLedgerEntries，页码分页，筛选：流水类型、
 // 子类型、子户、会计日起止、业务单号）。读要 fund.view 或 user.lookup（菜单仍只认 fund.view，只持
-// user.lookup 时直达地址可用）；都没有时本页说明无权限、不发请求。只读：整页只发 GET，唯一入口是
-// 【导出记录】（跳 /exports），不出【导出当前筛选】（编排 D10-1740）。金额经 @couli/money 显示，
-// 不在页面上求和或重算。
-import { ReloadOutlined } from '@ant-design/icons';
+// user.lookup 时直达地址可用）；都没有时本页说明无权限、不发请求。只读：余额不能在这里改动；标题行
+// 有【导出记录】（跳 /exports），F1-08fb 起另有【导出当前筛选】：持 export 且能读本页、已查过用户时
+// 才出现，点一次只发一次 POST /admin/v1/exports（resource=ledger，filters 为已生效的 user_id 与
+// 筛选，不带分页，不带 Idempotency-Key 与二次验证），在途不再发；失败不自动重发，结果未知时提示先
+// 到【导出记录】核对；导出不重读流水、不跳转。金额经 @couli/money 显示，不在页面上求和或重算。
+import { ExportOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import {
   Alert,
@@ -21,7 +23,7 @@ import {
   theme,
   type TableColumnsType,
 } from 'antd';
-import { useEffect, useId, useState, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { PlannedPage, usePlanned } from '../../components/planned/index.ts';
 import { delayedLoading, useLoadingClock } from '../../motion.ts';
@@ -29,12 +31,16 @@ import type { AccessControl } from '../../providers/access-control/index.ts';
 import { ledgerTexts as t } from '../../texts/ledger.ts';
 import {
   EMPTY_DRAFT,
+  EXPORTS_URL,
   LEDGER_TYPES,
   LEDGER_URL,
   PAGE_SIZE,
   SUB_ACCOUNTS,
   beijingTime,
   checkDraft,
+  exportRejected,
+  exportRequest,
+  exportResolved,
   failureOf,
   holdKindName,
   ledgerQuery,
@@ -45,6 +51,8 @@ import {
   summaryUrl,
   type Draft,
   type DraftErrors,
+  type ExportOutcome,
+  type ExportTask,
   type Filters,
   type FundSummary,
   type LedgerEntry,
@@ -98,7 +106,24 @@ export function LedgerPage({ access }: LedgerPageProps): ReactElement {
         </Card>
       </Flex>
     );
-  return <LedgerContent />;
+  return <LedgerContent canExport={access.can('export')} />;
+}
+
+type ExportNotice = { readonly type: 'success' | 'error' | 'warning'; readonly text: string };
+
+function exportNotice(outcome: ExportOutcome): ExportNotice {
+  switch (outcome.kind) {
+    case 'created':
+      return { type: 'success', text: t.export.created(outcome.id) };
+    case 'forbidden':
+      return { type: 'error', text: t.export.forbidden };
+    case 'dateRange':
+      return { type: 'error', text: t.export.dateRange };
+    case 'failed':
+      return { type: 'error', text: t.export.failed };
+    case 'unknown':
+      return { type: 'warning', text: t.export.unknown };
+  }
 }
 
 const amountStyle = { whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' } as const;
@@ -191,7 +216,7 @@ const columns: TableColumnsType<LedgerEntry> = [
   },
 ];
 
-function LedgerContent(): ReactElement {
+function LedgerContent({ canExport }: { readonly canExport: boolean }): ReactElement {
   const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
@@ -218,6 +243,17 @@ function LedgerContent(): ReactElement {
   const [draftErrors, setDraftErrors] = useState<DraftErrors>({});
   const [filters, setFilters] = useState<Filters>({});
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
+  const [exportResult, setExportResult] = useState<ExportNotice>();
+  const exportingRef = useRef(false);
+  const alive = useRef(true);
+
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   // The fund summary of the queried user; `summaryAttempt` reads it again (【重试】).
   useEffect(() => {
@@ -285,6 +321,7 @@ function LedgerContent(): ReactElement {
     }
     setUidError(undefined);
     setForbidden(false);
+    setExportResult(undefined);
     setUserId(value);
     setGeneration((count) => count + 1);
     setSummary({ status: 'loading' });
@@ -339,6 +376,44 @@ function LedgerContent(): ReactElement {
     setPage(next);
   };
 
+  // One click, one POST: the ref stops a second click before the disabled state renders; a failure
+  // is never resent (the endpoint has no Idempotency-Key, every call is a new task).
+  const createExport = async (user: string) => {
+    if (exportingRef.current) return;
+    exportingRef.current = true;
+    setExporting(true);
+    setExportResult(undefined);
+    const custom = getProvider().custom;
+    let outcome: ExportOutcome;
+    try {
+      if (custom === undefined) throw new Error('Missing custom data provider');
+      const response = await custom<ExportTask>({
+        url: EXPORTS_URL,
+        method: 'post',
+        payload: exportRequest(user, filters),
+      });
+      outcome = exportResolved(response.data);
+    } catch (cause) {
+      outcome = exportRejected(cause);
+    }
+    exportingRef.current = false;
+    if (!alive.current) return;
+    setExporting(false);
+    setExportResult(exportNotice(outcome));
+  };
+
+  const exportAction =
+    canExport && userId !== undefined && !forbidden ? (
+      <Button
+        icon={<ExportOutlined aria-hidden />}
+        disabled={exporting}
+        loading={exporting}
+        onClick={() => void createExport(userId)}
+      >
+        {t.export.action}
+      </Button>
+    ) : null;
+
   const uidForm = (
     <Card>
       <Form layout="vertical">
@@ -373,7 +448,23 @@ function LedgerContent(): ReactElement {
 
   const header = (
     <>
-      <LedgerTitle extra={<Link to="/exports">{t.exportsEntry}</Link>} />
+      <LedgerTitle
+        extra={
+          <Flex align="center" gap={12}>
+            <Link to="/exports">{t.exportsEntry}</Link>
+            {exportAction}
+          </Flex>
+        }
+      />
+      {exportResult === undefined ? null : (
+        <Alert
+          type={exportResult.type}
+          showIcon
+          closable
+          message={exportResult.text}
+          onClose={() => setExportResult(undefined)}
+        />
+      )}
       <Alert type="info" showIcon role="note" message={t.readOnlyNotice} />
       {uidForm}
     </>

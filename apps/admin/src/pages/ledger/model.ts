@@ -194,3 +194,65 @@ export function failureOf(cause: unknown): Failure {
   // user_id: unknown, malformed or of another app; any other field: the filter conditions.
   return fields.includes('user_id') ? 'uid' : 'invalid';
 }
+
+export type ExportTask = Schema<'AdminExport'>;
+export type ExportRequest = Schema<'AdminExportCreateLedgerRequest'>;
+
+/** adminCreateExport (no Idempotency-Key: every call creates a new task). */
+export const EXPORTS_URL = '/admin/v1/exports';
+
+/**
+ * Body of the ledger export: the applied user and filters, with the list's own parameter names;
+ * no paging, never unmasked / reason (a ledger export is always masked); unset keys left out.
+ */
+export function exportRequest(userId: string, filters: Filters): ExportRequest {
+  return {
+    resource: 'ledger',
+    filters: {
+      user_id: userId,
+      ...(filters.ledgerType === undefined ? {} : { ledger_type: filters.ledgerType }),
+      ...(filters.subType === undefined ? {} : { sub_type: filters.subType }),
+      ...(filters.subAccount === undefined ? {} : { sub_account: filters.subAccount }),
+      ...(filters.dateFrom === undefined ? {} : { accounting_date_from: filters.dateFrom }),
+      ...(filters.dateTo === undefined ? {} : { accounting_date_to: filters.dateTo }),
+      ...(filters.ref === undefined ? {} : { ref: filters.ref }),
+    },
+  };
+}
+
+/**
+ * How one export attempt ended. `unknown`: no answer in the unified envelope (network error,
+ * unreadable body, or a success without the task), so the task may exist; never resent.
+ */
+export type ExportOutcome =
+  | { readonly kind: 'created'; readonly id: string }
+  | { readonly kind: 'forbidden' }
+  | { readonly kind: 'dateRange' }
+  | { readonly kind: 'failed' }
+  | { readonly kind: 'unknown' };
+
+function createdOf(data: unknown): ExportOutcome {
+  if (typeof data !== 'object' || data === null) return { kind: 'unknown' };
+  const id = (data as { id?: unknown }).id;
+  return typeof id === 'string' && id !== '' ? { kind: 'created', id } : { kind: 'unknown' };
+}
+
+/** The answer data of a resolved call (an envelope with code 0 and HTTP 200). */
+export function exportResolved(data: unknown): ExportOutcome {
+  return createdOf(data);
+}
+
+export function exportRejected(cause: unknown): ExportOutcome {
+  if (!(cause instanceof AdminApiError)) return { kind: 'unknown' };
+  if (cause.kind === 'network' || cause.kind === 'parse') return { kind: 'unknown' };
+  // 202 Accepted with the new task: the data provider only treats 200 as success.
+  if (cause.kind === 'http')
+    return cause.httpStatus === 202 ? createdOf(cause.data) : { kind: 'failed' };
+  if (cause.code === 10403) return { kind: 'forbidden' };
+  if (cause.code === 20001) {
+    const fields = rejectedFields(cause);
+    if (fields.includes('accounting_date_from') || fields.includes('accounting_date_to'))
+      return { kind: 'dateRange' };
+  }
+  return { kind: 'failed' };
+}
