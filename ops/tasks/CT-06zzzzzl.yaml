@@ -1,0 +1,50 @@
+id: CT-06zzzzzl
+repo: rebate-platform
+title: 'CT-06zzzzzl（FU-CI-PROPS-SHA2-HANG）：5 个 property 用例每轮收尾让出一次宏任务，释放 vitest mock 的 WeakRef 保活（D10-1944 / D10-1945）'
+type: test-change
+# 2026-11-17 be 入账（编排 D10-1932 挪单、D10-1937 / D10-1938 实测、D10-1944 定位、D10-1945 认修法甲）。起因：shard 2/3 的 5 个 property 文件各留住 2.4–3.4 万份 vi.fn——@vitest/spy 首次标记 mock 时建的 WeakRef 在同一 job 内保活，
+#   这些桩立即 resolve，10 万轮在一个 job 里跑完不回事件循环，mock.calls 里的入参与 Buffer 攒到文件结束（单文件容器峰值最高 11.89 GiB），托管 runner 失联（couli-runs/FU-CI-PROPS-SHA2-HANG/facts.md）。
+# 要做：5 个用例块的 fc.asyncProperty 各挂 .afterEach(…让出一次 setImmediate…)；原来都没有 beforeEach / afterEach（已核），若实现时发现有须先调原钩子。断言、生成器、轮数、种子、wire() / searchRows 调用方式、两个 kit 都不动。
+# 逐块确认让出事件循环不改变被测行为（被测代码与 kit 里没有 setTimeout / setImmediate / 假定时器，已初核）；有就停下报编排。union 归属证据类，编排按 #24 逐块核 before / after。
+# 验收：couli-ci 同法复测——2 GB 堆上限下 5 个文件都过、容器峰值回落到 2 GiB 量级（对照 facts.md 表）；flake_fix 证据每块 loops ≥ 20 全绿；CI 该分片连续跑通。tester none：不加新规则测试，验收即上述复测。实现 Opus，评审 Codex money。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/union/taobao-order-archive/property.test.ts'
+  - 'test/spec/union/taobao-refund-archive/property.test.ts'
+  - 'test/spec/union/taobao-seller-shop-ref/property.test.ts'
+  - 'test/spec/union/followups-20261106/dataoke-image-cap.test.ts'
+  - 'test/spec/union/taobao-punish-archive/property.test.ts'
+modify_existing:
+  - file: 'test/spec/union/taobao-order-archive/property.test.ts'
+    test: '[AC-B1-04zzc#5] 任意顺序的自家 / 别家 / 坏行混合页：归档恰好一行，等于去掉别家行后的原序列'
+    reason: flake_fix
+    ruling: D10-1945
+    note: '只加每轮收尾钩子让出事件循环，释放 vitest mock 的 WeakRef 保活；断言与生成器未动；编排 D10-1944 / D10-1945'
+  - file: 'test/spec/union/taobao-refund-archive/property.test.ts'
+    test: '[AC-B1-04zzu#11] 任意顺序的凑狸 / 别家 / 读不出单号的行混合页：维权归档恰好一行，等于去掉别家行后的原序列；只问读得出的单号且去重；listRefunds 的条目与不注入查询时相同'
+    reason: flake_fix
+    ruling: D10-1945
+    note: '只加每轮收尾钩子让出事件循环，释放 vitest mock 的 WeakRef 保活；断言与生成器未动；编排 D10-1944 / D10-1945'
+  - file: 'test/spec/union/taobao-seller-shop-ref/property.test.ts'
+    test: '[AC-B1-04zzs#8] 任意 sellerId 混排：每条照常返回、顺序不变；shop_ref 恰为本行 sellerId 合格时的十进制文本，否则缺省；不告警 invalid_item'
+    reason: flake_fix
+    ruling: D10-1945
+    note: '只加每轮收尾钩子让出事件循环，释放 vitest mock 的 WeakRef 保活；断言与生成器未动；编排 D10-1944 / D10-1945'
+  - file: 'test/spec/union/followups-20261106/dataoke-image-cap.test.ts'
+    test: '[AC-B1-04zzk#7] 属性：白名单外地址排在前面、白名单内去重后不少于 9 个，夹杂重复与不合格项 → image_urls 恰为参照口径的 9 个'
+    reason: flake_fix
+    ruling: D10-1945
+    note: '只加每轮收尾钩子让出事件循环，释放 vitest mock 的 WeakRef 保活；断言与生成器未动；编排 D10-1944 / D10-1945'
+  - file: 'test/spec/union/taobao-punish-archive/property.test.ts'
+    test: '[AC-B1-04zzp#10] 任意顺序的自家 / 别家 / 读不出推广位的行混合页：违规归档恰好一行，等于去掉别家行后的原序列，total_count 不变'
+    reason: flake_fix
+    ruling: D10-1945
+    note: '只加每轮收尾钩子让出事件循环，释放 vitest mock 的 WeakRef 保活；断言与生成器未动；编排 D10-1944 / D10-1945'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null
