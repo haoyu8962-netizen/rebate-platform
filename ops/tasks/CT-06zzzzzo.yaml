@@ -1,0 +1,33 @@
+id: CT-06zzzzzo
+repo: rebate-platform
+title: CT-06zzzzzo（FU-SUPPORT-TOKENS-TYPE-POSITION-GAPS 第二批）：支撑文件放行清单——无方法体的方法签名参数注解按类型判（误放），=> 后的类型字面量、换行后的 as、带默认值的接口体、函数类型判断返回对象的条件类型按实判（误拒），as[ 报错文案（D10-1989）
+type: guard-change
+# 2026-11-18 be 入账（编排 D10-1989：CT-06zzzzzn 范围外那几条并成第二批；误放先修；误拒修时逐条确认不放宽任何已拒的写法；「偏严的生僻写法」不修只留记录；Codex 写测、首轮评审 Codex；写测前先扫既有四组定例；合并后取当时主干最大 approvals id + 1 登记）。
+# 误放（先修）：① 无方法体的方法签名，参数注解里的对象类型（interface I { m(x: { a: number }): void; }、abstract m(x: {…}): void;、declare 函数 / 重载签名）按 P2 放行必填成员——这类 ( 未被认作参数表；应按 P3 拒（couli-runs/CT-06zzzzzn/out-of-scope.md）。
+# 误拒（逐条确认不放宽已拒写法）：② type F = () => { a: number } 里 => 后的 { 被 computeRole 认成块，往里插可选成员被按语句拒（影响规则 1–4，改建树须证明对值位置的箭头函数体 { 判法不变）；③ 同根因：条件类型判断部分是返回对象类型的函数类型（T extends () => { a: 1 } ? X : Y）认不出；
+#   ④ 换行后的 as：基线已有 export const v = raw⏎as({ a: 1 })（TS 里是调用、括号内是值）追加属性应按 P2 放行，现被当类型拒；换行后新插入 as(…) / as < … 照旧拒（钉住）；⑤ 带默认值的 interface I<T = …> { … } 接口体被 headerKeyword 认作块（碰到 = 就停）。
+# 文案：⑥ 变量 as 后的 [ 被 computeRole 判成 array（应为 index），判定方向不变（都拒），只改报错文案。不修只记录：x < y, z = w > (q)、type / async 变量后直接跟 < 比较、.tsx JSX 属性 =、对象字面量里 { async as<T>() {} }。
+# 不许动：CT-06zzzzzi / zzzzzj / zzzzzk / zzzzzn 既有规则与拒绝清单，四组既有定例 test/spec/ci/{support-allowlist, support-nested-type, support-type-position, modify-existing-support}/**（一字不改全绿）；方向冲突列出来报编排，不加特例。
+refs: []
+refs_hash: {}
+deps:
+  - CT-06zzzzzn
+paths:
+  - 'tools/guard/lib/support-tokens.ts'
+  - 'tools/guard/lib/support-tokens.test.ts'
+  - 'tools/guard/lib/test-blocks.ts'
+  - 'tools/guard/lib/test-blocks.test.ts'
+  - 'ops/tasks/CT-06zzzzzo.yaml'
+test_paths:
+  - 'test/spec/ci/support-type-gaps-2/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/support-type-gaps-2/**'
+  - 'test/spec/ci/support-type-position/**'
+  - 'test/spec/ci/support-nested-type/**'
+  - 'test/spec/ci/support-allowlist/**'
+  - 'test/spec/ci/modify-existing-support/**'
+status: todo
+pr: null
