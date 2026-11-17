@@ -24806,7 +24806,10 @@ paths:
         GET /admin/v1/pay-recon-diffs) is 20001 with `data.fields=[recon_diff_id]` (no 404) → a
         difference whose `type` is not `ledger_mismatch`, whose `status` is `adjusted`,
         `written_off` or `closed`, or that names no single member account as above, is 20001
-        with `data.fields=[recon_diff_id]` (no `data.reason`), nothing written. The member's
+        with `data.fields=[recon_diff_id]` (no `data.reason`), nothing written → under the locks
+        (see Effects), sums of the entries that cannot be a balance (a negative frozen sum, or a
+        sum out of the bigint range) are 20001 with `data.fields=[recon_diff_id]` (no
+        `data.reason`), the balance row not written and an audit record written. The member's
         own status (frozen, banned, deleting or deleted) does not matter: the cache follows the
         entries whatever it is.
 
@@ -24814,17 +24817,46 @@ paths:
         row `FOR UPDATE`, then the member's account_balances row `FOR UPDATE` (steps 2 and 3, the
         order every transaction writing this balance takes; no order is involved, so there is
         no `order_key` advisory lock). After the locks are held the server reads the sums of the
-        account's ledger entries per sub-account and sets `available_fen` and `frozen_fen` of the
-        account_balances row to them, in the member's sign (entries are stored debit positive,
-        credit negative: `available_fen` = 0 − Σ entries of sub-account available, `frozen_fen`
-        = 0 − Σ entries of sub-account frozen; BR-FUND-16, the cache check of BR-FUND-19 ①).
-        Amounts are integer fen; nothing is rounded. No voucher and no ledger entry is written
-        and none is changed, so this is not a manual adjustment of BR-FUND-24 (which forbids
-        writing account_balances or entries by hand; here the server derives the values). Writes
+        account's ledger entries per sub-account, in the member's sign (entries are stored debit
+        positive, credit negative: the available sum = 0 − Σ entries of sub-account available,
+        the frozen sum = 0 − Σ entries of sub-account frozen; BR-FUND-16, the cache check of
+        BR-FUND-19 ①). Amounts are integer fen; nothing is rounded.
+        Refused (D10-2032 ②): when the frozen sum is below 0, or the available sum or the
+        frozen sum is outside the range of a PostgreSQL bigint (−2^63 to 2^63 − 1), the
+        account_balances row is not written (`available_fen`, `frozen_fen`, `version` and
+        `negative_since` all stay as they were) and the call is 20001 with
+        `data.fields=[recon_diff_id]` (no `data.reason`). Such sums mean the entries themselves
+        are wrong, and the way out is a manual adjustment (RECON_FIX, below), not a
+        recalculation. The refusal writes an audit record of the same action
+        recon_diff_balance_recalc, with the `recon_diff_id`, the `user_id`, the trimmed reason,
+        the cause of the refusal (a negative frozen sum, or a sum out of range) and the sums as
+        computed; it is committed while the balance row is left untouched. The difference is
+        not closed and no withdrawal hold is released, as on success.
+        Otherwise the server sets `available_fen` and `frozen_fen` of the account_balances row to
+        the two sums. When either value differs from the row read under the lock, the row is
+        written with `version` + 1, compared and set as every posting does (the same
+        compare-and-set on `version`), and `negative_since` follows the rule of the posting path
+        (BR-FUND-12): when the new `available_fen` is below 0 and the old one was below 0 with a
+        `negative_since`, that value is kept; when the new one is below 0 and the old one was 0
+        or more (or had no `negative_since`), it becomes the current accounting day (+08:00, the
+        server's Clock); when the new one is 0 or more, it becomes NULL. When both values are
+        equal before and after, the row is not written: `version` and `negative_since` do not
+        change. Crossing 0 is handled as a posting handles it (D10-2041), with the same check of
+        the old and the new `available_fen`, inside the same transaction: from 0 or more to
+        below 0 the server publishes the platform event account.went_negative once (BR-WDR-05
+        (a) then applies to the member's non-terminal withdrawals as usual); from below 0 to 0
+        or more it calls the balance-recovered handling once; a recalculation that does not
+        cross 0, a refusal, and an unchanged cache do neither, and a rolled-back transaction
+        publishes nothing. No voucher and no ledger entry is written and none is changed, so this is not a
+        manual adjustment of BR-FUND-24 (which forbids writing account_balances or entries by
+        hand; here the server derives the values). Writes
         an audit record (action recon_diff_balance_recalc, with the `recon_diff_id`, the
         `user_id`, the trimmed reason, `changed` and, before and after, `available_fen` and
         `frozen_fen`; no personal data). Values equal before and after are a success too
-        (`changed=false`), and the audit record is written as usual, so a check leaves a trace.
+        (`changed=false`): the balance row is not written, and the audit record is written as
+        usual, so a check leaves a trace. This operation does not trigger a wallet change push
+        to the member (D10-2033): neither a recalculation that changes the cache nor a refusal
+        sends one.
 
         Not done by this operation (D10-2017): it does not close the difference, does not
         change its `status`, `handler_id`, `resolution` or `updated_at`, and releases no
@@ -24837,7 +24869,8 @@ paths:
         with it, and the balance is checked again under BR-FUND-19 ①.
 
         Response: `user_id` (the member), `before` and `after` (`available_fen`, `frozen_fen`, the
-        cache as read under the lock and as written), `changed` (true when either value
+        cache as read under the lock and as it stands after the call, written only when it
+        changed), `changed` (true when either value
         differs) and `recalculated_at` (the server's current time). No phone number or other
         personal data is returned.
 
