@@ -5,6 +5,7 @@ type: impl
 # 2026-11-13 be 入账（编排 D10-1487 ②：入账，排在 C-31 第二步 CT-13e–h 之后）。来源：CT-06zzzzzd（#28）Codex money r1 的 S2——drop() 轮询查询与原 asFactory 都没有客户端超时，半开连接时可能越过 DROP_GRACE_MS 挂住，直到测试清理钩子超时。
 # 只改 packages/db/src/testing/index.ts（必要时 README）；不吞错误、不挂忽略错误的监听；超时后关闭连接并向调用方传播错误。规则测试钉：工厂连接上的查询卡住时 drop() 在有界时间内以错误结束（可用一个不返回的查询或可控的代理模拟），正常路径不变。
 # 本机重活（D10-1477）：写手自检只对改动的文件跑 eslint 与 prettier；全量 typecheck / lint / 任何 vitest 不在本机裸跑，要跑就加 zsh ~/couli-orch/local-heavy.sh；交回后由本线在测试机跑 verify:fast。
+# 2026-11-18 tester 由 codex 改 claude-independent（编排 D10-2003：Codex 额度用尽至 11-23 21:57，规则测试尚未写，改由独立 Claude 经 claude-run.sh 写，写测者与实现者不同会话）。
 refs: []
 refs_hash: {}
 deps: [CT-06zzzzzd]
@@ -14,7 +15,7 @@ paths:
 test_paths:
   - 'test/spec/db/test-database-drop-timeout/**'
 impl: claude
-tester: codex
+tester: claude-independent
 accept:
   - 'pnpm verify'
 status: todo
