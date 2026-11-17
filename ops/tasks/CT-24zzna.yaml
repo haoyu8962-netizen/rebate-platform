@@ -1,0 +1,29 @@
+id: CT-24zzna
+repo: rebate-platform
+title: 契约：recalcBalanceAdminReconDiff 补一条拒绝情形——锁内算出的 frozen 分录合计为负或任一合计超出 bigint 时不写、回 20001 data.fields=[recon_diff_id]、审计记原因（D10-2032 ②）
+type: contract
+# 2026-11-18 be 入账（编排 D10-2032 ②；B2-02x 写测前清单 couli-runs/CT-24zzn/b2-02x-open-items.md 第 2 项）。契约由 Claude 写；只补说明文字，不改 schema、参数、响应形状与错误码集合。
+# 背景：app.account_balances 有 CHECK frozen_fen >= 0；照写负的 frozen 合计会撞约束成 500。这种情形说明分录本身有问题，该走调账（RECON_FIX），不是缓存纠正。
+# 要写进 CT-24zzn 已合并的 recalcBalanceAdminReconDiff 说明：在锁内算出合计后、写回前，frozen 合计 < 0，或 available / frozen 任一合计超出 bigint 范围 → 不写余额行（available_fen、frozen_fen、version、negative_since 都不变）、回 20001 data.fields=[recon_diff_id]、写一条审计记拒绝原因与算出的合计；不关单、不解除 withdraw_holds（同原说明）。只用已有错误码。
+# 另把 B2-02x 已定的另外三项写进说明（D10-2032）：negative_since 沿用入账路径同一规则（重算后 < 0 且重算前也 < 0 有值则沿用，重算后 < 0 而重算前 ≥ 0 取当天会计日，重算后 ≥ 0 置 NULL）；不推送钱包变更；有变化时 version + 1（按 version CAS），前后相同不写余额行、version 不变（审计照写）。
+refs: [BR-FUND-19, BR-FUND-16]
+refs_hash:
+  BR-FUND-19: 34f619112535
+  BR-FUND-16: 077f6d412d5a
+contract_sections: ['11.1']
+deps: [CT-24zzn]
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
+pr: null
