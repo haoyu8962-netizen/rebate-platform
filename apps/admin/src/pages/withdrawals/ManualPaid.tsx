@@ -4,7 +4,8 @@
 // 对话框按列表顺序逐单列出单号、收款方式、应付，并让录入人逐单填写通道流水号、实付时间、实付金额（元）；
 // 三项打开时都为空，页面不预填、不提供把应付或当前时间填进去的任何快捷入口，也不改写输入（D10-2004 /
 // D10-2012）。微信零钱单只标跳过、不出输入、不进请求。本地校验：流水号去首尾空白后 1–64 字、无空白与
-// NUL；实付时间不晚于注入时钟的现在；实付金额经 yuanStrToFen 转整数分后必须等于 net_fen。
+// NUL；实付时间不晚于注入时钟的现在；实付金额先判格式（非负、最多两位小数），合格才经 yuanStrToFen
+// 转整数分，且必须等于 net_fen。
 // 流程：【确认录入】→ 动态码（totp）→ 只发一次 POST batch-manual-paid（items，带 X-Step-Up-Token 与
 // Idempotency-Key）→ 逐单显示已录入 / 跳过原因与汇总，清空已选并重读列表；下一次提交换新键。
 // 结果未知（照 F1-08ce）：没有统一外壳的回答、带外壳的 40901 与 5xx → 「上次提交结果未知」，输入锁定、
@@ -68,6 +69,9 @@ interface Checked {
   readonly item?: Payload['items'][number];
 }
 
+/** 实付金额（元）的格式：非负整数，或带一到两位小数。 */
+const AMOUNT_FORMAT = /^\d+(\.\d{1,2})?$/;
+
 /** One row's local check; `item` only when all three inputs pass. */
 function checkEntry(row: WithdrawalRow, entry: Entry, now: number): Checked {
   const errors: Partial<Record<Field, string>> = {};
@@ -81,10 +85,15 @@ function checkEntry(row: WithdrawalRow, entry: Entry, now: number): Checked {
   let paidFen: bigint | undefined;
   if (entry.amount === '') errors.amount = t.invalid.amountRequired;
   else {
-    try {
-      paidFen = yuanStrToFen(entry.amount);
-    } catch {
-      paidFen = undefined;
+    // 先判格式：只接受非负、最多两位小数的十进制（去首尾空白后判），不认正负号、千分位、全角与科学计数；
+    // 98.009 这类多位小数在这里就拒，不交给 yuanStrToFen 截尾后误判为等于应付。输入值本身不改写。
+    const amount = entry.amount.trim();
+    if (AMOUNT_FORMAT.test(amount)) {
+      try {
+        paidFen = yuanStrToFen(amount);
+      } catch {
+        paidFen = undefined;
+      }
     }
     if (paidFen === undefined || paidFen !== parseFen(row.net_fen))
       errors.amount = t.invalid.amount;
