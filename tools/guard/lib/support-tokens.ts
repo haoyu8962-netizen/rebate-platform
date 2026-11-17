@@ -50,7 +50,13 @@
 //       CT-06zzzzzn, D10-1932: the branches of a conditional type whose check type is a function
 //       type, a type parameter's default `<T = …>`, the type after as / satisfies following a
 //       contextual keyword used as a variable name: conditionalType, typeDefault,
-//       contextualName);
+//       contextualName; CT-06zzzzzo, D10-1989: the parameter list of a member signature without
+//       a body — an interface's, an abstract / overload method's, a type literal's with a return
+//       type — memberParams; the object type after the `=>` of a function type (Tree.arrowType,
+//       also as a conditional type's check), the body of an interface with defaulted type
+//       parameters, headerKeyword; a line-leading `as` / `satisfies` is no type operator, as in
+//       TypeScript — an existing one is a name ending the statement before it, an inserted one
+//       after an operand is refused as ambiguous);
 //    P4 the trailing comma of a list (alone too: a re-wrapped call).
 //    Expressions: identifiers (no keyword), member access `a.b` on an identifier, literals (no
 //    template with `${…}`), object literals of these (properties first, spreads at the end),
@@ -176,8 +182,14 @@ const OPERATOR_WORDS = new Set([
 /** `return`, `throw` too: `(` / `[` after them is no call. */
 const NOT_CALLEE = new Set([...OPERATOR_WORDS, 'return', 'throw']);
 const HEADER_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 'with']);
-/** After these an expression goes on on the next line (no statement ends before them). */
-const CONTINUE_WORDS = new Set(['in', 'of', 'instanceof', 'as', 'satisfies', 'extends']);
+/**
+ * After these an expression goes on on the next line (no statement ends before them).
+ * CT-06zzzzzo: not `as` / `satisfies` — TypeScript reads no type operator after a line break
+ * (typeOperator), so a statement ends before a line-leading `as` as before any name.
+ */
+const CONTINUE_WORDS = new Set(['in', 'of', 'instanceof', 'extends']);
+/** Punctuators of a type inside the angles of type parameters or arguments (headerKeyword). */
+const ANGLE_PUNCT = new Set(['=', '|', '&', ':', '?', '=>', '...', '-']);
 /** After these identifiers a statement does not end at a line break. */
 const NOT_ENDING = new Set([
   ...OPERATOR_WORDS,
@@ -412,15 +424,53 @@ function endsOperand(ts: readonly OutsideToken[], k: number): boolean {
 /**
  * Whether the `as` / `satisfies` at k is the type operator: right after a whole operand (not
  * after `=`, `,`, `(`, an operator or at the start of a statement — there it is a name), and no
- * member name `.as`.
+ * member name `.as`. CT-06zzzzzo: on the line of that operand — TypeScript reads no operator
+ * after a line break (`raw⏎as(x)` ends the statement before `as`, a call of the name as).
  */
 function typeOperator(ts: readonly OutsideToken[], k: number): boolean {
   return (
     (isId(ts[k], 'as') || isId(ts[k], 'satisfies')) &&
+    ts[k]?.nl !== true &&
     !isMember(ts[k - 1]) &&
     endsOperand(ts, k - 1)
   );
 }
+
+/** Whether the `as` / `satisfies` at k is a variable's name: no member name, no type operator. */
+function asName(ts: readonly OutsideToken[], k: number): boolean {
+  return (
+    (isId(ts[k], 'as') || isId(ts[k], 'satisfies')) && !isMember(ts[k - 1]) && !typeOperator(ts, k)
+  );
+}
+
+/**
+ * CT-06zzzzzo: whether the `as` / `satisfies` at k would be the type operator but for the line
+ * break before it (TypeScript ends the statement there, typeOperator).
+ */
+function lineLeadingAs(ts: readonly OutsideToken[], k: number): boolean {
+  return (
+    (isId(ts[k], 'as') || isId(ts[k], 'satisfies')) &&
+    ts[k]?.nl === true &&
+    !isMember(ts[k - 1]) &&
+    endsOperand(ts, k - 1)
+  );
+}
+
+/** Words that may stand before the name of a class or interface member (memberParams). */
+const MEMBER_MODIFIERS = new Set([
+  'public',
+  'private',
+  'protected',
+  'static',
+  'readonly',
+  'abstract',
+  'override',
+  'declare',
+  'async',
+  'get',
+  'set',
+  'accessor',
+]);
 
 /** The bracket tree of a token stream, with the roles of its brackets and statements. */
 class Tree {
@@ -428,6 +478,16 @@ class Tree {
   readonly match: Int32Array;
   /** The innermost open bracket around each token (a close bracket: its open's), or -1. */
   readonly parent: Int32Array;
+  /**
+   * CT-06zzzzzo: whether the `=>` at k is a function type's (its `{` a type literal, no block);
+   * installed by typedTree once the bindings are known (they read the roles of `(` only).
+   */
+  arrowType: ((k: number) => boolean) | null = null;
+  /**
+   * The parameter lists that only memberParams (CT-06zzzzzo) tells — member signatures — and the
+   * first token of each one's member (its modifiers or name; the `(` / `<` / `new` without one).
+   */
+  readonly signatures = new Map<number, number>();
   private readonly roles = new Map<number, Role>();
   private readonly statements = new Map<number, [number, number][]>();
 
@@ -471,6 +531,8 @@ class Tree {
     }
     if (t.text === '[') {
       if (prev === undefined || prev.block === true) return 'array';
+      // CT-06zzzzzo: a variable named as / satisfies (no type operator) is indexed: `as[n]`.
+      if (asName(ts, o - 1)) return 'index';
       if (prev.kind === 'id') return NOT_CALLEE.has(prev.text) ? 'array' : 'index';
       if (prev.kind === 'str' || prev.kind === 'tpl') return 'index';
       return [')', ']', '!', '?.'].includes(prev.text) ? 'index' : 'array';
@@ -489,24 +551,57 @@ class Tree {
     if (prev.block === true) return 'block';
     if (prev.kind === 'id') return OBJECT_AFTER.has(prev.text) ? 'object' : 'block';
     if (prev.kind !== 'punct') return 'object';
-    if (['=>', ')', ']', '}', '>', '>>', ';'].includes(prev.text)) return 'block';
+    if (prev.text === '=>') {
+      // CT-06zzzzzo: `type F = () => { a: number }` returns an object type; an arrow function's
+      // body is a block.
+      if (this.arrowType === null)
+        throw new Error('Tree: the role of `=>` { asked before typedTree');
+      return this.arrowType(o - 1) ? 'object' : 'block';
+    }
+    if ([')', ']', '}', '>', '>>', ';'].includes(prev.text)) return 'block';
     if (prev.text === '{') return this.role(o - 1) === 'block' ? 'block' : 'object';
     return 'object';
   }
 
-  /** `interface` / `class` / `enum` when the `{` at o ends such a declaration's header. */
-  private headerKeyword(o: number): string | null {
+  /**
+   * `interface` / `class` / `enum` when the `{` at o ends such a declaration's header.
+   * CT-06zzzzzo: inside the angles of type parameters or arguments (a `>` / `>>` not yet closed
+   * by its `<`, walking back) the punctuators of a type stand too — a default `<T = …>`, a
+   * union, a function type (`interface I<T = { a: number }> { … }` is an interface body).
+   */
+  private headerKeyword(o: number, strict = false): string | null {
     const ts = this.ts;
+    let angle = 0;
+    /** A `}` passed outside angles: the walk left the header (an earlier statement's body). */
+    let crossed = false;
+    /** A token passed that only the angles admit (CT-06zzzzzo). */
+    let widened = false;
     for (let k = o - 1; k >= 0; k -= 1) {
       const t = ts[k] as OutsideToken;
       if (isClose(t)) {
+        if (t.text === '}' && angle === 0) crossed = true;
         k = this.match[k] as number;
         if (k < 0) return null;
         continue;
       }
-      if (isId(t, 'interface') || isId(t, 'class') || isId(t, 'enum')) return t.text;
+      if (isId(t, 'interface') || isId(t, 'class') || isId(t, 'enum')) {
+        // As before CT-06zzzzzo unless the walk passed an angle-only token or reads strictly
+        // (memberParams): then neither out of the header nor inside unclosed angles.
+        if (!widened && !strict) return t.text;
+        return crossed || angle !== 0 ? null : t.text;
+      }
       if (t.kind === 'id' && t.block !== true) continue;
+      if (t.kind === 'punct' && t.text === '>') angle += 1;
+      else if (t.kind === 'punct' && t.text === '>>') angle += 2;
+      else if (t.kind === 'punct' && t.text === '<') angle = Math.max(0, angle - 1);
       if (t.kind === 'punct' && ['.', '<', '>', ',', '>>', '?.'].includes(t.text)) continue;
+      if (
+        angle > 0 &&
+        ((t.kind === 'punct' && ANGLE_PUNCT.has(t.text)) || t.kind === 'str' || t.kind === 'num')
+      ) {
+        widened = true;
+        continue;
+      }
       return null;
     }
     return null;
@@ -544,8 +639,104 @@ class Tree {
     return false;
   }
 
-  /** Whether `(` at o opens a parameter list (a function, a method, an arrow function, a function type). */
+  /**
+   * Whether `(` at o opens a parameter list (a function, a method, an arrow function, a function
+   * type; CT-06zzzzzo: a member signature without a body, memberParams).
+   */
   private params(o: number): boolean {
+    if (this.functionParams(o)) return true;
+    const start = this.memberParams(o);
+    if (start < 0) return false;
+    this.signatures.set(o, start);
+    return true;
+  }
+
+  /**
+   * CT-06zzzzzo: whether `(` at o opens the parameter list of a member standing directly in the
+   * braces around it, at a member's start (the braces' `{`, `;`, `,`, a `}` there, a test block
+   * or a line break where a statement ends before): `[modifiers] name [?] [<…>] (`, the name an
+   * identifier, a string, a number or a computed `[…]`; without a name `(` / `<…>(` (a call
+   * signature) or `new (` (a construct signature). Where it decides:
+   * - an interface body (headerKeyword): any such member — `m(x: T): R;`, `(x: T): R`, `new (x: T): R`;
+   * - a class body: a named member — an abstract method, an overload, `m?(…)`, `m<T>(…)`;
+   * - any other braces (a type literal, an object, a block): a name that is no keyword
+   *   (NOT_CALLEE, `if` …) or none, no `?`, and a `:` right after the `)`. A call or a
+   *   parenthesized expression at a statement start is never followed by `:` (`case (x):` has
+   *   the keyword before it), a method of an object literal has its body: this is a signature
+   *   with its return type in a type literal (`type T = { m(x: T): void }`).
+   * It reads no role (the roles of `{` may wait for the bindings, which read these). The first
+   * token of the member, or -1.
+   */
+  private memberParams(o: number): number {
+    const ts = this.ts;
+    const p = this.parent[o] as number;
+    const close = this.match[o] as number;
+    if (p < 0 || close < 0 || ts[p]?.text !== '{') return -1;
+    const keyword = this.headerKeyword(p, true);
+    const kind = keyword === 'interface' ? 'interface' : keyword === 'class' ? 'class' : 'other';
+    const punctAt = (k: number, text: string): boolean =>
+      ts[k]?.kind === 'punct' && ts[k]?.text === text;
+    /** A member starts at token f. */
+    const starts = (f: number): boolean => {
+      const before = ts[f - 1];
+      if (f - 1 === p || before?.block === true) return true;
+      if (punctAt(f - 1, ';') || punctAt(f - 1, ',')) return true;
+      if (punctAt(f - 1, '}') && this.parent[f - 1] === p) return true;
+      return asiAt(ts, f);
+    };
+    let k = o - 1;
+    // Type parameters `<…>`: back to their `<`.
+    if (punctAt(k, '>') || punctAt(k, '>>')) {
+      let depth = 0;
+      for (; k > p; k -= 1) {
+        const t = ts[k] as OutsideToken;
+        if (isClose(t)) {
+          k = this.match[k] as number;
+          if (k < 0) return -1;
+          continue;
+        }
+        if (isOpen(t) || punctAt(k, ';')) return -1;
+        if (punctAt(k, '>')) depth += 1;
+        else if (punctAt(k, '>>')) depth += 2;
+        else if (punctAt(k, '<')) {
+          depth -= 1;
+          if (depth <= 0) break;
+        }
+      }
+      if (k <= p || !punctAt(k, '<')) return -1;
+      k -= 1;
+    }
+    const typed = kind !== 'other' || punctAt(close + 1, ':');
+    if (!typed) return -1;
+    // No name: a call signature; `new`: a construct signature (not in a class).
+    if (kind !== 'class' && starts(k + 1)) return k + 1;
+    if (kind !== 'class' && isId(ts[k], 'new') && starts(k)) return k;
+    if (kind !== 'other' && punctAt(k, '?')) k -= 1;
+    let f: number;
+    const t = ts[k];
+    if (punctAt(k, ']')) {
+      f = this.match[k] as number;
+      if (f < 0) return -1;
+    } else if (t !== undefined && (t.kind === 'str' || t.kind === 'num')) {
+      f = k;
+    } else if (isId(t)) {
+      const word = t?.text ?? '';
+      if (kind === 'other' && (NOT_CALLEE.has(word) || HEADER_KEYWORDS.has(word))) return -1;
+      f = k;
+    } else {
+      return -1;
+    }
+    while (
+      !starts(f) &&
+      ((isId(ts[f - 1]) && MEMBER_MODIFIERS.has(ts[f - 1]?.text ?? '')) || punctAt(f - 1, '*'))
+    ) {
+      f -= 1;
+    }
+    return starts(f) ? f : -1;
+  }
+
+  /** Whether `(` at o opens the parameter list of a function, a method with a body, an arrow function or a function type. */
+  private functionParams(o: number): boolean {
     const ts = this.ts;
     const prev = ts[o - 1];
     const pp = ts[o - 2];
@@ -1036,10 +1227,16 @@ export function judgeInsertions(
     problems.push({ at, reason });
   };
   const inserted = (j: number): boolean => (matchB[j] as number) < 0;
-  const bt = new Tree(base);
-  const ht = new Tree(head);
+  const { tree: bt, bindings: baseBindings } = typedTree(base);
+  const { tree: ht, bindings, types } = typedTree(head);
 
   // 1. The bracket tree of the base tokens.
+  /** CT-06zzzzzo: a member signature's `(` keeps its member (`m(x)` → `m; (x)` splits it). */
+  const sameMember = (i: number, j: number): boolean => {
+    const b = bt.signatures.get(i);
+    const h = ht.signatures.get(j);
+    return b === undefined ? h === undefined : h !== undefined && toHead[b] === h;
+  };
   base.forEach((t, i) => {
     if (isClose(t)) return;
     const j = toHead[i] as number;
@@ -1049,17 +1246,39 @@ export function judgeInsertions(
       add(j, `${shown(t)} now stands in other brackets (existing code wrapped or regrouped)`);
     } else if (isOpen(t) && bt.role(i) !== ht.role(j)) {
       add(j, `the bracket ${shown(t)} changed its meaning (${bt.role(i)} → ${ht.role(j)})`);
+    } else if (isOpen(t) && !sameMember(i, j)) {
+      add(j, `the bracket ${shown(t)} changed its meaning (another member's parameter list)`);
+    } else if (typeOperator(base, i) !== typeOperator(head, j)) {
+      // CT-06zzzzzo: a line break added or removed before an existing as / satisfies (or a
+      // token inserted before it) turns the type operator into a name or back.
+      add(
+        j,
+        `${shown(t)} changed its meaning (${typeOperator(base, i) ? 'a type operator' : 'a name'} → ${typeOperator(head, j) ? 'a type operator' : 'a name'})`,
+      );
     }
   });
 
   // 2. and 3. The inserted tokens.
-  const bindings = bindingsOf(ht);
   const fresh = new Set<string>();
   for (const n of bindings.names) {
     const name = (head[n] as OutsideToken).text;
     if (inserted(n) && !baseIds.has(name)) fresh.add(name);
   }
   const sites: (number[] | null)[] = head.map((_, k) => assertionSite(head, k));
+  /**
+   * CT-06zzzzzo: whether a statement ended after token k already before a line-leading `as` was
+   * read as a name: a test block, the `}` of a block or an interface body, or of braces after
+   * `=>` (read as a block until then).
+   */
+  const statementBreak = (k: number): boolean => {
+    const t = head[k];
+    if (t === undefined || t.block === true) return true;
+    if (!(t.kind === 'punct' && t.text === '}')) return false;
+    const m = ht.match[k] as number;
+    if (m < 0) return false;
+    const r = ht.role(m);
+    return r === 'block' || r === 'type-body' || head[m - 1]?.text === '=>';
+  };
   head.forEach((t, j) => {
     if (!inserted(j)) return;
     const next = head[j + 1];
@@ -1073,6 +1292,12 @@ export function judgeInsertions(
       }
       if (isMember(head[j - 1]) && VI_MOCKS.has(t.text)) add(j, `\`vi.${t.text}\` inserted`);
       if (HOOKS.has(t.text)) add(j, `a test hook \`${t.text}\` inserted`);
+      if (lineLeadingAs(head, j) && !statementBreak(j - 1)) {
+        add(
+          j,
+          `\`${t.text}\` inserted at the start of a line after an operand (TypeScript ends the statement before it: no type operator, a name — refused as ambiguous, CT-06zzzzzo)`,
+        );
+      }
       if (bindings.names.has(j) && baseIds.has(t.text)) {
         add(j, `declares \`${t.text}\`, a name the base file already holds`);
       }
@@ -1158,7 +1383,7 @@ export function judgeInsertions(
     }
   });
   // 5. The allow list (CT-06zzzzzj): one problem per line no other rule names.
-  const offList = allowListProblems(ht, inserted, bindings, baseLocals(bt));
+  const offList = allowListProblems(ht, inserted, bindings, baseLocals(bt, baseBindings), types);
 
   // 4. No insertion into an existing statement holding an assertion call (D10-1780 ⑦ A).
   const holds = new Int32Array(head.length + 1);
@@ -1200,6 +1425,22 @@ export function judgeInsertions(
       seen.add(key);
       return true;
     });
+}
+
+/**
+ * A tree with its bindings and type positions installed (CT-06zzzzzo: the role of a `{` after
+ * `=>` reads the type positions, which read the bindings, which read the roles of `(` only).
+ */
+function typedTree(ts: readonly OutsideToken[]): {
+  tree: Tree;
+  bindings: Bindings;
+  types: TypePositions;
+} {
+  const tree = new Tree(ts);
+  const bindings = bindingsOf(tree);
+  const types = typePositions(tree, bindings);
+  tree.arrowType = types.arrowType;
+  return { tree, bindings, types };
 }
 
 /** Whether the comma at k stands in type arguments (`Map<string, number>`). */
@@ -1249,19 +1490,27 @@ function inAngles(tree: Tree, k: number): boolean {
  * and let declarations and its parameters (a catch binding, a lone arrow parameter too), no name
  * an import binds.
  */
-function baseLocals(tree: Tree): Set<string> {
-  const b = bindingsOf(tree);
+function baseLocals(tree: Tree, b: Bindings): Set<string> {
   const by = new Map<number, string>();
   for (const [k, list] of b.keywords) {
     for (const n of list) by.set(n, (tree.ts[k] as OutsideToken).text);
   }
+  // CT-06zzzzzo: a parameter of a member signature (Tree.signatures: no body, nothing in scope)
+  // stays no local, as before those lists were read as parameter lists.
+  const signatureParam = (n: number): boolean => {
+    for (let p = tree.parent[n] as number; p >= 0; p = tree.parent[p] as number) {
+      if (tree.ts[p]?.text === '(' && tree.role(p) === 'params') return tree.signatures.has(p);
+    }
+    return false;
+  };
   const locals = new Set<string>();
   const imports = new Set<string>();
   for (const n of b.names) {
     const name = (tree.ts[n] as OutsideToken).text;
     const keyword = by.get(n);
     if (keyword === 'import') imports.add(name);
-    else if (keyword === undefined || keyword === 'const' || keyword === 'let') locals.add(name);
+    else if (keyword === 'const' || keyword === 'let') locals.add(name);
+    else if (keyword === undefined && !signatureParam(n)) locals.add(name);
   }
   for (const name of imports) locals.delete(name);
   return locals;
@@ -1329,6 +1578,341 @@ const TYPE_GOES_ON = new Set(['|', '&', '<', ',', ':', '.', '=>']);
 /** A type follows these words (an object, tuple or parenthesized type after them is a type). */
 const TYPE_OPERATORS = new Set(['as', 'satisfies', 'extends', 'keyof', 'implements', 'readonly']);
 
+/** The type positions of a tree (typePositions): see allowListProblems and Tree.arrowType. */
+type TypePositions = {
+  /** Whether the object-role braces at o are a type literal (by where they stand). */
+  typeLiteral: (o: number) => boolean;
+  /** Whether the `=>` at k is a function type's (CT-06zzzzzo: Tree.arrowType). */
+  arrowType: (k: number) => boolean;
+};
+
+function typePositions(ht: Tree, bindings: Bindings): TypePositions {
+  const ts = ht.ts;
+  const n = ts.length;
+  const tx = (k: number): string => ts[k]?.text ?? '';
+  const punct = (k: number, text: string): boolean =>
+    ts[k]?.kind === 'punct' && ts[k]?.text === text;
+  const close = (o: number): number => ht.match[o] as number;
+  const keywordOf = new Map<number, number>();
+  for (const [k, list] of bindings.keywords) for (const m of list) keywordOf.set(m, k);
+  const roleAt = (p: number): Role | 'file' => (p < 0 ? 'file' : ht.role(p));
+  /**
+   * Whether the `:` at c annotates a type: after a declared name of const / let / var (not in a
+   * pattern), a parameter, an optional mark `?`, a parameter list (a return type), or a member
+   * of an interface or a type literal (`sure`: see inType).
+   */
+  const annotates = (c: number, sure = false): boolean => {
+    const q = c - 1;
+    if (punct(q, '?')) return true;
+    const keyword = keywordOf.get(q);
+    if (
+      keyword !== undefined &&
+      ['const', 'let', 'var'].includes(tx(keyword)) &&
+      ht.parent[q] === ht.parent[keyword]
+    ) {
+      return true;
+    }
+    if (bindings.names.has(q) && roleAt(ht.parent[q] as number) === 'params') return true;
+    if (punct(q, ')') && close(q) >= 0 && ht.role(close(q)) === 'params') return true;
+    const p = ht.parent[c] as number;
+    return p >= 0 && (ht.role(p) === 'type-body' || (ht.role(p) === 'object' && inType(p, sure)));
+  };
+  const inTypes = new Map<number, boolean>();
+  const sureTypes = new Map<number, boolean>();
+  /**
+   * Whether the object-role braces at o are a type literal (review r1 S2-2: by where they stand,
+   * not by the separators of an insertion). CT-06zzzzzk (D10-1902 / D10-1916): at any depth of a
+   * type — a tuple element, an array, a union / intersection arm, a type argument, a member type.
+   */
+  const typeLiteral = (o: number): boolean => inType(o);
+  /** Whether the `extends` at k is a class's heritage (`class A<T> extends B`: a value follows). */
+  const heritage = (k: number): boolean => {
+    let j = k - 1;
+    if (punct(j, '>') || punct(j, '>>')) j = angleOpen(j) - 1;
+    if (j >= 0 && isId(ts[j]) && !isId(ts[j], 'class')) j -= 1;
+    return j >= 0 && isId(ts[j], 'class');
+  };
+  /**
+   * Whether the open bracket at o (`{`, a tuple / array `[`, a parenthesized type `(`, or the
+   * parameter list of a function type) stands where a type is expected, by what stands before it
+   * at its level: the `=` of a type alias or of a type parameter's default (`<T = …>`,
+   * CT-06zzzzzn: typeDefault), a type annotation `:`, type arguments (`<`, a `,` in
+   * angles, `>`), `as` / `satisfies` / `extends` / `keyof` / `implements` / `readonly`, a branch
+   * of a conditional type, the return type of a function type, a union or intersection of these
+   * (`|`, `&`, `.`, names, `...`); and, CT-06zzzzzk, an element of a tuple or a parenthesized type
+   * standing in a type itself (the enclosing bracket, recursively). An ambiguous place counts as a
+   * type (the stricter list); a value stays a value (`[{ a: 1 }]`, `f([{ a: 1 }])`).
+   * CT-06zzzzzo: the parameter list of a function type may have `new` / `abstract new` before it.
+   * `sure` (for Tree.arrowType, which tells a type literal from a block, so no reading is the
+   * stricter one): only places that hold no value — `<` / `>` / a `,` in angles only right before
+   * a function type's parameter list (an arrow function cannot stand there; `a < (() => {})` can),
+   * `extends` but a class's heritage (heritage).
+   */
+  const inType = (o: number, sure = false): boolean => {
+    const cache = sure ? sureTypes : inTypes;
+    const known = cache.get(o);
+    if (known !== undefined) return known;
+    let from = o - 1;
+    const params = punct(o, '(') && ht.role(o) === 'params';
+    // The type parameters of a function type or generic arrow `<T>(…) =>` are no position: on
+    // before them (`const f = <T>(x: T) => …` is a value).
+    if (params && (punct(from, '>') || punct(from, '>>'))) {
+      const a = angleOpen(from);
+      if (a >= 0) from = a - 1;
+    }
+    if (params && isId(ts[from], 'new')) {
+      from -= 1;
+      if (isId(ts[from], 'abstract')) from -= 1;
+    }
+    const direct = !sure || params;
+    let got = false;
+    for (let k = from; k >= 0; k -= 1) {
+      const t = ts[k] as OutsideToken;
+      if (punct(k, '=')) {
+        if (typeDefault(k)) {
+          got = true;
+          break;
+        }
+        const eq = bindings.eq.get(k);
+        const named = eq?.kind === 'init' ? eq.names[0] : undefined;
+        const keyword = named === undefined ? undefined : keywordOf.get(named);
+        got = keyword !== undefined && tx(keyword) === 'type';
+        break;
+      }
+      if (punct(k, ':')) {
+        // A named tuple element `[name: T]` too.
+        got = annotates(k, sure) || conditionalBranch(k) || element(ht.parent[k] as number, sure);
+        break;
+      }
+      if (punct(k, '?')) {
+        got = conditionalType(k);
+        break;
+      }
+      if (punct(k, '=>')) {
+        got = punct(k - 1, ')') && close(k - 1) >= 0 && returnType(close(k - 1), sure);
+        break;
+      }
+      if (punct(k, '<') || punct(k, '>') || punct(k, '>>')) {
+        got = direct;
+        break;
+      }
+      if (punct(k, ',')) {
+        got = (direct && inAngles(ht, k)) || element(ht.parent[k] as number, sure);
+        break;
+      }
+      if (isId(t) && TYPE_OPERATORS.has(t.text)) {
+        // A name `as` / `satisfies` (no operator, review r2) is an operand like any name.
+        if ((t.text === 'as' || t.text === 'satisfies') && !typeOperator(ts, k)) continue;
+        got = !sure || t.text !== 'extends' || !heritage(k);
+        break;
+      }
+      if (punct(k, '|') || punct(k, '&') || punct(k, '.') || punct(k, '...')) continue;
+      if (isClose(t)) {
+        const m = close(k);
+        if (m < 0) break;
+        k = m;
+        continue;
+      }
+      if (isOpen(t)) {
+        // The bracket around o (the walk skips whole brackets): a tuple or a parenthesized type.
+        got = nested(k, sure);
+        break;
+      }
+      if ((isId(t) && !NOT_NAMES.has(t.text) && !OBJECT_AFTER.has(t.text)) || t.kind === 'str') {
+        continue;
+      }
+      break;
+    }
+    cache.set(o, got);
+    return got;
+  };
+  /**
+   * Whether the open bracket q is a tuple `[` or a parenthesized type `(` in a type (CT-06zzzzzo:
+   * the `[` after a variable named as / satisfies is an index now, as it is read as before).
+   */
+  const nested = (q: number, sure = false): boolean =>
+    q >= 0 &&
+    ((punct(q, '[') && (ht.role(q) === 'array' || asName(ts, q - 1))) ||
+      (punct(q, '(') && ht.role(q) === 'group')) &&
+    inType(q, sure);
+  /** Whether q is a tuple `[` in a type (its items: after a `,`, a name `:`). */
+  const element = (q: number, sure = false): boolean => q >= 0 && punct(q, '[') && nested(q, sure);
+  /** Whether the parameter list `(` at o is a function type's (so its `=>` is a return type). */
+  const returnType = (o: number, sure = false): boolean =>
+    ht.role(o) === 'params' && inType(o, sure);
+  /**
+   * CT-06zzzzzo: whether the `=>` at k is a function type's arrow (Tree.arrowType: the `{` after
+   * it is an object type, not an arrow function's body) — its parameter list a function type's
+   * in the `sure` reading of inType: `type F = () => { … }`, `x: () => { … }`, `T extends () => {
+   * … } ? …`, `as () => { … }`; a value arrow (`const f = () => { … }`, `f(() => { … })`,
+   * `return () => { … }`) and an ambiguous place keep the block.
+   */
+  const arrowType = (k: number): boolean =>
+    punct(k - 1, ')') && close(k - 1) >= 0 && returnType(close(k - 1), true);
+  /** The `<` that the `>` / `>>` at k closes, or -1 (none at its level before a `;`). */
+  const angleOpen = (k: number): number => {
+    let depth = 0;
+    for (let j = k; j >= 0; j -= 1) {
+      if (isClose(ts[j])) {
+        j = close(j);
+        if (j < 0) return -1;
+        continue;
+      }
+      if (isOpen(ts[j]) || punct(j, ';')) return -1;
+      if (punct(j, '>')) depth += 1;
+      else if (punct(j, '>>')) depth += 2;
+      else if (punct(j, '<')) {
+        depth -= 1;
+        if (depth <= 0) return j;
+      }
+    }
+    return -1;
+  };
+  /**
+   * The `>` / `>>` closing the `<` at a (at its bracket level, before a `;`), or -1.
+   */
+  const angleClose = (a: number): number => {
+    let depth = 0;
+    for (let j = a; j < n; j += 1) {
+      if (isOpen(ts[j])) {
+        j = close(j);
+        if (j < 0) return -1;
+        continue;
+      }
+      if (isClose(ts[j]) || punct(j, ';')) return -1;
+      if (punct(j, '<')) depth += 1;
+      else if (punct(j, '>')) depth -= 1;
+      else if (punct(j, '>>')) depth -= 2;
+      if (depth <= 0 && j > a) return j;
+    }
+    return -1;
+  };
+  /**
+   * Whether the `<` at a opens a list of type parameters, no less-than (CT-06zzzzzn): no operand
+   * ends before it (`= <T>() =>`, `(<T>(x: T) => …`, `function <T>`, a call signature); or it
+   * follows the name of a type alias, interface, class or function (`type`, `interface`,
+   * `class`, `function`, `function*` before the name); or the `>` closing it is followed by `(`
+   * (a generic method or signature `m<T = X>(…)`; type arguments of a call hold no `=`).
+   */
+  const typeParameters = (a: number): boolean => {
+    if (!endsOperand(ts, a - 1)) return true;
+    if (
+      isId(ts[a - 1]) &&
+      (['type', 'interface', 'class', 'function'].some((w) => isId(ts[a - 2], w)) ||
+        (punct(a - 2, '*') && isId(ts[a - 3], 'function')))
+    ) {
+      return true;
+    }
+    const c = angleClose(a);
+    return c >= 0 && punct(c + 1, '(');
+  };
+  /**
+   * Whether the `=` at q gives a type parameter its default (`<T = { a: number }>`, CT-06zzzzzn,
+   * D10-1932): a `<` opening type parameters (typeParameters) stands open before it at its
+   * level (`>` / `>>` before it close the `<` of nested type arguments), in the same statement
+   * (no `;`, open bracket, statement break between). A parameter default `(x = { a: 1 })` has
+   * its `(` before it; a type has no `=` at its level, so only a default stands there.
+   */
+  const typeDefault = (q: number): boolean => {
+    let depth = 0;
+    for (let k = q - 1; k >= 0; k -= 1) {
+      if (ht.asiBefore(k + 1)) return false;
+      if (isClose(ts[k])) {
+        const m = close(k);
+        if (m < 0) return false;
+        k = m;
+        continue;
+      }
+      if (isOpen(ts[k]) || punct(k, ';')) return false;
+      if (punct(k, '>')) depth += 1;
+      else if (punct(k, '>>')) depth += 2;
+      else if (punct(k, '<')) {
+        if (depth === 0) return typeParameters(k);
+        depth -= 1;
+      }
+    }
+    return false;
+  };
+  /**
+   * The first token of the function type or parameter list whose arrow is the `=>` at k: its
+   * `(` (with its type parameters `<…>` and a `new` / `abstract new` before them), or -1 when
+   * no parameter list `(…)` stands right before the arrow (`x => …`, `(): R => …`).
+   */
+  const functionStart = (k: number): number => {
+    if (!punct(k - 1, ')')) return -1;
+    let start = close(k - 1);
+    if (start < 0 || ht.role(start) !== 'params') return -1;
+    if (punct(start - 1, '>') || punct(start - 1, '>>')) {
+      const a = angleOpen(start - 1);
+      if (a < 0) return -1;
+      start = a;
+    }
+    if (isId(ts[start - 1], 'new')) start -= 1;
+    if (isId(ts[start - 1], 'abstract') && isId(ts[start], 'new')) start -= 1;
+    return start;
+  };
+  /**
+   * Whether the `?` at q is a conditional type's (`T extends U ? X : Y`): an `extends` before it
+   * at its level, in the same statement (no `;`, `=`, `?`, `:`, open bracket, statement break
+   * between). A conditional expression has none. CT-06zzzzzn (D10-1932): the check type may be a
+   * function type (`T extends (x: A) => B ? X : Y`, `T extends () => () => C ? …`): at a `=>`
+   * the walk skips the function type — its parameter list, its type parameters `<…>` whole
+   * (an `extends` in them is a constraint: `<T extends A>(x: T) => c ? … : …` is a value), a
+   * `new` — and goes on only when `extends` stands right before it (or the `=>` of a function
+   * type it is the return type of); any other `=>` (an arrow function's) ends the walk.
+   */
+  const conditionalType = (q: number): boolean => {
+    for (let k = q - 1; k >= 0; k -= 1) {
+      const t = ts[k] as OutsideToken;
+      if (ht.asiBefore(k + 1)) return false;
+      if (isClose(t)) {
+        const m = close(k);
+        if (m < 0) return false;
+        const r = ht.role(m);
+        if (r === 'block' || r === 'type-body') return false;
+        k = m;
+        continue;
+      }
+      if (isOpen(t)) return false;
+      if (punct(k, '=>')) {
+        const start = functionStart(k);
+        if (start < 0) return false;
+        if (isId(ts[start - 1], 'extends')) return true;
+        if (!punct(start - 1, '=>')) return false;
+        k = start;
+        continue;
+      }
+      if (t.kind === 'punct' && [';', '=', '?', ':'].includes(t.text)) return false;
+      if (isId(t, 'extends')) return true;
+    }
+    return false;
+  };
+  /** Whether the `:` at c ends the true branch of a conditional type (its `?`: conditionalType). */
+  const conditionalBranch = (c: number): boolean => {
+    let depth = 0;
+    for (let k = c - 1; k >= 0; k -= 1) {
+      const t = ts[k] as OutsideToken;
+      if (ht.asiBefore(k + 1)) return false;
+      if (isClose(t)) {
+        const m = close(k);
+        if (m < 0) return false;
+        const r = ht.role(m);
+        if (r === 'block' || r === 'type-body') return false;
+        k = m;
+        continue;
+      }
+      if (isOpen(t) || punct(k, ';') || punct(k, '=')) return false;
+      if (punct(k, ':')) depth += 1;
+      else if (punct(k, '?')) {
+        if (depth === 0) return conditionalType(k);
+        depth -= 1;
+      }
+    }
+    return false;
+  };
+  return { typeLiteral, arrowType };
+}
+
 type Off = { at: number; reason: string };
 
 /**
@@ -1342,7 +1926,9 @@ function allowListProblems(
   inserted: (j: number) => boolean,
   bindings: Bindings,
   locals: ReadonlySet<string>,
+  types: TypePositions,
 ): Off[] {
+  const { typeLiteral } = types;
   const ts = ht.ts;
   const n = ts.length;
   const tx = (k: number): string => ts[k]?.text ?? '';
@@ -1747,286 +2333,6 @@ function allowListProblems(
     const j = typeSpan(k + 1, e + 1, false);
     if (j < 0) return -1;
     return j === e + 1 ? e + 1 : offList(j);
-  };
-  /**
-   * Whether the `:` at c annotates a type: after a declared name of const / let / var (not in a
-   * pattern), a parameter, an optional mark `?`, a parameter list (a return type), or a member
-   * of an interface or a type literal.
-   */
-  const annotates = (c: number): boolean => {
-    const q = c - 1;
-    if (punct(q, '?')) return true;
-    const keyword = keywordOf.get(q);
-    if (
-      keyword !== undefined &&
-      ['const', 'let', 'var'].includes(tx(keyword)) &&
-      ht.parent[q] === ht.parent[keyword]
-    ) {
-      return true;
-    }
-    if (bindings.names.has(q) && roleAt(ht.parent[q] as number) === 'params') return true;
-    if (punct(q, ')') && close(q) >= 0 && ht.role(close(q)) === 'params') return true;
-    const p = ht.parent[c] as number;
-    return p >= 0 && (ht.role(p) === 'type-body' || (ht.role(p) === 'object' && typeLiteral(p)));
-  };
-  const inTypes = new Map<number, boolean>();
-  /**
-   * Whether the object-role braces at o are a type literal (review r1 S2-2: by where they stand,
-   * not by the separators of an insertion). CT-06zzzzzk (D10-1902 / D10-1916): at any depth of a
-   * type — a tuple element, an array, a union / intersection arm, a type argument, a member type.
-   */
-  const typeLiteral = (o: number): boolean => inType(o);
-  /**
-   * Whether the open bracket at o (`{`, a tuple / array `[`, a parenthesized type `(`, or the
-   * parameter list of a function type) stands where a type is expected, by what stands before it
-   * at its level: the `=` of a type alias or of a type parameter's default (`<T = …>`,
-   * CT-06zzzzzn: typeDefault), a type annotation `:`, type arguments (`<`, a `,` in
-   * angles, `>`), `as` / `satisfies` / `extends` / `keyof` / `implements` / `readonly`, a branch
-   * of a conditional type, the return type of a function type, a union or intersection of these
-   * (`|`, `&`, `.`, names, `...`); and, CT-06zzzzzk, an element of a tuple or a parenthesized type
-   * standing in a type itself (the enclosing bracket, recursively). An ambiguous place counts as a
-   * type (the stricter list); a value stays a value (`[{ a: 1 }]`, `f([{ a: 1 }])`).
-   */
-  const inType = (o: number): boolean => {
-    const known = inTypes.get(o);
-    if (known !== undefined) return known;
-    let from = o - 1;
-    // The type parameters of a function type or generic arrow `<T>(…) =>` are no position: on
-    // before them (`const f = <T>(x: T) => …` is a value).
-    if (punct(o, '(') && ht.role(o) === 'params' && (punct(from, '>') || punct(from, '>>'))) {
-      const a = angleOpen(from);
-      if (a >= 0) from = a - 1;
-    }
-    let got = false;
-    for (let k = from; k >= 0; k -= 1) {
-      const t = ts[k] as OutsideToken;
-      if (punct(k, '=')) {
-        if (typeDefault(k)) {
-          got = true;
-          break;
-        }
-        const eq = bindings.eq.get(k);
-        const named = eq?.kind === 'init' ? eq.names[0] : undefined;
-        const keyword = named === undefined ? undefined : keywordOf.get(named);
-        got = keyword !== undefined && tx(keyword) === 'type';
-        break;
-      }
-      if (punct(k, ':')) {
-        // A named tuple element `[name: T]` too.
-        got = annotates(k) || conditionalBranch(k) || element(ht.parent[k] as number);
-        break;
-      }
-      if (punct(k, '?')) {
-        got = conditionalType(k);
-        break;
-      }
-      if (punct(k, '=>')) {
-        got = punct(k - 1, ')') && close(k - 1) >= 0 && returnType(close(k - 1));
-        break;
-      }
-      if (punct(k, '<') || punct(k, '>') || punct(k, '>>')) {
-        got = true;
-        break;
-      }
-      if (punct(k, ',')) {
-        got = inAngles(ht, k) || element(ht.parent[k] as number);
-        break;
-      }
-      if (isId(t) && TYPE_OPERATORS.has(t.text)) {
-        // A name `as` / `satisfies` (no operator, review r2) is an operand like any name.
-        if ((t.text === 'as' || t.text === 'satisfies') && !typeOperator(ts, k)) continue;
-        got = true;
-        break;
-      }
-      if (punct(k, '|') || punct(k, '&') || punct(k, '.') || punct(k, '...')) continue;
-      if (isClose(t)) {
-        const m = close(k);
-        if (m < 0) break;
-        k = m;
-        continue;
-      }
-      if (isOpen(t)) {
-        // The bracket around o (the walk skips whole brackets): a tuple or a parenthesized type.
-        got = nested(k);
-        break;
-      }
-      if ((isId(t) && !NOT_NAMES.has(t.text) && !OBJECT_AFTER.has(t.text)) || t.kind === 'str') {
-        continue;
-      }
-      break;
-    }
-    inTypes.set(o, got);
-    return got;
-  };
-  /** Whether the open bracket q is a tuple `[` or a parenthesized type `(` in a type. */
-  const nested = (q: number): boolean =>
-    q >= 0 &&
-    ((punct(q, '[') && ht.role(q) === 'array') || (punct(q, '(') && ht.role(q) === 'group')) &&
-    inType(q);
-  /** Whether q is a tuple `[` in a type (its items: after a `,`, a name `:`). */
-  const element = (q: number): boolean => q >= 0 && punct(q, '[') && nested(q);
-  /** Whether the parameter list `(` at o is a function type's (so its `=>` is a return type). */
-  const returnType = (o: number): boolean => ht.role(o) === 'params' && inType(o);
-  /** The `<` that the `>` / `>>` at k closes, or -1 (none at its level before a `;`). */
-  const angleOpen = (k: number): number => {
-    let depth = 0;
-    for (let j = k; j >= 0; j -= 1) {
-      if (isClose(ts[j])) {
-        j = close(j);
-        if (j < 0) return -1;
-        continue;
-      }
-      if (isOpen(ts[j]) || punct(j, ';')) return -1;
-      if (punct(j, '>')) depth += 1;
-      else if (punct(j, '>>')) depth += 2;
-      else if (punct(j, '<')) {
-        depth -= 1;
-        if (depth <= 0) return j;
-      }
-    }
-    return -1;
-  };
-  /**
-   * The `>` / `>>` closing the `<` at a (at its bracket level, before a `;`), or -1.
-   */
-  const angleClose = (a: number): number => {
-    let depth = 0;
-    for (let j = a; j < n; j += 1) {
-      if (isOpen(ts[j])) {
-        j = close(j);
-        if (j < 0) return -1;
-        continue;
-      }
-      if (isClose(ts[j]) || punct(j, ';')) return -1;
-      if (punct(j, '<')) depth += 1;
-      else if (punct(j, '>')) depth -= 1;
-      else if (punct(j, '>>')) depth -= 2;
-      if (depth <= 0 && j > a) return j;
-    }
-    return -1;
-  };
-  /**
-   * Whether the `<` at a opens a list of type parameters, no less-than (CT-06zzzzzn): no operand
-   * ends before it (`= <T>() =>`, `(<T>(x: T) => …`, `function <T>`, a call signature); or it
-   * follows the name of a type alias, interface, class or function (`type`, `interface`,
-   * `class`, `function`, `function*` before the name); or the `>` closing it is followed by `(`
-   * (a generic method or signature `m<T = X>(…)`; type arguments of a call hold no `=`).
-   */
-  const typeParameters = (a: number): boolean => {
-    if (!endsOperand(ts, a - 1)) return true;
-    if (
-      isId(ts[a - 1]) &&
-      (['type', 'interface', 'class', 'function'].some((w) => isId(ts[a - 2], w)) ||
-        (punct(a - 2, '*') && isId(ts[a - 3], 'function')))
-    ) {
-      return true;
-    }
-    const c = angleClose(a);
-    return c >= 0 && punct(c + 1, '(');
-  };
-  /**
-   * Whether the `=` at q gives a type parameter its default (`<T = { a: number }>`, CT-06zzzzzn,
-   * D10-1932): a `<` opening type parameters (typeParameters) stands open before it at its
-   * level (`>` / `>>` before it close the `<` of nested type arguments), in the same statement
-   * (no `;`, open bracket, statement break between). A parameter default `(x = { a: 1 })` has
-   * its `(` before it; a type has no `=` at its level, so only a default stands there.
-   */
-  const typeDefault = (q: number): boolean => {
-    let depth = 0;
-    for (let k = q - 1; k >= 0; k -= 1) {
-      if (ht.asiBefore(k + 1)) return false;
-      if (isClose(ts[k])) {
-        const m = close(k);
-        if (m < 0) return false;
-        k = m;
-        continue;
-      }
-      if (isOpen(ts[k]) || punct(k, ';')) return false;
-      if (punct(k, '>')) depth += 1;
-      else if (punct(k, '>>')) depth += 2;
-      else if (punct(k, '<')) {
-        if (depth === 0) return typeParameters(k);
-        depth -= 1;
-      }
-    }
-    return false;
-  };
-  /**
-   * The first token of the function type or parameter list whose arrow is the `=>` at k: its
-   * `(` (with its type parameters `<…>` and a `new` / `abstract new` before them), or -1 when
-   * no parameter list `(…)` stands right before the arrow (`x => …`, `(): R => …`).
-   */
-  const functionStart = (k: number): number => {
-    if (!punct(k - 1, ')')) return -1;
-    let start = close(k - 1);
-    if (start < 0 || ht.role(start) !== 'params') return -1;
-    if (punct(start - 1, '>') || punct(start - 1, '>>')) {
-      const a = angleOpen(start - 1);
-      if (a < 0) return -1;
-      start = a;
-    }
-    if (isId(ts[start - 1], 'new')) start -= 1;
-    if (isId(ts[start - 1], 'abstract') && isId(ts[start], 'new')) start -= 1;
-    return start;
-  };
-  /**
-   * Whether the `?` at q is a conditional type's (`T extends U ? X : Y`): an `extends` before it
-   * at its level, in the same statement (no `;`, `=`, `?`, `:`, open bracket, statement break
-   * between). A conditional expression has none. CT-06zzzzzn (D10-1932): the check type may be a
-   * function type (`T extends (x: A) => B ? X : Y`, `T extends () => () => C ? …`): at a `=>`
-   * the walk skips the function type — its parameter list, its type parameters `<…>` whole
-   * (an `extends` in them is a constraint: `<T extends A>(x: T) => c ? … : …` is a value), a
-   * `new` — and goes on only when `extends` stands right before it (or the `=>` of a function
-   * type it is the return type of); any other `=>` (an arrow function's) ends the walk.
-   */
-  const conditionalType = (q: number): boolean => {
-    for (let k = q - 1; k >= 0; k -= 1) {
-      const t = ts[k] as OutsideToken;
-      if (ht.asiBefore(k + 1)) return false;
-      if (isClose(t)) {
-        const m = close(k);
-        if (m < 0) return false;
-        const r = ht.role(m);
-        if (r === 'block' || r === 'type-body') return false;
-        k = m;
-        continue;
-      }
-      if (isOpen(t)) return false;
-      if (punct(k, '=>')) {
-        const start = functionStart(k);
-        if (start < 0) return false;
-        if (isId(ts[start - 1], 'extends')) return true;
-        if (!punct(start - 1, '=>')) return false;
-        k = start;
-        continue;
-      }
-      if (t.kind === 'punct' && [';', '=', '?', ':'].includes(t.text)) return false;
-      if (isId(t, 'extends')) return true;
-    }
-    return false;
-  };
-  /** Whether the `:` at c ends the true branch of a conditional type (its `?`: conditionalType). */
-  const conditionalBranch = (c: number): boolean => {
-    let depth = 0;
-    for (let k = c - 1; k >= 0; k -= 1) {
-      const t = ts[k] as OutsideToken;
-      if (ht.asiBefore(k + 1)) return false;
-      if (isClose(t)) {
-        const m = close(k);
-        if (m < 0) return false;
-        const r = ht.role(m);
-        if (r === 'block' || r === 'type-body') return false;
-        k = m;
-        continue;
-      }
-      if (isOpen(t) || punct(k, ';') || punct(k, '=')) return false;
-      if (punct(k, ':')) depth += 1;
-      else if (punct(k, '?')) {
-        if (depth === 0) return conditionalType(k);
-        depth -= 1;
-      }
-    }
-    return false;
   };
   /** Whether the specifier braces p are an import's (not an export's). */
   const importBraces = (p: number): boolean => {
