@@ -44,6 +44,25 @@ modify_existing:
     br: [BR-PRICE-11]
     ruling: D10-1970
     note: 'BR 取值未变；变的是 04 §3.2 的 pool_items 表形状（加 tags，负责人 2026-11-15，F-ADM-10），该用例钉的列集合随之多一列（BR-PRICE-11）；编排 D10-1968 / D10-1970；commission 文件的改动负责人 2026-11-17 本人确认，D10-1973（只许这一行，超出另报）。只在对象字面量末尾追加 tags: [''_text'', false, "''{}''::text[]"] 一行，块体、其余列的期望与「没有多出别的列」的判法不动。'
+red_exempt:
+  - file: 'test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts'
+    test: '[BR-PRICE-11] pool_items.commission_rate_bp 是 integer，可空，没有默认值'
+    reason: '冻结用例、块体与主干逐字相同、不读顶部 SHAPE（不依赖 pool_items 的列集合），在新旧实现下都成立；同文件因顶部 SHAPE 末尾追加 tags 一行（文件级支撑条目，D10-1970 / D10-1973）被整份重判（red-check：code outside the tests changed），照工具登记（D10-1984，同 B1-05zd 先例）'
+  - file: 'test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts'
+    test: '[BR-PRICE-11] commission_rate_bp 为负被拒：插入和更新都违反 CHECK，不留下也不改动行'
+    reason: '冻结用例、块体与主干逐字相同、不读顶部 SHAPE（不依赖 pool_items 的列集合），在新旧实现下都成立；同文件因顶部 SHAPE 末尾追加 tags 一行（文件级支撑条目，D10-1970 / D10-1973）被整份重判（red-check：code outside the tests changed），照工具登记（D10-1984，同 B1-05zd 先例）'
+  - file: 'test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts'
+    test: '[BR-PRICE-11] commission_rate_bp 取 0 和正值都能写入，原样读回，没有上限'
+    reason: '冻结用例、块体与主干逐字相同、不读顶部 SHAPE（不依赖 pool_items 的列集合），在新旧实现下都成立；同文件因顶部 SHAPE 末尾追加 tags 一行（文件级支撑条目，D10-1970 / D10-1973）被整份重判（red-check：code outside the tests changed），照工具登记（D10-1984，同 B1-05zd 先例）'
+  - file: 'test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts'
+    test: '[BR-PRICE-11] 不写 commission_rate_bp 的插入成功且该列为 NULL，显式写 NULL 同样成功'
+    reason: '冻结用例、块体与主干逐字相同、不读顶部 SHAPE（不依赖 pool_items 的列集合），在新旧实现下都成立；同文件因顶部 SHAPE 末尾追加 tags 一行（文件级支撑条目，D10-1970 / D10-1973）被整份重判（red-check：code outside the tests changed），照工具登记（D10-1984，同 B1-05zd 先例）'
+  - file: 'test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts'
+    test: '[BR-PRICE-11] 空值行下一次刷新能补上 commission_rate_bp：0 和正值都能从 NULL 更新进去'
+    reason: '冻结用例、块体与主干逐字相同、不读顶部 SHAPE（不依赖 pool_items 的列集合），在新旧实现下都成立；同文件因顶部 SHAPE 末尾追加 tags 一行（文件级支撑条目，D10-1970 / D10-1973）被整份重判（red-check：code outside the tests changed），照工具登记（D10-1984，同 B1-05zd 先例）'
+  - file: 'test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts'
+    test: '[BR-PRICE-11] 主键仍是 (app_id, pool_id, product_key)：只有佣金率不同的同键插入失败，原行不变'
+    reason: '冻结用例、块体与主干逐字相同、不读顶部 SHAPE（不依赖 pool_items 的列集合），在新旧实现下都成立；同文件因顶部 SHAPE 末尾追加 tags 一行（文件级支撑条目，D10-1970 / D10-1973）被整份重判（red-check：code outside the tests changed），照工具登记（D10-1984，同 B1-05zd 先例）'
 impl: claude
 tester: codex
 accept:
