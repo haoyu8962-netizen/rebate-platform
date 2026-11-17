@@ -1,0 +1,106 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-ledger-export/entries.test.ts > [AC-F1-08fb-ENTRY#1] fund.view 无 export 始终隐藏；两点俱全时只在查询 UID 后显示标题行导出按钮",
+    "test/spec/frontend/admin-ledger-export/entries.test.ts > [AC-F1-08fb-ENTRY#2] user.lookup 无 export 隐藏；user.lookup 加 export 直达可导出，不要求 fund.view",
+    "test/spec/frontend/admin-ledger-export/entries.test.ts > [AC-F1-08fb-ENTRY#3] 仅 export 没有任一读取点不能导出；超管查过 UID 后可导出且仍不请求明文",
+    "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#1] 10403 明确提示没有导出权限，不重发；按钮恢复后手动导出使用新筛选",
+    "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#2] 20001 两个会计日字段提示起不能晚于止，不重发，允许按新条件手动导出",
+    "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#3] 20001 fields 只含 accounting_date_from 仍显示会计日提示并恢复按钮",
+    "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#4] 20001 fields 只含 accounting_date_to 仍显示会计日提示并恢复按钮",
+    "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#5] 20001 非会计日字段是其他确定失败，不误报日期或创建成功，不自动重发",
+    "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#6] HTTP 500 带统一失败外壳是确定失败，不冒充网络结果未知，不自动重发",
+    "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#7] 网络抛错提示可能已创建、先核对导出记录，不自动重发；手动再点发新筛选",
+    "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#8] HTTP 502 无法解析的响应提示结果未知并核对导出记录，不自动重发",
+    "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#9] HTTP 202 JSON 但没有统一外壳也提示结果未知，不推断创建成功、不重发",
+    "test/spec/frontend/admin-ledger-export/records.test.ts > [AC-F1-08fb-RECORDS#1] 标题行导出记录入口照旧，资源列 ledger 显示余额流水，users 与 audit_logs 名称不变",
+    "test/spec/frontend/admin-ledger-export/requests.test.ts > [AC-F1-08fb-REQUEST#1] 六个已生效筛选整包导出，未查询的 UID 与筛选草稿不进入请求；202 提示任务编号且不跳转、不重读流水",
+    "test/spec/frontend/admin-ledger-export/requests.test.ts > [AC-F1-08fb-REQUEST#2] 第二页导出不带分页；重置后仅 user_id，换用户后使用新 UID，空筛选不发空串",
+    "test/spec/frontend/admin-ledger-export/requests.test.ts > [AC-F1-08fb-REQUEST#3] 同一轮连点与在途再点只发一次 POST；202 完成后按钮恢复可用，流水和摘要不重读"
+  ],
+  "risk_note": "F1-08fb (D10-1740 / 1741; contract CT-24zzm #236). Ledger page: 导出当前筛选 shown only with export plus fund.view or user.lookup and a queried user; one click sends exactly one POST /admin/v1/exports {resource: ledger, filters = applied user_id and applied non-empty filters}, no paging / unmasked / reason, no Idempotency-Key, no step-up; in-flight guard. 202 with task id is success; 10403, 20001 date range and other definite failures each have a notice; no enveloped answer is treated as unknown (check 导出记录 first), never resent. Exports page resource name table gains ledger 余额流水. Read-only parts unchanged. Rule tests by Codex (ledger tester codex), spec-test r1 by an independent Claude, pass (an earlier call was killed by an external SIGTERM with no output). Implementation by Opus 5.5 (another context). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh (CODEX_REVIEW_EFFORT=medium, D10-1872), r1 pass, 0 findings (couli-runs/F1-08fb/review-codex-money-r1.json)"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "tests by Codex (tools/agent/codex-run.sh impl --phase test, ledger tester codex, D10-1872); spec-test r1 by an independent Claude context (claude-run.sh, Codex does not review its own tests), pass; a first call was killed by an external SIGTERM with no output and was rerun",
+    "model": "claude-opus-5-5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08fb",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "33a57c59e72a92800f61798bd7c9419ab75ea2ef",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "33a57c59e72a92800f61798bd7c9419ab75ea2ef",
+      "tree": "b6f48a4f67a1c1d5f2090e20abee8d7d8b97c770",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-17T13:00:13Z",
+      "finished_at": "2026-11-17T13:00:24Z",
+      "red_tests": [
+        "test/spec/frontend/admin-ledger-export/entries.test.ts > [AC-F1-08fb-ENTRY#1] fund.view 无 export 始终隐藏；两点俱全时只在查询 UID 后显示标题行导出按钮",
+        "test/spec/frontend/admin-ledger-export/entries.test.ts > [AC-F1-08fb-ENTRY#2] user.lookup 无 export 隐藏；user.lookup 加 export 直达可导出，不要求 fund.view",
+        "test/spec/frontend/admin-ledger-export/entries.test.ts > [AC-F1-08fb-ENTRY#3] 仅 export 没有任一读取点不能导出；超管查过 UID 后可导出且仍不请求明文",
+        "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#1] 10403 明确提示没有导出权限，不重发；按钮恢复后手动导出使用新筛选",
+        "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#2] 20001 两个会计日字段提示起不能晚于止，不重发，允许按新条件手动导出",
+        "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#3] 20001 fields 只含 accounting_date_from 仍显示会计日提示并恢复按钮",
+        "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#4] 20001 fields 只含 accounting_date_to 仍显示会计日提示并恢复按钮",
+        "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#5] 20001 非会计日字段是其他确定失败，不误报日期或创建成功，不自动重发",
+        "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#6] HTTP 500 带统一失败外壳是确定失败，不冒充网络结果未知，不自动重发",
+        "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#7] 网络抛错提示可能已创建、先核对导出记录，不自动重发；手动再点发新筛选",
+        "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#8] HTTP 502 无法解析的响应提示结果未知并核对导出记录，不自动重发",
+        "test/spec/frontend/admin-ledger-export/errors.test.ts > [AC-F1-08fb-ERROR#9] HTTP 202 JSON 但没有统一外壳也提示结果未知，不推断创建成功、不重发",
+        "test/spec/frontend/admin-ledger-export/records.test.ts > [AC-F1-08fb-RECORDS#1] 标题行导出记录入口照旧，资源列 ledger 显示余额流水，users 与 audit_logs 名称不变",
+        "test/spec/frontend/admin-ledger-export/requests.test.ts > [AC-F1-08fb-REQUEST#1] 六个已生效筛选整包导出，未查询的 UID 与筛选草稿不进入请求；202 提示任务编号且不跳转、不重读流水",
+        "test/spec/frontend/admin-ledger-export/requests.test.ts > [AC-F1-08fb-REQUEST#2] 第二页导出不带分页；重置后仅 user_id，换用户后使用新 UID，空筛选不发空串",
+        "test/spec/frontend/admin-ledger-export/requests.test.ts > [AC-F1-08fb-REQUEST#3] 同一轮连点与在途再点只发一次 POST；202 完成后按钮恢复可用，流水和摘要不重读"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-ledger-export/entries.test.ts",
+        "test/spec/frontend/admin-ledger-export/errors.test.ts",
+        "test/spec/frontend/admin-ledger-export/records.test.ts",
+        "test/spec/frontend/admin-ledger-export/requests.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "7d2aa2a9a16f2f5118d37f5c9dbd3ac48a9be4ca454b2ba37ff3de18951aa55a"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "33d60610994e9818b2a24622ad50d8f0302273b5",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
