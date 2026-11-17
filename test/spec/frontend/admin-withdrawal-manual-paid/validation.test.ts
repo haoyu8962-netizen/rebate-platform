@@ -126,7 +126,19 @@ it(
     await fillRows(modal, rows);
     const row = rowOf(modal, rows[1]!.out_biz_no);
     const input = field(row, '实付金额（元）');
+    // D10-2025: inputs whose value equals the amount due but whose text is not a plain
+    // non-negative decimal with at most two places must be refused, not truncated or normalised.
+    const due = formatFen(parseFen(rows[1]!.net_fen));
+    const fullWidth = due.replace(/[0-9]/g, (digit) => String.fromCharCode(0xff10 + Number(digit)));
     for (const value of [
+      `${due}0`,
+      `${due}9`,
+      `${parseFen(rows[1]!.net_fen)}e-2`,
+      ` ${due}`,
+      `${due} `,
+      fullWidth,
+      due.replace('.', ','),
+      `0,${due.padStart(6, '0')}`,
       '98.00',
       '98.02',
       '0.00',
