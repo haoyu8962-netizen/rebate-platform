@@ -28,7 +28,7 @@ import {
 } from './helpers.ts';
 
 it(
-  '[AC-F1-08ai-ACCESS#1] 只读和其他资金权限没有勾选或批量通过；审核权限与超管可勾选，未勾选不出现批量栏',
+  '[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏',
   { timeout: 90_000 },
   async () => {
     for (const permissions of [
@@ -44,9 +44,27 @@ it(
         ],
       },
     ]) {
-      const server = serverFor();
+      const server = permissions.permissions.includes('payout.manual_entry')
+        ? serverFor(samples())
+        : serverFor();
       await mount(server, permissions);
-      expect(within(main()).queryAllByRole('checkbox')).toEqual([]);
+      if (permissions.permissions.includes('payout.manual_entry')) {
+        expect(
+          server.state
+            .filter((item) =>
+              within(rowOf(main(), item.out_biz_no))
+                .queryAllByRole('checkbox')
+                .some((node) => !disabled(node)),
+            )
+            .map((item) => item.withdrawal_id),
+        ).toEqual(
+          server.state
+            .filter((item) => item.status === 'APPROVED')
+            .map((item) => item.withdrawal_id),
+        );
+      } else {
+        expect(within(main()).queryAllByRole('checkbox')).toEqual([]);
+      }
       expect(buttons(main(), '批量通过')).toEqual([]);
       expect(server.writes()).toEqual([]);
       cleanup();
