@@ -627,3 +627,9 @@ approvals:
     granted: true
     date: '2026-11-17'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（试次属门禁流程小改动），D10-1984：CT-07e 正式先红试跑（couli-runs/CT-07e/red/2，spec 提交 9e5825b0d）报 11 个问题——commission-column.int.test.ts 其余 6 条按工具登 red_exempt（台账 #258）；另 5 条在本单第 3 轮新写的 home-config-save.test.ts（未进主干、不是冻结用例），基线上 save() 先抛 PageFieldsError、没走到断言，red-check 判「不认识的红」。第 3 轮的先红只在本机跑过、没过测试机门禁判定，这次在测试机上才暴露。写测试已用 3 次加 approvals 100 一次、spec-test 已用 2 次加 approvals 93 与 100 各一次，这一轮各再超 1 次；独立 Claude 做完到 10 / 10。不改金额计算与订单归属规则、不放宽密钥扫描、不删不削弱资金测试、不涉生产；起因是先红门禁要求红因为断言，不是放宽判法。编排按 approvals 16 / 24 登记。'
+  - id: 102
+    row: 4
+    title: 'CT-06zzzzzn：支撑文件放行清单的类型位置判定补三处——判断部分本身是函数类型的条件类型分支、类型参数默认值、上下文关键字作变量名后的 as / satisfies；三处里的对象类型字面量追加必填成员由放行改为拒（只收紧）'
+    granted: true
+    date: '2026-11-18'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/guard/lib）：FU-SUPPORT-TOKENS-TYPE-POSITION-GAPS 误放三条，口径 D10-1924 / D10-1929 / D10-1932。只收紧：三处原被当成值、按 P2 放行必填成员的类型位置改按 P3 判，值位置的对象字面量照旧 P2；Tree.asiBefore 抽成 asiAt / ended 为搬移、原行为不变，没有删规则。规则测试 test/spec/ci/support-type-position/**（13 条，Codex 写，独立 Claude spec-test r1 fail → r2 pass，先红 13 条全为断言失败；Codex 写的 positions.test.ts 经 prettier 机械重排并进未合并的规则测试提交、不计写测次数）；实现由 Opus 子代理做；Codex money r1 pass（1 S2 已修）、r2 增量 pass；测试机四组规则目录 14 文件 / 109 条与 verify:fast 绿；范围外新发现误放一条与原有误拒 / 同根因 / 文案并入 FU 第二批；编排按 #24 核过实际差异（D10-1989），#263 合并。'
