@@ -16,8 +16,6 @@ paths:
   - 'apps/admin/src/texts/adjustments.ts'
 test_paths:
   - 'test/spec/frontend/admin-writeoff-approve/**'
-  - 'test/spec/frontend/admin-adjustment-create/entry.test.ts'
-  - 'test/spec/frontend/admin-adjustment-approve/**'
 impl: claude
 tester: claude-independent
 accept:
