@@ -46,7 +46,11 @@
 //       (`x?: T`, with their `;` / `,`) at any place in an interface or a type literal (known
 //       by where its braces stand: a type alias, an annotation, type arguments — review r1; at
 //       any depth of a type: a tuple element, an array, a union / intersection arm, a type
-//       argument, a member type, a parenthesized, conditional or function type — CT-06zzzzzk);
+//       argument, a member type, a parenthesized, conditional or function type — CT-06zzzzzk;
+//       CT-06zzzzzn, D10-1932: the branches of a conditional type whose check type is a function
+//       type, a type parameter's default `<T = …>`, the type after as / satisfies following a
+//       contextual keyword used as a variable name: conditionalType, typeDefault,
+//       contextualName);
 //    P4 the trailing comma of a list (alone too: a re-wrapped call).
 //    Expressions: identifiers (no keyword), member access `a.b` on an identifier, literals (no
 //    template with `${…}`), object literals of these (properties first, spreads at the end),
@@ -244,9 +248,150 @@ const isMember = (t: OutsideToken | undefined): boolean =>
   t !== undefined && t.kind === 'punct' && (t.text === '.' || t.text === '?.');
 
 /**
+ * The contextual keywords of NOT_ENDING that a module may use as a variable name (no reserved
+ * word there): CT-06zzzzzn (D10-1932) tells such a name before `as` / `satisfies` (contextualName).
+ */
+const CONTEXTUAL = new Set([
+  'async',
+  'of',
+  'from',
+  'type',
+  'declare',
+  'abstract',
+  'namespace',
+  'readonly',
+  'keyof',
+]);
+/** Keywords after which an operand starts (a name, not a keyword, stands there). */
+const OPERAND_AFTER = new Set([
+  'return',
+  'throw',
+  'typeof',
+  'void',
+  'await',
+  'yield',
+  'delete',
+  'case',
+  'in',
+  'instanceof',
+]);
+/** Punctuators after which no operand starts in an expression (an operand ends, or a statement). */
+const NO_OPERAND_START = new Set([')', ']', '}', ';', '{', '++', '--']);
+/** After `<word> as` these make `as` a name being declared (`readonly as: T`, `async as =>`). */
+const AS_IS_NAME = new Set(['=', ':', '?', '!', '=>', ';', ',', ')', ']', '}', '.', '?.']);
+
+/** Whether a statement may end after token t (asiAt): a literal, a name, `)` `]` `}` `++` `--`. */
+function ended(t: OutsideToken): boolean {
+  return (
+    t.block === true ||
+    t.kind === 'num' ||
+    t.kind === 'str' ||
+    t.kind === 'tpl' ||
+    t.kind === 're' ||
+    (t.kind === 'id' && !NOT_ENDING.has(t.text)) ||
+    (t.kind === 'punct' && [')', ']', '}', '++', '--'].includes(t.text))
+  );
+}
+
+/** Whether a statement may end before token k at its line break (automatic semicolons). */
+function asiAt(ts: readonly OutsideToken[], k: number): boolean {
+  const t = ts[k];
+  const prev = ts[k - 1];
+  if (t === undefined || prev === undefined || !t.nl) return false;
+  if (prev.block === true) return true;
+  const ends = ended(prev);
+  const starts =
+    (t.kind === 'id' && !CONTINUE_WORDS.has(t.text)) ||
+    t.block === true ||
+    t.kind === 'num' ||
+    t.kind === 'str';
+  return ends && starts;
+}
+
+/**
+ * Whether token k stands directly in the header of a for statement (`for (` / `for await (`, no
+ * `;` of a three-part header between): the enclosing bracket at its depth.
+ */
+function forHeader(ts: readonly OutsideToken[], k: number): boolean {
+  let depth = 0;
+  for (let j = k - 1; j >= 0; j -= 1) {
+    const t = ts[j] as OutsideToken;
+    if (isClose(t)) depth += 1;
+    else if (isOpen(t)) {
+      if (depth === 0) {
+        return (
+          t.text === '(' &&
+          (isId(ts[j - 1], 'for') || (isId(ts[j - 1], 'await') && isId(ts[j - 2], 'for')))
+        );
+      }
+      depth -= 1;
+    } else if (depth === 0 && t.kind === 'punct' && t.text === ';') return false;
+  }
+  return false;
+}
+
+/**
+ * Whether the contextual keyword at k (CONTEXTUAL) is a variable name before a type operator
+ * (CT-06zzzzzn, D10-1932: `declare const async: never; const v = async as [{ a: number }]`).
+ * A name, by both sides: (1) `as` / `satisfies` follows it; (2) it stands where an operand
+ * starts — inside an expression: after a punctuator that is no closing bracket, `;`, `{` or
+ * postfix `++` / `--` (`=`, `(`, `,`, `[`, `?`, `:`, `=>`, `...`, an operator), or after
+ * return / throw / typeof / void / await / yield / delete / case / in / instanceof; or (code
+ * review r1 S2) at the start of a statement: the start of the file, after `;`, `{`, `}`, a test
+ * block, or a line break where a statement ends (asiAt); `of` after `}` or on a new line after
+ * an operand is the for-of keyword in a for header (`for (const { a } of as)`, forHeader) and a
+ * statement start elsewhere (outside a for header no expression goes on with `of`). So an infix
+ * keyword after an operand on its line (`for (x of y)`, `import x from 'm'`) stays a keyword;
+ * (3) what follows the `as` / `satisfies` can start a type: not `=` `:` `?` `!` `=>` `;` `,`
+ * `)` `]` `}` `.` or the end, nor a parameter list followed by a body. Where the word is the
+ * keyword it is followed by no `as`, or that `as` is a name itself (3): `type as = …`,
+ * `async as => …`, `{ x, async as() {} }`, `readonly as: T` / `readonly as;` (readonly stands in
+ * members only), `declare const …`, `abstract class …`, `namespace N {}`. Ambiguous places take
+ * the stricter reading, a type after the operator (P3): `namespace as { … }` at a statement
+ * start, `readonly as` followed by a member on the next line. Anything else keeps the keyword
+ * reading (the word ends no operand, as before).
+ */
+function contextualName(ts: readonly OutsideToken[], k: number): boolean {
+  const op = ts[k + 1];
+  if (!(isId(op, 'as') || isId(op, 'satisfies'))) return false;
+  const prev = ts[k - 1];
+  const statement =
+    prev === undefined ||
+    prev.block === true ||
+    (prev.kind === 'punct' && (prev.text === ';' || prev.text === '{')) ||
+    // `of` after a pattern `}` or on a new line: the for-of keyword in a for header only.
+    (isId(ts[k], 'of')
+      ? ((prev.kind === 'punct' && prev.text === '}') || (ts[k]?.nl === true && ended(prev))) &&
+        !forHeader(ts, k)
+      : (prev.kind === 'punct' && prev.text === '}') || asiAt(ts, k));
+  const operand =
+    prev !== undefined &&
+    prev.block !== true &&
+    ((prev.kind === 'punct' && !NO_OPERAND_START.has(prev.text)) ||
+      (prev.kind === 'id' && OPERAND_AFTER.has(prev.text)));
+  if (!(statement || operand)) return false;
+  const type = ts[k + 2];
+  if (type === undefined || type.block === true) return false;
+  if (type.kind === 'punct' && AS_IS_NAME.has(type.text)) return false;
+  if (type.kind === 'punct' && type.text === '(') {
+    // A method `as(…) {…}` after the modifier async: find the `)` at its depth.
+    let depth = 0;
+    for (let j = k + 2; j < ts.length; j += 1) {
+      const x = ts[j] as OutsideToken;
+      if (isOpen(x)) depth += 1;
+      else if (isClose(x)) depth -= 1;
+      if (depth === 0) return !(ts[j + 1]?.kind === 'punct' && ts[j + 1]?.text === '{');
+    }
+    return false;
+  }
+  return true;
+}
+
+/**
  * Whether token k ends an operand (CT-06zzzzzk review r2): a literal or template, a name or a
  * keyword value (no operator or declaration word, no return / throw), a member name, `)` `]` `}`,
- * a postfix `!` / `++` / `--` after one, an `as` / `satisfies` that is a name itself.
+ * a postfix `!` / `++` / `--` after one, an `as` / `satisfies` that is a name itself, a
+ * contextual keyword used as a variable name before `as` / `satisfies` (contextualName).
  */
 function endsOperand(ts: readonly OutsideToken[], k: number): boolean {
   const t = ts[k];
@@ -256,6 +401,7 @@ function endsOperand(ts: readonly OutsideToken[], k: number): boolean {
   if (t.kind === 'id') {
     if (isMember(ts[k - 1])) return true;
     if (t.text === 'as' || t.text === 'satisfies') return !typeOperator(ts, k);
+    if (CONTEXTUAL.has(t.text) && contextualName(ts, k)) return true;
     return !NOT_ENDING.has(t.text) && t.text !== 'return' && t.text !== 'throw';
   }
   if (t.kind !== 'punct') return false;
@@ -457,23 +603,7 @@ class Tree {
 
   /** Whether a statement may end before token k at its line break (automatic semicolons). */
   asiBefore(k: number): boolean {
-    const t = this.ts[k];
-    const prev = this.ts[k - 1];
-    if (t === undefined || prev === undefined || !t.nl) return false;
-    if (prev.block === true) return true;
-    const ends =
-      prev.kind === 'num' ||
-      prev.kind === 'str' ||
-      prev.kind === 'tpl' ||
-      prev.kind === 're' ||
-      (prev.kind === 'id' && !NOT_ENDING.has(prev.text)) ||
-      (prev.kind === 'punct' && [')', ']', '}', '++', '--'].includes(prev.text));
-    const starts =
-      (t.kind === 'id' && !CONTINUE_WORDS.has(t.text)) ||
-      t.block === true ||
-      t.kind === 'num' ||
-      t.kind === 'str';
-    return ends && starts;
+    return asiAt(this.ts, k);
   }
 
   /** The block (or interface body) whose statement list holds token k (-1: the file). */
@@ -1649,7 +1779,8 @@ function allowListProblems(
   /**
    * Whether the open bracket at o (`{`, a tuple / array `[`, a parenthesized type `(`, or the
    * parameter list of a function type) stands where a type is expected, by what stands before it
-   * at its level: the `=` of a type alias, a type annotation `:`, type arguments (`<`, a `,` in
+   * at its level: the `=` of a type alias or of a type parameter's default (`<T = …>`,
+   * CT-06zzzzzn: typeDefault), a type annotation `:`, type arguments (`<`, a `,` in
    * angles, `>`), `as` / `satisfies` / `extends` / `keyof` / `implements` / `readonly`, a branch
    * of a conditional type, the return type of a function type, a union or intersection of these
    * (`|`, `&`, `.`, names, `...`); and, CT-06zzzzzk, an element of a tuple or a parenthesized type
@@ -1670,6 +1801,10 @@ function allowListProblems(
     for (let k = from; k >= 0; k -= 1) {
       const t = ts[k] as OutsideToken;
       if (punct(k, '=')) {
+        if (typeDefault(k)) {
+          got = true;
+          break;
+        }
         const eq = bindings.eq.get(k);
         const named = eq?.kind === 'init' ? eq.names[0] : undefined;
         const keyword = named === undefined ? undefined : keywordOf.get(named);
@@ -1752,9 +1887,97 @@ function allowListProblems(
     return -1;
   };
   /**
+   * The `>` / `>>` closing the `<` at a (at its bracket level, before a `;`), or -1.
+   */
+  const angleClose = (a: number): number => {
+    let depth = 0;
+    for (let j = a; j < n; j += 1) {
+      if (isOpen(ts[j])) {
+        j = close(j);
+        if (j < 0) return -1;
+        continue;
+      }
+      if (isClose(ts[j]) || punct(j, ';')) return -1;
+      if (punct(j, '<')) depth += 1;
+      else if (punct(j, '>')) depth -= 1;
+      else if (punct(j, '>>')) depth -= 2;
+      if (depth <= 0 && j > a) return j;
+    }
+    return -1;
+  };
+  /**
+   * Whether the `<` at a opens a list of type parameters, no less-than (CT-06zzzzzn): no operand
+   * ends before it (`= <T>() =>`, `(<T>(x: T) => …`, `function <T>`, a call signature); or it
+   * follows the name of a type alias, interface, class or function (`type`, `interface`,
+   * `class`, `function`, `function*` before the name); or the `>` closing it is followed by `(`
+   * (a generic method or signature `m<T = X>(…)`; type arguments of a call hold no `=`).
+   */
+  const typeParameters = (a: number): boolean => {
+    if (!endsOperand(ts, a - 1)) return true;
+    if (
+      isId(ts[a - 1]) &&
+      (['type', 'interface', 'class', 'function'].some((w) => isId(ts[a - 2], w)) ||
+        (punct(a - 2, '*') && isId(ts[a - 3], 'function')))
+    ) {
+      return true;
+    }
+    const c = angleClose(a);
+    return c >= 0 && punct(c + 1, '(');
+  };
+  /**
+   * Whether the `=` at q gives a type parameter its default (`<T = { a: number }>`, CT-06zzzzzn,
+   * D10-1932): a `<` opening type parameters (typeParameters) stands open before it at its
+   * level (`>` / `>>` before it close the `<` of nested type arguments), in the same statement
+   * (no `;`, open bracket, statement break between). A parameter default `(x = { a: 1 })` has
+   * its `(` before it; a type has no `=` at its level, so only a default stands there.
+   */
+  const typeDefault = (q: number): boolean => {
+    let depth = 0;
+    for (let k = q - 1; k >= 0; k -= 1) {
+      if (ht.asiBefore(k + 1)) return false;
+      if (isClose(ts[k])) {
+        const m = close(k);
+        if (m < 0) return false;
+        k = m;
+        continue;
+      }
+      if (isOpen(ts[k]) || punct(k, ';')) return false;
+      if (punct(k, '>')) depth += 1;
+      else if (punct(k, '>>')) depth += 2;
+      else if (punct(k, '<')) {
+        if (depth === 0) return typeParameters(k);
+        depth -= 1;
+      }
+    }
+    return false;
+  };
+  /**
+   * The first token of the function type or parameter list whose arrow is the `=>` at k: its
+   * `(` (with its type parameters `<…>` and a `new` / `abstract new` before them), or -1 when
+   * no parameter list `(…)` stands right before the arrow (`x => …`, `(): R => …`).
+   */
+  const functionStart = (k: number): number => {
+    if (!punct(k - 1, ')')) return -1;
+    let start = close(k - 1);
+    if (start < 0 || ht.role(start) !== 'params') return -1;
+    if (punct(start - 1, '>') || punct(start - 1, '>>')) {
+      const a = angleOpen(start - 1);
+      if (a < 0) return -1;
+      start = a;
+    }
+    if (isId(ts[start - 1], 'new')) start -= 1;
+    if (isId(ts[start - 1], 'abstract') && isId(ts[start], 'new')) start -= 1;
+    return start;
+  };
+  /**
    * Whether the `?` at q is a conditional type's (`T extends U ? X : Y`): an `extends` before it
-   * at its level, in the same statement (no `;`, `=`, `?`, `:`, `=>`, open bracket, statement
-   * break between). A conditional expression has none.
+   * at its level, in the same statement (no `;`, `=`, `?`, `:`, open bracket, statement break
+   * between). A conditional expression has none. CT-06zzzzzn (D10-1932): the check type may be a
+   * function type (`T extends (x: A) => B ? X : Y`, `T extends () => () => C ? …`): at a `=>`
+   * the walk skips the function type — its parameter list, its type parameters `<…>` whole
+   * (an `extends` in them is a constraint: `<T extends A>(x: T) => c ? … : …` is a value), a
+   * `new` — and goes on only when `extends` stands right before it (or the `=>` of a function
+   * type it is the return type of); any other `=>` (an arrow function's) ends the walk.
    */
   const conditionalType = (q: number): boolean => {
     for (let k = q - 1; k >= 0; k -= 1) {
@@ -1769,7 +1992,15 @@ function allowListProblems(
         continue;
       }
       if (isOpen(t)) return false;
-      if (t.kind === 'punct' && [';', '=', '?', ':', '=>'].includes(t.text)) return false;
+      if (punct(k, '=>')) {
+        const start = functionStart(k);
+        if (start < 0) return false;
+        if (isId(ts[start - 1], 'extends')) return true;
+        if (!punct(start - 1, '=>')) return false;
+        k = start;
+        continue;
+      }
+      if (t.kind === 'punct' && [';', '=', '?', ':'].includes(t.text)) return false;
       if (isId(t, 'extends')) return true;
     }
     return false;
