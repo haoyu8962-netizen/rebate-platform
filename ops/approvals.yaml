@@ -621,3 +621,9 @@ approvals:
     granted: true
     date: '2026-11-17'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（试次属门禁流程小改动），D10-1968 / D10-1970：负责人 2026-11-15 定商品池标签本期做（F-ADM-10），CT-07e 的迁移 0149 给 pool_items 加 tags，三条钉列集合的冻结用例（product-pool-schema/shape.int.test.ts、access.int.test.ts 读 kit.ts 的 ITEM_SHAPE；commission-column.int.test.ts 读本文件顶部 SHAPE）在测试机上必红（CT-07e/tests/1），期望值须跟着加这一列；台账按 rule_change 文件级条目登记（#250，refs 补 BR-PROD-08 / BR-PRICE-11，BR 取值未变、变的是 04 §3.2 表形状）。CT-07e 写测试已用 3 次、spec-test 已用 2 次加 approvals 93 一次，这一轮各超上限 1 次。commission-column.int.test.ts 属资金 / 归属类，其改动由负责人 2026-11-17 本人确认（D10-1973），只许那一行；kit.ts 不属资金类。不改金额计算与订单归属规则、不放宽密钥扫描、不删不削弱资金测试、不涉生产；起因是规则变更带来的必然红，不是测试质量问题。编排按 approvals 16 / 24 登记。'
+  - id: 101
+    row: 4
+    title: 'CT-07e 任务专属一次性追加（本单最后一次）：写规则测试第 5 次（Codex）与规则测试评审（spec-test）再 1 次——写测试只改 test/spec/catalog/pool-tags/home-config-save.test.ts，让基线上首页配置校验对 tags 的拒绝（PageFieldsError）落到断言上，期望、判法与用例数不变；先上测试机跑正式先红、11 个问题清零后，评审只审这个文件的增量，由与写手不同的引擎做（specTestReviewers）；照常不调 bump-attempt（按编排例外轮记），其余口径与次数上限不变；先红或评审再出新问题即停下报编排，改为把 pool-tags 用例拆成单独小单，不再加轮'
+    granted: true
+    date: '2026-11-17'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（试次属门禁流程小改动），D10-1984：CT-07e 正式先红试跑（couli-runs/CT-07e/red/2，spec 提交 9e5825b0d）报 11 个问题——commission-column.int.test.ts 其余 6 条按工具登 red_exempt（台账 #258）；另 5 条在本单第 3 轮新写的 home-config-save.test.ts（未进主干、不是冻结用例），基线上 save() 先抛 PageFieldsError、没走到断言，red-check 判「不认识的红」。第 3 轮的先红只在本机跑过、没过测试机门禁判定，这次在测试机上才暴露。写测试已用 3 次加 approvals 100 一次、spec-test 已用 2 次加 approvals 93 与 100 各一次，这一轮各再超 1 次；独立 Claude 做完到 10 / 10。不改金额计算与订单归属规则、不放宽密钥扫描、不删不削弱资金测试、不涉生产；起因是先红门禁要求红因为断言，不是放宽判法。编排按 approvals 16 / 24 登记。'
