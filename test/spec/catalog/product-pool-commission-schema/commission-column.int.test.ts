@@ -55,6 +55,7 @@ const SHAPE: Record<string, readonly [string, boolean, string | null]> = {
   updated_at: ['timestamptz', false, 'now()'],
   [COLUMN]: ['int4', true, null],
   shop_name: ['text', true, null],
+  tags: ['_text', false, "'{}'::text[]"],
 };
 
 let h: Harness;
