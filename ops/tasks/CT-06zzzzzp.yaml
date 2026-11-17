@@ -5,6 +5,7 @@ type: guard-change
 # 2026-11-18 be 入账（编排 D10-2007：CT-06zzzzzo 取甲照落，这两类宽松另开本单在所有类型位置一起收掉；排在缺口乙类 #11–#14 拆单方案之后；合并后取当时主干最大 approvals id + 1 登记）。
 # 两类宽松（改动前即有，CT-06zzzzzo 差分各 144 / 64 条，均为语法非法 TS）：成员列表里任意位置单独插 , / ;（{ a;: number }）；参数或返回注解里插 ?: 或重复注解（x:?: T、x: void: T）。收紧后这两类在所有类型位置都拒。
 # 一并修：headerKeyword 跨声明（经过声明体的 } 继续往回走，紧跟 interface X {…} 后的函数体 / if 块被当接口体、enum 后当对象）；类字段注解误放（class C { x: { a: number } } 的对象类型按 P2）。
+# 并入（D10-2015）：CT-06zzzzzo r1 S2——type T = { m?(x: { a: number }): void } 这类可选方法签名的参数注解误放（改动前即有），见 couli-runs/CT-06zzzzzo/out-of-scope.md。
 # 写测前（D10-2007）：回放全部冻结支撑文件的历史改动（ops/evidence 与已合并 PR 里登记过的 modify_existing 支撑条目，基线→头），逐条判定与改前相同；有变化的列出来报编排，不加特例。规则测试与评审照 D10-2003 走独立 Claude（Codex 恢复后是否切回等编排裁定）。
 refs: []
 refs_hash: {}
