@@ -126,16 +126,16 @@ it(
     await fillRows(modal, rows);
     const row = rowOf(modal, rows[1]!.out_biz_no);
     const input = field(row, '实付金额（元）');
-    // D10-2025: inputs whose value equals the amount due but whose text is not a plain
-    // non-negative decimal with at most two places must be refused, not truncated or normalised.
+    // D10-2025 / D10-2027: inputs whose value equals the amount due but whose text is not a plain
+    // non-negative decimal with at most two places must be refused, not truncated or normalised;
+    // only leading / trailing whitespace is ignored for the check (the shown text stays as typed).
     const due = formatFen(parseFen(rows[1]!.net_fen));
     const fullWidth = due.replace(/[0-9]/g, (digit) => String.fromCharCode(0xff10 + Number(digit)));
     for (const value of [
       `${due}0`,
       `${due}9`,
       `${parseFen(rows[1]!.net_fen)}e-2`,
-      ` ${due}`,
-      `${due} `,
+      `${due.slice(0, 1)} ${due.slice(1)}`,
       fullWidth,
       due.replace('.', ','),
       `0,${due.padStart(6, '0')}`,
@@ -150,6 +150,15 @@ it(
       expect(input.value).toBe(value);
       expect(disabled(button(modal, '确认录入'))).toBe(true);
       await click(button(modal, '确认录入'));
+      expect(server.writes()).toEqual([]);
+    }
+    // D10-2027: leading / trailing whitespace is trimmed for the check only, as on the other admin
+    // amount inputs; the input keeps the typed text and the row may be submitted.
+    for (const value of [` ${due}`, `${due} `]) {
+      await fill(input, value);
+      expect(input.value).toBe(value);
+      expect(row.textContent ?? '').not.toContain(INVALID.amount);
+      expect(disabled(button(modal, '确认录入'))).toBe(false);
       expect(server.writes()).toEqual([]);
     }
     await fill(input, formatFen(parseFen(rows[1]!.net_fen)));
