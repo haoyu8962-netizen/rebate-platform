@@ -18,7 +18,7 @@ paths:
 test_paths:
   - 'test/spec/catalog/pool-tags-home/**'
 impl: claude
-tester: codex
+tester: claude-independent # D10-2003：Codex 额度用尽至 11-23 21:57，规则测试改由独立 Claude 写（写测者与实现者不同会话）
 accept:
   - 'pnpm verify'
   - 'test/spec/catalog/pool-tags-home/**'
