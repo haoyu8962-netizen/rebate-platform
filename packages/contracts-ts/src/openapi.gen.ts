@@ -8925,6 +8925,105 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/recon-diffs/{recon_diff_id}/balance-recalc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recalculate one member's balance cache from the ledger entries for a ledger_mismatch difference (按分录重算余额缓存)
+         * @description The 「差异以分录为准修正」 of BR-FUND-19 细则 (owner 2026-10-06; 编排 D10-2017 ①): when the
+         *     balance cache of a member and the sum of the member's ledger entries disagree, the entries
+         *     are right, because account_balances is only a cache of the entries. The handler starts the
+         *     recalculation from the difference; the server sets the cache to the entry sums. The
+         *     handler cannot enter an amount. The list and the detail are GET /admin/v1/recon-diffs and
+         *     GET /admin/v1/recon-diffs/{recon_diff_id}. Permission point `fund.recon` (04 §11.1, §11.2;
+         *     `fund.view` alone is not enough). Step-up: sms tier (BR-ID-34; operation
+         *     `fund.recon.balance_recalc` of specs/permissions.yaml, the only step-up operation under
+         *     `fund.recon`, see GET /admin/v1/me/permissions): without a valid sms-tier
+         *     `X-Step-Up-Token`, a totp-tier token included → 10003 with `data.tier=sms`; an account
+         *     without a registered verify phone also gets `data.reason=verify_phone_missing`.
+         *
+         *     Request: `reason`, required: after trimming surrounding whitespace 1–200 characters, else
+         *     20001 with `data.fields=[reason]` (as POST .../close); recorded in the audit record. The
+         *     console sends no amount: any other key, an amount included, is 20001 at the route schema.
+         *
+         *     Only a difference of `type=ledger_mismatch` (source R3) whose `status` is `open` or
+         *     `processing` and that is registered on one member's account can be recalculated: its
+         *     `ref_type` is `ledger_account` and its `ref_id` is `{invariant}:{account_id}` (04 §3.2
+         *     recon_diffs; the account-level checks of BR-FUND-19), and that account is the
+         *     USER_BALANCE account of a member of the app. That member is the only one whose cache
+         *     this operation touches. A ledger_mismatch registered on a voucher, an order or the
+         *     whole app (`ref_type` `voucher`, `order` or `app`) names no single member account and is
+         *     refused, as is an account of the platform, one of another app, one that does not exist,
+         *     or one without its account_balances row.
+         *
+         *     The route schema runs first (D10-590 ⑥, D10-1132, as every console route): a body that
+         *     fails it (a missing `reason`, a non-string or over-long `reason`, an extra key) is 20001
+         *     before `fund.recon` and step-up, with or without that permission or a step-up token, and
+         *     writes nothing; a well-formed body follows the order below, where the body step covers
+         *     the checks after the schema (a `reason` that is blank after trimming).
+         *     Order of checks: `fund.recon` (10403 with `data.reason=admin_permission_denied`) →
+         *     step-up (10003) → body (20001 with `data.fields=[reason]`) → an unknown
+         *     `recon_diff_id`, a difference of another app, or one of source R4 (see
+         *     GET /admin/v1/pay-recon-diffs) is 20001 with `data.fields=[recon_diff_id]` (no 404) → a
+         *     difference whose `type` is not `ledger_mismatch`, whose `status` is `adjusted`,
+         *     `written_off` or `closed`, or that names no single member account as above, is 20001
+         *     with `data.fields=[recon_diff_id]` (no `data.reason`), nothing written. The member's
+         *     own status (frozen, banned, deleting or deleted) does not matter: the cache follows the
+         *     entries whatever it is.
+         *
+         *     Effects, in one transaction, within the 「加锁流程」 of BR-FUND-16 细则: the member's users
+         *     row `FOR UPDATE`, then the member's account_balances row `FOR UPDATE` (steps 2 and 3, the
+         *     order every transaction writing this balance takes; no order is involved, so there is
+         *     no `order_key` advisory lock). After the locks are held the server reads the sums of the
+         *     account's ledger entries per sub-account and sets `available_fen` and `frozen_fen` of the
+         *     account_balances row to them, in the member's sign (entries are stored debit positive,
+         *     credit negative: `available_fen` = 0 − Σ entries of sub-account available, `frozen_fen`
+         *     = 0 − Σ entries of sub-account frozen; BR-FUND-16, the cache check of BR-FUND-19 ①).
+         *     Amounts are integer fen; nothing is rounded. No voucher and no ledger entry is written
+         *     and none is changed, so this is not a manual adjustment of BR-FUND-24 (which forbids
+         *     writing account_balances or entries by hand; here the server derives the values). Writes
+         *     an audit record (action recon_diff_balance_recalc, with the `recon_diff_id`, the
+         *     `user_id`, the trimmed reason, `changed` and, before and after, `available_fen` and
+         *     `frozen_fen`; no personal data). Values equal before and after are a success too
+         *     (`changed=false`), and the audit record is written as usual, so a check leaves a trace.
+         *
+         *     Not done by this operation (D10-2017): it does not close the difference, does not
+         *     change its `status`, `handler_id`, `resolution` or `updated_at`, and releases no
+         *     withdrawal hold (withdraw_holds): the member stays held until the difference is closed
+         *     with POST /admin/v1/recon-diffs/{recon_diff_id}/close, which releases the holds of the
+         *     difference (BR-FUND-19). When the entries themselves are found wrong (a missing or wrong
+         *     posting against the orders or withdrawals), the cache is not the fault: post a manual
+         *     adjustment with POST /admin/v1/adjustments (`reason_code` RECON_FIX, `refs` with
+         *     `ref_type=recon_diff` naming this difference, BR-FUND-24); the voucher updates the cache
+         *     with it, and the balance is checked again under BR-FUND-19 ①.
+         *
+         *     Response: `user_id` (the member), `before` and `after` (`available_fen`, `frozen_fen`, the
+         *     cache as read under the lock and as written), `changed` (true when either value
+         *     differs) and `recalculated_at` (the server's current time). No phone number or other
+         *     personal data is returned.
+         *
+         *     No Idempotency-Key (04 §6.6): the operation sets the cache to a value derived from the
+         *     entries under the lock, so a repeated call on the same difference, a retry after a lost
+         *     response included, is not an error and normally answers `changed=false`, with an audit
+         *     record of its own. Each call needs its own sms-tier step-up: the token of a call that
+         *     succeeded is spent, so a retry that reuses it is 10003 with `data.tier=sms` and changes
+         *     nothing; the console asks for a new code and calls again. Two calls at once are serialized by the locks; the second reads the
+         *     cache the first wrote. A posting committed between two calls is in the entries and in
+         *     the cache alike, so the second call does not undo it.
+         */
+        post: operations["recalcBalanceAdminReconDiff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/adjustments": {
         parameters: {
             query?: never;
@@ -20560,6 +20659,40 @@ export interface components {
             code: components["schemas"]["SuccessCode"];
             msg: string;
             data: components["schemas"]["AdminReconDiffBlacklistClawback"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /**
+         * @description Body of POST /admin/v1/recon-diffs/{recon_diff_id}/balance-recalc. Only the reason: the
+         *     console sends no amount; the values are the sums of the member's ledger entries,
+         *     derived by the server (BR-FUND-19 细则「差异以分录为准修正」). Any other key is 20001.
+         */
+        AdminReconDiffBalanceRecalcRequest: {
+            /** @description Why the cache is recalculated; 1–200 characters after trimming, else 20001 with data.fields=[reason]. Recorded in the audit record. */
+            reason: string;
+        };
+        /** @description The member's balance cache (account_balances), in integer fen and in the member's sign (`available_fen` may be negative). */
+        AdminReconDiffBalanceValues: {
+            available_fen: components["schemas"]["Fen"];
+            frozen_fen: components["schemas"]["Fen"];
+        };
+        AdminReconDiffBalanceRecalc: {
+            user_id: components["schemas"]["Id"];
+            /** @description The cache as read under the lock, before it was set. */
+            before: components["schemas"]["AdminReconDiffBalanceValues"];
+            /** @description The cache as written, the sums of the member's ledger entries per sub-account. */
+            after: components["schemas"]["AdminReconDiffBalanceValues"];
+            /** @description True when `available_fen` or `frozen_fen` differs between `before` and `after`. */
+            changed: boolean;
+            /**
+             * Format: date-time
+             * @description The server's current time of the recalculation.
+             */
+            recalculated_at: string;
+        };
+        AdminReconDiffBalanceRecalcResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminReconDiffBalanceRecalc"];
             trace_id: components["schemas"]["TraceId"];
         };
         /**
@@ -41346,6 +41479,64 @@ export interface operations {
             };
             429: components["responses"]["TooManyRequests"];
             /** @description Not clawed back (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    recalcBalanceAdminReconDiff: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+                /**
+                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
+                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
+                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
+                 *     optional). Only on admin console operations; app operations use StepUpToken.
+                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
+                 *     error it is released and can be sent again until its expire_at (see POST
+                 *     /admin/v1/auth/step-up).
+                 */
+                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
+            };
+            path: {
+                /** @description The reconciliation difference (recon_diffs.id) as a list row carries it; unknown, of another app or of source R4 → 20001 with data.fields=[recon_diff_id]. */
+                recon_diff_id: components["parameters"]["AdminReconDiffIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "reason": "分录与订单、提现单据核对无误，按分录重算余额缓存"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdminReconDiffBalanceRecalcRequest"];
+            };
+        };
+        responses: {
+            /** @description The member's balance cache before and after the recalculation. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminReconDiffBalanceRecalcResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not recalculated (codes in contracts/error-codes.yaml). */
             "4XX": {
                 headers: {
                     "X-Trace-Id": components["headers"]["TraceId"];
