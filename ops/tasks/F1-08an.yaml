@@ -1,0 +1,26 @@
+id: F1-08an
+repo: rebate-platform
+title: F1-08an：提现审核页【批量自动打款】、一键组批与各页签计数（adminCreatePayoutBatch，payout.execute + 动态码；listAdminWithdrawals 的 total）
+type: impl
+# 2026-11-18 入账（前端线 fe，编排 D10-2017：be 核出缺口乙类里后端已有的项，couli-runs/BE-codex/gap-plan-B11-15-20261118.md 第一张表；排在 F1-08al → F1-08fc → 导出记录页 → 小链接之后）。
+# 范围：apps/admin/src/pages/withdrawals/WithdrawalsPage.tsx 与批量栏。持 payout.execute 时勾到 APPROVED 单出【批量自动打款】（确认对话框列将处理与跳过的单、执行前检查与后果 → 动态码 → 只发一次 POST /admin/v1/payout-batches，1–200 单；整批拒绝原因与逐单结果如实显示，部分成功不报全成）；一键组批按 listAdminWithdrawals 已有的 hold_reason / blocked 筛选选中可执行单（纯前端，不另发写请求）；各状态页签计数用每个页签一次 page_size=1 的 total（D10-2017「各页签取一次总数」）。与 F1-08al【批量手动打款】同一批量栏、各管各的勾选子集。顺手更新 WithdrawalsPage.tsx 头部 TODO（【导出】等 be ③ 契约、「自动到账设置」另见 F1-08ap）。
+# 资金写操作（RV2）：money 评审。
+# 写测与评审：Codex 额度用尽（D10-2003），规则测试与首轮评审由无上下文的独立 Claude（claude-run.sh），证据如实记 claude-independent。写测时发现冻结用例（入口清单、只读断言、TODO 对应的「不出现」断言）受影响，先报编排再补 modify_existing（D10-1712 / D10-1899）。写操作一律照 F1-08ce 结果未知处理（D10-1731）。
+refs: [BR-WDR-12, BR-WDR-11, BR-ID-34]
+refs_hash:
+  BR-WDR-12: 37adcd14e97f
+  BR-WDR-11: 9193f1c7ed27
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [F1-08al]
+paths:
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/texts/withdrawals.ts'
+test_paths:
+  - 'test/spec/frontend/admin-withdrawal-batch-payout/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-withdrawal-batch-payout/**'
+status: todo
+pr: null

@@ -1,0 +1,25 @@
+id: F1-08ap
+repo: rebate-platform
+title: F1-08ap：提现审核页「自动到账设置」页签——读取与保存 withdraw.auto_payout.*（config-items，config.business + 动态码；总开关只能关）
+type: impl
+# 2026-11-18 入账（前端线 fe，编排 D10-2017：be 核出缺口乙类里后端已有的项，couli-runs/BE-codex/gap-plan-B11-15-20261118.md 第一张表；排在 F1-08al → F1-08fc → 导出记录页 → 小链接之后）。
+# 范围：apps/admin/src/pages/withdrawals/** 新页签。按 BR-WDR-30 默认值表逐项显示与编辑 withdraw.auto_payout.* 各键（金额上限、时段、首提限制、冻结金额与当日提现的唯一值、次数、订单佣金预警、全平台日累计 ≤ payout.daily_cap_fen、风控转人工清单），保存走 config-items（乐观并发按各键 version；动态码；规则版本由后端算）；总开关 enabled 在本页只能关、开只在紧急开关页（switch.all）。不做（D10-2017）：「开启前置检查」只列条目、不显示满足与否；不做配置历史查看；【恢复默认值】等 be 核 config-items 是否返回 default 的结论。阈值按现默认值，不改。
+# 配置写入影响自动打款（RV2）：money 评审。
+# 写测与评审：Codex 额度用尽（D10-2003），规则测试与首轮评审由无上下文的独立 Claude（claude-run.sh），证据如实记 claude-independent。写测时发现冻结用例（入口清单、只读断言、TODO 对应的「不出现」断言）受影响，先报编排再补 modify_existing（D10-1712 / D10-1899）。写操作一律照 F1-08ce 结果未知处理（D10-1731）。
+refs: [BR-WDR-30, BR-ID-34]
+refs_hash:
+  BR-WDR-30: ec74379ec48c
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [F1-08an]
+paths:
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/texts/withdrawals.ts'
+test_paths:
+  - 'test/spec/frontend/admin-withdrawal-auto-payout-settings/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-withdrawal-auto-payout-settings/**'
+status: todo
+pr: null

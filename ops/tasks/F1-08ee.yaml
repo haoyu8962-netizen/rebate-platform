@@ -1,0 +1,28 @@
+id: F1-08ee
+repo: rebate-platform
+title: F1-08ee：差错单详情【去调账】与【申诉恢复】（adminCreateAdjustment ref_type=recon_diff / RECON_FIX；restoreAdminReconDiff）
+type: impl
+# 2026-11-18 入账（前端线 fe，编排 D10-2017：be 核出缺口乙类里后端已有的项，couli-runs/BE-codex/gap-plan-B11-15-20261118.md 第一张表；排在 F1-08al → F1-08fc → 导出记录页 → 小链接之后）。
+# 范围：apps/admin/src/pages/recon/DetailDrawer.tsx 操作区。【去调账】带上该差错单的用户、原因码 RECON_FIX 与关联单据（ref_type=recon_diff、差错单号）打开调账页的新建抽屉（复用 F1-08cb，一步提交，短信档，结果未知照 F1-08ce）；【申诉恢复】POST /admin/v1/recon-diffs/{id}/restore（权限与条件以契约为准）。【重算余额缓存】等 be ① 契约，不做；顺手把 DetailDrawer.tsx 头部 TODO 改成现状。
+# 资金页面（调账写入 RV2）：money 评审。
+# 写测与评审：Codex 额度用尽（D10-2003），规则测试与首轮评审由无上下文的独立 Claude（claude-run.sh），证据如实记 claude-independent。写测时发现冻结用例（入口清单、只读断言、TODO 对应的「不出现」断言）受影响，先报编排再补 modify_existing（D10-1712 / D10-1899）。写操作一律照 F1-08ce 结果未知处理（D10-1731）。
+refs: [BR-FUND-24, BR-FUND-19, BR-ID-34]
+refs_hash:
+  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-19: 34f619112535
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [F1-08cb]
+paths:
+  - 'apps/admin/src/pages/recon/**'
+  - 'apps/admin/src/texts/recon.ts'
+  - 'apps/admin/src/pages/adjustments/**'
+  - 'apps/admin/src/texts/adjustments.ts'
+test_paths:
+  - 'test/spec/frontend/admin-recon-adjust-restore/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-recon-adjust-restore/**'
+status: todo
+pr: null

@@ -1,0 +1,27 @@
+id: F1-08ao
+repo: rebate-platform
+title: F1-08ao：打款队列行操作【查询通道结果】与【驳回】（adminQueryPayoutResult、adminRejectWithdrawal，按 BR-WDR-08 / 15 / 17 的条件显示）
+type: impl
+# 2026-11-18 入账（前端线 fe，编排 D10-2017：be 核出缺口乙类里后端已有的项，couli-runs/BE-codex/gap-plan-B11-15-20261118.md 第一张表；排在 F1-08al → F1-08fc → 导出记录页 → 小链接之后）。
+# 范围：apps/admin/src/pages/withdrawals/PayoutTabs.tsx 的打款队列行。【查询通道结果】只存凭证、不改状态（BR-WDR-14：只查不重提），对 PAYING 或已有转账尝试的单显示；【驳回】只对未发出转账、可驳回的单（BR-WDR-08 W9 / BR-WDR-10，守卫以服务端为准），必填原因、动态码。条件所需字段以 listAdminWithdrawals 现有字段为准（hold_reason 等）；【重新执行】要等 be ② 批次成员字段，不做（D10-2017）。
+# 资金写操作（RV2）：money 评审。
+# 写测与评审：Codex 额度用尽（D10-2003），规则测试与首轮评审由无上下文的独立 Claude（claude-run.sh），证据如实记 claude-independent。写测时发现冻结用例（入口清单、只读断言、TODO 对应的「不出现」断言）受影响，先报编排再补 modify_existing（D10-1712 / D10-1899）。写操作一律照 F1-08ce 结果未知处理（D10-1731）。
+refs: [BR-WDR-14, BR-WDR-17, BR-WDR-10, BR-ID-34]
+refs_hash:
+  BR-WDR-14: 6328f3cda2e6
+  BR-WDR-17: f6119a685e00
+  BR-WDR-10: 1db6b508e224
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [F1-08bd]
+paths:
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/texts/withdrawals.ts'
+test_paths:
+  - 'test/spec/frontend/admin-payout-row-actions/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-payout-row-actions/**'
+status: todo
+pr: null
