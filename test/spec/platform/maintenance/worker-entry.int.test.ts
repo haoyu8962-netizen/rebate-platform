@@ -24,6 +24,7 @@ import { sql, type Kysely } from 'kysely';
 import { expect, it } from 'vitest';
 import { leaksIn, phraseOf } from '../db/kit.ts';
 import { ALL_ENSURED, MONTH_TABLES } from './kit.ts';
+import { lockApiBuild, unlockApiBuild, reportApiBuild } from '../_shared/api-build-lock.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../../../..');
@@ -37,11 +38,14 @@ const MAINT_ROLE = 'DATABASE_MAINT_URL: must connect as couli_maint';
 /** Builds apps/api (incremental); returns '' on success or what went wrong. */
 function build(): string {
   const tsc = createRequire(path.join(ROOT, 'package.json')).resolve('typescript/bin/tsc');
+  lockApiBuild();
   const result = spawnSync(process.execPath, [tsc, '-b', API_DIR], {
     cwd: ROOT,
     encoding: 'utf8',
     timeout: 120_000,
   });
+  unlockApiBuild();
+  reportApiBuild(result);
   if (result.status !== 0) {
     return `tsc -b apps/api: ${result.stdout}${result.stderr}`.slice(0, 2000);
   }
