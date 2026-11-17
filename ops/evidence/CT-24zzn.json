@@ -1,0 +1,37 @@
+{
+  "risk_note": "CT-24zzn (D10-2017 ①; contract only, tester none). Adds the planned operation recalcBalanceAdminReconDiff, POST /admin/v1/recon-diffs/{recon_diff_id}/balance-recalc, to contracts/openapi.yaml (x-implementation: planned; route and behaviour come with B2-02x), with request schema AdminReconDiffBalanceRecalcRequest (reason only, additionalProperties false: no amount is accepted) and its response and examples. BR-FUND-19 「差异以分录为准修正」 and BR-FUND-16 「加锁流程」: within the users row then account_balances row locks the server sets available_fen / frozen_fen to 0 − Σ entries per sub-account (same sign as db/invariants/ledger/01_user-balances.sql), writes no voucher or entry, writes an audit record with before / after; sms step-up via the registered operation fund.recon.balance_recalc; only ledger_mismatch differences in open / processing registered on one member's USER_BALANCE account (ref_type ledger_account); other cases 20001 data.fields=[recon_diff_id]; does not close the difference, change its status / handler / resolution or release withdraw_holds (D10-2017). Existing error codes only. Generated files come from pnpm codegen and the four apps/api generators. After contract review r1 (attempt 2) one sentence was added to the description (each call needs its own sms step-up; reusing a spent token is 10003) and the generated files were regenerated; D10-2025: no extra review for it. Test machine on the final head: verify:fast green (includes contracts:check), test/spec/contracts 66 files 658/658 green.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Fresh independent Claude via claude-run.sh (Codex out of quota, D10-2003). Attempt 1 was rejected (position_changed: branches, caused by be opening another worktree during the run); attempt 2 pass with two S2: (a) the retry sentence ignored that the sms step-up token is spent — fixed by one added sentence, no behaviour change, D10-2025 no extra review; (b) an account with entries but no account_balances row stays 20001 — follow-up FU-RECON-BALANCE-RECALC-NO-CACHE-ROW (couli-runs/CT-24zzn/review-contract-r1b.json)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "CT-24zzn",
+  "spec_commit": "19f3dd6503db68f15559a603d785f20986037b5a",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "0928f95a1793146dc13a2061f35c27f953f3472d",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
