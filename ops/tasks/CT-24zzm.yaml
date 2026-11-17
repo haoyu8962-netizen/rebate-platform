@@ -33,4 +33,5 @@ accept:
   - 'pnpm verify'
   - 'pnpm contracts:check'
   - 'test/spec/admin/export-ledger/**'
-status: todo
+status: done
+pr: 236
