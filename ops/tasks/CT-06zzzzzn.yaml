@@ -1,0 +1,32 @@
+id: CT-06zzzzzn
+repo: rebate-platform
+title: CT-06zzzzzn（FU-SUPPORT-TOKENS-TYPE-POSITION-GAPS 误放三条）：支撑文件放行清单的类型位置判定补三处——函数类型判断的条件类型分支、类型参数默认值、上下文关键字作变量名后的 as，里面的对象类型字面量追加必填成员一律拒（D10-1924 / D10-1929 / D10-1932）
+type: guard-change
+# 2026-11-17 be 入账（编排 D10-1932：FU-SUPPORT-TOKENS-TYPE-POSITION-GAPS 误放三条先做，写测前照 D10-1920 先扫既有定例；Codex 写测、首轮评审 Codex；合并后取当时主干最大 approvals id + 1 登记，规划/11 §7.1 第 5 行例外）。
+# 三条误放（couli-runs/CT-06zzzzzk/out-of-scope.md 第 1、3、4 条；类型层、不改运行时）：
+#   ① 条件类型的判断部分本身是函数类型（type Row<T> = T extends () => void ? [{ a: number }] : never）：判 ? 时向前扫到 => 就停，分支里的对象类型字面量被当成值，追加必填成员按 P2 放行（Codex r1–r3 均报，support-tokens.ts conditionalType）；
+#   ② 类型参数默认值（<T = { a: number }>、函数 / 类 / 接口 / 类型别名的类型参数表里的 = 后）不认作类型位置，追加必填成员按 P2 放行；
+#   ③ 上下文关键字作变量名（declare const async: never; const v = async as [{ a: number }]）：NOT_ENDING 含 async 等，endsOperand 判前一 token 不结束操作数，真的 as 不被认作类型运算符，嵌套类型字面量追加必填成员按 P2 放行。
+# 要做：上述三处里的对象类型字面量按 P3 判（只放行可选成员与加 ?，必填成员拒并点名行）；值位置照旧 P2。不许动：CT-06zzzzzi / zzzzzj / zzzzzk 的既有规则与拒绝清单，test/spec/ci/support-allowlist/**、support-nested-type/**、modify-existing-support/** 既有定例（一字不改全绿）；
+#   方向与既有定例冲突的列出来报编排，不加特例。误拒两条（=> 后的 { 认作块、换行后的 as）与报错文案一条（as[ 认作 array）不在本单，留 FU。
+# 分工：规则测试 Codex 写（codex-run.sh），spec-test 由独立 Claude 审；实现 Opus 子代理；代码评审第 1 轮 Codex（D10-1872）；本机不跑全量，测试机跑。
+refs: []
+refs_hash: {}
+deps:
+  - CT-06zzzzzk
+paths:
+  - 'tools/guard/lib/support-tokens.ts'
+  - 'tools/guard/lib/support-tokens.test.ts'
+  - 'ops/tasks/CT-06zzzzzn.yaml'
+test_paths:
+  - 'test/spec/ci/support-type-position/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/support-type-position/**'
+  - 'test/spec/ci/support-nested-type/**'
+  - 'test/spec/ci/support-allowlist/**'
+  - 'test/spec/ci/modify-existing-support/**'
+status: todo
+pr: null
