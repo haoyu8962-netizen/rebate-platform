@@ -645,3 +645,9 @@ approvals:
     granted: true
     date: '2026-11-18'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/guard/lib），D10-1989 / D10-2007 / D10-2011 取甲′。不是只收紧：修误放 1 条、误拒 4 条、文案 1 条；两类既有 P3 宽松（成员列表里单独插分隔符、注解里插 ?: 或重复注解）随之延伸到新类型位置，差分 164 条全为语法非法 TS（证据 couli-runs/CT-06zzzzzo/evidence/parse-check.json，冻结文件非法写法 tsc TS1110 / prettier / eslint 均报错），另开 CT-06zzzzzp 在所有类型位置收掉；新类型位置同时继承 P4 尾分隔符（40 条，合法、JS 与 .d.ts 输出相同，equiv.json）。差分语料 48352 条，新放行 460、新拒绝 323 全部归类，值位置三类新放行 0（diff.ts）；三份证据脚本编排重跑与留档逐字相同（D10-2015）。规则测试 test/spec/ci/support-type-gaps-2/**（6 条，Codex 写，独立 Claude spec-test r1 pass）；实现由 Opus 子代理做，support-tokens.ts 指纹 9e614cf16c6b983a；Codex 额度用尽后评审改独立 Claude（approvals 第 36 条、D10-2003，证据记 claude-independent）：money r1 pass（1 条 S2 记 out-of-scope 并入 CT-06zzzzzp）、r2 增量 pass（评审无 shell，脚本由编排代跑）；测试机五组规则目录与 verify:fast 绿；编排按 #24 核过（D10-2016），#277 合并。'
+  - id: 105
+    row: 4
+    title: 'CT-06zzzzzp 任务专属一次性追加：资金评审（money）第 3 轮重跑一次——原第 3 轮结论 pass 但输出因清单不适用项引用差异块外行号被校验器拒收，只为拿到一份能通过校验的有效输出'
+    granted: true
+    date: '2026-11-18'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（评审轮次属门禁流程小改动），D10-2028，先例 CT-07e（D10-1974）与第 103 条（F1-08al）：CT-06zzzzzp money r1 pass（2 条 S2 本单已修）、r2 pass（1 条同类 S2 本单已修）、r3 内容为 pass（1 条 S2：尖括号里的逗号被当成员分隔符，登 FU-SUPPORT-TOKENS-ANGLE-COMMA-MEMBER-START、不修），但 validate-output 判 checklist 第 7 项（app_id，状态 na）引用 support-tokens.test.ts:274 不在差异块内、整份拒收，被拒收的输出不作证据（原文留 couli-runs/CT-06zzzzzp/review-money-r3.rejected.json）。只此一单、只重跑这一轮：全新无上下文的独立 Claude（claude-run.sh，approvals 第 36 条、D10-2003），证据如实记 claude-independent；任务书内容不变，只加一句纯格式提醒（清单项凡引用行号必须落在本次差异块内，不适用项不带行号）；照常不调 bump-attempt（按编排例外轮记），次数上限与熔断（10 次独立调用）不变。重跑若报出新的 S1 或与前两轮相反的结论即停下报编排，不再加轮。'
