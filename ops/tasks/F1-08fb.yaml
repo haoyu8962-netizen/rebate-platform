@@ -1,0 +1,26 @@
+id: F1-08fb
+repo: rebate-platform
+title: 后台余额流水页【导出当前筛选】（adminCreateExport resource=ledger，fund.view 或 user.lookup + export）；导出记录页「资源」名称表补 ledger「余额流水」
+type: impl
+# 2026-11-17 入账（前端线 fe，编排 D10-1740 / D10-1741 定的「F1-08db」= 本单；D10-1934 / D10-1935：#236 CT-24zzm 合并后入账，排 F1-08cg 之后、FU-F108-RETITLE-ENTRY-CASES 之前）。规格 design/specs/admin-ledger.md【导出当前筛选】；契约 contracts/enums/admin.yaml export_resource 的 ledger 值与 adminCreateExport 的 ledger 分支（filters 同 adminListLedgerEntries：user_id 必填、ledger_type、sub_type、sub_account、accounting_date_from / to、ref；ledger 任务恒 masked，带 unmasked / reason 被拒）。
+# 范围：余额流水页（F1-08fa）查过用户后出【导出当前筛选】：持 export 且持 fund.view 或 user.lookup 才见（隐藏，不置灰）；按当前已生效的查询条件只发一次 POST /admin/v1/exports（resource=ledger、filters 恰为当前条件，不带 unmasked / reason），成功提示并给【导出记录】去处；10403 / 20001 / 网络与 5xx 按导出记录页与操作日志导出的现有口径提示、不自动重发。导出记录页 texts/exports.ts 的 resource 表补 ledger「余额流水」（D10-1934 只读核：现在兜底显示原值 ledger，不坏）。
+# 冻结用例：admin-ledger-readonly 的 [AC-F1-08fa-READONLY#1]（含「导出」的控件恰为【导出记录】）用默认账号 FUND_VIEW（只有 fund.view、无 export），新按钮对它不出现，预计不需 modify_existing；若实现后它红，照 D10-1899 / D10-1712 另补台账再改。
+# 资金页面路径（apps/admin/src/pages/ledger/** 属 RV2，未列入白名单）：money 评审。D10-1872 / D10-1935：规则测试与首轮评审用 Codex（codex-run.sh），Codex 不可用时改独立 Claude 并如实记。
+refs: [BR-ID-42, BR-FUND-16]
+refs_hash:
+  BR-ID-42: 2f9cd1710ed3
+  BR-FUND-16: 077f6d412d5a
+deps: [F1-08fa, CT-24zzm]
+paths:
+  - 'apps/admin/src/pages/ledger/**'
+  - 'apps/admin/src/texts/ledger.ts'
+  - 'apps/admin/src/texts/exports.ts'
+test_paths:
+  - 'test/spec/frontend/admin-ledger-export/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-ledger-export/**'
+status: todo
+pr: null
