@@ -43,8 +43,8 @@ const SELECTOR = [
   'textarea',
   'select',
   'button',
-  'a[href]',
-  'a[role]',
+  // Every <a>, also a bare one without href / role / tabindex (antd Typography.Link renders so).
+  'a',
   ...INTERACTIVE_ROLES.map((role) => `[role~="${role}"]`),
   '[tabindex]:not([tabindex="-1"])',
   '[contenteditable]:not([contenteditable="false"])',
@@ -88,7 +88,7 @@ function roleOf(node: Element): string {
   if (node instanceof HTMLSelectElement)
     return node.multiple || node.size > 1 ? 'listbox' : 'combobox';
   if (node instanceof HTMLButtonElement) return 'button';
-  if (node instanceof HTMLAnchorElement && node.hasAttribute('href')) return 'link';
+  if (node.localName === 'a') return 'link';
   if (isAffix(node)) return 'affix';
   const editable = node.getAttribute('contenteditable');
   if (editable !== null && editable !== 'false') return 'textbox';
