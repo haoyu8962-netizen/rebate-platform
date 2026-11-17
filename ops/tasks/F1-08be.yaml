@@ -1,0 +1,25 @@
+id: F1-08be
+repo: rebate-platform
+title: 打款页【解除暂停】/【解除通道暂停】结果未定后再试时读开关列表失败也保留「上次结果未知」，下次再试已是目标值时提示「上次提交已生效」而非「被他人修改」（FU-F108BD-UNKNOWN-KEPT-ON-READ-FAIL）
+type: impl
+# 2026-11-17 入账（前端线 fe，编排 D10-1886 / D10-1912 队列）。来由：#220（F1-08bd）编排核时的 S3——PayoutPause.tsx 的 send() catch 里，读开关列表（GET）失败时 putSent 为 false，会把 unknownRef 清掉；于是上一次 PUT 结果未定之后，若紧接着的一次再试恰好读列表失败，再下一次再试发现已是目标值时提示「被他人修改」而不是「上次提交已生效」。只是提示措辞不准，不会多发写请求。
+# 范围：只改 apps/admin/src/pages/withdrawals/** 的这一处（读列表失败时保留 unknownRef）与必要文案键；不改其他行为。规则测试新目录 test/spec/frontend/admin-payout-unpause-unknown-read/**：PUT 结果未定 → 再试时 GET 开关列表失败 → 再试时读到已是目标值 → 提示「上次提交已生效」（对应文案键）、不再发 PUT；对照：没有未定的 PUT 时读到已是目标值仍提示被他人修改。
+# 资金页面（apps/admin/src/**/withdrawals/** 属 RV2）。D10-1872 起新入账：规则测试与评审优先 Codex（codex-run.sh），Codex 不可用时改独立 Claude 并如实记。
+refs: [BR-WDR-17, BR-WDR-33, BR-ID-34]
+refs_hash:
+  BR-WDR-17: f6119a685e00
+  BR-WDR-33: '7886471e9297'
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [F1-08bd]
+paths:
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/texts/withdrawals.ts'
+test_paths:
+  - 'test/spec/frontend/admin-payout-unpause-unknown-read/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-payout-unpause-unknown-read/**'
+status: todo
+pr: null
