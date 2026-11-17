@@ -9,6 +9,7 @@ type: impl
 #   contracts/home-schema.json 的 product_pool 数据源（后台配置侧）加可选 tags（1–10 项，每项同上规则）；首页读池只取与之有交集的条目（命中任一），不带或 [] 不筛；兜底池 feed.fallback_pool_id 不受标签筛选；下发给 App / H5 的页面配置与商品卡都不带标签字段（服务端筛选后下发，三端与 H5 不改）。
 # 迁移：db/migrations 新增一条：pool_items 加 tags text[] NOT NULL DEFAULT '{}'（已有条目为空数组）；列表按 tag 筛选是否建 GIN 索引由实现按查询量定并写明。迁移号与冻结在落地时向编排要（D10-1762）；db/schema.sql 与 packages/db/src/db.gen.ts 由沙箱外 pnpm db:snapshot 生成（outside_needed）。
 # 契约槽：openapi 类，w1 持槽，排 B1-02zzzc、CT-24zzl、CT-24zzm 之后（顺序 w1 定，D10-1758）。门禁等测试机。
+# 2026-11-17 拆单（D10-1984 / D10-1986）：首页 product_pool 按标签取数、首页配置保存对 tags 的校验与下发去标签，连同 delivery / home-config / home-config-save / section-read 四个用例文件，移到新单 CT-07f；本单只留迁移 0149、pool_items.tags 的后台读写与校验、对应规则测试与两处 SHAPE 各一行。
 refs: [BR-PROD-08, BR-PRICE-11]
 refs_hash:
   BR-PROD-08: 7c9abf38989c
@@ -16,14 +17,12 @@ refs_hash:
 deps: []
 paths:
   - 'contracts/openapi.yaml'
-  - 'contracts/home-schema.json'
   - 'packages/contracts-ts/**'
   - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
   - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
   - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
   - 'apps/api/src/modules/catalog/**'
-  - 'apps/api/src/modules/content/**'
   - 'db/migrations/**'
   - 'db/schema.sql'
   - 'packages/db/src/db.gen.ts'
@@ -44,6 +43,9 @@ modify_existing:
     br: [BR-PRICE-11]
     ruling: D10-1970
     note: 'BR 取值未变；变的是 04 §3.2 的 pool_items 表形状（加 tags，负责人 2026-11-15，F-ADM-10），该用例钉的列集合随之多一列（BR-PRICE-11）；编排 D10-1968 / D10-1970；commission 文件的改动负责人 2026-11-17 本人确认，D10-1973（只许这一行，超出另报）。只在对象字面量末尾追加 tags: [''_text'', false, "''{}''::text[]"] 一行，块体、其余列的期望与「没有多出别的列」的判法不动。'
+red_exempt_outside:
+  - file: 'test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts'
+    reason: '顶部 SHAPE 常量只在末尾追加 tags 一行（0149 合法加列，文件级支撑条目，D10-1970 / D10-1973，照 B1-05zd 先例），仍是精确列集合比对；其余用例块体未改（D10-1986）'
 red_exempt:
   - file: 'test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts'
     test: '[BR-PRICE-11] pool_items.commission_rate_bp 是 integer，可空，没有默认值'
