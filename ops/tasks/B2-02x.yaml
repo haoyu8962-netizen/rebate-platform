@@ -12,6 +12,7 @@ type: impl
 #   ② frozen 合计为负或任一合计超出 bigint → 不写、回 20001 data.fields=[recon_diff_id]、审计记原因，钉「拒绝时余额行与 version 都没变」（契约 CT-24zzna）；
 #   ③ 不推送钱包变更；④ 有变化 version + 1（CAS），前后相同不写余额行、version 不变、审计照写；
 #   以及「不关差错单（status / handler_id / resolution / updated_at 不变）、不解除 withdraw_holds」。
+#   ⑤ 跨零照入账路径（D10-2041，契约 CT-24zzna）：available 由 ≥0 变 <0 时 account.went_negative 恰发一次且在同一事务里（事务失败回滚则不发）；由 <0 回到 ≥0 时恢复钩子（balanceRecoveredHook）恰调一次；不跨零、拒绝、前后相同时两者都不发生。用入账路径同一个跨零判定函数。
 refs: [BR-FUND-19, BR-FUND-16, BR-ID-34]
 refs_hash:
   BR-FUND-19: 34f619112535
