@@ -139,7 +139,9 @@ it('[CT-07e][D10-1777] 首页配置 product_pool 的 tags 规范化后有重复�
   expect(modelTags(DUPLICATED)).toEqual(DEDUPED);
   const m = memory();
 
-  const view = await save(m.admin, DUPLICATED);
+  const saving = save(m.admin, DUPLICATED);
+  await expect(saving).resolves.toBeDefined();
+  const view = await saving;
 
   expect(m.inserted).toHaveLength(1);
   const stored = m.inserted[0]!.sections;
@@ -154,7 +156,7 @@ it('[CT-07e][D10-1777] 首页配置 product_pool 的 tags 规范化后有重复�
 it('[CT-07e][D10-1777] 首页配置 product_pool 的 tags 已是规范化后的值、无重复：原样保存', async () => {
   const m = memory();
 
-  await save(m.admin, DEDUPED);
+  await expect(save(m.admin, DEDUPED)).resolves.toBeDefined();
 
   expect(m.inserted.map((entry) => entry.sections)).toEqual([sections(DEDUPED)]);
 });
@@ -169,7 +171,7 @@ it.each([
     expect(modelTags(tags)).toEqual([]);
     // The same save with tags that keep a value goes through, normalized.
     const ok = memory();
-    await save(ok.admin, [' 新品 ', '新品']);
+    await expect(save(ok.admin, [' 新品 ', '新品'])).resolves.toBeDefined();
     expect(ok.inserted.map((entry) => savedTags(entry.sections))).toEqual([['新品']]);
 
     const m = memory();
