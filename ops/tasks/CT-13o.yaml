@@ -29,5 +29,5 @@ impl: claude
 tester: codex
 accept:
   - 'pnpm verify'
-status: todo
-pr: null
+status: done
+pr: 229

@@ -29,4 +29,5 @@ accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/support-allowlist/**'
   - 'test/spec/ci/modify-existing-support/**'
-status: todo
+status: done
+pr: 225
