@@ -639,3 +639,9 @@ approvals:
     granted: true
     date: '2026-11-18'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（评审轮次属门禁流程小改动），D10-2004 / D10-2012，先例 CT-07e（D10-1974）与第 96 条：F1-08al 第 2 轮（独立 Claude 写，规则测试提交 b3ceceb69）spec-test r2 pass，D10-2004 要钉的四项里「实付金额不许有「填入应付」快捷按钮」一项因 D10-2004 晚于第 2 轮任务书发出而缺断言，不算写测方的问题。本条只多一轮写测（第 3 次，未超 3 次上限）与一次 spec-test（本阶段第 3 次，超 2 次上限即本条所批）；不改任何资金规则、不放宽任何既有断言，其余用例、断言、样例一行不动；写测与评审都由无上下文的独立 Claude（claude-run.sh，approvals 第 36 条、D10-2003），证据如实记 claude-independent；照常不调 bump-attempt（按编排例外轮记），次数上限与熔断（10 次独立调用）不变。'
+  - id: 104
+    row: 4
+    title: 'CT-06zzzzzo：支撑文件放行清单的类型位置判定补第二批——无函数体方法签名的参数注解按 P3 判，函数类型 => 后与条件类型函数检查位置的对象类型、带默认值的 interface 体按类型判，行首 as / satisfies 不当类型运算符，as[ 在文案里读作索引'
+    granted: true
+    date: '2026-11-18'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/guard/lib），D10-1989 / D10-2007 / D10-2011 取甲′。不是只收紧：修误放 1 条、误拒 4 条、文案 1 条；两类既有 P3 宽松（成员列表里单独插分隔符、注解里插 ?: 或重复注解）随之延伸到新类型位置，差分 164 条全为语法非法 TS（证据 couli-runs/CT-06zzzzzo/evidence/parse-check.json，冻结文件非法写法 tsc TS1110 / prettier / eslint 均报错），另开 CT-06zzzzzp 在所有类型位置收掉；新类型位置同时继承 P4 尾分隔符（40 条，合法、JS 与 .d.ts 输出相同，equiv.json）。差分语料 48352 条，新放行 460、新拒绝 323 全部归类，值位置三类新放行 0（diff.ts）；三份证据脚本编排重跑与留档逐字相同（D10-2015）。规则测试 test/spec/ci/support-type-gaps-2/**（6 条，Codex 写，独立 Claude spec-test r1 pass）；实现由 Opus 子代理做，support-tokens.ts 指纹 9e614cf16c6b983a；Codex 额度用尽后评审改独立 Claude（approvals 第 36 条、D10-2003，证据记 claude-independent）：money r1 pass（1 条 S2 记 out-of-scope 并入 CT-06zzzzzp）、r2 增量 pass（评审无 shell，脚本由编排代跑）；测试机五组规则目录与 verify:fast 绿；编排按 #24 核过（D10-2016），#277 合并。'
