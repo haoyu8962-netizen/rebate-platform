@@ -56,7 +56,10 @@
 //       also as a conditional type's check), the body of an interface with defaulted type
 //       parameters, headerKeyword; a line-leading `as` / `satisfies` is no type operator, as in
 //       TypeScript — an existing one is a name ending the statement before it, an inserted one
-//       after an operand is refused as ambiguous);
+//       after an operand is refused as ambiguous; CT-06zzzzzp, D10-2007: a class field's
+//       annotation, an optional method signature with an annotated parameter in a type
+//       literal, no header walk past an earlier declaration's `}`; refused: a lone separator
+//       inside a member, `?:` or a second annotation in an annotation);
 //    P4 the trailing comma of a list (alone too: a re-wrapped call).
 //    Expressions: identifiers (no keyword), member access `a.b` on an identifier, literals (no
 //    template with `${…}`), object literals of these (properties first, spreads at the end),
@@ -568,27 +571,28 @@ class Tree {
    * CT-06zzzzzo: inside the angles of type parameters or arguments (a `>` / `>>` not yet closed
    * by its `<`, walking back) the punctuators of a type stand too — a default `<T = …>`, a
    * union, a function type (`interface I<T = { a: number }> { … }` is an interface body).
+   * CT-06zzzzzp (D10-2007 D): a `}` passed outside angles ends the walk — it closes an earlier
+   * declaration's body (`interface X { a: number } function g() { … }`, `enum E { A } if (c) {
+   * … }`), no header holds one there; the braces after it are judged as without that declaration.
    */
   private headerKeyword(o: number, strict = false): string | null {
     const ts = this.ts;
     let angle = 0;
-    /** A `}` passed outside angles: the walk left the header (an earlier statement's body). */
-    let crossed = false;
     /** A token passed that only the angles admit (CT-06zzzzzo). */
     let widened = false;
     for (let k = o - 1; k >= 0; k -= 1) {
       const t = ts[k] as OutsideToken;
       if (isClose(t)) {
-        if (t.text === '}' && angle === 0) crossed = true;
+        if (t.text === '}' && angle === 0) return null;
         k = this.match[k] as number;
         if (k < 0) return null;
         continue;
       }
       if (isId(t, 'interface') || isId(t, 'class') || isId(t, 'enum')) {
         // As before CT-06zzzzzo unless the walk passed an angle-only token or reads strictly
-        // (memberParams): then neither out of the header nor inside unclosed angles.
+        // (memberParams): then not inside unclosed angles.
         if (!widened && !strict) return t.text;
-        return crossed || angle !== 0 ? null : t.text;
+        return angle !== 0 ? null : t.text;
       }
       if (t.kind === 'id' && t.block !== true) continue;
       if (t.kind === 'punct' && t.text === '>') angle += 1;
@@ -676,14 +680,7 @@ class Tree {
     const kind = keyword === 'interface' ? 'interface' : keyword === 'class' ? 'class' : 'other';
     const punctAt = (k: number, text: string): boolean =>
       ts[k]?.kind === 'punct' && ts[k]?.text === text;
-    /** A member starts at token f. */
-    const starts = (f: number): boolean => {
-      const before = ts[f - 1];
-      if (f - 1 === p || before?.block === true) return true;
-      if (punctAt(f - 1, ';') || punctAt(f - 1, ',')) return true;
-      if (punctAt(f - 1, '}') && this.parent[f - 1] === p) return true;
-      return asiAt(ts, f);
-    };
+    const starts = (f: number): boolean => this.memberStart(p, f);
     let k = o - 1;
     // Type parameters `<…>`: back to their `<`.
     if (punctAt(k, '>') || punctAt(k, '>>')) {
@@ -711,7 +708,10 @@ class Tree {
     // No name: a call signature; `new`: a construct signature (not in a class).
     if (kind !== 'class' && starts(k + 1)) return k + 1;
     if (kind !== 'class' && isId(ts[k], 'new') && starts(k)) return k;
-    if (kind !== 'other' && punctAt(k, '?')) k -= 1;
+    // CT-06zzzzzp (D10-2007 C): an optional method signature in other braces (a type literal
+    // `{ m?(x: { a: number }): void }`) when a parameter is annotated — `c ? (x: T)` is no
+    // expression; an unannotated `{ m?(x): T }` stays as it was (a conditional `c ? (x) : y`).
+    if (punctAt(k, '?') && (kind !== 'other' || this.annotatedParams(o))) k -= 1;
     let f: number;
     const t = ts[k];
     if (punctAt(k, ']')) {
@@ -733,6 +733,69 @@ class Tree {
       f -= 1;
     }
     return starts(f) ? f : -1;
+  }
+
+  /**
+   * Whether a member of the braces at p starts at token f (memberParams): right after the `{`, a
+   * test block, `;`, `,`, a `}` directly in the braces, or a line break where a statement ends.
+   */
+  memberStart(p: number, f: number): boolean {
+    const ts = this.ts;
+    const before = ts[f - 1];
+    if (f - 1 === p || before?.block === true) return true;
+    if (before?.kind === 'punct' && (before.text === ';' || before.text === ',')) return true;
+    if (before?.kind === 'punct' && before.text === '}' && this.parent[f - 1] === p) return true;
+    return asiAt(ts, f);
+  }
+
+  /**
+   * CT-06zzzzzp (D10-2007 C): whether a parameter directly in the parentheses at o is annotated
+   * — a name after the `(`, a `,` or `...`, followed by `:` or `?:` — which no parenthesized
+   * expression holds.
+   */
+  private annotatedParams(o: number): boolean {
+    const ts = this.ts;
+    const close = this.match[o] as number;
+    const punctAt = (k: number, text: string): boolean =>
+      ts[k]?.kind === 'punct' && ts[k]?.text === text;
+    for (let k = o + 1; k < close; k += 1) {
+      if (this.parent[k] !== o || !isId(ts[k])) continue;
+      if (!(k - 1 === o || punctAt(k - 1, ',') || punctAt(k - 1, '...'))) continue;
+      if (punctAt(k + 1, ':') || (punctAt(k + 1, '?') && punctAt(k + 2, ':'))) return true;
+    }
+    return false;
+  }
+
+  /**
+   * CT-06zzzzzp (D10-2007 B): whether the `:` at c annotates a field of a class body: directly in
+   * the body (headerKeyword), after the field's name (an identifier, a string, a number, a
+   * computed `[…]`, with a definite `!`) at a member's start, its modifiers before it. A `:` of
+   * a conditional in a field's initializer (`x = c ? a : { … }`) follows no member start.
+   */
+  classField(c: number): boolean {
+    const ts = this.ts;
+    const p = this.parent[c] as number;
+    if (p < 0 || ts[p]?.text !== '{' || this.headerKeyword(p) !== 'class') return false;
+    let k = c - 1;
+    if (ts[k]?.kind === 'punct' && ts[k]?.text === '!') k -= 1;
+    const t = ts[k];
+    let f: number;
+    if (t?.kind === 'punct' && t.text === ']') {
+      f = this.match[k] as number;
+      if (f < 0) return false;
+    } else if (t !== undefined && (isId(t) || t.kind === 'str' || t.kind === 'num')) {
+      f = k;
+    } else {
+      return false;
+    }
+    while (
+      !this.memberStart(p, f) &&
+      isId(ts[f - 1]) &&
+      MEMBER_MODIFIERS.has(ts[f - 1]?.text ?? '')
+    ) {
+      f -= 1;
+    }
+    return this.memberStart(p, f);
   }
 
   /** Whether `(` at o opens the parameter list of a function, a method with a body, an arrow function or a function type. */
@@ -1575,6 +1638,21 @@ const COMMA = new Set([',']);
 const MEMBER_SEPARATORS = new Set([',', ';']);
 /** A line of a type goes on after these (a member of an interface does not end there). */
 const TYPE_GOES_ON = new Set(['|', '&', '<', ',', ':', '.', '=>']);
+/**
+ * Words after which a type goes on (CT-06zzzzzp, money r2): no member ends at them unless one is
+ * the member's own name (allowListProblems list, members).
+ */
+const TYPE_OPERATOR_WORDS = new Set([
+  'keyof',
+  'typeof',
+  'unique',
+  'infer',
+  'new',
+  'extends',
+  'is',
+  'asserts',
+  'readonly',
+]);
 /** A type follows these words (an object, tuple or parenthesized type after them is a type). */
 const TYPE_OPERATORS = new Set(['as', 'satisfies', 'extends', 'keyof', 'implements', 'readonly']);
 
@@ -1614,6 +1692,8 @@ function typePositions(ht: Tree, bindings: Bindings): TypePositions {
     }
     if (bindings.names.has(q) && roleAt(ht.parent[q] as number) === 'params') return true;
     if (punct(q, ')') && close(q) >= 0 && ht.role(close(q)) === 'params') return true;
+    // CT-06zzzzzp (D10-2007 B): a class field's annotation `class C { x: { a: number } }`.
+    if (ht.classField(c)) return true;
     const p = ht.parent[c] as number;
     return p >= 0 && (ht.role(p) === 'type-body' || (ht.role(p) === 'object' && inType(p, sure)));
   };
@@ -1961,10 +2041,17 @@ function allowListProblems(
       `${what(k)} inserted off the allow list (CT-06zzzzzj: positions P1–P4 × the expression grammar)`,
     );
 
-  /** A type from k up to `stop` (a `,` / `;` / `=` at its level ends it; `member`: a new line). */
+  /**
+   * A type from k up to `stop` (a `,` / `;` / `=` at its level ends it; `member`: a new line).
+   * CT-06zzzzzp (D10-2007 A2): outside its brackets a `?` only after an `extends` (a conditional
+   * type) and a `:` only after such a `?` — no `x:?: T`, no second annotation `x: void: T`.
+   */
   const typeSpan = (k: number, stop: number, member: boolean): number => {
     let j = k;
     let angle = 0;
+    /** `extends` waiting for their `?`, and `?` of conditional types waiting for their `:`. */
+    let checks = 0;
+    let branches = 0;
     const typeToken = (x: number): boolean => {
       const t = ts[x] as OutsideToken;
       if (t.kind === 'punct') return TYPE_PUNCT.has(t.text);
@@ -1994,6 +2081,22 @@ function allowListProblems(
         continue;
       }
       if (!typeToken(j)) return fail(j, `${what(j)} in an inserted type`);
+      if (isId(t, 'extends')) checks += 1;
+      else if (punct(j, '?') || punct(j, ':')) {
+        const conditional = punct(j, '?') ? checks > 0 : branches > 0;
+        if (!conditional) {
+          return fail(
+            j,
+            `${what(j)} in an inserted type outside a conditional type (no \`?:\` or second annotation in an annotation, CT-06zzzzzp)`,
+          );
+        }
+        if (punct(j, '?')) {
+          checks -= 1;
+          branches += 1;
+        } else {
+          branches -= 1;
+        }
+      }
       if (t.text === '<') angle += 1;
       else if (t.text === '>') angle = Math.max(0, angle - 1);
       else if (t.text === '>>') angle = Math.max(0, angle - 2);
@@ -2260,13 +2363,70 @@ function allowListProblems(
     e: number,
     p: number,
     item: (k: number, stop: number) => number,
-    opts: { seps: ReadonlySet<string>; tail: boolean; newline: boolean },
+    opts: { seps: ReadonlySet<string>; tail: boolean; newline: boolean; members?: true },
   ): number => {
     const c = close(p);
     const isSep = (k: number): boolean => ts[k]?.kind === 'punct' && opts.seps.has(tx(k));
+    /**
+     * CT-06zzzzzp (D10-2007 A1), members: a separator stands after a whole member and before the
+     * next one (or the `}`) — no lone `;` / `,` between a name and its `:` (`{ a;: number }`),
+     * none inside an annotation (`{ a:; number }`); after an inserted member on a line of its
+     * own, the existing code on the next line starts a member.
+     */
+    const memberEnds = (x: number): boolean => {
+      const t = ts[x];
+      if (t === undefined || t.block === true) return false;
+      if (t.kind === 'id' && TYPE_OPERATOR_WORDS.has(t.text)) {
+        // CT-06zzzzzp (money r2 S2): a type operator (`a: keyof⏎U`) ends no member; the word
+        // ends one only as the member's own name, at a member's start (`{ keyof }`, `{ new }`).
+        let f = x;
+        while (!ht.memberStart(p, f) && isId(ts[f - 1]) && MEMBER_MODIFIERS.has(tx(f - 1))) {
+          f -= 1;
+        }
+        return ht.memberStart(p, f);
+      }
+      if (t.kind !== 'punct') return t.kind !== 're';
+      return [')', ']', '}', '>', '>>', '>>>', '?'].includes(t.text);
+    };
+    const memberStarts = (x: number): boolean => {
+      const t = ts[x];
+      if (t === undefined || t.block === true) return false;
+      if (t.kind === 'id' || t.kind === 'str' || t.kind === 'num') return true;
+      return t.kind === 'punct' && ['[', '(', '<'].includes(t.text);
+    };
+    const strayFrom = (x: number): number =>
+      fail(
+        x,
+        `a lone separator ${what(x)} inserted inside an existing member (no member before or after it, CT-06zzzzzp)`,
+      );
     let k = s;
     let needSep = !(s - 1 === p || isSep(s - 1));
     let last = false;
+    // CT-06zzzzzp (independent Claude money r1, two S2): in a member list a run that follows no
+    // separator and no `{` stands after a whole member — not inside an annotation (`a:⏎b?:
+    // string⏎number`), not between a modifier and its member's name (`readonly⏎;⏎a: number`).
+    if (opts.members === true && needSep) {
+      const split =
+        isId(ts[s - 1]) &&
+        MEMBER_MODIFIERS.has(tx(s - 1)) &&
+        (isId(ts[e + 1]) ||
+          ts[e + 1]?.kind === 'str' ||
+          ts[e + 1]?.kind === 'num' ||
+          punct(e + 1, '['));
+      if (split) {
+        return fail(
+          s,
+          `${what(s)} inserted between the modifier ${what(s - 1)} and its member's name (CT-06zzzzzp)`,
+        );
+      }
+      if (!memberEnds(s - 1)) {
+        if (isSep(s)) return strayFrom(s);
+        return fail(
+          s,
+          `${what(s)} inserted inside an existing member, after ${what(s - 1)} (CT-06zzzzzp)`,
+        );
+      }
+    }
     while (k <= e) {
       if (needSep) {
         if (isSep(k)) {
@@ -2300,6 +2460,14 @@ function allowListProblems(
       }
     } else if (last && !(next === c || isSep(next) || (opts.newline && ts[next]?.nl === true))) {
       return offList(e);
+    } else if (opts.members === true && next !== c) {
+      if (!last && !memberStarts(next)) return strayFrom(e);
+      if (last && !isSep(next) && !memberStarts(next)) {
+        return fail(
+          e,
+          `a member inserted before the existing ${what(next)}, which starts no member (CT-06zzzzzp)`,
+        );
+      }
     }
     return e + 1;
   };
@@ -2332,7 +2500,16 @@ function allowListProblems(
     if (!(afterParameter || declared || returns)) return null;
     const j = typeSpan(k + 1, e + 1, false);
     if (j < 0) return -1;
-    return j === e + 1 ? e + 1 : offList(j);
+    if (j !== e + 1) return offList(j);
+    // CT-06zzzzzp (D10-2007 A2): an annotation inserted before an existing `:` / `?`
+    // (`x: void: T`, `): string: void`) is a second annotation.
+    if (punct(e + 1, ':') || punct(e + 1, '?')) {
+      return fail(
+        s,
+        `an annotation inserted before the existing ${what(e + 1)} (a second annotation, CT-06zzzzzp)`,
+      );
+    }
+    return e + 1;
   };
   /** Whether the specifier braces p are an import's (not an export's). */
   const importBraces = (p: number): boolean => {
@@ -2360,6 +2537,7 @@ function allowListProblems(
     if (typed !== null) return typed;
     const role = roleAt(p);
     const tail = { seps: COMMA, tail: true, newline: false };
+    const members = { seps: MEMBER_SEPARATORS, tail: false, newline: true, members: true } as const;
     switch (role) {
       case 'file':
       case 'block':
@@ -2369,11 +2547,9 @@ function allowListProblems(
       case 'params':
         return list(s, e, p, parameter, tail);
       case 'object':
-        return typeLiteral(p)
-          ? list(s, e, p, member, { seps: MEMBER_SEPARATORS, tail: false, newline: true })
-          : list(s, e, p, property, tail);
+        return typeLiteral(p) ? list(s, e, p, member, members) : list(s, e, p, property, tail);
       case 'type-body':
-        return list(s, e, p, member, { seps: MEMBER_SEPARATORS, tail: false, newline: true });
+        return list(s, e, p, member, members);
       case 'specifiers':
         if (!importBraces(p)) {
           return fail(

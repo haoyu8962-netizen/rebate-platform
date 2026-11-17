@@ -1234,3 +1234,282 @@ it('[CT-06zzzzzo] ⑥ an insertion into the index after a variable named as / sa
     `head:${gapLine(rows, typed)} ${REQUIRED}`,
   ]);
 });
+
+// CT-06zzzzzp (D10-2007): two P3 leniencies closed in every type position — A1 a lone separator
+// inside a member of a member list (allowListProblems list), A2 `?:` or a second
+// annotation in an annotation (typeSpan, annotation) — plus B a class field's annotation
+// (Tree.classField), C an annotated optional method signature in a type literal (memberParams,
+// Tree.annotatedParams) and D the header walk ending at an earlier declaration's body
+// (headerKeyword). `now` rows changed their decision; `kept` rows decide as before.
+
+const STRAY = [
+  'type T = { a: number };',
+  'type U = {\n  a: number\n  b: string\n};',
+  'interface I { value: T; }',
+];
+
+it('[CT-06zzzzzp] A1 now: a lone separator inside an existing member (before its colon, after it) or an inserted member followed by an existing token that starts no member is refused on its line', () => {
+  const t = 'type T = { a: number };';
+  const line = gapLine(STRAY, t);
+  for (const to of ['{ a\n;\n: number }', '{ a\n,\n: number }', '{ a:\n;\nnumber }']) {
+    expect(gap(STRAY, t, t.replace('{ a: number }', to)), to).toEqual([
+      `head:${line + 1} a lone separator \`${to.includes(',') ? ',' : ';'}\` inserted inside an existing member (no member before or after it, CT-06zzzzzp)`,
+    ]);
+  }
+  const i = 'interface I { value: T; }';
+  expect(names(gap(STRAY, i, i.replace('value: T', 'value\n;\n: T')), gapLine(STRAY, i) + 1)).toBe(
+    true,
+  );
+  // An optional member put before an existing `: number` swallows no annotation.
+  expect(gap(STRAY, t, t.replace('{ a: number }', '{ a\n; b?: string\n: number }'))).not.toEqual(
+    [],
+  );
+});
+
+it('[CT-06zzzzzp] A1 kept: a separator after a whole member — trailing (P4), between members on their own lines, before an inserted optional member — still passes; a second separator stays refused', () => {
+  const t = 'type T = { a: number };';
+  for (const to of ['{ a: number\n;\n }', '{ a: number\n,\n }', '{ a: number; }']) {
+    expect(gap(STRAY, t, t.replace('{ a: number }', to)), to).toEqual([]);
+  }
+  expect(gap(STRAY, t, t.replace('{ a: number }', '{ a: number\n; b?: string\n }'))).toEqual([]);
+  const u = 'type U = {\n  a: number\n  b: string\n};';
+  expect(gap(STRAY, u, u.replace('a: number\n', 'a: number;\n'))).toEqual([]);
+  expect(gap(STRAY, u, u.replace('a: number\n', 'a: number\n  c?: string\n'))).toEqual([]);
+  expect(gap(STRAY, t, t.replace('{ a: number }', '{ a: number;\n; }'))).toEqual([
+    `head:${gapLine(STRAY, t) + 1} \`;\` inserted off the allow list (CT-06zzzzzj: positions P1–P4 × the expression grammar)`,
+  ]);
+});
+
+it('[CT-06zzzzzp] A2 now: `?:` or a second annotation in an inserted member type, or an annotation inserted before an existing one (a variable, a parameter, a return type), is refused on its line', () => {
+  const t = 'type T = { a: number };';
+  const line = gapLine(STRAY, t);
+  for (const to of ['{ a: number; b?: void: string }', '{ a: number; b?: ?: string }']) {
+    const got = gap(STRAY, t, t.replace('{ a: number }', to));
+    expect(names(got, line, 'outside a conditional type'), to).toBe(true);
+  }
+  const rows = [
+    'let v: { a: number };',
+    'function p(y: { a: number }) { void y; }',
+    'interface S { m(x: number): void }',
+  ];
+  for (const [row, from] of [
+    ['let v: { a: number };', 'v: {'],
+    ['function p(y: { a: number }) { void y; }', 'y: {'],
+    ['interface S { m(x: number): void }', 'x: number'],
+    ['interface S { m(x: number): void }', '): void'],
+  ] as const) {
+    const at = gapLine(rows, row) + 1;
+    const [name, rest] = [from.slice(0, from.indexOf(':')), from.slice(from.indexOf(':'))];
+    for (const extra of [':?', ': string']) {
+      const got = gap(rows, row, row.replace(from, `${name}\n${extra}\n${rest}`));
+      expect(names(got, at), `${row} ${extra}`).toBe(true);
+    }
+  }
+});
+
+it('[CT-06zzzzzp] A2 kept: an annotation inserted on a parameter or a variable, an optional member with a plain type, still pass; an inserted conditional stays refused by rule 2', () => {
+  const rows = ['function q(y) { void y; }', 'let w = 1;', 'type T = { a: number };'];
+  expect(gap(rows, '(y)', '(y: number)')).toEqual([]);
+  expect(gap(rows, '(y)', '(y?: { a: number })')).toEqual([]);
+  expect(gap(rows, 'let w = 1', 'let w: number = 1')).toEqual([]);
+  expect(gap(rows, '{ a: number }', '{ a: number; b?: string | number }')).toEqual([]);
+  expect(
+    names(
+      gap(rows, '{ a: number }', '{ a: number; b?: A extends B ? C : D }'),
+      gapLine(rows, 'type T = { a: number };'),
+      'a conditional',
+    ),
+  ).toBe(true);
+});
+
+const FIELDS = [
+  'class C { x: { a: number } }',
+  'class S { static readonly z!: { a: number }; }',
+  "class K { ['k']: { a: number }; }",
+  'class Cb { cb: () => { a: number }; }',
+  'class P { x = cond ? raw : { a: 1 }; }',
+  'class Q { x = { a: 1 }; }',
+];
+
+it('[CT-06zzzzzp] B now: the object type of a class field annotation (modifiers, a definite !, a computed name, after a function type =>) takes only optional members', () => {
+  for (const [row, leaf] of [
+    ['class C { x: { a: number } }', '{ a: number }'],
+    ['class S { static readonly z!: { a: number }; }', '{ a: number }'],
+    ["class K { ['k']: { a: number }; }", '{ a: number }'],
+    ['class Cb { cb: () => { a: number }; }', '{ a: number }'],
+  ] as const) {
+    const line = gapLine(FIELDS, row);
+    const edit = (to: string): string[] => gap(FIELDS, row, row.replace(leaf, to));
+    expect(edit('{ a: number, b: string }'), row).toEqual([`head:${line} ${REQUIRED}`]);
+    expect(edit('{ a: number; b?: string }'), row).toEqual([]);
+    expect(edit('{ a: number, b?: string }'), row).toEqual([]);
+  }
+  const cb = 'class Cb { cb: () => { a: number }; }';
+  expect(gap(FIELDS, cb, cb.replace('{ a: number }', '{ a: number; ping(); }'))).not.toEqual([]);
+});
+
+it('[CT-06zzzzzp] B kept: an object in a field initializer (also a conditional branch) stays a value judged by P2', () => {
+  for (const row of ['class P { x = cond ? raw : { a: 1 }; }', 'class Q { x = { a: 1 }; }']) {
+    expect(gap(FIELDS, row, row.replace('{ a: 1 }', '{ a: 1, b: 2 }')), row).toEqual([]);
+    expect(gap(FIELDS, row, row.replace('{ a: 1 }', '{ a: 1, b?: 2 }')), row).not.toEqual([]);
+  }
+});
+
+const OPTIONAL_METHODS = [
+  'type M = { m?(x: { a: number }): void };',
+  'type R = { m?(x: { a: number }): () => void };',
+  'type N = { m?(x): string };',
+  'if (cond) { cond ? (raw) : raw; }',
+];
+
+it('[CT-06zzzzzp] C now: an optional method signature with an annotated parameter in a type literal reads its parameter list: P3 in its types, only optional parameters appended', () => {
+  for (const row of OPTIONAL_METHODS.slice(0, 2)) {
+    const line = gapLine(OPTIONAL_METHODS, row);
+    const edit = (to: string): string[] =>
+      gap(OPTIONAL_METHODS, row, row.replace('{ a: number }', to));
+    expect(edit('{ a: number, b: string }'), row).toEqual([`head:${line} ${REQUIRED}`]);
+    expect(edit('{ a: number; b?: string }'), row).toEqual([]);
+    expect(
+      gap(OPTIONAL_METHODS, row, row.replace('{ a: number })', '{ a: number }, y?: number)')),
+      row,
+    ).toEqual([]);
+  }
+});
+
+it('[CT-06zzzzzp] C kept: an unannotated optional method signature and a parenthesized conditional branch stay parentheses — an inserted annotation or parameter is refused', () => {
+  const n = 'type N = { m?(x): string };';
+  const line = gapLine(OPTIONAL_METHODS, n);
+  for (const to of ['m?(x: string)', 'm?(x, y?: string)']) {
+    expect(names(gap(OPTIONAL_METHODS, n, n.replace('m?(x)', to)), line), to).toBe(true);
+  }
+  const block = 'if (cond) { cond ? (raw) : raw; }';
+  expect(
+    names(
+      gap(OPTIONAL_METHODS, block, block.replace('(raw)', '(raw, b)')),
+      gapLine(OPTIONAL_METHODS, block),
+    ),
+  ).toBe(true);
+});
+
+const AFTER_DECLARATIONS = [
+  'interface X { a: number }\nfunction g() { ping(); }',
+  'enum E { A } if (cond) { ping(); }',
+  'interface Y { a: number } while (cond) { ping(); }',
+  'class Z { a = 1 }\nfunction h() { ping(); }',
+];
+
+it('[CT-06zzzzzp] D now: a function body or if / while block right after an interface or enum is a block — a call statement passes, a member-shaped statement is refused', () => {
+  for (const [row, body] of [
+    ['interface X { a: number }\nfunction g() { ping(); }', 'g() { ping(); }'],
+    ['enum E { A } if (cond) { ping(); }', 'if (cond) { ping(); }'],
+    ['interface Y { a: number } while (cond) { ping(); }', 'while (cond) { ping(); }'],
+  ] as const) {
+    const at = gapLine(AFTER_DECLARATIONS, row) + (row.includes('\n') ? 1 : 0);
+    const edit = (to: string): string[] =>
+      gap(AFTER_DECLARATIONS, body, body.replace('ping();', to));
+    expect(edit('ping(); ping();'), row).toEqual([]);
+    expect(names(edit('ping(); b: 1;'), at), row).toBe(true);
+    expect(names(edit('ping(); b?: string;'), at), row).toBe(true);
+  }
+});
+
+it('[CT-06zzzzzp] D kept: the interface body itself and a function body after a class decide as before', () => {
+  const x = 'interface X { a: number }';
+  const line = gapLine(AFTER_DECLARATIONS, 'interface X { a: number }\nfunction g() { ping(); }');
+  expect(gap(AFTER_DECLARATIONS, `${x}\n`, `${x.replace(' }', '; b?: string }')}\n`)).toEqual([]);
+  expect(gap(AFTER_DECLARATIONS, `${x}\n`, `${x.replace(' }', '; b: string }')}\n`)).toEqual([
+    `head:${line} ${REQUIRED}`,
+  ]);
+  const h = 'h() { ping(); }';
+  expect(gap(AFTER_DECLARATIONS, h, h.replace('ping();', 'ping(); ping();'))).toEqual([]);
+});
+
+// CT-06zzzzzp, independent Claude money r1 (two S2 in list(), members): a run that follows no
+// separator and no `{` must stand after a whole member — not inside a wrapped annotation, not
+// between a modifier and its member's name.
+
+const WRAPPED = [
+  'type T = {\n  a:\n    number\n};',
+  'interface I {\n  value:\n    T;\n}',
+  'interface R { readonly a: number }',
+  'type Q = { readonly [k: string]: number };',
+  'type W = { readonly };',
+];
+
+it('[CT-06zzzzzp] r1 now: a member inserted on its own line inside a wrapped annotation, or a separator / member inserted between a modifier and its name, is refused on its line', () => {
+  for (const [row, from] of [
+    ['type T = {\n  a:\n    number\n};', '  a:\n'],
+    ['interface I {\n  value:\n    T;\n}', '  value:\n'],
+  ] as const) {
+    const at = gapLine(WRAPPED, row) + 2;
+    for (const added of ['    b?: string\n', '    b?: string;\n']) {
+      expect(names(gap(WRAPPED, row, row.replace(from, `${from}${added}`)), at), row).toBe(true);
+    }
+  }
+  for (const [row, from] of [
+    ['interface R { readonly a: number }', 'readonly a'],
+    ['type Q = { readonly [k: string]: number };', 'readonly ['],
+  ] as const) {
+    const at = gapLine(WRAPPED, row) + 1;
+    for (const added of [';', ',', 'b?: string;']) {
+      const to = from.replace('readonly ', `readonly\n${added}\n`);
+      expect(names(gap(WRAPPED, row, row.replace(from, to)), at, 'the modifier'), added).toBe(true);
+    }
+  }
+});
+
+it('[CT-06zzzzzp] r1 kept: an optional member before or after a wrapped member, after a modified member, and a trailing separator after a member named readonly still pass', () => {
+  const t = 'type T = {\n  a:\n    number\n};';
+  expect(gap(WRAPPED, t, t.replace('{\n', '{\n  b?: string;\n'))).toEqual([]);
+  expect(gap(WRAPPED, t, t.replace('number\n', 'number\n  b?: string\n'))).toEqual([]);
+  const i = 'interface I {\n  value:\n    T;\n}';
+  expect(gap(WRAPPED, i, i.replace('T;\n', 'T;\n  b?: string;\n'))).toEqual([]);
+  const r = 'interface R { readonly a: number }';
+  expect(gap(WRAPPED, r, r.replace('number }', 'number; b?: string }'))).toEqual([]);
+  expect(gap(WRAPPED, r, r.replace('{ readonly', '{ b?: string; readonly'))).toEqual([]);
+  const w = 'type W = { readonly };';
+  expect(gap(WRAPPED, w, w.replace('readonly }', 'readonly\n;\n }'))).toEqual([]);
+  expect(gap(WRAPPED, w, w.replace('readonly }', 'readonly; b?: string }'))).toEqual([]);
+});
+
+// CT-06zzzzzp, independent Claude money r2 (S2 in list(), members): a type operator word
+// (keyof typeof unique infer new extends is asserts readonly) ends no member unless it is the
+// member's own name.
+
+const OPERATED = [
+  'type T = {\n  a: keyof\n    U\n};',
+  'type O = {\n  a: typeof\n    raw\n};',
+  'type C = {\n  a: new\n    () => U\n};',
+  'type E = {\n  a: U extends\n    V ? X : Y\n};',
+  'type K = { keyof: string; new: number };',
+  'type N = { keyof };',
+  'type W = { new };',
+  'type R = { readonly keyof };',
+  'type S = { new(): U };',
+];
+
+it('[CT-06zzzzzp] r2 now: a member or a lone separator inserted on its own line between a type operator (keyof, typeof, new, extends) and its operand is refused on its line', () => {
+  for (const row of OPERATED.slice(0, 4)) {
+    const at = gapLine(OPERATED, row) + 2;
+    const word = /a: (?:U )?(\w+)\n/.exec(row)?.[1] ?? '';
+    const from = `${word}\n`;
+    for (const added of ['    b?: string\n', '    b?: string;\n', '    ;\n']) {
+      expect(names(gap(OPERATED, row, row.replace(from, `${from}${added}`)), at), row).toBe(true);
+    }
+  }
+});
+
+it('[CT-06zzzzzp] r2 kept: members named keyof / new (also with a modifier, untyped) and a construct signature still take an appended optional member or a trailing separator', () => {
+  const edits: [string, string, string][] = [
+    ['type K = { keyof: string; new: number };', 'number }', 'number; b?: string }'],
+    ['type N = { keyof };', 'keyof }', 'keyof\n;\n }'],
+    ['type N = { keyof };', 'keyof }', 'keyof; b?: string }'],
+    ['type W = { new };', 'new }', 'new\n,\n }'],
+    ['type W = { new };', 'new }', 'new\n; b?: string\n }'],
+    ['type R = { readonly keyof };', 'keyof }', 'keyof; b?: string }'],
+    ['type S = { new(): U };', 'U }', 'U; b?: string }'],
+  ];
+  for (const [row, from, to] of edits) {
+    expect(gap(OPERATED, row, row.replace(from, to)), `${row} ${to}`).toEqual([]);
+  }
+});
