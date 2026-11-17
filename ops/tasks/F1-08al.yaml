@@ -1,0 +1,36 @@
+id: F1-08al
+repo: rebate-platform
+title: F1-08al：提现审核页【批量手动打款】（adminBatchManualPaid，payout.manual_entry + 动态码）——勾选待执行（APPROVED）单逐单填写通道流水号、实付时间、实付金额，一次提交，逐单结果如实显示
+type: impl
+# 2026-11-18 入账（前端线 fe，编排 D10-1994 甲类 (一)，缺口清单 #1）。契约 CT-24zr（done）、后端 B2-09m 已在主干。规格 design/specs/admin-withdrawals.md 批量栏与「批量手动打款对话框」；BR-WDR-16 本条与细则「后台【批量手动打款】」。
+# 范围：审核列表持 payout.manual_entry（超管持全部点）时，APPROVED 单可勾选（PENDING_REVIEW 的勾选与【批量通过】不变）；勾到 APPROVED 单时批量栏出【批量手动打款】→ 对话框列出所选单（单号、收款方式、应付 net_fen）并逐单填写通道流水号、实付时间、实付金额（本单做「逐单填写」；规格里的【下载流水号模板】/ Upload 导入另登后续 FU-F108AL-TEMPLATE-IMPORT）→ 本地校验（必填、流水号无空白 1–64、实付金额须等于应付）→ 动态码 → 只发一次 POST /admin/v1/withdrawals/batch-manual-paid（带 Idempotency-Key 与 X-Step-Up-Token），逐单结果（paid / skipped + reason 中文）如实列出，部分成功不许报成全成；之后重读列表。
+# 写入照 F1-08ce 的结果未知处理（D10-1731 / D10-1994）：没拿到带统一外壳的回答 → 锁定、原键原体只能原样【重试】或【去列表核对】；40901 / 5xx 同样结果未知；10003 重验后原键原体重发；确定结果才解锁；不自动重发。顺手把 WithdrawalsPage.tsx 头部过时的 TODO（【批量手动打款】「契约未出」）改成现状。
+# 冻结用例：[AC-F1-08ai-ACCESS#1] 断言持 fund.view + payout.execute + payout.manual_entry + export + config.business 的账号「没有勾选或批量通过」——本单起该账号可勾 APPROVED 单，按 D10-1712 / D10-1899 口径改（只改勾选框与入口清单，【批量通过】仍不出现，toEqual 严格相等），见 modify_existing；写测时如发现别的冻结用例同样受影响，先报再补台账。
+# 资金写操作（RV2）：money 评审；D10-1872 / D10-1994：规则测试与首轮评审用 Codex。
+refs: [BR-WDR-16, BR-WDR-05, BR-ID-34]
+refs_hash:
+  BR-WDR-16: c5899cc85558
+  BR-WDR-05: 99e2e2654ce0
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [F1-08ai]
+paths:
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/texts/withdrawals.ts'
+test_paths:
+  - 'test/spec/frontend/admin-withdrawal-manual-paid/**'
+  - 'test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts'
+impl: claude
+tester: codex
+modify_existing:
+  - file: 'test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts'
+    test: '[AC-F1-08ai-ACCESS#1] 只读和其他资金权限没有勾选或批量通过；审核权限与超管可勾选，未勾选不出现批量栏'
+    retitle_to: '[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏'
+    reason: rule_change
+    br: [BR-WDR-16]
+    ruling: D10-1994
+    note: '同 D10-1712 / D10-1899 通例：F1-08al 落地【批量手动打款】后，持 payout.manual_entry 的账号对 APPROVED 单出勾选框；该账号「没有任何勾选框」改为「恰为 APPROVED 单有可用勾选框、其余没有」（toEqual 严格相等），【批量通过】仍不出现、不发写请求；只持 fund.view 一组与审核权限 / 超管一组不变'
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-withdrawal-manual-paid/**'
+status: todo
+pr: null
