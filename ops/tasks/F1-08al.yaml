@@ -7,7 +7,7 @@ type: impl
 # 写入照 F1-08ce 的结果未知处理（D10-1731 / D10-1994）：没拿到带统一外壳的回答 → 锁定、原键原体只能原样【重试】或【去列表核对】；40901 / 5xx 同样结果未知；10003 重验后原键原体重发；确定结果才解锁；不自动重发。顺手把 WithdrawalsPage.tsx 头部过时的 TODO（【批量手动打款】「契约未出」）改成现状。
 # 冻结用例：[AC-F1-08ai-ACCESS#1] 断言持 fund.view + payout.execute + payout.manual_entry + export + config.business 的账号「没有勾选或批量通过」——本单起该账号可勾 APPROVED 单，按 D10-1712 / D10-1899 口径改（只改勾选框与入口清单，【批量通过】仍不出现，toEqual 严格相等），见 modify_existing；写测时如发现别的冻结用例同样受影响，先报再补台账。
 # 资金写操作（RV2）：money 评审；D10-1872 / D10-1994：规则测试与首轮评审用 Codex。
-# 2026-11-18 台账补丁 1：写测试第 1 轮由 Codex 写（规则测试提交 5d1aaee69）；第 2 轮调用 Codex 回报 usage limit（原文「usage limit, try again at Nov 23rd, 2026 9:57 PM」），按 approvals 第 36 条与 D10-1872 改由无上下文的独立 Claude（claude-run.sh）续写，tester 改为 claude-independent；证据如实记两家各写哪一轮。
+# 2026-11-18 台账补丁 1：写测试第 1 轮由 Codex 写（规则测试提交 5d1aaee69）；第 2 轮调用 Codex 回报 usage limit（原文「usage limit, try again at Nov 23rd, 2026 9:57 PM」），按 approvals 第 36 条、D10-1872 与 D10-2003 改由无上下文的独立 Claude（claude-run.sh）续写，tester 改为 claude-independent；证据如实记两家各写哪一轮。
 refs: [BR-WDR-16, BR-WDR-05, BR-ID-34]
 refs_hash:
   BR-WDR-16: c5899cc85558
