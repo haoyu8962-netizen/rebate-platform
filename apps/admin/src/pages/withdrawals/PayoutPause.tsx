@@ -302,12 +302,14 @@ export function PauseEntry(props: PauseEntryProps): ReactElement {
         setPhase('verify');
         return;
       }
-      // PUT 已发出却遇到网络错误或 5xx：结果未定，记下以便再试时识别「其实已生效」。
-      unknownRef.current =
-        putSent &&
-        (!(cause instanceof AdminApiError) || cause.kind === 'network' || cause.httpStatus >= 500)
-          ? id
-          : undefined;
+      // PUT 已发出却遇到网络错误或 5xx：结果未定，记下以便再试时识别「其实已生效」；
+      // 确定失败则清掉。PUT 没发出（读开关列表失败）时保留原值：不清掉之前的未定，也不凭空记成未定。
+      if (putSent) {
+        unknownRef.current =
+          !(cause instanceof AdminApiError) || cause.kind === 'network' || cause.httpStatus >= 500
+            ? id
+            : undefined;
+      }
       failed(cause);
     }
   };
