@@ -71,4 +71,5 @@ accept:
   - 'pnpm verify'
   - 'pnpm contracts:check'
   - 'test/spec/catalog/pool-tags/**'
-status: todo
+status: done
+pr: 270
