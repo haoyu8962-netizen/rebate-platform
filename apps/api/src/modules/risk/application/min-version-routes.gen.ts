@@ -2555,6 +2555,16 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": true
   },
   {
+    "operationId": "recalcBalanceAdminReconDiff",
+    "method": "POST",
+    "path": "/admin/v1/recon-diffs/:recon_diff_id/balance-recalc",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
     "operationId": "adminListAdjustments",
     "method": "GET",
     "path": "/admin/v1/adjustments",
