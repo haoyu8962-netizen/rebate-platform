@@ -1,0 +1,104 @@
+{
+  "risk_note": "CT-06zzzzzl (FU-CI-PROPS-SHA2-HANG; D10-1932 / D10-1937 / D10-1938 / D10-1944 / D10-1945): test-change only — five frozen union property blocks ([AC-B1-04zzc#5], [AC-B1-04zzu#11], [AC-B1-04zzs#8], [AC-B1-04zzk#7], [AC-B1-04zzp#10]) each chain fc .afterEach(async (previous) => { await previous(); await setImmediate }) so every run yields one macrotask: @vitest/spy 5.0.5 markDirty() creates a WeakRef per mock that stays alive until the job ends, and the 100k-run loops never returned to the event loop, keeping every run’s vi.fn with its mock.calls (rows, gzip Buffers) to the end of the file (heap 2.3–6.3 GB, container peak up to 11.89 GiB; three CI shard-2/3 runners lost, couli-runs/FU-CI-PROPS-SHA2-HANG/facts.md). Assertions, arbitraries, propParams (runs / seed), timeouts, titles, kits and wire() / searchRows calls unchanged (git diff -w: +36 / −6); none of the blocks had hooks before. Measured on couli-ci (same isolation): with --max-old-space-size=2048 and PROP_RUNS=100000 (= CI) all five files pass (before: all five heap-out-of-memory), container peak 1.74–1.95 GiB, heap ≤ 280 MB; default runs 20/20 green. No new rule test (tester none).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money full review r1 (codex-run.sh, CODEX_REVIEW_EFFORT=medium): pass, no findings; arbitraries, assertions, runs, seeds and timeouts unchanged, every hook awaits previous() then yields once (couli-runs/CT-06zzzzzl/review-money-r1.json)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; longrun-props runs test/properties/** only, which does not include these files",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "modify_existing": [
+    {
+      "file": "test/spec/union/taobao-order-archive/property.test.ts",
+      "test": "[AC-B1-04zzc#5] 任意顺序的自家 / 别家 / 坏行混合页：归档恰好一行，等于去掉别家行后的原序列",
+      "reason": "flake_fix",
+      "before": "it('[AC-B1-04zzc#5] 任意顺序的自家 / 别家 / 坏行混合页：归档恰好一行，等于去掉别家行后的原序列', async () => {\n  await expect(\n    fc.assert(\n      fc.asyncProperty(pages, async (kinds) => {\n        const rows = kinds.map((kind, index) => BUILD[kind](index + 1));\n        const kept = rows.filter((_row, index) => !FOREIGN_KINDS.includes(kinds[index]!));\n        const body = { hasNext: true, position: 'arc-prop-1_SYN|arc-prop-2_SYN' };\n        const h = wire(() => answer(orderBody(rows, body)));\n        let failure: unknown;\n        try {\n          await h.adapter.listOrders(win, {}, COLLECT);\n        } catch (error) {\n          failure = error;\n        }\n        expect(failure).toBeUndefined();\n        expect(h.database.inserted).toHaveLength(1);\n        expect(storedTree(h.database.inserted[0]!)).toStrictEqual(\n          parseLiterals(orderBody(kept, body)),\n        );\n        return true;\n      }),\n      propParams(),\n    ),\n  ).resolves.toBeUndefined();\n}, 900_000);",
+      "after": "it('[AC-B1-04zzc#5] 任意顺序的自家 / 别家 / 坏行混合页：归档恰好一行，等于去掉别家行后的原序列', async () => {\n  await expect(\n    fc.assert(\n      fc\n        .asyncProperty(pages, async (kinds) => {\n          const rows = kinds.map((kind, index) => BUILD[kind](index + 1));\n          const kept = rows.filter((_row, index) => !FOREIGN_KINDS.includes(kinds[index]!));\n          const body = { hasNext: true, position: 'arc-prop-1_SYN|arc-prop-2_SYN' };\n          const h = wire(() => answer(orderBody(rows, body)));\n          let failure: unknown;\n          try {\n            await h.adapter.listOrders(win, {}, COLLECT);\n          } catch (error) {\n            failure = error;\n          }\n          expect(failure).toBeUndefined();\n          expect(h.database.inserted).toHaveLength(1);\n          expect(storedTree(h.database.inserted[0]!)).toStrictEqual(\n            parseLiterals(orderBody(kept, body)),\n          );\n          return true;\n        })\n        .afterEach(async (previous) => {\n          // 每轮收尾让出一次宏任务：本轮 vi.fn 的 WeakRef 保活随之解除，不攒到文件结束（D10-1945）。\n          await previous();\n          await new Promise<void>((resolve) => setImmediate(resolve));\n        }),\n      propParams(),\n    ),\n  ).resolves.toBeUndefined();\n}, 900_000);",
+      "note": "只加每轮收尾钩子让出事件循环，释放 vitest mock 的 WeakRef 保活；断言与生成器未动；编排 D10-1944 / D10-1945",
+      "loops": {
+        "runs": 20,
+        "all_green": true,
+        "where": "couli-ci isolated container (--network none, couli-verify:b5df414591d8f78e, VITEST_MAX_WORKERS=1, NODE_OPTIONS --max-old-space-size=8192, default PROP_RUNS, PROP_SEED 20261001), all 5 files per run, 20 runs (couli-runs/CT-06zzzzzl/verify/B1–B20)"
+      }
+    },
+    {
+      "file": "test/spec/union/taobao-refund-archive/property.test.ts",
+      "test": "[AC-B1-04zzu#11] 任意顺序的凑狸 / 别家 / 读不出单号的行混合页：维权归档恰好一行，等于去掉别家行后的原序列；只问读得出的单号且去重；listRefunds 的条目与不注入查询时相同",
+      "reason": "flake_fix",
+      "before": "it('[AC-B1-04zzu#11] 任意顺序的凑狸 / 别家 / 读不出单号的行混合页：维权归档恰好一行，等于去掉别家行后的原序列；只问读得出的单号且去重；listRefunds 的条目与不注入查询时相同', async () => {\n  await expect(\n    fc.assert(\n      fc.asyncProperty(pages, async ({ kinds, hasNext }) => {\n        const built = kinds.map((kind, index) => build(kind, index + 1));\n        const rows = built.map((entry) => entry.row);\n        const kept = rows.filter((_row, index) => !OTHER_KINDS.includes(kinds[index]!));\n        const options = {\n          hasNext,\n          position: 'synthetic-refund-prop-position',\n          top: { request_id: 'synthetic-refund-prop-request' },\n          data: { synthetic_note: '合成属性页' },\n        };\n        const body = refundBody(rows, options);\n        const own = ownOrders(OURS);\n        const h = wireRefunds(() => answer(body), { ownOrders: own.reader });\n        const plain = wire(() => answer(body));\n\n        const page = await listed(h.adapter.listRefunds(win, PLAIN));\n        const before = await listed(plain.adapter.listRefunds(win, PLAIN));\n\n        expect(page.items).toEqual(before.items);\n        expect(page.nextCursor).toBe(before.nextCursor);\n        expect(h.database.inserted).toHaveLength(1);\n        expectArchivedAs(onlyArchiveOf(h.database, REFUND_PATH), refundBody(kept, options));\n        expectAskedOnce(\n          own.reader,\n          built.flatMap((entry) => (entry.no === null ? [] : [entry.no])),\n        );\n      }),\n      propParams(),\n    ),\n  ).resolves.toBeUndefined();\n}, 900_000);",
+      "after": "it('[AC-B1-04zzu#11] 任意顺序的凑狸 / 别家 / 读不出单号的行混合页：维权归档恰好一行，等于去掉别家行后的原序列；只问读得出的单号且去重；listRefunds 的条目与不注入查询时相同', async () => {\n  await expect(\n    fc.assert(\n      fc\n        .asyncProperty(pages, async ({ kinds, hasNext }) => {\n          const built = kinds.map((kind, index) => build(kind, index + 1));\n          const rows = built.map((entry) => entry.row);\n          const kept = rows.filter((_row, index) => !OTHER_KINDS.includes(kinds[index]!));\n          const options = {\n            hasNext,\n            position: 'synthetic-refund-prop-position',\n            top: { request_id: 'synthetic-refund-prop-request' },\n            data: { synthetic_note: '合成属性页' },\n          };\n          const body = refundBody(rows, options);\n          const own = ownOrders(OURS);\n          const h = wireRefunds(() => answer(body), { ownOrders: own.reader });\n          const plain = wire(() => answer(body));\n\n          const page = await listed(h.adapter.listRefunds(win, PLAIN));\n          const before = await listed(plain.adapter.listRefunds(win, PLAIN));\n\n          expect(page.items).toEqual(before.items);\n          expect(page.nextCursor).toBe(before.nextCursor);\n          expect(h.database.inserted).toHaveLength(1);\n          expectArchivedAs(onlyArchiveOf(h.database, REFUND_PATH), refundBody(kept, options));\n          expectAskedOnce(\n            own.reader,\n            built.flatMap((entry) => (entry.no === null ? [] : [entry.no])),\n          );\n        })\n        .afterEach(async (previous) => {\n          // 每轮收尾让出一次宏任务：本轮 vi.fn 的 WeakRef 保活随之解除，不攒到文件结束（D10-1945）。\n          await previous();\n          await new Promise<void>((resolve) => setImmediate(resolve));\n        }),\n      propParams(),\n    ),\n  ).resolves.toBeUndefined();\n}, 900_000);",
+      "note": "只加每轮收尾钩子让出事件循环，释放 vitest mock 的 WeakRef 保活；断言与生成器未动；编排 D10-1944 / D10-1945",
+      "loops": {
+        "runs": 20,
+        "all_green": true,
+        "where": "couli-ci isolated container (--network none, couli-verify:b5df414591d8f78e, VITEST_MAX_WORKERS=1, NODE_OPTIONS --max-old-space-size=8192, default PROP_RUNS, PROP_SEED 20261001), all 5 files per run, 20 runs (couli-runs/CT-06zzzzzl/verify/B1–B20)"
+      }
+    },
+    {
+      "file": "test/spec/union/taobao-seller-shop-ref/property.test.ts",
+      "test": "[AC-B1-04zzs#8] 任意 sellerId 混排：每条照常返回、顺序不变；shop_ref 恰为本行 sellerId 合格时的十进制文本，否则缺省；不告警 invalid_item",
+      "reason": "flake_fix",
+      "before": "it('[AC-B1-04zzs#8] 任意 sellerId 混排：每条照常返回、顺序不变；shop_ref 恰为本行 sellerId 合格时的十进制文本，否则缺省；不告警 invalid_item', async () => {\n  await expect(\n    fc.assert(\n      fc.asyncProperty(sellerIdLists, async (sellerIds) => {\n        const rows = sellerIds.map((sellerId, index) => dtkRow(index + 1, { sellerId }));\n        const { h, page } = await searchRows(rows);\n        expect(expectTrueIdentities(page)).toEqual(rows.map((_row, index) => index + 1));\n        page.items.forEach((item, index) => {\n          const expected = expectedShopRef(sellerIds[index]);\n          expect(Object.hasOwn(item, 'shop_ref'), `row ${index + 1} has shop_ref`).toBe(\n            expected !== undefined,\n          );\n          expect(item.shop_ref).toBe(expected);\n        });\n        expectNoInvalidItem(h);\n      }),\n      propParams(),\n    ),\n  ).resolves.toBeUndefined();\n}, 900_000);",
+      "after": "it('[AC-B1-04zzs#8] 任意 sellerId 混排：每条照常返回、顺序不变；shop_ref 恰为本行 sellerId 合格时的十进制文本，否则缺省；不告警 invalid_item', async () => {\n  await expect(\n    fc.assert(\n      fc\n        .asyncProperty(sellerIdLists, async (sellerIds) => {\n          const rows = sellerIds.map((sellerId, index) => dtkRow(index + 1, { sellerId }));\n          const { h, page } = await searchRows(rows);\n          expect(expectTrueIdentities(page)).toEqual(rows.map((_row, index) => index + 1));\n          page.items.forEach((item, index) => {\n            const expected = expectedShopRef(sellerIds[index]);\n            expect(Object.hasOwn(item, 'shop_ref'), `row ${index + 1} has shop_ref`).toBe(\n              expected !== undefined,\n            );\n            expect(item.shop_ref).toBe(expected);\n          });\n          expectNoInvalidItem(h);\n        })\n        .afterEach(async (previous) => {\n          // 每轮收尾让出一次宏任务：本轮 vi.fn 的 WeakRef 保活随之解除，不攒到文件结束（D10-1945）。\n          await previous();\n          await new Promise<void>((resolve) => setImmediate(resolve));\n        }),\n      propParams(),\n    ),\n  ).resolves.toBeUndefined();\n}, 900_000);",
+      "note": "只加每轮收尾钩子让出事件循环，释放 vitest mock 的 WeakRef 保活；断言与生成器未动；编排 D10-1944 / D10-1945",
+      "loops": {
+        "runs": 20,
+        "all_green": true,
+        "where": "couli-ci isolated container (--network none, couli-verify:b5df414591d8f78e, VITEST_MAX_WORKERS=1, NODE_OPTIONS --max-old-space-size=8192, default PROP_RUNS, PROP_SEED 20261001), all 5 files per run, 20 runs (couli-runs/CT-06zzzzzl/verify/B1–B20)"
+      }
+    },
+    {
+      "file": "test/spec/union/followups-20261106/dataoke-image-cap.test.ts",
+      "test": "[AC-B1-04zzk#7] 属性：白名单外地址排在前面、白名单内去重后不少于 9 个，夹杂重复与不合格项 → image_urls 恰为参照口径的 9 个",
+      "reason": "flake_fix",
+      "before": "it('[AC-B1-04zzk#7] 属性：白名单外地址排在前面、白名单内去重后不少于 9 个，夹杂重复与不合格项 → image_urls 恰为参照口径的 9 个', async () => {\n  await fc.assert(\n    fc.asyncProperty(\n      fc.array(fc.constantFrom(...FOREIGN), { minLength: 1, maxLength: 4 }),\n      fc.shuffledSubarray(ALLOWED, { minLength: LIMIT }),\n      fc.array(fc.tuple(fc.nat(), fc.constantFrom<unknown>(...FOREIGN, ...INVALID, ...ALLOWED)), {\n        maxLength: 6,\n      }),\n      async (head, allowed, extras) => {\n        const list: unknown[] = [...head, ...allowed];\n        for (const [at, value] of extras) list.splice(at % (list.length + 1), 0, value);\n        const want = expectedImages(list);\n        expect(want).toHaveLength(LIMIT);\n        const item = await imagesOf(44, list);\n        expect(item.image_urls).toEqual(want);\n      },\n    ),\n    propParams(),\n  );\n}, 900_000);",
+      "after": "it('[AC-B1-04zzk#7] 属性：白名单外地址排在前面、白名单内去重后不少于 9 个，夹杂重复与不合格项 → image_urls 恰为参照口径的 9 个', async () => {\n  await fc.assert(\n    fc\n      .asyncProperty(\n        fc.array(fc.constantFrom(...FOREIGN), { minLength: 1, maxLength: 4 }),\n        fc.shuffledSubarray(ALLOWED, { minLength: LIMIT }),\n        fc.array(fc.tuple(fc.nat(), fc.constantFrom<unknown>(...FOREIGN, ...INVALID, ...ALLOWED)), {\n          maxLength: 6,\n        }),\n        async (head, allowed, extras) => {\n          const list: unknown[] = [...head, ...allowed];\n          for (const [at, value] of extras) list.splice(at % (list.length + 1), 0, value);\n          const want = expectedImages(list);\n          expect(want).toHaveLength(LIMIT);\n          const item = await imagesOf(44, list);\n          expect(item.image_urls).toEqual(want);\n        },\n      )\n      .afterEach(async (previous) => {\n        // 每轮收尾让出一次宏任务：本轮 vi.fn 的 WeakRef 保活随之解除，不攒到文件结束（D10-1945）。\n        await previous();\n        await new Promise<void>((resolve) => setImmediate(resolve));\n      }),\n    propParams(),\n  );\n}, 900_000);",
+      "note": "只加每轮收尾钩子让出事件循环，释放 vitest mock 的 WeakRef 保活；断言与生成器未动；编排 D10-1944 / D10-1945",
+      "loops": {
+        "runs": 20,
+        "all_green": true,
+        "where": "couli-ci isolated container (--network none, couli-verify:b5df414591d8f78e, VITEST_MAX_WORKERS=1, NODE_OPTIONS --max-old-space-size=8192, default PROP_RUNS, PROP_SEED 20261001), all 5 files per run, 20 runs (couli-runs/CT-06zzzzzl/verify/B1–B20)"
+      }
+    },
+    {
+      "file": "test/spec/union/taobao-punish-archive/property.test.ts",
+      "test": "[AC-B1-04zzp#10] 任意顺序的自家 / 别家 / 读不出推广位的行混合页：违规归档恰好一行，等于去掉别家行后的原序列，total_count 不变",
+      "reason": "flake_fix",
+      "before": "it('[AC-B1-04zzp#10] 任意顺序的自家 / 别家 / 读不出推广位的行混合页：违规归档恰好一行，等于去掉别家行后的原序列，total_count 不变', async () => {\n  await expect(\n    fc.assert(\n      fc.asyncProperty(pages, async ({ kinds, more }) => {\n        const rows = kinds.map((kind, index) => BUILD[kind](index + 1));\n        const kept = rows.filter((_row, index) => !FOREIGN_KINDS.includes(kinds[index]!));\n        const options = {\n          total: rows.length + more,\n          top: { request_id: 'synthetic-punish-prop-request' },\n          data: { synthetic_note: '合成属性页' },\n        };\n        const h = wire(() => answer(punishBody(rows, options)));\n\n        const page = await listed(h.adapter.listPunishments(win, PLAIN));\n\n        expect(page.items.map((item) => item.punishment_id)).toEqual(\n          kinds.flatMap((kind, index) =>\n            OUR_KINDS.includes(kind) ? [punishmentIdOf(index + 1)] : [],\n          ),\n        );\n        expect(h.database.inserted).toHaveLength(1);\n        expectArchivedAs(onlyArchiveOf(h.database, PUNISH_PATH), punishBody(kept, options));\n      }),\n      propParams(),\n    ),\n  ).resolves.toBeUndefined();\n}, 900_000);",
+      "after": "it('[AC-B1-04zzp#10] 任意顺序的自家 / 别家 / 读不出推广位的行混合页：违规归档恰好一行，等于去掉别家行后的原序列，total_count 不变', async () => {\n  await expect(\n    fc.assert(\n      fc\n        .asyncProperty(pages, async ({ kinds, more }) => {\n          const rows = kinds.map((kind, index) => BUILD[kind](index + 1));\n          const kept = rows.filter((_row, index) => !FOREIGN_KINDS.includes(kinds[index]!));\n          const options = {\n            total: rows.length + more,\n            top: { request_id: 'synthetic-punish-prop-request' },\n            data: { synthetic_note: '合成属性页' },\n          };\n          const h = wire(() => answer(punishBody(rows, options)));\n\n          const page = await listed(h.adapter.listPunishments(win, PLAIN));\n\n          expect(page.items.map((item) => item.punishment_id)).toEqual(\n            kinds.flatMap((kind, index) =>\n              OUR_KINDS.includes(kind) ? [punishmentIdOf(index + 1)] : [],\n            ),\n          );\n          expect(h.database.inserted).toHaveLength(1);\n          expectArchivedAs(onlyArchiveOf(h.database, PUNISH_PATH), punishBody(kept, options));\n        })\n        .afterEach(async (previous) => {\n          // 每轮收尾让出一次宏任务：本轮 vi.fn 的 WeakRef 保活随之解除，不攒到文件结束（D10-1945）。\n          await previous();\n          await new Promise<void>((resolve) => setImmediate(resolve));\n        }),\n      propParams(),\n    ),\n  ).resolves.toBeUndefined();\n}, 900_000);",
+      "note": "只加每轮收尾钩子让出事件循环，释放 vitest mock 的 WeakRef 保活；断言与生成器未动；编排 D10-1944 / D10-1945",
+      "loops": {
+        "runs": 20,
+        "all_green": true,
+        "where": "couli-ci isolated container (--network none, couli-verify:b5df414591d8f78e, VITEST_MAX_WORKERS=1, NODE_OPTIONS --max-old-space-size=8192, default PROP_RUNS, PROP_SEED 20261001), all 5 files per run, 20 runs (couli-runs/CT-06zzzzzl/verify/B1–B20)"
+      }
+    }
+  ],
+  "task": "CT-06zzzzzl",
+  "spec_commit": "03468c9398017b02217d1cc97eaba4c1c40ae294",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f70898d16deaaf327f7c5004062c7e58467aec91",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
