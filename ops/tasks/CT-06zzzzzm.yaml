@@ -1,0 +1,58 @@
+id: CT-06zzzzzm
+repo: rebate-platform
+title: 'CT-06zzzzzm（FU-CT13O-DIST-TSC-ONCE）：dist 子进程用例的 tsc -b apps/api 跨进程串行，失败打印 status / signal / stderr（D10-1937 / D10-1953）'
+type: test-change
+# 2026-11-17 be 入账（编排 D10-1937 (d) 登单、D10-1953 认做法乙）。起因：CT-13o 测试机大批量同跑（test/spec/db + test/spec/platform，210 个集成文件并行，容器 8 GiB 无 swap）时 maintenance 的 5 条 dist 子进程用例
+#   在用例内 build() 的 spawnSync(tsc -b apps/api) 处 14–33 s 内非零退出且无输出（疑被信号杀；build() 只拼 stdout / stderr、不看 signal），三份 tsc -b 同时在跑；21 个文件时同 5 条通过。
+# 要做（乙）：新增 test/spec/platform/_shared/api-build-lock.ts，导出 lockApiBuild() / unlockApiBuild() / reportApiBuild(result)——锁目录在仓库 .tmp/ 下按工作树唯一，锁里记持有者 pid 与起始时间；等待方见持有者进程不在（kill(pid, 0) 失败）立即接管，
+#   陈旧超时只作兜底（大于一次完整构建、小于最短用例超时 180 s 并留余量）；reportApiBuild 打印 status、signal、stderr 末段、等锁时长、本次是否真构建。辅助文件只做锁与打印，不碰断言、不吞异常、不改 spawnSync 参数与超时。
+# 6 个冻结文件的 build() 里只做放行清单 P1 内的整句插入（spawnSync 前 lockApiBuild()、后 unlockApiBuild()、失败分支前 reportApiBuild(result)，加一行带绑定的 import），原有语句一字不动；放行清单拒了哪一句就停下报编排，不改清单。
+# 验收：测试机按 CT-13o 那次的大批量（test/spec/db + test/spec/platform 同跑）复跑，5 条 dist 子进程用例不再红；另单跑确认 reportApiBuild 能打印 signal。tester none（不加新规则测试，验收即上述复跑）；实现 Opus，评审 Codex。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/spec/platform/_shared/api-build-lock.ts'
+  - 'test/spec/platform/maintenance/worker-entry.int.test.ts'
+  - 'test/spec/platform/maintenance/worker-signal-start.int.test.ts'
+  - 'test/spec/platform/maintenance/worker-signal-start-more.int.test.ts'
+  - 'test/spec/platform/queue/entries.int.test.ts'
+  - 'test/spec/platform/queue/entry-send-keepalive.int.test.ts'
+  - 'test/spec/platform/idempotency-purge/entry.int.test.ts'
+modify_existing:
+  - file: 'test/spec/platform/maintenance/worker-entry.int.test.ts'
+    scope: support
+    reason: flake_fix
+    ruling: D10-1953
+    note: '只在 build() 里 spawnSync 前后与失败分支前各插一句裸调用（跨进程串行锁 + reportApiBuild 打印 status / signal / stderr 末段 / 等锁时长 / 是否真构建），加一行带绑定的 import；原有语句与断言一字不动；编排 D10-1937 / D10-1953'
+  - file: 'test/spec/platform/maintenance/worker-signal-start.int.test.ts'
+    scope: support
+    reason: flake_fix
+    ruling: D10-1953
+    note: '只在 build() 里 spawnSync 前后与失败分支前各插一句裸调用（跨进程串行锁 + reportApiBuild 打印 status / signal / stderr 末段 / 等锁时长 / 是否真构建），加一行带绑定的 import；原有语句与断言一字不动；编排 D10-1937 / D10-1953'
+  - file: 'test/spec/platform/maintenance/worker-signal-start-more.int.test.ts'
+    scope: support
+    reason: flake_fix
+    ruling: D10-1953
+    note: '只在 build() 里 spawnSync 前后与失败分支前各插一句裸调用（跨进程串行锁 + reportApiBuild 打印 status / signal / stderr 末段 / 等锁时长 / 是否真构建），加一行带绑定的 import；原有语句与断言一字不动；编排 D10-1937 / D10-1953'
+  - file: 'test/spec/platform/queue/entries.int.test.ts'
+    scope: support
+    reason: flake_fix
+    ruling: D10-1953
+    note: '只在 build() 里 spawnSync 前后与失败分支前各插一句裸调用（跨进程串行锁 + reportApiBuild 打印 status / signal / stderr 末段 / 等锁时长 / 是否真构建），加一行带绑定的 import；原有语句与断言一字不动；编排 D10-1937 / D10-1953'
+  - file: 'test/spec/platform/queue/entry-send-keepalive.int.test.ts'
+    scope: support
+    reason: flake_fix
+    ruling: D10-1953
+    note: '只在 build() 里 spawnSync 前后与失败分支前各插一句裸调用（跨进程串行锁 + reportApiBuild 打印 status / signal / stderr 末段 / 等锁时长 / 是否真构建），加一行带绑定的 import；原有语句与断言一字不动；编排 D10-1937 / D10-1953'
+  - file: 'test/spec/platform/idempotency-purge/entry.int.test.ts'
+    scope: support
+    reason: flake_fix
+    ruling: D10-1953
+    note: '只在 build() 里 spawnSync 前后与失败分支前各插一句裸调用（跨进程串行锁 + reportApiBuild 打印 status / signal / stderr 末段 / 等锁时长 / 是否真构建），加一行带绑定的 import；原有语句与断言一字不动；编排 D10-1937 / D10-1953'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null
