@@ -615,3 +615,9 @@ approvals:
     granted: true
     date: '2026-11-17'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（门禁流程小改动，第三类保护路径 tools/guard/lib）：FU-SUPPORT-TOKENS-NESTED-TYPE（CT-06zzzzzj Codex 代码评审 r2 S2），口径 D10-1902 / D10-1916 / D10-1920。本单 = 收紧 + 一处纠正误拒：判定上，嵌套类型字面量追加必填成员由放行改为拒；另把 CT-06zzzzzi 规则 3 的声明扫描在 as / satisfies 后的类型上跳过，消除「raw as Record<string, { … }> 里类型实参的逗号被读成第二个声明」的误拒，编排在 D10-1924 放开台账「CT-06zzzzzi 原规则不许动」这一处，拒绝清单与重名规则不动；as / satisfies 只在跟在完整操作数后、且不是成员名时算类型运算符，认不出时声明扫描退回旧行为（偏严），不会把真声明藏起来（D10-1929）。规则测试 test/spec/ci/support-nested-type/**（12 条，Codex 写，独立 Claude spec-test r1 / r2 通过，先红 12 条全为断言失败）；实现由 Opus 子代理做，单测 28 条含 D10-1924 ① 四组防绕过；Codex money r1–r3 均通过、无 S0 / S1；测试机三组规则目录 96 / 96 与 verify:fast 绿；类型层遗留偏差（误放 3、误拒 2、文案 1）登 FU-SUPPORT-TOKENS-TYPE-POSITION-GAPS；编排按 #24 核过实际差异（D10-1929），#237 合并。'
+  - id: 100
+    row: 4
+    title: 'CT-07e 任务专属一次性追加：写规则测试第 4 次（Codex，台账 tester 改 codex）与规则测试评审（spec-test）再 1 次——写测试只在 test/spec/catalog/product-pool-schema/kit.ts 的 ITEM_SHAPE 与 test/spec/catalog/product-pool-commission-schema/commission-column.int.test.ts 顶部 SHAPE 两个对象字面量末尾各追加 tags 一行，块体、其余期望与「没有多出别的列」的判法一字不动；评审只审这两处增量，由与写手不同的引擎做（specTestReviewers）；照常不调 bump-attempt（上限已满，按编排例外轮记），其余口径与次数上限不变；这一轮 fail 即停下报编排，不再加轮'
+    granted: true
+    date: '2026-11-17'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（试次属门禁流程小改动），D10-1968 / D10-1970：负责人 2026-11-15 定商品池标签本期做（F-ADM-10），CT-07e 的迁移 0149 给 pool_items 加 tags，三条钉列集合的冻结用例（product-pool-schema/shape.int.test.ts、access.int.test.ts 读 kit.ts 的 ITEM_SHAPE；commission-column.int.test.ts 读本文件顶部 SHAPE）在测试机上必红（CT-07e/tests/1），期望值须跟着加这一列；台账按 rule_change 文件级条目登记（#250，refs 补 BR-PROD-08 / BR-PRICE-11，BR 取值未变、变的是 04 §3.2 表形状）。CT-07e 写测试已用 3 次、spec-test 已用 2 次加 approvals 93 一次，这一轮各超上限 1 次。commission-column.int.test.ts 属资金 / 归属类，其改动由负责人 2026-11-17 本人确认（D10-1973），只许那一行；kit.ts 不属资金类。不改金额计算与订单归属规则、不放宽密钥扫描、不删不削弱资金测试、不涉生产；起因是规则变更带来的必然红，不是测试质量问题。编排按 approvals 16 / 24 登记。'
