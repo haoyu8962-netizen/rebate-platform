@@ -80,24 +80,30 @@ function storedTree(row: ArchivedRow): unknown {
 it('[AC-B1-04zzc#5] 任意顺序的自家 / 别家 / 坏行混合页：归档恰好一行，等于去掉别家行后的原序列', async () => {
   await expect(
     fc.assert(
-      fc.asyncProperty(pages, async (kinds) => {
-        const rows = kinds.map((kind, index) => BUILD[kind](index + 1));
-        const kept = rows.filter((_row, index) => !FOREIGN_KINDS.includes(kinds[index]!));
-        const body = { hasNext: true, position: 'arc-prop-1_SYN|arc-prop-2_SYN' };
-        const h = wire(() => answer(orderBody(rows, body)));
-        let failure: unknown;
-        try {
-          await h.adapter.listOrders(win, {}, COLLECT);
-        } catch (error) {
-          failure = error;
-        }
-        expect(failure).toBeUndefined();
-        expect(h.database.inserted).toHaveLength(1);
-        expect(storedTree(h.database.inserted[0]!)).toStrictEqual(
-          parseLiterals(orderBody(kept, body)),
-        );
-        return true;
-      }),
+      fc
+        .asyncProperty(pages, async (kinds) => {
+          const rows = kinds.map((kind, index) => BUILD[kind](index + 1));
+          const kept = rows.filter((_row, index) => !FOREIGN_KINDS.includes(kinds[index]!));
+          const body = { hasNext: true, position: 'arc-prop-1_SYN|arc-prop-2_SYN' };
+          const h = wire(() => answer(orderBody(rows, body)));
+          let failure: unknown;
+          try {
+            await h.adapter.listOrders(win, {}, COLLECT);
+          } catch (error) {
+            failure = error;
+          }
+          expect(failure).toBeUndefined();
+          expect(h.database.inserted).toHaveLength(1);
+          expect(storedTree(h.database.inserted[0]!)).toStrictEqual(
+            parseLiterals(orderBody(kept, body)),
+          );
+          return true;
+        })
+        .afterEach(async (previous) => {
+          // 每轮收尾让出一次宏任务：本轮 vi.fn 的 WeakRef 保活随之解除，不攒到文件结束（D10-1945）。
+          await previous();
+          await new Promise<void>((resolve) => setImmediate(resolve));
+        }),
       propParams(),
     ),
   ).resolves.toBeUndefined();

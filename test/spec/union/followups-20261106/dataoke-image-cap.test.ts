@@ -98,21 +98,27 @@ it('[AC-B1-04zzk#6] 前 9 个合法地址都在白名单外、第 10 个起才�
 
 it('[AC-B1-04zzk#7] 属性：白名单外地址排在前面、白名单内去重后不少于 9 个，夹杂重复与不合格项 → image_urls 恰为参照口径的 9 个', async () => {
   await fc.assert(
-    fc.asyncProperty(
-      fc.array(fc.constantFrom(...FOREIGN), { minLength: 1, maxLength: 4 }),
-      fc.shuffledSubarray(ALLOWED, { minLength: LIMIT }),
-      fc.array(fc.tuple(fc.nat(), fc.constantFrom<unknown>(...FOREIGN, ...INVALID, ...ALLOWED)), {
-        maxLength: 6,
+    fc
+      .asyncProperty(
+        fc.array(fc.constantFrom(...FOREIGN), { minLength: 1, maxLength: 4 }),
+        fc.shuffledSubarray(ALLOWED, { minLength: LIMIT }),
+        fc.array(fc.tuple(fc.nat(), fc.constantFrom<unknown>(...FOREIGN, ...INVALID, ...ALLOWED)), {
+          maxLength: 6,
+        }),
+        async (head, allowed, extras) => {
+          const list: unknown[] = [...head, ...allowed];
+          for (const [at, value] of extras) list.splice(at % (list.length + 1), 0, value);
+          const want = expectedImages(list);
+          expect(want).toHaveLength(LIMIT);
+          const item = await imagesOf(44, list);
+          expect(item.image_urls).toEqual(want);
+        },
+      )
+      .afterEach(async (previous) => {
+        // 每轮收尾让出一次宏任务：本轮 vi.fn 的 WeakRef 保活随之解除，不攒到文件结束（D10-1945）。
+        await previous();
+        await new Promise<void>((resolve) => setImmediate(resolve));
       }),
-      async (head, allowed, extras) => {
-        const list: unknown[] = [...head, ...allowed];
-        for (const [at, value] of extras) list.splice(at % (list.length + 1), 0, value);
-        const want = expectedImages(list);
-        expect(want).toHaveLength(LIMIT);
-        const item = await imagesOf(44, list);
-        expect(item.image_urls).toEqual(want);
-      },
-    ),
     propParams(),
   );
 }, 900_000);

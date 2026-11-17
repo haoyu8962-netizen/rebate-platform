@@ -38,19 +38,25 @@ const sellerIdLists = fc.array(fc.oneof(validText, validNumber, invalid), {
 it('[AC-B1-04zzs#8] 任意 sellerId 混排：每条照常返回、顺序不变；shop_ref 恰为本行 sellerId 合格时的十进制文本，否则缺省；不告警 invalid_item', async () => {
   await expect(
     fc.assert(
-      fc.asyncProperty(sellerIdLists, async (sellerIds) => {
-        const rows = sellerIds.map((sellerId, index) => dtkRow(index + 1, { sellerId }));
-        const { h, page } = await searchRows(rows);
-        expect(expectTrueIdentities(page)).toEqual(rows.map((_row, index) => index + 1));
-        page.items.forEach((item, index) => {
-          const expected = expectedShopRef(sellerIds[index]);
-          expect(Object.hasOwn(item, 'shop_ref'), `row ${index + 1} has shop_ref`).toBe(
-            expected !== undefined,
-          );
-          expect(item.shop_ref).toBe(expected);
-        });
-        expectNoInvalidItem(h);
-      }),
+      fc
+        .asyncProperty(sellerIdLists, async (sellerIds) => {
+          const rows = sellerIds.map((sellerId, index) => dtkRow(index + 1, { sellerId }));
+          const { h, page } = await searchRows(rows);
+          expect(expectTrueIdentities(page)).toEqual(rows.map((_row, index) => index + 1));
+          page.items.forEach((item, index) => {
+            const expected = expectedShopRef(sellerIds[index]);
+            expect(Object.hasOwn(item, 'shop_ref'), `row ${index + 1} has shop_ref`).toBe(
+              expected !== undefined,
+            );
+            expect(item.shop_ref).toBe(expected);
+          });
+          expectNoInvalidItem(h);
+        })
+        .afterEach(async (previous) => {
+          // 每轮收尾让出一次宏任务：本轮 vi.fn 的 WeakRef 保活随之解除，不攒到文件结束（D10-1945）。
+          await previous();
+          await new Promise<void>((resolve) => setImmediate(resolve));
+        }),
       propParams(),
     ),
   ).resolves.toBeUndefined();
