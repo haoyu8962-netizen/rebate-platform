@@ -2,15 +2,17 @@
 // 只经 @couli/money 换成整数分，不设上限；原因码三选一；关联单据 ≤ 10、不重复，按原因码的最低要求；
 // 对方科目只 RECON_FIX / OTHER 有，联盟应收另选平台）、两种封闭请求体、红冲方向（原单方向的相反）、
 // 写入失败的提示与 Idempotency-Key 是否沿用；批准 / 驳回系统预填单（adminApproveAdjustment、
-// adminRejectAdjustment，F1-08cc）的地址、驳回原因本地校验与失败提示。这里不放文案。
+// adminRejectAdjustment，F1-08cc）的地址、驳回原因本地校验与失败提示；批准坏账核销候选单
+// （adminApproveBadDebtWriteoff，F1-08cd）的地址与失败提示。这里不放文案。
 import { fenToJsonNumber, formatYuanAdmin, yuanStrToFen } from '@couli/money';
 import { platform, type Schema } from '@couli/contracts-ts';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
-import { ADJUSTMENTS_URL, fieldsOf, type Adjustment } from './model.ts';
+import { ADJUSTMENTS_URL, WRITEOFFS_URL, fieldsOf, type Adjustment } from './model.ts';
 
 const e = adjustmentsTexts.write.errors;
 const ae = adjustmentsTexts.approve.errors;
+const we = adjustmentsTexts.writeoffApprove.errors;
 
 export type CreateNew = Schema<'AdminAdjustmentCreateNew'>;
 export type CreateReversal = Schema<'AdminAdjustmentCreateReversal'>;
@@ -19,6 +21,7 @@ export type Executed = Schema<'AdminAdjustmentExecuted'>;
 export type ApproveRequest = Schema<'AdminEmptyActionRequest'>;
 export type RejectRequest = Schema<'AdminAdjustmentRejectRequest'>;
 export type Rejection = Schema<'AdminAdjustmentReject'>;
+export type WriteoffApproved = Schema<'AdminBadDebtWriteoffApprove'>;
 export type Direction = Adjustment['direction'];
 export type ChoosableReason = CreateNew['reason_code'];
 export type ChoosableSubject = NonNullable<CreateNew['contra_subject']>;
@@ -315,6 +318,30 @@ export function decisionErrorText(cause: unknown): string {
     const fields = fieldsOf(cause);
     if (fields.length === 1 && fields[0] === 'reason') return ae.reasonInvalid;
     if (fields.length === 1 && fields[0] === 'adjust_id') return ae.missing;
+    return e.invalid;
+  }
+  return e.failed;
+}
+
+// ---- approving a bad-debt write-off candidate ------------------------------------------------
+
+export const writeoffApproveUrl = (id: string): string =>
+  `${WRITEOFFS_URL}/${encodeURIComponent(id)}/approve`;
+
+/** 20001 data.reason=writeoff_frozen_pending: the member still has frozen money (nothing written). */
+export const frozenPending = (cause: unknown): boolean =>
+  cause instanceof AdminApiError &&
+  cause.code === 20001 &&
+  reasonOf(cause) === 'writeoff_frozen_pending';
+
+/** The prompt of a failed write-off approval (20902 and writeoff_frozen_pending aside). */
+export function writeoffErrorText(cause: unknown): string {
+  if (!(cause instanceof AdminApiError)) return e.failed;
+  if (cause.code === 10403) return we.forbidden;
+  if (cause.code === 20001) {
+    const fields = fieldsOf(cause);
+    if (reasonOf(cause) === undefined && fields.length === 1 && fields[0] === 'id')
+      return we.missing;
     return e.invalid;
   }
   return e.failed;

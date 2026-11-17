@@ -1,0 +1,129 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-writeoff-approve/approve.test.ts > [AC-F1-08cd-APPROVE#1] 【批准核销】：先发验证码、短信验证通过后只发一次 POST /admin/v1/bad-debt-writeoffs/{id}/approve，请求体恰为 {}（不带金额），带 X-Step-Up-Token 与 Idempotency-Key；返回已核销 → 提示候选单号与核销金额（written_off_fen 3 元）、关对话框、列表刷新：该行已核销、当前可用余额 0、不再有【批准核销】",
+    "test/spec/frontend/admin-writeoff-approve/approve.test.ts > [AC-F1-08cd-APPROVE#2] 打开对话框之后用户入账、可用余额由负 3 元变为负 1.20 元：请求体仍恰为 {}，提示按服务端批准时的余额核销 1.20 元（不用生成时金额、也不用打开时的余额）；该行已核销、可用余额 0",
+    "test/spec/frontend/admin-writeoff-approve/approve.test.ts > [AC-F1-08cd-APPROVE#3] 批准前余额已回正（可用余额 2 元）：服务端仍回 200，候选单置为已取消、written_off_fen=0 → 提示「可用余额已回正，候选单已取消，未记坏账，候选单号 …」（不提示已核销）、关对话框、列表刷新：该行已取消、不再有【批准核销】；只发一次",
+    "test/spec/frontend/admin-writeoff-approve/approve.test.ts > [AC-F1-08cd-APPROVE#4] 开关关闭（approve_blocked=false）时有冻结金额的候选单照常核销：请求体恰为 {}，提示核销金额 123.45 元，该行已核销；页面不按冻结金额自行拦截",
+    "test/spec/frontend/admin-writeoff-approve/approve.test.ts > [AC-F1-08cd-APPROVE#5] 两张候选单依次批准（第二张的冻结已在打开前处理完）：各自短信验证一次、各发一次请求体 {} 的 POST 到各自的候选单号，两次的 Idempotency-Key 不同（成功后换新键）；两行都显示已核销",
+    "test/spec/frontend/admin-writeoff-approve/busy.test.ts > [AC-F1-08cd-BUSY#1] 批准提交中：【批准核销】【取消】都不可用、对话框保留，再点不发第二次、不再发码；返回成功后只有一次批准",
+    "test/spec/frontend/admin-writeoff-approve/busy.test.ts > [AC-F1-08cd-BUSY#2] 对话框【取消】：关闭后焦点回到打开它的那一行的【批准核销】（两张待批准候选单各试一次）；都不发任何写请求、候选单仍待批准",
+    "test/spec/frontend/admin-writeoff-approve/dialog.test.ts > [AC-F1-08cd-DIALOG#1] 行上【批准核销】打开「批准坏账核销」：候选单摘要（候选单号、用户、负余额起始日、负余额天数、生成时金额 8 元、当前可用余额负 3 元、冻结 0，金额只经 @couli/money）、「核销金额按批准时余额」说明与后果说明（记坏账、关联账户风控标记）；没有冻结提示、没有任何输入项；【取消】【批准核销】可用；打开不发写请求、不弹验证",
+    "test/spec/frontend/admin-writeoff-approve/dialog.test.ts > [AC-F1-08cd-DIALOG#2] 有冻结金额的待批准候选单（approve_blocked=true）：对话框摘要显示当前可用余额负 123.45 元、冻结 50 元，并显示「该用户有冻结中的提现金额（提现单未到终态），暂不能核销：请先把提现单处理到终态，候选单保持待批准。」；说明与后果说明照常；打开不发写请求",
+    "test/spec/frontend/admin-writeoff-approve/dialog.test.ts > [AC-F1-08cd-DIALOG#3] 冻结提示只看列表的 approve_blocked、不看冻结金额本身（开关 ledger.bad_debt_require_no_frozen.enabled 关闭时服务端给 approve_blocked=false）：同一张有冻结 50 元的候选单，对话框不显示冻结提示，【批准核销】可用",
+    "test/spec/frontend/admin-writeoff-approve/entry.test.ts > [AC-F1-08cd-ENTRY#1] 只持 fund.writeoff：【批准核销】只在两张待批准候选单（含有冻结金额、approve_blocked 的那张）的行上，各恰 1 个可用；已核销、已取消两行没有；页面别处没有；进页不弹对话框、不发任何写请求、不读调账单",
+    "test/spec/frontend/admin-writeoff-approve/entry.test.ts > [AC-F1-08cd-ENTRY#2] 超管：先显示的调账单页签上没有【批准核销】；切到「坏账核销」后【批准核销】同样只在两张待批准候选单的行上，各恰 1 个可用；不发任何写请求",
+    "test/spec/frontend/admin-writeoff-approve/entry.test.ts > [AC-F1-08cd-ENTRY#3] 一张候选单核销成功后：该行变为已核销、不再有【批准核销】；另一张待批准候选单的【批准核销】仍恰 1 个可用",
+    "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#1] 拦截态：打开后用户又有了冻结金额，批准返回 20001 data.reason=writeoff_frozen_pending → 对话框里提示「该用户有冻结中的提现金额（提现单未到终态），暂不能核销：请先把提现单处理到终态，候选单保持待批准。」、对话框保留、该行仍待批准，不自动重发；提现单处理完（冻结回到 0）后再次批准重新短信验证、换新的 Idempotency-Key，核销成功",
+    "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#2] 有冻结金额的候选单（approve_blocked=true）照样可以提交，服务端返回 writeoff_frozen_pending：冻结提示仍在、对话框保留、该行仍待批准且仍有【批准核销】；不自动重发",
+    "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#3] 批准时候选单已被别人核销：返回 20902（data.resource=bad_debt_writeoff）→ 提示「该核销候选单已不是待批准状态，已刷新」、关对话框、列表重新读取：该行已核销、不再有【批准核销】；不自动重发",
+    "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#4] 批准返回 10003 data.tier=sms（验证已失效）：重新发验证码、再弹短信验证，验证后用新的验证重放请求体 {} 与同一个 Idempotency-Key（契约：重放沿用原键），成功只核销一次",
+    "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#5] 10403（本地有 fund.writeoff、服务端不认）：提示「无权限执行坏账核销」、对话框保留、该行仍待批准，不自动重发",
+    "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#6] 20001 data.fields=[id]（没有 reason）：提示「核销候选单不存在或已不可见，请刷新后重试」，只发一次、不自动重发",
+    "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#7] 20901（同键不同请求体）：提示「提交失败，请稍后重试」、对话框保留、不自动重发；再次批准重新短信验证并换新的 Idempotency-Key，成功只核销一次",
+    "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#8] 未登记验证手机号（发码返回 10003 data.reason=verify_phone_missing）：提示「这项操作需要短信验证，请先登记验证手机号」，不弹验证、不发批准，对话框保留；再按【批准核销】也不再发码、不弹验证",
+    "test/spec/frontend/admin-writeoff-approve/retry.test.ts > [AC-F1-08cd-RETRY#1] 批准结果未定（网络断开、50001、40901）：每次提示「提交失败，请稍后重试」、对话框保留、不自动重发，并在失败后重新读取候选单列表；再次批准重新短信验证、沿用同一个 Idempotency-Key 与请求体 {}，最终只核销一次",
+    "test/spec/frontend/admin-writeoff-approve/retry.test.ts > [AC-F1-08cd-RETRY#2] 先刷新再允许重提：批准网络失败后重新读取列表，读取返回前【批准核销】不可用、再点不发码不发请求；读取返回仍待批准后才可用，再次批准沿用原键",
+    "test/spec/frontend/admin-writeoff-approve/retry.test.ts > [AC-F1-08cd-RETRY#3] 批准其实已生效、只是回答丢了（网络断开）：重新读取后该行已核销 → 提示「该核销候选单已不是待批准状态，已刷新」、关对话框、该行不再有【批准核销】；不再发批准、不再发码",
+    "test/spec/frontend/admin-writeoff-approve/roles.test.ts > [AC-F1-08cd-ENTRY#4] 没有 fund.writeoff：只持 fund.view、持 fund.view + fund.adjust 时坏账核销页签可读但任何行都没有【批准核销】（不置灰，直接不出现）；只持 fund.adjust 时只有调账单页签、页面上没有【批准核销】；都不发写请求；同一页面换成只持 fund.writeoff 的账号才出现",
+    "test/spec/frontend/admin-writeoff-approve/roles.test.ts > [AC-F1-08cd-ENTRY#5] 持 fund.writeoff 的各种组合（+ fund.view、+ fund.adjust、三项全持）与超管：两张待批准候选单的行上各恰 1 个可用【批准核销】，其余行没有"
+  ],
+  "risk_note": "F1-08cd (orchestrator D10-1517 batch 1 ③; rebuilt per D10-1772 / D10-1890 like F1-08cc). Bad-debt write-off approval for fund.writeoff: confirm dialog, SMS step-up, one approve request; the write goes through the F1-08ce result-unknown handling (no enveloped reply means locked, original key and body on retry, 去列表核对; 40901 / 5xx stay unknown; definite result unlocks; re-read before re-enabling after an undetermined result); amounts only through @couli/money. Rebuilt on main after F1-08cc / ce / cf merged (rebase conflict); useAdjustmentWrite.tsx unchanged; cc / ce / cf code untouched; money review r2 re-read the whole implementation. The rule-test commit only adds files under admin-writeoff-approve/; no frozen case is modified. Rule tests by an independent Claude (ledger tester claude-independent), spec-test r1 pass. Implementation by Opus 5.5 (another context). Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "money review by an independent Claude per ops/approvals.yaml #36 (claude-run.sh, fresh context; reviewer kept from round 1 per D10-1872): r1 pass; r2 after the rebuild on main re-read the whole implementation (D10-1890), pass, 0 findings"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude context (ledger tester claude-independent); spec-test r1 by another independent Claude context, pass",
+    "model": "claude-opus-5-5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08cd",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "a62484e46ce7d79c54d73dda8ca4f419c54396b8",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a62484e46ce7d79c54d73dda8ca4f419c54396b8",
+      "tree": "8917283d425b433d19c09608507f4bb6409914ee",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-17T04:17:01Z",
+      "finished_at": "2026-11-17T04:17:17Z",
+      "red_tests": [
+        "test/spec/frontend/admin-writeoff-approve/approve.test.ts > [AC-F1-08cd-APPROVE#1] 【批准核销】：先发验证码、短信验证通过后只发一次 POST /admin/v1/bad-debt-writeoffs/{id}/approve，请求体恰为 {}（不带金额），带 X-Step-Up-Token 与 Idempotency-Key；返回已核销 → 提示候选单号与核销金额（written_off_fen 3 元）、关对话框、列表刷新：该行已核销、当前可用余额 0、不再有【批准核销】",
+        "test/spec/frontend/admin-writeoff-approve/approve.test.ts > [AC-F1-08cd-APPROVE#2] 打开对话框之后用户入账、可用余额由负 3 元变为负 1.20 元：请求体仍恰为 {}，提示按服务端批准时的余额核销 1.20 元（不用生成时金额、也不用打开时的余额）；该行已核销、可用余额 0",
+        "test/spec/frontend/admin-writeoff-approve/approve.test.ts > [AC-F1-08cd-APPROVE#3] 批准前余额已回正（可用余额 2 元）：服务端仍回 200，候选单置为已取消、written_off_fen=0 → 提示「可用余额已回正，候选单已取消，未记坏账，候选单号 …」（不提示已核销）、关对话框、列表刷新：该行已取消、不再有【批准核销】；只发一次",
+        "test/spec/frontend/admin-writeoff-approve/approve.test.ts > [AC-F1-08cd-APPROVE#4] 开关关闭（approve_blocked=false）时有冻结金额的候选单照常核销：请求体恰为 {}，提示核销金额 123.45 元，该行已核销；页面不按冻结金额自行拦截",
+        "test/spec/frontend/admin-writeoff-approve/approve.test.ts > [AC-F1-08cd-APPROVE#5] 两张候选单依次批准（第二张的冻结已在打开前处理完）：各自短信验证一次、各发一次请求体 {} 的 POST 到各自的候选单号，两次的 Idempotency-Key 不同（成功后换新键）；两行都显示已核销",
+        "test/spec/frontend/admin-writeoff-approve/busy.test.ts > [AC-F1-08cd-BUSY#1] 批准提交中：【批准核销】【取消】都不可用、对话框保留，再点不发第二次、不再发码；返回成功后只有一次批准",
+        "test/spec/frontend/admin-writeoff-approve/busy.test.ts > [AC-F1-08cd-BUSY#2] 对话框【取消】：关闭后焦点回到打开它的那一行的【批准核销】（两张待批准候选单各试一次）；都不发任何写请求、候选单仍待批准",
+        "test/spec/frontend/admin-writeoff-approve/dialog.test.ts > [AC-F1-08cd-DIALOG#1] 行上【批准核销】打开「批准坏账核销」：候选单摘要（候选单号、用户、负余额起始日、负余额天数、生成时金额 8 元、当前可用余额负 3 元、冻结 0，金额只经 @couli/money）、「核销金额按批准时余额」说明与后果说明（记坏账、关联账户风控标记）；没有冻结提示、没有任何输入项；【取消】【批准核销】可用；打开不发写请求、不弹验证",
+        "test/spec/frontend/admin-writeoff-approve/dialog.test.ts > [AC-F1-08cd-DIALOG#2] 有冻结金额的待批准候选单（approve_blocked=true）：对话框摘要显示当前可用余额负 123.45 元、冻结 50 元，并显示「该用户有冻结中的提现金额（提现单未到终态），暂不能核销：请先把提现单处理到终态，候选单保持待批准。」；说明与后果说明照常；打开不发写请求",
+        "test/spec/frontend/admin-writeoff-approve/dialog.test.ts > [AC-F1-08cd-DIALOG#3] 冻结提示只看列表的 approve_blocked、不看冻结金额本身（开关 ledger.bad_debt_require_no_frozen.enabled 关闭时服务端给 approve_blocked=false）：同一张有冻结 50 元的候选单，对话框不显示冻结提示，【批准核销】可用",
+        "test/spec/frontend/admin-writeoff-approve/entry.test.ts > [AC-F1-08cd-ENTRY#1] 只持 fund.writeoff：【批准核销】只在两张待批准候选单（含有冻结金额、approve_blocked 的那张）的行上，各恰 1 个可用；已核销、已取消两行没有；页面别处没有；进页不弹对话框、不发任何写请求、不读调账单",
+        "test/spec/frontend/admin-writeoff-approve/entry.test.ts > [AC-F1-08cd-ENTRY#2] 超管：先显示的调账单页签上没有【批准核销】；切到「坏账核销」后【批准核销】同样只在两张待批准候选单的行上，各恰 1 个可用；不发任何写请求",
+        "test/spec/frontend/admin-writeoff-approve/entry.test.ts > [AC-F1-08cd-ENTRY#3] 一张候选单核销成功后：该行变为已核销、不再有【批准核销】；另一张待批准候选单的【批准核销】仍恰 1 个可用",
+        "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#1] 拦截态：打开后用户又有了冻结金额，批准返回 20001 data.reason=writeoff_frozen_pending → 对话框里提示「该用户有冻结中的提现金额（提现单未到终态），暂不能核销：请先把提现单处理到终态，候选单保持待批准。」、对话框保留、该行仍待批准，不自动重发；提现单处理完（冻结回到 0）后再次批准重新短信验证、换新的 Idempotency-Key，核销成功",
+        "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#2] 有冻结金额的候选单（approve_blocked=true）照样可以提交，服务端返回 writeoff_frozen_pending：冻结提示仍在、对话框保留、该行仍待批准且仍有【批准核销】；不自动重发",
+        "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#3] 批准时候选单已被别人核销：返回 20902（data.resource=bad_debt_writeoff）→ 提示「该核销候选单已不是待批准状态，已刷新」、关对话框、列表重新读取：该行已核销、不再有【批准核销】；不自动重发",
+        "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#4] 批准返回 10003 data.tier=sms（验证已失效）：重新发验证码、再弹短信验证，验证后用新的验证重放请求体 {} 与同一个 Idempotency-Key（契约：重放沿用原键），成功只核销一次",
+        "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#5] 10403（本地有 fund.writeoff、服务端不认）：提示「无权限执行坏账核销」、对话框保留、该行仍待批准，不自动重发",
+        "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#6] 20001 data.fields=[id]（没有 reason）：提示「核销候选单不存在或已不可见，请刷新后重试」，只发一次、不自动重发",
+        "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#7] 20901（同键不同请求体）：提示「提交失败，请稍后重试」、对话框保留、不自动重发；再次批准重新短信验证并换新的 Idempotency-Key，成功只核销一次",
+        "test/spec/frontend/admin-writeoff-approve/errors.test.ts > [AC-F1-08cd-ERROR#8] 未登记验证手机号（发码返回 10003 data.reason=verify_phone_missing）：提示「这项操作需要短信验证，请先登记验证手机号」，不弹验证、不发批准，对话框保留；再按【批准核销】也不再发码、不弹验证",
+        "test/spec/frontend/admin-writeoff-approve/retry.test.ts > [AC-F1-08cd-RETRY#1] 批准结果未定（网络断开、50001、40901）：每次提示「提交失败，请稍后重试」、对话框保留、不自动重发，并在失败后重新读取候选单列表；再次批准重新短信验证、沿用同一个 Idempotency-Key 与请求体 {}，最终只核销一次",
+        "test/spec/frontend/admin-writeoff-approve/retry.test.ts > [AC-F1-08cd-RETRY#2] 先刷新再允许重提：批准网络失败后重新读取列表，读取返回前【批准核销】不可用、再点不发码不发请求；读取返回仍待批准后才可用，再次批准沿用原键",
+        "test/spec/frontend/admin-writeoff-approve/retry.test.ts > [AC-F1-08cd-RETRY#3] 批准其实已生效、只是回答丢了（网络断开）：重新读取后该行已核销 → 提示「该核销候选单已不是待批准状态，已刷新」、关对话框、该行不再有【批准核销】；不再发批准、不再发码",
+        "test/spec/frontend/admin-writeoff-approve/roles.test.ts > [AC-F1-08cd-ENTRY#4] 没有 fund.writeoff：只持 fund.view、持 fund.view + fund.adjust 时坏账核销页签可读但任何行都没有【批准核销】（不置灰，直接不出现）；只持 fund.adjust 时只有调账单页签、页面上没有【批准核销】；都不发写请求；同一页面换成只持 fund.writeoff 的账号才出现",
+        "test/spec/frontend/admin-writeoff-approve/roles.test.ts > [AC-F1-08cd-ENTRY#5] 持 fund.writeoff 的各种组合（+ fund.view、+ fund.adjust、三项全持）与超管：两张待批准候选单的行上各恰 1 个可用【批准核销】，其余行没有"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-writeoff-approve/approve.test.ts",
+        "test/spec/frontend/admin-writeoff-approve/busy.test.ts",
+        "test/spec/frontend/admin-writeoff-approve/dialog.test.ts",
+        "test/spec/frontend/admin-writeoff-approve/entry.test.ts",
+        "test/spec/frontend/admin-writeoff-approve/errors.test.ts",
+        "test/spec/frontend/admin-writeoff-approve/retry.test.ts",
+        "test/spec/frontend/admin-writeoff-approve/roles.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "1ec6e32ce273bade99ad2fa865ea4b67251cd64aef81f3989cbaef85ecf04cb9"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2e39eeed6d69e7ea825e760b4d6353266d88cced",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}

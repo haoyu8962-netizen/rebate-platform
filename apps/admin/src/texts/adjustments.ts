@@ -1,5 +1,5 @@
 // 调账与核销页文案（资源 adjustments，菜单 资金 / 调账与核销；F1-08ca 只读：调账单列表与详情、坏账核销
-// 候选单；F1-08cb 新建调账与红冲，一步提交并生效；F1-08cc 批准 / 驳回系统预填单）。调账单状态、原因码、候选单状态的中文名只从后台字典读（BR-TEXT-25
+// 候选单；F1-08cb 新建调账与红冲，一步提交并生效；F1-08cc 批准 / 驳回系统预填单；F1-08cd 批准坏账核销）。调账单状态、原因码、候选单状态的中文名只从后台字典读（BR-TEXT-25
 // admin_dict.admin_adjustments.*、admin_dict.bad_debt_writeoff.*，contracts/texts.admin.default.json），
 // 缺键显示编码，所以这里不写这些名字。方向、关联单据类型、对方科目按 contracts/enums/fund.yaml 的值名。
 export const adjustmentsTexts = {
@@ -8,7 +8,7 @@ export const adjustmentsTexts = {
   /** created_by null: a form the system prefilled. */
   system: '系统',
   readOnlyNotice:
-    '批准坏账核销尚未接入，接口定稿后开放；新建调账与红冲一步提交并生效；系统预填的待批准单经【批准】批准或驳回。',
+    '新建调账与红冲一步提交并生效；系统预填的待批准单经【批准】批准或驳回；待批准的坏账核销候选单经【批准核销】短信验证后核销。',
   forbidden: '无权限查看调账与核销',
   forbiddenDescription:
     '当前账号缺少资金权限点（fund.adjust、fund.writeoff 或 fund.view），请联系超管勾选。',
@@ -63,7 +63,9 @@ export const adjustmentsTexts = {
       frozen: '冻结',
       status: '状态',
       created: '生成时间',
+      actions: '操作',
     },
+    approveEntry: '批准核销',
   },
   detail: {
     title: '调账单详情',
@@ -274,6 +276,44 @@ export const adjustmentsTexts = {
       noBalance: '可用余额不大于 0，不能批准，请驳回',
       missing: '调账单不存在或已不可见，请刷新后重试',
       stale: '该调账单已不是待批准状态，已刷新',
+    },
+  },
+  /**
+   * 批准坏账核销对话框（adminApproveBadDebtWriteoff，fund.writeoff，短信档二次验证，请求体 {}；BR-FUND-12：
+   * 金额 = −批准时可用余额，余额已不小于 0 时候选单改为已取消）。
+   */
+  writeoffApprove: {
+    title: '批准坏账核销',
+    approve: '批准核销',
+    cancel: '取消',
+    amountNotice:
+      '核销金额按批准时重新读取的可用余额计算，不用生成时金额；批准时可用余额已不小于 0 的，候选单改为已取消，不记坏账。',
+    consequence:
+      '批准后立即记坏账（借 坏账 / 贷 用户可用余额），用户可用余额回到 0，不可撤回，之后的入账照常计入余额；关联账户将被打上风控标记，只留痕，不改变提现判定。',
+    frozenPending:
+      '该用户有冻结中的提现金额（提现单未到终态），暂不能核销：请先把提现单处理到终态，候选单保持待批准。',
+    checking: '正在重新读取候选单…',
+    checkFailed: '候选单读取失败',
+    /** 批准没拿到带统一外壳的回答（网络错误、无法解析）：结果未知，只能原样重试或去列表核对。 */
+    unknown:
+      '上次提交结果未知：可能已经生效。重新读取后仍待批准时，再按【批准核销】用原内容原样重新提交（不会重复核销），或按【去列表核对】查看是否已处理。',
+    /** StepUpModal 的「本次操作」。 */
+    operation: '批准坏账核销（按批准时余额记坏账）',
+    approved: (id: string, amount: string): string => `已核销，候选单号 ${id}，核销金额 ${amount}`,
+    cancelled: (id: string): string => `可用余额已回正，候选单已取消，未记坏账，候选单号 ${id}`,
+    summary: {
+      id: '候选单号',
+      user: '用户',
+      since: '负余额起始日',
+      days: '负余额天数',
+      candidate: '生成时金额',
+      available: '当前可用余额',
+      frozen: '冻结',
+    },
+    errors: {
+      missing: '核销候选单不存在或已不可见，请刷新后重试',
+      stale: '该核销候选单已不是待批准状态，已刷新',
+      forbidden: '无权限执行坏账核销',
     },
   },
   /** 对方科目连同平台（contra_platform，只 UNION_RECEIVABLE 有）。 */
