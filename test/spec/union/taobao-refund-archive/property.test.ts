@@ -90,33 +90,39 @@ const pages = fc
 it('[AC-B1-04zzu#11] 任意顺序的凑狸 / 别家 / 读不出单号的行混合页：维权归档恰好一行，等于去掉别家行后的原序列；只问读得出的单号且去重；listRefunds 的条目与不注入查询时相同', async () => {
   await expect(
     fc.assert(
-      fc.asyncProperty(pages, async ({ kinds, hasNext }) => {
-        const built = kinds.map((kind, index) => build(kind, index + 1));
-        const rows = built.map((entry) => entry.row);
-        const kept = rows.filter((_row, index) => !OTHER_KINDS.includes(kinds[index]!));
-        const options = {
-          hasNext,
-          position: 'synthetic-refund-prop-position',
-          top: { request_id: 'synthetic-refund-prop-request' },
-          data: { synthetic_note: '合成属性页' },
-        };
-        const body = refundBody(rows, options);
-        const own = ownOrders(OURS);
-        const h = wireRefunds(() => answer(body), { ownOrders: own.reader });
-        const plain = wire(() => answer(body));
+      fc
+        .asyncProperty(pages, async ({ kinds, hasNext }) => {
+          const built = kinds.map((kind, index) => build(kind, index + 1));
+          const rows = built.map((entry) => entry.row);
+          const kept = rows.filter((_row, index) => !OTHER_KINDS.includes(kinds[index]!));
+          const options = {
+            hasNext,
+            position: 'synthetic-refund-prop-position',
+            top: { request_id: 'synthetic-refund-prop-request' },
+            data: { synthetic_note: '合成属性页' },
+          };
+          const body = refundBody(rows, options);
+          const own = ownOrders(OURS);
+          const h = wireRefunds(() => answer(body), { ownOrders: own.reader });
+          const plain = wire(() => answer(body));
 
-        const page = await listed(h.adapter.listRefunds(win, PLAIN));
-        const before = await listed(plain.adapter.listRefunds(win, PLAIN));
+          const page = await listed(h.adapter.listRefunds(win, PLAIN));
+          const before = await listed(plain.adapter.listRefunds(win, PLAIN));
 
-        expect(page.items).toEqual(before.items);
-        expect(page.nextCursor).toBe(before.nextCursor);
-        expect(h.database.inserted).toHaveLength(1);
-        expectArchivedAs(onlyArchiveOf(h.database, REFUND_PATH), refundBody(kept, options));
-        expectAskedOnce(
-          own.reader,
-          built.flatMap((entry) => (entry.no === null ? [] : [entry.no])),
-        );
-      }),
+          expect(page.items).toEqual(before.items);
+          expect(page.nextCursor).toBe(before.nextCursor);
+          expect(h.database.inserted).toHaveLength(1);
+          expectArchivedAs(onlyArchiveOf(h.database, REFUND_PATH), refundBody(kept, options));
+          expectAskedOnce(
+            own.reader,
+            built.flatMap((entry) => (entry.no === null ? [] : [entry.no])),
+          );
+        })
+        .afterEach(async (previous) => {
+          // 每轮收尾让出一次宏任务：本轮 vi.fn 的 WeakRef 保活随之解除，不攒到文件结束（D10-1945）。
+          await previous();
+          await new Promise<void>((resolve) => setImmediate(resolve));
+        }),
       propParams(),
     ),
   ).resolves.toBeUndefined();

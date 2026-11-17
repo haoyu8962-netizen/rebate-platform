@@ -73,26 +73,32 @@ const pages = fc
 it('[AC-B1-04zzp#10] 任意顺序的自家 / 别家 / 读不出推广位的行混合页：违规归档恰好一行，等于去掉别家行后的原序列，total_count 不变', async () => {
   await expect(
     fc.assert(
-      fc.asyncProperty(pages, async ({ kinds, more }) => {
-        const rows = kinds.map((kind, index) => BUILD[kind](index + 1));
-        const kept = rows.filter((_row, index) => !FOREIGN_KINDS.includes(kinds[index]!));
-        const options = {
-          total: rows.length + more,
-          top: { request_id: 'synthetic-punish-prop-request' },
-          data: { synthetic_note: '合成属性页' },
-        };
-        const h = wire(() => answer(punishBody(rows, options)));
+      fc
+        .asyncProperty(pages, async ({ kinds, more }) => {
+          const rows = kinds.map((kind, index) => BUILD[kind](index + 1));
+          const kept = rows.filter((_row, index) => !FOREIGN_KINDS.includes(kinds[index]!));
+          const options = {
+            total: rows.length + more,
+            top: { request_id: 'synthetic-punish-prop-request' },
+            data: { synthetic_note: '合成属性页' },
+          };
+          const h = wire(() => answer(punishBody(rows, options)));
 
-        const page = await listed(h.adapter.listPunishments(win, PLAIN));
+          const page = await listed(h.adapter.listPunishments(win, PLAIN));
 
-        expect(page.items.map((item) => item.punishment_id)).toEqual(
-          kinds.flatMap((kind, index) =>
-            OUR_KINDS.includes(kind) ? [punishmentIdOf(index + 1)] : [],
-          ),
-        );
-        expect(h.database.inserted).toHaveLength(1);
-        expectArchivedAs(onlyArchiveOf(h.database, PUNISH_PATH), punishBody(kept, options));
-      }),
+          expect(page.items.map((item) => item.punishment_id)).toEqual(
+            kinds.flatMap((kind, index) =>
+              OUR_KINDS.includes(kind) ? [punishmentIdOf(index + 1)] : [],
+            ),
+          );
+          expect(h.database.inserted).toHaveLength(1);
+          expectArchivedAs(onlyArchiveOf(h.database, PUNISH_PATH), punishBody(kept, options));
+        })
+        .afterEach(async (previous) => {
+          // 每轮收尾让出一次宏任务：本轮 vi.fn 的 WeakRef 保活随之解除，不攒到文件结束（D10-1945）。
+          await previous();
+          await new Promise<void>((resolve) => setImmediate(resolve));
+        }),
       propParams(),
     ),
   ).resolves.toBeUndefined();
