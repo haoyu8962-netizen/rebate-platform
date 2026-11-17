@@ -170,14 +170,15 @@ it('[AC-B1-34b#3] required columns reject explicit NULL even when they have defa
   }
 });
 
-it('[AC-B1-34b#4] resource is limited to users, audit_logs and tax_withdrawals by a database CHECK', async () => {
+it('[AC-B1-34b#4] resource is limited to users, audit_logs, tax_withdrawals and ledger by a database CHECK', async () => {
   await ready();
   expect([...new Set(await literals(app, TABLE, 'resource'))].sort()).toEqual([
     'audit_logs',
+    'ledger',
     'tax_withdrawals',
     'users',
   ]);
-  for (const resource of ['users', 'audit_logs', 'tax_withdrawals']) {
+  for (const resource of ['users', 'audit_logs', 'tax_withdrawals', 'ledger']) {
     expect(await insert({ ...(await fixture()), resource })).toMatchObject({ resource });
   }
   for (const resource of ['', 'orders', 'USERS', 'audit_log']) {
@@ -416,5 +417,27 @@ it('[AC-B1-34b#15] couli_readonly can read every column but cannot insert, updat
   await expect(
     sql`DELETE FROM app.export_tasks WHERE false`.execute(readonly),
   ).rejects.toMatchObject({ code: '42501' });
+  expect(await stored(row['id'])).toEqual(row);
+});
+
+it('[AC-CT-24zzma#1] a ledger export task row can be inserted, round-trips its filters unchanged and stays masked', async () => {
+  await ready();
+  expect(await literals(app, TABLE, 'resource')).toContain('ledger');
+  const filters = {
+    user_id: randomUUID(),
+    ledger_type: 'REBATE_CREDIT',
+    accounting_date_from: '2026-10-01',
+    accounting_date_to: '2026-10-31',
+  };
+  const base = {
+    ...(await fixture()),
+    resource: 'ledger',
+    filters: JSON.stringify(filters),
+    filters_summary: '指定用户的返利入账流水',
+    masked: true,
+  };
+  const row = await insert(base);
+  expect(row).toMatchObject({ ...base, filters, masked: true, row_version: 1 });
+  expect(row['filters']).toEqual(filters);
   expect(await stored(row['id'])).toEqual(row);
 });
