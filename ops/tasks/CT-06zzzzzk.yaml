@@ -1,0 +1,29 @@
+id: CT-06zzzzzk
+repo: rebate-platform
+title: CT-06zzzzzk（FU-SUPPORT-TOKENS-NESTED-TYPE）：支撑文件放行清单的类型字面量判定补嵌套——元组等嵌套类型里的对象类型字面量追加必填成员一律拒（D10-1902 / D10-1916）
+type: guard-change
+# 2026-11-17 be 入账（编排 D10-1902：排在 CT-13o 之后；D10-1916：Codex 写测、首轮评审 Codex；合并后取当时主干最大 approvals id + 1 登记，规划/11 §7.1 第 5 行例外）。
+# 起因：CT-06zzzzzj Codex 代码评审 r2 S2（support-tokens.ts typeLiteral）——向前找所属声明时遇到 [ 即停，元组等嵌套类型里的对象类型字面量（如 [{ a: number }] 追加 b: string）被当成对象字面量属性，
+#   按 P2「对象字面量末尾的属性」放行；只影响类型、不改运行时行为，要刻意构造才会出现（couli-runs/CT-06zzzzzj/out-of-scope.md）。
+# 要做：类型位置里任意嵌套深度的对象类型字面量（元组元素、数组 / 联合 / 交叉 / 泛型实参、嵌套对象类型的成员类型）都按 P3 判——只放行可选成员（含分隔符），追加必填成员拒；表达式位置的对象字面量照旧按 P2。
+# 不许动：CT-06zzzzzj 的两层文法其余部分、CT-06zzzzzi 原规则与拒绝清单、test/spec/ci/support-allowlist/** 与 modify-existing-support/** 既有定例（一字不改全绿）；判出与既有定例方向冲突的，列出来报编排，不加特例。
+# 分工：规则测试 Codex 写（codex-run.sh），spec-test 由独立 Claude 审；实现是 Opus 子代理；代码评审第 1 轮 Codex（D10-1872 / D10-1916）；本机不跑全量，测试机跑。
+refs: []
+refs_hash: {}
+deps:
+  - CT-06zzzzzj
+paths:
+  - 'tools/guard/lib/support-tokens.ts'
+  - 'tools/guard/lib/support-tokens.test.ts'
+  - 'ops/tasks/CT-06zzzzzk.yaml'
+test_paths:
+  - 'test/spec/ci/support-nested-type/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/support-nested-type/**'
+  - 'test/spec/ci/support-allowlist/**'
+  - 'test/spec/ci/modify-existing-support/**'
+status: todo
+pr: null
