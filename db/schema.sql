@@ -1787,6 +1787,8 @@ CREATE FUNCTION app.purge_expired_link_logs_default(p_now timestamp with time zo
     SET "TimeZone" TO 'UTC'
     AS $$
 DECLARE
+  -- Most rows one call deletes (CT-13o; the reason is in the header of migration 0148).
+  PURGE_BATCH CONSTANT integer := 10000;
   v_cutoff  timestamptz;
   v_deleted bigint;
 BEGIN
@@ -1817,17 +1819,24 @@ BEGIN
   -- right after the statement.
   PERFORM set_config('couli.link_logs_default_purge_before', v_cutoff::text, true);
 
+  -- One batch: at most PURGE_BATCH rows, picked by physical row id (id alone is not unique).
   DELETE FROM ONLY app.link_logs_default l
-  WHERE l.created_at < v_cutoff
-    AND (
-      l.id NOT IN (
-        SELECT r.id
-        FROM app.claim_items ci
-        CROSS JOIN LATERAL unnest(ci.evidence_link_log_ids) AS r(id)
-        WHERE r.id IS NOT NULL
-      )
-      OR l.id IN (SELECT e.id FROM app.link_log_evidence e)
-    );
+  WHERE l.ctid = ANY (ARRAY(
+      SELECT c.ctid
+      FROM ONLY app.link_logs_default c
+      WHERE c.created_at < v_cutoff
+        AND (
+          c.id NOT IN (
+            SELECT r.id
+            FROM app.claim_items ci
+            CROSS JOIN LATERAL unnest(ci.evidence_link_log_ids) AS r(id)
+            WHERE r.id IS NOT NULL
+          )
+          OR c.id IN (SELECT e.id FROM app.link_log_evidence e)
+        )
+      LIMIT PURGE_BATCH
+    ))
+    AND l.created_at < v_cutoff;
   GET DIAGNOSTICS v_deleted = ROW_COUNT;
 
   PERFORM set_config('couli.link_logs_default_purge_before', '', true);
