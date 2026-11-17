@@ -76,4 +76,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/db/admin/export-tasks/export-tasks.int.test.ts'
-status: todo
+status: done
+pr: 226
