@@ -1,0 +1,33 @@
+id: F1-08fc
+repo: rebate-platform
+title: F1-08fc：余额流水页【导出当前筛选】收到带统一外壳的 5xx 也按结果未知——提示「导出任务可能已创建，请先到【导出记录】核对，再决定是否重新导出。」，不报「未能创建」（FU-F108FB-5XX-AS-UNKNOWN）
+type: impl
+# 2026-11-18 入账（前端线 fe，编排 D10-1981 记的 S3、D10-1988 准做，低优先）。来由：F1-08fb 把带统一外壳的 5xx 归「导出任务未能创建，请稍后再试。」，但服务端可能在写入任务后才出错、任务其实已建；adminCreateExport 无幂等键，用户照提示重试会多出一个重复导出任务（只读文件、不涉资金）。与调账页「5xx 归结果未知」对齐：带外壳的 5xx 也提示先到【导出记录】核对。
+# 范围：只改 apps/admin/src/pages/ledger/model.ts 的 exportRejected 分类（httpStatus ≥ 500 的带外壳失败 → 结果未知）与必要文案；10403、20001、其他 4xx 确定失败、网络 / 无法解析的处理不变；仍不自动重发。
+# 冻结用例：[AC-F1-08fb-ERROR#6] 断言「HTTP 500 带统一失败外壳是确定失败」→ 按本单改为结果未知提示（rule_change，标题随之 retitle_to）；同文件可新增用例（如 503 带外壳同样按结果未知）。errors.test.ts 导入 ./fixtures.ts，若正式先红整份判定，其余块按 red_exempt 另补台账并走门禁补录（D10-1833）。
+# 资金页面路径（apps/admin/src/pages/ledger/** 属 RV2）：money 评审。D10-1872：规则测试与首轮评审用 Codex。
+refs: [BR-ID-42, BR-FUND-16]
+refs_hash:
+  BR-ID-42: 2f9cd1710ed3
+  BR-FUND-16: 077f6d412d5a
+deps: [F1-08fb]
+paths:
+  - 'apps/admin/src/pages/ledger/**'
+  - 'apps/admin/src/texts/ledger.ts'
+test_paths:
+  - 'test/spec/frontend/admin-ledger-export/errors.test.ts'
+impl: claude
+tester: codex
+modify_existing:
+  - file: 'test/spec/frontend/admin-ledger-export/errors.test.ts'
+    test: '[AC-F1-08fb-ERROR#6] HTTP 500 带统一失败外壳是确定失败，不冒充网络结果未知，不自动重发'
+    retitle_to: '[AC-F1-08fb-ERROR#6] HTTP 500 带统一失败外壳也按结果未知（任务可能已建），提示先核对导出记录，不自动重发'
+    reason: rule_change
+    br: [BR-ID-42]
+    ruling: D10-1981
+    note: '编排 D10-1981 / D10-1988：adminCreateExport 无幂等键，带外壳的 5xx 可能发生在任务写入之后，归结果未知、提示先到【导出记录】核对，不再报「未能创建」；期望提示由「导出任务未能创建，请稍后再试。」改为「导出任务可能已创建，请先到【导出记录】核对，再决定是否重新导出。」，其余断言（POST 次数、不自动重发）不变'
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-ledger-export/errors.test.ts'
+status: todo
+pr: null
