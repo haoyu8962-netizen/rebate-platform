@@ -1,0 +1,37 @@
+{
+  "risk_note": "CT-24zzna (D10-2032 ② / D10-2033 / D10-2041; contract only, tester none). Only the description of the planned operation recalcBalanceAdminReconDiff (CT-24zzn #284) in contracts/openapi.yaml changes, and codegen updated the matching doc comment in packages/contracts-ts/src/openapi.gen.ts; no schema, parameter, response shape, example field or x-error-codes change. Added: under the locks, a frozen sum below 0 or a sum outside the bigint range is refused — the account_balances row is not written (available_fen, frozen_fen, version, negative_since unchanged), 20001 data.fields=[recon_diff_id], an audit record of the same action with the cause and the computed sums; negative_since follows the posting rule (BR-FUND-12, same branches as apps/api/src/modules/ledger/application/ledger.ts); version + 1 with the posting compare-and-set only when a value changes, no write when equal; crossing 0 is handled as a posting does in the same transaction (account.went_negative once from >= 0 to < 0, balance-recovered handling once from < 0 to >= 0, neither otherwise, nothing on rollback); this operation triggers no wallet change push. Test machine on the final head: verify:fast green (includes contracts:check), test/spec/contracts 66 files 658/658 green.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Fresh independent Claude via claude-run.sh (Codex out of quota, D10-2003): contract r1 pass, no in-scope findings; one out_of_scope S2 (whether crossing 0 publishes account.went_negative / calls the recovered handling) decided by the orchestrator in D10-2041 and added as one sentence after the review, no extra review (D10-2042, precedent D10-2025) (couli-runs/CT-24zzna/review-contract-r1.json)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "CT-24zzna",
+  "spec_commit": "565622acb19f3e1014408a5d50ded9e4d27565fa",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "22394901a48d5f3750a4c6625f689eb41505db20",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
