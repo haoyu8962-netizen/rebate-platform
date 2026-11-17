@@ -1,0 +1,23 @@
+id: F1-08aq
+repo: rebate-platform
+title: F1-08aq：【批量手动打款】对话框控件清单扩到全部表单与可交互控件，整份与期望清单相等——钉住没有把应付填进实付金额的任何快捷入口（只补用例；FU-F108AL-SHORTCUT-INPUTS）
+type: test-change
+# 2026-11-18 入账（前端线 fe，编排 D10-2022；F1-08al 落地后紧接着做、排在 F1-08am 之前）。来由：F1-08al spec-test 第 3 次的 S2——VALIDATE#1 的控件清单只取 button / a / role=button / role=link，实现若加一个 antd 复选框「实付同应付」（role=checkbox）把应付填进实付金额，全部用例仍绿。F1-08al 实现已把复选框、开关、单选、下拉、输入框前后缀图标等一律写成硬约束不做。
+# 范围：只新增用例，放新目录 test/spec/frontend/admin-withdrawal-manual-paid-controls/，可导入 F1-08al 的 admin-withdrawal-manual-paid 夹具与帮手，不改任何已有文件。对话框刚打开（未填写）时，把对话框里全部表单与可交互控件——输入框（input / textarea / role=textbox / spinbutton）、复选框、开关（role=switch）、单选、下拉（select / role=combobox / listbox）、输入框前后缀里的可点击图标、以及 button / a / role=button / role=link——按「角色 + 名字」整份列出，与期望清单逐项相等（toEqual），多出任何一个就红；填写后与提交结果显示时各再核一次清单不新增快捷控件。
+# 有牙的证明照 D10-1843 / D10-1879：F1-08al 合并后实现已满足，新用例在主干上为绿，不跑正式先红、不登 red_exempt；以变异探针证明——临时在对话框每行加一个「实付同应付」复选框（勾上把 net_fen 填进实付金额）、或给实付金额输入框加后缀按钮，新用例应变红；临时提交、测试机跑、撤回、不推。推非 task/ 分支，按 #24 由编排核后加 owner-approved。
+# 资金页（RV2）用例：规则测试由无上下文的独立 Claude 写、另一独立 Claude 做 spec-test（D10-2003，Codex 额度用尽）；证据如实记 claude-independent。
+refs: [BR-WDR-16]
+refs_hash:
+  BR-WDR-16: c5899cc85558
+deps: [F1-08al]
+paths:
+  - 'test/spec/frontend/admin-withdrawal-manual-paid-controls/**'
+test_paths:
+  - 'test/spec/frontend/admin-withdrawal-manual-paid-controls/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-withdrawal-manual-paid-controls/**'
+status: todo
+pr: null
