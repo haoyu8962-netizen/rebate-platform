@@ -1,0 +1,29 @@
+id: B2-02x
+repo: rebate-platform
+title: ledger：差错单按分录重算余额缓存的实现（CT-24zzn）——在加锁流程内把 account_balances 的 available_fen / frozen_fen 改为分录合计，不写凭证、不改分录，记审计前后值；不关单、不解除 withdraw_holds（D10-2017 ①）
+type: impl
+# 2026-11-18 be 入账（编排 D10-2017 ①）。资金单：强度 high；规则测试与资金评审走独立 Claude（claude-run.sh，D10-2003），评审清单逐项（舍入、正负号、幂等、并发、部分退款、时钟、app_id）；合并前照常挂批准标签。
+# 实现照 BR-FUND-19 细则「差异以分录为准修正」与 BR-FUND-16 细则「加锁流程」：同一事务内锁该用户余额行，按分录重算 available_fen、frozen_fen 后写回；只有 ledger 模块写余额（AGENTS.md §4 第 2 条）；不插凭证、不动分录；audit_logs 记前后值与差错单号。
+# 守卫：差错单 type=ledger_mismatch、未关闭；app_id 隔离；step-up 短信档由平台层校验。并发：与入账、提现冻结并发时以锁为准，重算结果等于锁内分录合计；同一差错单重复触发是幂等的（第二次前后相同）。
+# 不做：不改差错单状态、不解除 withdraw_holds（关单走已有 close，D10-2017）。
+# 规则测试要钉：重算后 available_fen / frozen_fen = 分录合计；凭证与分录条数不变；非 ledger_mismatch / 已关闭 / 别的 app 拒；请求里带金额被拒；差错单状态与 withdraw_holds 不变；审计有前后值。
+refs: [BR-FUND-19, BR-FUND-16, BR-ID-34]
+refs_hash:
+  BR-FUND-19: 34f619112535
+  BR-FUND-16: 077f6d412d5a
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [CT-24zzn]
+paths:
+  - 'apps/api/src/modules/ledger/application/admin-recon-diff-balance-recalc*.ts'
+  - 'apps/api/src/modules/ledger/http/admin/recon-diff-balance-recalc.controller*.ts'
+  - 'apps/api/src/modules/ledger/infra/**'
+  - 'apps/api/src/modules/ledger/ledger.module.ts'
+test_paths:
+  - 'test/spec/ledger/admin-recon-balance-recalc/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/admin-recon-balance-recalc/**'
+status: todo
+pr: null

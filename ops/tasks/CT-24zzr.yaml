@@ -1,0 +1,27 @@
+id: CT-24zzr
+repo: rebate-platform
+title: 契约：配置项列表与单项读取加只读字段 default_value（服务端内置默认值）与数值项的取值上下限——供【恢复默认值】与前端校验用，不在前端另写一份（D10-2017）
+type: contract
+# 2026-11-18 be 入账（编排 D10-2017：【恢复默认值】先只读核 config-items 是否返回 default，没有就开只加只读字段的小契约单）。核对结论：AdminConfigItem 只有 key、value（null = 从未写过、用服务端内置默认）、value_type、options、permission、admin_editable、version、updated_by、updated_at；没有默认值，也没有数值上下限。契约由 Claude 写；实现另开 B2-03y。
+# 加只读字段：default_value（与 value 同类型；没有内置默认的给 null）；number 类加 min / max（无界给 null）。只加响应字段，请求与写入规则不变；【恢复默认值】= 前端把 default_value 照常经 adminUpdateConfigItem 写回（照常 CAS、step-up、审计），不新增重置接口。
+# withdraw.auto_payout.* 的默认值以 BR-WDR-30 默认值表为准，由服务端登记表给出（F1-08ap 设置页照 D10-2019 不在前端另写一份）。
+refs: [BR-WDR-30]
+refs_hash:
+  BR-WDR-30: ec74379ec48c
+contract_sections: ['11.1']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
+pr: null

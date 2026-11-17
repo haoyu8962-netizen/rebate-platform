@@ -1,0 +1,32 @@
+id: CT-24zzo
+repo: rebate-platform
+title: 契约：打款批次只读——GET /admin/v1/payout-batches（批次列表）与 GET /admin/v1/payout-batches/{batch_id}（批次摘要 + 成员表，成员带停住原因、最近一次尝试、下次查询、是否已有转账尝试）（D10-2017 ②）
+type: contract
+# 2026-11-18 be 入账（编排 D10-2017 ②，缺口清单乙类 #11 打款队列「已暂停批次表」；规格 design/specs/admin-payouts.md §2「已暂停批次表」、§4）。契约由 Claude 写；实现另开 B2-07g。
+# 权限点 payout.execute 或 fund.view（任一），只读、无 step-up、不写审计；app 隔离；未知 / 别的 app 的 batch_id 20001，不给 404。
+# 列表：筛选 kind（payout_batch_kind）、是否有停住成员（有 hold_reason 的成员）、创建时间区间；页码分页（AdminPage / AdminPageSize）。行：batch_id、kind、创建与执行时刻、执行人、成员数、按 payout_batch_item_result 的分段计数、停住成员数。
+# 成员表（按 execute_seq）：withdrawal_id、out_biz_no、net_fen、withdrawal status、item result（payout_batch_item_result，含 moved_out）、hold_reason（withdrawal_hold_reason，可空）、needs_manual、最近一次尝试（kind / 结果 / 时刻，可空）、下次查询时刻（可空）、是否已有 kind=transfer 尝试（has_transfer_attempt）。
+# D10-2017：「最近一次尝试 / 下次查询」并进本成员表，不在 listAdminWithdrawals 上加字段。只给事实字段，不下发「可用操作」；【重新执行】只对 hold_reason=queue_paused 且没有转账尝试的单（BR-WDR-14、BR-WDR-17），各写接口仍自行守卫。
+# hold_reason、item result、batch kind 的后台中文名 BR-TEXT-25 没有行：契约只给编码，不在契约里造中文名；中文名待规划回写（编排记）。
+refs: [BR-WDR-12, BR-WDR-14, BR-WDR-17]
+refs_hash:
+  BR-WDR-12: 37adcd14e97f
+  BR-WDR-14: 6328f3cda2e6
+  BR-WDR-17: f6119a685e00
+contract_sections: ['11.1']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
+pr: null

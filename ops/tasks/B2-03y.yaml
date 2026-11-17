@@ -1,0 +1,23 @@
+id: B2-03y
+repo: rebate-platform
+title: content：配置项读取返回 default_value 与 min / max 的实现（CT-24zzr）——取自 config-registry 登记，不另写一份默认值
+type: impl
+# 2026-11-18 be 入账（编排 D10-2017）。config-registry.ts 已登记各键的默认与取值范围（businessInteger 的上下限、businessEnum 的值集），列表与单项读取从登记表带出；不改写入规则。
+# 规则测试要钉：withdraw.auto_payout.* 各键的 default_value 等于 BR-WDR-30 默认值表（max_amount_fen 30000、platform_daily_max_fen 200000、次数 1 / 2 / 1 / 1、⑧ 四项 10000 / 10000 / 10000 / 0 等），max_amount_fen 的 min / max 为 0 / 1000000；未登记默认的键给 null。
+refs: [BR-WDR-30]
+refs_hash:
+  BR-WDR-30: ec74379ec48c
+deps: [CT-24zzr]
+paths:
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/application/config-items*.ts'
+  - 'apps/api/src/modules/content/http/admin/config-items*.ts'
+test_paths:
+  - 'test/spec/content/config-items-defaults/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/config-items-defaults/**'
+status: todo
+pr: null
