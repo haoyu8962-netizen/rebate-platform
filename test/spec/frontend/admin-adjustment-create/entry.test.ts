@@ -58,7 +58,7 @@ function noEntries(): void {
 }
 
 it(
-  '[AC-F1-08cb-ENTRY#1] 持 fund.adjust：标题行（页签外）恰 1 个可用【新建调账】；【红冲】只在已生效、非红冲单、未被红冲的三行（对账修正、其他、订单恢复），每行 1 个可用；不出现【批准】【驳回】【批准核销】【撤回】【保存待批】；进页不发任何写请求',
+  '[AC-F1-08cb-ENTRY#1] 持 fund.adjust：标题行（页签外）恰 1 个可用【新建调账】；【红冲】只在已生效、非红冲单、未被红冲的三行（对账修正、其他、订单恢复），每行 1 个可用；不出现【驳回】【批准核销】【撤回】【保存待批】，系统预填待批行有【批准】；进页不发任何写请求',
   { timeout: 60_000 },
   async () => {
     const server = createWriteServer();
@@ -70,14 +70,14 @@ it(
     expect(buttons(panel(), TEXT.createEntry)).toEqual([]);
     expect(rowsWithReverse()).toEqual(REVERSIBLE);
     expect(usableReverses()).toEqual([1, 1, 1]);
-    expect(laterEntries()).toEqual([]);
+    expect(laterEntries()).toEqual(['批准']);
     expect(server.unexpected()).toEqual([]);
     expect(server.others()).toEqual([]);
   },
 );
 
 it(
-  '[AC-F1-08cb-ENTRY#2] 持 fund.adjust 的详情：已生效未红冲单（对账修正）有 1 个可用【红冲】；已被红冲的原单、红冲单本身、系统预填待批单、已驳回单都没有【红冲】，也没有【批准】【驳回】',
+  '[AC-F1-08cb-ENTRY#2] 持 fund.adjust 的详情：已生效未红冲单（对账修正）有 1 个可用【红冲】；已被红冲的原单、红冲单本身、系统预填待批单、已驳回单都没有【红冲】，也没有【驳回】；只有系统预填待批单的详情有【批准】',
   { timeout: 60_000 },
   async () => {
     const server = createWriteServer();
@@ -91,7 +91,9 @@ it(
     for (const adjustId of [ADJ.recovery, ADJ.reversal, ADJ.prefilled, ADJ.rejected]) {
       await openDetail(server, adjustId);
       expect(buttons(drawer(), TEXT.reverseEntry), adjustId).toEqual([]);
-      expect(laterEntries(), adjustId).toEqual([]);
+      expect(laterEntries(), adjustId).toEqual(['批准']);
+      const inDetail = LATER_ENTRIES.filter((name) => buttons(drawer(), name).length > 0);
+      expect(inDetail, adjustId).toEqual(adjustId === ADJ.prefilled ? ['批准'] : []);
     }
     expect(server.others()).toEqual([]);
   },
@@ -132,7 +134,7 @@ it(
 );
 
 it(
-  '[AC-F1-08cb-ENTRY#4] 超管：标题行恰 1 个可用【新建调账】，【红冲】同样只在三行可红冲的单上；不出现后续任务的写入口',
+  '[AC-F1-08cb-ENTRY#4] 超管：标题行恰 1 个可用【新建调账】，【红冲】同样只在三行可红冲的单上；后续任务的写入口只出现系统预填待批行的【批准】',
   { timeout: 60_000 },
   async () => {
     const server = createWriteServer({ permissions: ALL_FUND });
@@ -142,6 +144,36 @@ it(
     expect(usable(main(), TEXT.createEntry)).toHaveLength(1);
     expect(rowsWithReverse()).toEqual(REVERSIBLE);
     expect(usableReverses()).toEqual([1, 1, 1]);
+    expect(laterEntries()).toEqual(['批准']);
+  },
+);
+
+it(
+  '[AC-F1-08cc-FROZEN#1] 逐行数【批准】：持 fund.adjust 时八行里只有系统预填的待批准行显示恰 1 个且可用的【批准】（其余七行 0 个），该行没有【红冲】；同一份数据换成只持 fund.view + fund.writeoff 的账号，八行都是 0 个、页面上也没有【批准】',
+  { timeout: 90_000 },
+  async () => {
+    const perRow = (count: (row: HTMLElement) => number): number[] =>
+      ADJUSTMENT_ORDER.map((adjustId) => count(rowWith(panel(), COLUMN.id, adjustId).element));
+    const shown = (): number[] => perRow((row) => buttons(row, '批准').length);
+    const open = (): number[] => perRow((row) => usable(row, '批准').length);
+    const onlyPrefilled = ADJUSTMENT_ORDER.map((adjustId) => (adjustId === ADJ.prefilled ? 1 : 0));
+
+    const server = createWriteServer();
+    await mount(server);
+    await waitColumn(COLUMN.id, ADJUSTMENT_ORDER);
+    await settled(server);
+    expect(shown()).toEqual(onlyPrefilled);
+    expect(open()).toEqual(onlyPrefilled);
+    expect(rowReverse(ADJ.prefilled)).toEqual([]);
+    expect(server.others()).toEqual([]);
+    cleanup();
+
+    const reader = createWriteServer({ permissions: ['fund.view', 'fund.writeoff'] });
+    await mount(reader, READER);
+    await waitColumn(COLUMN.id, ADJUSTMENT_ORDER);
+    await settled(reader);
+    expect(shown()).toEqual(ADJUSTMENT_ORDER.map(() => 0));
     expect(laterEntries()).toEqual([]);
+    expect(reader.others()).toEqual([]);
   },
 );

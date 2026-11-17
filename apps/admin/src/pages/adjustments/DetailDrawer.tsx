@@ -1,7 +1,8 @@
 // 调账单详情抽屉（adminGetAdjustment，只读）：单号、用户、方向、金额、原因与状态（后台字典名）、对方科目
 // （连同 contra_platform）、说明、凭证、原调账单 / 红冲单（链接，点开在同一抽屉里读那张单）、创建与审核、
 // 驳回原因；关联单据逐行；reversed_by_adjust_id 有值时另有「已红冲」标记（不是状态）。持 fund.adjust 时
-// 已生效、非红冲单、未被红冲的单另有【红冲】（F1-08cb，对话框由页签打开）；批准 / 驳回留给 F1-08cc。
+// 已生效、非红冲单、未被红冲的单另有【红冲】（F1-08cb），待批准单另有【批准】（F1-08cc，批准 / 驳回都在
+// 批准对话框里）；对话框都由页签打开。
 import { Button, Descriptions, Drawer, Flex, Result, Table, Tag, Typography, theme } from 'antd';
 import type { ReactElement, ReactNode } from 'react';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
@@ -39,6 +40,10 @@ export interface DetailDrawerProps {
   readonly onReverse?: (item: Adjustment, trigger: HTMLElement) => void;
   /** adminCreateAdjustment is still planned: 【红冲】 is greyed out. */
   readonly planned?: boolean;
+  /** 【批准】 of a PENDING form (undefined: no fund.adjust, no entry). */
+  readonly onApprove?: (item: Adjustment, trigger: HTMLElement) => void;
+  /** Both decisions are still planned: 【批准】 is greyed out. */
+  readonly approvePlanned?: boolean;
 }
 
 type Ref = Adjustment['refs'][number];
@@ -51,6 +56,8 @@ export function DetailDrawer({
   onOpenForm,
   onReverse,
   planned = false,
+  onApprove,
+  approvePlanned = false,
 }: DetailDrawerProps): ReactElement {
   const { token } = theme.useToken();
   const code = { fontFamily: token.fontFamilyCode, wordBreak: 'break-all' } as const;
@@ -97,6 +104,7 @@ export function DetailDrawer({
   } else {
     const item = state.data;
     const reverse = onReverse !== undefined && reversible(item);
+    const approve = onApprove !== undefined && item.status === 'PENDING';
     body = (
       <Flex vertical gap={16}>
         {item.reversed_by_adjust_id === null ? null : (
@@ -115,6 +123,18 @@ export function DetailDrawer({
               onClick={(event) => onReverse?.(item, event.currentTarget)}
             >
               {adjustmentsTexts.adjustments.reverseEntry}
+            </Button>
+          </Flex>
+        ) : null}
+        {approve ? (
+          <Flex justify="flex-end">
+            <Button
+              type="primary"
+              autoInsertSpace={false}
+              {...plannedButtonProps(approvePlanned)}
+              onClick={(event) => onApprove?.(item, event.currentTarget)}
+            >
+              {adjustmentsTexts.adjustments.approveEntry}
             </Button>
           </Flex>
         ) : null}

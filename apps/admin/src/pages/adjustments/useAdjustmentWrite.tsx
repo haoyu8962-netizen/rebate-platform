@@ -1,6 +1,8 @@
-// adminCreateAdjustment 的写入流程（fund.adjust，短信档 BR-ID-34）：每次提交先发验证码
-// （POST /admin/v1/auth/step-up/sms-codes），弹 StepUpModal（短信档）验证（POST /admin/v1/auth/step-up），
-// 通过后带 X-Step-Up-Token 与 Idempotency-Key 只发一次 POST /admin/v1/adjustments。
+// 调账写入流程（fund.adjust）：adminCreateAdjustment（POST /admin/v1/adjustments，默认）、
+// adminApproveAdjustment（POST …/{adjust_id}/approve，请求体 {}，F1-08cc）共用短信档（BR-ID-34）：每次提交先发
+// 验证码（POST /admin/v1/auth/step-up/sms-codes），弹 StepUpModal（短信档）验证（POST /admin/v1/auth/step-up），
+// 通过后带 X-Step-Up-Token 与 Idempotency-Key 只发一次写请求。adminRejectAdjustment（…/reject，F1-08cc）
+// 不需二次验证（`verify: false`）：直接带 Idempotency-Key 只发一次；下面的结果未知与换键规则对它同样适用。
 // - 10003 data.reason=verify_phone_missing（发码或写入时）：不弹验证、不发写请求，此后本次表单不再发码。
 // - 写入返回 10003（验证已失效）：重新发码、再验证，用新的验证重放同一请求体与同一个键。
 // - 没拿到带统一外壳的回答（网络错误、无法解析）：进入「结果未知」（编排 D10-1731）——保留原键与原请求体，
@@ -8,8 +10,8 @@
 //   重试拿到确定的回答（成功、确定的拒绝）才退出；重试又遇 5xx / 40901 仍留在结果未知。
 // - 带外壳的结果未定（5xx、40901）：提示失败，下次提交沿用原键；其余确定的回答（成功、20001、20901、
 //   20902、10403 等）后下次提交换新键。任何失败都不自动重发。
-// 一次打开（抽屉或对话框）一个实例；卸载后迟到的回答被丢弃。
-import { useDataProvider } from '@refinedev/core';
+// 一次打开（抽屉或对话框）一个写操作一个实例；卸载后迟到的回答被丢弃。
+import { useDataProvider, type BaseRecord } from '@refinedev/core';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
@@ -31,14 +33,20 @@ const TOO_FREQUENT = 42901;
 
 type Phase = 'idle' | 'code' | 'verify' | 'writing';
 
-export interface AdjustmentWriteOptions {
+export interface AdjustmentWriteOptions<R extends BaseRecord = Executed> {
   /** 「本次操作」 of the verification dialog. */
   readonly operation: string;
-  readonly onDone: (executed: Executed) => void;
+  /** The write (POST); adminCreateAdjustment when left out. */
+  readonly url?: string;
+  /** false: the write needs no step-up (adminRejectAdjustment); the sms tier when left out. */
+  readonly verify?: boolean;
+  readonly onDone: (result: R) => void;
   readonly onFailed: (cause: unknown) => void;
+  /** The write got no reply in the unified envelope (`unknown` is now true). */
+  readonly onUnknown?: () => void;
 }
 
-export interface AdjustmentWrite {
+export interface AdjustmentWrite<B extends object = CreateRequest> {
   /** A code is being sent, the verification is open or the write is in flight. */
   readonly busy: boolean;
   /** The account has no registered verify phone (10003 verify_phone_missing). */
@@ -49,7 +57,7 @@ export interface AdjustmentWrite {
    */
   readonly unknown: boolean;
   /** Starts one submission of `body` (ignored while busy, unknown or without a verify phone). */
-  submit(body: CreateRequest): void;
+  submit(body: B): void;
   /** Sends the unknown submission again: the same key and the same body (verified again). */
   retry(): void;
   /** The sms-tier verification dialog (render it once). */
@@ -63,11 +71,17 @@ function resultOf(cause: unknown): StepUpResult {
     : { ok: false, code: cause.code, retryAfterSeconds: cause.retryAfterSeconds };
 }
 
-export function useAdjustmentWrite({
+export function useAdjustmentWrite<
+  B extends object = CreateRequest,
+  R extends BaseRecord = Executed,
+>({
   operation,
+  url = ADJUSTMENTS_URL,
+  verify: needsStepUp = true,
   onDone,
   onFailed,
-}: AdjustmentWriteOptions): AdjustmentWrite {
+  onUnknown,
+}: AdjustmentWriteOptions<R>): AdjustmentWrite<B> {
   const getProvider = useDataProvider();
   const [phase, setPhaseValue] = useState<Phase>('idle');
   const phaseRef = useRef<Phase>('idle');
@@ -75,7 +89,7 @@ export function useAdjustmentWrite({
   const missingRef = useRef(false);
   const [unknown, setUnknownValue] = useState(false);
   const unknownRef = useRef(false);
-  const bodyRef = useRef<CreateRequest | undefined>(undefined);
+  const bodyRef = useRef<B | undefined>(undefined);
   /** The Idempotency-Key of the submission whose outcome is still open; undefined: take a new one. */
   const keyRef = useRef<string | undefined>(undefined);
   const alive = useRef(true);
@@ -129,17 +143,27 @@ export function useAdjustmentWrite({
     }
   };
 
-  const submit = (body: CreateRequest) => {
+  /** The sms tier: send a code and verify first; without step-up: write right away. */
+  const start = (body: B, key: string) => {
+    if (needsStepUp) {
+      void requestCode();
+      return;
+    }
+    setPhase('writing');
+    void write(body, key, undefined);
+  };
+
+  const submit = (body: B) => {
     if (phaseRef.current !== 'idle' || missingRef.current || unknownRef.current) return;
     bodyRef.current = body;
     keyRef.current ??= newRequestKey();
-    void requestCode();
+    start(body, keyRef.current);
   };
 
   const retry = () => {
     if (phaseRef.current !== 'idle' || missingRef.current || !unknownRef.current) return;
     if (bodyRef.current === undefined || keyRef.current === undefined) return;
-    void requestCode();
+    start(bodyRef.current, keyRef.current);
   };
 
   const verify = async (code: string): Promise<StepUpResult> => {
@@ -165,13 +189,16 @@ export function useAdjustmentWrite({
     }
   };
 
-  const write = async (body: CreateRequest, key: string, stepUpToken: string) => {
+  const write = async (body: B, key: string, stepUpToken: string | undefined) => {
     try {
-      const response = await customOf()<Executed>({
-        url: ADJUSTMENTS_URL,
+      const response = await customOf()<R>({
+        url,
         method: 'post',
         payload: body,
-        meta: { stepUpToken, idempotencyKey: key },
+        meta:
+          stepUpToken === undefined
+            ? { idempotencyKey: key }
+            : { stepUpToken, idempotencyKey: key },
       });
       if (!alive.current) return;
       keyRef.current = undefined;
@@ -184,7 +211,7 @@ export function useAdjustmentWrite({
         markMissing();
         return;
       }
-      if (cause instanceof AdminApiError && cause.code === STEP_UP_REFUSED) {
+      if (needsStepUp && cause instanceof AdminApiError && cause.code === STEP_UP_REFUSED) {
         // The verification was not accepted: verify again and replay the same body and key.
         void requestCode();
         return;
@@ -193,6 +220,7 @@ export function useAdjustmentWrite({
         // It may have taken effect: keep the key and the body, lock, no failure prompt.
         setUnknown(true);
         setPhase('idle');
+        onUnknown?.();
         return;
       }
       if (!outcomeUnknown(cause)) {
