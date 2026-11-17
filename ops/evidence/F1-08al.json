@@ -1,0 +1,125 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-withdrawal-manual-paid/flow.test.ts > [AC-F1-08al-SUBMIT#1] 一次动态码覆盖整批且连点只发一次；在途保持对话框、输入按钮锁定，成功清空勾选重读列表",
+    "test/spec/frontend/admin-withdrawal-manual-paid/flow.test.ts > [AC-F1-08al-RESULT#1] 部分成功逐行展示 paid 和十一种 skipped 全文，阻断等由服务端判定且不冒称全成",
+    "test/spec/frontend/admin-withdrawal-manual-paid/flow.test.ts > [AC-F1-08al-RESULT#2] 全部 skipped 不出成功提示；完成后重选同一批使用新幂等标识",
+    "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts > [AC-F1-08al-UNKNOWN#1] 首次已生效但网络断开，原始输入锁定；重验后原键原字节请求重放确定结果",
+    "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts > [AC-F1-08al-UNKNOWN#2] 无法解析的响应也按未知锁定；去列表核对关闭并刷新，不再发写请求",
+    "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts > [AC-F1-08al-UNKNOWN#3] 网络未知后收到带外壳 40901 或 5xx 仍锁定；再试原键原体，已录入项返回 not_approved 如实展示",
+    "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts > [AC-F1-08al-UNKNOWN#4] 首次即带外壳的在途 40901 或部分失败 5xx 也不能解锁改写或自动重发",
+    "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts > [AC-F1-08al-REAUTH#1] 10003 重新动态码且验证前不重发；直接拒绝或未知后重验均沿用原键原体",
+    "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts > [AC-F1-08al-ERROR#1] 确定的 10403 与 20001 展示全文、解锁且不自动重发；新提交换键",
+    "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts > [AC-F1-08al-ACCESS#1] 仅手动补录权限可勾真实 APPROVED；无此权限不可勾，不能借补录权限批量通过",
+    "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts > [AC-F1-08al-ACCESS#2] 双权限及超管只选待审仍只有批量通过；混选后手动对话框只列待执行单",
+    "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts > [AC-F1-08al-DIALOG#1] 按列表顺序显示单号、收款方式、应付；微信仅标跳过且无输入、不进入请求",
+    "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts > [AC-F1-08al-DIALOG#2] 全选微信时全部标跳过，无录入输入、确认不可用且不发验证或写请求",
+    "test/spec/frontend/admin-withdrawal-manual-paid/validation.test.ts > [AC-F1-08al-VALIDATE#1] 任一行的三项必填缺失均提示并阻止整批提交，修正后才可确认",
+    "test/spec/frontend/admin-withdrawal-manual-paid/validation.test.ts > [AC-F1-08al-VALIDATE#2] 流水号去首尾空白、拒绝内部空白与 NUL 和超长；1 与 64 字符原样保留大小写",
+    "test/spec/frontend/admin-withdrawal-manual-paid/validation.test.ts > [AC-F1-08al-VALIDATE#3] 实付金额按整数分比较应付；少一分、多一分和申请总额均拒绝且不擅改输入",
+    "test/spec/frontend/admin-withdrawal-manual-paid/validation.test.ts > [AC-F1-08al-VALIDATE#4] 实付时间以注入时钟判断：晚一秒也拒绝，等于现在可提交且请求带时区"
+  ],
+  "risk_note": "F1-08al (D10-1994 (一), D10-1998). Withdrawal review list: with payout.manual_entry, APPROVED rows can be ticked and 【批量手动打款】 opens a dialog where each row takes channel serial, paid time and paid amount; one POST /admin/v1/withdrawals/batch-manual-paid (Idempotency-Key + totp step-up), per-item results shown as they are, partial success never reported as full. Paid amount: empty on open, no default / prefill / shortcut of any kind, never rewritten; format /^\\d+(\\.\\d{1,2})?$/ on the trimmed text, then yuanStrToFen must equal net_fen (fixes the 98.009 truncation S2). Result-unknown handling as F1-08ce. Frozen [AC-F1-08ai-ACCESS#1] changed by modify_existing (rule_change, D10-1994): the manual_entry holder now has checkboxes exactly on APPROVED rows. Known open S2: a 10403 on retry after an unknown result unlocks the dialog (FU-F108AL-UNKNOWN-RETRY-10403, together with useAdjustmentWrite). Rule tests: round 1 Codex, rounds 2-3 independent Claude; spec-test by independent Claude; money review by independent Claude (Codex out of quota, D10-2003). Implementation by Opus 5.5. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (approvals #36, D10-2003: Codex usage limit until 2026-11-23). Round 1 ran twice: the first output (pass + S2 on 98.009 truncation) was refused by the wrapper because one checklist citation lay outside the diff hunks; the S2 was fixed and the rerun passed with one S2 left open by orchestrator ruling D10-2035 (FU-F108AL-UNKNOWN-RETRY-10403). couli-runs/F1-08al/review-claude-money-r1.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "tests: round 1 by Codex (codex-run.sh), rounds 2-3 by independent Claude contexts (claude-run.sh, ledger tester claude-independent after Codex usage limit, #271 / D10-2003); round 3 and the third spec-test per ops/approvals.yaml #103; input samples of VALIDATE#3 added and adjusted afterwards per D10-2025 / D10-2027 on the non-implementer side. spec-test r1 fail, r2 pass, r3 pass, each by a fresh independent Claude",
+    "model": "claude-opus-5-5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts",
+      "test": "[AC-F1-08ai-ACCESS#1] 只读和其他资金权限没有勾选或批量通过；审核权限与超管可勾选，未勾选不出现批量栏",
+      "retitle_to": "[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08ai-ACCESS#1] 只读和其他资金权限没有勾选或批量通过；审核权限与超管可勾选，未勾选不出现批量栏',\n  { timeout: 90_000 },\n  async () => {\n    for (const permissions of [\n      { isSuper: false, permissions: ['fund.view'] },\n      {\n        isSuper: false,\n        permissions: [\n          'fund.view',\n          'payout.execute',\n          'payout.manual_entry',\n          'export',\n          'config.business',\n        ],\n      },\n    ]) {\n      const server = serverFor();\n      await mount(server, permissions);\n      expect(within(main()).queryAllByRole('checkbox')).toEqual([]);\n      expect(buttons(main(), '批量通过')).toEqual([]);\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n    for (const permissions of [REVIEW, { isSuper: true, permissions: [] }]) {\n      const server = serverFor();\n      await mount(server, permissions);\n      expect(buttons(main(), '批量通过')).toEqual([]);\n      for (const item of server.state) expect(checkbox(item).checked).toBe(false);\n      await select([server.state[0]!]);\n      expect(disabled(button(main(), '批量通过'))).toBe(false);\n      assertNoOtherActions();\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "after": "it(\n  '[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏',\n  { timeout: 90_000 },\n  async () => {\n    for (const permissions of [\n      { isSuper: false, permissions: ['fund.view'] },\n      {\n        isSuper: false,\n        permissions: [\n          'fund.view',\n          'payout.execute',\n          'payout.manual_entry',\n          'export',\n          'config.business',\n        ],\n      },\n    ]) {\n      const server = permissions.permissions.includes('payout.manual_entry')\n        ? serverFor(samples())\n        : serverFor();\n      await mount(server, permissions);\n      if (permissions.permissions.includes('payout.manual_entry')) {\n        expect(\n          server.state\n            .filter((item) =>\n              within(rowOf(main(), item.out_biz_no))\n                .queryAllByRole('checkbox')\n                .some((node) => !disabled(node)),\n            )\n            .map((item) => item.withdrawal_id),\n        ).toEqual(\n          server.state\n            .filter((item) => item.status === 'APPROVED')\n            .map((item) => item.withdrawal_id),\n        );\n      } else {\n        expect(within(main()).queryAllByRole('checkbox')).toEqual([]);\n      }\n      expect(buttons(main(), '批量通过')).toEqual([]);\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n    for (const permissions of [REVIEW, { isSuper: true, permissions: [] }]) {\n      const server = serverFor();\n      await mount(server, permissions);\n      expect(buttons(main(), '批量通过')).toEqual([]);\n      for (const item of server.state) expect(checkbox(item).checked).toBe(false);\n      await select([server.state[0]!]);\n      expect(disabled(button(main(), '批量通过'))).toBe(false);\n      assertNoOtherActions();\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为前序任务 F1-08ai 版本（旧规则：持 payout.manual_entry 的账号对 APPROVED 单没有勾选框），即本单正式先红的基线（规则测试提交 ff74c130a5c9，不含本单实现）；couli-runs/F1-08al/tests/1（couli-ci，--tests 只跑 admin-withdrawal-batch-approve/selection.test.ts）中本条为红——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-16"]
+    }
+  ],
+  "task": "F1-08al",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "a63744df1a3935b982ca9dc5a10da1e986692ecb",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a63744df1a3935b982ca9dc5a10da1e986692ecb",
+      "tree": "bf72b04af7d589189a0daa899cd2ae2b051e595d",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-17T21:36:20Z",
+      "finished_at": "2026-11-17T21:36:36Z",
+      "red_tests": [
+        "test/spec/frontend/admin-withdrawal-manual-paid/flow.test.ts > [AC-F1-08al-SUBMIT#1] 一次动态码覆盖整批且连点只发一次；在途保持对话框、输入按钮锁定，成功清空勾选重读列表",
+        "test/spec/frontend/admin-withdrawal-manual-paid/flow.test.ts > [AC-F1-08al-RESULT#1] 部分成功逐行展示 paid 和十一种 skipped 全文，阻断等由服务端判定且不冒称全成",
+        "test/spec/frontend/admin-withdrawal-manual-paid/flow.test.ts > [AC-F1-08al-RESULT#2] 全部 skipped 不出成功提示；完成后重选同一批使用新幂等标识",
+        "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts > [AC-F1-08al-UNKNOWN#1] 首次已生效但网络断开，原始输入锁定；重验后原键原字节请求重放确定结果",
+        "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts > [AC-F1-08al-UNKNOWN#2] 无法解析的响应也按未知锁定；去列表核对关闭并刷新，不再发写请求",
+        "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts > [AC-F1-08al-UNKNOWN#3] 网络未知后收到带外壳 40901 或 5xx 仍锁定；再试原键原体，已录入项返回 not_approved 如实展示",
+        "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts > [AC-F1-08al-UNKNOWN#4] 首次即带外壳的在途 40901 或部分失败 5xx 也不能解锁改写或自动重发",
+        "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts > [AC-F1-08al-REAUTH#1] 10003 重新动态码且验证前不重发；直接拒绝或未知后重验均沿用原键原体",
+        "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts > [AC-F1-08al-ERROR#1] 确定的 10403 与 20001 展示全文、解锁且不自动重发；新提交换键",
+        "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts > [AC-F1-08al-ACCESS#1] 仅手动补录权限可勾真实 APPROVED；无此权限不可勾，不能借补录权限批量通过",
+        "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts > [AC-F1-08al-ACCESS#2] 双权限及超管只选待审仍只有批量通过；混选后手动对话框只列待执行单",
+        "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts > [AC-F1-08al-DIALOG#1] 按列表顺序显示单号、收款方式、应付；微信仅标跳过且无输入、不进入请求",
+        "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts > [AC-F1-08al-DIALOG#2] 全选微信时全部标跳过，无录入输入、确认不可用且不发验证或写请求",
+        "test/spec/frontend/admin-withdrawal-manual-paid/validation.test.ts > [AC-F1-08al-VALIDATE#1] 任一行的三项必填缺失均提示并阻止整批提交，修正后才可确认",
+        "test/spec/frontend/admin-withdrawal-manual-paid/validation.test.ts > [AC-F1-08al-VALIDATE#2] 流水号去首尾空白、拒绝内部空白与 NUL 和超长；1 与 64 字符原样保留大小写",
+        "test/spec/frontend/admin-withdrawal-manual-paid/validation.test.ts > [AC-F1-08al-VALIDATE#3] 实付金额按整数分比较应付；少一分、多一分和申请总额均拒绝且不擅改输入",
+        "test/spec/frontend/admin-withdrawal-manual-paid/validation.test.ts > [AC-F1-08al-VALIDATE#4] 实付时间以注入时钟判断：晚一秒也拒绝，等于现在可提交且请求带时区"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-withdrawal-manual-paid/flow.test.ts",
+        "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts",
+        "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts",
+        "test/spec/frontend/admin-withdrawal-manual-paid/validation.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "a931eb3f913acd5ff471064846c99b477f377adabffbc68b1c55501f76480d2e"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "42cda9f7a1a236bb98508e33aca40b23d7899b00",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
