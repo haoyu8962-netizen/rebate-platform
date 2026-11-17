@@ -477,19 +477,31 @@
 //    RETURNS bigint` deletes the rows of app.link_logs_default strictly before the cutoff of I1b
 //    (copying the claim-referenced ones into app.link_log_evidence first, in its own transaction).
 //    No configuration item: the 90 days live only in the SQL functions.
+//    Batches (task CT-13o, orchestrator rulings D10-1832, D10-1874; rule tests
+//    test/spec/platform/link-logs-default-purge-batch/**): since `0148_link-logs-default-purge-batch.sql`
+//    one call deletes at most one bounded batch (same signature, cutoff and copy-first order) and
+//    returns the rows it deleted, 0 when nothing deletable is left for its cutoff.
 //    Module — only when `dayPartitions` is true, with the same single `now`:
 //    - Inside the C.4 gate (04:00 (+08:00) or later), right after the day-partition drop of link_logs
-//      (whether or not that drop succeeded) and before section O's evidence purge, at most one
-//      successful purge per +08:00 day per instance (a failed one is tried again by the next run):
-//      one short transaction of exactly two statements, `SELECT set_config('statement_timeout',
+//      (whether or not that drop succeeded) and before section O's evidence purge, until the purge of
+//      the +08:00 day is complete, per instance: calls repeated (as section K's batches) until one
+//      returns 0 or LINK_LOGS_DEFAULT_PURGE_MAX_BATCHES calls were made in this run. Each call is its
+//      own short transaction of exactly two statements, `SELECT set_config('statement_timeout',
 //      LINK_LOGS_DEFAULT_PURGE_STATEMENT_TIMEOUT, true)` then `SELECT
 //      app.purge_expired_link_logs_default(<now>)` (D10-1826: a function-level SET cannot bound the
-//      statement that calls the function, so the bound is set here, as C.3 does for lock_timeout).
-//      A timeout (57014) is a failure like any other: the whole call rolls back.
-//    - Logs: `retention_purged` (info) { table: 'link_logs_default', rows } when rows > 0.
-//    - Errors as section O: `retention_purge_failed` (error) { table: 'link_logs_default', sqlstate },
-//      counts in `failed`, the rest of the run still goes on, and runOnce then rejects with that very
-//      error (the first failure of sections N, O and P in run order) instead of resolving the report.
+//      statement that calls the function, so the bound is set here, as C.3 does for lock_timeout), so
+//      each batch commits on its own. The day is marked complete only when a call returned 0; when
+//      the cap is reached first, or a call fails, the next run of the same day goes on.
+//      A timeout (57014) is a failure like any other: that call's batch rolls back, the batches
+//      committed before it stay deleted.
+//    - Logs, after the calls: `retention_purged` (info) { table: 'link_logs_default', rows } when rows
+//      > 0 (rows summed over this run's calls), or `retention_purge_backlog` (warn) with the same
+//      fields when the cap was reached with the last call still returning > 0.
+//    - Errors as section O: the line above for the rows deleted before the failing call (if any),
+//      then `retention_purge_failed` (error) { table: 'link_logs_default', sqlstate }, no further
+//      call in this run, counts in `failed`, the rest of the run still goes on, and runOnce then
+//      rejects with that very error (the first failure of sections N, O and P in run order) instead
+//      of resolving the report.
 import {
   MONTH_PARTITIONED_TABLES,
   MONTHS_AHEAD,
@@ -517,10 +529,17 @@ export const OPEN_ATTEMPTS_BATCH_SIZE = 1000;
 export const OPEN_ATTEMPTS_MAX_BATCHES = 100;
 
 /**
- * statement_timeout of the section P call (D10-1826): a DEFAULT partition grown far beyond normal
- * makes the call fail and roll back instead of running without bound; the next run tries again.
+ * statement_timeout of each section P call (D10-1826): a call that runs too long fails and rolls its
+ * batch back instead of running without bound; the next run tries again.
  */
 const LINK_LOGS_DEFAULT_PURGE_STATEMENT_TIMEOUT = '60s';
+
+/**
+ * Most calls of app.purge_expired_link_logs_default in one run (section P, CT-13o); a larger backlog
+ * continues in the next run. One call deletes at most 10000 rows (0148), so one run removes up to
+ * 1,000,000 rows, the same order as sections J and K (100 batches per run).
+ */
+export const LINK_LOGS_DEFAULT_PURGE_MAX_BATCHES = 100;
 
 /** Rows per call of the retention functions (section K). */
 const RETENTION_BATCH_SIZE = 1000;
@@ -743,7 +762,7 @@ export function createPartitionMaintenance(
   let eventsCleanedDay: string | undefined;
   /** The +08:00 day ('YYYY-MM-DD') of this instance's last successful evidence purge (section O). */
   let evidencePurgedDay: string | undefined;
-  /** The +08:00 day ('YYYY-MM-DD') of this instance's last successful DEFAULT purge (section P). */
+  /** The +08:00 day ('YYYY-MM-DD') whose DEFAULT purge this instance completed (section P). */
   let defaultPurgedDay: string | undefined;
 
   /** Section N: pre-create the events day partitions; the first failure rejects. */
@@ -789,7 +808,7 @@ export function createPartitionMaintenance(
     }
   }
 
-  /** Sections O and P: one purge call; logs the rows or the failure here, and rejects on failure. */
+  /** Section O: one purge call; logs the rows or the failure here, and rejects on failure. */
   async function purgeOnce(
     table: string,
     purge: () => Promise<{ rows: { deleted?: bigint | number | string | null }[] }>,
@@ -813,20 +832,45 @@ export function createPartitionMaintenance(
   }
 
   /**
-   * Section P: one call of the link_logs DEFAULT purge (it copies the referenced rows first), in a
-   * short transaction that bounds it with LINK_LOGS_DEFAULT_PURGE_STATEMENT_TIMEOUT (D10-1826).
+   * Section P: the link_logs DEFAULT purge in bounded batches (CT-13o). Each call deletes at most one
+   * batch (it copies the referenced rows first) in its own short transaction bounded by
+   * LINK_LOGS_DEFAULT_PURGE_STATEMENT_TIMEOUT (D10-1826), until a call returns 0 or
+   * LINK_LOGS_DEFAULT_PURGE_MAX_BATCHES calls were made. Resolves true when a call returned 0 (the
+   * day's purge is complete), false when the cap was reached first; logs the rows or the failure
+   * here and rejects with the original error (only the failing call's batch rolls back).
    */
-  async function purgeLinkLogsDefault(now: Date): Promise<void> {
-    await purgeOnce('link_logs_default', () =>
-      db.transaction().execute(async (trx) => {
-        await sql`
-          SELECT set_config('statement_timeout', ${LINK_LOGS_DEFAULT_PURGE_STATEMENT_TIMEOUT}::text, true)
-        `.execute(trx);
-        return sql<{ deleted: bigint }>`
-          SELECT app.purge_expired_link_logs_default(${now}::timestamptz) AS deleted
-        `.execute(trx);
-      }),
-    );
+  async function purgeLinkLogsDefault(now: Date): Promise<boolean> {
+    const table = 'link_logs_default';
+    let rows = 0;
+    let last = 0;
+    try {
+      for (let batches = 0; batches < LINK_LOGS_DEFAULT_PURGE_MAX_BATCHES; batches += 1) {
+        const result = await db.transaction().execute(async (trx) => {
+          await sql`
+            SELECT set_config('statement_timeout', ${LINK_LOGS_DEFAULT_PURGE_STATEMENT_TIMEOUT}::text, true)
+          `.execute(trx);
+          return sql<{ deleted: bigint }>`
+            SELECT app.purge_expired_link_logs_default(${now}::timestamptz) AS deleted
+          `.execute(trx);
+        });
+        last = deletedCount(result.rows);
+        if (!Number.isSafeInteger(rows + last)) {
+          throw new RangeError('deleted row count out of range');
+        }
+        rows += last;
+        if (last === 0) break;
+      }
+    } catch (error) {
+      // Batches committed before the failing call stay deleted: report them as purged.
+      if (rows > 0) logger.info({ table, rows }, 'retention_purged');
+      logger.error({ table, sqlstate: sqlstate(error) }, 'retention_purge_failed');
+      throw error;
+    }
+    if (rows > 0) {
+      if (last > 0) logger.warn({ table, rows }, 'retention_purge_backlog');
+      else logger.info({ table, rows }, 'retention_purged');
+    }
+    return last === 0;
   }
 
   /** Section J: bounded batches, each its own statement; resolves false when a batch failed. */
@@ -1143,11 +1187,11 @@ export function createPartitionMaintenance(
             logger.error({ table, sqlstate: sqlstate(error) }, 'partition_drop_failed');
           }
         }
-        // Section P: once per +08:00 day, after the link_logs drop and before the evidence purge.
+        // Section P: until complete for the +08:00 day, after the link_logs drop and before the
+        // evidence purge; complete only when a call returned 0 (a capped run leaves the rest).
         if (defaultPurgedDay !== today) {
           try {
-            await purgeLinkLogsDefault(now);
-            defaultPurgedDay = today;
+            if (await purgeLinkLogsDefault(now)) defaultPurgedDay = today;
           } catch (error) {
             failed += 1;
             firstFailure ??= { error };
