@@ -167,3 +167,71 @@ export async function countAdminEntries(
   }
   return total;
 }
+
+/** An export page's row: the entry and its keyset position (booked_at to the microsecond, UTC). */
+export interface AdminEntryExportRow extends AdminEntryRow {
+  /** e.booked_at as YYYY-MM-DDTHH:MI:SS.USZ (microseconds kept; session time zone independent). */
+  readonly bookedAtKey: string;
+}
+
+/** Keyset position of the last row read: strictly older entries come next. */
+export interface AdminEntryKeyset {
+  readonly bookedAtKey: string;
+  readonly entryId: string;
+}
+
+/**
+ * The filtered entries in the list's order (booked_at then entry id descending), the first `limit`
+ * strictly after `after` in that order — a keyset walk, so pages neither repeat nor skip entries
+ * when several share one booked_at, and entries booked meanwhile (newer) never shift a page.
+ */
+export async function readAdminEntriesAfter(
+  handle: Kysely<DB>,
+  filter: AdminEntryFilter,
+  slice: { readonly after: AdminEntryKeyset | null; readonly limit: number },
+): Promise<readonly AdminEntryExportRow[]> {
+  let query = matching(handle, filter);
+  if (slice.after !== null) {
+    const { bookedAtKey, entryId } = slice.after;
+    query = query.where(
+      sql<boolean>`(e.booked_at, e.id) < (${bookedAtKey}::timestamptz, ${entryId}::bigint)`,
+    );
+  }
+  const rows = await query
+    .select([
+      sql<string>`e.id::text`.as('entry_id'),
+      'e.booked_at',
+      sql<string>`to_char(e.booked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`.as(
+        'booked_at_key',
+      ),
+      sql<string>`to_char(v.accounting_date, 'YYYY-MM-DD')`.as('accounting_date'),
+      'e.ledger_type',
+      'e.sub_type',
+      'e.sub_account',
+      sql<string>`e.amount_fen::text`.as('amount_fen'),
+      sql<string | null>`e.balance_after_fen::text`.as('balance_after_fen'),
+      sql<string>`v.id::text`.as('voucher_id'),
+      'v.uniq_key',
+      'v.biz_type',
+      'v.biz_id',
+    ])
+    .orderBy('e.booked_at', 'desc')
+    .orderBy('e.id', 'desc')
+    .limit(slice.limit)
+    .execute();
+  return rows.map((row) => ({
+    entryId: row.entry_id,
+    bookedAt: row.booked_at,
+    bookedAtKey: row.booked_at_key,
+    accountingDate: row.accounting_date,
+    ledgerType: row.ledger_type,
+    subType: row.sub_type,
+    subAccount: subAccountOf(row.sub_account),
+    amountFen: parseFen(row.amount_fen),
+    balanceAfterFen: row.balance_after_fen === null ? null : parseFen(row.balance_after_fen),
+    voucherId: row.voucher_id,
+    uniqKey: row.uniq_key,
+    bizType: row.biz_type,
+    bizId: row.biz_id,
+  }));
+}

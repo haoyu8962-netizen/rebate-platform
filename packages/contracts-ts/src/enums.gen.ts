@@ -160,6 +160,7 @@ export const export_resource = [
   "users", // 用户列表 GET /admin/v1/users（user.list；filters 为 risk_state）
   "audit_logs", // 审计日志 GET /admin/v1/audit-logs（登录即可，未持 audit.view_all 时只导出本人记录；filters 为 actor_id、target_type、target_id、permission、from、to）
   "tax_withdrawals", // 涉税季度导出 BR-WDR-21，没有对应列表（脱敏版 export + fund.view；全量版 unmasked 只要 tax.export_full 与 step-up，不被 fund.* 隐含；filters 为 quarter）
+  "ledger", // 余额流水 GET /admin/v1/ledger（fund.view 或 user.lookup 任一，另加 export；filters 同 adminListLedgerEntries 的查询参数 user_id（必填）、ledger_type、sub_type、sub_account、accounting_date_from、accounting_date_to、ref；导出列为该列表 items 的字段，没有一列属于 pii.*，恒为脱敏任务，不收 unmasked 与 reason；编排默认，待规划回写 D10-1742）
 ] as const;
 export type ExportResource = (typeof export_resource)[number];
 

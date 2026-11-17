@@ -9,6 +9,9 @@
 //   booked_at then entry_id descending, amount_fen negated to the user's view, link by biz_type,
 //   filters and page / page_size (≤ 200) / total.
 // Everything of one answer is read on one read-only REPEATABLE READ transaction; nothing is written.
+// CT-24zzm (D10-1740 / D10-1742): readAdminLedgerExportPage is the admin export's read of the same
+// list — the same filters, checks, order and item values (entryView), walked by keyset instead of
+// offset so that pages of entries sharing one booked_at neither repeat nor skip an entry.
 import { ledger_type, withdraw_hold_kind, type Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import { fenToJsonNumber, subFen } from '@couli/money';
@@ -18,7 +21,9 @@ import {
   countAdminEntries,
   readAdminBalance,
   readAdminEntries,
+  readAdminEntriesAfter,
   type AdminEntryFilter,
+  type AdminEntryKeyset,
   type AdminEntryRow,
 } from '../infra/admin-ledger-read-store.ts';
 
@@ -277,4 +282,85 @@ export function adminLedgerLinkOf(voucher: {
   const type = LINK_TYPES.get(voucher.bizType);
   if (type === undefined || voucher.bizId === '') return null;
   return { type, id: voucher.bizId };
+}
+
+/** The export's filters: the list's query parameters without paging (contract AdminExportLedgerFilters). */
+const EXPORT_FILTER_KEYS: ReadonlySet<string> = new Set([
+  'user_id',
+  'ledger_type',
+  'sub_type',
+  'sub_account',
+  'accounting_date_from',
+  'accounting_date_to',
+  'ref',
+]);
+const EXPORT_CURSOR = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z)\|(\d{1,19})$/;
+
+export interface AdminLedgerExportPageInput {
+  readonly appId: string;
+  /** The export task's stored filters (string values; any other key or value is refused). */
+  readonly filters: Readonly<Record<string, unknown>>;
+  /** The previous page's `next`; null for the first page. */
+  readonly after: string | null;
+  /** 1..200 (the list's page_size maximum). */
+  readonly limit: number;
+}
+
+export interface AdminLedgerExportPage {
+  /** In the list's order, each item exactly as GET /admin/v1/ledger answers it. */
+  readonly items: readonly Schema<'AdminLedgerEntry'>[];
+  /** Opaque keyset position of the last item; null when this page is the last one. */
+  readonly next: string | null;
+}
+
+function exportQueryOf(appId: string, filters: Readonly<Record<string, unknown>>) {
+  const raw: Record<string, string> = {};
+  for (const [key, value] of Object.entries(filters)) {
+    if (!EXPORT_FILTER_KEYS.has(key) || typeof value !== 'string') {
+      throw new AdminLedgerReadFieldsError([key]);
+    }
+    raw[key] = value;
+  }
+  if (raw['user_id'] === undefined) throw new AdminLedgerReadFieldsError(['user_id']);
+  return adminLedgerQueryOf(appId, raw);
+}
+
+function keysetOf(after: string | null): AdminEntryKeyset | null {
+  if (after === null) return null;
+  const match = EXPORT_CURSOR.exec(after);
+  if (match === null) throw new Error('ledger: admin ledger export cursor malformed');
+  return { bookedAtKey: match[1]!, entryId: match[2]! };
+}
+
+/**
+ * One page of the user's ledger for an admin export: the filters and checks of
+ * listAdminLedgerEntries (20001 AdminLedgerReadFieldsError for the same reasons, the user of the
+ * console's app included), the same order and the same item values, `limit` entries after `after`.
+ */
+export async function readAdminLedgerExportPage(
+  deps: Pick<AdminLedgerReadDeps, 'db'> & {
+    readonly ports: Pick<AdminLedgerReadPorts, 'userExists'>;
+  },
+  input: AdminLedgerExportPageInput,
+): Promise<AdminLedgerExportPage> {
+  if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > MAX_PAGE_SIZE) {
+    throw new RangeError('ledger: admin ledger export page size out of range');
+  }
+  const query = exportQueryOf(input.appId, input.filters);
+  const filter = checkedFilter({ ...query, page: DEFAULT_PAGE, pageSize: input.limit });
+  const after = keysetOf(input.after);
+  const rows = await readOnly(deps.db, async (trx) => {
+    if (!(await deps.ports.userExists(trx, { appId: filter.appId, userId: filter.userId }))) {
+      throw new AdminLedgerReadFieldsError(['user_id']);
+    }
+    return readAdminEntriesAfter(trx, filter, { after, limit: input.limit });
+  });
+  const last = rows.at(-1);
+  return {
+    items: rows.map(entryView),
+    next:
+      rows.length < input.limit || last === undefined
+        ? null
+        : `${last.bookedAtKey}|${last.entryId}`,
+  };
 }

@@ -95,3 +95,10 @@ POST /admin/v1/recon-diffs/{recon_diff_id}/write-off added the new `blacklist_af
 # (the native step-up pages are not live), login / bind requests stay valid unchanged.
 POST /v1/auth/sms-codes added 'if' subschema to the request body
 POST /v1/auth/sms-codes added 'then' subschema to the request body
+# CT-24zzm (D10-1740 / D10-1742, accepted by D10-1934): export_resource (AdminExportResource) adds ledger,
+# the balance-ledger export. Old clients cannot receive it: all three responses are /admin/v1/exports
+# endpoints read only by the admin console, which ships together with the server (D10-557); no /v1/**
+# user-side response references AdminExportResource, so no installed App / H5 client can see the value.
+GET /admin/v1/exports added the new `ledger` enum value to the `data/items/items/resource` response property for the response status `200`
+POST /admin/v1/exports added the new `ledger` enum value to the `data/resource` response property for the response status `202`
+POST /admin/v1/exports/{id}/retry added the new `ledger` enum value to the `data/resource` response property for the response status `200`

@@ -10336,11 +10336,12 @@ export const CONTRACT_ROUTE_SCHEMAS = {
         },
         "resource": {
           "type": "string",
-          "description": "Source list of an export task (enum export_resource): users = GET /admin/v1/users\n(needs user.list), audit_logs = GET /admin/v1/audit-logs (signed in is enough; own\nrecords only without audit.view_all), tax_withdrawals = the quarterly tax export of\nBR-WDR-21, which has no source list (see POST /admin/v1/exports).\n",
+          "description": "Source list of an export task (enum export_resource): users = GET /admin/v1/users\n(needs user.list), audit_logs = GET /admin/v1/audit-logs (signed in is enough; own\nrecords only without audit.view_all), tax_withdrawals = the quarterly tax export of\nBR-WDR-21, which has no source list (see POST /admin/v1/exports), ledger = GET\n/admin/v1/ledger (needs fund.view or user.lookup; always masked).\n",
           "enum": [
             "users",
             "audit_logs",
-            "tax_withdrawals"
+            "tax_withdrawals",
+            "ledger"
           ]
         },
         "from": {
@@ -10520,6 +10521,98 @@ export const CONTRACT_ROUTE_SCHEMAS = {
               "minLength": 1,
               "maxLength": 200,
               "description": "Required free-text reason, kept in the audit record."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Export of one user's ledger (GET /admin/v1/ledger); always masked (no column is personal\ndata), so neither unmasked nor reason is accepted.\n",
+          "additionalProperties": false,
+          "required": [
+            "resource",
+            "filters"
+          ],
+          "properties": {
+            "resource": {
+              "type": "string",
+              "enum": [
+                "ledger"
+              ]
+            },
+            "filters": {
+              "type": "object",
+              "description": "Filters of a ledger export, the query parameters of GET /admin/v1/ledger without paging,\njudged the same way (user_id required; accounting_date_from later than\naccounting_date_to is 20001). Each property has the list parameter's own schema; the\nuser id must also be a UUID, which the list itself answers with 20001 [user_id] (here it\nis refused by the request schema already, so no task is created for it).\n",
+              "additionalProperties": false,
+              "required": [
+                "user_id"
+              ],
+              "allOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "user_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              ],
+              "properties": {
+                "user_id": {
+                  "type": "string",
+                  "description": "Entity id, a UUIDv7 string (04 §5).",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "ledger_type": {
+                  "type": "string",
+                  "description": "contracts/enums/fund.yaml ledger_type (BR-FUND-15, all 13 values).",
+                  "enum": [
+                    "REBATE_CREDIT",
+                    "SHARE_CREDIT",
+                    "REFERRAL_CREDIT",
+                    "CLAWBACK",
+                    "SETTLE_ADJUST",
+                    "WITHDRAW_FREEZE",
+                    "WITHDRAW_PAID",
+                    "WITHDRAW_RETURN",
+                    "WITHDRAW_FEE",
+                    "TAX_WITHHOLD",
+                    "REWARD",
+                    "ADMIN_ADJUST",
+                    "BAD_DEBT_WRITEOFF"
+                  ]
+                },
+                "sub_type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "sub_account": {
+                  "type": "string",
+                  "description": "contracts/enums/fund.yaml ledger_sub_account (BR-FUND-13).",
+                  "enum": [
+                    "available",
+                    "frozen"
+                  ]
+                },
+                "accounting_date_from": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "First accounting date of the voucher, inclusive."
+                },
+                "accounting_date_to": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "Last accounting date of the voucher, inclusive."
+                },
+                "ref": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Exact voucher biz_id."
+                }
+              }
             }
           }
         }
