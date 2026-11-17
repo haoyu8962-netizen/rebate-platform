@@ -1,0 +1,84 @@
+{
+  "risk_note": "CT-06zzzzzm (FU-CT13O-DIST-TSC-ONCE; D10-1937 / D10-1953 / D10-1962 / D10-1976): test-change only. New test/spec/platform/_shared/api-build-lock.ts (lockApiBuild / unlockApiBuild / reportApiBuild: a per-worktree lock under the repository .tmp/, one owner file per epoch linked atomically, take-over when the owner pid is gone or after a 150 s stale timeout, release only by the token owner; one stderr line per build with status / signal / error / build_ms / lock_wait_ms / lock_via / lock_epoch / lock_lost / tsbuildinfo_changed / stderr tail). The three frozen maintenance dist-subprocess files (worker-entry, worker-signal-start, worker-signal-start-more) only get whole-statement insertions inside build(): one import, lockApiBuild(); before spawnSync, unlockApiBuild(); after it, reportApiBuild(result); before the status check (compareSupportFile: no problems); spawnSync arguments, timeouts and assertions unchanged. queue/entries, queue/entry-send-keepalive and idempotency-purge/entry stay as at the base: reverting them under load did not reproduce a red in 3 bulk runs (494 files / 4558 tests each), so they moved to FU-CT13O-DIST-TSC-ONCE-REST (D10-1962). Residual: their builds hold no lock and may still overlap; a test process SIGKILLed while its tsc child lives lets a waiter start a second tsc (accepted, D10-1962). Codex money r1 (2 S2), r2 increment (1 S2), r3 increment pass with no findings; all fixed except the accepted one. Test machine on the final tree (57f8282ef, only the three maintenance files hold the lock): bulk test/spec/db + test/spec/platform 494 files / 4558 tests green, the 5 dist-subprocess tests pass; maintenance alone 19 files green with one real lock wait (28.2 s, then a 0.1 s incremental build).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Codex money r1 full pass with 2 S2 (take-over race fixed; SIGKILLed owner leaving a live tsc accepted as inherent, D10-1962), r2 increment pass with 1 S2 (EEXIST on release, fixed), r3 increment pass with no findings (couli-runs/CT-06zzzzzm/review-money-r1/r2/r3.json)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "modify_existing": [
+    {
+      "file": "test/spec/platform/maintenance/worker-entry.int.test.ts",
+      "scope": "support",
+      "reason": "flake_fix",
+      "before_sha256": "866c41fb7d1b33acfddde6b7024e5bc101d25dc4f944538e525857d87eb3a77b",
+      "after_sha256": "6808ac8aabc5da77d77d002aecccc50a42d5cdb81ab2ba5ebfed0511c699e529",
+      "reverse_red": [
+        "[ADR-0001 §4.2 #4、#8、#14、#20; 规划/02 §15.1; worker 契约 4] 真实入口（dist 子进程）：worker 带 DATABASE_MAINT_URL 时在 pgboss 版本不对（41）时 startup_failed、退出码 1、一个分区都不建（维护在队列之后启动）；payout 设了它也不维护；COULI_EXIT_AFTER_INIT=1 的 worker 不跑维护；APP_ENV=test 的 worker 不设它时记 partition_maintenance_disabled、不维护；worker 带它时 started 之前跑完一轮——预建 event_log 与 orders 各 4 个月、link_logs 2026-11-20 至 12-04 共 15 个日分区（worker 契约 8），event_log_default 与 link_logs_default 的行都告警（warn）——SIGTERM 后 stopping、stopped、5 秒内以退出码 0 结束（维护池也已关闭，不靠空闲超时）；输出不含任何口令",
+        "[ADR-0001 §4.2 #4、#11; worker 契约 3、7 c] 真实入口（dist 子进程）：维护首轮中收到 SIGTERM，放锁后启动做完并开始停止；停止的最后一步（关维护池）被挂住时进程仍在、只有 stopping 与 partition_maintenance_done、没有 stopped；放开后才记 stopped，进程自然结束、退出码 0",
+        "[ADR-0001 §4.2 #4、#11; worker 契约 7 e] 真实入口（dist 子进程）：维护首轮卡在分区锁上时连收两次同一信号（SIGTERM→SIGTERM、SIGINT→SIGINT，第二次在第一次的 stopping 已记之后发）——第二次被忽略：只一行 stopping、不退出、不记 started；放锁后这一轮做完，按启停顺序停、记 stopped，进程自然结束、退出码 0",
+        "[ADR-0001 §4.2 #4、#11; worker 契约 3、4、7] 真实入口（dist 子进程）：worker 在队列启动时（pgboss.version 被另一会话锁住）收到 SIGTERM——立即记 stopping、不退出、不记 started；放锁后启动照常做完（维护首轮 ensured 23：8 个月分区 + link_logs 15 个日分区，B1-01w），不记 started，按启停顺序停、记 stopped，进程自然结束（无 process.exit、保活定时器已清、两个池都关）、放锁后 5 秒内退出码 0；同一阶段收到 SIGINT 后启动失败（放锁时版本改成 41）：stopping、startup_failed、不记 stopped，进程自然结束、退出码 1；输出不含口令",
+        "[ADR-0001 §4.2 #4、#11; worker 契约 3、4、7] 真实入口（dist 子进程）：worker 的维护首轮卡在 event_log_p202611 的分区锁上时收到 SIGTERM 再收到 SIGINT（或 SIGINT 再 SIGTERM）——只按第一个信号立即记一行 stopping、不退出、不记 started；放锁后这一轮做完（ensured 23 含 link_logs 15 个日分区（B1-01w）、failed 0），不记 started，按启停顺序停、记 stopped，进程自然结束（无 process.exit、保活定时器已清、维护池与主池都关）、放锁后 5 秒内退出码 0；输出不含口令"
+      ],
+      "note": "争用引起、非必现：CT-13o 测试机 run 2（couli-runs/CT-13o/tests/2，test/spec/db + test/spec/platform 210 个集成文件同跑、容器 8 GiB 无 swap）里，6 个文件都不持锁时这 5 条 dist 子进程用例在 build() 的 tsc -b 处 14–33 s 非零且无输出而红；同 5 条在只跑 21 个文件时过（run 3）。本单让 maintenance 三个文件的 build() 跨进程串行；编排 D10-1953 / D10-1962"
+    },
+    {
+      "file": "test/spec/platform/maintenance/worker-signal-start.int.test.ts",
+      "scope": "support",
+      "reason": "flake_fix",
+      "before_sha256": "fa4d0fb659a40471f46b4a4ae66d3eddc50f6c8ee1092602c243a0f545150687",
+      "after_sha256": "8ca0bea9ad985414cd4b7869d493fd5a90240c615b7aadd36703bad1d31ebb82",
+      "reverse_red": [
+        "[ADR-0001 §4.2 #4、#8、#14、#20; 规划/02 §15.1; worker 契约 4] 真实入口（dist 子进程）：worker 带 DATABASE_MAINT_URL 时在 pgboss 版本不对（41）时 startup_failed、退出码 1、一个分区都不建（维护在队列之后启动）；payout 设了它也不维护；COULI_EXIT_AFTER_INIT=1 的 worker 不跑维护；APP_ENV=test 的 worker 不设它时记 partition_maintenance_disabled、不维护；worker 带它时 started 之前跑完一轮——预建 event_log 与 orders 各 4 个月、link_logs 2026-11-20 至 12-04 共 15 个日分区（worker 契约 8），event_log_default 与 link_logs_default 的行都告警（warn）——SIGTERM 后 stopping、stopped、5 秒内以退出码 0 结束（维护池也已关闭，不靠空闲超时）；输出不含任何口令",
+        "[ADR-0001 §4.2 #4、#11; worker 契约 3、7 c] 真实入口（dist 子进程）：维护首轮中收到 SIGTERM，放锁后启动做完并开始停止；停止的最后一步（关维护池）被挂住时进程仍在、只有 stopping 与 partition_maintenance_done、没有 stopped；放开后才记 stopped，进程自然结束、退出码 0",
+        "[ADR-0001 §4.2 #4、#11; worker 契约 7 e] 真实入口（dist 子进程）：维护首轮卡在分区锁上时连收两次同一信号（SIGTERM→SIGTERM、SIGINT→SIGINT，第二次在第一次的 stopping 已记之后发）——第二次被忽略：只一行 stopping、不退出、不记 started；放锁后这一轮做完，按启停顺序停、记 stopped，进程自然结束、退出码 0",
+        "[ADR-0001 §4.2 #4、#11; worker 契约 3、4、7] 真实入口（dist 子进程）：worker 在队列启动时（pgboss.version 被另一会话锁住）收到 SIGTERM——立即记 stopping、不退出、不记 started；放锁后启动照常做完（维护首轮 ensured 23：8 个月分区 + link_logs 15 个日分区，B1-01w），不记 started，按启停顺序停、记 stopped，进程自然结束（无 process.exit、保活定时器已清、两个池都关）、放锁后 5 秒内退出码 0；同一阶段收到 SIGINT 后启动失败（放锁时版本改成 41）：stopping、startup_failed、不记 stopped，进程自然结束、退出码 1；输出不含口令",
+        "[ADR-0001 §4.2 #4、#11; worker 契约 3、4、7] 真实入口（dist 子进程）：worker 的维护首轮卡在 event_log_p202611 的分区锁上时收到 SIGTERM 再收到 SIGINT（或 SIGINT 再 SIGTERM）——只按第一个信号立即记一行 stopping、不退出、不记 started；放锁后这一轮做完（ensured 23 含 link_logs 15 个日分区（B1-01w）、failed 0），不记 started，按启停顺序停、记 stopped，进程自然结束（无 process.exit、保活定时器已清、维护池与主池都关）、放锁后 5 秒内退出码 0；输出不含口令"
+      ],
+      "note": "争用引起、非必现：CT-13o 测试机 run 2（couli-runs/CT-13o/tests/2，test/spec/db + test/spec/platform 210 个集成文件同跑、容器 8 GiB 无 swap）里，6 个文件都不持锁时这 5 条 dist 子进程用例在 build() 的 tsc -b 处 14–33 s 非零且无输出而红；同 5 条在只跑 21 个文件时过（run 3）。本单让 maintenance 三个文件的 build() 跨进程串行；编排 D10-1953 / D10-1962"
+    },
+    {
+      "file": "test/spec/platform/maintenance/worker-signal-start-more.int.test.ts",
+      "scope": "support",
+      "reason": "flake_fix",
+      "before_sha256": "46c33f2e60e183a27ae77a7de8b36ef85e31d8f8707a51b8552c64920ab85b7d",
+      "after_sha256": "2285272808a7884e6a88baa37558b2ff9f8faa6549424da605d9909084477e86",
+      "reverse_red": [
+        "[ADR-0001 §4.2 #4、#8、#14、#20; 规划/02 §15.1; worker 契约 4] 真实入口（dist 子进程）：worker 带 DATABASE_MAINT_URL 时在 pgboss 版本不对（41）时 startup_failed、退出码 1、一个分区都不建（维护在队列之后启动）；payout 设了它也不维护；COULI_EXIT_AFTER_INIT=1 的 worker 不跑维护；APP_ENV=test 的 worker 不设它时记 partition_maintenance_disabled、不维护；worker 带它时 started 之前跑完一轮——预建 event_log 与 orders 各 4 个月、link_logs 2026-11-20 至 12-04 共 15 个日分区（worker 契约 8），event_log_default 与 link_logs_default 的行都告警（warn）——SIGTERM 后 stopping、stopped、5 秒内以退出码 0 结束（维护池也已关闭，不靠空闲超时）；输出不含任何口令",
+        "[ADR-0001 §4.2 #4、#11; worker 契约 3、7 c] 真实入口（dist 子进程）：维护首轮中收到 SIGTERM，放锁后启动做完并开始停止；停止的最后一步（关维护池）被挂住时进程仍在、只有 stopping 与 partition_maintenance_done、没有 stopped；放开后才记 stopped，进程自然结束、退出码 0",
+        "[ADR-0001 §4.2 #4、#11; worker 契约 7 e] 真实入口（dist 子进程）：维护首轮卡在分区锁上时连收两次同一信号（SIGTERM→SIGTERM、SIGINT→SIGINT，第二次在第一次的 stopping 已记之后发）——第二次被忽略：只一行 stopping、不退出、不记 started；放锁后这一轮做完，按启停顺序停、记 stopped，进程自然结束、退出码 0",
+        "[ADR-0001 §4.2 #4、#11; worker 契约 3、4、7] 真实入口（dist 子进程）：worker 在队列启动时（pgboss.version 被另一会话锁住）收到 SIGTERM——立即记 stopping、不退出、不记 started；放锁后启动照常做完（维护首轮 ensured 23：8 个月分区 + link_logs 15 个日分区，B1-01w），不记 started，按启停顺序停、记 stopped，进程自然结束（无 process.exit、保活定时器已清、两个池都关）、放锁后 5 秒内退出码 0；同一阶段收到 SIGINT 后启动失败（放锁时版本改成 41）：stopping、startup_failed、不记 stopped，进程自然结束、退出码 1；输出不含口令",
+        "[ADR-0001 §4.2 #4、#11; worker 契约 3、4、7] 真实入口（dist 子进程）：worker 的维护首轮卡在 event_log_p202611 的分区锁上时收到 SIGTERM 再收到 SIGINT（或 SIGINT 再 SIGTERM）——只按第一个信号立即记一行 stopping、不退出、不记 started；放锁后这一轮做完（ensured 23 含 link_logs 15 个日分区（B1-01w）、failed 0），不记 started，按启停顺序停、记 stopped，进程自然结束（无 process.exit、保活定时器已清、维护池与主池都关）、放锁后 5 秒内退出码 0；输出不含口令"
+      ],
+      "note": "争用引起、非必现：CT-13o 测试机 run 2（couli-runs/CT-13o/tests/2，test/spec/db + test/spec/platform 210 个集成文件同跑、容器 8 GiB 无 swap）里，6 个文件都不持锁时这 5 条 dist 子进程用例在 build() 的 tsc -b 处 14–33 s 非零且无输出而红；同 5 条在只跑 21 个文件时过（run 3）。本单让 maintenance 三个文件的 build() 跨进程串行；编排 D10-1953 / D10-1962"
+    }
+  ],
+  "task": "CT-06zzzzzm",
+  "spec_commit": "502ece4a5b071c9fa55e89cf5ec1d733de08149b",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "878c3ea81bf0d3273be21436a444018c75144716",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
