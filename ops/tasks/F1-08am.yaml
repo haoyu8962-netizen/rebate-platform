@@ -1,0 +1,26 @@
+id: F1-08am
+repo: rebate-platform
+title: F1-08am：提现单详情页【执行打款】与【手动成功】——单张即一张单的批次（adminCreatePayoutBatch、adminBatchManualPaid，动态码）
+type: impl
+# 2026-11-18 入账（前端线 fe，编排 D10-2017：be 核出缺口乙类里后端已有的项，couli-runs/BE-codex/gap-plan-B11-15-20261118.md 第一张表；排在 F1-08al → F1-08fc → 导出记录页 → 小链接之后）。
+# 范围：apps/admin/src/pages/withdrawals/WithdrawalDetailPage.tsx。APPROVED 单持 payout.execute 出【执行打款】（确认对话框列执行前检查与后果 → 动态码 → 只发一次 POST /admin/v1/payout-batches，items 为这一张；整批拒绝原因与逐单结果如实显示）；持 payout.manual_entry 出【手动成功】（复用 F1-08al 的录入对话框，一张单的批次走 adminBatchManualPaid；实付金额须等于应付、打开时三项为空、不许有填入应付的快捷入口）。已发出转账的单不出这两个按钮（结果待确认的处置仍走 W10，F1-08aj）。【撤销微信转账】先隐藏（D10-2017）；【重新计算】等 be ④ 契约，不做。顺手把该页头部 TODO 改成现状。
+# 资金写操作（RV2）：money 评审。
+# 写测与评审：Codex 额度用尽（D10-2003），规则测试与首轮评审由无上下文的独立 Claude（claude-run.sh），证据如实记 claude-independent。写测时发现冻结用例（入口清单、只读断言、TODO 对应的「不出现」断言）受影响，先报编排再补 modify_existing（D10-1712 / D10-1899）。写操作一律照 F1-08ce 结果未知处理（D10-1731）。
+refs: [BR-WDR-12, BR-WDR-16, BR-ID-34]
+refs_hash:
+  BR-WDR-12: 37adcd14e97f
+  BR-WDR-16: c5899cc85558
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [F1-08al]
+paths:
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/texts/withdrawals.ts'
+test_paths:
+  - 'test/spec/frontend/admin-withdrawal-detail-payout/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-withdrawal-detail-payout/**'
+status: todo
+pr: null
