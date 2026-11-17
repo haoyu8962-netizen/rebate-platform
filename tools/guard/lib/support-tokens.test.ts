@@ -741,3 +741,194 @@ it('[CT-06zzzzzk] review r2: the operator follows any whole operand (a name, x!,
   const named = 'declare const as: number;\nexport const v = as | { a: 1 };\n';
   expect(problemsOf(named, named.replace('{ a: 1 }', '{ a: 1, b: 2 }'))).toEqual([]);
 });
+
+// CT-06zzzzzn (D10-1924 / D10-1929 / D10-1932): three more type positions — the branches of a
+// conditional type whose check type is a function type (conditionalType), a type parameter's
+// default (typeDefault), the type after as / satisfies following a contextual keyword used as a
+// variable name (contextualName) — judge an object type literal by P3; values alike stay P2.
+
+const PRELUDE = [
+  'type A = number;',
+  'type B = void;',
+  'declare const cond: boolean;',
+  'declare const raw: never;',
+];
+
+/**
+ * Lines with one `{ a: number }` leaf in a type: optional members pass, a required one
+ * is refused at its line.
+ */
+function typeLeaves(lines: readonly string[]): void {
+  const base = [...PRELUDE, ...lines, ''].join('\n');
+  for (const line of lines.filter((l) => l.includes('{ a: number }'))) {
+    const at = base.split('\n').indexOf(line) + 1;
+    const edit = (to: string): string => base.replace(line, line.replace('{ a: number }', to));
+    for (const to of ['{ a: number; b?: string }', '{ a: number, b?: string }', '{ a?: number }']) {
+      expect(problemsOf(base, edit(to)), `${line} → ${to}`).toEqual([]);
+    }
+    for (const to of ['{ a: number; b: string }', '{ a: number, b: string }']) {
+      expect(problemsOf(base, edit(to)), `${line} → ${to}`).toEqual([
+        `head:${at} a required member inserted (only an optional one, \`x?: T\`)`,
+      ]);
+    }
+    expect(problemsOf(base, edit('{ a: number\n  b: string\n}')), line).toEqual([
+      `head:${at + 1} a required member inserted (only an optional one, \`x?: T\`)`,
+    ]);
+  }
+}
+
+/** Each line holds one `{ a: 1 }` leaf in a value: a property appended passes (P2). */
+function valueLeaves(lines: readonly string[]): void {
+  const base = [...PRELUDE, ...lines, ''].join('\n');
+  for (const line of lines.filter((l) => l.includes('{ a: 1 }'))) {
+    const head = base.replace(line, line.replace('{ a: 1 }', '{ a: 1, b: 2 }'));
+    expect(problemsOf(base, head), line).toEqual([]);
+  }
+}
+
+it('[CT-06zzzzzn] conditionalType: a check type that is a function type (no / with parameters, generic, new / abstract new, a generic return, a function type returning one) keeps both branches types', () => {
+  typeLeaves([
+    'export type R1<T> = T extends () => void ? [{ a: number }] : never;',
+    'export type R2<T> = T extends (x: A, y: string) => B ? { a: number } : never;',
+    'export type R3<T> = T extends (x: A) => B ? { other: boolean } : { a: number };',
+    'export type R4<T> = T extends <U>(x: U) => U ? never : [{ a: number }];',
+    'export type R5<T> = T extends new () => B ? [{ a: number }] : never;',
+    'export type R6<T> = T extends abstract new () => B ? [{ a: number }] : never;',
+    'export type R7<T> = T extends (x: A) => Promise<B> ? [{ a: number }] : never;',
+    'export type R8<T> = T extends () => () => void ? [{ a: number }] : never;',
+    'export type R9<T> = T extends (x: { a: number }) => B ? 1 : 2;',
+  ]);
+});
+
+it('[CT-06zzzzzn] conditionalType: an arrow function before a conditional expression is no check type — a generic arrow whose type parameter extends (also a function type constraint), a plain, curried, async or return-typed arrow — its branches stay P2', () => {
+  valueLeaves([
+    'export const h = <T extends A>(x: T) => cond ? [{ a: 1 }] : [];',
+    'export const i = <T extends A>(x: T) => cond ? [] : [{ a: 1 }];',
+    'export const w = <T extends (x: A) => B>(t: T) => cond ? [{ a: 1 }] : [];',
+    'export const g = (x: A) => cond ? [{ a: 1 }] : [];',
+    'export const k = (a: A) => (b: A) => cond ? [{ a: 1 }] : [];',
+    'export const m = async (x: A) => cond ? [{ a: 1 }] : [];',
+    'export const e = (x: A): B => cond ? [{ a: 1 }] : [];',
+    'export const s = (x: A) => cond;',
+    'export const t = cond ? [{ a: 1 }] : [];',
+  ]);
+});
+
+it('[CT-06zzzzzn] typeDefault: a type parameter default is a type — alias, interface, function, generator, class, class expression, arrow, function type, method, call signature, after nested type arguments, a later parameter, a list over lines', () => {
+  typeLeaves([
+    'export type Box<T = { a: number }> = T;',
+    'export type Pair<U, T = [{ a: number }]> = T;',
+    'export interface I<T = { a: number }> { value: T; }',
+    'export function f<T = { a: number }>() {}',
+    'export function* gen<T = { a: number }>() {}',
+    'export class C<T = { a: number }> {}',
+    'export const K = class<T = { a: number }> {};',
+    'export const arrow = <T = { a: number }>() => raw;',
+    'export type Fn = <T extends Map<A, B> = { a: number }>() => void;',
+    'export class M { m<T = { a: number }>() {} }',
+    'export interface S { <T = { a: number }>(x: T): void; }',
+    'export type Many<',
+    '  U,',
+    '  T = { a: number },',
+    '> = [U, T];',
+  ]);
+});
+
+it('[CT-06zzzzzn] typeDefault: a value default stays P2 — a function, arrow or method parameter default, a destructuring default, a declarator after a less-than comparison', () => {
+  valueLeaves([
+    'export function withDefault(x = { a: 1 }) { void x; }',
+    'export const arrowDefault = (x = { a: 1 }) => x;',
+    'export class P { m(x = { a: 1 }) { void x; } }',
+    'export const { k = { a: 1 } } = raw;',
+    'export const less = cond < raw, after = { a: 1 };',
+    'export const generic = <T,>(x: T, y = { a: 1 }) => [x, y];',
+  ]);
+});
+
+/** The contextual keywords a module may use as a variable name (support-tokens.ts CONTEXTUAL). */
+const CONTEXTUAL_WORDS = [
+  'async',
+  'of',
+  'from',
+  'type',
+  'declare',
+  'abstract',
+  'namespace',
+  'readonly',
+  'keyof',
+];
+
+it('[CT-06zzzzzn] contextualName: a contextual keyword used as a variable name where an operand starts (after =, (, a comma, return, ?, :) admits as / satisfies as the type operator: its type is P3', () => {
+  for (const w of CONTEXTUAL_WORDS) {
+    typeLeaves([
+      `export const v = ${w} as [{ a: number }];`,
+      `export const s = f(${w} satisfies { a: number });`,
+      `export const l = [raw, ${w} as { a: number }];`,
+      `export function r() { return ${w} as [{ a: number }]; }`,
+      `export const t = cond ? ${w} as [{ a: number }] : raw;`,
+      `export const u = cond ? raw : ${w} satisfies { a: number };`,
+    ]);
+  }
+});
+
+it('[CT-06zzzzzn] contextualName: the keyword readings stay — of after an operand is the for-of keyword (the name as after it is indexed, its object P2), declaration and modifier keywords at a statement or member start, an async method named as', () => {
+  valueLeaves([
+    'for (const x of as[{ a: 1 }.a]) void x;',
+    'async function load() { return [{ a: 1 }]; }',
+    "import x from './m.ts'; export const fromValue = [{ a: 1 }];",
+    'export class R { readonly as = [{ a: 1 }]; }',
+    'export const o = { x: 1, async as() { return [{ a: 1 }]; } };',
+    'export const arrowAs = async as => [{ a: 1 }];',
+  ]);
+  typeLeaves([
+    'type T = [{ a: number }];',
+    'declare const d: [{ a: number }];',
+    'export abstract class Q { abstract m(): { a: number }; }',
+    'export type Ro = { readonly as: { a: number } };',
+  ]);
+});
+
+it('[CT-06zzzzzn] contextualName: the type skipped after `<word> as` hides no declarator — a name the base holds after it is still refused on its line', () => {
+  for (const w of CONTEXTUAL_WORDS) {
+    const first = `const v = ${w} as Record<string, { a: number }>,`;
+    expect(appended(`${first} dup = 1;`), first).toEqual([COMMA, holds(AT)]);
+    expect(appended(`${first}\n  dup = 1;`), first).toEqual([COMMA, holds(AT + 1)]);
+  }
+});
+
+// CT-06zzzzzn code review r1 (S2): a contextual keyword used as a variable name at the start of
+// a statement (after `;`, `{`, `}`, at a line break where a statement ends) before as / satisfies.
+
+it('[CT-06zzzzzn] review r1: a contextual keyword used as a variable name at the start of a statement (after ;, {, }, a line break ending the statement before) admits as / satisfies as the type operator: its type is P3', () => {
+  for (const w of CONTEXTUAL_WORDS) {
+    typeLeaves([
+      `declare const d0: never; ${w} as [0, { a: number }];`,
+      `${w} as [{ a: number }];`,
+      'export const before = raw',
+      `${w} satisfies [string, { a: number }]`,
+      `{ ${w} satisfies { a: number }; }`,
+      `if (cond) {} ${w} as { a: number };`,
+    ]);
+  }
+});
+
+it('[CT-06zzzzzn] review r1: the keyword readings at the start of a statement stay — a type alias named as, an async arrow with a parameter named as, declare / abstract / namespace declarations, readonly in members, of after an object or array pattern', () => {
+  typeLeaves([
+    'type as = { a: number };',
+    'declare const declared: { a: number };',
+    'declare namespace NS { const inner: { a: number }; }',
+    'export abstract class Q2 { abstract m(): { a: number }; }',
+    'export type Members = { readonly as: { a: number }; readonly x?: { a: number } };',
+  ]);
+  valueLeaves([
+    'async as => [{ a: 1 }];',
+    'export const asyncArrow = async as => [{ a: 1 }];',
+    'namespace NV { export const v = [{ a: 1 }]; }',
+    'export class R2 { readonly as = [{ a: 1 }]; readonly as2 = [0]; }',
+    'for (const { a } of as[{ a: 1 }.a]) void a;',
+    'for (const [a] of as[{ a: 1 }.a]) void a;',
+    'for (const { a }\n  of as[{ a: 1 }.a]) void a;',
+    'for (const x\n  of as[{ a: 1 }.a]) void x;',
+    'for await (const { a } of as[{ a: 1 }.a]) void a;',
+  ]);
+});
