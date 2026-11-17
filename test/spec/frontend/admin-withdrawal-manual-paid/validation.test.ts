@@ -46,6 +46,16 @@ it(
         ['通道流水号', '实付时间', '实付金额（元）'].map((label) => field(row, label).value),
       ).toEqual(['', '', '']);
     }
+    // Nor is there any shortcut that copies the payable amount (or "now") into a row (D10-2004):
+    // right after opening, every clickable control in the dialog (icon buttons by aria-label) is
+    // exactly the dialog's own set — the corner close, 取消 and 确认录入 — and nothing else.
+    const nameOf = (node: Element) =>
+      (node.getAttribute('aria-label') ?? node.textContent ?? '').replace(/\s+/g, '');
+    const selector = 'button, a, [role="button"], [role="link"]';
+    const controls = Array.from(modal.querySelectorAll(selector)).map((node) => nameOf(node));
+    expect([...controls].sort()).toEqual(['Close', '取消', '确认录入'].sort());
+    const shortcut = /应付|填入|同上|一键|复制|此刻|现在|今天|now|today/i;
+    expect(controls.filter((name) => shortcut.test(name))).toEqual([]);
     expect(disabled(button(modal, '确认录入'))).toBe(true);
     for (const [index, item] of rows.entries())
       await fill(field(rowOf(modal, item.out_biz_no), '通道流水号'), `Serial-${index + 1}-Aa`);
