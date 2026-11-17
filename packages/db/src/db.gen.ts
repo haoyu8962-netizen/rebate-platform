@@ -1667,6 +1667,7 @@ export interface PoolItems {
   sort: Generated<number>;
   start_at: Timestamp | null;
   status: string;
+  tags: Generated<string[]>;
   title: string;
   updated_at: Generated<Timestamp>;
 }

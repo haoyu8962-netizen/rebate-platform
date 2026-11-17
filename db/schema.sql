@@ -5755,6 +5755,7 @@ CREATE TABLE app.pool_items (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     commission_rate_bp integer,
     shop_name text,
+    tags text[] DEFAULT '{}'::text[] NOT NULL,
     CONSTRAINT pool_items_commission_rate_bp_check CHECK ((commission_rate_bp >= 0)),
     CONSTRAINT pool_items_coupon_fen_check CHECK ((coupon_fen >= 0)),
     CONSTRAINT pool_items_final_price_fen_check CHECK ((final_price_fen >= 0)),
