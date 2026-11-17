@@ -16,6 +16,9 @@ import {
   compareModifiedBlocks,
   compareOutsideChanged,
   compareSupportFile,
+  bracketsNest,
+  nestAlignment,
+  slideAlignment,
   formatEachTitle,
   formatObjectTitle,
   TITLE_VALUE_TRUNCATE,
@@ -4232,4 +4235,66 @@ it('[CT-06zzzzzi] compareSupportFile round 2 / 3: an assertion helper call remov
   const plain = compareSupportFile(kit, kit.replace('[1n, 2n]', '[1n, 3n]'));
   expect(plain).toMatchObject({ ok: true, changed: true, blocks: [], assertions: [] });
   expect(plain.ok && plain.tokens.map((p) => `${p.side}:${p.line}`)).toEqual(['base:2']);
+});
+
+// CT-06zzzzzj (scan-1888 W-1): the alignment of a file under a support entry repairs a cluster of
+// inserted tokens whose brackets do not nest by sliding the kept tokens between its runs.
+/** Head tokens of space-separated texts (brackets and punctuation as punct, the rest as id). */
+const toks = (text: string): { kind: string; text: string }[] =>
+  text.split(' ').map((t) => ({ kind: /^[\w$]/.test(t) ? 'id' : 'punct', text: t }));
+
+it('[CT-06zzzzzj] nestAlignment: a property appended before `},` aligned with the inner `}` / `,` slides to the outer ones; `body)` gaining `, f(body)` aligned from the end slides back; a nesting alignment stays', () => {
+  // Base `N } ,`; head `N , k : f ( { a : b } ) , } ,`, aligned from the start.
+  const w1 = toks('N , k : f ( { a : b } ) , } ,');
+  const first = Int32Array.from([0, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, -1, 2, -1, -1]);
+  expect(bracketsNest(w1, first)).toBe(false);
+  const right = slideAlignment(w1, first, 1);
+  expect([...right]).toEqual([0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 2]);
+  expect(bracketsNest(w1, right)).toBe(true);
+  expect([...nestAlignment(w1, first)]).toEqual([...right]);
+  // Base `body )`; head `body , f ( body ) )`, aligned from the end: the inner body is kept.
+  const arg = toks('body , f ( body ) )');
+  const fromEnd = Int32Array.from([-1, -1, -1, -1, 0, -1, 1]);
+  expect([...nestAlignment(arg, fromEnd)]).toEqual([0, -1, -1, -1, -1, -1, 1]);
+  // An insertion that nests is left alone, and so is the rest of the file around a repair.
+  const fine = Int32Array.from([0, -1, -1, -1, -1, -1, 1]);
+  expect([...nestAlignment(arg, fine)]).toEqual([...fine]);
+  // Base `x ( y ) ; N } ,`: the kept `x ( y ) ;` before the cluster stays where it is.
+  const two = toks('x ( y ) ; N , k : f ( { a : b } ) , } ,');
+  const gap = Array.from({ length: 9 }, () => -1);
+  const m = Int32Array.from([0, 1, 2, 3, 4, 5, ...gap, 6, -1, 7, -1, -1]);
+  expect([...nestAlignment(two, m)]).toEqual([0, 1, 2, 3, 4, 5, ...gap, -1, -1, -1, 6, 7]);
+});
+
+it('[CT-06zzzzzj] compareSupportFile: an object literal property appended before a method, re-wrapped with trailing commas (scan-1888 W-1), passes; wrapping existing code in a call stays refused', () => {
+  const base = [
+    'export function fixture() {',
+    '  return {',
+    '    client,',
+    '    command: { appId, userId: uid, alipayLogonId: LOGIN, payeeName: NAME },',
+    "    async get(mode = 'app') {",
+    '      return mode;',
+    '    },',
+    '  };',
+    '}',
+    '',
+  ].join('\n');
+  const head = base.replace(
+    '    command: { appId, userId: uid, alipayLogonId: LOGIN, payeeName: NAME },',
+    [
+      '    command: {',
+      '      appId,',
+      '      userId: uid,',
+      '      alipayLogonId: LOGIN,',
+      '      payeeName: NAME,',
+      '      stepUpSummary: payoutSummary(kit.crypto, { alipayLogonId: LOGIN }),',
+      '    },',
+    ].join('\n'),
+  );
+  expect(compareSupportFile(base, head)).toMatchObject({ ok: true, tokens: [] });
+  const wrapped = compareSupportFile(
+    base,
+    base.replace('      return mode;', '      return later(mode);'),
+  );
+  expect(wrapped.ok && wrapped.tokens.map((p) => `${p.side}:${p.line}`)).toContain('head:6');
 });

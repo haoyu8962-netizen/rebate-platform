@@ -2575,9 +2575,13 @@ export function compareModifiedBlocks(
 //   name the base file holds, default value or assignment to an existing name, and stand in no
 //   existing statement holding an assertion call. Several alignments of the two token sequences
 //   are tried (line by line and then token by token inside the changed lines; token by token
-//   from the start; from the end): the change passes when one shows such a pure insertion,
-//   otherwise the problems of the first are given (a removed or changed token by its base line,
-//   an inserted one by its head line; the first without a removal when there is one).
+//   from the start; from the end), each with the clusters of inserted tokens whose brackets do
+//   not nest repaired by sliding the kept tokens between them (CT-06zzzzzj, nestAlignment): the
+//   change passes when one shows such a pure insertion, otherwise the problems of the first are
+//   given (a removed or changed token by its base line, an inserted one by its head line; the
+//   first without a removal when there is one). Since CT-06zzzzzj (D10-1880 / D10-1888) the
+//   inserted tokens must also be on the allow list, positions P1–P4 × the expression grammar
+//   (support-tokens.ts rule 5): anything off it is refused.
 // - `assertions`: the base lines of removed or changed tokens that hold an assertion call
 //   (ASSERTION_CALL, ASSERTION_NAME or ASSERTION_HELPER_CALL on the line with its comments and
 //   string contents blanked, or a line inside an assertion expression: from `expect` /
@@ -2911,7 +2915,129 @@ function supportAlignments(
     });
     return out;
   };
-  return [byLines, byTokens, fromEnd];
+  // CT-06zzzzzj (scan-1888 W-1): each with its clusters of inserted tokens made to nest.
+  return [byLines, byTokens, fromEnd].map((align) => (): Int32Array | null => {
+    const m = align();
+    return m === null ? null : nestAlignment(b, m);
+  });
+}
+
+/**
+ * The alignment `matchB` (for each head token of `head` its base token, -1: inserted) with each
+ * cluster of inserted tokens whose brackets do not nest (bracketsNest) repaired (CT-06zzzzzj,
+ * scan-1888 W-1). A cluster is a run of inserted tokens, joined with the next one across the
+ * kept tokens between them when those are one token or punctuation only (`NAME },` gaining
+ * `, k: f(x, { a: b }),` before `},`, aligned from the start, keeps the inner `}` and the `,`
+ * after `)`: the insertion seems to wrap existing code; `body)` gaining `, f(body)` aligned from
+ * the end keeps the inner `body`). Such a cluster takes the first of its kept tokens slid to the
+ * end, to the start, to the start then the end, to the end then the start (slideAlignment,
+ * inside the cluster only) whose inserted runs nest; else it stays. The base tokens stay in order, each paired with a head token of its text; the
+ * rest of the file keeps its alignment, and every rule still judges the result.
+ */
+export function nestAlignment(
+  head: readonly { kind: string; text: string }[],
+  matchB: Int32Array,
+): Int32Array {
+  const out = Int32Array.from(matchB);
+  const n = out.length;
+  const kept = (k: number): boolean => (out[k] as number) >= 0;
+  let s = 0;
+  while (s < n) {
+    if (kept(s)) {
+      s += 1;
+      continue;
+    }
+    let e = s;
+    for (;;) {
+      while (e + 1 < n && !kept(e + 1)) e += 1;
+      let k = e + 1;
+      let punctOnly = true;
+      while (k < n && kept(k)) {
+        if (head[k]?.kind !== 'punct') punctOnly = false;
+        k += 1;
+      }
+      if (k >= n || !(k === e + 2 || punctOnly)) break;
+      e = k;
+    }
+    if (!bracketsNest(head, out, s, e)) {
+      const slide = (m: Int32Array, dir: 1 | -1): Int32Array => slideAlignment(head, m, dir, s, e);
+      const tries = [
+        () => slide(out, 1),
+        () => slide(out, -1),
+        () => slide(slide(out, -1), 1),
+        () => slide(slide(out, 1), -1),
+      ];
+      for (const t of tries) {
+        const m = t();
+        if (bracketsNest(head, m, s, e)) {
+          out.set(m.subarray(s, e + 1), s);
+          break;
+        }
+      }
+    }
+    s = e + 1;
+  }
+  return out;
+}
+
+/**
+ * Whether each run of inserted tokens of `head` in [s, e] (`matchB` -1, next to each other)
+ * holds whole brackets only: each closed in the run, by its kind.
+ */
+export function bracketsNest(
+  head: readonly { kind: string; text: string }[],
+  matchB: Int32Array,
+  s = 0,
+  e = head.length - 1,
+): boolean {
+  const opens = new Map([
+    [')', '('],
+    [']', '['],
+    ['}', '{'],
+  ]);
+  const stack: string[] = [];
+  for (let j = s; j <= e; j += 1) {
+    const t = head[j] as { kind: string; text: string };
+    if ((matchB[j] as number) >= 0) {
+      if (stack.length > 0) return false;
+      continue;
+    }
+    if (t.kind !== 'punct') continue;
+    if (t.text === '(' || t.text === '[' || t.text === '{') stack.push(t.text);
+    else if (opens.has(t.text) && stack.pop() !== opens.get(t.text)) return false;
+  }
+  return stack.length === 0;
+}
+
+/**
+ * The alignment `matchB` with each kept head token in [s, e] moved to the farthest inserted head
+ * token of the same kind and text in the run of inserted tokens after it (`dir` 1, from the end)
+ * or before it (-1, from the start), inside [s, e]: the base tokens stay in order.
+ */
+export function slideAlignment(
+  head: readonly { kind: string; text: string }[],
+  matchB: Int32Array,
+  dir: 1 | -1,
+  s = 0,
+  e = head.length - 1,
+): Int32Array {
+  const out = Int32Array.from(matchB);
+  const same = (x: number, y: number): boolean =>
+    head[x]?.kind === head[y]?.kind && head[x]?.text === head[y]?.text;
+  for (let c = 0; c <= e - s; c += 1) {
+    const j = dir === 1 ? e - c : s + c;
+    const i = out[j] as number;
+    if (i < 0) continue;
+    let best = -1;
+    for (let x = j + dir; x >= s && x <= e && (out[x] as number) < 0; x += dir) {
+      if (same(x, j)) best = x;
+    }
+    if (best >= 0) {
+      out[best] = i;
+      out[j] = -1;
+    }
+  }
+  return out;
 }
 
 /** See the comment above ASSERTION_CALL (CT-06zzzzzi, D10-1662). */

@@ -27,6 +27,35 @@
 //    header is in the statement with its body; a parameter list is judged by 2 and 3 only, not by
 //    the function's body).
 // An inserted template literal is judged by the tokens of its `${…}` expressions too.
+// 5. (CT-06zzzzzj, D10-1795 / D10-1880 / D10-1888: an allow list, default deny) every inserted
+//    token stands in one of these positions, and what it writes follows the expression grammar
+//    (allowListProblems):
+//    P1 whole statements between existing ones (a run of inserted tokens that is whole statements
+//       of a block or of the file): an import declaration with a binding (any source; a bare
+//       side-effect import is refused), `[export] const <one plain name> [: T] = <expression>`
+//       (no destructuring, one declarator; export at the file level only), `[await] <call>;` with
+//       a bare callee, `<base local>.push(<arguments>);` (a const / let / parameter of the base
+//       file, no import binding), `export { … };` at the end of the file (nothing of the base
+//       after it);
+//    P2 the tail of an existing list: arguments appended to a call, properties / spreads appended
+//       to an object literal, optional parameters (`x?` / `x?: T`, no default, no rest, no
+//       pattern) appended to a parameter list; names added at any place inside the braces of an
+//       existing import (not an export);
+//    P3 type positions: a type annotation after a declared name, a parameter or a parameter
+//       list (a return type), an optional mark `?` on a parameter or a member, optional members
+//       (`x?: T`, with their `;` / `,`) at any place in an interface or a type literal (known
+//       by where its braces stand: a type alias, an annotation, type arguments — review r1);
+//    P4 the trailing comma of a list (alone too: a re-wrapped call).
+//    Expressions: identifiers (no keyword), member access `a.b` on an identifier, literals (no
+//    template with `${…}`), object literals of these (properties first, spreads at the end),
+//    array literals of these, calls of a bare identifier that is no const this change declares
+//    (arguments of the grammar), `Promise.resolve(…)` (while no `Promise` is declared in the
+//    file — review r1), `await` of these; binary + - * / % < > <=
+//    >= === !== only at the top of the value of a new P1 const. Anything else — other
+//    operators, assignment, arrows, function, class, new, optional chains, parentheses,
+//    indexing, a member call (vi.*, Object.*, .then …), a call of a call's result — is refused,
+//    naming the line of the first inserted token off the list (none on a line another rule names
+//    already).
 // Node built-ins only; pure functions.
 import type { Token } from './token.ts';
 
@@ -279,7 +308,7 @@ class Tree {
     if (prev.block === true) return 'block';
     if (prev.kind === 'id') return OBJECT_AFTER.has(prev.text) ? 'object' : 'block';
     if (prev.kind !== 'punct') return 'object';
-    if (['=>', ')', ']', '}', '>', ';'].includes(prev.text)) return 'block';
+    if (['=>', ')', ']', '}', '>', '>>', ';'].includes(prev.text)) return 'block';
     if (prev.text === '{') return this.role(o - 1) === 'block' ? 'block' : 'object';
     return 'object';
   }
@@ -907,7 +936,11 @@ export function judgeInsertions(
       add(j, 'an arrow function `=>` inserted');
     } else if (t.text === ',') {
       const p = ht.parent[j] as number;
-      if (!(p >= 0 && LIST_ROLES.has(ht.role(p))) && !inAngles(ht, j)) {
+      // `import x, { … }` / `import x, * as y` (CT-06zzzzzj): no comma expression either.
+      const importDefault =
+        isId(head[j - 1]) &&
+        (isId(head[j - 2], 'import') || (isId(head[j - 2], 'type') && isId(head[j - 3], 'import')));
+      if (!(p >= 0 && LIST_ROLES.has(ht.role(p))) && !inAngles(ht, j) && !importDefault) {
         add(j, 'a comma expression inserted');
       }
     }
@@ -952,6 +985,8 @@ export function judgeInsertions(
       add(at, `an assertion call inserted (${shown(head[k] as OutsideToken)})`);
     }
   });
+  // 5. The allow list (CT-06zzzzzj): one problem per line no other rule names.
+  const offList = allowListProblems(ht, inserted, bindings, baseLocals(bt));
 
   // 4. No insertion into an existing statement holding an assertion call (D10-1780 ⑦ A).
   const holds = new Int32Array(head.length + 1);
@@ -974,6 +1009,10 @@ export function judgeInsertions(
       `${shown(head[j] as OutsideToken)} inserted into an existing statement holding an assertion call (with an if / for / while / do / switch header, its body counts)`,
     );
   });
+  const named = new Set(problems.map((p) => (head[p.at] as OutsideToken).line));
+  for (const p of offList) {
+    if (!named.has((head[p.at] as OutsideToken).line)) problems.push(p);
+  }
 
   const seen = new Set<string>();
   return problems
@@ -1031,4 +1070,652 @@ function inAngles(tree: Tree, k: number): boolean {
     }
   }
   return false;
+}
+
+/**
+ * The names of the base file a `<name>.push(…)` statement may stand on (D10-1888 ③): its const
+ * and let declarations and its parameters (a catch binding, a lone arrow parameter too), no name
+ * an import binds.
+ */
+function baseLocals(tree: Tree): Set<string> {
+  const b = bindingsOf(tree);
+  const by = new Map<number, string>();
+  for (const [k, list] of b.keywords) {
+    for (const n of list) by.set(n, (tree.ts[k] as OutsideToken).text);
+  }
+  const locals = new Set<string>();
+  const imports = new Set<string>();
+  for (const n of b.names) {
+    const name = (tree.ts[n] as OutsideToken).text;
+    const keyword = by.get(n);
+    if (keyword === 'import') imports.add(name);
+    else if (keyword === undefined || keyword === 'const' || keyword === 'let') locals.add(name);
+  }
+  for (const name of imports) locals.delete(name);
+  return locals;
+}
+
+/** Reserved words: no identifier of the expression grammar, no parameter name. */
+const NOT_NAMES = new Set([
+  ...CONTROL,
+  ...FUNCTIONS,
+  'new',
+  'typeof',
+  'void',
+  'delete',
+  'this',
+  'super',
+  'yield',
+  'await',
+  'in',
+  'instanceof',
+  'import',
+  'export',
+  'const',
+  'let',
+  'var',
+  'with',
+  'debugger',
+  'enum',
+  'extends',
+  'implements',
+  'interface',
+  'package',
+  'private',
+  'protected',
+  'public',
+  'static',
+]);
+/** The binary operators of the value of a new P1 const (D10-1888 ②). */
+const BINARY = new Set(['+', '-', '*', '/', '%', '<', '>', '<=', '>=', '===', '!==']);
+/** Punctuators a type annotation may hold (P3). */
+const TYPE_PUNCT = new Set([
+  '.',
+  '|',
+  '&',
+  '<',
+  '>',
+  '>>',
+  '[',
+  ']',
+  '(',
+  ')',
+  '{',
+  '}',
+  ',',
+  ';',
+  ':',
+  '?',
+  '...',
+  '=>',
+  '-',
+]);
+const COMMA = new Set([',']);
+const MEMBER_SEPARATORS = new Set([',', ';']);
+/** A line of a type goes on after these (a member of an interface does not end there). */
+const TYPE_GOES_ON = new Set(['|', '&', '<', ',', ':', '.', '=>']);
+
+type Off = { at: number; reason: string };
+
+/**
+ * Rule 5 (CT-06zzzzzj, D10-1880 / D10-1888): each run of inserted tokens of the head (`ht`) that
+ * is not on the allow list — positions P1–P4 × the expression grammar, see the head of this file
+ * — as the first inserted token off it and why. `locals`: the base file's names a push may stand
+ * on (baseLocals).
+ */
+function allowListProblems(
+  ht: Tree,
+  inserted: (j: number) => boolean,
+  bindings: Bindings,
+  locals: ReadonlySet<string>,
+): Off[] {
+  const ts = ht.ts;
+  const n = ts.length;
+  const tx = (k: number): string => ts[k]?.text ?? '';
+  const punct = (k: number, text: string): boolean =>
+    ts[k]?.kind === 'punct' && ts[k]?.text === text;
+  const close = (o: number): number => ht.match[o] as number;
+  const name = (k: number): boolean => isId(ts[k]) && !NOT_NAMES.has(tx(k));
+  const roleAt = (p: number): Role | 'file' => (p < 0 ? 'file' : ht.role(p));
+  const what = (k: number): string => (k < n ? shown(ts[k] as OutsideToken) : 'the end');
+  // The names this change declares with const (D10-1888 ④), and the keyword of each declared name.
+  const fresh = new Set<string>();
+  const keywordOf = new Map<number, number>();
+  for (const [k, list] of bindings.keywords) {
+    for (const m of list) keywordOf.set(m, k);
+    if (inserted(k) && tx(k) === 'const') for (const m of list) fresh.add(tx(m));
+  }
+
+  // review r1 S2-1: `Promise` declared, imported or a parameter anywhere outside the blocks (base
+  // or this change) is no global Promise: Promise.resolve(…) is then a member call like any.
+  const promiseShadowed = [...bindings.names].some((m) => tx(m) === 'Promise');
+
+  let off: Off | null = null;
+  const fail = (at: number, reason: string): number => {
+    off ??= { at, reason };
+    return -1;
+  };
+  const offList = (k: number): number =>
+    fail(
+      k,
+      `${what(k)} inserted off the allow list (CT-06zzzzzj: positions P1–P4 × the expression grammar)`,
+    );
+
+  /** A type from k up to `stop` (a `,` / `;` / `=` at its level ends it; `member`: a new line). */
+  const typeSpan = (k: number, stop: number, member: boolean): number => {
+    let j = k;
+    let angle = 0;
+    const typeToken = (x: number): boolean => {
+      const t = ts[x] as OutsideToken;
+      if (t.kind === 'punct') return TYPE_PUNCT.has(t.text);
+      if (t.kind === 'tpl') return (t.inner?.length ?? 0) === 0;
+      return t.block !== true && t.kind !== 're';
+    };
+    while (j < stop) {
+      const t = ts[j] as OutsideToken;
+      if (angle === 0 && (punct(j, ',') || punct(j, ';') || punct(j, '='))) break;
+      if (
+        member &&
+        angle === 0 &&
+        j > k &&
+        t.nl &&
+        !TYPE_GOES_ON.has(tx(j - 1)) &&
+        !['|', '&', '.', '>', '>>'].includes(t.text)
+      ) {
+        break;
+      }
+      if (isOpen(t)) {
+        const c = close(j);
+        if (c < 0 || c >= stop) return offList(j);
+        for (let x = j + 1; x < c; x += 1) {
+          if (!typeToken(x)) return fail(x, `${what(x)} in an inserted type`);
+        }
+        j = c + 1;
+        continue;
+      }
+      if (!typeToken(j)) return fail(j, `${what(j)} in an inserted type`);
+      if (t.text === '<') angle += 1;
+      else if (t.text === '>') angle = Math.max(0, angle - 1);
+      else if (t.text === '>>') angle = Math.max(0, angle - 2);
+      j += 1;
+    }
+    return j === k ? fail(k, 'a type expected after `:`') : j;
+  };
+
+  /** Bracketed items from `(` / `[` at o to its close, each an operand; past the close. */
+  const items = (o: number, stop: number): number => {
+    const c = close(o);
+    if (c < 0 || c >= stop) return offList(o);
+    let k = o + 1;
+    while (k < c) {
+      const j = operand(k, c);
+      if (j < 0) return -1;
+      if (j === c) break;
+      if (!punct(j, ',')) return offList(j);
+      k = j + 1;
+    }
+    return c + 1;
+  };
+  /** A property of an object literal: `key: operand`, a shorthand name, `...value`. */
+  const property = (k: number, stop: number): number => {
+    if (k >= stop) return fail(k, 'a property expected');
+    if (punct(k, '...')) return value(k + 1, stop);
+    const t = ts[k] as OutsideToken;
+    if (!(isId(t) || t.kind === 'str' || t.kind === 'num')) {
+      return fail(k, `${what(k)} as a property key (an identifier, string or number only)`);
+    }
+    if (punct(k + 1, ':')) return operand(k + 2, stop);
+    if (name(k) && (k + 1 === stop || punct(k + 1, ','))) return k + 1;
+    return offList(k + 1);
+  };
+  const objectLiteral = (o: number, stop: number): number => {
+    const c = close(o);
+    if (c < 0 || c >= stop) return offList(o);
+    let k = o + 1;
+    let spread = false;
+    while (k < c) {
+      if (punct(k, '...')) spread = true;
+      else if (spread) return fail(k, 'a property after a spread (spreads at the end only)');
+      const j = property(k, c);
+      if (j < 0) return -1;
+      if (j === c) break;
+      if (!punct(j, ',')) return offList(j);
+      k = j + 1;
+    }
+    return c + 1;
+  };
+  /** A value of the grammar without await and operators. */
+  const value = (k: number, stop: number): number => {
+    if (k >= stop) return fail(k, 'an expression expected');
+    const t = ts[k] as OutsideToken;
+    if (t.kind === 'str' || t.kind === 'num' || t.kind === 're') return k + 1;
+    if (t.kind === 'tpl') {
+      return (t.inner?.length ?? 0) === 0
+        ? k + 1
+        : fail(k, 'a template literal with `${…}` inserted (literals only)');
+    }
+    if (punct(k, '{')) return objectLiteral(k, stop);
+    if (punct(k, '[')) return items(k, stop);
+    if (!isId(t)) return offList(k);
+    if (NOT_NAMES.has(t.text)) return fail(k, `\`${t.text}\` inserted (not on the allow list)`);
+    if (t.text === 'Promise' && punct(k + 1, '.') && tx(k + 2) === 'resolve' && punct(k + 3, '(')) {
+      if (promiseShadowed) {
+        return fail(
+          k + 2,
+          'a member call `.resolve(` inserted: `Promise` is declared in this file (the Promise.resolve(…) exception holds for the global only)',
+        );
+      }
+      return items(k + 3, stop);
+    }
+    if (punct(k + 1, '(')) {
+      if (fresh.has(t.text)) {
+        return fail(k, `\`${t.text}\`, a const this change declares, called (D10-1888 ④)`);
+      }
+      return items(k + 1, stop);
+    }
+    let j = k + 1;
+    while (j + 1 < stop && punct(j, '.') && isId(ts[j + 1])) j += 2;
+    if (j > k + 1 && punct(j, '(')) {
+      return fail(
+        j - 1,
+        `a member call \`.${tx(j - 1)}(\` inserted (only Promise.resolve(…), and <base local>.push(…) as a statement)`,
+      );
+    }
+    return j;
+  };
+  /** A value, or `await` of one. */
+  const operand = (k: number, stop: number): number =>
+    isId(ts[k], 'await') && k < stop ? value(k + 1, stop) : value(k, stop);
+  /** The value of a new P1 const: operands joined by the binary operators of D10-1888 ②. */
+  const initializer = (k: number, stop: number): number => {
+    let j = operand(k, stop);
+    while (j >= 0 && j < stop && ts[j]?.kind === 'punct' && BINARY.has(tx(j))) {
+      j = operand(j + 1, stop);
+    }
+    return j;
+  };
+
+  /** `[type] name [as name]` in import / export braces. */
+  const specifier = (k: number, stop: number): number => {
+    let j = k;
+    if (tx(j) === 'type' && isId(ts[j + 1]) && j + 1 < stop && tx(j + 1) !== 'as') j += 1;
+    if (!isId(ts[j]) || j >= stop) return offList(j);
+    j += 1;
+    if (tx(j) === 'as' && j + 1 < stop && isId(ts[j + 1])) j += 2;
+    return j;
+  };
+  const braces = (o: number, stop: number): number => {
+    const c = close(o);
+    if (c < 0 || c >= stop) return offList(o);
+    let k = o + 1;
+    let count = 0;
+    while (k < c) {
+      const j = specifier(k, c);
+      if (j < 0) return -1;
+      count += 1;
+      if (j === c) break;
+      if (!punct(j, ',')) return offList(j);
+      k = j + 1;
+    }
+    return count === 0 ? fail(o, 'empty braces inserted (no binding)') : c + 1;
+  };
+  /** An import declaration with a binding (any source); a bare side-effect import is refused. */
+  const importDeclaration = (k: number, stop: number): number => {
+    let j = k + 1;
+    if (ts[j]?.kind === 'str') return fail(k, 'a bare side-effect import inserted (no binding)');
+    if (tx(j) === 'type' && !['from', ','].includes(tx(j + 1))) j += 1;
+    let bound = false;
+    if (isId(ts[j]) && tx(j) !== 'from') {
+      j += 1;
+      bound = true;
+      if (punct(j, ',')) j += 1;
+    }
+    if (punct(j, '*')) {
+      if (tx(j + 1) !== 'as' || !isId(ts[j + 2])) return offList(j);
+      j += 3;
+      bound = true;
+    } else if (punct(j, '{')) {
+      j = braces(j, stop);
+      if (j < 0) return -1;
+      bound = true;
+    }
+    if (!bound) return fail(k, 'an import without a binding inserted');
+    if (!isId(ts[j], 'from') || ts[j + 1]?.kind !== 'str' || j + 1 >= stop) return offList(j);
+    return j + 2;
+  };
+  /** `const <one plain name> [: T] = <initializer>` (D10-1888 ⑤). */
+  const constDeclaration = (k: number, stop: number): number => {
+    const at = k + 1;
+    if (punct(at, '{') || punct(at, '[')) {
+      return fail(at, 'a destructuring const inserted (one plain name only, D10-1888 ⑤)');
+    }
+    if (!name(at)) return offList(at);
+    let j = at + 1;
+    if (punct(j, ':')) {
+      j = typeSpan(j + 1, stop, false);
+      if (j < 0) return -1;
+    }
+    if (!punct(j, '=')) return fail(Math.min(j, stop - 1), 'a const without a value inserted');
+    j = initializer(j + 1, stop);
+    if (j >= 0 && punct(j, ',')) {
+      return fail(j, 'two names declared in one const (one plain name only, D10-1888 ⑤)');
+    }
+    return j;
+  };
+
+  /** One whole inserted statement [from, to] of the container p (P1). */
+  const statement = (from: number, to: number, p: number): number => {
+    const end = punct(to, ';') ? to : to + 1;
+    const done = (j: number): number => (j < 0 ? -1 : j === end ? end : offList(j));
+    if (isId(ts[from], 'import')) {
+      if (p >= 0) return fail(from, 'an import inserted inside a block');
+      return done(importDeclaration(from, end));
+    }
+    if (isId(ts[from], 'export')) {
+      if (p >= 0) return fail(from, '`export` inserted inside a block');
+      if (isId(ts[from + 1], 'const')) return done(constDeclaration(from + 1, end));
+      if (punct(from + 1, '{')) {
+        for (let k = to + 1; k < n; k += 1) {
+          if (!inserted(k)) {
+            return fail(
+              from,
+              '`export { … }` inserted before existing code (at the end of the file only)',
+            );
+          }
+        }
+        return done(braces(from + 1, end));
+      }
+      return offList(from + 1);
+    }
+    if (isId(ts[from], 'const')) return done(constDeclaration(from, end));
+    if (isId(ts[from], 'let') || isId(ts[from], 'var')) {
+      return fail(from, `\`${tx(from)}\` inserted (only a const declares a new name)`);
+    }
+    // <base local>.push(…) (D10-1888 ③).
+    if (isId(ts[from]) && punct(from + 1, '.') && tx(from + 2) === 'push' && punct(from + 3, '(')) {
+      if (!locals.has(tx(from)) || fresh.has(tx(from))) {
+        return fail(
+          from,
+          `\`${tx(from)}.push(…)\` inserted: \`${tx(from)}\` is no const, let or parameter of the base file (D10-1888 ③)`,
+        );
+      }
+      return done(items(from + 3, end));
+    }
+    // [await] <bare identifier>(…).
+    const k = isId(ts[from], 'await') ? from + 1 : from;
+    if (name(k) && punct(k + 1, '(')) {
+      if (fresh.has(tx(k))) {
+        return fail(k, `\`${tx(k)}\`, a const this change declares, called (D10-1888 ④)`);
+      }
+      return done(items(k + 1, end));
+    }
+    if (isId(ts[k]) && punct(k + 1, '.')) {
+      return fail(
+        k,
+        'a member call or member access as a statement inserted (only <base local>.push(…), D10-1888 ③)',
+      );
+    }
+    return fail(k, 'a statement inserted that is no import, const, call or export { … }');
+  };
+  /** The run [s, e] of whole statements of the block (or file) p (P1). */
+  const statements = (s: number, e: number, p: number): number => {
+    for (const [from, to] of ht.statementsIn(p)) {
+      if (to < s || from > e) continue;
+      if (from < s || to > e) {
+        return fail(
+          s,
+          `${what(s)} inserted into an existing statement (no whole statement, no item appended at the end of a list, no type)`,
+        );
+      }
+      if (statement(from, to, p) < 0) return -1;
+    }
+    return e + 1;
+  };
+
+  /** An optional parameter appended (P2): `x?` / `x?: T`, no default, no rest, no pattern. */
+  const parameter = (k: number, stop: number): number => {
+    if (punct(k, '...')) return fail(k, 'a rest parameter inserted (only an optional one, `x?`)');
+    if (!name(k) || k >= stop) return fail(k, `${what(k)} as a parameter (a plain name only)`);
+    if (!punct(k + 1, '?')) {
+      return fail(k, 'a required parameter inserted (only an optional one, `x?: T`)');
+    }
+    return punct(k + 2, ':') ? typeSpan(k + 3, stop, false) : k + 2;
+  };
+  /** An optional member of an interface or a type literal (P3): `x?: T`. */
+  const member = (k: number, stop: number): number => {
+    const t = ts[k];
+    if (t === undefined || !(isId(t) || t.kind === 'str') || k >= stop) return offList(k);
+    if (!punct(k + 1, '?')) {
+      return fail(k, 'a required member inserted (only an optional one, `x?: T`)');
+    }
+    if (!punct(k + 2, ':')) return offList(k + 2);
+    return typeSpan(k + 3, stop, true);
+  };
+  /**
+   * The run [s, e] as items of the list in the bracket p, separated by `seps` (`newline`: or a
+   * line break): at its end only (`tail`) or anywhere; a trailing separator allowed (P4).
+   */
+  const list = (
+    s: number,
+    e: number,
+    p: number,
+    item: (k: number, stop: number) => number,
+    opts: { seps: ReadonlySet<string>; tail: boolean; newline: boolean },
+  ): number => {
+    const c = close(p);
+    const isSep = (k: number): boolean => ts[k]?.kind === 'punct' && opts.seps.has(tx(k));
+    let k = s;
+    let needSep = !(s - 1 === p || isSep(s - 1));
+    let last = false;
+    while (k <= e) {
+      if (needSep) {
+        if (isSep(k)) {
+          k += 1;
+          needSep = false;
+          last = false;
+          continue;
+        }
+        if (last) return offList(k);
+        if (!(opts.newline && ts[k]?.nl === true)) {
+          return fail(
+            k,
+            `${what(k)} inserted inside an existing item of a list (whole items only${opts.tail ? ', appended at its end' : ''})`,
+          );
+        }
+      }
+      const j = item(k, e + 1);
+      if (j < 0) return -1;
+      if (j <= k) return offList(k);
+      k = j;
+      needSep = true;
+      last = true;
+    }
+    const next = e + 1;
+    if (opts.tail) {
+      if (!(next === c || (last && isSep(next) && next + 1 === c))) {
+        return fail(
+          s,
+          `${what(s)} inserted before or between the existing items of a list (P2: appended at its end only)`,
+        );
+      }
+    } else if (last && !(next === c || isSep(next) || (opts.newline && ts[next]?.nl === true))) {
+      return offList(e);
+    }
+    return e + 1;
+  };
+
+  /**
+   * P3 on its own: a type annotation `: T` after a declared name (not in a pattern), a
+   * parameter or a parameter list, or an optional mark `?` on a parameter or a member; null when
+   * the run is no annotation.
+   */
+  const annotation = (s: number, e: number, p: number): number | null => {
+    const prev = s - 1;
+    const role = roleAt(p);
+    const afterParameter = role === 'params' && bindings.names.has(prev) && ht.parent[prev] === p;
+    if (s === e && punct(s, '?')) {
+      if (afterParameter && [':', ',', ')'].includes(tx(e + 1))) return e + 1;
+      const key = isId(ts[prev]) || ts[prev]?.kind === 'str';
+      const typed = role === 'type-body' || (role === 'object' && typeLiteral(p));
+      if (typed && key && punct(e + 1, ':')) return e + 1;
+      return null;
+    }
+    let k = s;
+    if (afterParameter && punct(k, '?')) k += 1;
+    if (!punct(k, ':')) return null;
+    const keyword = keywordOf.get(prev);
+    const declared =
+      keyword !== undefined &&
+      ['const', 'let', 'var'].includes(tx(keyword)) &&
+      ht.parent[prev] === ht.parent[keyword];
+    const returns = punct(prev, ')') && close(prev) >= 0 && ht.role(close(prev)) === 'params';
+    if (!(afterParameter || declared || returns)) return null;
+    const j = typeSpan(k + 1, e + 1, false);
+    if (j < 0) return -1;
+    return j === e + 1 ? e + 1 : offList(j);
+  };
+  /**
+   * Whether the `:` at c annotates a type: after a declared name of const / let / var (not in a
+   * pattern), a parameter, an optional mark `?`, a parameter list (a return type), or a member
+   * of an interface or a type literal.
+   */
+  const annotates = (c: number): boolean => {
+    const q = c - 1;
+    if (punct(q, '?')) return true;
+    const keyword = keywordOf.get(q);
+    if (
+      keyword !== undefined &&
+      ['const', 'let', 'var'].includes(tx(keyword)) &&
+      ht.parent[q] === ht.parent[keyword]
+    ) {
+      return true;
+    }
+    if (bindings.names.has(q) && roleAt(ht.parent[q] as number) === 'params') return true;
+    if (punct(q, ')') && close(q) >= 0 && ht.role(close(q)) === 'params') return true;
+    const p = ht.parent[c] as number;
+    return p >= 0 && (ht.role(p) === 'type-body' || (ht.role(p) === 'object' && typeLiteral(p)));
+  };
+  const literals = new Map<number, boolean>();
+  /**
+   * Whether the object-role braces at o are a type literal, by what stands before them (review r1
+   * S2-2: not by the separators of an insertion): the `=` of a type alias, a type annotation
+   * `:`, type arguments (`<`, a `,` in angles, `>`), `as` / `satisfies` / `extends` / `keyof`,
+   * a union or intersection of these; an ambiguous place counts as a type (the stricter list).
+   */
+  const typeLiteral = (o: number): boolean => {
+    const known = literals.get(o);
+    if (known !== undefined) return known;
+    let got = false;
+    for (let k = o - 1; k >= 0; k -= 1) {
+      const t = ts[k] as OutsideToken;
+      if (punct(k, '=')) {
+        const eq = bindings.eq.get(k);
+        const named = eq?.kind === 'init' ? eq.names[0] : undefined;
+        const keyword = named === undefined ? undefined : keywordOf.get(named);
+        got = keyword !== undefined && tx(keyword) === 'type';
+        break;
+      }
+      if (punct(k, ':')) {
+        got = annotates(k);
+        break;
+      }
+      if (punct(k, '<') || punct(k, '>') || punct(k, '>>')) {
+        got = true;
+        break;
+      }
+      if (punct(k, ',')) {
+        got = inAngles(ht, k);
+        break;
+      }
+      if (isId(t) && ['as', 'satisfies', 'extends', 'keyof', 'implements'].includes(t.text)) {
+        got = true;
+        break;
+      }
+      if (punct(k, '|') || punct(k, '&') || punct(k, '.')) continue;
+      if (isClose(t)) {
+        const m = close(k);
+        if (m < 0) break;
+        k = m;
+        continue;
+      }
+      if ((isId(t) && !NOT_NAMES.has(t.text) && !OBJECT_AFTER.has(t.text)) || t.kind === 'str') {
+        continue;
+      }
+      break;
+    }
+    literals.set(o, got);
+    return got;
+  };
+  /** Whether the specifier braces p are an import's (not an export's). */
+  const importBraces = (p: number): boolean => {
+    for (let k = p - 1; k >= 0; k -= 1) {
+      if (isId(ts[k], 'import')) return true;
+      if (isId(ts[k], 'export') || !(isId(ts[k]) || punct(k, ','))) return false;
+    }
+    return false;
+  };
+
+  const run = (s: number, e: number): number => {
+    for (let k = s; k <= e; k += 1) {
+      const t = ts[k] as OutsideToken;
+      if (!isOpen(t) && !isClose(t)) continue;
+      const m = close(k);
+      if (m < s || m > e) {
+        return fail(
+          k,
+          `the inserted bracket ${what(k)} pairs with an existing one (existing code wrapped or regrouped)`,
+        );
+      }
+    }
+    const p = ht.parent[s] as number;
+    const typed = annotation(s, e, p);
+    if (typed !== null) return typed;
+    const role = roleAt(p);
+    const tail = { seps: COMMA, tail: true, newline: false };
+    switch (role) {
+      case 'file':
+      case 'block':
+        return statements(s, e, p);
+      case 'call':
+        return list(s, e, p, operand, tail);
+      case 'params':
+        return list(s, e, p, parameter, tail);
+      case 'object':
+        return typeLiteral(p)
+          ? list(s, e, p, member, { seps: MEMBER_SEPARATORS, tail: false, newline: true })
+          : list(s, e, p, property, tail);
+      case 'type-body':
+        return list(s, e, p, member, { seps: MEMBER_SEPARATORS, tail: false, newline: true });
+      case 'specifiers':
+        if (!importBraces(p)) {
+          return fail(
+            s,
+            `${what(s)} inserted into an export list (names are added to an import only)`,
+          );
+        }
+        return list(s, e, p, specifier, { seps: COMMA, tail: false, newline: false });
+      default:
+        return fail(
+          s,
+          `${what(s)} inserted into ${role === 'array' ? 'an existing array' : role === 'index' ? 'an index' : role === 'header' ? 'the header of an if / for / while / switch / catch' : 'parentheses'} (not on the allow list)`,
+        );
+    }
+  };
+
+  const out: Off[] = [];
+  for (let s = 0; s < n; s += 1) {
+    if (!inserted(s)) continue;
+    let e = s;
+    while (e + 1 < n && inserted(e + 1)) e += 1;
+    off = null;
+    if (run(s, e) < 0) {
+      const at = (off as Off | null)?.at ?? s;
+      out.push({
+        at: Math.min(Math.max(at, s), e),
+        reason: (off as Off | null)?.reason ?? 'not on the allow list',
+      });
+    }
+    s = e;
+  }
+  return out;
 }
