@@ -1,0 +1,27 @@
+id: B2-02y
+repo: rebate-platform
+title: ledger：把入账路径的跨零判定（recovered / wentNegative）与 negative_since 规则抽成导出纯函数，入账路径改为调用、行为不变；恢复钩子入参 voucherId 允许为空（D10-2064 ② ④）
+type: impl
+# 2026-11-18 be 入账（编排 D10-2064 ②④）。缘由：B2-02x（差错单按分录重算余额缓存）要用与入账同一套跨零与 negative_since 判定，ledger.ts 没导出、实现方只能照抄；照抄不落地，先抽函数。
+# 做法：把 apps/api/src/modules/ledger/application/ledger.ts 里 negative_since 的三分支（约 336–341 行）与 recovered / wentNegative（约 398–407 行）原样搬到一个新纯函数文件并导出，ledger.ts 改为调用；纯搬移、行为不变，不改任何判定条件。
+# 恢复钩子：BalanceRecoveredInput.voucherId 现为必填 string（ledger.ts 约 389 行），重算余额缓存不写凭证。改为可空（string | null），payout 的实现（payout/application/balance-recovered.ts）照常处理 null（现不读该字段则不受影响）；如改可空牵动面过大，在输出里写明再定。
+# 资金评审必查「纯搬移」：现有账本与入账相关测试全绿；独立 Claude 先写规则测试钉新导出函数的输入输出（negative_since 三分支 + 前后都为负沿用、跨零四种组合），实现方另补单测。
+refs: [BR-FUND-12, BR-WDR-05]
+refs_hash:
+  BR-FUND-12: 8d69aa9c2ca9
+  BR-WDR-05: 99e2e2654ce0
+deps: []
+paths:
+  - 'apps/api/src/modules/ledger/application/ledger.ts'
+  - 'apps/api/src/modules/ledger/application/balance-transitions*.ts'
+  - 'apps/api/src/modules/ledger/application/recovered-ledger.ts'
+  - 'apps/api/src/modules/payout/application/balance-recovered*.ts'
+test_paths:
+  - 'test/spec/ledger/balance-transitions/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/balance-transitions/**'
+status: todo
+pr: null
