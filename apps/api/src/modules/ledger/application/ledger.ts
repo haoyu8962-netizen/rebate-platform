@@ -31,6 +31,7 @@ import {
   type BalanceRow,
   type EntryInsert,
 } from '../infra/store.ts';
+import { goesNegative, nextNegativeSince, recovers } from './balance-transitions.ts';
 import { LedgerError } from './errors.ts';
 
 export type LedgerAccountRef =
@@ -333,12 +334,12 @@ function computeWrite(
       );
     }
   }
-  const negativeSince =
-    after.available_fen < 0n
-      ? before.available_fen < 0n && before.negative_since !== null
-        ? before.negative_since
-        : day
-      : null;
+  const negativeSince = nextNegativeSince({
+    availableBefore: before.available_fen,
+    availableAfter: after.available_fen,
+    negativeSinceBefore: before.negative_since,
+    day,
+  });
   return { before, after, version: before.version + 1n, negativeSince };
 }
 
@@ -386,22 +387,17 @@ export interface BalanceRecoveredInput {
   readonly accountId: string;
   readonly availableBefore: bigint;
   readonly availableAfter: bigint;
+  /**
+   * The voucher id or source record id that caused the recovery — for dedupe and tracing only;
+   * it is not guaranteed to be found in the voucher table, and a prefixed value is not a voucher
+   * id. The posting path passes the real voucher id (D10-2084).
+   */
   readonly voucherId: string;
 }
 
 /** The synchronous transactional recovery port, implemented outside ledger (payout). */
 export interface BalanceRecoveredPort {
   onRecovered(trx: Transaction<DB>, input: BalanceRecoveredInput): Promise<void>;
-}
-
-/** True when a user account's available goes from < 0 to >= 0 by this voucher's net change. */
-function recovered(change: AccountWrite): boolean {
-  return change.before.available_fen < 0n && change.after.available_fen >= 0n;
-}
-
-/** True when a user account's available goes from >= 0 to < 0 by this voucher's net change. */
-function wentNegative(change: AccountWrite): boolean {
-  return change.before.available_fen >= 0n && change.after.available_fen < 0n;
 }
 
 export function createPostingCore(input: PostingCoreOptions): PostingCore {
@@ -525,7 +521,7 @@ export function createPostingCore(input: PostingCoreOptions): PostingCore {
     );
     if (eventBus !== undefined) {
       for (const change of ordered) {
-        if (!wentNegative(change)) continue;
+        if (!goesNegative(change.before.available_fen, change.after.available_fen)) continue;
         await eventBus.publish(trx, {
           appId,
           name: 'account.went_negative',
@@ -538,7 +534,7 @@ export function createPostingCore(input: PostingCoreOptions): PostingCore {
     // stays usable. A replayed uniq_key returned 'duplicate' above and never gets here.
     if (balanceRecoveredHook !== undefined) {
       for (const change of ordered) {
-        if (!recovered(change)) continue;
+        if (!recovers(change.before.available_fen, change.after.available_fen)) continue;
         await balanceRecoveredHook.onRecovered(trx, {
           appId,
           userId: change.before.user_id,
