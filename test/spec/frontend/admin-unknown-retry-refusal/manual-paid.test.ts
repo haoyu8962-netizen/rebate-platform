@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-// F1-08ar（FU-F108AL-UNKNOWN-RETRY-10403，编排 D10-2035 甲）：批量手动打款一旦进入「上次提交结果未知」，
-// 之后的【重试】只有拿到同键回放的成功（逐单结果）才解除。【重试】收到带统一外壳的确定拒绝（10403、20001）
-// 时第一次提交仍可能已生效：对话框仍提示「上次提交结果未知」并显示该拒绝的全文，输入仍锁定、对话框不能关、
+// F1-08as（取代 F1-08ar；编排 D10-2060 / 2061 / 2062）：批量手动打款一旦进入「上次提交结果未知」，之后【重试】
+// 收到契约里先于幂等回放判、又会随状态变化的拒绝——10403 admin_permission_denied（未知窗口内权限被撤）——
+// 时第一次提交仍可能已生效：对话框仍提示「上次提交结果未知」并显示该拒绝的原文，输入仍锁定、对话框不能关、
 // 仍只有【重试】【去列表核对】，再【重试】原 Idempotency-Key 与逐字节相同的请求体（BR-WDR-16、BR-ID-34
-// 动态码档）。首次提交（未进入结果未知时）的确定拒绝照旧解锁、下次换新键；10003 照旧重新动态码后原键原体。
+// 动态码档）。对照（照现状）：结果未知后重试收 20001 解锁、可改、下次换新键；10003（凭证未被接受）重新动态码
+// 后原键原体；首次提交（未进入结果未知）即收 10403 照旧解锁、下次换新键。
 import { cleanup, waitFor, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import {
@@ -62,11 +63,19 @@ const ITEMS_INVALID: Refusal = {
   data: { fields: ['items'] },
   text: '提交内容有误，请检查后重试',
 };
+const UNKNOWN_NOTICE = '上次提交结果未知';
 
 /** The first submission takes effect on the server, its reply is lost (no envelope). */
 function loseAfterEffect(server: Server, rows: readonly Withdrawal[]): void {
   server.once('POST', MANUAL, () => {
     reply(server, paid(rows));
+    throw new Error('response lost');
+  });
+}
+
+/** The first submission never reaches the service, its reply is lost (no envelope). */
+function loseBeforeEffect(server: Server): void {
+  server.once('POST', MANUAL, () => {
     throw new Error('response lost');
   });
 }
@@ -109,6 +118,29 @@ async function refusedYetUnknown(
   expect(stepDialogs()).toEqual([]);
   expect(within(document.body).queryAllByText('已录入', { exact: true })).toEqual([]);
   expect(writes(server)).toHaveLength(count);
+}
+
+/**
+ * After a settled refusal that unlocks: its notice shown, no result-unknown notice, no 【重试】
+ * 【去列表核对】, every input of the `size` rows changeable again and 确认录入 usable.
+ */
+async function refusedAndUnlocked(
+  server: Server,
+  modal: HTMLElement,
+  refusal: Refusal,
+  size: number,
+): Promise<void> {
+  await notice(refusal.text);
+  await settled(server);
+  expect(within(modal).queryAllByText(UNKNOWN_NOTICE, { exact: true })).toEqual([]);
+  expect(inputs(modal).map((input) => disabled(input))).toEqual(
+    Array.from({ length: size * 3 }, () => false),
+  );
+  expect(buttons(modal, '重试')).toEqual([]);
+  expect(buttons(modal, '去列表核对')).toEqual([]);
+  expect(disabled(button(modal, '确认录入'))).toBe(false);
+  expect(dialogs()).toEqual([modal]);
+  expect(within(document.body).queryAllByText('已录入', { exact: true })).toEqual([]);
 }
 
 // ---- D10-2050: controls while a 实付时间 is wrong -------------------------------------------
@@ -174,7 +206,7 @@ async function wrongTimeKeepsControls(): Promise<void> {
 }
 
 it(
-  '[AC-F1-08ar-MANUAL#1] 首次已生效但回答丢失 → 结果未知；【重试】动态码后原键原体收到带外壳的 10403：仍提示「上次提交结果未知」并显示「无权限执行此操作（需要 payout.manual_entry 权限点）」、输入锁定、对话框不能关、只剩【重试】【去列表核对】；再【重试】仍是原键原体、再收 10403 仍未知；【去列表核对】关闭并重读列表；另开对话框某行实付时间晚于现在或格式不合时控件清单仍等于刚打开时',
+  '[AC-F1-08as-MANUAL#1] 首次已生效但回答丢失 → 结果未知；【重试】动态码后原键原体收到带外壳的 10403 admin_permission_denied：仍提示「上次提交结果未知」并显示「无权限执行此操作（需要 payout.manual_entry 权限点）」、输入锁定、对话框不能关、只剩【重试】【去列表核对】；再【重试】仍是原键原体、再收 10403 仍未知；【去列表核对】关闭并重读列表、不再发写；另开对话框某行实付时间晚于现在或格式不合时控件清单仍等于刚打开时',
   { timeout: 180_000 },
   async () => {
     const rows = approvedRows(2);
@@ -213,15 +245,15 @@ it(
 );
 
 it(
-  '[AC-F1-08ar-MANUAL#2] 结果未知后【重试】收到带外壳的 20001 data.fields=[items]：仍提示「上次提交结果未知」并显示「提交内容有误，请检查后重试」、不解锁、只剩【重试】【去列表核对】；再【重试】原键原体拿到同键回放的逐单成功才解除：显示「已录入 2 张，跳过 0 张」、可关闭；对照：首次提交即收 20001 照旧解锁、可改，下次换新键',
-  { timeout: 180_000 },
+  '[AC-F1-08as-MANUAL#2] 结果未知后【重试】先收带外壳的 10403：仍是结果未知、只剩【重试】【去列表核对】、键与请求体不变；对照（照现状）：再【重试】原键原体收到带外壳的 20001 data.fields=[items]：提示「提交内容有误，请检查后重试」并解锁（无结果未知提示、无【重试】【去列表核对】、输入可改、【确认录入】可用），改正后再提交换新键、显示「已录入 2 张，跳过 0 张」；对照：另开对话框首次提交即收 10403 照旧解锁，再提交换新键',
+  { timeout: 240_000 },
   async () => {
     const rows = approvedRows(2);
     const server = serverFor(rows);
-    const results = paid(rows);
-    loseAfterEffect(server, rows);
+    loseBeforeEffect(server);
+    refuse(server, FORBIDDEN);
     refuse(server, ITEMS_INVALID);
-    server.once('POST', MANUAL, () => reply(server, results));
+    server.once('POST', MANUAL, () => reply(server, paid(rows)));
     await mount(server);
     await select(rows);
     const modal = await open();
@@ -234,24 +266,34 @@ it(
     assertRequest(server, body);
 
     await retry(server, modal);
-    await refusedYetUnknown(server, modal, ITEMS_INVALID, body, 2, original);
+    await refusedYetUnknown(server, modal, FORBIDDEN, body, 2, original);
 
-    const reads = server.reads().length;
+    // Control (照现状, D10-2060 ②): 20001 after the unknown state unlocks; the next one is new.
     await retry(server, modal);
     assertReplay(server, body, 3);
-    await notice('已录入 2 张，跳过 0 张', modal);
-    for (const row of rows) await notice('已录入', rowOf(modal, row.out_biz_no));
-    expect(within(modal).queryAllByText('上次提交结果未知', { exact: true })).toEqual([]);
-    await waitFor(() => expect(server.reads().length).toBeGreaterThan(reads));
-    await settled(server);
-    expect(disabled(button(modal, '关闭'))).toBe(false);
+    await refusedAndUnlocked(server, modal, ITEMS_INVALID, 2);
     expect(writes(server)).toHaveLength(3);
+    await fill(field(rowOf(modal, rows[0]!.out_biz_no), '通道流水号'), 'Corrected-Serial');
+    const corrected: Payload = {
+      items: body.items.map((item, index) =>
+        index === 0 ? { ...item, channel_order_id: 'Corrected-Serial' } : item,
+      ),
+    };
+    await confirm(server, modal);
+    await verify();
+    await notice('已录入 2 张，跳过 0 张', modal);
+    await settled(server);
+    assertRequest(server, corrected, 4);
+    expect(writes(server).at(-1)!.headers.get('Idempotency-Key')).not.toBe(
+      writes(server)[0]!.headers.get('Idempotency-Key'),
+    );
+    expect(writes(server)).toHaveLength(4);
     cleanup();
 
-    // Control: a settled refusal of a first submission (never unknown) unlocks as before.
+    // Control: a 10403 of a first submission (never unknown) unlocks as before.
     const fresh = approvedRows(1);
     const other = serverFor(fresh);
-    refuse(other, ITEMS_INVALID);
+    refuse(other, FORBIDDEN);
     other.once('POST', MANUAL, () => reply(other, paid(fresh)));
     await mount(other);
     await select(fresh);
@@ -260,13 +302,8 @@ it(
     await confirm(other, dialog);
     await verify();
     await settled(other);
-    await notice(ITEMS_INVALID.text);
     assertRequest(other, sent);
-    expect(within(dialog).queryAllByText('上次提交结果未知', { exact: true })).toEqual([]);
-    expect(inputs(dialog).map((input) => disabled(input))).toEqual([false, false, false]);
-    expect(buttons(dialog, '重试')).toEqual([]);
-    expect(buttons(dialog, '去列表核对')).toEqual([]);
-    expect(disabled(button(dialog, '确认录入'))).toBe(false);
+    await refusedAndUnlocked(other, dialog, FORBIDDEN, 1);
     await confirm(other, dialog);
     await verify();
     await notice('已录入 1 张，跳过 0 张', dialog);
@@ -279,7 +316,7 @@ it(
 );
 
 it(
-  '[AC-F1-08ar-MANUAL#3] 结果未知后【重试】收到 10003：重新动态码、验证前不重发，验证后原键原体再发（不算解除也不算确定拒绝）；这次收到带外壳的 10403 仍是结果未知、只剩【重试】【去列表核对】；再【重试】原键原体拿到回放成功才解除',
+  '[AC-F1-08as-MANUAL#3] 结果未知后【重试】收到 10003（凭证未被接受，照旧）：重新动态码、验证前不重发，验证后原键原体再发；这次收到带外壳的 10403 仍是结果未知、只剩【重试】【去列表核对】；再【重试】原键原体拿到同键回放的逐单成功才解除：显示「已录入 2 张，跳过 0 张」、可关闭',
   { timeout: 180_000 },
   async () => {
     const rows = approvedRows(2);
@@ -314,8 +351,10 @@ it(
     await retry(server, modal);
     assertReplay(server, body, 4);
     await notice('已录入 2 张，跳过 0 张', modal);
-    expect(within(modal).queryAllByText('上次提交结果未知', { exact: true })).toEqual([]);
+    for (const row of rows) await notice('已录入', rowOf(modal, row.out_biz_no));
+    expect(within(modal).queryAllByText(UNKNOWN_NOTICE, { exact: true })).toEqual([]);
     await settled(server);
     expect(disabled(button(modal, '关闭'))).toBe(false);
+    expect(writes(server)).toHaveLength(4);
   },
 );
