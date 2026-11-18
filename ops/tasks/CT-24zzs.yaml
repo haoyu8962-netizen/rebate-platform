@@ -1,0 +1,31 @@
+id: CT-24zzs
+repo: rebate-platform
+title: 契约：导出记录【重新导出】——POST /admin/v1/exports/{id}/re-export 按一条已有导出任务新建一条任务（同来源、同筛选、同脱敏与否），发起人记当前操作人，按当前权限重新校验；不脱敏的重新要权限、step-up 与理由（D10-2061）
+type: contract
+# 2026-11-18 be 入账（编排 D10-2061，fe F1-08fd 缺此契约；排在缺口乙类四对之后，不急）。契约由 Claude 写；实现另开 B2-08h。
+# 只读核过：BR-ID-42 细则「后台导出任务」与 04 §6.6 exports 只定了「重试」（adminRetryExport：只限创建人、只有 failed 可重试、同一任务 id 回到 pending、按当前权限重验、不脱敏的须新 totp step-up 与新理由），没有「重新导出」的说法；BR-ID-33 只管脱敏口径。以下按 D10-2061 作默认写进说明，注明出处为编排默认、待规划回写。
+# 行为：读源任务的 resource、filters、masked，按 adminCreateExport 的规则新建一条任务（新 id、created_by = 当前账号、状态 pending）；源任务不变。校验全部按当前调用者的现有权限重做（导出权限点 export、该来源列表的权限点；只持 user.lookup 的照来源规则要 user_id），不沿用源任务的创建人或理由。
+# 不脱敏的源任务（masked=false）：照 adminCreateExport / adminRetryExport 的不脱敏规则重新要 pii.*（tax_withdrawals 为 tax.export_full）、新的 totp 档 step-up 与新理由（1–200 字），缺一照现有错误码；脱敏任务请求体为空，带 reason 照 retry 的写法 20001。
+# 可作源任务的：调用者能在导出记录里看到的任务（本人的；持 audit.view_all 的可看全部——是否允许重新导出别人的任务写明，be 建议允许，因为新任务以调用者自己的权限与身份发起、等同用同样筛选新建）；任意状态均可（不改源任务状态）。未知 / 别的 app / 看不到的 id → 20001 data.fields=[id]（不给 404，同 retry）。
+# 审计：写 export_create（或新 action，契约线定，与 create 一致为宜），记源任务 id；不脱敏另写 export_unmasked 带新理由。只用已有错误码。
+refs: [BR-ID-42, BR-ID-33]
+refs_hash:
+  BR-ID-42: 2f9cd1710ed3
+  BR-ID-33: 01b25f773b29
+contract_sections: ['11.1']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
+pr: null

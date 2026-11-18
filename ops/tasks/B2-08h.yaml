@@ -1,0 +1,22 @@
+id: B2-08h
+repo: rebate-platform
+title: admin：导出记录【重新导出】的实现（CT-24zzs）——按源任务的来源、筛选与脱敏与否新建任务，当前操作人发起、按当前权限重验，不脱敏的重新要权限、step-up 与理由
+type: impl
+# 2026-11-18 be 入账（编排 D10-2061）。admin 模块导出任务（admin-exports.ts 一类）复用 adminCreateExport 的建任务与校验路径，不另写一份权限判定；源任务只读，不改其状态。
+# 规则测试要钉：新任务 id 不同、resource / filters / masked 与源任务相同、created_by 为当前账号；源任务不变；当前账号缺 export 或来源列表权限 → 10403；不脱敏的缺 pii.* / step-up / reason 各按现有码拒、都不建任务；脱敏的带 reason → 20001；看不到的源任务 → 20001 [id]；审计记源任务 id，不脱敏另有带理由的记录。
+refs: [BR-ID-42, BR-ID-33]
+refs_hash:
+  BR-ID-42: 2f9cd1710ed3
+  BR-ID-33: 01b25f773b29
+deps: [CT-24zzs]
+paths:
+  - 'apps/api/src/modules/admin/**'
+test_paths:
+  - 'test/spec/admin/export-re-export/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/admin/export-re-export/**'
+status: todo
+pr: null
