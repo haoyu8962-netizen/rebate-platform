@@ -1,0 +1,28 @@
+id: CT-24zzt
+repo: rebate-platform
+title: 契约：recalcBalanceAdminReconDiff 把「合计或缓存超出 ±(2^53−1)」并进拒绝情形——不写、20001 data.fields=[recon_diff_id]、审计记原因（D10-2064 ③ / D10-2067）
+type: contract
+# 2026-11-18 be 入账（编排 D10-2064 ③、D10-2067）。只读核过：ledger 模块金额出 JSON 一律经 packages/money 的 fenToJsonNumber（超过 MAX_JSON_FEN = ±(2^53−1) 抛 InvalidAmount），即全模块以 2^53−1 为上限；现说明只拒「超出 bigint」，介于 2^53−1 与 bigint 上限之间的值实现只能在写库前失败成 50001，与说明不符。契约由 Claude 写；只补说明，不改 schema 与错误码集合。
+# 要写进 CT-24zzn / CT-24zzna 已合并的说明：锁内算出的 available / frozen 合计，或锁内读到的缓存值，任一超出 ±(2^53−1)（应答装不下的整数）→ 与「frozen 合计为负 / 超出 bigint」同一处理：不写余额行（四个字段都不变）、20001 data.fields=[recon_diff_id]、写一条审计记原因与算出的值；不关单、不解除 withdraw_holds。超出 bigint 的情形被它覆盖，原句相应合并改写，不另立。
+# 大数用例由实现方（B2-02x）补单元测试，不进规则测试（D10-2067）。
+refs: [BR-FUND-19, BR-FUND-16]
+refs_hash:
+  BR-FUND-19: 34f619112535
+  BR-FUND-16: 077f6d412d5a
+contract_sections: ['11.1']
+deps: [CT-24zzna]
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
+pr: null
