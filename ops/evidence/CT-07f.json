@@ -1,0 +1,128 @@
+{
+  "task": "CT-07f",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "13dfbf0c18c96cade11e02b3a6bbb2e3b3c082ba",
+  "red_tests": [
+    "test/spec/catalog/pool-tags-home/delivery.int.test.ts > [CT-07f][D10-1986] 正式下发 getPage：product_pool 数据源不带 tags，其余字段和别的卡片原样（横幅静态项里的 tags 键照发）；再读一次也不带；存储不变",
+    "test/spec/catalog/pool-tags-home/delivery.int.test.ts > [CT-07f][D10-1986] 下发去掉 tags 不改缓存：getPage 之后同一版本的卡片（列表接口读的 PageReader.section）仍带存储里的 tags，之后的 getPage 仍不带",
+    "test/spec/catalog/pool-tags-home/delivery.int.test.ts > [CT-07f][D10-1986] 预览下发：product_pool 数据源不带 tags，其余原样；同一个令牌再读一次也不带；草稿版本存储不变",
+    "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] product_pool 数据源 tags：不带、1 项、10 项、一项 16 个码点都能保存并发布，存下的就是规范化后的值",
+    "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1777] 保存时 tags 按 CT-07e 同一套规范化：NFKC、去首尾空白、内部空白并一个、空白项丢掉、规范化后重复的只留第一个、大小写不折叠；返回、读回与存储都是规范化后的值",
+    "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1777] 已规范化的 tags 原样再存一版：结果相同（规范化幂等）",
+    "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 空数组 [] → 20001，data.fields 指向该数据源的 tags，什么都不写",
+    "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 超 10 项（11 个不同的标签） → 20001，data.fields 指向该数据源的 tags，什么都不写",
+    "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 一项 17 个码点 → 20001，data.fields 指向该数据源的 tags，什么都不写",
+    "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 一项规范化后 20 个码点 → 20001，data.fields 指向该数据源的 tags，什么都不写",
+    "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 一项含控制字符 → 20001，data.fields 指向该数据源的 tags，什么都不写",
+    "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 一项不是字符串 → 20001，data.fields 指向该数据源的 tags，什么都不写",
+    "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 不是数组 → 20001，data.fields 指向该数据源的 tags，什么都不写",
+    "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1777] tags 规范化后为空数组（全是空白）→ 20001，data.fields 恰为该数据源的 tags，不当成不筛，什么都不写",
+    "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1777] tags 规范化后为空数组（一项全角空格）→ 20001，data.fields 恰为该数据源的 tags，不当成不筛，什么都不写",
+    "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 带 tags 的数据源只出 tags 与之有交集的行（命中任一），顺序同 sort、product_key，每行只出一次，只给出的卡登记，卡上不带标签字段",
+    "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 完全相等匹配：包含、被包含、大小写不同、中间多空格都不算命中",
+    "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 标签命中与其他池规则同时成立：命中但下线、未开始、已结束、超龄、佣金率为空的行都不出，没命中的合格行也不出",
+    "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 分页：limit=2 时 9 行里命中的 5 行翻完不重不漏、顺序对，每页不超过 limit，最后一页 has_more=false",
+    "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 数据源不带 tags = 不筛：同一个池带 tags 时只出命中的行，去掉后出全部合格行",
+    "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 数据源tags=[] = 不筛：同一个池带 tags 时只出命中的行，去掉后出全部合格行",
+    "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 兜底池 feed.fallback_pool_id 不受标签筛选：同一个池在带 tags 的数据源里只出命中的行，信息流频道全挂回退到它时出全部合格行，stale=true",
+    "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 任意一池、任意 tags：翻完所有页，出的正好是合格且（不带 tags 时全部、带时与之有交集）的行，顺序对，每页不超过 limit"
+  ],
+  "risk_note": "RV2 by path (apps/api/src/modules/content/**). CT-07f (split from CT-07e by D10-1986; deps CT-07e #270): contracts/home-schema.json product_pool data source gains optional tags (each normalized tag 1-16 code points, no control character, at most 10); on save the console page config normalizes the tags (NFKC, trim, inner whitespace to one, drop empty, dedupe keeping order, case kept) and refuses a list that ends up empty with 20001 (data.fields sections.N.data_source.tags), writing nothing; the home section read filters pool items by tag intersection inside the existing app_id / pool_id scoped statement (tags && $1::text[]), the fallback pool (feed.fallback_pool_id) is never filtered; delivered and preview pages drop tags from product_pool sources without touching stored or cached versions. The content module keeps its own copy of the normalization steps (content -> catalog index import would form a cycle), accepted by D10-2034 with its unit test taking the catalog normalization table row by row; FU-POOL-TAGS-NORMALIZE-SINGLE follows right after this task.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "13dfbf0c18c96cade11e02b3a6bbb2e3b3c082ba",
+      "tree": "f8d2f82029daaa70877cdae0b4e2a52f8bee4780",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-18T02:27:16Z",
+      "finished_at": "2026-11-18T02:27:32Z",
+      "red_tests": [
+        "test/spec/catalog/pool-tags-home/delivery.int.test.ts > [CT-07f][D10-1986] 正式下发 getPage：product_pool 数据源不带 tags，其余字段和别的卡片原样（横幅静态项里的 tags 键照发）；再读一次也不带；存储不变",
+        "test/spec/catalog/pool-tags-home/delivery.int.test.ts > [CT-07f][D10-1986] 下发去掉 tags 不改缓存：getPage 之后同一版本的卡片（列表接口读的 PageReader.section）仍带存储里的 tags，之后的 getPage 仍不带",
+        "test/spec/catalog/pool-tags-home/delivery.int.test.ts > [CT-07f][D10-1986] 预览下发：product_pool 数据源不带 tags，其余原样；同一个令牌再读一次也不带；草稿版本存储不变",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] product_pool 数据源 tags：不带、1 项、10 项、一项 16 个码点都能保存并发布，存下的就是规范化后的值",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1777] 保存时 tags 按 CT-07e 同一套规范化：NFKC、去首尾空白、内部空白并一个、空白项丢掉、规范化后重复的只留第一个、大小写不折叠；返回、读回与存储都是规范化后的值",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1777] 已规范化的 tags 原样再存一版：结果相同（规范化幂等）",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 空数组 [] → 20001，data.fields 指向该数据源的 tags，什么都不写",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 超 10 项（11 个不同的标签） → 20001，data.fields 指向该数据源的 tags，什么都不写",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 一项 17 个码点 → 20001，data.fields 指向该数据源的 tags，什么都不写",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 一项规范化后 20 个码点 → 20001，data.fields 指向该数据源的 tags，什么都不写",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 一项含控制字符 → 20001，data.fields 指向该数据源的 tags，什么都不写",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 一项不是字符串 → 20001，data.fields 指向该数据源的 tags，什么都不写",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1986] tags 不是数组 → 20001，data.fields 指向该数据源的 tags，什么都不写",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1777] tags 规范化后为空数组（全是空白）→ 20001，data.fields 恰为该数据源的 tags，不当成不筛，什么都不写",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts > [CT-07f][D10-1777] tags 规范化后为空数组（一项全角空格）→ 20001，data.fields 恰为该数据源的 tags，不当成不筛，什么都不写",
+        "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 带 tags 的数据源只出 tags 与之有交集的行（命中任一），顺序同 sort、product_key，每行只出一次，只给出的卡登记，卡上不带标签字段",
+        "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 完全相等匹配：包含、被包含、大小写不同、中间多空格都不算命中",
+        "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 标签命中与其他池规则同时成立：命中但下线、未开始、已结束、超龄、佣金率为空的行都不出，没命中的合格行也不出",
+        "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 分页：limit=2 时 9 行里命中的 5 行翻完不重不漏、顺序对，每页不超过 limit，最后一页 has_more=false",
+        "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 数据源不带 tags = 不筛：同一个池带 tags 时只出命中的行，去掉后出全部合格行",
+        "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 数据源tags=[] = 不筛：同一个池带 tags 时只出命中的行，去掉后出全部合格行",
+        "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 兜底池 feed.fallback_pool_id 不受标签筛选：同一个池在带 tags 的数据源里只出命中的行，信息流频道全挂回退到它时出全部合格行，stale=true",
+        "test/spec/catalog/pool-tags-home/section-tags.int.test.ts > [CT-07f][D10-1986] 任意一池、任意 tags：翻完所有页，出的正好是合格且（不带 tags 时全部、带时与之有交集）的行，顺序对，每页不超过 limit"
+      ],
+      "expected": [
+        "test/spec/catalog/pool-tags-home/delivery.int.test.ts",
+        "test/spec/catalog/pool-tags-home/home-config-save.int.test.ts",
+        "test/spec/catalog/pool-tags-home/section-tags.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "e90c19867cd405c42d14964e68b6c38511df33dbcc6616c1bbf3793d7228eb96"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (Codex usage limit until 11-23, D10-2003): money r1 full review pass, no findings (couli-runs/CT-07f/review-money-r1.json). A general review was refused by the tool (RV2 needs money) before it ran and was not counted."
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Independent Claude contract review r1 pass, no findings, on the home-schema.json product_pool tags (couli-runs/CT-07f/review-contract-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by independent Claude (claude-run.sh; ledger tester claude-independent, D10-2003), red on the test machine at the first try (23 tests in 3 files red for the right reason). spec-test r1 by a fresh independent Claude pass with one S2: the asyncProperty callback in section-tags.int.test.ts ends without return true; fast-check 4 treats void as a pass and a failing expect still throws, so no verdict changes; not given another test round (precedent B1-02zzzc r1 pass with S2s)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c23959dd1af1986baa879e0d57b7b5a6dc223c91",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
