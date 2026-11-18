@@ -316,3 +316,70 @@ it('a reread that finds page 2 emptied goes back to the last page with rows and 
   await waitFor(() => expect(searches.length).toBeGreaterThan(reads));
   expect(new URLSearchParams(searches[searches.length - 1]).get('page')).toBe('1');
 });
+
+it('the read of the page a reread went back to stays silent when it fails, and the rereads go on', async () => {
+  fakeTimeouts();
+  const running = (id: string): ExportRow =>
+    task(id, {
+      status: 'running',
+      progress: 40,
+      file_name: null,
+      row_count: null,
+      expires_at: null,
+    });
+  const first = Array.from({ length: 20 }, (_, i) =>
+    running(`exp_Q1${String(i).padStart(2, '0')}w8Rt5Ym1Zx7N`),
+  );
+  const lone = running('exp_Q2zzw8Rt5Ym1Zx7N');
+  let loneDone = false;
+  let failPage1 = false;
+  const { searches } = mount({ now: () => START }, (call) => {
+    if (call.path !== LIST) return Promise.reject(new Error(`unexpected ${call.path}`));
+    const asked = new URLSearchParams(searches[searches.length - 1]).get('page');
+    if (asked === '2') {
+      return Promise.resolve(
+        ok(
+          loneDone
+            ? { items: [], page: 2, page_size: 20, total: 20 }
+            : { items: [lone], page: 2, page_size: 20, total: 21 },
+        ),
+      );
+    }
+    if (failPage1) {
+      failPage1 = false;
+      return Promise.resolve(
+        Response.json({ code: 50000, msg: 'boom', data: null, trace_id: 't' }, { status: 500 }),
+      );
+    }
+    return Promise.resolve(ok({ items: first, page: 1, page_size: 20, total: loneDone ? 20 : 21 }));
+  });
+  await waitFor(() => expect(screen.getByText(first[0]!.id)).toBeTruthy());
+  fireEvent.click(screen.getByTitle('2'));
+  await waitFor(() => expect(screen.getByText(lone.id)).toBeTruthy());
+  loneDone = true;
+  failPage1 = true;
+  const before = searches.length;
+  act(() => {
+    vi.advanceTimersByTime(POLL_MS);
+  });
+  await waitFor(() =>
+    expect(searches.slice(before).map((search) => new URLSearchParams(search).get('page'))).toEqual(
+      ['2', '1'],
+    ),
+  );
+  await waitFor(() => expect(failPage1).toBe(false));
+  // The failed read of page 1 tells nothing and keeps the row shown.
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(screen.queryByText(t.loadFailedTitle)).toBeNull();
+  expect(screen.getByText(lone.id)).toBeTruthy();
+  // The next reread goes ahead (page 1, same filters) and shows its rows.
+  act(() => {
+    vi.advanceTimersByTime(POLL_MS);
+  });
+  await waitFor(() => expect(screen.getByText(first[0]!.id)).toBeTruthy());
+  expect(screen.queryByText(lone.id)).toBeNull();
+  expect(screen.queryByText(t.loadFailedTitle)).toBeNull();
+  expect(new URLSearchParams(searches[searches.length - 1]).get('page')).toBe('1');
+});

@@ -182,6 +182,9 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
   const busyRef = useRef(new Set<string>());
   const flowRef = useRef<RetryFlow>(IDLE);
   const alive = useRef(true);
+  // The query a silent reread moved to (its page past the end went back to the last page): the
+  // main read of exactly this query stays silent too. Any query the operator sets is a new object.
+  const silentQuery = useRef<ListQuery | undefined>(undefined);
   // Bumped when the earliest expires_at comes: the rows are judged again against the clock.
   const [expiryTick, setExpiryTick] = useState(0);
 
@@ -227,6 +230,7 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
 
   useEffect(() => {
     let current = true;
+    const silent = silentQuery.current === query;
     const custom = getProvider().custom;
     if (custom === undefined) throw new Error('Missing custom data provider');
     custom<Schema<'AdminExportPage'>>({
@@ -240,7 +244,9 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
         // back to the last page that still has rows, same filters, without any message.
         const back = pageBack(query.page, response.data.items.length, response.data.total);
         if (back !== undefined) {
-          setQuery({ ...query, page: back });
+          const next = { ...query, page: back };
+          if (silent) silentQuery.current = next;
+          setQuery(next);
           return;
         }
         setData({ items: response.data.items, total: response.data.total });
@@ -248,6 +254,9 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
       },
       (cause: unknown) => {
         if (!current) return;
+        // The read of a page a silent reread went back to fails like any reread: the rows shown
+        // stay, nothing is told, and the polling (still running for this query) reads again.
+        if (silent) return;
         // A failed read never keeps the rows of an earlier answer on screen.
         setData(undefined);
         setStatus(cause instanceof AdminApiError && cause.code === 10403 ? 'forbidden' : 'failed');
@@ -281,7 +290,9 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
             // (the rows on screen stay until that answer comes; polling then follows that page).
             const back = pageBack(query.page, response.data.items.length, response.data.total);
             if (back !== undefined) {
-              setQuery({ ...query, page: back });
+              const next = { ...query, page: back };
+              silentQuery.current = next;
+              setQuery(next);
               return;
             }
             setData({ items: response.data.items, total: response.data.total });
@@ -318,6 +329,7 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
   }, [data, clock, now, expiryTick]);
 
   const reload = () => {
+    silentQuery.current = undefined;
     setStatus('loading');
     setAttempt((value) => value + 1);
   };
