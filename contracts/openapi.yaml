@@ -24807,9 +24807,9 @@ paths:
         difference whose `type` is not `ledger_mismatch`, whose `status` is `adjusted`,
         `written_off` or `closed`, or that names no single member account as above, is 20001
         with `data.fields=[recon_diff_id]` (no `data.reason`), nothing written → under the locks
-        (see Effects), sums of the entries that cannot be a balance (a negative frozen sum, or a
-        sum out of the bigint range) are 20001 with `data.fields=[recon_diff_id]` (no
-        `data.reason`), the balance row not written and an audit record written. The member's
+        (see Effects), a negative frozen sum, or a sum or a cached value outside ±(2^53 − 1),
+        is 20001 with `data.fields=[recon_diff_id]` (no `data.reason`), the balance row not
+        written and an audit record written. The member's
         own status (frozen, banned, deleting or deleted) does not matter: the cache follows the
         entries whatever it is.
 
@@ -24821,17 +24821,21 @@ paths:
         positive, credit negative: the available sum = 0 − Σ entries of sub-account available,
         the frozen sum = 0 − Σ entries of sub-account frozen; BR-FUND-16, the cache check of
         BR-FUND-19 ①). Amounts are integer fen; nothing is rounded.
-        Refused (D10-2032 ②): when the frozen sum is below 0, or the available sum or the
-        frozen sum is outside the range of a PostgreSQL bigint (−2^63 to 2^63 − 1), the
-        account_balances row is not written (`available_fen`, `frozen_fen`, `version` and
-        `negative_since` all stay as they were) and the call is 20001 with
-        `data.fields=[recon_diff_id]` (no `data.reason`). Such sums mean the entries themselves
-        are wrong, and the way out is a manual adjustment (RECON_FIX, below), not a
-        recalculation. The refusal writes an audit record of the same action
-        recon_diff_balance_recalc, with the `recon_diff_id`, the `user_id`, the trimmed reason,
-        the cause of the refusal (a negative frozen sum, or a sum out of range) and the sums as
-        computed; it is committed while the balance row is left untouched. The difference is
-        not closed and no withdrawal hold is released, as on success.
+        Refused (D10-2032 ②, D10-2064 ③): when the frozen sum is below 0, or when the available
+        sum or the frozen sum computed under the lock, or the cached `available_fen` or
+        `frozen_fen` read under the lock, is outside ±(2^53 − 1) (−9007199254740991 to
+        9007199254740991, the range of an amount in a response; a value outside the range of a
+        PostgreSQL bigint is outside it too), the account_balances row is not written
+        (`available_fen`, `frozen_fen`, `version` and `negative_since` all stay as they were)
+        and the call is 20001 with `data.fields=[recon_diff_id]` (no `data.reason`). A negative
+        frozen sum or a sum out of range means the entries themselves are wrong, and the way
+        out is a manual adjustment (RECON_FIX, below), not a recalculation. The refusal writes
+        an audit record of the same action recon_diff_balance_recalc, with the `recon_diff_id`,
+        the `user_id`, the trimmed reason, the cause of the refusal (a negative frozen sum, a
+        sum out of range, or a cached value out of range), the sums as computed and the cached
+        `available_fen` and `frozen_fen` as read under the lock; it is committed while the
+        balance row is left untouched. The difference is not closed and no withdrawal hold is
+        released, as on success.
         Otherwise the server sets `available_fen` and `frozen_fen` of the account_balances row to
         the two sums. When either value differs from the row read under the lock, the row is
         written with `version` + 1, compared and set as every posting does (the same
