@@ -19,5 +19,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-withdrawal-manual-paid-controls/**'
-status: todo
-pr: null
+status: done
+pr: 295
