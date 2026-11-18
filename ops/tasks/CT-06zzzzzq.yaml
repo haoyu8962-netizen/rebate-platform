@@ -1,0 +1,25 @@
+id: CT-06zzzzzq
+repo: rebate-platform
+title: 'CT-06zzzzzq（FU-REVIEW-OUTPUT-NA-LINE）：评审输出校验——资金清单里状态为 na 的项不带位置；na 项位置落在差异块外时丢掉该位置并记提示，不再整份拒收（D10-2086 ②）'
+type: guard-change
+# 2026-11-18 be 入账（编排 D10-2086 ②，提前到 B2-02x 之前）。缘由：今天三次整轮评审作废（fe F1-08al money r1、be CT-06zzzzzp money r3、be B2-02y money r1），都只因清单里状态 na 的项引用了差异块外的行号，评审内容本身通过。
+# 范围只两处：(a) tools/agent/prompts/review-money.md「Mandatory checklist」里 file / line 那条写明：status 为 na 的项不带位置，填 file "" 与 line 0；(b) tools/agent/validate-output.ts 的 money 清单校验（约 312–320 行）：仅对 status 为 na 的项——位置为空（file 为空且 line 为 0）视为不带位置、通过；位置落在差异块外时不再记 error，改为丢掉该位置并在 warnings 里记一条提示（写明是哪一项、原位置）。
+# 不许放宽、一字不动：发现项（findings / out_of_scope 各严重级）的位置校验；status 为 ok / issue 的清单项的位置校验（缺位置或越界照旧拒收）；清单项必须各出现一次、note 非空、issue 须有对应发现等其余全部现有检查；review.schema.json 不改（字段仍必填，na 用空串与 0 表示不带位置）。现有校验器用例一条不改。
+# 规则测试（独立 Claude 写）至少钉三类：「na 项越界位置 → 通过且记提示」「发现项越界位置 → 照旧拒收」「非 na 清单项越界 → 照旧拒收」；另钉「na 项不带位置（"" / 0）→ 通过」「ok 项不带位置 → 照旧拒收」。门禁改动，评审走独立 Claude；提 PR 报号，编排按 #24 核过才加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/agent/validate-output.ts'
+  - 'tools/agent/validate-output.test.ts'
+  - 'tools/agent/prompts/review-money.md'
+  - 'ops/tasks/CT-06zzzzzq.yaml'
+test_paths:
+  - 'test/spec/ci/review-output-na-line/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/review-output-na-line/**'
+status: todo
+pr: null
