@@ -1,0 +1,103 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-exports-filters/progress.test.ts > [AC-F1-08fd-PROGRESS#1] 当前页有生成中的行时按固定间隔重读同一页同一页签，生成中行显示「进度 N%」随重读更新",
+    "test/spec/frontend/admin-exports-filters/progress.test.ts > [AC-F1-08fd-PROGRESS#2] 排队中的行也触发重读，转生成中显示进度、到已完成后出现【下载】，当前页全部终态后不再重读；任何行都没有【重新导出】",
+    "test/spec/frontend/admin-exports-filters/progress.test.ts > [AC-F1-08fd-PROGRESS#3] 某次重读失败不弹错误、列表与进度保留，下一次按原间隔照常重读并更新进度",
+    "test/spec/frontend/admin-exports-filters/progress.test.ts > [AC-F1-08fd-PROGRESS#4] 切页签后旧定时器不再发请求（新页签无在途行即不重读、有则按新条件重读），卸载后不再发任何请求",
+    "test/spec/frontend/admin-exports-filters/source.test.ts > [AC-F1-08fd-SOURCE#1] 来源页面列全部 export_resource（中文名取 resource 表、无名显示编码）外加全部，选定后按【查询】才带 resource，选全部不带；任何状态的行都没有【重新导出】",
+    "test/spec/frontend/admin-exports-filters/tabs.test.ts > [AC-F1-08fd-TABS#1] 状态为七个页签且不带计数、原状态 Select 不再出现，切页签即带 status（全部不带）并回第 1 页；无 export 照旧整页无权限、不发请求",
+    "test/spec/frontend/admin-exports-filters/tabs.test.ts > [AC-F1-08fd-TABS#2] 状态页签、来源页面、发起时间可组合：同一请求同时带 status resource from to，翻页保留，切页签回第 1 页仍带来源与时间",
+    "test/spec/frontend/admin-exports-filters/time.test.ts > [AC-F1-08fd-TIME#1] 发起时间选起止日按【查询】带 from=起日 00:00:00+08:00、to=止日次日 00:00:00+08:00（from 含 to 不含），未按查询不发请求不改列表",
+    "test/spec/frontend/admin-exports-filters/time.test.ts > [AC-F1-08fd-TIME#2] 发起时间只填起日只带 from、只填止日只带 to"
+  ],
+  "risk_note": "F1-08fd: admin export-records page only (apps/admin/src/pages/exports/**, texts/exports.ts). Adds resource and created-at range filters passed to adminListExports, replaces the status Select with Tabs (no counts), and silently re-reads the current page on a constant interval while rows are pending / running, showing progress. Two S2 fixes from review: fall back to the last non-empty page, and keep that fallback read silent on failure. Read-only page, no money writes. Rule tests and spec-test by independent Claude contexts; money-type review by an independent Claude (D10-2003); implementation by Opus 5.5. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (approvals #36, D10-2003). Pass with one S2 (re-read landing past the last page), fixed in 33d1b79c. couli-runs/F1-08fd/review-claude-money-r1.json"
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Independent Claude via tools/agent/claude-run.sh on 3ae69fa9. Pass, 0 findings. An earlier round-2 call on 33d1b79c was rejected by the output validator (checklist locations outside the diff); its content was pass with one S2 (fallback read not silent), fixed in 3ae69fa9 before this call. couli-runs/F1-08fd/review-claude-money-r3.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude context (claude-run.sh); spec-test r1 by another independent Claude, pass, 0 findings",
+    "model": "claude-opus-5-5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08fd",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "2ff86ff17739fee2f9501b9148a17447b5af4477",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "2ff86ff17739fee2f9501b9148a17447b5af4477",
+      "tree": "f6661202428269276ec92059a388c925700b18b6",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-18T06:57:59Z",
+      "finished_at": "2026-11-18T06:58:11Z",
+      "red_tests": [
+        "test/spec/frontend/admin-exports-filters/progress.test.ts > [AC-F1-08fd-PROGRESS#1] 当前页有生成中的行时按固定间隔重读同一页同一页签，生成中行显示「进度 N%」随重读更新",
+        "test/spec/frontend/admin-exports-filters/progress.test.ts > [AC-F1-08fd-PROGRESS#2] 排队中的行也触发重读，转生成中显示进度、到已完成后出现【下载】，当前页全部终态后不再重读；任何行都没有【重新导出】",
+        "test/spec/frontend/admin-exports-filters/progress.test.ts > [AC-F1-08fd-PROGRESS#3] 某次重读失败不弹错误、列表与进度保留，下一次按原间隔照常重读并更新进度",
+        "test/spec/frontend/admin-exports-filters/progress.test.ts > [AC-F1-08fd-PROGRESS#4] 切页签后旧定时器不再发请求（新页签无在途行即不重读、有则按新条件重读），卸载后不再发任何请求",
+        "test/spec/frontend/admin-exports-filters/source.test.ts > [AC-F1-08fd-SOURCE#1] 来源页面列全部 export_resource（中文名取 resource 表、无名显示编码）外加全部，选定后按【查询】才带 resource，选全部不带；任何状态的行都没有【重新导出】",
+        "test/spec/frontend/admin-exports-filters/tabs.test.ts > [AC-F1-08fd-TABS#1] 状态为七个页签且不带计数、原状态 Select 不再出现，切页签即带 status（全部不带）并回第 1 页；无 export 照旧整页无权限、不发请求",
+        "test/spec/frontend/admin-exports-filters/tabs.test.ts > [AC-F1-08fd-TABS#2] 状态页签、来源页面、发起时间可组合：同一请求同时带 status resource from to，翻页保留，切页签回第 1 页仍带来源与时间",
+        "test/spec/frontend/admin-exports-filters/time.test.ts > [AC-F1-08fd-TIME#1] 发起时间选起止日按【查询】带 from=起日 00:00:00+08:00、to=止日次日 00:00:00+08:00（from 含 to 不含），未按查询不发请求不改列表",
+        "test/spec/frontend/admin-exports-filters/time.test.ts > [AC-F1-08fd-TIME#2] 发起时间只填起日只带 from、只填止日只带 to"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-exports-filters/progress.test.ts",
+        "test/spec/frontend/admin-exports-filters/source.test.ts",
+        "test/spec/frontend/admin-exports-filters/tabs.test.ts",
+        "test/spec/frontend/admin-exports-filters/time.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "53f32d1e892680e7f52e71ae194dd82d054506c1ec8742096c29ccdbd84dfc37"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "db5b0a4db3151c1b165faff0dc7bf555880d3c7c",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
