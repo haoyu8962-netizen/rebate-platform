@@ -1,0 +1,37 @@
+{
+  "risk_note": "CT-24zzt (D10-2064 ③ / D10-2067; contract only, tester none). Only the description of the planned operation recalcBalanceAdminReconDiff in contracts/openapi.yaml changes, with the matching doc comment regenerated in packages/contracts-ts/src/openapi.gen.ts; no schema, parameter, response, example, x-error-codes or x-implementation change. The refusal for sums outside the PostgreSQL bigint range becomes: an available or frozen sum computed under the lock, or the cached available_fen or frozen_fen read under the lock, outside ±(2^53−1) (= MAX_JSON_FEN of packages/money, the range of an amount in a response; the bigint case is outside it too) is refused like a negative frozen sum — the account_balances row is not written, 20001 data.fields=[recon_diff_id], an audit record with the cause, the computed sums and the cached values read under the lock; the difference is not closed and no hold is released. Order of checks updated to match. Test machine on the final head: verify:fast green (includes contracts:check), test/spec/contracts 66 files 658/658 green (rerun after the machine restart, D10-2077).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Fresh independent Claude via claude-run.sh (D10-2003): contract r1 pass; one S2 (a cache-only overflow with correct entries has no stated way out; not reachable because every write path goes through the same amount cap) recorded as FU-RECON-RECALC-CACHE-ONLY-OVERFLOW (couli-runs/CT-24zzt/review-contract-r1.json)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "CT-24zzt",
+  "spec_commit": "57f3f0651691bec2ebc7e292c7803b4fe5569d90",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c23959dd1af1986baa879e0d57b7b5a6dc223c91",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
