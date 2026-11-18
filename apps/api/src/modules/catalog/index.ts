@@ -166,3 +166,15 @@ export * from './favorites/index.ts';
 // of search.hot_words / search.keyword_routes (app.module hands searchConfigSaveCheck to content's
 // configuration center), rule tests test/spec/catalog/hot-words/**.
 export * from './hot-words/index.ts';
+// Task CT-07g (FU-POOL-TAGS-NORMALIZE-SINGLE, D10-2034): the one normalization of pool tags
+// (CT-07e, ./domain/pool-tags.ts) for other modules; app.module hands it to content's home
+// configuration save, so content keeps no copy. Rule tests
+// test/spec/catalog/pool-tags-normalize-single/**.
+/** A list of pool tags normalized (CT-07e rules), in input order; null when the value is refused. */
+export type PoolTagsNormalizer = (input: readonly string[]) => readonly string[] | null;
+
+/** The normalized tags of a write, in input order; null when refused (CT-07e bounds). */
+export function normalizePoolTags(input: readonly string[]): readonly string[] | null {
+  void input;
+  throw new Error('NotImplemented: normalizePoolTags');
+}
