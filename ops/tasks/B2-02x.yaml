@@ -4,8 +4,7 @@ title: ledger：差错单按分录重算余额缓存的实现（CT-24zzn）—�
 type: impl
 # 2026-11-18 be 入账（编排 D10-2017 ①）。资金单：强度 high；规则测试与资金评审走独立 Claude（claude-run.sh，D10-2003），评审清单逐项（舍入、正负号、幂等、并发、部分退款、时钟、app_id）；合并前照常挂批准标签。
 # 实现照 BR-FUND-19 细则「差异以分录为准修正」与 BR-FUND-16 细则「加锁流程」：同一事务内锁该用户余额行，按分录重算 available_fen、frozen_fen 后写回；只有 ledger 模块写余额（AGENTS.md §4 第 2 条）；不插凭证、不动分录；audit_logs 记前后值与差错单号。
-# 守卫：差错单 type=ledger_mismatch、未关闭；app_id 隔离；step-up 短信档由平台层校验。并发：与入账、提现冻结并发时以锁为准，重算结果等于锁内分录合计；同一差错单重复触发是幂等的（第二次前后相同）。
-# 不做：不改差错单状态、不解除 withdraw_holds（关单走已有 close，D10-2017）。
+# 守卫：差错单 type=ledger_mismatch、未关闭；app_id 隔离；step-up 短信档由平台层校验。并发：与入账、提现冻结并发时以锁为准，重算结果等于锁内分录合计；同一差错单重复触发是幂等的（第二次前后相同）。 不做：不改差错单状态、不解除 withdraw_holds（关单走已有 close，D10-2017）。
 # 规则测试要钉：重算后 available_fen / frozen_fen = 分录合计；凭证与分录条数不变；非 ledger_mismatch / 已关闭 / 别的 app 拒；请求里带金额被拒；差错单状态与 withdraw_holds 不变；审计有前后值。
 # 2026-11-18 be（编排 D10-2032，写测前清单 couli-runs/CT-24zzn/b2-02x-open-items.md 四项已定）：写测必钉——
 #   ① negative_since 沿用入账路径同一规则，三个分支各一条用例（重算后 < 0 且重算前也 < 0 有值 → 沿用；重算后 < 0 而重算前 ≥ 0 → 当天会计日；重算后 ≥ 0 → NULL），另加「前后都为负时原值不动」；
@@ -24,6 +23,12 @@ paths:
   - 'apps/api/src/modules/ledger/http/admin/recon-diff-balance-recalc.controller*.ts'
   - 'apps/api/src/modules/ledger/infra/**'
   - 'apps/api/src/modules/ledger/ledger.module.ts'
+  - 'contracts/openapi.yaml' # 只去掉 recalcBalanceAdminReconDiff 的 x-implementation: planned（照 B2-02u / D10-1079 先例）
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
 test_paths:
   - 'test/spec/ledger/admin-recon-balance-recalc/**'
 impl: claude
