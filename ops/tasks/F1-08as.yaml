@@ -1,0 +1,39 @@
+id: F1-08as
+repo: rebate-platform
+title: F1-08as：结果未知后按【重试】收到「先于幂等回放、又随状态变化」的拒绝——10403 admin_permission_denied 与 10003 data.reason=verify_phone_missing——仍保持「上次提交结果未知」、只放行【重试】【去列表核对】、键与请求体不变；20001 等照现状解锁换键（批量手动打款、调账页 useAdjustmentWrite 与批准 / 核销对话框；取代 F1-08ar）
+type: impl
+# 2026-11-18 入账（前端线 fe，编排 D10-2062）：F1-08ar 入账后编排按 D10-2060 / 2061 收窄口径，已入账任务不得改 id / type / title，故换本编号；F1-08ar 置 void、被本单取代。deps 与排序沿用 F1-08ar：F1-08aq 之后、F1-08am 之前。来由：F1-08al money r1 重跑留的 S2（D10-2035）——首次提交没拿到外壳回答进入结果未知 → 期间权限被撤 → 【重试】原键原体回 10403（契约先判权限、后做幂等回放）→ 页面当确定结果解锁，不再提示结果未知，但第一次提交可能已生效。
+# 口径（D10-2060 / 2061）：只有契约里先于幂等回放判、又会随状态变化的拒绝在结果未知后重试时保持未知——10403 admin_permission_denied（权限被撤）与 10003 data.reason=verify_phone_missing（短信档，验证手机号被删；与「凭证未被接受」的 10003 按 reason 分开，后者照旧重新验证、原键原体重发，各一条用例）。保持未知即：仍显示「上次提交结果未知」并显示该拒绝原文、输入锁定、对话框不能关、只有【重试】【去列表核对】、再重试时 Idempotency-Key 与请求体逐字不变。20001（请求体 / 字段 / 单据不存在等）照现状解锁、新提交换键；首次提交（未进入结果未知时）的确定拒绝照旧解锁换键；不自动重发。实现时对着 adminBatchManualPaid、adminCreateAdjustment、adminApproveAdjustment、adminRejectAdjustment、adminApproveBadDebtWriteoff 五个接口说明逐条核检查顺序，同类清单贴进交回。10001（会话失效）不在本单：重新登录后未知提示会丢，记 out_of_scope（已知局限）。
+# 范围：apps/admin/src/pages/withdrawals/ManualPaid.tsx 的结果未知分支、apps/admin/src/pages/adjustments/useAdjustmentWrite.tsx（新建调账、红冲共用）与 ApproveDialog / WriteoffApproveDialog 各自的 unknown / onFailed 处理。规则测试新目录 test/spec/frontend/admin-unknown-retry-refusal/**：10403 与 verify_phone_missing 保持未知为主体，20001 解锁与「凭证不被接受」重验作对照（放进会红的块里）；批准对话框与核销对话框各补一条 10403 序列。F1-08ar 分支上已写的第 1 轮用例（规则测试提交 225fb1160）与任务书挪到本单重用，写测与 spec-test 轮次在本单重新计（D10-2062）。
+# 冻结用例：[AC-F1-08cb-ERROR#11]（20001 解锁）不改；[AC-F1-08al-ERROR#1] 只改「首次丢响应 + 重试收 10403」这一个场景（见 modify_existing），其余场景一字不动——这处须负责人过目，他回话前不进落地分支（D10-2060）。
+# 另（自 F1-08ar 台账补丁 1 带过来，D10-2050）：新目录加一条——批量手动打款对话框在实付时间出错（晚于注入时钟的现在、或格式不合）时，全部表单与可交互控件清单仍等于刚打开时（可导入 F1-08aq 的 admin-withdrawal-manual-paid-controls/controls.ts），不得出现「用当前时间」类入口。资金评审必查项（D10-2050）：对话框内不得有绑定点击 / 按键处理却无交互角色的元素；不得有任何把应付金额或当前时间填进输入框的入口。
+# 资金页（RV2）：money 评审；规则测试与首轮评审由无上下文的独立 Claude（D10-2003）。
+refs: [BR-WDR-16, BR-FUND-24, BR-ID-34]
+refs_hash:
+  BR-WDR-16: c5899cc85558
+  BR-FUND-24: 0f1a6ecb3334
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [F1-08al]
+paths:
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/texts/withdrawals.ts'
+  - 'apps/admin/src/pages/adjustments/**'
+  - 'apps/admin/src/texts/adjustments.ts'
+test_paths:
+  - 'test/spec/frontend/admin-unknown-retry-refusal/**'
+  - 'test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts'
+modify_existing:
+  - file: 'test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts'
+    test: '[AC-F1-08al-ERROR#1] 确定的 10403 与 20001 展示全文、解锁且不自动重发；新提交换键'
+    retitle_to: '[AC-F1-08al-ERROR#1] 确定的 10403 与 20001 展示全文且不自动重发；首次即拒与首次丢响应后重试收 20001 解锁并换键，首次丢响应后重试收 10403 仍保持结果未知、只放行【重试】【去列表核对】、键不变（F1-08as）'
+    reason: rule_change
+    br: [BR-WDR-16]
+    ruling: D10-2060
+    note: 'D10-2060 / D10-2062：只改 loseFirst=true 且 scenario 为 10403 admin_permission_denied 的那一个场景——期望由「无『上次提交结果未知』、三个输入可改、【确认录入】可用、新提交换键」改为「仍提示『上次提交结果未知』并显示 10403 原文、输入锁定、只有【重试】【去列表核对】、再按【重试】的 Idempotency-Key 与请求体与第一次相同」；loseFirst=false 的两个场景与 loseFirst=true 的 20001 场景一字不动。须负责人过目，回话前不进落地分支'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-unknown-retry-refusal/**'
+status: todo
+pr: null
