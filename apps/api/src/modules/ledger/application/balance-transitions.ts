@@ -12,22 +12,25 @@ export interface NegativeSinceInput {
   readonly day: string;
 }
 
-/** BR-FUND-12: the negative_since to store after the change. */
+/**
+ * BR-FUND-12: the negative_since to store after the change. Still negative with a stored date
+ * keeps it; newly negative (or negative without a date) takes today's 会计日; >= 0 clears it.
+ */
 export function nextNegativeSince(input: NegativeSinceInput): string | null {
-  void input;
-  throw new Error('NotImplemented: nextNegativeSince');
+  const { availableBefore, availableAfter, negativeSinceBefore, day } = input;
+  return availableAfter < 0n
+    ? availableBefore < 0n && negativeSinceBefore !== null
+      ? negativeSinceBefore
+      : day
+    : null;
 }
 
 /** BR-WDR-05 (a): true when available goes from < 0 to >= 0. */
 export function recovers(availableBefore: bigint, availableAfter: bigint): boolean {
-  void availableBefore;
-  void availableAfter;
-  throw new Error('NotImplemented: recovers');
+  return availableBefore < 0n && availableAfter >= 0n;
 }
 
 /** BR-WDR-05 (a): true when available goes from >= 0 to < 0. */
 export function goesNegative(availableBefore: bigint, availableAfter: bigint): boolean {
-  void availableBefore;
-  void availableAfter;
-  throw new Error('NotImplemented: goesNegative');
+  return availableBefore >= 0n && availableAfter < 0n;
 }
