@@ -663,3 +663,9 @@ approvals:
     granted: true
     date: '2026-11-18'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测次数属门禁流程小改动），D10-2064，先例第 103 条（F1-08al）与第 105 条（CT-06zzzzzp）：B2-02x 写测 3 次已用满（第 1 次写、第 2 次修 #33 夹具撞唯一键、第 3 次按 spec-test r1 修 S1 / S2），实现后测试机（couli-runs/B2-02x/tests/4，含库）45 条 43 绿，红的只有 [AC-B2-02x#40]、[AC-B2-02x#43]，红因同为测试写错：locks.int.test.ts 第 43 行 USERS_LOCK = /\busers\b[\s\S]*\bfor\s+update\b/i 只认 FOR UPDATE，而锁 users 行的唯一跨模块端口 identity lockUsersForUpdate（ports/lock-users.ts）发的是 FOR NO KEY UPDATE，#43 等锁的是测试自己的入账、任何实现都过不了。范围写死：只改这一行正则为同时认 for update 与 for no key update（照 test/spec/settlement/settle-adjust-keep/account-lock.int.test.ts 第 181 行写法），实跑确认同属测试写错的只有上面两条；不改期望值、不删断言、不动其余用例与文件。任务书 §9 第 9 项括号改为「经 identity 的锁用户行端口」。全新无上下文的独立 Claude（claude-run.sh，approvals 第 36 条、D10-2003），证据记 claude-independent；照常不调 bump-attempt（按编排例外轮记），次数上限与熔断（10 次独立调用）不变；改后先红核对与 spec-test 增量一轮，再报编排。'
+  - id: 108
+    row: 4
+    title: 'F1-08as：负责人同意改冻结资金用例 [AC-F1-08al-ERROR#1] 的一个场景——批量手动打款首次丢响应、重试收到 10403 无权限时，由「解锁换键」改为「继续提示结果未知、保持锁定，只放行【重试】【去列表核对】、键与请求体不变」'
+    granted: true
+    date: '2026-11-18'
+    note: '负责人 2026-11-18 13:00 在编排会话回复原话「可以改」（D10-2083）。范围只限 couli-runs/F1-08as/error1-change.diff 里这一处场景（test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts 的 [AC-F1-08al-ERROR#1]，loseFirst=true 且 scenario 为 10403 admin_permission_denied 的分支）的断言改动；该用例其余三个场景与其他任何冻结断言、期望值不在这次同意之内。依据 D10-2060 / D10-2061 收窄规则（只有先于幂等回放判、又随状态变化的拒绝在结果未知后重试时保持未知），台账 F1-08as 的 modify_existing（rule_change，br BR-WDR-16）。'
