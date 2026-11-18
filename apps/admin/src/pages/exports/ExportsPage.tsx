@@ -1,44 +1,56 @@
-// Export tasks (导出记录, 04 §6.6 exports, BR-ID-34 细则「后台导出任务」, F1-10j): GET
-// /admin/v1/exports page by page, optionally by status. Rows never carry a link: 【下载】 (done and
+// Export tasks (导出记录, 04 §6.6 exports, BR-ID-42, F1-10j, F1-08fd): GET /admin/v1/exports
+// page by page; the status tabs apply at once, 来源页面 and 发起时间 (Beijing days, from inclusive,
+// to exclusive) on 【查询】. While the page shown has a pending or running row it is read again
+// silently every POLL_MS (same page, same filters; a failed reread keeps the rows). Rows never carry a link: 【下载】 (done and
 // not yet past expires_at) asks GET …/{id}/download for a freshly signed link on every click and
 // opens it (never cached, the file is never fetched here); 【重试】 (failed only) sends POST
 // …/{id}/retry, for an unmasked task after a new reason and a totp step-up. 30417 means the task
 // moved on meanwhile: the current status is told and the list read again. Without the `export`
 // point the page says so and sends nothing.
 import type { Schema } from '@couli/contracts-ts';
-import { DownloadOutlined, ReloadOutlined } from '@ant-design/icons';
+import { DownloadOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import {
   Alert,
   Button,
   Card,
+  DatePicker,
   Empty,
   Flex,
   Form,
   Result,
   Select,
   Table,
+  Tabs,
   Tag,
   Typography,
   theme,
   type TableColumnsType,
   type TablePaginationConfig,
 } from 'antd';
-import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
+import dayjs from 'dayjs';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { exportsTexts as t } from '../../texts/exports.ts';
 import {
+  DAY_FORMAT,
   PAGE_SIZE,
+  POLL_MS,
+  RESOURCES,
   STATUSES,
   beijingTime,
+  dayAfter,
+  dayStart,
+  inFlight,
   nextExpiry,
   rejectedStatus,
   resourceLabel,
   shownStatus,
   statusLabel,
   statusTagColor,
+  type ExportResource,
   type ExportRow,
   type ExportStatus,
 } from './model.ts';
@@ -49,11 +61,44 @@ const EXPORTS_URL = '/admin/v1/exports';
 const STEP_UP_URL = '/admin/v1/auth/step-up';
 
 type StatusFilter = ExportStatus | 'all';
+type ResourceFilter = ExportResource | 'all';
+
+/** 来源页面 and 发起时间 as picked (days YYYY-MM-DD); they apply on 【查询】. */
+interface Filters {
+  readonly resource: ResourceFilter;
+  readonly from?: string | undefined;
+  readonly to?: string | undefined;
+}
+
+const NO_FILTERS: Filters = { resource: 'all' };
 
 interface ListQuery {
   readonly page: number;
   readonly status: StatusFilter;
+  readonly filters: Filters;
 }
+
+/** Query of one list read: page, size, then only the conditions set. */
+function listParams(query: ListQuery): Record<string, string | number> {
+  const { filters } = query;
+  return {
+    page: query.page,
+    page_size: PAGE_SIZE,
+    ...(query.status === 'all' ? {} : { status: query.status }),
+    ...(filters.resource === 'all' ? {} : { resource: filters.resource }),
+    ...(filters.from === undefined ? {} : { from: dayStart(filters.from) }),
+    ...(filters.to === undefined ? {} : { to: dayAfter(filters.to) }),
+  };
+}
+
+const HIDDEN: CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  overflow: 'hidden',
+  clipPath: 'inset(50%)',
+  whiteSpace: 'nowrap',
+};
 
 type ListStatus = 'loading' | 'ready' | 'failed' | 'forbidden';
 
@@ -113,8 +158,11 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
   const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
-  const statusId = useId();
-  const [query, setQuery] = useState<ListQuery>({ page: 1, status: 'all' });
+  const sourceId = useId();
+  const fromId = useId();
+  const toId = useId();
+  const [query, setQuery] = useState<ListQuery>({ page: 1, status: 'all', filters: NO_FILTERS });
+  const [draft, setDraft] = useState<Filters>(NO_FILTERS);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<ListStatus>('loading');
   const [data, setData] = useState<ListData>();
@@ -174,11 +222,7 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
     custom<Schema<'AdminExportPage'>>({
       url: EXPORTS_URL,
       method: 'get',
-      query: {
-        page: query.page,
-        page_size: PAGE_SIZE,
-        ...(query.status === 'all' ? {} : { status: query.status }),
-      },
+      query: listParams(query),
     }).then(
       (response) => {
         if (!current) return;
@@ -196,6 +240,40 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
       current = false;
     };
   }, [getProvider, query, attempt]);
+
+  // Silent rereads while a row of the page shown is pending or running: the same page with the
+  // same filters, one at a time, POLL_MS after the last answer. A failed reread keeps the rows and
+  // shows nothing; the next one goes ahead. Any new read (tab, filters, page, reload) or leaving
+  // the page drops the timer and ignores an answer still on its way.
+  useEffect(() => {
+    if (status !== 'ready' || data === undefined || !data.items.some(inFlight)) return;
+    let current = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        const custom = getProvider().custom;
+        if (custom === undefined) return;
+        custom<Schema<'AdminExportPage'>>({
+          url: EXPORTS_URL,
+          method: 'get',
+          query: listParams(query),
+        }).then(
+          (response) => {
+            if (!current) return;
+            setData({ items: response.data.items, total: response.data.total });
+          },
+          () => {
+            if (current) schedule();
+          },
+        );
+      }, POLL_MS);
+    };
+    schedule();
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [getProvider, query, status, data]);
 
   // Judged at every render against the injected clock (never frozen at the time of the read).
   const now = clock.now();
@@ -223,7 +301,16 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
   const changeStatus = (next: StatusFilter) => {
     if (next === query.status) return;
     setStatus('loading');
-    setQuery({ page: 1, status: next });
+    setQuery({ ...query, page: 1, status: next });
+  };
+
+  const draftInvalid = draft.from !== undefined && draft.to !== undefined && draft.from > draft.to;
+
+  /** 【查询】: 来源页面 and 发起时间 apply, from page 1 (every press reads once). */
+  const submit = () => {
+    if (draftInvalid) return;
+    setStatus('loading');
+    setQuery({ ...query, page: 1, filters: draft });
   };
 
   const changePage = (pagination: TablePaginationConfig) => {
@@ -476,7 +563,10 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
       <Flex
         align="center"
         gap={8}
-        style={{ padding: '12px 16px', borderBottom: `1px solid ${token.colorBorderSecondary}` }}
+        style={{
+          padding: `${token.paddingSM}px ${token.padding}px`,
+          borderBottom: `1px solid ${token.colorBorderSecondary}`,
+        }}
       >
         <Typography.Text type="secondary" role="status">
           {t.loading}
@@ -540,7 +630,7 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
             total: data.total,
             showSizeChanger: false,
             showTotal: (total) => t.total(total),
-            style: { paddingInline: 16 },
+            style: { paddingInline: token.padding },
           }}
           onChange={changePage}
         />
@@ -564,19 +654,73 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
       )}
       <Card>
         <Form layout="vertical" component="div">
-          <Form.Item label={t.columns.status} htmlFor={statusId} style={{ marginBottom: 0 }}>
-            <Select<StatusFilter>
-              id={statusId}
-              value={query.status}
-              onChange={changeStatus}
-              style={{ width: 200 }}
-              options={[
-                { value: 'all', label: t.statusAll },
-                ...STATUSES.map((item) => ({ value: item, label: statusLabel(item) })),
-              ]}
-            />
-          </Form.Item>
+          <Flex wrap gap={16} align="flex-end">
+            <Form.Item label={t.filters.source} htmlFor={sourceId} style={{ marginBottom: 0 }}>
+              <Select<ResourceFilter>
+                id={sourceId}
+                value={draft.resource}
+                onChange={(resource) => setDraft({ ...draft, resource })}
+                style={{ width: 200 }}
+                options={[
+                  { value: 'all', label: t.filters.sourceAll },
+                  ...RESOURCES.map((item) => ({ value: item, label: resourceLabel(item) })),
+                ]}
+              />
+            </Form.Item>
+            <Form.Item
+              label={t.filters.time}
+              style={{ marginBottom: 0, minWidth: 320 }}
+              validateStatus={draftInvalid ? 'error' : ''}
+              {...(draftInvalid ? { help: t.filters.rangeInvalid } : {})}
+            >
+              <Flex gap={8}>
+                <label htmlFor={fromId} style={HIDDEN}>
+                  {t.filters.timeFrom}
+                </label>
+                <DatePicker
+                  id={fromId}
+                  format={DAY_FORMAT}
+                  placeholder={t.filters.fromPlaceholder}
+                  value={draft.from === undefined ? null : dayjs(draft.from)}
+                  onChange={(value) =>
+                    setDraft({ ...draft, from: value?.format(DAY_FORMAT) ?? undefined })
+                  }
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <label htmlFor={toId} style={HIDDEN}>
+                  {t.filters.timeTo}
+                </label>
+                <DatePicker
+                  id={toId}
+                  format={DAY_FORMAT}
+                  placeholder={t.filters.toPlaceholder}
+                  value={draft.to === undefined ? null : dayjs(draft.to)}
+                  onChange={(value) =>
+                    setDraft({ ...draft, to: value?.format(DAY_FORMAT) ?? undefined })
+                  }
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+              </Flex>
+            </Form.Item>
+            <Button
+              type="primary"
+              icon={<SearchOutlined aria-hidden />}
+              disabled={draftInvalid}
+              onClick={submit}
+            >
+              {t.filters.submit}
+            </Button>
+          </Flex>
         </Form>
+        <Tabs
+          activeKey={query.status}
+          onChange={(key) => changeStatus(key as StatusFilter)}
+          style={{ marginTop: token.margin }}
+          items={[
+            { key: 'all', label: t.statusAll },
+            ...STATUSES.map((item) => ({ key: item, label: statusLabel(item) })),
+          ]}
+        />
       </Card>
       {body}
       {flow.phase === 'reason' ? (
