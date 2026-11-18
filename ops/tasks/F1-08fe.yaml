@@ -1,0 +1,28 @@
+id: F1-08fe
+repo: rebate-platform
+title: F1-08fe：后台小链接——余额流水「关联单据」与用户摘要【查看用户详情】、调账 / 红冲 / 核销成功条【查看凭证】、核销拦截态【去处理提现单】，坏账核销页签待批准角标（只用已读列表的 total）
+type: impl
+# 2026-11-18 入账（前端线 fe，编排 D10-1994 甲类 (三)：缺口清单 #6 #7 #8 #10 合一张，#9 并入；排 F1-08fd 之后）。
+# 范围：① 余额流水页（F1-08fa）流水表「关联单据」按 AdminLedgerEntry.link（type + id）做成链接，跳对应的后台页（提现单详情、调账单详情、订单等，以现有路由为准；link 为 null 时保持纯文字）；用户摘要卡加【查看用户详情】跳用户详情。② 调账页新建 / 红冲成功提示与核销成功提示加【查看凭证】，跳余额流水页并带上该用户（与能定位的业务单号）预填查询。③ 批准核销被拦（20001 data.reason=writeoff_frozen_pending，有未完结提现单）时，拦截提示加【去处理提现单】——拒绝回答里没有提现单号，链到提现审核列表并带上该用户筛选（D10-1994）。④ 坏账核销页签上的待批准角标：只用页面本来就会读的那次列表请求的 total——进页就读了待批准列表才显示，不为角标另发请求；做不到就不做并在交回写明（D10-1994）。
+# 只加导航，不新增写操作、不改任何写请求与金额显示；目标页面需要接收预填参数时只改其读取查询参数的部分。资金页路径（RV2）：money 评审；规则测试与首轮评审由无上下文的独立 Claude（D10-2003）。资金评审必查项（D10-2050）照带。
+refs: [BR-FUND-16, BR-FUND-12]
+refs_hash:
+  BR-FUND-16: 077f6d412d5a
+  BR-FUND-12: 8d69aa9c2ca9
+deps: [F1-08fa, F1-08cd]
+paths:
+  - 'apps/admin/src/pages/ledger/**'
+  - 'apps/admin/src/texts/ledger.ts'
+  - 'apps/admin/src/pages/adjustments/**'
+  - 'apps/admin/src/texts/adjustments.ts'
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/texts/withdrawals.ts'
+test_paths:
+  - 'test/spec/frontend/admin-small-links/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-small-links/**'
+status: todo
+pr: null
