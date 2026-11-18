@@ -18,6 +18,7 @@ import {
   expectMentions,
   expectNoPersonalData,
   fixture,
+  refusalCause,
   notApplicable,
   plainMember,
   rawVoucher,
@@ -53,6 +54,10 @@ async function expectRefusalAudit(
   for (const sum of e.sums) {
     expect(text, `算出的合计 ${sum} 记入审计`).toContain(sum.toString());
   }
+  expect(
+    refusalCause(row, { ids: [e.diffId, e.m.userId], reason: e.reason }).length,
+    `审计记了拒绝原因：${JSON.stringify([row.target, row.before, row.after])}`,
+  ).toBeGreaterThan(0);
   expectNoPersonalData(row);
 }
 
@@ -88,7 +93,7 @@ it('[AC-B2-02x#30] frozen 合计为负：分录 available 1700 / frozen −700 �
   });
 });
 
-it('[AC-B2-02x#31] 合计超出 bigint：available 合计 300 + 2·(2^63 − 1)、available 合计 300 − 2·(2^63 − 1)、frozen 合计 2·(2^63 − 1) → 各回 20001 [recon_diff_id]，余额行（含 version、negative_since）原样，每次一条审计，文本含精确合计', async () => {
+it('[AC-B2-02x#31] 合计超出 bigint：available 合计 300 + 2·(2^63 − 1)、available 合计 300 − 2·(2^63 − 1)、frozen 合计 2·(2^63 − 1) → 各回 20001 [recon_diff_id]，余额行（含 version、negative_since）原样，每次一条审计，文本含精确合计，审计原因与冻结合计为负的拒绝不同', async () => {
   const f = fixture(s);
   await withRecalcAdmin(f, async (h) => {
     const cases = [
@@ -96,7 +101,23 @@ it('[AC-B2-02x#31] 合计超出 bigint：available 合计 300 + 2·(2^63 − 1)�
       { sub: 'available', sign: 1n, sum: 300n - 2n * BIGINT_MAX },
       { sub: 'frozen', sign: -1n, sum: 2n * BIGINT_MAX },
     ] as const;
-    let count = 0;
+    // Reference refusal of the other cause (frozen sum negative, as #30): the audit record of each
+    // out-of-range refusal must carry a different cause (key and value not pinned).
+    const ref = await plainMember(f, 1000n);
+    await rawVoucher(f, ref, [
+      { sub_account: 'frozen', amount_fen: 700n },
+      { sub_account: 'available', amount_fen: -700n },
+    ]);
+    await tamper(f, ref, { available: -5n, frozen: 0n, negativeSince: EARLIER });
+    const refDiff = await seedMismatch(f, ref);
+    await notApplicable(await h.recalc(refDiff.id, { reason: '冻结为负' }));
+    const [refRow] = await audits(f, RECALC_ACTION);
+    expect(refRow, '冻结合计为负的拒绝审计').toBeDefined();
+    const negativeCause = refusalCause(refRow!, {
+      ids: [refDiff.id, ref.userId],
+      reason: '冻结为负',
+    });
+    let count = 1;
     for (const c of cases) {
       const m = await plainMember(f, 300n);
       for (let i = 0; i < 2; i += 1) {
@@ -117,6 +138,9 @@ it('[AC-B2-02x#31] 合计超出 bigint：available 合计 300 + 2·(2^63 − 1)�
       expect(row.admin_id).toBe(h.recon.id);
       expectMentions(row, { ids: [diff.id, m.userId], values: [`越界 ${c.sub}`] });
       expect(await auditText(f, row.id)).toContain(c.sum.toString());
+      const cause = refusalCause(row, { ids: [diff.id, m.userId], reason: `越界 ${c.sub}` });
+      expect(cause.length, `${c.sub} ${c.sign} 审计记了拒绝原因`).toBeGreaterThan(0);
+      expect(cause, `${c.sub} ${c.sign} 越界与冻结为负的审计原因可区分`).not.toEqual(negativeCause);
       expectNoPersonalData(row);
     }
   });

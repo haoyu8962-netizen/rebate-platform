@@ -365,9 +365,98 @@ export function expectNoPersonalData(row: AuditRow): void {
   expect(text, 'not the nickname').not.toContain('"synthetic"');
 }
 
+/** One leaf of an audit record: its path (column name first, then keys or indices) and value. */
+export interface AuditLeaf {
+  readonly path: readonly string[];
+  readonly value: string;
+}
+
+function pathLeaves(value: unknown, path: readonly string[], out: AuditLeaf[]): AuditLeaf[] {
+  if (value === null || value === undefined) return out;
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'bigint' ||
+    typeof value === 'boolean'
+  ) {
+    out.push({ path, value: String(value) });
+  } else if (Array.isArray(value)) {
+    for (const [index, item] of (value as unknown[]).entries()) {
+      pathLeaves(item, [...path, String(index)], out);
+    }
+  } else if (typeof value === 'object') {
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      pathLeaves(item, [...path, key], out);
+    }
+  }
+  return out;
+}
+
+/** Every leaf of target, before and after of the record, with its path. */
+export function auditLeaves(row: AuditRow): AuditLeaf[] {
+  const out: AuditLeaf[] = [];
+  pathLeaves(row.target, ['target'], out);
+  pathLeaves(row.before, ['before'], out);
+  pathLeaves(row.after, ['after'], out);
+  return out;
+}
+
+/**
+ * The part of the record a leaf belongs to: the innermost path segment naming `before` or `after`
+ * (the column itself, or a key such as before / available_before); null when none or both.
+ */
+export function sideOf(path: readonly string[]): 'before' | 'after' | null {
+  for (let i = path.length - 1; i >= 0; i -= 1) {
+    const segment = path[i]!;
+    const before = /before/i.test(segment);
+    const after = /after/i.test(segment);
+    if (before && after) return null;
+    if (before) return 'before';
+    if (after) return 'after';
+  }
+  return null;
+}
+
+/**
+ * The value is a leaf of the `side` part of the record (the before column or a leaf under a
+ * before key, likewise after): values written to the other part, or flat without a side, fail.
+ */
+export function expectOnSide(row: AuditRow, side: 'before' | 'after', value: bigint): void {
+  const found = auditLeaves(row);
+  const onSide = found.filter((leaf) => sideOf(leaf.path) === side).map((leaf) => leaf.value);
+  expect(onSide, `${String(value)} in the ${side} part of ${JSON.stringify(found)}`).toContain(
+    String(value),
+  );
+}
+
+const ANY_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+const NUMERIC = /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i;
+
+/**
+ * What a refusal record says besides the ids, the handler's reason and the amounts: every other
+ * leaf as `path=value`, sorted. The cause of the refusal (whatever its key and value) is in here,
+ * so two refusals of different causes give different lists; no key name or literal is assumed.
+ */
+export function refusalCause(
+  row: AuditRow,
+  e: { readonly ids: readonly string[]; readonly reason: string },
+): string[] {
+  return auditLeaves(row)
+    .filter(
+      (leaf) =>
+        !ANY_UUID.test(leaf.value) &&
+        !e.ids.some((id) => leaf.value.includes(id)) &&
+        leaf.value !== e.reason &&
+        !NUMERIC.test(leaf.value),
+    )
+    .map((leaf) => `${leaf.path.join('.')}=${leaf.value}`)
+    .sort();
+}
+
 /**
  * The newest recon_diff_balance_recalc record: by `adminId`, naming the difference and the member,
- * with the trimmed reason, `changed` and the four values before and after; no personal data.
+ * with the trimmed reason and `changed`; the available_fen / frozen_fen before the recalculation
+ * in its before part and those after in its after part (swapped or flat fails); no personal data.
  */
 export async function expectRecalcAudit(
   f: AdjustFixture,
@@ -386,17 +475,11 @@ export async function expectRecalcAudit(
   const row = recorded[recorded.length - 1]!;
   expect(row.admin_id).toBe(e.adminId);
   expect(row.system_actor).toBeNull();
-  expectMentions(row, {
-    ids: [e.diffId, e.userId],
-    values: [
-      e.reason,
-      String(e.changed),
-      e.before.available,
-      e.before.frozen,
-      e.after.available,
-      e.after.frozen,
-    ],
-  });
+  expectMentions(row, { ids: [e.diffId, e.userId], values: [e.reason, String(e.changed)] });
+  expectOnSide(row, 'before', e.before.available);
+  expectOnSide(row, 'before', e.before.frozen);
+  expectOnSide(row, 'after', e.after.available);
+  expectOnSide(row, 'after', e.after.frozen);
   expectNoPersonalData(row);
   return row;
 }

@@ -215,7 +215,7 @@ it('[AC-B2-02x#12] 性质：合计在范围内且 frozen ≥ 0 时，相等即 u
         const result = plan(before, sums.available, sums.frozen);
         if (sums.available === before.available_fen && sums.frozen === before.frozen_fen) {
           expect(result).toEqual({ kind: 'unchanged' });
-          return;
+          return true;
         }
         const negativeSince =
           sums.available < 0n
@@ -232,6 +232,7 @@ it('[AC-B2-02x#12] 性质：合计在范围内且 frozen ≥ 0 时，相等即 u
             recovered: before.available_fen < 0n && sums.available >= 0n,
           }),
         );
+        return true;
       },
     ),
     propParams(),
@@ -253,6 +254,7 @@ it('[AC-B2-02x#13] 性质：frozen 合计在 [−2^63, −1] → frozen_negative
           kind: 'refused',
           cause: 'frozen_negative',
         });
+        return true;
       },
     ),
     propParams(),
@@ -260,6 +262,7 @@ it('[AC-B2-02x#13] 性质：frozen 合计在 [−2^63, −1] → frozen_negative
   fc.assert(
     fc.property(cacheArb, beyond, frozenInRange, (before, available, frozen) => {
       expect(plan(before, available, frozen)).toEqual({ kind: 'refused', cause: 'out_of_range' });
+      return true;
     }),
     propParams(),
   );
@@ -273,6 +276,7 @@ it('[AC-B2-02x#13] 性质：frozen 合计在 [−2^63, −1] → frozen_negative
           kind: 'refused',
           cause: 'out_of_range',
         });
+        return true;
       },
     ),
     propParams(),
