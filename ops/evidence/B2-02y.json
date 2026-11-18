@@ -1,0 +1,131 @@
+{
+  "risk_note": "B2-02y (D10-2064 ② / D10-2084; ledger, RV2). Pure move: the posting path's negative_since rule (ledger.ts, the three-branch ternary) and the zero-crossing checks (recovered / wentNegative) are moved verbatim into apps/api/src/modules/ledger/application/balance-transitions.ts as exported pure functions nextNegativeSince / recovers / goesNegative; ledger.ts now calls them with the same before/after available_fen, the same stored negative_since and the same accounting day, and the local copies are deleted. BalanceRecoveredInput.voucherId stays a required string (D10-2084 option 甲; the D10-2064 ④ 'nullable' is void), only its comment changes; payout is untouched; the frozen test/spec/ledger/back-to-nonnegative/kit.ts is untouched. Correctness evidence (D10-2069): no existing test was changed; test machine test/spec/ledger 161 files 885/885 green, verify:fast green; locally the full api unit suite 638 files 5392 tests green. New rule tests test/spec/ledger/balance-transitions/** (11 cases / 31 tests, independent Claude; red verified: 27 NotImplemented, 4 property tests on PROP_SEED 20261001).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Fresh independent Claude via claude-run.sh (D10-2003). Attempt 1 content pass but rejected by validate-output (an na checklist item cited a line outside the diff, kept as couli-runs/B2-02y/review-money-r1.rejected.json); attempt 2 pass, no findings, validate ok (couli-runs/B2-02y/review-money-r1b.json). Both D10-2067 must-checks confirmed: verbatim move; payout unchanged."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "spec-test r1 pass, no findings (couli-runs/B2-02y/review-spec-test-r1.json). Test-writing attempt 2 only added propParams() to the 7 fc.assert calls (seed and runs from @couli/testing)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "property tests use propParams(); the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#1] 变后 <0、变前 <0 且已有 negative_since → 沿用原值（−800 → −300，仍为 11-20）",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#2] 变前 0n ≥0、变后 -1n <0（变前 negative_since=null）→ 记当天会计日",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#2] 变前 200n ≥0、变后 -800n <0（变前 negative_since=null）→ 记当天会计日",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#2] 变前 1n ≥0、变后 -1n <0（变前 negative_since=null）→ 记当天会计日",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#2] 变前 0n ≥0、变后 -800n <0（变前 negative_since=2026-10-01）→ 记当天会计日",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#3] 变前 -800n <0 但 negative_since 为空、变后 -300n <0 → 记当天会计日",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#3] 变前 -1n <0 但 negative_since 为空、变后 -1n <0 → 记当天会计日",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#3] 变前 -300n <0 但 negative_since 为空、变后 -800n <0 → 记当天会计日",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 -800n → 变后 0n ≥0（变前 negative_since=2026-11-20）→ null（清空）",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 -300n → 变后 200n ≥0（变前 negative_since=2026-11-20）→ null（清空）",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 -1n → 变后 0n ≥0（变前 negative_since=null）→ null（清空）",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 0n → 变后 0n ≥0（变前 negative_since=null）→ null（清空）",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 100n → 变后 50n ≥0（变前 negative_since=null）→ null（清空）",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 0n → 变后 1n ≥0（变前 negative_since=null）→ null（清空）",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 5n → 变后 0n ≥0（变前 negative_since=null）→ null（清空）",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#5] BR-FUND-12 细则例：11-20 扣至 −800 记 11-20，入账 500 至 −300 不动，12-01 入账 800 抵平清空",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#6] 前后都为负且已有 negative_since 时原值不动（任意金额、任意当天）",
+    "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#7] 变后 ≥0 一律为 null；变后 <0 而变前 ≥0 一律为当天（任意金额）",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#8] 正→正：100n → 50n，变负=false、回正=false",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#8] 正→负：100n → -1n，变负=true、回正=false",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#8] 负→正（细则例 −300 → +200）：-300n → 200n，变负=false、回正=true",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#8] 负→负：-800n → -300n，变负=false、回正=false",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 0→负 一分（0 算 ≥0）：0n → -1n，变负=true、回正=false",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 负 一分→0（恰好抵平算回正）：-1n → 0n，变负=false、回正=true",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 负→0（−800 入账 800 抵平）：-800n → 0n，变负=false、回正=true",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 0→0：0n → 0n，变负=false、回正=false",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 0→正：0n → 5n，变负=false、回正=false",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 正→0：5n → 0n，变负=false、回正=false",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 负→负（不变）：-1n → -1n，变负=false、回正=false",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#10] 任意 ≥0 → <0：只算变负；任意 <0 → ≥0：只算回正",
+    "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#11] 不跨零（同为 ≥0 或同为 <0）时既不变负也不回正"
+  ],
+  "task": "B2-02y",
+  "spec_commit": "1b2ce56e6baec57db3617c37e901266013461de1",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "1b2ce56e6baec57db3617c37e901266013461de1",
+      "tree": "7a2994ce50fe3596fe0c28fee213831d9a919d5a",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-18T07:35:29Z",
+      "finished_at": "2026-11-18T07:35:33Z",
+      "red_tests": [
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#1] 变后 <0、变前 <0 且已有 negative_since → 沿用原值（−800 → −300，仍为 11-20）",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#2] 变前 0n ≥0、变后 -1n <0（变前 negative_since=null）→ 记当天会计日",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#2] 变前 200n ≥0、变后 -800n <0（变前 negative_since=null）→ 记当天会计日",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#2] 变前 1n ≥0、变后 -1n <0（变前 negative_since=null）→ 记当天会计日",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#2] 变前 0n ≥0、变后 -800n <0（变前 negative_since=2026-10-01）→ 记当天会计日",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#3] 变前 -800n <0 但 negative_since 为空、变后 -300n <0 → 记当天会计日",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#3] 变前 -1n <0 但 negative_since 为空、变后 -1n <0 → 记当天会计日",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#3] 变前 -300n <0 但 negative_since 为空、变后 -800n <0 → 记当天会计日",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 -800n → 变后 0n ≥0（变前 negative_since=2026-11-20）→ null（清空）",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 -300n → 变后 200n ≥0（变前 negative_since=2026-11-20）→ null（清空）",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 -1n → 变后 0n ≥0（变前 negative_since=null）→ null（清空）",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 0n → 变后 0n ≥0（变前 negative_since=null）→ null（清空）",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 100n → 变后 50n ≥0（变前 negative_since=null）→ null（清空）",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 0n → 变后 1n ≥0（变前 negative_since=null）→ null（清空）",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#4] 变前 5n → 变后 0n ≥0（变前 negative_since=null）→ null（清空）",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#5] BR-FUND-12 细则例：11-20 扣至 −800 记 11-20，入账 500 至 −300 不动，12-01 入账 800 抵平清空",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#6] 前后都为负且已有 negative_since 时原值不动（任意金额、任意当天）",
+        "test/spec/ledger/balance-transitions/negative-since.test.ts > [AC-B2-02y#7] 变后 ≥0 一律为 null；变后 <0 而变前 ≥0 一律为当天（任意金额）",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#8] 正→正：100n → 50n，变负=false、回正=false",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#8] 正→负：100n → -1n，变负=true、回正=false",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#8] 负→正（细则例 −300 → +200）：-300n → 200n，变负=false、回正=true",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#8] 负→负：-800n → -300n，变负=false、回正=false",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 0→负 一分（0 算 ≥0）：0n → -1n，变负=true、回正=false",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 负 一分→0（恰好抵平算回正）：-1n → 0n，变负=false、回正=true",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 负→0（−800 入账 800 抵平）：-800n → 0n，变负=false、回正=true",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 0→0：0n → 0n，变负=false、回正=false",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 0→正：0n → 5n，变负=false、回正=false",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 正→0：5n → 0n，变负=false、回正=false",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#9] 恰为 0 的边界 负→负（不变）：-1n → -1n，变负=false、回正=false",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#10] 任意 ≥0 → <0：只算变负；任意 <0 → ≥0：只算回正",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts > [AC-B2-02y#11] 不跨零（同为 ≥0 或同为 <0）时既不变负也不回正"
+      ],
+      "expected": [
+        "test/spec/ledger/balance-transitions/negative-since.test.ts",
+        "test/spec/ledger/balance-transitions/zero-crossing.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "497afd57c64a7848d5b9a70be1c0db19d617d6bb62dece2ac3a2a87beeba71d6"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "67922e22d71baff60c369299a88a03a3f547de0c",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}
