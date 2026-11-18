@@ -219,7 +219,7 @@ it(
 );
 
 it(
-  '[AC-F1-08al-ERROR#1] 确定的 10403 与 20001 展示全文、解锁且不自动重发；新提交换键',
+  '[AC-F1-08al-ERROR#1] 确定的 10403 与 20001 展示全文且不自动重发；首次即拒与首次丢响应后重试收 20001 解锁并换键，首次丢响应后重试收 10403 仍保持结果未知、只放行【重试】【去列表核对】、键不变（F1-08as）',
   { timeout: 180_000 },
   async () => {
     for (const loseFirst of [false, true])
@@ -259,6 +259,22 @@ it(
         await notice(scenario.text);
         await settled(server);
         assertReplay(server, body, before);
+        if (loseFirst && scenario.code === 10403) {
+          // F1-08as（D10-2060）：首次丢响应后【重试】收 10403——契约先判权限、后做幂等回放，首次提交仍
+          // 可能已生效：仍提示「上次提交结果未知」（10403 原文已在上面核对）、输入锁定、只有【重试】
+          // 【去列表核对】、对话框不能关；再按【重试】原 Idempotency-Key 与逐字节相同的请求体。
+          await unknown(modal);
+          expect(inputs(modal).map((input) => disabled(input))).toEqual([true, true, true]);
+          expect(within(document.body).queryAllByText('已录入', { exact: true })).toEqual([]);
+          expect(document.querySelectorAll('.ant-message-success')).toHaveLength(0);
+          expect(writes(server)).toHaveLength(before);
+          await retry(server, modal);
+          assertReplay(server, body, before + 1);
+          await notice('已录入 1 张，跳过 0 张', modal);
+          expect(within(modal).queryAllByText('上次提交结果未知', { exact: true })).toEqual([]);
+          cleanup();
+          continue;
+        }
         expect(within(modal).queryAllByText('上次提交结果未知', { exact: true })).toEqual([]);
         expect(inputs(modal).map((input) => disabled(input))).toEqual([false, false, false]);
         expect(disabled(button(modal, '确认录入'))).toBe(false);

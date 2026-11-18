@@ -1,0 +1,111 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-unknown-retry-refusal/adjustment.test.ts > [AC-F1-08as-ADJUST#1] 新建调账首次已生效但回答丢失 → 结果未知；【重试】短信验证后原键原体收到带外壳的 10403 admin_permission_denied：仍提示「上次提交结果未知……」并显示「无权限执行调账」、全部输入锁定、无提交按钮、只剩【重试】【去列表核对】、Esc 不关、不清键；再【重试】原 Idempotency-Key 与逐字节相同的请求体拿到幂等回放的成功才解除：提示新单号与调账前 ¥500.00 / 调账后 ¥508.80、关抽屉、服务端只生效一张",
+    "test/spec/frontend/admin-unknown-retry-refusal/adjustment.test.ts > [AC-F1-08as-ADJUST#2] 新建调账结果未知后【重试】先收带外壳的 10403：仍是结果未知、键与请求体不变；对照（照现状）：再【重试】原键原体收到带外壳的 20001 data.fields=[user_id]：提示「用户不存在，请核对用户 ID」并解锁（无结果未知提示与【重试】【去列表核对】、可改、提交可用），再提交换新键并成功；对照：再开新建、首次提交即收 10403 照旧解锁，再提交换新键",
+    "test/spec/frontend/admin-unknown-retry-refusal/adjustment.test.ts > [AC-F1-08as-ADJUST#3] 红冲首次已生效但回答丢失 → 结果未知；【重试】先收 10003（凭证未被接受，照旧：重新短信验证后原键原体再发，不算解除）、再收带外壳的 10403：仍是结果未知并显示「无权限执行调账」、红冲原因锁定、无提交按钮、只剩【重试】【去列表核对】、Esc 不关；再【重试】原键原体拿到幂等回放的成功才解除：提示红冲单号与红冲前 ¥500.00 / 红冲后 -¥1,234,067.89、原单已红冲，只生效一张红冲单",
+    "test/spec/frontend/admin-unknown-retry-refusal/adjustment.test.ts > [AC-F1-08as-ADJUST#4] 新建调账首次已生效但回答丢失 → 结果未知；未知窗口内验证手机号被删：【重试】发码收到 10003 data.reason=verify_phone_missing（不弹验证、不发写）、仍提示「上次提交结果未知……」并显示「这项操作需要短信验证，请先登记验证手机号」、全部输入锁定、只剩【重试】【去列表核对】、Esc 不关；补登后再【重试】发码验证、写入时又收 verify_phone_missing 仍是结果未知、原键原体；再【重试】原键原体拿到幂等回放的成功才解除，服务端只生效一张",
+    "test/spec/frontend/admin-unknown-retry-refusal/adjustment.test.ts > [AC-F1-08as-ADJUST#5] 对照：新建调账结果未知后【重试】写入收到 10003 data.tier=sms 但没有 verify_phone_missing（凭证未被接受）：照旧重新发码、重新短信验证，用新验证原键原体再发（不算解除也不算确定拒绝）；这次收到 10003 verify_phone_missing 仍是结果未知、显示「这项操作需要短信验证，请先登记验证手机号」、只剩【重试】【去列表核对】；再【重试】原键原体拿到幂等回放的成功才解除",
+    "test/spec/frontend/admin-unknown-retry-refusal/approve-dialog.test.ts > [AC-F1-08as-APPROVE#1] 批准调账单：批准没拿到带外壳的回答 → 结果未知（重新读取后仍待批准）；再按【批准并短信验证】短信验证后原键、请求体 {} 收到带外壳的 10403 admin_permission_denied：仍显示结果未知提示并显示「无权限执行调账」、【去列表核对】代替【取消】、无右上角关闭、Esc 不关、不清键；再批准沿用原 Idempotency-Key 与请求体 {} 才解除：提示「已批准，调账单号 …，实际调减 ¥20.00」、关对话框、该单已生效，只批准一次",
+    "test/spec/frontend/admin-unknown-retry-refusal/manual-paid.test.ts > [AC-F1-08as-MANUAL#1] 首次已生效但回答丢失 → 结果未知；【重试】动态码后原键原体收到带外壳的 10403 admin_permission_denied：仍提示「上次提交结果未知」并显示「无权限执行此操作（需要 payout.manual_entry 权限点）」、输入锁定、对话框不能关、只剩【重试】【去列表核对】；再【重试】仍是原键原体、再收 10403 仍未知；【去列表核对】关闭并重读列表、不再发写；另开对话框某行实付时间晚于现在或格式不合时控件清单仍等于刚打开时",
+    "test/spec/frontend/admin-unknown-retry-refusal/manual-paid.test.ts > [AC-F1-08as-MANUAL#2] 结果未知后【重试】先收带外壳的 10403：仍是结果未知、只剩【重试】【去列表核对】、键与请求体不变；对照（照现状）：再【重试】原键原体收到带外壳的 20001 data.fields=[items]：提示「提交内容有误，请检查后重试」并解锁（无结果未知提示、无【重试】【去列表核对】、输入可改、【确认录入】可用），改正后再提交换新键、显示「已录入 2 张，跳过 0 张」；对照：另开对话框首次提交即收 10403 照旧解锁，再提交换新键",
+    "test/spec/frontend/admin-unknown-retry-refusal/manual-paid.test.ts > [AC-F1-08as-MANUAL#3] 结果未知后【重试】收到 10003（凭证未被接受，照旧）：重新动态码、验证前不重发，验证后原键原体再发；这次收到带外壳的 10403 仍是结果未知、只剩【重试】【去列表核对】；再【重试】原键原体拿到同键回放的逐单成功才解除：显示「已录入 2 张，跳过 0 张」、可关闭",
+    "test/spec/frontend/admin-unknown-retry-refusal/writeoff-dialog.test.ts > [AC-F1-08as-WRITEOFF#1] 批准坏账核销：批准没拿到带外壳的回答 → 结果未知（重新读取列表后仍待批准）；再按【批准核销】短信验证后原键、请求体 {} 收到带外壳的 10403 admin_permission_denied：仍显示结果未知提示并显示「无权限执行坏账核销」、【去列表核对】代替【取消】、无右上角关闭、Esc 不关、不清键；再批准沿用原 Idempotency-Key 与请求体 {} 才解除：提示「已核销，候选单号 …，核销金额 ¥3.00」、关对话框、该行已核销，只核销一次"
+  ],
+  "risk_note": "F1-08as (replaces F1-08ar; D10-2060 / 2061 / 2062; owner approved the frozen change D10-2083 / approvals #108). After a write entered result-unknown, a retry answered with 10403 admin_permission_denied or 10003 verify_phone_missing (both checked before the idempotent replay and dependent on state) keeps the unknown state: same key and body, inputs locked, only retry / check-the-list. 20001 still unlocks with a new key; a plain 10003 still re-verifies; first-submission refusals unchanged; no automatic resend. Applied in useAdjustmentWrite (create, reverse, approve, reject, write-off) and ManualPaid. Frozen [AC-F1-08al-ERROR#1] changed in the lost-first + 10403 branch only (modify_existing, rule_change). Rule tests and spec-test by independent Claude contexts; money review by an independent Claude (D10-2003). Implementation by Opus 5.5. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (approvals #36, D10-2003). Pass, 0 findings; out_of_scope: result-unknown lost on re-login after 10001 (D10-2061 known limitation, FU-ADMIN-UNKNOWN-ON-RELOGIN = F1-08at). couli-runs/F1-08as/review-claude-money-r1.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "tests by independent Claude contexts (claude-run.sh): F1-08ar round 1 reused as the starting point (D10-2062), F1-08as round 1 on top; spec-test r1 by another independent Claude, pass (one S2 handled as an implementation hard constraint and checked by the money review)",
+    "model": "claude-opus-5-5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts",
+      "test": "[AC-F1-08al-ERROR#1] 确定的 10403 与 20001 展示全文、解锁且不自动重发；新提交换键",
+      "retitle_to": "[AC-F1-08al-ERROR#1] 确定的 10403 与 20001 展示全文且不自动重发；首次即拒与首次丢响应后重试收 20001 解锁并换键，首次丢响应后重试收 10403 仍保持结果未知、只放行【重试】【去列表核对】、键不变（F1-08as）",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08al-ERROR#1] 确定的 10403 与 20001 展示全文、解锁且不自动重发；新提交换键',\n  { timeout: 180_000 },\n  async () => {\n    for (const loseFirst of [false, true])\n      for (const scenario of [\n        {\n          code: 10403,\n          data: { reason: 'admin_permission_denied' },\n          text: '无权限执行此操作（需要 payout.manual_entry 权限点）',\n        },\n        { code: 20001, data: { fields: ['items'] }, text: '提交内容有误，请检查后重试' },\n        {\n          code: 20001,\n          data: { fields: ['items[0].paid_fen'] },\n          text: '提交内容有误，请检查后重试',\n        },\n      ]) {\n        const rows = approvedRows(1);\n        const server = serverFor(rows);\n        if (loseFirst)\n          server.once('POST', MANUAL, () => {\n            throw new Error('response lost');\n          });\n        server.once('POST', MANUAL, () => failure(scenario.code, scenario.data));\n        server.once('POST', MANUAL, () => reply(server, paid(rows)));\n        await mount(server);\n        await select(rows);\n        const modal = await open();\n        const body = await fillRows(modal, rows);\n        await confirm(server, modal);\n        await verify();\n        await settled(server);\n        if (loseFirst) {\n          await unknown(modal);\n          await retry(server, modal);\n        }\n        const before = loseFirst ? 2 : 1;\n        await notice(scenario.text);\n        await settled(server);\n        assertReplay(server, body, before);\n        expect(within(modal).queryAllByText('上次提交结果未知', { exact: true })).toEqual([]);\n        expect(inputs(modal).map((input) => disabled(input))).toEqual([false, false, false]);\n        expect(disabled(button(modal, '确认录入'))).toBe(false);\n        expect(within(document.body).queryAllByText('已录入', { exact: true })).toEqual([]);\n        expect(document.querySelectorAll('.ant-message-success')).toHaveLength(0);\n        await fill(field(rowOf(modal, rows[0]!.out_biz_no), '通道流水号'), 'Corrected-Serial');\n        body.items[0]!.channel_order_id = 'Corrected-Serial';\n        await confirm(server, modal);\n        await verify();\n        await notice('已录入 1 张，跳过 0 张', modal);\n        await settled(server);\n        assertRequest(server, body, before + 1);\n        expect(writes(server).at(-1)!.headers.get('Idempotency-Key')).not.toBe(\n          writes(server)[0]!.headers.get('Idempotency-Key'),\n        );\n        cleanup();\n      }\n  },\n);",
+      "after": "it(\n  '[AC-F1-08al-ERROR#1] 确定的 10403 与 20001 展示全文且不自动重发；首次即拒与首次丢响应后重试收 20001 解锁并换键，首次丢响应后重试收 10403 仍保持结果未知、只放行【重试】【去列表核对】、键不变（F1-08as）',\n  { timeout: 180_000 },\n  async () => {\n    for (const loseFirst of [false, true])\n      for (const scenario of [\n        {\n          code: 10403,\n          data: { reason: 'admin_permission_denied' },\n          text: '无权限执行此操作（需要 payout.manual_entry 权限点）',\n        },\n        { code: 20001, data: { fields: ['items'] }, text: '提交内容有误，请检查后重试' },\n        {\n          code: 20001,\n          data: { fields: ['items[0].paid_fen'] },\n          text: '提交内容有误，请检查后重试',\n        },\n      ]) {\n        const rows = approvedRows(1);\n        const server = serverFor(rows);\n        if (loseFirst)\n          server.once('POST', MANUAL, () => {\n            throw new Error('response lost');\n          });\n        server.once('POST', MANUAL, () => failure(scenario.code, scenario.data));\n        server.once('POST', MANUAL, () => reply(server, paid(rows)));\n        await mount(server);\n        await select(rows);\n        const modal = await open();\n        const body = await fillRows(modal, rows);\n        await confirm(server, modal);\n        await verify();\n        await settled(server);\n        if (loseFirst) {\n          await unknown(modal);\n          await retry(server, modal);\n        }\n        const before = loseFirst ? 2 : 1;\n        await notice(scenario.text);\n        await settled(server);\n        assertReplay(server, body, before);\n        if (loseFirst && scenario.code === 10403) {\n          // F1-08as（D10-2060）：首次丢响应后【重试】收 10403——契约先判权限、后做幂等回放，首次提交仍\n          // 可能已生效：仍提示「上次提交结果未知」（10403 原文已在上面核对）、输入锁定、只有【重试】\n          // 【去列表核对】、对话框不能关；再按【重试】原 Idempotency-Key 与逐字节相同的请求体。\n          await unknown(modal);\n          expect(inputs(modal).map((input) => disabled(input))).toEqual([true, true, true]);\n          expect(within(document.body).queryAllByText('已录入', { exact: true })).toEqual([]);\n          expect(document.querySelectorAll('.ant-message-success')).toHaveLength(0);\n          expect(writes(server)).toHaveLength(before);\n          await retry(server, modal);\n          assertReplay(server, body, before + 1);\n          await notice('已录入 1 张，跳过 0 张', modal);\n          expect(within(modal).queryAllByText('上次提交结果未知', { exact: true })).toEqual([]);\n          cleanup();\n          continue;\n        }\n        expect(within(modal).queryAllByText('上次提交结果未知', { exact: true })).toEqual([]);\n        expect(inputs(modal).map((input) => disabled(input))).toEqual([false, false, false]);\n        expect(disabled(button(modal, '确认录入'))).toBe(false);\n        expect(within(document.body).queryAllByText('已录入', { exact: true })).toEqual([]);\n        expect(document.querySelectorAll('.ant-message-success')).toHaveLength(0);\n        await fill(field(rowOf(modal, rows[0]!.out_biz_no), '通道流水号'), 'Corrected-Serial');\n        body.items[0]!.channel_order_id = 'Corrected-Serial';\n        await confirm(server, modal);\n        await verify();\n        await notice('已录入 1 张，跳过 0 张', modal);\n        await settled(server);\n        assertRequest(server, body, before + 1);\n        expect(writes(server).at(-1)!.headers.get('Idempotency-Key')).not.toBe(\n          writes(server)[0]!.headers.get('Idempotency-Key'),\n        );\n        cleanup();\n      }\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为前序任务 F1-08al 版本（旧规则：结果未知后重试收 10403 即解锁换键），即本单正式先红的基线（规则测试提交 ee87c5fa9cde，不含本单实现）；couli-runs/F1-08as/tests/1（couli-ci，--tests 只跑 admin-withdrawal-manual-paid/recovery.test.ts）中本条为红——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-16"]
+    }
+  ],
+  "task": "F1-08as",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "018db6fe5d8710303adcde92a2b9597a24b918a9",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "018db6fe5d8710303adcde92a2b9597a24b918a9",
+      "tree": "92f4912107cc7f92645f311e510a3565c548581a",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-18T05:42:02Z",
+      "finished_at": "2026-11-18T05:42:50Z",
+      "red_tests": [
+        "test/spec/frontend/admin-unknown-retry-refusal/adjustment.test.ts > [AC-F1-08as-ADJUST#1] 新建调账首次已生效但回答丢失 → 结果未知；【重试】短信验证后原键原体收到带外壳的 10403 admin_permission_denied：仍提示「上次提交结果未知……」并显示「无权限执行调账」、全部输入锁定、无提交按钮、只剩【重试】【去列表核对】、Esc 不关、不清键；再【重试】原 Idempotency-Key 与逐字节相同的请求体拿到幂等回放的成功才解除：提示新单号与调账前 ¥500.00 / 调账后 ¥508.80、关抽屉、服务端只生效一张",
+        "test/spec/frontend/admin-unknown-retry-refusal/adjustment.test.ts > [AC-F1-08as-ADJUST#2] 新建调账结果未知后【重试】先收带外壳的 10403：仍是结果未知、键与请求体不变；对照（照现状）：再【重试】原键原体收到带外壳的 20001 data.fields=[user_id]：提示「用户不存在，请核对用户 ID」并解锁（无结果未知提示与【重试】【去列表核对】、可改、提交可用），再提交换新键并成功；对照：再开新建、首次提交即收 10403 照旧解锁，再提交换新键",
+        "test/spec/frontend/admin-unknown-retry-refusal/adjustment.test.ts > [AC-F1-08as-ADJUST#3] 红冲首次已生效但回答丢失 → 结果未知；【重试】先收 10003（凭证未被接受，照旧：重新短信验证后原键原体再发，不算解除）、再收带外壳的 10403：仍是结果未知并显示「无权限执行调账」、红冲原因锁定、无提交按钮、只剩【重试】【去列表核对】、Esc 不关；再【重试】原键原体拿到幂等回放的成功才解除：提示红冲单号与红冲前 ¥500.00 / 红冲后 -¥1,234,067.89、原单已红冲，只生效一张红冲单",
+        "test/spec/frontend/admin-unknown-retry-refusal/adjustment.test.ts > [AC-F1-08as-ADJUST#4] 新建调账首次已生效但回答丢失 → 结果未知；未知窗口内验证手机号被删：【重试】发码收到 10003 data.reason=verify_phone_missing（不弹验证、不发写）、仍提示「上次提交结果未知……」并显示「这项操作需要短信验证，请先登记验证手机号」、全部输入锁定、只剩【重试】【去列表核对】、Esc 不关；补登后再【重试】发码验证、写入时又收 verify_phone_missing 仍是结果未知、原键原体；再【重试】原键原体拿到幂等回放的成功才解除，服务端只生效一张",
+        "test/spec/frontend/admin-unknown-retry-refusal/adjustment.test.ts > [AC-F1-08as-ADJUST#5] 对照：新建调账结果未知后【重试】写入收到 10003 data.tier=sms 但没有 verify_phone_missing（凭证未被接受）：照旧重新发码、重新短信验证，用新验证原键原体再发（不算解除也不算确定拒绝）；这次收到 10003 verify_phone_missing 仍是结果未知、显示「这项操作需要短信验证，请先登记验证手机号」、只剩【重试】【去列表核对】；再【重试】原键原体拿到幂等回放的成功才解除",
+        "test/spec/frontend/admin-unknown-retry-refusal/approve-dialog.test.ts > [AC-F1-08as-APPROVE#1] 批准调账单：批准没拿到带外壳的回答 → 结果未知（重新读取后仍待批准）；再按【批准并短信验证】短信验证后原键、请求体 {} 收到带外壳的 10403 admin_permission_denied：仍显示结果未知提示并显示「无权限执行调账」、【去列表核对】代替【取消】、无右上角关闭、Esc 不关、不清键；再批准沿用原 Idempotency-Key 与请求体 {} 才解除：提示「已批准，调账单号 …，实际调减 ¥20.00」、关对话框、该单已生效，只批准一次",
+        "test/spec/frontend/admin-unknown-retry-refusal/manual-paid.test.ts > [AC-F1-08as-MANUAL#1] 首次已生效但回答丢失 → 结果未知；【重试】动态码后原键原体收到带外壳的 10403 admin_permission_denied：仍提示「上次提交结果未知」并显示「无权限执行此操作（需要 payout.manual_entry 权限点）」、输入锁定、对话框不能关、只剩【重试】【去列表核对】；再【重试】仍是原键原体、再收 10403 仍未知；【去列表核对】关闭并重读列表、不再发写；另开对话框某行实付时间晚于现在或格式不合时控件清单仍等于刚打开时",
+        "test/spec/frontend/admin-unknown-retry-refusal/manual-paid.test.ts > [AC-F1-08as-MANUAL#2] 结果未知后【重试】先收带外壳的 10403：仍是结果未知、只剩【重试】【去列表核对】、键与请求体不变；对照（照现状）：再【重试】原键原体收到带外壳的 20001 data.fields=[items]：提示「提交内容有误，请检查后重试」并解锁（无结果未知提示、无【重试】【去列表核对】、输入可改、【确认录入】可用），改正后再提交换新键、显示「已录入 2 张，跳过 0 张」；对照：另开对话框首次提交即收 10403 照旧解锁，再提交换新键",
+        "test/spec/frontend/admin-unknown-retry-refusal/manual-paid.test.ts > [AC-F1-08as-MANUAL#3] 结果未知后【重试】收到 10003（凭证未被接受，照旧）：重新动态码、验证前不重发，验证后原键原体再发；这次收到带外壳的 10403 仍是结果未知、只剩【重试】【去列表核对】；再【重试】原键原体拿到同键回放的逐单成功才解除：显示「已录入 2 张，跳过 0 张」、可关闭",
+        "test/spec/frontend/admin-unknown-retry-refusal/writeoff-dialog.test.ts > [AC-F1-08as-WRITEOFF#1] 批准坏账核销：批准没拿到带外壳的回答 → 结果未知（重新读取列表后仍待批准）；再按【批准核销】短信验证后原键、请求体 {} 收到带外壳的 10403 admin_permission_denied：仍显示结果未知提示并显示「无权限执行坏账核销」、【去列表核对】代替【取消】、无右上角关闭、Esc 不关、不清键；再批准沿用原 Idempotency-Key 与请求体 {} 才解除：提示「已核销，候选单号 …，核销金额 ¥3.00」、关对话框、该行已核销，只核销一次"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-unknown-retry-refusal/adjustment.test.ts",
+        "test/spec/frontend/admin-unknown-retry-refusal/approve-dialog.test.ts",
+        "test/spec/frontend/admin-unknown-retry-refusal/manual-paid.test.ts",
+        "test/spec/frontend/admin-unknown-retry-refusal/writeoff-dialog.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "138959ac41424f3098668044248884090cf4b55589ee3b8b17b2ee3ac3fcbe6c"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "1bbc31a288b07b6828ad9385d4154e8830077998",
+    "specs": "ce3a9de72e9c1cd3adc489082778a91438c7c765"
+  }
+}

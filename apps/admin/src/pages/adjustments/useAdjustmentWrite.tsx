@@ -8,6 +8,10 @@
 // - 没拿到带统一外壳的回答（网络错误、无法解析）：进入「结果未知」（编排 D10-1731）——保留原键与原请求体，
 //   表单由调用方锁定，只能【重试】（原键、同一个请求体对象逐字节相同地重发，需要时重新短信验证）或去列表核对；
 //   重试拿到确定的回答（成功、确定的拒绝）才退出；重试又遇 5xx / 40901 仍留在结果未知。
+//   重试遇到契约里先于幂等回放判、又随状态变化的拒绝（10403 admin_permission_denied；发码或写入时的
+//   10003 data.reason=verify_phone_missing）不算确定的回答：第一次提交仍可能已生效，所以仍留在结果未知
+//   （原键原体保留、表单锁定、只能【重试】或去列表核对），拒绝原文经 onFailed 交调用方显示（F1-08as，
+//   D10-2060 / 2061）。这条对每个决定一致生效，包括不验证的写法（驳回）。
 // - 带外壳的结果未定（5xx、40901）：提示失败，下次提交沿用原键；其余确定的回答（成功、20001、20901、
 //   20902、10403 等）后下次提交换新键。任何失败都不自动重发。
 // 一次打开（抽屉或对话框）一个写操作一个实例；卸载后迟到的回答被丢弃。
@@ -22,6 +26,7 @@ import {
   noEnvelope,
   outcomeUnknown,
   phoneMissing as isPhoneMissing,
+  refusedBeforeReplay,
   type CreateRequest,
   type Executed,
 } from './write.ts';
@@ -41,7 +46,11 @@ export interface AdjustmentWriteOptions<R extends BaseRecord = Executed> {
   /** false: the write needs no step-up (adminRejectAdjustment); the sms tier when left out. */
   readonly verify?: boolean;
   readonly onDone: (result: R) => void;
-  readonly onFailed: (cause: unknown) => void;
+  /**
+   * A failed submission; `stillUnknown`: the earlier result is still unknown (a refusal judged
+   * before the idempotent replay after an unknown outcome): the key, the body and the lock stay.
+   */
+  readonly onFailed: (cause: unknown, stillUnknown: boolean) => void;
   /** The write got no reply in the unified envelope (`unknown` is now true). */
   readonly onUnknown?: () => void;
 }
@@ -129,6 +138,12 @@ export function useAdjustmentWrite<
       setPhase('verify');
     } catch (cause) {
       if (!alive.current) return;
+      if (unknownRef.current && refusedBeforeReplay(cause)) {
+        // The first submission may still have taken effect: stay unknown, show the refusal.
+        setPhase('idle');
+        onFailed(cause, true);
+        return;
+      }
       if (isPhoneMissing(cause)) {
         markMissing();
         return;
@@ -139,7 +154,7 @@ export function useAdjustmentWrite<
         return;
       }
       setPhase('idle');
-      onFailed(cause);
+      onFailed(cause, unknownRef.current);
     }
   };
 
@@ -207,6 +222,13 @@ export function useAdjustmentWrite<
       onDone(response.data);
     } catch (cause) {
       if (!alive.current) return;
+      if (unknownRef.current && refusedBeforeReplay(cause)) {
+        // Judged before the idempotent replay and changing with the account's state (D10-2060):
+        // the first submission may still have taken effect. Key, body and lock stay; no resend.
+        setPhase('idle');
+        onFailed(cause, true);
+        return;
+      }
       if (isPhoneMissing(cause)) {
         markMissing();
         return;
@@ -228,7 +250,7 @@ export function useAdjustmentWrite<
         setUnknown(false);
       }
       setPhase('idle');
-      onFailed(cause);
+      onFailed(cause, unknownRef.current);
     }
   };
 
