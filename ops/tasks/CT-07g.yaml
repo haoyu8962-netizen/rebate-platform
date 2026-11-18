@@ -2,9 +2,10 @@ id: CT-07g
 repo: rebate-platform
 title: 商品池标签规范化只留一份（FU-POOL-TAGS-NORMALIZE-SINGLE，D10-2034）：catalog 规范化经 catalog/index.ts 导出、由 app.module 注入 content，删掉 content 里的另一份
 type: impl
-# 2026-11-18 w1 入账（编排 D10-2034：CT-07f 落地后紧接着做）。CT-07f（#303）为避开 content → catalog/index.ts 的导入环，在 content/domain/pages/pool-source-tags.ts 照 catalog/domain/pool-tags.ts 的步骤另写了一份规范化。
+# 2026-11-18 w1 入账（编排 D10-2034：CT-07f 落地后紧接着做；登法照 B2-02y，D10-2081）。CT-07f（#303）为避开 content → catalog/index.ts 的导入环，在 content/domain/pages/pool-source-tags.ts 照 catalog/domain/pool-tags.ts 的步骤另写了一份规范化。
 # 本单：catalog/index.ts 导出规范化函数（或只含它的端口），app.module 把它作为 content 首页配置保存的一项选项注入，content 不直接 import catalog；删掉 content 那份规范化与它的照搬单测（拒空的辅助若仍需要，留在 content、改为调用注入的函数）。
-# 纯重构：首页配置保存的行为（规范化去重、丢完为空拒 20001、data.fields 路径）与 pool-tags-home / pool-tags 现有规则测试的期望一字不变，由它们护着，tester none。depcruise 不得新增环。
+# 规则测试（新目录）钉两件事：(a) 从 catalog/index.ts 的新导出拿规范化函数，用一张输入输出表钉其结果；(b) 首页配置保存走注入后的结果与同一张表逐条一致。取值照 CT-07e / CT-07f 已有期望，不新立规则；基线上 catalog/index.ts 还没有这个导出，自然先红。pool-tags-home 与 pool-tags 现有规则测试一条不改、全部照绿，变红即停报。depcruise 不得新增环。
+# refs 为空：标签规则出自 规划/01 F-ADM-10 与 04 §3.2（编排 D10-1758 / D10-1777），08 里没有对应 BR（SPEC_REF 版本逐文件查过），同 CT-07f。
 refs: []
 refs_hash: {}
 deps: [CT-07f]
@@ -13,8 +14,11 @@ paths:
   - 'apps/api/src/app.module.ts'
   - 'apps/api/src/app.module.test.ts'
   - 'apps/api/src/modules/content/**'
+test_paths:
+  - 'test/spec/catalog/pool-tags-normalize-single/**'
 impl: claude
-tester: none
+tester: claude-independent
 accept:
   - 'pnpm verify'
+  - 'test/spec/catalog/pool-tags-normalize-single/**'
 status: todo
