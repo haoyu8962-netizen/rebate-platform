@@ -8,6 +8,7 @@ import { fenToJsonNumber, formatYuanAdmin, yuanStrToFen } from '@couli/money';
 import { platform, type Schema } from '@couli/contracts-ts';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
+import { stepUpTexts } from '../../texts/step-up.ts';
 import { ADJUSTMENTS_URL, WRITEOFFS_URL, fieldsOf, type Adjustment } from './model.ts';
 
 const e = adjustmentsTexts.write.errors;
@@ -243,6 +244,16 @@ export const phoneMissing = (cause: unknown): boolean =>
   cause.code === 10003 &&
   reasonOf(cause) === 'verify_phone_missing';
 
+/**
+ * A refusal the contract judges before the idempotent replay and that changes with the account's
+ * state (F1-08as, D10-2060 / 2061): 10403 (the permission point withdrawn) and 10003
+ * data.reason=verify_phone_missing (the verify phone removed). After an unknown outcome it does not
+ * settle anything: the first submission may still have taken effect.
+ */
+export const refusedBeforeReplay = (cause: unknown): boolean =>
+  (cause instanceof AdminApiError && cause.kind === 'api' && cause.code === 10403) ||
+  phoneMissing(cause);
+
 /** 20902 data.resource=admin_adjustment: the original was reversed meanwhile. */
 export const alreadyReversed = (cause: unknown): boolean =>
   cause instanceof AdminApiError && cause.code === 20902;
@@ -271,6 +282,7 @@ export function noEnvelope(cause: unknown): boolean {
 /** The prompt of a failed write. */
 export function writeErrorText(cause: unknown): string {
   if (!(cause instanceof AdminApiError)) return e.failed;
+  if (phoneMissing(cause)) return stepUpTexts.verifyPhoneMissing;
   if (cause.code === 10403) return e.forbidden;
   if (cause.code === 20902) return e.alreadyReversed;
   if (cause.code === 20001) {
@@ -312,6 +324,7 @@ export const stateChanged = (cause: unknown): boolean =>
 /** The prompt of a failed approval or rejection (20902 is handled by the page instead). */
 export function decisionErrorText(cause: unknown): string {
   if (!(cause instanceof AdminApiError)) return e.failed;
+  if (phoneMissing(cause)) return stepUpTexts.verifyPhoneMissing;
   if (cause.code === 10403) return e.forbidden;
   if (cause.code === 20001) {
     if (reasonOf(cause) === 'adjust_no_balance') return ae.noBalance;
@@ -337,6 +350,7 @@ export const frozenPending = (cause: unknown): boolean =>
 /** The prompt of a failed write-off approval (20902 and writeoff_frozen_pending aside). */
 export function writeoffErrorText(cause: unknown): string {
   if (!(cause instanceof AdminApiError)) return e.failed;
+  if (phoneMissing(cause)) return stepUpTexts.verifyPhoneMissing;
   if (cause.code === 10403) return we.forbidden;
   if (cause.code === 20001) {
     const fields = fieldsOf(cause);

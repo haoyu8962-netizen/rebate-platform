@@ -11,6 +11,8 @@
 // 结果未知（照 F1-08ce）：没有统一外壳的回答、带外壳的 40901 与 5xx → 「上次提交结果未知」，输入锁定、
 // 对话框不能关，只剩【重试】（重新动态码后原键、同一请求体逐字节相同地重发）与【去列表核对】；
 // 拿到确定结果才解锁。10003 重新动态码后沿用原键原体。任何失败都不自动重发。
+// 进入结果未知后重试收到带外壳的 10403（契约先判 payout.manual_entry、后做幂等回放，权限可能在未知窗口内
+// 被撤）不算确定结果：显示其原文，仍是结果未知、原键原体保留（F1-08as，D10-2060）；20001 照旧解锁换键。
 import type { Schema } from '@couli/contracts-ts';
 import { addFen, fenToJsonNumber, formatYuanAdmin, parseFen, yuanStrToFen } from '@couli/money';
 import { useDataProvider } from '@refinedev/core';
@@ -44,6 +46,8 @@ import {
 
 const t = withdrawalsTexts.manualPaid;
 const STEP_UP_REFUSED = 10003;
+/** admin_permission_denied: judged before the idempotent replay, and it changes with the account. */
+const FORBIDDEN = 10403;
 
 type Payload = Schema<'AdminWithdrawalBatchManualPaidRequest'>;
 type Answer = Schema<'AdminWithdrawalBatchManualPaid'>;
@@ -284,6 +288,7 @@ export function ManualPaid({
     if (phaseRef.current !== 'unknown') return;
     if (bodyRef.current === undefined || keyRef.current === undefined) return;
     setAgain(false);
+    setFailure(undefined);
     setPhase('verify');
   };
 
@@ -342,6 +347,17 @@ export function ManualPaid({
         // 凭证未被接受：重新验证后以新凭证、原幂等键与原请求体再发。
         setAgain(true);
         setPhase('verify');
+        return;
+      }
+      if (
+        uncertainRef.current &&
+        cause instanceof AdminApiError &&
+        cause.kind === 'api' &&
+        cause.code === FORBIDDEN
+      ) {
+        // 结果未知后的重试被先于幂等回放判的 10403 拒绝：第一次提交仍可能已生效，保持结果未知、原键原体。
+        setFailure(failureNotice(cause));
+        setPhase('unknown');
         return;
       }
       if (isSettledRejection(cause)) {
@@ -534,7 +550,7 @@ export function ManualPaid({
                 description={t.unknownDescription}
               />
             ) : null}
-            {failure === undefined || phase !== 'edit' ? null : (
+            {failure === undefined || (phase !== 'edit' && phase !== 'unknown') ? null : (
               <Alert type="error" showIcon message={failure} />
             )}
             <Table<WithdrawalRow>

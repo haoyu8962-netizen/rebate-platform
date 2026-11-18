@@ -8,7 +8,8 @@
 // 两个决定都经 useAdjustmentWrite（F1-08ce 的结果未知处理，驳回用不验证的写法），各自一个实例：
 // - 没拿到带统一外壳的回答（网络、无法解析）：该决定进入结果未知（编排 D10-1731），原键原请求体保留，只能
 //   原样重试（再按同一个决定即【重试】：批准重新短信验证；驳回原因锁定、按已发的请求体重发），对话框不能
-//   关闭、【取消】换成【去列表核对】；之后遇 40901 / 5xx 仍结果未知，拿到确定的回答才解除。
+//   关闭、【取消】换成【去列表核对】；之后遇 40901 / 5xx 仍结果未知，拿到确定的回答才解除；重试遇到先于
+//   幂等回放判的 10403（及批准的 verify_phone_missing）显示原文、仍结果未知（F1-08as，批准与驳回一致）。
 // - 带外壳的结果未定（5xx、40901）：沿用原键（驳回原因同样锁定，原请求体重发）。
 // - 以上结果未定都提示失败，并先重新读取该单：读回前两个决定都不可用，读回仍待批准才放开，已不是待批准就
 //   交回页面提示并刷新、不再提交。20902 同样交回页面。
@@ -146,9 +147,10 @@ export function ApproveDialog({
     url: rejectUrl(item.adjust_id),
     verify: false,
     onDone: onRejected,
-    onFailed: (cause) => {
-      // A final answer: the next rejection takes a new key and the reason as typed.
-      if (!outcomeUnknown(cause)) setOpenRejection(undefined);
+    onFailed: (cause, stillUnknown) => {
+      // A final answer: the next rejection takes a new key and the reason as typed. A refusal
+      // judged before the replay while the result is unknown is not one: the body stays locked.
+      if (!stillUnknown && !outcomeUnknown(cause)) setOpenRejection(undefined);
       failed(cause);
     },
     onUnknown: unknownOutcome,
