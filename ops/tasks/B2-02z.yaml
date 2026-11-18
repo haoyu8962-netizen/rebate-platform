@@ -3,7 +3,7 @@ repo: rebate-platform
 title: notification：余额更正站内信（CT-24zzu 的编码）的目录登记与渲染、写入函数——照 BALANCE_ADJUSTED 的写法，只发站内信、category=service、注销用户不发，在调用方事务内写入（D10-2092 ⑤）
 type: impl
 # 2026-11-18 be 入账（编排 D10-2092 ⑤：模板渲染与目录登记放哪张单由 be 定——另开本单，B2-02x 只调用）。照 notification 模块 BALANCE_ADJUSTED 先例：admin-channels/catalog.ts 登记为 inboxOnly、变量为更正前 / 后可用余额两个；新渲染器（默认标题取 texts inbox.title.<编码>「余额更正」，默认正文「核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可用余额由 {before} 调整为 {after}。如有疑问，请联系客服。」，金额按 BR-TEXT-10 格式化、含符号与货币符号；后台可改措辞不可改变量）；写入函数在调用方事务内写站内信、读 notify_templates 覆盖行；index.ts 导出；app.module.ts 只接线供 B2-02x 的 ledger 端口使用。
-# 规则测试要钉：渲染默认标题 / 正文与变量替换、调增调减金额格式（含负数）；覆盖行替换措辞不改变量；注销用户不写；category=service；渠道列表里该编码推送与短信两个开关恒为关（只发站内信）；写入随调用方事务回滚。
+# 规则测试要钉：渲染默认标题 / 正文与变量替换、调增调减金额格式（含负数）；覆盖行替换措辞不改变量；会员状态三种（D10-2097）：注销冷静期内照写、users.status=deleting 不写、deleted 不写；category=service；渠道列表里该编码推送与短信两个开关恒为关（只发站内信）；写入随调用方事务回滚。
 refs: [BR-FUND-24, BR-TEXT-10]
 refs_hash:
   BR-FUND-24: 0f1a6ecb3334

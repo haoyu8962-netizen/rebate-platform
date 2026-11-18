@@ -9,7 +9,7 @@ type: impl
 # 2026-11-18 be（编排 D10-2032，写测前清单 couli-runs/CT-24zzn/b2-02x-open-items.md 四项已定）：写测必钉——
 #   ① negative_since 沿用入账路径同一规则，三个分支各一条用例（重算后 < 0 且重算前也 < 0 有值 → 沿用；重算后 < 0 而重算前 ≥ 0 → 当天会计日；重算后 ≥ 0 → NULL），另加「前后都为负时原值不动」；
 #   ② frozen 合计为负或任一合计超出 bigint → 不写、回 20001 data.fields=[recon_diff_id]、审计记原因，钉「拒绝时余额行与 version 都没变」（契约 CT-24zzna）；
-#   ③ 通知（D10-2092 ⑤，替代原「不推送」）：可用余额有变化 → 恰发一条余额更正站内信（CT-24zzu 编码，B2-02z 写入）且与余额写入同一事务，调增调减各一条；仅冻结变化、前后相同、各类拒绝、注销用户 → 不发；不触发推送与短信；④ 有变化 version + 1（CAS），前后相同不写余额行、version 不变、审计照写；
+#   ③ 通知（D10-2092 ⑤，替代原「不推送」）：可用余额有变化 → 恰发一条余额更正站内信（CT-24zzu 编码，B2-02z 写入）且与余额写入同一事务，调增调减各一条；仅冻结变化、前后相同、各类拒绝、deleting 与 deleted 会员 → 不发（冷静期内照发，D10-2097）；不触发推送与短信；④ 有变化 version + 1（CAS），前后相同不写余额行、version 不变、审计照写；
 #   以及「不关差错单（status / handler_id / resolution / updated_at 不变）、不解除 withdraw_holds」。
 #   ⑤ 跨零照入账路径（D10-2041，契约 CT-24zzna）：available 由 ≥0 变 <0 时 account.went_negative 恰发一次且在同一事务里（事务失败回滚则不发）；由 <0 回到 ≥0 时恢复钩子（balanceRecoveredHook）恰调一次；不跨零、拒绝、前后相同时两者都不发生。用入账路径同一个跨零判定函数。
 refs: [BR-FUND-19, BR-FUND-16, BR-ID-34]
