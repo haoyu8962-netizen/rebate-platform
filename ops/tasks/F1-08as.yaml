@@ -29,7 +29,7 @@ modify_existing:
     reason: rule_change
     br: [BR-WDR-16]
     ruling: D10-2060
-    note: 'D10-2060 / D10-2062：只改 loseFirst=true 且 scenario 为 10403 admin_permission_denied 的那一个场景——期望由「无『上次提交结果未知』、三个输入可改、【确认录入】可用、新提交换键」改为「仍提示『上次提交结果未知』并显示 10403 原文、输入锁定、只有【重试】【去列表核对】、再按【重试】的 Idempotency-Key 与请求体与第一次相同」；loseFirst=false 的两个场景与 loseFirst=true 的 20001 场景一字不动。须负责人过目，回话前不进落地分支'
+    note: 'D10-2060 / D10-2062：只改 loseFirst=true 且 scenario 为 10403 admin_permission_denied 的那一个场景——期望由「无『上次提交结果未知』、三个输入可改、【确认录入】可用、新提交换键」改为「仍提示『上次提交结果未知』并显示 10403 原文、输入锁定、只有【重试】【去列表核对】、再按【重试】的 Idempotency-Key 与请求体与第一次相同」；loseFirst=false 的两个场景与 loseFirst=true 的 20001 场景一字不动。负责人 2026-11-18 13:00 回「可以改」（D10-2083，ops/approvals.yaml 第 108 条）'
 impl: claude
 tester: claude-independent
 accept:
