@@ -17,7 +17,7 @@ refs_hash:
   BR-FUND-19: 34f619112535
   BR-FUND-16: 077f6d412d5a
   BR-ID-34: 6a2bdd4ca3ce
-deps: [CT-24zzn, CT-24zzna]
+deps: [CT-24zzn, CT-24zzna, B2-02y]
 paths:
   - 'apps/api/src/modules/ledger/application/admin-recon-diff-balance-recalc*.ts'
   - 'apps/api/src/modules/ledger/http/admin/recon-diff-balance-recalc.controller*.ts'
