@@ -1,0 +1,18 @@
+id: CT-17k
+repo: rebate-platform
+title: 契约：routes.json 的 DeleteAccount 路由 since.ios 由 null 赋为 1.0.0（iOS 注销页 APP-13a-ios 的前提，D10-1564 / D10-2081）
+type: contract
+# 2026-11-18 w1 入账（编排 D10-2081 ③）。范围只此一处：contracts/routes.json 的 routes.DeleteAccount.since.ios null → "1.0.0"，重跑 pnpm codegen 更新 packages/contracts-ts/src/bridge.gen.ts，别的路由与字段一律不动。
+# 读取方盘点（w1 只读，2026-11-18）：本仓库里路由的 since 只出现在生成物 bridge.gen.ts 的 routes 表里；服务端（agent 编排器、content 页面区块校验、通知等）、H5（app-shell、nav-bar）、后台读 routes.json / bridge.routes 只用路由名、h5_path、auth 等字段，没有一处按路由的 since 分支；h5 conformance 读的是 bridgeMethods 的 since（桥方法），不是路由；packages/contracts-ts/scripts/bridge.ts 只校验 since 的格式；bridge.test.ts 只断言每条路由三端 since 键齐全。改动只影响三端原生按 routes.json 生成的代码，所以可随时落地（D10-2081 ③）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/routes.json'
+  - 'packages/contracts-ts/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
