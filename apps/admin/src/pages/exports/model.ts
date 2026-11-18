@@ -1,11 +1,12 @@
 // Export task helpers: the status shown (a done task past expires_at is expired, as the server
 // answers), its BR-TEXT-25 name, and which action a row offers. No copy lives here.
-import { export_status, type Schema } from '@couli/contracts-ts';
+import { export_resource, export_status, type Schema } from '@couli/contracts-ts';
 import { rawCodePointLength } from '../../text-length.ts';
 import { exportsTexts as t } from '../../texts/exports.ts';
 
 export type ExportRow = Schema<'AdminExport'>;
 export type ExportStatus = Schema<'AdminExportStatus'>;
+export type ExportResource = Schema<'AdminExportResource'>;
 
 /** page_size of the list (contract ≤ 200). */
 export const PAGE_SIZE = 20;
@@ -14,6 +15,18 @@ export const PAGE_SIZE = 20;
 export const REASON_MAX = 200;
 
 export const STATUSES: readonly ExportStatus[] = export_status;
+
+/** 来源页面 options (enum export_resource, contract order). */
+export const RESOURCES: readonly ExportResource[] = export_resource;
+
+/**
+ * Interval of the silent rereads while the page shown has a pending or running row. Long enough
+ * that a page opened for a moment sends its one read only.
+ */
+export const POLL_MS = 15_000;
+
+/** Day format of the 发起时间 pickers (Beijing days). */
+export const DAY_FORMAT = 'YYYY-MM-DD';
 
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
 
@@ -48,6 +61,23 @@ export function nextExpiry(items: readonly ExportRow[], now: number): number | u
     if (next === undefined || at < next) next = at;
   }
   return next;
+}
+
+/** A task still on its way: the page reads its list again until it is final. */
+export function inFlight(row: ExportRow): boolean {
+  return row.status === 'pending' || row.status === 'running';
+}
+
+/** `from` of a Beijing day (YYYY-MM-DD): its 00:00 (inclusive). */
+export function dayStart(day: string): string {
+  return `${day}T00:00:00+08:00`;
+}
+
+/** `to` of a last Beijing day (YYYY-MM-DD): the next day's 00:00 (exclusive). */
+export function dayAfter(day: string): string {
+  const [year, month, date] = day.split('-').map(Number);
+  const next = new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, (date ?? 1) + 1));
+  return `${next.getUTCFullYear()}-${two(next.getUTCMonth() + 1)}-${two(next.getUTCDate())}T00:00:00+08:00`;
 }
 
 export function statusLabel(status: string): string {

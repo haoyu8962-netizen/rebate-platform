@@ -15,6 +15,17 @@ export const exportsTexts = {
   forbiddenTitle: '无权限查看导出记录',
   forbiddenDescription: '当前账号没有导出权限点（export），请联系超管勾选。',
   statusAll: '全部',
+  filters: {
+    source: '来源页面',
+    sourceAll: '全部',
+    time: '发起时间',
+    timeFrom: '发起时间起日',
+    timeTo: '发起时间止日',
+    fromPlaceholder: '开始日期',
+    toPlaceholder: '结束日期',
+    rangeInvalid: '开始日期不能晚于结束日期',
+    submit: '查询',
+  },
   /** BR-TEXT-25 admin_dict.export_status.* */
   status: {
     pending: '排队中',
