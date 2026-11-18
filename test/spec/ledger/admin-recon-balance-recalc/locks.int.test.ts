@@ -40,7 +40,8 @@ import {
 
 const s = suite();
 
-const USERS_LOCK = /\busers\b[\s\S]*\bfor\s+update\b/i;
+// identity's lockUsersForUpdate (the one cross-module port for users rows) sends FOR NO KEY UPDATE.
+const USERS_LOCK = /\busers\b[\s\S]*\bfor\s+(?:no\s+key\s+)?update\b/i;
 
 /** A credit of `amount` to the member on the holder pool: users row, balance row, then post. */
 function postOnHolder(f: AdjustFixture, m: Member, amount: bigint): Promise<string> {
