@@ -1,0 +1,20 @@
+id: CT-07g
+repo: rebate-platform
+title: 商品池标签规范化只留一份（FU-POOL-TAGS-NORMALIZE-SINGLE，D10-2034）：catalog 规范化经 catalog/index.ts 导出、由 app.module 注入 content，删掉 content 里的另一份
+type: impl
+# 2026-11-18 w1 入账（编排 D10-2034：CT-07f 落地后紧接着做）。CT-07f（#303）为避开 content → catalog/index.ts 的导入环，在 content/domain/pages/pool-source-tags.ts 照 catalog/domain/pool-tags.ts 的步骤另写了一份规范化。
+# 本单：catalog/index.ts 导出规范化函数（或只含它的端口），app.module 把它作为 content 首页配置保存的一项选项注入，content 不直接 import catalog；删掉 content 那份规范化与它的照搬单测（拒空的辅助若仍需要，留在 content、改为调用注入的函数）。
+# 纯重构：首页配置保存的行为（规范化去重、丢完为空拒 20001、data.fields 路径）与 pool-tags-home / pool-tags 现有规则测试的期望一字不变，由它们护着，tester none。depcruise 不得新增环。
+refs: []
+refs_hash: {}
+deps: [CT-07f]
+paths:
+  - 'apps/api/src/modules/catalog/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/app.module.test.ts'
+  - 'apps/api/src/modules/content/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
