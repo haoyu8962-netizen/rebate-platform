@@ -12,7 +12,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createAdminShell } from '../../App.tsx';
 import { createDataProvider } from '../../providers/data/index.ts';
 import { exportsTexts as t } from '../../texts/exports.ts';
-import { nextExpiry, type ExportRow } from './model.ts';
+import { nextExpiry, POLL_MS, type ExportRow } from './model.ts';
 
 vi.setConfig({ testTimeout: 60_000 });
 // The first mount loads antd and the shell; a cold start takes longer than the 1 s default.
@@ -72,7 +72,7 @@ interface Call {
 function mount(
   clock: { now(): number },
   reply: (call: Call) => Promise<Response>,
-): { readonly calls: Call[] } {
+): { readonly calls: Call[]; readonly searches: string[] } {
   vi.stubGlobal('matchMedia', (media: string) => ({
     matches: false,
     media,
@@ -84,12 +84,15 @@ function mount(
     dispatchEvent: vi.fn(() => true),
   }));
   const calls: Call[] = [];
+  const searches: string[] = [];
   const fetch: typeof globalThis.fetch = (input, init) => {
+    const url = new URL(String(input));
     const call = {
       method: (init?.method ?? 'GET').toUpperCase(),
-      path: new URL(String(input)).pathname,
+      path: url.pathname,
     };
     calls.push(call);
+    searches.push(url.search);
     return reply(call);
   };
   render(
@@ -109,7 +112,7 @@ function mount(
       }),
     }),
   );
-  return { calls };
+  return { calls, searches };
 }
 
 function page(items: readonly ExportRow[]): Promise<Response> {
@@ -260,4 +263,56 @@ it('one task finishing its retry never closes another task’s reason dialog or 
   expect(calls.filter((call) => call.method === 'POST')).toEqual([
     { method: 'POST', path: `${LIST}/${MASKED_ID}/retry` },
   ]);
+});
+
+it('a reread that finds page 2 emptied goes back to the last page with rows and keeps polling it', async () => {
+  fakeTimeouts();
+  const running = (id: string): ExportRow =>
+    task(id, {
+      status: 'running',
+      progress: 40,
+      file_name: null,
+      row_count: null,
+      expires_at: null,
+    });
+  const first = Array.from({ length: 20 }, (_, i) =>
+    running(`exp_P1${String(i).padStart(2, '0')}w8Rt5Ym1Zx7N`),
+  );
+  const lone = running('exp_P2zzw8Rt5Ym1Zx7N');
+  let loneDone = false;
+  const { searches } = mount({ now: () => START }, (call) => {
+    if (call.path !== LIST) return Promise.reject(new Error(`unexpected ${call.path}`));
+    const asked = new URLSearchParams(searches[searches.length - 1]).get('page');
+    if (asked === '2') {
+      return Promise.resolve(
+        ok(
+          loneDone
+            ? { items: [], page: 2, page_size: 20, total: 20 }
+            : { items: [lone], page: 2, page_size: 20, total: 21 },
+        ),
+      );
+    }
+    return Promise.resolve(ok({ items: first, page: 1, page_size: 20, total: loneDone ? 20 : 21 }));
+  });
+  await waitFor(() => expect(screen.getByText(first[0]!.id)).toBeTruthy());
+  fireEvent.click(screen.getByTitle('2'));
+  await waitFor(() => expect(screen.getByText(lone.id)).toBeTruthy());
+  loneDone = true;
+  const before = searches.length;
+  act(() => {
+    vi.advanceTimersByTime(POLL_MS);
+  });
+  // The emptied page 2 is never shown: page 1 is read with the same filters and shown instead.
+  await waitFor(() => expect(screen.getByText(first[0]!.id)).toBeTruthy());
+  expect(screen.queryByText(lone.id)).toBeNull();
+  expect(screen.queryByText(t.empty)).toBeNull();
+  const after = searches.slice(before).map((search) => new URLSearchParams(search).get('page'));
+  expect(after.slice(0, 2)).toEqual(['2', '1']);
+  // Page 1 still has running rows: the silent rereads go on, now for page 1.
+  const reads = searches.length;
+  act(() => {
+    vi.advanceTimersByTime(POLL_MS);
+  });
+  await waitFor(() => expect(searches.length).toBeGreaterThan(reads));
+  expect(new URLSearchParams(searches[searches.length - 1]).get('page')).toBe('1');
 });

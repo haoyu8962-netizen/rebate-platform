@@ -79,6 +79,16 @@ interface ListQuery {
 }
 
 /** Query of one list read: page, size, then only the conditions set. */
+/**
+ * The page to read instead when `page` came back empty although `total` rows remain: the last
+ * page that still has rows (at least 1). Undefined when the answer is to be shown as it is.
+ */
+function pageBack(page: number, count: number, total: number): number | undefined {
+  if (count > 0 || total <= 0 || page <= 1) return undefined;
+  const last = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  return last < page ? last : undefined;
+}
+
 function listParams(query: ListQuery): Record<string, string | number> {
   const { filters } = query;
   return {
@@ -226,6 +236,13 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
     }).then(
       (response) => {
         if (!current) return;
+        // The page asked for is past the end now (its rows finished or left the filter): go
+        // back to the last page that still has rows, same filters, without any message.
+        const back = pageBack(query.page, response.data.items.length, response.data.total);
+        if (back !== undefined) {
+          setQuery({ ...query, page: back });
+          return;
+        }
         setData({ items: response.data.items, total: response.data.total });
         setStatus('ready');
       },
@@ -260,6 +277,13 @@ function ExportsContent({ clock }: { readonly clock: ExportsClock }): ReactEleme
         }).then(
           (response) => {
             if (!current) return;
+            // Same as the first read: an emptied page past the end reads the last page instead
+            // (the rows on screen stay until that answer comes; polling then follows that page).
+            const back = pageBack(query.page, response.data.items.length, response.data.total);
+            if (back !== undefined) {
+              setQuery({ ...query, page: back });
+              return;
+            }
             setData({ items: response.data.items, total: response.data.total });
           },
           () => {
