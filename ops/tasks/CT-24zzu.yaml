@@ -1,0 +1,33 @@
+id: CT-24zzu
+repo: rebate-platform
+title: 契约：新增只发站内信的通知模板编码 BALANCE_CORRECTED（余额被重算纠正）——枚举、只发站内信那组、站内信标题键、资金术语分段，并改写 recalcBalanceAdminReconDiff 说明里「不推送」那句（D10-2091 / D10-2092）
+type: contract
+# 2026-11-18 be 入账（负责人「要通知」D10-2091；方案 D10-2092）。契约由 Claude 写；渲染、目录登记与发送另开 B2-02z。编码最终名由本单定（暂名 BALANCE_CORRECTED），定了报编排。
+# 要改：contracts/enums/ops.yaml notify_template_code 加编码（中文说明：重算纠正余额，只发站内信）；openapi adminListNotifyChannels 说明里「只发站内信」那组（现写 BR-TEXT-23 三码与 BALANCE_ADJUSTED）加上它；texts.default.json 加 inbox.title.<编码> =「余额更正」（按字典序插入）；specs/fund-term-keys.yaml 把它放进 fund 段 notify_templates（与 BALANCE_ADJUSTED 同段）；recalcBalanceAdminReconDiff 说明里「does not trigger a wallet change push」那句改写为：可用余额前后不等时，在写余额行的同一事务里写一条该编码的站内信（不发推送与短信、category=service、注销用户不发），拒绝、前后相同、只有冻结变化都不发；跨零驳回提现的通知照旧另发。
+# 盘点（be，11-18，Explore 核 be2cand HEAD）：texts 现只放标题键 inbox.title.<code>，正文默认在渲染器常量里（BALANCE_ADJUSTED 见 notification/application/balance-adjusted-message.ts DEFAULT_BODY），所以本单只加标题键、默认正文放 B2-02z 渲染器（D10-2092 原说 texts 加正文，按现约定改，已报编排）；H5 消息页只渲染服务端给的 title / body、不按 code 分支，未知编码照常显示；后台消息模板页与渠道页不写死编码清单（列表来自接口）——前端无须 modify_existing；三端原生 App 不在本仓库，未核。
+# 会碰的钉子：packages/contracts-ts/src/fund-term-keys.test.ts:94 要求每个编码在 specs/fund-term-keys.yaml 恰在一段（本单加进 fund 段即满足）；冻结 test/spec/contracts/settle-adjusted-template/texts.test.ts [AC-CT-26za#7] 钉 inbox.title.* 按字典序（新键插对位置即可）；fund-terms.test.ts [AC-CT-26za#9] 钉 ordinary 段整份（本单不进 ordinary 段，不受影响）。
+refs: [BR-FUND-19, BR-FUND-24]
+refs_hash:
+  BR-FUND-19: 34f619112535
+  BR-FUND-24: 0f1a6ecb3334
+contract_sections: ['11.1']
+deps: []
+paths:
+  - 'contracts/enums/ops.yaml'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
+pr: null
