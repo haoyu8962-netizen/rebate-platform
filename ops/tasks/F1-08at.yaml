@@ -1,0 +1,29 @@
+id: F1-08at
+repo: rebate-platform
+title: F1-08at：结果未知期间会话过期、重新登录后在原页面顶部提示「有一笔提交结果未知，请先到列表核对」——只存不含业务数据的标记（页面、有一笔结果未知、发生时刻），手动关闭后清掉（FU-ADMIN-UNKNOWN-ON-RELOGIN）
+type: impl
+# 2026-11-18 入账（前端线 fe，编排 D10-2075；排在 F1-08am 之后，不急）。来由：F1-08as 资金评审 r1 的 out_of_scope（D10-2061 已知局限）——批量手动打款或调账类写入进入「结果未知」后，会话过期 → 【重试】收 10001 → 全局去登录、抽屉 / 对话框卸载，键与请求体丢失，登录后不再提示结果未知，操作员可能以新键重填同一笔。
+# 做法（D10-2075，**不照评审建议存键与请求体**）：请求体含提现单号与金额，重新登录的也可能是另一个账号，存它们风险大于收益。改为在进入结果未知时只存一个**不含业务数据**的标记：哪个页面（路由 / 资源名）、有一笔提交结果未知、发生时刻（注入 Clock）；不存单号、金额、用户、键、请求体。重新登录后进入该页面时在页面顶部提示「有一笔提交结果未知，请先到列表核对」（含发生时刻），提供关闭；手动关闭后清掉标记；结果未知在同一会话内正常解除（拿到确定结果）时也清掉。不自动重试、不恢复表单、不跨账号显示其他账号的标记（标记按当前登录账号区分，或换号即清，二选一，以简单且不泄露为准）。存储用会话级或本地存储由实现定，但只存上述三项。
+# 覆盖面：批量手动打款（ManualPaid）、调账写入层 useAdjustmentWrite（新建、红冲、批准、驳回、核销）。规则测试新目录 test/spec/frontend/admin-unknown-relogin-marker/**：进入结果未知 → 模拟会话过期去登录 → 重新登录回到原页 → 顶部提示全文与时刻、关闭后清掉、刷新后不再出现；存储里只有页面、标记、时刻三项（断言整个存储值 toEqual，不含单号 / 金额 / 键 / 请求体）；换另一账号登录不出现前一账号的提示；正常解除后不出现。
+# 资金页（RV2）：money 评审；规则测试与首轮评审由无上下文的独立 Claude（D10-2003）。资金评审必查项（D10-2050）照带。
+refs: [BR-WDR-16, BR-FUND-24, BR-ID-34]
+refs_hash:
+  BR-WDR-16: c5899cc85558
+  BR-FUND-24: 0f1a6ecb3334
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [F1-08as]
+paths:
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/texts/withdrawals.ts'
+  - 'apps/admin/src/pages/adjustments/**'
+  - 'apps/admin/src/texts/adjustments.ts'
+  - 'apps/admin/src/components/unknown-marker/**'
+test_paths:
+  - 'test/spec/frontend/admin-unknown-relogin-marker/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-unknown-relogin-marker/**'
+status: todo
+pr: null
