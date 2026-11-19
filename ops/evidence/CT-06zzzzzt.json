@@ -1,0 +1,85 @@
+{
+  "task": "CT-06zzzzzt",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "c3b47c3a2209baea513fed38b9b09b915f852965",
+  "red_tests": [
+    "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#1] T[], readonly T[] and Array<T> between the name and the `=`: the table expands row by row, as the same table without the annotation",
+    "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#2] ReadonlyArray<{ a: number; b: string }> (on one line or over several) between the name and the `=`: the table expands as without it",
+    "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#3] an annotation together with `as const`: the table expands as the same `as const` table without the annotation",
+    "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#4] an `=` inside the annotation does not end it: Record<string, (x: number) => string>[], Foo<T = string>[], a generic function type with a default type parameter",
+    "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#5] brackets inside the annotation are not the table: a tuple type `[…]`, nested generics closing with `>>`",
+    "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#6] annotated but a row is not literal (a name, a call, a spread) or a method follows the literal: still cannot be expanded for certain",
+    "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#7] annotated but a let, a var or the result of a call: still cannot be expanded for certain",
+    "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#8] annotated but in a kit of another directory, or re-exported by the kit (export { … } from, export * from): still cannot be expanded for certain",
+    "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#9] annotated tables, each side read from its own kit: a row added to the head kit makes its rows not apply; the other table, unchanged, still expands"
+  ],
+  "risk_note": "Guard change (tools/**, RV2 by path). CT-06zzzzzt (D10-2148): exportedTable in tools/guard/lib/test-blocks.ts — the reader of a same-directory kit's top-level export const literal array that modify_existing / red_exempt .each expansion uses in red-check and evidence-check — now skips a top-level type annotation between the name and = (annotationEnd walks the tokenizer's tokens: strings, templates and comments are whole tokens or dropped, brackets matched, = inside angle brackets and => are not the assignment). Every other condition is unchanged (same directory, one import level, top-level const, literal rows, as const allowed); an annotated table with a non-literal row, let / var, a call result, another directory or a re-export is refused as before. No existing test changed. Unblocks be's B2-02za (texts.ts AMOUNT_VECTORS).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c3b47c3a2209baea513fed38b9b09b915f852965",
+      "tree": "17519e3e67880cd0cf4a16877b0a8ac564a67f59",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-19T19:22:13Z",
+      "finished_at": "2026-11-19T19:22:16Z",
+      "red_tests": [
+        "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#1] T[], readonly T[] and Array<T> between the name and the `=`: the table expands row by row, as the same table without the annotation",
+        "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#2] ReadonlyArray<{ a: number; b: string }> (on one line or over several) between the name and the `=`: the table expands as without it",
+        "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#3] an annotation together with `as const`: the table expands as the same `as const` table without the annotation",
+        "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#4] an `=` inside the annotation does not end it: Record<string, (x: number) => string>[], Foo<T = string>[], a generic function type with a default type parameter",
+        "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#5] brackets inside the annotation are not the table: a tuple type `[…]`, nested generics closing with `>>`",
+        "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#6] annotated but a row is not literal (a name, a call, a spread) or a method follows the literal: still cannot be expanded for certain",
+        "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#7] annotated but a let, a var or the result of a call: still cannot be expanded for certain",
+        "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#8] annotated but in a kit of another directory, or re-exported by the kit (export { … } from, export * from): still cannot be expanded for certain",
+        "test/spec/ci/each-kit-table-annotated/annotated.test.ts > [CT-06zzzzzt#9] annotated tables, each side read from its own kit: a row added to the head kit makes its rows not apply; the other table, unchanged, still expands"
+      ],
+      "expected": ["test/spec/ci/each-kit-table-annotated/annotated.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "6c418102a53a279e82655263239f407eff73ad72767df2292ae377fdb6b5f8c3"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (Codex usage limit until 2026-11-20 13:01, approvals 36): money r1 full review pass, no findings (couli-runs/CT-06zzzzzt/review-money-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by independent Claude (ledger tester claude-independent), red at the first try (9 tests). spec-test r1 by a fresh independent Claude (approvals 36) pass with one S2 (no annotation holding a string literal with = > [); pinned by the implementation's unit test instead of another test round (couli-runs/CT-06zzzzzt/review-spec-test-r1.json)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c2a35211e183bbbdbd253368b942c33bf571f8cb",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
