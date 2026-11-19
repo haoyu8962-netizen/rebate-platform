@@ -675,3 +675,9 @@ approvals:
     granted: true
     date: '2026-11-18'
     note: '负责人 2026-11-18 15:28 在编排会话回复原话「可以」（D10-2098）；编排问的原话是「F1-08fc 导出遇到服务器错误时，提示改成『导出任务可能已创建，请先到【导出记录】核对，再决定是否重新导出』，可以吗？」。范围只限 test/spec/frontend/admin-ledger-export/errors.test.ts 的 [AC-F1-08fb-ERROR#6] 里这一句期望提示及台账已登的改标题（retitle_to）；该用例 POST 次数与不自动重发两条断言不变；10403、20001、其他 4xx、网络错误与无法解析的分类不动；其他任何冻结断言与期望值不在这次同意之内。台账 F1-08fc 的 modify_existing（rule_change，br BR-ID-42，D10-1981 / D10-1988）。'
+  - id: 110
+    row: 4
+    title: 'B1-02zzzb 任务专属一次性追加：代码评审例外一轮——Codex 按资金评审口径审到最终头，必读「收窄到只做 payout_account_change 摘要」那一实现提交（D10-1665 / D10-1666）；照常不调 bump-attempt（上限已满，按编排例外轮记），证据如实记 engine codex、model gpt-6-astra，其余口径与次数上限不变'
+    granted: true
+    date: '2026-11-19'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（试次属门禁流程小改动），D10-2140：前三轮不是连续不过——money r1 fail、r2 全量 pass、例外轮 exception91（approvals 91）pass，三轮之后还有一个收窄实现提交（payout 回基线、签发对 withdraw 带 summary 回 20001），它改的正是安全边界，落地的头上不能留没被评审看过的实现提交。评审重点：payout_account_change 仍必须带且校验摘要、withdraw 路径回基线后不留半截摘要逻辑、带 summary 的 withdraw 签发被 20001 拒、phone_change / account_deletion 不受影响。收口：这一轮若提出问题，修完报编排，不再自批下一轮。编排按 approvals 16 / 24 登记。'
