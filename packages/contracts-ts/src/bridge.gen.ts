@@ -1416,7 +1416,7 @@ export const routes = {
     "auth": "login",
     "phase": "M-公开",
     "since": {
-      "ios": null,
+      "ios": "1.0.0",
       "android": "1.0.0",
       "harmony": "1.0.0"
     },
