@@ -25,4 +25,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/codex-model-gpt62sol/**'
-status: todo
+status: done
+pr: 346
