@@ -1,0 +1,25 @@
+id: QA-04b
+repo: rebate-platform
+title: 'QA-04b（STAGING-SMOKE 第一阶段冒烟本体；挂 05 QA-04）：staging 接口层每日冒烟 smoke.ts，用例 1–8，直连 staging、按真实客户端方式调用，PASS / FAIL / 黄汇总'
+type: test-change
+# 2026-11-20 be 入账（D10-2111 / D10-2112 / D10-2119 / D10-2148；couli-runs/STAGING-SMOKE/brief.md 第一阶段、be-admin-account-plan.md）。
+# 只写 test/staging-smoke/：smoke.ts 与 lib/（客户端调用：设备注册、签名、幂等键、令牌；后台登录与二次验证复用 QA-04a 的
+# lib/totp.ts、lib/node-files.ts）。用例：1 设备注册 + 测试号登录 + 刷新令牌；2 首页配置 / 商品池；3 粘贴一条商品链接查返利
+# （每次只调 1 次）；4 订单列表与详情；5 钱包汇总与流水；6 改收款账号（二次验证用测试号固定验证码，带业务摘要）；
+# 7 提现申请 → 后台审批通过 → 打款（staging 假通道）→ 余额、流水、提现记录、站内信核对，另一笔驳回核余额退回；
+# 8 事件上报 /v1/events、强更检查。每条核响应过契约与状态前后变化。余额 < ¥10 报黄（D10-2119 ②）；后台 10403 报黄
+# 「出口 IP 可能变了」。值只在测试机 ~/.couli-staging-smoke/（admin.json、member.json，0600），只认 staging（复用 QA-04a 的
+# target.json 检查）；输出与结果目录只有步骤名、HTTP 状态、业务码、耗时、脱敏后的失败原文。码错一次即停、不刷码。
+# 用专用测试会员，不碰别人数据。不改应用代码、不加 staging 后门、不进 verify 测试、不在 CI 跑；测试机 cron 另由编排装。
+# type test-change、tester none（同 QA-04a）；评审独立 Claude（approvals 第 27 / 36 条）；Claude 实现。
+refs: []
+refs_hash: {}
+deps: [QA-04a]
+paths:
+  - 'test/staging-smoke/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null
