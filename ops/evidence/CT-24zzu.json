@@ -1,0 +1,37 @@
+{
+  "risk_note": "CT-24zzu (D10-2091 / D10-2092 / D10-2093 / D10-2097; contract only, tester none). Adds notify template code BALANCE_CORRECTED: contracts/enums/ops.yaml notify_template_code (next to BALANCE_ADJUSTED), the inbox-only group named in adminListNotifyChannels (cited as owner decision D10-2092 pending write-back to 08), contracts/texts.default.json inbox.title.BALANCE_CORRECTED 余额更正 (sorted; no body key, the default body lives in the B2-02z renderer), specs/fund-term-keys.yaml fund segment (+ generated fund-term-keys.gen.ts). recalcBalanceAdminReconDiff: the no-wallet-push sentence becomes the member notice — one BALANCE_CORRECTED inbox message in the balance-row transaction when available_fen changes (increase and decrease alike), variables before / after formatted per BR-TEXT-10 (negative with '-', no '+' for positive), operators may reword but not change variables; no push / SMS; not sent to members whose users.status is deleting or deleted (cooling-off members get it; D10-2097, BR-FUND-24 ⑧); refusals, unchanged values, frozen-only changes and rolled-back transactions send none; the crossing-0 withdrawal rejection notice stays separate. Generated files from codegen and the text-specs generator. Test machine on the final head: verify:fast green, test/spec/contracts green; locally contracts-ts 392 and the frozen settle-adjusted-template 16 tests green.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Fresh independent Claude via claude-run.sh (D10-2003): contract r1 pass. One S2 (deleting vs deleted members) ruled by the orchestrator in D10-2097 and applied as one sentence after the review; two out_of_scope S2 also fixed in wording before the PR (no forced '+' sign; the inbox-only sentence cites D10-2092 pending write-back). D10-2097 accepted the three post-review wording changes (couli-runs/CT-24zzu/review-contract-r1.json)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "CT-24zzu",
+  "spec_commit": "01a035d7749a04312a32fc1d48871fe6965d37bf",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "6c2fdfcd8c57478190e00ec07a609c8c04005fa9",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}
