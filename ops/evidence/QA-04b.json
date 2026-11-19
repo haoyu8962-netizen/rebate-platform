@@ -1,0 +1,37 @@
+{
+  "risk_note": "QA-04b (STAGING-SMOKE phase 1 smoke body; D10-2111 / D10-2112 / D10-2119 / D10-2148; test-change, tester none). Adds the daily staging API smoke under test/staging-smoke/ only: smoke.ts (entry, PASS / FAIL / YELLOW / SKIP summary, exit 1 on FAIL, 2 on refusal), cases/ (cases 1–9: device + test-phone login + refresh; config / home / product search; paste-link parse once; orders; wallet / ledger / rules; payout account re-saved unchanged with sms step-up; withdrawal loop: ¥1 reject then ¥1 approve + payout batch on the staging fake channel with wallet / ledger / withdrawal / inbox checks; events + force-update check; logout), lib/member-client.ts (device reuse, request signature as risk/domain/request-signature.ts, idempotency keys kept on replay, token refresh), lib/admin-client.ts (password + TOTP login, totp step-up; a refused code or lock stops the admin part; 10403 admin_ip_not_allowed → YELLOW), lib/http.ts, lib/report.ts (redaction of every registered secret), lib/shape.ts, lib/node-files.ts (member.json / device.json, 0600 atomic), README.md. Balance < ¥10 → YELLOW, money cases skipped. Integer fen only. No application code, no backdoor, not in verify tests or CI. Test machine on the final content: verify:fast green.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Fresh independent Claude via claude-run.sh (approvals #27 / #36), two rounds: r1 pass with two S2 (auto review paid before the freeze check → false FAIL; a refused device.json counted as a case-1 FAIL instead of a refusal) fixed; r2 incremental pass with no findings. Validate ok, positions unchanged (couli-runs/QA-04b/review-money-r1..r2.json)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "QA-04b",
+  "spec_commit": "d30c444154b7fdb59d3c423fbbc366790c516256",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "8bf107494e13cce1be70cbac0e0c72ef54ce57be",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}
