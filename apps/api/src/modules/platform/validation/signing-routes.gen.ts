@@ -1432,8 +1432,18 @@ export const CONTRACT_SIGNING_ROUTES = [
     "signed": false
   },
   {
+    "method": "GET",
+    "path": "/admin/v1/payout-batches",
+    "signed": false
+  },
+  {
     "method": "POST",
     "path": "/admin/v1/payout-batches",
+    "signed": false
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/payout-batches/:batch_id",
     "signed": false
   },
   {

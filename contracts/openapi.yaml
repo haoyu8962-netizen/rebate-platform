@@ -28841,6 +28841,133 @@ paths:
         5XX:
           $ref: '#/components/responses/ServerError'
   /admin/v1/payout-batches:
+    get:
+      operationId: listAdminPayoutBatches
+      tags:
+        - admin-withdrawals
+      summary: Payout batches of the app, page by page, newest first, with member counts by result and held members
+      description: |
+        The batch list of the payout console, the source of its「已暂停批次表」(01 F-ADM-07; 04 §3.2
+        payout_batches, payout_batch_items, withdrawals; BR-WDR-12, BR-WDR-14, BR-WDR-17;
+        design/specs/admin-payouts.md §2, §4; ruling D10-2017 ②). Read only, no step-up. Permission
+        point: any of `payout.execute` or `fund.view` (04 §11.1, §11.2); lacking both is 10403
+        with `data.reason=admin_permission_denied`; a super admin holds every point. Reading does
+        not write an audit record. Only the batches of the console's app are listed.
+
+        A batch is created by the EXECUTE that runs it, the manual one of POST
+        /admin/v1/payout-batches or the automatic one of BR-WDR-30; a refused EXECUTE writes no
+        batch (BR-WDR-12, D10-609). Its members are the withdrawals with at least one
+        payout_batch_items row of the batch (insert only, BR-WDR-11, BR-WDR-12): the ones judged in
+        its EXECUTE, a withdrawal later moved to another batch included (its item moved_out stays
+        here). A member's `result` is its newest item of this batch (`at`, then the item id).
+
+        Each row (AdminPayoutBatchSummary) is one payout_batches row: `batch_id`, `kind` (enum
+        payout_batch_kind), `created_at`; `executed_at`, the time of the EXECUTE that formed the
+        batch, read as the earliest `at` of its paying, skipped or blocked items (null only for a
+        batch without such an item); `executor_id`, payout_batches.created_by, the admin_users id
+        that executed a manual batch, null for an automatic batch (the system executes it,
+        BR-WDR-30); `member_count`, the number of members; `result_counts`, the members by
+        `result` (enum payout_batch_item_result: paying, skipped, blocked, moved_out; the four add
+        up to `member_count`); and `held_count`, the members that are held on this batch: still on
+        it (withdrawals.batch_id is this batch), in status APPROVED and with a `hold_reason` (enum
+        withdrawal_hold_reason, set by W9, BR-WDR-13, BR-WDR-17). A member re-executed later is
+        not held even if the column still holds an old reason (EXECUTE does not clear it). The
+        members themselves are in GET
+        /admin/v1/payout-batches/{batch_id}.
+
+        Filters combine with AND: `kind`; `held` (true = only batches with `held_count` > 0, false =
+        only batches with `held_count` = 0; absent = all); `created_from` (inclusive) and
+        `created_to` (exclusive) on `created_at` (ISO 8601 with offset, 04 §5). A value outside an
+        enum or not a date-time is 20001 with `data.fields` naming the parameter; `created_from`
+        later than `created_to` is 20001 with `data.fields=[created_from, created_to]`. A filter
+        set nothing matches is an empty page (`items=[]`, `total=0`), not an error.
+
+        Order: `created_at` descending (then `batch_id` descending). Pages with `page` (as
+        AdminPage; a page past the last one is `items=[]`) and `page_size` ≤ 200 (above 200 is
+        20001, as AdminPageSize); `total` is the count of the filter set. Only codes are returned
+        for the batch kind, the item result and the hold reason: their Chinese names have no
+        BR-TEXT-25 row yet, so the console shows the codes until the planning adds them.
+      x-auth: admin
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 10403
+        - 20001
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AdminPage'
+        - $ref: '#/components/parameters/AdminPageSize'
+        - $ref: '#/components/parameters/AdminPayoutBatchKindFilter'
+        - $ref: '#/components/parameters/AdminPayoutBatchHeldFilter'
+        - $ref: '#/components/parameters/AdminPayoutBatchCreatedFrom'
+        - $ref: '#/components/parameters/AdminPayoutBatchCreatedTo'
+      responses:
+        '200':
+          description: One page of payout batches, newest first.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPayoutBatchPageResponse'
+              example:
+                code: 0
+                msg: ''
+                data:
+                  items:
+                    - batch_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fd101
+                      kind: manual
+                      created_at: '2026-11-03T10:00:00+08:00'
+                      executed_at: '2026-11-03T10:00:00+08:00'
+                      executor_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01
+                      member_count: 3
+                      result_counts:
+                        paying: 3
+                        skipped: 0
+                        blocked: 0
+                        moved_out: 0
+                      held_count: 2
+                    - batch_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fd100
+                      kind: auto
+                      created_at: '2026-11-02T15:00:00+08:00'
+                      executed_at: '2026-11-02T15:00:00+08:00'
+                      executor_id: null
+                      member_count: 1
+                      result_counts:
+                        paying: 0
+                        skipped: 0
+                        blocked: 0
+                        moved_out: 1
+                      held_count: 0
+                  page: 1
+                  page_size: 20
+                  total: 2
+                trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          description: Not available (codes in contracts/error-codes.yaml).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                pageSizeTooLarge:
+                  $ref: '#/components/examples/AdminPageSizeInvalid'
+                createdRangeInvalid:
+                  $ref: '#/components/examples/AdminPayoutBatchCreatedRangeInvalid'
+                noPermission:
+                  $ref: '#/components/examples/AdminPermissionDenied'
+                tokenExpired:
+                  $ref: '#/components/examples/AdminTokenExpired'
+        5XX:
+          $ref: '#/components/responses/ServerError'
     post:
       operationId: adminCreatePayoutBatch
       tags:
@@ -28982,6 +29109,158 @@ paths:
               examples:
                 stepUpRequired:
                   $ref: '#/components/examples/AdminStepUpRequiredTotp'
+                noPermission:
+                  $ref: '#/components/examples/AdminPermissionDenied'
+                tokenExpired:
+                  $ref: '#/components/examples/AdminTokenExpired'
+        5XX:
+          $ref: '#/components/responses/ServerError'
+  /admin/v1/payout-batches/{batch_id}:
+    get:
+      operationId: getAdminPayoutBatch
+      tags:
+        - admin-withdrawals
+      summary: One payout batch with its members, each with its hold reason, latest attempt and next query
+      description: |
+        The batch detail of the payout console, the「已暂停批次表」 (01 F-ADM-07; 04 §3.2
+        payout_batches, payout_batch_items, payout_attempts, withdrawals; BR-WDR-12, BR-WDR-14,
+        BR-WDR-17; design/specs/admin-payouts.md §2, §4; ruling D10-2017 ②). Read only, no step-up.
+        Permission point: any of `payout.execute` or `fund.view` (04 §11.1, §11.2); lacking both is
+        10403 with `data.reason=admin_permission_denied`; a super admin holds every point. An
+        unknown `batch_id`, one that is not UUID-shaped or a batch of another app is 20001 with
+        `data.fields=[batch_id]` (no 404, no probing). Reading does not write an audit record.
+
+        The fields of a list row of GET /admin/v1/payout-batches (same meaning, same values), plus
+        `members`: every member of the batch (as defined there; at most the 200 ids of one
+        EXECUTE), ordered by the time of the member's first payout_batch_items row in this batch
+        (the order the EXECUTE processed them), then `withdrawal_id` ascending; `execute_seq` is the
+        withdrawal's own execution count and is not the order within the batch. Each member
+        (AdminPayoutBatchMember) holds facts only, read when the request is served (the
+        withdrawal now, not as it was at the EXECUTE):
+
+        - `execute_seq`, `withdrawal_id`, `out_biz_no`, `net_fen`, `status` (enum
+          withdrawal_status), `hold_reason` (enum withdrawal_hold_reason; null unless the status is
+          APPROVED, so an old reason left on a re-executed withdrawal is not shown) and
+          `needs_manual`, the withdrawals columns of the same names; a member moved to another
+          batch shows its withdrawal as it is there;
+        - `result` (enum payout_batch_item_result), its newest payout_batch_items row of this batch;
+          moved_out = it has since moved to another batch (BR-WDR-12);
+        - `last_attempt`, the newest payout_attempts row of the withdrawal of any kind (`at`, then
+          the attempt id): `kind` (enum payout_attempt_kind), `result` (payout_attempts.result as
+          stored) and `at`; null when there is none. Request and response bodies are never
+          returned; the full list is in GET /admin/v1/withdrawals/{withdrawal_id};
+        - `next_query_at`, when the payout process is next due to query the transfer (BR-WDR-14,
+          configuration payout.query_schedule): for a member in PAYING with `needs_manual=false`,
+          a kind=transfer attempt and no WeChat confirmation stage (channel_state null or
+          processing; wait_user_confirm and canceling follow BR-WDR-33 ⑥ and give null), T + the offset of the first query point later than the
+          injected Clock, T being the `at` of its earliest kind=transfer attempt, and never later
+          than the moment the withdrawal goes to a person (T + 24 hours by default); null otherwise
+          (not PAYING, `needs_manual=true`, no transfer attempt, or channel_state wait_user_confirm / canceling). Computed when read, not stored;
+          the query itself may run a little later;
+        - `has_transfer_attempt`, true when the withdrawal has a kind=transfer payout_attempts row
+          of any result, the same test as BR-WDR-12 ② and the `has_transfer_attempt` reason of POST
+          /admin/v1/payout-batches.
+
+        No list of available actions is returned; the console derives what to offer from these
+        facts and each write operation still guards itself on the server. 【重新执行】 (a new POST
+        /admin/v1/payout-batches) is for a member with `hold_reason=queue_paused` and
+        `has_transfer_attempt=false` only; a withdrawal with a transfer attempt, payer_side_after_transfer
+        included, is never executed again and ends through W8, W3, W10 or W11 (BR-WDR-14,
+        BR-WDR-17). Only codes are returned for the batch kind, the item result and the hold
+        reason: their Chinese names have no BR-TEXT-25 row yet, so the console shows the codes
+        until the planning adds them.
+      x-auth: admin
+      x-implementation: planned
+      x-error-codes:
+        - 10001
+        - 10403
+        - 20001
+      security:
+        - adminBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/AdminPayoutBatchIdPath'
+      responses:
+        '200':
+          description: The batch with its members.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPayoutBatchDetailResponse'
+              example:
+                code: 0
+                msg: ''
+                data:
+                  batch_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fd101
+                  kind: manual
+                  created_at: '2026-11-03T10:00:00+08:00'
+                  executed_at: '2026-11-03T10:00:00+08:00'
+                  executor_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b01
+                  member_count: 3
+                  result_counts:
+                    paying: 3
+                    skipped: 0
+                    blocked: 0
+                    moved_out: 0
+                  held_count: 2
+                  members:
+                    - execute_seq: 1
+                      withdrawal_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc101
+                      out_biz_no: W20261103000101
+                      net_fen: 9800
+                      status: PAYING
+                      result: paying
+                      hold_reason: null
+                      needs_manual: false
+                      last_attempt:
+                        kind: query
+                        result: unknown
+                        at: '2026-11-03T10:05:01+08:00'
+                      next_query_at: '2026-11-03T10:30:01+08:00'
+                      has_transfer_attempt: true
+                    - execute_seq: 1
+                      withdrawal_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc102
+                      out_biz_no: W20261103000102
+                      net_fen: 20000
+                      status: APPROVED
+                      result: paying
+                      hold_reason: payer_side_after_transfer
+                      needs_manual: false
+                      last_attempt:
+                        kind: transfer
+                        result: fail
+                        at: '2026-11-03T10:00:03+08:00'
+                      next_query_at: null
+                      has_transfer_attempt: true
+                    - execute_seq: 1
+                      withdrawal_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4fc103
+                      out_biz_no: W20261102000103
+                      net_fen: 28000
+                      status: APPROVED
+                      result: paying
+                      hold_reason: queue_paused
+                      needs_manual: false
+                      last_attempt: null
+                      next_query_at: null
+                      has_transfer_attempt: false
+                trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        4XX:
+          description: Not available (codes in contracts/error-codes.yaml).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                batchInvalid:
+                  $ref: '#/components/examples/AdminPayoutBatchIdInvalid'
                 noPermission:
                   $ref: '#/components/examples/AdminPermissionDenied'
                 tokenExpired:
@@ -32204,6 +32483,43 @@ components:
       description: The withdrawal (withdrawals.id) as a list row carries it; unknown or of another app → 20001 with data.fields=[withdrawal_id].
       schema:
         $ref: '#/components/schemas/Id'
+    AdminPayoutBatchIdPath:
+      name: batch_id
+      in: path
+      required: true
+      description: The payout batch (payout_batches.id) as a list row carries it; unknown, not UUID-shaped or of another app → 20001 with data.fields=[batch_id].
+      schema:
+        $ref: '#/components/schemas/Id'
+    AdminPayoutBatchKindFilter:
+      name: kind
+      in: query
+      required: false
+      description: Only batches of this kind (enum payout_batch_kind); absent = all.
+      schema:
+        $ref: '#/components/schemas/AdminPayoutBatchKind'
+    AdminPayoutBatchHeldFilter:
+      name: held
+      in: query
+      required: false
+      description: true = only batches with a held member (held_count > 0, that is a member still on the batch, in status APPROVED, with a hold_reason); false = only batches without; absent = all.
+      schema:
+        type: boolean
+    AdminPayoutBatchCreatedFrom:
+      name: created_from
+      in: query
+      required: false
+      description: Earliest payout_batches.created_at, inclusive (ISO 8601 with offset); later than created_to → 20001 with data.fields=[created_from, created_to].
+      schema:
+        type: string
+        format: date-time
+    AdminPayoutBatchCreatedTo:
+      name: created_to
+      in: query
+      required: false
+      description: Latest payout_batches.created_at, exclusive (ISO 8601 with offset).
+      schema:
+        type: string
+        format: date-time
     AdminSettleBillFrom:
       name: bill_from
       in: query
@@ -34832,6 +35148,25 @@ components:
         data:
           fields:
             - withdrawal_id
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminPayoutBatchIdInvalid:
+      summary: 20001 unknown batch_id (or not UUID-shaped, or a batch of another app)
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - batch_id
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminPayoutBatchCreatedRangeInvalid:
+      summary: 20001 payout batch list with created_from later than created_to
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - created_from
+            - created_to
         trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
     AdminSettleBillRangeInvalid:
       summary: 20001 settlement bill list with bill_from later than bill_to
@@ -58550,6 +58885,257 @@ components:
           type: string
         data:
           $ref: '#/components/schemas/AdminPayoutBatchResult'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+    AdminPayoutBatchResultCounts:
+      type: object
+      description: The members of a batch by their result in it (payout_batch_item_result); the four add up to member_count.
+      additionalProperties: false
+      required:
+        - paying
+        - skipped
+        - blocked
+        - moved_out
+      properties:
+        paying:
+          type: integer
+          format: int32
+          minimum: 0
+        skipped:
+          type: integer
+          format: int32
+          minimum: 0
+        blocked:
+          type: integer
+          format: int32
+          minimum: 0
+        moved_out:
+          type: integer
+          format: int32
+          minimum: 0
+    AdminPayoutBatchSummary:
+      type: object
+      description: One payout batch (04 §3.2 payout_batches) with its member counts; see GET /admin/v1/payout-batches.
+      additionalProperties: false
+      required:
+        - batch_id
+        - kind
+        - created_at
+        - executed_at
+        - executor_id
+        - member_count
+        - result_counts
+        - held_count
+      properties:
+        batch_id:
+          $ref: '#/components/schemas/Id'
+        kind:
+          $ref: '#/components/schemas/AdminPayoutBatchKind'
+        created_at:
+          type: string
+          format: date-time
+        executed_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: The EXECUTE that formed the batch, the earliest at of its paying, skipped or blocked items; null only for a batch without such an item.
+        executor_id:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 64
+          description: payout_batches.created_by, the admin_users id that executed a manual batch; null for an automatic batch (BR-WDR-30).
+        member_count:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Withdrawals with at least one payout_batch_items row of this batch.
+        result_counts:
+          $ref: '#/components/schemas/AdminPayoutBatchResultCounts'
+        held_count:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Members still on this batch (withdrawals.batch_id is this batch), in status APPROVED, with a hold_reason.
+    AdminPayoutBatchPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+        - page_size
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPayoutBatchSummary'
+        page:
+          type: integer
+          format: int32
+          minimum: 1
+        page_size:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 200
+        total:
+          type: integer
+          format: int32
+          minimum: 0
+    AdminPayoutBatchPageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/AdminPayoutBatchPage'
+        trace_id:
+          $ref: '#/components/schemas/TraceId'
+    AdminPayoutBatchLastAttempt:
+      type: object
+      description: The newest payout_attempts row of the withdrawal, any kind (04 §3.2); bodies are not returned.
+      additionalProperties: false
+      required:
+        - kind
+        - result
+        - at
+      properties:
+        kind:
+          $ref: '#/components/schemas/AdminPayoutAttemptKind'
+        result:
+          $ref: '#/components/schemas/AdminPayoutAttemptResult'
+        at:
+          type: string
+          format: date-time
+    AdminPayoutBatchMember:
+      type: object
+      description: One member of a payout batch, facts only and read when served; see GET /admin/v1/payout-batches/{batch_id}.
+      additionalProperties: false
+      required:
+        - execute_seq
+        - withdrawal_id
+        - out_biz_no
+        - net_fen
+        - status
+        - result
+        - hold_reason
+        - needs_manual
+        - last_attempt
+        - next_query_at
+        - has_transfer_attempt
+      properties:
+        execute_seq:
+          type: integer
+          format: int32
+          minimum: 0
+          description: withdrawals.execute_seq, raised by one at each move to PAYING (BR-WDR-12).
+        withdrawal_id:
+          $ref: '#/components/schemas/Id'
+        out_biz_no:
+          $ref: '#/components/schemas/AdminWithdrawalOutBizNo'
+        net_fen:
+          $ref: '#/components/schemas/Fen'
+        status:
+          $ref: '#/components/schemas/WithdrawalStatus'
+        result:
+          $ref: '#/components/schemas/AdminPayoutBatchItemResult'
+        hold_reason:
+          anyOf:
+            - $ref: '#/components/schemas/AdminWithdrawalHoldReason'
+            - type: 'null'
+          description: Why W9 returned the withdrawal to APPROVED (BR-WDR-13, BR-WDR-17); null unless the status is APPROVED (an old reason left on a re-executed withdrawal is not shown).
+        needs_manual:
+          type: boolean
+        last_attempt:
+          anyOf:
+            - $ref: '#/components/schemas/AdminPayoutBatchLastAttempt'
+            - type: 'null'
+          description: Null when the withdrawal has no payout attempt.
+        next_query_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: When the next scheduled query of the transfer is due (BR-WDR-14), computed when read; null unless PAYING with needs_manual false and a transfer attempt.
+        has_transfer_attempt:
+          type: boolean
+          description: The withdrawal has a kind=transfer payout_attempts row of any result (BR-WDR-12 ②).
+    AdminPayoutBatchDetail:
+      type: object
+      description: A payout batch with its members; see GET /admin/v1/payout-batches/{batch_id}.
+      additionalProperties: false
+      required:
+        - batch_id
+        - kind
+        - created_at
+        - executed_at
+        - executor_id
+        - member_count
+        - result_counts
+        - held_count
+        - members
+      properties:
+        batch_id:
+          $ref: '#/components/schemas/Id'
+        kind:
+          $ref: '#/components/schemas/AdminPayoutBatchKind'
+        created_at:
+          type: string
+          format: date-time
+        executed_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: As in AdminPayoutBatchSummary.
+        executor_id:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 64
+          description: As in AdminPayoutBatchSummary.
+        member_count:
+          type: integer
+          format: int32
+          minimum: 0
+        result_counts:
+          $ref: '#/components/schemas/AdminPayoutBatchResultCounts'
+        held_count:
+          type: integer
+          format: int32
+          minimum: 0
+        members:
+          type: array
+          description: Ordered by the member's first item time in this batch, then withdrawal_id, ascending.
+          items:
+            $ref: '#/components/schemas/AdminPayoutBatchMember'
+    AdminPayoutBatchDetailResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - msg
+        - data
+        - trace_id
+      properties:
+        code:
+          $ref: '#/components/schemas/SuccessCode'
+        msg:
+          type: string
+        data:
+          $ref: '#/components/schemas/AdminPayoutBatchDetail'
         trace_id:
           $ref: '#/components/schemas/TraceId'
     AdminPayoutOverviewChannel:

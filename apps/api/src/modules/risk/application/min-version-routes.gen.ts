@@ -2885,6 +2885,16 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": true
   },
   {
+    "operationId": "listAdminPayoutBatches",
+    "method": "GET",
+    "path": "/admin/v1/payout-batches",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
     "operationId": "adminCreatePayoutBatch",
     "method": "POST",
     "path": "/admin/v1/payout-batches",
@@ -2893,6 +2903,16 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
       "full"
     ],
     "idempotent": true
+  },
+  {
+    "operationId": "getAdminPayoutBatch",
+    "method": "GET",
+    "path": "/admin/v1/payout-batches/:batch_id",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
   },
   {
     "operationId": "adminGetPayoutOverview",
