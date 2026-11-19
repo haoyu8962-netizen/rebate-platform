@@ -59,8 +59,11 @@ export interface PayoutExecuteProps {
   readonly onBusyChange: (busy: boolean) => void;
 }
 
+/** What the pre-checks read of a withdrawal (a list row or the detail). */
+export type CheckedRow = Pick<WithdrawalRow, 'payout_channel' | 'net_fen'>;
+
 /** Sum of the net amounts (integer fen through @couli/money). */
-function netTotal(rows: readonly WithdrawalRow[]): bigint {
+function netTotal(rows: readonly CheckedRow[]): bigint {
   let total = parseFen(0);
   for (const row of rows) total = addFen(total, parseFen(row.net_fen));
   return total;
@@ -69,7 +72,7 @@ function netTotal(rows: readonly WithdrawalRow[]): bigint {
 const channelName = (code: string): string => nameOr(channelTitles, code);
 
 /** The 执行前检查 items, every one taken from the overview (no threshold of its own). */
-function checksOf(rows: readonly WithdrawalRow[], overview: PayoutOverview): string[] {
+export function checksOf(rows: readonly CheckedRow[], overview: PayoutOverview): string[] {
   const items = [
     t.check(t.payout, overview.payout_enabled ? t.payoutOn : t.payoutOff, overview.payout_enabled),
     t.check(
@@ -125,7 +128,7 @@ function checksOf(rows: readonly WithdrawalRow[], overview: PayoutOverview): str
 }
 
 /** The notice of a whole batch refused. */
-function refusedText(result: PayoutBatchResult): string {
+export function refusedText(result: PayoutBatchResult): string {
   const reason = result.reason ?? '';
   const text = t.refused[reason];
   if (text === undefined) return t.refusedOther(reason);
@@ -133,7 +136,7 @@ function refusedText(result: PayoutBatchResult): string {
 }
 
 /** The text of one item of an executed batch. */
-function itemText(
+export function itemText(
   id: string,
   paying: ReadonlySet<string>,
   left: ReadonlyMap<string, PayoutBatchLeftItem>,

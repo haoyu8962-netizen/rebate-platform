@@ -1,0 +1,139 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-withdrawal-detail-payout/entry.test.ts > [AC-F1-08am-ENTRY#1] 待执行（APPROVED）单：持 payout.execute 只出【执行打款】，持 payout.manual_entry 只出【手动成功】，超管两个都出且可用；只持 fund.view 或 withdraw.review 两个都不出；都没有【撤销微信转账】【重新计算】，不点不发写请求",
+    "test/spec/frontend/admin-withdrawal-detail-payout/entry.test.ts > [AC-F1-08am-ENTRY#2] 只有 APPROVED 单出两个入口：待审核、已驳回、打款中、接口打款成功、线下打款成功、打款失败的单（超管）两个都不出；APPROVED 单（超管）两个都出",
+    "test/spec/frontend/admin-withdrawal-detail-payout/entry.test.ts > [AC-F1-08am-ENTRY#3] 已发出转账的 APPROVED 单不出入口：转账尝试为处理中、成功或结果未知时两个都不出；付款方侧失败退回（转账 fail、payer_side_after_transfer）时不出【执行打款】；没有转账尝试的同一张单（超管）两个都出",
+    "test/spec/frontend/admin-withdrawal-detail-payout/entry.test.ts > [AC-F1-08am-ENTRY#4] 微信零钱的 APPROVED 单（超管）：不出【手动成功】（W8 不对微信开放），【执行打款】照常可用；没有【撤销微信转账】",
+    "test/spec/frontend/admin-withdrawal-detail-payout/entry.test.ts > [AC-F1-08am-ENTRY#5] 银行卡收款的 APPROVED 单（没有转账尝试；银行卡通道开通前只能手动成功）：超管与持 payout.manual_entry 都出可用的【手动成功】；录入三项、动态码后只发一次 POST /admin/v1/withdrawals/batch-manual-paid，items 与支付宝单同形 [{withdrawal_id, channel_order_id, paid_at, paid_fen: net_fen}]，显示「已录入」",
+    "test/spec/frontend/admin-withdrawal-detail-payout/execute.test.ts > [AC-F1-08am-EXEC#1] 持 payout.execute：【执行打款】先出确认对话框（单号、实付金额、执行前检查），【取消】不发任何请求；【确认执行】→ 动态码（双击也只验一次、只发一次）→ 只发一次 POST /admin/v1/payout-batches，body 恰为 withdrawal_ids=[这一张]，带 X-Step-Up-Token 与 Idempotency-Key；逐单结果显示「已发起打款」，详情重读为打款中、两个入口消失",
+    "test/spec/frontend/admin-withdrawal-detail-payout/execute.test.ts > [AC-F1-08am-EXEC#2] executed 但该单留在待执行（会员有提现阻断 / 打款通道未开通）：如实显示原因，不显示「已发起打款」，详情仍是已通过待打款；该单已先被手动成功（not_approved，先提交的生效）：显示「单据已不是待执行状态（已被处理或状态已变化），本次未执行」、不显示「已发起打款」，随后重读详情显示线下打款成功、两个入口都不再出现；每次只发一次",
+    "test/spec/frontend/admin-withdrawal-detail-payout/execute.test.ts > [AC-F1-08am-EXEC#3] 整批拒绝（rejected，批次级前置检查与水位）：打款开关已关闭显示「整批未执行：打款开关已关闭」、打款队列已暂停显示「整批未执行：打款队列已暂停」、企业支付宝余额 W 低于预计提现 P 显示「整批未执行：企业支付宝余额 W 低于预计提现 P」；都不报成功、不进入结果未知、单据仍已通过待打款、不自动重发；再执行换新的 Idempotency-Key，第二次 executed 显示「已发起打款」",
+    "test/spec/frontend/admin-withdrawal-detail-payout/execute.test.ts > [AC-F1-08am-EXEC#4] 提交收到 10003（动态码凭证未被接受）：重新弹动态码并提示凭证已失效，验证前不重发；验证后以新凭证、原 Idempotency-Key 与逐字节相同的请求体再发一次，成功后显示「已发起打款」",
+    "test/spec/frontend/admin-withdrawal-detail-payout/execute.test.ts > [AC-F1-08am-EXEC#5] 首次提交即收到带外壳的 10403：提示「无权限执行此操作（需要 payout.execute 权限点）」，不进入结果未知（没有【重试】），不自动重发；再执行换新的 Idempotency-Key",
+    "test/spec/frontend/admin-withdrawal-detail-payout/manual-paid.test.ts > [AC-F1-08am-MANUAL#1] 持 payout.manual_entry：【手动成功】打开录入对话框，列出单号与应付，三项为空、【确认录入】不可用，控件清单整份等于关闭、取消、确认录入与三个文本输入；实付金额不等于应付（差一分、多一分、三位小数、整数不同）时提示「实付金额必须等于应付金额」、不可提交、控件清单不变、输入原样；三项逐项轮换（另两项填对，这一项留空，流水号另测只填空格）时【确认录入】都不可用、不弹验证、不发请求；填对后控件清单仍相同；【取消】后再打开三项又为空，全程不发请求",
+    "test/spec/frontend/admin-withdrawal-detail-payout/manual-paid.test.ts > [AC-F1-08am-MANUAL#2] 刚打开时对实付金额与实付时间输入框聚焦、点击、双击、按键、粘贴后失焦，值仍为空、控件清单不变；实付时间晚于注入时钟的现在 1 秒时提示「实付时间不能晚于当前时间」、不可提交、控件清单不变，不发请求",
+    "test/spec/frontend/admin-withdrawal-detail-payout/manual-paid.test.ts > [AC-F1-08am-MANUAL#3] 填对三项 →【确认录入】→ 动态码（双击也只发一次）→ 只发一次 POST /admin/v1/withdrawals/batch-manual-paid，items 恰为这一张（流水号去首尾空白、实付时间、实付金额 = net_fen），带 X-Step-Up-Token 与 Idempotency-Key；显示「已录入」，结果态控件只剩关闭类、三项锁定保留原文；详情重读为线下打款成功、两个入口消失，不发执行打款",
+    "test/spec/frontend/admin-withdrawal-detail-payout/manual-paid.test.ts > [AC-F1-08am-MANUAL#4] 服务端逐单跳过（会员有提现阻断、存在未定的转账尝试、流水号已被他单使用）：如实显示跳过原因，单据仍已通过待打款、不显示线下打款成功；该单已先被执行打款（not_approved，先提交的生效）：显示「提现单不再是待执行状态，本次未录入」、不显示线下打款成功，随后重读详情显示打款中、两个入口都不再出现；每次只发一次",
+    "test/spec/frontend/admin-withdrawal-detail-payout/manual-paid.test.ts > [AC-F1-08am-MANUAL#5] 提交收到 10003：重新动态码、验证前不重发，验证后原 Idempotency-Key 与逐字节相同的请求体再发并显示「已录入」；对照：另一次首次提交即收 10403 提示「无权限执行此操作（需要 payout.manual_entry 权限点）」、不进入结果未知、输入解锁可改，改流水号后再提交换新键",
+    "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts > [AC-F1-08am-UNKNOWN#1] 【执行打款】首次提交已生效但连接断开：进入结果未知（提示「上次提交结果未知」、只剩【重试】与去核对、Esc 与遮罩关不掉、不自动重发、不报成功）；【重试】重新动态码后原 Idempotency-Key、逐字节相同的请求体只再发一次，拿到同键回放的 executed 后显示「已发起打款」",
+    "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts > [AC-F1-08am-UNKNOWN#2] 【执行打款】首次提交收到无法解析的响应或带统一外壳的 5xx：同样是结果未知、不自动重发；去核对关闭对话框并重新读取、不再发写请求",
+    "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts > [AC-F1-08am-UNKNOWN#3] 【执行打款】结果未知后【重试】收到 10403：显示其原文但仍是结果未知、键与请求体不变；再【重试】收到 10003 verify_phone_missing：仍是结果未知、不弹验证；再【重试】收到 20001：解锁（无结果未知提示、无【重试】），再执行换新键并显示「已发起打款」",
+    "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts > [AC-F1-08am-UNKNOWN#4] 【手动成功】首次提交已生效但连接断开：结果未知、三项锁定保留原文、只剩【重试】与去核对、不自动重发；【重试】原键原体只再发一次，拿到同键回放的逐单成功后显示「已录入」",
+    "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts > [AC-F1-08am-UNKNOWN#5] 【手动成功】首次提交收到无法解析的响应或带统一外壳的 5xx：结果未知、三项锁定、不自动重发；去核对关闭对话框并重新读取、不再发写请求",
+    "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts > [AC-F1-08am-UNKNOWN#6] 【手动成功】结果未知后：【重试】收到普通 10003 照旧重新动态码、验证前不重发、验证后原键原体；收到 10403 显示其原文仍是结果未知；收到 10003 verify_phone_missing 仍是结果未知、不弹验证；收到 20001 解锁、输入可改，改流水号后再提交换新键并显示「已录入」",
+    "test/spec/frontend/admin-withdrawals/readonly.test.ts > [AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【撤销微信转账】【重新计算】，【执行打款】【手动成功】只在已通过待执行单上恰各 1 个（F1-08am），收款账号与手机号旁没有可点的【查看】，点其余这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号",
+    "test/spec/frontend/admin-withdrawals/readonly.test.ts > [AC-F1-08am-READONLY#1] 已通过待执行单（银行卡、没有转账尝试）的详情按权限点出入口：不持 payout.execute 与 payout.manual_entry 时（其余写与查看权限点照持，或只持查看）【执行打款】【手动成功】都不出现（隐藏，不是置灰）；持 payout.execute 不持 payout.manual_entry 时只出可用的【执行打款】；持 payout.manual_entry 不持 payout.execute 时只出可用的【手动成功】；都不点，只发允许的 GET、不出现完整账号 / 姓名 / 手机号"
+  ],
+  "risk_note": "F1-08am (D10-2017). apps/admin withdrawal detail page only: APPROVED withdrawals get 【执行打款】 (payout.execute; one-item POST /admin/v1/payout-batches, TOTP step-up) and 【手动成功】 (payout.manual_entry; adminBatchManualPaid, paid_fen must equal net_fen via @couli/money, fields start empty, no prefill entries). Result-unknown locks inputs and key, only same-key same-body retry; no automatic resend. Frozen READONLY#2 entry list changed under D10-1733 / D10-1899 (visibility only).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (approvals #36, D10-2003) on 9c6dca5f: pass, 0 findings. couli-runs/F1-08am/review-claude-money-r1.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude context (claude-run.sh), 2 rounds; spec-test by another independent Claude: r1 fail (1 S1 + 3 S2, fixed), r2 pass (1 S2 handled in the implementation per BR-WDR-16); red_exempt confirmation (gate record, same as F1-08cc D10-1900 / D10-1987): another independent Claude confirmed both red_exempt entries (READONLY#1 / #3 block bodies unchanged, hold on base and on this implementation), pass, 0 findings, couli-runs/F1-08am/review-confirm.json",
+    "model": "claude-opus-5-5",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-withdrawals/readonly.test.ts",
+      "test": "[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【执行打款】【手动成功】【撤销微信转账】【重新计算】，收款账号与手机号旁没有可点的【查看】，点任何这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号",
+      "retitle_to": "[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【撤销微信转账】【重新计算】，【执行打款】【手动成功】只在已通过待执行单上恰各 1 个（F1-08am），收款账号与手机号旁没有可点的【查看】，点其余这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【执行打款】【手动成功】【撤销微信转账】【重新计算】，收款账号与手机号旁没有可点的【查看】，点任何这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号',\n  async () => {\n    const { actions, click, REVEAL } = await import('./helpers.ts');\n    const otherEntry = (node: HTMLElement) =>\n      !/^(审核通过|驳回)$/.test(\n        squash(node.getAttribute('aria-label')) || squash(node.textContent),\n      );\n    const cases = [\n      { id: ID.pending, number: NO.pending, payee: PAYEE.pending },\n      { id: ID.approved, number: NO.approved, payee: PAYEE.approved },\n      { id: ID.paying, number: NO.paying, payee: PAYEE.paying },\n    ];\n    for (const { id, number, payee } of cases) {\n      const server = createServer(undefined, { permissions: ALL_GRANTS });\n      await mount(server, { route: detailRoute(id) });\n      const area = await detailShown(server, id, number);\n      expect(squash(textOf(area)), `${number}: the masked account`).toContain(\n        squash(payee.masked_account),\n      );\n      expect(usable(main(), WRITE).filter(otherEntry), `${number}: no usable write entry`).toEqual(\n        [],\n      );\n      expect(revealEntries(area), `${number}: no usable reveal entry`).toEqual([]);\n      expect(usable(area, WRITE).filter(otherEntry), 'no usable write entry').toEqual([]);\n      const pressable = [\n        ...actions(area, WRITE).filter(otherEntry),\n        ...actions(area, REVEAL),\n        ...actions(area, /^查看/),\n      ];\n      for (const node of new Set(pressable)) if (node.isConnected) await click(node);\n      await settled(server);\n      expect(server.writes(), 'no request other than GET').toEqual([]);\n      assertOnlyReads();\n      cleanup();\n    }\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【撤销微信转账】【重新计算】，【执行打款】【手动成功】只在已通过待执行单上恰各 1 个（F1-08am），收款账号与手机号旁没有可点的【查看】，点其余这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号',\n  async () => {\n    const { actions, click, REVEAL } = await import('./helpers.ts');\n    const nameOf = (node: HTMLElement) =>\n      squash(node.getAttribute('aria-label')) || squash(node.textContent);\n    const otherEntry = (node: HTMLElement) => !/^(审核通过|驳回)$/.test(nameOf(node));\n    // 【执行打款】【手动成功】 are not pressed here either (their flows: admin-withdrawal-detail-payout).\n    const notPressed = (node: HTMLElement) =>\n      !/^(审核通过|驳回|执行打款|手动成功)$/.test(nameOf(node));\n    const PAYOUT_ENTRIES = ['执行打款', '手动成功'].sort();\n    const cases = [\n      { id: ID.pending, number: NO.pending, payee: PAYEE.pending, entries: [] as string[] },\n      { id: ID.approved, number: NO.approved, payee: PAYEE.approved, entries: PAYOUT_ENTRIES },\n      { id: ID.paying, number: NO.paying, payee: PAYEE.paying, entries: [] as string[] },\n    ];\n    for (const { id, number, payee, entries } of cases) {\n      const server = createServer(undefined, { permissions: ALL_GRANTS });\n      await mount(server, { route: detailRoute(id) });\n      const area = await detailShown(server, id, number);\n      expect(squash(textOf(area)), `${number}: the masked account`).toContain(\n        squash(payee.masked_account),\n      );\n      expect(\n        usable(main(), WRITE).filter(otherEntry).map(nameOf).sort(),\n        `${number}: no usable write entry`,\n      ).toEqual(entries);\n      expect(revealEntries(area), `${number}: no usable reveal entry`).toEqual([]);\n      expect(\n        usable(area, WRITE).filter(otherEntry).map(nameOf).sort(),\n        'no usable write entry',\n      ).toEqual(entries);\n      const pressable = [\n        ...actions(area, WRITE).filter(notPressed),\n        ...actions(area, REVEAL),\n        ...actions(area, /^查看/),\n      ];\n      for (const node of new Set(pressable)) if (node.isConnected) await click(node);\n      await settled(server);\n      expect(server.writes(), 'no request other than GET').toEqual([]);\n      assertOnlyReads();\n      cleanup();\n    }\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（F1-08a / F1-08al，详情页没有【执行打款】【手动成功】），即本单正式先红的基线（规则测试提交 517bcbc2038b，不含本单实现）；couli-runs/F1-08am/red/1（正式先红）中本条判「red for a valid reason」——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12", "BR-WDR-16"]
+    }
+  ],
+  "task": "F1-08am",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "b4da16d1191c5c5aa8599ca27f75b21b09f7094b",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b4da16d1191c5c5aa8599ca27f75b21b09f7094b",
+      "tree": "880f5ce5a303d25d46c3a5f86276e45073abe08c",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-19T19:36:48Z",
+      "finished_at": "2026-11-19T19:37:03Z",
+      "red_tests": [
+        "test/spec/frontend/admin-withdrawal-detail-payout/entry.test.ts > [AC-F1-08am-ENTRY#1] 待执行（APPROVED）单：持 payout.execute 只出【执行打款】，持 payout.manual_entry 只出【手动成功】，超管两个都出且可用；只持 fund.view 或 withdraw.review 两个都不出；都没有【撤销微信转账】【重新计算】，不点不发写请求",
+        "test/spec/frontend/admin-withdrawal-detail-payout/entry.test.ts > [AC-F1-08am-ENTRY#2] 只有 APPROVED 单出两个入口：待审核、已驳回、打款中、接口打款成功、线下打款成功、打款失败的单（超管）两个都不出；APPROVED 单（超管）两个都出",
+        "test/spec/frontend/admin-withdrawal-detail-payout/entry.test.ts > [AC-F1-08am-ENTRY#3] 已发出转账的 APPROVED 单不出入口：转账尝试为处理中、成功或结果未知时两个都不出；付款方侧失败退回（转账 fail、payer_side_after_transfer）时不出【执行打款】；没有转账尝试的同一张单（超管）两个都出",
+        "test/spec/frontend/admin-withdrawal-detail-payout/entry.test.ts > [AC-F1-08am-ENTRY#4] 微信零钱的 APPROVED 单（超管）：不出【手动成功】（W8 不对微信开放），【执行打款】照常可用；没有【撤销微信转账】",
+        "test/spec/frontend/admin-withdrawal-detail-payout/entry.test.ts > [AC-F1-08am-ENTRY#5] 银行卡收款的 APPROVED 单（没有转账尝试；银行卡通道开通前只能手动成功）：超管与持 payout.manual_entry 都出可用的【手动成功】；录入三项、动态码后只发一次 POST /admin/v1/withdrawals/batch-manual-paid，items 与支付宝单同形 [{withdrawal_id, channel_order_id, paid_at, paid_fen: net_fen}]，显示「已录入」",
+        "test/spec/frontend/admin-withdrawal-detail-payout/execute.test.ts > [AC-F1-08am-EXEC#1] 持 payout.execute：【执行打款】先出确认对话框（单号、实付金额、执行前检查），【取消】不发任何请求；【确认执行】→ 动态码（双击也只验一次、只发一次）→ 只发一次 POST /admin/v1/payout-batches，body 恰为 withdrawal_ids=[这一张]，带 X-Step-Up-Token 与 Idempotency-Key；逐单结果显示「已发起打款」，详情重读为打款中、两个入口消失",
+        "test/spec/frontend/admin-withdrawal-detail-payout/execute.test.ts > [AC-F1-08am-EXEC#2] executed 但该单留在待执行（会员有提现阻断 / 打款通道未开通）：如实显示原因，不显示「已发起打款」，详情仍是已通过待打款；该单已先被手动成功（not_approved，先提交的生效）：显示「单据已不是待执行状态（已被处理或状态已变化），本次未执行」、不显示「已发起打款」，随后重读详情显示线下打款成功、两个入口都不再出现；每次只发一次",
+        "test/spec/frontend/admin-withdrawal-detail-payout/execute.test.ts > [AC-F1-08am-EXEC#3] 整批拒绝（rejected，批次级前置检查与水位）：打款开关已关闭显示「整批未执行：打款开关已关闭」、打款队列已暂停显示「整批未执行：打款队列已暂停」、企业支付宝余额 W 低于预计提现 P 显示「整批未执行：企业支付宝余额 W 低于预计提现 P」；都不报成功、不进入结果未知、单据仍已通过待打款、不自动重发；再执行换新的 Idempotency-Key，第二次 executed 显示「已发起打款」",
+        "test/spec/frontend/admin-withdrawal-detail-payout/execute.test.ts > [AC-F1-08am-EXEC#4] 提交收到 10003（动态码凭证未被接受）：重新弹动态码并提示凭证已失效，验证前不重发；验证后以新凭证、原 Idempotency-Key 与逐字节相同的请求体再发一次，成功后显示「已发起打款」",
+        "test/spec/frontend/admin-withdrawal-detail-payout/execute.test.ts > [AC-F1-08am-EXEC#5] 首次提交即收到带外壳的 10403：提示「无权限执行此操作（需要 payout.execute 权限点）」，不进入结果未知（没有【重试】），不自动重发；再执行换新的 Idempotency-Key",
+        "test/spec/frontend/admin-withdrawal-detail-payout/manual-paid.test.ts > [AC-F1-08am-MANUAL#1] 持 payout.manual_entry：【手动成功】打开录入对话框，列出单号与应付，三项为空、【确认录入】不可用，控件清单整份等于关闭、取消、确认录入与三个文本输入；实付金额不等于应付（差一分、多一分、三位小数、整数不同）时提示「实付金额必须等于应付金额」、不可提交、控件清单不变、输入原样；三项逐项轮换（另两项填对，这一项留空，流水号另测只填空格）时【确认录入】都不可用、不弹验证、不发请求；填对后控件清单仍相同；【取消】后再打开三项又为空，全程不发请求",
+        "test/spec/frontend/admin-withdrawal-detail-payout/manual-paid.test.ts > [AC-F1-08am-MANUAL#2] 刚打开时对实付金额与实付时间输入框聚焦、点击、双击、按键、粘贴后失焦，值仍为空、控件清单不变；实付时间晚于注入时钟的现在 1 秒时提示「实付时间不能晚于当前时间」、不可提交、控件清单不变，不发请求",
+        "test/spec/frontend/admin-withdrawal-detail-payout/manual-paid.test.ts > [AC-F1-08am-MANUAL#3] 填对三项 →【确认录入】→ 动态码（双击也只发一次）→ 只发一次 POST /admin/v1/withdrawals/batch-manual-paid，items 恰为这一张（流水号去首尾空白、实付时间、实付金额 = net_fen），带 X-Step-Up-Token 与 Idempotency-Key；显示「已录入」，结果态控件只剩关闭类、三项锁定保留原文；详情重读为线下打款成功、两个入口消失，不发执行打款",
+        "test/spec/frontend/admin-withdrawal-detail-payout/manual-paid.test.ts > [AC-F1-08am-MANUAL#4] 服务端逐单跳过（会员有提现阻断、存在未定的转账尝试、流水号已被他单使用）：如实显示跳过原因，单据仍已通过待打款、不显示线下打款成功；该单已先被执行打款（not_approved，先提交的生效）：显示「提现单不再是待执行状态，本次未录入」、不显示线下打款成功，随后重读详情显示打款中、两个入口都不再出现；每次只发一次",
+        "test/spec/frontend/admin-withdrawal-detail-payout/manual-paid.test.ts > [AC-F1-08am-MANUAL#5] 提交收到 10003：重新动态码、验证前不重发，验证后原 Idempotency-Key 与逐字节相同的请求体再发并显示「已录入」；对照：另一次首次提交即收 10403 提示「无权限执行此操作（需要 payout.manual_entry 权限点）」、不进入结果未知、输入解锁可改，改流水号后再提交换新键",
+        "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts > [AC-F1-08am-UNKNOWN#1] 【执行打款】首次提交已生效但连接断开：进入结果未知（提示「上次提交结果未知」、只剩【重试】与去核对、Esc 与遮罩关不掉、不自动重发、不报成功）；【重试】重新动态码后原 Idempotency-Key、逐字节相同的请求体只再发一次，拿到同键回放的 executed 后显示「已发起打款」",
+        "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts > [AC-F1-08am-UNKNOWN#2] 【执行打款】首次提交收到无法解析的响应或带统一外壳的 5xx：同样是结果未知、不自动重发；去核对关闭对话框并重新读取、不再发写请求",
+        "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts > [AC-F1-08am-UNKNOWN#3] 【执行打款】结果未知后【重试】收到 10403：显示其原文但仍是结果未知、键与请求体不变；再【重试】收到 10003 verify_phone_missing：仍是结果未知、不弹验证；再【重试】收到 20001：解锁（无结果未知提示、无【重试】），再执行换新键并显示「已发起打款」",
+        "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts > [AC-F1-08am-UNKNOWN#4] 【手动成功】首次提交已生效但连接断开：结果未知、三项锁定保留原文、只剩【重试】与去核对、不自动重发；【重试】原键原体只再发一次，拿到同键回放的逐单成功后显示「已录入」",
+        "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts > [AC-F1-08am-UNKNOWN#5] 【手动成功】首次提交收到无法解析的响应或带统一外壳的 5xx：结果未知、三项锁定、不自动重发；去核对关闭对话框并重新读取、不再发写请求",
+        "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts > [AC-F1-08am-UNKNOWN#6] 【手动成功】结果未知后：【重试】收到普通 10003 照旧重新动态码、验证前不重发、验证后原键原体；收到 10403 显示其原文仍是结果未知；收到 10003 verify_phone_missing 仍是结果未知、不弹验证；收到 20001 解锁、输入可改，改流水号后再提交换新键并显示「已录入」",
+        "test/spec/frontend/admin-withdrawals/readonly.test.ts > [AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【撤销微信转账】【重新计算】，【执行打款】【手动成功】只在已通过待执行单上恰各 1 个（F1-08am），收款账号与手机号旁没有可点的【查看】，点其余这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号",
+        "test/spec/frontend/admin-withdrawals/readonly.test.ts > [AC-F1-08am-READONLY#1] 已通过待执行单（银行卡、没有转账尝试）的详情按权限点出入口：不持 payout.execute 与 payout.manual_entry 时（其余写与查看权限点照持，或只持查看）【执行打款】【手动成功】都不出现（隐藏，不是置灰）；持 payout.execute 不持 payout.manual_entry 时只出可用的【执行打款】；持 payout.manual_entry 不持 payout.execute 时只出可用的【手动成功】；都不点，只发允许的 GET、不出现完整账号 / 姓名 / 手机号"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-withdrawal-detail-payout/entry.test.ts",
+        "test/spec/frontend/admin-withdrawal-detail-payout/execute.test.ts",
+        "test/spec/frontend/admin-withdrawal-detail-payout/manual-paid.test.ts",
+        "test/spec/frontend/admin-withdrawal-detail-payout/unknown.test.ts",
+        "test/spec/frontend/admin-withdrawals/readonly.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "ef64ccb3e3ec304ccd5be025637adcb019a2fb6296542ad74322489495985dd7"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3df8f4efc1f3c329ecefff007718446baeeaddfe",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}

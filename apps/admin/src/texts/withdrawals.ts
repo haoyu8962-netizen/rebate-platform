@@ -376,6 +376,38 @@ export const withdrawalsTexts = {
     invalidRequest: '提交内容有误，请检查后重试',
     failed: '提交失败，请稍后重试',
   },
+  /**
+   * 详情页【执行打款】【手动成功】（F1-08am；一张单即一张单的批次：adminCreatePayoutBatch、
+   * adminBatchManualPaid）。逐单原因、整批原因、校验提示与结果文案沿用 execute / manualPaid 两节。
+   */
+  detailPayout: {
+    execute: '执行打款',
+    manual: '手动成功',
+    executeTitle: (number: string): string => `执行打款确认 · ${number}`,
+    executeResultTitle: (number: string): string => `执行结果 · ${number}`,
+    manualTitle: (number: string): string => `手动成功 · ${number}`,
+    manualResultTitle: (number: string): string => `手动成功结果 · ${number}`,
+    number: '提现单号',
+    channel: '收款方式',
+    net: '实付金额',
+    due: '应付',
+    result: '执行结果',
+    overviewLoading: '正在读取打款概览…',
+    overviewFailed: '打款概览未读取到，无法预检；提交后由服务端检查，以服务端结果为准。',
+    executeConsequence:
+      '执行后这张单进入打款中并发起转账；会员阻断、通道未开通、水位等由服务端检查，未通过时单据留在待执行，并在结果里写明原因。',
+    manualConsequence:
+      '只录入已经线下打给会员的单：填写支付宝或银行转账流水号、实付时间（北京时间，或带时区的 ISO 8601）与实付金额，实付金额须等于应付。会员阻断、转账记录等由服务端判定。',
+    stepUpTarget: (number: string): string => `提现单：${number}`,
+    retry: '重试',
+    check: '刷新详情核对',
+    unknownTitle: '上次提交结果未知',
+    executeUnknownDescription:
+      '没有收到确定的结果，打款可能已经发起。可以【重试】（重新验证动态码后按原内容再提交一次，不会重复打款），或【刷新详情核对】。',
+    manualUnknownDescription:
+      '没有收到确定的结果，录入可能已经生效。录入内容已锁定：可以【重试】（重新验证动态码后按原内容再提交一次，不会重复录入），或【刷新详情核对】。',
+    refreshed: '详情已刷新，请以页面上的最新状态为准。',
+  },
   batchKinds: { manual: '手动批次', auto: '自动批次' } as Readonly<Record<string, string>>,
   itemResults: {
     paying: '已发起打款',
