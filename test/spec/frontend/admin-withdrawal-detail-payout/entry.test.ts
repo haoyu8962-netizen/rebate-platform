@@ -2,24 +2,39 @@
 // F1-08am：提现单详情页的【执行打款】（payout.execute）与【手动成功】（payout.manual_entry）只对 APPROVED
 // 单出现（BR-WDR-12 EXECUTE 与 BR-WDR-16 W8 都只从 APPROVED 进入；超管持全部点）；已发出转账的单两个都不出
 // （BR-WDR-12 ②「有转账记录即拒绝执行」，BR-WDR-16 有 pending / success / unknown 转账尝试不得手动成功，结果待确认
-// 的处置仍走 W10）；微信零钱单不开放 W8（BR-WDR-33 ⑧）；【撤销微信转账】先隐藏（D10-2017）、【重新计算】不做。
-// 只看不点不发写请求。
-import { cleanup } from '@testing-library/react';
+// 的处置仍走 W10）；微信零钱单不开放 W8（BR-WDR-33 ⑧）；银行卡单在通道开通前只能手动成功（BR-WDR-32 ①），入口与
+// 支付宝单相同、发出的 items 同形；【撤销微信转账】先隐藏（D10-2017）、【重新计算】不做。除 ENTRY#5 外只看不点不发写请求。
+import { cleanup, waitFor } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import type { PermissionSnapshot } from '../../../../apps/admin/src/providers/access-control/index.ts';
+import { PAYEE } from '../admin-withdrawals/fixtures.ts';
 import {
   EXECUTE,
+  MANUAL,
+  MANUAL_BODY,
   MANUAL_ENTRY,
+  NAME,
   REVIEWER_ONLY,
   SUPER,
+  TEXT,
   VIEWER,
   approved,
+  assertManual,
   assertNoOtherActions,
   entries,
+  executes,
+  fillEntry,
+  inDialog,
   inStatus,
+  manuals,
   mount,
+  openManual,
+  paidReply,
   serverFor,
+  settled,
+  submit,
   transfer,
+  verify,
   type Withdrawal,
 } from './helpers.ts';
 
@@ -111,5 +126,42 @@ it(
     expect(entries()).toEqual({ execute: true, manual: false });
     assertNoOtherActions();
     expect(server.writes()).toEqual([]);
+  },
+);
+
+it(
+  '[AC-F1-08am-ENTRY#5] 银行卡收款的 APPROVED 单（没有转账尝试；银行卡通道开通前只能手动成功）：超管与持 payout.manual_entry 都出可用的【手动成功】；录入三项、动态码后只发一次 POST /admin/v1/withdrawals/batch-manual-paid，items 与支付宝单同形 [{withdrawal_id, channel_order_id, paid_at, paid_fen: net_fen}]，显示「已录入」',
+  { timeout: 180_000 },
+  async () => {
+    const cases: { label: string; who: PermissionSnapshot; want: ReturnType<typeof entries> }[] = [
+      { label: 'payout.manual_entry', who: MANUAL_ENTRY, want: { execute: false, manual: true } },
+      { label: 'super', who: SUPER, want: { execute: true, manual: true } },
+    ];
+    for (const { label, who, want } of cases) {
+      const server = serverFor(
+        approved({
+          payout_channel: 'bank_card',
+          payout_method: 'bank_card',
+          payee: { ...PAYEE.approved },
+        }),
+      );
+      server.once('POST', MANUAL, (request) => paidReply(server, request));
+      await mount(server, who);
+      expect(entries(), label).toEqual(want);
+      assertNoOtherActions();
+      expect(server.writes(), label).toEqual([]);
+
+      const modal = await openManual(server);
+      await fillEntry(modal);
+      await submit(server, modal, NAME.manualSubmit);
+      await verify();
+      await waitFor(() => expect(manuals(server)).toHaveLength(1));
+      await settled(server);
+      assertManual(server, 0, MANUAL_BODY);
+      await inDialog(TEXT.paid);
+      expect(manuals(server), label).toHaveLength(1);
+      expect(executes(server), label).toEqual([]);
+      cleanup();
+    }
   },
 );

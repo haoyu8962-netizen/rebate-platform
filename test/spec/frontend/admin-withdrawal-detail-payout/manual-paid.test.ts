@@ -16,6 +16,7 @@ import {
   MANUAL_ENTRY,
   NAME,
   NET_SHOWN,
+  NET_TYPED,
   NUMBER,
   SERIAL,
   STATUS_SHOWN,
@@ -33,6 +34,7 @@ import {
   dialogs,
   disabled,
   entries,
+  executeOnServer,
   executes,
   field,
   fill,
@@ -53,8 +55,10 @@ import {
   skippedReply,
   statusShown,
   step,
+  stepDialogs,
   submit,
   submitAgainFrom,
+  timeTyped,
   values,
   verify,
   writes,
@@ -108,8 +112,8 @@ async function poke(node: HTMLInputElement): Promise<void> {
 }
 
 it(
-  '[AC-F1-08am-MANUAL#1] 持 payout.manual_entry：【手动成功】打开录入对话框，列出单号与应付，三项为空、【确认录入】不可用，控件清单整份等于关闭、取消、确认录入与三个文本输入；实付金额不等于应付（差一分、多一分、三位小数、整数不同）时提示「实付金额必须等于应付金额」、不可提交、控件清单不变、输入原样；填对后控件清单仍相同；【取消】后再打开三项又为空，全程不发请求',
-  { timeout: 120_000 },
+  '[AC-F1-08am-MANUAL#1] 持 payout.manual_entry：【手动成功】打开录入对话框，列出单号与应付，三项为空、【确认录入】不可用，控件清单整份等于关闭、取消、确认录入与三个文本输入；实付金额不等于应付（差一分、多一分、三位小数、整数不同）时提示「实付金额必须等于应付金额」、不可提交、控件清单不变、输入原样；三项逐项轮换（另两项填对，这一项留空，流水号另测只填空格）时【确认录入】都不可用、不弹验证、不发请求；填对后控件清单仍相同；【取消】后再打开三项又为空，全程不发请求',
+  { timeout: 150_000 },
   async () => {
     const server = serverFor();
     await mount(server, MANUAL_ENTRY);
@@ -132,6 +136,29 @@ it(
       await click(button(modal, NAME.manualSubmit));
       expect(dialogs()).toEqual([modal]);
       expect(writes(server)).toEqual([]);
+    }
+
+    // The three are all required: the other two right, this one left empty (the serial also only
+    // blanks) → 【确认录入】 stays unusable and nothing is sent.
+    const time = timeTyped(field(modal, FIELD.paidAt), WHEN);
+    const missing: { label: string; serial: string; at: string; amount: string }[] = [
+      { label: 'serial empty', serial: '', at: time, amount: NET_TYPED },
+      { label: 'serial blanks only', serial: '   ', at: time, amount: NET_TYPED },
+      { label: 'paid time empty', serial: SERIAL, at: '', amount: NET_TYPED },
+      { label: 'amount empty', serial: SERIAL, at: time, amount: '' },
+    ];
+    for (const { label, serial, at, amount } of missing) {
+      await fill(field(modal, FIELD.serial), serial);
+      await fill(field(modal, FIELD.paidAt), at);
+      await fill(field(modal, FIELD.amount), amount);
+      await settle();
+      expect(disabled(button(modal, NAME.manualSubmit)), label).toBe(true);
+      expect(controlsOf(modal), label).toEqual(OPENED);
+      expect(operableOf(modal), label).toEqual(OPENED_USABLE);
+      await click(button(modal, NAME.manualSubmit));
+      expect(dialogs(), label).toEqual([modal]);
+      expect(stepDialogs(), label).toEqual([]);
+      expect(writes(server), label).toEqual([]);
     }
 
     const typed = await fillEntry(modal);
@@ -212,8 +239,8 @@ it(
 );
 
 it(
-  '[AC-F1-08am-MANUAL#4] 服务端逐单跳过（会员有提现阻断、存在未定的转账尝试、流水号已被他单使用）：如实显示跳过原因，单据仍已通过待打款、不显示线下打款成功；每次只发一次',
-  { timeout: 150_000 },
+  '[AC-F1-08am-MANUAL#4] 服务端逐单跳过（会员有提现阻断、存在未定的转账尝试、流水号已被他单使用）：如实显示跳过原因，单据仍已通过待打款、不显示线下打款成功；该单已先被执行打款（not_approved，先提交的生效）：显示「提现单不再是待执行状态，本次未录入」、不显示线下打款成功，随后重读详情显示打款中、两个入口都不再出现；每次只发一次',
+  { timeout: 200_000 },
   async () => {
     const reasons = ['member_blocked', 'has_transfer_attempt', 'channel_order_id_taken'] as const;
     for (const reason of reasons) {
@@ -234,6 +261,34 @@ it(
       expect(writes(server)).toHaveLength(1);
       cleanup();
     }
+
+    // The execute was committed first (BR-WDR-16: the first to commit wins).
+    const raced = serverFor();
+    raced.once('POST', MANUAL, () => {
+      executeOnServer(raced);
+      return skippedReply('not_approved');
+    });
+    await mount(raced, SUPER);
+    const modal = await openManual(raced);
+    await fillEntry(modal);
+    const before = raced.detailReads(WID).length;
+    await submit(raced, modal, NAME.manualSubmit);
+    await verify();
+    await waitFor(() => expect(manuals(raced)).toHaveLength(1));
+    await settled(raced);
+    assertManual(raced, 0);
+    await inDialog(TEXT.skipped.not_approved!);
+    expect(shows(document.body, TEXT.unknown), 'not_approved').toBe(false);
+    await refreshed(raced, before);
+    await waitFor(() => expect(statusShown(STATUS_SHOWN.PAYING)).toBe(true));
+    expect(statusShown(STATUS_SHOWN.APPROVED), 'not_approved').toBe(false);
+    expect(statusShown(STATUS_SHOWN.PAID_MANUAL), 'not_approved').toBe(false);
+    expect(entries(), 'not_approved: both entries gone').toEqual({
+      execute: false,
+      manual: false,
+    });
+    expect(writes(raced)).toHaveLength(1);
+    expect(executes(raced)).toEqual([]);
   },
 );
 

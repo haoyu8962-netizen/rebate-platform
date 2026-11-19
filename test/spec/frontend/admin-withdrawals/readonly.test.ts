@@ -36,32 +36,39 @@ it(
 );
 
 it(
-  '[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【执行打款】【手动成功】【撤销微信转账】【重新计算】，收款账号与手机号旁没有可点的【查看】，点任何这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号',
+  '[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【撤销微信转账】【重新计算】，【执行打款】【手动成功】只在已通过待执行单上恰各 1 个（F1-08am），收款账号与手机号旁没有可点的【查看】，点其余这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号',
   async () => {
     const { actions, click, REVEAL } = await import('./helpers.ts');
-    const otherEntry = (node: HTMLElement) =>
-      !/^(审核通过|驳回)$/.test(
-        squash(node.getAttribute('aria-label')) || squash(node.textContent),
-      );
+    const nameOf = (node: HTMLElement) =>
+      squash(node.getAttribute('aria-label')) || squash(node.textContent);
+    const otherEntry = (node: HTMLElement) => !/^(审核通过|驳回)$/.test(nameOf(node));
+    // 【执行打款】【手动成功】 are not pressed here either (their flows: admin-withdrawal-detail-payout).
+    const notPressed = (node: HTMLElement) =>
+      !/^(审核通过|驳回|执行打款|手动成功)$/.test(nameOf(node));
+    const PAYOUT_ENTRIES = ['执行打款', '手动成功'].sort();
     const cases = [
-      { id: ID.pending, number: NO.pending, payee: PAYEE.pending },
-      { id: ID.approved, number: NO.approved, payee: PAYEE.approved },
-      { id: ID.paying, number: NO.paying, payee: PAYEE.paying },
+      { id: ID.pending, number: NO.pending, payee: PAYEE.pending, entries: [] as string[] },
+      { id: ID.approved, number: NO.approved, payee: PAYEE.approved, entries: PAYOUT_ENTRIES },
+      { id: ID.paying, number: NO.paying, payee: PAYEE.paying, entries: [] as string[] },
     ];
-    for (const { id, number, payee } of cases) {
+    for (const { id, number, payee, entries } of cases) {
       const server = createServer(undefined, { permissions: ALL_GRANTS });
       await mount(server, { route: detailRoute(id) });
       const area = await detailShown(server, id, number);
       expect(squash(textOf(area)), `${number}: the masked account`).toContain(
         squash(payee.masked_account),
       );
-      expect(usable(main(), WRITE).filter(otherEntry), `${number}: no usable write entry`).toEqual(
-        [],
-      );
+      expect(
+        usable(main(), WRITE).filter(otherEntry).map(nameOf).sort(),
+        `${number}: no usable write entry`,
+      ).toEqual(entries);
       expect(revealEntries(area), `${number}: no usable reveal entry`).toEqual([]);
-      expect(usable(area, WRITE).filter(otherEntry), 'no usable write entry').toEqual([]);
+      expect(
+        usable(area, WRITE).filter(otherEntry).map(nameOf).sort(),
+        'no usable write entry',
+      ).toEqual(entries);
       const pressable = [
-        ...actions(area, WRITE).filter(otherEntry),
+        ...actions(area, WRITE).filter(notPressed),
         ...actions(area, REVEAL),
         ...actions(area, /^查看/),
       ];
@@ -104,4 +111,46 @@ it(
     assertOnlyReads();
   },
   FLOW_TIMEOUT,
+);
+
+it(
+  '[AC-F1-08am-READONLY#1] 已通过待执行单（银行卡、没有转账尝试）的详情按权限点出入口：不持 payout.execute 与 payout.manual_entry 时（其余写与查看权限点照持，或只持查看）【执行打款】【手动成功】都不出现（隐藏，不是置灰）；持 payout.execute 不持 payout.manual_entry 时只出可用的【执行打款】；持 payout.manual_entry 不持 payout.execute 时只出可用的【手动成功】；都不点，只发允许的 GET、不出现完整账号 / 姓名 / 手机号',
+  async () => {
+    const { actions } = await import('./helpers.ts');
+    const PAYOUT = /^(执行打款|手动成功)$/;
+    const nameOf = (node: HTMLElement) =>
+      squash(node.getAttribute('aria-label')) || squash(node.textContent);
+    const others = ALL_GRANTS.filter(
+      (point) => point !== 'payout.execute' && point !== 'payout.manual_entry',
+    );
+    const viewOnly = ALL_GRANTS.filter(
+      (point) => point === 'withdraw.review' || point === 'fund.view',
+    );
+    const cases = [
+      { label: 'all but payout.*', permissions: others, want: [] as string[] },
+      { label: 'view only', permissions: viewOnly, want: [] as string[] },
+      {
+        label: 'payout.execute',
+        permissions: [...others, 'payout.execute' as const],
+        want: ['执行打款'],
+      },
+      {
+        label: 'payout.manual_entry',
+        permissions: [...others, 'payout.manual_entry' as const],
+        want: ['手动成功'],
+      },
+    ];
+    for (const { label, permissions, want } of cases) {
+      const server = createServer(undefined, { permissions });
+      await mount(server, { route: detailRoute(ID.approved) });
+      const area = await detailShown(server, ID.approved, NO.approved);
+      await settled(server);
+      expect(actions(area, PAYOUT).map(nameOf).sort(), `${label}: shown entries`).toEqual(want);
+      expect(usable(area, PAYOUT).map(nameOf).sort(), `${label}: usable entries`).toEqual(want);
+      expect(server.writes(), `${label}: no request other than GET`).toEqual([]);
+      assertOnlyReads();
+      cleanup();
+    }
+  },
+  FLOW_TIMEOUT * 2,
 );
