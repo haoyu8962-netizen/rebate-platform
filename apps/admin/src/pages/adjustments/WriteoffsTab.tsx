@@ -71,10 +71,15 @@ export function WriteoffsTab({ canWriteoff, onNotice }: WriteoffsTabProps): Reac
   };
   const approved = (result: WriteoffApproved) => {
     setApproval(undefined);
-    const { id, status } = result.writeoff;
+    const { id, status, user_id: userId } = result.writeoff;
+    // APPROVED wrote BAD_DEBT_WRITEOFF under biz_id = the candidate id; CANCELLED wrote nothing.
     onNotice(
       status === 'APPROVED'
-        ? { type: 'success', lines: [w.approved(id, money(result.written_off_fen))] }
+        ? {
+            type: 'success',
+            lines: [w.approved(id, money(result.written_off_fen))],
+            voucher: { userId, ref: id },
+          }
         : { type: 'success', lines: [w.cancelled(id)] },
     );
     reload();

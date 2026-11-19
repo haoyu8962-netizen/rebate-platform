@@ -135,6 +135,8 @@ export const adjustmentsTexts = {
   /** 新建调账抽屉与红冲对话框（adminCreateAdjustment，fund.adjust，短信档二次验证）。 */
   write: {
     createEntry: '新建调账',
+    /** F1-08fe: in a success prompt that wrote a voucher; opens 余额流水 for its user and biz_id. */
+    viewVoucher: '查看凭证',
     createTitle: '新建调账',
     oneStep:
       '一步提交并生效：短信验证通过后立即记账，不保存待批、不可撤回；已生效的调账只能整笔红冲后另开新单。',
@@ -292,6 +294,8 @@ export const adjustmentsTexts = {
       '批准后立即记坏账（借 坏账 / 贷 用户可用余额），用户可用余额回到 0，不可撤回，之后的入账照常计入余额；关联账户将被打上风控标记，只留痕，不改变提现判定。',
     frozenPending:
       '该用户有冻结中的提现金额（提现单未到终态），暂不能核销：请先把提现单处理到终态，候选单保持待批准。',
+    /** F1-08fe: next to the writeoff_frozen_pending refusal; opens 提现审核 filtered to the user. */
+    toWithdrawals: '去处理提现单',
     checking: '正在重新读取候选单…',
     checkFailed: '候选单读取失败',
     /** 批准没拿到带统一外壳的回答（网络错误、无法解析）：结果未知，只能原样重试或去列表核对。 */

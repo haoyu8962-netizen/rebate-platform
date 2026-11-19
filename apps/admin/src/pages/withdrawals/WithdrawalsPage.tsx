@@ -208,16 +208,17 @@ function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): R
     to: useId(),
   };
   const location = useLocation();
-  // The address's status (a workbench card) is only the starting filter, applied from the first
-  // read on; from then on the page's own draft and applied filters are all there is.
+  // The address's status (a workbench card) and user_id (【去处理提现单】) are only the starting
+  // filter, applied from the first read on; from then on the page's own draft and applied filters are all there is.
   const [initial] = useState<Draft>(() => draftFromSearch(location.search));
   const [tab, setTab] = useState<StatusTab>('all');
   const [draft, setDraft] = useState<Draft>(initial);
   const [applied, setApplied] = useState<Draft>(initial);
   const [draftErrors, setDraftErrors] = useState<DraftErrors>({});
-  const [filters, setFilters] = useState<Filters>(() =>
-    initial.status === undefined ? {} : { status: initial.status },
-  );
+  const [filters, setFilters] = useState<Filters>(() => {
+    const checked = checkDraft(initial);
+    return 'filters' in checked ? checked.filters : {};
+  });
   const [page, setPage] = useState(1);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<ListStatus>('loading');

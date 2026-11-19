@@ -28,6 +28,7 @@ import { delayedLoading, useLoadingClock } from '../../motion.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
 import { ApproveDialog } from './ApproveDialog.tsx';
 import { DetailDrawer, type DetailState } from './DetailDrawer.tsx';
+import { voucherOf } from './links.ts';
 import { ReverseDialog } from './ReverseDialog.tsx';
 import {
   ADJUSTMENTS_URL,
@@ -55,6 +56,7 @@ import {
 } from './model.ts';
 import { useRead } from './useRead.ts';
 import { reversible, type Executed, type Rejection } from './write.ts';
+import type { LedgerPrefill } from '../ledger/prefill.ts';
 
 const t = adjustmentsTexts.adjustments;
 
@@ -63,6 +65,11 @@ export interface Notice {
   readonly type: 'success' | 'warning';
   /** One element per line (the new form id, then the available balance before / after). */
   readonly lines: readonly string[];
+  /**
+   * The voucher a success wrote (F1-08fe): 【查看凭证】 opens 余额流水 for its user and biz_id.
+   * Left out when nothing was written (warnings, a cancelled write-off).
+   */
+  readonly voucher?: LedgerPrefill;
 }
 
 export interface AdjustmentsTabProps {
@@ -75,6 +82,8 @@ export interface AdjustmentsTabProps {
   readonly onNotice: (notice: Notice) => void;
   /** The list read for `version` has answered (ready or failed). */
   readonly onListRead?: (version: number) => void;
+  /** adjust_id whose detail opens with the tab (F1-08fe: 余额流水「关联单据」). */
+  readonly initialDetail?: string;
 }
 
 interface Reversal {
@@ -95,6 +104,7 @@ export function AdjustmentsTab({
   version,
   onNotice,
   onListRead,
+  initialDetail,
 }: AdjustmentsTabProps): ReactElement {
   const loadingClock = useLoadingClock();
   const { token } = theme.useToken();
@@ -104,7 +114,7 @@ export function AdjustmentsTab({
   const [page, setPage] = useState(1);
   const [attempt, setAttempt] = useState(0);
   /** The form shown in the detail drawer (undefined: closed). */
-  const [target, setTarget] = useState<string>();
+  const [target, setTarget] = useState<string | undefined>(initialDetail);
   /** Bumped on every open and retry of the drawer: each one is a new read. */
   const [detailAttempt, setDetailAttempt] = useState(0);
   /** The open reversal dialog (undefined: closed). */
@@ -154,6 +164,7 @@ export function AdjustmentsTab({
         w.reversedBefore(money(executed.available_before_fen)),
         w.reversedAfter(money(executed.available_after_fen)),
       ],
+      voucher: voucherOf(executed),
     });
     refresh();
   };

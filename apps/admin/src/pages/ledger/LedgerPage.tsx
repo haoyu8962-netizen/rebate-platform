@@ -6,6 +6,8 @@
 // 才出现，点一次只发一次 POST /admin/v1/exports（resource=ledger，filters 为已生效的 user_id 与
 // 筛选，不带分页，不带 Idempotency-Key 与二次验证），在途不再发；失败不自动重发，结果未知时提示先
 // 到【导出记录】核对；导出不重读流水、不跳转。金额经 @couli/money 显示，不在页面上求和或重算。
+// F1-08fe 只加导航：「业务单号」按 link 链到关联单据的现有后台页（link 为 null 保持纯文字，文字仍是
+// biz_id）；资金摘要卡有【查看用户详情】；进页按地址 /ledger?user_id=…&ref=… 预填 UID 与业务单号并照常查询。
 import { ExportOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import {
@@ -24,11 +26,12 @@ import {
   type TableColumnsType,
 } from 'antd';
 import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { PlannedPage, usePlanned } from '../../components/planned/index.ts';
 import { delayedLoading, useLoadingClock } from '../../motion.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { ledgerTexts as t } from '../../texts/ledger.ts';
+import { linkTarget, userDetailTarget } from './links.ts';
 import {
   EMPTY_DRAFT,
   EXPORTS_URL,
@@ -58,6 +61,7 @@ import {
   type LedgerEntry,
   type LedgerEntryPage,
 } from './model.ts';
+import { prefillFromSearch } from './prefill.ts';
 
 /** fund.view or user.lookup reads both operations (contract). */
 export function canReadLedger(access: AccessControl): boolean {
@@ -212,7 +216,15 @@ const columns: TableColumnsType<LedgerEntry> = [
   {
     key: 'biz_id',
     title: t.columns.bizId,
-    render: (_, row) => <span style={nowrap}>{row.voucher.biz_id}</span>,
+    render: (_, row) => {
+      if (row.link === null) return <span style={nowrap}>{row.voucher.biz_id}</span>;
+      const target = linkTarget(row.link);
+      return (
+        <Link to={target.to} state={target.state} style={nowrap}>
+          {row.voucher.biz_id}
+        </Link>
+      );
+    },
   },
 ];
 
@@ -229,9 +241,12 @@ function LedgerContent({ canExport }: { readonly canExport: boolean }): ReactEle
     dateTo: useId(),
     ref: useId(),
   };
-  const [uidDraft, setUidDraft] = useState('');
+  const location = useLocation();
+  // The address's user and biz_id (【查看凭证】 of 调账与核销) are only the starting query.
+  const [prefill] = useState(() => prefillFromSearch(location.search));
+  const [uidDraft, setUidDraft] = useState(prefill?.userId ?? '');
   const [uidError, setUidError] = useState<string>();
-  const [userId, setUserId] = useState<string>();
+  const [userId, setUserId] = useState<string | undefined>(prefill?.userId);
   // Bumped by every 【查询】 of the UID form: both reads start afresh, earlier answers are dropped.
   const [generation, setGeneration] = useState(0);
   const [forbidden, setForbidden] = useState(false);
@@ -239,9 +254,13 @@ function LedgerContent({ canExport }: { readonly canExport: boolean }): ReactEle
   const [summaryAttempt, setSummaryAttempt] = useState(0);
   const [ledger, setLedger] = useState<LedgerState>({ status: 'loading' });
   const [ledgerAttempt, setLedgerAttempt] = useState(0);
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<Draft>(() =>
+    prefill?.ref === undefined ? EMPTY_DRAFT : { ...EMPTY_DRAFT, ref: prefill.ref },
+  );
   const [draftErrors, setDraftErrors] = useState<DraftErrors>({});
-  const [filters, setFilters] = useState<Filters>({});
+  const [filters, setFilters] = useState<Filters>(() =>
+    prefill?.ref === undefined ? {} : { ref: prefill.ref },
+  );
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [exportResult, setExportResult] = useState<ExportNotice>();
@@ -504,6 +523,7 @@ function LedgerContent({ canExport }: { readonly canExport: boolean }): ReactEle
     </Flex>
   );
 
+  const userDetail = userDetailTarget(userId);
   let summaryBody: ReactElement;
   if (summary.status === 'loading') {
     summaryBody = loadingLine(t.summary.loading);
@@ -677,7 +697,16 @@ function LedgerContent({ canExport }: { readonly canExport: boolean }): ReactEle
   return (
     <Flex vertical gap={16}>
       {header}
-      <Card title={t.summary.title}>{summaryBody}</Card>
+      <Card
+        title={t.summary.title}
+        extra={
+          <Link to={userDetail.to} state={userDetail.state}>
+            {t.summary.viewUser}
+          </Link>
+        }
+      >
+        {summaryBody}
+      </Card>
       <Card>{filterForm}</Card>
       <Card title={t.list.title} styles={{ body: { padding: 0 } }}>
         {ledgerBody}

@@ -35,6 +35,8 @@ export const ledgerTexts = {
   readOnlyNotice: '本页只读：查看单个用户的资金摘要与余额流水，不能在这里改动余额。',
   summary: {
     title: '资金摘要',
+    /** F1-08fe: opens the user detail (/users) of the queried user. */
+    viewUser: '查看用户详情',
     loading: '资金摘要加载中…',
     failed: '资金摘要加载失败',
     failedHint: '网络错误或服务异常，点【重试】重新读取资金摘要。',
