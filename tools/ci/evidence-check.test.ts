@@ -11,6 +11,7 @@ import {
   checkEvidence,
   engineProblem,
   evidenceProblems,
+  expectedRedFiles,
   handoverPolicy,
   headTreeWithoutEvidence,
   redRequirement,
@@ -19,7 +20,8 @@ import {
 } from './evidence-check.ts';
 import type { HandoverPolicy, RedRequirement } from './evidence-check.ts';
 import { loadProtected } from '../guard/lib/protected.ts';
-import { MONEY_PATHS as TASK_FILE_MONEY_PATHS } from '../lib/task-file.ts';
+import { MONEY_PATHS as TASK_FILE_MONEY_PATHS, loadTask } from '../lib/task-file.ts';
+import { mixedOnlyFiles, mixedOnlyNote, ruleTestsLeftOut } from '../guard/lib/red-check.ts';
 import { loadRiskMap } from '../guard/lib/risk.ts';
 
 const REPO = resolve(import.meta.dirname, '../..');
@@ -2803,6 +2805,80 @@ it('[CT-06zzzg] Codex r1 S2: a ledger only at the PR head never applies modify_e
   );
 });
 
+// CT-06zzzzzr (D10-2125; spec-test r1 S2 out of scope): redRequirement takes its expected list
+// from expectedRedFiles, the function that calls red-check's ruleTestsLeftOut: a file with both
+// kinds of declared change (an import outside the tests listed in red_exempt_outside, the
+// declared block changed, the other tests unchanged and red_exempt) is left out by both alike.
+it('[CT-06zzzzzr] redRequirement leaves out a file with both kinds of declared change, file for file as ruleTestsLeftOut; an undeclared unchanged test keeps it expected', () => {
+  const exempt = (tests: readonly string[]): string[] => [
+    'red_exempt:',
+    ...tests.flatMap((t) => [
+      `  - file: ${MOD_FILE}`,
+      `    test: '${t}'`,
+      '    reason: unchanged frozen test, green on the old code by construction',
+    ]),
+    'red_exempt_outside:',
+    `  - file: ${MOD_FILE}`,
+    '    reason: imports the helper the rewritten block calls',
+  ];
+  const ledgerWith = (name: string, tests: readonly string[]): string => {
+    const dir = modTrusted(name, 'tighten_only');
+    write(dir, {
+      'ops/tasks/B2-09v.yaml': `${modLedger('tighten_only')
+        .replace(
+          `paths:\n  - '${MOD_FILE}'`,
+          "paths:\n  - 'apps/api/src/**'\ntest_paths:\n  - 'test/spec/payout/**'",
+        )
+        .replace('tester: none', 'tester: codex')
+        .trimEnd()}\n${exempt(tests).join('\n')}\n`,
+    });
+    return dir;
+  };
+  const both = ledgerWith('trusted-ct06zzzzzr', ['[AC-B2-09t#34] first', '[AC-B2-09t#36] last']);
+  const short = ledgerWith('trusted-ct06zzzzzr-short', ['[AC-B2-09t#34] first']);
+  const spec = modBranch(
+    'mod-ct06zzzzzr',
+    modSource(MOD_NEW, { extra: "import { send } from './send.ts';" }),
+    modEvidence(),
+  );
+  const req = (trusted: string) =>
+    redRequirement(
+      { prDir: modRepo, base: modBase, head: spec, headRef: 'task/B2-09v', trusted },
+      'B2-09v',
+      modBase,
+      JSON.stringify({ task: 'B2-09v', spec_commit: spec }),
+    );
+  const show = (ref: string) => (p: string) => {
+    const res = spawnSync('git', ['show', `${ref}:${p}`], { cwd: modRepo, encoding: 'utf8' });
+    return res.status === 0 ? res.stdout : null;
+  };
+  const read = { base: show(modBase), head: show(spec) };
+  const ledgerOf = (trusted: string) => loadTask('B2-09v', trusted);
+  for (const [trusted, want] of [
+    [both, [] as string[]],
+    [short, [MOD_FILE]],
+  ] as const) {
+    const t = ledgerOf(trusted);
+    const red = ruleTestsLeftOut([MOD_FILE], read, t);
+    expect(red.expected).toEqual(want);
+    expect(expectedRedFiles([MOD_FILE], read, t, t.modify_existing)).toEqual(want);
+    expect(req(trusted).expected).toEqual(want);
+  }
+  // red-check's note for the file left out is mixedOnlyNote's.
+  const t = ledgerOf(both);
+  expect(ruleTestsLeftOut([MOD_FILE], read, t).notes).toEqual(
+    mixedOnlyFiles(
+      [MOD_FILE],
+      read,
+      t.renames,
+      t.expected_values,
+      t.red_exempt_outside,
+      t.red_exempt,
+      t.modify_existing,
+    ).map(mixedOnlyNote),
+  );
+});
+
 // CT-06zzzk (D10-738 A, after B2-04zx): rows of .each tables declared by their expanded titles.
 it('[CT-06zzzk] the B2-04zx shape: every row of both .each tables declared, only the callbacks changed, with the label — the class 1 change passes; a row left out or a record without its row is refused', () => {
   const FILE = 'test/spec/orders/x/success-after-closed.int.test.ts';
@@ -3641,4 +3717,151 @@ it('[CT-06zzzzzi] evidence-check round 2: a support file changed in the rule-tes
   expect(modCheck(b, trusted, approved(b)).problems.join('\n')).toContain(
     `${where} test block 2 ("${MOD_TEST}") is not declared and differs from the base`,
   );
+});
+
+// CT-06zzzzzr (D10-2125 (B), money-codex r1 S2; B1-02zzzb's step-up-bound-phone/sms.int.test.ts):
+// the merge path of evidence-check (the class 1 hit after spec_commit and the modify_existing
+// records) reads an `.each` table imported from a same-directory kit from that side's kit, as
+// red-check does; a table imported from another directory still cannot be expanded for certain.
+it('[CT-06zzzzzr] checkEvidence: rows of it.each(ACTIONS) with ACTIONS from a same-directory kit, every row declared and only the callback changed, pass; a kit in another directory is refused as before', () => {
+  const DIR = 'test/spec/identity/step-up';
+  const FILE = `${DIR}/sms.int.test.ts`;
+  const KIT = "export const ACTIONS = ['bind', 'unbind'] as const;\n";
+  const block = (body: string): string =>
+    [
+      'it.each(ACTIONS)(',
+      "  '[AC-K#4] %s：短信校验',",
+      '  async (action) => {',
+      `    ${body}`,
+      '  },',
+      ');',
+    ].join('\n');
+  const OLD = 'expect(action).toBeTruthy();';
+  const NEW = 'expect(await verify(action)).toBe(true);';
+  const source = (body: string, from: string): string =>
+    [
+      "import { expect, it } from 'vitest';",
+      `import { ACTIONS } from '${from}';`,
+      "it('[AC-K#3] plain', () => {",
+      '  expect(1).toBe(1);',
+      '});',
+      block(body),
+      '',
+    ].join('\n');
+  const TESTS = ['[AC-K#4] bind：短信校验', '[AC-K#4] unbind：短信校验'];
+  const ROWS = ["'bind'", "'unbind'"];
+  const record = (i: number): Evidence => {
+    const tag = `\n// .each row ${i + 1} of 2: ${ROWS[i] as string}`;
+    return {
+      file: FILE,
+      test: TESTS[i],
+      reason: 'tighten_only',
+      before: `${block(OLD)}${tag}`,
+      after: `${block(NEW)}${tag}`,
+      mutation: [{ mutant: 'verify skipped', result: 'killed' }],
+    };
+  };
+  const repo = join(SCRATCH, 'kit-each-repo');
+  mkdirSync(repo, { recursive: true });
+  git(repo, ['init', '-q', '-b', 'main']);
+  write(repo, {
+    SPEC_REF: `${SPEC_REF}\n`,
+    [`${DIR}/kit.ts`]: KIT,
+    'test/spec/identity/shared/kit.ts': KIT,
+    [FILE]: source(OLD, './kit.ts'),
+  });
+  git(repo, ['add', '-A']);
+  git(repo, ['commit', '-q', '-m', 'base']);
+  const base = git(repo, ['rev-parse', 'HEAD']);
+  const trusted = join(SCRATCH, 'trusted-kit-each');
+  for (const f of ['tools/guard/protected-paths.json', 'ops/risk-map.yaml']) {
+    write(trusted, { [f]: readFileSync(join(REPO, f), 'utf8') });
+  }
+  write(trusted, {
+    'tools/guard/legacy-tasks.json': JSON.stringify({ baseline: 'fixture', tasks: [] }),
+    'ops/tasks/B1-02k.yaml': [
+      'id: B1-02k',
+      'repo: rebate-platform',
+      'title: verify inside the frozen .each block',
+      'type: test-change',
+      'refs: []',
+      'refs_hash: {}',
+      'deps: []',
+      'paths:',
+      `  - '${FILE}'`,
+      'impl: claude',
+      'tester: none',
+      'accept:',
+      "  - 'pnpm verify'",
+      'status: todo',
+      'modify_existing:',
+      ...TESTS.flatMap((t) => [
+        `  - file: '${FILE}'`,
+        `    test: '${t}'`,
+        '    reason: tighten_only',
+        '    ruling: D10-2125',
+        "    note: 'the verification is called inside the block only'",
+      ]),
+      '',
+    ].join('\n'),
+  });
+  const branch = (name: string, baseContent: string | null, headContent: string): string => {
+    let from = base;
+    if (baseContent !== null) {
+      // The base side of the comparison (the merge base) holds `baseContent` instead.
+      git(repo, ['checkout', '-q', '-B', `${name}-base`, base]);
+      write(repo, { [FILE]: baseContent });
+      git(repo, ['add', '-A']);
+      git(repo, ['commit', '-q', '-m', `${name} base`]);
+      from = git(repo, ['rev-parse', 'HEAD']);
+    }
+    git(repo, ['checkout', '-q', '-B', name, from]);
+    write(repo, { [FILE]: headContent });
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-q', '-m', name]);
+    const tree = git(repo, ['rev-parse', 'HEAD:test/spec']);
+    const doc = {
+      task: 'B1-02k',
+      spec_ref: SPEC_REF,
+      spec_commit: from,
+      runs: [],
+      reviews: [
+        {
+          reviewer: 'codex',
+          engine: 'codex',
+          model: 'gpt-6-astra',
+          verdict: 'pass',
+          open_s0_s1: 0,
+          checklist_complete: true,
+        },
+      ],
+      trees: { 'test/spec': tree },
+      longrun: { runs: 1000000, seed: 1, passed: true, tree },
+      modify_existing: [record(0), record(1)],
+    };
+    write(repo, { 'ops/evidence/B1-02k.json': `${JSON.stringify(doc, null, 2)}\n` });
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-q', '-m', 'evidence']);
+    return git(repo, ['rev-parse', 'HEAD']);
+  };
+  const check = (mergeBase: string, head: string) =>
+    checkEvidence({
+      prDir: repo,
+      base: mergeBase,
+      head,
+      headRef: 'task/B1-02k',
+      trusted,
+      approval: approved(head),
+    });
+  // The same-directory kit: both rows expanded from it on both sides; the change passes.
+  const good = branch('kit-good', null, source(NEW, './kit.ts'));
+  expect(check(base, good).problems).toEqual([]);
+  // A kit in another directory (one level up): not read, so the rows cannot be expanded for
+  // certain and the class 1 change and the records are refused as before.
+  const otherBase = source(OLD, '../shared/kit.ts');
+  const other = branch('kit-other', otherBase, source(NEW, '../shared/kit.ts'));
+  const mb = git(repo, ['rev-parse', `${other}~2`]);
+  const text = check(mb, other).problems.join('\n');
+  expect(text).toContain(`spec_commit: rule tests changed after the rule-test commit: ${FILE} (M)`);
+  expect(text).toContain('cannot be expanded for certain');
 });

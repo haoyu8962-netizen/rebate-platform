@@ -257,6 +257,20 @@
 // headNames); the red run runs the head, so the report is matched by `retitle_to`, and the note
 // names both titles. A report with only the old title: the entry matches no test (a note), and
 // the old-named test is judged as any other.
+//
+// Files with both kinds of declared change (CT-06zzzzzr, FU-RED-CHECK-MIXED-LEAVE-OUT;
+// orchestrator rulings D10-2120 ① / D10-2125, after B1-02zzzb's payout-account
+// concurrency.int.test.ts): a file that existed at the base whose changes outside the tests are
+// covered by an entry naming the file itself (red_exempt_outside, or a modify_existing `scope:
+// support` entry), whose every changed block is a declared modify_existing block found and
+// changed, whose every other test is unchanged and declared in red_exempt (exactly those names,
+// each certain), and that adds, removes or moves no test, is left out of the expected list
+// (mixedOnlyFiles, after renamedOnlyFiles, outsideOnlyFiles and modifiedOnlyFiles; one note), here,
+// in red-check.ts and in evidence-check.ts alike (ruleTestsLeftOut). A file the ledger's renames or
+// registered expected values touch, or anything else, stays expected and is judged as before.
+// A modify_existing `.each` / `.for` block whose table is one name imported from a same-directory
+// kit exporting it as `export const NAME = [ literals ]` (CT-06zzzzzr (B)) is expanded from the
+// kit of each side, as compareOutsideChanged reads it (compareModifiedBlocks' `modules`).
 import { matchesAny } from '../../lib/glob.ts';
 import type { Change } from '../../lib/git.ts';
 import { RED_EXEMPT_REASON_MIN, blockEntries, supportEntries } from '../../lib/task-file.ts';
@@ -277,6 +291,7 @@ import {
   compareEachRows,
   compareModifiedBlocks,
   compareOutsideChanged,
+  compareSupportFile,
   compareTestFile,
   helperImpact,
   helperNamedInLiteral,
@@ -740,11 +755,13 @@ export function modifiedOnlyFiles(
     const here = modified.filter((d) => d.file === file);
     const names = here.map((d) => d.test);
     // CT-06zzzzr (D10-1278 ②): a renamed entry's block is its retitle_to at the head.
+    // CT-06zzzzzr (D10-2125 (B)): a table imported from a same-directory kit, from each side's kit.
     const compared = compareModifiedBlocks(
       before,
       after,
       names,
       here.map((d) => d.retitle_to),
+      { file, base: (p) => read.base(p), head: (p) => read.head(p) },
     );
     if (!compared.ok || compared.outside !== null) continue;
     if (!compared.blocks.every((b) => b.found && b.changed)) continue;
@@ -789,6 +806,175 @@ export function supportEntryNote(d: ModifyExistingSupportDeclaration): string {
 /** The note that says a file was left out by modify_existing (CT-06zzzg, D10-701). */
 export function modifiedOnlyNote(r: ModifiedOnly): string {
   return `${r.file}: every change against the base lies in the ${r.tests.length} block(s) the ledger declares in modify_existing (D10-701: ${r.tests.join(' | ')}), left out of the expected list (not run, not judged): nothing in it is shown red; evidence-check requires the owner's approval label and the record of each block (evidence modify_existing)`;
+}
+
+/**
+ * A rule-test file left out of the expected list because it has both kinds of declared change
+ * (CT-06zzzzzr, D10-2120 ① / D10-2125, after outsideOnlyFiles and modifiedOnlyFiles): its changes
+ * outside the tests are covered (red_exempt_outside, or a modify_existing `scope: support` entry of
+ * the file), every changed block is a declared modify_existing block found and changed, every
+ * other test is unchanged and declared in red_exempt, and no test is added, removed or moved.
+ * `tests` the declared block names (ledger order), `exempt` how many tests red_exempt declares,
+ * `lines` the head lines of the changes outside the tests.
+ */
+export type MixedOnly = { file: string; tests: string[]; exempt: number; lines: string };
+
+/**
+ * The files among `files` that existed at the base and are left out of the expected list as
+ * MixedOnly says (CT-06zzzzzr), as outsideOnlyFiles and modifiedOnlyFiles: red-check.ts
+ * --print-expected, the check itself and tools/ci/evidence-check.ts all call it. Anything else
+ * stays expected and is judged as before.
+ */
+export function mixedOnlyFiles(
+  files: readonly string[],
+  read: Pick<BaselineReader, 'base' | 'head'>,
+  renames: readonly RenameDeclaration[],
+  expectedValues: readonly ExpectedValueDeclaration[],
+  outside: readonly RedExemptOutsideDeclaration[],
+  declared: readonly RedExemptDeclaration[],
+  declarations: readonly ModifyExistingDeclaration[],
+): MixedOnly[] {
+  const modified = blockEntries(declarations);
+  if (modified.length === 0) return [];
+  // Only an entry naming the file itself covers its changes outside the tests (spec-test r1 S1).
+  const covered = new Set([
+    ...outside.map((o) => o.file),
+    ...supportEntries(declarations).map((d) => d.file),
+  ]);
+  const listed = new Set(modified.map((d) => d.file));
+  const out: MixedOnly[] = [];
+  for (const file of [...new Set(files)].filter((f) => listed.has(f) && covered.has(f)).sort()) {
+    const before = read.base(file);
+    const after = read.head(file);
+    if (before === null || after === null || !COMPARABLE.test(file)) continue;
+    // A file the renames or the registered expected values touch stays expected (judged as before).
+    if (applyRenames(before, renames).applied.length > 0) continue;
+    if (expectedValues.some((e) => e.file === file)) continue;
+    const modules = { file, base: (p: string) => read.base(p), head: (p: string) => read.head(p) };
+    // The changes outside the tests, and which head blocks are the base's (CT-06zzzc's reading).
+    const lenient = compareOutsideChanged(before, after, modules);
+    if (lenient.whole || lenient.lines === '') continue;
+    // The exact full names of every block, distinct (as outsideOnlyFiles). A changed block whose
+    // table is an inline array of literal rows followed by `as const` (CT-06zzzzzr r2, B1-02zzzb's
+    // concurrency.int.test.ts) is named as modify_existing expands it (ComparedBlock.inlineEach);
+    // it must then be a declared block (below), and any other block keeps its names or none.
+    if (lenient.blocks.length === 0) continue;
+    const blocks = lenient.blocks.map((b) => ({
+      ...b,
+      names: b.names ?? (b.changed ? (b.inlineEach ?? null) : null),
+    }));
+    if (blocks.some((b) => !Array.isArray(b.names) || b.names.length === 0)) continue;
+    const allNames = blocks.flatMap((b) => b.names as string[]);
+    if (new Set(allNames).size !== allNames.length) continue;
+    // Every declared block found on both sides and changed (compareModifiedBlocks).
+    const here = modified.filter((d) => d.file === file);
+    const names = here.map((d) => d.test);
+    const retitles = here.map((d) => d.retitle_to);
+    const compared = compareModifiedBlocks(before, after, names, retitles, modules);
+    if (!compared.ok) continue;
+    if (!compared.blocks.every((b) => b.found && b.changed)) continue;
+    const headDeclared = new Set(compared.blocks.map((b) => (b.found ? b.headTest : b.test)));
+    if (![...headDeclared].every((n) => allNames.includes(n))) continue;
+    // compareModifiedBlocks tells a plain block changed by its place in the shared rest too, which
+    // any change outside the tests moves: each declared block must also differ from the base by
+    // the lenient comparison (its head block is not the base's).
+    const declaredBlocks = blocks.filter((b) =>
+      (b.names as string[]).some((n) => headDeclared.has(n)),
+    );
+    if (declaredBlocks.some((b) => !b.changed)) continue;
+    // No test added, removed or moved, and no undeclared block changed (the block part of
+    // compareSupportFile; its token rules are evidence-check's, for support entries).
+    const blocksOf = compareSupportFile(before, after, names, retitles);
+    if (!blocksOf.ok || blocksOf.blocks.length > 0) continue;
+    // Every other test unchanged (a block none of whose names is declared, the base's) and the
+    // file's red_exempt declarations exactly those names, each with a reason.
+    let others: string[] | null = [];
+    for (const b of blocks) {
+      const bn = b.names as string[];
+      if (bn.some((n) => headDeclared.has(n))) continue;
+      if (b.changed) {
+        others = null;
+        break;
+      }
+      others.push(...bn);
+    }
+    if (others === null) continue;
+    const mine = declared.filter((d) => d.file === file);
+    const have = new Set(mine.map((d) => d.test));
+    if (have.size !== mine.length || have.size !== others.length) continue;
+    if (!others.every((n) => have.has(n))) continue;
+    if (mine.some((d) => d.reason.trim().length < RED_EXEMPT_REASON_MIN)) continue;
+    // A declared .each block's undeclared rows are neither declared nor exempt: stays expected.
+    if (allNames.some((n) => !headDeclared.has(n) && !have.has(n))) continue;
+    out.push({ file, tests: names, exempt: mine.length, lines: lenient.lines });
+  }
+  return out;
+}
+
+/** The note that says a file was left out by mixedOnlyFiles (CT-06zzzzzr, D10-2125). */
+export function mixedOnlyNote(r: MixedOnly): string {
+  return `${r.file}: every change against the base lies in the ${r.tests.length} block(s) the ledger declares in modify_existing (${r.tests.join(' | ')}) and in code outside the tests at ${r.lines} (head lines; covered by the file's red_exempt_outside or modify_existing scope: support entry), its other ${r.exempt} test(s) unchanged and declared exempt (CT-06zzzzzr, D10-2120 ① / D10-2125), left out of the expected list (not run, not judged): nothing in it is shown red; evidence-check still requires the rule-test reviewer's confirmation of the exemptions (spec_test_review.red_exempt_confirmed), the owner's approval label and the record of each block (evidence modify_existing)`;
+}
+
+/**
+ * What is left of the expected rule-test files after renamedOnlyFiles, outsideOnlyFiles,
+ * modifiedOnlyFiles and mixedOnlyFiles, in that order (CT-06zzzzzr): `expected` the files still
+ * run and judged, `notes` one line per file left out, `modifiedLeftOut` the files left out whose
+ * modify_existing entries are therefore not redundant (checkRedReports).
+ */
+export type LeftOutRuleTests = { expected: string[]; notes: string[]; modifiedLeftOut: string[] };
+
+/** See LeftOutRuleTests: red-check.ts calls it with the trusted ledger (CT-06zzzzzr). */
+export function ruleTestsLeftOut(
+  files: readonly string[],
+  read: Pick<BaselineReader, 'base' | 'head'>,
+  task: Pick<
+    TaskFile,
+    'renames' | 'expected_values' | 'red_exempt_outside' | 'red_exempt' | 'modify_existing'
+  >,
+): LeftOutRuleTests {
+  const left = new Set<string>();
+  const notes: string[] = [];
+  const rest = (): string[] => files.filter((f) => !left.has(f));
+  // CT-06zxc (D10-347): a file that differs from its base only by the ledger's renames.
+  for (const r of renamedOnlyFiles(files, read, task.renames)) {
+    left.add(r.file);
+    notes.push(renamedOnlyNote(r));
+  }
+  // CT-06zzzd (D10-630): a listed file whose every test is unchanged and declared.
+  for (const r of outsideOnlyFiles(
+    rest(),
+    read,
+    task.renames,
+    task.expected_values,
+    task.red_exempt_outside,
+    task.red_exempt,
+  )) {
+    left.add(r.file);
+    notes.push(outsideOnlyNote(r));
+  }
+  // CT-06zzzg (D10-701): a file whose every change lies in its declared blocks.
+  const modifiedLeftOut: string[] = [];
+  for (const r of modifiedOnlyFiles(rest(), read, task.modify_existing)) {
+    left.add(r.file);
+    modifiedLeftOut.push(r.file);
+    notes.push(modifiedOnlyNote(r));
+  }
+  // CT-06zzzzzr (D10-2125): a file with both kinds of declared change.
+  for (const r of mixedOnlyFiles(
+    rest(),
+    read,
+    task.renames,
+    task.expected_values,
+    task.red_exempt_outside,
+    task.red_exempt,
+    task.modify_existing,
+  )) {
+    left.add(r.file);
+    modifiedLeftOut.push(r.file);
+    notes.push(mixedOnlyNote(r));
+  }
+  return { expected: rest(), notes, modifiedLeftOut };
 }
 
 /** The note that says a file was left out of the expected list (CT-06zxc). */
@@ -990,11 +1176,14 @@ export function ruleTestBaselines(
     const modifiedDeclared = modified.filter((d) => d.file === file);
     if (modifiedDeclared.length > 0) {
       // CT-06zzzzr (D10-1278 ②): a renamed entry's block is its retitle_to at the head.
+      // CT-06zzzzzr (D10-2125 (B)): a table imported from a same-directory kit, from each side's
+      // kit.
       modifiedState = compareModifiedBlocks(
         comparedBase,
         after,
         modifiedDeclared.map((d) => d.test),
         modifiedDeclared.map((d) => d.retitle_to),
+        { file, base: (p) => read.base(p), head: (p) => read.head(p) },
       );
     }
     const others = [...support].filter((s) => s !== file).sort();

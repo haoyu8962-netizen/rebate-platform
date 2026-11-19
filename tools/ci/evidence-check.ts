@@ -207,15 +207,15 @@ import {
   supportLinesText,
   supportTokensText,
 } from '../guard/lib/test-blocks.ts';
-import type { ModifiedComparison } from '../guard/lib/test-blocks.ts';
+import type { ImportedModules, ModifiedComparison } from '../guard/lib/test-blocks.ts';
 import {
   expectedRuleTests,
   expectedValuesHit,
-  modifiedOnlyFiles,
-  outsideOnlyFiles,
   renamedOnlyFiles,
   renamesHit,
+  ruleTestsLeftOut,
 } from '../guard/lib/red-check.ts';
+import type { BaselineReader } from '../guard/lib/red-check.ts';
 import { matchesAny } from '../lib/glob.ts';
 import { loadProtected, splitFragment } from '../guard/lib/protected.ts';
 import type { ProtectedConfig } from '../guard/lib/protected.ts';
@@ -485,6 +485,18 @@ export function changedBetween(
   return changes;
 }
 
+/**
+ * The readers of a same-directory kit for `file` (CT-06zzzzzr, D10-2125 (B); money-codex r1 S2):
+ * the base side at `from`, the head side at `head`, as red-check reads them (ImportedModules).
+ */
+function sideModules(prDir: string, from: string, head: string, file: string): ImportedModules {
+  return {
+    file,
+    base: (p: string) => showOrNull(prDir, from, p),
+    head: (p: string) => showOrNull(prDir, head, p),
+  };
+}
+
 function showOrNull(prDir: string, ref: string, path: string): string | null {
   const res = tryGit(['show', `${ref}:${path}`], { cwd: prDir });
   return res.status === 0 ? res.stdout : null;
@@ -589,13 +601,17 @@ function modifiedHitProblem(
   const before = showOrNull(prDir, from, hit.path);
   const after = showOrNull(prDir, head, hit.path);
   if (before === null || after === null) return 'declared in modify_existing, but unreadable';
-  if (support !== undefined) return supportHitProblem(before, after, declared);
+  // CT-06zzzzzr (D10-2125 (B), money-codex r1 S2): a table imported from a same-directory kit
+  // is read from that side's kit, spec_commit's and the head's (as red-check reads them).
+  const modules = sideModules(prDir, from, head, hit.path);
+  if (support !== undefined) return supportHitProblem(before, after, declared, modules);
   // CT-06zzzzr (D10-1278 ②): a renamed entry's block is its retitle_to at the head.
   const compared = compareModifiedBlocks(
     before,
     after,
     names,
     declared.map((e) => e.retitle_to),
+    modules,
   );
   if (!compared.ok) return `declared in modify_existing, but ${compared.reason}`;
   const missing = compared.blocks.find((b) => !b.found);
@@ -622,11 +638,12 @@ function supportHitProblem(
   before: string,
   after: string,
   declared: readonly ModifyExistingBlockDeclaration[],
+  modules?: ImportedModules,
 ): string | null {
   const names = declared.map((e) => e.test);
   const retitles = declared.map((e) => e.retitle_to);
   if (names.length > 0) {
-    const compared = compareModifiedBlocks(before, after, names, retitles);
+    const compared = compareModifiedBlocks(before, after, names, retitles, modules);
     if (!compared.ok) return `declared in modify_existing, but ${compared.reason}`;
     const missing = compared.blocks.find((b) => !b.found);
     if (missing !== undefined && !missing.found) {
@@ -750,7 +767,12 @@ function supportRecordProblems(
   // class 1 hits stays as it is).
   if (before !== null && after !== null && before !== after) {
     const declared = blockEntries(modify.entries).filter((e) => e.file === entry.file);
-    const why = supportHitProblem(before, after, declared);
+    const why = supportHitProblem(
+      before,
+      after,
+      declared,
+      sideModules(prDir, modify.base, head, entry.file),
+    );
     if (why !== null) at(where, `${entry.file} (merge base → head): ${why}`);
   }
   for (const [key, text, side] of [
@@ -823,6 +845,8 @@ function modifyRecordProblems(
                 declared.map((e) => e.test),
                 // CT-06zzzzr (D10-1278 ②): a renamed entry's block is its retitle_to at the head.
                 declared.map((e) => e.retitle_to),
+                // CT-06zzzzzr (D10-2125 (B)): kit tables read from the merge base and the head.
+                sideModules(prDir, modify.base, head, file),
               );
       cache.set(file, got);
     }
@@ -1787,33 +1811,24 @@ export function redRequirement(
   };
   const leftOut = renamedOnlyFiles(all, read, ledger.renames).map((r) => r.file);
   const left = new Set(leftOut);
-  // CT-06zzzd (D10-630): a file listed in red_exempt_outside whose every test is unchanged and
-  // declared is left out the same way (red-check.ts calls the same function); the coverage rule
-  // below is unchanged, and red_exempt_confirmed is still required (the ledger declares them).
-  const outsideOut = outsideOnlyFiles(
-    all.filter((f) => !left.has(f)),
+  // CT-06zzzd (D10-630), CT-06zzzg (D10-701), CT-06zzzzzr (D10-2125): a file listed in
+  // red_exempt_outside whose every test is unchanged and declared, a file whose every change lies
+  // in its declared modify_existing blocks, and a file with both kinds of declared change are left
+  // out the same way, by the function red-check.ts calls (expectedRedFiles → ruleTestsLeftOut);
+  // the coverage rule below is unchanged, red_exempt_confirmed is still required (the ledger
+  // declares them), and the label and the record of each block too (evidenceProblems). Codex r1
+  // S2: the modify_existing entries come from the trusted root's ledger only (readTrustedLedger,
+  // as checkEvidence reads them for the label and the record); a ledger the PR head adds never
+  // leaves a file out.
+  const expected = expectedRedFiles(
+    all,
     read,
-    ledger.renames,
-    ledger.expected_values,
-    ledger.red_exempt_outside,
-    ledger.red_exempt,
-  ).map((r) => r.file);
-  // CT-06zzzg (D10-701): a file whose every change lies in its declared modify_existing blocks is
-  // left out the same way (red-check.ts calls the same function); the label and the record of
-  // each block are still required (evidenceProblems). Codex r1 S2: the entries come from the
-  // trusted root's ledger only (readTrustedLedger, as checkEvidence reads them for the label and
-  // the record); a ledger the PR head adds never leaves a file out.
-  const modifiedOut = modifiedOnlyFiles(
-    all.filter((f) => !left.has(f) && !outsideOut.includes(f)),
-    read,
+    ledger,
     readTrustedLedger(input, task)?.modify_existing ?? [],
-  ).map((r) => r.file);
+  );
   // Review r1 S2-1: renames that hit a rule-test file of the task need the reviewer's confirmation.
   const hit = renamesHit(all, read, ledger.renames);
   // CT-06zxe (D10-371): registered expected values that apply need the reviewer's confirmation.
-  const expected = all.filter(
-    (f) => !left.has(f) && !outsideOut.includes(f) && !modifiedOut.includes(f),
-  );
   // A file left out by red_exempt_outside still has its registered expected values confirmed.
   const values = expectedValuesHit(
     all.filter((f) => !left.has(f)),
@@ -1844,6 +1859,27 @@ export function redRequirement(
       : {}),
     ...(values.length > 0 ? { expectedValues: { hit: values, tester: ledger.tester } } : {}),
   };
+}
+
+/**
+ * The rule-test files whose red tests evidence-check wants (CT-06zzzzzr, D10-2125): `all`
+ * (expectedRuleTests at the spec_commit) without the files red-check leaves out, by the same
+ * functions in the same order (ruleTestsLeftOut); `modifyExisting` the trusted ledger's entries
+ * only (a ledger the PR head adds never leaves a file out). redRequirement calls it.
+ */
+export function expectedRedFiles(
+  all: readonly string[],
+  read: Pick<BaselineReader, 'base' | 'head'>,
+  ledger: Pick<TaskFile, 'renames' | 'expected_values' | 'red_exempt_outside' | 'red_exempt'>,
+  modifyExisting: readonly ModifyExistingDeclaration[],
+): string[] {
+  return ruleTestsLeftOut(all, read, {
+    renames: ledger.renames,
+    expected_values: ledger.expected_values,
+    red_exempt_outside: ledger.red_exempt_outside,
+    red_exempt: ledger.red_exempt,
+    modify_existing: [...modifyExisting],
+  }).expected;
 }
 
 export function checkEvidence(input: EvidenceInput): EvidenceReport {

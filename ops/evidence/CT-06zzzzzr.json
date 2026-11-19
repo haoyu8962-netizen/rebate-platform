@@ -1,0 +1,116 @@
+{
+  "task": "CT-06zzzzzr",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "6479439499b4a01e761bd080a3589c1434ccc70e",
+  "red_tests": [
+    "test/spec/ci/red-check-mixed-leave-out/each-kit.test.ts > [CT-06zzzzzr#14] it.each(ACTIONS), ACTIONS `export const … = [literals]` (as const or not) in ./kit.ts: every row declared and the shared callback changed, the file is left out by modifiedOnlyFiles; with a new test next to it, it stays expected",
+    "test/spec/ci/red-check-mixed-leave-out/each-kit.test.ts > [CT-06zzzzzr#15] the B1-02zzzb (B) shape in the red run: the declared rows of it.each(ACTIONS) pass green as declared changes, the unchanged test is exempt, the new test is red: ok",
+    "test/spec/ci/red-check-mixed-leave-out/each-kit.test.ts > [CT-06zzzzzr#16] still cannot be expanded for certain: a kit of another directory, a re-export (export { … } from, export * from), a let, the result of a call, a non-literal or spread row",
+    "test/spec/ci/red-check-mixed-leave-out/each-kit.test.ts > [CT-06zzzzzr#17] each side reads its own kit: a kit changed elsewhere keeps the rows; a kit the base does not have cannot be expanded; a row added to the head kit makes the entries not apply",
+    "test/spec/ci/red-check-mixed-leave-out/evidence-parity.test.ts > [CT-06zzzzzr#11] evidence-check no longer wants a red test of the mixed file: its expected list is red-check’s, file for file",
+    "test/spec/ci/red-check-mixed-leave-out/evidence-parity.test.ts > [CT-06zzzzzr#12] red-check and evidence-check agree on every scenario: left out (red_exempt_outside, support entry, both) and kept (judged as before)",
+    "test/spec/ci/red-check-mixed-leave-out/evidence-parity.test.ts > [CT-06zzzzzr#13] without the trusted ledger’s modify_existing entries (a ledger the PR head adds) evidence-check leaves the mixed file in",
+    "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#1] the B1-02zzzb (A) shape — an import inserted outside the tests (red_exempt_outside), T2 a declared changed modify_existing block, T1 / T3 unchanged and red_exempt — is left out; neither outsideOnlyFiles nor modifiedOnlyFiles leaves it out alone",
+    "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#2] the change outside the tests may be covered by red_exempt_outside, by a modify_existing scope: support entry of the file, or by both",
+    "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#3] anything else keeps the file expected: an undeclared unchanged test, a new, removed or moved test, an uncovered change outside the tests, a changed test declared red_exempt only, a changed block not declared, a redundant or dangling modify_existing entry",
+    "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#4] a file that did not exist at the base, or is not listed by any declaration, is never left out",
+    "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#5] the note names the file, its declared blocks, that it is not run and not judged, and what evidence-check still requires (red_exempt_confirmed, modify_existing)",
+    "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#6] next to a new rule-test file the red run is the new file’s alone: the mixed file is not run, its modify_existing entry is not redundant, the verdict is ok",
+    "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#7] the order outsideOnlyFiles → modifiedOnlyFiles → mixedOnlyFiles: each file left out gets its own note once, and only the new file is expected",
+    "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#8] one more unchanged test (T4) that is neither red_exempt nor modify_existing: the file stays expected and T4 green is a problem",
+    "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#9] a new test (T5) next to the declared ones: the file stays expected; T5 red passes, T5 green is a problem",
+    "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#10] the change outside the tests covered by neither red_exempt_outside nor a support entry: the file stays expected and is judged as a whole (every test must be red)"
+  ],
+  "risk_note": "Guard change (tools/**, RV2 by path). CT-06zzzzzr (D10-2120 ① / D10-2125): (A) a rule-test file that existed at the base, whose changes outside the tests are covered by its own red_exempt_outside or scope: support entry, whose every changed block is a declared modify_existing block found and changed, and whose every other test is unchanged and declared red_exempt (no test added, removed or moved), is left out of the expected list (mixedOnlyFiles, after renamed / outsideOnly / modifiedOnly; ruleTestsLeftOut is the one chain red-check's check, its CLI and evidence-check's expectedRedFiles / redRequirement call); a changed inline .each([...]) / .each([...] as const) block gets its exact names for this (inlineEach). (B) modify_existing on an .each / .for table imported from a same-directory test-support file's top-level export const literal array (as const allowed) is expanded, base and head each reading their own kit, in red-check and in evidence-check's three compareModifiedBlocks calls. Anything else is judged exactly as before; no existing test changed. Checked on real data: B1-02zzzb's formal red run with this branch as trusted root went from 10 problems (couli-runs/B1-02zzzb/red/7) to exit 0, 0 problems (red/9).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "6479439499b4a01e761bd080a3589c1434ccc70e",
+      "tree": "4bd99c5ac8d5c420f8e69d56a43234fbb03ab2e9",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-19T14:07:37Z",
+      "finished_at": "2026-11-19T14:07:41Z",
+      "red_tests": [
+        "test/spec/ci/red-check-mixed-leave-out/each-kit.test.ts > [CT-06zzzzzr#14] it.each(ACTIONS), ACTIONS `export const … = [literals]` (as const or not) in ./kit.ts: every row declared and the shared callback changed, the file is left out by modifiedOnlyFiles; with a new test next to it, it stays expected",
+        "test/spec/ci/red-check-mixed-leave-out/each-kit.test.ts > [CT-06zzzzzr#15] the B1-02zzzb (B) shape in the red run: the declared rows of it.each(ACTIONS) pass green as declared changes, the unchanged test is exempt, the new test is red: ok",
+        "test/spec/ci/red-check-mixed-leave-out/each-kit.test.ts > [CT-06zzzzzr#16] still cannot be expanded for certain: a kit of another directory, a re-export (export { … } from, export * from), a let, the result of a call, a non-literal or spread row",
+        "test/spec/ci/red-check-mixed-leave-out/each-kit.test.ts > [CT-06zzzzzr#17] each side reads its own kit: a kit changed elsewhere keeps the rows; a kit the base does not have cannot be expanded; a row added to the head kit makes the entries not apply",
+        "test/spec/ci/red-check-mixed-leave-out/evidence-parity.test.ts > [CT-06zzzzzr#11] evidence-check no longer wants a red test of the mixed file: its expected list is red-check’s, file for file",
+        "test/spec/ci/red-check-mixed-leave-out/evidence-parity.test.ts > [CT-06zzzzzr#12] red-check and evidence-check agree on every scenario: left out (red_exempt_outside, support entry, both) and kept (judged as before)",
+        "test/spec/ci/red-check-mixed-leave-out/evidence-parity.test.ts > [CT-06zzzzzr#13] without the trusted ledger’s modify_existing entries (a ledger the PR head adds) evidence-check leaves the mixed file in",
+        "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#1] the B1-02zzzb (A) shape — an import inserted outside the tests (red_exempt_outside), T2 a declared changed modify_existing block, T1 / T3 unchanged and red_exempt — is left out; neither outsideOnlyFiles nor modifiedOnlyFiles leaves it out alone",
+        "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#2] the change outside the tests may be covered by red_exempt_outside, by a modify_existing scope: support entry of the file, or by both",
+        "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#3] anything else keeps the file expected: an undeclared unchanged test, a new, removed or moved test, an uncovered change outside the tests, a changed test declared red_exempt only, a changed block not declared, a redundant or dangling modify_existing entry",
+        "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#4] a file that did not exist at the base, or is not listed by any declaration, is never left out",
+        "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#5] the note names the file, its declared blocks, that it is not run and not judged, and what evidence-check still requires (red_exempt_confirmed, modify_existing)",
+        "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#6] next to a new rule-test file the red run is the new file’s alone: the mixed file is not run, its modify_existing entry is not redundant, the verdict is ok",
+        "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#7] the order outsideOnlyFiles → modifiedOnlyFiles → mixedOnlyFiles: each file left out gets its own note once, and only the new file is expected",
+        "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#8] one more unchanged test (T4) that is neither red_exempt nor modify_existing: the file stays expected and T4 green is a problem",
+        "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#9] a new test (T5) next to the declared ones: the file stays expected; T5 red passes, T5 green is a problem",
+        "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts > [CT-06zzzzzr#10] the change outside the tests covered by neither red_exempt_outside nor a support entry: the file stays expected and is judged as a whole (every test must be red)"
+      ],
+      "expected": [
+        "test/spec/ci/red-check-mixed-leave-out/each-kit.test.ts",
+        "test/spec/ci/red-check-mixed-leave-out/evidence-parity.test.ts",
+        "test/spec/ci/red-check-mixed-leave-out/mixed.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "6a21419c2d48f75c5813345d7943f3b774a9899b9074267f81e9155bb6773f92"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh (Codex usable again, D10-2134): money r1 pass with one S2 — evidence-check's modifiedHitProblem / supportHitProblem / modifyRecordProblems did not pass the kit reader to compareModifiedBlocks; fixed in implementation r2 with an end-to-end checkEvidence unit test (couli-runs/CT-06zzzzzr/review-money-codex-r1.json)."
+    },
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money r2 (incremental since r1) pass, no findings: the r1 S2 is fixed and the inline as-const naming and its controls hold (couli-runs/CT-06zzzzzr/review-money-codex-r2.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by independent Claude (ledger tester claude-independent). Attempt 1 used describe() and was stopped by the trusted test-guard before the red run (rule-tests-top-level-it); attempt 2 only lifted the it() blocks to the top level. spec-test r1 (fresh independent Claude) fail with one S1: no KEPT case where the only covering entry names another file; attempt 3 added two such cases; spec-test r2 pass (couli-runs/CT-06zzzzzr/review-spec-test-r1.json, -r2.json). Its out-of-scope S2 (the callers must really use the new chain) is pinned by the implementation's unit tests."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "d894231d15dc13ee05b0793262a4166d9b97c7cb",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
