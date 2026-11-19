@@ -67,6 +67,7 @@ import {
   deleteFavoritesForUser,
   createItemRefService,
   processItemRefCipher,
+  normalizePoolTags,
   searchConfigSaveCheck,
   type Catalog,
   type CatalogCardEntry,
@@ -638,6 +639,19 @@ function contentAdminChecks(): Pick<ContentAdminOptions, 'configItemChecks' | 'k
         autoPayoutEnable: (appId) => readAutoPayoutEnableCheck(appId, db, { config, recon }),
       };
     },
+  };
+}
+
+/**
+ * The options of ContentAdminModule.forAdmin on the admin entry: admin's audit writer, the checks
+ * above, and (CT-07g, D10-2034) catalog's normalization of pool tags for the home configuration's
+ * save, so content keeps no copy of it.
+ */
+export function contentAdminOptions(): ContentAdminOptions {
+  return {
+    auditWriter: (db, clock) => createAuditWriter({ db, clock, sensitiveKeys: SENSITIVE_KEYS }),
+    ...contentAdminChecks(),
+    normalizePoolTags,
   };
 }
 
@@ -4932,15 +4946,7 @@ export class AppModule {
         // content's /admin/v1 routes (platform marks, F1-06w / F1-06y), guarded through
         // platform's AdminOperationGuard, which adminAuthModule provides on this entry only. Its
         // writes append audit rows through admin's writer bound to their own transaction.
-        ...(options.entry === 'admin'
-          ? [
-              ContentAdminModule.forAdmin({
-                auditWriter: (db, clock) =>
-                  createAuditWriter({ db, clock, sensitiveKeys: SENSITIVE_KEYS }),
-                ...contentAdminChecks(),
-              }),
-            ]
-          : []),
+        ...(options.entry === 'admin' ? [ContentAdminModule.forAdmin(contentAdminOptions())] : []),
         // catalog's /admin/v1 product pools (B1-05q, content.pool): guarded by AdminOperationGuard;
         // each write and its audit row commit together. Adds and re-checks read the union through
         // this entry's own governed adapters (shared quota bucket) and parsing's link resolution.
