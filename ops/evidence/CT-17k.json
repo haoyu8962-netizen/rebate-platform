@@ -1,0 +1,37 @@
+{
+  "task": "CT-17k",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "813e8e117b83042f42a271f46d33ec9d64bd2830",
+  "red_tests": [],
+  "risk_note": "RV1 by path (contracts/routes.json, packages/contracts-ts/**). CT-17k (D10-2081 ③, prerequisite of the iOS account-deletion page APP-13a-ios): routes.DeleteAccount.since.ios null -> \"1.0.0\" and the regenerated bridge.gen.ts line, nothing else. Read-only inventory (notices 2026-11-18): no runtime code in this repository branches on a route's since (server, H5, admin and release-scan read only the route name, h5_path and auth; h5 conformance reads bridgeMethods' since, not routes'); only the three native apps' generated code changes. Ledger tester none: no rule tests, so no red run.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Independent Claude contract review via tools/agent/claude-run.sh (Codex usage limit until 11-23, D10-2003): r1 pass, no findings; only routes.DeleteAccount.since.ios changes and the regenerated bridge.gen.ts matches (couli-runs/CT-17k/review-contract-r1.json)."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "6c2fdfcd8c57478190e00ec07a609c8c04005fa9",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
