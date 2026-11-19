@@ -146,3 +146,13 @@ export type {
 } from './application/balance-adjusted-message.ts';
 export { recordBalanceAdjustedMessage } from './application/balance-adjusted-message-record.ts';
 export type { BalanceAdjustedRecordInput } from './application/balance-adjusted-message-record.ts';
+// B2-02z: the BALANCE_CORRECTED inbox message of a balance recalculation (D10-2092 ⑤, D10-2097),
+// written on ledger's recalculation transaction. ledger never imports it: app.module hands it over.
+export { renderBalanceCorrectedMessage } from './application/balance-corrected-message.ts';
+export type {
+  BalanceCorrectedFacts,
+  BalanceCorrectedMessage,
+  BalanceCorrectedOverride,
+} from './application/balance-corrected-message.ts';
+export { recordBalanceCorrectedMessage } from './application/balance-corrected-message-record.ts';
+export type { BalanceCorrectedRecordInput } from './application/balance-corrected-message-record.ts';

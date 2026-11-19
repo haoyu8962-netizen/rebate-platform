@@ -1,0 +1,136 @@
+{
+  "risk_note": "B2-02z (D10-2092 ⑤ / D10-2093 / D10-2097 / D10-2084; notification, RV2 by the fund notice). Registers BALANCE_CORRECTED in admin-channels/catalog.ts (inbox only, default channel inbox, no SMS variables, same shape as BALANCE_ADJUSTED); renderBalanceCorrectedMessage is a pure function (default title 余额更正 and the D10-2092 body verbatim, amounts by @couli/money formatYuan unsigned: '-' before '¥', no '+', trailing zeros dropped, ¥0, no thousands separators; function replacers so '$&' in an override stays literal; equal before/after → null); recordBalanceCorrectedMessage writes on the caller's transaction: reads users.status (deleting / deleted / missing → no write), the app's notify_templates override, inserts notify_logs (inbox, success, dedupe_key balance_corrected:{reconDiffId}:{balanceVersion}) with ON CONFLICT (app_id, dedupe_key) DO NOTHING and only then inbox_messages. index.ts exports both; app.module.ts unchanged (no recalculation flow in ledger yet; the call comes with B2-02x). Test machine: test/spec/notification 101 files 944 tests green (rule tests included), verify:fast green.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Fresh independent Claude via claude-run.sh; pass with no findings, validate ok, positions unchanged (couli-runs/B2-02z/review-money-r1.json). Asked to judge the unlocked users.status read: a switch to deleting committed after the read equals sending before the change, not an illegal state."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "spec-test r1 pass, no findings (couli-runs/B2-02z/review-spec-test-r1.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "property tests use propParams(); the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/notification/balance-corrected/catalog.test.ts > [AC-B2-02z#6] 目录登记 BALANCE_CORRECTED：只发站内信（inboxOnly），默认渠道只有站内信，不是短信固定的编码",
+    "test/spec/notification/balance-corrected/catalog.test.ts > [AC-B2-02z#6] 后台渠道列表项：BALANCE_CORRECTED 推送与短信两个开关都不能开（push_switchable、sms_switchable 为 false），没有短信登记行，短信 disabled",
+    "test/spec/notification/balance-corrected/channels.int.test.ts > [AC-B2-02z#6] 后台渠道列表：BALANCE_CORRECTED 推送与短信两个开关都不能动（false）、没有短信登记行、短信 disabled；开推送或开短信都被拒（notify_channel_locked）、不写",
+    "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#8] 写入：一条 notify_logs（站内信渠道、success、去重键 balance_corrected:{reconDiffId}:{balanceVersion}）加一条站内信（标题「余额更正」、正文按模板与 BR-TEXT-10），没有推送与短信记录",
+    "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#8] 调增同样写一条（D10-2092：调增调减都发），正文为更正前后的可用余额",
+    "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#8] 同一 (reconDiffId, balanceVersion) 再调一次不重复写（同一事务里连调、之后另一事务再调都返回 false），两张表原样",
+    "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#8] 同一差异单再次重算出新的余额版本 → 另写一条（去重键带余额版本）",
+    "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#3] 更正前后可用余额相等 → 写入函数返回 false，notify_logs 与站内信都没有行",
+    "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#7] users.status=deleting 的会员不写：返回 false，notify_logs 与站内信都没有行",
+    "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#7] users.status=deleted 的会员不写：返回 false，notify_logs 与站内信都没有行",
+    "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#7] 注销冷静期内（有 cooling 的注销申请、users.status 仍为 normal）照写一条",
+    "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#7] users.status 在调用方事务里读：同一事务里刚改成 deleting（未提交）就不写",
+    "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#4] 写入时读本 app 的 notify_templates 覆盖行：标题与正文用运营措辞、变量照样替换；别的 app 的覆盖不用",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#1] 默认标题「余额更正」；默认正文逐字为 D10-2092 的模板，{before} {after} 换成更正前后的可用余额",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 调增：更正前 990n 分、更正后 123456n 分 → 正文「…可用余额由 ¥9.9 调整为 ¥1234.56。…」",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 调减：更正前 1000n 分、更正后 1n 分 → 正文「…可用余额由 ¥10 调整为 ¥0.01。…」",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 调减到负数：更正前 500n 分、更正后 -1234n 分 → 正文「…可用余额由 ¥5 调整为 -¥12.34。…」",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 由负数调增为正数（正数不带 +，末尾 0 去掉）：更正前 -150n 分、更正后 600n 分 → 正文「…可用余额由 -¥1.5 调整为 ¥6。…」",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 调到 0（App 表「¥0」，不是后台「¥0.00」）：更正前 -120n 分、更正后 0n 分 → 正文「…可用余额由 -¥1.2 调整为 ¥0。…」",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 由 0 调增（不加千分位）：更正前 0n 分、更正后 2000000n 分 → 正文「…可用余额由 ¥0 调整为 ¥20000。…」",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 大额调减到负数（不加千分位）：更正前 123456789n 分、更正后 -2000000n 分 → 正文「…可用余额由 ¥1234567.89 调整为 -¥20000。…」",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 负数之间调减：更正前 -1n 分、更正后 -100n 分 → 正文「…可用余额由 -¥0.01 调整为 -¥1。…」",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 任意更正前后金额（调增、调减、正负、0）：默认正文按 BR-TEXT-10 App 写法格式化两个金额",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#3] 更正前后可用余额相等 → 不发（null），有覆盖行也一样",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#4] 覆盖行：标题与正文换成运营的措辞，正文里的 {before} {after} 照样替换（顺序可换、出现几次换几次）",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#4] 覆盖正文里的 $&、$1、$$ 等字符照字面输出，不当替换模式",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#4] 只覆盖标题时正文用默认，只覆盖正文时标题用默认，两项都为空即全用默认",
+    "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#5] 编码恒为 BALANCE_CORRECTED、变体 default、category 恒为 service（调增、调减、有无覆盖都一样）",
+    "test/spec/notification/balance-corrected/rollback.int.test.ts > [AC-B2-02z#9] 随调用方事务回滚：事务内写入后回滚 → notify_logs 与站内信都没有行；之后同一键照常写入一条",
+    "test/spec/notification/balance-corrected/rollback.int.test.ts > [AC-B2-02z#9] 调用方在写入之后的步骤失败（如写余额行出错）→ 整笔回滚，两张表都没有行"
+  ],
+  "task": "B2-02z",
+  "spec_commit": "eec3632c864886607886931b9645aca9370e9f77",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "eec3632c864886607886931b9645aca9370e9f77",
+      "tree": "8aa6ff0300cabccbbd03b2bfeaebc365f970bbe8",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-19T12:54:09Z",
+      "finished_at": "2026-11-19T12:54:22Z",
+      "red_tests": [
+        "test/spec/notification/balance-corrected/catalog.test.ts > [AC-B2-02z#6] 目录登记 BALANCE_CORRECTED：只发站内信（inboxOnly），默认渠道只有站内信，不是短信固定的编码",
+        "test/spec/notification/balance-corrected/catalog.test.ts > [AC-B2-02z#6] 后台渠道列表项：BALANCE_CORRECTED 推送与短信两个开关都不能开（push_switchable、sms_switchable 为 false），没有短信登记行，短信 disabled",
+        "test/spec/notification/balance-corrected/channels.int.test.ts > [AC-B2-02z#6] 后台渠道列表：BALANCE_CORRECTED 推送与短信两个开关都不能动（false）、没有短信登记行、短信 disabled；开推送或开短信都被拒（notify_channel_locked）、不写",
+        "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#8] 写入：一条 notify_logs（站内信渠道、success、去重键 balance_corrected:{reconDiffId}:{balanceVersion}）加一条站内信（标题「余额更正」、正文按模板与 BR-TEXT-10），没有推送与短信记录",
+        "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#8] 调增同样写一条（D10-2092：调增调减都发），正文为更正前后的可用余额",
+        "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#8] 同一 (reconDiffId, balanceVersion) 再调一次不重复写（同一事务里连调、之后另一事务再调都返回 false），两张表原样",
+        "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#8] 同一差异单再次重算出新的余额版本 → 另写一条（去重键带余额版本）",
+        "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#3] 更正前后可用余额相等 → 写入函数返回 false，notify_logs 与站内信都没有行",
+        "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#7] users.status=deleting 的会员不写：返回 false，notify_logs 与站内信都没有行",
+        "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#7] users.status=deleted 的会员不写：返回 false，notify_logs 与站内信都没有行",
+        "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#7] 注销冷静期内（有 cooling 的注销申请、users.status 仍为 normal）照写一条",
+        "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#7] users.status 在调用方事务里读：同一事务里刚改成 deleting（未提交）就不写",
+        "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#4] 写入时读本 app 的 notify_templates 覆盖行：标题与正文用运营措辞、变量照样替换；别的 app 的覆盖不用",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#1] 默认标题「余额更正」；默认正文逐字为 D10-2092 的模板，{before} {after} 换成更正前后的可用余额",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 调增：更正前 990n 分、更正后 123456n 分 → 正文「…可用余额由 ¥9.9 调整为 ¥1234.56。…」",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 调减：更正前 1000n 分、更正后 1n 分 → 正文「…可用余额由 ¥10 调整为 ¥0.01。…」",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 调减到负数：更正前 500n 分、更正后 -1234n 分 → 正文「…可用余额由 ¥5 调整为 -¥12.34。…」",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 由负数调增为正数（正数不带 +，末尾 0 去掉）：更正前 -150n 分、更正后 600n 分 → 正文「…可用余额由 -¥1.5 调整为 ¥6。…」",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 调到 0（App 表「¥0」，不是后台「¥0.00」）：更正前 -120n 分、更正后 0n 分 → 正文「…可用余额由 -¥1.2 调整为 ¥0。…」",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 由 0 调增（不加千分位）：更正前 0n 分、更正后 2000000n 分 → 正文「…可用余额由 ¥0 调整为 ¥20000。…」",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 大额调减到负数（不加千分位）：更正前 123456789n 分、更正后 -2000000n 分 → 正文「…可用余额由 ¥1234567.89 调整为 -¥20000。…」",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 负数之间调减：更正前 -1n 分、更正后 -100n 分 → 正文「…可用余额由 -¥0.01 调整为 -¥1。…」",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#2] 任意更正前后金额（调增、调减、正负、0）：默认正文按 BR-TEXT-10 App 写法格式化两个金额",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#3] 更正前后可用余额相等 → 不发（null），有覆盖行也一样",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#4] 覆盖行：标题与正文换成运营的措辞，正文里的 {before} {after} 照样替换（顺序可换、出现几次换几次）",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#4] 覆盖正文里的 $&、$1、$$ 等字符照字面输出，不当替换模式",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#4] 只覆盖标题时正文用默认，只覆盖正文时标题用默认，两项都为空即全用默认",
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#5] 编码恒为 BALANCE_CORRECTED、变体 default、category 恒为 service（调增、调减、有无覆盖都一样）",
+        "test/spec/notification/balance-corrected/rollback.int.test.ts > [AC-B2-02z#9] 随调用方事务回滚：事务内写入后回滚 → notify_logs 与站内信都没有行；之后同一键照常写入一条",
+        "test/spec/notification/balance-corrected/rollback.int.test.ts > [AC-B2-02z#9] 调用方在写入之后的步骤失败（如写余额行出错）→ 整笔回滚，两张表都没有行"
+      ],
+      "expected": [
+        "test/spec/notification/balance-corrected/catalog.test.ts",
+        "test/spec/notification/balance-corrected/channels.int.test.ts",
+        "test/spec/notification/balance-corrected/record.int.test.ts",
+        "test/spec/notification/balance-corrected/render.test.ts",
+        "test/spec/notification/balance-corrected/rollback.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "70fa31e7a677e3d41f6a9f2d13c9a10c346828bae047592bbf08e1876236d4ef"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "b28d5357a36bd108099d7f05924ff4f8c7f57e3f59cf4f9faaac57a4539e7373"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b16f8eeaf84793aafe2ff5d015c1bb17941ecee8",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}
