@@ -23,6 +23,7 @@ import {
   waitBlocked,
   type Kit,
 } from './kit.ts';
+import { bound } from '../step-up-digest/payout-summary.ts';
 
 let database: TestDatabase;
 let redis: TestRedis;
@@ -70,7 +71,7 @@ it.each(['limit', 'same-account', 'first-binding'] as const)(
       const b = kit.db.transaction().execute(async (trx) => {
         await sql`SET LOCAL statement_timeout = '5s'`.execute(trx);
         started.resolve(await pid(trx));
-        return app.save(trx, { ...f.command, alipayLogonId: next });
+        return app.save(trx, bound(kit, { ...f.command, alipayLogonId: next }));
       });
       pending = b;
       void b.catch(() => undefined);
@@ -125,7 +126,7 @@ it.each(['invalid-logon', 'disabled-method'] as const)(
         .execute();
       const result = await kit.db.transaction().execute(async (trx) => {
         await sql`SET LOCAL statement_timeout = '1s'`.execute(trx);
-        return app.save(trx, { ...f.command, alipayLogonId: '@' });
+        return app.save(trx, bound(kit, { ...f.command, alipayLogonId: '@' }));
       });
       expect(result).toEqual({
         code: 20001,

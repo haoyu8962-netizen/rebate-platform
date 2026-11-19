@@ -22,6 +22,7 @@ import {
   BANK_CONTEXT,
   type Response,
 } from '../payout-account/kit.ts';
+import { payoutChangeClaim } from '../step-up-digest/payout-summary.ts';
 export { close, config, PATH, NAME, NOW, BANK_CONTEXT, ROOT };
 export { account, change, state, privateDataAbsent } from '../payout-account/kit.ts';
 
@@ -126,7 +127,10 @@ export async function fixture(kit: Kit, options: Parameters<typeof baseFixture>[
       ),
     );
   const initial = await issue();
-  const stepUp = (action = 'payout_account_change') =>
+  // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): a payout_account_change token carries the digest
+  // of the account it is for, as POST /v1/auth/step-up signs it (claim `summary`); `stepUpBody` is
+  // the PUT body the token is taken for (when omitted: the default bank card body).
+  const stepUp = (action = 'payout_account_change', stepUpBody?: unknown) =>
     kit.signScopedToken(kit.keys, {
       audience: 'step_up',
       claims: {
@@ -136,6 +140,7 @@ export async function fixture(kit: Kit, options: Parameters<typeof baseFixture>[
         device_id: device.device_id,
         action,
         jti: randomUUID(),
+        ...payoutChangeClaim(kit.crypto, action, stepUpBody, bankBody()),
       },
       issuedAt: Math.floor(kit.clock.now().getTime() / 1000),
       ttlSeconds: 300,
@@ -176,7 +181,7 @@ export async function fixture(kit: Kit, options: Parameters<typeof baseFixture>[
         'x-nonce': nonce,
         'x-sign': createHmac('sha256', device.install_secret).update(text).digest('hex'),
         'idempotency-key': key,
-        'x-step-up-token': token ?? (await stepUp()),
+        'x-step-up-token': token ?? (await stepUp('payout_account_change', body)),
         'x-trace-id': randomUUID(),
         ...extra,
       },

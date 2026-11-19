@@ -1,6 +1,7 @@
 // B1-02zq §9 #4: PUT /v1/me/payout-account, the gate after the step-up check (contract
 // savePayoutAccount; BR-WDR-01 细则「位置与返回码」). Both methods go through it. Its place among the
 // business refusals (⓪ blocklist, 30307 …) is not in the rule, so bodies here pass all of them.
+import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { bankBody, card } from '../payout-bank-card/kit.ts';
 import { closeKit, openKit, type Kit } from '../reverify/kit.ts';
@@ -50,11 +51,17 @@ it('[AC-B1-02zq#20] 10010 不写幂等结果、不消耗令牌：加验通过后
   const m = await f.member({ payout: false, balance: null });
   await f.flag(m.uid, { realname: true, providers: [] });
   const c = f.on(m);
-  const step = await c.stepUp('payout_account_change');
-  refused(kit, PAYOUT, 'put', await c.payout({ step }), ID_NUMBER);
+  // B1-02zzzb: the one token is for this one account, saved by both calls.
+  const body = {
+    payout_method: 'alipay',
+    alipay_logon_id: `new-${randomBytes(6).toString('hex')}@example.test`,
+    payee_name: PERSON,
+  };
+  const step = await c.stepUp('payout_account_change', body);
+  refused(kit, PAYOUT, 'put', await c.payout({ step, body }), ID_NUMBER);
   expect(await f.idempotencyRows(PAYOUT)).toEqual([]);
 
   await f.passById(m);
-  answer(kit, PAYOUT, 'put', await c.payout({ step }), 0);
+  answer(kit, PAYOUT, 'put', await c.payout({ step, body }), 0);
   expect((await f.payoutState(m.uid)).accounts).toHaveLength(1);
 });

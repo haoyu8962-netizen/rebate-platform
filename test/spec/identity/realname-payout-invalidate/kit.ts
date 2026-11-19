@@ -27,6 +27,7 @@ import {
   type JsonSchema,
 } from '../../../../apps/api/src/modules/platform/validation/index.ts';
 import { seed } from '../../admin/accounts/kit.ts';
+import { payoutSummary } from '../step-up-digest/payout-summary.ts';
 import {
   apiRequire,
   factory,
@@ -391,9 +392,14 @@ export async function rebind(s: Setup, target: User, alipayLogonId: string, paye
     ...options,
     blocklist: risk.createBlocklistService(options),
   });
-  return s.h.db
-    .transaction()
-    .execute((trx) =>
-      service.save(trx, { appId: target.appId, userId: target.id, alipayLogonId, payeeName }),
-    );
+  return s.h.db.transaction().execute((trx) =>
+    service.save(trx, {
+      appId: target.appId,
+      userId: target.id,
+      alipayLogonId,
+      payeeName,
+      // B1-02zzzb: the step_up_token digest of the account this call saves.
+      stepUpSummary: payoutSummary(s.h.fields, { alipayLogonId }),
+    }),
+  );
 }

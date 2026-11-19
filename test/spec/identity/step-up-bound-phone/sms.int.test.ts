@@ -30,12 +30,11 @@ it.each(ACTIONS)(
   async (action) => {
     const f = await account(kit);
     const message = await sendBound(f, action);
+    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.
     const summary =
-      action === 'withdraw'
-        ? { payout_account_id: f.uid, amount_fen: 10000 }
-        : action === 'payout_account_change'
-          ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }
-          : undefined;
+      action === 'payout_account_change'
+        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }
+        : undefined;
     const data = accepted<Schema<'StepUpData'>>(
       kit,
       STEP_UP,

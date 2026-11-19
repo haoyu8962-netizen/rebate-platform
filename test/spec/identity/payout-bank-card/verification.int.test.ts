@@ -150,7 +150,9 @@ it('[AC-B1-13f#22] 同键 R2 在 R1 核验期间 40901，R1 不一致后原样�
   expect(await f.attempts()).toHaveLength(1);
   expect((await f.attempts())[0]!.status).toBe('mismatched');
   expect(await f.idempotency(key)).toHaveLength(1);
-  envelope(kit, await f.submit(ALIPAY, randomUUID(), token));
+  // B1-02zzzb: the token binds this card; a new key verifies it again (match) and saves.
+  kit.verify.mockResolvedValue('match');
+  envelope(kit, await f.submit(bankBody(), randomUUID(), token));
 });
 
 it('[AC-B1-13f#23] 核验落 matched 与账号、幂等结果一起提交，等待保存锁时仍只可见 reserved', async () => {
@@ -475,7 +477,8 @@ it('[AC-B1-13f#37] 完成的幂等键原样返回；同键改卡号 20901，不�
   kit.verify.mockResolvedValue('mismatch');
   const original = await f.submit(bankBody(), key);
   envelope(kit, original, 30307);
-  const token = await f.stepUp();
+  // B1-02zzzb: the token is for the Alipay save that succeeds (20901 is the key's own answer).
+  const token = await f.stepUp('payout_account_change', ALIPAY);
   envelope(kit, await f.submit(bankBody(card(2)), key, token), 20901);
   expect(kit.verify).toHaveBeenCalledTimes(1);
   expect(await f.attempts()).toHaveLength(1);

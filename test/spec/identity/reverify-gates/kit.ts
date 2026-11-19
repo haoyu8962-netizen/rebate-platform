@@ -34,6 +34,7 @@ import { fund } from '../../payout/apply/kit.ts';
 import { block } from '../../payout/risk-rule-toggle/kit.ts';
 import { ROOT, sign } from '../../risk/signature/kit.ts';
 import { ALIPAY_CONTEXT } from '../payout-account/kit.ts';
+import { payoutChangeClaim } from '../step-up-digest/payout-summary.ts';
 import { residentId } from '../realname/kit.ts';
 import {
   BY_ID,
@@ -290,7 +291,9 @@ export async function gates(kit: Kit, options: { days?: number } = {}) {
       });
       return `Bearer ${token}`;
     };
-    const stepUp = async (action: StepUpAction) =>
+    // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): a payout_account_change token carries the digest
+    // of the account `stepUpBody` saves, as POST /v1/auth/step-up signs it (claim `summary`).
+    const stepUp = async (action: StepUpAction, stepUpBody?: object) =>
       access.signScopedToken(keys, {
         audience: access.STEP_UP_AUDIENCE,
         claims: {
@@ -300,6 +303,7 @@ export async function gates(kit: Kit, options: { days?: number } = {}) {
           device_id: from.id,
           action,
           jti: randomUUID(),
+          ...payoutChangeClaim(kit.crypto, action, stepUpBody),
         },
         issuedAt: Math.floor(kit.clock.now().getTime() / 1000),
         ttlSeconds: STEP_UP_TTL_SECONDS,
@@ -314,7 +318,8 @@ export async function gates(kit: Kit, options: { days?: number } = {}) {
       const raw = JSON.stringify(body);
       const timestamp = String(Math.floor(kit.clock.now().getTime() / 1000));
       const nonce = randomBytes(16).toString('hex');
-      const token = call.step === undefined && action !== null ? await stepUp(action) : call.step;
+      const token =
+        call.step === undefined && action !== null ? await stepUp(action, body) : call.step;
       return wire.inject({
         method,
         url: path,
