@@ -1,0 +1,24 @@
+id: QA-04a
+repo: rebate-platform
+title: 'QA-04a（即 D10-2119 的 STAGING-SMOKE-a；挂 05 QA-04 staging 每日全流程，编号须对上 05 任务行）：staging 冒烟后台账号一次性登记脚本 enroll-admin.ts（真实 TOTP，种子与密码只在测试机）与共用 lib（TOTP、节点文件读写、只认 staging）'
+type: test-change
+# 2026-11-19 be 入账（D10-2111 / D10-2112 / D10-2119 ④；couli-runs/STAGING-SMOKE/brief.md 第一阶段、be-admin-account-plan.md）。
+# 只写 test/staging-smoke/：enroll-admin.ts（终端无回显读初始密码 → 首登 → 改随机密码 → 取种子 → 算码绑定 →
+# 原子写 ~/.couli-staging-smoke/admin.json 0600 → 新时间步重登 + 登出核对；改密前、绑定前各存一次以便续跑；
+# 续跑登录失败只提示「改密没成功就删 admin.json 用初始密码重跑」、不自动重试），lib/totp.ts（RFC 6238，
+# 与 admin/domain/totp.ts 同参数，不导入应用代码），lib/node-files.ts（target.json 只认 env=staging、https、
+# 裸 origin、主机名带 staging 标签，D10-2119 ①；输出只有步骤名、HTTP 状态、业务码，不带任何值），README.md。
+# 不改应用代码、不加 staging 后门（D10-2112 ①）；不进 verify 测试、不在 CI 跑，只在测试机手动 / 定时跑；
+# 补余额不写脚本（D10-2119 ② 改为负责人一次性后台调账）。接口层冒烟用例本体另开 QA-04b。
+# type test-change（只写 test/ 下的冒烟脚本，无规则测试；impl 类型在 RV2 路径必须有规则测试作者）；tester none；评审一轮独立 Claude（approvals 第 27 / 36 条）；Claude 实现（D10-2119 ④）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'test/staging-smoke/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
+pr: null
