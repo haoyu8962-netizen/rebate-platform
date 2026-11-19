@@ -1,0 +1,23 @@
+id: CT-06zzzzzu
+repo: rebate-platform
+title: 'CT-06zzzzzu（FU-EACH-KIT-TABLE-BIGINT）：先红 / 证据检查读同目录 kit 导出表的行时与同文件 .each 表一样认 BigInt（含负号）；数字与 BigInt 字面量认规范写法的 _ 分隔符（按去掉 _ 的值算，行文本按原文比）（D10-2150）'
+type: guard-change
+# 2026-11-20 w1 入账（编排 D10-2150，现在就做，排在 B1-02zzzc 与 D10-2152 那张之前）。起因：be 的 B2-02za 里 test/spec/notification/balance-corrected/texts.ts 的 AMOUNT_VECTORS 行含 990n、123_456n、-1234n，exportedTable 用 rowsIn(…, false) 读，不认 BigInt，报 the rows of AMOUNT_VECTORS are not literal；同文件 .each 表（compareEachRows）认 BigInt。两处都是展开逻辑前后不一致，不是放宽。
+# 范围：tools/guard/lib/test-blocks.ts——① exportedTable 读 kit 表的行改用与同文件 .each 表相同的读法（BigInt、负号、行尾 as const）；② literalReader 的数字与十进制 BigInt 认规范写法的 _ 分隔符：只在两个数字之间、单个 _，按去掉 _ 后的值算（Number / BigInt），行文本照旧按原文逐字比较。red-check 与 evidence-check 共用同一函数，无需各自改。
+# 不许放宽：分隔符在开头、结尾、连续两个、紧挨小数点 / 指数 e / 进制前缀（0x_、0_x 之类）或 n 前时仍算非字面量；kit 表里混入非字面量行、let / var、函数调用、跨目录、两层导入时照旧拒；现有用例一条不改。
+# 规则测试（独立 Claude 写，test_paths 新目录）至少钉：kit 表含 BigInt（正、负、0n）时可展开且与同文件 .each 同表展开逐行相同；带分隔符的 BigInt / 数字展开后值正确、与不带分隔符时值相同而行文本保留原文；上面列的分隔符非法位置各一条仍算非字面量；kit 表混入非字面量行仍拒。开 PR 前用本分支 tools 跑 couli-runs/B2-02za/support-check.ts，render / record.int / rollback.int / texts.ts 四行全 ok，预核输出贴进 PR 正文；还有别的缺口在本单一并修、一并钉。碰 tools/**：评审过后编排按 approvals 第 16 条加标签。
+refs: []
+refs_hash: {}
+deps: [CT-06zzzzzt]
+paths:
+  - 'tools/guard/lib/test-blocks.ts'
+  - 'tools/guard/lib/test-blocks.test.ts'
+  - 'ops/tasks/CT-06zzzzzu.yaml'
+test_paths:
+  - 'test/spec/ci/each-kit-table-bigint/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/each-kit-table-bigint/**'
+status: todo
