@@ -93,7 +93,7 @@ it('[BR-ID-08] SMS: the account phone with purpose step_up; a token bound to uid
   const result = await context.service.verify({
     principal: PRINCIPAL,
     verifiedDevice: DEVICE,
-    body: { action: 'payout_account_change', code: '123456' },
+    body: { action: 'phone_change', code: '123456' },
   });
   expect(context.verifyAndConsume).toHaveBeenCalledExactlyOnceWith({
     app_id: 'couli',
@@ -115,7 +115,7 @@ it('[BR-ID-08] SMS: the account phone with purpose step_up; a token bound to uid
     app_id: 'couli',
     sid: PRINCIPAL.sid,
     device_id: PRINCIPAL.device_id,
-    action: 'payout_account_change',
+    action: 'phone_change',
     jti: expect.any(String),
   });
   expect((payload.exp ?? 0) - (payload.iat ?? 0)).toBe(300);
@@ -127,7 +127,7 @@ it('[BR-ID-08] SMS refusals: no bound phone 20001 [code]; 20002 / 20003 passed t
     await unbound.service.verify({
       principal: PRINCIPAL,
       verifiedDevice: DEVICE,
-      body: { action: 'payout_account_change', code: '123456' },
+      body: { action: 'phone_change', code: '123456' },
     }),
   ).toEqual({ code: 20001, data: { fields: ['code'] } });
   expect(unbound.verifyAndConsume).not.toHaveBeenCalled();
@@ -136,7 +136,7 @@ it('[BR-ID-08] SMS refusals: no bound phone 20001 [code]; 20002 / 20003 passed t
       await setup({ bound: true, verify: { code } }).service.verify({
         principal: PRINCIPAL,
         verifiedDevice: DEVICE,
-        body: { action: 'payout_account_change', code: '123456' },
+        body: { action: 'phone_change', code: '123456' },
       }),
     ).toEqual({ code });
   }
@@ -217,7 +217,7 @@ it('[BR-ID-07] a token of another app than the signing device is 10403 before an
     await context.service.verify({
       principal: PRINCIPAL,
       verifiedDevice: { ...DEVICE, appId: 'another_app' },
-      body: { action: 'payout_account_change', code: '123456' },
+      body: { action: 'phone_change', code: '123456' },
     }),
   ).toEqual({ code: 10403 });
   const third = setup({ bound: false, union: 'u1' });
@@ -260,7 +260,7 @@ it('[AC-B1-02zza#u6] a staging test phone’s SMS step-up writes one pino audit 
   const command = {
     principal: PRINCIPAL,
     verifiedDevice: DEVICE,
-    body: { action: 'payout_account_change' as const, code: '864213' },
+    body: { action: 'phone_change' as const, code: '864213' },
   };
   verifyAndConsume.mockResolvedValueOnce({ code: 20002 });
   expect(await service.verify(command)).toEqual({ code: 20002 });
