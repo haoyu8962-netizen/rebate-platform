@@ -1,0 +1,79 @@
+{
+  "task": "CT-06zzzzzu",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "8e515f43f0b39acebfb1e8cefee0c6f44d60252c",
+  "red_tests": [
+    "test/spec/ci/each-kit-table-bigint/bigint.test.ts > [CT-06zzzzzu#1] a kit table whose rows hold BigInt literals (990n, -1234n, 0n; bare, as const or annotated) expands row by row, each row with the full name and row text the same table written inline gives it",
+    "test/spec/ci/each-kit-table-bigint/bigint.test.ts > [CT-06zzzzzu#2] `_` separators (123_456n, 2_000_000n, -1_234n, 1_000, 1_000.5) in a kit table and inline: the full names are those of the values without the `_`, the row texts the source as written",
+    "test/spec/ci/each-kit-table-bigint/bigint.test.ts > [CT-06zzzzzu#3] a row rewritten only with `_` separators (same value) is a changed row: its text is compared as written, inline and in a kit",
+    "test/spec/ci/each-kit-table-bigint/bigint.test.ts > [CT-06zzzzzu#4] a `_` where the language does not allow it (first, last, twice, next to the point or the e, in a radix prefix, before the n) in a kit table: its rows still are not literal; the other table expands",
+    "test/spec/ci/each-kit-table-bigint/bigint.test.ts > [CT-06zzzzzu#5] a `_` where the language does not allow it in an inline `.each` table: its rows still cannot be expanded for certain; the other table expands",
+    "test/spec/ci/each-kit-table-bigint/bigint.test.ts > [CT-06zzzzzu#6] a kit table of BigInt rows with a row that is not literal (a name, a negated name, a BigInt(…) call, a whole row by name, a spread): still not literal, cannot be expanded for certain; the other table expands"
+  ],
+  "risk_note": "Guard change (tools/**, RV2 by path). CT-06zzzzzu (D10-2150): in tools/guard/lib/test-blocks.ts, exportedTable / importedTable read a same-directory kit's table rows, on the compareModifiedBlocks expansion path, the way a same-file .each table is read (rowsIn(…, true): BigInt, negative BigInt, per-literal as const); the names of CT-06zzzd keep their reading. Number and decimal BigInt literals accept the canonical _ separator (a single _ between two digits; the value is computed without it, BigInt never through Number; row texts compare as written); a misplaced _ (trailing, doubled, next to . e x or n, after a leading 0) is still not a literal, and a kit table with a non-literal row is refused as before. No existing test changed. Pre-check with this branch's tools: be's couli-runs/B2-02za/support-check.ts over render / record.int / rollback.int / texts.ts — all four ok, exit 0.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "8e515f43f0b39acebfb1e8cefee0c6f44d60252c",
+      "tree": "a62cb1ad549727d392af10954203577dfbe25e56",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-19T23:14:08Z",
+      "finished_at": "2026-11-19T23:14:11Z",
+      "red_tests": [
+        "test/spec/ci/each-kit-table-bigint/bigint.test.ts > [CT-06zzzzzu#1] a kit table whose rows hold BigInt literals (990n, -1234n, 0n; bare, as const or annotated) expands row by row, each row with the full name and row text the same table written inline gives it",
+        "test/spec/ci/each-kit-table-bigint/bigint.test.ts > [CT-06zzzzzu#2] `_` separators (123_456n, 2_000_000n, -1_234n, 1_000, 1_000.5) in a kit table and inline: the full names are those of the values without the `_`, the row texts the source as written",
+        "test/spec/ci/each-kit-table-bigint/bigint.test.ts > [CT-06zzzzzu#3] a row rewritten only with `_` separators (same value) is a changed row: its text is compared as written, inline and in a kit",
+        "test/spec/ci/each-kit-table-bigint/bigint.test.ts > [CT-06zzzzzu#4] a `_` where the language does not allow it (first, last, twice, next to the point or the e, in a radix prefix, before the n) in a kit table: its rows still are not literal; the other table expands",
+        "test/spec/ci/each-kit-table-bigint/bigint.test.ts > [CT-06zzzzzu#5] a `_` where the language does not allow it in an inline `.each` table: its rows still cannot be expanded for certain; the other table expands",
+        "test/spec/ci/each-kit-table-bigint/bigint.test.ts > [CT-06zzzzzu#6] a kit table of BigInt rows with a row that is not literal (a name, a negated name, a BigInt(…) call, a whole row by name, a spread): still not literal, cannot be expanded for certain; the other table expands"
+      ],
+      "expected": ["test/spec/ci/each-kit-table-bigint/bigint.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "31c8306e24b7240c45e9c588955f0e4fa74b603c15c6080f9749e770e5d4b23e"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (Codex usage limit until 2026-11-20 13:01, approvals 36): money r1 full review pass, no findings (couli-runs/CT-06zzzzzu/review-money-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by independent Claude (ledger tester claude-independent), red at the first try (6 tests). spec-test r1 by a fresh independent Claude (approvals 36) pass with two S2 (per-literal as const in a kit row; a separated BigInt above 2^53 valued as BigInt); both pinned by the implementation's unit tests instead of another test round (couli-runs/CT-06zzzzzu/review-spec-test-r1.json)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "836952b75809368ab116706ac656bed96f6cc003",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
