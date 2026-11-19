@@ -1210,16 +1210,22 @@ function exportedTable(source: string, name: string): KitTable {
   }
   const at = (k: number, text: string, kind: Token['kind']): boolean =>
     tokens[k]?.text === text && tokens[k]?.kind === kind;
+  // CT-06zzzzzt (D10-2148): a top-level type annotation `: <type>` between the name and the `=`
+  // is skipped whole; `assign` is the token holding the `=` (`=`, or `>=` / `>>=` / `>>>=` closing
+  // the annotation's last `<…>`).
+  const assign = at(d + 1, ':', 'punct') ? annotationEnd(tokens, match, d + 2) : d + 1;
   if (
     depth !== 0 ||
+    assign === null ||
     !at(d - 2, 'export', 'id') ||
     !at(d - 1, 'const', 'id') ||
-    !at(d + 1, '=', 'punct') ||
-    !at(d + 2, '[', 'punct')
+    tokens[assign]?.kind !== 'punct' ||
+    !(tokens[assign]?.text ?? '').endsWith('=') ||
+    !at(assign + 1, '[', 'punct')
   ) {
     return { reason: `the kit does not declare it as \`export const ${name} = [ … ]\`` };
   }
-  const open = d + 2;
+  const open = assign + 1;
   const close = match[open] as number;
   let last = close;
   if (at(close + 1, 'as', 'id') && at(close + 2, 'const', 'id')) last = close + 2;
@@ -1246,6 +1252,44 @@ function exportedTable(source: string, name: string): KitTable {
   return texts.length === rows.length
     ? { rows, texts, raw, decl: joinTokens(tokens, d - 2, last, sep) }
     : { reason: `the rows of ${name} were not read alike` };
+}
+
+/**
+ * The token that ends a type annotation starting at token `from` with its assignment `=`
+ * (CT-06zzzzzt, D10-2148), or null. The annotation is walked as tokens, so its string literals
+ * and comments are never read for `=`, `>` or `[` (spec-test r1, S2); `(…)`, `[…]` and `{…}` are
+ * jumped over whole; `<…>` are counted (`<<`, `>>`, `>>>` as two or three), and an `=` inside them
+ * (a default type parameter) does not end it; `=>` is its own token, not an `=`. The end is a
+ * plain `=` outside every `<…>`, or a `>=` / `>>=` / `>>>=` whose `>`s close the last `<…>`.
+ * A `;` or the end of the file before it: null.
+ */
+function annotationEnd(
+  tokens: readonly Token[],
+  match: readonly number[],
+  from: number,
+): number | null {
+  let angles = 0;
+  let k = from;
+  while (k < tokens.length) {
+    const t = tokens[k] as Token;
+    if (t.kind === 'punct') {
+      const { text } = t;
+      if (text === '(' || text === '[' || text === '{') {
+        k = (match[k] as number) + 1;
+        continue;
+      }
+      if (text === ';') return null;
+      if (/^<+$/.test(text)) angles += text.length;
+      else if (/^>+=?$/.test(text)) {
+        const closes = text.replace('=', '').length;
+        if (closes > angles) return null;
+        angles -= closes;
+        if (text.endsWith('=') && angles === 0) return k;
+      } else if (text === '=' && angles === 0) return k;
+    }
+    k += 1;
+  }
+  return null;
 }
 
 /**
