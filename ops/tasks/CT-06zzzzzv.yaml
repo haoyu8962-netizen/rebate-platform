@@ -1,0 +1,27 @@
+id: CT-06zzzzzv
+repo: rebate-platform
+title: 'CT-06zzzzzv（FU-FOR-OF-LITERAL-TABLE-ROWS）：先红 / 证据检查把「顶层 for…of 遍历内联字面量数组、每行生成一条 it」按行比较——未改的行按未改用例对待、可登 red_exempt，改了的行按行声明 modify_existing；其余写法照旧整表判 changed（D10-2152）'
+type: guard-change
+# 2026-11-20 w1 入账（编排 D10-2152，排在 CT-06zzzzzu 合并之后，两张都动 test-blocks.ts、不并行）。起因：B1-02zzzc 的冻结文件 test/spec/risk/risk-state/http.int.test.ts 的 [AC-B1-03h#17] 是顶层 for (const route of [ … ]) 里的模板标题 it；丙类那一行（POST /v1/auth/step-up 的 action withdraw → phone_change）在 for 头部表里，现在 red-check 把整张表 6 行都判为 changed since the base——不能 red_exempt、旧实现下又不会红；links 行标题含运行期 randomUUID，按名字也无法声明。测试侧没有不碰 for 头的改法。
+# 范围（只认这一种写法）：顶层 for…of 遍历一张内联字面量数组（行全是字面量，读法同 .each 表）、循环体逐 token 与基线相同、表里每行生成一条 it。行文本与基线逐字相同的行按未改用例对待（可登 red_exempt）；改了的行必须按行在 modify_existing 声明（行文本改前 → 改后都写进证据）；标题含运行期值（randomUUID 等、全名不能由行确定）的行不按名字认，只在行文本未改时按表行下标对待。paths 含 red-check / evidence-check 只为接这一种按行比较，不改别的判定。
+# 不许放宽（照旧整表判 changed）：表不是内联字面量（常量、导入、调用）、行里有非字面量、循环体任何 token 改了、行有增删或换序、标题含运行期值的行其行文本改了、for 不在顶层或不是 for…of；现有用例一条不改。
+# 规则测试（独立 Claude 写，test_paths 新目录）各钉一条：合格写法下未改行可 red_exempt、改的行按行声明后通过；上面每一种「照旧整表判」；含运行期值的行未改时按下标放行、改了即整表判。碰 tools/**：评审过后编排按 approvals 第 16 条加标签。
+refs: []
+refs_hash: {}
+deps: [CT-06zzzzzu]
+paths:
+  - 'tools/guard/lib/test-blocks.ts'
+  - 'tools/guard/lib/test-blocks.test.ts'
+  - 'tools/guard/lib/red-check.ts'
+  - 'tools/guard/lib/red-check.test.ts'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'ops/tasks/CT-06zzzzzv.yaml'
+test_paths:
+  - 'test/spec/ci/for-of-literal-table/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/for-of-literal-table/**'
+status: todo
