@@ -1,0 +1,122 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-small-links/ledger.test.ts > [AC-F1-08fe-USER#1] 资金摘要卡里有【查看用户详情】：点开进 /users 并读该用户详情（GET /admin/v1/users/{user_id}），不发写请求",
+    "test/spec/frontend/admin-small-links/ledger.test.ts > [AC-F1-08fe-PREFILL#1] 直达 /ledger?user_id=…&ref=…：「用户 UID」与「业务单号」预填，进页就读一次资金摘要与一次流水（user_id + ref，第 1 页），只列该业务单号的分录",
+    "test/spec/frontend/admin-small-links/ledger.test.ts > [AC-F1-08fe-PREFILL#2] 直达 /ledger?user_id=…（不带 ref）：只预填「用户 UID」，流水按该用户第 1 页读、不带 ref，「业务单号」为空",
+    "test/spec/frontend/admin-small-links/links.test.ts > [AC-F1-08fe-LINK#1] 有 link 的行，业务单号单元格恰有一个链接、文字是凭证 biz_id；link 为 null 的行（邀请奖励）没有链接；各行文字与原来逐格相同",
+    "test/spec/frontend/admin-small-links/links.test.ts > [AC-F1-08fe-LINK#2] 提现单的链接进该提现单详情：地址 /withdrawals/{withdrawal_id}，读该提现单（GET /admin/v1/withdrawals/{id}），不发写请求",
+    "test/spec/frontend/admin-small-links/links.test.ts > [AC-F1-08fe-LINK#3] 订单的链接进订单页（/orders…），不发写请求",
+    "test/spec/frontend/admin-small-links/links.test.ts > [AC-F1-08fe-LINK#4] 调账单的链接进调账与核销并打开该调账单详情：地址 /adjustments，读 GET /admin/v1/adjustments/{adjust_id}，不发写请求",
+    "test/spec/frontend/admin-small-links/links.test.ts > [AC-F1-08fe-LINK#5] 核销候选单的链接进调账与核销的「坏账核销」页签：地址 /adjustments，该页签选中并读候选单列表，不发写请求",
+    "test/spec/frontend/admin-small-links/routes.test.ts > [AC-F1-08fe-ROUTE#1] 余额流水预填地址：/ledger 只带 user_id，有业务单号时另带 ref，不带别的参数",
+    "test/spec/frontend/admin-small-links/routes.test.ts > [AC-F1-08fe-ROUTE#2] 余额流水预填地址按 URL 编码：含 & = # 空格、中文与冒号的业务单号原样读回",
+    "test/spec/frontend/admin-small-links/routes.test.ts > [AC-F1-08fe-ROUTE#3] 从地址取预填：user_id 与 ref 去首尾空白；没有用户或用户为空白时不预填；空白的 ref 不带；其余参数不取",
+    "test/spec/frontend/admin-small-links/routes.test.ts > [AC-F1-08fe-ROUTE#4] 预填地址与读取互逆：按地址读回的就是带过去的用户与业务单号",
+    "test/spec/frontend/admin-small-links/routes.test.ts > [AC-F1-08fe-ROUTE#5] 提现审核按用户筛选的地址：/withdrawals 只带 user_id",
+    "test/spec/frontend/admin-small-links/routes.test.ts > [AC-F1-08fe-ROUTE#6] 提现审核从地址取起始筛选：user_id 预填「用户 ID」，可与工作台卡片的 status 同时带；按【去处理提现单】的地址读回该用户",
+    "test/spec/frontend/admin-small-links/voucher.test.ts > [AC-F1-08fe-VOUCHER#1] 新建调账成功提示里有【查看凭证】：点开进余额流水，「用户 UID」为该单用户，流水按 user_id + ref=新单号读第 1 页；不再发写请求",
+    "test/spec/frontend/admin-small-links/voucher.test.ts > [AC-F1-08fe-VOUCHER#2] 红冲成功提示里有【查看凭证】：点开进余额流水，「用户 UID」为原单用户，流水按 user_id + ref=红冲单号读第 1 页；不再发写请求",
+    "test/spec/frontend/admin-small-links/writeoff.test.ts > [AC-F1-08fe-VOUCHER#3] 核销成功（APPROVED）提示里有【查看凭证】，已取消（CANCELLED，未记坏账）的提示里没有；点开进余额流水，「用户 UID」为候选单的用户，流水按 user_id + ref=候选单号读第 1 页；不再发写请求",
+    "test/spec/frontend/admin-small-links/writeoff.test.ts > [AC-F1-08fe-INTERCEPT#1] 批准核销被拦（writeoff_frozen_pending）：拦截提示旁有【去处理提现单】；点开关对话框进提现审核，「用户 ID」预填候选单的用户，列表第一次读恰为 {page: 1, page_size: 20, user_id}；不重发批准、不发任何写请求"
+  ],
+  "risk_note": "F1-08fe: admin navigation only (apps/admin/src/pages/{ledger,adjustments,withdrawals}/**, texts/{ledger,adjustments}.ts). Ledger rows link by AdminLedgerEntry.link, user card links to user detail, adjustment / reversal / write-off success notices link to a prefilled ledger query, and the write-off frozen-pending notice links to the withdrawals list filtered by user; ledger and withdrawals pages read the prefill from the query string. No new write request, no write body or amount display change; the pending badge was not built (no existing read gives the count). Rule tests and spec-test by independent Claude contexts; money-type review by an independent Claude (D10-2003); implementation by Opus 5.5. Written by hand.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (approvals #36, D10-2003) on 148b9208. Pass with one S2 (frozen-pending notice on an approve_blocked candidate had no withdrawals link), fixed in cd1820fb. couli-runs/F1-08fe/review-claude-money-r1.json"
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Independent Claude via tools/agent/claude-run.sh on cd1820fb. An earlier round-2 call was rejected by the output validator (two checklist locations outside the diff); its content was pass, 0 findings. couli-runs/F1-08fe/review-claude-money-r2b.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude context (claude-run.sh); spec-test r1 by another independent Claude, pass, 0 findings",
+    "model": "claude-opus-5-5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08fe",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "db39e2878d98f0e6d065453010ff7aa223f7c5b7",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "db39e2878d98f0e6d065453010ff7aa223f7c5b7",
+      "tree": "43a8b560e799eb3803aa1235719b005bf76abddd",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-19T11:17:36Z",
+      "finished_at": "2026-11-19T11:17:47Z",
+      "red_tests": [
+        "test/spec/frontend/admin-small-links/ledger.test.ts > [AC-F1-08fe-USER#1] 资金摘要卡里有【查看用户详情】：点开进 /users 并读该用户详情（GET /admin/v1/users/{user_id}），不发写请求",
+        "test/spec/frontend/admin-small-links/ledger.test.ts > [AC-F1-08fe-PREFILL#1] 直达 /ledger?user_id=…&ref=…：「用户 UID」与「业务单号」预填，进页就读一次资金摘要与一次流水（user_id + ref，第 1 页），只列该业务单号的分录",
+        "test/spec/frontend/admin-small-links/ledger.test.ts > [AC-F1-08fe-PREFILL#2] 直达 /ledger?user_id=…（不带 ref）：只预填「用户 UID」，流水按该用户第 1 页读、不带 ref，「业务单号」为空",
+        "test/spec/frontend/admin-small-links/links.test.ts > [AC-F1-08fe-LINK#1] 有 link 的行，业务单号单元格恰有一个链接、文字是凭证 biz_id；link 为 null 的行（邀请奖励）没有链接；各行文字与原来逐格相同",
+        "test/spec/frontend/admin-small-links/links.test.ts > [AC-F1-08fe-LINK#2] 提现单的链接进该提现单详情：地址 /withdrawals/{withdrawal_id}，读该提现单（GET /admin/v1/withdrawals/{id}），不发写请求",
+        "test/spec/frontend/admin-small-links/links.test.ts > [AC-F1-08fe-LINK#3] 订单的链接进订单页（/orders…），不发写请求",
+        "test/spec/frontend/admin-small-links/links.test.ts > [AC-F1-08fe-LINK#4] 调账单的链接进调账与核销并打开该调账单详情：地址 /adjustments，读 GET /admin/v1/adjustments/{adjust_id}，不发写请求",
+        "test/spec/frontend/admin-small-links/links.test.ts > [AC-F1-08fe-LINK#5] 核销候选单的链接进调账与核销的「坏账核销」页签：地址 /adjustments，该页签选中并读候选单列表，不发写请求",
+        "test/spec/frontend/admin-small-links/routes.test.ts > [AC-F1-08fe-ROUTE#1] 余额流水预填地址：/ledger 只带 user_id，有业务单号时另带 ref，不带别的参数",
+        "test/spec/frontend/admin-small-links/routes.test.ts > [AC-F1-08fe-ROUTE#2] 余额流水预填地址按 URL 编码：含 & = # 空格、中文与冒号的业务单号原样读回",
+        "test/spec/frontend/admin-small-links/routes.test.ts > [AC-F1-08fe-ROUTE#3] 从地址取预填：user_id 与 ref 去首尾空白；没有用户或用户为空白时不预填；空白的 ref 不带；其余参数不取",
+        "test/spec/frontend/admin-small-links/routes.test.ts > [AC-F1-08fe-ROUTE#4] 预填地址与读取互逆：按地址读回的就是带过去的用户与业务单号",
+        "test/spec/frontend/admin-small-links/routes.test.ts > [AC-F1-08fe-ROUTE#5] 提现审核按用户筛选的地址：/withdrawals 只带 user_id",
+        "test/spec/frontend/admin-small-links/routes.test.ts > [AC-F1-08fe-ROUTE#6] 提现审核从地址取起始筛选：user_id 预填「用户 ID」，可与工作台卡片的 status 同时带；按【去处理提现单】的地址读回该用户",
+        "test/spec/frontend/admin-small-links/voucher.test.ts > [AC-F1-08fe-VOUCHER#1] 新建调账成功提示里有【查看凭证】：点开进余额流水，「用户 UID」为该单用户，流水按 user_id + ref=新单号读第 1 页；不再发写请求",
+        "test/spec/frontend/admin-small-links/voucher.test.ts > [AC-F1-08fe-VOUCHER#2] 红冲成功提示里有【查看凭证】：点开进余额流水，「用户 UID」为原单用户，流水按 user_id + ref=红冲单号读第 1 页；不再发写请求",
+        "test/spec/frontend/admin-small-links/writeoff.test.ts > [AC-F1-08fe-VOUCHER#3] 核销成功（APPROVED）提示里有【查看凭证】，已取消（CANCELLED，未记坏账）的提示里没有；点开进余额流水，「用户 UID」为候选单的用户，流水按 user_id + ref=候选单号读第 1 页；不再发写请求",
+        "test/spec/frontend/admin-small-links/writeoff.test.ts > [AC-F1-08fe-INTERCEPT#1] 批准核销被拦（writeoff_frozen_pending）：拦截提示旁有【去处理提现单】；点开关对话框进提现审核，「用户 ID」预填候选单的用户，列表第一次读恰为 {page: 1, page_size: 20, user_id}；不重发批准、不发任何写请求"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-small-links/ledger.test.ts",
+        "test/spec/frontend/admin-small-links/links.test.ts",
+        "test/spec/frontend/admin-small-links/routes.test.ts",
+        "test/spec/frontend/admin-small-links/voucher.test.ts",
+        "test/spec/frontend/admin-small-links/writeoff.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "397d2ee849ae127adb1192a3b75b27ee8fab4231194422c3d1caf08bd42e8307"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "33a3acba685e7b6b4c7132a17eef14cd5158dcc9",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}
