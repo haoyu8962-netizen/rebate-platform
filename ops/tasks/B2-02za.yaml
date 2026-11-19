@@ -4,11 +4,13 @@ title: 'B2-02za：余额更正站内信默认正文「可用余额」改「可�
 type: test-change
 # 2026-11-19 be 入账（D10-2132 ①、D10-2133 ②；规划 couli#8 squash 7b4b8bb，08 BR-TEXT-19 / BR-TEXT-01）。只换一个词：
 # 渲染器 DEFAULT_BODY 与其单测期望、冻结规则测试 texts.ts 的默认正文与拼句、render.test.ts #1 的期望正文、
-# #2 it.each 标题（逐行登记 retitle_to）。标题、变量 {before} {after}、金额格式、发送条件不变；覆盖正文测试数据里的
+# #2 it.each 各行（标题不改名，见下 D10-2154）。标题、变量 {before} {after}、金额格式、发送条件不变；覆盖正文测试数据里的
 # 「可用余额」是运营措辞样例，不改。属 D10-1670 / #24 编排放行范围。tester none（照 QA-03cz 先例）。
 # 11-20 改法 A（D10-2146）：冻结辅助文件 texts.ts 一字不改，只在末尾新增 TEMPLATE_WITHDRAWABLE（support 白名单只许新增）；
 # 期望默认正文的块改用新常量拼期望并逐块登记（render #2 / #4、record.int 5 块、rollback.int 1 块），import 只加名字（support 条目）；
 # int 文件里 bodyOf 不再用，import 不删（只许新增），加 eslint-disable 注释。旧 TEMPLATE / bodyOf 留着，登 FU。
+# 11-20 D10-2154：.each 行不许改名，#2 it.each 标题模板保留主干原文（旧词「可用余额」），块上方加注释说明期望以块内断言为准；
+# 8 行去掉 retitle_to、test 名照主干原名；标题用词与断言不一致登 FU-B202ZA-EACH-TITLE-WORD。
 refs: [BR-TEXT-19]
 refs_hash:
   BR-TEXT-19: 49112cf6e025
@@ -29,56 +31,48 @@ modify_existing:
     note: '只把默认正文里的「可用余额」换成「可提现余额」（BR-TEXT-01 用户词，couli#8 回写）；期望的金额、变量、标题键与发送条件一律不变'
   - file: 'test/spec/notification/balance-corrected/render.test.ts'
     test: '[AC-B2-02z#2] 调增：更正前 990n 分、更正后 123456n 分 → 正文「…可用余额由 ¥9.9 调整为 ¥1234.56。…」'
-    retitle_to: '[AC-B2-02z#2] 调增：更正前 990n 分、更正后 123456n 分 → 正文「…可提现余额由 ¥9.9 调整为 ¥1234.56。…」'
     reason: rule_change
     br: [BR-TEXT-19]
     ruling: D10-2132
     note: '只把默认正文里的「可用余额」换成「可提现余额」（BR-TEXT-01 用户词，couli#8 回写）；期望的金额、变量、标题键与发送条件一律不变'
   - file: 'test/spec/notification/balance-corrected/render.test.ts'
     test: '[AC-B2-02z#2] 调减：更正前 1000n 分、更正后 1n 分 → 正文「…可用余额由 ¥10 调整为 ¥0.01。…」'
-    retitle_to: '[AC-B2-02z#2] 调减：更正前 1000n 分、更正后 1n 分 → 正文「…可提现余额由 ¥10 调整为 ¥0.01。…」'
     reason: rule_change
     br: [BR-TEXT-19]
     ruling: D10-2132
     note: '只把默认正文里的「可用余额」换成「可提现余额」（BR-TEXT-01 用户词，couli#8 回写）；期望的金额、变量、标题键与发送条件一律不变'
   - file: 'test/spec/notification/balance-corrected/render.test.ts'
     test: '[AC-B2-02z#2] 调减到负数：更正前 500n 分、更正后 -1234n 分 → 正文「…可用余额由 ¥5 调整为 -¥12.34。…」'
-    retitle_to: '[AC-B2-02z#2] 调减到负数：更正前 500n 分、更正后 -1234n 分 → 正文「…可提现余额由 ¥5 调整为 -¥12.34。…」'
     reason: rule_change
     br: [BR-TEXT-19]
     ruling: D10-2132
     note: '只把默认正文里的「可用余额」换成「可提现余额」（BR-TEXT-01 用户词，couli#8 回写）；期望的金额、变量、标题键与发送条件一律不变'
   - file: 'test/spec/notification/balance-corrected/render.test.ts'
     test: '[AC-B2-02z#2] 由负数调增为正数（正数不带 +，末尾 0 去掉）：更正前 -150n 分、更正后 600n 分 → 正文「…可用余额由 -¥1.5 调整为 ¥6。…」'
-    retitle_to: '[AC-B2-02z#2] 由负数调增为正数（正数不带 +，末尾 0 去掉）：更正前 -150n 分、更正后 600n 分 → 正文「…可提现余额由 -¥1.5 调整为 ¥6。…」'
     reason: rule_change
     br: [BR-TEXT-19]
     ruling: D10-2132
     note: '只把默认正文里的「可用余额」换成「可提现余额」（BR-TEXT-01 用户词，couli#8 回写）；期望的金额、变量、标题键与发送条件一律不变'
   - file: 'test/spec/notification/balance-corrected/render.test.ts'
     test: '[AC-B2-02z#2] 调到 0（App 表「¥0」，不是后台「¥0.00」）：更正前 -120n 分、更正后 0n 分 → 正文「…可用余额由 -¥1.2 调整为 ¥0。…」'
-    retitle_to: '[AC-B2-02z#2] 调到 0（App 表「¥0」，不是后台「¥0.00」）：更正前 -120n 分、更正后 0n 分 → 正文「…可提现余额由 -¥1.2 调整为 ¥0。…」'
     reason: rule_change
     br: [BR-TEXT-19]
     ruling: D10-2132
     note: '只把默认正文里的「可用余额」换成「可提现余额」（BR-TEXT-01 用户词，couli#8 回写）；期望的金额、变量、标题键与发送条件一律不变'
   - file: 'test/spec/notification/balance-corrected/render.test.ts'
     test: '[AC-B2-02z#2] 由 0 调增（不加千分位）：更正前 0n 分、更正后 2000000n 分 → 正文「…可用余额由 ¥0 调整为 ¥20000。…」'
-    retitle_to: '[AC-B2-02z#2] 由 0 调增（不加千分位）：更正前 0n 分、更正后 2000000n 分 → 正文「…可提现余额由 ¥0 调整为 ¥20000。…」'
     reason: rule_change
     br: [BR-TEXT-19]
     ruling: D10-2132
     note: '只把默认正文里的「可用余额」换成「可提现余额」（BR-TEXT-01 用户词，couli#8 回写）；期望的金额、变量、标题键与发送条件一律不变'
   - file: 'test/spec/notification/balance-corrected/render.test.ts'
     test: '[AC-B2-02z#2] 大额调减到负数（不加千分位）：更正前 123456789n 分、更正后 -2000000n 分 → 正文「…可用余额由 ¥1234567.89 调整为 -¥20000。…」'
-    retitle_to: '[AC-B2-02z#2] 大额调减到负数（不加千分位）：更正前 123456789n 分、更正后 -2000000n 分 → 正文「…可提现余额由 ¥1234567.89 调整为 -¥20000。…」'
     reason: rule_change
     br: [BR-TEXT-19]
     ruling: D10-2132
     note: '只把默认正文里的「可用余额」换成「可提现余额」（BR-TEXT-01 用户词，couli#8 回写）；期望的金额、变量、标题键与发送条件一律不变'
   - file: 'test/spec/notification/balance-corrected/render.test.ts'
     test: '[AC-B2-02z#2] 负数之间调减：更正前 -1n 分、更正后 -100n 分 → 正文「…可用余额由 -¥0.01 调整为 -¥1。…」'
-    retitle_to: '[AC-B2-02z#2] 负数之间调减：更正前 -1n 分、更正后 -100n 分 → 正文「…可提现余额由 -¥0.01 调整为 -¥1。…」'
     reason: rule_change
     br: [BR-TEXT-19]
     ruling: D10-2132
