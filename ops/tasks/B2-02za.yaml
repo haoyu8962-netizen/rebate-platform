@@ -6,6 +6,9 @@ type: test-change
 # 渲染器 DEFAULT_BODY 与其单测期望、冻结规则测试 texts.ts 的默认正文与拼句、render.test.ts #1 的期望正文、
 # #2 it.each 标题（逐行登记 retitle_to）。标题、变量 {before} {after}、金额格式、发送条件不变；覆盖正文测试数据里的
 # 「可用余额」是运营措辞样例，不改。属 D10-1670 / #24 编排放行范围。tester none（照 QA-03cz 先例）。
+# 11-20 改法 A（D10-2146）：冻结辅助文件 texts.ts 一字不改，只在末尾新增 TEMPLATE_WITHDRAWABLE（support 白名单只许新增）；
+# 期望默认正文的块改用新常量拼期望并逐块登记（render #2 / #4、record.int 5 块、rollback.int 1 块），import 只加名字（support 条目）；
+# int 文件里 bodyOf 不再用，import 不删（只许新增），加 eslint-disable 注释。旧 TEMPLATE / bodyOf 留着，登 FU。
 refs: [BR-TEXT-19]
 refs_hash:
   BR-TEXT-19: 49112cf6e025
@@ -15,6 +18,8 @@ paths:
   - 'test/spec/notification/balance-corrected/render.test.ts'
   - 'apps/api/src/modules/notification/application/balance-corrected-message.ts'
   - 'apps/api/src/modules/notification/application/balance-corrected-message.test.ts'
+  - 'test/spec/notification/balance-corrected/record.int.test.ts'
+  - 'test/spec/notification/balance-corrected/rollback.int.test.ts'
 modify_existing:
   - file: 'test/spec/notification/balance-corrected/render.test.ts'
     test: '[AC-B2-02z#1] 默认标题「余额更正」；默认正文逐字为 D10-2092 的模板，{before} {after} 换成更正前后的可用余额'
@@ -84,6 +89,72 @@ modify_existing:
     br: [BR-TEXT-19]
     ruling: D10-2132
     note: '只把默认正文里的「可用余额」换成「可提现余额」（BR-TEXT-01 用户词，couli#8 回写）；期望的金额、变量、标题键与发送条件一律不变'
+  - file: 'test/spec/notification/balance-corrected/render.test.ts'
+    test: '[AC-B2-02z#4] 只覆盖标题时正文用默认，只覆盖正文时标题用默认，两项都为空即全用默认'
+    reason: rule_change
+    br: [BR-TEXT-19]
+    ruling: D10-2146
+    note: '只把期望默认正文从 bodyOf（旧词）换成 TEMPLATE_WITHDRAWABLE 拼出的同一句（「可用余额」→「可提现余额」，couli#8 回写）；金额、变量、发送条件、次数与其余断言一律不变'
+  - file: 'test/spec/notification/balance-corrected/record.int.test.ts'
+    test: '[AC-B2-02z#8] 写入：一条 notify_logs（站内信渠道、success、去重键 balance_corrected:{reconDiffId}:{balanceVersion}）加一条站内信（标题「余额更正」、正文按模板与 BR-TEXT-10），没有推送与短信记录'
+    reason: rule_change
+    br: [BR-TEXT-19]
+    ruling: D10-2146
+    note: '只把期望默认正文从 bodyOf（旧词）换成 TEMPLATE_WITHDRAWABLE 拼出的同一句（「可用余额」→「可提现余额」，couli#8 回写）；金额、变量、发送条件、次数与其余断言一律不变'
+  - file: 'test/spec/notification/balance-corrected/record.int.test.ts'
+    test: '[AC-B2-02z#8] 调增同样写一条（D10-2092：调增调减都发），正文为更正前后的可用余额'
+    reason: rule_change
+    br: [BR-TEXT-19]
+    ruling: D10-2146
+    note: '只把期望默认正文从 bodyOf（旧词）换成 TEMPLATE_WITHDRAWABLE 拼出的同一句（「可用余额」→「可提现余额」，couli#8 回写）；金额、变量、发送条件、次数与其余断言一律不变'
+  - file: 'test/spec/notification/balance-corrected/record.int.test.ts'
+    test: '[AC-B2-02z#8] 同一差异单再次重算出新的余额版本 → 另写一条（去重键带余额版本）'
+    reason: rule_change
+    br: [BR-TEXT-19]
+    ruling: D10-2146
+    note: '只把期望默认正文从 bodyOf（旧词）换成 TEMPLATE_WITHDRAWABLE 拼出的同一句（「可用余额」→「可提现余额」，couli#8 回写）；金额、变量、发送条件、次数与其余断言一律不变'
+  - file: 'test/spec/notification/balance-corrected/record.int.test.ts'
+    test: '[AC-B2-02z#7] 注销冷静期内（有 cooling 的注销申请、users.status 仍为 normal）照写一条'
+    reason: rule_change
+    br: [BR-TEXT-19]
+    ruling: D10-2146
+    note: '只把期望默认正文从 bodyOf（旧词）换成 TEMPLATE_WITHDRAWABLE 拼出的同一句（「可用余额」→「可提现余额」，couli#8 回写）；金额、变量、发送条件、次数与其余断言一律不变'
+  - file: 'test/spec/notification/balance-corrected/record.int.test.ts'
+    test: '[AC-B2-02z#4] 写入时读本 app 的 notify_templates 覆盖行：标题与正文用运营措辞、变量照样替换；别的 app 的覆盖不用'
+    reason: rule_change
+    br: [BR-TEXT-19]
+    ruling: D10-2146
+    note: '只把期望默认正文从 bodyOf（旧词）换成 TEMPLATE_WITHDRAWABLE 拼出的同一句（「可用余额」→「可提现余额」，couli#8 回写）；金额、变量、发送条件、次数与其余断言一律不变'
+  - file: 'test/spec/notification/balance-corrected/rollback.int.test.ts'
+    test: '[AC-B2-02z#9] 随调用方事务回滚：事务内写入后回滚 → notify_logs 与站内信都没有行；之后同一键照常写入一条'
+    reason: rule_change
+    br: [BR-TEXT-19]
+    ruling: D10-2146
+    note: '只把期望默认正文从 bodyOf（旧词）换成 TEMPLATE_WITHDRAWABLE 拼出的同一句（「可用余额」→「可提现余额」，couli#8 回写）；金额、变量、发送条件、次数与其余断言一律不变'
+  - file: 'test/spec/notification/balance-corrected/texts.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-TEXT-19]
+    ruling: D10-2146
+    note: '块外只在文件末尾新增 export const TEMPLATE_WITHDRAWABLE（新默认正文模板）与一段注释；TEMPLATE / bodyOf 原样保留（D10-2146，CT-06zzzzzi 只许新增）'
+  - file: 'test/spec/notification/balance-corrected/render.test.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-TEXT-19]
+    ruling: D10-2146
+    note: '块外只在 import { … } from ./texts.ts 的花括号里加 TEMPLATE_WITHDRAWABLE 一个名字（D10-2146）'
+  - file: 'test/spec/notification/balance-corrected/record.int.test.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-TEXT-19]
+    ruling: D10-2146
+    note: '块外只在 import { … } from ./texts.ts 的花括号里加 TEMPLATE_WITHDRAWABLE 一个名字，并在其上加一行 eslint-disable 注释（bodyOf 不再用但不能删）（D10-2146）'
+  - file: 'test/spec/notification/balance-corrected/rollback.int.test.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-TEXT-19]
+    ruling: D10-2146
+    note: '块外只在 import { … } from ./texts.ts 的花括号里加 TEMPLATE_WITHDRAWABLE 一个名字，并在其上加一行 eslint-disable 注释（bodyOf 不再用但不能删）（D10-2146）'
 impl: claude
 tester: none
 accept:
