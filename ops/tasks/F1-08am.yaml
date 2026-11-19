@@ -6,6 +6,7 @@ type: impl
 # 范围：apps/admin/src/pages/withdrawals/WithdrawalDetailPage.tsx。APPROVED 单持 payout.execute 出【执行打款】（确认对话框列执行前检查与后果 → 动态码 → 只发一次 POST /admin/v1/payout-batches，items 为这一张；整批拒绝原因与逐单结果如实显示）；持 payout.manual_entry 出【手动成功】（复用 F1-08al 的录入对话框，一张单的批次走 adminBatchManualPaid；实付金额须等于应付、打开时三项为空、不许有填入应付的快捷入口）。已发出转账的单不出这两个按钮（结果待确认的处置仍走 W10，F1-08aj）。【撤销微信转账】先隐藏（D10-2017）；【重新计算】等 be ④ 契约，不做。顺手把该页头部 TODO 改成现状。
 # 资金写操作（RV2）：money 评审。
 # 写测与评审：Codex 额度用尽（D10-2003），规则测试与首轮评审由无上下文的独立 Claude（claude-run.sh），证据如实记 claude-independent。写测时发现冻结用例（入口清单、只读断言、TODO 对应的「不出现」断言）受影响，先报编排再补 modify_existing（D10-1712 / D10-1899）。写操作一律照 F1-08ce 结果未知处理（D10-1731）。
+# 2026-11-20 补丁 1（fe，同 D10-1733 / D10-1899）：写测第 1 轮报 F1-08a 冻结 [AC-F1-08a-READONLY#2] 与本单冲突（已通过待执行单持全量权限点后会出【执行打款】【手动成功】）；readonly.test.ts 列进 test_paths 并登记 modify_existing（F1-08a 早已在主干）。同文件另须有至少一条本单新块在主干上红（D10-1812）。
 refs: [BR-WDR-12, BR-WDR-16, BR-ID-34]
 refs_hash:
   BR-WDR-12: 37adcd14e97f
@@ -17,8 +18,17 @@ paths:
   - 'apps/admin/src/texts/withdrawals.ts'
 test_paths:
   - 'test/spec/frontend/admin-withdrawal-detail-payout/**'
+  - 'test/spec/frontend/admin-withdrawals/readonly.test.ts'
 impl: claude
 tester: claude-independent
+modify_existing:
+  - file: 'test/spec/frontend/admin-withdrawals/readonly.test.ts'
+    test: '[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【执行打款】【手动成功】【撤销微信转账】【重新计算】，收款账号与手机号旁没有可点的【查看】，点任何这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号'
+    retitle_to: '[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【撤销微信转账】【重新计算】，【执行打款】【手动成功】只在已通过待执行单上恰各 1 个（F1-08am），收款账号与手机号旁没有可点的【查看】，点其余这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号'
+    reason: rule_change
+    br: [BR-WDR-12, BR-WDR-16]
+    ruling: D10-1733
+    note: '同 D10-1733 / D10-1899 通例：已通过待执行单（ID.approved，全量权限点含 payout.execute 与 payout.manual_entry）之后才落地的写入口由空改为恰为【执行打款】【手动成功】（F1-08am 落地，toEqual 严格相等），这两个入口与【审核通过】【驳回】一样不在本用例里点击（点击会读 payout-overview 等，由 F1-08am 自己的用例覆盖）；待审核与微信等用户确认两单的写入口仍为空；揭示入口、不发写请求、不出现完整账号 / 姓名 / 手机号的断言不变'
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-withdrawal-detail-payout/**'
