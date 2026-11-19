@@ -1,0 +1,498 @@
+{
+  "task": "B1-02zzzb",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "0216a1fed2714b3687d63a6a825f2b27886ab40d",
+  "red_tests": [
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] payout_account_change 不带 summary → 20001 data.fields=[summary]，不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带支付宝形状 → 20001 data.fields=[summary]，不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带银行卡形状 → 20001 data.fields=[summary]，不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带微信形状 → 20001 data.fields=[summary]，不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] payout_account_change 带提现形状 → 20001 data.fields=[summary]，不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] phone_change 带提现形状 → 20001 data.fields=[summary]，不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] phone_change 带支付宝形状 → 20001 data.fields=[summary]，不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] account_deletion 带提现形状 → 20001 data.fields=[summary]，不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] account_deletion 带微信形状 → 20001 data.fields=[summary]，不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#4] 支付宝摘要（手机号形式）由服务端规范化：同一账号两种写法指纹相同，换账号指纹不同，claims 无明文",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#4] 支付宝摘要（邮箱形式）由服务端规范化：同一账号两种写法指纹相同，换账号指纹不同，claims 无明文",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#4] 银行卡摘要由服务端规范化：卡号带空格与不带空格指纹相同，换卡指纹不同，claims 无明文",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#5] 微信零钱摘要 = p:wechat:<attempt_id>（不按 openid 算）",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001",
+    "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#4] 支付宝（手机号形式）：为账号 B 取令牌，保存账号 C → 10003、不改绑定、不核销；B 的另一种写法保存 → 通过",
+    "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#4] 支付宝（手机号形式（反向））：为账号 B 取令牌，保存账号 C → 10003、不改绑定、不核销；B 的另一种写法保存 → 通过",
+    "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#4] 支付宝（邮箱形式）：为账号 B 取令牌，保存账号 C → 10003、不改绑定、不核销；B 的另一种写法保存 → 通过",
+    "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#4] 银行卡（令牌带空格、保存不带）：为卡 B 取令牌，保存卡 C → 10003、不改绑定；B 的另一种写法保存 → 通过",
+    "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#4] 银行卡（令牌不带、保存带连字符）：为卡 B 取令牌，保存卡 C → 10003、不改绑定；B 的另一种写法保存 → 通过",
+    "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#4] 换收款方式也比对：支付宝摘要的令牌保存银行卡、银行卡摘要的令牌保存支付宝 → 10003",
+    "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#5] 微信零钱：摘要为 p:wechat:<attempt_id>，该令牌不能用于保存支付宝 / 银行卡账号（10003，不改绑定）",
+    "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#6] claims 不含摘要的 payout_account_change 令牌（签法同 POST /v1/auth/step-up）→ 10003、不改绑定",
+    "test/spec/identity/step-up-digest/privacy.int.test.ts > [AC-B1-02zzzb#9] 签发与比对全程：日志、响应与 token claims 不含明文收款账号 / 卡号 / 支付宝登录号，摘要原文不进日志与响应"
+  ],
+  "risk_note": "RV2 (identity payout accounts, BR-ID-08 细则「绑定业务摘要」, FU-STEPUP-TOKEN-BIND-DIGEST). The payout_account_change step_up_token now carries the digest of the account it was issued for (alipay / bank card: p:<method>:<HMAC of the BR-WDR-02 normalised account>, WeChat: p:wechat:<attempt_id>); issuance validates the summary per action (20001 fields=[summary]; withdraw / phone_change / account_deletion take none, a summary on them → 20001, D10-1665 / D10-1666); stage ⑫ only passes the claim through; the payout-account, bank-card and WeChat saves compare it under the users row lock, a mismatch or a token without a digest → 10003 (STEP_UP_FAILURE body), nothing written, the token not consumed. The withdrawal path is back at the baseline (no payout/** change). No contract change (CT-26c), no migration. Frozen tests: 19 declared rows (D10-1773 six blocks + D10-2106 three, .each rows expanded) and 8 file-level support entries (D10-2100, token insertions only, branch logic in test/spec/identity/step-up-digest/payout-summary.ts), checked by the orchestrator line by line (approvals 24); 54 red_exempt + 2 red_exempt_outside confirmed by the rule-test reviewer. The formal red run passes since CT-06zzzzzr (D10-2125).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "0216a1fed2714b3687d63a6a825f2b27886ab40d",
+      "tree": "3632de26c4baded020199b238b0ec34644faf338",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-19T15:06:37Z",
+      "finished_at": "2026-11-19T15:06:51Z",
+      "red_tests": [
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] payout_account_change 不带 summary → 20001 data.fields=[summary]，不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带支付宝形状 → 20001 data.fields=[summary]，不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带银行卡形状 → 20001 data.fields=[summary]，不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带微信形状 → 20001 data.fields=[summary]，不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] payout_account_change 带提现形状 → 20001 data.fields=[summary]，不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] phone_change 带提现形状 → 20001 data.fields=[summary]，不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] phone_change 带支付宝形状 → 20001 data.fields=[summary]，不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] account_deletion 带提现形状 → 20001 data.fields=[summary]，不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] account_deletion 带微信形状 → 20001 data.fields=[summary]，不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#4] 支付宝摘要（手机号形式）由服务端规范化：同一账号两种写法指纹相同，换账号指纹不同，claims 无明文",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#4] 支付宝摘要（邮箱形式）由服务端规范化：同一账号两种写法指纹相同，换账号指纹不同，claims 无明文",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#4] 银行卡摘要由服务端规范化：卡号带空格与不带空格指纹相同，换卡指纹不同，claims 无明文",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#5] 微信零钱摘要 = p:wechat:<attempt_id>（不按 openid 算）",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001",
+        "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#4] 支付宝（手机号形式）：为账号 B 取令牌，保存账号 C → 10003、不改绑定、不核销；B 的另一种写法保存 → 通过",
+        "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#4] 支付宝（手机号形式（反向））：为账号 B 取令牌，保存账号 C → 10003、不改绑定、不核销；B 的另一种写法保存 → 通过",
+        "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#4] 支付宝（邮箱形式）：为账号 B 取令牌，保存账号 C → 10003、不改绑定、不核销；B 的另一种写法保存 → 通过",
+        "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#4] 银行卡（令牌带空格、保存不带）：为卡 B 取令牌，保存卡 C → 10003、不改绑定；B 的另一种写法保存 → 通过",
+        "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#4] 银行卡（令牌不带、保存带连字符）：为卡 B 取令牌，保存卡 C → 10003、不改绑定；B 的另一种写法保存 → 通过",
+        "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#4] 换收款方式也比对：支付宝摘要的令牌保存银行卡、银行卡摘要的令牌保存支付宝 → 10003",
+        "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#5] 微信零钱：摘要为 p:wechat:<attempt_id>，该令牌不能用于保存支付宝 / 银行卡账号（10003，不改绑定）",
+        "test/spec/identity/step-up-digest/payout-account.int.test.ts > [AC-B1-02zzzb#6] claims 不含摘要的 payout_account_change 令牌（签法同 POST /v1/auth/step-up）→ 10003、不改绑定",
+        "test/spec/identity/step-up-digest/privacy.int.test.ts > [AC-B1-02zzzb#9] 签发与比对全程：日志、响应与 token claims 不含明文收款账号 / 卡号 / 支付宝登录号，摘要原文不进日志与响应"
+      ],
+      "expected": [
+        "test/spec/identity/step-up-digest/issue.int.test.ts",
+        "test/spec/identity/step-up-digest/payout-account.int.test.ts",
+        "test/spec/identity/step-up-digest/privacy.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "15401ce76bb4613a08b8c0e5761fe2f7363d86089e8dfbe5a8a66caa0e416e19"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Independent Claude via tools/agent/claude-run.sh (Codex unavailable then, D10-1604): money r1 fail (S1 the mismatch 10003 body differed from stage ⑫; S2 an undefined stepUpSummary let through) → r2 full review pass (couli-runs/B1-02zzzb/review-money-r2.json); exception round approvals 91 pass on the r2 / r3 increment (review-money-exception91.json)."
+    },
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6-astra",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 4,
+      "note": "Codex exception round (approvals 110 / D10-2140) over the whole change to the final head, reading the narrowing commit (D10-1665 / D10-1666) that no earlier round had seen: pass, no findings (couli-runs/B1-02zzzb/review-money-codex-exc110.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests by independent Claude (ledger tester claude-independent). The gate confirmation round (D10-2125 ④; fresh independent Claude, review brief couli-runs/B1-02zzzb/brief-confirm-1119.md listing every declaration by file) confirmed all 54 red_exempt and both red_exempt_outside entries one by one: block identical at the merge base and the head, green on the baseline and the new implementation, why the file is judged as a whole (couli-runs/B1-02zzzb/review-spec-test-rc1.json)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "7dab3197afbf424e4a7dcecdca8295a017e8ee14",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/identity/payout-bank-card/submit.int.test.ts",
+      "test": "[AC-B1-13f#5] 未注入 bin 返回 50301，零预占且不核销 step-up",
+      "reason": "rule_change",
+      "before": "it.each(['bin', 'verifier'] as const)(\n  '[AC-B1-13f#5] 未注入 %s 返回 50301，零预占且不核销 step-up',\n  async (absent) => {\n    const fallback = await open(database, redis, absent);\n    try {\n      const f = await fixture(fallback);\n      const token = await f.stepUp();\n      envelope(fallback, await f.submit(bankBody(), randomUUID(), token), 50301);\n      expect(await f.attempts()).toEqual([]);\n      expect(fallback.verify).not.toHaveBeenCalled();\n      envelope(fallback, await f.submit(ALIPAY, randomUUID(), token));\n    } finally {\n      await close(fallback);\n    }\n  },\n);\n// .each row 1 of 2: 'bin'",
+      "after": "it.each(['bin', 'verifier'] as const)(\n  '[AC-B1-13f#5] 未注入 %s 返回 50301，零预占且不核销 step-up',\n  async (absent) => {\n    const fallback = await open(database, redis, absent);\n    try {\n      const f = await fixture(fallback);\n      // B1-02zzzb: the token is for the Alipay save that succeeds (50301 is judged before it).\n      const token = await f.stepUp('payout_account_change', ALIPAY);\n      envelope(fallback, await f.submit(bankBody(), randomUUID(), token), 50301);\n      expect(await f.attempts()).toEqual([]);\n      expect(fallback.verify).not.toHaveBeenCalled();\n      envelope(fallback, await f.submit(ALIPAY, randomUUID(), token));\n    } finally {\n      await close(fallback);\n    }\n  },\n);\n// .each row 1 of 2: 'bin'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/domain/step-up-digest.ts digestMatches always returns false (the in-lock digest comparison never matches, every save → 10003); probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/9, tree 43aca25b8fa1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/payout-bank-card/submit.int.test.ts",
+      "test": "[AC-B1-13f#5] 未注入 verifier 返回 50301，零预占且不核销 step-up",
+      "reason": "rule_change",
+      "before": "it.each(['bin', 'verifier'] as const)(\n  '[AC-B1-13f#5] 未注入 %s 返回 50301，零预占且不核销 step-up',\n  async (absent) => {\n    const fallback = await open(database, redis, absent);\n    try {\n      const f = await fixture(fallback);\n      const token = await f.stepUp();\n      envelope(fallback, await f.submit(bankBody(), randomUUID(), token), 50301);\n      expect(await f.attempts()).toEqual([]);\n      expect(fallback.verify).not.toHaveBeenCalled();\n      envelope(fallback, await f.submit(ALIPAY, randomUUID(), token));\n    } finally {\n      await close(fallback);\n    }\n  },\n);\n// .each row 2 of 2: 'verifier'",
+      "after": "it.each(['bin', 'verifier'] as const)(\n  '[AC-B1-13f#5] 未注入 %s 返回 50301，零预占且不核销 step-up',\n  async (absent) => {\n    const fallback = await open(database, redis, absent);\n    try {\n      const f = await fixture(fallback);\n      // B1-02zzzb: the token is for the Alipay save that succeeds (50301 is judged before it).\n      const token = await f.stepUp('payout_account_change', ALIPAY);\n      envelope(fallback, await f.submit(bankBody(), randomUUID(), token), 50301);\n      expect(await f.attempts()).toEqual([]);\n      expect(fallback.verify).not.toHaveBeenCalled();\n      envelope(fallback, await f.submit(ALIPAY, randomUUID(), token));\n    } finally {\n      await close(fallback);\n    }\n  },\n);\n// .each row 2 of 2: 'verifier'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/domain/step-up-digest.ts digestMatches always returns false (the in-lock digest comparison never matches, every save → 10003); probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/9, tree 43aca25b8fa1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/payout-bank-card/submit.int.test.ts",
+      "test": "[AC-B1-13f#8] 默认每日三次，不一致保留占额，超限 30303 verify_limit 不调用且不消费 token",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-13f#8] 默认每日三次，不一致保留占额，超限 30303 verify_limit 不调用且不消费 token', async () => {\n  const f = await fixture(kit);\n  kit.verify.mockResolvedValue('mismatch');\n  const token = await f.stepUp();\n  for (let i = 0; i < 3; i++) envelope(kit, await f.submit(bankBody(), randomUUID(), token), 30307);\n  expect(envelope(kit, await f.submit(bankBody(card(2)), randomUUID(), token), 30303).data).toEqual(\n    { reason: 'payout_account_verify_limit' },\n  );\n  expect(kit.verify).toHaveBeenCalledTimes(3);\n  expect(await f.attempts()).toHaveLength(3);\n  expect((await f.attempts()).every((row) => row.status === 'mismatched')).toBe(true);\n  envelope(kit, await f.submit(ALIPAY, randomUUID(), token));\n  envelope(\n    kit,\n    await f.submit({ ...ALIPAY, alipay_logon_id: 'next@example.com' }, randomUUID(), token),\n    10003,\n  );\n});",
+      "after": "it('[AC-B1-13f#8] 默认每日三次，不一致保留占额，超限 30303 verify_limit 不调用且不消费 token', async () => {\n  const f = await fixture(kit);\n  kit.verify.mockResolvedValue('mismatch');\n  let token = await f.stepUp();\n  for (let i = 0; i < 3; i++) envelope(kit, await f.submit(bankBody(), randomUUID(), token), 30307);\n  // B1-02zzzb: the token binds one account; the digest is compared before the day's quota.\n  token = await f.stepUp('payout_account_change', bankBody(card(2)));\n  expect(envelope(kit, await f.submit(bankBody(card(2)), randomUUID(), token), 30303).data).toEqual(\n    { reason: 'payout_account_verify_limit' },\n  );\n  expect(kit.verify).toHaveBeenCalledTimes(3);\n  expect(await f.attempts()).toHaveLength(3);\n  expect((await f.attempts()).every((row) => row.status === 'mismatched')).toBe(true);\n  token = await f.stepUp('payout_account_change', ALIPAY);\n  envelope(kit, await f.submit(ALIPAY, randomUUID(), token));\n  // B1-02zzzb: the same token, body and a new key again — consumed by the save above.\n  envelope(kit, await f.submit(ALIPAY, randomUUID(), token), 10003);\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/domain/step-up-digest.ts digestMatches always returns false (the in-lock digest comparison never matches, every save → 10003); probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/9, tree 43aca25b8fa1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/payout-bank-card/verification.int.test.ts",
+      "test": "[AC-B1-13f#22] 同键 R2 在 R1 核验期间 40901，R1 不一致后原样回放，不二次收费",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-13f#22] 同键 R2 在 R1 核验期间 40901，R1 不一致后原样回放，不二次收费', async () => {\n  const f = await fixture(kit);\n  const key = randomUUID();\n  const token = await f.stepUp();\n  const hold = deferred<'match' | 'mismatch'>();\n  kit.verify.mockImplementation(() => hold.promise);\n  const pending = f.submit(bankBody(), key, token);\n  try {\n    await until(() => kit.verify.mock.calls.length === 1);\n    envelope(kit, await f.submit(bankBody(), key, token), 40901);\n    expect(await f.idempotency(key)).toEqual([]);\n  } finally {\n    hold.resolve('mismatch');\n    await pending;\n  }\n  const first = await pending;\n  envelope(kit, first, 30307);\n  const replay = await f.submit(bankBody(), key, '');\n  envelope(kit, replay, 30307);\n  expect(replay.body).toBe(first.body);\n  expect(kit.verify).toHaveBeenCalledTimes(1);\n  expect(await f.attempts()).toHaveLength(1);\n  expect((await f.attempts())[0]!.status).toBe('mismatched');\n  expect(await f.idempotency(key)).toHaveLength(1);\n  envelope(kit, await f.submit(ALIPAY, randomUUID(), token));\n});",
+      "after": "it('[AC-B1-13f#22] 同键 R2 在 R1 核验期间 40901，R1 不一致后原样回放，不二次收费', async () => {\n  const f = await fixture(kit);\n  const key = randomUUID();\n  const token = await f.stepUp();\n  const hold = deferred<'match' | 'mismatch'>();\n  kit.verify.mockImplementation(() => hold.promise);\n  const pending = f.submit(bankBody(), key, token);\n  try {\n    await until(() => kit.verify.mock.calls.length === 1);\n    envelope(kit, await f.submit(bankBody(), key, token), 40901);\n    expect(await f.idempotency(key)).toEqual([]);\n  } finally {\n    hold.resolve('mismatch');\n    await pending;\n  }\n  const first = await pending;\n  envelope(kit, first, 30307);\n  const replay = await f.submit(bankBody(), key, '');\n  envelope(kit, replay, 30307);\n  expect(replay.body).toBe(first.body);\n  expect(kit.verify).toHaveBeenCalledTimes(1);\n  expect(await f.attempts()).toHaveLength(1);\n  expect((await f.attempts())[0]!.status).toBe('mismatched');\n  expect(await f.idempotency(key)).toHaveLength(1);\n  // B1-02zzzb: the token binds this card; a new key verifies it again (match) and saves.\n  kit.verify.mockResolvedValue('match');\n  envelope(kit, await f.submit(bankBody(), randomUUID(), token));\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/domain/step-up-digest.ts digestMatches always returns false (the in-lock digest comparison never matches, every save → 10003); probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/9, tree 43aca25b8fa1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/payout-bank-card/verification.int.test.ts",
+      "test": "[AC-B1-13f#37] 完成的幂等键原样返回；同键改卡号 20901，不新收费或核销新的 step-up",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-13f#37] 完成的幂等键原样返回；同键改卡号 20901，不新收费或核销新的 step-up', async () => {\n  const f = await fixture(kit);\n  const key = randomUUID();\n  kit.verify.mockResolvedValue('mismatch');\n  const original = await f.submit(bankBody(), key);\n  envelope(kit, original, 30307);\n  const token = await f.stepUp();\n  envelope(kit, await f.submit(bankBody(card(2)), key, token), 20901);\n  expect(kit.verify).toHaveBeenCalledTimes(1);\n  expect(await f.attempts()).toHaveLength(1);\n  envelope(kit, await f.submit(ALIPAY, randomUUID(), token));\n});",
+      "after": "it('[AC-B1-13f#37] 完成的幂等键原样返回；同键改卡号 20901，不新收费或核销新的 step-up', async () => {\n  const f = await fixture(kit);\n  const key = randomUUID();\n  kit.verify.mockResolvedValue('mismatch');\n  const original = await f.submit(bankBody(), key);\n  envelope(kit, original, 30307);\n  // B1-02zzzb: the token is for the Alipay save that succeeds (20901 is the key's own answer).\n  const token = await f.stepUp('payout_account_change', ALIPAY);\n  envelope(kit, await f.submit(bankBody(card(2)), key, token), 20901);\n  expect(kit.verify).toHaveBeenCalledTimes(1);\n  expect(await f.attempts()).toHaveLength(1);\n  envelope(kit, await f.submit(ALIPAY, randomUUID(), token));\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/domain/step-up-digest.ts digestMatches always returns false (the in-lock digest comparison never matches, every save → 10003); probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/9, tree 43aca25b8fa1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-bound-phone/sms.int.test.ts",
+      "test": "[AC-B1-02zzz#4] withdraw 从登录账号取绑定手机发码，并能完成相应用途的二次验证",
+      "reason": "rule_change",
+      "before": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    const message = await sendBound(f, action);\n    const summary =\n      action === 'withdraw'\n        ? { payout_account_id: f.uid, amount_fen: 10000 }\n        : action === 'payout_account_change'\n          ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n          : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 1 of 4: 'withdraw'",
+      "after": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    const message = await sendBound(f, action);\n    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.\n    const summary =\n      action === 'payout_account_change'\n        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n        : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 1 of 4: 'withdraw'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts STEP_UP_DEFAULT_TTL_SECONDS 300 → 301; probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/10, tree 01fa8ab82169): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-bound-phone/sms.int.test.ts",
+      "test": "[AC-B1-02zzz#4] payout_account_change 从登录账号取绑定手机发码，并能完成相应用途的二次验证",
+      "reason": "rule_change",
+      "before": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    const message = await sendBound(f, action);\n    const summary =\n      action === 'withdraw'\n        ? { payout_account_id: f.uid, amount_fen: 10000 }\n        : action === 'payout_account_change'\n          ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n          : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 2 of 4: 'payout_account_change'",
+      "after": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    const message = await sendBound(f, action);\n    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.\n    const summary =\n      action === 'payout_account_change'\n        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n        : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 2 of 4: 'payout_account_change'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts STEP_UP_DEFAULT_TTL_SECONDS 300 → 301; probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/10, tree 01fa8ab82169): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-bound-phone/sms.int.test.ts",
+      "test": "[AC-B1-02zzz#4] phone_change 从登录账号取绑定手机发码，并能完成相应用途的二次验证",
+      "reason": "rule_change",
+      "before": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    const message = await sendBound(f, action);\n    const summary =\n      action === 'withdraw'\n        ? { payout_account_id: f.uid, amount_fen: 10000 }\n        : action === 'payout_account_change'\n          ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n          : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 3 of 4: 'phone_change'",
+      "after": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    const message = await sendBound(f, action);\n    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.\n    const summary =\n      action === 'payout_account_change'\n        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n        : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 3 of 4: 'phone_change'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts STEP_UP_DEFAULT_TTL_SECONDS 300 → 301; probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/10, tree 01fa8ab82169): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-bound-phone/sms.int.test.ts",
+      "test": "[AC-B1-02zzz#4] account_deletion 从登录账号取绑定手机发码，并能完成相应用途的二次验证",
+      "reason": "rule_change",
+      "before": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    const message = await sendBound(f, action);\n    const summary =\n      action === 'withdraw'\n        ? { payout_account_id: f.uid, amount_fen: 10000 }\n        : action === 'payout_account_change'\n          ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n          : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 4 of 4: 'account_deletion'",
+      "after": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    const message = await sendBound(f, action);\n    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.\n    const summary =\n      action === 'payout_account_change'\n        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n        : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 4 of 4: 'account_deletion'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts STEP_UP_DEFAULT_TTL_SECONDS 300 → 301; probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/10, tree 01fa8ab82169): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#20][BR-ID-08] 短信签发 withdraw：ES256、300 秒、身份与 action 绑定",
+      "reason": "rule_change",
+      "before": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, { action, code }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 1 of 4: 'withdraw'",
+      "after": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary\n      // of the account it is for; the other actions take none.\n      await f.post(STEP_UP, {\n        action,\n        code,\n        ...(action === 'payout_account_change'\n          ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }\n          : {}),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 1 of 4: 'withdraw'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts STEP_UP_DEFAULT_TTL_SECONDS 300 → 301; probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/10, tree 01fa8ab82169): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#20][BR-ID-08] 短信签发 payout_account_change：ES256、300 秒、身份与 action 绑定",
+      "reason": "rule_change",
+      "before": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, { action, code }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 2 of 4: 'payout_account_change'",
+      "after": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary\n      // of the account it is for; the other actions take none.\n      await f.post(STEP_UP, {\n        action,\n        code,\n        ...(action === 'payout_account_change'\n          ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }\n          : {}),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 2 of 4: 'payout_account_change'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts STEP_UP_DEFAULT_TTL_SECONDS 300 → 301; probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/10, tree 01fa8ab82169): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#20][BR-ID-08] 短信签发 phone_change：ES256、300 秒、身份与 action 绑定",
+      "reason": "rule_change",
+      "before": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, { action, code }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 3 of 4: 'phone_change'",
+      "after": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary\n      // of the account it is for; the other actions take none.\n      await f.post(STEP_UP, {\n        action,\n        code,\n        ...(action === 'payout_account_change'\n          ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }\n          : {}),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 3 of 4: 'phone_change'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts STEP_UP_DEFAULT_TTL_SECONDS 300 → 301; probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/10, tree 01fa8ab82169): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#20][BR-ID-08] 短信签发 account_deletion：ES256、300 秒、身份与 action 绑定",
+      "reason": "rule_change",
+      "before": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, { action, code }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 4 of 4: 'account_deletion'",
+      "after": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary\n      // of the account it is for; the other actions take none.\n      await f.post(STEP_UP, {\n        action,\n        code,\n        ...(action === 'payout_account_change'\n          ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }\n          : {}),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 4 of 4: 'account_deletion'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts STEP_UP_DEFAULT_TTL_SECONDS 300 → 301; probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/10, tree 01fa8ab82169): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/payout-account/concurrency.int.test.ts",
+      "test": "[AC-B1-13e#30] 两个真实连接并发 limit：等待 users 行锁后重读绑定和计数",
+      "reason": "rule_change",
+      "before": "it.each(['limit', 'same-account', 'first-binding'] as const)(\n  '[AC-B1-13e#30] 两个真实连接并发 %s：等待 users 行锁后重读绑定和计数',\n  async (mode) => {\n    const f = await fixture(kit);\n    if (mode !== 'first-binding') {\n      await account(kit, f, 'old@example.com');\n      await change(kit, f);\n    }\n    const app = await service(kit);\n    const a = await kit.db.startTransaction().execute();\n    let finished = false;\n    let pending: Promise<unknown> | undefined;\n    try {\n      await sql`SET LOCAL statement_timeout = '5s'`.execute(a);\n      const first = await app.save(a, f.command);\n      expect(first.code).toBe(0);\n      const aPid = await pid(a);\n      const started = Promise.withResolvers<number>();\n      const next = mode === 'same-account' ? LOGIN : 'second@example.com';\n      const b = kit.db.transaction().execute(async (trx) => {\n        await sql`SET LOCAL statement_timeout = '5s'`.execute(trx);\n        started.resolve(await pid(trx));\n        return app.save(trx, { ...f.command, alipayLogonId: next });\n      });\n      pending = b;\n      void b.catch(() => undefined);\n      const bPid = await started.promise;\n      expect(bPid).not.toBe(aPid);\n      // A owns users FOR UPDATE; B must wait, including for an apparently identical login.\n      await waitBlocked(kit, bPid, aPid);\n      await a.commit().execute();\n      finished = true;\n      const second = await b;\n      if (mode === 'limit')\n        expect(second).toEqual({ code: 30303, data: { reason: 'payout_account_change_limit' } });\n      else\n        expect(second).toMatchObject({\n          code: 0,\n          data: { change_remaining_this_month: mode === 'first-binding' ? 1 : 0 },\n        });\n      const rows = await state(kit, f);\n      expect(rows.accounts).toHaveLength(2);\n      expect(rows.accounts.filter((row) => row.is_current)).toHaveLength(1);\n      expect(rows.accounts.find((row) => row.is_current)?.alipay_hmac).toBe(\n        kit.crypto.blindIndex(mode === 'first-binding' ? next : LOGIN, ALIPAY_CONTEXT),\n      );\n      expect(rows.changes).toHaveLength(mode === 'first-binding' ? 1 : 2);\n      if (mode === 'first-binding')\n        expect(rows.changes[0]).toMatchObject({\n          old_hmac: kit.crypto.blindIndex(LOGIN, ALIPAY_CONTEXT),\n          new_hmac: kit.crypto.blindIndex(next, ALIPAY_CONTEXT),\n        });\n    } finally {\n      if (!finished) await a.rollback().execute();\n      await pending?.catch(() => undefined);\n    }\n  },\n  20_000,\n);\n// .each row 1 of 3: 'limit'",
+      "after": "it.each(['limit', 'same-account', 'first-binding'] as const)(\n  '[AC-B1-13e#30] 两个真实连接并发 %s：等待 users 行锁后重读绑定和计数',\n  async (mode) => {\n    const f = await fixture(kit);\n    if (mode !== 'first-binding') {\n      await account(kit, f, 'old@example.com');\n      await change(kit, f);\n    }\n    const app = await service(kit);\n    const a = await kit.db.startTransaction().execute();\n    let finished = false;\n    let pending: Promise<unknown> | undefined;\n    try {\n      await sql`SET LOCAL statement_timeout = '5s'`.execute(a);\n      const first = await app.save(a, f.command);\n      expect(first.code).toBe(0);\n      const aPid = await pid(a);\n      const started = Promise.withResolvers<number>();\n      const next = mode === 'same-account' ? LOGIN : 'second@example.com';\n      const b = kit.db.transaction().execute(async (trx) => {\n        await sql`SET LOCAL statement_timeout = '5s'`.execute(trx);\n        started.resolve(await pid(trx));\n        return app.save(trx, bound(kit, { ...f.command, alipayLogonId: next }));\n      });\n      pending = b;\n      void b.catch(() => undefined);\n      const bPid = await started.promise;\n      expect(bPid).not.toBe(aPid);\n      // A owns users FOR UPDATE; B must wait, including for an apparently identical login.\n      await waitBlocked(kit, bPid, aPid);\n      await a.commit().execute();\n      finished = true;\n      const second = await b;\n      if (mode === 'limit')\n        expect(second).toEqual({ code: 30303, data: { reason: 'payout_account_change_limit' } });\n      else\n        expect(second).toMatchObject({\n          code: 0,\n          data: { change_remaining_this_month: mode === 'first-binding' ? 1 : 0 },\n        });\n      const rows = await state(kit, f);\n      expect(rows.accounts).toHaveLength(2);\n      expect(rows.accounts.filter((row) => row.is_current)).toHaveLength(1);\n      expect(rows.accounts.find((row) => row.is_current)?.alipay_hmac).toBe(\n        kit.crypto.blindIndex(mode === 'first-binding' ? next : LOGIN, ALIPAY_CONTEXT),\n      );\n      expect(rows.changes).toHaveLength(mode === 'first-binding' ? 1 : 2);\n      if (mode === 'first-binding')\n        expect(rows.changes[0]).toMatchObject({\n          old_hmac: kit.crypto.blindIndex(LOGIN, ALIPAY_CONTEXT),\n          new_hmac: kit.crypto.blindIndex(next, ALIPAY_CONTEXT),\n        });\n    } finally {\n      if (!finished) await a.rollback().execute();\n      await pending?.catch(() => undefined);\n    }\n  },\n  20_000,\n);\n// .each row 1 of 3: 'limit'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/domain/step-up-digest.ts digestMatches always returns false (the in-lock digest comparison never matches, every save → 10003); probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/9, tree 43aca25b8fa1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/payout-account/concurrency.int.test.ts",
+      "test": "[AC-B1-13e#30] 两个真实连接并发 same-account：等待 users 行锁后重读绑定和计数",
+      "reason": "rule_change",
+      "before": "it.each(['limit', 'same-account', 'first-binding'] as const)(\n  '[AC-B1-13e#30] 两个真实连接并发 %s：等待 users 行锁后重读绑定和计数',\n  async (mode) => {\n    const f = await fixture(kit);\n    if (mode !== 'first-binding') {\n      await account(kit, f, 'old@example.com');\n      await change(kit, f);\n    }\n    const app = await service(kit);\n    const a = await kit.db.startTransaction().execute();\n    let finished = false;\n    let pending: Promise<unknown> | undefined;\n    try {\n      await sql`SET LOCAL statement_timeout = '5s'`.execute(a);\n      const first = await app.save(a, f.command);\n      expect(first.code).toBe(0);\n      const aPid = await pid(a);\n      const started = Promise.withResolvers<number>();\n      const next = mode === 'same-account' ? LOGIN : 'second@example.com';\n      const b = kit.db.transaction().execute(async (trx) => {\n        await sql`SET LOCAL statement_timeout = '5s'`.execute(trx);\n        started.resolve(await pid(trx));\n        return app.save(trx, { ...f.command, alipayLogonId: next });\n      });\n      pending = b;\n      void b.catch(() => undefined);\n      const bPid = await started.promise;\n      expect(bPid).not.toBe(aPid);\n      // A owns users FOR UPDATE; B must wait, including for an apparently identical login.\n      await waitBlocked(kit, bPid, aPid);\n      await a.commit().execute();\n      finished = true;\n      const second = await b;\n      if (mode === 'limit')\n        expect(second).toEqual({ code: 30303, data: { reason: 'payout_account_change_limit' } });\n      else\n        expect(second).toMatchObject({\n          code: 0,\n          data: { change_remaining_this_month: mode === 'first-binding' ? 1 : 0 },\n        });\n      const rows = await state(kit, f);\n      expect(rows.accounts).toHaveLength(2);\n      expect(rows.accounts.filter((row) => row.is_current)).toHaveLength(1);\n      expect(rows.accounts.find((row) => row.is_current)?.alipay_hmac).toBe(\n        kit.crypto.blindIndex(mode === 'first-binding' ? next : LOGIN, ALIPAY_CONTEXT),\n      );\n      expect(rows.changes).toHaveLength(mode === 'first-binding' ? 1 : 2);\n      if (mode === 'first-binding')\n        expect(rows.changes[0]).toMatchObject({\n          old_hmac: kit.crypto.blindIndex(LOGIN, ALIPAY_CONTEXT),\n          new_hmac: kit.crypto.blindIndex(next, ALIPAY_CONTEXT),\n        });\n    } finally {\n      if (!finished) await a.rollback().execute();\n      await pending?.catch(() => undefined);\n    }\n  },\n  20_000,\n);\n// .each row 2 of 3: 'same-account'",
+      "after": "it.each(['limit', 'same-account', 'first-binding'] as const)(\n  '[AC-B1-13e#30] 两个真实连接并发 %s：等待 users 行锁后重读绑定和计数',\n  async (mode) => {\n    const f = await fixture(kit);\n    if (mode !== 'first-binding') {\n      await account(kit, f, 'old@example.com');\n      await change(kit, f);\n    }\n    const app = await service(kit);\n    const a = await kit.db.startTransaction().execute();\n    let finished = false;\n    let pending: Promise<unknown> | undefined;\n    try {\n      await sql`SET LOCAL statement_timeout = '5s'`.execute(a);\n      const first = await app.save(a, f.command);\n      expect(first.code).toBe(0);\n      const aPid = await pid(a);\n      const started = Promise.withResolvers<number>();\n      const next = mode === 'same-account' ? LOGIN : 'second@example.com';\n      const b = kit.db.transaction().execute(async (trx) => {\n        await sql`SET LOCAL statement_timeout = '5s'`.execute(trx);\n        started.resolve(await pid(trx));\n        return app.save(trx, bound(kit, { ...f.command, alipayLogonId: next }));\n      });\n      pending = b;\n      void b.catch(() => undefined);\n      const bPid = await started.promise;\n      expect(bPid).not.toBe(aPid);\n      // A owns users FOR UPDATE; B must wait, including for an apparently identical login.\n      await waitBlocked(kit, bPid, aPid);\n      await a.commit().execute();\n      finished = true;\n      const second = await b;\n      if (mode === 'limit')\n        expect(second).toEqual({ code: 30303, data: { reason: 'payout_account_change_limit' } });\n      else\n        expect(second).toMatchObject({\n          code: 0,\n          data: { change_remaining_this_month: mode === 'first-binding' ? 1 : 0 },\n        });\n      const rows = await state(kit, f);\n      expect(rows.accounts).toHaveLength(2);\n      expect(rows.accounts.filter((row) => row.is_current)).toHaveLength(1);\n      expect(rows.accounts.find((row) => row.is_current)?.alipay_hmac).toBe(\n        kit.crypto.blindIndex(mode === 'first-binding' ? next : LOGIN, ALIPAY_CONTEXT),\n      );\n      expect(rows.changes).toHaveLength(mode === 'first-binding' ? 1 : 2);\n      if (mode === 'first-binding')\n        expect(rows.changes[0]).toMatchObject({\n          old_hmac: kit.crypto.blindIndex(LOGIN, ALIPAY_CONTEXT),\n          new_hmac: kit.crypto.blindIndex(next, ALIPAY_CONTEXT),\n        });\n    } finally {\n      if (!finished) await a.rollback().execute();\n      await pending?.catch(() => undefined);\n    }\n  },\n  20_000,\n);\n// .each row 2 of 3: 'same-account'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/domain/step-up-digest.ts digestMatches always returns false (the in-lock digest comparison never matches, every save → 10003); probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/9, tree 43aca25b8fa1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/payout-account/concurrency.int.test.ts",
+      "test": "[AC-B1-13e#30] 两个真实连接并发 first-binding：等待 users 行锁后重读绑定和计数",
+      "reason": "rule_change",
+      "before": "it.each(['limit', 'same-account', 'first-binding'] as const)(\n  '[AC-B1-13e#30] 两个真实连接并发 %s：等待 users 行锁后重读绑定和计数',\n  async (mode) => {\n    const f = await fixture(kit);\n    if (mode !== 'first-binding') {\n      await account(kit, f, 'old@example.com');\n      await change(kit, f);\n    }\n    const app = await service(kit);\n    const a = await kit.db.startTransaction().execute();\n    let finished = false;\n    let pending: Promise<unknown> | undefined;\n    try {\n      await sql`SET LOCAL statement_timeout = '5s'`.execute(a);\n      const first = await app.save(a, f.command);\n      expect(first.code).toBe(0);\n      const aPid = await pid(a);\n      const started = Promise.withResolvers<number>();\n      const next = mode === 'same-account' ? LOGIN : 'second@example.com';\n      const b = kit.db.transaction().execute(async (trx) => {\n        await sql`SET LOCAL statement_timeout = '5s'`.execute(trx);\n        started.resolve(await pid(trx));\n        return app.save(trx, { ...f.command, alipayLogonId: next });\n      });\n      pending = b;\n      void b.catch(() => undefined);\n      const bPid = await started.promise;\n      expect(bPid).not.toBe(aPid);\n      // A owns users FOR UPDATE; B must wait, including for an apparently identical login.\n      await waitBlocked(kit, bPid, aPid);\n      await a.commit().execute();\n      finished = true;\n      const second = await b;\n      if (mode === 'limit')\n        expect(second).toEqual({ code: 30303, data: { reason: 'payout_account_change_limit' } });\n      else\n        expect(second).toMatchObject({\n          code: 0,\n          data: { change_remaining_this_month: mode === 'first-binding' ? 1 : 0 },\n        });\n      const rows = await state(kit, f);\n      expect(rows.accounts).toHaveLength(2);\n      expect(rows.accounts.filter((row) => row.is_current)).toHaveLength(1);\n      expect(rows.accounts.find((row) => row.is_current)?.alipay_hmac).toBe(\n        kit.crypto.blindIndex(mode === 'first-binding' ? next : LOGIN, ALIPAY_CONTEXT),\n      );\n      expect(rows.changes).toHaveLength(mode === 'first-binding' ? 1 : 2);\n      if (mode === 'first-binding')\n        expect(rows.changes[0]).toMatchObject({\n          old_hmac: kit.crypto.blindIndex(LOGIN, ALIPAY_CONTEXT),\n          new_hmac: kit.crypto.blindIndex(next, ALIPAY_CONTEXT),\n        });\n    } finally {\n      if (!finished) await a.rollback().execute();\n      await pending?.catch(() => undefined);\n    }\n  },\n  20_000,\n);\n// .each row 3 of 3: 'first-binding'",
+      "after": "it.each(['limit', 'same-account', 'first-binding'] as const)(\n  '[AC-B1-13e#30] 两个真实连接并发 %s：等待 users 行锁后重读绑定和计数',\n  async (mode) => {\n    const f = await fixture(kit);\n    if (mode !== 'first-binding') {\n      await account(kit, f, 'old@example.com');\n      await change(kit, f);\n    }\n    const app = await service(kit);\n    const a = await kit.db.startTransaction().execute();\n    let finished = false;\n    let pending: Promise<unknown> | undefined;\n    try {\n      await sql`SET LOCAL statement_timeout = '5s'`.execute(a);\n      const first = await app.save(a, f.command);\n      expect(first.code).toBe(0);\n      const aPid = await pid(a);\n      const started = Promise.withResolvers<number>();\n      const next = mode === 'same-account' ? LOGIN : 'second@example.com';\n      const b = kit.db.transaction().execute(async (trx) => {\n        await sql`SET LOCAL statement_timeout = '5s'`.execute(trx);\n        started.resolve(await pid(trx));\n        return app.save(trx, bound(kit, { ...f.command, alipayLogonId: next }));\n      });\n      pending = b;\n      void b.catch(() => undefined);\n      const bPid = await started.promise;\n      expect(bPid).not.toBe(aPid);\n      // A owns users FOR UPDATE; B must wait, including for an apparently identical login.\n      await waitBlocked(kit, bPid, aPid);\n      await a.commit().execute();\n      finished = true;\n      const second = await b;\n      if (mode === 'limit')\n        expect(second).toEqual({ code: 30303, data: { reason: 'payout_account_change_limit' } });\n      else\n        expect(second).toMatchObject({\n          code: 0,\n          data: { change_remaining_this_month: mode === 'first-binding' ? 1 : 0 },\n        });\n      const rows = await state(kit, f);\n      expect(rows.accounts).toHaveLength(2);\n      expect(rows.accounts.filter((row) => row.is_current)).toHaveLength(1);\n      expect(rows.accounts.find((row) => row.is_current)?.alipay_hmac).toBe(\n        kit.crypto.blindIndex(mode === 'first-binding' ? next : LOGIN, ALIPAY_CONTEXT),\n      );\n      expect(rows.changes).toHaveLength(mode === 'first-binding' ? 1 : 2);\n      if (mode === 'first-binding')\n        expect(rows.changes[0]).toMatchObject({\n          old_hmac: kit.crypto.blindIndex(LOGIN, ALIPAY_CONTEXT),\n          new_hmac: kit.crypto.blindIndex(next, ALIPAY_CONTEXT),\n        });\n    } finally {\n      if (!finished) await a.rollback().execute();\n      await pending?.catch(() => undefined);\n    }\n  },\n  20_000,\n);\n// .each row 3 of 3: 'first-binding'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/domain/step-up-digest.ts digestMatches always returns false (the in-lock digest comparison never matches, every save → 10003); probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/9, tree 43aca25b8fa1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/payout-account/concurrency.int.test.ts",
+      "test": "[AC-B1-13e#31] 锁前本地校验 invalid-logon：users 被独立连接锁住仍立即拒绝，且不写行",
+      "reason": "rule_change",
+      "before": "it.each(['invalid-logon', 'disabled-method'] as const)(\n  '[AC-B1-13e#31] 锁前本地校验 %s：users 被独立连接锁住仍立即拒绝，且不写行',\n  async (mode) => {\n    const f = await fixture(kit);\n    if (mode === 'disabled-method') await config(kit, f, 'withdraw.payout_methods', ['bank_card']);\n    const app = await service(kit);\n    const holder = await kit.db.startTransaction().execute();\n    try {\n      await holder\n        .selectFrom('users')\n        .select('id')\n        .where('app_id', '=', f.appId)\n        .where('id', '=', f.uid)\n        .forUpdate()\n        .execute();\n      const result = await kit.db.transaction().execute(async (trx) => {\n        await sql`SET LOCAL statement_timeout = '1s'`.execute(trx);\n        return app.save(trx, { ...f.command, alipayLogonId: '@' });\n      });\n      expect(result).toEqual({\n        code: 20001,\n        data: { fields: [mode === 'invalid-logon' ? 'alipay_logon_id' : 'payout_method'] },\n      });\n      expect(await state(kit, f)).toEqual({ accounts: [], changes: [] });\n    } finally {\n      await holder.rollback().execute();\n    }\n  },\n  10_000,\n);\n// .each row 1 of 2: 'invalid-logon'",
+      "after": "it.each(['invalid-logon', 'disabled-method'] as const)(\n  '[AC-B1-13e#31] 锁前本地校验 %s：users 被独立连接锁住仍立即拒绝，且不写行',\n  async (mode) => {\n    const f = await fixture(kit);\n    if (mode === 'disabled-method') await config(kit, f, 'withdraw.payout_methods', ['bank_card']);\n    const app = await service(kit);\n    const holder = await kit.db.startTransaction().execute();\n    try {\n      await holder\n        .selectFrom('users')\n        .select('id')\n        .where('app_id', '=', f.appId)\n        .where('id', '=', f.uid)\n        .forUpdate()\n        .execute();\n      const result = await kit.db.transaction().execute(async (trx) => {\n        await sql`SET LOCAL statement_timeout = '1s'`.execute(trx);\n        return app.save(trx, bound(kit, { ...f.command, alipayLogonId: '@' }));\n      });\n      expect(result).toEqual({\n        code: 20001,\n        data: { fields: [mode === 'invalid-logon' ? 'alipay_logon_id' : 'payout_method'] },\n      });\n      expect(await state(kit, f)).toEqual({ accounts: [], changes: [] });\n    } finally {\n      await holder.rollback().execute();\n    }\n  },\n  10_000,\n);\n// .each row 1 of 2: 'invalid-logon'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/domain/alipay-logon.ts ALIPAY_LOGON_FIELD → 'alipay_logon_id_probe' and payout-account.ts alipay payout_method refusal fields → ['payout_method_probe']; probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/19, tree c9023cb45b14): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/payout-account/concurrency.int.test.ts",
+      "test": "[AC-B1-13e#31] 锁前本地校验 disabled-method：users 被独立连接锁住仍立即拒绝，且不写行",
+      "reason": "rule_change",
+      "before": "it.each(['invalid-logon', 'disabled-method'] as const)(\n  '[AC-B1-13e#31] 锁前本地校验 %s：users 被独立连接锁住仍立即拒绝，且不写行',\n  async (mode) => {\n    const f = await fixture(kit);\n    if (mode === 'disabled-method') await config(kit, f, 'withdraw.payout_methods', ['bank_card']);\n    const app = await service(kit);\n    const holder = await kit.db.startTransaction().execute();\n    try {\n      await holder\n        .selectFrom('users')\n        .select('id')\n        .where('app_id', '=', f.appId)\n        .where('id', '=', f.uid)\n        .forUpdate()\n        .execute();\n      const result = await kit.db.transaction().execute(async (trx) => {\n        await sql`SET LOCAL statement_timeout = '1s'`.execute(trx);\n        return app.save(trx, { ...f.command, alipayLogonId: '@' });\n      });\n      expect(result).toEqual({\n        code: 20001,\n        data: { fields: [mode === 'invalid-logon' ? 'alipay_logon_id' : 'payout_method'] },\n      });\n      expect(await state(kit, f)).toEqual({ accounts: [], changes: [] });\n    } finally {\n      await holder.rollback().execute();\n    }\n  },\n  10_000,\n);\n// .each row 2 of 2: 'disabled-method'",
+      "after": "it.each(['invalid-logon', 'disabled-method'] as const)(\n  '[AC-B1-13e#31] 锁前本地校验 %s：users 被独立连接锁住仍立即拒绝，且不写行',\n  async (mode) => {\n    const f = await fixture(kit);\n    if (mode === 'disabled-method') await config(kit, f, 'withdraw.payout_methods', ['bank_card']);\n    const app = await service(kit);\n    const holder = await kit.db.startTransaction().execute();\n    try {\n      await holder\n        .selectFrom('users')\n        .select('id')\n        .where('app_id', '=', f.appId)\n        .where('id', '=', f.uid)\n        .forUpdate()\n        .execute();\n      const result = await kit.db.transaction().execute(async (trx) => {\n        await sql`SET LOCAL statement_timeout = '1s'`.execute(trx);\n        return app.save(trx, bound(kit, { ...f.command, alipayLogonId: '@' }));\n      });\n      expect(result).toEqual({\n        code: 20001,\n        data: { fields: [mode === 'invalid-logon' ? 'alipay_logon_id' : 'payout_method'] },\n      });\n      expect(await state(kit, f)).toEqual({ accounts: [], changes: [] });\n    } finally {\n      await holder.rollback().execute();\n    }\n  },\n  10_000,\n);\n// .each row 2 of 2: 'disabled-method'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/domain/alipay-logon.ts ALIPAY_LOGON_FIELD → 'alipay_logon_id_probe' and payout-account.ts alipay payout_method refusal fields → ['payout_method_probe']; probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/19, tree c9023cb45b14): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/reverify-gates/payout-account.int.test.ts",
+      "test": "[AC-B1-02zq#20] 10010 不写幂等结果、不消耗令牌：加验通过后同令牌新键保存成功",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02zq#20] 10010 不写幂等结果、不消耗令牌：加验通过后同令牌新键保存成功', async () => {\n  const f = await gates(kit);\n  const m = await f.member({ payout: false, balance: null });\n  await f.flag(m.uid, { realname: true, providers: [] });\n  const c = f.on(m);\n  const step = await c.stepUp('payout_account_change');\n  refused(kit, PAYOUT, 'put', await c.payout({ step }), ID_NUMBER);\n  expect(await f.idempotencyRows(PAYOUT)).toEqual([]);\n\n  await f.passById(m);\n  answer(kit, PAYOUT, 'put', await c.payout({ step }), 0);\n  expect((await f.payoutState(m.uid)).accounts).toHaveLength(1);\n});",
+      "after": "it('[AC-B1-02zq#20] 10010 不写幂等结果、不消耗令牌：加验通过后同令牌新键保存成功', async () => {\n  const f = await gates(kit);\n  const m = await f.member({ payout: false, balance: null });\n  await f.flag(m.uid, { realname: true, providers: [] });\n  const c = f.on(m);\n  // B1-02zzzb: the one token is for this one account, saved by both calls.\n  const body = {\n    payout_method: 'alipay',\n    alipay_logon_id: `new-${randomBytes(6).toString('hex')}@example.test`,\n    payee_name: PERSON,\n  };\n  const step = await c.stepUp('payout_account_change', body);\n  refused(kit, PAYOUT, 'put', await c.payout({ step, body }), ID_NUMBER);\n  expect(await f.idempotencyRows(PAYOUT)).toEqual([]);\n\n  await f.passById(m);\n  answer(kit, PAYOUT, 'put', await c.payout({ step, body }), 0);\n  expect((await f.payoutState(m.uid)).accounts).toHaveLength(1);\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/domain/step-up-digest.ts digestMatches always returns false (the in-lock digest comparison never matches, every save → 10003); probe worktree at the head fe65219f7 (reverted, not committed or pushed); verify-container --tests test/spec/identity test/spec/risk/bad-debt-linked on the test machine (couli-runs/B1-02zzzb/tests/9, tree 43aca25b8fa1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/identity-level/http-kit.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-ID-08"],
+      "before_sha256": "90ac8c0289a95f9ead362fa005010fd4fa0fca6177b69e18b289858b6153be94",
+      "after_sha256": "5b7d63961586472825a82fd99ecb64ba019d463a911780ea4fd9318d39bcec02",
+      "reverse_red": [
+        "test/spec/identity/deletion-guard/http.int.test.ts > [AC-B1-15e#10] 冷静期 deletion_only 会话：表内的 step-up（account_deletion）→ 10007；表内白名单 abandon、GET /v1/me 放行",
+        "test/spec/identity/deletion-guard/http.int.test.ts > [AC-B1-15e#2] cooling 用户幂等 PUT 收款账号 → 10007：业务未执行、幂等表无记录、step_up_token 未核销",
+        "test/spec/identity/deletion-guard/http.int.test.ts > [AC-B1-15e#2] cooling 用户非幂等 PATCH /v1/me → 403 10007 stage=cooling，trace_id 同请求，处理器未执行"
+      ],
+      "note": "put back to the base on the new implementation (couli-runs/B1-02zzzb/tests/11): deletion-guard, identity-level and privacy-min-version http.int.test.ts each fail in beforeAll (its setup save now answers 10003: expected the codes not to include 10003), so the file is red and Vitest reports these tests as skipped, not failed; no test of another file turned red."
+    },
+    {
+      "file": "test/spec/identity/payout-account/concurrency.int.test.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-ID-08"],
+      "before_sha256": "7ca9fac21c0e4e118ed912fc4fcff17f4b4f7b57cae98ac9eca52b50a48e119d",
+      "after_sha256": "76091faa0704ef45a818c613541b759eb3d07376294474e1ff8f0f4b7971e7d9",
+      "reverse_red": [
+        "test/spec/identity/payout-account/concurrency.int.test.ts > [AC-B1-13e#30] 两个真实连接并发 first-binding：等待 users 行锁后重读绑定和计数",
+        "test/spec/identity/payout-account/concurrency.int.test.ts > [AC-B1-13e#30] 两个真实连接并发 limit：等待 users 行锁后重读绑定和计数"
+      ]
+    },
+    {
+      "file": "test/spec/identity/payout-account/kit.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-ID-08"],
+      "before_sha256": "251cf554a93168be879025601743e9d2bccf69a878d31a36616c99f79b7ab9be",
+      "after_sha256": "782348014c30a2bd3b292cd9956dac6cff69825ff3dec801613d30800c527512",
+      "reverse_red": [
+        "test/spec/identity/payout-account-exempt/count.int.test.ts > [AC-B2-05j#10] 本月名额已用满 + 实名更正失效后：首次重绑仍成功、不写变更行、剩余 0；之后再换绑 30303",
+        "test/spec/identity/payout-account-exempt/count.int.test.ts > [AC-B2-05j#1] 本月 2 条变更其中 1 条 exempt：GET 剩余 = 上限 − 1；换绑一次后剩 0，再换绑 30303",
+        "test/spec/identity/payout-account-exempt/count.int.test.ts > [AC-B2-05j#2] exempt 行不论几条都不占名额：配置上限 1、本月 3 条 exempt → 剩 1，换绑后剩 0，再换绑 30303"
+      ]
+    },
+    {
+      "file": "test/spec/identity/payout-bank-card/kit.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-ID-08"],
+      "before_sha256": "d8668fd2d46f8fb6536ad6e9e1e2e7e771e611aec58912237ef577e4e7833be7",
+      "after_sha256": "6f3114a6846653aa3ebff72e8ccfbf7350b7785a04b82c4b3f674e98f852cdbc",
+      "reverse_red": [
+        "test/spec/identity/bank-card-correction-race/correction-lock.int.test.ts > [AC-B1-27l#5] 供应商答一致后实名更正持 users 行锁、绑卡请求已被它阻塞，更正提交后不绑卡（首绑与换绑）、40901、无变更记录、记录照实 matched",
+        "test/spec/identity/bank-card-correction-race/correction-race.int.test.ts > [AC-B1-27l#1] 核验期间实名更正：不绑卡、40901、记录照实 matched、无绑卡写入，同键重试 20901；未更正、更正早于或等于预留时刻照常绑卡",
+        "test/spec/identity/bank-card-correction-race/correction-race.int.test.ts > [AC-B1-27l#2] 核验期间实名更正后换新键重试：不复用旧记录，第二次供应商调用按新身份核验，一致后绑卡成功"
+      ]
+    },
+    {
+      "file": "test/spec/identity/realname-payout-invalidate/kit.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-ID-08"],
+      "before_sha256": "12a7254e2f5744d2bb2a6a608657faa9f0dab441f68d5b65683d5ad173587bcb",
+      "after_sha256": "8f1084601fc98d48ff49e7da7d4a3ada6d18e0174f6c31a1a1d5d636390d6a19",
+      "reverse_red": [
+        "test/spec/identity/realname-payout-invalidate/limit.int.test.ts > [AC-B1-27g#5] 本月已用 1 次：更正照常受理并写一条 exempt 行；GET 无账号；首次重绑成功、不写变更行、剩余与更正前相同；再换绑才计次",
+        "test/spec/identity/realname-payout-invalidate/limit.int.test.ts > [AC-B1-27g#5] 本月已用 2 次：更正照常受理并写一条 exempt 行；GET 无账号；首次重绑成功、不写变更行、剩余与更正前相同；再换绑才计次",
+        "test/spec/identity/realname-payout-invalidate/limit.int.test.ts > [AC-B1-27g#6] 更正当月的 exempt 行不占名额：更正后重绑、再换绑用满剩余名额，与没有过更正时的次数一致"
+      ]
+    },
+    {
+      "file": "test/spec/identity/reverify-gates/kit.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-ID-08"],
+      "before_sha256": "edd38119956c472a474e4aa63ea9751dae2478ec52320199d198a5c7124ff19d",
+      "after_sha256": "6aa8cab086e6744c07ae241617541fbcc1988e5c921e7a0f636beb79afe060bd",
+      "reverse_red": [
+        "test/spec/identity/reverify-gates/passes.int.test.ts > [AC-B1-02zq#38] 收款账号变更：无标记放行，行为同今天；有标记的账号才 10010",
+        "test/spec/identity/reverify-gates/passes.int.test.ts > [AC-B1-02zq#39] 收款账号变更：加验通过只放行那一台设备，另一台仍 10010，标记保留",
+        "test/spec/identity/reverify-gates/payout-account.int.test.ts > [AC-B1-02zq#20] 10010 不写幂等结果、不消耗令牌：加验通过后同令牌新键保存成功"
+      ]
+    },
+    {
+      "file": "test/spec/identity/reverify-gates/payout-account.int.test.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-ID-08"],
+      "before_sha256": "10e607ffb7a89db68a8c16d53f687a902fcbb9480434895d149ab303a172cbdb",
+      "after_sha256": "d880fac217e830e0bded483228b31d50cfe5f223a44f3724b123d697768598d6",
+      "reverse_red": [
+        "test/spec/identity/reverify-gates/payout-account.int.test.ts > [AC-B1-02zq#20] 10010 不写幂等结果、不消耗令牌：加验通过后同令牌新键保存成功"
+      ]
+    },
+    {
+      "file": "test/spec/risk/bad-debt-linked/kit.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-ID-08"],
+      "before_sha256": "8ac348e399b2e8b009547bce0f068722a85107559c135dbcf427bb07b5455352",
+      "after_sha256": "55e84694d93865d7ca19f3b43457ecb92bebac028a92d9ab2652ce41261644a3",
+      "reverse_red": [
+        "test/spec/risk/bad-debt-linked/history.int.test.ts > [AC-B2-12g#10] 同收款账号含历史行：B 先绑支付宝 P、后换绑 Q；A 再绑 P（BR-WDR-02 允许）；U 只绑自己的号 → A 核销批准后 B 一行 payout_account 标记（source_user_id=A、source_ref=候选单 id），U 与 A 本人没有",
+        "test/spec/risk/bad-debt-linked/history.int.test.ts > [AC-B2-12g#11] 同收款账号的其余组合：A 先绑支付宝 X 后换绑 Z、G 随后绑 X（A 历史行对 G 当前行）；A 与 C 都绑过又换掉银行卡 K（两边都是历史行，按 bank_card_hmac）→ G、C 各一行 payout_account 标记；只绑过别的卡 K2 的 D 不打标"
+      ]
+    }
+  ]
+}
