@@ -20,4 +20,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/each-kit-table-bigint/**'
-status: todo
+status: done
+pr: 366
