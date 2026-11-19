@@ -6,8 +6,11 @@
 // 【驳回】见 ReviewActions.tsx（F1-08ah，持 withdraw.review 且状态可审时显示），写后重新拉详情。
 // 结果未知转人工的单（PAYING + needs_manual）的【立即查询】【人工处置】见 UnknownPayoutActions.tsx
 // （F1-08aj，持 payout.execute 时显示），写后同样重新拉详情。
-// TODO(规划/11 §7): 【执行打款】【手动成功】【撤销微信转账】【重新计算】与手机号 / 收款账号的
-// 【查看】全量 — blocked on 契约未出
+// 已通过待执行（APPROVED）单的【执行打款】【手动成功】见 DetailPayoutActions.tsx（F1-08am，一张单即
+// 一张单的批次；持 payout.execute / payout.manual_entry 时显示），写后同样重新拉详情；页面时钟由 props
+// 注入（clock，缺省为系统时钟），只用于手动成功的实付时间校验。【撤销微信转账】先不出现（D10-2017），
+// 【重新计算】不做。
+// TODO(规划/11 §7): 手机号 / 收款账号的【查看】全量 — blocked on 契约未出
 import { ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import {
@@ -45,6 +48,8 @@ import {
   statusLabel,
   type WithdrawalDetail,
 } from './model.ts';
+import { DetailPayoutActions } from './DetailPayoutActions.tsx';
+import type { ManualPaidClock } from './ManualPaid.tsx';
 import { ReviewActions } from './ReviewActions.tsx';
 import { UnknownPayoutActions } from './UnknownPayoutActions.tsx';
 import { Forbidden, marksOf } from './WithdrawalsPage.tsx';
@@ -56,6 +61,8 @@ type Attempt = WithdrawalDetail['payout_attempts'][number];
 type BatchItem = WithdrawalDetail['batch_items'][number];
 type Hold = WithdrawalDetail['holds'][number];
 
+const SYSTEM_CLOCK: ManualPaidClock = { now: () => Date.now() };
+
 type DetailState =
   | { readonly status: 'loading' }
   | { readonly status: 'ready'; readonly data: WithdrawalDetail }
@@ -66,22 +73,27 @@ type DetailState =
 export interface WithdrawalDetailPageProps {
   readonly access: AccessControl;
   readonly withdrawalId: string;
+  /** Injected clock (AGENTS.md §4 rule 5), epoch ms; the paid-time check of 【手动成功】. */
+  readonly clock?: ManualPaidClock | undefined;
 }
 
 export function WithdrawalDetailPage({
   access,
   withdrawalId,
+  clock = SYSTEM_CLOCK,
 }: WithdrawalDetailPageProps): ReactElement {
   if (!canRead(access)) return <Forbidden />;
-  return <DetailContent access={access} withdrawalId={withdrawalId} />;
+  return <DetailContent access={access} withdrawalId={withdrawalId} clock={clock} />;
 }
 
 function DetailContent({
   access,
   withdrawalId,
+  clock,
 }: {
   readonly access: AccessControl;
   readonly withdrawalId: string;
+  readonly clock: ManualPaidClock;
 }): ReactElement {
   const getProvider = useDataProvider();
   const navigate = useNavigate();
@@ -157,6 +169,12 @@ function DetailContent({
           <Flex gap={8} wrap style={{ marginInlineStart: 'auto' }}>
             <ReviewActions item={state.data} access={access} onChanged={reload} />
             <UnknownPayoutActions item={state.data} access={access} onChanged={reload} />
+            <DetailPayoutActions
+              item={state.data}
+              access={access}
+              clock={clock}
+              onChanged={reload}
+            />
           </Flex>
         ) : null}
       </Flex>

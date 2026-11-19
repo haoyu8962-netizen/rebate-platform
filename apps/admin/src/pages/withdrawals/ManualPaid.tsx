@@ -53,22 +53,22 @@ type Payload = Schema<'AdminWithdrawalBatchManualPaidRequest'>;
 type Answer = Schema<'AdminWithdrawalBatchManualPaid'>;
 type ResultItem = Schema<'AdminWithdrawalBatchManualPaidItem'>;
 type Phase = 'edit' | 'verify' | 'sending' | 'unknown' | 'done';
-type Field = 'serial' | 'paidAt' | 'amount';
+export type Field = 'serial' | 'paidAt' | 'amount';
 
 /** Time source of the page (AGENTS.md §4 rule 5): the console's injected clock, in epoch ms. */
 export interface ManualPaidClock {
   now(): number;
 }
 
-interface Entry {
+export interface Entry {
   readonly serial: string;
   readonly paidAt: string;
   readonly amount: string;
 }
 
-const EMPTY_ENTRY: Entry = { serial: '', paidAt: '', amount: '' };
+export const EMPTY_ENTRY: Entry = { serial: '', paidAt: '', amount: '' };
 
-interface Checked {
+export interface Checked {
   readonly errors: Partial<Record<Field, string>>;
   readonly item?: Payload['items'][number];
 }
@@ -77,7 +77,11 @@ interface Checked {
 const AMOUNT_FORMAT = /^\d+(\.\d{1,2})?$/;
 
 /** One row's local check; `item` only when all three inputs pass. */
-function checkEntry(row: WithdrawalRow, entry: Entry, now: number): Checked {
+export function checkEntry(
+  row: Pick<WithdrawalRow, 'withdrawal_id' | 'net_fen'>,
+  entry: Entry,
+  now: number,
+): Checked {
   const errors: Partial<Record<Field, string>> = {};
   const serial = entry.serial.trim();
   if (serial === '') errors.serial = t.invalid.serialRequired;
