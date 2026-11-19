@@ -10,8 +10,9 @@ export interface LedgerPrefill {
 
 /** The console address of the ledger page for `prefill`: /ledger?user_id=…[&ref=…]. */
 export function ledgerRoute(prefill: LedgerPrefill): string {
-  void prefill;
-  throw new Error('NotImplemented: ledgerRoute');
+  const params = new URLSearchParams({ user_id: prefill.userId });
+  if (prefill.ref !== undefined) params.set('ref', prefill.ref);
+  return `/ledger?${params.toString()}`;
 }
 
 /**
@@ -19,6 +20,9 @@ export function ledgerRoute(prefill: LedgerPrefill): string {
  * undefined without a user; a blank ref is left out; other parameters are not taken.
  */
 export function prefillFromSearch(search: string): LedgerPrefill | undefined {
-  void search;
-  throw new Error('NotImplemented: prefillFromSearch');
+  const params = new URLSearchParams(search);
+  const userId = (params.get('user_id') ?? '').trim();
+  if (userId === '') return undefined;
+  const ref = (params.get('ref') ?? '').trim();
+  return ref === '' ? { userId } : { userId, ref };
 }

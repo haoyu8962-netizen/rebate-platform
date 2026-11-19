@@ -4,6 +4,5 @@
 
 /** The 提现审核 list filtered to one user: /withdrawals?user_id=… */
 export function userWithdrawalsRoute(userId: string): string {
-  void userId;
-  throw new Error('NotImplemented: userWithdrawalsRoute');
+  return `/withdrawals?${new URLSearchParams({ user_id: userId }).toString()}`;
 }

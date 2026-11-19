@@ -185,14 +185,21 @@ export const EMPTY_DRAFT: Draft = {
 };
 
 /**
- * The starting draft of a page opened at `search` (a workbench card opens /withdrawals?status=…):
- * its `status` when it is a WithdrawalStatus (exact case), else the empty draft; nothing else of
- * the address is taken.
+ * The starting draft of a page opened at `search` (a workbench card opens /withdrawals?status=…,
+ * 【去处理提现单】 of 批准核销 opens /withdrawals?user_id=…): its `status` when it is a
+ * WithdrawalStatus (exact case) and its `user_id` (trimmed) when it is a UUID; nothing else of the
+ * address is taken.
  */
 export function draftFromSearch(search: string): Draft {
-  const value = new URLSearchParams(search).get('status');
+  const params = new URLSearchParams(search);
+  const value = params.get('status');
   const status = STATUSES.find((item) => item === value);
-  return status === undefined ? EMPTY_DRAFT : { ...EMPTY_DRAFT, status };
+  const userId = (params.get('user_id') ?? '').trim();
+  return {
+    ...EMPTY_DRAFT,
+    ...(status === undefined ? {} : { status }),
+    ...(UUID.test(userId) ? { userId } : {}),
+  };
 }
 
 export const sameDraft = (a: Draft, b: Draft): boolean =>

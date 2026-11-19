@@ -4,6 +4,8 @@
 // - 【批准核销】：短信档二次验证后只发一次 POST /admin/v1/bad-debt-writeoffs/{id}/approve，请求体恰为 {}
 //   （金额由服务端按批准时可用余额取）；成功按返回状态（已核销 / 已取消）交回页面提示并刷新。
 // - 20001 writeoff_frozen_pending：对话框里显示冻结提示、对话框保留；其余确定的失败照提示、保留。
+//   F1-08fe：被拦时冻结提示旁有【去处理提现单】（拒绝回答里没有提现单号，链到按该用户筛选的提现审核
+//   列表；只是导航，不重发批准）。
 // 写入经 useAdjustmentWrite（F1-08ce 的结果未知处理，编排 D10-1731），不另起一套：
 // - 没拿到带统一外壳的回答（网络、无法解析）：进入结果未知，原键与原请求体（同一个 {} 对象）保留；对话框不能
 //   关闭、【取消】换成【去列表核对】，再按【批准核销】即原样重试（重新短信验证）；之后遇 40901 / 5xx 仍结果未知，
@@ -13,12 +15,14 @@
 //   （或已不在）就交回页面提示并刷新、不再提交。20902 同样交回页面。任何失败都不自动重发。
 import { Alert, Button, Descriptions, Flex, Modal, Typography, theme } from 'antd';
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
+import { Link } from 'react-router';
 import { plannedButtonProps } from '../../components/planned/index.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
 import { stepUpTexts } from '../../texts/step-up.ts';
 import { WRITEOFFS_URL, money, type Writeoff, type WriteoffPage } from './model.ts';
 import { useAdjustmentWrite } from './useAdjustmentWrite.tsx';
 import { useRead } from './useRead.ts';
+import { userWithdrawalsRoute } from '../withdrawals/prefill.ts';
 import {
   frozenPending,
   outcomeUnknown,
@@ -219,7 +223,16 @@ export function WriteoffApproveDialog({
         />
         <Typography.Text type="secondary">{w.amountNotice}</Typography.Text>
         {current.approve_blocked || frozenRefused ? (
-          <Alert type="error" showIcon message={w.frozenPending} />
+          <Alert
+            type="error"
+            showIcon
+            message={w.frozenPending}
+            action={
+              frozenRefused ? (
+                <Link to={userWithdrawalsRoute(item.user_id)}>{w.toWithdrawals}</Link>
+              ) : undefined
+            }
+          />
         ) : null}
         {rechecking && reread.status === 'failed' ? (
           <Flex align="center" gap={8}>

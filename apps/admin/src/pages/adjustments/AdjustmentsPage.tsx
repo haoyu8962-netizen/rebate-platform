@@ -7,17 +7,22 @@
 // 新建结果未知时【去列表核对】关抽屉、刷新列表；此后再按【新建调账】先读一次列表，读完才显示空白表单。
 // 待批准（系统预填）的行与详情有【批准】（F1-08cc，批准并短信验证 / 驳回），结果提示同样在标题下。
 // 持 fund.writeoff（超管含）时坏账核销待批准的行有【批准核销】（F1-08cd，短信验证），结果提示同样在标题下。
+// F1-08fe：记了凭证的成功提示（新建、红冲、已核销）有【查看凭证】，跳余额流水并预填该用户与凭证 biz_id；
+// 从余额流水「关联单据」进来时按路由状态先打开该调账单详情或「坏账核销」页签（只是起始视图，不另发读）。
 import { PlusOutlined } from '@ant-design/icons';
 import { Alert, Button, Card, Flex, Result, Tabs, Typography } from 'antd';
 import { useCallback, useRef, useState, type ReactElement } from 'react';
+import { Link, useLocation } from 'react-router';
 import { PlannedPage, plannedButtonProps, usePlanned } from '../../components/planned/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { adjustmentsTexts as t } from '../../texts/adjustments.ts';
 import { AdjustmentsTab, type Notice } from './AdjustmentsTab.tsx';
 import { CreateDrawer } from './CreateDrawer.tsx';
+import { openingOf, voucherOf } from './links.ts';
 import { canReadAdjustments, canReadWriteoffs, money } from './model.ts';
 import { WriteoffsTab } from './WriteoffsTab.tsx';
 import type { Executed } from './write.ts';
+import { ledgerRoute } from '../ledger/prefill.ts';
 
 export interface AdjustmentsPageProps {
   readonly access: AccessControl;
@@ -34,6 +39,9 @@ function Title(): ReactElement {
 export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement {
   const planned = usePlanned('adminListAdjustments');
   const writePlanned = usePlanned('adminCreateAdjustment');
+  const location = useLocation();
+  /** Where another page asked to open (read once: later navigation within the page is its own). */
+  const [opening] = useState(() => openingOf(location.state));
   const entryRef = useRef<HTMLButtonElement>(null);
   /** Every opening of the drawer is a new form (and a new Idempotency-Key). */
   const [createSession, setCreateSession] = useState(0);
@@ -82,6 +90,7 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
         t.write.createdBefore(money(executed.available_before_fen)),
         t.write.createdAfter(money(executed.available_after_fen)),
       ],
+      voucher: voucherOf(executed),
     });
     setVersion((value) => value + 1);
   };
@@ -112,6 +121,7 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
                 canAdjust={canAdjust}
                 planned={writePlanned}
                 version={version}
+                {...(opening.detail === undefined ? {} : { initialDetail: opening.detail })}
                 onNotice={setNotice}
                 onListRead={listRead}
               />
@@ -161,10 +171,20 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
               ))}
             </div>
           }
+          action={
+            notice.voucher === undefined ? undefined : (
+              <Link to={ledgerRoute(notice.voucher)}>{t.write.viewVoucher}</Link>
+            )
+          }
           onClose={() => setNotice(undefined)}
         />
       )}
-      <Tabs items={items} />
+      <Tabs
+        items={items}
+        {...(opening.tab !== undefined && items.some((item) => item.key === opening.tab)
+          ? { defaultActiveKey: opening.tab }
+          : {})}
+      />
       {canAdjust ? (
         <CreateDrawer
           key={createSession}
