@@ -6,6 +6,7 @@ type: impl
 # 做法：把 apps/api/src/modules/ledger/application/ledger.ts 里 negative_since 的三分支（约 336–341 行）与 recovered / wentNegative（约 398–407 行）原样搬到一个新纯函数文件并导出，ledger.ts 改为调用；纯搬移、行为不变，不改任何判定条件。
 # 恢复钩子：BalanceRecoveredInput.voucherId 现为必填 string（ledger.ts 约 389 行），重算余额缓存不写凭证。改为可空（string | null），payout 的实现（payout/application/balance-recovered.ts）照常处理 null（现不读该字段则不受影响）；如改可空牵动面过大，在输出里写明再定。
 # 资金评审必查「纯搬移」：现有账本与入账相关测试全绿；独立 Claude 先写规则测试钉新导出函数的输入输出（negative_since 三分支 + 前后都为负沿用、跨零四种组合），实现方另补单测。
+# 2026-11-19 be：D10-2084 ③——标题里「voucherId 允许为空」半句作废：选（甲），voucherId 保持必填 string、只改注释，payout 零改动，冻结 back-to-nonnegative/kit.ts 未碰。
 refs: [BR-FUND-12, BR-WDR-05]
 refs_hash:
   BR-FUND-12: 8d69aa9c2ca9
@@ -23,5 +24,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/ledger/balance-transitions/**'
-status: todo
-pr: null
+status: done
+pr: 320
