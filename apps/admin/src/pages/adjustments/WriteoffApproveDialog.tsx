@@ -4,7 +4,7 @@
 // - 【批准核销】：短信档二次验证后只发一次 POST /admin/v1/bad-debt-writeoffs/{id}/approve，请求体恰为 {}
 //   （金额由服务端按批准时可用余额取）；成功按返回状态（已核销 / 已取消）交回页面提示并刷新。
 // - 20001 writeoff_frozen_pending：对话框里显示冻结提示、对话框保留；其余确定的失败照提示、保留。
-//   F1-08fe：被拦时冻结提示旁有【去处理提现单】（拒绝回答里没有提现单号，链到按该用户筛选的提现审核
+//   F1-08fe：冻结提示（列表 approve_blocked 或被拦）旁都有【去处理提现单】（拒绝回答里没有提现单号，链到按该用户筛选的提现审核
 //   列表；只是导航，不重发批准）。
 // 写入经 useAdjustmentWrite（F1-08ce 的结果未知处理，编排 D10-1731），不另起一套：
 // - 没拿到带统一外壳的回答（网络、无法解析）：进入结果未知，原键与原请求体（同一个 {} 对象）保留；对话框不能
@@ -227,11 +227,7 @@ export function WriteoffApproveDialog({
             type="error"
             showIcon
             message={w.frozenPending}
-            action={
-              frozenRefused ? (
-                <Link to={userWithdrawalsRoute(item.user_id)}>{w.toWithdrawals}</Link>
-              ) : undefined
-            }
+            action={<Link to={userWithdrawalsRoute(item.user_id)}>{w.toWithdrawals}</Link>}
           />
         ) : null}
         {rechecking && reread.status === 'failed' ? (
