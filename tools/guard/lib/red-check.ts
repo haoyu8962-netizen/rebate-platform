@@ -791,6 +791,71 @@ export function modifiedOnlyNote(r: ModifiedOnly): string {
   return `${r.file}: every change against the base lies in the ${r.tests.length} block(s) the ledger declares in modify_existing (D10-701: ${r.tests.join(' | ')}), left out of the expected list (not run, not judged): nothing in it is shown red; evidence-check requires the owner's approval label and the record of each block (evidence modify_existing)`;
 }
 
+/**
+ * A rule-test file left out of the expected list because it has both kinds of declared change
+ * (CT-06zzzzzr, D10-2120 ① / D10-2125, after outsideOnlyFiles and modifiedOnlyFiles): its changes
+ * outside the tests are covered (red_exempt_outside, or a modify_existing `scope: support` entry of
+ * the file), every changed block is a declared modify_existing block found and changed, every
+ * other test is unchanged and declared in red_exempt, and no test is added, removed or moved.
+ * `tests` the declared block names (ledger order), `exempt` how many tests red_exempt declares,
+ * `lines` the head lines of the changes outside the tests.
+ */
+export type MixedOnly = { file: string; tests: string[]; exempt: number; lines: string };
+
+/**
+ * The files among `files` that existed at the base and are left out of the expected list as
+ * MixedOnly says (CT-06zzzzzr), as outsideOnlyFiles and modifiedOnlyFiles: red-check.ts
+ * --print-expected, the check itself and tools/ci/evidence-check.ts all call it. Anything else
+ * stays expected and is judged as before.
+ */
+export function mixedOnlyFiles(
+  files: readonly string[],
+  read: Pick<BaselineReader, 'base' | 'head'>,
+  renames: readonly RenameDeclaration[],
+  expectedValues: readonly ExpectedValueDeclaration[],
+  outside: readonly RedExemptOutsideDeclaration[],
+  declared: readonly RedExemptDeclaration[],
+  declarations: readonly ModifyExistingDeclaration[],
+): MixedOnly[] {
+  void files;
+  void read;
+  void renames;
+  void expectedValues;
+  void outside;
+  void declared;
+  void declarations;
+  throw new Error('NotImplemented: mixedOnlyFiles');
+}
+
+/** The note that says a file was left out by mixedOnlyFiles (CT-06zzzzzr, D10-2125). */
+export function mixedOnlyNote(r: MixedOnly): string {
+  void r;
+  throw new Error('NotImplemented: mixedOnlyNote');
+}
+
+/**
+ * What is left of the expected rule-test files after renamedOnlyFiles, outsideOnlyFiles,
+ * modifiedOnlyFiles and mixedOnlyFiles, in that order (CT-06zzzzzr): `expected` the files still
+ * run and judged, `notes` one line per file left out, `modifiedLeftOut` the files left out whose
+ * modify_existing entries are therefore not redundant (checkRedReports).
+ */
+export type LeftOutRuleTests = { expected: string[]; notes: string[]; modifiedLeftOut: string[] };
+
+/** See LeftOutRuleTests: red-check.ts calls it with the trusted ledger (CT-06zzzzzr). */
+export function ruleTestsLeftOut(
+  files: readonly string[],
+  read: Pick<BaselineReader, 'base' | 'head'>,
+  task: Pick<
+    TaskFile,
+    'renames' | 'expected_values' | 'red_exempt_outside' | 'red_exempt' | 'modify_existing'
+  >,
+): LeftOutRuleTests {
+  void files;
+  void read;
+  void task;
+  throw new Error('NotImplemented: ruleTestsLeftOut');
+}
+
 /** The note that says a file was left out of the expected list (CT-06zxc). */
 export function renamedOnlyNote(r: RenamedOnly): string {
   return `${r.file}: unchanged after the ledger's renames (D10-347: ${r.applied.join(', ')}), left out of the expected list (not run, not judged); the rule-test reviewer confirms the renames are literal follow-ups only`;

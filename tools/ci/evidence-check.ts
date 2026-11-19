@@ -216,6 +216,7 @@ import {
   renamedOnlyFiles,
   renamesHit,
 } from '../guard/lib/red-check.ts';
+import type { BaselineReader } from '../guard/lib/red-check.ts';
 import { matchesAny } from '../lib/glob.ts';
 import { loadProtected, splitFragment } from '../guard/lib/protected.ts';
 import type { ProtectedConfig } from '../guard/lib/protected.ts';
@@ -1844,6 +1845,25 @@ export function redRequirement(
       : {}),
     ...(values.length > 0 ? { expectedValues: { hit: values, tester: ledger.tester } } : {}),
   };
+}
+
+/**
+ * The rule-test files whose red tests evidence-check wants (CT-06zzzzzr, D10-2125): `all`
+ * (expectedRuleTests at the spec_commit) without the files red-check leaves out, by the same
+ * functions in the same order (ruleTestsLeftOut); `modifyExisting` the trusted ledger's entries
+ * only (a ledger the PR head adds never leaves a file out). redRequirement calls it.
+ */
+export function expectedRedFiles(
+  all: readonly string[],
+  read: Pick<BaselineReader, 'base' | 'head'>,
+  ledger: Pick<TaskFile, 'renames' | 'expected_values' | 'red_exempt_outside' | 'red_exempt'>,
+  modifyExisting: readonly ModifyExistingDeclaration[],
+): string[] {
+  void all;
+  void read;
+  void ledger;
+  void modifyExisting;
+  throw new Error('NotImplemented: expectedRedFiles');
 }
 
 export function checkEvidence(input: EvidenceInput): EvidenceReport {
