@@ -46,10 +46,23 @@ function command(method: 'POST' | 'PUT', path: string): Command {
   } as Command;
 }
 
+// Collapses the check's outcome into a plain value so that a rejection (e.g. a RequestRejection
+// from an implementation that still gates withdrawals) surfaces as an assertion failure rather
+// than as the innermost cause of the failure. 'passed' only when the check resolves to undefined.
+function passedOrError(run: () => Promise<unknown>): Promise<unknown> {
+  return Promise.resolve()
+    .then(run)
+    .then(
+      (value: unknown) => (value === undefined ? 'passed' : value),
+      (error: unknown) => error,
+    );
+}
+
 it('[AC-B1-02zzzc#22] ⑫ 在 HTTP 请求内不再判 POST /v1/withdrawals：无 withStepUp、无令牌直接放过，不碰 Redis', async () => {
   vi.spyOn(RiskModule, 'hasHttpRequestScope').mockReturnValue(true);
   const { check, namespace, warn } = stageCheck();
-  await expect(check(command('POST', '/v1/withdrawals'))).resolves.toBeUndefined();
+  const outcome = await passedOrError(() => check(command('POST', '/v1/withdrawals')));
+  expect(outcome).toBe('passed');
   expect(namespace).not.toHaveBeenCalled();
   expect(warn).not.toHaveBeenCalled();
 });
@@ -66,6 +79,7 @@ it('[AC-B1-02zzzc#23] ⑫ 对仍要二次验证的收款账号变更、注销照
       statusCode: 403,
     });
   }
-  await expect(check(command('POST', '/v1/withdrawals'))).resolves.toBeUndefined();
+  const outcome = await passedOrError(() => check(command('POST', '/v1/withdrawals')));
+  expect(outcome).toBe('passed');
   expect(namespace).not.toHaveBeenCalled();
 });
