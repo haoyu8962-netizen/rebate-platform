@@ -6,7 +6,7 @@
 
 **默认分工（负责人 2026-10-05，`ops/approvals.yaml` 第 19 条；规划/11 §1.1）：Opus 实现、Codex 写测试与评审。**
 
-**评审只用 Codex（负责人 2026-10-09，`ops/approvals.yaml` 第 27 条）**：Claude 写的实现不再派 Claude 新子代理做第二家评审（RV2 也不派），所有风险级的代码评审只跑 Codex 新只读会话（`gpt-6-astra`，推理档位默认 `medium`，第 52 条；环境变量 `CODEX_REVIEW_EFFORT` 是保留的开关，只在负责人另有决定时改）；Codex 写的规则测试仍由 Claude 新子代理过审（§11），Codex 实现的代码（换家、第 23 / 30 条首发）仍由 Claude 评审。
+**评审只用 Codex（负责人 2026-10-09，`ops/approvals.yaml` 第 27 条）**：Claude 写的实现不再派 Claude 新子代理做第二家评审（RV2 也不派），所有风险级的代码评审只跑 Codex 新只读会话（`gpt-6.2-sol`，第 111 条，D10-2134；推理档位默认 `medium`，第 52 条；环境变量 `CODEX_REVIEW_EFFORT` 是保留的开关，只在负责人另有决定时改）；Codex 写的规则测试仍由 Claude 新子代理过审（§11），Codex 实现的代码（换家、第 23 / 30 条首发）仍由 Claude 评审。
 
 | 谁 | 做什么 | 经什么 |
 | --- | --- | --- |
@@ -191,7 +191,7 @@ tools/agent/codex-run.sh impl <id> --dry-run      # 先看 argv
 tools/agent/codex-run.sh impl <id> --timeout-min 10
 #    期望：退出 0；meta.json 里 has_output=true、position_changed=[]、last_event=turn.completed
 #    再核对会话文件 ~/.codex/sessions/…/rollout-*-<thread_id>.jsonl：
-#    turn_context.model 是 gpt-6-astra、effort 是 high；没有 skill 段；/tmp 下写不进去
+#    turn_context.model 是 gpt-6.2-sol、effort 是 high；没有 skill 段；/tmp 下写不进去
 
 # 3. 真实评审一次（耗一次额度）
 tools/agent/codex-run.sh review <id> --review-type general --base <基线提交>
@@ -299,9 +299,9 @@ tools/agent/claude-run.sh selfcheck      # 只读 claude --help，不发起任�
 
 **证据怎么记**（`ops/evidence/<id>.json`，`tools/ci/evidence-check.ts`）：
 
-- 每条评审条目（`reviews[]`，以及有 red_exempt 或改名命中时的 `spec_test_review`）都必须写 `engine`，且等于 `reviewer`；`codex` 条目另写 `"model": "gpt-6-astra"`，`claude-independent` 条目写 `"model": "claude-opus-5-5"`（#1046 r1 S2：引擎与模型绑定，取自 `meta.json` 的 `model`）。**在途 PR 的旧证据要补这两个字段**，否则 evidence-check 红。
+- 每条评审条目（`reviews[]`，以及有 red_exempt 或改名命中时的 `spec_test_review`）都必须写 `engine`，且等于 `reviewer`；`codex` 条目另写 `"model": "gpt-6.2-sol"`（D10-2134 切换前记 `gpt-6-astra` 的条目过渡期仍认，待 FU-CODEX-MODEL-ASTRA-SUNSET 删除），`claude-independent` 条目写 `"model": "claude-opus-5-5"`（#1046 r1 S2：引擎与模型绑定，取自 `meta.json` 的 `model`）。**在途 PR 的旧证据要补这两个字段**，否则 evidence-check 红。
 - 独立 Claude 的评审条目写 `"reviewer": "claude-independent", "engine": "claude-independent", "model": "claude-opus-5-5"`，其余字段与 Codex 条目相同：`verdict: "pass"`、`open_s0_s1: 0`、`checklist_complete: true`（资金清单必填）。它顶替缺的那一家：Opus 实现时顶替 `codex` 条目，Codex 实现时顶替 `claude` 条目；台账读不到时两家都要，其中只能有一家是顶替。换家时，绑定换家提交的独立 Claude 条目（写 `commit`）算作 Claude 评审。
-- 把独立 Claude 的产出写成 `reviewer: "codex"` 会被拒收：`engine` 不符，或 `model` 不是 `gpt-6-astra`；不写 `engine` 也拒收。
+- 把独立 Claude 的产出写成 `reviewer: "codex"` 会被拒收：`engine` 不符，或 `model` 不是 `gpt-6.2-sol`（过渡期也认 `gpt-6-astra`）；不写 `engine` 也拒收。
 - `spec_test_review.renames_confirmed`（改名确认，CT-06zxc）：台账 `renames` 有一对命中本任务应判候选文件的基线、或有文件因此被剔出应跑清单时必填，形状 `{ "pairs": [{ "from": …, "to": … }, …], "left_out": [文件, …] }`，`pairs` 恰为命中的改名对（按台账顺序）、`left_out` 恰为被剔出的文件，写 `true` 或多一项少一项都拒收；评审方、`engine`、`last_verdict: pass` 的要求同下一条。规则测试评审须自己逐对核对（在 base 与 spec_commit 之间看每处命中确是纯改名、被剔出的文件替换后逐字相同）后才写这一字段；**不得照 evidence-check 报错信息里打印的值照抄**——那只说明门禁算出了什么，不是核对过的结论。
 - `spec_test_review.expected_values_confirmed`（期望值登记确认，CT-06zxe，D10-371）：台账 `expected_values` 有一条在本任务应判文件的基线（先按 `renames` 替换后）上生效（顶层 helper 存在且唯一、`from` 在 helper 内恰好出现一次、替换后 helper 的值骨架不变）时必填，形状 `{ "entries": [{ "file": …, "helper": …, "from": …, "to": … }, …] }`，`entries` 恰为生效的登记（按台账顺序），写 `true` 或多一项少一项、多出别的键都拒收；评审方、`engine`、`last_verdict: pass` 的要求同下一条。规则测试评审须在 base 与 spec_commit 之间逐条核对：改动只是期望值本身（没删断言、没改断言以外的逻辑、没借字面量让断言变空）、新值有 refs 里的 BR 依据；逐条核**改后值不让断言恒真**——比较 / 长度 / 匹配类匹配器的期望实参改成 `toBeGreaterThanOrEqual(0)`、`toHaveLength(0)`、`toMatch('')`、`toBeLessThan(<极大值>)`、`toBeGreaterThan(<极小值>)` 这类写法一律不得确认（机制只能保证改动落在断言里：expect 链末端匹配器（`expect(…)` / `expect.soft(…)` / `expect.poll(…)` 经 `.not` / `.resolves` / `.rejects` 到 `.toXxx(`）的期望实参上，或这类匹配器 / `expect.objectContaining(` 等实参里对象字面量（键前是 `{` 或 `,`）的属性值上；不在 `.where(` / `sql(` 等查询调用里、不在夹具输入或查询对象（非 expect 调用的实参、变量里的对象、返回的对象）里、不是三元分支或类型注解、不是 `toString(` / `toFixed(` 这类非匹配器、不改带标签模板（CT-06zxh，评审 r2 S2-2）；判断不了新值是否让断言变空，评审 r1 S2-1）——且改的不是查询参数、运算符或 SQL，并对照 red-check `notes` 核对受影响用例（直接或经顶层 helper 间接调用被改 helper 的 it 块；基线里被改 helper 之外有字符串、模板或正则字面量整词提到被改 helper 或其调用闭包里的名字时，red-check 改整文件判，CT-06zxh）确实都在旧实现上有效红；同样**不得照 evidence-check 报错信息照抄**。同一份「不得确认」清单写在规则测试评审的提示词 `tools/agent/prompts/review-spec-test.md`（Part 4）里，两处口径一致。
 - `spec_test_review`（红测豁免与改名的确认）：台账 `tester: codex` → `claude` 或 `claude-independent`；`tester: claude` → `codex` 或 `claude-independent`；`tester: claude-independent` → `claude` 或另一次 `claude-independent`；写了 `engine` 同样要与 `reviewer` 一致。

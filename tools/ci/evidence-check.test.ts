@@ -100,7 +100,7 @@ function evidence(extra: Evidence = {}): Evidence {
       {
         reviewer: 'codex',
         engine: 'codex',
-        model: 'gpt-6-astra',
+        model: 'gpt-6.2-sol',
         verdict: 'pass',
         open_s0_s1: 0,
         checklist_complete: true,
@@ -249,7 +249,7 @@ it('every field of the evidence can fail the check', () => {
           {
             reviewer: 'codex',
             engine: 'codex',
-            model: 'gpt-6-astra',
+            model: 'gpt-6.2-sol',
             verdict: 'pass',
             open_s0_s1: 0,
             checklist_complete: true,
@@ -266,7 +266,7 @@ it('every field of the evidence can fail the check', () => {
           {
             reviewer: 'codex',
             engine: 'codex',
-            model: 'gpt-6-astra',
+            model: 'gpt-6.2-sol',
             verdict: 'pass',
             open_s0_s1: 0,
             checklist_complete: false,
@@ -326,7 +326,7 @@ it('[CR-09] after a handover the evidence names the handover commit and only the
   const codexBefore = {
     reviewer: 'codex',
     engine: 'codex',
-    model: 'gpt-6-astra',
+    model: 'gpt-6.2-sol',
     verdict: 'fail',
     open_s0_s1: 1,
     checklist_complete: true,
@@ -591,7 +591,7 @@ it('[CR-09] checkEvidence refuses a handover on a money task and accepts one on 
   const codexFail = {
     reviewer: 'codex',
     engine: 'codex',
-    model: 'gpt-6-astra',
+    model: 'gpt-6.2-sol',
     verdict: 'fail',
     open_s0_s1: 1,
   };
@@ -1009,7 +1009,7 @@ it("[CT-06r] declared red exemptions need the rule-test reviewer's confirmation 
           ...confirmed,
           reviewer: 'codex',
           engine: 'codex',
-          model: 'gpt-6-astra',
+          model: 'gpt-6.2-sol',
         },
       }),
     ),
@@ -1032,7 +1032,7 @@ it("[CT-06r] declared red exemptions need the rule-test reviewer's confirmation 
           ...confirmed,
           reviewer: 'codex',
           engine: 'codex',
-          model: 'gpt-6-astra',
+          model: 'gpt-6.2-sol',
         },
       }),
       declared('claude'),
@@ -1183,7 +1183,7 @@ it('[CT-06zzze] a ledger with red_exempt_rows needs red_exempt_rows_confirmed fr
           ...confirmed,
           reviewer: 'codex',
           engine: 'codex',
-          model: 'gpt-6-astra',
+          model: 'gpt-6.2-sol',
         },
       }),
       red,
@@ -1387,7 +1387,7 @@ it('[approvals 27] the side that did not implement reviews; the other entry is o
   const codexPass = {
     reviewer: 'codex',
     engine: 'codex',
-    model: 'gpt-6-astra',
+    model: 'gpt-6.2-sol',
     verdict: 'pass',
     open_s0_s1: 0,
     checklist_complete: true,
@@ -1490,7 +1490,7 @@ it('[approvals 36] an independent Claude review stands in for the missing side, 
   const codexPass = {
     reviewer: 'codex',
     engine: 'codex',
-    model: 'gpt-6-astra',
+    model: 'gpt-6.2-sol',
     verdict: 'pass',
     open_s0_s1: 0,
     checklist_complete: true,
@@ -1538,7 +1538,7 @@ it("[approvals 36] an independent Claude review is never filed as Codex's: engin
   const codexPass = {
     reviewer: 'codex',
     engine: 'codex',
-    model: 'gpt-6-astra',
+    model: 'gpt-6.2-sol',
     verdict: 'pass',
     open_s0_s1: 0,
     checklist_complete: true,
@@ -1555,11 +1555,11 @@ it("[approvals 36] an independent Claude review is never filed as Codex's: engin
     problemsOf(evidence({ reviews: [{ ...codexPass, engine: 'claude-independent' }] })),
   ).toMatch(/reviews.codex.engine: engine claude-independent does not match reviewer "codex"/);
   expect(problemsOf(evidence({ reviews: [{ ...codexPass, model: 'claude-opus-5-5' }] }))).toMatch(
-    /reviews.codex.engine: engine codex runs gpt-6-astra: the entry must say model "gpt-6-astra"/,
+    /reviews.codex.engine: engine codex runs gpt-6.2-sol: the entry must say model "gpt-6.2-sol"/,
   );
   const noModel: Evidence = { ...codexPass };
   delete noModel['model'];
-  expect(problemsOf(evidence({ reviews: [noModel] }))).toMatch(/must say model "gpt-6-astra"/);
+  expect(problemsOf(evidence({ reviews: [noModel] }))).toMatch(/must say model "gpt-6.2-sol"/);
   expect(problemsOf(evidence({ reviews: [{ ...codexPass, engine: 'gpt' }] }))).toMatch(
     /reviews.codex.engine: must be one of codex, claude, claude-independent/,
   );
@@ -1571,6 +1571,12 @@ it("[approvals 36] an independent Claude review is never filed as Codex's: engin
     model: 'claude-opus-5-5',
   };
   expect(problemsOf(evidence({ reviews: [independent] }))).toBe('');
+  expect(problemsOf(evidence({ reviews: [{ ...independent, model: 'gpt-6.2-sol' }] }))).toMatch(
+    /reviews.claude-independent.engine: engine claude-independent runs claude-opus-5-5/,
+  );
+  // D10-2134 transition: a codex entry recorded before the switch (gpt-6-astra) is still
+  // accepted; the old name stays codex-only.
+  expect(problemsOf(evidence({ reviews: [{ ...codexPass, model: 'gpt-6-astra' }] }))).toBe('');
   expect(problemsOf(evidence({ reviews: [{ ...independent, model: 'gpt-6-astra' }] }))).toMatch(
     /reviews.claude-independent.engine: engine claude-independent runs claude-opus-5-5/,
   );
@@ -1627,7 +1633,7 @@ it('[approvals 36] rule-test reviewers: an independent Claude context confirms r
           ...confirmed,
           reviewer: 'codex',
           engine: 'codex',
-          model: 'gpt-6-astra',
+          model: 'gpt-6.2-sol',
         },
       }),
       'claude-independent',
@@ -1648,7 +1654,7 @@ it('[approvals 36] rule-test reviewers: an independent Claude context confirms r
 const CT06ZZZZM_CODEX = {
   reviewer: 'codex',
   engine: 'codex',
-  model: 'gpt-6-astra',
+  model: 'gpt-6.2-sol',
   rounds: 1,
   last_verdict: 'pass',
 } as const;
@@ -1710,7 +1716,7 @@ it('[CT-06zzzzm] red_exempt of independent Claude tests: a Codex confirmation pa
       red,
     ),
   ).toBe(
-    'spec_test_review.engine: engine codex runs gpt-6-astra: the entry must say model "gpt-6-astra" (got "claude-opus-5-5")',
+    'spec_test_review.engine: engine codex runs gpt-6.2-sol: the entry must say model "gpt-6.2-sol" (got "claude-opus-5-5")',
   );
 });
 
@@ -1792,11 +1798,11 @@ it('[CT-06zzzzm] no loosening: a Codex confirmation of independent Claude tests 
       evidence({ spec_test_review: { ...confirmed, model: 'claude-opus-5-5' } }),
       ci,
     ),
-  ).toMatch(/spec_test_review\.engine: engine codex runs gpt-6-astra/);
+  ).toMatch(/spec_test_review\.engine: engine codex runs gpt-6.2-sol/);
   const noModel: Evidence = { ...confirmed };
   delete noModel['model'];
   expect(ct06zzzzmProblems(evidence({ spec_test_review: noModel }), ci)).toMatch(
-    /spec_test_review\.engine: .*must say model "gpt-6-astra"/,
+    /spec_test_review\.engine: .*must say model "gpt-6.2-sol"/,
   );
   const noEngine: Evidence = { ...confirmed };
   delete noEngine['engine'];
@@ -2213,7 +2219,7 @@ it("[CT-06zxe] registered expected values that apply need the rule-test reviewer
           ...confirmed,
           reviewer: 'codex',
           engine: 'codex',
-          model: 'gpt-6-astra',
+          model: 'gpt-6.2-sol',
         },
       }),
     ),
@@ -2243,7 +2249,7 @@ it("[CT-06zxe] registered expected values that apply need the rule-test reviewer
           ...confirmed,
           reviewer: 'codex',
           engine: 'codex',
-          model: 'gpt-6-astra',
+          model: 'gpt-6.2-sol',
         },
       }),
       registered('claude'),
@@ -2295,7 +2301,7 @@ it("[CT-06zxc] renames that hit need the rule-test reviewer's confirmation, pair
           ...confirmed,
           reviewer: 'codex',
           engine: 'codex',
-          model: 'gpt-6-astra',
+          model: 'gpt-6.2-sol',
         },
       }),
     ),
@@ -2327,7 +2333,7 @@ it("[CT-06zxc] renames that hit need the rule-test reviewer's confirmation, pair
           ...confirmed,
           reviewer: 'codex',
           engine: 'codex',
-          model: 'gpt-6-astra',
+          model: 'gpt-6.2-sol',
         },
       }),
       renamed('claude'),
@@ -2484,7 +2490,7 @@ const modEvidence =
       {
         reviewer: 'codex',
         engine: 'codex',
-        model: 'gpt-6-astra',
+        model: 'gpt-6.2-sol',
         verdict: 'pass',
         open_s0_s1: 0,
         checklist_complete: true,
@@ -3000,7 +3006,7 @@ it('[CT-06zzzk] the B2-04zx shape: every row of both .each tables declared, only
         {
           reviewer: 'codex',
           engine: 'codex',
-          model: 'gpt-6-astra',
+          model: 'gpt-6.2-sol',
           verdict: 'pass',
           open_s0_s1: 0,
           checklist_complete: true,
@@ -3829,7 +3835,7 @@ it('[CT-06zzzzzr] checkEvidence: rows of it.each(ACTIONS) with ACTIONS from a sa
         {
           reviewer: 'codex',
           engine: 'codex',
-          model: 'gpt-6-astra',
+          model: 'gpt-6.2-sol',
           verdict: 'pass',
           open_s0_s1: 0,
           checklist_complete: true,

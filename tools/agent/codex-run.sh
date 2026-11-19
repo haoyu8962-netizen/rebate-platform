@@ -64,7 +64,7 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then AGENT_ENGINE=codex; fi
 case "${AGENT_ENGINE:-}" in
   codex)
     SCRIPT_NAME=codex-run.sh
-    MODEL='gpt-6-astra'
+    MODEL='gpt-6.2-sol'
     REVIEW_OUT_NAME=review-codex.json
     DONE_EVENT=turn.completed
     ;;
