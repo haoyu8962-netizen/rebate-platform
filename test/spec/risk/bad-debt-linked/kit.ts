@@ -34,6 +34,7 @@ import {
   type Fixture,
   type Kit,
 } from '../../identity/payout-account/kit.ts';
+import { payoutSummary } from '../../identity/step-up-digest/payout-summary.ts';
 import { phone } from '../../identity/sms-codes/kit.ts';
 import { seedWithdrawal } from '../../ledger/admin-adjustments/kit.ts';
 import {
@@ -233,6 +234,8 @@ export async function rebind(kit: Kit, p: Person, payee: string): Promise<void> 
       userId: p.userId,
       alipayLogonId: payee,
       payeeName: NAME,
+      // B1-02zzzb: the step_up_token digest of the account this call saves.
+      stepUpSummary: payoutSummary(kit.crypto, { alipayLogonId: payee }),
     }),
   );
   expect(result, '换绑支付宝（BR-WDR-02 允许）').toMatchObject({ code: 0 });

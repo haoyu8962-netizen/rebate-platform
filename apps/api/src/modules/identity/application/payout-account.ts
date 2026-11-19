@@ -69,6 +69,17 @@
 // write): the verification reservation (payout-bank-card.ts) runs them in its own short
 // transaction before it reserves the day's quota (BR-WDR-02 细则「顺序」).
 //
+// Business digest (B1-02zzzb; BR-ID-08 细则「绑定业务摘要」, BR-WDR-02 细则「保存在用户级锁内」): the
+// command's stepUpSummary is the digest of the payout_account_change step_up_token stage ⑫ passed
+// (the controller always passes it: a string, or null when the claims carry none). Right after
+// the users row lock, before ⓪ and the「same account」answer, the request's account — normalised
+// above exactly as stored — is turned into `p:<payout_method>:<HMAC>` and compared; a different
+// method or account, a WeChat digest or no digest → 10003 (no data), nothing written; being a
+// non-zero answer, the caller's withStepUp releases the token (not consumed). stepUpSummary is
+// required of every caller (a direct service call too): there is no "compare nothing" value, and
+// anything that is not the matching string — null, or a missing value from an untyped caller — is
+// 10003 (fails closed).
+//
 // Cipher AAD and blind-index context of the logon id: payout_accounts.alipay (the card number:
 // payout_accounts.bank_card), the contexts risk's blocklist hashes with (blocklistHmacContexts),
 // so blocklist entries and the partial unique index see the same digest. payee_name stores the
@@ -95,6 +106,7 @@ import {
   maskPayeeName,
 } from '../domain/mask-payout-account.ts';
 import { PHONE_CIPHER_CONTEXT } from '../domain/registration.ts';
+import { digestMatches, payoutAccountDigest } from '../domain/step-up-digest.ts';
 import { createRealnameReader } from '../infra/realname-reader.ts';
 
 export interface PayoutAccountSubject {
@@ -106,7 +118,15 @@ export interface PayoutAccountSubject {
 export interface SaveAlipayCommand extends PayoutAccountSubject {
   readonly alipayLogonId: string;
   readonly payeeName: string;
+  /** B1-02zzzb: the step_up_token's digest (null: none, never matches; file header). */
+  readonly stepUpSummary: string | null;
 }
+
+/**
+ * B1-02zzzb: the step_up_token does not bind this account (BR-ID-08); no data, never stored. The
+ * controller answers it with STEP_UP_FAILURE's status and text (stage ⑫'s 10003 body).
+ */
+export const STEP_UP_MISMATCH = Object.freeze({ code: 10003 } as const);
 
 export type SaveAlipayResult =
   | { readonly code: 0; readonly data: components['schemas']['PayoutAccountAlipay'] }
@@ -116,7 +136,8 @@ export type SaveAlipayResult =
     }
   | { readonly code: 30304 | 30307 | 30308 }
   | { readonly code: 30303; readonly data: { readonly reason: 'payout_account_change_limit' } }
-  | { readonly code: 44001; readonly data: { readonly risk_msg_code: string } };
+  | { readonly code: 44001; readonly data: { readonly risk_msg_code: string } }
+  | typeof STEP_UP_MISMATCH;
 
 /** B1-13f: a bank card whose three-element verification matched; bank data from its BIN. */
 export interface SaveBankCardCommand extends PayoutAccountSubject {
@@ -128,6 +149,8 @@ export interface SaveBankCardCommand extends PayoutAccountSubject {
   readonly cardBin: string;
   /** reserved_at of the verification record this save rests on (file header: B1-27l). */
   readonly attemptReservedAt?: Date;
+  /** B1-02zzzb: the step_up_token's digest (null: none, never matches; file header). */
+  readonly stepUpSummary: string | null;
 }
 
 /** The refusals of the lock phase, shared by both methods and the verification reservation. */
@@ -139,7 +162,8 @@ export type PayoutAccountRefusal =
 export type SaveBankCardResult =
   | { readonly code: 0; readonly data: components['schemas']['PayoutAccountBankCard'] }
   | { readonly code: 20001; readonly data: { readonly fields: readonly string[] } }
-  | PayoutAccountRefusal;
+  | PayoutAccountRefusal
+  | typeof STEP_UP_MISMATCH;
 
 /** The record predates a real-name correction (file header); internal, never a response code. */
 export const ATTEMPT_PREDATES_CORRECTION = Object.freeze({
@@ -405,6 +429,17 @@ export function createPayoutAccountReader(
       return project(current, crypto, remaining(limit, used));
     },
   });
+}
+
+/**
+ * B1-02zzzb (file header): under the users row lock, does the step_up_token's digest bind the
+ * account this request saves? `target` is the normalised account's method and blind index.
+ */
+export function stepUpBindsAccount(
+  stepUpSummary: string | null,
+  target: Pick<PayoutAccountTarget, 'method' | 'hmac'>,
+): boolean {
+  return digestMatches(stepUpSummary, payoutAccountDigest(target.method, target.hmac));
 }
 
 /** The users row lock of the payout saves and the reservation (FOR NO KEY UPDATE, file header). */
@@ -677,6 +712,8 @@ export function createPayoutAccountService(
 
       // The user lock (see the file header for FOR NO KEY UPDATE); everything after is reread.
       const user = await lockPayoutUser(trx, subject);
+      // B1-02zzzb: the token's digest first, inside the lock (file header).
+      if (!stepUpBindsAccount(command.stepUpSummary, target)) return STEP_UP_MISMATCH;
       const checks = await payoutAccountChecks(trx, deps, subject, user, target, limit, (h) =>
         realname.verified(h, { app_id: subject.appId, user_id: subject.userId }),
       );
@@ -735,6 +772,8 @@ export function createPayoutAccountService(
       };
 
       const user = await lockPayoutUser(trx, subject);
+      // B1-02zzzb: the token's digest first, inside the lock (file header).
+      if (!stepUpBindsAccount(command.stepUpSummary, target)) return STEP_UP_MISMATCH;
       const checks = await payoutAccountChecks(trx, deps, subject, user, target, limit, (h) =>
         realname.verified(h, { app_id: subject.appId, user_id: subject.userId }),
       );

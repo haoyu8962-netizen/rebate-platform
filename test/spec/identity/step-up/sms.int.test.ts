@@ -68,7 +68,15 @@ it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'
     const data = accepted<Schema<'StepUpData'>>(
       kit,
       STEP_UP,
-      await f.post(STEP_UP, { action, code }),
+      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary
+      // of the account it is for; the other actions take none.
+      await f.post(STEP_UP, {
+        action,
+        code,
+        ...(action === 'payout_account_change'
+          ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }
+          : {}),
+      }),
     );
     expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({
       action,

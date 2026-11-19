@@ -24,6 +24,7 @@ import type * as Sessions from '../../../../apps/api/src/modules/identity/applic
 import type * as Tokens from '../../../../apps/api/src/modules/identity/application/tokens.ts';
 import type * as StepUp from '../../../../apps/api/src/modules/identity/application/step-up-verify.ts';
 import type * as Risk from '../../../../apps/api/src/modules/risk/index.ts';
+import { summaryClaim } from '../step-up-digest/payout-summary.ts';
 import { seedUser } from '../registration/kit.ts';
 import { buildApp } from '../sms-codes/http-kit.ts';
 import { memoryLogger } from '../sms-codes/kit.ts';
@@ -523,7 +524,12 @@ export async function client(
         ${Buffer.from(crypto.encrypt('1990-01-01', 'realname.birth_date'))}, 'fixture',
         ${f.clock.now()})`.execute(f.db);
     },
-    async stepUp() {
+    /**
+     * B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): the token carries the digest of the account
+     * `stepUpBody` saves (when omitted: BODY, the body send() puts), as POST /v1/auth/step-up
+     * signs it.
+     */
+    async stepUp(stepUpBody?: object) {
       const jti = randomUUID();
       const token = await access.signScopedToken(f.keys, {
         audience: 'step_up',
@@ -534,6 +540,7 @@ export async function client(
           device_id: device.device_id,
           action: 'payout_account_change',
           jti,
+          ...summaryClaim(f.crypto, stepUpBody, BODY),
         },
         issuedAt: Math.floor(f.clock.now().getTime() / 1000),
         ttlSeconds: 300,

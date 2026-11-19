@@ -191,7 +191,8 @@ it.each(['bin', 'verifier'] as const)(
     const fallback = await open(database, redis, absent);
     try {
       const f = await fixture(fallback);
-      const token = await f.stepUp();
+      // B1-02zzzb: the token is for the Alipay save that succeeds (50301 is judged before it).
+      const token = await f.stepUp('payout_account_change', ALIPAY);
       envelope(fallback, await f.submit(bankBody(), randomUUID(), token), 50301);
       expect(await f.attempts()).toEqual([]);
       expect(fallback.verify).not.toHaveBeenCalled();
@@ -256,20 +257,20 @@ it('[AC-B1-13f#7] 相同当前银行卡即使月额度用尽仍成功，不写�
 it('[AC-B1-13f#8] 默认每日三次，不一致保留占额，超限 30303 verify_limit 不调用且不消费 token', async () => {
   const f = await fixture(kit);
   kit.verify.mockResolvedValue('mismatch');
-  const token = await f.stepUp();
+  let token = await f.stepUp();
   for (let i = 0; i < 3; i++) envelope(kit, await f.submit(bankBody(), randomUUID(), token), 30307);
+  // B1-02zzzb: the token binds one account; the digest is compared before the day's quota.
+  token = await f.stepUp('payout_account_change', bankBody(card(2)));
   expect(envelope(kit, await f.submit(bankBody(card(2)), randomUUID(), token), 30303).data).toEqual(
     { reason: 'payout_account_verify_limit' },
   );
   expect(kit.verify).toHaveBeenCalledTimes(3);
   expect(await f.attempts()).toHaveLength(3);
   expect((await f.attempts()).every((row) => row.status === 'mismatched')).toBe(true);
+  token = await f.stepUp('payout_account_change', ALIPAY);
   envelope(kit, await f.submit(ALIPAY, randomUUID(), token));
-  envelope(
-    kit,
-    await f.submit({ ...ALIPAY, alipay_logon_id: 'next@example.com' }, randomUUID(), token),
-    10003,
-  );
+  // B1-02zzzb: the same token, body and a new key again — consumed by the save above.
+  envelope(kit, await f.submit(ALIPAY, randomUUID(), token), 10003);
 });
 
 it.each([0, -1, 1.5, '2', null])(

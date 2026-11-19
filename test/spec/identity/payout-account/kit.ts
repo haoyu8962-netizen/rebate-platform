@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createDb, destroyDb, type DB } from '@couli/db';
 import { sql, type Kysely } from 'kysely';
 import { expect } from 'vitest';
+import { payoutSummary, resavedDigest } from '../step-up-digest/payout-summary.ts';
 
 type Platform = typeof import('../../../../apps/api/src/modules/platform/index.ts');
 type Crypto = typeof import('../../../../apps/api/src/modules/platform/crypto/index.ts');
@@ -208,7 +209,14 @@ export async function fixture(
   return {
     appId,
     uid,
-    command: { appId, userId: uid, alipayLogonId: LOGIN, payeeName: NAME },
+    command: {
+      appId,
+      userId: uid,
+      alipayLogonId: LOGIN,
+      payeeName: NAME,
+      // B1-02zzzb: the step_up_token digest of the account this command saves.
+      stepUpSummary: payoutSummary(kit.crypto, { alipayLogonId: LOGIN }),
+    },
     async get(mode: 'app' | 'h5' | 'guest' = 'app') {
       const session = await kit.db
         .transaction()
@@ -261,7 +269,12 @@ export async function service(kit: Kit) {
 }
 export async function save(kit: Kit, f: Fixture, input: Partial<Fixture['command']> = {}) {
   const app = await service(kit); // In each test, so NotImplemented is a test failure, not a suite hook failure.
-  return kit.db.transaction().execute((trx) => app.save(trx, { ...f.command, ...input }));
+  // B1-02zzzb: the token digest follows the account this call saves, unless the input sets one.
+  return kit.db
+    .transaction()
+    .execute((trx) =>
+      app.save(trx, { ...f.command, ...input, ...resavedDigest(kit.crypto, f.command, input) }),
+    );
 }
 export async function config(kit: Kit, f: Fixture, key: string, value: unknown) {
   await sql`INSERT INTO app.config_items (app_id, key, value, updated_by)

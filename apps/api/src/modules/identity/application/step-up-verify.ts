@@ -27,6 +27,13 @@
 // judging → 50001 and the business does not run; Redis failing while settling → one pino `warn`
 // line, the response is unchanged. Logs never carry the token or its jti.
 //
+// Business digest (B1-02zzzb; BR-ID-08 细则「绑定业务摘要」): ⑫ does not compare the token's
+// `summary` claim. After a passing check it is kept on this request's step-up context, and the
+// handler reads it through the StepUpContext withStepUp hands to `execute` (null: no digest in the
+// claims, or no token was judged), to compare it inside its own business lock; a mismatch there is
+// the business's 10003 and, being a non-zero answer, releases the reservation (not consumed). The
+// digest is never logged.
+//
 // Placement: app.module hands createStepUpCheck's result to RiskModule.forRoot's
 // `beforeRateLimit` list, so it is judged after ④a and ⑤ and before ⑬.
 //
@@ -45,6 +52,7 @@ import {
   type RootLogger,
   type TokenPrincipal,
 } from '../../platform/index.ts';
+import { STEP_UP_FAILURE } from '../domain/step-up-digest.ts';
 import { createStepUpTokenVerifier, type TokenKeyProvider } from './access-tokens.ts';
 import { RiskModule } from '../../risk/index.ts';
 
@@ -80,10 +88,22 @@ return 1
 interface StepUpScope {
   readonly request: StepUpHttpRequest;
   settle?: (success: boolean) => Promise<void>;
+  /** The judged token's digest claim (null: none); set only by a passing stage ⑫. */
+  summary?: string | null;
+}
+
+/** What the business handler of a withStepUp call may read of the judged step_up_token. */
+export interface StepUpContext {
+  /**
+   * The business digest of the token stage ⑫ passed in this request (BR-ID-08 细则「绑定业务摘要」);
+   * null when its claims carry none or no token was judged. Read inside the business lock.
+   */
+  summary(): string | null;
 }
 
 const SCOPE = new AsyncLocalStorage<StepUpScope>();
-const required = () => new RequestRejection(10003, 403, '需要二次验证');
+const required = () =>
+  new RequestRejection(STEP_UP_FAILURE.code, STEP_UP_FAILURE.status, STEP_UP_FAILURE.msg);
 const unavailable = () => new RequestRejection(50001, 500, '服务端错误');
 
 /**
@@ -176,6 +196,7 @@ export function createStepUpCheck(options: StepUpCheckOptions): IdempotencyPostM
     }
     if (reserved === 0) throw required();
     if (reserved !== 1) throw unavailable();
+    scope.summary = claims.summary;
     scope.settle = async (success) => {
       try {
         await options.redis!.namespace('step_up').eval(SETTLE, {
@@ -195,19 +216,21 @@ export function createStepUpCheck(options: StepUpCheckOptions): IdempotencyPostM
  * controller's own idempotency.executeInTransaction call. Runs it with this request's step-up
  * context (what stage ⑫ judges), then settles a reservation stage ⑫ made: the response of source
  * 'handler' with HTTP 2xx and code 0 consumes the token; any other response or a rejection releases
- * this request's reservation (a rejection is rethrown unchanged). A replay or an envelope built by
+ * this request's reservation (a rejection is rethrown unchanged). `execute` receives the
+ * StepUpContext of this request (B1-02zzzb: the judged token's business digest). A replay or an envelope built by
  * the idempotency module made no reservation and settles nothing. The response is returned
  * unchanged.
  */
 export function withStepUp(
   request: StepUpHttpRequest,
-  execute: () => Promise<IdempotentResponse>,
+  execute: (context: StepUpContext) => Promise<IdempotentResponse>,
 ): Promise<IdempotentResponse> {
   const scope: StepUpScope = { request };
+  const context: StepUpContext = Object.freeze({ summary: () => scope.summary ?? null });
   return SCOPE.run(scope, async () => {
     let success = false;
     try {
-      const response = await execute();
+      const response = await execute(context);
       if (response.source === 'handler' && response.status >= 200 && response.status < 300) {
         const envelope: unknown = JSON.parse(response.body);
         success =

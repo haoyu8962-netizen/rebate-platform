@@ -73,6 +73,7 @@ import {
   type RequestCheckInput,
   type TokenPrincipal,
 } from '../../platform/index.ts';
+import { STEP_UP_FAILURE } from '../domain/step-up-digest.ts';
 
 /** BR-ID-07: an access token is valid for 2 hours. */
 export const ACCESS_TOKEN_TTL_SECONDS = 2 * 60 * 60;
@@ -206,6 +207,11 @@ export interface StepUpClaims {
   readonly action: string;
   readonly jti: string;
   readonly exp: number;
+  /**
+   * B1-02zzzb: the business digest claim (`summary`, BR-ID-08 细则「绑定业务摘要」) when it is a
+   * string, else null. Compared by the business inside its lock, never here.
+   */
+  readonly summary: string | null;
 }
 
 /** Same local keys / issuer as access tokens, but a separate audience and rejection code. */
@@ -215,7 +221,8 @@ export function createStepUpTokenVerifier(
 ) {
   const publicKeys = new Map(keys.publicKeys);
   return async (token: string): Promise<StepUpClaims> => {
-    const reject = () => new RequestRejection(10003, 403, '需要二次验证');
+    const reject = () =>
+      new RequestRejection(STEP_UP_FAILURE.code, STEP_UP_FAILURE.status, STEP_UP_FAILURE.msg);
     let payload: JWTPayload;
     try {
       ({ payload } = await jwtVerify(
@@ -252,7 +259,8 @@ export function createStepUpTokenVerifier(
     ) {
       throw reject();
     }
-    return Object.freeze({ uid, app_id, device_id, action, jti, exp });
+    const summary = typeof payload['summary'] === 'string' ? payload['summary'] : null;
+    return Object.freeze({ uid, app_id, device_id, action, jti, exp, summary });
   };
 }
 
