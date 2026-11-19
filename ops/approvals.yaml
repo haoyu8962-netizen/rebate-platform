@@ -687,3 +687,9 @@ approvals:
     granted: true
     date: '2026-11-19'
     note: '负责人 2026-11-19 18:22 前在编排会话原话「Codex 对抗评审模型请修改为 gpt-6.2 sol」（D10-2134）。编排已把本机 codex-cli 升到 0.169.1，按 codex-run.sh 评审整套参数实测 gpt-6.2-sol 与 gpt-6-astra 都 rc=0、按 schema 出结果。过渡：证据评审条目没有时间字段，切换前记 model gpt-6-astra 的 codex 条目过渡期仍认（evidence-check 单列过渡常量），codex 条目记其他名字、claude-independent 条目记任一 Codex 模型名照旧拒；在途单落完后由 FU-CODEX-MODEL-ASTRA-SUNSET 删旧名。落地任务 CT-06zzzzzs。'
+  - id: 112
+    row: 4
+    title: 'B2-02x 任务专属一次性追加：写规则测试第 5 次——只新增三处：D10-2084 凭证来源号格式与两次回正两个号、D10-2092 ⑤ / D10-2097 余额更正站内信的发送条件、plan.test.ts 四处 propParams 用例补显式超时；其余用例与期望值不动，随后先红与 spec-test 增量一轮'
+    granted: true
+    date: '2026-11-20'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测次数属门禁流程小改动），D10-2149，先例第 107 条（B2-02x 第 4 次）、第 110 条：前 4 次不是连续不过（第 4 次后先红合格、spec-test r3 通过），这次是之后负责人定了「余额更正要通知」（D10-2091 / 2092 / 2097）与来源号口径（D10-2084），规则变了要补测试。范围写死（任务书 couli-runs/B2-02x/brief-test5-draft.md §7）：① 来源号为 recalc:<recon_diff_id>:<重算后余额版本号>，钉格式，并钉同一差错单两次回正得两个不同号；② 重算在同一事务里经 notification 的 recordBalanceCorrectedMessage 写站内信：调增、调减各写一条，只有冻结变化（可提现前后相同）、前后相同、拒绝时不写，users.status 为 deleting / deleted 不写，注销冷静期照写，只站内信、不推送不发短信；若钉默认正文，以 B2-02za 落地后的「可提现余额」常量为准，不钉旧词；③ test/spec/ledger/admin-recon-balance-recalc/plan.test.ts 第 238、260、267、282 行四处 propParams() 用例补 `}, 900_000);`（D10-750），只加超时参数。不改已有用例的期望值、不删断言、不动其余用例与文件。全新无上下文的独立 Claude（claude-run.sh，approvals 第 36 条），证据记 claude-independent；照常不调 bump-attempt（按编排例外轮记），次数上限与熔断（10 次独立调用）不变；写完先红核对与 spec-test 增量一轮，再报编排。'
