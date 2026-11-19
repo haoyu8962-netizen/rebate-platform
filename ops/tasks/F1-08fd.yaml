@@ -5,7 +5,7 @@ type: impl
 # 2026-11-18 入账（前端线 fe，编排 D10-1994 甲类 (二)：缺口清单 #2 #4 #5 合一张、#3 只做页签不带计数；排在 F1-08fc 之后，D10-2060 让等 F1-08ar 期间先做）。规格 design/specs/admin-ledger.md §2「导出记录筛选」「导出记录列表」、§6「生成中行轮询进度」。
 # 范围：apps/admin/src/pages/exports/**（F1-10j 导出记录页）。① 筛选：来源页面 Select（export_resource 全部值，中文名取 texts/exports.ts 的 resource 表，含 F1-08fb 补的 ledger「余额流水」）与发起时间 RangePicker（created_at 的 from 含、to 不含，ISO 8601 北京时间换算照契约），按【查询】生效后带进 GET /admin/v1/exports；② 状态由现在的 Select 改为 Tabs（全部 / 排队中 / 生成中 / 已完成 / 失败 / 已过期 / 已取消），**不带 Badge 计数**（契约无计数字段，D10-1994）；③ 列表里有 pending / running 的行时按固定间隔（取值写成常量、不写死在多处）重读当前页，显示 progress（有值时百分比），全部到终态后停止重读；页面卸载、切走页签或筛选变化时清掉定时器；重读失败不打断、下次再试，不弹错误。
 # 不做：【重新导出】——AdminExport 列表项只有 filters_summary（展示用文字），没有原始 filters，adminRetryExport 只收 failed，前端无法按原 resource 与 filters 重建任务；已报编排，需契约补字段或新接口，另开单。
-# 风险级：apps/admin/src/pages/exports/** 属 RV1（apps/admin/**），general 评审；规则测试与首轮评审由无上下文的独立 Claude（D10-2003）。
+# 风险级：apps/admin/src/pages/exports/** 不在 RV1 白名单，工具判 RV2，走 money 评审（D10-2074，置 done 时更正）；规则测试与评审由无上下文的独立 Claude（D10-2003）。
 refs: [BR-ID-42]
 refs_hash:
   BR-ID-42: 2f9cd1710ed3
@@ -20,5 +20,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-exports-filters/**'
-status: todo
-pr: null
+status: done
+pr: 319
