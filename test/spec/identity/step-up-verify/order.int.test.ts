@@ -29,16 +29,16 @@ afterAll(async () => {
 
 it('[AC-B1-02y#18] 版本过低（④a 10405）先命中时不校验、不占用 token；升级后沿用原键通过，之后该 token 不可再用', async () => {
   const u = await user(f, { minVersion: '2.0.0' });
-  const token = await u.mint('withdraw');
+  const token = await u.mint('phone_change');
   const key = randomUUID();
-  const old = await u.send('withdraw', { stepUp: token, key, version: '1.0.0' });
+  const old = await u.send('phone', { stepUp: token, key, version: '1.0.0' });
   failed(old, 403, 10405);
   // 10405 wins over a missing or invalid token as well: ⑫ comes later.
-  failed(await u.send('withdraw', { stepUp: null, version: '1.0.0' }), 403, 10405);
+  failed(await u.send('phone', { stepUp: null, version: '1.0.0' }), 403, 10405);
   expect(u.handled()).toBe(0);
-  succeeded(await u.send('withdraw', { stepUp: token, key, version: '2.0.0' }));
+  succeeded(await u.send('phone', { stepUp: token, key, version: '2.0.0' }));
   expect(u.handled()).toBe(1);
-  await stepUpRequired(await u.send('withdraw', { stepUp: token, version: '2.0.0' }));
+  await stepUpRequired(await u.send('phone', { stepUp: token, version: '2.0.0' }));
   expect(u.handled()).toBe(1);
 });
 
@@ -57,18 +57,18 @@ it('[AC-B1-02y#19] 封禁（⑤ 10006）先命中时不占用 token；解封后�
       }),
     );
   await set('banned');
-  const token = await u.mint('withdraw');
+  const token = await u.mint('phone_change');
   const key = randomUUID();
-  failed(await u.send('withdraw', { stepUp: token, key }), 403, 10006);
+  failed(await u.send('phone', { stepUp: token, key }), 403, 10006);
   // Without a token: on a BR-ID-01 global-order operation ⑤ answers before ⑫ (B1-02zk, D10-265).
   failed(await sendPhone(f, u, { stepUp: null }), 403, 10006);
   expect(u.handled()).toBe(0);
   await set('normal');
   // The same request once unbanned reaches ⑫: 10003 was really behind 10006.
   failed(await sendPhone(f, u, { stepUp: null }), 403, 10003);
-  succeeded(await u.send('withdraw', { stepUp: token, key }));
+  succeeded(await u.send('phone', { stepUp: token, key }));
   expect(u.handled()).toBe(1);
-  await stepUpRequired(await u.send('withdraw', { stepUp: token }));
+  await stepUpRequired(await u.send('phone', { stepUp: token }));
   expect(u.handled()).toBe(1);
 });
 

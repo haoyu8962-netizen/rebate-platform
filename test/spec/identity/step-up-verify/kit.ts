@@ -51,6 +51,7 @@ import { envelopeValidator } from '../../platform/errors/kit.ts';
 import { apiRequire, ROOT, sign } from '../../risk/signature/kit.ts';
 import { closeKit, openKit, seedUser, type Kit } from '../registration/kit.ts';
 import { buildApp } from '../sms-codes/http-kit.ts';
+import { detachPhoneReply, fillPhoneBody } from '../../payout/withdraw-no-step-up/phone-stub.ts';
 import { acquireRedis, memoryLogger } from '../sms-codes/kit.ts';
 
 export const INSTANT = '2026-10-16T02:00:00.000Z';
@@ -59,6 +60,8 @@ export const TTL_SECONDS = 300;
 export const OPERATIONS = {
   deletion: { path: '/v1/me/deletion', action: 'account_deletion', operationId: 'requestDeletion' },
   withdraw: { path: '/v1/withdrawals', action: 'withdraw', operationId: 'createWithdrawal' },
+  // B1-02zzzc (编排裁定 D10-1699): the phone change (BR-ID-01 global order: ④a and ⑤ before ⑫).
+  phone: { path: '/v1/me/phone', action: 'phone_change', operationId: 'bindPhone' },
 } as const;
 export type OperationName = keyof typeof OPERATIONS;
 export type StepUpAction =
@@ -240,7 +243,9 @@ export async function openFixture(): Promise<Fixture> {
   // when it lands, this fixture needs its own test change instead of a silent swap.
   // B2-05i: createWithdrawal's real handler takes only @Req() too; the fixture body below is
   // contract-valid for it (CreateWithdrawalRequest), so the swap keeps every signal the tests read.
-  const swappable: Record<OperationName, boolean> = { deletion: true, withdraw: true };
+  // B1-02zzzc (D10-1699): bindPhone's real handler takes @Req() and @Res(); detachPhoneReply (below)
+  // drops the @Res() argument for the stub, and the fixture body is contract-valid (BindPhoneRequest).
+  const swappable: Record<OperationName, boolean> = { deletion: true, withdraw: true, phone: true };
   const names = Object.keys(OPERATIONS) as OperationName[];
   const implemented = names.filter((name) =>
     Object.hasOwn(routes.CONTRACT_ROUTE_SCHEMAS, OPERATIONS[name].operationId),
@@ -255,6 +260,7 @@ export async function openFixture(): Promise<Fixture> {
   const stubPaths: Record<OperationName, string> = {
     deletion: 'me/deletion',
     withdraw: 'withdrawals',
+    phone: 'me/phone',
   };
   common.Controller('v1')(PlannedStepUpEndpoints);
   for (const name of planned) {
@@ -341,6 +347,8 @@ export async function openFixture(): Promise<Fixture> {
               if (!full.includes(route.slice(1))) continue;
               // The real method takes only @Req(); anything else fails the request (500), never
               // runs the stub on a guessed argument.
+              // B1-02zzzc (D10-1699): bindPhone also takes @Res(); detachPhoneReply below removes that
+              // argument from the stub's route metadata, so Nest calls it with @Req() only.
               const stub: Handler = function (...args: unknown[]) {
                 const request = args[0];
                 if (
@@ -354,6 +362,7 @@ export async function openFixture(): Promise<Fixture> {
               };
               for (const key of metadata.getOwnMetadataKeys(original))
                 metadata.defineMetadata(key, metadata.getOwnMetadata(key, original), stub);
+              detachPhoneReply({ name, metatype, method, stub, restore, constants, common });
               Object.defineProperty(proto, method, { ...descriptor, value: stub });
               const owner = proto;
               restore.push(() => Object.defineProperty(owner, method, descriptor));
@@ -561,6 +570,7 @@ export async function user(
       });
     },
     send(operation, sendOptions) {
+      fillPhoneBody(operation, sendOptions);
       const path = OPERATIONS[operation].path;
       const raw = JSON.stringify(
         sendOptions.body ??
@@ -601,6 +611,8 @@ export async function user(
  * unlike POST /v1/me/deletion (whitelisted) and POST /v1/withdrawals (BR-WDR-03's own order). The
  * body is contract-valid (BindPhoneRequest); its handler is not the stub, so handled() is not
  * counted.
+ * B1-02zzzc (D10-1699): the route's handler is now the stub (OPERATIONS.phone), so a request that
+ * reaches it counts in handled() like User.send('phone').
  */
 export function sendPhone(f: Fixture, u: User, options: SendOptions): Promise<WireResponse> {
   const path = '/v1/me/phone';

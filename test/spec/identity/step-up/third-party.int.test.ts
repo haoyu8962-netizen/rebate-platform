@@ -159,7 +159,9 @@ it.each(['uid', 'device', 'action', 'provider'] as const)(
       );
     } else {
       const changed =
-        field === 'action' ? { ...body, action: 'withdraw' } : oauthBody(data.attempt_id, 'apple');
+        field === 'action'
+          ? { ...body, action: 'phone_change' }
+          : oauthBody(data.attempt_id, 'apple');
       rejected(kit, STEP_UP, await f.post(STEP_UP, changed), 20004);
     }
     expect(kit.exchange).not.toHaveBeenCalled();
