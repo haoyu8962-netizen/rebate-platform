@@ -233,6 +233,25 @@ export const KEPT: readonly Case[] = [
       modify_existing: [modifyOf(MIX, T2)],
     }),
   ),
+  // spec-test r1 S1: the only covering entry names another rule-test file of the task (OUT), so
+  // nothing covers MIX's import; an entry must name the file itself to cover its change.
+  mixCase(
+    'the change outside the tests uncovered: the only red_exempt_outside entry names another rule-test file (OUT)',
+    MIX_HEAD,
+    ledger({
+      red_exempt_outside: [outsideOf(OUT)],
+      red_exempt: [exemptOf(MIX, T1), exemptOf(MIX, T3)],
+      modify_existing: [modifyOf(MIX, T2)],
+    }),
+  ),
+  mixCase(
+    'the change outside the tests uncovered: the only scope: support entry names another rule-test file (OUT)',
+    MIX_HEAD,
+    ledger({
+      red_exempt: [exemptOf(MIX, T1), exemptOf(MIX, T3)],
+      modify_existing: [supportOf(OUT), modifyOf(MIX, T2)],
+    }),
+  ),
   mixCase(
     'a test removed (T3)',
     testFile([B1, B2_HEAD], true),

@@ -74,7 +74,7 @@ it('[CT-06zzzzzr#2] the change outside the tests may be covered by red_exempt_ou
 });
 
 it('[CT-06zzzzzr#3] anything else keeps the file expected: an undeclared unchanged test, a new, removed or moved test, an uncovered change outside the tests, a changed test declared red_exempt only, a changed block not declared, a redundant or dangling modify_existing entry', () => {
-  expect(KEPT.length).toBeGreaterThanOrEqual(9);
+  expect(KEPT.length).toBeGreaterThanOrEqual(11);
   for (const c of KEPT) {
     const read = reader(c.base, c.head);
     expect(mixedOf([MIX], read, c.ledger), c.name).toEqual([]);
