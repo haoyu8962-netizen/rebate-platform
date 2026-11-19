@@ -1,0 +1,37 @@
+{
+  "risk_note": "QA-04a (= STAGING-SMOKE-a; D10-2111 / D10-2112 / D10-2119; test-change, tester none). Adds test/staging-smoke/ only: enroll-admin.ts (one-time enrolment of the staging smoke admin account with a real authenticator TOTP — first login → random 32-char password → totp secret → bind with a computed code → admin.json → re-login on a fresh time step + logout; resumable: saved before the password change and before the bind; a resume whose bind already went through is proven with the stored values and marked bound; resume-login advice by business code: 10008 delete admin.json and rerun with the initial password, 10009 / others keep admin.json; one wrong code stops, nothing retried), lib/totp.ts (RFC 6238 SHA-1 / 30 s / 6 digits, strictly increasing steps), lib/node-files.ts (target.json must be env staging, https bare origin, host with a staging label; admin.json 0600 in a 0700 dir, atomic write, refuses non-regular / loose / oversized files), README.md. No application code, no server backdoor, not in verify tests or CI; output carries step names, HTTP status and business codes only. Test machine on the final content: verify:fast green.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Fresh independent Claude via claude-run.sh (approvals #27 / #36), three rounds: r1 pass with one S2 (bind done on the server but its answer lost → resume stuck, README advised deleting admin.json) fixed; r2 incremental pass with one S2 (every resume-login failure advised deleting admin.json) fixed by business code; r3 incremental pass with no findings. Validate ok, positions unchanged (couli-runs/QA-04a/review-money-r1..r3.json)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "QA-04a",
+  "spec_commit": "0d500d7bf650cf5028a27fe92080020330858d12",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b16f8eeaf84793aafe2ff5d015c1bb17941ecee8",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}
