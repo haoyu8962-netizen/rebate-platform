@@ -367,4 +367,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/identity/step-up-digest/**'
-status: todo
+status: done
+pr: 344
