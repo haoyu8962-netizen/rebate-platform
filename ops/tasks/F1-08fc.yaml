@@ -26,7 +26,7 @@ modify_existing:
     reason: rule_change
     br: [BR-ID-42]
     ruling: D10-1981
-    note: '编排 D10-1981 / D10-1988：adminCreateExport 无幂等键，带外壳的 5xx 可能发生在任务写入之后，归结果未知、提示先到【导出记录】核对，不再报「未能创建」；期望提示由「导出任务未能创建，请稍后再试。」改为「导出任务可能已创建，请先到【导出记录】核对，再决定是否重新导出。」，其余断言（POST 次数、不自动重发）不变'
+    note: '编排 D10-1981 / D10-1988：adminCreateExport 无幂等键，带外壳的 5xx 可能发生在任务写入之后，归结果未知、提示先到【导出记录】核对，不再报「未能创建」；期望提示由「导出任务未能创建，请稍后再试。」改为「导出任务可能已创建，请先到【导出记录】核对，再决定是否重新导出。」，其余断言（POST 次数、不自动重发）不变；负责人 2026-11-18 15:28 回「可以」（D10-2098，ops/approvals.yaml 第 109 条）'
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-ledger-export/errors.test.ts'

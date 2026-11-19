@@ -669,3 +669,9 @@ approvals:
     granted: true
     date: '2026-11-18'
     note: '负责人 2026-11-18 13:00 在编排会话回复原话「可以改」（D10-2083）。范围只限 couli-runs/F1-08as/error1-change.diff 里这一处场景（test/spec/frontend/admin-withdrawal-manual-paid/recovery.test.ts 的 [AC-F1-08al-ERROR#1]，loseFirst=true 且 scenario 为 10403 admin_permission_denied 的分支）的断言改动；该用例其余三个场景与其他任何冻结断言、期望值不在这次同意之内。依据 D10-2060 / D10-2061 收窄规则（只有先于幂等回放判、又随状态变化的拒绝在结果未知后重试时保持未知），台账 F1-08as 的 modify_existing（rule_change，br BR-WDR-16）。'
+  - id: 109
+    row: 4
+    title: 'F1-08fc：负责人同意改冻结用例 [AC-F1-08fb-ERROR#6] 的期望提示——余额流水页导出收到带统一外壳的 5xx，由「导出任务未能创建，请稍后再试。」改为按结果未知提示「导出任务可能已创建，请先到【导出记录】核对，再决定是否重新导出。」'
+    granted: true
+    date: '2026-11-18'
+    note: '负责人 2026-11-18 15:28 在编排会话回复原话「可以」（D10-2098）；编排问的原话是「F1-08fc 导出遇到服务器错误时，提示改成『导出任务可能已创建，请先到【导出记录】核对，再决定是否重新导出』，可以吗？」。范围只限 test/spec/frontend/admin-ledger-export/errors.test.ts 的 [AC-F1-08fb-ERROR#6] 里这一句期望提示及台账已登的改标题（retitle_to）；该用例 POST 次数与不自动重发两条断言不变；10403、20001、其他 4xx、网络错误与无法解析的分类不动；其他任何冻结断言与期望值不在这次同意之内。台账 F1-08fc 的 modify_existing（rule_change，br BR-ID-42，D10-1981 / D10-1988）。'
