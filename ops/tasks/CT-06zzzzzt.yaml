@@ -1,0 +1,23 @@
+id: CT-06zzzzzt
+repo: rebate-platform
+title: 'CT-06zzzzzt（FU-EACH-KIT-TABLE-ANNOTATED）：先红 / 证据检查展开同目录 kit 导出表时，跳过名字与 = 之间的顶层类型注解（export const NAME: T[] = [ … ]），其余条件不变（D10-2148）'
+type: guard-change
+# 2026-11-20 w1 入账（编排 D10-2148，排在 CT-06zzzzzs 合并之后、B1-02zzzc 之前）。起因：be 的 B2-02za 里 texts.ts 的 AMOUNT_VECTORS 写成带类型注解的 export const，modify_existing 的 it.each(AMOUNT_VECTORS) 块因 exportedTable 不认注解而报 cannot be expanded for certain。注解不改变表内容，属展开逻辑的小缺口，不是放宽。
+# 范围：tools/guard/lib/test-blocks.ts 的 exportedTable（CT-06zzzzzi / CT-06zzzzzr 读同目录 kit 顶层 export const 字面量数组的那段）在名字与 = 之间遇到顶层类型注解时跳过它再取右侧数组；注解按括号 / 尖括号 / 方括号 / 花括号嵌套与字符串整体跳过，注解里出现的 =（默认类型参数、箭头函数类型的 =>）不得当作赋值号误切。其余条件一字不变：同目录、一层导入、顶层 const、行全是字面量（可带 as const）。red-check 与 evidence-check 共用同一函数，无需各自改。
+# 不许放宽：带注解但行里有非字面量、let / var、函数调用结果、跨目录、两层（再导出）导入时照旧报 cannot be expanded for certain；现有用例一条不改。
+# 规则测试（独立 Claude 写，test_paths 新目录）至少钉：带注解（T[]、readonly T[]、Array<T>、ReadonlyArray<{ a: number; b: string }> 等）的字面量表可展开，且展开结果与去掉注解时逐行相同；带注解 + 非字面量行 / let / 调用 / 跨目录 / 两层导入仍拒；注解里含 =（如 Record<string, (x: number) => string>、带默认类型参数的泛型）时不被误切、结果正确。碰 tools/**：评审过后编排按 approvals 第 16 条加标签。
+refs: []
+refs_hash: {}
+deps: [CT-06zzzzzr]
+paths:
+  - 'tools/guard/lib/test-blocks.ts'
+  - 'tools/guard/lib/test-blocks.test.ts'
+  - 'ops/tasks/CT-06zzzzzt.yaml'
+test_paths:
+  - 'test/spec/ci/each-kit-table-annotated/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/each-kit-table-annotated/**'
+status: todo
