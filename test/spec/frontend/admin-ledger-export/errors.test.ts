@@ -124,12 +124,12 @@ it(
 );
 
 it(
-  '[AC-F1-08fb-ERROR#6] HTTP 500 带统一失败外壳是确定失败，不冒充网络结果未知，不自动重发',
+  '[AC-F1-08fb-ERROR#6] HTTP 500 带统一失败外壳也按结果未知（任务可能已建），提示先核对导出记录，不自动重发',
   { timeout: 60_000 },
   async () => {
     const server = await failedThenManualExport(
       () => failure(50001, null, '服务暂时不可用'),
-      '导出任务未能创建，请稍后再试。',
+      '导出任务可能已创建，请先到【导出记录】核对，再决定是否重新导出。',
     );
     expect(server.exportPosts()).toHaveLength(2);
   },
@@ -167,6 +167,42 @@ it(
       () => Response.json({ accepted: true }, { status: 202 }),
       '导出任务可能已创建，请先到【导出记录】核对，再决定是否重新导出。',
     );
+    expect(server.exportPosts()).toHaveLength(2);
+  },
+);
+
+it(
+  '[AC-F1-08fc-ERROR#1] HTTP 503 带统一失败外壳同样按结果未知，不报未能创建，不自动重发',
+  { timeout: 60_000 },
+  async () => {
+    // FU-F108FB-5XX-AS-UNKNOWN: adminCreateExport has no idempotency key; a 5xx may come after
+    // the task was written, so any enveloped 5xx is shown as "may exist, check 【导出记录】".
+    const server = await failedThenManualExport(
+      () =>
+        Response.json(
+          { code: 50001, msg: '服务暂时不可用', trace_id: '0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6c' },
+          { status: 503 },
+        ),
+      '导出任务可能已创建，请先到【导出记录】核对，再决定是否重新导出。',
+    );
+    expect(ownTexts(document.body)).not.toContain('导出任务未能创建，请稍后再试。');
+    expect(server.exportPosts()).toHaveLength(2);
+  },
+);
+
+it(
+  '[AC-F1-08fc-ERROR#2] HTTP 500 带统一外壳但 code 为 0、没有任务，也按结果未知，不报未能创建，不自动重发',
+  { timeout: 60_000 },
+  async () => {
+    const server = await failedThenManualExport(
+      () =>
+        Response.json(
+          { code: 0, msg: 'ok', data: null, trace_id: '0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6d' },
+          { status: 500 },
+        ),
+      '导出任务可能已创建，请先到【导出记录】核对，再决定是否重新导出。',
+    );
+    expect(ownTexts(document.body)).not.toContain('导出任务未能创建，请稍后再试。');
     expect(server.exportPosts()).toHaveLength(2);
   },
 );
