@@ -32,6 +32,8 @@
 // --money (资金评审清单必填): the seven checklist items are present exactly once, each with a
 //   `file:line` and a note; with --diff-base every cited line lies inside the diff hunks of
 //   that file (working tree of --cwd compared with the base ref, untracked files included).
+//   An `na` item may carry no position (file "" and line 0); an `na` position outside the diff
+//   is a warning, not an error (D10-2086).
 //
 // Exit codes: 0 valid, 1 invalid (problems on stderr, or as JSON with --json), 2 usage or
 // internal error.
@@ -311,11 +313,22 @@ export function reviewProblems(
     }
     review.checklist.forEach((c, i) => {
       const at = `checklist[${i}] (${c.item})`;
-      if (c.file.trim() === '' || c.line < 1) {
+      // An `na` item carries no position (file "" and line 0, review-money.md); an `na` position
+      // outside the diff is dropped with a warning instead of invalidating the review (D10-2086).
+      const na = c.status === 'na';
+      if (na && c.file === '' && c.line === 0) {
+        // No position: nothing to check against the diff.
+      } else if (c.file.trim() === '' || c.line < 1) {
         errors.push(`${at}: needs file and line >= 1 (规划/11 §3.3)`);
       } else if (opts.lineChecker !== undefined) {
         const result = opts.lineChecker(c.file, c.line);
-        if (!result.ok) errors.push(`${at}: ${c.file}:${c.line} ${result.reason}`);
+        if (!result.ok && na) {
+          warnings.push(
+            `${at}: status "na" cites ${c.file}:${c.line}, ${result.reason}; the position is dropped and does not invalidate the review`,
+          );
+        } else if (!result.ok) {
+          errors.push(`${at}: ${c.file}:${c.line} ${result.reason}`);
+        }
       }
       if (c.note.trim() === '') errors.push(`${at}: note is empty (state what was checked)`);
     });
