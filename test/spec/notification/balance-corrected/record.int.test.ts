@@ -21,7 +21,8 @@ import {
   recordBalanceCorrectedMessage,
   rowsOf,
 } from './db-kit.ts';
-import { CODE, TITLE, bodyOf } from './texts.ts';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- B2-02za: bodyOf keeps the old wording and is no longer used here; this frozen file may only gain tokens, so the name stays (FU)
+import { CODE, TEMPLATE_WITHDRAWABLE, TITLE, bodyOf } from './texts.ts';
 
 let database: TestDatabase;
 let db: Kysely<DB>;
@@ -62,7 +63,7 @@ it('[AC-B2-02z#8] 写入：一条 notify_logs（站内信渠道、success、去�
     user_id: m.uid,
     code: CODE,
     title: TITLE,
-    body: bodyOf('¥10', '-¥12.34'),
+    body: TEMPLATE_WITHDRAWABLE.replace('{before}', '¥10').replace('{after}', '-¥12.34'),
     read_at: null,
   });
   expect(inbox[0]?.created_at.getTime()).toBe(NOW.getTime());
@@ -79,7 +80,7 @@ it('[AC-B2-02z#8] 调增同样写一条（D10-2092：调增调减都发），正
     ['inbox', 'success', dedupeKeyOf(input)],
   ]);
   expect(inbox.map((row) => [row.code, row.title, row.body])).toEqual([
-    [CODE, TITLE, bodyOf('-¥1.5', '¥0')],
+    [CODE, TITLE, TEMPLATE_WITHDRAWABLE.replace('{before}', '-¥1.5').replace('{after}', '¥0')],
   ]);
 }, 900_000);
 
@@ -119,7 +120,10 @@ it('[AC-B2-02z#8] 同一差异单再次重算出新的余额版本 → 另写一
   const keys = logs.map((row) => row.dedupe_key).sort();
   expect(keys).toEqual([`balance_corrected:${diff}:4`, `balance_corrected:${diff}:5`]);
   const bodies = inbox.map((row) => row.body).sort();
-  expect(bodies).toEqual([bodyOf('¥3', '¥2'), bodyOf('¥5', '¥3')]);
+  expect(bodies).toEqual([
+    TEMPLATE_WITHDRAWABLE.replace('{before}', '¥3').replace('{after}', '¥2'),
+    TEMPLATE_WITHDRAWABLE.replace('{before}', '¥5').replace('{after}', '¥3'),
+  ]);
 }, 900_000);
 
 it('[AC-B2-02z#3] 更正前后可用余额相等 → 写入函数返回 false，notify_logs 与站内信都没有行', async () => {
@@ -162,7 +166,7 @@ it('[AC-B2-02z#7] 注销冷静期内（有 cooling 的注销申请、users.statu
     [m.uid, 'inbox', 'success', dedupeKeyOf(input)],
   ]);
   expect(inbox.map((row) => [row.user_id, row.title, row.body])).toEqual([
-    [m.uid, TITLE, bodyOf('¥8', '¥1')],
+    [m.uid, TITLE, TEMPLATE_WITHDRAWABLE.replace('{before}', '¥8').replace('{after}', '¥1')],
   ]);
 }, 900_000);
 
@@ -202,7 +206,7 @@ it('[AC-B2-02z#4] 写入时读本 app 的 notify_templates 覆盖行：标题与
   ]);
   const defaults = await rowsOf(db, plain.appId);
   expect(defaults.inbox.map((row) => [row.title, row.body])).toEqual([
-    [TITLE, bodyOf('¥5', '-¥12.34')],
+    [TITLE, TEMPLATE_WITHDRAWABLE.replace('{before}', '¥5').replace('{after}', '-¥12.34')],
   ]);
   expect(await rowsOf(db, other.appId)).toEqual({ logs: [], inbox: [] });
 }, 900_000);

@@ -49,3 +49,10 @@ export const AMOUNT_VECTORS: [string, bigint, bigint, string, string][] = [
   ['大额调减到负数（不加千分位）', 123_456_789n, -2_000_000n, '¥1234567.89', '-¥20000'],
   ['负数之间调减', -1n, -100n, '-¥0.01', '-¥1'],
 ];
+
+// B2-02za (D10-2132 / D10-2146; couli#8): the default body says 「可提现余额」 (BR-TEXT-01 user
+// term). From B2-02za on the expectations of the default body use this template; TEMPLATE and
+// bodyOf above keep the old wording and are no longer used for the default body (FU: remove them
+// once the gate lets a support file drop a constant with the owner's label).
+export const TEMPLATE_WITHDRAWABLE =
+  '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可提现余额由 {before} 调整为 {after}。如有疑问，请联系客服。';

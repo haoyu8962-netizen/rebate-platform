@@ -13,7 +13,15 @@ import {
   BALANCE_CORRECTED_CODE,
   renderBalanceCorrectedMessage,
 } from '../../../../apps/api/src/modules/notification/application/balance-corrected-message.ts';
-import { AMOUNT_VECTORS, CODE, TEMPLATE, TITLE, appYuan, bodyOf } from './texts.ts';
+import {
+  AMOUNT_VECTORS,
+  CODE,
+  TEMPLATE,
+  TEMPLATE_WITHDRAWABLE,
+  TITLE,
+  appYuan,
+  bodyOf,
+} from './texts.ts';
 
 /** Integer fen well inside the PG bigint range, negatives included. */
 const fen = fc.bigInt({ min: -(10n ** 15n), max: 10n ** 15n });
@@ -37,7 +45,7 @@ it('[AC-B2-02z#1] 默认标题「余额更正」；默认正文逐字为 D10-209
     variant: 'default',
     category: 'service',
     title: '余额更正',
-    body: '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可用余额由 ¥10 调整为 ¥0.01。如有疑问，请联系客服。',
+    body: '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可提现余额由 ¥10 调整为 ¥0.01。如有疑问，请联系客服。',
   });
   const increase = { before_fen: 990n, after_fen: 123_456n };
   expect(renderBalanceCorrectedMessage(increase, null)).toEqual({
@@ -45,10 +53,11 @@ it('[AC-B2-02z#1] 默认标题「余额更正」；默认正文逐字为 D10-209
     variant: 'default',
     category: 'service',
     title: '余额更正',
-    body: '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可用余额由 ¥9.9 调整为 ¥1234.56。如有疑问，请联系客服。',
+    body: '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可提现余额由 ¥9.9 调整为 ¥1234.56。如有疑问，请联系客服。',
   });
 }, 900_000);
 
+// .each 标题不能改名，标题保留旧词；期望正文以块内断言为准（可提现余额，B2-02za / D10-2154）。
 it.each(AMOUNT_VECTORS)(
   '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',
   (label, before, after, beforeText, afterText) => {
@@ -59,7 +68,7 @@ it.each(AMOUNT_VECTORS)(
       variant: 'default',
       category: 'service',
       title: TITLE,
-      body: bodyOf(beforeText, afterText),
+      body: TEMPLATE_WITHDRAWABLE.replace('{before}', beforeText).replace('{after}', afterText),
     });
     // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.
     expect(message?.body, label).not.toContain('+');
@@ -78,7 +87,10 @@ it('[AC-B2-02z#2] 任意更正前后金额（调增、调减、正负、0）：�
         variant: 'default',
         category: 'service',
         title: TITLE,
-        body: bodyOf(appYuan(before), appYuan(after)),
+        body: TEMPLATE_WITHDRAWABLE.replace('{before}', appYuan(before)).replace(
+          '{after}',
+          appYuan(after),
+        ),
       });
       return true;
     }),
@@ -168,7 +180,7 @@ it('[AC-B2-02z#4] 只覆盖标题时正文用默认，只覆盖正文时标题�
     variant: 'default',
     category: 'service',
     title: '余额已更正',
-    body: bodyOf('¥5', '-¥12.34'),
+    body: TEMPLATE_WITHDRAWABLE.replace('{before}', '¥5').replace('{after}', '-¥12.34'),
   });
   const bodyOnly = { title_override: null, body_override: '可用余额 {before} → {after}' };
   expect(renderBalanceCorrectedMessage(facts, bodyOnly)).toEqual({
@@ -184,7 +196,7 @@ it('[AC-B2-02z#4] 只覆盖标题时正文用默认，只覆盖正文时标题�
     variant: 'default',
     category: 'service',
     title: TITLE,
-    body: bodyOf('¥5', '-¥12.34'),
+    body: TEMPLATE_WITHDRAWABLE.replace('{before}', '¥5').replace('{after}', '-¥12.34'),
   });
 }, 900_000);
 

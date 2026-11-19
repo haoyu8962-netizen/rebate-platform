@@ -3,7 +3,7 @@
 // 「Member notice」): inbox only, category service, sent for an increase and a decrease alike, none
 // when the available balance is unchanged. Default title inbox.title.BALANCE_CORRECTED「余额更正」
 // (contracts/texts.default.json); default body 「核对账目时发现你的余额显示与流水明细不一致，已按流水明细
-// 更正：可用余额由 {before} 调整为 {after}。如有疑问，请联系客服。」, {before} / {after} per BR-TEXT-10
+// 更正：可提现余额由 {before} 调整为 {after}。如有疑问，请联系客服。」, {before} / {after} per BR-TEXT-10
 // (App format: '-' before '¥' for a negative balance, no '+' for a positive one, no thousands
 // separator). Operators may reword the title and body (notify_templates override); the variables are
 // replaced the same way.
@@ -38,7 +38,7 @@ export const BALANCE_CORRECTED_CODE = 'BALANCE_CORRECTED';
 const DEFAULT_TITLE = '余额更正';
 /** D10-2092 default body, verbatim. */
 const DEFAULT_BODY =
-  '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可用余额由 {before} 调整为 {after}。如有疑问，请联系客服。';
+  '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可提现余额由 {before} 调整为 {after}。如有疑问，请联系客服。';
 
 /** null when the available balance is unchanged (nothing is sent). */
 export function renderBalanceCorrectedMessage(
