@@ -697,3 +697,99 @@ it('CLI: --allowed-paths, --rewrite and --out-of-scope-log', { timeout: 60_000 }
   writeFileSync(impl, JSON.stringify(validImpl()));
   expect(runCli(['--schema', IMPL_SCHEMA_FILE, '--file', impl, '--rewrite']).status).toBe(2);
 });
+
+// CT-06zzzzzq (D10-2086 ②): an `na` checklist item carries no position; an `na` position
+// outside the diff is a warning, every other position check stays an error.
+function naChecklistReview(
+  status: 'ok' | 'issue' | 'na',
+  at: { file: string; line: number },
+): ReviewOutput {
+  const review = validReview('src/a.ts', 1);
+  const clock = review.checklist.find((c) => c.item === 'clock');
+  if (clock === undefined) throw new Error('fixture has no checklist');
+  Object.assign(clock, { status, ...at });
+  return review;
+}
+
+function recordingChecker(): { check: LineChecker; calls: string[] } {
+  const calls: string[] = [];
+  const check: LineChecker = (file, line) => {
+    calls.push(`${file}:${line}`);
+    return file === 'src/a.ts' && line === 1
+      ? { ok: true, reason: '' }
+      : { ok: false, reason: 'line is outside the diff hunks of this file' };
+  };
+  return { check, calls };
+}
+
+it('[CT-06zzzzzq] money review: an na item without a position gives no error and no warning, and is not checked', () => {
+  const { check, calls } = recordingChecker();
+  const review = naChecklistReview('na', { file: '', line: 0 });
+  expect(reviewProblems(review, { money: true, lineChecker: check })).toEqual({
+    errors: [],
+    warnings: [],
+  });
+  expect(calls).not.toContain(':0');
+  expect(calls).toHaveLength(CHECKLIST_ITEMS.length - 1);
+  expect(reviewProblems(review, { money: true })).toEqual({ errors: [], warnings: [] });
+});
+
+it('[CT-06zzzzzq] money review: an na item outside the diff gives no error and exactly one warning', () => {
+  const { check } = recordingChecker();
+  const result = reviewProblems(naChecklistReview('na', { file: 'src/b.ts', line: 42 }), {
+    money: true,
+    lineChecker: check,
+  });
+  expect(result.errors).toEqual([]);
+  expect(result.warnings).toHaveLength(1);
+  expect(result.warnings[0]).toContain('(clock)');
+  expect(result.warnings[0]).toContain('src/b.ts:42');
+  expect(result.warnings[0]).toContain('line is outside the diff hunks of this file');
+  // Inside the diff: nothing to report.
+  expect(
+    reviewProblems(naChecklistReview('na', { file: 'src/a.ts', line: 1 }), {
+      money: true,
+      lineChecker: check,
+    }),
+  ).toEqual({ errors: [], warnings: [] });
+});
+
+it('[CT-06zzzzzq] money review: an na item with half a position is still an error', () => {
+  const { check, calls } = recordingChecker();
+  for (const at of [
+    { file: 'src/a.ts', line: 0 },
+    { file: '', line: 1 },
+    { file: ' ', line: 0 },
+    { file: '', line: -1 },
+  ]) {
+    const result = reviewProblems(naChecklistReview('na', at), { money: true, lineChecker: check });
+    expect(result.errors, `${at.file}:${at.line}`).toEqual([
+      'checklist[5] (clock): needs file and line >= 1 (规划/11 §3.3)',
+    ]);
+    expect(result.warnings, `${at.file}:${at.line}`).toEqual([]);
+  }
+  expect(calls.filter((c) => c !== 'src/a.ts:1')).toEqual([]);
+});
+
+it('[CT-06zzzzzq] money review: ok and issue items outside the diff or without a position are errors as before', () => {
+  for (const status of ['ok', 'issue'] as const) {
+    const { check } = recordingChecker();
+    const outside = reviewProblems(naChecklistReview(status, { file: 'src/b.ts', line: 42 }), {
+      money: true,
+      lineChecker: check,
+    });
+    expect(outside.errors, status).toEqual([
+      'checklist[5] (clock): src/b.ts:42 line is outside the diff hunks of this file',
+    ]);
+    expect(outside.warnings, status).toEqual([]);
+
+    const none = reviewProblems(naChecklistReview(status, { file: '', line: 0 }), {
+      money: true,
+      lineChecker: check,
+    });
+    expect(none.errors, status).toEqual([
+      'checklist[5] (clock): needs file and line >= 1 (规划/11 §3.3)',
+    ]);
+    expect(none.warnings, status).toEqual([]);
+  }
+});

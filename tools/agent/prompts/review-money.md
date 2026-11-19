@@ -107,10 +107,11 @@ disagree, the rules below win.
 `checklist` must contain each of the seven items below **exactly once**. Every item needs:
 
 - `status`: `ok` (checked, no problem), `issue` (a finding in `findings` covers it) or `na`.
-- `file` and `line`: a location **inside the diff under review** — the line that shows the item
-  is handled correctly, the line where the problem is, or for `na` the line of the change that
-  shows why the item cannot apply. A wrapper script verifies that each cited line lies inside the
-  diff hunks of that file; a citation outside the diff invalidates the whole review.
+- `file` and `line`: for `ok` and `issue`, a location **inside the diff under review** — the line
+  that shows the item is handled correctly, or the line where the problem is. A wrapper script
+  verifies that each cited line lies inside the diff hunks of that file; a citation outside the
+  diff invalidates the whole review. For `na`, cite no location: set `file` to the empty string
+  `""` and `line` to `0`, and say in `note` why the item cannot apply.
 - `note`: one or two sentences saying what you verified and how. Never empty. "Looks fine" is
   not a note.
 
