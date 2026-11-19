@@ -4421,3 +4421,45 @@ it('[CT-06zzzzzr] compareOutsideChanged: inlineEach names an inline .each table 
     [true, null, null],
   ]);
 });
+
+// CT-06zzzzzt (D10-2148; spec-test r1 S2): a kit table's top-level type annotation is skipped as
+// tokens — an `=`, `>` or `[` in a string literal of the annotation or in a comment inside it does
+// not end it; the expansion is the same, row by row, as the same table without the annotation.
+it('[CT-06zzzzzt] exportedTable: an annotation holding strings and a comment with = > [ is skipped; let stays refused', () => {
+  const ruleFile = (head: boolean): string =>
+    [
+      "import { expect, it } from 'vitest';",
+      "import { ROWS, send } from './kit.ts';",
+      '',
+      "it.each(ROWS)('[AC-Z#1] %s sends', (row) => {",
+      `  expect(send(row${head ? ", 'x'" : ''})).toBe(row);`,
+      '});',
+      '',
+    ].join('\n');
+  const names = ['[AC-Z#1] a=b sends', '[AC-Z#1] > sends'];
+  const run = (decl: string): unknown => {
+    const kitText = [
+      decl,
+      'export function send(a: string, b?: string) { return b ?? a; }',
+      '',
+    ].join('\n');
+    const tree: Record<string, string> = { 'test/spec/z/kit.ts': kitText };
+    return compareModifiedBlocks(ruleFile(false), ruleFile(true), names, undefined, {
+      file: 'test/spec/z/a.test.ts',
+      base: (p) => tree[p] ?? null,
+      head: (p) => tree[p] ?? null,
+    });
+  };
+  const bare = run("export const ROWS = ['a=b', '>'] as const;");
+  expect(bare).toMatchObject({ ok: true, blocks: [{ found: true }, { found: true }] });
+  const annotated = [
+    "export const ROWS: ReadonlyArray<'a=b' | '>' | '[' /* = ] > [ */ | \"x = [\"> = ['a=b', '>'] as const;",
+    "export const ROWS: Foo<'=', /* > = */ Array<'>' | ']'>>= ['a=b', '>'] as const;",
+    "export const ROWS: Record<string, (x: `a=${string}>`) => string>[] = ['a=b', '>'] as const;",
+  ];
+  for (const decl of annotated) expect(run(decl), decl).toEqual(bare);
+  // The control: the same annotation on a `let` is still refused.
+  expect(JSON.stringify(run("export let ROWS: Array<'=' | '['> = ['a=b', '>'];"))).toMatch(
+    /cannot be expanded for certain/,
+  );
+});
