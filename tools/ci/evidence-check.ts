@@ -211,10 +211,9 @@ import type { ModifiedComparison } from '../guard/lib/test-blocks.ts';
 import {
   expectedRuleTests,
   expectedValuesHit,
-  modifiedOnlyFiles,
-  outsideOnlyFiles,
   renamedOnlyFiles,
   renamesHit,
+  ruleTestsLeftOut,
 } from '../guard/lib/red-check.ts';
 import type { BaselineReader } from '../guard/lib/red-check.ts';
 import { matchesAny } from '../lib/glob.ts';
@@ -1788,33 +1787,24 @@ export function redRequirement(
   };
   const leftOut = renamedOnlyFiles(all, read, ledger.renames).map((r) => r.file);
   const left = new Set(leftOut);
-  // CT-06zzzd (D10-630): a file listed in red_exempt_outside whose every test is unchanged and
-  // declared is left out the same way (red-check.ts calls the same function); the coverage rule
-  // below is unchanged, and red_exempt_confirmed is still required (the ledger declares them).
-  const outsideOut = outsideOnlyFiles(
-    all.filter((f) => !left.has(f)),
+  // CT-06zzzd (D10-630), CT-06zzzg (D10-701), CT-06zzzzzr (D10-2125): a file listed in
+  // red_exempt_outside whose every test is unchanged and declared, a file whose every change lies
+  // in its declared modify_existing blocks, and a file with both kinds of declared change are left
+  // out the same way, by the function red-check.ts calls (expectedRedFiles → ruleTestsLeftOut);
+  // the coverage rule below is unchanged, red_exempt_confirmed is still required (the ledger
+  // declares them), and the label and the record of each block too (evidenceProblems). Codex r1
+  // S2: the modify_existing entries come from the trusted root's ledger only (readTrustedLedger,
+  // as checkEvidence reads them for the label and the record); a ledger the PR head adds never
+  // leaves a file out.
+  const expected = expectedRedFiles(
+    all,
     read,
-    ledger.renames,
-    ledger.expected_values,
-    ledger.red_exempt_outside,
-    ledger.red_exempt,
-  ).map((r) => r.file);
-  // CT-06zzzg (D10-701): a file whose every change lies in its declared modify_existing blocks is
-  // left out the same way (red-check.ts calls the same function); the label and the record of
-  // each block are still required (evidenceProblems). Codex r1 S2: the entries come from the
-  // trusted root's ledger only (readTrustedLedger, as checkEvidence reads them for the label and
-  // the record); a ledger the PR head adds never leaves a file out.
-  const modifiedOut = modifiedOnlyFiles(
-    all.filter((f) => !left.has(f) && !outsideOut.includes(f)),
-    read,
+    ledger,
     readTrustedLedger(input, task)?.modify_existing ?? [],
-  ).map((r) => r.file);
+  );
   // Review r1 S2-1: renames that hit a rule-test file of the task need the reviewer's confirmation.
   const hit = renamesHit(all, read, ledger.renames);
   // CT-06zxe (D10-371): registered expected values that apply need the reviewer's confirmation.
-  const expected = all.filter(
-    (f) => !left.has(f) && !outsideOut.includes(f) && !modifiedOut.includes(f),
-  );
   // A file left out by red_exempt_outside still has its registered expected values confirmed.
   const values = expectedValuesHit(
     all.filter((f) => !left.has(f)),
@@ -1859,11 +1849,13 @@ export function expectedRedFiles(
   ledger: Pick<TaskFile, 'renames' | 'expected_values' | 'red_exempt_outside' | 'red_exempt'>,
   modifyExisting: readonly ModifyExistingDeclaration[],
 ): string[] {
-  void all;
-  void read;
-  void ledger;
-  void modifyExisting;
-  throw new Error('NotImplemented: expectedRedFiles');
+  return ruleTestsLeftOut(all, read, {
+    renames: ledger.renames,
+    expected_values: ledger.expected_values,
+    red_exempt_outside: ledger.red_exempt_outside,
+    red_exempt: ledger.red_exempt,
+    modify_existing: [...modifyExisting],
+  }).expected;
 }
 
 export function checkEvidence(input: EvidenceInput): EvidenceReport {

@@ -44,6 +44,11 @@
 // A file whose every change against the base lies in its declared blocks is left out of the
 // expected list (D10-701 ②, modifiedOnlyFiles), here and with --print-expected, as a
 // renamed-only file; the notes, or stderr, say which.
+// A file with both kinds of declared change — outside the tests covered by its own
+// red_exempt_outside or scope: support entry, inside only declared changed blocks, every other
+// test unchanged and red_exempt, no test added, removed or moved — is left out likewise
+// (CT-06zzzzzr, D10-2125, mixedOnlyFiles). Both modes take the list from lib/red-check.ts
+// ruleTestsLeftOut, the function tools/ci/evidence-check.ts calls (expectedRedFiles).
 //
 //   node tools/guard/red-check.ts --task <id> --cwd <worktree> --base <ref> --print-expected
 //     prints the expected rule-test files, one per line (tools/ops/verify-container.sh --red uses
@@ -61,14 +66,9 @@ import {
   type RuleTestBaseline,
   checkRedReports,
   expectedRuleTests,
-  modifiedOnlyFiles,
-  modifiedOnlyNote,
   redCheckRequired,
-  outsideOnlyFiles,
-  outsideOnlyNote,
-  renamedOnlyFiles,
-  renamedOnlyNote,
   ruleTestBaselines,
+  ruleTestsLeftOut,
   unusedExpectedValueNotes,
   unusedOutsideNotes,
 } from './lib/red-check.ts';
@@ -160,38 +160,16 @@ runCli(
         throw new UsageError('--print-expected needs --cwd <dir> --base <ref>');
       const cwd = resolveRoot(args.values.get('cwd'));
       const files = expectedRuleTests(changedFiles(base, { cwd }), scope);
-      // CT-06zxc: a file that differs from its base only by the ledger's renames is not run.
-      const renamedOnly = renamedOnlyFiles(
+      // CT-06zxc / CT-06zzzd / CT-06zzzg / CT-06zzzzzr: the files left out of the red run
+      // (renames only; red_exempt_outside with every test declared; modify_existing blocks only;
+      // both kinds of declared change), by the same function evidence-check calls.
+      const leftOut = ruleTestsLeftOut(
         files,
         { base: (p) => showAt(cwd, base, p), head: (p) => readWorkTree(cwd, p) },
-        task.renames,
+        task,
       );
-      const left = new Set(renamedOnly.map((r) => r.file));
-      for (const r of renamedOnly) console.error(`red-check note: ${renamedOnlyNote(r)}`);
-      // CT-06zzzd (D10-630): a listed file whose every test is unchanged and declared is not run.
-      const outsideOnly = outsideOnlyFiles(
-        files.filter((f) => !left.has(f)),
-        { base: (p) => showAt(cwd, base, p), head: (p) => readWorkTree(cwd, p) },
-        task.renames,
-        task.expected_values,
-        task.red_exempt_outside,
-        task.red_exempt,
-      );
-      for (const r of outsideOnly) {
-        left.add(r.file);
-        console.error(`red-check note: ${outsideOnlyNote(r)}`);
-      }
-      // CT-06zzzg (D10-701): a file whose every change lies in its declared blocks is not run.
-      const modifiedOnly = modifiedOnlyFiles(
-        files.filter((f) => !left.has(f)),
-        { base: (p) => showAt(cwd, base, p), head: (p) => readWorkTree(cwd, p) },
-        task.modify_existing,
-      );
-      for (const r of modifiedOnly) {
-        left.add(r.file);
-        console.error(`red-check note: ${modifiedOnlyNote(r)}`);
-      }
-      for (const file of files) if (!left.has(file)) console.log(file);
+      for (const n of leftOut.notes) console.error(`red-check note: ${n}`);
+      for (const file of leftOut.expected) console.log(file);
       return 0;
     }
     if (reportArg === undefined) throw new UsageError('--report is required');
@@ -239,37 +217,15 @@ runCli(
         // CT-06zxc (D10-347): the trusted ledger's literal renames, as red_exempt. A file that
         // differs from its base only by them is unchanged: out of the expected list (whether the
         // list came from --print-expected, which already left it out, or from the changes).
-        const renamedOnly = renamedOnlyFiles(
-          [...expected, ...expectedRuleTests(changes, scope)],
-          reader,
-          task.renames,
-        );
-        const left = new Set(renamedOnly.map((r) => r.file));
-        expected = expected.filter((f) => !left.has(f));
-        for (const r of renamedOnly) renamedNotes.push(renamedOnlyNote(r));
-        // CT-06zzzd (D10-630): likewise a listed file whose every test is unchanged and declared.
-        const outsideOnly = outsideOnlyFiles(
-          [...expected, ...expectedRuleTests(changes, scope)].filter((f) => !left.has(f)),
-          reader,
-          task.renames,
-          task.expected_values,
-          task.red_exempt_outside,
-          task.red_exempt,
-        );
-        const outsideLeft = new Set(outsideOnly.map((r) => r.file));
-        expected = expected.filter((f) => !outsideLeft.has(f));
-        for (const r of outsideOnly) renamedNotes.push(outsideOnlyNote(r));
-        // CT-06zzzg (D10-701): likewise a file whose every change lies in its declared blocks.
-        const modifiedOnly = modifiedOnlyFiles(
-          [...expected, ...expectedRuleTests(changes, scope)].filter(
-            (f) => !left.has(f) && !outsideLeft.has(f),
-          ),
-          reader,
-          task.modify_existing,
-        );
-        modifiedLeftOut = modifiedOnly.map((r) => r.file);
-        expected = expected.filter((f) => !modifiedLeftOut.includes(f));
-        for (const r of modifiedOnly) renamedNotes.push(modifiedOnlyNote(r));
+        // CT-06zzzd (D10-630), CT-06zzzg (D10-701), CT-06zzzzzr (D10-2125): likewise a listed file
+        // whose every test is unchanged and declared, a file whose every change lies in its
+        // declared blocks, and a file with both kinds of declared change (ruleTestsLeftOut).
+        const candidates = [...expected, ...expectedRuleTests(changes, scope)];
+        const leftOut = ruleTestsLeftOut(candidates, reader, task);
+        const kept = new Set(leftOut.expected);
+        expected = expected.filter((f) => kept.has(f));
+        renamedNotes.push(...leftOut.notes);
+        modifiedLeftOut = leftOut.modifiedLeftOut;
         // CT-06zxe (D10-371): the trusted ledger's registered expected values, after the renames.
         baselines = ruleTestBaselines(
           expected,

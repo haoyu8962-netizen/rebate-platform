@@ -1163,8 +1163,12 @@ type KitReader = { file: string; read: (path: string) => string | null };
 /** The only module specifier a table is read through (CT-06zzzzi): `./<name>.ts`, same directory. */
 const SAME_DIR_KIT = /^\.\/([^/\\]+)\.ts$/;
 
-/** A kit's table (CT-06zzzzi): its literal rows and the normalised text of each, or why not. */
-type KitTable = { rows: Row[]; texts: string[] } | { reason: string };
+/**
+ * A kit's table (CT-06zzzzi): its literal rows and the normalised text of each, or why not;
+ * CT-06zzzzzr (D10-2125): also the source text of each row (`raw`) and the normalised
+ * declaration (`decl`, from `export` to the `;` or `as const`), for modify_existing.
+ */
+type KitTable = { rows: Row[]; texts: string[]; raw: string[]; decl: string } | { reason: string };
 
 /**
  * The table `name` of a kit's source (CT-06zzzzi): exactly `export const <name> = [ … ]`, then
@@ -1219,16 +1223,20 @@ function exportedTable(source: string, name: string): KitTable {
   const rows = rowsIn(open, close, false);
   if (rows === null) return { reason: `the rows of ${name} are not literal` };
   const texts: string[] = [];
+  const raw: string[] = [];
   let j = open + 1;
   while (j < close) {
     const end = valueEnd(j, close);
     texts.push(joinTokens(tokens, j, end - 1, sep));
+    const first = tokens[j] as Token;
+    const lastRow = tokens[end - 1] as Token;
+    raw.push(source.slice(first.start ?? 0, (lastRow.start ?? 0) + lastRow.text.length));
     j = end;
     if (j === close) break;
     j += 1;
   }
   return texts.length === rows.length
-    ? { rows, texts }
+    ? { rows, texts, raw, decl: joinTokens(tokens, d - 2, last, sep) }
     : { reason: `the rows of ${name} were not read alike` };
 }
 
@@ -1525,6 +1533,8 @@ function outsideView(source: string, kit?: KitReader): OutsideView {
   // not (no kit reader, not one name, not a named import from `./<name>.ts`), the kit's table
   // (exportedTable) when the name occurs in this file only in that import and at `p`, else why not.
   const kitSources = new Map<string, string | null>();
+  // CT-06zzzzzr: the kit path a table call at `p` was read from (expansion's `table`).
+  const kitPathAt = new Map<number, string>();
   const importedTable = (p: number): KitTable | null => {
     if (kit === undefined || tokens[p]?.text !== '(' || match[p] !== p + 2) return null;
     const id = tokens[p + 1] as Token;
@@ -1569,6 +1579,7 @@ function outsideView(source: string, kit?: KitReader): OutsideView {
     }
     const dir = dirOf(kit.file);
     const path = dir === '' ? `${kitName}.ts` : `${dir}/${kitName}.ts`;
+    kitPathAt.set(p, path);
     if (!kitSources.has(path)) {
       let text: string | null;
       try {
@@ -1741,6 +1752,16 @@ function outsideView(source: string, kit?: KitReader): OutsideView {
       if (close + 1 === match[p] || outerAsConst(close, match[p] as number)) {
         found = tableAt(p + 1, close);
       }
+    } else if (one?.kind === 'id' && importedTable(p) !== null) {
+      // CT-06zzzzzr (D10-2125 (B)): one name imported (one level) from a same-directory kit that
+      // exports it at its top level as `export const NAME = [ literals ]` (as const or not), read
+      // from this side's kit (exportedTable); anything else about it cannot be expanded for certain.
+      const imported = importedTable(p) as KitTable;
+      if ('reason' in imported) {
+        return fail(`the table ${one.text} imported from a same-directory kit: ${imported.reason}`);
+      }
+      found = { table: imported.rows, rows: imported.texts, raw: imported.raw };
+      decl = `${kitPathAt.get(p) ?? ''}\u0000${imported.decl}`;
     } else if (one?.kind === 'id') {
       const named = namedTable(p + 1);
       if ('reason' in named) return fail(named.reason);
@@ -2292,7 +2313,10 @@ type BlockView = {
   raw: string;
 };
 
-function blockViews(source: string): {
+function blockViews(
+  source: string,
+  kit?: KitReader,
+): {
   shared: string;
   blocks: BlockView[];
   /** CT-06zzzk: each block's `.each` / `.for` table expanded (null: no such table). */
@@ -2300,7 +2324,9 @@ function blockViews(source: string): {
 } {
   const { tokens, suites, tests } = scanTests(source);
   const parsed = parseTestFile(source);
-  const view = outsideView(source);
+  // CT-06zzzzzr (D10-2125 (B)): with a kit reader, an `.each` / `.for` table imported from a
+  // same-directory kit is expanded from that side's kit (EachShape.expand).
+  const view = outsideView(source, kit);
   const blocks = tests.map((c, i): BlockView => {
     const b = parsed.blocks[i] as TestBlock;
     const around = suites.filter((s) => s.open < c.start && c.start < s.close);
@@ -2331,22 +2357,36 @@ function blockViews(source: string): {
   return { shared: parsed.shared, blocks, each };
 }
 
-/** See the comment above ModifiedBlock (CT-06zzzg, D10-701; rows of `.each`: CT-06zzzk). */
+/**
+ * See the comment above ModifiedBlock (CT-06zzzg, D10-701; rows of `.each`: CT-06zzzk). With
+ * `modules` (CT-06zzzzzr, D10-2125 (B)), an `.each` / `.for` table that is one name imported from
+ * a same-directory kit (`./<name>.ts`) exporting it at its top level as `export const NAME = [
+ * literals ]` (`as const` or not) is expanded row by row, the base from the base's kit, the head
+ * from the head's (as compareOutsideChanged reads it, CT-06zzzzi); another directory, a re-export,
+ * a `let`, a call, a non-literal row or a kit missing on a side still cannot be expanded.
+ */
 export function compareModifiedBlocks(
   base: string,
   head: string,
   names: readonly string[],
   headNames?: readonly (string | undefined)[],
+  modules?: ImportedModules,
 ): ModifiedComparison {
   let before: ReturnType<typeof blockViews>;
   let after: ReturnType<typeof blockViews>;
   try {
-    before = blockViews(base);
+    before = blockViews(
+      base,
+      modules === undefined ? undefined : { file: modules.file, read: modules.base },
+    );
   } catch (err) {
     return { ok: false, reason: `the file at the base cannot be read as tests (${String(err)})` };
   }
   try {
-    after = blockViews(head);
+    after = blockViews(
+      head,
+      modules === undefined ? undefined : { file: modules.file, read: modules.head },
+    );
   } catch (err) {
     return { ok: false, reason: `the file cannot be read as tests (${String(err)})` };
   }

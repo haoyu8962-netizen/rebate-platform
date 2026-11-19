@@ -7,6 +7,7 @@ import type { Change } from '../../lib/git.ts';
 import { parseTaskFile } from '../../lib/task-file.ts';
 import {
   type BaselineReader,
+  type MixedOnly,
   type RenamedOnly,
   type RuleTestBaseline,
   applyExpectedValues,
@@ -16,6 +17,8 @@ import {
   checkRedReports,
   expectedRuleTests,
   expectedValuesHit,
+  mixedOnlyFiles,
+  mixedOnlyNote,
   modifiedOnlyFiles,
   modifiedOnlyNote,
   redCheckRequired,
@@ -23,6 +26,7 @@ import {
   renamedOnlyNote,
   renamesHit,
   ruleTestBaselines,
+  ruleTestsLeftOut,
   scriptFaultConsoleError,
   unusedExpectedValueNotes,
   unusedOutsideNotes,
@@ -4523,4 +4527,153 @@ it('[CT-06zzzzzi] supportEntryNote: the file, scope: support, the reason with it
     note: 'the shared helper takes the summary; no assertion changes',
   });
   expect(rc).toContain('D10-1500 → D10-1662; basis: 规划/02 §12.3');
+});
+
+// CT-06zzzzzr (D10-2120 ① / D10-2125; spec-test r1 S2 out of scope): red-check.ts (both modes)
+// and evidence-check.ts take the expected list from ruleTestsLeftOut, which runs
+// renamedOnlyFiles → outsideOnlyFiles → modifiedOnlyFiles → mixedOnlyFiles on what is left.
+const MIXED_DIR = 'test/spec/unit/ct06zzzzzr';
+const mixedTest = (title: string, body: string): string =>
+  `it('${title}', async () => {\n  ${body}\n});`;
+const mixedFile = (blocks: readonly string[], extra: string | null): string =>
+  [
+    "import { expect, it } from 'vitest';",
+    ...(extra === null ? [] : [extra]),
+    '',
+    ...blocks.flatMap((b) => [b, '']),
+  ].join('\n');
+const MX_A = mixedTest('[AC-X#1] a', 'expect(1).toBe(1);');
+const MX_B = mixedTest('[AC-X#2] b', 'expect(2).toBe(2);');
+const MX_B2 = mixedTest('[AC-X#2] b', 'expect(await stepUp(2)).toBe(2);');
+const MX_C = mixedTest('[AC-X#3] c', 'expect(3).toBe(3);');
+const MX_IMPORT = "import { stepUp } from './step-up.ts';";
+const mxExempt = (file: string, test: string) => ({
+  file,
+  test,
+  reason: 'unchanged frozen test, green on the old code by construction',
+});
+const mxModify = (file: string, test: string): ModifyExistingDeclaration => ({
+  file,
+  test,
+  reason: 'rule_change',
+  ruling: 'D10-2125',
+  note: 'the bind now carries the step-up token',
+  br: ['BR-ID-08'],
+});
+
+it('[CT-06zzzzzr] ruleTestsLeftOut is renamedOnlyFiles → outsideOnlyFiles → modifiedOnlyFiles → mixedOnlyFiles: each file left out once with its note, the mixed and modified files in modifiedLeftOut, the new file expected', () => {
+  const REN = `${MIXED_DIR}/renamed.test.ts`;
+  const OUT = `${MIXED_DIR}/outside.test.ts`;
+  const MODF = `${MIXED_DIR}/modified.test.ts`;
+  const MIX = `${MIXED_DIR}/mixed.test.ts`;
+  const NEW = `${MIXED_DIR}/new.test.ts`;
+  const baseText = mixedFile([MX_A, MX_B, MX_C], null);
+  const base: Record<string, string> = {
+    [REN]: mixedFile([mixedTest('[AC-X#9] old-name', 'expect(9).toBe(9);')], null),
+    [OUT]: baseText,
+    [MODF]: baseText,
+    [MIX]: baseText,
+  };
+  const head: Record<string, string> = {
+    [REN]: mixedFile([mixedTest('[AC-X#9] new-name', 'expect(9).toBe(9);')], null),
+    [OUT]: mixedFile([MX_A, MX_B, MX_C], MX_IMPORT),
+    [MODF]: mixedFile([MX_A, MX_B2, MX_C], null),
+    [MIX]: mixedFile([MX_A, MX_B2, MX_C], MX_IMPORT),
+    [NEW]: mixedFile([mixedTest('[AC-X#10] new', 'expect(0).toBe(1);')], null),
+  };
+  const read = { base: (p: string) => base[p] ?? null, head: (p: string) => head[p] ?? null };
+  const task = {
+    renames: [{ from: "'[AC-X#9] old-name'", to: "'[AC-X#9] new-name'" }],
+    expected_values: [],
+    red_exempt_outside: [
+      { file: OUT, reason: 'imports the step-up helper' },
+      { file: MIX, reason: 'imports the step-up helper' },
+    ],
+    red_exempt: [
+      ...['[AC-X#1] a', '[AC-X#2] b', '[AC-X#3] c'].map((t) => mxExempt(OUT, t)),
+      mxExempt(MIX, '[AC-X#1] a'),
+      mxExempt(MIX, '[AC-X#3] c'),
+    ],
+    modify_existing: [mxModify(MODF, '[AC-X#2] b'), mxModify(MIX, '[AC-X#2] b')],
+  };
+  const files = [MIX, MODF, NEW, OUT, REN];
+  const left = ruleTestsLeftOut(files, read, task);
+  expect(left.expected).toEqual([NEW]);
+  expect(left.modifiedLeftOut).toEqual([MODF, MIX]);
+  const ren = renamedOnlyFiles(files, read, task.renames);
+  const out = outsideOnlyFiles(
+    files.filter((f) => f !== REN),
+    read,
+    task.renames,
+    task.expected_values,
+    task.red_exempt_outside,
+    task.red_exempt,
+  );
+  const mod = modifiedOnlyFiles([MIX, MODF, NEW], read, task.modify_existing);
+  const mix = mixedOnlyFiles(
+    [MIX, NEW],
+    read,
+    task.renames,
+    task.expected_values,
+    task.red_exempt_outside,
+    task.red_exempt,
+    task.modify_existing,
+  );
+  expect([ren, out, mod, mix].map((l) => l.map((r) => r.file))).toEqual([
+    [REN],
+    [OUT],
+    [MODF],
+    [MIX],
+  ]);
+  expect(left.notes).toEqual([
+    ...ren.map(renamedOnlyNote),
+    ...out.map(outsideOnlyNote),
+    ...mod.map(modifiedOnlyNote),
+    ...mix.map(mixedOnlyNote),
+  ]);
+  // The mixed file's note: not run, not judged, and what evidence-check still asks for.
+  const note = mixedOnlyNote(mix[0] as MixedOnly);
+  for (const part of [MIX, '[AC-X#2] b', 'not run, not judged', 'red_exempt_confirmed']) {
+    expect(note, part).toContain(part);
+  }
+  // Without the modify_existing entries (a ledger the PR head adds) the mixed file stays expected.
+  expect(ruleTestsLeftOut(files, read, { ...task, modify_existing: [] }).expected).toEqual([
+    MIX,
+    MODF,
+    NEW,
+  ]);
+});
+
+it('[CT-06zzzzzr] mixedOnlyFiles keeps a file expected when a rename or a registered expected value touches it, or when the declared block moved', () => {
+  const MIX = `${MIXED_DIR}/kept.test.ts`;
+  const base = { [MIX]: mixedFile([MX_A, MX_B, MX_C], null) };
+  const headOf = (blocks: readonly string[]) => ({ [MIX]: mixedFile(blocks, MX_IMPORT) });
+  const readOf = (h: Record<string, string>) => ({
+    base: (p: string) => base[p as keyof typeof base] ?? null,
+    head: (p: string) => h[p] ?? null,
+  });
+  const outside = [{ file: MIX, reason: 'imports the step-up helper' }];
+  const exempt = [mxExempt(MIX, '[AC-X#1] a'), mxExempt(MIX, '[AC-X#3] c')];
+  const modify = [mxModify(MIX, '[AC-X#2] b')];
+  const run = (h: Record<string, string>, renames: { from: string; to: string }[] = []) =>
+    mixedOnlyFiles([MIX], readOf(h), renames, [], outside, exempt, modify).map((r) => r.file);
+  expect(run(headOf([MX_A, MX_B2, MX_C]))).toEqual([MIX]);
+  // The declared block moved to the end.
+  expect(run(headOf([MX_A, MX_C, MX_B2]))).toEqual([]);
+  // A rename that hits the file's base.
+  expect(run(headOf([MX_A, MX_B2, MX_C]), [{ from: "'[AC-X#1] a'", to: "'[AC-X#1] a'" }])).toEqual(
+    [],
+  );
+  // A registered expected value of the file.
+  expect(
+    mixedOnlyFiles(
+      [MIX],
+      readOf(headOf([MX_A, MX_B2, MX_C])),
+      [],
+      [{ file: MIX, helper: 'h', from: '1', to: '2' }],
+      outside,
+      exempt,
+      modify,
+    ),
+  ).toEqual([]);
 });

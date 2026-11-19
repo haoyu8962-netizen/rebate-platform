@@ -11,6 +11,7 @@ import {
   checkEvidence,
   engineProblem,
   evidenceProblems,
+  expectedRedFiles,
   handoverPolicy,
   headTreeWithoutEvidence,
   redRequirement,
@@ -19,7 +20,8 @@ import {
 } from './evidence-check.ts';
 import type { HandoverPolicy, RedRequirement } from './evidence-check.ts';
 import { loadProtected } from '../guard/lib/protected.ts';
-import { MONEY_PATHS as TASK_FILE_MONEY_PATHS } from '../lib/task-file.ts';
+import { MONEY_PATHS as TASK_FILE_MONEY_PATHS, loadTask } from '../lib/task-file.ts';
+import { mixedOnlyFiles, mixedOnlyNote, ruleTestsLeftOut } from '../guard/lib/red-check.ts';
 import { loadRiskMap } from '../guard/lib/risk.ts';
 
 const REPO = resolve(import.meta.dirname, '../..');
@@ -2800,6 +2802,80 @@ it('[CT-06zzzg] Codex r1 S2: a ledger only at the PR head never applies modify_e
   expect(report.approval_wanted).toBe(false);
   expect(report.problems.join('\n')).toContain(
     `runs[0].expected: does not cover ${MOD_FILE}, a rule-test file the task added`,
+  );
+});
+
+// CT-06zzzzzr (D10-2125; spec-test r1 S2 out of scope): redRequirement takes its expected list
+// from expectedRedFiles, the function that calls red-check's ruleTestsLeftOut: a file with both
+// kinds of declared change (an import outside the tests listed in red_exempt_outside, the
+// declared block changed, the other tests unchanged and red_exempt) is left out by both alike.
+it('[CT-06zzzzzr] redRequirement leaves out a file with both kinds of declared change, file for file as ruleTestsLeftOut; an undeclared unchanged test keeps it expected', () => {
+  const exempt = (tests: readonly string[]): string[] => [
+    'red_exempt:',
+    ...tests.flatMap((t) => [
+      `  - file: ${MOD_FILE}`,
+      `    test: '${t}'`,
+      '    reason: unchanged frozen test, green on the old code by construction',
+    ]),
+    'red_exempt_outside:',
+    `  - file: ${MOD_FILE}`,
+    '    reason: imports the helper the rewritten block calls',
+  ];
+  const ledgerWith = (name: string, tests: readonly string[]): string => {
+    const dir = modTrusted(name, 'tighten_only');
+    write(dir, {
+      'ops/tasks/B2-09v.yaml': `${modLedger('tighten_only')
+        .replace(
+          `paths:\n  - '${MOD_FILE}'`,
+          "paths:\n  - 'apps/api/src/**'\ntest_paths:\n  - 'test/spec/payout/**'",
+        )
+        .replace('tester: none', 'tester: codex')
+        .trimEnd()}\n${exempt(tests).join('\n')}\n`,
+    });
+    return dir;
+  };
+  const both = ledgerWith('trusted-ct06zzzzzr', ['[AC-B2-09t#34] first', '[AC-B2-09t#36] last']);
+  const short = ledgerWith('trusted-ct06zzzzzr-short', ['[AC-B2-09t#34] first']);
+  const spec = modBranch(
+    'mod-ct06zzzzzr',
+    modSource(MOD_NEW, { extra: "import { send } from './send.ts';" }),
+    modEvidence(),
+  );
+  const req = (trusted: string) =>
+    redRequirement(
+      { prDir: modRepo, base: modBase, head: spec, headRef: 'task/B2-09v', trusted },
+      'B2-09v',
+      modBase,
+      JSON.stringify({ task: 'B2-09v', spec_commit: spec }),
+    );
+  const show = (ref: string) => (p: string) => {
+    const res = spawnSync('git', ['show', `${ref}:${p}`], { cwd: modRepo, encoding: 'utf8' });
+    return res.status === 0 ? res.stdout : null;
+  };
+  const read = { base: show(modBase), head: show(spec) };
+  const ledgerOf = (trusted: string) => loadTask('B2-09v', trusted);
+  for (const [trusted, want] of [
+    [both, [] as string[]],
+    [short, [MOD_FILE]],
+  ] as const) {
+    const t = ledgerOf(trusted);
+    const red = ruleTestsLeftOut([MOD_FILE], read, t);
+    expect(red.expected).toEqual(want);
+    expect(expectedRedFiles([MOD_FILE], read, t, t.modify_existing)).toEqual(want);
+    expect(req(trusted).expected).toEqual(want);
+  }
+  // red-check's note for the file left out is mixedOnlyNote's.
+  const t = ledgerOf(both);
+  expect(ruleTestsLeftOut([MOD_FILE], read, t).notes).toEqual(
+    mixedOnlyFiles(
+      [MOD_FILE],
+      read,
+      t.renames,
+      t.expected_values,
+      t.red_exempt_outside,
+      t.red_exempt,
+      t.modify_existing,
+    ).map(mixedOnlyNote),
   );
 });
 

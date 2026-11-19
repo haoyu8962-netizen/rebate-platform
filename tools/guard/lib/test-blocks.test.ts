@@ -4298,3 +4298,88 @@ it('[CT-06zzzzzj] compareSupportFile: an object literal property appended before
   );
   expect(wrapped.ok && wrapped.tokens.map((p) => `${p.side}:${p.line}`)).toContain('head:6');
 });
+
+// CT-06zzzzzr (D10-2125 (B)): compareModifiedBlocks with `modules` expands an `.each` table that
+// is one name imported from a same-directory kit exporting `export const NAME = [ literals ]`,
+// each side from its own kit; without `modules`, or for anything else, it cannot be expanded.
+it('[CT-06zzzzzr] compareModifiedBlocks reads a same-directory kit table only with modules, the base from the base kit, the head from the head kit', () => {
+  const FILE = 'test/spec/unit/zzkit/sms.test.ts';
+  const KIT = 'test/spec/unit/zzkit/kit.ts';
+  const ROWS = ['[AC-K#1] a needs a phone', '[AC-K#1] b needs a phone'];
+  const file = (body: string, spec = './kit.ts'): string =>
+    [
+      "import { expect, it } from 'vitest';",
+      `import { ACTIONS } from '${spec}';`,
+      '',
+      "it.each(ACTIONS)('[AC-K#1] %s needs a phone', (action) => {",
+      `  ${body}`,
+      '});',
+      '',
+    ].join('\n');
+  const before = file('expect(action).toBeTruthy();');
+  const after = file("expect(`${action}!`).toContain('!');");
+  const kit = (decl: string): string => `${decl}\nexport const other = 1;\n`;
+  const modules = (b: Record<string, string>, h: Record<string, string> = b) => ({
+    file: FILE,
+    base: (p: string) => b[p] ?? null,
+    head: (p: string) => h[p] ?? null,
+  });
+  const ok = (m: ReturnType<typeof modules> | undefined, a = after, s = before) => {
+    const c = compareModifiedBlocks(s, a, ROWS, undefined, m);
+    return c.ok && c.outside === null && c.blocks.every((b) => b.found && b.changed);
+  };
+  const reasons = (m: ReturnType<typeof modules> | undefined, a = after, s = before): string[] => {
+    const c = compareModifiedBlocks(s, a, ROWS, undefined, m);
+    return c.ok ? c.blocks.map((b) => (b.found ? '' : b.reason)) : [c.reason];
+  };
+  const AS_CONST = "export const ACTIONS = ['a', 'b'] as const;";
+  for (const decl of [AS_CONST, "export const ACTIONS = ['a', 'b'];"]) {
+    expect(ok(modules({ [KIT]: kit(decl) })), decl).toBe(true);
+    const c = compareModifiedBlocks(before, after, ROWS, undefined, modules({ [KIT]: kit(decl) }));
+    expect(c.ok && c.blocks.map((b) => (b.found ? b.after.split('\n').at(-1) : ''))).toEqual([
+      "// .each row 1 of 2: 'a'",
+      "// .each row 2 of 2: 'b'",
+    ]);
+  }
+  // Without modules: as before, cannot be expanded for certain.
+  for (const r of reasons(undefined)) expect(r).toMatch(/cannot be expanded for certain/);
+  // The base has no kit; another directory; a let; a re-export; a call; a name row.
+  const refused: [string, ReturnType<typeof modules>, string?][] = [
+    ['no kit at the base', modules({}, { [KIT]: kit(AS_CONST) })],
+    [
+      'another directory',
+      modules({ 'test/spec/unit/other/kit.ts': kit(AS_CONST) }),
+      '../other/kit.ts',
+    ],
+    ['a let', modules({ [KIT]: kit("export let ACTIONS = ['a', 'b'];") })],
+    [
+      'a re-export',
+      modules({
+        [KIT]: kit("export { ACTIONS } from './actions.ts';"),
+        'test/spec/unit/zzkit/actions.ts': AS_CONST,
+      }),
+    ],
+    ['a call', modules({ [KIT]: kit('export const ACTIONS = make();') })],
+    ['a name row', modules({ [KIT]: kit("const A = 'a';\nexport const ACTIONS = [A, 'b'];") })],
+  ];
+  for (const [name, m, spec] of refused) {
+    const s = spec === undefined ? before : file('expect(action).toBeTruthy();', spec);
+    const a = spec === undefined ? after : file("expect(`${action}!`).toContain('!');", spec);
+    const got = reasons(m, a, s);
+    expect(got.length, name).toBeGreaterThan(0);
+    for (const r of got) expect(r, name).toMatch(/cannot be expanded for certain/);
+  }
+  // A row added to the head's kit: the table is not the base's row by row.
+  expect(
+    reasons(
+      modules(
+        { [KIT]: kit(AS_CONST) },
+        { [KIT]: kit("export const ACTIONS = ['a', 'b', 'c'] as const;") },
+      ),
+    ),
+  ).toEqual(
+    ROWS.map(
+      () => 'the .each / .for table has 3 row(s) at the head, 2 at the base: rows added or removed',
+    ),
+  );
+});
