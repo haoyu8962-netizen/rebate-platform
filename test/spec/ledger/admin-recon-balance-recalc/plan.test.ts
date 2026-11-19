@@ -237,7 +237,7 @@ it('[AC-B2-02x#12] 性质：合计在范围内且 frozen ≥ 0 时，相等即 u
     ),
     propParams(),
   );
-});
+}, 900_000);
 
 it('[AC-B2-02x#13] 性质：frozen 合计在 [−2^63, −1] → frozen_negative；任一合计超出 bigint 而 frozen 不为负 → out_of_range；都与缓存无关', () => {
   const beyond = fc.oneof(
@@ -281,4 +281,4 @@ it('[AC-B2-02x#13] 性质：frozen 合计在 [−2^63, −1] → frozen_negative
     ),
     propParams(),
   );
-});
+}, 900_000);

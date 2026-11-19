@@ -62,3 +62,20 @@ export function planBalanceRecalc(input: BalanceRecalcPlanInput): BalanceRecalcP
   void input;
   throw new Error('NotImplemented: planBalanceRecalc');
 }
+
+export interface BalanceRecalcSourceInput {
+  /** The recon_diffs row whose recalculation wrote the balance row. */
+  readonly reconDiffId: string;
+  /** The balance row's version after the recalculation wrote it (the plan's `version`). */
+  readonly version: bigint;
+}
+
+/**
+ * D10-2084: the source of a recalculation (the recovery hook's `voucherId` when available goes from
+ * < 0 to ≥ 0, and any voucher a recalculation would carry): `recalc:<recon_diff_id>:<version>`, the
+ * version in decimal; two recalculations of one difference that write two versions have two sources.
+ */
+export function balanceRecalcSourceRef(input: BalanceRecalcSourceInput): string {
+  void input;
+  throw new Error('NotImplemented: balanceRecalcSourceRef');
+}
