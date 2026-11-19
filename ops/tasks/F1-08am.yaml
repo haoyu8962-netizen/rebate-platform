@@ -40,5 +40,5 @@ modify_existing:
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-withdrawal-detail-payout/**'
-status: todo
-pr: null
+status: done
+pr: 357
