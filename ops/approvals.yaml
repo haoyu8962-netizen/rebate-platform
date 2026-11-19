@@ -681,3 +681,9 @@ approvals:
     granted: true
     date: '2026-11-19'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（试次属门禁流程小改动），D10-2140：前三轮不是连续不过——money r1 fail、r2 全量 pass、例外轮 exception91（approvals 91）pass，三轮之后还有一个收窄实现提交（payout 回基线、签发对 withdraw 带 summary 回 20001），它改的正是安全边界，落地的头上不能留没被评审看过的实现提交。评审重点：payout_account_change 仍必须带且校验摘要、withdraw 路径回基线后不留半截摘要逻辑、带 summary 的 withdraw 签发被 20001 拒、phone_change / account_deletion 不受影响。收口：这一轮若提出问题，修完报编排，不再自批下一轮。编排按 approvals 16 / 24 登记。'
+  - id: 111
+    row: 12
+    title: 'Codex 模型由 gpt-6-astra 改为 gpt-6.2-sol：codex-run.sh 的 MODEL（对抗评审与 Codex 实现同一常量）改 gpt-6.2-sol，evidence-check 的 codex 条目改认 gpt-6.2-sol；取代第 27 条（及第 52 条括号）所写的评审模型，推理档位仍按第 52 条（review 默认 medium，impl 仍 high），其余不变'
+    granted: true
+    date: '2026-11-19'
+    note: '负责人 2026-11-19 18:22 前在编排会话原话「Codex 对抗评审模型请修改为 gpt-6.2 sol」（D10-2134）。编排已把本机 codex-cli 升到 0.169.1，按 codex-run.sh 评审整套参数实测 gpt-6.2-sol 与 gpt-6-astra 都 rc=0、按 schema 出结果。过渡：证据评审条目没有时间字段，切换前记 model gpt-6-astra 的 codex 条目过渡期仍认（evidence-check 单列过渡常量），codex 条目记其他名字、claude-independent 条目记任一 Codex 模型名照旧拒；在途单落完后由 FU-CODEX-MODEL-ASTRA-SUNSET 删旧名。落地任务 CT-06zzzzzs。'

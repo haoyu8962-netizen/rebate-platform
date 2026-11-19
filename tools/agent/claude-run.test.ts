@@ -394,7 +394,7 @@ it("[approvals 36] Codex keeps the caller's working directory and its argv", LON
   expect(argv).not.toContain('--add-dir');
   expect(readJson(join(fx.run, 'meta.impl.json'))).toMatchObject({
     engine: 'codex',
-    model: 'gpt-6-astra',
+    model: 'gpt-6.2-sol',
   });
 });
 
@@ -491,7 +491,7 @@ it('[approvals 36] codex-run.sh ignores AGENT_ENGINE from the environment', LONG
   expect(res.status, res.stderr).toBe(0);
   const argv = decodeDryRun(res.stdout);
   expect(argv[1]).toBe('exec');
-  expect(argv).toContain('gpt-6-astra');
+  expect(argv).toContain('gpt-6.2-sol');
 });
 
 it('[approvals 36] selfcheck reads claude --help and starts no Claude turn', LONG, () => {

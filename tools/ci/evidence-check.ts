@@ -30,8 +30,9 @@
 //              codex or claude entry, with the same conditions (pass, open_s0_s1 0, checklist
 //              complete). An entry must say truthfully which engine produced it: every entry
 //              carries `engine`, equal to its reviewer ("codex", "claude-independent", "claude"),
-//              and a codex / claude-independent entry the model of that engine (gpt-6-astra,
-//              claude-opus-5-5), so a Claude review cannot be filed as Codex's.
+//              and a codex / claude-independent entry the model of that engine (gpt-6.2-sol,
+//              claude-opus-5-5; a codex entry recorded before the D10-2134 switch may still say
+//              gpt-6-astra during the transition), so a Claude review cannot be filed as Codex's.
 //              Handover (规划/11 §2.5, CR-09): when Opus used up its rounds and Codex implemented
 //              once, the evidence carries `handover` and only the Claude review of the handover
 //              implementation must pass (Codex never reviews its own code). Allowed only when the
@@ -1075,14 +1076,28 @@ export const REVIEWERS = ['codex', 'claude', 'claude-independent'] as const;
  * it (#1046 r1 S2), so an independent Claude review cannot pass for a Codex one by its fields.
  */
 export const ENGINE_MODELS: Readonly<Record<string, string>> = {
-  codex: 'gpt-6-astra',
+  codex: 'gpt-6.2-sol',
   'claude-independent': 'claude-opus-5-5',
 };
 
 /**
+ * Transition (D10-2134, owner 2026-11-19): Codex moved from gpt-6-astra to gpt-6.2-sol. Review
+ * entries carry no time field, so entries recorded before the switch cannot be told apart: during
+ * the transition a codex entry may also name one of these models. Exact names only; to be removed
+ * by FU-CODEX-MODEL-ASTRA-SUNSET once the in-flight tasks have landed.
+ */
+export const CODEX_TRANSITION_MODELS: readonly string[] = ['gpt-6-astra'];
+
+/** The models an entry of `engine` may name besides ENGINE_MODELS[engine] (transition only). */
+function transitionModels(engine: string): readonly string[] {
+  return engine === 'codex' ? CODEX_TRANSITION_MODELS : [];
+}
+
+/**
  * ops/approvals.yaml id 36: every review entry (and spec_test_review) names the engine that
  * produced it, equal to its reviewer, and a codex / claude-independent entry the model of that
- * engine (ENGINE_MODELS). Returns the problem or null.
+ * engine (ENGINE_MODELS; a codex entry may also name a CODEX_TRANSITION_MODELS model during the
+ * D10-2134 transition). Returns the problem or null.
  */
 export function engineProblem(entry: Record<string, unknown>): string | null {
   const reviewer = entry['reviewer'];
@@ -1104,10 +1119,15 @@ export function engineProblem(entry: Record<string, unknown>): string | null {
     );
   }
   const model = ENGINE_MODELS[String(engine)];
-  if (model !== undefined && entry['model'] !== model) {
+  const named = entry['model'];
+  if (
+    model !== undefined &&
+    named !== model &&
+    !(typeof named === 'string' && transitionModels(String(engine)).includes(named))
+  ) {
     return (
       `engine ${String(engine)} runs ${model}: the entry must say model "${model}" ` +
-      `(got ${JSON.stringify(entry['model'])})`
+      `(got ${JSON.stringify(named)})`
     );
   }
   return null;

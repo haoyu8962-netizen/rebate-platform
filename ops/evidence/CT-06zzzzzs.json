@@ -1,0 +1,85 @@
+{
+  "task": "CT-06zzzzzs",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "fa41e9b2e65228058094c6baa7ed62cd146b342c",
+  "red_tests": [
+    "test/spec/ci/codex-model-gpt62sol/approvals-entry.test.ts > [AC-CT-06zzzzzs#7] ops/approvals.yaml: a granted entry records the owner words and the switch to gpt-6.2-sol",
+    "test/spec/ci/codex-model-gpt62sol/codex-run-model.test.ts > [AC-CT-06zzzzzs#6] codex-run.sh: the codex engine branch sets MODEL to gpt-6.2-sol (one assignment); the claude-independent branch keeps claude-opus-5-5",
+    "test/spec/ci/codex-model-gpt62sol/engine-model.test.ts > [AC-CT-06zzzzzs#1] a codex review entry naming gpt-6.2-sol passes; ENGINE_MODELS binds codex to gpt-6.2-sol, claude-independent to claude-opus-5-5",
+    "test/spec/ci/codex-model-gpt62sol/engine-model.test.ts > [AC-CT-06zzzzzs#2] transition: a codex entry naming gpt-6-astra (recorded before the switch) still passes, alongside gpt-6.2-sol",
+    "test/spec/ci/codex-model-gpt62sol/engine-model.test.ts > [AC-CT-06zzzzzs#3] a codex entry naming any other model, or none, is refused, and the problem names gpt-6.2-sol",
+    "test/spec/ci/codex-model-gpt62sol/engine-model.test.ts > [AC-CT-06zzzzzs#4] the Codex model names stay codex-only: a claude-independent entry naming gpt-6.2-sol or gpt-6-astra is refused, claude-opus-5-5 still passes",
+    "test/spec/ci/codex-model-gpt62sol/engine-model.test.ts > [AC-CT-06zzzzzs#5] the engine checks are otherwise unchanged: with gpt-6.2-sol a codex entry still needs engine equal to reviewer"
+  ],
+  "risk_note": "Guard change (tools/**, RV2 by path). CT-06zzzzzs (D10-2134): the owner said before 2026-11-19 18:22 「Codex 对抗评审模型请修改为 gpt-6.2 sol」. tools/agent/codex-run.sh MODEL (review and Codex implementation alike) → gpt-6.2-sol; evidence-check ENGINE_MODELS.codex → gpt-6.2-sol, with CODEX_TRANSITION_MODELS ['gpt-6-astra'] still accepted for codex entries only (review entries carry no time field; to be removed by FU-CODEX-MODEL-ASTRA-SUNSET); any other model name, a claude model name on a codex entry or a codex model name on a claude-independent entry is refused as before. ops/approvals.yaml id 111 records the owner's words and replaces the review model written in ids 27 / 52 (effort unchanged). No other check changed.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "fa41e9b2e65228058094c6baa7ed62cd146b342c",
+      "tree": "ba76b192acdabad2bfc477e543f1f8981a15d4e8",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-19T17:54:08Z",
+      "finished_at": "2026-11-19T17:54:11Z",
+      "red_tests": [
+        "test/spec/ci/codex-model-gpt62sol/approvals-entry.test.ts > [AC-CT-06zzzzzs#7] ops/approvals.yaml: a granted entry records the owner words and the switch to gpt-6.2-sol",
+        "test/spec/ci/codex-model-gpt62sol/codex-run-model.test.ts > [AC-CT-06zzzzzs#6] codex-run.sh: the codex engine branch sets MODEL to gpt-6.2-sol (one assignment); the claude-independent branch keeps claude-opus-5-5",
+        "test/spec/ci/codex-model-gpt62sol/engine-model.test.ts > [AC-CT-06zzzzzs#1] a codex review entry naming gpt-6.2-sol passes; ENGINE_MODELS binds codex to gpt-6.2-sol, claude-independent to claude-opus-5-5",
+        "test/spec/ci/codex-model-gpt62sol/engine-model.test.ts > [AC-CT-06zzzzzs#2] transition: a codex entry naming gpt-6-astra (recorded before the switch) still passes, alongside gpt-6.2-sol",
+        "test/spec/ci/codex-model-gpt62sol/engine-model.test.ts > [AC-CT-06zzzzzs#3] a codex entry naming any other model, or none, is refused, and the problem names gpt-6.2-sol",
+        "test/spec/ci/codex-model-gpt62sol/engine-model.test.ts > [AC-CT-06zzzzzs#4] the Codex model names stay codex-only: a claude-independent entry naming gpt-6.2-sol or gpt-6-astra is refused, claude-opus-5-5 still passes",
+        "test/spec/ci/codex-model-gpt62sol/engine-model.test.ts > [AC-CT-06zzzzzs#5] the engine checks are otherwise unchanged: with gpt-6.2-sol a codex entry still needs engine equal to reviewer"
+      ],
+      "expected": [
+        "test/spec/ci/codex-model-gpt62sol/approvals-entry.test.ts",
+        "test/spec/ci/codex-model-gpt62sol/codex-run-model.test.ts",
+        "test/spec/ci/codex-model-gpt62sol/engine-model.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "989b47f2a838fb8227cda9dd7b233f01d532cc14ea6956ab2fcc80852da367d3"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (Codex usage limit until 2026-11-20 13:01, approvals 36): money r1 full review pass, no findings (couli-runs/CT-06zzzzzs/review-money-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by independent Claude (ledger tester claude-independent), red at the first try (7 tests). The Codex spec-test round hit the Codex usage limit three times (exit 11, given back, no output); spec-test r1 by a fresh independent Claude pass (approvals 36; couli-runs/CT-06zzzzzs/review-spec-test-r1.json)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "8bf107494e13cce1be70cbac0e0c72ef54ce57be",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
