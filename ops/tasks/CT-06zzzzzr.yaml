@@ -1,0 +1,30 @@
+id: CT-06zzzzzr
+repo: rebate-platform
+title: 'CT-06zzzzzr（FU-RED-CHECK-MIXED-LEAVE-OUT）：先红检查——基线文件里每条用例都是 red_exempt 或已套用的 modify_existing 块时移出 expected（降为 note）；modify_existing 的 .each 表可取同目录 kit 导出的顶层 const 字面量数组展开（D10-2125）'
+type: guard-change
+# 2026-11-19 w1 入账（编排 D10-2120 ① / D10-2125，排在 B1-02zzzb 之前）。缘由：B1-02zzzb 正式先红（couli-runs/B1-02zzzb/red/7、known-problems.txt）按构造不可能红的 10 条 problem，evidence-check 对 task 分支先红只认 exit 0、标签不豁免，B1-02zzzb 落不了地。
+# (A) 现状：outsideOnlyFiles（块外改动 + 全部用例逐字未改且 red_exempt）与 modifiedOnlyFiles（改动全在已声明块内、块外不动）各自把文件移出 expected；两者兼有的文件（块外有 red_exempt_outside 或 scope: support 覆盖的改动，块内改动都是已声明且找得到、确有改动的 modify_existing 块，其余用例逐字未改且都登了 red_exempt，无新增 / 删除 / 移动用例）两边都不认，留在 expected 里报「existed at the base and every test is declared exempt: nothing is shown red」。要做：这种文件同样移出 expected（not run, not judged，记 note），red-check 与 evidence-check 调同一函数（照 outsideOnlyFiles / modifiedOnlyFiles 的接法）；red_exempt_confirmed 与 modify_existing 的标签、逐块记录要求一字不变。
+# (B) 现状：modify_existing 块是 .each / .for 表、表名从别处导入时报「the table X is not one top-level const used only by this block … cannot be expanded for certain」。outsideOnlyFiles 已认同目录 kit 导出的字面量数组（CT-06zzzzi）；要做：modify_existing 的块比对 / 逐行展开同样认它——只认一层导入、只认同目录测试支撑文件、只认该文件顶层 export const 的字面量数组（可带 as const），基线与头各按各自那份 kit 展开；展不开的照旧报 problem。
+# 不许放宽：基线文件里有一条既非 red_exempt、也非已套用 modify_existing 的用例时，照旧要求红 / 照旧报 problem；有新增用例的文件照旧在 expected；导入的不是 const、跨目录、多层再导出、非字面量时照旧报「cannot be expanded」；evidence-check 其余检查（先红 exit 0、覆盖、标签、逐块 before/after/mutation、support 记录）一字不动；现有 red-check / test-blocks / evidence-check 用例一条不改。
+# 规则测试（独立 Claude 写）至少钉：A 兼有文件 → 移出 expected 且记 note；A 同类文件多一条未声明的绿用例 → 照旧 problem；A 同类文件多一条新用例 → 照旧 expected；B 同目录 kit 顶层 const 字面量（含 as const）→ 块级声明套用；B 跨目录 / 非 const / 两层导入 / 非字面量 → 照旧 cannot be expanded；evidence-check 对 A 文件不再要求其红用例。碰 tools/**：评审走独立 Claude，提 PR 报号，编排按 #24 核过、按 approvals 第 16 条加标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/guard/lib/red-check.ts'
+  - 'tools/guard/lib/red-check.test.ts'
+  - 'tools/guard/lib/test-blocks.ts'
+  - 'tools/guard/lib/test-blocks.test.ts'
+  - 'tools/guard/red-check.ts'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzzr.yaml'
+test_paths:
+  - 'test/spec/ci/red-check-mixed-leave-out/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/red-check-mixed-leave-out/**'
+status: todo
