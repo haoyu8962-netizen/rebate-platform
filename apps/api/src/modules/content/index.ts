@@ -34,6 +34,8 @@ export type {
   ContentAuditWriterFactory,
   ContentKillSwitchChecksFactory,
 } from './content-admin.module.ts';
+// CT-07g (D10-2034): the port of ContentAdminOptions.normalizePoolTags (app.module hands catalog's).
+export type { PoolSourceTagsNormalizer } from './domain/pages/pool-source-tags.ts';
 export { ConfigItemAdmin, combineConfigItemSaveChecks } from './application/config-item-admin.ts';
 export type {
   ConfigItemAdminChecks,

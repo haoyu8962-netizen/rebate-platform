@@ -172,9 +172,4 @@ export * from './hot-words/index.ts';
 // test/spec/catalog/pool-tags-normalize-single/**.
 /** A list of pool tags normalized (CT-07e rules), in input order; null when the value is refused. */
 export type PoolTagsNormalizer = (input: readonly string[]) => readonly string[] | null;
-
-/** The normalized tags of a write, in input order; null when refused (CT-07e bounds). */
-export function normalizePoolTags(input: readonly string[]): readonly string[] | null {
-  void input;
-  throw new Error('NotImplemented: normalizePoolTags');
-}
+export { normalizePoolTags } from './domain/pool-tags.ts';

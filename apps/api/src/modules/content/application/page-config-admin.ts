@@ -30,8 +30,8 @@ import {
   slotDelaySeconds,
 } from '../domain/pages/schedule.ts';
 import {
-  emptiedPoolSourceTagFields,
   normalizePoolSourceTags,
+  type PoolSourceTagsNormalizer,
 } from '../domain/pages/pool-source-tags.ts';
 import { instantOf } from './article-admin.ts';
 
@@ -267,11 +267,22 @@ export class PageConfigAdmin {
   readonly #store: PageConfigStore;
   readonly #clock: Clock;
   readonly #check: PageSectionsCheck;
+  readonly #normalizeTags: PoolSourceTagsNormalizer;
 
-  constructor(store: PageConfigStore, clock: Clock, check: PageSectionsCheck) {
+  /**
+   * `normalizeTags` (CT-07g, D10-2034): catalog's normalization of pool tags, handed in by
+   * app.module through ContentAdminOptions; content has no default of its own.
+   */
+  constructor(
+    store: PageConfigStore,
+    clock: Clock,
+    check: PageSectionsCheck,
+    normalizeTags: PoolSourceTagsNormalizer,
+  ) {
     this.#store = store;
     this.#clock = clock;
     this.#check = check;
+    this.#normalizeTags = normalizeTags;
   }
 
   async list(appId: string, query?: PageListQuery): Promise<Schema<'AdminPageConfigList'>> {
@@ -316,11 +327,12 @@ export class PageConfigAdmin {
     body: Schema<'AdminPageConfigDraftRequest'>,
   ): Promise<PageVersionView> {
     return this.#store.transaction(async (tx) => {
-      // CT-07f (D10-1777 ②): product_pool tags are normalized first and the normalized sections are
-      // what is checked and saved; tags that normalize to [] (empty or all blanks) are refused on their own.
-      const emptied = emptiedPoolSourceTagFields(body.sections);
-      if (emptied.length > 0) throw new PageFieldsError(emptied);
-      const sections = normalizePoolSourceTags(body.sections) as typeof body.sections;
+      // CT-07f (D10-1777 ②) / CT-07g (D10-2034): product_pool tags are normalized first by the
+      // injected normalization (catalog's) and the normalized sections are what is checked and saved;
+      // tags it refuses (null) or that normalize to [] are refused at that data source's tags.
+      const normalized = normalizePoolSourceTags(body.sections, this.#normalizeTags);
+      if (!normalized.ok) throw new PageFieldsError(normalized.fields);
+      const sections = normalized.sections as typeof body.sections;
       // Sections depend only on the request: checked before the page row is touched (F1).
       this.#validate(sections, await tx.unionHostBlock(actor.appId));
       const at = this.#clock.now();

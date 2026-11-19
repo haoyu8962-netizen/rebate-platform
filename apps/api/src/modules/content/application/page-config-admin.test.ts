@@ -156,6 +156,10 @@ function memory(switchValue: unknown = undefined) {
 
 const ACTOR: PageActor = { appId: 'a1', adminId: 'admin-1', ip: null };
 const ok = () => [] as string[];
+// CT-07g: these saves carry no product_pool tags, so the injected normalization is never reached.
+const noTags = (): never => {
+  throw new Error('test: no product_pool tags in these saves');
+};
 
 function setup(
   check: (s: unknown, block: boolean) => readonly string[] = ok,
@@ -163,7 +167,7 @@ function setup(
 ) {
   const clock = new Clockwork();
   const m = memory(switchValue);
-  const admin = new PageConfigAdmin(m.store, clock, check);
+  const admin = new PageConfigAdmin(m.store, clock, check, noTags);
   const save = (rev: number) => {
     clock.ms += 1000;
     return admin.save(ACTOR, 'home', { sections: [], expected_revision: rev });

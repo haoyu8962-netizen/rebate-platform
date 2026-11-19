@@ -95,6 +95,7 @@ import {
   type PageSectionsCheck,
 } from './application/page-config-admin.ts';
 import { createPageSectionsCheck } from './application/page-sections-check.ts';
+import type { PoolSourceTagsNormalizer } from './domain/pages/pool-source-tags.ts';
 import { AdminPagesController } from './http/admin/pages.controller.ts';
 import { PopupAssetUploader } from './application/popup-asset-uploader.ts';
 import { AdminPopupAssetsController } from './http/admin/popup-assets.controller.ts';
@@ -139,7 +140,17 @@ export interface ContentAdminOptions {
   readonly configItemChecks?: ConfigItemAdminChecks;
   /** B2-11e: switch checks over the entry's database handle; absent, none. */
   readonly killSwitchChecks?: ContentKillSwitchChecksFactory;
+  /**
+   * CT-07g (D10-2034): the normalization of product_pool data source tags on a page save — catalog's
+   * normalizePoolTags, handed in by app.module. Content keeps no copy: absent, a page save that
+   * carries such tags fails (50001) instead of normalizing them some other way.
+   */
+  readonly normalizePoolTags?: PoolSourceTagsNormalizer;
 }
+
+const NO_POOL_TAGS_NORMALIZER: PoolSourceTagsNormalizer = () => {
+  throw new Error('content: page saves with product_pool tags need the injected normalization');
+};
 
 const refuse = (): Promise<never> =>
   Promise.reject(new Error('content: platform icon reads need the database'));
@@ -360,6 +371,7 @@ export class ContentAdminModule {
                   homeSectionsSchema(),
                   config.mediaPublicBaseUrl,
                 ))(sections, unionHostBlock),
+              options.normalizePoolTags ?? NO_POOL_TAGS_NORMALIZER,
             );
           },
         },
