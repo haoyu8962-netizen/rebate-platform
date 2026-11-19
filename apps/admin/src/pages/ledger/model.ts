@@ -221,8 +221,10 @@ export function exportRequest(userId: string, filters: Filters): ExportRequest {
 }
 
 /**
- * How one export attempt ended. `unknown`: no answer in the unified envelope (network error,
- * unreadable body, or a success without the task), so the task may exist; never resent.
+ * How one export attempt ended. `unknown`: no definite answer (network error, unreadable body,
+ * a success without the task, or any enveloped HTTP 5xx that is not an explicit 10403 / 20001
+ * date refusal: adminCreateExport has no idempotency key and the server may fail after writing
+ * the task), so the task may exist; never resent. Other enveloped 4xx are `failed`.
  */
 export type ExportOutcome =
   | { readonly kind: 'created'; readonly id: string }
@@ -246,13 +248,18 @@ export function exportRejected(cause: unknown): ExportOutcome {
   if (!(cause instanceof AdminApiError)) return { kind: 'unknown' };
   if (cause.kind === 'network' || cause.kind === 'parse') return { kind: 'unknown' };
   // 202 Accepted with the new task: the data provider only treats 200 as success.
-  if (cause.kind === 'http')
-    return cause.httpStatus === 202 ? createdOf(cause.data) : { kind: 'failed' };
+  if (cause.kind === 'http') {
+    if (cause.httpStatus === 202) return createdOf(cause.data);
+    return cause.httpStatus >= 500 ? { kind: 'unknown' } : { kind: 'failed' };
+  }
+  // Explicit refusals first: the server said the task was not created.
   if (cause.code === 10403) return { kind: 'forbidden' };
   if (cause.code === 20001) {
     const fields = rejectedFields(cause);
     if (fields.includes('accounting_date_from') || fields.includes('accounting_date_to'))
       return { kind: 'dateRange' };
   }
+  // A 5xx may come after the task was written (no idempotency key): check 【导出记录】.
+  if (cause.httpStatus >= 500) return { kind: 'unknown' };
   return { kind: 'failed' };
 }
