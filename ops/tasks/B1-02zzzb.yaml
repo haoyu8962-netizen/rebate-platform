@@ -19,6 +19,121 @@ paths:
   - 'apps/api/src/modules/identity/**'
 test_paths:
   - 'test/spec/identity/step-up-digest/**'
+  - 'test/spec/identity/identity-level/http-kit.ts'
+  - 'test/spec/identity/payout-account/concurrency.int.test.ts'
+  - 'test/spec/identity/payout-account/kit.ts'
+  - 'test/spec/identity/payout-bank-card/kit.ts'
+  - 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+  - 'test/spec/identity/payout-bank-card/verification.int.test.ts'
+  - 'test/spec/identity/realname-payout-invalidate/kit.ts'
+  - 'test/spec/identity/reverify-gates/kit.ts'
+  - 'test/spec/identity/reverify-gates/payout-account.int.test.ts'
+  - 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+  - 'test/spec/identity/step-up/sms.int.test.ts'
+  - 'test/spec/risk/bad-debt-linked/kit.ts'
+modify_existing:
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#5] 未注入 %s 返回 50301，零预占且不核销 step-up'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#8] 默认每日三次，不一致保留占额，超限 30303 verify_limit 不调用且不消费 token'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/payout-bank-card/verification.int.test.ts'
+    test: '[AC-B1-13f#22] 同键 R2 在 R1 核验期间 40901，R1 不一致后原样回放，不二次收费'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/payout-bank-card/verification.int.test.ts'
+    test: '[AC-B1-13f#37] 完成的幂等键原样返回；同键改卡号 20901，不新收费或核销新的 step-up'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    test: '[AC-B1-13e#30] 两个真实连接并发 %s：等待 users 行锁后重读绑定和计数'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2106
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动 11-19 补报（D10-1773 的六块之外），编排按 D10-1670 核过放行（D10-2106）。'
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    test: '[AC-B1-13e#31] 锁前本地校验 %s：users 被独立连接锁住仍立即拒绝，且不写行'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2106
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动 11-19 补报（D10-1773 的六块之外），编排按 D10-1670 核过放行（D10-2106）。'
+  - file: 'test/spec/identity/reverify-gates/payout-account.int.test.ts'
+    test: '[AC-B1-02zq#20] 10010 不写幂等结果、不消耗令牌：加验通过后同令牌新键保存成功'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2106
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动 11-19 补报（D10-1773 的六块之外），编排按 D10-1670 核过放行（D10-2106）。'
+  - file: 'test/spec/identity/identity-level/http-kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/identity/payout-account/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/identity/payout-bank-card/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/identity/realname-payout-invalidate/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/identity/reverify-gates/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/identity/reverify-gates/payout-account.int.test.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/risk/bad-debt-linked/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
 impl: claude
 tester: claude-independent
 accept:
