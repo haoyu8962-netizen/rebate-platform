@@ -5,6 +5,7 @@ type: impl
 # 2026-11-18 be 入账（编排 D10-2017 ②）。只读，不改任何状态；payout 是 RV2 路径，规则测试与评审走独立 Claude（D10-2003）。
 # 取数：payout_batches、payout_batch_items（只插入不改，moved_out 行照原样给出）、withdrawals、payout_attempts；「下次查询」取查询任务的排程（与 BR-WDR-14 查询节奏同一来源，不另算）；has_transfer_attempt = 该单存在 kind=transfer 的尝试记录。
 # 规则测试要钉：BR-WDR-17 例（第 8 单 payer_side_after_transfer、第 9–20 单 queue_paused、第 1–7 单照常查询）读出的成员字段；moved_out 行；app 隔离；无权限 10403。
+# 11-20 be 补 paths（D10-2157 开工时发现）：契约两接口仍是 x-implementation: planned，实现要去掉并同步生成物，照 B2-02x 写法。
 refs: [BR-WDR-12, BR-WDR-14, BR-WDR-17]
 refs_hash:
   BR-WDR-12: 37adcd14e97f
@@ -16,6 +17,12 @@ paths:
   - 'apps/api/src/modules/payout/http/admin/payout-batches-read.controller*.ts'
   - 'apps/api/src/modules/payout/infra/**'
   - 'apps/api/src/modules/payout/payout.module.ts'
+  - 'contracts/openapi.yaml' # 只去掉 listAdminPayoutBatches、getAdminPayoutBatch 的 x-implementation: planned（照 B2-02x / B2-02u / D10-1079 先例）
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
 test_paths:
   - 'test/spec/payout/admin-payout-batches-read/**'
 impl: claude
