@@ -1,0 +1,37 @@
+{
+  "risk_note": "CT-24zzo (contract only, tester none; D10-2105 / D10-2107). Adds two planned read-only admin operations for payout batches: listAdminPayoutBatches (GET /admin/v1/payout-batches) and getAdminPayoutBatch (GET /admin/v1/payout-batches/{batch_id}), with member schema AdminPayoutBatchMember. Members ordered by their first payout_batch_items time in the batch, then withdrawal_id; held_count and the held filter share one definition (member still on the batch, status APPROVED, hold_reason non-null); a member's hold_reason is null unless APPROVED; next_query_at only while channel_state is null or processing. The existing AdminWithdrawal schema and adminCreatePayoutBatch are unchanged. Generated files (openapi.gen.ts, planned-operations.gen.ts, auth / signing / min-version route tables) from codegen; after the rebase onto main (with #324) codegen produced no change, contracts:check and prettier exit 0.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 3,
+      "note": "Fresh independent Claude via claude-run.sh: r1 fail (fixed), r2 fail (my r1 fix had edited the existing AdminWithdrawal schema line instead of the new member schema; fixed by line), r3 incremental pass with no new S0/S1. No content change after r3 (couli-runs/CT-24zzo/review-contract-r3.json)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "task": "CT-24zzo",
+  "spec_commit": "813e8e117b83042f42a271f46d33ec9d64bd2830",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "6c2fdfcd8c57478190e00ec07a609c8c04005fa9",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}
