@@ -19,6 +19,349 @@ paths:
   - 'apps/api/src/modules/identity/**'
 test_paths:
   - 'test/spec/identity/step-up-digest/**'
+  - 'test/spec/identity/identity-level/http-kit.ts'
+  - 'test/spec/identity/payout-account/concurrency.int.test.ts'
+  - 'test/spec/identity/payout-account/kit.ts'
+  - 'test/spec/identity/payout-bank-card/kit.ts'
+  - 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+  - 'test/spec/identity/payout-bank-card/verification.int.test.ts'
+  - 'test/spec/identity/realname-payout-invalidate/kit.ts'
+  - 'test/spec/identity/reverify-gates/kit.ts'
+  - 'test/spec/identity/reverify-gates/payout-account.int.test.ts'
+  - 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+  - 'test/spec/identity/step-up/sms.int.test.ts'
+  - 'test/spec/risk/bad-debt-linked/kit.ts'
+modify_existing:
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#5] 未注入 bin 返回 50301，零预占且不核销 step-up'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#5] 未注入 verifier 返回 50301，零预占且不核销 step-up'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#8] 默认每日三次，不一致保留占额，超限 30303 verify_limit 不调用且不消费 token'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/payout-bank-card/verification.int.test.ts'
+    test: '[AC-B1-13f#22] 同键 R2 在 R1 核验期间 40901，R1 不一致后原样回放，不二次收费'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/payout-bank-card/verification.int.test.ts'
+    test: '[AC-B1-13f#37] 完成的幂等键原样返回；同键改卡号 20901，不新收费或核销新的 step-up'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#4] withdraw 从登录账号取绑定手机发码，并能完成相应用途的二次验证'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#4] payout_account_change 从登录账号取绑定手机发码，并能完成相应用途的二次验证'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#4] phone_change 从登录账号取绑定手机发码，并能完成相应用途的二次验证'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#4] account_deletion 从登录账号取绑定手机发码，并能完成相应用途的二次验证'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#20][BR-ID-08] 短信签发 withdraw：ES256、300 秒、身份与 action 绑定'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#20][BR-ID-08] 短信签发 payout_account_change：ES256、300 秒、身份与 action 绑定'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#20][BR-ID-08] 短信签发 phone_change：ES256、300 秒、身份与 action 绑定'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#20][BR-ID-08] 短信签发 account_deletion：ES256、300 秒、身份与 action 绑定'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-1773
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动编排已按 D10-1670 核过放行（D10-1773，核对表 couli-runs/B1-02zzzb/frozen-cand2/checklist-1670.md）。'
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    test: '[AC-B1-13e#30] 两个真实连接并发 limit：等待 users 行锁后重读绑定和计数'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2106
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动 11-19 补报（D10-1773 的六块之外），编排按 D10-1670 核过放行（D10-2106）。'
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    test: '[AC-B1-13e#30] 两个真实连接并发 same-account：等待 users 行锁后重读绑定和计数'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2106
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动 11-19 补报（D10-1773 的六块之外），编排按 D10-1670 核过放行（D10-2106）。'
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    test: '[AC-B1-13e#30] 两个真实连接并发 first-binding：等待 users 行锁后重读绑定和计数'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2106
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动 11-19 补报（D10-1773 的六块之外），编排按 D10-1670 核过放行（D10-2106）。'
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    test: '[AC-B1-13e#31] 锁前本地校验 invalid-logon：users 被独立连接锁住仍立即拒绝，且不写行'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2106
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动 11-19 补报（D10-1773 的六块之外），编排按 D10-1670 核过放行（D10-2106）。'
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    test: '[AC-B1-13e#31] 锁前本地校验 disabled-method：users 被独立连接锁住仍立即拒绝，且不写行'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2106
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动 11-19 补报（D10-1773 的六块之外），编排按 D10-1670 核过放行（D10-2106）。'
+  - file: 'test/spec/identity/reverify-gates/payout-account.int.test.ts'
+    test: '[AC-B1-02zq#20] 10010 不写幂等结果、不消耗令牌：加验通过后同令牌新键保存成功'
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2106
+    note: '令牌绑定业务摘要后，该块取令牌改为带上要保存的那张收款账号（或保存请求带同一账号），期望码与期望值不变；块内改动 11-19 补报（D10-1773 的六块之外），编排按 D10-1670 核过放行（D10-2106）。'
+  - file: 'test/spec/identity/identity-level/http-kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/identity/payout-account/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/identity/payout-bank-card/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/identity/realname-payout-invalidate/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/identity/reverify-gates/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/identity/reverify-gates/payout-account.int.test.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+  - file: 'test/spec/risk/bad-debt-linked/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-08]
+    ruling: D10-2100
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-1780 改写：分支逻辑放 test_paths 新文件 step-up-digest/payout-summary.ts，冻结文件里只按 token 纯插入 import 与调用；D10-1795 过渡期禁列自查无命中）。'
+red_exempt_outside:
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    reason: '块外只按 token 纯插入 import 与取令牌辅助调用（分支逻辑在 test_paths 新文件 step-up-digest/payout-summary.ts；文件级 support 条目 D10-2100，D10-1780 / D10-1795 禁列自查无命中），用例断言与期望值未改'
+  - file: 'test/spec/identity/reverify-gates/payout-account.int.test.ts'
+    reason: '块外只按 token 纯插入 import 与取令牌辅助调用（分支逻辑在 test_paths 新文件 step-up-digest/payout-summary.ts；文件级 support 条目 D10-2100，D10-1780 / D10-1795 禁列自查无命中），用例断言与期望值未改'
+red_exempt:
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#1] PUT 去 planned，契约声明错误码且开户行由服务端 BIN 带出'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#2] 12 位合法卡号去空格连字符，银行名忽略用户输入，密文与 HMAC 使用统一上下文'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#2] 16 位合法卡号去空格连字符，银行名忽略用户输入，密文与 HMAC 使用统一上下文'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#2] 19 位合法卡号去空格连字符，银行名忽略用户输入，密文与 HMAC 使用统一上下文'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#3] 不合法卡号 99000100018 返回 20001 card_no，不占额不外调'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#3] 不合法卡号 99000100000000000019 返回 20001 card_no，不占额不外调'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#3] 不合法卡号 9900010000000010 返回 20001 card_no，不占额不外调'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#3] 不合法卡号 A900010000000019 返回 20001 card_no，不占额不外调'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#3] 不合法卡号 +9900010000000019 返回 20001 card_no，不占额不外调'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#4] BIN 为 credit 时拒绝且不收费'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#4] BIN 为 unrecognised 时拒绝且不收费'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#6] 本地拒绝 disabled 先于预占和供应商'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#6] 本地拒绝 blacklist 先于预占和供应商'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#6] 本地拒绝 name 先于预占和供应商'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#6] 本地拒绝 occupied 先于预占和供应商'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#6] 本地拒绝 changes 先于预占和供应商'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#7] 相同当前银行卡即使月额度用尽仍成功，不写账号、变更或核验记录；仍先比户名'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#9] 无效每日额度 0 回退三次且 warn 仅携带配置键'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#9] 无效每日额度 -1 回退三次且 warn 仅携带配置键'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#9] 无效每日额度 1.5 回退三次且 warn 仅携带配置键'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#9] 无效每日额度 "2" 回退三次且 warn 仅携带配置键'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#9] 无效每日额度 null 回退三次且 warn 仅携带配置键'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#10] 当日统计包括在途、unknown 与终态，排除 released、昨日和别的用户；按 +08:00 换日'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#11] 银行卡成功核销 step-up，同键回放绕过已消费 token；换支付宝共用变更计数'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-bank-card/submit.int.test.ts'
+    test: '[AC-B1-13f#12] 未实名与无效 step-up 在预占前拒绝，正确 token 才能触达银行卡供应商'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（payout-bank-card/kit.ts → identity-level/http-kit.ts，文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#5] 未登录发 step_up 返回 10001；拒绝不占次数，登录后无需提交手机号'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#6] step_up 出现 phone（own）一律 20001 fields=[phone]，不发码也不占次数'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#6] step_up 出现 phone（other）一律 20001 fields=[phone]，不发码也不占次数'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#6] step_up 出现 phone（empty）一律 20001 fields=[phone]，不发码也不占次数'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#6] step_up 出现 phone（null）一律 20001 fields=[phone]，不发码也不占次数'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#7] 未绑手机沿用短信 step-up 的 20001 fields=[code]，不得发送短信'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#8] 同 app、同设备切换账号后，只向令牌所属账号的手机发码'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#9] 跨 app 令牌不得借用本设备取号；合法本人令牌仍能发码'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#10] 伪造令牌不得作为匿名请求发 step_up；拒绝后本人仍能发码'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#11] 不同设备和 action 仍共享绑定手机号的发送间隔'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#12] deletion_only 只放行 login 与注销 step_up；其他用途拒绝且不发码'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#13] login 仍允许匿名传号，登录时仍用传入号；step_up 才用绑定号'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#13] bind 仍允许匿名传号，登录时仍用传入号；step_up 才用绑定号'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up-bound-phone/sms.int.test.ts'
+    test: '[AC-B1-02zzz#14] 换绑后下一次发码读取最新绑定号码，不复用设备或会话中的旧号'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#29][BR-ID-08] 配置 step-up TTL，复用短信核销端口并指定绑定手机号与用途'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#21][BR-ID-08] 验证码核销，同码再次提交 20003，无第二个 token'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#22][BR-ID-08] 错码 20002，随后正确码仍可验证'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#23][BR-ID-08] 短信满 300 秒失效，返回 20003'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#24][BR-ID-08] 未绑定手机不能走短信'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#25][BR-ID-08] 账号手机号从服务端取，另一账号验证码不能验证本账号'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#26][BR-ID-08] login 短信不能替代 purpose=step_up 的验证码'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#27][BR-ID-08] 混用短信与 Apple 凭证不能绕过 oneOf 校验'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/step-up/sms.int.test.ts'
+    test: '[AC-B1-02f#28][BR-ID-08] 无令牌 10001；其他 app 令牌 10403，均不核销验证码'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件读本单改动的支撑文件（step-up/http-kit.ts（工具判其未闭合：按计算名导入），文件级 support 条目 D10-2100）被整份重判（red-check：may read a test-support file the task changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    test: '[AC-B1-13e#32] 部分唯一索引的真实 23505 竞态映射 30308，旧行与计次回滚且调用方事务可继续'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件块外只有 token 纯插入（文件级 support 条目 D10-2100，D10-1780 / D10-1795）被整份重判（red-check：code outside the tests changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    test: '[AC-B1-13e#33] 保存持有的锁不含 advisory lock，也不访问余额表'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件块外只有 token 纯插入（文件级 support 条目 D10-2100，D10-1780 / D10-1795）被整份重判（red-check：code outside the tests changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/payout-account/concurrency.int.test.ts'
+    test: '[AC-B1-13e#34] 等待 users 行锁期间新登记的黑名单在锁内重查，禁止保存缓存的通过结果'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件块外只有 token 纯插入（文件级 support 条目 D10-2100，D10-1780 / D10-1795）被整份重判（red-check：code outside the tests changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/reverify-gates/payout-account.int.test.ts'
+    test: '[AC-B1-02zq#17] step-up 之后：无令牌 → 10003，有令牌 → 10010，都不写入'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件块外只有 token 纯插入（文件级 support 条目 D10-2100，D10-1780 / D10-1795）被整份重判（red-check：code outside the tests changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/reverify-gates/payout-account.int.test.ts'
+    test: '[AC-B1-02zq#18] 已有账号的变更同样拦下：当前账号不动，不记变更'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件块外只有 token 纯插入（文件级 support 条目 D10-2100，D10-1780 / D10-1795）被整份重判（red-check：code outside the tests changed），照工具登记（D10-1984 / D10-1986 先例）'
+  - file: 'test/spec/identity/reverify-gates/payout-account.int.test.ts'
+    test: '[AC-B1-02zq#19] 银行卡同样拦下：不占核验次数、不写入'
+    reason: '冻结用例、块体与主干逐字相同，在新旧实现下都成立；同文件块外只有 token 纯插入（文件级 support 条目 D10-2100，D10-1780 / D10-1795）被整份重判（red-check：code outside the tests changed），照工具登记（D10-1984 / D10-1986 先例）'
 impl: claude
 tester: claude-independent
 accept:
