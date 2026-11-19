@@ -92,6 +92,8 @@ const CATALOG: Readonly<Record<string, TemplateCodeDefinition>> = {
   APPEAL_RESULT: { defaultChannels: INBOX, inboxOnly: true, variables: {} },
   DELETION_PROGRESS: { defaultChannels: INBOX, inboxOnly: true, variables: {} },
   BALANCE_ADJUSTED: { defaultChannels: INBOX, inboxOnly: true, variables: {} },
+  // B2-02z: a balance recalculation's correction notice (D10-2092 ⑤): inbox only, no SMS variables.
+  BALANCE_CORRECTED: { defaultChannels: INBOX, inboxOnly: true, variables: {} },
   DATA_COPY_READY: { defaultChannels: PUSH_INBOX, variables: { default: ['expires_at'] } },
   DATA_COPY_CODE: {
     defaultChannels: SMS,

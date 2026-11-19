@@ -10,9 +10,7 @@
 //
 // Pure renderer: erasable syntax only, no database, no platform import (the writer that records it
 // is ./balance-corrected-message-record.ts).
-//
-// Skeleton (B2-02z test round): the renderer throws NotImplemented; the implementation round fills
-// it in (rule tests test/spec/notification/balance-corrected/**).
+import { formatYuan } from '@couli/money';
 
 /** The available balance read under the lock and the one written, integer fen (may be negative). */
 export interface BalanceCorrectedFacts {
@@ -34,12 +32,26 @@ export interface BalanceCorrectedMessage {
   readonly body: string;
 }
 
+export const BALANCE_CORRECTED_CODE = 'BALANCE_CORRECTED';
+
+/** inbox.title.BALANCE_CORRECTED (contracts/texts.default.json, D10-2093). */
+const DEFAULT_TITLE = '余额更正';
+/** D10-2092 default body, verbatim. */
+const DEFAULT_BODY =
+  '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可用余额由 {before} 调整为 {after}。如有疑问，请联系客服。';
+
 /** null when the available balance is unchanged (nothing is sent). */
 export function renderBalanceCorrectedMessage(
   facts: BalanceCorrectedFacts,
   override: BalanceCorrectedOverride | null,
 ): BalanceCorrectedMessage | null {
-  void facts;
-  void override;
-  throw new Error('NotImplemented: renderBalanceCorrectedMessage (B2-02z)');
+  if (facts.before_fen === facts.after_fen) return null;
+  const title = override?.title_override ?? DEFAULT_TITLE;
+  const template = override?.body_override ?? DEFAULT_BODY;
+  // BR-TEXT-10 App format, unsigned option: '-' before '¥' for a negative balance, no '+'.
+  const before = formatYuan(facts.before_fen);
+  const after = formatYuan(facts.after_fen);
+  // Function replacers: the substituted text is taken literally (no `$` patterns).
+  const body = template.replaceAll('{before}', () => before).replaceAll('{after}', () => after);
+  return { code: BALANCE_CORRECTED_CODE, variant: 'default', category: 'service', title, body };
 }

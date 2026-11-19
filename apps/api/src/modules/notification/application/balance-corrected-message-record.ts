@@ -7,12 +7,14 @@
 // source `recalc:<recon_diff_id>:<version>`, D10-2084) and the inbox message commit or roll back with
 // the recalculation itself; a second record of the same pair writes nothing. The recalculation
 // (ledger) receives this through app.module, never by import.
-//
-// Skeleton (B2-02z test round): the writer throws NotImplemented; the implementation round fills
-// it in (rule tests test/spec/notification/balance-corrected/**).
 import type { DB } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
-import type { BalanceCorrectedFacts } from './balance-corrected-message.ts';
+import { newUuidV7 } from '../../platform/index.ts';
+import {
+  BALANCE_CORRECTED_CODE,
+  renderBalanceCorrectedMessage,
+  type BalanceCorrectedFacts,
+} from './balance-corrected-message.ts';
 
 export interface BalanceCorrectedRecordInput {
   readonly appId: string;
@@ -26,12 +28,67 @@ export interface BalanceCorrectedRecordInput {
   readonly now: Date;
 }
 
+/** users.status values of an account being deleted or already deleted (D10-2097). */
+const GONE_STATUSES: ReadonlySet<string> = new Set(['deleting', 'deleted']);
+
 /** True when a message was written (a changed available balance seen for the first time). */
-export function recordBalanceCorrectedMessage(
+export async function recordBalanceCorrectedMessage(
   trx: Transaction<DB> | Kysely<DB>,
   input: BalanceCorrectedRecordInput,
 ): Promise<boolean> {
-  void trx;
-  void input;
-  throw new Error('NotImplemented: recordBalanceCorrectedMessage (B2-02z)');
+  if (input.facts.before_fen === input.facts.after_fen) return false;
+  const db = trx.withSchema('app');
+  const { now } = input;
+  // A plain read on the caller's transaction (no row lock: the recalculation already holds the
+  // balance lock, and locking users after it would invert the users → balance lock order).
+  const user = await db
+    .selectFrom('users')
+    .select('status')
+    .where('app_id', '=', input.appId)
+    .where('id', '=', input.userId)
+    .executeTakeFirst();
+  if (user === undefined || GONE_STATUSES.has(user.status)) return false;
+  const override = await db
+    .selectFrom('notify_templates')
+    .select(['title_override', 'body_override'])
+    .where('app_id', '=', input.appId)
+    .where('code', '=', BALANCE_CORRECTED_CODE)
+    .where('variant', '=', 'default')
+    .executeTakeFirst();
+  const message = renderBalanceCorrectedMessage(input.facts, override ?? null);
+  if (message === null) return false;
+  const logged = await db
+    .insertInto('notify_logs')
+    .values({
+      id: newUuidV7(now),
+      app_id: input.appId,
+      user_id: input.userId,
+      code: message.code,
+      channel: 'inbox',
+      dedupe_key: `balance_corrected:${input.reconDiffId}:${String(input.balanceVersion)}`,
+      planned_at: now,
+      sent_at: now,
+      status: 'success',
+      created_at: now,
+      updated_at: now,
+    })
+    .onConflict((oc) => oc.columns(['app_id', 'dedupe_key']).doNothing())
+    .returning('id')
+    .executeTakeFirst();
+  if (logged === undefined) return false;
+  await db
+    .insertInto('inbox_messages')
+    .values({
+      message_id: newUuidV7(now),
+      app_id: input.appId,
+      user_id: input.userId,
+      code: message.code,
+      title: message.title,
+      body: message.body,
+      route: null,
+      created_at: now,
+      updated_at: now,
+    })
+    .execute();
+  return true;
 }
