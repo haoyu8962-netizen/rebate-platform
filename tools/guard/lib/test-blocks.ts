@@ -787,6 +787,14 @@ export type ComparedBlock = {
    * otherwise and for a block that is no `.each` / `.for` table call.
    */
   rows?: EachRows;
+  /**
+   * CT-06zzzzzr r2 (B1-02zzzb's concurrency.int.test.ts; compareOutsideChanged only): the exact
+   * full names of an `.each` / `.for` block whose table is an inline array of literal rows,
+   * `as const` after it or not, expanded as modify_existing expands it (EachExpansion, `table`
+   * '': inline), null for any other block or when that expansion fails. Only mixedOnlyFiles
+   * reads it, and only for a changed block whose `names` are null; `names` is unchanged.
+   */
+  inlineEach?: string[] | null;
 };
 
 export type FileComparison =
@@ -2079,6 +2087,10 @@ export function compareOutsideChanged(
       title: b.title,
       changed: !unchanged.has(j),
       names: b.names,
+      inlineEach:
+        b.each !== null && b.each.expand.ok && b.each.expand.table === ''
+          ? b.each.expand.names
+          : null,
     })),
     lines: lineRanges(changedLines),
   };

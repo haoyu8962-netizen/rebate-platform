@@ -3718,3 +3718,150 @@ it('[CT-06zzzzzi] evidence-check round 2: a support file changed in the rule-tes
     `${where} test block 2 ("${MOD_TEST}") is not declared and differs from the base`,
   );
 });
+
+// CT-06zzzzzr (D10-2125 (B), money-codex r1 S2; B1-02zzzb's step-up-bound-phone/sms.int.test.ts):
+// the merge path of evidence-check (the class 1 hit after spec_commit and the modify_existing
+// records) reads an `.each` table imported from a same-directory kit from that side's kit, as
+// red-check does; a table imported from another directory still cannot be expanded for certain.
+it('[CT-06zzzzzr] checkEvidence: rows of it.each(ACTIONS) with ACTIONS from a same-directory kit, every row declared and only the callback changed, pass; a kit in another directory is refused as before', () => {
+  const DIR = 'test/spec/identity/step-up';
+  const FILE = `${DIR}/sms.int.test.ts`;
+  const KIT = "export const ACTIONS = ['bind', 'unbind'] as const;\n";
+  const block = (body: string): string =>
+    [
+      'it.each(ACTIONS)(',
+      "  '[AC-K#4] %s：短信校验',",
+      '  async (action) => {',
+      `    ${body}`,
+      '  },',
+      ');',
+    ].join('\n');
+  const OLD = 'expect(action).toBeTruthy();';
+  const NEW = 'expect(await verify(action)).toBe(true);';
+  const source = (body: string, from: string): string =>
+    [
+      "import { expect, it } from 'vitest';",
+      `import { ACTIONS } from '${from}';`,
+      "it('[AC-K#3] plain', () => {",
+      '  expect(1).toBe(1);',
+      '});',
+      block(body),
+      '',
+    ].join('\n');
+  const TESTS = ['[AC-K#4] bind：短信校验', '[AC-K#4] unbind：短信校验'];
+  const ROWS = ["'bind'", "'unbind'"];
+  const record = (i: number): Evidence => {
+    const tag = `\n// .each row ${i + 1} of 2: ${ROWS[i] as string}`;
+    return {
+      file: FILE,
+      test: TESTS[i],
+      reason: 'tighten_only',
+      before: `${block(OLD)}${tag}`,
+      after: `${block(NEW)}${tag}`,
+      mutation: [{ mutant: 'verify skipped', result: 'killed' }],
+    };
+  };
+  const repo = join(SCRATCH, 'kit-each-repo');
+  mkdirSync(repo, { recursive: true });
+  git(repo, ['init', '-q', '-b', 'main']);
+  write(repo, {
+    SPEC_REF: `${SPEC_REF}\n`,
+    [`${DIR}/kit.ts`]: KIT,
+    'test/spec/identity/shared/kit.ts': KIT,
+    [FILE]: source(OLD, './kit.ts'),
+  });
+  git(repo, ['add', '-A']);
+  git(repo, ['commit', '-q', '-m', 'base']);
+  const base = git(repo, ['rev-parse', 'HEAD']);
+  const trusted = join(SCRATCH, 'trusted-kit-each');
+  for (const f of ['tools/guard/protected-paths.json', 'ops/risk-map.yaml']) {
+    write(trusted, { [f]: readFileSync(join(REPO, f), 'utf8') });
+  }
+  write(trusted, {
+    'tools/guard/legacy-tasks.json': JSON.stringify({ baseline: 'fixture', tasks: [] }),
+    'ops/tasks/B1-02k.yaml': [
+      'id: B1-02k',
+      'repo: rebate-platform',
+      'title: verify inside the frozen .each block',
+      'type: test-change',
+      'refs: []',
+      'refs_hash: {}',
+      'deps: []',
+      'paths:',
+      `  - '${FILE}'`,
+      'impl: claude',
+      'tester: none',
+      'accept:',
+      "  - 'pnpm verify'",
+      'status: todo',
+      'modify_existing:',
+      ...TESTS.flatMap((t) => [
+        `  - file: '${FILE}'`,
+        `    test: '${t}'`,
+        '    reason: tighten_only',
+        '    ruling: D10-2125',
+        "    note: 'the verification is called inside the block only'",
+      ]),
+      '',
+    ].join('\n'),
+  });
+  const branch = (name: string, baseContent: string | null, headContent: string): string => {
+    let from = base;
+    if (baseContent !== null) {
+      // The base side of the comparison (the merge base) holds `baseContent` instead.
+      git(repo, ['checkout', '-q', '-B', `${name}-base`, base]);
+      write(repo, { [FILE]: baseContent });
+      git(repo, ['add', '-A']);
+      git(repo, ['commit', '-q', '-m', `${name} base`]);
+      from = git(repo, ['rev-parse', 'HEAD']);
+    }
+    git(repo, ['checkout', '-q', '-B', name, from]);
+    write(repo, { [FILE]: headContent });
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-q', '-m', name]);
+    const tree = git(repo, ['rev-parse', 'HEAD:test/spec']);
+    const doc = {
+      task: 'B1-02k',
+      spec_ref: SPEC_REF,
+      spec_commit: from,
+      runs: [],
+      reviews: [
+        {
+          reviewer: 'codex',
+          engine: 'codex',
+          model: 'gpt-6-astra',
+          verdict: 'pass',
+          open_s0_s1: 0,
+          checklist_complete: true,
+        },
+      ],
+      trees: { 'test/spec': tree },
+      longrun: { runs: 1000000, seed: 1, passed: true, tree },
+      modify_existing: [record(0), record(1)],
+    };
+    write(repo, { 'ops/evidence/B1-02k.json': `${JSON.stringify(doc, null, 2)}\n` });
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-q', '-m', 'evidence']);
+    return git(repo, ['rev-parse', 'HEAD']);
+  };
+  const check = (mergeBase: string, head: string) =>
+    checkEvidence({
+      prDir: repo,
+      base: mergeBase,
+      head,
+      headRef: 'task/B1-02k',
+      trusted,
+      approval: approved(head),
+    });
+  // The same-directory kit: both rows expanded from it on both sides; the change passes.
+  const good = branch('kit-good', null, source(NEW, './kit.ts'));
+  expect(check(base, good).problems).toEqual([]);
+  // A kit in another directory (one level up): not read, so the rows cannot be expanded for
+  // certain and the class 1 change and the records are refused as before.
+  const otherBase = source(OLD, '../shared/kit.ts');
+  const other = branch('kit-other', otherBase, source(NEW, '../shared/kit.ts'));
+  const mb = git(repo, ['rev-parse', `${other}~2`]);
+  const text = check(mb, other).problems.join('\n');
+  expect(text).toContain(`spec_commit: rule tests changed after the rule-test commit: ${FILE} (M)`);
+  expect(text).toContain('cannot be expanded for certain');
+});

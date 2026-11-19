@@ -854,10 +854,17 @@ export function mixedOnlyFiles(
     // The changes outside the tests, and which head blocks are the base's (CT-06zzzc's reading).
     const lenient = compareOutsideChanged(before, after, modules);
     if (lenient.whole || lenient.lines === '') continue;
-    // The exact full names of every block, distinct (as outsideOnlyFiles).
+    // The exact full names of every block, distinct (as outsideOnlyFiles). A changed block whose
+    // table is an inline array of literal rows followed by `as const` (CT-06zzzzzr r2, B1-02zzzb's
+    // concurrency.int.test.ts) is named as modify_existing expands it (ComparedBlock.inlineEach);
+    // it must then be a declared block (below), and any other block keeps its names or none.
     if (lenient.blocks.length === 0) continue;
-    if (lenient.blocks.some((b) => !Array.isArray(b.names) || b.names.length === 0)) continue;
-    const allNames = lenient.blocks.flatMap((b) => b.names as string[]);
+    const blocks = lenient.blocks.map((b) => ({
+      ...b,
+      names: b.names ?? (b.changed ? (b.inlineEach ?? null) : null),
+    }));
+    if (blocks.some((b) => !Array.isArray(b.names) || b.names.length === 0)) continue;
+    const allNames = blocks.flatMap((b) => b.names as string[]);
     if (new Set(allNames).size !== allNames.length) continue;
     // Every declared block found on both sides and changed (compareModifiedBlocks).
     const here = modified.filter((d) => d.file === file);
@@ -871,7 +878,7 @@ export function mixedOnlyFiles(
     // compareModifiedBlocks tells a plain block changed by its place in the shared rest too, which
     // any change outside the tests moves: each declared block must also differ from the base by
     // the lenient comparison (its head block is not the base's).
-    const declaredBlocks = lenient.blocks.filter((b) =>
+    const declaredBlocks = blocks.filter((b) =>
       (b.names as string[]).some((n) => headDeclared.has(n)),
     );
     if (declaredBlocks.some((b) => !b.changed)) continue;
@@ -882,7 +889,7 @@ export function mixedOnlyFiles(
     // Every other test unchanged (a block none of whose names is declared, the base's) and the
     // file's red_exempt declarations exactly those names, each with a reason.
     let others: string[] | null = [];
-    for (const b of lenient.blocks) {
+    for (const b of blocks) {
       const bn = b.names as string[];
       if (bn.some((n) => headDeclared.has(n))) continue;
       if (b.changed) {

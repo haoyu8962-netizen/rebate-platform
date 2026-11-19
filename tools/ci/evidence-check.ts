@@ -207,7 +207,7 @@ import {
   supportLinesText,
   supportTokensText,
 } from '../guard/lib/test-blocks.ts';
-import type { ModifiedComparison } from '../guard/lib/test-blocks.ts';
+import type { ImportedModules, ModifiedComparison } from '../guard/lib/test-blocks.ts';
 import {
   expectedRuleTests,
   expectedValuesHit,
@@ -485,6 +485,18 @@ export function changedBetween(
   return changes;
 }
 
+/**
+ * The readers of a same-directory kit for `file` (CT-06zzzzzr, D10-2125 (B); money-codex r1 S2):
+ * the base side at `from`, the head side at `head`, as red-check reads them (ImportedModules).
+ */
+function sideModules(prDir: string, from: string, head: string, file: string): ImportedModules {
+  return {
+    file,
+    base: (p: string) => showOrNull(prDir, from, p),
+    head: (p: string) => showOrNull(prDir, head, p),
+  };
+}
+
 function showOrNull(prDir: string, ref: string, path: string): string | null {
   const res = tryGit(['show', `${ref}:${path}`], { cwd: prDir });
   return res.status === 0 ? res.stdout : null;
@@ -589,13 +601,17 @@ function modifiedHitProblem(
   const before = showOrNull(prDir, from, hit.path);
   const after = showOrNull(prDir, head, hit.path);
   if (before === null || after === null) return 'declared in modify_existing, but unreadable';
-  if (support !== undefined) return supportHitProblem(before, after, declared);
+  // CT-06zzzzzr (D10-2125 (B), money-codex r1 S2): a table imported from a same-directory kit
+  // is read from that side's kit, spec_commit's and the head's (as red-check reads them).
+  const modules = sideModules(prDir, from, head, hit.path);
+  if (support !== undefined) return supportHitProblem(before, after, declared, modules);
   // CT-06zzzzr (D10-1278 ②): a renamed entry's block is its retitle_to at the head.
   const compared = compareModifiedBlocks(
     before,
     after,
     names,
     declared.map((e) => e.retitle_to),
+    modules,
   );
   if (!compared.ok) return `declared in modify_existing, but ${compared.reason}`;
   const missing = compared.blocks.find((b) => !b.found);
@@ -622,11 +638,12 @@ function supportHitProblem(
   before: string,
   after: string,
   declared: readonly ModifyExistingBlockDeclaration[],
+  modules?: ImportedModules,
 ): string | null {
   const names = declared.map((e) => e.test);
   const retitles = declared.map((e) => e.retitle_to);
   if (names.length > 0) {
-    const compared = compareModifiedBlocks(before, after, names, retitles);
+    const compared = compareModifiedBlocks(before, after, names, retitles, modules);
     if (!compared.ok) return `declared in modify_existing, but ${compared.reason}`;
     const missing = compared.blocks.find((b) => !b.found);
     if (missing !== undefined && !missing.found) {
@@ -750,7 +767,12 @@ function supportRecordProblems(
   // class 1 hits stays as it is).
   if (before !== null && after !== null && before !== after) {
     const declared = blockEntries(modify.entries).filter((e) => e.file === entry.file);
-    const why = supportHitProblem(before, after, declared);
+    const why = supportHitProblem(
+      before,
+      after,
+      declared,
+      sideModules(prDir, modify.base, head, entry.file),
+    );
     if (why !== null) at(where, `${entry.file} (merge base → head): ${why}`);
   }
   for (const [key, text, side] of [
@@ -823,6 +845,8 @@ function modifyRecordProblems(
                 declared.map((e) => e.test),
                 // CT-06zzzzr (D10-1278 ②): a renamed entry's block is its retitle_to at the head.
                 declared.map((e) => e.retitle_to),
+                // CT-06zzzzzr (D10-2125 (B)): kit tables read from the merge base and the head.
+                sideModules(prDir, modify.base, head, file),
               );
       cache.set(file, got);
     }

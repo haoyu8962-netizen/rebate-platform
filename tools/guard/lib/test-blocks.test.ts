@@ -4383,3 +4383,41 @@ it('[CT-06zzzzzr] compareModifiedBlocks reads a same-directory kit table only wi
     ),
   );
 });
+
+// CT-06zzzzzr r2 (B1-02zzzb's concurrency.int.test.ts): a changed `.each([…] as const)` block has
+// no ComparedBlock.names (unchanged reading); compareOutsideChanged adds inlineEach, the names
+// modify_existing expands for an inline table of literal rows, and nothing for a table by name.
+it('[CT-06zzzzzr] compareOutsideChanged: inlineEach names an inline .each table with `as const`, names stays null; a table by name or a %o title has none', () => {
+  const src = (body: string, extra: string): string =>
+    [
+      "import { expect, it } from 'vitest';",
+      extra,
+      "const MODES = ['x', 'y'] as const;",
+      '',
+      "it.each(['limit', 'same-account'] as const)(",
+      "  '[AC-R2#30] mode %s',",
+      '  async (mode) => {',
+      `    ${body}`,
+      '  },',
+      '  20_000,',
+      ');',
+      '',
+      "it.each(MODES)('[AC-R2#31] named %s', (mode) => {",
+      `    ${body}`,
+      '});',
+      '',
+      "it.each(['a'] as const)('[AC-R2#32] obj %o', (mode) => {",
+      `    ${body}`,
+      '});',
+      '',
+    ].join('\n');
+  const base = src('expect(mode).toBeTruthy();', '');
+  const head = src('expect(bound(mode)).toBeTruthy();', "import { bound } from './bound.ts';");
+  const c = compareOutsideChanged(base, head);
+  if (c.whole) throw new Error(c.reason);
+  expect(c.blocks.map((b) => [b.changed, b.names, b.inlineEach])).toEqual([
+    [true, null, ['[AC-R2#30] mode limit', '[AC-R2#30] mode same-account']],
+    [true, null, null],
+    [true, null, null],
+  ]);
+});

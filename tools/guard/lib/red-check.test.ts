@@ -4677,3 +4677,98 @@ it('[CT-06zzzzzr] mixedOnlyFiles keeps a file expected when a rename or a regist
     ),
   ).toEqual([]);
 });
+
+// CT-06zzzzzr r2 (B1-02zzzb's concurrency.int.test.ts, red/8): a file whose changed blocks are
+// inline `.each([…] as const)` tables, every row declared in modify_existing, an import added
+// outside the tests (red_exempt_outside) and every other test unchanged and red_exempt.
+const R2_FILE = `${MIXED_DIR}/as-const.int.test.ts`;
+const r2Each = (n: number, rows: readonly string[], call: string): string =>
+  [
+    `it.each([${rows.map((r) => `'${r}'`).join(', ')}] as const)(`,
+    `  '[AC-R2#${n}] 并发 %s：重读',`,
+    '  async (mode) => {',
+    `    expect(${call}).toBeTruthy();`,
+    '  },',
+    '  20_000,',
+    ');',
+  ].join('\n');
+const R2_ROWS30 = ['limit', 'same-account', 'first-binding'];
+const R2_ROWS31 = ['invalid-logon', 'disabled-method'];
+const R2_PLAIN = mixedTest('[AC-R2#32] 竞态', 'expect(3).toBe(3);');
+const R2_PLAIN2 = mixedTest('[AC-R2#33] 锁', 'expect(4).toBe(4);');
+const r2Base = mixedFile(
+  [r2Each(30, R2_ROWS30, 'mode'), r2Each(31, R2_ROWS31, 'mode'), R2_PLAIN, R2_PLAIN2],
+  null,
+);
+const r2Head = mixedFile(
+  [r2Each(30, R2_ROWS30, 'bound(mode)'), r2Each(31, R2_ROWS31, 'bound(mode)'), R2_PLAIN, R2_PLAIN2],
+  "import { bound } from '../step-up-digest/payout-summary.ts';",
+);
+const r2Names = [
+  ...R2_ROWS30.map((r) => `[AC-R2#30] 并发 ${r}：重读`),
+  ...R2_ROWS31.map((r) => `[AC-R2#31] 并发 ${r}：重读`),
+];
+const r2Run = (
+  head: string,
+  modify: readonly string[],
+  exempt: readonly string[],
+): { mixed: string[]; expected: string[] } => {
+  const read = {
+    base: (p: string) => (p === R2_FILE ? r2Base : null),
+    head: (p: string) => (p === R2_FILE ? head : null),
+  };
+  const task = {
+    renames: [],
+    expected_values: [],
+    red_exempt_outside: [{ file: R2_FILE, reason: 'imports the bound helper' }],
+    red_exempt: exempt.map((t) => mxExempt(R2_FILE, t)),
+    modify_existing: modify.map((t) => mxModify(R2_FILE, t)),
+  };
+  return {
+    mixed: mixedOnlyFiles(
+      [R2_FILE],
+      read,
+      task.renames,
+      task.expected_values,
+      task.red_exempt_outside,
+      task.red_exempt,
+      task.modify_existing,
+    ).map((r) => r.file),
+    expected: ruleTestsLeftOut([R2_FILE], read, task).expected,
+  };
+};
+
+it('[CT-06zzzzzr] mixedOnlyFiles leaves out a file whose changed blocks are inline .each([…] as const) tables with every row declared, the rest unchanged and exempt', () => {
+  expect(r2Run(r2Head, r2Names, ['[AC-R2#32] 竞态', '[AC-R2#33] 锁'])).toEqual({
+    mixed: [R2_FILE],
+    expected: [],
+  });
+});
+
+it('[CT-06zzzzzr] mixedOnlyFiles keeps the as-const file expected when one row or one test is not declared', () => {
+  // A row of a changed .each block without its modify_existing entry.
+  expect(
+    r2Run(
+      r2Head,
+      r2Names.filter((n) => n !== '[AC-R2#31] 并发 disabled-method：重读'),
+      ['[AC-R2#32] 竞态', '[AC-R2#33] 锁'],
+    ),
+  ).toEqual({ mixed: [], expected: [R2_FILE] });
+  // An unchanged test without its red_exempt entry.
+  expect(r2Run(r2Head, r2Names, ['[AC-R2#32] 竞态'])).toEqual({
+    mixed: [],
+    expected: [R2_FILE],
+  });
+  // An unchanged .each([…] as const) block stays without names: exempt rows do not leave it out.
+  const unchangedEach = mixedFile(
+    [r2Each(30, R2_ROWS30, 'bound(mode)'), r2Each(31, R2_ROWS31, 'mode'), R2_PLAIN, R2_PLAIN2],
+    "import { bound } from '../step-up-digest/payout-summary.ts';",
+  );
+  expect(
+    r2Run(unchangedEach, r2Names.slice(0, 3), [
+      ...r2Names.slice(3),
+      '[AC-R2#32] 竞态',
+      '[AC-R2#33] 锁',
+    ]),
+  ).toEqual({ mixed: [], expected: [R2_FILE] });
+});
