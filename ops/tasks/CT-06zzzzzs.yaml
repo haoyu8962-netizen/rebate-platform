@@ -1,0 +1,28 @@
+id: CT-06zzzzzs
+repo: rebate-platform
+title: 'CT-06zzzzzs（FU-CODEX-MODEL-GPT62SOL）：Codex 对抗评审与实现模型改 gpt-6.2-sol——codex-run.sh MODEL、evidence-check ENGINE_MODELS 的 codex 改新名，切换前的 gpt-6-astra 记录过渡期仍认；approvals 新条目记负责人原话（D10-2134）'
+type: guard-change
+# 2026-11-19 w1 入账（编排 D10-2134，排在 CT-06zzzzzr 合并之后：两张都动 tools/ci/evidence-check.ts）。负责人 2026-11-19 18:22 前原话「Codex 对抗评审模型请修改为 gpt-6.2 sol」；编排已把本机 codex-cli 升到 0.169.1，按 codex-run.sh 评审整套参数实测 gpt-6.2-sol 与 gpt-6-astra 都 rc=0、按 schema 出结果。
+# 范围：① tools/agent/codex-run.sh 的 MODEL（评审与 Codex 实现同一常量）改 'gpt-6.2-sol'；推理档位不动（仍按 CODEX_REVIEW_EFFORT，现 medium）。② tools/ci/evidence-check.ts：ENGINE_MODELS 的 codex 改 'gpt-6.2-sol'；过渡——证据评审条目没有时间字段，所以过渡期 codex 条目记 gpt-6.2-sol 或 gpt-6-astra 都认（单列一个过渡常量，注释写明 D10-2134 与待删 FU），claude-independent 不动。③ tools/agent/README.md 与 tools/ci/evidence-check.ts 头注里写模型名的地方同步；现有测试里断言旧模型名的，只改为新名并保留一条「旧名过渡期仍认」。④ ops/approvals.yaml 末尾新增一条（号取落地时主干最大 + 1）：记负责人原话，改第 27 条所写的评审模型，强度仍按第 52 条（medium）。
+# 不许放宽：codex 条目记别的模型名（含 claude 模型名、空、gpt-6.2 sol 带空格等变体）仍拒；claude-independent 条目记 codex 任一模型名仍拒；engine 必须等于 reviewer 等其余检查一字不动。tools/research 一类非评审调用（rea-research.sh）不动。
+# 规则测试（独立 Claude 写，test_paths 新目录）至少钉：codex 记 gpt-6.2-sol 通过；codex 记 gpt-6-astra 过渡期通过；codex 记其他名字拒；claude-independent 记 gpt-6.2-sol / gpt-6-astra 拒；codex-run.sh 的 MODEL 是 gpt-6.2-sol。登 FU-CODEX-MODEL-ASTRA-SUNSET：在途单落完后删旧名。碰 tools/**：评审过后编排按 approvals 第 16 条加标签。
+refs: []
+refs_hash: {}
+deps: [CT-06zzzzzr]
+paths:
+  - 'tools/agent/codex-run.sh'
+  - 'tools/agent/codex-run.test.ts'
+  - 'tools/agent/claude-run.test.ts'
+  - 'tools/agent/README.md'
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'ops/approvals.yaml'
+  - 'ops/tasks/CT-06zzzzzs.yaml'
+test_paths:
+  - 'test/spec/ci/codex-model-gpt62sol/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/codex-model-gpt62sol/**'
+status: todo
