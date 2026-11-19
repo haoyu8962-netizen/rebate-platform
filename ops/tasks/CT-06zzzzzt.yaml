@@ -20,4 +20,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/each-kit-table-annotated/**'
-status: todo
+status: done
+pr: 355
