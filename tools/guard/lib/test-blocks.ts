@@ -1183,8 +1183,12 @@ type KitTable = { rows: Row[]; texts: string[]; raw: string[]; decl: string } | 
  * `as const` or not, then `;` or the end of the file, at the top level, with rows CT-06zzzd reads
  * as literal (rowsIn, as an inline `.each([…])`), and the name occurring nowhere else in the kit —
  * not as a name (a push, an alias, an export list), not in a string or a template — or why not.
+ * CT-06zzzzzu (D10-2150): with `eachRows` (compareModifiedBlocks' expansion) the rows are read as
+ * compareEachRows reads an inline table (rowsIn(…, true): BigInt, a negative BigInt, a literal
+ * followed by `as const`), so that a kit table expands row by row as the same table written inline
+ * does; without it (the names of CT-06zzzd, namesOf) as before. The row texts stay the source.
  */
-function exportedTable(source: string, name: string): KitTable {
+function exportedTable(source: string, name: string, eachRows = false): KitTable {
   let tokens: Token[];
   let match: number[];
   try {
@@ -1234,7 +1238,7 @@ function exportedTable(source: string, name: string): KitTable {
     return { reason: `${name} is more than an array literal: \`${next.text}\` follows it` };
   }
   const { rowsIn, valueEnd } = literalReader(tokens, match);
-  const rows = rowsIn(open, close, false);
+  const rows = rowsIn(open, close, eachRows);
   if (rows === null) return { reason: `the rows of ${name} are not literal` };
   const texts: string[] = [];
   const raw: string[] = [];
@@ -1291,6 +1295,18 @@ function annotationEnd(
   }
   return null;
 }
+
+/** Digits with numeric separators where the language allows them (CT-06zzzzzu, D10-2150). */
+const DIGITS = String.raw`\d(?:_?\d)*`;
+/**
+ * A decimal number literal as primitive reads it (CT-06zzzd): its integer part is `0`, a legacy
+ * `0`-led run of digits without `_` (as before), or digits with separators not led by `0`.
+ */
+const NUMBER = new RegExp(
+  String.raw`^(?:(?:0\d*|[1-9](?:_?\d)*)(?:\.${DIGITS})?|\.${DIGITS})(?:[eE][+-]?${DIGITS})?$`,
+);
+/** A decimal BigInt literal (CT-06zzzf), with separators where the language allows them. */
+const BIGINT = /^(?:0|[1-9](?:_?\d)*)n$/;
 
 /**
  * The readers of literal `.each` / `.for` rows over `tokens` (CT-06zzzd; moved out of outsideView
@@ -1419,15 +1435,17 @@ function literalReader(tokens: readonly Token[], match: readonly number[]) {
     if (t.kind === 'tpl' && t.parts?.length === 1 && typeof t.parts[0] === 'string') {
       return { value: t.parts[0], next: k + 1 };
     }
+    // CT-06zzzzzu (D10-2150): a numeric separator `_` is read where the language allows it — one
+    // `_` between two digits, not after a leading `0` (DIGITS, NUMBER, BIGINT) — and the value is
+    // that of the text without the `_`; a `_` anywhere else (first, last, twice, next to the point,
+    // the `e` or the `n`, in a radix prefix) is no literal. Row texts keep the source as written.
     const number = (u: Token | undefined): number | null =>
-      u?.kind === 'num' && /^(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(u.text)
-        ? Number(u.text)
-        : null;
-    // A decimal BigInt literal (`789n`, `0n`): its value by BigInt, never through Number (no
-    // precision lost); the rows themselves compareEachRows compares by their text.
+      u?.kind === 'num' && NUMBER.test(u.text) ? Number(u.text.replaceAll('_', '')) : null;
+    // A decimal BigInt literal (`789n`, `0n`, `123_456n`): its value by BigInt, never through
+    // Number (no precision lost); the rows themselves compareEachRows compares by their text.
     const big = (u: Token | undefined): bigint | null =>
-      bigint && u?.kind === 'num' && /^(?:0|[1-9]\d*)n$/.test(u.text)
-        ? BigInt(u.text.slice(0, -1))
+      bigint && u?.kind === 'num' && BIGINT.test(u.text)
+        ? BigInt(u.text.slice(0, -1).replaceAll('_', ''))
         : null;
     if (t.kind === 'num') {
       const b = big(t);
@@ -1587,7 +1605,8 @@ function outsideView(source: string, kit?: KitReader): OutsideView {
   const kitSources = new Map<string, string | null>();
   // CT-06zzzzzr: the kit path a table call at `p` was read from (expansion's `table`).
   const kitPathAt = new Map<number, string>();
-  const importedTable = (p: number): KitTable | null => {
+  // CT-06zzzzzu: `eachRows` as exportedTable's (true only for compareModifiedBlocks' expansion).
+  const importedTable = (p: number, eachRows = false): KitTable | null => {
     if (kit === undefined || tokens[p]?.text !== '(' || match[p] !== p + 2) return null;
     const id = tokens[p + 1] as Token;
     if (id.kind !== 'id') return null;
@@ -1643,7 +1662,7 @@ function outsideView(source: string, kit?: KitReader): OutsideView {
     }
     const text = kitSources.get(path) ?? null;
     if (text === null) return { reason: `the kit ${path} cannot be read` };
-    return exportedTable(text, id.text);
+    return exportedTable(text, id.text, eachRows);
   };
   const namesOf = (c: Call, prefix: string): string[] | null => {
     if (!plainChain(c.start, c.open)) return null;
@@ -1804,11 +1823,11 @@ function outsideView(source: string, kit?: KitReader): OutsideView {
       if (close + 1 === match[p] || outerAsConst(close, match[p] as number)) {
         found = tableAt(p + 1, close);
       }
-    } else if (one?.kind === 'id' && importedTable(p) !== null) {
+    } else if (one?.kind === 'id' && importedTable(p, true) !== null) {
       // CT-06zzzzzr (D10-2125 (B)): one name imported (one level) from a same-directory kit that
       // exports it at its top level as `export const NAME = [ literals ]` (as const or not), read
       // from this side's kit (exportedTable); anything else about it cannot be expanded for certain.
-      const imported = importedTable(p) as KitTable;
+      const imported = importedTable(p, true) as KitTable;
       if ('reason' in imported) {
         return fail(`the table ${one.text} imported from a same-directory kit: ${imported.reason}`);
       }

@@ -4463,3 +4463,147 @@ it('[CT-06zzzzzt] exportedTable: an annotation holding strings and a comment wit
     /cannot be expanded for certain/,
   );
 });
+
+// CT-06zzzzzu (D10-2150): a kit table is read as compareEachRows reads an inline table (BigInt, a
+// negative BigInt, a literal followed by `as const`); number and BigInt literals take `_`
+// separators where the language allows them, valued without the `_`, their row texts as written.
+const U_DIR = 'test/spec/zu';
+const uRuleFile = (head: boolean, inline?: readonly string[]): string =>
+  [
+    "import { expect, it } from 'vitest';",
+    inline === undefined
+      ? "import { ROWS, send } from './kit.ts';"
+      : "import { send } from './kit.ts';",
+    '',
+    `it.each(${inline === undefined ? 'ROWS' : `[${inline.join(', ')}]`})('[AC-U#1] %s pays %s', (label, amount) => {`,
+    `  expect(send(label${head ? ", 'x'" : ''})).toBe(label);`,
+    '  expect(amount).toBeDefined();',
+    '});',
+    '',
+  ].join('\n');
+const uKit = (rows: readonly string[]): Record<string, string> => ({
+  [`${U_DIR}/kit.ts`]: [
+    `export const ROWS = [${rows.join(', ')}];`,
+    'export function send(a: string, b?: string) { return b ?? a; }',
+    '',
+  ].join('\n'),
+});
+const uModules = (base: Record<string, string>, head = base) => ({
+  file: `${U_DIR}/a.test.ts`,
+  base: (p: string) => base[p] ?? null,
+  head: (p: string) => head[p] ?? null,
+});
+/** Per declared name: the row tag on both sides when found, else the reason. */
+const uOutcome = (r: ReturnType<typeof compareModifiedBlocks>): unknown => {
+  if (!r.ok) return r.reason;
+  return r.blocks.map((b) =>
+    b.found
+      ? [
+          b.test,
+          b.changed,
+          b.before.slice(b.before.lastIndexOf('\n// .each row ')),
+          b.after.slice(b.after.lastIndexOf('\n// .each row ')),
+        ]
+      : [b.test, b.reason],
+  );
+};
+/** The name and `changed` (or the reason) of each outcome. */
+const uFound = (r: unknown): unknown =>
+  Array.isArray(r) ? (r as unknown[][]).map((x) => x.slice(0, 2)) : r;
+const uKitRun = (rows: readonly string[], names: readonly string[]): unknown =>
+  uOutcome(
+    compareModifiedBlocks(
+      uRuleFile(false),
+      uRuleFile(true),
+      names,
+      undefined,
+      uModules(uKit(rows)),
+    ),
+  );
+const uInlineRun = (rows: readonly string[], names: readonly string[]): unknown =>
+  uOutcome(
+    compareModifiedBlocks(
+      uRuleFile(false, rows),
+      uRuleFile(true, rows),
+      names,
+      undefined,
+      uModules(uKit([])),
+    ),
+  );
+
+it('[CT-06zzzzzu] a kit row whose items carry `as const` each (990n as const) expands as the same table inline', () => {
+  const rows = ["['raise', 990n as const, 1234n]", "['flat', 7 as const, 'x' as const]"];
+  const names = ['[AC-U#1] raise pays 990n', '[AC-U#1] flat pays 7'];
+  const kit = uKitRun(rows, names);
+  expect(kit).toEqual(uInlineRun(rows, names));
+  expect(kit).toEqual([
+    [names[0], true, `\n// .each row 1 of 2: ${rows[0]}`, `\n// .each row 1 of 2: ${rows[0]}`],
+    [names[1], true, `\n// .each row 2 of 2: ${rows[1]}`, `\n// .each row 2 of 2: ${rows[1]}`],
+  ]);
+});
+
+it('[CT-06zzzzzu] a separated BigInt above 2^53 (9_007_199_254_740_993n) is valued by BigInt, not through Number', () => {
+  const rows = ["['big', 9_007_199_254_740_993n]"];
+  const exact = ['[AC-U#1] big pays 9007199254740993n'];
+  const kit = uKitRun(rows, exact);
+  expect(kit).toEqual(uInlineRun(rows, exact));
+  expect(uFound(kit)).toEqual([[exact[0], true]]);
+  // The value Number would give (…992) is not a name of the table.
+  const rounded = uKitRun(rows, ['[AC-U#1] big pays 9007199254740992n']);
+  expect(JSON.stringify(rounded)).toMatch(
+    /no row of the \.each \/ \.for table at the base expands/,
+  );
+  expect(uFound(rounded)).not.toEqual([['[AC-U#1] big pays 9007199254740992n', true]]);
+});
+
+it('[CT-06zzzzzu] a kit table with negative and separated BigInt expands as the same table inline', () => {
+  const rows = [
+    "['a', -1234n]",
+    "['b', 0n]",
+    "['c', 123_456n]",
+    "['d', -2_000_000n]",
+    "['e', 1_000.5]",
+  ];
+  const names = [
+    '[AC-U#1] a pays -1234n',
+    '[AC-U#1] b pays 0n',
+    '[AC-U#1] c pays 123456n',
+    '[AC-U#1] d pays -2000000n',
+    '[AC-U#1] e pays 1000.5',
+  ];
+  const kit = uKitRun(rows, names);
+  expect(kit).toEqual(uInlineRun(rows, names));
+  expect((kit as unknown[][]).map((x) => x[1])).toEqual([true, true, true, true, true]);
+  expect((kit as string[][])[2]?.[2]).toBe("\n// .each row 3 of 5: ['c', 123_456n]");
+});
+
+it('[CT-06zzzzzu] 1_000 has the value of 1000 (same name) but another row text (a changed row)', () => {
+  const names = ['[AC-U#1] n pays 1000'];
+  const plain = ["['n', 1000]"];
+  const sep = ["['n', 1_000]"];
+  expect(uFound(uKitRun(sep, names))).toEqual([[names[0], true]]);
+  expect(uFound(uInlineRun(sep, names))).toEqual([[names[0], true]]);
+  // Callbacks unchanged, only the row rewritten with `_`: the declared row is changed.
+  const r = compareModifiedBlocks(
+    uRuleFile(false, plain),
+    uRuleFile(false, sep),
+    names,
+    undefined,
+    uModules(uKit([])),
+  );
+  expect(uOutcome(r)).toEqual([
+    [names[0], true, "\n// .each row 1 of 1: ['n', 1000]", "\n// .each row 1 of 1: ['n', 1_000]"],
+  ]);
+});
+
+it('[CT-06zzzzzu] a misplaced separator (1__0, 0_1 after a leading 0) still is no literal', () => {
+  for (const bad of ['1__0', '0_1', '1_n']) {
+    const rows = ["['ok', 1n]", `['bad', ${bad}]`];
+    const kit = JSON.stringify(uKitRun(rows, ['[AC-U#1] ok pays 1n']));
+    expect(kit, bad).toMatch(/not literal/);
+    expect(kit, bad).toMatch(/cannot be expanded for certain/);
+    expect(JSON.stringify(uInlineRun(rows, ['[AC-U#1] ok pays 1n'])), bad).toMatch(
+      /cannot be expanded for certain/,
+    );
+  }
+});
