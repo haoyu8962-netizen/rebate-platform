@@ -1365,6 +1365,7 @@ export const notify_template_code = [
   "APPEAL_RESULT", // 申诉结果（只发站内信）
   "DELETION_PROGRESS", // 注销进度（只发站内信）
   "BALANCE_ADJUSTED", // 人工调账调减（只发站内信）
+  "BALANCE_CORRECTED", // 余额被重算纠正（只发站内信）
   "SMS_CODE", // 短信验证码
   "UNION_AUTH_EXPIRING", // 站长授权即将到期（短信）
   "UNION_AUTH_EXPIRED", // 站长授权已过期（短信）

@@ -131,6 +131,7 @@ export const FUND_TERM_KEYS = {
       "CLAIM_RESULT",
       "WD_OVERDUE",
       "BALANCE_ADJUSTED",
+      "BALANCE_CORRECTED",
       "RISK_STATE_CHANGED",
       "APPEAL_RESULT",
       "DELETION_PROGRESS"

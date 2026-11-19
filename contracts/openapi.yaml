@@ -20630,12 +20630,13 @@ paths:
         - What may be changed: `push_switchable` (push may be turned on or off), `sms_switchable`
           (SMS may be turned on or off) and `sms_fixed` (SMS is always on and only its registration
           may be replaced: `SMS_CODE`, `UNION_AUTH_EXPIRING`, `UNION_AUTH_EXPIRED`,
-          `DATA_COPY_CODE`). Codes 08 sends as inbox messages only (the three codes of BR-TEXT-23
-          and `BALANCE_ADJUSTED`) have both switches false; codes outside the service category
-          never get SMS (subscription codes, BR-WATCH-15; marketing SMS is P1); codes without inbox
-          (`SMS_CODE`, the station-owner alerts) cannot get push either. `sms_billing_confirm` is
-          true for a service code whose default channels have no SMS: turning its SMS on needs
-          `confirm_sms_billing` (SMS is billed per message).
+          `DATA_COPY_CODE`). Codes 08 sends as inbox messages only (the three codes of BR-TEXT-23,
+          `BALANCE_ADJUSTED`, and `BALANCE_CORRECTED` by owner decision D10-2092 pending its
+          write-back to 08) have both switches false; codes outside the
+          service category never get SMS (subscription codes, BR-WATCH-15; marketing SMS is P1);
+          codes without inbox (`SMS_CODE`, the station-owner alerts) cannot get push either.
+          `sms_billing_confirm` is true for a service code whose default channels have no SMS:
+          turning its SMS on needs `confirm_sms_billing` (SMS is billed per message).
         - SMS readiness (D10-337 ②, D10-339 ⑥): `sms_ready` is true when every variant of the code
           has an active registration (`sms_registrations[].active` not null); it is false for a
           code without SMS rows. SMS can be turned on only when `sms_ready` is true.
@@ -24858,9 +24859,23 @@ paths:
         `user_id`, the trimmed reason, `changed` and, before and after, `available_fen` and
         `frozen_fen`; no personal data). Values equal before and after are a success too
         (`changed=false`): the balance row is not written, and the audit record is written as
-        usual, so a check leaves a trace. This operation does not trigger a wallet change push
-        to the member (D10-2033): neither a recalculation that changes the cache nor a refusal
-        sends one.
+        usual, so a check leaves a trace.
+        Member notice (D10-2091, D10-2092): when the new `available_fen` differs from the one read
+        under the lock, the server writes one inbox message of template code `BALANCE_CORRECTED`
+        (category `service`) in the same transaction that writes the balance row; its two
+        variables are `before` and `after`, the available balance before and after the correction
+        (`available_fen` as read under the lock and as written), formatted as an amount per
+        BR-TEXT-10 (a negative balance with '-' before '¥', no '+' for a positive one); operators may reword the title and body but not
+        the variables. It is an inbox message only: no push (the wallet change push
+        of D10-2033 included) and no SMS. It is sent for an increase and a decrease alike. It is
+        not sent to a member whose users.status is `deleting` (deletion processing: the account
+        can no longer sign in) or `deleted`; a member still in the cooling-off period of a
+        deletion request (can sign in, read only) gets it as usual (D10-2097, BR-FUND-24 ⑧). The
+        recalculation itself is done whatever the member's status. A refusal, a cache whose values are equal before and
+        after, and a recalculation that changes only `frozen_fen` send none; a rolled-back
+        transaction sends none. When the correction crosses 0 downwards and BR-WDR-05 (a)
+        rejects the member's non-terminal withdrawals, the rejection notice of each withdrawal
+        is sent as usual, separately: the two are not merged.
 
         Not done by this operation (D10-2017): it does not close the difference, does not
         change its `status`, `handler_id`, `resolution` or `updated_at`, and releases no
