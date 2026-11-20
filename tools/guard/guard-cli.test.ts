@@ -945,10 +945,11 @@ describe('run.ts static and the single-purpose guards', () => {
       'SKIP protected-sync (.github/workflows/protected-paths.yml does not exist yet)',
       'PASS test-guard',
       'PASS hidden-unicode',
+      'PASS ledger-writers',
       expect.stringMatching(/^(PASS|SKIP) lockfile-urls/),
       expect.stringMatching(/^SKIP spec-ref \(planning repository not found/),
       expect.stringMatching(/^SKIP banned-terms \(planning repository not found/),
-      'guard static: 6 passed, 0 failed, 4 skipped',
+      'guard static: 7 passed, 0 failed, 4 skipped',
       '',
     ]);
     expect(res.status).toBe(0);
@@ -959,7 +960,7 @@ describe('run.ts static and the single-purpose guards', () => {
     const root = staticTree();
     const res = guard('run.ts', ['static'], { cwd: root, env: { PATH: makeTree() } });
     expect(res.status).toBe(0);
-    expect(res.stdout).toContain('guard static: 6 passed, 0 failed, 4 skipped');
+    expect(res.stdout).toContain('guard static: 7 passed, 0 failed, 4 skipped');
   });
 
   it('accepts the argument separator that pnpm forwards', () => {

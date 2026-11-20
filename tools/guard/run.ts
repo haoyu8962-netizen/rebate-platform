@@ -62,6 +62,7 @@ import type { OwnerApproval } from './lib/owner-approval-env.ts';
 import { resolveSpecBase } from './lib/spec-base.ts';
 import type { SpecBase } from './lib/spec-base.ts';
 import { listTreeFiles } from './lib/tree.ts';
+import { ledgerWritersCheck } from './ledger-writers.ts';
 
 function runCheck(name: string, run: () => CheckResult): CheckResult {
   try {
@@ -122,6 +123,7 @@ function runStatic(argv: string[]): number {
     ['protected-sync', () => protectedSyncCheck(root)],
     ['test-guard', () => testGuardCheck(root, tree)],
     ['hidden-unicode', () => hiddenUnicodeCheck(root, tree)],
+    ['ledger-writers', () => ledgerWritersCheck(root, tree)],
     ['lockfile-urls', () => lockfileCheck(root)],
     ['spec-ref', () => specRefCheck(root, spec)],
     ['banned-terms', () => bannedTermsSpecCheck(root, spec)],
