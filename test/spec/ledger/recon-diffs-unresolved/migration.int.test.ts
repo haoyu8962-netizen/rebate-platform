@@ -3,11 +3,15 @@
 // 'processing'), named in its own migration (located by file-name suffix); in the database a second
 // unresolved ledger_mismatch of the same app and ref_id is refused with 23505 whatever its period,
 // a concluded one is accepted, and other types, apps and refs are not affected. Applied over
-// existing duplicates (two unresolved tickets of one ref, one hold each) the migration fails with
-// 23505 on that index and changes no business row (it never concludes or rewrites tickets).
+// existing duplicates (two unresolved tickets of one ref, one hold each; open / open and
+// open / processing, each group in its own scratch database) the migration fails with 23505 on
+// that index and changes no business row (it never concludes or rewrites tickets). Applied over an
+// unresolved ticket without duplicate and its live hold it succeeds, the index is there and valid,
+// and the ticket and the hold are unchanged field by field (it never releases holds).
 import { randomUUID } from 'node:crypto';
+import type { DB } from '@couli/db';
 import { createTestDatabase } from '@couli/db/testing';
-import { sql } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { expect, it } from 'vitest';
 import {
   AT,
@@ -27,9 +31,72 @@ import {
   scratchDatabase,
   unresolvedMigrationFile,
   unresolvedMigrationSource,
+  type Scratch,
 } from './kit.ts';
 
 const h = harness(createTestDatabase);
+
+/** A scratch database holding app.recon_diffs and app.withdraw_holds as right before the migration. */
+async function preIndexDatabase(): Promise<Scratch> {
+  const ddl = preIndexDdl();
+  const scratch = await scratchDatabase();
+  try {
+    await sql`CREATE SCHEMA app`.execute(scratch.db);
+    for (const statement of ddl) await sql.raw(statement).execute(scratch.db);
+    expect(
+      (await indexes(scratch.db, 'recon_diffs')).map((index) => index.name),
+      '迁移前的库没有该索引',
+    ).not.toContain(INDEX);
+  } catch (error) {
+    await scratch.drop();
+    throw error;
+  }
+  return scratch;
+}
+
+/** Inserts a ledger_mismatch ticket and one live hold (released_at null) sourced from it. */
+async function seedTicketWithHold(db: Kysely<DB>, diff: Row, group: string): Promise<void> {
+  expect(
+    await sqlState(insert(db, 'recon_diffs', diff)),
+    `${group}：差错单 ${String(diff['status'])}`,
+  ).toBe('ok');
+  expect(
+    await sqlState(
+      insert(db, 'withdraw_holds', {
+        id: randomUUID(),
+        app_id: diff['app_id'],
+        user_id: randomUUID(),
+        reason: 'ledger_mismatch',
+        source_ref: `recon_diff:${String(diff['id'])}`,
+        created_by: 'system',
+        created_at: AT,
+        hold_until: null,
+        released_at: null,
+        released_by: null,
+      }),
+    ),
+    `${group}：冻结`,
+  ).toBe('ok');
+}
+
+/** Every ticket and every hold of the scratch database, row by row. */
+async function businessRows(db: Kysely<DB>) {
+  return {
+    diffs: await db.selectFrom('recon_diffs').selectAll().orderBy('id').execute(),
+    holds: await db.selectFrom('withdraw_holds').selectAll().orderBy('id').execute(),
+  };
+}
+
+/** Runs the migration text in one transaction; the error it raised, or null when it committed. */
+async function applyMigration(db: Kysely<DB>, migration: string): Promise<unknown> {
+  return db
+    .transaction()
+    .execute((trx) => sql.raw(migration).execute(trx))
+    .then(
+      () => null,
+      (error: unknown) => error,
+    );
+}
 
 it('[AC-B2-02zc#9] 迁移（按后缀定位）显式建唯一索引 recon_diffs_unresolved_internal_key：键 (app_id, type, ref_id)、有效、非约束，谓词只含 ledger_mismatch 与 open / processing', async () => {
   await ready(h.app);
@@ -129,77 +196,79 @@ it('[AC-B2-02zc#10] 库内直接 INSERT：同 app 同 ref_id 已有未结 ledger
   ]);
 });
 
-it('[AC-B2-02zc#12] 迁移遇存量重复：无该索引的库里已有同 app、同 ref_id、不同 period 的两张未结 ledger_mismatch（open / processing）及各自一条冻结 → 执行迁移文件原文得 23505（建该索引失败），回滚后两张单与两条冻结逐行不变、索引不存在（迁移不自动结案、不改写业务数据）', async () => {
+it('[AC-B2-02zc#12] 迁移遇存量重复：无该索引的库里已有同 app、同 ref_id、不同 period 的两张未结 ledger_mismatch 及各自一条冻结，open / open 与 open / processing 两组各用独立的临时库 → 每组执行迁移文件原文都得 23505（建该索引失败），回滚后两张单与两条冻结逐行不变、索引不存在（迁移不自动结案、不改写业务数据）', async () => {
   const migration = unresolvedMigrationFile();
-  const ddl = preIndexDdl();
-  const scratch = await scratchDatabase();
+  for (const secondStatus of UNRESOLVED) {
+    const group = `open / ${secondStatus}`;
+    const scratch = await preIndexDatabase();
+    try {
+      const db = scratch.db;
+      const refId = `01:${randomUUID()}`;
+      const first = recon({
+        ref_type: 'ledger_account',
+        ref_id: refId,
+        period: '2032-06-15',
+        status: 'open',
+        dedupe_key: `R3:2032-06-15:${refId}`,
+      });
+      const second = recon({
+        app_id: first['app_id'],
+        ref_type: 'ledger_account',
+        ref_id: refId,
+        period: '2032-06-16',
+        status: secondStatus,
+        dedupe_key: `R3:2032-06-16:${refId}`,
+      });
+      for (const diff of [first, second]) await seedTicketWithHold(db, diff, group);
+      const before = await businessRows(db);
+      expect(before.diffs, group).toHaveLength(2);
+      expect(before.holds, group).toHaveLength(2);
+      expect(before.diffs.map((diff) => diff.status).sort(), group).toEqual(
+        ['open', secondStatus].sort(),
+      );
+
+      const failure = await applyMigration(db, migration);
+      expect(failure, `${group}：存量重复时迁移须失败`).not.toBeNull();
+      expect((failure as { code?: unknown }).code, `${group}：${String(failure)}`).toBe('23505');
+      expect(String((failure as { message?: unknown }).message), group).toContain(INDEX);
+
+      expect(await businessRows(db), `${group}：回滚后两张单与两条冻结逐行不变`).toEqual(before);
+      expect(
+        (await indexes(db, 'recon_diffs')).map((index) => index.name),
+        `${group}：回滚后索引不存在`,
+      ).not.toContain(INDEX);
+    } finally {
+      await scratch.drop();
+    }
+  }
+}, 120_000);
+
+it('[AC-B2-02zc#13] 迁移遇无重复存量：无该索引的库里只有一张未结 ledger_mismatch 与其一条生效冻结（released_at 为空）→ 执行迁移文件原文成功，索引存在、唯一、有效；差错单与冻结逐字段与迁移前相同（迁移不解除冻结、不改写差错单）', async () => {
+  const migration = unresolvedMigrationFile();
+  const scratch = await preIndexDatabase();
   try {
     const db = scratch.db;
-    await sql`CREATE SCHEMA app`.execute(db);
-    for (const statement of ddl) await sql.raw(statement).execute(db);
-    expect(
-      (await indexes(db, 'recon_diffs')).map((index) => index.name),
-      '迁移前的库没有该索引',
-    ).not.toContain(INDEX);
-
     const refId = `01:${randomUUID()}`;
-    const first = recon({
+    const diff = recon({
       ref_type: 'ledger_account',
       ref_id: refId,
       period: '2032-06-15',
+      status: 'open',
       dedupe_key: `R3:2032-06-15:${refId}`,
     });
-    const second = recon({
-      app_id: first['app_id'],
-      ref_type: 'ledger_account',
-      ref_id: refId,
-      period: '2032-06-16',
-      status: 'processing',
-      dedupe_key: `R3:2032-06-16:${refId}`,
-    });
-    for (const diff of [first, second]) {
-      expect(await sqlState(insert(db, 'recon_diffs', diff))).toBe('ok');
-      expect(
-        await sqlState(
-          insert(db, 'withdraw_holds', {
-            id: randomUUID(),
-            app_id: diff['app_id'],
-            user_id: randomUUID(),
-            reason: 'ledger_mismatch',
-            source_ref: `recon_diff:${String(diff['id'])}`,
-            created_by: 'system',
-            created_at: AT,
-            hold_until: null,
-            released_at: null,
-            released_by: null,
-          }),
-        ),
-      ).toBe('ok');
-    }
-    const snapshot = async () => ({
-      diffs: await db.selectFrom('recon_diffs').selectAll().orderBy('id').execute(),
-      holds: await db.selectFrom('withdraw_holds').selectAll().orderBy('id').execute(),
-    });
-    const before = await snapshot();
-    expect(before.diffs).toHaveLength(2);
-    expect(before.holds).toHaveLength(2);
+    await seedTicketWithHold(db, diff, '无重复');
+    const before = await businessRows(db);
+    expect(before.diffs).toHaveLength(1);
+    expect(before.holds).toHaveLength(1);
+    expect(before.holds[0]!.released_at, '迁移前冻结生效').toBeNull();
 
-    const failure = await db
-      .transaction()
-      .execute((trx) => sql.raw(migration).execute(trx))
-      .then(
-        () => null,
-        (error: unknown) => error,
-      );
-    expect(failure, '存量重复时迁移须失败').not.toBeNull();
-    expect((failure as { code?: unknown }).code, String(failure)).toBe('23505');
-    expect(String((failure as { message?: unknown }).message)).toContain(INDEX);
+    const failure = await applyMigration(db, migration);
+    expect(failure, `无重复存量时迁移须成功：${String(failure)}`).toBeNull();
 
-    expect(await snapshot(), '回滚后两张单与两条冻结逐行不变').toEqual(before);
-    expect(
-      (await indexes(db, 'recon_diffs')).map((index) => index.name),
-      '回滚后索引不存在',
-    ).not.toContain(INDEX);
+    const found = (await indexes(db, 'recon_diffs')).filter((index) => index.name === INDEX);
+    expect(found, '迁移后索引存在').toHaveLength(1);
+    expect(found[0]).toMatchObject({ unique: true, valid: true });
+    expect(await businessRows(db), '差错单与冻结逐字段与迁移前相同').toEqual(before);
   } finally {
     await scratch.drop();
   }
