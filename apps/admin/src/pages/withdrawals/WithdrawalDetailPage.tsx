@@ -30,6 +30,7 @@ import {
 } from 'antd';
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
+import { UnknownMarkerBanner, useMarkerAccount } from '../../components/unknown-marker/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { withdrawalsTexts } from '../../texts/withdrawals.ts';
 import {
@@ -49,7 +50,7 @@ import {
   type WithdrawalDetail,
 } from './model.ts';
 import { DetailPayoutActions } from './DetailPayoutActions.tsx';
-import type { ManualPaidClock } from './ManualPaid.tsx';
+import { MARKER_PAGE, type ManualPaidClock } from './ManualPaid.tsx';
 import { ReviewActions } from './ReviewActions.tsx';
 import { UnknownPayoutActions } from './UnknownPayoutActions.tsx';
 import { Forbidden, marksOf } from './WithdrawalsPage.tsx';
@@ -99,6 +100,8 @@ function DetailContent({
   const navigate = useNavigate();
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<DetailState>({ status: 'loading' });
+  // F1-08at: 【手动成功】 / 【执行打款】 here keep the marker of 提现审核; its prompt shows here too.
+  const account = useMarkerAccount();
 
   useEffect(() => {
     let current = true;
@@ -160,6 +163,7 @@ function DetailContent({
 
   return (
     <Flex vertical gap={16}>
+      <UnknownMarkerBanner scope={{ page: MARKER_PAGE, account }} />
       <Flex align="center" gap={12}>
         <Button onClick={() => void navigate('/withdrawals')}>{t.back}</Button>
         <Typography.Title level={4} style={{ margin: 0 }}>

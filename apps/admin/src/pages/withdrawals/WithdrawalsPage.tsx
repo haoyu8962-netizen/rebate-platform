@@ -43,10 +43,11 @@ import {
   type ReactElement,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { UnknownMarkerBanner, useMarkerAccount } from '../../components/unknown-marker/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { withdrawalsTexts as t } from '../../texts/withdrawals.ts';
 import { BatchApprove } from './BatchApprove.tsx';
-import { ManualPaid, type ManualPaidClock } from './ManualPaid.tsx';
+import { MARKER_PAGE, ManualPaid, type ManualPaidClock } from './ManualPaid.tsx';
 import { PayoutQueuePanel, UnknownPayoutsPanel } from './PayoutTabs.tsx';
 import {
   CHANNELS,
@@ -131,6 +132,8 @@ export function WithdrawalsPage({
   const reader = canRead(access);
   const payouts = canSeePayouts(access);
   const [tab, setTab] = useState<PageTab>('review');
+  // F1-08at: the account whose result-unknown marker of this page is shown on top.
+  const account = useMarkerAccount();
   if (!reader && !payouts) return <Forbidden />;
   const review = reader ? (
     <WithdrawalsList
@@ -148,6 +151,7 @@ export function WithdrawalsPage({
       <Typography.Title level={4} style={{ margin: 0 }}>
         {t.title}
       </Typography.Title>
+      <UnknownMarkerBanner scope={{ page: MARKER_PAGE, account }} />
       {payouts ? (
         <Tabs
           activeKey={tab}

@@ -17,12 +17,14 @@ import { useDataProvider } from '@refinedev/core';
 import { Alert, Button, Descriptions, Flex, Input, Modal, Typography, theme } from 'antd';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
+import { endsSession, useUnknownMarker } from '../../components/unknown-marker/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { stepUpTexts } from '../../texts/step-up.ts';
 import { withdrawalsTexts } from '../../texts/withdrawals.ts';
 import {
   EMPTY_ENTRY,
+  MARKER_PAGE,
   checkEntry,
   type Entry,
   type Field,
@@ -196,6 +198,8 @@ function DetailExecute({
   const { token } = theme.useToken();
   const { phase, phaseRef, setPhase } = usePhase();
   const alive = useAlive();
+  // F1-08at (D10-2075): the result-unknown marker of 提现审核 (the system clock: no page clock here).
+  const marker = useUnknownMarker(MARKER_PAGE);
   /** The withdrawal as it was when the dialog opened (the page may read it again meanwhile). */
   const [snapshot, setSnapshot] = useState<WithdrawalDetail>();
   const [overview, setOverview] = useState<OverviewState>({ status: 'loading' });
@@ -295,6 +299,7 @@ function DetailExecute({
       if (!alive.current) return;
       const answer = response.data as Partial<PayoutBatchResult> | undefined;
       if (answer?.outcome === 'executed') {
+        if (uncertainRef.current) marker.clear();
         forget();
         setNotice(undefined);
         setResult(answer as PayoutBatchResult);
@@ -304,12 +309,14 @@ function DetailExecute({
       }
       if (answer?.outcome === 'rejected') {
         // 整批拒绝已确定：显示原因、解锁；下一次执行是新操作，换新键。
+        if (uncertainRef.current) marker.clear();
         forget();
         setNotice(refusedText(answer as PayoutBatchResult));
         setPhase('edit');
         return;
       }
       // An answer that does not say what happened is no answer: stay locked.
+      if (!uncertainRef.current) marker.mark();
       uncertainRef.current = true;
       setPhase('unknown');
     } catch (cause) {
@@ -325,11 +332,14 @@ function DetailExecute({
         return;
       }
       if (isSettledRejection(cause)) {
+        // A settled refusal settles an unknown submission; an ended session (10001) settles nothing.
+        if (uncertainRef.current && !endsSession(cause)) marker.clear();
         forget();
         setNotice(executeFailure(cause));
         setPhase('edit');
         return;
       }
+      if (!uncertainRef.current) marker.mark();
       uncertainRef.current = true;
       setNotice(undefined);
       setPhase('unknown');
@@ -539,6 +549,8 @@ function DetailManualPaid({
   const { token } = theme.useToken();
   const { phase, phaseRef, setPhase } = usePhase();
   const alive = useAlive();
+  // F1-08at (D10-2075): the same marker as the list's 【批量手动打款】 (page 提现审核).
+  const marker = useUnknownMarker(MARKER_PAGE, clock);
   const [snapshot, setSnapshot] = useState<WithdrawalDetail>();
   const [entry, setEntry] = useState<Entry>(EMPTY_ENTRY);
   const [touched, setTouched] = useState<ReadonlySet<Field>>(new Set());
@@ -642,12 +654,14 @@ function DetailManualPaid({
       if (!alive.current) return;
       const items: unknown = (response.data as { items?: unknown } | undefined)?.items;
       if (!Array.isArray(items)) {
+        if (!uncertainRef.current) marker.mark();
         uncertainRef.current = true;
         setPhase('unknown');
         return;
       }
       const id = body.items[0]?.withdrawal_id;
       const mine = (items as ManualResult[]).find((line) => line.withdrawal_id === id);
+      if (uncertainRef.current) marker.clear();
       forget();
       setNotice(undefined);
       setResult(mine ?? 'none');
@@ -666,11 +680,14 @@ function DetailManualPaid({
         return;
       }
       if (isSettledRejection(cause)) {
+        // A settled refusal settles an unknown submission; an ended session (10001) settles nothing.
+        if (uncertainRef.current && !endsSession(cause)) marker.clear();
         forget();
         setNotice(manualFailure(cause));
         setPhase('edit');
         return;
       }
+      if (!uncertainRef.current) marker.mark();
       uncertainRef.current = true;
       setNotice(undefined);
       setPhase('unknown');

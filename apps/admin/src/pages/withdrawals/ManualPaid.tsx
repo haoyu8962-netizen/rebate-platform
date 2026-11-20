@@ -29,6 +29,7 @@ import {
 } from 'antd';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
+import { endsSession, useUnknownMarker } from '../../components/unknown-marker/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { withdrawalsTexts } from '../../texts/withdrawals.ts';
 import {
@@ -46,6 +47,8 @@ import {
 
 const t = withdrawalsTexts.manualPaid;
 const STEP_UP_REFUSED = 10003;
+/** The result-unknown marker's page (F1-08at): the menu id of 提现审核. */
+export const MARKER_PAGE = 'withdrawals';
 /** admin_permission_denied: judged before the idempotent replay, and it changes with the account. */
 const FORBIDDEN = 10403;
 
@@ -159,6 +162,9 @@ export function ManualPaid({
 }: ManualPaidProps): ReactElement {
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
+  // F1-08at (D10-2075): a marker without business data while the result is unknown, for the prompt
+  // after signing in again; cleared once a settled answer comes (not by a 10001).
+  const marker = useUnknownMarker(MARKER_PAGE, clock);
   const [snapshot, setSnapshot] = useState<readonly WithdrawalRow[]>();
   const [entries, setEntries] = useState<ReadonlyMap<string, Entry>>(new Map());
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
@@ -337,10 +343,12 @@ export function ManualPaid({
       const items: unknown = (response.data as { items?: unknown } | undefined)?.items;
       if (!Array.isArray(items)) {
         // An answer that does not say what happened is no answer: stay locked.
+        if (!uncertainRef.current) marker.mark();
         uncertainRef.current = true;
         setPhase('unknown');
         return;
       }
+      if (uncertainRef.current) marker.clear();
       forget();
       setResults(new Map((items as ResultItem[]).map((item) => [item.withdrawal_id, item])));
       setPhase('done');
@@ -365,13 +373,15 @@ export function ManualPaid({
         return;
       }
       if (isSettledRejection(cause)) {
-        // 服务端确定拒绝（10403、20001 等）：解锁，提示全文；下次提交换新键。
+        // 服务端确定拒绝（10403、20001 等）：解锁，提示全文；下次提交换新键。会话失效（10001）不算确定的回答，标记留着。
+        if (uncertainRef.current && !endsSession(cause)) marker.clear();
         forget();
         setFailure(failureNotice(cause));
         setPhase('edit');
         return;
       }
       // 网络错误、无法解析、40901（同键仍在处理）、5xx（已录入的保留）：结果未知，锁定。
+      if (!uncertainRef.current) marker.mark();
       uncertainRef.current = true;
       setPhase('unknown');
     }

@@ -14,6 +14,7 @@ import { Alert, Button, Card, Flex, Result, Tabs, Typography } from 'antd';
 import { useCallback, useRef, useState, type ReactElement } from 'react';
 import { Link, useLocation } from 'react-router';
 import { PlannedPage, plannedButtonProps, usePlanned } from '../../components/planned/index.ts';
+import { UnknownMarkerBanner, useMarkerAccount } from '../../components/unknown-marker/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { adjustmentsTexts as t } from '../../texts/adjustments.ts';
 import { AdjustmentsTab, type Notice } from './AdjustmentsTab.tsx';
@@ -23,6 +24,9 @@ import { canReadAdjustments, canReadWriteoffs, money } from './model.ts';
 import { WriteoffsTab } from './WriteoffsTab.tsx';
 import type { Executed } from './write.ts';
 import { ledgerRoute } from '../ledger/prefill.ts';
+
+/** The result-unknown marker's page (F1-08at): the menu id of 调账与核销 (see useAdjustmentWrite). */
+const MARKER_PAGE = 'adjustments';
 
 export interface AdjustmentsPageProps {
   readonly access: AccessControl;
@@ -53,6 +57,8 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
   const [recheck, setRecheck] = useState(false);
   /** The opening waits for the list read of this version (undefined: none waits). */
   const [waitingFor, setWaitingFor] = useState<number>();
+  // F1-08at: the account whose result-unknown marker of this page is shown on top.
+  const account = useMarkerAccount();
   const listRead = useCallback(
     (read: number) => {
       if (waitingFor === undefined || read < waitingFor) return;
@@ -158,6 +164,7 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
           </Button>
         ) : null}
       </Flex>
+      <UnknownMarkerBanner scope={{ page: MARKER_PAGE, account }} />
       <Alert type="info" showIcon role="note" message={t.readOnlyNotice} />
       {notice === undefined ? null : (
         <Alert
