@@ -1,0 +1,121 @@
+// @vitest-environment jsdom
+// F1-08anb AMOUNT（BR-WDR-11：不设批次第二人批准；例「批次 30 单合计 ¥20,000 → 不需第二人批准，执行人 step-up 后执行」）。
+// 照真实交互写：列表每页固定 20 行、没有每页条数选择与全选框、翻页清空勾选、【一键组批】只选当前页，一次批量最多勾到
+// 当前页 20 张（30 单的原例在当前交互下做不到，另由编排定）。服务端 total=30，第 1 页 20 张待执行单实付合计恰为
+// 2000000 分（¥20,000.00）：逐张勾选或【一键组批】选中这 20 张 → 一次确认 + 一次动态码 → 恰 1 笔 POST，
+// withdrawal_ids 恰为这 20 张、按列表顺序；页面上没有「需他人批准」「第二人」类提示；除这 1 笔外没有别的写请求。
+// 约定见 ../helpers.ts 与 ./helpers.ts 开头。
+import { addFen, formatYuanAdmin, parseFen, subFen } from '@couli/money';
+import { cleanup, waitFor } from '@testing-library/react';
+import { expect, it } from 'vitest';
+import { overview } from '../../admin-payouts-readonly/fixtures.ts';
+import {
+  EXECUTOR,
+  NAME,
+  TEXT,
+  VERIFY,
+  assertBatch,
+  button,
+  check,
+  click,
+  confirm,
+  executedReply,
+  isTableRead,
+  main,
+  mount,
+  numbersIn,
+  openBatch,
+  row,
+  select,
+  serverFor,
+  settled,
+  shows,
+  ticked,
+  verify,
+  writes,
+  type Withdrawal,
+} from '../helpers.ts';
+import { ONE_BATCH, SECOND_PERSON_HINTS, writeLines } from './helpers.ts';
+
+/** BR-WDR-11 例：合计 ¥20,000（分）。 */
+const BATCH_TOTAL_FEN = 2_000_000;
+const ON_SERVER = 30;
+const PER_PAGE = 20;
+
+/** 30 APPROVED withdrawals (newest first), ¥1,000.00 each, mixed alipay / bank card. */
+function thirty(): Withdrawal[] {
+  return Array.from({ length: ON_SERVER }, (_, index) =>
+    row(index + 1, 'APPROVED', 100_000, index % 4 === 3 ? 'bank_card' : 'alipay'),
+  );
+}
+
+function sumOf(rows: readonly Withdrawal[]): bigint {
+  let total = parseFen(0);
+  for (const one of rows) total = addFen(total, parseFen(one.net_fen));
+  return total;
+}
+
+function noSecondPerson(where: string): void {
+  for (const hint of SECOND_PERSON_HINTS)
+    expect(shows(document.body, hint), `${where}: no hint ${hint}`).toBe(false);
+}
+
+it(
+  '[AC-F1-08anb-AMOUNT#1] 服务端 30 张待执行单（total=30），列表第 1 页 20 张、实付合计恰 ¥20,000.00：逐张勾选与【一键组批】各一次，都只选中这 20 张；一次确认 + 一次动态码 → 恰 1 笔 POST，withdrawal_ids 恰为这 20 张、按列表顺序；确认里本次合计 ¥20,000.00；页面上没有「需他人批准」「第二人」类提示；除这 1 笔外没有别的写请求',
+  { timeout: 300_000 },
+  async () => {
+    for (const how of ['tick', 'group'] as const) {
+      const rows = thirty();
+      const page = rows.slice(0, PER_PAGE);
+      const ids = page.map((one) => one.withdrawal_id);
+      const numbers = rows.map((one) => one.out_biz_no);
+      expect(sumOf(page), 'fixture: page one sums to ¥20,000').toBe(parseFen(BATCH_TOTAL_FEN));
+
+      const server = serverFor(rows);
+      server.once('POST', '/admin/v1/payout-batches', () => executedReply(server, ids));
+      await mount(server, EXECUTOR);
+      const read = server.log.find(isTableRead);
+      expect(read?.query['page_size'], `${how}: pages of 20`).toBe(String(PER_PAGE));
+      expect(shows(main(), '共 30 条'), `${how}: total=30`).toBe(true);
+      expect(numbersIn(main(), numbers), `${how}: page one holds the 20 newest`).toEqual(
+        page.map((one) => one.out_biz_no),
+      );
+
+      if (how === 'tick') await select(page);
+      else {
+        await click(button(main(), NAME.group));
+        await settled(server);
+        expect(server.writes(), `${how}: 一键组批 sends nothing`).toEqual([]);
+      }
+      expect(ticked(), `${how}: the 20 rows of the page ticked`).toHaveLength(PER_PAGE);
+      noSecondPerson(`${how} ticked`);
+
+      const modal = await openBatch(server);
+      expect(numbersIn(modal, numbers), `${how}: the batch in list order`).toEqual(
+        page.map((one) => one.out_biz_no),
+      );
+      const view = overview();
+      const left = subFen(parseFen(view.daily_cap_fen), parseFen(view.daily_sent_fen));
+      const total = parseFen(BATCH_TOTAL_FEN);
+      const daily = check(
+        '单日限额余量',
+        `${formatYuanAdmin(left)}，本次合计 ${formatYuanAdmin(total)}`,
+        total <= left,
+      );
+      expect(shows(modal, daily), `${how}: ${daily}`).toBe(true);
+      noSecondPerson(`${how} confirmation`);
+
+      await confirm(server, modal);
+      await verify();
+      await waitFor(() => expect(writes(server)).toHaveLength(1));
+      await settled(server);
+      expect(server.requests('POST', VERIFY), `${how}: one dynamic code`).toHaveLength(1);
+      expect(writes(server), `${how}: one batch write`).toHaveLength(1);
+      assertBatch(server, 0, ids);
+      expect(writeLines(server), `${how}: nothing else written`).toEqual(ONE_BATCH);
+      await waitFor(() => expect(shows(modal, TEXT.paying)).toBe(true));
+      noSecondPerson(`${how} result`);
+      cleanup();
+    }
+  },
+);
