@@ -717,3 +717,9 @@ approvals:
     granted: true
     date: '2026-11-20'
     note: '负责人 2026-11-20 对话确认（D10-2185，编排会话 13:10 转达「同意 #360」）；原登记写作第 113 条，113–115 先被占用后改号为 116，内容其余不动。负责人过目后合并（D10-2151）。原因：负责人 11-18 定了余额更正要发站内信（D10-2091 / 2092 ⑤ / 2097），第 112 条按新规则写的 notice.int（#49–#53）与前 4 轮已提交的 recalc.int #14（第 55–57 行整体比较含 inbox / notifyLogs）、#15（第 95 行同）、#19（第 261–262 行「没有站内信」「没有通知」）正面冲突，任何实现都无法同时通过。范围写死（清单 couli-runs/B2-02x/frozen-notice-change.md）：#14、#15 除 inbox / notifyLogs 外照旧整体比较，inbox 与 notify_logs 原有行原样、恰好多一条被重算会员与本差错单的 BALANCE_CORRECTED（notify_logs channel inbox、status success、dedupe_key balance_corrected:<差错单 id>:<重算后余额版本号>），#15 另一会员不增；#19 改大、改小两人各恰好一条，只改 frozen（可提现前后相同）的一人没有，标题随之 retitle，事件 / 凭证 / 分录断言不动。只改这一项期望，不删断言、不放宽成不查，金额、余额行、版本号、凭证、分录、事件、提现单、冻结记录、差错单、审计断言一字不改，不动其余用例与文件。由全新无上下文的独立 Claude（claude-run.sh，approvals 第 36 条）按清单改，证据记 claude-independent，逐条登记 modify_existing；算第 112 条范围内补一轮还是新的一次由编排届时定；改完先红核对与 spec-test 增量一轮。'
+  - id: 117
+    row: 4
+    title: 'B2-02zb 任务专属一次性追加：spec-test 第 3 轮（Codex 增量，评审写测第 3 次的头）——范围写死为 r2 的 S1 一条（重算上调后真实扣款仍报）与 S2 两条（普通键配 REASSIGN_REV 凭证类型仍报、覆盖统计不依赖 PROP_RUNS）'
+    granted: true
+    date: '2026-11-20'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（评审轮次属门禁流程小改动），D10-2229，先例第 107 条、第 112 条、第 114 条、第 115 条：前两轮不是同一问题连续不过——spec-test r1（Codex 全量）报 7 条 S1（跨日扣款、净零 / 恰到零、superseded 只增、空账本 none 行、属性隔离与回调内断言、次数、金额超 2^31），写测第 2 次全部补上，r2（Codex 增量）确认已补；r2 新报 S1：只钉了「重算下调后正常入账不报」，没钉「重算上调后真实扣款仍报」（实现若附加「结果余额低于上一条历史分录余额」会漏报），正是本单（负余额来源自检 07 换版、新单 A 自动更正的前置）的核心口径，拆单会使 land 顺序绕行，故不拆。范围写死（任务书 couli-runs/B2-02zb/brief-test3.md §7）：r3 只判写测第 3 次是否钉住上述三条及其改动是否放宽已有断言；只对 B2-02zb、只多 spec-test 1 轮；Codex 经 codex-run.sh（证据 engine 记 codex）；照常不调 bump-attempt（按编排例外轮记），其余次数上限与熔断不变；r3 再出新的 S1 即停报编排，不再加轮。'
