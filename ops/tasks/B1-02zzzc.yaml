@@ -117,8 +117,8 @@ modify_existing:
     test: '[AC-B1-02zzz#12] deletion_only 只放行 login 与注销 step_up；其他用途拒绝且不发码'
     reason: rule_change
     br: [BR-ID-08]
-    ruling: D10-1705
-    note: '提现免二次验证（D10-1665）：期望值不变，只把 withdraw 样例换成仍要二次验证的动作（phone_change 等）、去掉提现请求里多余的令牌或改标题里失效的半句；编排 D10-1705 逐行核过（核对表 couli-runs/B1-02zzzc/frozen-cand/table.md）'
+    ruling: D10-1702
+    note: '提现免二次验证（负责人 2026-11-14，D10-1665）：「其他用途被拒」循环里 withdraw 一项的期望 10405 → 20001（D10-1702 第 ⑤ 种：withdraw 用途 → 20001；D10-2166 定不删、改断言），仍断言不发码，其余两项 10405 不变'
   - file: 'test/spec/identity/step-up-verify/order.int.test.ts'
     test: '[AC-B1-02y#18] 版本过低（④a 10405）先命中时不校验、不占用 token；升级后沿用原键通过，之后该 token 不可再用'
     reason: rule_change
