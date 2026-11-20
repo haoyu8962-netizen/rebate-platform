@@ -569,3 +569,40 @@ it('[B1-20b][Codex money r1 S0 #3] 号码在锁内反复被换走：有限次重
   expect(statements.filter((statement) => /^(insert|update)/.test(statement.sql))).toEqual([]);
   expect(events).toEqual(['begin', 'rollback']);
 });
+
+it('[B1-20b][Codex money r2 S1] 锁住第一个候选后复核发现号已转出：先回滚到保存点（释放其行锁）再锁下一个候选，任何时刻最多持有一个候选账号的行锁', async () => {
+  const { statements, login } = await setup({
+    owners: [USER_ID, OTHER_ID],
+    movedLocks: [true, false],
+  });
+  const result = await login();
+  if (result.code !== 0) throw new Error(`expected a login, got ${result.code}`);
+  expect(result.data.user_id).toBe(OTHER_ID);
+  const texts = statements.map((statement) => statement.sql);
+  const isLock = (index: number, id: string) =>
+    texts[index]!.includes('from "users"') &&
+    texts[index]!.includes('for no key update') &&
+    statements[index]!.parameters.includes(id);
+  const firstLock = texts.findIndex((_, index) => isLock(index, USER_ID));
+  const secondLock = texts.findIndex((_, index) => isLock(index, OTHER_ID));
+  expect(firstLock).toBeGreaterThanOrEqual(0);
+  expect(secondLock).toBeGreaterThan(firstLock);
+  // A savepoint is taken right before each candidate's lock.
+  expect(texts[firstLock - 1]).toBe('SAVEPOINT couli_sms_login_owner');
+  expect(texts[secondLock - 1]).toBe('SAVEPOINT couli_sms_login_owner');
+  // The moved candidate's lock is rolled back (released) before the next one is locked.
+  const rollbackTo = texts.indexOf('ROLLBACK TO SAVEPOINT couli_sms_login_owner');
+  expect(rollbackTo).toBeGreaterThan(firstLock);
+  expect(rollbackTo).toBeLessThan(secondLock);
+  expect(texts.filter((text) => text.startsWith('ROLLBACK TO SAVEPOINT'))).toHaveLength(1);
+  // The confirmed owner's savepoint is released (its lock kept), before anything is written.
+  const releases = texts
+    .map((text, index) => (text === 'RELEASE SAVEPOINT couli_sms_login_owner' ? index : -1))
+    .filter((index) => index >= 0);
+  expect(releases).toHaveLength(2);
+  expect(releases[0]).toBeGreaterThan(rollbackTo);
+  expect(releases[0]).toBeLessThan(secondLock);
+  expect(releases[1]).toBeGreaterThan(secondLock);
+  const firstWrite = texts.findIndex((text) => /^(insert|update)/.test(text));
+  expect(firstWrite).toBeGreaterThan(releases[1]!);
+});

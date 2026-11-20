@@ -52,7 +52,7 @@
 // relative imports, no decorators, no Nest.
 import type { ClientPlatform, Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
-import type { Kysely, Transaction } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 import type { Clock, FieldCrypto, RootLogger } from '../../platform/index.ts';
 import { normalizeInviteCode } from '../domain/login.ts';
 import { completeLogin, type FirstAppLoginReview } from './login-completion.ts';
@@ -217,6 +217,9 @@ function refusal(blocked: {
 /** Times the owner of a number is looked up again after it changed under the lock. */
 const OWNER_LOOKUPS = 3;
 
+/** The savepoint around one candidate owner's row lock and recheck (lockedOwner). */
+const OWNER_SAVEPOINT = sql.raw('couli_sms_login_owner');
+
 /**
  * BR-ID-27: an account whose deletion is processing logs in by no method (10007,
  * stage=processing), in either scope; nothing is created, issued or recorded. The status is read
@@ -231,6 +234,13 @@ const OWNER_LOOKUPS = 3;
  * state (READ COMMITTED: a new statement sees it) — another account or none (then the login
  * registers). Deleting under the lock → 10007 (BR-ID-27). undefined: no account
  * holds the number. A number that keeps moving away (OWNER_LOOKUPS times) → thrown, rolled back.
+ *
+ * At most one candidate's row lock is held at any time (B1-20b, Codex money r2 S1): each
+ * candidate's lock and recheck run inside OWNER_SAVEPOINT; a number found moved away rolls back to
+ * that savepoint, which releases the row lock taken after it (PostgreSQL), before the next owner is
+ * looked up and locked. Holding the old owner while waiting for the next one could deadlock with a
+ * transaction that locks accounts in id order (an order credit holding the next, waiting for the
+ * old). The confirmed owner's savepoint is released, which keeps its lock until the login ends.
  */
 async function lockedOwner(
   trx: Transaction<DB>,
@@ -240,10 +250,18 @@ async function lockedOwner(
   for (let lookup = 0; lookup < OWNER_LOOKUPS; lookup += 1) {
     const found = await findAccountByPhone(trx, appId, phoneHmac);
     if (found === undefined) return undefined;
+    await sql`SAVEPOINT ${OWNER_SAVEPOINT}`.execute(trx);
     const locked = await lockAccountStatus(trx, appId, found.id);
     if (locked === undefined) throw new Error('identity: the login account has no user row');
-    if (locked.phone_hmac !== phoneHmac || locked.status === 'deleted') continue;
+    if (locked.phone_hmac !== phoneHmac || locked.status === 'deleted') {
+      // Moved away: drop this candidate's row lock before looking up and locking the next one.
+      await sql`ROLLBACK TO SAVEPOINT ${OWNER_SAVEPOINT}`.execute(trx);
+      await sql`RELEASE SAVEPOINT ${OWNER_SAVEPOINT}`.execute(trx);
+      continue;
+    }
+    // Deleting: thrown, the whole transaction rolls back (nothing written, no session).
     if (locked.status === 'deleting') throw new LoginAbort(DELETING);
+    await sql`RELEASE SAVEPOINT ${OWNER_SAVEPOINT}`.execute(trx);
     return found;
   }
   throw new Error('identity: the login number kept changing owner');
