@@ -15,6 +15,7 @@ import {
   type JobQueue,
   type RootLogger,
 } from '../platform/index.ts';
+import { recordBalanceCorrectedMessage } from '../notification/index.ts';
 import type {
   CloseAdminReconDiffDeps,
   ReconDiffHoldRelease,
@@ -28,6 +29,11 @@ import {
   RECON_DIFF_WRITE_OFF_DEPS,
 } from './http/admin/recon-diff-write-off.controller.ts';
 import { BalanceRecoveredHook, createLedger } from './application/recovered-ledger.ts';
+import type { BalanceRecalcDeps } from './application/admin-recon-diff-balance-recalc-use-case.ts';
+import {
+  AdminReconDiffBalanceRecalcController,
+  RECON_DIFF_BALANCE_RECALC_DEPS,
+} from './http/admin/recon-diff-balance-recalc.controller.ts';
 import type { Ledger } from './application/reverse.ts';
 import {
   ASSET_SNAPSHOT_READ_DB,
@@ -147,7 +153,9 @@ export interface LedgerAdminOptions {
  * asset snapshot list (GET /admin/v1/asset-snapshots, fund.view, read only). B2-04zs: the fund
  * ledger overview (GET /admin/v1/fund-ledger, fund.view, read only). B2-02u: one user's balance
  * card and ledger (GET /admin/v1/users/{user_id}/fund-summary, GET /admin/v1/ledger, fund.view or
- * user.lookup, read only). Without the database the routes still register and fail closed (50001).
+ * user.lookup, read only). B2-02x: the balance cache recalculation of a ledger_mismatch difference
+ * (POST /admin/v1/recon-diffs/{recon_diff_id}/balance-recalc, fund.recon, step-up sms). Without the
+ * database the routes still register and fail closed (50001).
  */
 export class LedgerAdminModule {
   static forAdmin(options: LedgerAdminOptions): DynamicModule {
@@ -161,6 +169,7 @@ export class LedgerAdminModule {
         AdminFundLedgerController,
         AdminAdjustmentsController,
         AdminUserFundController,
+        AdminReconDiffBalanceRecalcController,
       ],
       providers: [
         // B2-12c: the adjustment reads (fund.adjust or fund.view, read only) on the primary
@@ -205,6 +214,39 @@ export class LedgerAdminModule {
                   auditOn: (trx) => options.auditWriter(trx, clock),
                   ledger: options.adjustments.ledger({ clock, eventBus }),
                   ports: options.adjustments.ports,
+                },
+        },
+        // B2-02x: the recalculation (fund.recon, step-up sms, no Idempotency-Key) on one
+        // transaction: identity's users row lock (the adjustments' port), the balance row, the
+        // entry's event bus and payout's recovery hook (provided globally by PayoutModule.recovery,
+        // the one LedgerModule's ledger takes) as a posting uses them, notification's
+        // BALANCE_CORRECTED inbox message (D10-2092 ⑤, through notification's index) and admin's
+        // audit writer bound to the transaction. Without the database, the bus or the hook it
+        // fails closed.
+        {
+          provide: RECON_DIFF_BALANCE_RECALC_DEPS,
+          inject: [
+            CLOCK,
+            { token: DB, optional: true },
+            { token: EVENT_BUS, optional: true },
+            { token: BalanceRecoveredHook, optional: true },
+          ],
+          useFactory: (
+            clock: Clock,
+            db?: Kysely<Database>,
+            eventBus?: EventBus,
+            balanceRecovered?: BalanceRecoveredHook,
+          ): BalanceRecalcDeps | null =>
+            db === undefined || eventBus === undefined || balanceRecovered === undefined
+              ? null
+              : {
+                  db,
+                  clock,
+                  auditOn: (trx) => options.auditWriter(trx, clock),
+                  lockUsers: (trx, input) => options.adjustments.ports.lockUsers(trx, input),
+                  eventBus,
+                  balanceRecovered,
+                  balanceCorrected: (trx, input) => recordBalanceCorrectedMessage(trx, input),
                 },
         },
         {

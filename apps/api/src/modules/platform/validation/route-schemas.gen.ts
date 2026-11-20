@@ -17395,6 +17395,57 @@ export const CONTRACT_ROUTE_SCHEMAS = {
       }
     }
   },
+  "recalcBalanceAdminReconDiff": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "x-trace-id": {
+          "type": "string",
+          "description": "Echo of a well-formed X-Trace-Id request header, otherwise a generated UUID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": []
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "recon_diff_id": {
+          "type": "string",
+          "description": "Entity id, a UUIDv7 string (04 §5).",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "recon_diff_id"
+      ],
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "object",
+      "description": "Body of POST /admin/v1/recon-diffs/{recon_diff_id}/balance-recalc. Only the reason: the\nconsole sends no amount; the values are the sums of the member's ledger entries,\nderived by the server (BR-FUND-19 细则「差异以分录为准修正」). Any other key is 20001.\n",
+      "additionalProperties": false,
+      "required": [
+        "reason"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Why the cache is recalculated; 1–200 characters after trimming, else 20001 with data.fields=[reason]. Recorded in the audit record."
+        }
+      }
+    }
+  },
   "adminListAdjustments": {
     "headers": {
       "type": "object",
