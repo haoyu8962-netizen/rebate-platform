@@ -1,0 +1,105 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-unknown-relogin-marker/adjustment.test.ts > [AC-F1-08at-ADJUST#1] 新建调账：结果未知时只存一项标记，整个值等于 {page: adjustments, unknown: true, at: 发生时刻}（不含调账单号、用户、金额、单据、说明、幂等键、请求体）；【重试】短信验证后收到 10001 走全局重新登录、标记仍在；同一账号重新登录回到调账与核销页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻 2026-11-18 12:00:00、只有一个【关闭】按钮、无无角色的点击 / 按键处理；不自动重试、不恢复抽屉；【关闭】后消失并清掉，再刷新不再出现",
+    "test/spec/frontend/admin-unknown-relogin-marker/adjustment.test.ts > [AC-F1-08at-REVERSE#1] 红冲：结果未知时只存一项标记，整个值等于 {page: adjustments, unknown: true, at: 发生时刻}（不含原调账单号、红冲原因、幂等键、请求体）；【重试】短信验证后收到 10001 走全局重新登录、标记仍在；同一账号重新登录回到调账与核销页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻、只有一个【关闭】按钮；不自动重试、不恢复对话框；【关闭】后消失并清掉，再刷新不再出现",
+    "test/spec/frontend/admin-unknown-relogin-marker/adjustment.test.ts > [AC-F1-08at-ADJUST#2] 新建调账：结果未知（已存标记）后同一会话内【重试】原键原体拿到幂等回放的成功（提示新单号与调账前后余额）→ 标记清掉；之后会话过期、同一账号重新登录回到调账与核销页，不出现「有一笔提交结果未知，请先到列表核对」",
+    "test/spec/frontend/admin-unknown-relogin-marker/adjustment.test.ts > [AC-F1-08at-ADJUST#3] 新建调账：结果未知（已存标记）后【重试】收到 10001 走全局重新登录；换另一个账号登录（同样的权限，落到调账与核销页）看不到「有一笔提交结果未知，请先到列表核对」，也不发任何写",
+    "test/spec/frontend/admin-unknown-relogin-marker/approve.test.ts > [AC-F1-08at-APPROVE#1] 批准调账单：批准没拿到带外壳的回答 → 结果未知（重新读取后仍待批准），只存一项标记，整个值等于 {page: adjustments, unknown: true, at: 发生时刻}（不含调账单号、用户、幂等键）；再按【批准并短信验证】短信验证后收到 10001 走全局重新登录、标记仍在；同一账号重新登录回到调账与核销页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻 2026-11-18 12:00:00、只有一个【关闭】按钮；不自动重试、不恢复对话框、该单仍待批准；【关闭】后消失并清掉，再刷新不再出现",
+    "test/spec/frontend/admin-unknown-relogin-marker/approve.test.ts > [AC-F1-08at-REJECT#1] 驳回调账单：驳回没拿到带外壳的回答 → 结果未知（重新读取后仍待批准），只存一项标记，整个值等于 {page: adjustments, unknown: true, at: 发生时刻}（不含调账单号、用户、驳回原因、幂等键）；再按【驳回】收到 10001 走全局重新登录、标记仍在；同一账号重新登录回到调账与核销页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻、只有一个【关闭】按钮；不自动重试、不恢复对话框、该单仍待批准；【关闭】后消失并清掉，再刷新不再出现",
+    "test/spec/frontend/admin-unknown-relogin-marker/manual-paid.test.ts > [AC-F1-08at-MANUAL#1] 批量手动打款：结果未知时只存一项标记，整个值等于 {page: withdrawals, unknown: true, at: 发生时刻}（不含单号、金额、流水号、用户、幂等键、请求体）；【重试】收到 10001 走全局重新登录后标记仍在；同一账号重新登录回到提现审核页，页面顶部提示「有一笔提交结果未知，请先到列表核对」并显示发生时刻 2026-11-18 12:00:00（不是重新登录时刻）、提示条只有一个【关闭】按钮且无无角色的点击 / 按键处理；不自动重试（不再发写）、不恢复对话框；按【关闭】后提示消失、存储清掉，再刷新不再出现",
+    "test/spec/frontend/admin-unknown-relogin-marker/manual-paid.test.ts > [AC-F1-08at-MANUAL#2] 批量手动打款：结果未知（已存标记）后同一会话内【重试】原键原体拿到确定结果「已录入 2 张，跳过 0 张」→ 标记清掉；之后会话过期、同一账号重新登录回到提现审核页，不出现「有一笔提交结果未知，请先到列表核对」",
+    "test/spec/frontend/admin-unknown-relogin-marker/manual-paid.test.ts > [AC-F1-08at-MANUAL#3] 批量手动打款：结果未知（已存标记）后【重试】收到 10001 走全局重新登录；换另一个账号登录（同样的权限，落到提现审核页）看不到「有一笔提交结果未知，请先到列表核对」，也不发任何写",
+    "test/spec/frontend/admin-unknown-relogin-marker/writeoff.test.ts > [AC-F1-08at-WRITEOFF#1] 批准坏账核销：批准没拿到带外壳的回答 → 结果未知（重新读取列表后仍待批准），只存一项标记，整个值等于 {page: adjustments, unknown: true, at: 发生时刻}（不含候选单号、用户、幂等键）；再按【批准核销】短信验证后收到 10001 走全局重新登录、标记仍在；同一账号重新登录回到调账与核销页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻 2026-11-18 12:00:00、只有一个【关闭】按钮；不自动重试、不恢复对话框、候选单仍待批准；【关闭】后消失并清掉，再刷新不再出现"
+  ],
+  "risk_note": "F1-08at (FU-ADMIN-UNKNOWN-ON-RELOGIN, D10-2075). apps/admin only (pages/withdrawals, pages/adjustments, components/unknown-marker, texts). On entering a result-unknown state (batch manual paid, detail-page manual paid / execute payout, adjustment create / reverse / approve / reject / write-off) the console keeps one sessionStorage item keyed by page and admin_id whose whole value is {page, unknown: true, at}; no ids, amounts, keys or bodies. After re-login the page shows a fixed prompt with one real close button; resolved results clear only the instance's own marker. No new write requests, no automatic resend, request bodies and idempotency handling unchanged.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (approvals #36, D10-2003) on f2a1e84e. Pass with two S2 (marker released after 去列表核对 not dropped; marker time not from the injected clock), fixed in 6e1373a8. An earlier call on c14c8820 was rejected by the output validator; its content was pass with two S2 (enveloped 5xx not marked; markers overwritten across instances), fixed in f2a1e84e before this call. couli-runs/F1-08at/review-claude-money-r2.json"
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Independent Claude via tools/agent/claude-run.sh on 6e1373a8. Pass, 0 findings. couli-runs/F1-08at/review-claude-money-r3.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude context (claude-run.sh), 2 rounds (round 2 only fixed manual-paid ready(), which waited for a button the frozen F1-08al tests forbid before selection); spec-test by another independent Claude: r1 pass (3 S2, covered by the implementation), r2 pass, 0 findings",
+    "model": "claude-opus-5-5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08at",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "e75347cdaa9955b1cbe1f54a427109275a831b33",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "e75347cdaa9955b1cbe1f54a427109275a831b33",
+      "tree": "e93853b406960fbc5d706902211152acaa7eecd0",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-20T00:34:22Z",
+      "finished_at": "2026-11-20T00:34:35Z",
+      "red_tests": [
+        "test/spec/frontend/admin-unknown-relogin-marker/adjustment.test.ts > [AC-F1-08at-ADJUST#1] 新建调账：结果未知时只存一项标记，整个值等于 {page: adjustments, unknown: true, at: 发生时刻}（不含调账单号、用户、金额、单据、说明、幂等键、请求体）；【重试】短信验证后收到 10001 走全局重新登录、标记仍在；同一账号重新登录回到调账与核销页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻 2026-11-18 12:00:00、只有一个【关闭】按钮、无无角色的点击 / 按键处理；不自动重试、不恢复抽屉；【关闭】后消失并清掉，再刷新不再出现",
+        "test/spec/frontend/admin-unknown-relogin-marker/adjustment.test.ts > [AC-F1-08at-REVERSE#1] 红冲：结果未知时只存一项标记，整个值等于 {page: adjustments, unknown: true, at: 发生时刻}（不含原调账单号、红冲原因、幂等键、请求体）；【重试】短信验证后收到 10001 走全局重新登录、标记仍在；同一账号重新登录回到调账与核销页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻、只有一个【关闭】按钮；不自动重试、不恢复对话框；【关闭】后消失并清掉，再刷新不再出现",
+        "test/spec/frontend/admin-unknown-relogin-marker/adjustment.test.ts > [AC-F1-08at-ADJUST#2] 新建调账：结果未知（已存标记）后同一会话内【重试】原键原体拿到幂等回放的成功（提示新单号与调账前后余额）→ 标记清掉；之后会话过期、同一账号重新登录回到调账与核销页，不出现「有一笔提交结果未知，请先到列表核对」",
+        "test/spec/frontend/admin-unknown-relogin-marker/adjustment.test.ts > [AC-F1-08at-ADJUST#3] 新建调账：结果未知（已存标记）后【重试】收到 10001 走全局重新登录；换另一个账号登录（同样的权限，落到调账与核销页）看不到「有一笔提交结果未知，请先到列表核对」，也不发任何写",
+        "test/spec/frontend/admin-unknown-relogin-marker/approve.test.ts > [AC-F1-08at-APPROVE#1] 批准调账单：批准没拿到带外壳的回答 → 结果未知（重新读取后仍待批准），只存一项标记，整个值等于 {page: adjustments, unknown: true, at: 发生时刻}（不含调账单号、用户、幂等键）；再按【批准并短信验证】短信验证后收到 10001 走全局重新登录、标记仍在；同一账号重新登录回到调账与核销页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻 2026-11-18 12:00:00、只有一个【关闭】按钮；不自动重试、不恢复对话框、该单仍待批准；【关闭】后消失并清掉，再刷新不再出现",
+        "test/spec/frontend/admin-unknown-relogin-marker/approve.test.ts > [AC-F1-08at-REJECT#1] 驳回调账单：驳回没拿到带外壳的回答 → 结果未知（重新读取后仍待批准），只存一项标记，整个值等于 {page: adjustments, unknown: true, at: 发生时刻}（不含调账单号、用户、驳回原因、幂等键）；再按【驳回】收到 10001 走全局重新登录、标记仍在；同一账号重新登录回到调账与核销页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻、只有一个【关闭】按钮；不自动重试、不恢复对话框、该单仍待批准；【关闭】后消失并清掉，再刷新不再出现",
+        "test/spec/frontend/admin-unknown-relogin-marker/manual-paid.test.ts > [AC-F1-08at-MANUAL#1] 批量手动打款：结果未知时只存一项标记，整个值等于 {page: withdrawals, unknown: true, at: 发生时刻}（不含单号、金额、流水号、用户、幂等键、请求体）；【重试】收到 10001 走全局重新登录后标记仍在；同一账号重新登录回到提现审核页，页面顶部提示「有一笔提交结果未知，请先到列表核对」并显示发生时刻 2026-11-18 12:00:00（不是重新登录时刻）、提示条只有一个【关闭】按钮且无无角色的点击 / 按键处理；不自动重试（不再发写）、不恢复对话框；按【关闭】后提示消失、存储清掉，再刷新不再出现",
+        "test/spec/frontend/admin-unknown-relogin-marker/manual-paid.test.ts > [AC-F1-08at-MANUAL#2] 批量手动打款：结果未知（已存标记）后同一会话内【重试】原键原体拿到确定结果「已录入 2 张，跳过 0 张」→ 标记清掉；之后会话过期、同一账号重新登录回到提现审核页，不出现「有一笔提交结果未知，请先到列表核对」",
+        "test/spec/frontend/admin-unknown-relogin-marker/manual-paid.test.ts > [AC-F1-08at-MANUAL#3] 批量手动打款：结果未知（已存标记）后【重试】收到 10001 走全局重新登录；换另一个账号登录（同样的权限，落到提现审核页）看不到「有一笔提交结果未知，请先到列表核对」，也不发任何写",
+        "test/spec/frontend/admin-unknown-relogin-marker/writeoff.test.ts > [AC-F1-08at-WRITEOFF#1] 批准坏账核销：批准没拿到带外壳的回答 → 结果未知（重新读取列表后仍待批准），只存一项标记，整个值等于 {page: adjustments, unknown: true, at: 发生时刻}（不含候选单号、用户、幂等键）；再按【批准核销】短信验证后收到 10001 走全局重新登录、标记仍在；同一账号重新登录回到调账与核销页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻 2026-11-18 12:00:00、只有一个【关闭】按钮；不自动重试、不恢复对话框、候选单仍待批准；【关闭】后消失并清掉，再刷新不再出现"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-unknown-relogin-marker/adjustment.test.ts",
+        "test/spec/frontend/admin-unknown-relogin-marker/approve.test.ts",
+        "test/spec/frontend/admin-unknown-relogin-marker/manual-paid.test.ts",
+        "test/spec/frontend/admin-unknown-relogin-marker/writeoff.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "fc290a824f20c181c40c9dc1d68f089fede7eafabe1487fb5ab8bbc2380d8489"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b12925d599c70cf3830aeaab4aa1aa27e8c4fd34",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}
