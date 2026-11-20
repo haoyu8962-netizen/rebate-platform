@@ -4,10 +4,10 @@ title: 'B2-02zc：账务自检差错单未结期间同一差异不按会计日�
 type: impl
 # 2026-11-21 be 入账（D10-2219 ④ 负责人 B/B/B 题 2；方案 couli-runs/LEDGER-REVIEW-1120/be-plan-A-B-C.md B 节 + D10-2224 修订 B ①）。
 # 规划依据：couli 8c4ffe5（#9）BR-FUND-19 细则「账务自检异常」——「同一个未解决的异常不按会计日重复：差错单未结案期间，之后各会计日再查出同一差异，不新生成差错单、不新增冻结记录；去重的做法由工程定」。本仓库 SPEC_REF（ba6655）尚无此句，由编排统一换；写测书 §9 逐字附原文。
-# 做法（D10-2224 B ①）：新迁移 0152 加部分唯一索引 recon_diffs_unresolved_internal_key (app_id, type, ref_id) WHERE type = 'ledger_mismatch' AND status IN ('open','processing')，只约束账务自检类；对外差异（union_mismatch / channel_mismatch / platform_restore 等）仍按 (app_id, type, period, ref_id) 每期一张。
+# 做法（D10-2224 B ①）：新迁移 0152 加部分唯一索引 recon_diffs_unresolved_internal_key (app_id, type, ref_id) WHERE type = 'ledger_mismatch' AND status IN ('open','processing') AND ref_type <> 'order'，只约束账务自检类的账户级（ledger_account）与凭证级（voucher，含全局 02）；按子订单归组的（ref_type order）维持按会计日每天一张、各自冻结（D10-2295 甲：一个子订单可含多个受益人，未结期间可能新增变负的受益人，按差错单去重会漏冻；withdraw_holds 无唯一约束、本单不跨 payout 路径；订单级去重另见 FU-B2-02ZC-ORDER-LEVEL-DEDUP）；对外差异（union_mismatch / channel_mismatch / platform_restore 等）仍按 (app_id, type, period, ref_id) 每期一张。
 # registerReconDiffOnce 现为 INSERT … ON CONFLICT DO NOTHING（不带冲突目标，覆盖新索引）；冲突后读回已有单的查找补一步「同 app、ledger_mismatch、ref_id 的未结单」，返回 inserted=false——日终执行段与入账后核对都按 inserted 决定加冻结 / 告警，冻结随之只加一次；已有单不改写（status、金额、period、resolution 照首次）。
 # 结案（adjusted / written_off / closed）后同一差异再出现：照常新开一张（period 为当日）并加 1 条冻结。processing 与 open 同算未结。
-# 全局类（scope=global，ref_id = 不变量:实体）同样落在本索引上：未结期间不再开新单；settle.auto.enabled 现为每轮发现即关（不看是否新插入），本单不改，规则测试钉住。入账后核对（credit_postcheck，ref_id 含 voucher_id、dedupe_key 无会计日）行为不变；month_end_unbalanced 不动。
+# 全局类（scope=global，ref_id = 不变量:实体）中凭证级同样落在本索引上：未结期间不再开新单；settle.auto.enabled 现为每轮发现即关（不看是否新插入），本单不改，规则测试钉住。入账后核对（credit_postcheck，ref_id 含 voucher_id、dedupe_key 无会计日）行为不变；month_end_unbalanced 不动。
 # 迁移在 runner 单事务里建（require-concurrent-index-creation 已全局排除，先例 0132）；存量有同 app 同 ref_id 两张以上未结 ledger_mismatch 时建索引 23505 失败——有意 fail-closed，迁移注释给查重 SQL，不在迁移里改业务数据（不自动结案、不动冻结）；staging 存量由编排部署前查。
 # 规则变化（rule_change，BR-FUND-19，编排按 approvals 24 核）：[AC-B2-02p#8] 后半「次日同一差异另登记 period 为次日的一张」→「前一张未结时次日不新增、不改写，inserted=false」；[AC-B2-02p#18] 后半「次日的新差错单另加 1 条」→「前一张未结时次日不再加冻结」；两块前半不动。
 # 入账前探针（主干 + 0152 + 读回未结单，测试机 519 文件 4162 例，B2-02zc/tests/1）另红 4 条，均因旧用例在同一 ref_id 上并存两张未结 ledger_mismatch 或索引不在 0060：B2-02xb#2、B2-04k#5、B2-04b#7、B2-04b#4，一并登记（只改造数据 / 查找范围，断言不放宽）。
