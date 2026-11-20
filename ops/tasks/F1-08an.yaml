@@ -9,6 +9,7 @@ type: impl
 # 2026-11-20 补丁 1（fe，编排 D10-2167，同 D10-1733 / D10-1899 / D10-2100）：写测第 1 轮报冻结冲突——本单【一键组批】持 payout.execute（超管）时不勾选也可用，F1-08a [AC-F1-08a-READONLY#1] / [#3]、[AC-F1-08a-BROWSER#1] 与 F1-08ai [AC-F1-08ai-ACCESS#1] 的全量权限 / 超管写入口须为空。改法：入口清单改为「恰为当时已落地的入口」（toEqual 严格相等，持 payout.execute 或超管时恰多【一键组批】、不点它；【批量自动打款】未勾选仍禁；无 payout.execute 的角色一字不变并保留看不到【一键组批】的反向用例）；admin-withdrawals/helpers.ts 的 assertReadOnly、admin-withdrawal-batch-approve/helpers.ts 的 assertNoOtherActions、pages.browser.test.ts 顶层 WRITE 只做纯插入（加可选的「已落地入口」参数：不传参时行为逐字不变、禁词表不删；传入的入口同时断言确实在），按文件级 scope: support 登记。每份冻结测试文件各补 1 条本单新块在主干上红（D10-1812）。页签计数若改变 server.reads() 次数，按 D10-2167 ③ 改成新的确切次数、逐条另登。金额、请求体、揭示断言不动。
 # 2026-11-20 补丁 2（fe，编排 D10-2172 / D10-2173，同 D10-1899）：① 实现撞 F1-08al [AC-F1-08al-ACCESS#1]（持 fund.view + payout.execute + export + config.business 时 APPROVED 行不可勾），而本单【批量自动打款】要求 payout.execute 先勾选（BR-WDR-12）：manual-paid/selection.test.ts 列进 test_paths，块级 modify_existing——第一组 ['fund.view'] 不动；第二组可勾、未勾选时三个批量入口都没有、勾选后【批量手动打款】【批量通过】恰为空、可用批量入口恰为【批量自动打款】（不点）、无写请求；另补一组 ['fund.view','export','config.business'] 走原断言保住「不可勾」反例；GRANTS 半段不动。同文件末尾补 1 条本单新块在主干上红（D10-1812）。② 删去补丁 1 的 [AC-F1-08a-READONLY#3] 条：写测第 2 轮核实它的断言都在详情页上，块未改（D10-2172）。red_exempt 待写测第 3 轮后的正式先红结果另登。
 # 2026-11-20 补丁 3（fe，编排 D10-2179，approvals 第 115 条）：实现 r1 的页签计数（进页时 5 个页签各一次 page_size=1 读，D10-2017）使 F1-14c [AC-F1-14c-WITHDRAWALS#1]–[#7] 与 F1-08ba [AC-F1-08ba-TABS#1] 的「列表读」1 → 6。改法：列表读只取 page_size 不为 '1' 的读、原期望一字不动；每处旁边配计数读断言（排序后 toEqual 恰 5 条，各带页签快捷筛选与 page '1'、page_size '1'，不许 ≥ / toContain / 只数个数）；admin-route-status-param/withdrawals.test.ts 加并列顶层函数、原 queries() 不改（scope: support）；两份文件各补 1 条新红块（D10-1812）。red_exempt 待写测第 4 次后的正式先红另登。
+# 2026-11-20 补丁 4（fe，同 F1-08am 补丁 2 / F1-08cc 先例）：写测第 4 次后正式先红（规则测试提交 7b6c0de38，couli-runs/F1-08an/red/2）把 6 份冻结文件中有改动块或读了 support 改动的整份判定，未改的 11 条在骨架上绿被记问题；按 red_exempt 登记这 11 条，块体均未改。
 refs: [BR-WDR-12, BR-WDR-11, BR-ID-34]
 refs_hash:
   BR-WDR-12: 37adcd14e97f
@@ -30,6 +31,40 @@ test_paths:
   - 'test/spec/frontend/admin-payouts-readonly/tabs.test.ts'
 impl: claude
 tester: claude-independent
+red_exempt:
+  - file: test/spec/frontend/admin-payouts-readonly/tabs.test.ts
+    test: '[AC-F1-08ba-TABS#2] 只持 fund.view、只持 payout.execute、超管：都见三个页签且默认审核列表（只持 payout.execute 时审核列表显示无权限、不读提现单）；只持 withdraw.review 或只持 user.lookup：不见「打款队列」「结果待确认」；未进页签时都不请求 payout-overview 与 unknown-payouts'
+    reason: 'F1-08ba 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08ba-TABS#1] 与本单新块，被整份判定；它看的是只持部分权限点时三个页签的可见与无权限提示、进打款队列 / 结果待确认页签的只读请求，本单只在审核列表加页签计数读与入口，新旧实现下都成立'
+  - file: test/spec/frontend/admin-payouts-readonly/tabs.test.ts
+    test: '[AC-F1-08ba-TABS#3] 进「打款队列」只读一次 payout-overview（不带参数）、不读 unknown-payouts；进「结果待确认」只读一次 unknown-payouts；再回「审核列表」，审核列表的行照旧（全部状态、申请时间倒序）'
+    reason: 'F1-08ba 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08ba-TABS#1] 与本单新块，被整份判定；它看的是只持部分权限点时三个页签的可见与无权限提示、进打款队列 / 结果待确认页签的只读请求，本单只在审核列表加页签计数读与入口，新旧实现下都成立'
+  - file: test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts
+    test: '[AC-F1-08ai-SELECT#1] 按真实 PENDING_REVIEW 限制勾选，APPROVED 即使展示状态同为 pending_review 也不可勾；其余状态没有可用勾选框'
+    reason: 'F1-08ai 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08ai-ACCESS#1] 与本单新块、且其 helpers.ts 按 support 改过（assertNoOtherActions 纯插入），被整份判定；它用只持 withdraw.review 的账号看待审单的勾选、批量栏与筛选保留，本单新入口只对 payout.execute 或超管出现，新旧实现下都成立'
+  - file: test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts
+    test: '[AC-F1-08ai-SELECT#2] 批量栏随勾选出现，aria-live 精确播报张数及合计实付；取消全部后入口与统计消失'
+    reason: 'F1-08ai 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08ai-ACCESS#1] 与本单新块、且其 helpers.ts 按 support 改过（assertNoOtherActions 纯插入），被整份判定；它用只持 withdraw.review 的账号看待审单的勾选、批量栏与筛选保留，本单新入口只对 payout.execute 或超管出现，新旧实现下都成立'
+  - file: test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts
+    test: '[AC-F1-08ai-FILTER#1] 改筛选未查询仍保留原选择；查询应用新条件后清空全部已选，再勾选只统计新选择'
+    reason: 'F1-08ai 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08ai-ACCESS#1] 与本单新块、且其 helpers.ts 按 support 改过（assertNoOtherActions 纯插入），被整份判定；它用只持 withdraw.review 的账号看待审单的勾选、批量栏与筛选保留，本单新入口只对 payout.execute 或超管出现，新旧实现下都成立'
+  - file: test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts
+    test: '[AC-F1-08al-ACCESS#2] 双权限及超管只选待审仍只有批量通过；混选后手动对话框只列待执行单'
+    reason: 'F1-08al 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08al-ACCESS#1] 与本单新块，被整份判定；它看的是双权限 / 超管只选待审单时只有【批量通过】、手动打款对话框的列与微信跳过，本单不改这两个对话框，新旧实现下都成立'
+  - file: test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts
+    test: '[AC-F1-08al-DIALOG#1] 按列表顺序显示单号、收款方式、应付；微信仅标跳过且无输入、不进入请求'
+    reason: 'F1-08al 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08al-ACCESS#1] 与本单新块，被整份判定；它看的是双权限 / 超管只选待审单时只有【批量通过】、手动打款对话框的列与微信跳过，本单不改这两个对话框，新旧实现下都成立'
+  - file: test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts
+    test: '[AC-F1-08al-DIALOG#2] 全选微信时全部标跳过，无录入输入、确认不可用且不发验证或写请求'
+    reason: 'F1-08al 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08al-ACCESS#1] 与本单新块，被整份判定；它看的是双权限 / 超管只选待审单时只有【批量通过】、手动打款对话框的列与微信跳过，本单不改这两个对话框，新旧实现下都成立'
+  - file: test/spec/frontend/admin-withdrawals/readonly.test.ts
+    test: '[AC-F1-08a-READONLY#2] 提现单详情（待审核、已通过待执行、微信等用户确认三种状态，全部写与查看全量权限点）：没有可点的【审核通过】【驳回】【撤销微信转账】【重新计算】，【执行打款】【手动成功】只在已通过待执行单上恰各 1 个（F1-08am），收款账号与手机号旁没有可点的【查看】，点其余这类入口都不发揭示或写请求、不出现完整账号 / 姓名 / 手机号'
+    reason: 'F1-08a / F1-08am 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08a-READONLY#1] 与本单新块、且其 helpers.ts 按 support 改过（assertReadOnly 纯插入），被整份判定；它的断言都在提现单详情页上，本单只改审核列表页（入口与页签计数），新旧实现下都成立'
+  - file: test/spec/frontend/admin-withdrawals/readonly.test.ts
+    test: '[AC-F1-08a-READONLY#3] 列表进详情一路（列表 → 【详情】 → 详情，全部权限点）只请求 GET /admin/v1/withdrawals 与 GET /admin/v1/withdrawals/{id}，不请求打款、导出、自动到账设置、风险标签重算或查看全量'
+    reason: 'F1-08a / F1-08am 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08a-READONLY#1] 与本单新块、且其 helpers.ts 按 support 改过（assertReadOnly 纯插入），被整份判定；它的断言都在提现单详情页上，本单只改审核列表页（入口与页签计数），新旧实现下都成立'
+  - file: test/spec/frontend/admin-withdrawals/readonly.test.ts
+    test: '[AC-F1-08am-READONLY#1] 已通过待执行单（银行卡、没有转账尝试）的详情按权限点出入口：不持 payout.execute 与 payout.manual_entry 时（其余写与查看权限点照持，或只持查看）【执行打款】【手动成功】都不出现（隐藏，不是置灰）；持 payout.execute 不持 payout.manual_entry 时只出可用的【执行打款】；持 payout.manual_entry 不持 payout.execute 时只出可用的【手动成功】；都不点，只发允许的 GET、不出现完整账号 / 姓名 / 手机号'
+    reason: 'F1-08a / F1-08am 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08a-READONLY#1] 与本单新块、且其 helpers.ts 按 support 改过（assertReadOnly 纯插入），被整份判定；它的断言都在提现单详情页上，本单只改审核列表页（入口与页签计数），新旧实现下都成立'
 modify_existing:
   - file: 'test/spec/frontend/admin-withdrawals/readonly.test.ts'
     test: '[AC-F1-08a-READONLY#1] 审核列表（账号持 withdraw.review、payout.execute、payout.manual_entry、export、pii.reveal_identity、pii.reveal_phone 等全部写与查看全量权限点）：没有可点的【批量通过】【批量手动打款】【批量自动打款】【导出】等写入口，点任何写入口或【查看】类入口都只发允许的 GET'
