@@ -22,5 +22,5 @@ tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/ledger-single-writer/**'
-status: todo
-pr: null
+status: done
+pr: 429
