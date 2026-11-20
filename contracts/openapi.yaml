@@ -24908,7 +24908,6 @@ paths:
         cache the first wrote. A posting committed between two calls is in the entries and in
         the cache alike, so the second call does not undo it.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10003

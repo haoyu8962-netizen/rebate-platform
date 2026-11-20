@@ -10,5 +10,4 @@ export const plannedOperations: ReadonlySet<string> = new Set([
   "adminSearch",
   "bindOauthIdentity",
   "loginByHuawei",
-  "recalcBalanceAdminReconDiff",
 ]);
