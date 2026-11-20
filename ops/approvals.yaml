@@ -699,3 +699,9 @@ approvals:
     granted: true
     date: '2026-11-20'
     note: '编排会话按 规划/11 §7.1 第 4 行（冻结用例改动由编排按第 24 条逐处核），D10-1706 / D10-1780 ③ ④ / D10-2166：提现免二次验证（负责人 2026-11-14，D10-1665）后 StepUpAction 去 withdraw，原用例的提现载体与 withdraw 动作已无法到达被测检查，纯插入做不到（换桩守卫单参、无外挂点、注销当不了载体；for 头部表无合法插入点）。实跑：测试机 step-up-verify 四文件（order / once / token / withdraw-order）23 例绿、受影响 10 目录 53 文件 625 例绿（couli-runs/B1-02zzzc/tests/1、tests/2）；评审：现行写法全新只读独立 Claude 评审 pass、无发现（couli-runs/B1-02zzzc/frozen-cand/c-review2/review.json；逐项核了期望值未改、换桩只对 phone 生效、handled 计数、已实现路由检查、risk-state 那行不被 20001 抢先）。台账 B1-02zzzc 补丁 3（#375）对应条目 ruling D10-1706。只对本单这三处生效，不扩到别的冻结文件。'
+  - id: 114
+    row: 4
+    title: 'B1-04zzzzj 任务专属一次性追加：spec-test 评审第 3 轮——只核写测第 3 次把 test/spec/union/taobao-raw-json-text/literal.test.ts 第 42 行两处源码里直接写出的 U+2028 原字符改成转义序列 \u2028（值逐字相同）'
+    granted: true
+    date: '2026-11-20'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（评审轮次属门禁流程小改动），D10-2175，先例第 107 条、第 112 条：前两轮不是连续不过——spec-test r1 pass、r2 pass（增量：写测第 2 次把 interface JsonTexts 改 type 修 fc.letrec 类型）；实现后规则 12 目录 679 条全绿、tsc / eslint / depcruise 过、money r1 pass 0 发现，verify:fast 只因静态门禁 hidden-unicode 拦 literal.test.ts:42 两个原字符 U+2028 而红，写测第 3 次（3/3）只把这两处改成转义。范围写死：只对 B1-04zzzzj、只多 spec-test 一轮，只核这一行两处的词法改动；评审方须自己核改前改后两个字符串字面量解析出的值逐字相同（各算一次码点），不只看 diff；其余用例、标题、期望与文件不动。全新无上下文的独立 Claude（claude-run.sh，approvals 第 36 条），证据记 claude-independent；照常不调 bump-attempt（按编排例外轮记），次数上限与熔断（10 次独立调用）不变。'
