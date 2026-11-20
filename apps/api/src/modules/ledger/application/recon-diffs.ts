@@ -46,7 +46,8 @@ const PERIOD = /^[0-9]{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?$/;
 const MONTH_END: ReconDiffType = 'month_end_unbalanced';
 /**
  * B2-02zc (BR-FUND-19 细则「账务自检异常」, D10-2224 B ①): internal self-check types whose unresolved
- * ticket is unique per (app_id, type, ref_id) across periods (recon_diffs_unresolved_internal_key).
+ * ticket is unique per (app_id, type, ref_id) across periods (recon_diffs_unresolved_internal_key),
+ * except an order-level ticket (ref_type order), which keeps one per accounting day (D10-2295).
  */
 const UNRESOLVED_UNIQUE: readonly ReconDiffType[] = ['ledger_mismatch'];
 

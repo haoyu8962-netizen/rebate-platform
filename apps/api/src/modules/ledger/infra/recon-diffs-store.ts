@@ -65,7 +65,8 @@ export async function findReconDiffByBusinessKey(
 
 /**
  * B2-02zc: the unresolved (open / processing) ticket of an internal self-check type under
- * recon_diffs_unresolved_internal_key (app_id, type, ref_id), whatever its period.
+ * recon_diffs_unresolved_internal_key (app_id, type, ref_id), whatever its period; like the index,
+ * never an order-level ticket (ref_type order keeps one per accounting day, D10-2295).
  */
 export async function findUnresolvedReconDiff(
   trx: Transaction<DB>,
@@ -79,6 +80,7 @@ export async function findUnresolvedReconDiff(
     .where('type', '=', key.type)
     .where('ref_id', '=', key.refId)
     .where('status', 'in', ['open', 'processing'])
+    .where('ref_type', '<>', 'order')
     .executeTakeFirst();
 }
 
