@@ -1,0 +1,33 @@
+id: B1-04zzzzj
+repo: rebate-platform
+title: 'union 归档两处收尾（FU-DATAOKE-ARCHIVEBODY-ASYNC、FU-TB-ARCHIVE-LITERAL-JSON；不改行为、不改契约）'
+type: impl
+# 2026-11-20 be 入账（编排 11-20「be 名下不改契约的 FU」第 1 张；清单 couli-runs/BE-codex/open-followups-20261108.md，前置 B1-04zzzx 已 done）。
+# ① DataokeRequestOptions.archiveBody 的类型照 replay.ts 放宽为 (body) => string | Promise<string>（归档传输早已 await，B1-04zzu），
+#    去掉 taobao-adapter.ts #exchangeOrderData 里的放宽断言（as）与其说明注释；DataokeClient 照旧原样转交，不 await、不改调用。
+# ② 淘宝归档正文的「解析树写回 JSON（数字按原文）」只留一份：新建 taobao/raw-json.ts 导出 taobaoRawJsonText，
+#    orders.ts 的 rawJsonText、punishments.ts / refunds.ts 两份 literalJson 删掉改用它。三份函数体逐字相同，输出逐字节不变。
+# 规则测试（RV2 须有作者）只钉 taobaoRawJsonText：TaobaoRawNumber 按原文、数组 / 对象 / 字符串 / null / 布尔 / 嵌套、成员顺序、
+#    键名转义；测试提交里 raw-json.ts 只放 NotImplemented 骨架。① 是纯类型改动，靠 tsc 与单测，不进规则测试。
+# 不改：线路请求、归档存的正文、告警、错误码、任何已有测试期望。RV2（union），评审 money。
+refs: []
+refs_hash: {}
+deps: [B1-04zzzx]
+paths:
+  - 'apps/api/src/modules/union/infra/dataoke/dataoke-client.ts'
+  - 'apps/api/src/modules/union/infra/taobao/taobao-adapter.ts'
+  - 'apps/api/src/modules/union/infra/taobao/orders.ts'
+  - 'apps/api/src/modules/union/infra/taobao/punishments.ts'
+  - 'apps/api/src/modules/union/infra/taobao/refunds.ts'
+  - 'apps/api/src/modules/union/infra/taobao/raw-json.ts'
+  - 'apps/api/src/modules/union/infra/taobao/*.test.ts'
+  - 'apps/api/src/modules/union/infra/dataoke/*.test.ts'
+test_paths:
+  - 'test/spec/union/taobao-raw-json-text/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/union/taobao-raw-json-text/**'
+status: todo
+pr: null
