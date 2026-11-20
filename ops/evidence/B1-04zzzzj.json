@@ -1,0 +1,131 @@
+{
+  "risk_note": "B1-04zzzzj (union, RV2; FU-DATAOKE-ARCHIVEBODY-ASYNC + FU-TB-ARCHIVE-LITERAL-JSON). Behaviour-neutral refactor: (1) the three byte-identical 'parsed tree back to JSON text, numbers as literals' helpers (orders.ts rawJsonText, punishments.ts / refunds.ts literalJson) become one taobaoRawJsonText in taobao/raw-json.ts; TaobaoRawNumber moves there too (no-circular) and orders.ts re-exports it, so every instanceof check sees the same class and archived bodies are byte-identical; (2) DataokeRequestOptions.archiveBody widens to string | Promise<string> as replay.ts already declares (the archiving transport awaits it), and taobao-adapter.ts drops its widening `as` assertion and forwards archiveBody directly. No wire request, archive body, warning, error code or contract change.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Fresh independent Claude via claude-run.sh; pass with no findings (couli-runs/B1-04zzzzj/review-money-r1.json). The implementation is unchanged since: it was parked as impl-r1.patch while the rule tests were fixed and re-applied byte-for-byte."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "r1 pass, r2 pass (test phase 2: interface JsonTexts -> type alias for fc.letrec typing), r3 pass under approvals 114 / D10-2175 (test phase 3: literal.test.ts:42 two raw U+2028 characters written as escapes, values identical by code points). One S2 repeated in all rounds (property callback without return true; a mismatch still throws), not changed (couli-runs/B1-04zzzzj/review-spec-test-r1.json, -r2.json, -r3.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "property tests use propParams(); the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber 12345678901234567890 原样写出，不经 Number",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber 1.10 原样写出，不经 Number",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber -0 原样写出，不经 Number",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber 1e3 原样写出，不经 Number",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber 0.000001 原样写出，不经 Number",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber 2.50E+10 原样写出，不经 Number",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber -12345678901234567890.000 原样写出，不经 Number",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#2] 数组与对象里的 TaobaoRawNumber 也原样写出",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"plain\" 按 JSON.stringify 转义为 \"plain\"",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"say \\\"hi\\\"\" 按 JSON.stringify 转义为 \"say \\\"hi\\\"\"",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"a\\\\b\" 按 JSON.stringify 转义为 \"a\\\\b\"",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"line1\\nline2\" 按 JSON.stringify 转义为 \"line1\\nline2\"",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"tab\\there\" 按 JSON.stringify 转义为 \"tab\\there\"",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"ctrl\\u0001\" 按 JSON.stringify 转义为 \"ctrl\\u0001\"",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"凑狸订单\" 按 JSON.stringify 转义为 \"凑狸订单\"",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"sep\u2028end\" 按 JSON.stringify 转义为 \"sep\u2028end\"",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"lone\\ud800\" 按 JSON.stringify 转义为 \"lone\\ud800\"",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"\" 按 JSON.stringify 转义为 \"\"",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#4] null、true、false 写成 JSON 常量",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#5] 数组（空、嵌套、混合）无空格输出、按原序",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#6] 对象（空、嵌套）无空格输出、成员按插入顺序",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#7] 键名按 JSON.stringify 转义（引号、反斜杠、换行、中文键、空键）",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#8] 不是 TaobaoRawNumber 的普通 number 走 JSON.stringify",
+    "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#9] 对象成员值为 null 写 null",
+    "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#10] 往返：{} 解析后写回逐字相同",
+    "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#10] 往返：{\"num_iid\":12345678901234567890,\"fee\":1.10,\"rate\":0.000001,\"neg\":-0,\"exp\":1e3,\"E\":2.50E+10} 解析后写回逐字相同",
+    "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#10] 往返：{\"price\":\"1.10\",\"alipay_total_price\":19.90,\"tk_status\":12,\"has_next\":false,\"position\":null} 解析后写回逐字相同",
+    "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#10] 往返：{\"results\":{\"publisher_order_dto\":[{\"trade_id\":\"1\",\"pub_share_fee\":0.00},{\"trade_id\":2}]}} 解析后写回逐字相同",
+    "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#10] 往返：{\"list\":[[],[1.0,[-0.0]],{\"k\":true},{}],\"empty\":{},\"zero\":0,\"big\":-98765432109876543210.10} 解析后写回逐字相同",
+    "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#10] 往返：{\"text\":\"引号\\\"与反斜杠\\\\和换行\\n\",\"esc\":\"\\u0001\\t\",\"emoji\":\"😀\",\"键\":\"值\"} 解析后写回逐字相同",
+    "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#11] 任意无空白、无重复键的 JSON 对象文本：解析后经 taobaoRawJsonText 写回逐字相同"
+  ],
+  "task": "B1-04zzzzj",
+  "spec_commit": "0f907a95b989677c8be12c4218d5ae9f1ec3dd63",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "0f907a95b989677c8be12c4218d5ae9f1ec3dd63",
+      "tree": "d9b98a2c0226a7b43bb5ee2ce8e927eeec60e0d0",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-20T04:27:57Z",
+      "finished_at": "2026-11-20T04:28:01Z",
+      "red_tests": [
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber 12345678901234567890 原样写出，不经 Number",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber 1.10 原样写出，不经 Number",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber -0 原样写出，不经 Number",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber 1e3 原样写出，不经 Number",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber 0.000001 原样写出，不经 Number",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber 2.50E+10 原样写出，不经 Number",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#1] TaobaoRawNumber -12345678901234567890.000 原样写出，不经 Number",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#2] 数组与对象里的 TaobaoRawNumber 也原样写出",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"plain\" 按 JSON.stringify 转义为 \"plain\"",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"say \\\"hi\\\"\" 按 JSON.stringify 转义为 \"say \\\"hi\\\"\"",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"a\\\\b\" 按 JSON.stringify 转义为 \"a\\\\b\"",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"line1\\nline2\" 按 JSON.stringify 转义为 \"line1\\nline2\"",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"tab\\there\" 按 JSON.stringify 转义为 \"tab\\there\"",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"ctrl\\u0001\" 按 JSON.stringify 转义为 \"ctrl\\u0001\"",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"凑狸订单\" 按 JSON.stringify 转义为 \"凑狸订单\"",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"sep\u2028end\" 按 JSON.stringify 转义为 \"sep\u2028end\"",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"lone\\ud800\" 按 JSON.stringify 转义为 \"lone\\ud800\"",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#3] 字符串 \"\" 按 JSON.stringify 转义为 \"\"",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#4] null、true、false 写成 JSON 常量",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#5] 数组（空、嵌套、混合）无空格输出、按原序",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#6] 对象（空、嵌套）无空格输出、成员按插入顺序",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#7] 键名按 JSON.stringify 转义（引号、反斜杠、换行、中文键、空键）",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#8] 不是 TaobaoRawNumber 的普通 number 走 JSON.stringify",
+        "test/spec/union/taobao-raw-json-text/literal.test.ts > [AC-B1-04zzzzj#9] 对象成员值为 null 写 null",
+        "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#10] 往返：{} 解析后写回逐字相同",
+        "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#10] 往返：{\"num_iid\":12345678901234567890,\"fee\":1.10,\"rate\":0.000001,\"neg\":-0,\"exp\":1e3,\"E\":2.50E+10} 解析后写回逐字相同",
+        "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#10] 往返：{\"price\":\"1.10\",\"alipay_total_price\":19.90,\"tk_status\":12,\"has_next\":false,\"position\":null} 解析后写回逐字相同",
+        "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#10] 往返：{\"results\":{\"publisher_order_dto\":[{\"trade_id\":\"1\",\"pub_share_fee\":0.00},{\"trade_id\":2}]}} 解析后写回逐字相同",
+        "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#10] 往返：{\"list\":[[],[1.0,[-0.0]],{\"k\":true},{}],\"empty\":{},\"zero\":0,\"big\":-98765432109876543210.10} 解析后写回逐字相同",
+        "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#10] 往返：{\"text\":\"引号\\\"与反斜杠\\\\和换行\\n\",\"esc\":\"\\u0001\\t\",\"emoji\":\"😀\",\"键\":\"值\"} 解析后写回逐字相同",
+        "test/spec/union/taobao-raw-json-text/round-trip.test.ts > [AC-B1-04zzzzj#11] 任意无空白、无重复键的 JSON 对象文本：解析后经 taobaoRawJsonText 写回逐字相同"
+      ],
+      "expected": [
+        "test/spec/union/taobao-raw-json-text/literal.test.ts",
+        "test/spec/union/taobao-raw-json-text/round-trip.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "3d52a3ea87236efc322e88d6d7b96316f8449a4fb9404a725c211ca078342fbe"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "87f381131b3947f2228aa2e342b99638bae9d1b4",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}
