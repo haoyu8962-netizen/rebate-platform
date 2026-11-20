@@ -1,0 +1,26 @@
+id: B1-20b
+repo: rebate-platform
+title: identity 更换手机号 POST /v1/me/phone 换号分支：包 withStepUp（phone_change）、新号 bind 验证码、换号开关关闭 30414（含发码与二次验证的提前 30414）、旧号写 deleted_identities（phone_changed）（D10-2189）
+type: impl
+# 2026-11-20 w1 入账（编排 D10-2189；并入 FU-BIND-PHONE-MISSING-WITHSTEPUP，D10-2170 定性已更正：换号功能未做且漏入账，B1-20a 台账第 3、8 行原定另列 B1-20b）。盘点 couli-runs/W1-search-linking/work/fu-bind-phone-inventory.md。
+# 现状：bind-phone.ts 对已绑号一律 10003；控制器直接 executeInTransaction、未包 withStepUp。实现：控制器照 deletion / payout-account 写法 withStepUp(request, () => idempotency.executeInTransaction(...))；服务层换号分支：开关 → 规范化 20001 → 新号 bind 码（20002 / 20003）→ 44001 → 30411（换号不走并号）→ 覆盖 phone_cipher / phone_hmac、旧 phone_hmac 写 deleted_identities（reason=phone_changed，留存同 admin-profile-edit）；成功（2xx 且 code 0）才核销令牌（withStepUp 已有）。首次绑定行为不变。不动幂等键写法（keyedRequestDigest 照旧，D10-2165 ① 未定）。
+# 换号开关 account.phone_change_enabled：只有配置值为 false 才算关闭（缺键按开启，BR-ID-06 细则「开关的客户端副本」同口径）。三处判定：换号接口（最终判定，首次绑定不受影响）；POST /v1/auth/sms-codes purpose=step_up action=phone_change（签名之后、20001 之前，不发短信、不计限额）；POST /v1/auth/step-up action=phone_change（10405 之后、校验验证码或第三方凭证之前）。D10-2189 ②：发码两处只许加一次开关判断，若要动限流 / 计数顺序就拆单报编排。
+# 分支点（D10-2189 ③，待编排交 Jev 后回写 08）：自助换号成功后是否吊销本人其他会话——08 BR-ID-06 / BR-ID-07 与 04 §6.1 都没写（只有后台改号 BR-ID-44 细则写了全部设备退出）。起草默认「吊销其他会话、保留当前会话」，规则测试两种都先不钉，回话后台账补丁再钉。
+# RV2（账号与授权边界，D10-2189）：评审按 money 同级安全口径；规则测试必须走真实控制器（test/spec/identity/bind-phone/http-kit.ts 那套），不换桩。冻结的 bind-phone/bind.int.test.ts #12（已绑无 / 无效令牌 → 10003）新实现下照旧成立，不改。契约已全（bindPhone 已有 x-step-up phone_change、30414、10003；sendSmsCode / stepUp 已有 30414），不占契约槽，无迁移。实现等 B1-02zzzc 落地后起。
+refs: [BR-ID-05, BR-ID-06, BR-ID-08]
+refs_hash:
+  BR-ID-05: 0737ee3b67e2
+  BR-ID-06: 379a6a53b315
+  BR-ID-08: a2e69361dbee
+deps: [B1-20a, B1-02zzzc]
+paths:
+  - 'apps/api/src/modules/identity/**'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/identity/bind-phone-change/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/bind-phone-change/**'
+status: todo
