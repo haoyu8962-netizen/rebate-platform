@@ -57,8 +57,12 @@ const TWO_53 = SAFE + 1n;
 
 type Field = 'available' | 'frozen';
 
-/** The leaf key of a sub-account's value (available_fen / frozen_fen in the record). */
-const FIELD: Readonly<Record<Field, RegExp>> = { available: /available/i, frozen: /frozen/i };
+/**
+ * The leaf key of a sub-account's value, exactly as the contract names it
+ * (recalcBalanceAdminReconDiff: the audit record's before / after each keep `available_fen` and
+ * `frozen_fen`); compared for equality, so a misspelt key such as `unavailable_fen` does not match.
+ */
+const FIELD: Readonly<Record<Field, string>> = { available: 'available_fen', frozen: 'frozen_fen' };
 /** A path segment naming the entry sums of a refusal (entry_sums in the record). */
 const SUMS = /sum/i;
 
@@ -69,9 +73,7 @@ function lastOf(path: readonly string[]): string {
 /** The values the record keeps under a key naming the entry sums, for the sub-account `field`. */
 function sumLeaves(row: AuditRow, field: Field): string[] {
   return auditLeaves(row)
-    .filter(
-      (leaf) => leaf.path.some((seg) => SUMS.test(seg)) && FIELD[field].test(lastOf(leaf.path)),
-    )
+    .filter((leaf) => leaf.path.some((seg) => SUMS.test(seg)) && lastOf(leaf.path) === FIELD[field])
     .map((leaf) => leaf.value);
 }
 
@@ -85,7 +87,7 @@ function sideLeaves(row: AuditRow, side: 'before' | 'after', field: Field): stri
       (leaf) =>
         !leaf.path.some((seg) => SUMS.test(seg)) &&
         sideOf(leaf.path) === side &&
-        FIELD[field].test(lastOf(leaf.path)),
+        lastOf(leaf.path) === FIELD[field],
     )
     .map((leaf) => leaf.value);
 }
