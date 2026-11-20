@@ -1,5 +1,3 @@
-import { readdirSync, readFileSync } from 'node:fs';
-
 import { createTestDatabase } from '@couli/db/testing';
 import { sql } from 'kysely';
 import { expect, it } from 'vitest';
@@ -102,6 +100,7 @@ it('[AC-B2-04b#4] 同一迁移创建并授权三表，资金表约束与独立�
   const escape = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // B2-02zc (D10-2224 B ①): indexes of these tables added by later migrations (merged migrations
   // never change) are looked up in those migrations too; tables, grants and constraints stay 0060's.
+  const { readdirSync, readFileSync } = await import('node:fs');
   const directory = new URL('../../../../../db/migrations/', import.meta.url);
   const later = readdirSync(directory)
     .filter((name) => /^\d{4}_.+\.sql$/.test(name) && Number(name.slice(0, 4)) > 60)
