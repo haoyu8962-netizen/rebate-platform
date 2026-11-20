@@ -30,7 +30,17 @@ import {
   voucherDiff,
   withHarness,
 } from '../daily-check-execute/kit.ts';
-import { CONCLUDED, CONCLUDED_AT, RUN_NEXT, RUN_THIRD, THIRD_DAY, moveTo } from './kit.ts';
+import {
+  CONCLUDED,
+  CONCLUDED_AT,
+  FOURTH_DAY,
+  RUN_FOURTH,
+  RUN_NEXT,
+  RUN_THIRD,
+  THIRD_DAY,
+  conclude,
+  moveTo,
+} from './kit.ts';
 
 it(
   '[AC-B2-02zc#1] 账户级差异（①）D 日登记 1 张并加 1 条冻结；D+1、D+2 同一差异再现 → 差错单仍 1 张（period=D 等逐字段不变）、inserted=false、冻结仍 1 条、端口只调 1 次；对照：同一账户 D+1 首次出现的 ⑦ 另登记 1 张、另加 1 条冻结',
@@ -150,8 +160,65 @@ it(
   TIMEOUT,
 );
 
+it(
+  '[AC-B2-02zc#11] 未结期间同一差异再现但金额变了（① D 日分录 300 / 缓存 500 → D+1 400 / 600 → D+2 350 / 700）→ 仍读回 D 日原单：inserted=false、返回旧单 id，旧单金额、period、resolution 等逐字段不变；冻结仍 1 条、端口只调 1 次',
+  async () => {
+    await withHarness(createTestDatabase, async (h) => {
+      const account = await userAccount(h);
+      const refId = `01:${account.accountId}`;
+      await h.executor.execute(h.db, {
+        accountingDate: DAY,
+        differences: [balanceCacheDiff(account, { expected: 300n, cache: 500n })],
+      });
+      const first = await diffByRef(h, refId);
+      expectRegistered(first, {
+        refType: 'ledger_account',
+        refId,
+        expectedFen: 300n,
+        actualFen: 500n,
+      });
+      const held = await holdsOf(h);
+      expect(held).toHaveLength(1);
+      expectHold(held[0], first, account.userId, h);
+      expect(h.holds.calls).toHaveLength(1);
+
+      const later = [
+        [NEXT_DAY, RUN_NEXT, { expected: 400n, cache: 600n }],
+        [THIRD_DAY, RUN_THIRD, { expected: 350n, cache: 700n }],
+      ] as const;
+      for (const [day, run, amounts] of later) {
+        h.clock.set(run);
+        const execution = await h.executor.execute(h.db, {
+          accountingDate: day,
+          differences: [balanceCacheDiff(account, amounts)],
+        });
+        expect(
+          execution.reconDiffs.map((executed) => executed.reconDiffId),
+          `${day}：金额变了仍读回 D 日原单`,
+        ).toEqual([first.id]);
+        expect(executedOf(execution, first)).toMatchObject({
+          refId,
+          inserted: false,
+          heldUserIds: [],
+        });
+        expect(await diffsOf(h), `${day}：不新生成差错单，原单逐字段不变`).toEqual([first]);
+        expect(first).toMatchObject({
+          period: DAY,
+          expected_fen: 300n,
+          actual_fen: 500n,
+          diff_fen: -200n,
+          status: 'open',
+        });
+        expect(await holdsOf(h), `${day}：不新增冻结，原冻结原样`).toEqual(held);
+        expect(h.holds.calls).toHaveLength(1);
+      }
+    });
+  },
+  TIMEOUT,
+);
+
 it.each(CONCLUDED)(
-  '[AC-B2-02zc#3] 未结时次日不新开；首张结案为 %s 后再次日同一差异 → 新开一张（period 为当日、新 id、inserted=true）并加 1 条指向新单的冻结，旧单与旧冻结不变',
+  '[AC-B2-02zc#3] 未结时次日不新开；首张结案为 %s（旧冻结随之按关单写法解除）后再次日同一差异 → 新开一张（period 为当日、新 id、inserted=true）并加 1 条指向新单的有效冻结，旧单与已解除的旧冻结不变；再追加一个会计日 → 读回重开的未结单（不是旧结案单）、inserted=false，两张单与冻结逐行不变',
   async (status) => {
     await withHarness(createTestDatabase, async (h) => {
       const account = await userAccount(h);
@@ -172,8 +239,17 @@ it.each(CONCLUDED)(
       expect(await holdsOf(h)).toEqual(held);
       expect(h.holds.calls).toHaveLength(1);
 
-      // Concluded, then found again on D+2: a new ticket and one new hold.
-      const concluded = await moveTo(h.db, first, status, CONCLUDED_AT);
+      // Concluded (its hold released as the closing entry does), then found again on D+2: a new
+      // ticket and one new hold in effect.
+      const {
+        diff: concluded,
+        released,
+        releasedBy,
+      } = await conclude(h.db, first, status, CONCLUDED_AT);
+      expect(released, '结案解除旧冻结').toEqual([
+        { ...held[0]!, released_at: new Date(CONCLUDED_AT), released_by: releasedBy },
+      ]);
+      expect(await holdsOf(h)).toEqual(released);
       h.clock.set(RUN_THIRD);
       const third = await h.executor.execute(h.db, {
         accountingDate: THIRD_DAY,
@@ -195,7 +271,10 @@ it.each(CONCLUDED)(
       expect(await diffsOf(h), '旧单不变，另有新单').toEqual([concluded, later]);
       const heldThird = await holdsOf(h);
       expect(heldThird).toHaveLength(2);
-      expect(heldThird.filter((hold) => hold.source_ref === sourceOf(first.id))).toEqual(held);
+      expect(
+        heldThird.filter((hold) => hold.source_ref === sourceOf(first.id)),
+        '旧冻结保留解除时间与操作人',
+      ).toEqual(released);
       expectHold(
         heldThird.find((hold) => hold.source_ref === sourceOf(later.id)),
         later,
@@ -206,6 +285,25 @@ it.each(CONCLUDED)(
         holdInput(first, account.userId),
         holdInput(later, account.userId),
       ]);
+
+      // D+3: the reopened ticket is unresolved → read back (not the concluded one), nothing new.
+      h.clock.set(RUN_FOURTH);
+      const fourth = await h.executor.execute(h.db, {
+        accountingDate: FOURTH_DAY,
+        differences: [cache],
+      });
+      expect(
+        fourth.reconDiffs.map((executed) => executed.reconDiffId),
+        '读回重开的未结单，不是旧结案单',
+      ).toEqual([later.id]);
+      expect(executedOf(fourth, later)).toMatchObject({
+        refId: `01:${account.accountId}`,
+        inserted: false,
+        heldUserIds: [],
+      });
+      expect(await diffsOf(h), '两张单逐行不变').toEqual([concluded, later]);
+      expect(await holdsOf(h), '冻结逐行不变').toEqual(heldThird);
+      expect(h.holds.calls).toHaveLength(2);
     });
   },
   TIMEOUT,

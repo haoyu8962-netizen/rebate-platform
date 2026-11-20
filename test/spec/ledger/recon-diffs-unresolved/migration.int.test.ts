@@ -2,7 +2,9 @@
 // unique index (app_id, type, ref_id) WHERE type = 'ledger_mismatch' AND status IN ('open',
 // 'processing'), named in its own migration (located by file-name suffix); in the database a second
 // unresolved ledger_mismatch of the same app and ref_id is refused with 23505 whatever its period,
-// a concluded one is accepted, and other types, apps and refs are not affected.
+// a concluded one is accepted, and other types, apps and refs are not affected. Applied over
+// existing duplicates (two unresolved tickets of one ref, one hold each) the migration fails with
+// 23505 on that index and changes no business row (it never concludes or rewrites tickets).
 import { randomUUID } from 'node:crypto';
 import { createTestDatabase } from '@couli/db/testing';
 import { sql } from 'kysely';
@@ -17,7 +19,15 @@ import {
   sqlState,
   type Row,
 } from '../../db/settlement/ledger-owned/kit.ts';
-import { CONCLUDED, INDEX, UNRESOLVED, unresolvedMigrationSource } from './kit.ts';
+import {
+  CONCLUDED,
+  INDEX,
+  UNRESOLVED,
+  preIndexDdl,
+  scratchDatabase,
+  unresolvedMigrationFile,
+  unresolvedMigrationSource,
+} from './kit.ts';
 
 const h = harness(createTestDatabase);
 
@@ -118,3 +128,79 @@ it('[AC-B2-02zc#10] 库内直接 INSERT：同 app 同 ref_id 已有未结 ledger
     { status: 'open', period: '2032-06-20' },
   ]);
 });
+
+it('[AC-B2-02zc#12] 迁移遇存量重复：无该索引的库里已有同 app、同 ref_id、不同 period 的两张未结 ledger_mismatch（open / processing）及各自一条冻结 → 执行迁移文件原文得 23505（建该索引失败），回滚后两张单与两条冻结逐行不变、索引不存在（迁移不自动结案、不改写业务数据）', async () => {
+  const migration = unresolvedMigrationFile();
+  const ddl = preIndexDdl();
+  const scratch = await scratchDatabase();
+  try {
+    const db = scratch.db;
+    await sql`CREATE SCHEMA app`.execute(db);
+    for (const statement of ddl) await sql.raw(statement).execute(db);
+    expect(
+      (await indexes(db, 'recon_diffs')).map((index) => index.name),
+      '迁移前的库没有该索引',
+    ).not.toContain(INDEX);
+
+    const refId = `01:${randomUUID()}`;
+    const first = recon({
+      ref_type: 'ledger_account',
+      ref_id: refId,
+      period: '2032-06-15',
+      dedupe_key: `R3:2032-06-15:${refId}`,
+    });
+    const second = recon({
+      app_id: first['app_id'],
+      ref_type: 'ledger_account',
+      ref_id: refId,
+      period: '2032-06-16',
+      status: 'processing',
+      dedupe_key: `R3:2032-06-16:${refId}`,
+    });
+    for (const diff of [first, second]) {
+      expect(await sqlState(insert(db, 'recon_diffs', diff))).toBe('ok');
+      expect(
+        await sqlState(
+          insert(db, 'withdraw_holds', {
+            id: randomUUID(),
+            app_id: diff['app_id'],
+            user_id: randomUUID(),
+            reason: 'ledger_mismatch',
+            source_ref: `recon_diff:${String(diff['id'])}`,
+            created_by: 'system',
+            created_at: AT,
+            hold_until: null,
+            released_at: null,
+            released_by: null,
+          }),
+        ),
+      ).toBe('ok');
+    }
+    const snapshot = async () => ({
+      diffs: await db.selectFrom('recon_diffs').selectAll().orderBy('id').execute(),
+      holds: await db.selectFrom('withdraw_holds').selectAll().orderBy('id').execute(),
+    });
+    const before = await snapshot();
+    expect(before.diffs).toHaveLength(2);
+    expect(before.holds).toHaveLength(2);
+
+    const failure = await db
+      .transaction()
+      .execute((trx) => sql.raw(migration).execute(trx))
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    expect(failure, '存量重复时迁移须失败').not.toBeNull();
+    expect((failure as { code?: unknown }).code, String(failure)).toBe('23505');
+    expect(String((failure as { message?: unknown }).message)).toContain(INDEX);
+
+    expect(await snapshot(), '回滚后两张单与两条冻结逐行不变').toEqual(before);
+    expect(
+      (await indexes(db, 'recon_diffs')).map((index) => index.name),
+      '回滚后索引不存在',
+    ).not.toContain(INDEX);
+  } finally {
+    await scratch.drop();
+  }
+}, 60_000);
