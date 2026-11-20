@@ -8,6 +8,7 @@ import {
   findReconDiffByBusinessKey,
   findReconDiffByDedupeKey,
   findReconDiffByMonthEnd,
+  findUnresolvedReconDiff,
   insertReconDiffIfAbsent,
   selectReconDiffs,
 } from '../infra/recon-diffs-store.ts';
@@ -43,6 +44,11 @@ const TYPES: readonly string[] = recon_diff_type;
 /** Same shape as the recon_diffs_period_check constraint: YYYY-MM or YYYY-MM-DD. */
 const PERIOD = /^[0-9]{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?$/;
 const MONTH_END: ReconDiffType = 'month_end_unbalanced';
+/**
+ * B2-02zc (BR-FUND-19 细则「账务自检异常」, D10-2224 B ①): internal self-check types whose unresolved
+ * ticket is unique per (app_id, type, ref_id) across periods (recon_diffs_unresolved_internal_key).
+ */
+const UNRESOLVED_UNIQUE: readonly ReconDiffType[] = ['ledger_mismatch'];
 
 function text(value: unknown, name: string): string {
   if (typeof value !== 'string' || value.length === 0) {
@@ -99,7 +105,8 @@ function checkInput(input: RegisterReconDiffInput): void {
 
 /**
  * The row already registered under one of the unique keys of recon_diffs, in this order: the
- * nullable dedupe_key, the business key (app_id, type, period, ref_id), the month-end key.
+ * nullable dedupe_key, the business key (app_id, type, period, ref_id), the month-end key, and for an
+ * internal self-check type the unresolved ticket of (app_id, type, ref_id) in any period (B2-02zc).
  */
 async function findExisting(
   trx: Transaction<DB>,
@@ -112,8 +119,16 @@ async function findExisting(
   const byBusiness = await findReconDiffByBusinessKey(trx, input);
   if (byBusiness !== undefined) return byBusiness;
   if (input.type === MONTH_END) return findReconDiffByMonthEnd(trx, input.appId, input.period);
+  if (UNRESOLVED_UNIQUE.includes(input.type)) return findUnresolvedReconDiff(trx, input);
   return undefined;
 }
+
+/**
+ * B2-02zc: a conflicting unresolved ticket can be concluded by a concurrent transaction between the
+ * INSERT that met it and the read-back (READ COMMITTED). Then nothing is found under any key and the
+ * INSERT is simply tried again (it now goes through, or meets the row that replaced it).
+ */
+const REGISTER_ATTEMPTS = 3;
 
 /** B2-15n: what one registration did — the stored row, and whether this call inserted it. */
 export interface ReconDiffRegistration {
@@ -156,6 +171,20 @@ export async function registerReconDiffOnce(
 ): Promise<ReconDiffRegistration> {
   checkInput(input);
   const now = dependencies.clock.now();
+  for (let attempt = 1; ; attempt += 1) {
+    const registration = await tryRegister(trx, input, now);
+    if (registration !== undefined) return registration;
+    if (attempt >= REGISTER_ATTEMPTS) {
+      throw new Error('ledger: recon diff conflicted but no existing row was found');
+    }
+  }
+}
+
+async function tryRegister(
+  trx: Transaction<DB>,
+  input: RegisterReconDiffInput,
+  now: Date,
+): Promise<ReconDiffRegistration | undefined> {
   const inserted = await insertReconDiffIfAbsent(trx, {
     id: newUuidV7(now),
     app_id: input.appId,
@@ -177,10 +206,7 @@ export async function registerReconDiffOnce(
   });
   if (inserted !== undefined) return { row: inserted, inserted: true };
   const existing = await findExisting(trx, input);
-  if (existing === undefined) {
-    throw new Error('ledger: recon diff conflicted but no existing row was found');
-  }
-  return { row: existing, inserted: false };
+  return existing === undefined ? undefined : { row: existing, inserted: false };
 }
 
 /** Uses the supplied connection/snapshot and never locks or writes. */
