@@ -73,7 +73,7 @@ import {
   type RequestCheckInput,
   type TokenPrincipal,
 } from '../../platform/index.ts';
-import { STEP_UP_FAILURE } from '../domain/step-up-digest.ts';
+import { STEP_UP_FAILURE, STEP_UP_PHONE_BINDING_CLAIM } from '../domain/step-up-digest.ts';
 
 /** BR-ID-07: an access token is valid for 2 hours. */
 export const ACCESS_TOKEN_TTL_SECONDS = 2 * 60 * 60;
@@ -212,6 +212,12 @@ export interface StepUpClaims {
    * string, else null. Compared by the business inside its lock, never here.
    */
   readonly summary: string | null;
+  /**
+   * B1-20b (Codex money r1 S0 #2): the phone binding claim of a phone_change token issued by SMS
+   * (domain/step-up-digest.ts phoneChangeBinding) when it is a string, else null. Compared by the
+   * phone change inside its users row lock, never here.
+   */
+  readonly phone_binding: string | null;
 }
 
 /** Same local keys / issuer as access tokens, but a separate audience and rejection code. */
@@ -260,7 +266,9 @@ export function createStepUpTokenVerifier(
       throw reject();
     }
     const summary = typeof payload['summary'] === 'string' ? payload['summary'] : null;
-    return Object.freeze({ uid, app_id, device_id, action, jti, exp, summary });
+    const binding = payload[STEP_UP_PHONE_BINDING_CLAIM];
+    const phone_binding = typeof binding === 'string' ? binding : null;
+    return Object.freeze({ uid, app_id, device_id, action, jti, exp, summary, phone_binding });
   };
 }
 

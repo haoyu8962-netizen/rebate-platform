@@ -14,6 +14,10 @@
 //   (BR-ID-08, POST /v1/auth/oauth-attempts). Then SmsCodeService.send runs with that number, so
 //   the per-phone limits (and the 60 s interval across devices and actions) count against it, and
 //   POST /v1/auth/step-up checks the code against the same bound number and purpose.
+// B1-20b (BR-ID-05 发码判定顺序, D10-2189): purpose=step_up with action=phone_change while the phone
+// change switch is off (phone-change-switch.ts) → 30414, right after the token checks above and
+// before any 20001: nothing read of the account, no SMS sent, no limit counted. Without the switch
+// option the change counts as on.
 // The session scope (deletion_only) and the version gate are stage ④a's (risk), before this.
 // Nothing is logged here: no phone in any form, no code, no captcha_token.
 //
@@ -24,6 +28,7 @@ import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
 import type { FieldCrypto, TokenPrincipal, VerifiedDevice } from '../../platform/index.ts';
 import { PHONE_CIPHER_CONTEXT } from '../domain/registration.ts';
+import { PHONE_CHANGE_DISABLED, type PhoneChangeSwitch } from './phone-change-switch.ts';
 import type { SmsCodeService, SmsResult } from './sms-codes.ts';
 
 export interface SmsCodeRequestCommand {
@@ -36,7 +41,7 @@ export interface SmsCodeRequestCommand {
 
 /** A step_up refusal decided here, before SmsCodeService.send (identity's error envelopes). */
 export type StepUpSendRefusal =
-  | { readonly code: 10001 | 10403 }
+  | { readonly code: 10001 | 10403 | 30414 }
   | { readonly code: 20001; readonly data: { readonly fields: readonly string[] } };
 
 export type SmsCodeRequestResult = SmsResult | { readonly refused: StepUpSendRefusal };
@@ -70,8 +75,10 @@ export function createBoundPhoneReader(
 export function createSmsCodeRequestService(options: {
   readonly sms: Pick<SmsCodeService, 'send'>;
   readonly boundPhone: BoundPhoneReader;
+  /** account.phone_change_enabled (B1-20b); absent → on. */
+  readonly phoneChange?: PhoneChangeSwitch;
 }): SmsCodeRequestService {
-  const { sms, boundPhone } = options;
+  const { sms, boundPhone, phoneChange } = options;
   return {
     async send(command) {
       const { body, verifiedDevice, principal, client_ip: clientIp } = command;
@@ -81,6 +88,13 @@ export function createSmsCodeRequestService(options: {
       if (purpose === 'step_up') {
         if (principal === undefined) return { refused: { code: 10001 } };
         if (principal.app_id !== appId) return { refused: { code: 10403 } };
+        if (
+          action === 'phone_change' &&
+          phoneChange !== undefined &&
+          !(await phoneChange.enabled(appId))
+        ) {
+          return { refused: PHONE_CHANGE_DISABLED };
+        }
         if (Object.prototype.hasOwnProperty.call(body, 'phone')) {
           return { refused: { code: 20001, data: { fields: ['phone'] } } };
         }

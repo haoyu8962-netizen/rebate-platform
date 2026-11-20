@@ -56,6 +56,7 @@ import {
   type BindPhoneService,
   type AccountAssetsPort,
   type AccountRiskPort,
+  type PhoneChangeAuditPort,
 } from './application/bind-phone.ts';
 import { createTipsService, type TipsService } from './application/tips.ts';
 import { createMeService, type MeService, type MeReadPorts } from './application/me.ts';
@@ -144,10 +145,15 @@ import { createReverifyService, type ReverifyService } from './application/rever
 import { unbindRevoked, type SessionPushTokens } from './application/push-tokens.ts';
 import { createRecordInitialLevel, type InitialLevelLog } from './application/initial-level-log.ts';
 import {
+  revokeOtherSessionsOfUser,
   revokeSessionsByDevice,
   revokeSessionsByUser,
   type SessionRevokeReason,
 } from './application/revoke-sessions.ts';
+import {
+  createPhoneChangeSwitch,
+  type PhoneChangeSwitch,
+} from './application/phone-change-switch.ts';
 import {
   createDefaultInviteCodeFilter,
   createRegistrationService,
@@ -373,6 +379,13 @@ export interface IdentityModuleOptions extends DeletionRequestModuleOptions {
    * identity never reads config_items. Absent or null: the route answers 50001.
    */
   readonly landingConfig?: Omit<FactoryProvider<LandingRegisterConfigReader | null>, 'provide'>;
+  /**
+   * B1-20b (D10-2192): the system audit of a self-service phone change (system:self_service,
+   * user_phone_change) on the change's transaction, assembled by app.module from admin's system
+   * audit writer. Absent or null: a phone change of POST /v1/me/phone fails (50001) and writes
+   * nothing; first bindings are unaffected.
+   */
+  readonly phoneChangeAudit?: Omit<FactoryProvider<PhoneChangeAuditPort | null>, 'provide'>;
 }
 
 /** RegistrationOptions['bindInvite'] as app.module assembles it (IdentityModuleOptions.inviteBinding). */
@@ -486,6 +499,10 @@ const DELETION_PROGRESS = Symbol('IDENTITY_DELETION_PROGRESS');
 const LANDING_INVITE = Symbol('IDENTITY_LANDING_INVITE');
 /** The landing configuration reader (IdentityModuleOptions.landingConfig), or null. */
 const LANDING_CONFIG = Symbol('IDENTITY_LANDING_CONFIG');
+/** B1-20b: the phone change audit port (IdentityModuleOptions.phoneChangeAudit), or null. */
+const PHONE_CHANGE_AUDIT = Symbol('IDENTITY_PHONE_CHANGE_AUDIT');
+/** B1-20b: account.phone_change_enabled through the uncached landing configuration reader. */
+const PHONE_CHANGE_SWITCH = Symbol('IDENTITY_PHONE_CHANGE_SWITCH');
 
 /**
  * The signing key of the api entry (B1-02h): JWT_PRIVATE_KEY_PEM + JWT_KEY_ID, an ephemeral pair in
@@ -646,6 +663,19 @@ export class IdentityModule {
         options.landingConfig === undefined
           ? { provide: LANDING_CONFIG, useValue: null }
           : { ...options.landingConfig, provide: LANDING_CONFIG },
+        options.phoneChangeAudit === undefined
+          ? { provide: PHONE_CHANGE_AUDIT, useValue: null }
+          : { ...options.phoneChangeAudit, provide: PHONE_CHANGE_AUDIT },
+        {
+          // B1-20b: a fresh content reader per read (LANDING_CONFIG), so a switch change applies to
+          // the next request; on the pool unless the caller hands its transaction.
+          provide: PHONE_CHANGE_SWITCH,
+          inject: [LANDING_CONFIG, { token: DB, optional: true }],
+          useFactory: (
+            reader: LandingRegisterConfigReader | null,
+            db?: Kysely<Database>,
+          ): PhoneChangeSwitch => createPhoneChangeSwitch(reader, db),
+        },
         {
           provide: BIND_PHONE,
           inject: [
@@ -655,6 +685,9 @@ export class IdentityModule {
             ACCOUNT_ASSETS,
             ACCOUNT_RISK,
             ACCOUNT_MERGE,
+            PHONE_CHANGE_SWITCH,
+            PHONE_CHANGE_AUDIT,
+            PUSH_TOKENS,
             { token: FIELD_CRYPTO, optional: true },
             { token: REDIS, optional: true },
           ],
@@ -665,6 +698,9 @@ export class IdentityModule {
             assets: AccountAssetsPort | null,
             risk: AccountRiskPort | null,
             barriers: AccountMergePort | null,
+            phoneChange: PhoneChangeSwitch,
+            audit: PhoneChangeAuditPort | null,
+            pushTokens: SessionPushTokens | null,
             crypto?: FieldCrypto,
             redis?: RedisHandle,
           ): BindPhoneService | null =>
@@ -684,6 +720,23 @@ export class IdentityModule {
                   barriers,
                   crypto,
                   redis,
+                  // B1-20b: the change's switch, the revocation of the other sessions (with the
+                  // push token unbinding, as revokeSessionsByUser's assembly) and its audit.
+                  ...(audit === null
+                    ? {}
+                    : {
+                        change: {
+                          switch: phoneChange,
+                          revokeOthers: (trx, input) =>
+                            revokeOtherSessionsOfUser(
+                              trx,
+                              input,
+                              clock,
+                              pushTokens === null ? undefined : unbindRevoked(pushTokens),
+                            ),
+                          audit,
+                        },
+                      }),
                 }),
         },
         {
@@ -904,11 +957,13 @@ export class IdentityModule {
           provide: SMS_CODE_REQUESTS,
           inject: [
             SMS_CODES,
+            PHONE_CHANGE_SWITCH,
             { token: DB, optional: true },
             { token: FIELD_CRYPTO, optional: true },
           ],
           useFactory: (
             sms: SmsCodeService | null,
+            phoneChange: PhoneChangeSwitch,
             db?: Kysely<Database>,
             fieldCrypto?: FieldCrypto,
           ): SmsCodeRequestService | null =>
@@ -917,6 +972,7 @@ export class IdentityModule {
               : createSmsCodeRequestService({
                   sms,
                   boundPhone: createBoundPhoneReader(db, fieldCrypto),
+                  phoneChange,
                 }),
         },
         {
@@ -1272,6 +1328,7 @@ export class IdentityModule {
             SMS_CODES,
             OAUTH_ATTEMPTS,
             THIRD_PARTY_IDENTITY,
+            PHONE_CHANGE_SWITCH,
             { token: DB, optional: true },
             { token: FIELD_CRYPTO, optional: true },
           ],
@@ -1283,6 +1340,7 @@ export class IdentityModule {
             sms: SmsCodeService | null,
             attempts: OauthAttemptService | null,
             thirdPartyIdentity: ThirdPartyIdentityPort | null,
+            phoneChange: PhoneChangeSwitch,
             db?: Kysely<Database>,
             fieldCrypto?: FieldCrypto,
           ): StepUpService | null =>
@@ -1303,6 +1361,7 @@ export class IdentityModule {
                   sms,
                   attempts,
                   logger,
+                  phoneChange,
                   ...(thirdPartyIdentity === null ? {} : { thirdPartyIdentity }),
                 }),
         },

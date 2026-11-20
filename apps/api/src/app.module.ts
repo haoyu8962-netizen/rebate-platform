@@ -234,6 +234,7 @@ import {
   type AccountMergePort,
   type AccountRiskPort,
   type MeReadPorts,
+  type PhoneChangeAuditPort,
   type MeUnionBindingStatus,
   type PayoutAccountConfigPort,
   type PersonalDataCopySources,
@@ -1420,6 +1421,16 @@ function identityModule(contentReader: SharedContentReader): DynamicModule {
         configValue: (appId, key, handle) =>
           createContentReader({ db: handle, clock }).configValue(appId, key),
       }),
+    },
+    // B1-20b (D10-2192): the self-service phone change's audit row (system:self_service,
+    // user_phone_change) on identity's transaction through admin's system audit writer, as
+    // deletionClosingPrefill's.
+    phoneChangeAudit: {
+      inject: [CLOCK],
+      useFactory: (clock: Clock): PhoneChangeAuditPort => {
+        const writer = createSystemAuditWriter({ clock, sensitiveKeys: SENSITIVE_KEYS });
+        return { appendAction: (trx, input) => writer.appendAction(trx, input) };
+      },
     },
     // B1-11h: growth's landing channel (precheck, binding) over the binder's read ports, each
     // bound to the landing transaction; without Redis, the field cipher or the event bus there is

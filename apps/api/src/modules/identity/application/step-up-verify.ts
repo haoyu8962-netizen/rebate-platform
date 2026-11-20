@@ -35,6 +35,12 @@
 // the business's 10003 and, being a non-zero answer, releases the reservation (not consumed). The
 // digest is never logged.
 //
+// B1-20b (Codex money r1 S0 #1 / #2): ⑫ reads the account's phone without a lock to decide whether
+// POST /v1/me/phone is a change. The business does not rely on that read: the StepUpContext also
+// hands it what ⑫ passed (judged(): action, jti, the phone binding claim; null when nothing was
+// judged), and the phone change requires a passed phone_change token bound to the number it
+// replaces, judged on its locked users row.
+//
 // Placement: app.module hands createStepUpCheck's result to RiskModule.forRoot's
 // `beforeRateLimit` list, so it is judged after ④a and ⑤ and before ⑬.
 //
@@ -90,6 +96,16 @@ interface StepUpScope {
   settle?: (success: boolean) => Promise<void>;
   /** The judged token's digest claim (null: none); set only by a passing stage ⑫. */
   summary?: string | null;
+  /** B1-20b: the passed token's action, jti and phone binding; set only by a passing stage ⑫. */
+  judged?: JudgedStepUp;
+}
+
+/** What a passing stage ⑫ judged in this request (B1-20b, Codex money r1 S0 #1 / #2). */
+export interface JudgedStepUp {
+  readonly action: StepUpAction;
+  readonly jti: string;
+  /** The phone_change token's phone binding claim (phone-change-binding.ts); null: none. */
+  readonly phone_binding: string | null;
 }
 
 /** What the business handler of a withStepUp call may read of the judged step_up_token. */
@@ -99,6 +115,12 @@ export interface StepUpContext {
    * null when its claims carry none or no token was judged. Read inside the business lock.
    */
   summary(): string | null;
+  /**
+   * B1-20b (Codex money r1 S0 #1): the token stage ⑫ passed and reserved in this request, or null
+   * when none was (a first phone binding, a request outside the three operations). A phone change
+   * reads it inside its users row lock instead of trusting ⑫'s own unlocked phone read.
+   */
+  judged(): JudgedStepUp | null;
 }
 
 const SCOPE = new AsyncLocalStorage<StepUpScope>();
@@ -197,6 +219,11 @@ export function createStepUpCheck(options: StepUpCheckOptions): IdempotencyPostM
     if (reserved === 0) throw required();
     if (reserved !== 1) throw unavailable();
     scope.summary = claims.summary;
+    scope.judged = Object.freeze({
+      action,
+      jti: claims.jti,
+      phone_binding: claims.phone_binding,
+    });
     scope.settle = async (success) => {
       try {
         await options.redis!.namespace('step_up').eval(SETTLE, {
@@ -226,7 +253,10 @@ export function withStepUp(
   execute: (context: StepUpContext) => Promise<IdempotentResponse>,
 ): Promise<IdempotentResponse> {
   const scope: StepUpScope = { request };
-  const context: StepUpContext = Object.freeze({ summary: () => scope.summary ?? null });
+  const context: StepUpContext = Object.freeze({
+    summary: () => scope.summary ?? null,
+    judged: () => scope.judged ?? null,
+  });
   return SCOPE.run(scope, async () => {
     let success = false;
     try {

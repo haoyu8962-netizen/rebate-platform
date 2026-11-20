@@ -46,3 +46,10 @@ export function wechatPayoutDigest(attemptId: string): string {
 export function digestMatches(claimed: string | null, expected: string | null): boolean {
   return typeof claimed === 'string' && typeof expected === 'string' && claimed === expected;
 }
+
+/**
+ * B1-20b (Codex money r1 S0 #2): name of the phone binding claim a phone_change step_up_token
+ * issued by SMS carries (application/phone-change-binding.ts). Not a business digest: its value is
+ * a hex hash, never `w:` / `p:`, and phone_change still takes no `summary`.
+ */
+export const STEP_UP_PHONE_BINDING_CLAIM = 'phone_binding';

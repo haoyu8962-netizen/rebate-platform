@@ -118,6 +118,13 @@ async function setup(
     risk?: (db: Kysely<DB>, clock: Clock, crypto: FieldCrypto) => Partial<SmsLoginOptions>;
     /** users.status the row lock's reread answers (B1-15f); absent, the generic users row. */
     lockedStatus?: string;
+    /**
+     * B1-20b (Codex money r1 S0 #3): the n-th row lock finds the number moved away (a phone change
+     * committed while the login waited); absent or false, the row still holds the looked-up number.
+     */
+    movedLocks?: readonly boolean[];
+    /** B1-20b: the owner id the n-th number lookup finds (null: none); absent, the generic row. */
+    owners?: readonly (string | null)[];
     /** The SMS check's answer (B1-02zza); absent, { code: 0 }. */
     verify?: SmsVerifyResult;
   } = {},
@@ -125,18 +132,45 @@ async function setup(
   const statements: Statement[] = [];
   const lines: string[] = [];
   const events = overrides.events ?? [];
+  let lookups = 0;
+  let locks = 0;
+  let lookedUp: unknown;
   const connection: DatabaseConnection = {
     executeQuery<R>(compiled: CompiledQuery): Promise<QueryResult<R>> {
       const statement = { sql: compiled.sql, parameters: compiled.parameters };
       statements.push(statement);
       if (overrides.pool === true) events.push(`sql:${compiled.sql.split(' ')[0] ?? ''}`);
       if (
-        overrides.lockedStatus !== undefined &&
         compiled.sql.startsWith('select') &&
         compiled.sql.includes('from "users"') &&
         compiled.sql.includes('for no key update')
       ) {
-        return Promise.resolve({ rows: [{ status: overrides.lockedStatus }] } as QueryResult<R>);
+        const moved = overrides.movedLocks?.[locks] === true;
+        locks += 1;
+        return Promise.resolve({
+          rows: [
+            {
+              status: overrides.lockedStatus ?? 'normal',
+              phone_hmac: moved ? 'hmac(moved-to-another-number)' : lookedUp,
+            },
+          ],
+        } as QueryResult<R>);
+      }
+      if (
+        compiled.sql.startsWith('select') &&
+        compiled.sql.includes('from "users"') &&
+        compiled.sql.includes('"phone_hmac" = ')
+      ) {
+        lookedUp = compiled.parameters.find(
+          (parameter) => typeof parameter === 'string' && parameter.startsWith('hmac('),
+        );
+        if (overrides.owners !== undefined) {
+          const owner = overrides.owners[lookups] ?? null;
+          lookups += 1;
+          return Promise.resolve({
+            rows: owner === null ? [] : [{ id: owner, parent_bind_source: null }],
+          } as QueryResult<R>);
+        }
       }
       return Promise.resolve(
         answer(statement, overrides.newUser === true, overrides.blocked === true) as QueryResult<R>,
@@ -468,4 +502,107 @@ it('[AC-B1-02zza#u7] a staging test phone’s SMS login writes one pino audit li
   const text = listed.lines.join('') + JSON.stringify(result);
   expect(text).not.toContain('13912345678');
   expect(text).not.toContain('123456');
+});
+
+const OTHER_ID = '01920000-0000-7000-8000-0000000000b2';
+const NEW_ID = '01920000-0000-7000-8000-0000000000c3';
+
+it('[B1-20b][Codex money r1 S0 #3] 锁内号码已被换走（换号先提交）：不给原账号签会话，按当前归属重新判定——号已归另一账号则登录那个账号', async () => {
+  const { statements, login } = await setup({
+    owners: [USER_ID, OTHER_ID],
+    movedLocks: [true, false],
+  });
+  const result = await login();
+  if (result.code !== 0) throw new Error(`expected a login, got ${result.code}`);
+  expect(result.data.user_id).toBe(OTHER_ID);
+  expect(result.data.is_new_user).toBe(false);
+  expect(decodeJwt(result.data.tokens.access_token).uid).toBe(OTHER_ID);
+  const lockStatements = statements.filter(
+    (statement) =>
+      statement.sql.includes('from "users"') && statement.sql.includes('for no key update'),
+  );
+  expect(lockStatements.map((statement) => statement.parameters.includes(USER_ID))).toEqual([
+    true,
+    false,
+  ]);
+  expect(lockStatements[1]!.parameters).toContain(OTHER_ID);
+  expect(lockStatements[0]!.sql).toContain('"phone_hmac"');
+  // Nothing was written for the old owner before the number was judged again.
+  const firstWrite = statements.findIndex((statement) => /^(insert|update)/.test(statement.sql));
+  expect(firstWrite).toBeGreaterThan(statements.indexOf(lockStatements[1]!));
+  for (const statement of statements.filter((s) => /^(insert|update)/.test(s.sql))) {
+    expect(statement.parameters).not.toContain(USER_ID);
+  }
+});
+
+it('[B1-20b][Codex money r1 S0 #3] 锁内号码已被换走且无人再持有：按注册处理（新账号），原账号不得会话', async () => {
+  let registered = 0;
+  const registration: RegistrationService = {
+    async register() {
+      registered += 1;
+      return { code: 0, user_id: NEW_ID, invite_code: 'ABCDEF', attr_code: 'abcdefgh' };
+    },
+  };
+  const { statements, login } = await setup({
+    owners: [USER_ID, null],
+    movedLocks: [true],
+    registration,
+  });
+  const result = await login();
+  if (result.code !== 0) throw new Error(`expected a login, got ${result.code}`);
+  expect(registered).toBe(1);
+  expect(result.data).toMatchObject({ user_id: NEW_ID, is_new_user: true });
+  expect(decodeJwt(result.data.tokens.access_token).uid).toBe(NEW_ID);
+  for (const statement of statements.filter((s) => /^(insert|update)/.test(s.sql))) {
+    expect(statement.parameters).not.toContain(USER_ID);
+  }
+});
+
+it('[B1-20b][Codex money r1 S0 #3] 号码在锁内反复被换走：有限次重判后抛错回滚，不写任何东西、不签会话', async () => {
+  const events: string[] = [];
+  const { statements, login } = await setup({
+    owners: [USER_ID, OTHER_ID, USER_ID],
+    movedLocks: [true, true, true],
+    events,
+  });
+  await expect(login()).rejects.toThrow('kept changing owner');
+  expect(statements.filter((statement) => /^(insert|update)/.test(statement.sql))).toEqual([]);
+  expect(events).toEqual(['begin', 'rollback']);
+});
+
+it('[B1-20b][Codex money r2 S1] 锁住第一个候选后复核发现号已转出：先回滚到保存点（释放其行锁）再锁下一个候选，任何时刻最多持有一个候选账号的行锁', async () => {
+  const { statements, login } = await setup({
+    owners: [USER_ID, OTHER_ID],
+    movedLocks: [true, false],
+  });
+  const result = await login();
+  if (result.code !== 0) throw new Error(`expected a login, got ${result.code}`);
+  expect(result.data.user_id).toBe(OTHER_ID);
+  const texts = statements.map((statement) => statement.sql);
+  const isLock = (index: number, id: string) =>
+    texts[index]!.includes('from "users"') &&
+    texts[index]!.includes('for no key update') &&
+    statements[index]!.parameters.includes(id);
+  const firstLock = texts.findIndex((_, index) => isLock(index, USER_ID));
+  const secondLock = texts.findIndex((_, index) => isLock(index, OTHER_ID));
+  expect(firstLock).toBeGreaterThanOrEqual(0);
+  expect(secondLock).toBeGreaterThan(firstLock);
+  // A savepoint is taken right before each candidate's lock.
+  expect(texts[firstLock - 1]).toBe('SAVEPOINT couli_sms_login_owner');
+  expect(texts[secondLock - 1]).toBe('SAVEPOINT couli_sms_login_owner');
+  // The moved candidate's lock is rolled back (released) before the next one is locked.
+  const rollbackTo = texts.indexOf('ROLLBACK TO SAVEPOINT couli_sms_login_owner');
+  expect(rollbackTo).toBeGreaterThan(firstLock);
+  expect(rollbackTo).toBeLessThan(secondLock);
+  expect(texts.filter((text) => text.startsWith('ROLLBACK TO SAVEPOINT'))).toHaveLength(1);
+  // The confirmed owner's savepoint is released (its lock kept), before anything is written.
+  const releases = texts
+    .map((text, index) => (text === 'RELEASE SAVEPOINT couli_sms_login_owner' ? index : -1))
+    .filter((index) => index >= 0);
+  expect(releases).toHaveLength(2);
+  expect(releases[0]).toBeGreaterThan(rollbackTo);
+  expect(releases[0]).toBeLessThan(secondLock);
+  expect(releases[1]).toBeGreaterThan(secondLock);
+  const firstWrite = texts.findIndex((text) => /^(insert|update)/.test(text));
+  expect(firstWrite).toBeGreaterThan(releases[1]!);
 });
