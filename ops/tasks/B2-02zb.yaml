@@ -33,5 +33,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/db/ledger/invariants-07-after-recalc/**'
-status: todo
-pr: null
+status: done
+pr: 417
