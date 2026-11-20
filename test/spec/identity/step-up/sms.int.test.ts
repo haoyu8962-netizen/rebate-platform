@@ -41,13 +41,13 @@ it('[AC-B1-02f#29][BR-ID-08] 配置 step-up TTL，复用短信核销端口并指
   const result = await service.verify({
     principal: f.principal,
     verifiedDevice: { appId: f.appId, deviceId: f.device.deviceId },
-    body: { action: 'withdraw', code },
+    body: { action: 'phone_change', code },
   });
   expect(result.code).toBe(0);
   if (result.code !== 0) throw new Error('unreachable after assertion');
   expect(jwt(f, result.data.step_up_token, 'step_up', 75, result.data.expire_at)).toHaveProperty(
     'action',
-    'withdraw',
+    'phone_change',
   );
   expect(verifyAndConsume).toHaveBeenCalledExactlyOnceWith({
     app_id: f.appId,
@@ -60,24 +60,28 @@ it('[AC-B1-02f#29][BR-ID-08] 配置 step-up TTL，复用短信核销端口并指
   ).toEqual({ code: 20003 });
 });
 
+// B1-02zzzc: an .each title may not be renamed (red-check), so the frozen title stays; what this
+// block now asserts after D10-1665 / D10-1702 is in its body.
 it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(
   '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',
   async (action) => {
     const f = await fixture(kit, true);
     const code = await f.send();
-    const data = accepted<Schema<'StepUpData'>>(
-      kit,
-      STEP_UP,
+    const response = await f.post(STEP_UP, {
+      action,
+      code,
       // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary
       // of the account it is for; the other actions take none.
-      await f.post(STEP_UP, {
-        action,
-        code,
-        ...(action === 'payout_account_change'
-          ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }
-          : {}),
-      }),
-    );
+      ...(action === 'payout_account_change'
+        ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }
+        : {}),
+    });
+    if (action === 'withdraw') {
+      // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.
+      rejected(kit, STEP_UP, response, 20001);
+      return;
+    }
+    const data = accepted<Schema<'StepUpData'>>(kit, STEP_UP, response);
     expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({
       action,
       jti: expect.any(String),
@@ -92,8 +96,8 @@ it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'
 it('[AC-B1-02f#21][BR-ID-08] 验证码核销，同码再次提交 20003，无第二个 token', async () => {
   const f = await fixture(kit, true);
   const code = await f.send();
-  accepted(kit, STEP_UP, await f.post(STEP_UP, { action: 'withdraw', code }));
-  const again = await f.post(STEP_UP, { action: 'withdraw', code });
+  accepted(kit, STEP_UP, await f.post(STEP_UP, { action: 'phone_change', code }));
+  const again = await f.post(STEP_UP, { action: 'phone_change', code });
   rejected(kit, STEP_UP, again, 20003);
   expect(again.json()).not.toHaveProperty('data.step_up_token');
 });
@@ -104,14 +108,17 @@ it('[AC-B1-02f#22][BR-ID-08] 错码 20002，随后正确码仍可验证', async 
   rejected(
     kit,
     STEP_UP,
-    await f.post(STEP_UP, { action: 'withdraw', code: code === '000000' ? '000001' : '000000' }),
+    await f.post(STEP_UP, {
+      action: 'phone_change',
+      code: code === '000000' ? '000001' : '000000',
+    }),
     20002,
   );
   expect(
     accepted<Schema<'StepUpData'>>(
       kit,
       STEP_UP,
-      await f.post(STEP_UP, { action: 'withdraw', code }),
+      await f.post(STEP_UP, { action: 'phone_change', code }),
     ).step_up_token,
   ).toEqual(expect.any(String));
 });
@@ -120,7 +127,7 @@ it('[AC-B1-02f#23][BR-ID-08] 短信满 300 秒失效，返回 20003', async () =
   const f = await fixture(kit, true);
   const code = await f.send();
   kit.clock.advanceMs(300_000);
-  rejected(kit, STEP_UP, await f.post(STEP_UP, { action: 'withdraw', code }), 20003);
+  rejected(kit, STEP_UP, await f.post(STEP_UP, { action: 'phone_change', code }), 20003);
 });
 
 it('[AC-B1-02f#24][BR-ID-08] 未绑定手机不能走短信', async () => {
@@ -138,7 +145,7 @@ it('[AC-B1-02f#25][BR-ID-08] 账号手机号从服务端取，另一账号验证
   const f = await fixture(kit, true);
   const other = await fixture(kit, true);
   const foreign = await other.send();
-  rejected(kit, STEP_UP, await f.post(STEP_UP, { action: 'withdraw', code: foreign }), 20003);
+  rejected(kit, STEP_UP, await f.post(STEP_UP, { action: 'phone_change', code: foreign }), 20003);
   expect(
     await other.sms.verifyAndConsume({
       app_id: other.appId,
@@ -152,7 +159,7 @@ it('[AC-B1-02f#25][BR-ID-08] 账号手机号从服务端取，另一账号验证
 it('[AC-B1-02f#26][BR-ID-08] login 短信不能替代 purpose=step_up 的验证码', async () => {
   const f = await fixture(kit, true);
   const code = await f.send('login');
-  rejected(kit, STEP_UP, await f.post(STEP_UP, { action: 'withdraw', code }), 20003);
+  rejected(kit, STEP_UP, await f.post(STEP_UP, { action: 'phone_change', code }), 20003);
   expect(
     await f.sms.verifyAndConsume({ app_id: f.appId, phone: f.number, purpose: 'login', code }),
   ).toEqual({ code: 0 });

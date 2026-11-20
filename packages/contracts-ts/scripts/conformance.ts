@@ -34,6 +34,8 @@ export const ENUM_BINDINGS: Readonly<Record<string, string>> = {
   'ProductCard/properties/match_tag': 'match_tag',
   'InputHit/properties/kind': 'input_kind',
   StepUpAction: 'step_up_action',
+  // IdempotencyAbandonAction (the four sensitive operations, withdraw included; B1-02zzzc,
+  // D10-1665) has no enum in contracts/enums: it is pinned to SENSITIVE_OPERATIONS instead.
   PlatformSearchStatus: 'platform_search_status',
   LinkPatternCategory: 'link_pattern_category',
   IdempotencyAbandonOutcome: 'idempotency_abandon_outcome',
@@ -182,12 +184,26 @@ export const ENUM_BINDINGS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The four operations that need step-up and the step_up_action each one's X-Step-Up-Token must
- * carry (规划/04 §5 step-up row; enum step_up_action). An operation in this table must carry
+ * The operations that need step-up and the step_up_action each one's X-Step-Up-Token must carry
+ * (规划/04 §5 step-up row; StepUpAction of the contract). An operation in this table must carry
  * `x-step-up` with exactly this value once it is declared; no other operation may carry it.
- * Until the four are declared the check has nothing to match (orchestrator decision D-18).
+ * Until they are declared the check has nothing to match (orchestrator decision D-18). A
+ * withdrawal needs no step-up (BR-ID-08, BR-WDR-01; B1-02zzzc, D10-1665): POST /v1/withdrawals is
+ * a sensitive operation (SENSITIVE_OPERATIONS) without x-step-up.
  */
 export const STEP_UP_OPERATIONS: Readonly<Record<string, string>> = {
+  payout_account_change: 'PUT /v1/me/payout-account',
+  phone_change: 'POST /v1/me/phone',
+  account_deletion: 'POST /v1/me/deletion',
+};
+
+/**
+ * The four sensitive operations (BR-ID-10 细则「敏感操作的幂等键」「不适用的动作」; D10-1671) and the
+ * IdempotencyAbandonAction that abandons each one's key. Exactly these carry
+ * `x-sensitive-operation: true` (a boolean, no other value) and list 20903; every step-up
+ * operation is one of them.
+ */
+export const SENSITIVE_OPERATIONS: Readonly<Record<string, string>> = {
   withdraw: 'POST /v1/withdrawals',
   payout_account_change: 'PUT /v1/me/payout-account',
   phone_change: 'POST /v1/me/phone',
@@ -266,8 +282,8 @@ const RESTRICTED_LOGINS = [
   'POST /v1/auth/login/huawei',
 ];
 
-/** Codes every x-step-up operation lists in x-error-codes (04 §5 step-up and 幂等 rows). */
-const STEP_UP_CODES = [10003, 20903];
+/** Code every x-step-up operation lists in x-error-codes (04 §5 step-up row). */
+const STEP_UP_CODES = [10003];
 
 /** Inline enums that may only use a subset of an enum of contracts/enums. */
 export const ENUM_SUBSETS: Readonly<Record<string, string>> = {
@@ -412,10 +428,39 @@ function checkAmounts(schemas: Obj, problems: string[]): void {
 }
 
 /**
- * `x-step-up` (04 §5 step-up row): the value is a step_up_action and is the one the table maps
+ * `x-sensitive-operation` (D10-1671): exactly the four SENSITIVE_OPERATIONS carry it, with the
+ * boolean true; they are idempotent and list 20903, which no other operation lists (20903 only
+ * answers a key abandoned through POST /v1/idempotency-keys/abandon).
+ */
+function checkSensitive(op: Obj, where: string, sensitive: boolean, problems: string[]): void {
+  const value = op['x-sensitive-operation'];
+  const listed = Array.isArray(op['x-error-codes']) ? op['x-error-codes'] : [];
+  if (!sensitive) {
+    if (value !== undefined) {
+      problems.push(
+        `${where}: x-sensitive-operation is carried only by the four sensitive operations`,
+      );
+    }
+    if (listed.includes(20903)) {
+      problems.push(`${where}: 20903 is listed only on x-sensitive-operation operations`);
+    }
+    return;
+  }
+  if (value !== true) {
+    problems.push(`${where}: a sensitive operation carries x-sensitive-operation: true`);
+  }
+  if (op['x-idempotent'] !== true) {
+    problems.push(`${where}: x-sensitive-operation operations are x-idempotent`);
+  }
+  if (!listed.includes(20903)) {
+    problems.push(`${where}: x-sensitive-operation operations list 20903 in x-error-codes`);
+  }
+}
+
+/**
+ * `x-step-up` (04 §5 step-up row): the value is a StepUpAction and is the one the table maps
  * this operation to; the operation is idempotent, lists the X-Step-Up-Token parameter and the
- * codes 10003 and 20903. Without `x-step-up` an operation lists neither the parameter nor 20903
- * (20903 only answers a key abandoned on one of these operations).
+ * code 10003. Without `x-step-up` an operation does not list the parameter.
  */
 function checkStepUp(
   op: Obj,
@@ -435,9 +480,6 @@ function checkStepUp(
     }
     if (params.includes('StepUpToken')) {
       problems.push(`${where}: X-Step-Up-Token is listed only on x-step-up operations`);
-    }
-    if (listed.includes(20903)) {
-      problems.push(`${where}: 20903 is listed only on x-step-up operations`);
     }
     return;
   }
@@ -713,12 +755,33 @@ export function checkConformance(
   const authLevels = enumValues.get('auth_level') ?? [];
   const adminAuthLevels = enumValues.get('admin_auth_level') ?? [];
   const live = new Map(codes.filter((c) => !c.deprecated).map((c) => [c.code, c]));
-  const stepUpActions = enumValues.get('step_up_action') ?? [];
-  if (!sameSet(Object.keys(STEP_UP_OPERATIONS), stepUpActions)) {
+  const stepUpActions = Object.keys(STEP_UP_OPERATIONS);
+  const stepUpNode = at(schemas, 'StepUpAction');
+  const contractActions = isObj(stepUpNode) ? stepUpNode['enum'] : undefined;
+  if (!Array.isArray(contractActions) || !sameSet(stepUpActions, contractActions)) {
     problems.push(
-      `conformance.ts STEP_UP_OPERATIONS: actions differ from contracts/enums step_up_action ` +
-        `(${JSON.stringify(Object.keys(STEP_UP_OPERATIONS))} vs ${JSON.stringify(stepUpActions)})`,
+      `conformance.ts STEP_UP_OPERATIONS: actions differ from components/schemas/StepUpAction ` +
+        `(${JSON.stringify(stepUpActions)} vs ${JSON.stringify(contractActions)})`,
     );
+  }
+  const abandonNode = at(schemas, 'IdempotencyAbandonAction');
+  const abandonActions = isObj(abandonNode) ? abandonNode['enum'] : undefined;
+  if (
+    !Array.isArray(abandonActions) ||
+    !sameSet(Object.keys(SENSITIVE_OPERATIONS), abandonActions)
+  ) {
+    problems.push(
+      `conformance.ts SENSITIVE_OPERATIONS: actions differ from ` +
+        `components/schemas/IdempotencyAbandonAction (${JSON.stringify(
+          Object.keys(SENSITIVE_OPERATIONS),
+        )} vs ${JSON.stringify(abandonActions)})`,
+    );
+  }
+  const sensitiveOperations = new Set(Object.values(SENSITIVE_OPERATIONS));
+  for (const where of Object.values(STEP_UP_OPERATIONS)) {
+    if (!sensitiveOperations.has(where)) {
+      problems.push(`conformance.ts STEP_UP_OPERATIONS: ${where} is not a sensitive operation`);
+    }
   }
   const stepUpByOperation = new Map(
     Object.entries(STEP_UP_OPERATIONS).map(([action, where]) => [where, action]),
@@ -786,6 +849,7 @@ export function checkConformance(
         problems.push(`${where}: x-implementation may only be "planned"`);
       }
       checkStepUp(op, where, stepUpActions, stepUpByOperation.get(where), problems);
+      checkSensitive(op, where, sensitiveOperations.has(where), problems);
       checkStream(doc, op, where, problems);
       if (admin) {
         checkAdminOperation(doc, op, where, live, problems);

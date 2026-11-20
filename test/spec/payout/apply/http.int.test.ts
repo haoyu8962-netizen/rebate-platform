@@ -155,7 +155,7 @@ async function client(balance = 10000n) {
 }
 
 it(
-  '[AC-B2-05d#50] 真实 POST 返回契约响应；重放忽略已消费 step-up，换键不能复用它',
+  '[AC-B2-05d#50] 真实 POST 返回契约响应；重放原样返回，同一 step-up 令牌换新键照常受理、再建一单',
   async () => {
     const c = await client();
     const step = await c.stepUp();
@@ -181,8 +181,9 @@ it(
     await assertContract(response, 'WithdrawalResponse');
     const before = await c.state();
     expect((await c.post({ step: null, key })).body).toBe(response.body);
-    expect((await c.post({ step, key: randomUUID() })).json()).toMatchObject({ code: 10003 });
-    expect(await c.state()).toEqual(before);
+    // B1-02zzzc (D10-1665, D10-1702): the token is neither judged nor consumed.
+    expect((await c.post({ step, key: randomUUID() })).json()).toMatchObject({ code: 0 });
+    expect((await c.state()).withdrawals).toHaveLength(before.withdrawals.length + 1);
   },
   TIMEOUT,
 );
@@ -231,6 +232,8 @@ it.each([0, -1, 1.5, '1000'])(
   },
 );
 
+// B1-02zzzc: an .each title may not be renamed (red-check), so the frozen title stays; what this
+// block now asserts after D10-1665 / D10-1702 is in its body.
 it.each(['missing', 'wrong-action'] as const)(
   '[AC-B2-05d#54] step-up %s → 10003，同键补齐后成功',
   async (mode) => {
@@ -241,9 +244,10 @@ it.each(['missing', 'wrong-action'] as const)(
       key,
       step: mode === 'missing' ? null : await c.stepUp('payout_account_change'),
     });
-    expect(response.statusCode).toBe(403);
-    expect(response.json()).toMatchObject({ code: 10003 });
-    expect(await c.state()).toEqual(before);
+    // B1-02zzzc (D10-1665, D10-1702): no token or another action's token, accepted alike.
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ code: 0 });
+    expect((await c.state()).withdrawals).toHaveLength(before.withdrawals.length + 1);
     expect((await c.post({ key })).json()).toMatchObject({ code: 0 });
   },
 );

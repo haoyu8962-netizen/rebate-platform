@@ -113,7 +113,7 @@ it('abandon: original is null exactly when outcome is abandoned (04 §6.1)', () 
 });
 
 it('step-up takes exactly one way; an oauth attempt for step_up names the action (BR-ID-04, BR-ID-08)', () => {
-  const bySms: Schema<'StepUpRequest'> = { action: 'withdraw', code: '123456' };
+  const bySms: Schema<'StepUpRequest'> = { action: 'payout_account_change', code: '123456' };
   const byApple: Schema<'StepUpRequest'> = {
     action: 'account_deletion',
     provider: 'apple',

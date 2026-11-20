@@ -102,3 +102,23 @@ POST /v1/auth/sms-codes added 'then' subschema to the request body
 GET /admin/v1/exports added the new `ledger` enum value to the `data/items/items/resource` response property for the response status `200`
 POST /admin/v1/exports added the new `ledger` enum value to the `data/resource` response property for the response status `202`
 POST /admin/v1/exports/{id}/retry added the new `ledger` enum value to the `data/resource` response property for the response status `200`
+# B1-02zzzc (D10-1665 / D10-1666 / D10-1671; 负责人 2026-11-14: a withdrawal needs no step-up, BR-ID-08,
+# BR-WDR-01): StepUpAction loses withdraw and StepUpSummary loses StepUpSummaryWithdraw, so the step-up
+# requests (sms code, oauth attempt, step-up) no longer accept action=withdraw. Intentional request
+# tightening: only staging exists, the server and the three apps move to this contract together (no old
+# client asks for a withdraw step-up; the native step-up pages are not live). The abandon request keeps
+# withdraw through the new IdempotencyAbandonAction (same four values, no wire change).
+# Lines in the wording of oasdiff 1.32.1 (CI). POST /v1/auth/oauth-attempts: the request body oneOf keeps its four
+# branches unchanged; branches #2–#4 each reference StepUpAction (#2 as action, #3 / #4 inside `not`), so with the
+# enum change oasdiff reports those three inline subschemas as removed (and re-added) — no branch is removed.
+POST /v1/auth/sms-codes removed the enum value `withdraw` of the request property `action`
+POST /v1/auth/oauth-attempts removed the enum value `withdraw` of the request property `action`
+POST /v1/auth/oauth-attempts removed `subschema #2, subschema #3, subschema #4` from the request body `oneOf` list
+POST /v1/auth/step-up removed the enum value `withdraw` of the request property `oneOf[#/components/schemas/StepUpByAppleRequest]/action`
+POST /v1/auth/step-up removed the enum value `withdraw` of the request property `oneOf[#/components/schemas/StepUpByHuaweiRequest]/action`
+POST /v1/auth/step-up removed the enum value `withdraw` of the request property `oneOf[#/components/schemas/StepUpBySmsRequest]/action`
+POST /v1/auth/step-up removed the enum value `withdraw` of the request property `oneOf[#/components/schemas/StepUpByWechatRequest]/action`
+POST /v1/auth/step-up removed `#/components/schemas/StepUpSummaryWithdraw` from the `oneOf[#/components/schemas/StepUpByAppleRequest]/summary` request property `oneOf` list
+POST /v1/auth/step-up removed `#/components/schemas/StepUpSummaryWithdraw` from the `oneOf[#/components/schemas/StepUpByHuaweiRequest]/summary` request property `oneOf` list
+POST /v1/auth/step-up removed `#/components/schemas/StepUpSummaryWithdraw` from the `oneOf[#/components/schemas/StepUpBySmsRequest]/summary` request property `oneOf` list
+POST /v1/auth/step-up removed `#/components/schemas/StepUpSummaryWithdraw` from the `oneOf[#/components/schemas/StepUpByWechatRequest]/summary` request property `oneOf` list

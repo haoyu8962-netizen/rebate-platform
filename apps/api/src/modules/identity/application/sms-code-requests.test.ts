@@ -39,7 +39,7 @@ function body(value: object): Schema<'SendSmsCodeRequest'> {
 it('[AC-B1-02zzz-UNIT#1] step_up sends to the bound phone of the token account, never a request number', async () => {
   const s = setup();
   const result = await s.service.send({
-    body: body({ purpose: 'step_up', action: 'withdraw', captcha_token: 'cap' }),
+    body: body({ purpose: 'step_up', action: 'payout_account_change', captcha_token: 'cap' }),
     verifiedDevice: DEVICE,
     principal: PRINCIPAL,
     client_ip: '203.0.113.7',
@@ -53,7 +53,7 @@ it('[AC-B1-02zzz-UNIT#1] step_up sends to the bound phone of the token account, 
     device_id: 'd1',
     client_ip: '203.0.113.7',
     captcha_token: 'cap',
-    action: 'withdraw',
+    action: 'payout_account_change',
   });
 });
 

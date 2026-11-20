@@ -152,16 +152,19 @@ it('[AC-B1-02y#6] 按注入的 Clock 判过期：签发后第 299 秒通过，�
   expect(u.handled()).toBe(2);
 });
 
-it('[AC-B1-02y#7] action 与接口不对应返回 10003：withdraw 的 token 调注销、account_deletion 的调提现', async () => {
+// B1-02zzzc (D10-1665, D10-1702): POST /v1/withdrawals no longer judges a step-up token, so a
+// withdrawal carrying another action's token is accepted (the token is ignored).
+it('[AC-B1-02y#7] action 与接口不对应返回 10003：phone_change 的 token 调注销；提现不判 token，带 account_deletion / phone_change 的也照常受理', async () => {
   const u = await user(f);
-  await stepUpRequired(await u.send('deletion', { stepUp: await u.mint('withdraw') }));
+  await stepUpRequired(await u.send('deletion', { stepUp: await u.mint('phone_change') }));
   await stepUpRequired(await u.send('deletion', { stepUp: await u.mint('payout_account_change') }));
-  await stepUpRequired(await u.send('withdraw', { stepUp: await u.mint('account_deletion') }));
-  await stepUpRequired(await u.send('withdraw', { stepUp: await u.mint('phone_change') }));
   expect(u.handled()).toBe(0);
+  succeeded(await u.send('withdraw', { stepUp: await u.mint('account_deletion') }));
+  succeeded(await u.send('withdraw', { stepUp: await u.mint('phone_change') }));
+  expect(u.handled()).toBe(2);
   succeeded(await u.send('withdraw', { stepUp: await u.mint('withdraw') }));
   succeeded(await u.send('deletion', { stepUp: await u.mint('account_deletion') }));
-  expect(u.handled()).toBe(2);
+  expect(u.handled()).toBe(4);
 });
 
 it('[AC-B1-02y#8] 绑定别的 uid、别的设备、别的 app 的 token 返回 10003', async () => {

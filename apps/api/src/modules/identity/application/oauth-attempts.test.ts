@@ -107,7 +107,7 @@ it('[BR-ID-04][BR-ID-08] issue refusals: 10001 without login, 20001 for a bound 
   const unbound = service();
   expect(
     await unbound.issue({
-      body: { provider: 'wechat', purpose: 'step_up', action: 'withdraw' },
+      body: { provider: 'wechat', purpose: 'step_up', action: 'payout_account_change' },
       verifiedDevice: DEVICE,
     }),
   ).toEqual({ code: 10001 });
@@ -143,7 +143,9 @@ it('[BR-ID-04] consume: a mismatch leaves the attempt, the holder consumes it on
   });
   if (issued.code !== 0) throw new Error(`issue failed: ${issued.code}`);
   const correct = { ...STEP_UP, attempt_id: issued.data.attempt_id };
-  expect(await attempts.consume({ ...correct, action: 'withdraw' })).toEqual({ code: 20004 });
+  expect(await attempts.consume({ ...correct, action: 'payout_account_change' })).toEqual({
+    code: 20004,
+  });
   expect(
     await attempts.consume({
       app_id: correct.app_id,

@@ -112,7 +112,7 @@ it('[AC-B1-02zza#25] 测试号 step_up 成功写一条审计（purpose=step_up�
   const command = {
     principal,
     verifiedDevice: { appId, deviceId: principal.device_id },
-    body: { action: 'withdraw' as const, code: FIXED },
+    body: { action: 'phone_change' as const, code: FIXED },
   };
   verifyAndConsume.mockResolvedValueOnce({ code: 20002 });
   expect(await service.verify(command)).toEqual({ code: 20002 });

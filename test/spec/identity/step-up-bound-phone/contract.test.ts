@@ -38,6 +38,8 @@ it('[AC-B1-02zzz#1] sendSmsCode 声明可选登录并保留签名，生成鉴权
   ).toMatchObject({ auth: 'optional' });
 });
 
+// B1-02zzzc: an .each title may not be renamed (red-check), so the frozen title stays; what this
+// block now asserts after D10-1665 / D10-1702 is in its body.
 it.each(['source', 'generated'] as const)(
   '[AC-B1-02zzz#2] %s 请求契约：step_up 不带 phone；login / bind 仍必须带 phone',
   async (source) => {
@@ -46,14 +48,11 @@ it.each(['source', 'generated'] as const)(
         ? (await document()).paths[SMS]!.post.requestBody.content['application/json'].schema
         : CONTRACT_ROUTE_SCHEMAS.sendSmsCode.body;
     const validate = createValidatorCompiler()({ schema, httpPart: 'body' });
-    for (const action of [
-      'withdraw',
-      'payout_account_change',
-      'phone_change',
-      'account_deletion',
-    ]) {
+    for (const action of ['payout_account_change', 'phone_change', 'account_deletion']) {
       expect(validate({ purpose: 'step_up', action }), JSON.stringify(validate.errors)).toBe(true);
     }
+    // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.
+    expect(validate({ purpose: 'step_up', action: 'withdraw' })).toBe(false);
     for (const purpose of ['login', 'bind']) {
       expect(validate({ purpose, phone: '13800138000' })).toBe(true);
       expect(validate({ purpose })).toBe(false);

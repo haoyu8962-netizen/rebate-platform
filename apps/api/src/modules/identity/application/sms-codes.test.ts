@@ -1178,7 +1178,7 @@ it('[AC-B1-02zza#u11] identity.module passes APP_ENV and the opened test phones 
   const result = await service.verify({
     principal: { uid, app_id: 'couli', sid: 's', device_id: 'd', scp: 'full' },
     verifiedDevice: { appId: 'couli', deviceId: 'd' },
-    body: { action: 'withdraw', code: TEST_CODE },
+    body: { action: 'phone_change', code: TEST_CODE },
   });
   expect(result.code).toBe(0);
   const audit = lines

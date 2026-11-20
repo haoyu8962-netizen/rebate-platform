@@ -152,7 +152,7 @@ it('[BR-ID-08][BR-ID-32] handlers refuse a request the stages did not vouch for'
   await expect(
     new StepUpController({ verify: issue }).verify({
       id: TRACE,
-      body: { action: 'withdraw', code: '123456' },
+      body: { action: 'payout_account_change', code: '123456' },
     }),
   ).rejects.toThrow(/verified access token/);
   await expect(new H5TokenController({ issue }).issue({ id: TRACE, body: {} })).rejects.toThrow(

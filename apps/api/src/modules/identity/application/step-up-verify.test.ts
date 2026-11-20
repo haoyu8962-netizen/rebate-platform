@@ -62,8 +62,36 @@ it('[AC-B1-02y#first-binding] first phone binding passes without withStepUp or a
   expect(namespace).not.toHaveBeenCalled();
 });
 
+it('[AC-B1-02zzzc#unit] POST /v1/withdrawals is no step-up operation: passes in HTTP without withStepUp, no Redis', async () => {
+  const namespace = vi.fn();
+  const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const check = createStepUpCheck({
+    keys: {
+      kid: 'unit',
+      privateKey: pair.privateKey,
+      publicKeys: new Map([['unit', pair.publicKey]]),
+    },
+    clock: new FixedClock('2026-11-15T00:00:00.000Z'),
+    redis: { namespace } as unknown as RedisHandle,
+    logger: { warn: vi.fn() } as unknown as RootLogger,
+  });
+  vi.spyOn(RiskModule, 'hasHttpRequestScope').mockReturnValue(true);
+  await expect(
+    check({
+      appId: 'couli',
+      actor: { userId: '019a0000-0000-7000-8000-000000000010', deviceId: null, phoneHmac: null },
+      method: 'POST',
+      path: '/v1/withdrawals',
+      key: 'no-step-up',
+      body: { amount_fen: 1000 },
+      traceId: 'no-step-up',
+    }),
+  ).resolves.toBeUndefined();
+  expect(idempotencyPostMissTransaction).not.toHaveBeenCalled();
+  expect(namespace).not.toHaveBeenCalled();
+});
+
 it.each([
-  ['POST', '/v1/withdrawals'],
   ['PUT', '/v1/me/payout-account'],
   ['POST', '/v1/me/phone'],
   ['POST', '/v1/me/deletion'],

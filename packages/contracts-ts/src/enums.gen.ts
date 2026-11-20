@@ -1026,7 +1026,6 @@ export type SmsPurpose = (typeof sms_purpose)[number];
  * Source: 规划/04 §2.5、§5；BR-ID-08 (contracts/enums/identity.yaml).
  */
 export const step_up_action = [
-  "withdraw", // POST /v1/withdrawals
   "payout_account_change", // PUT /v1/me/payout-account
   "phone_change", // POST /v1/me/phone（更换）
   "account_deletion", // POST /v1/me/deletion

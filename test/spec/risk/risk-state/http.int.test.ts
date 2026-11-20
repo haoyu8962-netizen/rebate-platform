@@ -62,7 +62,7 @@ for (const route of [
     path: '/v1/auth/oauth-attempts',
     body: { provider: 'wechat', purpose: 'payout_bind' },
   },
-  { method: 'POST', path: '/v1/auth/step-up', body: { action: 'withdraw', code: '123456' } },
+  { method: 'POST', path: '/v1/auth/step-up', body: { action: 'phone_change', code: '123456' } },
 ]) {
   it(`[AC-B1-03h#17][BR-ID-31] 真签名白名单外 ${route.method} ${route.path} ${JSON.stringify(route.body)} 返回契约 10006`, async () => {
     const c = await client(f);
@@ -100,7 +100,7 @@ it('[AC-B1-03h#19][BR-ID-01] 真实 ④a 在 ⑤ 前：低版本 banned 得到 1
     VALUES (${randomUUID()}, ${c.appId}, 'ios', 'appstore', '9.0.0', '8.0.0', 'fixture', 'fixture', 'https://example.test/store', 'appstore', '[]'::jsonb)`.execute(
     f.db,
   );
-  const body = { action: 'withdraw', code: '123456' };
+  const body = { action: 'phone_change', code: '123456' };
   const response = await c.send('POST', '/v1/auth/step-up', body);
   expect(response.statusCode).toBe(403);
   expect(response.json()).toMatchObject({ code: 10405, data: { min_supported_version: '8.0.0' } });

@@ -95,7 +95,7 @@ const H5_SCOPES: ReadonlySet<unknown> = new Set<H5Scope>(['standard', 'read_only
 /**
  * Paths an h5_token never reaches (BR-ID-32: withdrawal, payout account, phone change, deletion,
  * the labor agreement (BR-WDR-31), and every /v1/auth/** route including the h5-token exchange
- * itself). The four x-step-up
+ * itself). The four sensitive
  * operations sit under these prefixes; x-signed routes are refused through the signing table.
  */
 const H5_EXCLUDED_PREFIXES: readonly string[] = Object.freeze([

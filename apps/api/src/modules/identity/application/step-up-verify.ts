@@ -1,13 +1,14 @@
-// Stage ⑫ of the request decision order: the user-side step-up check of the four x-step-up
+// Stage ⑫ of the request decision order: the user-side step-up check of the three x-step-up
 // operations (规划/08 BR-ID-08, BR-ID-01 判定顺序 ⑫ 10003; 04 §5 step-up row; 02 §18
 // step_up_token row; task B1-02y, orchestrator ruling §9.3). The public entry points follow the
 // frozen rule-test skeleton in test/spec/identity/step-up-verify/**.
 //
-// When: only on the four x-step-up operations, keyed by the idempotent request's method and path
-// (a fixed copy of 04 §5): POST /v1/withdrawals → withdraw, PUT /v1/me/payout-account →
-// payout_account_change, POST /v1/me/phone → phone_change (only when the account already has a
+// When: only on the three x-step-up operations, keyed by the idempotent request's method and path
+// (a fixed copy of 04 §5): PUT /v1/me/payout-account → payout_account_change, POST /v1/me/phone → phone_change (only when the account already has a
 // bound phone, read on the claim's transaction: a first binding needs no token), POST
-// /v1/me/deletion → account_deletion. Every other request passes untouched. Only in the
+// /v1/me/deletion → account_deletion. Every other request passes untouched — POST /v1/withdrawals
+// included: a withdrawal needs no step-up (BR-ID-08, BR-WDR-01, BR-WDR-03 ② retired; B1-02zzzc,
+// D10-1665), although it stays one of the four sensitive operations (risk-state.ts). Only in the
 // idempotency post-miss phase: a replay (also of a request whose token has since expired or been
 // consumed), 40901, 20901, 20903 and a missing / malformed Idempotency-Key (20001) never read,
 // judge or reserve the token.
@@ -58,9 +59,8 @@ import { RiskModule } from '../../risk/index.ts';
 
 export const STEP_UP_CHECK = Symbol('STEP_UP_CHECK');
 
-/** Fixed copy of contracts' x-step-up operations (04 §5), as in risk-state.ts. */
+/** Fixed copy of contracts' x-step-up operations (04 §5); the withdrawal is not one (D10-1665). */
 const ACTIONS: ReadonlyMap<string, StepUpAction> = new Map([
-  ['POST /v1/withdrawals', 'withdraw'],
   ['PUT /v1/me/payout-account', 'payout_account_change'],
   ['POST /v1/me/phone', 'phone_change'],
   ['POST /v1/me/deletion', 'account_deletion'],
@@ -212,7 +212,7 @@ export function createStepUpCheck(options: StepUpCheckOptions): IdempotencyPostM
 }
 
 /**
- * The entry for the business handlers of the four x-step-up operations: `execute` is the
+ * The entry for the business handlers of the three x-step-up operations: `execute` is the
  * controller's own idempotency.executeInTransaction call. Runs it with this request's step-up
  * context (what stage ⑫ judges), then settles a reservation stage ⑫ made: the response of source
  * 'handler' with HTTP 2xx and code 0 consumes the token; any other response or a rejection releases

@@ -45,39 +45,38 @@ it('[AC-B1-02zq#3] 对照：无标记未实名 → 30304；已实名有标记 �
   refused(kit, WITHDRAW, 'post', await f.on(flagged).withdraw(), ID_NUMBER);
 });
 
-it('[AC-B1-02zq#4] ② 先于 ③b：不带 step-up → 10003，带了才是 10010', async () => {
+// B1-02zzzc (D10-1665, D10-1702): BR-WDR-03 ② is cancelled; a withdrawal without a step-up token
+// reaches ③b like any other.
+it('[AC-B1-02zq#4] ② 已取消：不带 step-up 也直接是 ③b 的 10010', async () => {
   const f = await gates(kit);
   const m = await f.member();
   await f.flag(m.uid, { realname: true, providers: [] });
   const c = f.on(m);
-  const required = answer(kit, WITHDRAW, 'post', await c.withdraw({ step: null }), 10003);
-  expect(required).not.toHaveProperty('data');
+  refused(kit, WITHDRAW, 'post', await c.withdraw({ step: null }), ID_NUMBER);
   refused(kit, WITHDRAW, 'post', await c.withdraw(), ID_NUMBER);
 });
 
-it('[AC-B1-02zq#5] 10010 不写幂等结果、不消耗 step-up：加验通过后同设备、同令牌、新幂等键建单成功', async () => {
+it('[AC-B1-02zq#5] 10010 不写幂等结果：加验通过后同设备、新幂等键建单成功（提现不带 step-up）', async () => {
   const f = await gates(kit);
   const m = await f.member();
   await f.flag(m.uid, { realname: true, providers: [] });
   const c = f.on(m);
-  const step = await c.stepUp('withdraw');
-  refused(kit, WITHDRAW, 'post', await c.withdraw({ step }), ID_NUMBER);
+  refused(kit, WITHDRAW, 'post', await c.withdraw({ step: null }), ID_NUMBER);
   expect(await f.idempotencyRows(WITHDRAW)).toEqual([]);
 
   await f.passById(m);
-  const created = answer(kit, WITHDRAW, 'post', await c.withdraw({ step }), 0);
+  const created = answer(kit, WITHDRAW, 'post', await c.withdraw({ step: null }), 0);
   expect(created.data).toMatchObject({ status: 'PENDING_REVIEW', amount_fen: 1000 });
   expect(await f.withdrawals(m.uid)).toHaveLength(1);
 });
 
-it('[AC-B1-02zq#6] 同一令牌连续被 10010 拦下多次，每次都不占用它', async () => {
+it('[AC-B1-02zq#6] 不带 step-up 连续被 10010 拦下多次，每次都不建单', async () => {
   const f = await gates(kit);
   const m = await f.member();
   await f.flag(m.uid, { realname: true, providers: [] });
   const c = f.on(m);
-  const step = await c.stepUp('withdraw');
-  refused(kit, WITHDRAW, 'post', await c.withdraw({ step }), ID_NUMBER);
-  refused(kit, WITHDRAW, 'post', await c.withdraw({ step }), ID_NUMBER);
+  refused(kit, WITHDRAW, 'post', await c.withdraw({ step: null }), ID_NUMBER);
+  refused(kit, WITHDRAW, 'post', await c.withdraw({ step: null }), ID_NUMBER);
   expect(await f.withdrawals(m.uid)).toEqual([]);
 });
 

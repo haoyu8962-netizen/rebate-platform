@@ -58,13 +58,7 @@ const WECHAT_SHAPE: Summary = { payout_method: 'wechat', attempt_id: randomUUID(
 
 const REFUSED: [string, StepUpAction, Summary | undefined][] = [
   ['payout_account_change 不带 summary', 'payout_account_change', undefined],
-  ['withdraw 带支付宝形状', 'withdraw', ALIPAY_SHAPE],
-  ['withdraw 带银行卡形状', 'withdraw', BANK_SHAPE],
-  ['withdraw 带微信形状', 'withdraw', WECHAT_SHAPE],
-  ['payout_account_change 带提现形状', 'payout_account_change', WITHDRAW_SHAPE],
-  ['phone_change 带提现形状', 'phone_change', WITHDRAW_SHAPE],
   ['phone_change 带支付宝形状', 'phone_change', ALIPAY_SHAPE],
-  ['account_deletion 带提现形状', 'account_deletion', WITHDRAW_SHAPE],
   ['account_deletion 带微信形状', 'account_deletion', WECHAT_SHAPE],
 ];
 
@@ -75,6 +69,100 @@ it.each(REFUSED)(
     const response = await m.stepUp(action, summary);
     const body = answered(kit, STEP_UP, 'post', response, 20001);
     expect(body.data).toEqual({ fields: ['summary'] });
+    expect(response.body).not.toContain('step_up_token');
+  },
+  TIMEOUT,
+);
+
+it.each<[string, StepUpAction, Summary | undefined, string[]]>([
+  // 这组字段是参数校验对 StepUpRequest 四分支 oneOf 的合并报告，不是设计口径，见 FU-20001-ONEOF-FIELDS-NOISE（D10-2193）。
+  [
+    'withdraw 带支付宝形状',
+    'withdraw',
+    ALIPAY_SHAPE,
+    ['action', 'attempt_id', 'authorization_code', 'body', 'code', 'identity_token', 'provider'],
+  ],
+  [
+    'withdraw 带银行卡形状',
+    'withdraw',
+    BANK_SHAPE,
+    ['action', 'attempt_id', 'authorization_code', 'body', 'code', 'identity_token', 'provider'],
+  ],
+  [
+    'withdraw 带微信形状',
+    'withdraw',
+    WECHAT_SHAPE,
+    ['action', 'attempt_id', 'authorization_code', 'body', 'code', 'identity_token', 'provider'],
+  ],
+  [
+    'payout_account_change 带提现形状',
+    'payout_account_change',
+    WITHDRAW_SHAPE,
+    [
+      'attempt_id',
+      'authorization_code',
+      'body',
+      'code',
+      'identity_token',
+      'provider',
+      'summary',
+      'summary.alipay_logon_id',
+      'summary.amount_fen',
+      'summary.attempt_id',
+      'summary.card_no',
+      'summary.payout_account_id',
+      'summary.payout_method',
+    ],
+  ],
+  [
+    'phone_change 带提现形状',
+    'phone_change',
+    WITHDRAW_SHAPE,
+    [
+      'attempt_id',
+      'authorization_code',
+      'body',
+      'code',
+      'identity_token',
+      'provider',
+      'summary',
+      'summary.alipay_logon_id',
+      'summary.amount_fen',
+      'summary.attempt_id',
+      'summary.card_no',
+      'summary.payout_account_id',
+      'summary.payout_method',
+    ],
+  ],
+  [
+    'account_deletion 带提现形状',
+    'account_deletion',
+    WITHDRAW_SHAPE,
+    [
+      'attempt_id',
+      'authorization_code',
+      'body',
+      'code',
+      'identity_token',
+      'provider',
+      'summary',
+      'summary.alipay_logon_id',
+      'summary.amount_fen',
+      'summary.attempt_id',
+      'summary.card_no',
+      'summary.payout_account_id',
+      'summary.payout_method',
+    ],
+  ],
+])(
+  '[AC-B1-02zzzb#1] %s → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token',
+  async (_name, action, summary, fields) => {
+    const m = await member(kit);
+    const response = await m.stepUp(action, summary);
+    const body = answered(kit, STEP_UP, 'post', response, 20001);
+    expect({ ...body.data, fields: [...(body.data!.fields as string[])].sort() }).toEqual({
+      fields,
+    });
     expect(response.body).not.toContain('step_up_token');
   },
   TIMEOUT,
@@ -166,19 +254,53 @@ it(
   '[AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001',
   async () => {
     const m = await member(kit);
-    for (const action of ['phone_change', 'account_deletion', 'withdraw'] as const) {
+    for (const action of ['phone_change', 'account_deletion'] as const) {
       const token = await m.token(action);
       expect(claimsOf(token)).toMatchObject({ uid: m.uid, action, aud: 'step_up' });
       expect(digestsOf(token)).toEqual([]);
     }
-    const refused = answered(
-      kit,
-      STEP_UP,
-      'post',
-      await m.stepUp('withdraw', WITHDRAW_SHAPE),
-      20001,
-    );
-    expect(refused.data).toEqual({ fields: ['summary'] });
+    const withdrawRefused: [Summary | undefined, string[]][] = [
+      // 这组字段是参数校验对 StepUpRequest 四分支 oneOf 的合并报告，不是设计口径，见 FU-20001-ONEOF-FIELDS-NOISE（D10-2193）。
+      [
+        undefined,
+        [
+          'action',
+          'attempt_id',
+          'authorization_code',
+          'body',
+          'code',
+          'identity_token',
+          'provider',
+        ],
+      ],
+      [
+        WITHDRAW_SHAPE,
+        [
+          'action',
+          'attempt_id',
+          'authorization_code',
+          'body',
+          'code',
+          'identity_token',
+          'provider',
+          'summary',
+          'summary.alipay_logon_id',
+          'summary.amount_fen',
+          'summary.attempt_id',
+          'summary.card_no',
+          'summary.payout_account_id',
+          'summary.payout_method',
+        ],
+      ],
+    ];
+    for (const [summary, fields] of withdrawRefused) {
+      const response = await m.stepUp('withdraw', summary);
+      const refused = answered(kit, STEP_UP, 'post', response, 20001);
+      expect({ ...refused.data, fields: [...(refused.data!.fields as string[])].sort() }).toEqual({
+        fields,
+      });
+      expect(response.body).not.toContain('step_up_token');
+    }
   },
   TIMEOUT,
 );

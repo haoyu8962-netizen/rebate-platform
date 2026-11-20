@@ -25,10 +25,18 @@ afterAll(async () => {
   await closeHttpKit(kit);
 });
 
+// B1-02zzzc: an .each title may not be renamed (red-check), so the frozen title stays; what this
+// block now asserts after D10-1665 / D10-1702 is in its body.
 it.each(ACTIONS)(
   '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',
   async (action) => {
     const f = await account(kit);
+    if (action === 'withdraw') {
+      // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.
+      rejected(kit, SMS, await f.post(SMS, { purpose: 'step_up', action }), 20001);
+      rejected(kit, STEP_UP, await f.post(STEP_UP, { action, code: '000000' }), 20001);
+      return;
+    }
     const message = await sendBound(f, action);
     // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.
     const summary =
@@ -184,7 +192,7 @@ it('[AC-B1-02zzz#11] 不同设备和 action 仍共享绑定手机号的发送间
     SMS,
     {
       purpose: 'step_up',
-      action: 'withdraw',
+      action: 'phone_change',
     },
     session.access_token,
   );
@@ -203,7 +211,9 @@ it('[AC-B1-02zzz#12] deletion_only 只放行 login 与注销 step_up；其他用
       kit,
       SMS,
       await f.post(SMS, { purpose: 'step_up', action }, session.access_token),
-      10405,
+      // B1-02zzzc (D10-1665, D10-1702 ⑤, D10-2166): withdraw is no step-up action any more, so
+      // the request is refused as 20001 (still no code sent); the other two stay 10405.
+      action === 'withdraw' ? 20001 : 10405,
     );
   }
   rejected(
