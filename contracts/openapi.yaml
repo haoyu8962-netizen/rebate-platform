@@ -28888,7 +28888,6 @@ paths:
         for the batch kind, the item result and the hold reason: their Chinese names have no
         BR-TEXT-25 row yet, so the console shows the codes until the planning adds them.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403
@@ -29170,7 +29169,6 @@ paths:
         reason: their Chinese names have no BR-TEXT-25 row yet, so the console shows the codes
         until the planning adds them.
       x-auth: admin
-      x-implementation: planned
       x-error-codes:
         - 10001
         - 10403
