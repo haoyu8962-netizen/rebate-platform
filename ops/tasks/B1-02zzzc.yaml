@@ -4,7 +4,7 @@ title: 提现免二次验证：POST /v1/withdrawals 去掉 step-up（契约 Step
 type: impl
 # 2026-11-14 w1 入账（负责人 2026-11-14 定「用户提现不需要二次验证了，因为用户已经登录了」，编排 D10-1665 / D10-1666；方案 couli-runs/FU-STEPUP-TOKEN-BIND-DIGEST/plan-d10-1665.md）。不变：提现仍只能原生 App 发起，access_token、请求签名、Idempotency-Key、风控加验（reverify）照旧；改收款账号、换手机号、注销照旧要 step-up。
 # 契约（contracts/openapi.yaml）：StepUpAction 去 withdraw；StepUpSummary 去 StepUpSummaryWithdraw；POST /v1/withdrawals 去 x-step-up、StepUpToken 参数、x-error-codes 的 10003 与相关描述；AbandonIdempotencyKeyRequest.action 改用新枚举 IdempotencyAbandonAction（withdraw、payout_account_change、phone_change、account_deletion），放弃上一笔提现照旧可用；oasdiff 去枚举值属破坏兼容，accepted 加行注明 D10-1665；重生成生成物；packages/contracts-ts/scripts/conformance.ts 的 STEP_UP_OPERATIONS 去 withdraw。 实现：identity application/step-up-verify.ts 的 ⑫ 映射去 'POST /v1/withdrawals'；payout 提现控制器去掉 withStepUp 包装，服务层 stepUpValid 照传 true（直调服务的冻结用例不动）；risk-state.ts 的敏感操作表不动（提现仍是 realname 敏感操作）。 冻结用例：「提现无令牌 → 10003」改「照常受理」、「用 withdraw 取令牌」改用仍需 step-up 的动作或改断言为 20001——资金类，按 D10-1356 由负责人确认后 rule_change 登记（br 待 refs 定后填）。 D10-1671 补（台账补丁 1）：「四个敏感操作」（提现、改收款、换号、注销）不再靠 x-step-up 识别——契约给这四个 operation 另加独立扩展标记 `x-sensitive-operation: true`（四个都带），x-step-up 只留在仍要二次验证的三个（改收款、换号、注销）；packages/contracts-ts/scripts/conformance.ts 同步检查两份清单（敏感四个、step-up 三个）；生成物里凡按 x-step-up 推出「敏感操作」的改读新标记。三端升到本版契约时改读新标记并钉住「提现仍是敏感操作：不自动重放、结果未知不换键」（三端各自任务，不在本单）。目前只有 staging，后端与三端同版本落地，不做旧客户端过渡期签发。规划里统称「四个敏感操作」。 D10-1701 补（台账补丁 2）：contracts/enums/identity.yaml 的 step_up_action 去 withdraw（规划 04 §2.5 已如此；conformance.ts 核它与 STEP_UP_OPERATIONS 一致），台账原漏列，补进 paths；生成物 packages/contracts-ts/src/enums.gen.ts 已在 packages/contracts-ts/** 内。不涉迁移。 契约槽：openapi 类，排 B1-10w 之后；deps B1-02zzzb。refs 按规划 dd297a79（couli#2 合并、SPEC_REF #150）填并哈希（台账补丁 1）。
-# 2026-11-20 台账补丁 3（w1）：冻结用例登记——test_paths 加冻结文件（补丁 4 后 12 个）（花括号合写）；modify_existing 块级（甲 D10-1702 负责人放行五种、乙 D10-1705、丙 D10-1706）与文件级 support；被整份重判文件里未改的绿用例登 red_exempt、risk-state 块外一行登 red_exempt_outside（D10-1984 / D10-1986 先例）；核对表 couli-runs/B1-02zzzc/frozen-cand/table.md，丙类清单 couli-runs/W1-search-linking/rewrite-1780/c-special-and-b-scope.md。 2026-11-20 台账补丁 4（w1）：证据探针 R 实测这 12 块的主干原文在新实现下仍绿、改动非必需（换样例 / 去多余令牌 / 只改标题），块体恢复主干原文、撤掉对应 modify_existing 条目；deletion-request/scope、payout-bank-card/submit、staging-test-phone/audit 三文件回到主干原样、移出 test_paths。冻结改动只减不增。
+# 2026-11-20 台账补丁 3（w1）：冻结用例登记——test_paths 加冻结文件（补丁 4 后 12 个）（花括号合写）；modify_existing 块级（甲 D10-1702 负责人放行五种、乙 D10-1705、丙 D10-1706）与文件级 support；被整份重判文件里未改的绿用例登 red_exempt、risk-state 块外一行登 red_exempt_outside（D10-1984 / D10-1986 先例）；核对表 couli-runs/B1-02zzzc/frozen-cand/table.md，丙类清单 couli-runs/W1-search-linking/rewrite-1780/c-special-and-b-scope.md。 2026-11-20 台账补丁 4（w1）：证据探针 R 实测这 12 块的主干原文在新实现下仍绿、改动非必需（换样例 / 去多余令牌 / 只改标题），块体恢复主干原文、撤掉对应 modify_existing 条目；deletion-request/scope、payout-bank-card/submit、staging-test-phone/audit 三文件回到主干原样、移出 test_paths；reverify-gates/kit.ts 只有一段头注释、撤回后反向检查无红，注释撤回、support 条目与 test_paths 一并撤。冻结改动只减不增。
 refs: [BR-ID-08, BR-WDR-01, BR-WDR-03, BR-WDR-07]
 refs_hash:
   BR-ID-08: a2e69361dbee
@@ -26,7 +26,7 @@ paths:
 test_paths:
   - 'test/spec/payout/withdraw-no-step-up/**'
   - 'test/spec/identity/reverify-gates/withdraw.int.test.ts'
-  - 'test/spec/identity/{reverify-gates,step-up-verify}/kit.ts'
+  - 'test/spec/identity/step-up-verify/kit.ts'
   - 'test/spec/identity/step-up-bound-phone/{contract.test.ts,sms.int.test.ts}'
   - 'test/spec/identity/step-up-verify/{order,token,withdraw-order}.int.test.ts'
   - 'test/spec/identity/step-up/{sms,third-party}.int.test.ts'
@@ -230,12 +230,6 @@ modify_existing:
     br: [BR-ID-08]
     ruling: D10-1705
     note: '提现免二次验证（D10-1665）：期望值不变，只把 withdraw 样例换成仍要二次验证的动作（phone_change 等）、去掉提现请求里多余的令牌或改标题里失效的半句；编排 D10-1705 逐行核过（核对表 couli-runs/B1-02zzzc/frozen-cand/table.md）'
-  - file: 'test/spec/identity/reverify-gates/kit.ts'
-    scope: support
-    reason: rule_change
-    br: [BR-ID-08]
-    ruling: D10-1780
-    note: '块外只有注释与 token 纯插入（D10-1780 / D10-1795 禁列自查无命中；withdraw-order 只在文末加 export { stepUpRequired } 保住冻结 import），用例断言与期望值不在块外'
   - file: 'test/spec/identity/step-up-verify/kit.ts'
     scope: support
     reason: rule_change
