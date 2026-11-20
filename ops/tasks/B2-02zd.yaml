@@ -1,0 +1,36 @@
+id: B2-02zd
+repo: rebate-platform
+title: 'B2-02zd：日终校验按分录自动更正余额缓存（开关默认关、三条护栏、按账户核对日结存、告警分级；D10-2219 新单 A）'
+type: impl
+# 2026-11-21 be 入账（D10-2219 ④ 负责人 B/B/B 题 1；方案 couli-runs/LEDGER-REVIEW-1120/be-plan-A-B-C.md A 节 + D10-2224 / D10-2230 / D10-2235；D10-2298 先起入账与写测书）。
+# 规划依据（SPEC_REF d49d8aa）：BR-FUND-19 细则「差异以分录为准修正」——系统自动更正、护栏 (a)(b)(c)、(b) 按账户核对与 daily_balances 缺行、两个配置键、告警级别、日结存缺行或不平只告警并重跑；正文「例（自动更正）」「例（被护栏拦下）」。
+# 配置键（content/domain/config-registry.ts，config.business）：ledger.auto_correct.enabled（boolean，默认 false——关闭时全部走现行旧路：登记、冻结、告警，D10-2230 ④ / D10-2235 ③）；ledger.auto_correct.max_accounts（businessInteger 0–1000，默认 3）。
+# 只作用于不变量 01 的 balance_cache 差异（用户账户余额缓存 ≠ 分录合计）。一轮的判定（同一次 execute 内）：
+#  (a) 本轮有任一全局差异（scope global，含凭证不平 02）→ 一个都不改；(c) 待更正账户数 > max_accounts → 一个都不改；两者都按旧路登记 + 冻结（全局照旧关 settle.auto.enabled），发最高级告警。
+#  (b) 逐账户核对：该账户上一会计日 daily_balances 结存 + 之后分录发生额 = 现在的分录合计，对得上才更正；对不上或日结存缺行 → 只这一个账户按旧路登记 + 冻结 + 最高级告警，并计入「本轮有账户被拦」，其余账户不受影响（D10-2224 ② / D10-2235 ①）。
+# 更正：以系统身份走 B2-02x 的重算（同一加锁流程、同一版本比较与 BALANCE_CORRECTED 站内信规则），拆出不依赖 admin 会话的内部入口，admin 接口行为不变；审计 audit_logs system_actor system:ledger（已在契约枚举，不占契约槽）、action balance_auto_correct，记前后值；不写凭证、不加冻结、不需二次验证。
+# 留痕不留待办（D10-2224）：每个被更正的账户登记一张 ledger_mismatch（source R3）并在同一事务内以 closed 结案，resolution 写「系统按分录自动更正」与前后值。重算被拒（越界、frozen_negative 等）→ 该账户按旧路登记 + 冻结 + 最高级告警。
+# 告警（日志行，字段不含个人信息）：每次自动更正警告级；同一账户 30 天内第二次被自动更正、或一轮更正数 ≥ ceil(max_accounts / 2)（默认 3 → 2）升最高级；被护栏拦下一律最高级（D10-2224 ③ / D10-2235 ②）。指标 couli_ledger_auto_corrected_total{app_id}（platform/metrics，ledger 目前无指标，照 credit-postcheck 先例）。
+# 日结存缺行或不平（01 的 daily_balance / missing_daily_balance）本身：账户没有余额缓存偏差时只告警并重跑生成，不冻结（BR-FUND-19 细则）；有偏差的按上面 (b) 处理。
+# 与 B2-02zc 的交集（D10-2298）：被拦账户走「登记差错单」那条路径，以及「已有未结 ledger_mismatch 的账户本轮核对得上被自动更正时不新开、不关那张旧单（人工关单解冻）」——B2-02zc 未合并，写测书与实现标明「等 B2-02zc 合并后变基」，相关用例先按 B2-02zc 的口径写。
+# 配置键登记会碰冻结的注册表用例（test/spec/content/config-items/registry.test.ts 等，逐条钉全部键）：先例 B2-04zo 走单独的 test-change 提交（13dd74ff9，11 个文件）；本单照此另开 test-change，入账公告请编排定。
+refs: [BR-FUND-19, BR-FUND-16]
+refs_hash:
+  BR-FUND-19: a918eec09fff
+  BR-FUND-16: 077f6d412d5a
+deps: [B2-02x, B2-02zb]
+paths:
+  - 'apps/api/src/modules/ledger/**'
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/platform/metrics/ledger-auto-correct*.ts'
+  - 'apps/api/src/modules/platform/metrics/collect.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/ledger/daily-check-auto-correct/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/daily-check-auto-correct/**'
+status: todo
