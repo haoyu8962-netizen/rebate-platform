@@ -741,3 +741,9 @@ approvals:
     granted: true
     date: '2026-11-20'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-2237；两处冻结资金夹具改动属 D10-1670 类（只换被取代的文件名，不动任何金额期望值、不删不放宽断言），由编排放行；先例 B2-04zzr（08 → 10，D10-1140）与第 61 条（superseded.json 追加算规则测试资产、由写测提交，D10-1150）。原因：B2-02zb 以 11 替代 07 后，两份冻结夹具写死旧文件名，pnpm verify 的集成测试必红（money r1 S2）；superseded.json 的追加原误放在实现提交里。范围写死：只改上述两行文件名与 superseded.json 末尾追加一项（内容与实现提交 be444929b 中的逐字相同），其余一字不动；modify_existing 两条登记（file / test / reason / before / after 原文）。写测由全新无上下文的独立 Claude（claude-run.sh，第 36 条）承担，证据记 claude-independent；另由一次独立 Claude 只读复审（spec-test 增量，只判「是否只改这三处」），复审发现动了别的行即停报编排；独立调用熔断 10 次不变（本次前已用 3 次），不够则复审改用 Codex。照常不调 bump-attempt（按编排例外轮记），其余次数上限不变。'
+  - id: 121
+    row: 4
+    title: 'F1-08ee 任务专属一次性追加：写规则测试第 4 次 + spec-test 第 4 轮（Codex 增量）——只改本单 restore.test.ts 的 [AC-F1-08ee-UNKNOWN#1]、[#2] 期望为「点【重试】→ 动态码 → 原键原体 POST」，fixtures.ts 假服务不再接受旧令牌；配探针「【重试】不经动态码直接 POST」须红；其余一字不动'
+    granted: true
+    date: '2026-11-20'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测次数属门禁流程小改动），D10-2239 ①、D10-2240，先例第 115 条、第 118 条。号取 121：第 120 条已由 be 预留（D10-2238，等 #411 合并后取号）。原因：Codex money r2（couli-runs/F1-08ee/review-money-r2.json）S1——申诉恢复结果未知后【重试】先拿旧令牌发 POST、被 10003 拒了才弹动态码；D10-1731 与 F1-08an 的做法都是「重新验证后原键原体」。实现照此改（couli-runs/F1-08ee/r2-s1-3-retry-verify-first.patch，只动 useRestore.tsx）后，本单规则测试 restore.test.ts 的 UNKNOWN#1 / #2（unknownThenRetry，约 277–299 行）要求点【重试】后不经动态码就发第 2 个 POST、假服务（fixtures.ts 约 645 行）也接受旧令牌，与规则冲突。这两条是本单自己新写、还没上主干的规则测试，不是主干上的冻结用例，在本单直接改（更正 D10-2239 ①「走 F1-08eec 台账补丁」，D10-2240）。范围写死：只改 UNKNOWN#1、#2 两块的期望（点【重试】→ 动态码 step-up → 原幂等键、原请求体 POST）与 fixtures.ts 假服务的令牌规则（已消耗或上次签发的旧令牌不再接受，回 10003），只把授权步骤改严；不动任何金额期望，不删、不放宽其余断言与用例；探针「【重试】不经动态码直接 POST」须红，结果进证据。只对 F1-08ee、只多写测 1 次（全新无上下文的独立 Claude，claude-run.sh，approvals 第 36 条，证据记 claude-independent；F1-08ee 独立调用现为 3 / 10）与 spec-test 1 轮（Codex，codex-run.sh，证据记 codex）；照常不调 bump-attempt（按编排例外轮记），其余次数上限与熔断不变；复审若发现动了金额或别的断言即停，r4 再出新的 S1 即停报编排、不再加轮。资金页冻结用例的改动由编排放行，事后报负责人（D10-2239）。'
