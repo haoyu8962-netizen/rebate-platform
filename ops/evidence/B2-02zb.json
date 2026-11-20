@@ -1,0 +1,75 @@
+{
+  "risk_note": "B2-02zb (BR-FUND-19 ⑦; 编排 D10-2219 new task C / D10-2224 / D10-2229 / D10-2237): invariant 07 compared each user entry's balance_after_fen with the previous one, but balance_after_fen comes from the balance cache at posting time; after a cache recalculation (B2-02x) a downward recalculation made the next ordinary credit look like a drop (false difference every day, the check reads the whole history) and an upward one could hide a real deduction. Rule tests first confirmed the false report on main (red/1: old 07 reports the credits after a recalculation). New db/invariants/ledger/11_negative-balance-drops-by-amount.sql: a drop is a voucher whose amount_fen sum on that (account, sub-account) is > 0 with balance_after_fen < 0; only the first entry of the group by (account_version, id) is reported; whitelist types and the :REASSIGN_REV: key exemption apply to that entry; detail shape, output number 07 and checked_rows as in 07; row-for-row identical to 07 on histories without a recalculation (property test). superseded.json appends 07 → 11 in a rule-test commit (approvals 61 / 120 precedent); two frozen kits that named the old file now name 11 (daily-check-execute FILES['07'], admin-union-receipts INVARIANT_FILES; D10-1140 precedent, D10-1670 class, approvals 120). 07 itself and the ledger posting code are unchanged; read-only SQL.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 full review pass (couli-runs/B2-02zb/review-money-r1-codex.json), no S0 / S1; its one S2 (a frozen kit still names the old 07 file, so the integration test would fail) was closed by test attempt 4 (approvals 120): both frozen kits now name 11. The implementation commit 5c8e7edbe is the money-reviewed SQL byte for byte; the superseded.json hunk moved verbatim into the rule-test commit d39e09781. Test machine: rule directory 3 tests, daily-check-execute 33, admin-union-receipts 47 green; verify:fast 0. Implementation probes P1 (extra 'below the previous entry' condition), P2 (exempt by sub_type / voucher_kind), P3 (per-entry amount), P4 (report a drop to exactly 0) each turn the rule tests red (AssertionError)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 4,
+    "last_verdict": "pass",
+    "note": "Rule tests by fresh independent Claude (claude-run.sh, approvals 36), four attempts (the 4th under approvals 120). Codex spec-test r1 (full) fail 7 S1 → test attempt 2; r2 (incremental) fail 1 S1 + 2 S2 → test attempt 3; r3 (incremental, approvals 117 / D10-2229) pass. Red runs red/1–red/3 each exactly #1 #4 #5, AssertionError. r4: a fresh independent Claude read-only review of test attempt 4 (approvals 120) pass, confirming exactly the three named changes (two kit file names and the appended superseded.json entry).",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/db/ledger/invariants-07-after-recalc/equivalence.int.test.ts > [AC-B2-02zb#5] 属性：不含重算的随机过账历史（多分录凭证、同凭证同子户多条、available / frozen、首笔为负、白名单类型、改派红冲与相似键、voucher_kind / sub_type 写成 REASSIGN_REV 的普通键凭证、多账户多 app、校验日前后多日、超过 2^31 分的金额与余额、负余额下净零凭证、正余额恰扣到 0），缓存始终与分录一致时，当前生效的替换版与旧 07 输出的行逐行相同（含 checked_rows = 用户分录数）；空账本两版都只出一条 checked_rows = 0 的 none 行",
+    "test/spec/db/ledger/invariants-07-after-recalc/recalc.int.test.ts > [AC-B2-02zb#1] ⑦ 余额缓存按分录重算下调到负数后，下一笔正常入账（余额回升但仍为负）不报；同场景下真扣款与首笔为负照报（含早于校验日的扣款 10 → −1、校验日回升到 1 后仍报），CLAWBACK / SETTLE_ADJUST / ADMIN_ADJUST 与改派红冲降到负照旧不报；重算上调（−260 → −200）后真扣款 30（→ −230，高于历史分录 −260）照报；普通键 ordinary:REVERSE 的 REBATE_CREDIT 凭证即使 voucher_kind 与 sub_type 写成 REASSIGN_REV、0 → −5 照报（豁免只按 uniq_key 精确片段）；空账本只出一条 none 行且 checked_rows = 0，有数据时 checked_rows = 用户分录数",
+    "test/spec/db/ledger/invariants-07-after-recalc/recalc.int.test.ts > [AC-B2-02zb#4] superseded.json 在主干登记原样保留的基础上只新增 07 → 11 一项（理由非空），07 原文件仍在且未改、仍是唯一的 07_ 文件；11 是唯一的 11_ 文件，目录装载生效的负余额来源自检即 11"
+  ],
+  "task": "B2-02zb",
+  "spec_commit": "34ba7694a701604c922ef7d96f876701770291a3",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "34ba7694a701604c922ef7d96f876701770291a3",
+      "tree": "bc4ec7d50370f8bae98002a20ccab38cd3c7fbd3",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-20T12:53:07Z",
+      "finished_at": "2026-11-20T12:53:13Z",
+      "red_tests": [
+        "test/spec/db/ledger/invariants-07-after-recalc/equivalence.int.test.ts > [AC-B2-02zb#5] 属性：不含重算的随机过账历史（多分录凭证、同凭证同子户多条、available / frozen、首笔为负、白名单类型、改派红冲与相似键、voucher_kind / sub_type 写成 REASSIGN_REV 的普通键凭证、多账户多 app、校验日前后多日、超过 2^31 分的金额与余额、负余额下净零凭证、正余额恰扣到 0），缓存始终与分录一致时，当前生效的替换版与旧 07 输出的行逐行相同（含 checked_rows = 用户分录数）；空账本两版都只出一条 checked_rows = 0 的 none 行",
+        "test/spec/db/ledger/invariants-07-after-recalc/recalc.int.test.ts > [AC-B2-02zb#1] ⑦ 余额缓存按分录重算下调到负数后，下一笔正常入账（余额回升但仍为负）不报；同场景下真扣款与首笔为负照报（含早于校验日的扣款 10 → −1、校验日回升到 1 后仍报），CLAWBACK / SETTLE_ADJUST / ADMIN_ADJUST 与改派红冲降到负照旧不报；重算上调（−260 → −200）后真扣款 30（→ −230，高于历史分录 −260）照报；普通键 ordinary:REVERSE 的 REBATE_CREDIT 凭证即使 voucher_kind 与 sub_type 写成 REASSIGN_REV、0 → −5 照报（豁免只按 uniq_key 精确片段）；空账本只出一条 none 行且 checked_rows = 0，有数据时 checked_rows = 用户分录数",
+        "test/spec/db/ledger/invariants-07-after-recalc/recalc.int.test.ts > [AC-B2-02zb#4] superseded.json 在主干登记原样保留的基础上只新增 07 → 11 一项（理由非空），07 原文件仍在且未改、仍是唯一的 07_ 文件；11 是唯一的 11_ 文件，目录装载生效的负余额来源自检即 11"
+      ],
+      "expected": [
+        "test/spec/db/ledger/invariants-07-after-recalc/equivalence.int.test.ts",
+        "test/spec/db/ledger/invariants-07-after-recalc/recalc.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "e55fe662ea9c13fca826b1486fb336a4ddf7bf7ce177e590b7a62a1297ce7d22"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "617f4565e9b1e94b8111c01bd5aff53257b7dd4d",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}
