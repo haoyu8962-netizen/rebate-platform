@@ -10784,7 +10784,7 @@ CREATE INDEX recon_diffs_status_idx ON app.recon_diffs USING btree (app_id, stat
 -- Name: recon_diffs_unresolved_internal_key; Type: INDEX; Schema: app; Owner: -
 --
 
-CREATE UNIQUE INDEX recon_diffs_unresolved_internal_key ON app.recon_diffs USING btree (app_id, type, ref_id) WHERE ((type = 'ledger_mismatch'::text) AND (status = ANY (ARRAY['open'::text, 'processing'::text])));
+CREATE UNIQUE INDEX recon_diffs_unresolved_internal_key ON app.recon_diffs USING btree (app_id, type, ref_id) WHERE ((type = 'ledger_mismatch'::text) AND (status = ANY (ARRAY['open'::text, 'processing'::text])) AND (ref_type <> 'order'::text));
 
 
 --
