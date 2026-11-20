@@ -1,0 +1,33 @@
+id: F1-08anb
+repo: rebate-platform
+title: 'F1-08anb：批量自动打款补规则测试五件——列表执行结果列、整批水位拒绝两种、全批逐单受阻、本人审核后执行、30 单无第二人批准（F1-08an Codex 全量 spec-test S1，规划/11 §2.5，D10-2199 / D10-2201）'
+type: test-change
+# 2026-11-20 fe 入账（编排 D10-2201，同 B2-02xb / D10-2200 做法）。F1-08an 写测 4 次、独立 Claude 10 次都到顶，Codex 全量 spec-test 查出 5 条 S1
+# （couli-runs/F1-08an/review-confirm-codex.json；实现现状只读核对 couli-runs/F1-08an/codex-s1-impl-check.md），补测试在本单名下做。
+# 全是新文件（放在 test/spec/frontend/admin-withdrawal-batch-payout/anb/ 下），不动 F1-08an r1–r4 已写的任何块、不改 helpers.ts（resultShown 不动；
+# 按单号取列表「执行结果」单元格的辅助另写在 anb/ 内）。五件：
+# ① 混选（待审核 + 待执行）→ 执行 → 关弹窗、列表重读完成后，按单号定位各行「原因 / 执行结果」列：进入打款的显示已发起、留下的显示各自原因、待审核的显示未审核（BR-WDR-12「写入列表执行结果列」）；
+# ② 整批拒绝 watermark_stale 与 watermark_usable_exceeded，至少一个非支付宝通道（如 bank_card）：显示完整原因原文、无已发起 / 成功提示、恰一次写请求不自动重发、勾选保留（BR-WDR-12）；
+# ③ outcome=executed 且 paying=[] 的多通道响应：各单显示各自水位原因、无已发起提示、列表重读后仍为待执行，不当成整批失败（BR-WDR-12）；
+# ④ 登录会话的管理员 id 与该单 reviewer_id 相同：本人审核过的单可勾、一次动态码、恰一笔请求且含该单（BR-WDR-11 不要求执行人 ≠ 审核人）；
+# ⑤ 30 单合计 2,000,000 分（¥20,000）：本人确认 + 一次动态码即发恰一笔请求、30 个 id 全在、无「需他人批准」提示或额外写请求（BR-WDR-11 例）。
+# 顺序（D10-2201）：本单工作分支基在 task/F1-08an 头上，测试先写、在 F1-08an 实现上跑；绿的配实现探针证明有牙——结果只进弹窗不进列表、丢 stale / exceeded 文案、
+# paying 为空当整批失败、按 reviewer_id 禁用、加金额门槛——探针实测结果写进证据（D10-1843 / D10-1879）；红的即实现有问题，在 F1-08an 实现提交里改并重做 money 评审。
+# 之后 Codex 复核 F1-08an（brief 如实写本单提交号、在实现上绿、探针已杀）→ F1-08an land → 本单变基后 land；新块在实现上为绿，标题定稿后台账补丁登 red_exempt（带探针）。
+# tester claude-independent（本单调用数从零算），spec-test 由 Codex 做全量，评审 Codex。
+refs: [BR-WDR-12, BR-WDR-11]
+refs_hash:
+  BR-WDR-12: 37adcd14e97f
+  BR-WDR-11: 9193f1c7ed27
+deps: [F1-08an]
+paths:
+  - 'test/spec/frontend/admin-withdrawal-batch-payout/anb/**'
+test_paths:
+  - 'test/spec/frontend/admin-withdrawal-batch-payout/anb/**' # 新文件
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-withdrawal-batch-payout/anb/**'
+status: todo
+pr: null
