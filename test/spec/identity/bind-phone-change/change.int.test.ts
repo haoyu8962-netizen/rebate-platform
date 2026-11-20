@@ -239,6 +239,7 @@ it('[AC-B1-20b#2] 缺令牌、错 action 或错设备均 10003，原 bind 码仍
 it.each([
   { label: '验证码错误', error: 20002 },
   { label: '他人已占用', error: 30411 },
+  { label: '注销冷静期或处理中的账号已占用', error: 30411, ownerStatus: 'deleting' as const },
   { label: '黑名单', error: 44001 },
   { label: '黑名单兼属他人', error: 44001, occupied: true },
   { label: '号码非法', error: 20001 },
@@ -247,7 +248,9 @@ it.each([
   const b = await (await newDevice(f)).issue();
   const token = await phoneToken(f);
   const code = await f.send();
-  if (scenario.error === 30411 || scenario.occupied) await f.owner();
+  if (scenario.error === 30411 || scenario.occupied) {
+    await f.owner({ status: scenario.ownerStatus ?? 'normal' });
+  }
   if (scenario.error === 44001) {
     await seedBlock(kit.suite.db, f.appId, 'phone', f.hmac(), kit.clock);
   }
@@ -479,6 +482,20 @@ it('[AC-B1-20b#12] 同 App 两人并发换到同一新号，唯一赢家，输�
     kit.clock.advanceMs(60_000);
     const codeB = await f.send();
     second = other.bind(`+86 ${f.number}`, codeB, tokenB);
+    // Hold the lock until both requests reach the write, so neither can see a committed owner.
+    await expect
+      .poll(
+        async () => {
+          const { rows } = await sql<{ waiting: number }>`
+            SELECT count(DISTINCT pid)::int AS waiting FROM pg_locks
+            WHERE relation = 'app.users'::regclass AND mode = 'RowExclusiveLock' AND NOT granted
+              AND ${lock.pid}::int = ANY(pg_blocking_pids(pid))
+          `.execute(f.db);
+          return rows[0]!.waiting;
+        },
+        { interval: 10, timeout: 5_000, message: 'A 和 B 均在等待写入 users' },
+      )
+      .toBe(2);
   } finally {
     await lock.release();
     await Promise.allSettled([first, second]);
@@ -504,5 +521,24 @@ it('[AC-B1-20b#12] 同 App 两人并发换到同一新号，唯一赢家，输�
   ]);
   expect(await audits(f)).toEqual([
     expect.objectContaining({ action: 'user_phone_change', target: `users:${accounts[winner]}` }),
+  ]);
+});
+
+it('[AC-B1-20b#13] 新号只属于已完成注销的账号时可换号，已注销行不动', async () => {
+  const f = await setup();
+  const deleted = await f.owner({ status: 'deleted' });
+  const before = await f.user(deleted);
+  const token = await phoneToken(f);
+  const code = await f.send();
+
+  bound(kit, await f.a.bind(f.number, code, token));
+
+  expect((await f.user()).phone_hmac).toBe(f.hmac());
+  expect(await f.user(deleted)).toEqual(before);
+  expect(await oldPhones(f)).toEqual([
+    expect.objectContaining({ phone_hmac: f.hmac(f.own), reason: 'phone_changed' }),
+  ]);
+  expect(await audits(f)).toEqual([
+    expect.objectContaining({ action: 'user_phone_change', target: `users:${f.uid}` }),
   ]);
 });
