@@ -36,5 +36,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/ledger/admin-recon-balance-recalc/**'
-status: todo
-pr: null
+status: done
+pr: 419
