@@ -7,6 +7,7 @@ type: impl
 # 换号开关 account.phone_change_enabled：只有配置值为 false 才算关闭（缺键按开启，BR-ID-06 细则「开关的客户端副本」同口径）。三处判定：换号接口（最终判定，首次绑定不受影响）；POST /v1/auth/sms-codes purpose=step_up action=phone_change（签名之后、20001 之前，不发短信、不计限额）；POST /v1/auth/step-up action=phone_change（10405 之后、校验验证码或第三方凭证之前）。D10-2189 ②：发码两处只许加一次开关判断，若要动限流 / 计数顺序就拆单报编排。
 # 会话（D10-2192，Jev jev-1.14.0；08 BR-ID-06 细则与 BR-ID-07「会话被动结束」待规划回写，回写前以本条为准）：自助换号成功（2xx 且 code 0），同一事务里作废该账号除当前会话（本次请求的 sid）外的全部会话（revoke_reason=phone_changed，afterRevoked 照常解绑推送令牌，同 admin-profile-edit 装配）；当前会话保留、不重新签发；换号任何非 0 不吊销。被吊销会话：access → 10002、refresh → 10404（BR-ID-07 被动结束现有码），其 h5_token 随 sid 失效（access-tokens.ts 令牌检查按 h5 的 sid 查 revoked_at，已覆盖）。规则测试照此钉。
 # RV2（账号与授权边界，D10-2189）：评审按 money 同级安全口径；规则测试必须走真实控制器（test/spec/identity/bind-phone/http-kit.ts 那套），不换桩。冻结的 bind-phone/bind.int.test.ts #12（已绑无 / 无效令牌 → 10003）新实现下照旧成立，不改。契约已全（bindPhone 已有 x-step-up phone_change、30414、10003；sendSmsCode / stepUp 已有 30414），不占契约槽，无迁移。实现等 B1-02zzzc 落地后起。
+# 补丁 1（D10-2215 / D10-2216）：新号规范化后等于当前号 → 20001 [phone]（规范化后、核码前；不核码不核令牌不写库不吊销）。换号成功同事务写 1 行 audit_logs：system_actor=system:self_service（中文名「用户本人（自助）」），action user_phone_change，target users:<uid>，before / after 只含 phone_masked（3+4，同 admin-profile-edit）；经 admin 已有的 createSystemAuditWriter.appendAction 在 app.module 装配，不改 AuditPort。system actor 是契约枚举 audit_system_actor（enums/admin.yaml 与 openapi AdminAuditSystemActor），追加一个值要改契约、重生 contracts-ts、补 audit-log-view.ts 的中文名表，故加上述 paths，占契约槽。
 refs: [BR-ID-05, BR-ID-06, BR-ID-08]
 refs_hash:
   BR-ID-05: 0737ee3b67e2
@@ -16,6 +17,11 @@ deps: [B1-20a, B1-02zzzc]
 paths:
   - 'apps/api/src/modules/identity/**'
   - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
+  - 'contracts/{openapi.yaml,enums/admin.yaml,oasdiff-accepted.txt}'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/{validation/route-schemas.gen.ts,validation/signing-routes.gen.ts,http/auth-routes.gen.ts}'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
 test_paths:
   - 'test/spec/identity/bind-phone-change/**'
 impl: claude
