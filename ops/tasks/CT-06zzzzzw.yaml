@@ -1,0 +1,32 @@
+id: CT-06zzzzzw
+repo: rebate-platform
+title: 'CT-06zzzzzw（support-tokens 三条 FU 合一）：支撑文件放行清单——尖括号内的逗号不算成员分隔、条件类型的 ? 与泛型函数类型的 > 不算成员结束、新插入整段花括号类型的内部按成员语法检查'
+type: guard-change
+# 2026-11-20 be 入账（编排 11-20「be 名下不改契约的 FU」排序第 ② 张，公告 10:2x）。合并三条同一缺口的 FU（均为改动前即有、放过语法非法 TS，正常写法到不了，只收紧不放宽）：
+# ① FU-SUPPORT-TOKENS-ANGLE-COMMA-MEMBER-START（CT-06zzzzzp money r3 S2）：Tree.memberStart 把尖括号内的 , 当成员分隔符，Map<K,⏎ keyof⏎ V> 中间插一行 b?: string 被放行；
+# ② FU-SUPPORT-TOKENS-QMARK-ANGLE-MEMBER-END（approvals 105 重跑 S2，D10-2028）：memberEnds 把条件类型的 ? 与泛型函数类型收尾的 > 当成员结束，a: X extends Y ?⏎ Z : W 之间可插成员；
+# ③ FU-SUPPORT-TOKENS-INSERTED-BRACE-INTERIOR（CT-06zzzzzp 实现者自报，D10-2025）：新插入的整段花括号类型内部只查记号种类，b?: { x: void: string }、b?: { x;: number } 放行；补一个小的成员语法检查，别误拒合法写法。
+# 写测前照 CT-06zzzzzp（D10-2007）：回放全部冻结支撑文件已登记的历史改动（ops/evidence 与已合并 PR 的 modify_existing 支撑条目，基线→头），逐条判定与改前相同；有变化的列出来报编排，不加特例。
+# 门禁改动：合并要 owner-approved 标签（approvals 16，编排加）。tester claude-independent（approvals 36），评审 money。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/guard/lib/support-tokens.ts'
+  - 'tools/guard/lib/support-tokens.test.ts'
+  - 'ops/tasks/CT-06zzzzzw.yaml'
+test_paths:
+  - 'test/spec/ci/support-member-syntax/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/support-member-syntax/**'
+  - 'test/spec/ci/support-p3-stray-punct/**'
+  - 'test/spec/ci/support-type-gaps-2/**'
+  - 'test/spec/ci/support-type-position/**'
+  - 'test/spec/ci/support-nested-type/**'
+  - 'test/spec/ci/support-allowlist/**'
+  - 'test/spec/ci/modify-existing-support/**'
+status: todo
+pr: null
