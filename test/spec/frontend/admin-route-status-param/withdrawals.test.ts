@@ -67,16 +67,52 @@ async function open(address: string, server: Server = createServer()): Promise<S
 function queries(server: Server): Record<string, string>[] {
   return server.reads().map((read) => read.query);
 }
+/** The list reads (page_size other than '1'), in order; page_size=1 reads are tab counts. */
+function listReadsOf(server: Server): ReturnType<Server['reads']> {
+  return server.reads().filter((read) => read.query['page_size'] !== '1');
+}
+/** The query of every list read (page_size other than '1'), in order. */
+function listQueries(server: Server): Record<string, string>[] {
+  return listReadsOf(server).map((read) => read.query);
+}
+/** Plain code-unit order of two strings. */
+function byText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+/** A key that does not depend on the order of the query parameters. */
+function queryKey(query: Readonly<Record<string, string>>): string {
+  return JSON.stringify(Object.entries(query).sort(([a], [b]) => byText(a, b)));
+}
+/** Queries sorted by queryKey. */
+function sortedQueries(list: readonly Record<string, string>[]): Record<string, string>[] {
+  return [...list].sort((a, b) => byText(queryKey(a), queryKey(b)));
+}
+/** The query of every tab count read (page_size '1'), sorted. */
+function countQueries(server: Server): Record<string, string>[] {
+  const counts = server.reads().filter((read) => read.query['page_size'] === '1');
+  return sortedQueries(counts.map((read) => read.query));
+}
+/** The five tab count reads (全部 / 待审 / 驳回 / 手动 / 自动), each only its tab's quick filter, sorted. */
+function tabCounts(): Record<string, string>[] {
+  return sortedQueries([
+    { page: '1', page_size: '1' },
+    { display_status: 'paid_manual', page: '1', page_size: '1' },
+    { display_status: 'pending_review', page: '1', page_size: '1' },
+    { display_status: 'rejected', page: '1', page_size: '1' },
+    { page: '1', page_size: '1', status: 'PAID_API' },
+  ]);
+}
 
 it(
-  '[AC-F1-14c-WITHDRAWALS#1] 进页 /withdrawals?status=PENDING_REVIEW：首个（也是唯一一个）列表请求即带 status=PENDING_REVIEW，提现状态控件显示「待审核」，只列待审核的单，不报错、不提示筛选未应用',
+  '[AC-F1-14c-WITHDRAWALS#1] 进页 /withdrawals?status=PENDING_REVIEW：首个（也是唯一一个）列表请求（另有 5 个页签计数读，F1-08an）即带 status=PENDING_REVIEW，提现状态控件显示「待审核」，只列待审核的单，不报错、不提示筛选未应用',
   { timeout: FLOW_TIMEOUT },
   async () => {
     const server = await open('/withdrawals?status=PENDING_REVIEW');
-    const size = pageSizeOf(server.reads());
-    expect(queries(server), 'first read carries the status').toEqual([
+    const size = pageSizeOf(listReadsOf(server));
+    expect(listQueries(server), 'first read carries the status').toEqual([
       { page: '1', page_size: size, status: 'PENDING_REVIEW' },
     ]);
+    expect(countQueries(server), 'five tab counts, no address status').toEqual(tabCounts());
     await waitFor(() => expect(listed(ALL)).toEqual([NO.pending]));
     expect(shownValue(STATUS_FILTER), 'control shows it').toBe(STATUS_NAME.PENDING_REVIEW);
     expect(main().textContent, 'applied, not a draft').not.toMatch(DRAFT_NOTICE);
@@ -91,10 +127,11 @@ it(
     const server = await open(
       '/withdrawals?dashboard_probe=case0&status=PAID_MANUAL&review_mode=auto&page=2',
     );
-    const size = pageSizeOf(server.reads());
-    expect(queries(server), 'only the status is taken').toEqual([
+    const size = pageSizeOf(listReadsOf(server));
+    expect(listQueries(server), 'only the status is taken').toEqual([
       { page: '1', page_size: size, status: 'PAID_MANUAL' },
     ]);
+    expect(countQueries(server), 'five tab counts, no address status').toEqual(tabCounts());
     await waitFor(() => expect(listed(ALL)).toEqual([NO.manualPaid]));
     expect(shownValue(STATUS_FILTER), 'control shows it').toBe(STATUS_NAME.PAID_MANUAL);
     expect(main().querySelector('.ant-result'), 'no error result').toBeNull();
@@ -106,8 +143,9 @@ it(
   { timeout: FLOW_TIMEOUT },
   async () => {
     const server = await open('/withdrawals?status=PENDING_REVIEW');
-    const size = pageSizeOf(server.reads());
-    expect(queries(server)).toEqual([{ page: '1', page_size: size, status: 'PENDING_REVIEW' }]);
+    const size = pageSizeOf(listReadsOf(server));
+    expect(listQueries(server)).toEqual([{ page: '1', page_size: size, status: 'PENDING_REVIEW' }]);
+    expect(countQueries(server), 'five tab counts, no address status').toEqual(tabCounts());
     await waitFor(() => expect(listed(ALL)).toEqual([NO.pending]));
     const before = server.reads().length;
     await click(action(scope(), RESET));
@@ -126,8 +164,9 @@ it(
   { timeout: FLOW_TIMEOUT },
   async () => {
     const server = await open('/withdrawals?status=PENDING_REVIEW');
-    const size = pageSizeOf(server.reads());
-    expect(queries(server)).toEqual([{ page: '1', page_size: size, status: 'PENDING_REVIEW' }]);
+    const size = pageSizeOf(listReadsOf(server));
+    expect(listQueries(server)).toEqual([{ page: '1', page_size: size, status: 'PENDING_REVIEW' }]);
+    expect(countQueries(server), 'five tab counts, no address status').toEqual(tabCounts());
     await waitFor(() => expect(listed(ALL)).toEqual([NO.pending]));
     const before = server.reads().length;
     await choose(scope(), STATUS_FILTER, /^已驳回$/);
@@ -148,8 +187,9 @@ it(
   async () => {
     const many = createServer(withFiller(200));
     const server = await open('/withdrawals?status=PENDING_REVIEW', many);
-    const size = pageSizeOf(server.reads());
-    expect(queries(server)).toEqual([{ page: '1', page_size: size, status: 'PENDING_REVIEW' }]);
+    const size = pageSizeOf(listReadsOf(server));
+    expect(listQueries(server)).toEqual([{ page: '1', page_size: size, status: 'PENDING_REVIEW' }]);
+    expect(countQueries(server), 'five tab counts, no address status').toEqual(tabCounts());
     await waitFor(() => expect(listed([NO.pending])).toEqual([NO.pending]));
     let before = server.reads().length;
     await nextPage();
@@ -180,17 +220,19 @@ it(
   { timeout: MULTI_TIMEOUT },
   async () => {
     const valid = await open('/withdrawals?status=APPROVED');
-    const validSize = pageSizeOf(valid.reads());
-    expect(queries(valid), 'contract value applied').toEqual([
+    const validSize = pageSizeOf(listReadsOf(valid));
+    expect(listQueries(valid), 'contract value applied').toEqual([
       { page: '1', page_size: validSize, status: 'APPROVED' },
     ]);
+    expect(countQueries(valid), 'five tab counts, no address status').toEqual(tabCounts());
     await waitFor(() => expect(listed(ALL)).toEqual([NO.approved]));
     expect(shownValue(STATUS_FILTER), 'control shows it').toBe(STATUS_NAME.APPROVED);
     for (const address of NO_VALUE) {
       unmountPage();
       const server = await open(address);
-      const size = pageSizeOf(server.reads());
-      expect(queries(server), address).toEqual([{ page: '1', page_size: size }]);
+      const size = pageSizeOf(listReadsOf(server));
+      expect(listQueries(server), address).toEqual([{ page: '1', page_size: size }]);
+      expect(countQueries(server), `${address}: five tab counts`).toEqual(tabCounts());
       await waitFor(() => expect(listed(ALL), address).toEqual(ALL));
       expect(shownValue(STATUS_FILTER), address).toBe('');
       expect(main().querySelector('.ant-result'), address).toBeNull();
@@ -203,20 +245,40 @@ it(
   { timeout: MULTI_TIMEOUT },
   async () => {
     const valid = await open('/withdrawals?status=FAILED');
-    const validSize = pageSizeOf(valid.reads());
-    expect(queries(valid), 'contract value applied').toEqual([
+    const validSize = pageSizeOf(listReadsOf(valid));
+    expect(listQueries(valid), 'contract value applied').toEqual([
       { page: '1', page_size: validSize, status: 'FAILED' },
     ]);
+    expect(countQueries(valid), 'five tab counts, no address status').toEqual(tabCounts());
     await waitFor(() => expect(listed(ALL)).toEqual([NO.failed]));
     expect(shownValue(STATUS_FILTER), 'control shows it').toBe(STATUS_NAME.FAILED);
     for (const value of NOT_CONTRACT) {
       unmountPage();
       const server = await open(`/withdrawals?status=${value}`);
-      const size = pageSizeOf(server.reads());
-      expect(queries(server), `status=${value}`).toEqual([{ page: '1', page_size: size }]);
+      const size = pageSizeOf(listReadsOf(server));
+      expect(listQueries(server), `status=${value}`).toEqual([{ page: '1', page_size: size }]);
+      expect(countQueries(server), `status=${value}: five tab counts`).toEqual(tabCounts());
       await waitFor(() => expect(listed(ALL), value).toEqual(ALL));
       expect(shownValue(STATUS_FILTER), `status=${value}`).toBe('');
       expect(main().querySelector('.ant-result'), `status=${value}`).toBeNull();
     }
+  },
+);
+
+it(
+  '[AC-F1-08an-COUNTS#1] 进页 /withdrawals 与 /withdrawals?status=PENDING_REVIEW：恰 5 个 page_size=1 的页签计数读（全部 / 待审 / 驳回 / 手动 / 自动，各只带该页签的快捷筛选、不带地址里的 status），列表读恰 1 条',
+  { timeout: MULTI_TIMEOUT },
+  async () => {
+    const bare = await open('/withdrawals');
+    await waitFor(() => expect(countQueries(bare), 'five tab counts').toEqual(tabCounts()));
+    await settled(bare);
+    expect(countQueries(bare), 'five tab counts, once each').toEqual(tabCounts());
+    expect(listQueries(bare), 'one list read').toHaveLength(1);
+    unmountPage();
+    const server = await open('/withdrawals?status=PENDING_REVIEW');
+    await waitFor(() => expect(countQueries(server), 'five tab counts').toEqual(tabCounts()));
+    await settled(server);
+    expect(countQueries(server), 'no address status in the counts').toEqual(tabCounts());
+    expect(listQueries(server), 'one list read').toHaveLength(1);
   },
 );

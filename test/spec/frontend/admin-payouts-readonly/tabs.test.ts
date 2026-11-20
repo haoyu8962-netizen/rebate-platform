@@ -54,7 +54,7 @@ interface Account {
 }
 
 it(
-  '[AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts',
+  '[AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（另有 5 个页签计数读，F1-08an）（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts',
   { timeout: FLOW_TIMEOUT },
   async () => {
     const server = createPayoutServer({ permissions: VIEW_EXECUTE });
@@ -66,9 +66,25 @@ it(
     const panel = await panelOf(review);
     await listed(panel, REVIEW_ROWS);
     await settled(server);
-    const size = pageSizeOf(server.listReads());
-    const queries = server.listReads().map((read) => read.query);
+    const lists = server.listReads().filter((read) => read.query['page_size'] !== '1');
+    const size = pageSizeOf(lists);
+    const queries = lists.map((read) => read.query);
     expect(queries, 'one review list read').toEqual([{ page: '1', page_size: size }]);
+    const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+    const key = (query: Readonly<Record<string, string>>): string =>
+      JSON.stringify(Object.entries(query).sort(([a], [b]) => byText(a, b)));
+    const sorted = (list: readonly Record<string, string>[]): Record<string, string>[] =>
+      [...list].sort((a, b) => byText(key(a), key(b)));
+    const counts = server.listReads().filter((read) => read.query['page_size'] === '1');
+    expect(sorted(counts.map((read) => read.query)), 'five tab counts').toEqual(
+      sorted([
+        { page: '1', page_size: '1' },
+        { display_status: 'paid_manual', page: '1', page_size: '1' },
+        { display_status: 'pending_review', page: '1', page_size: '1' },
+        { display_status: 'rejected', page: '1', page_size: '1' },
+        { page: '1', page_size: '1', status: 'PAID_API' },
+      ]),
+    );
     expect(server.overviewReads(), 'no overview read before its tab').toEqual([]);
     expect(server.unknownReads(), 'no unknown read before its tab').toEqual([]);
   },
@@ -139,5 +155,38 @@ it(
     expect(server.unknownReads(), 'one unknown read').toHaveLength(1);
     const review = await openTab(TAB.review);
     await listed(review, REVIEW_ROWS);
+  },
+);
+
+it(
+  '[AC-F1-08an-COUNTS#1] 持 fund.view + payout.execute 进 /withdrawals：恰 5 个 page_size=1 的页签计数读（全部 / 待审 / 驳回 / 手动 / 自动，各只带该页签的快捷筛选），审核列表的列表读恰 1 条',
+  { timeout: FLOW_TIMEOUT },
+  async () => {
+    const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+    const key = (query: Readonly<Record<string, string>>): string =>
+      JSON.stringify(Object.entries(query).sort(([a], [b]) => byText(a, b)));
+    const sorted = (list: readonly Record<string, string>[]): Record<string, string>[] =>
+      [...list].sort((a, b) => byText(key(a), key(b)));
+    const expected = sorted([
+      { page: '1', page_size: '1' },
+      { display_status: 'paid_manual', page: '1', page_size: '1' },
+      { display_status: 'pending_review', page: '1', page_size: '1' },
+      { display_status: 'rejected', page: '1', page_size: '1' },
+      { page: '1', page_size: '1', status: 'PAID_API' },
+    ]);
+    const server = createPayoutServer({ permissions: VIEW_EXECUTE });
+    const countsOf = (): Record<string, string>[] => {
+      const counts = server.listReads().filter((read) => read.query['page_size'] === '1');
+      return sorted(counts.map((read) => read.query));
+    };
+    await mount(server, everyGrant(VIEW_EXECUTE));
+    await waitFor(() => expect(pageTabNames()).toEqual(PAGE_TABS));
+    const review = tabsIn(main(), TAB.review)[0]!;
+    await listed(await panelOf(review), REVIEW_ROWS);
+    await waitFor(() => expect(countsOf(), 'five tab counts').toEqual(expected));
+    await settled(server);
+    expect(countsOf(), 'five tab counts, once each').toEqual(expected);
+    const lists = server.listReads().filter((read) => read.query['page_size'] !== '1');
+    expect(lists, 'one review list read').toHaveLength(1);
   },
 );
