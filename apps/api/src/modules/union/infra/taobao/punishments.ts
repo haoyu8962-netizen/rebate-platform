@@ -35,6 +35,7 @@ import {
   taobaoUnavailable,
   windowSeconds,
 } from './orders.ts';
+import { taobaoRawJsonText } from './raw-json.ts';
 
 /**
  * Punishment warnings. None carries an order number, an amount or a PID:
@@ -216,19 +217,6 @@ function punishAdzone(row: unknown): string | null {
   return isRecord(row) ? taobaoDecimalId(row.tk_adzone_id) : null;
 }
 
-/** JSON text of a parsed tree, every TaobaoRawNumber written as its literal. */
-function literalJson(value: unknown): string {
-  if (value instanceof TaobaoRawNumber) return value.text;
-  if (Array.isArray(value)) return `[${value.map(literalJson).join(',')}]`;
-  if (typeof value === 'object' && value !== null) {
-    const members = Object.entries(value).map(
-      ([name, member]) => `${JSON.stringify(name)}:${literalJson(member)}`,
-    );
-    return `{${members.join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
 /**
  * B1-04zzp（D10-793 ①，同 B1-04zzc 方案 A）: the get-foul-order-list body as the archive stores
  * it. Rows of other companies' promotion slots (tk_adzone_id readable as ourPunishRows reads it,
@@ -255,7 +243,7 @@ export function taobaoPunishArchiveBody(body: string, adzones: ReadonlySet<strin
   });
   if (kept.length === list.length) return taobaoArchiveAsParsed(body);
   data.results = kept;
-  return literalJson(tree);
+  return taobaoRawJsonText(tree);
 }
 
 /** Text of a required key part: a non-blank string (not "--") or a JSON integer literal. */
