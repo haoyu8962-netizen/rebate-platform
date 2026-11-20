@@ -15,9 +15,17 @@
 // - 带外壳的结果未定（5xx、40901）：提示失败，下次提交沿用原键；其余确定的回答（成功、20001、20901、
 //   20902、10403 等）后下次提交换新键。任何失败都不自动重发。
 // 一次打开（抽屉或对话框）一个写操作一个实例；卸载后迟到的回答被丢弃。
+// F1-08at（D10-2075）：进入「结果未知」时为本页（adjustments）与登录账号存一个不含业务数据的标记，
+// 带外壳的 5xx / 40901（保留原键、未落定）同样存标记；拿到确定的回答（成功或确定的拒绝）时清掉；
+// 10001（会话失效）不算确定的回答，标记留给重新登录后的提示。
 import { useDataProvider, type BaseRecord } from '@refinedev/core';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
+import {
+  endsSession,
+  useUnknownMarker,
+  type MarkerClock,
+} from '../../components/unknown-marker/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
 import { ADJUSTMENTS_URL } from './model.ts';
@@ -53,7 +61,15 @@ export interface AdjustmentWriteOptions<R extends BaseRecord = Executed> {
   readonly onFailed: (cause: unknown, stillUnknown: boolean) => void;
   /** The write got no reply in the unified envelope (`unknown` is now true). */
   readonly onUnknown?: () => void;
+  /**
+   * The page's injected clock: the moment kept with the result-unknown marker (F1-08at), passed
+   * down from 调账与核销 (CONSOLE_CLOCK there when none was injected).
+   */
+  readonly clock: MarkerClock;
 }
+
+/** The marker's page: the menu id of 调账与核销. */
+const MARKER_PAGE = 'adjustments';
 
 export interface AdjustmentWrite<B extends object = CreateRequest> {
   /** A code is being sent, the verification is open or the write is in flight. */
@@ -90,8 +106,10 @@ export function useAdjustmentWrite<
   onDone,
   onFailed,
   onUnknown,
+  clock,
 }: AdjustmentWriteOptions<R>): AdjustmentWrite<B> {
   const getProvider = useDataProvider();
+  const marker = useUnknownMarker(MARKER_PAGE, clock);
   const [phase, setPhaseValue] = useState<Phase>('idle');
   const phaseRef = useRef<Phase>('idle');
   const [missing, setMissingValue] = useState(false);
@@ -216,6 +234,8 @@ export function useAdjustmentWrite<
             : { stepUpToken, idempotencyKey: key },
       });
       if (!alive.current) return;
+      // A settled answer (the idempotent replay or the first time): the submission's marker goes.
+      marker.clear();
       keyRef.current = undefined;
       setUnknown(false);
       setPhase('idle');
@@ -240,12 +260,20 @@ export function useAdjustmentWrite<
       }
       if (noEnvelope(cause)) {
         // It may have taken effect: keep the key and the body, lock, no failure prompt.
+        marker.mark();
         setUnknown(true);
         setPhase('idle');
         onUnknown?.();
         return;
       }
-      if (!outcomeUnknown(cause)) {
+      if (outcomeUnknown(cause)) {
+        // An enveloped 5xx / 40901: the key is kept, the write may have taken effect, so it is
+        // result-unknown for the marker too (D10-2075 / D10-1731).
+        marker.mark();
+      } else {
+        // A settled refusal settles the submission; an ended session (10001) settles nothing.
+        if (endsSession(cause)) marker.leave();
+        else marker.clear();
         keyRef.current = undefined;
         setUnknown(false);
       }

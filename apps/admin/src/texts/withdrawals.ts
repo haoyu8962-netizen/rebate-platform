@@ -714,4 +714,13 @@ export const withdrawalsTexts = {
     network: '网络错误，请检查网络后重试；未确认前不会重复提交',
     failed: '提交失败，请稍后重试',
   },
+  /**
+   * F1-08at（D10-2075）：结果未知期间会话过期、重新登录后页面顶部的提示（components/unknown-marker，
+   * 提现审核与调账与核销共用）。
+   */
+  unknownMarker: {
+    notice: '有一笔提交结果未知，请先到列表核对',
+    moment: (shown: string): string => `发生时刻：${shown}（北京时间）`,
+    close: '关闭',
+  },
 } as const;

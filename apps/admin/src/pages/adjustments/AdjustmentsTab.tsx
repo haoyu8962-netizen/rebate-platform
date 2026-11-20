@@ -24,6 +24,7 @@ import {
 } from 'antd';
 import { useEffect, useId, useState, type ReactElement } from 'react';
 import { plannedButtonProps, usePlanned } from '../../components/planned/index.ts';
+import type { MarkerClock } from '../../components/unknown-marker/index.ts';
 import { delayedLoading, useLoadingClock } from '../../motion.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
 import { ApproveDialog } from './ApproveDialog.tsx';
@@ -79,6 +80,8 @@ export interface AdjustmentsTabProps {
   readonly planned: boolean;
   /** Bumped by the page after a write: the list (and an open detail) is read again. */
   readonly version: number;
+  /** The page's injected clock: the moment of the result-unknown marker (F1-08at). */
+  readonly clock: MarkerClock;
   readonly onNotice: (notice: Notice) => void;
   /** The list read for `version` has answered (ready or failed). */
   readonly onListRead?: (version: number) => void;
@@ -105,6 +108,7 @@ export function AdjustmentsTab({
   onNotice,
   onListRead,
   initialDetail,
+  clock,
 }: AdjustmentsTabProps): ReactElement {
   const loadingClock = useLoadingClock();
   const { token } = theme.useToken();
@@ -489,6 +493,7 @@ export function AdjustmentsTab({
         <ReverseDialog
           key={reversal.item.adjust_id}
           item={reversal.item}
+          clock={clock}
           planned={planned}
           onClose={cancelReverse}
           onReversed={reversed}
@@ -500,6 +505,7 @@ export function AdjustmentsTab({
         <ApproveDialog
           key={approval.item.adjust_id}
           item={approval.item}
+          clock={clock}
           approvePlanned={approvePlanned}
           rejectPlanned={rejectPlanned}
           onClose={cancelApprove}

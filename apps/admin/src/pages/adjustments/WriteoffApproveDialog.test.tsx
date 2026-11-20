@@ -66,6 +66,7 @@ function renderDialog(item: Writeoff): HTMLElement {
       <WriteoffApproveDialog
         item={item}
         planned={false}
+        clock={{ now: () => 0 }}
         onClose={() => {}}
         onApproved={() => {}}
         onStale={() => {}}

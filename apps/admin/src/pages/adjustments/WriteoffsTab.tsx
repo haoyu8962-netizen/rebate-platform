@@ -18,6 +18,7 @@ import {
 } from 'antd';
 import { useState, type ReactElement } from 'react';
 import { plannedButtonProps, usePlanned } from '../../components/planned/index.ts';
+import type { MarkerClock } from '../../components/unknown-marker/index.ts';
 import { delayedLoading, useLoadingClock } from '../../motion.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
 import {
@@ -42,6 +43,8 @@ const w = adjustmentsTexts.writeoffApprove;
 export interface WriteoffsTabProps {
   /** fund.writeoff: 【批准核销】 on the PENDING rows. */
   readonly canWriteoff: boolean;
+  /** The page's injected clock: the moment of the result-unknown marker (F1-08at). */
+  readonly clock: MarkerClock;
   readonly onNotice: (notice: Notice) => void;
 }
 
@@ -51,7 +54,7 @@ interface Approval {
   readonly trigger: HTMLElement;
 }
 
-export function WriteoffsTab({ canWriteoff, onNotice }: WriteoffsTabProps): ReactElement {
+export function WriteoffsTab({ canWriteoff, clock, onNotice }: WriteoffsTabProps): ReactElement {
   const loadingClock = useLoadingClock();
   const { token } = theme.useToken();
   const [page, setPage] = useState(1);
@@ -249,6 +252,7 @@ export function WriteoffsTab({ canWriteoff, onNotice }: WriteoffsTabProps): Reac
         <WriteoffApproveDialog
           key={approval.item.id}
           item={approval.item}
+          clock={clock}
           planned={approvePlanned}
           onClose={cancelApprove}
           onApproved={approved}

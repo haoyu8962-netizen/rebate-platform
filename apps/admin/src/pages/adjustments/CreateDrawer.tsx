@@ -20,6 +20,7 @@ import {
 } from 'antd';
 import { useId, useState, type ReactElement } from 'react';
 import { plannedButtonProps } from '../../components/planned/index.ts';
+import type { MarkerClock } from '../../components/unknown-marker/index.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
 import { stepUpTexts } from '../../texts/step-up.ts';
 import { directionLabel, reasonLabel, refTypeLabel } from './model.ts';
@@ -56,6 +57,8 @@ export interface CreateDrawerProps {
   readonly open: boolean;
   /** adminCreateAdjustment is still planned: the submit is greyed out. */
   readonly planned: boolean;
+  /** The page's injected clock: the moment of the result-unknown marker (F1-08at). */
+  readonly clock: MarkerClock;
   readonly onClose: () => void;
   readonly onCreated: (executed: Executed) => void;
   /** 【去列表核对】 while the result is unknown: close and read the list again. */
@@ -71,6 +74,7 @@ export function CreateDrawer({
   onClose,
   onCreated,
   onCheck,
+  clock,
 }: CreateDrawerProps): ReactElement {
   const { token } = theme.useToken();
   const ids = {
@@ -94,6 +98,7 @@ export function CreateDrawer({
 
   const write = useAdjustmentWrite({
     operation: w.createOperation,
+    clock,
     onDone: onCreated,
     onFailed: (cause) => setWriteError(writeErrorText(cause)),
   });

@@ -17,6 +17,7 @@ import { Alert, Button, Descriptions, Flex, Modal, Typography, theme } from 'ant
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import { Link } from 'react-router';
 import { plannedButtonProps } from '../../components/planned/index.ts';
+import type { MarkerClock } from '../../components/unknown-marker/index.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
 import { stepUpTexts } from '../../texts/step-up.ts';
 import { WRITEOFFS_URL, money, type Writeoff, type WriteoffPage } from './model.ts';
@@ -47,6 +48,8 @@ export interface WriteoffApproveDialogProps {
   /** adminApproveBadDebtWriteoff still planned: 【批准核销】 is greyed out. */
   readonly planned: boolean;
   /** 【取消】; `uncertain`: the approval may have been carried out (refresh). */
+  /** The page's injected clock: the moment of the result-unknown marker (F1-08at). */
+  readonly clock: MarkerClock;
   readonly onClose: (uncertain: boolean) => void;
   readonly onApproved: (result: WriteoffApproved) => void;
   /** 20902, or the read after an unknown outcome found the candidate no longer PENDING. */
@@ -62,6 +65,7 @@ export function WriteoffApproveDialog({
   onApproved,
   onStale,
   onCheck,
+  clock,
 }: WriteoffApproveDialogProps): ReactElement {
   const { token } = theme.useToken();
   const ids = { phone: useId() };
@@ -113,6 +117,7 @@ export function WriteoffApproveDialog({
 
   const approval = useAdjustmentWrite<ApproveRequest, WriteoffApproved>({
     operation: w.operation,
+    clock,
     url: writeoffApproveUrl(item.id),
     onDone: onApproved,
     onFailed: failed,
