@@ -765,3 +765,9 @@ approvals:
     granted: true
     date: '2026-11-21'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审轮次属门禁流程小改动），D10-2284，先例第 117 条、第 119 条。原因：Codex spec-test r1（全量）四条 S1 已由写测第 3 次补齐并经 r2 确认关闭；r2（couli-runs/B2-02zc/review-spec-test-r2-codex.json）新报两条 S1 都在迁移对存量的保护上，指向已定口径 D10-2275 ③（迁移不改业务数据），各给出具体错误实现（自动结案较早单后建索引；顺手批量解除 ledger_mismatch 冻结）。写测 3 / 3、spec-test 2 / 2 已用满。止损：r3 再出新 S1 即停下报编排，属实的登 FU，不再加轮。'
+  - id: 125
+    row: 4
+    title: "B2-02zc 任务专属一次性追加：写规则测试第 5 次 + Codex spec-test 增量 1 轮 + money 评审增量 1 轮——写测范围写死四处：test/spec/ledger/recon-diffs-unresolved/migration.int.test.ts 的 [AC-B2-02zc#9] 谓词断言加 ref_type <> 'order'、[AC-B2-02zc#10] 加一行「order 级同 app 同 ref_id 两张未结 ledger_mismatch 可并存」、两组存量重复夹具里两条冻结改用同一 user_id（关 FU-B2-02ZC-MIGRATION-SAME-USER-HOLDS）；daily.int.test.ts 加一条「order 级次日新增变负的受益人照常新开差错单并冻结该受益人」；其余一字不动"
+    granted: true
+    date: '2026-11-21'
+    note: "编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审轮次属门禁流程小改动），D10-2295，先例第 117 条、第 119 条、第 124 条。原因：Codex money r1（couli-runs/B2-02zc/review-money-r1-codex.json）S1 属实——按子订单归组的自检差异一组可含多个受益人，0152 按（app、type、ref_id）去重时 D+1 新增变负的受益人不被冻结；取甲：索引谓词加 ref_type <> 'order'，订单级维持按会计日登记与冻结（宁多冻不漏冻），订单级去重另登 FU-B2-02ZC-ORDER-LEVEL-DEDUP。写测 4 / 4、spec-test 已用满（approvals 124 一轮）。止损：本轮 Codex spec-test 或 money 再出新 S1 即停下报编排，不再加轮。"
