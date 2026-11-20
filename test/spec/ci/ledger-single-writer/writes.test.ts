@@ -1,4 +1,4 @@
-import { it } from 'vitest';
+import { expect, it } from 'vitest';
 import { listTreeFiles } from '../../../../tools/guard/lib/tree.ts';
 import {
   BALANCES,
@@ -60,12 +60,13 @@ it.each([
 it('[CT-06zzzzzx#3] TRUNCATE TABLE 的逗号列表会报出排在其他表后面的每张账务表', () => {
   const statement = [
     'TRUNCATE TABLE',
-    `app.unrelated, app.${ENTRIES},\n  "app"."${BALANCES}";`,
+    `app.unrelated,\n  app.${ENTRIES}, "app"."${BALANCES}";`,
   ].join(' ');
   const root = fixture({ [SQL_FILE]: `-- 夹具\n\n${statement}\n` });
   const result = check(root);
-  expectWrite(result, SQL_FILE, [3], ENTRIES, /\btruncate\b/i);
-  expectWrite(result, SQL_FILE, [3, 4], BALANCES, /\btruncate\b/i);
+  const entriesProblem = expectWrite(result, SQL_FILE, [3, 4], ENTRIES, /\btruncate\b/i);
+  const balancesProblem = expectWrite(result, SQL_FILE, [3, 4], BALANCES, /\btruncate\b/i);
+  expect(entriesProblem).not.toBe(balancesProblem);
 });
 
 it('[CT-06zzzzzx#4] 拦截 TS 字符串、普通模板和 sql 标签模板里的 SQL', () => {
@@ -74,15 +75,35 @@ it('[CT-06zzzzzx#4] 拦截 TS 字符串、普通模板和 sql 标签模板里的
   const tagged = 'apps/api/src/modules/orders/tagged.ts';
   const insert = ['INSERT INTO', `app.${ENTRIES} VALUES (1);`].join(' ');
   const remove = ['DELETE FROM', `"app"."${VOUCHERS}" WHERE false;`].join('\n');
+  const additionalWrites = [
+    [
+      'merge',
+      BALANCES,
+      ['MERGE INTO', `app.${BALANCES} AS b USING staging AS s ON false WHEN MATCHED THEN DO NOTHING;`].join(' '),
+    ],
+    ['truncate', ENTRIES, ['TRUNCATE TABLE', `app.${ENTRIES};`].join(' ')],
+    ['copy', VOUCHERS, ['COPY', `app.${VOUCHERS} (app_id) FROM STDIN;`].join(' ')],
+  ] as const;
+  const plainWrites = additionalWrites.map(
+    ([operation, , statement]) => `const ${operation} = ${JSON.stringify(statement)};`,
+  );
+  const taggedWrites = additionalWrites.map(
+    ([operation, , statement]) => `const ${operation} = sql\`${statement}\`;`,
+  );
   const root = fixture({
-    [plain]: `// 夹具\n\nconst query = ${JSON.stringify(insert)};\n`,
+    [plain]: `// 夹具\n\nconst query = ${JSON.stringify(insert)};\n${plainWrites.join('\n')}\n`,
     [template]: `// 夹具\n\nconst query = \`${BALANCE_UPDATE}\`;\n`,
-    [tagged]: `// 夹具\n\nconst query = sql\`${remove}\`;\n`,
+    [tagged]: `// 夹具\n\nconst query = sql\`${remove}\`;\n${taggedWrites.join('\n')}\n`,
   });
   const result = check(root);
   expectWrite(result, plain, [3], ENTRIES, /\binsert\b/i);
   expectWrite(result, template, [3], BALANCES, /\bupdate\b/i);
   expectWrite(result, tagged, [3, 4], VOUCHERS, /\bdelete\b/i);
+  for (const [index, [operation, table]] of additionalWrites.entries()) {
+    const operationPattern = new RegExp(`\\b${operation}\\b`, 'i');
+    expectWrite(result, plain, [4 + index], table, operationPattern);
+    expectWrite(result, tagged, [5 + index], table, operationPattern);
+  }
 });
 
 it('[CT-06zzzzzx#5] 触发器、授权、DDL、读、读加锁和注释均不算写入', () => {
@@ -126,4 +147,21 @@ it('[CT-06zzzzzx#6] 忽略生成物、依赖、未列入扫描清单的文件与
   });
   const tree = listTreeFiles(root);
   expectPass(check(root, { ...tree, files: tree.files.filter((file) => file !== unlisted) }));
+});
+
+it('[CT-06zzzzzx#15] 扫描 packages、迁移目录之外的 SQL 和 tools', () => {
+  const domain = 'packages/domain/src/x.ts';
+  const seed = 'db/seeds/0008_x.sql';
+  const tool = 'tools/x.ts';
+  const insert = ['INSERT INTO', `app.${ENTRIES} VALUES (1);`].join(' ');
+  const method = 'deleteFrom';
+  const root = fixture({
+    [domain]: `// 夹具\n\nconst query = ${JSON.stringify(BALANCE_UPDATE)};\n`,
+    [seed]: `-- 夹具\n${insert}\n`,
+    [tool]: `// 夹具\n\n\ndb.${method}('app.${VOUCHERS}');\n`,
+  });
+  const result = check(root);
+  expectWrite(result, domain, [3], BALANCES, /\bupdate\b/i);
+  expectWrite(result, seed, [2], ENTRIES, /\binsert\b/i);
+  expectWrite(result, tool, [4], VOUCHERS, /\bdeleteFrom\b/i);
 });

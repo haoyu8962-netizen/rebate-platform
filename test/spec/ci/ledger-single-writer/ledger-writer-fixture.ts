@@ -57,10 +57,15 @@ export function expectWrite(
 ): string {
   expect(result.status).toBe('fail');
   const problem = result.problems.find((text) => {
-    const location = text.split(`${file}:`)[1] ?? '';
-    const line = /^\d+/.exec(location)?.[0];
+    if (!text.startsWith(`${file}:`)) return false;
+    const location = text.slice(file.length + 1);
+    const line = /^\d+\b/.exec(location)?.[0];
+    // A dedicated field identifies the hit even when the guidance mentions other ledger tables.
+    const reportedTable = /(?:^|[\s:：,，;；])表\s*[:：]\s*(\w+)\b/.exec(location)?.[1];
     return (
-      lines.includes(Number(line)) && text.toLowerCase().includes(table) && operation.test(text)
+      lines.includes(Number(line)) &&
+      reportedTable?.toLowerCase() === table &&
+      operation.test(location)
     );
   });
   expect(problem, result.problems.join('\n')).toBeDefined();

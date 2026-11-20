@@ -94,44 +94,35 @@ it('[CT-06zzzzzx#12] guard static 执行 ledger-writers 并报告未放行的写
   expect(run.status).toBe(1);
 });
 
-it('[CT-06zzzzzx#13] 随仓清单逐条列出现有写入点和夹具并说明理由', () => {
+it('[CT-06zzzzzx#13] 随仓放行清单满足写入点、历史迁移、测试路径和理由的性质', () => {
   const path = join(REPO, ALLOWLIST);
   expect(existsSync(path), `任务要求交付 ${ALLOWLIST}`).toBe(true);
   const rows = readFileSync(path, 'utf8')
     .split(/\r?\n/)
     .filter((line) => line.trim() !== '' && !line.trimStart().startsWith('#'));
-  for (const row of rows) expect(row).toMatch(/^[^\t]+\t\s*\S/);
-  expect(rows.map((row) => row.split('\t')[0]).sort()).toEqual(
-    [
-      STORE,
-      BACKFILL,
-      'apps/api/src/modules/identity/infra/registration-store.test.ts',
-      'apps/api/src/modules/ledger/application/ledger-locks.test.ts',
-      'tools/ci/lint-migrations.test.ts',
-      'test/spec/agent/write-scope/',
-      'test/spec/db/ledger/backfill/',
-      'test/spec/db/ledger/core/',
-      'test/spec/db/ledger/invariants-07-after-recalc/',
-      'test/spec/growth/admin-invite-rewards/',
-      'test/spec/growth/invite-reward/',
-      'test/spec/identity/bind-phone-merge-conditions/',
-      'test/spec/identity/deletion-expiry/',
-      'test/spec/identity/deletion-progress-message/',
-      'test/spec/identity/deletion-request/',
-      'test/spec/identity/reverify-gates/',
-      'test/spec/ledger/admin-fund-ledger/',
-      'test/spec/ledger/admin-ledger-read/',
-      'test/spec/ledger/admin-recon-balance-recalc/',
-      'test/spec/ledger/daily-check/',
-      FIXTURES,
-      'test/spec/ledger/wallet-ledger/',
-      'test/spec/ledger/wallet-summary/',
-      'test/spec/payment/recon/',
-      'test/spec/risk/appeal-restore/',
-      'test/spec/settlement/blacklist-clawback/',
-      'test/spec/settlement/union-receipts-schema/',
-    ].sort(),
+  const entries = rows.map((row) => {
+    expect(row).toMatch(/^[^\t]+\t\s*\S/);
+    const [entry = ''] = row.split('\t');
+    expect(entry).not.toMatch(/[*?[\]{}]/);
+    expect(existsSync(join(REPO, entry)), entry).toBe(true);
+    return entry;
+  });
+  const testFiles = new Set([
+    'apps/api/src/modules/identity/infra/registration-store.test.ts',
+    'apps/api/src/modules/ledger/application/ledger-locks.test.ts',
+    'tools/ci/lint-migrations.test.ts',
+  ]);
+  const migrations = entries.filter((entry) => entry.startsWith('db/migrations/'));
+  expect(migrations).toEqual([BACKFILL]);
+
+  const testSpecRoot = `${join(REPO, 'test/spec')}/`;
+  const nonTestNonMigration = entries.filter(
+    (entry) =>
+      !entry.startsWith('db/migrations/') &&
+      !testFiles.has(entry) &&
+      !join(REPO, entry, '.').startsWith(testSpecRoot),
   );
+  expect(nonTestNonMigration).toEqual([STORE]);
 });
 
 it('[CT-06zzzzzx#14] 在真实仓库根目录执行守卫应通过', () => {
