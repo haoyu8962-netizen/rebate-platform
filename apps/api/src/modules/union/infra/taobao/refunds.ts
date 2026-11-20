@@ -40,6 +40,7 @@ import {
   taobaoUnavailable,
   windowSeconds,
 } from './orders.ts';
+import { taobaoRawJsonText } from './raw-json.ts';
 
 /**
  * Refund warnings. None carries an order number, a refund id or an amount:
@@ -145,20 +146,7 @@ export function taobaoRefundArchiveBody(body: string, own: ReadonlySet<string>):
   });
   if (kept.length === found.list.length) return taobaoArchiveAsParsed(body);
   found.data.result = kept;
-  return literalJson(found.tree);
-}
-
-/** JSON text of a parsed tree, every TaobaoRawNumber written as its literal (as punishments.ts). */
-function literalJson(value: unknown): string {
-  if (value instanceof TaobaoRawNumber) return value.text;
-  if (Array.isArray(value)) return `[${value.map(literalJson).join(',')}]`;
-  if (typeof value === 'object' && value !== null) {
-    const members = Object.entries(value).map(
-      ([name, member]) => `${JSON.stringify(name)}:${literalJson(member)}`,
-    );
-    return `{${members.join(',')}}`;
-  }
-  return JSON.stringify(value);
+  return taobaoRawJsonText(found.tree);
 }
 
 export const TAOBAO_REFUND_PATH = '/api/tb-service/get-order-refund';

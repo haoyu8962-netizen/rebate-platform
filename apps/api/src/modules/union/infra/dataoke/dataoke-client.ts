@@ -67,9 +67,10 @@ export interface DataokeRequestOptions {
   readonly archive?: ArchiveContext;
   /**
    * B1-04zzc: rides on the transport request as `archiveBody` (the body the archiving transport
-   * stores); never on the wire, the caller's response is unchanged.
+   * stores); never on the wire, the caller's response is unchanged. B1-04zzzzj: may give a promise,
+   * as replay.ts allows (the archiving transport awaits it; this client passes it on untouched).
    */
-  readonly archiveBody?: (body: string) => string;
+  readonly archiveBody?: (body: string) => string | Promise<string>;
   /**
    * B1-04d: per-interface refinement of non-zero outer codes (string form), e.g. the privilege
    * link's goods-not-promotable codes → item_unavailable. Codes not listed keep the gz-13 grouping.

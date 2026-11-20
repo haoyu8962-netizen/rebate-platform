@@ -1077,14 +1077,12 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   ): Promise<UnionTransportResponse> {
     const archive = archiveOf(ctx, 'order');
     // B1-04zzu: DataokeClient forwards archiveBody to the archiving transport untouched, and that
-    // transport awaits it (replay.ts allows a promise); DataokeRequestOptions still declares the
-    // synchronous form (outside this task's paths), hence the widening assertion.
-    const forwarded = archiveBody as ((body: string) => string) | undefined;
+    // transport awaits it (replay.ts allows a promise; DataokeRequestOptions declares the same).
     const send = (signal: AbortSignal | undefined) =>
       source.exchange('GET', path, parameters, {
         version,
         archive,
-        ...(forwarded === undefined ? {} : { archiveBody: forwarded }),
+        ...(archiveBody === undefined ? {} : { archiveBody }),
         ...(signal === undefined ? {} : { signal }),
       });
     const gate: UpstreamGate | undefined = ctx?.gateUpstream;

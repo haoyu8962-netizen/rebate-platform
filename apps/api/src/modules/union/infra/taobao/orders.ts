@@ -75,6 +75,7 @@ import {
   type UnionOrderNeutralFields,
 } from '../../domain/types.ts';
 import type { OrderRowIdentity } from '../order-row.ts';
+import { TaobaoRawNumber, taobaoRawJsonText } from './raw-json.ts';
 
 /**
  * Every Taobao PID (`mm_<memberid>_<siteid>_<adzoneid>`) the platform registered in union_pids for
@@ -386,14 +387,9 @@ export function slotAdzones(pids: unknown): ReadonlySet<string> {
 // 报文：JSON 数字原文
 // ---------------------------------------------------------------------------------------------
 
-/** A JSON number of the order body, kept as its literal (only made by parseTaobaoOrderBody). */
-export class TaobaoRawNumber {
-  readonly text: string;
-
-  constructor(text: string) {
-    this.text = text;
-  }
-}
+// B1-04zzzzj: the class and its writer live in raw-json.ts (one copy for orders / refunds /
+// punishments); re-exported here so existing importers keep working.
+export { TaobaoRawNumber } from './raw-json.ts';
 
 /** JSON.parse 的源文本访问（Node ≥ 21；本仓库 engines 为 Node 24）。 */
 interface ReviverContext {
@@ -417,19 +413,6 @@ function parseRawJson(text: string): unknown {
       ? new TaobaoRawNumber(typeof context?.source === 'string' ? context.source : String(value))
       : value,
   );
-}
-
-/** B1-04zzc: JSON text of a parseRawJson tree, every TaobaoRawNumber written as its literal. */
-function rawJsonText(value: unknown): string {
-  if (value instanceof TaobaoRawNumber) return value.text;
-  if (Array.isArray(value)) return `[${value.map(rawJsonText).join(',')}]`;
-  if (typeof value === 'object' && value !== null) {
-    const members = Object.entries(value).map(
-      ([name, member]) => `${JSON.stringify(name)}:${rawJsonText(member)}`,
-    );
-    return `{${members.join(',')}}`;
-  }
-  return JSON.stringify(value);
 }
 
 /**
@@ -491,7 +474,7 @@ export function taobaoJsonHasDuplicateKeys(text: string): boolean {
  */
 export function taobaoArchiveAsParsed(body: string): string {
   const tree = parseRawJson(body);
-  return taobaoJsonHasDuplicateKeys(body) ? rawJsonText(tree) : body;
+  return taobaoJsonHasDuplicateKeys(body) ? taobaoRawJsonText(tree) : body;
 }
 
 /**
@@ -585,7 +568,7 @@ export function taobaoOrderArchiveBody(body: string, adzones: ReadonlySet<string
   });
   if (kept.length === list.length) return taobaoArchiveAsParsed(body);
   results.publisher_order_dto = kept;
-  return rawJsonText(tree);
+  return taobaoRawJsonText(tree);
 }
 
 /**
