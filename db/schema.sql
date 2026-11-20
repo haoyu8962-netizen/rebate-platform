@@ -4095,7 +4095,7 @@ CREATE TABLE app.export_tasks (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT export_tasks_audit_masked_check CHECK (((resource <> 'audit_logs'::text) OR masked)),
     CONSTRAINT export_tasks_progress_check CHECK (((progress IS NULL) OR ((progress >= 0) AND (progress <= 100)))),
-    CONSTRAINT export_tasks_resource_check CHECK ((resource = ANY (ARRAY['users'::text, 'audit_logs'::text, 'tax_withdrawals'::text, 'ledger'::text]))),
+    CONSTRAINT export_tasks_resource_check CHECK ((resource = ANY (ARRAY['users'::text, 'audit_logs'::text, 'tax_withdrawals'::text, 'ledger'::text, 'withdrawals'::text]))),
     CONSTRAINT export_tasks_row_count_check CHECK (((row_count IS NULL) OR (row_count >= 0))),
     CONSTRAINT export_tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'running'::text, 'done'::text, 'failed'::text, 'expired'::text, 'cancelled'::text])))
 );
