@@ -18,7 +18,6 @@
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { createDb, destroyDb, pgUrl, type DB } from '@couli/db';
-import type { TestDbContext } from '@couli/db/testing';
 import { sql, type Kysely, type Selectable } from 'kysely';
 import { expect, inject } from 'vitest';
 import { seedHandler } from '../../db/settlement/ledger-owned/kit.ts';
@@ -191,7 +190,7 @@ export interface Scratch {
 
 /** An empty database (from template0) owned by the run's factory role; drop() removes it. */
 export async function scratchDatabase(): Promise<Scratch> {
-  const context: TestDbContext = inject('couliTestDb');
+  const context = inject('couliTestDb');
   const name = `couli_t_${context.runId}_${randomUUID().replaceAll('-', '').slice(0, 12)}`;
   const factory = createDb({ connectionString: context.factoryUrl, max: 1 });
   try {
