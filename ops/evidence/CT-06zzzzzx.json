@@ -1,0 +1,118 @@
+{
+  "task": "CT-06zzzzzx",
+  "spec_ref": "d49d8aa59aeddf16698fdbb65dbcc36e64741e22",
+  "spec_commit": "ad7bbc7d0a9290b396a59fa1a77b3b68c1e295dd",
+  "red_tests": [
+    "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#7] 文件和目录清单条目放行，支持注释、空行与 Tab 后的理由",
+    "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#8] 拒绝包含通配符的放行条目",
+    "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#9] 同模块、新迁移、应用单测及放行目录的同名前缀目录仍受检查",
+    "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#10] 放行路径已不存在时检查失败",
+    "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#11] 放行路径仍在但无命中时只发一条 notice",
+    "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#12] guard static 执行 ledger-writers 并报告未放行的写入",
+    "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#13] 随仓放行清单满足写入点、历史迁移、测试路径和理由的性质",
+    "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#14] 在真实仓库根目录执行守卫应通过",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#1] 拦截 Kysely insertInto 的表名参数",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#1] 拦截 Kysely updateTable 的表名参数",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#1] 拦截 Kysely deleteFrom 的表名参数",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#1] 拦截 Kysely mergeInto 的表名参数",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#1] 拦截 Kysely replaceInto 的表名参数",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#2] 拦截 SQL 文件里的 INSERT",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#2] 拦截 SQL 文件里的 UPDATE",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#2] 拦截 SQL 文件里的 DELETE",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#2] 拦截 SQL 文件里的 MERGE",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#2] 拦截 SQL 文件里的 TRUNCATE",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#2] 拦截 SQL 文件里的 COPY",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#3] TRUNCATE TABLE 的逗号列表会报出排在其他表后面的每张账务表",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#4] 拦截 TS 字符串、普通模板和 sql 标签模板里的 SQL",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#5] 触发器、授权、DDL、读、读加锁和注释均不算写入",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#6] 忽略生成物、依赖、未列入扫描清单的文件与其他扩展名",
+    "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#15] 扫描 packages、迁移目录之外的 SQL 和 tools"
+  ],
+  "risk_note": "Guard change (tightening only; D10-2219 / D10-2223 / D10-2270 / D10-2278 / D10-2282; ledger patch 1 #423). New static check tools/guard/ledger-writers.ts, wired into guard static (run.ts): any tracked .ts / .sql file outside the allowlist that writes app.ledger_entries, app.ledger_vouchers or app.account_balances (Kysely insertInto / updateTable / deleteFrom / mergeInto / replaceInto with a literal table; INSERT / UPDATE / DELETE / MERGE / TRUNCATE (every table of the list) / COPY ... FROM in .sql files and in SQL inside .ts strings and templates, schema prefix, quoted identifiers, across lines, with comments blanked first; single-quoted SQL literals are data except the one right after EXECUTE; dollar-quoted bodies are scanned) fails with file:line, the table and what to do. Allowlist tools/guard/ledger-writers.allow.txt, one path per line with a reason, no wildcards, a missing path is a problem: apps/api/src/modules/ledger/infra/store.ts (the only write point; B2-02x's recalc writes through it), the merged migration 0054, three files whose strings only hold SQL text (two apps unit tests asserting emitted SQL, tools/ci/lint-migrations.test.ts) and 21 test/spec fixture directories. Allowed by file, not by module: a new file under modules/ledger that writes is refused. In git mode only tracked files are scanned. tools/guard/guard-cli.test.ts: the two cases that pin the guard static output gain one PASS line (6 -> 7 passed), nothing else. Scope and known limits (dynamic SQL, table names assembled at run time, Unicode-escaped identifiers, views / aliases, writes inside database functions, psql inline COPY data) are in the guard's header comment and FU-LEDGER-WRITERS-LEXER-LIMITS. Merge needs the owner label (approvals 16).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "ad7bbc7d0a9290b396a59fa1a77b3b68c1e295dd",
+      "tree": "461ca2124c38bf9025a5c6376f35687d07a19fe2",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-20T18:55:17Z",
+      "finished_at": "2026-11-20T18:55:20Z",
+      "red_tests": [
+        "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#7] 文件和目录清单条目放行，支持注释、空行与 Tab 后的理由",
+        "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#8] 拒绝包含通配符的放行条目",
+        "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#9] 同模块、新迁移、应用单测及放行目录的同名前缀目录仍受检查",
+        "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#10] 放行路径已不存在时检查失败",
+        "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#11] 放行路径仍在但无命中时只发一条 notice",
+        "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#12] guard static 执行 ledger-writers 并报告未放行的写入",
+        "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#13] 随仓放行清单满足写入点、历史迁移、测试路径和理由的性质",
+        "test/spec/ci/ledger-single-writer/allowlist.test.ts > [CT-06zzzzzx#14] 在真实仓库根目录执行守卫应通过",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#1] 拦截 Kysely insertInto 的表名参数",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#1] 拦截 Kysely updateTable 的表名参数",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#1] 拦截 Kysely deleteFrom 的表名参数",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#1] 拦截 Kysely mergeInto 的表名参数",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#1] 拦截 Kysely replaceInto 的表名参数",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#2] 拦截 SQL 文件里的 INSERT",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#2] 拦截 SQL 文件里的 UPDATE",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#2] 拦截 SQL 文件里的 DELETE",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#2] 拦截 SQL 文件里的 MERGE",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#2] 拦截 SQL 文件里的 TRUNCATE",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#2] 拦截 SQL 文件里的 COPY",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#3] TRUNCATE TABLE 的逗号列表会报出排在其他表后面的每张账务表",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#4] 拦截 TS 字符串、普通模板和 sql 标签模板里的 SQL",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#5] 触发器、授权、DDL、读、读加锁和注释均不算写入",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#6] 忽略生成物、依赖、未列入扫描清单的文件与其他扩展名",
+        "test/spec/ci/ledger-single-writer/writes.test.ts > [CT-06zzzzzx#15] 扫描 packages、迁移目录之外的 SQL 和 tools"
+      ],
+      "expected": [
+        "test/spec/ci/ledger-single-writer/allowlist.test.ts",
+        "test/spec/ci/ledger-single-writer/writes.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "e3da7c45ba03703792e05dcb0bdaa9ceff161a07537d5d1ea4798ea9ec7e6bab"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 4,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27). r1 fail: 2 S1 (SQL comments inside .ts strings gave false positives and hid writes; TRUNCATE split across lines missed) + 1 S2 (untracked files scanned) - fixed in r2. r2 fail: 1 S1 (dollar quotes threw comment handling off) + 1 S2 (\"\" escapes cut the TRUNCATE list) - fixed in r3; brief gained the D10-2278 scope section. r3 fail: 1 S1 (COMMENT ON ... IS '...UPDATE app.account_balances...' refused, a false positive in a usual form) + 1 S2 (unit-test fixture reused the outer dollar delimiter) - fixed in r4, the one extra implementation run and incremental review granted by approvals 123 (D10-2282; not counted by bump-attempt). r4 (incremental): pass, 1 S2 (psql inline COPY data with an apostrophe) recorded as a known limit per D10-2282 (couli-runs/CT-06zzzzzx/review-money-codex-r1.json ... -r4.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (gpt-6.2-sol, ledger tester codex, attempts 1 and 2), so the spec-test review went to a fresh independent Claude (approvals 19; D10-2199's full Codex spec-test round does not apply when Codex wrote the tests). r1 pass with 2 S2 (positive fixtures only under three roots; table matched against the whole message) and an out-of-scope S2 (MERGE / TRUNCATE / COPY in .ts) - attempt 2 added all three together with D10-2270 (#13 pins four properties of the allowlist, not its full text). r2 (incremental) pass. A prettier-only test(spec) commit on top (one array wrapped, trailing comma) was accepted by the orchestrator (D10-2272)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "008455f8cc57f1b95c4b30342cd0773a60499643",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
