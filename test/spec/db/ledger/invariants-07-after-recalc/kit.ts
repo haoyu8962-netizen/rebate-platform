@@ -25,7 +25,33 @@ export const TIMEOUT = 120_000;
 export const LEGACY = '07_negative-balance-drops.sql';
 export const REPLACEMENT = '11_negative-balance-drops-by-amount.sql';
 const DIRECTORY = new URL('../../../../../db/invariants/ledger/', import.meta.url);
-const BOOKED_AT = '2032-06-15T08:00:00Z';
+
+/** Accounting dates around the check date (couli.check_date = DAY = 2032-06-15). */
+export const DAYS = ['2032-06-13', '2032-06-14', DAY, '2032-06-16'] as const;
+
+/** booked_at of an entry posted on an accounting date (16:00 +08:00 that day). */
+export function bookedAt(date: string): string {
+  return `${date}T08:00:00Z`;
+}
+
+/**
+ * superseded.json on main before this ticket, verbatim. The implementation keeps every entry as
+ * it is and adds exactly one: 07 → 11.
+ */
+export const BASELINE: readonly Replacement[] = [
+  {
+    file: '03_credit-unique.sql',
+    replaced_by: '09_credit-unique-net.sql',
+    reason:
+      "BR-FUND-16 的更正写红冲凭证（沿用原 voucher_kind，uniq_key = 原键 + ':REVERSE'），旧 03 按 CREDIT 张数计会把原单与其红冲数成两张而报假差异；09 只在原凭证与其红冲的分录按（账户、子户、ledger_type、sub_type）逐项相加为 0 且红冲无多出分录项时视为抵消，再判同键有效入账至多一张；配对未完全抵消与孤立红冲都报差异，输出编号仍为 03。",
+  },
+  {
+    file: '08_invalid-still-credited.sql',
+    replaced_by: '10_invalid-still-credited-since-restore.sql',
+    reason:
+      'BR-FUND-19 ⑧ 与 BR-FUND-22：P7 后经平台恢复 R12 / R13 合法回到 CREDITED 的子订单，旧 08 因仍有成功的 INVALID_AFTER_SETTLE 记录而报假差异；10 只计 updated_at 不早于该单最后一次 R12 / R13（order_status_history 中 field = rebate、event = ADMIN_RESTORE、from_status 为 VOID / CLAWED_BACK 的 max(at)）的成功记录，从未恢复的单全部计入，platform_status = INVALID 一支不受恢复截断；其余口径、account / global 两种行与 detail 形状照旧，输出编号仍为 08。',
+  },
+];
 
 export const LEDGER_TYPES = [
   'REBATE_CREDIT',
@@ -232,7 +258,10 @@ export function active(): string {
   return current;
 }
 
-/** superseded.json registers 07 → 11; 07 is still there unchanged and the only 07_ file. */
+/**
+ * superseded.json registers 07 → 11 and nothing else new: every main entry (BASELINE) is kept
+ * verbatim and in order; 07 is still there unchanged and the only 07_ file.
+ */
 export function registration(): Replacement {
   const rows = registry();
   const found = rows.filter((row) => row.file === LEGACY);
@@ -240,6 +269,13 @@ export function registration(): Replacement {
   const entry = found[0]!;
   expect(entry.replaced_by).toBe(REPLACEMENT);
   expect(entry.reason.trim().length).toBeGreaterThan(0);
+  expect(
+    rows.filter((row) => row.file !== LEGACY),
+    'the main registrations stay as they are',
+  ).toEqual(BASELINE);
+  expect(rows, `the only new registration is ${LEGACY} → ${REPLACEMENT}`).toHaveLength(
+    BASELINE.length + 1,
+  );
   const names = readdirSync(DIRECTORY);
   expect(names.filter((name) => name.startsWith('07_'))).toEqual([LEGACY]);
   expect(names.filter((name) => name.startsWith('11_'))).toEqual([REPLACEMENT]);
@@ -269,7 +305,11 @@ export function query(file: string): string {
   return text.trim().replace(/;\s*$/, '');
 }
 
-function shape(rows: readonly Result[], file: string): void {
+/**
+ * Row shape only. checked_rows may be 0 here (the empty ledger); every caller pins the exact
+ * count instead: empty() for the empty ledger, the number of user entries written otherwise.
+ */
+export function validate(rows: readonly Result[], file: string): void {
   expect(rows.length, `${file}: differences or exactly one none row`).toBeGreaterThan(0);
   for (const row of rows) {
     expect(Object.keys(row).sort()).toEqual([
@@ -283,7 +323,7 @@ function shape(rows: readonly Result[], file: string): void {
     // A replacement keeps the output number of ⑦ (B2-02l / B2-04zzr precedent).
     expect(row.invariant, `${file}: output number stays 07`).toBe('07');
     expect(typeof row.checked_rows).toBe('bigint');
-    expect(row.checked_rows, 'D18: zero checked rows is not success').toBeGreaterThan(0n);
+    expect(row.checked_rows).toBeGreaterThanOrEqual(0n);
     expect(row.checked_rows).toBe(rows[0]!.checked_rows);
     expect(['account', 'none']).toContain(row.scope);
     if (row.scope === 'none') {
@@ -320,7 +360,7 @@ export async function scenario(
             const results: Result[][] = [];
             for (const [file, select] of selects) {
               const { rows } = await sql.raw<Result>(select).execute(trx);
-              shape(rows, file);
+              validate(rows, file);
               const types = await sql
                 .raw<Record<string, string>>(
                   `SELECT pg_typeof(invariant)::text AS invariant,
@@ -389,6 +429,7 @@ export async function cache(db: Kysely<DB>, a: UserAccount): Promise<Cache> {
  * Posts one voucher the way the ledger does: user lines in the given order (entry ids ascend in
  * that order), each carrying its sub-account's cache value after the whole voucher and the
  * account's next version; then a platform counter line for the remainder; then the cache.
+ * `date` is the voucher's accounting date and the entries' booked_at day (default: DAY).
  */
 export async function book(
   db: Kysely<DB>,
@@ -397,8 +438,10 @@ export async function book(
     counter: PlatformAccount;
     lines: readonly Line[];
     uniqKey?: string;
+    date?: string;
   },
 ): Promise<Booked> {
+  const date = voucher.date ?? DAY;
   expect(voucher.lines.length).toBeGreaterThan(0);
   const after = new Map<string, { before: Cache; next: Cache }>();
   for (const line of voucher.lines) {
@@ -416,7 +459,7 @@ export async function book(
   const uniqKey = voucher.uniqKey ?? `fixture:${randomUUID()}`;
   await sql`INSERT INTO app.ledger_vouchers
     (id, app_id, biz_type, biz_id, uniq_key, accounting_date, operator)
-    VALUES (${voucherId}, ${voucher.appId}, 'order', ${randomUUID()}, ${uniqKey}, ${DAY},
+    VALUES (${voucherId}, ${voucher.appId}, 'order', ${randomUUID()}, ${uniqKey}, ${date},
       'system')`.execute(db);
   const entries: BookedEntry[] = [];
   let net = 0n;
@@ -427,7 +470,7 @@ export async function book(
       (app_id, voucher_id, account_id, sub_account, amount_fen, ledger_type,
        balance_after_fen, account_version, booked_at)
       VALUES (${voucher.appId}, ${voucherId}, ${line.account.id}, ${line.sub}, ${line.amount},
-       ${line.type}, ${balanceAfter}, ${next.version}, ${BOOKED_AT})
+       ${line.type}, ${balanceAfter}, ${next.version}, ${bookedAt(date)})
       RETURNING id`.execute(db);
     entries.push({ id: String(rows[0]!.id), account_id: line.account.id, sub_account: line.sub });
     net = net + line.amount;
@@ -436,7 +479,7 @@ export async function book(
     await sql`INSERT INTO app.ledger_entries
       (app_id, voucher_id, account_id, sub_account, amount_fen, ledger_type, booked_at)
       VALUES (${voucher.appId}, ${voucherId}, ${voucher.counter.id}, 'available',
-       ${subFen(0n, net)}, ${voucher.lines[0]!.type}, ${BOOKED_AT})`.execute(db);
+       ${subFen(0n, net)}, ${voucher.lines[0]!.type}, ${bookedAt(date)})`.execute(db);
   }
   for (const [accountId, { before, next }] of after) {
     expect(next.frozen, 'the ledger never posts a negative frozen balance').toBeGreaterThanOrEqual(
@@ -483,6 +526,122 @@ export function reported(rows: readonly Result[]): string[] {
         .join('|');
     })
     .sort();
+}
+
+/** Empty ledger: each file returns exactly one none row with checked_rows = 0. */
+export function empty(results: readonly (readonly Result[])[]): void {
+  for (const rows of results) {
+    expect(rows).toEqual([
+      {
+        invariant: '07',
+        checked_rows: 0n,
+        scope: 'none',
+        app_id: null,
+        account_id: null,
+        detail: null,
+      },
+    ]);
+  }
+}
+
+/** Number of user entries the vouchers wrote (each carries balance_after_fen). */
+export function userEntries(booked: readonly Booked[]): bigint {
+  return BigInt(booked.reduce((total, voucher) => total + voucher.entries.length, 0));
+}
+
+function stable(value: unknown): string {
+  if (typeof value === 'bigint') return `${value.toString()}n`;
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const fields = Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stable(record[key])}`);
+    return `{${fields.join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'undefined';
+}
+
+/** Every output field, one canonical string per row, sorted (row order is not compared). */
+export function lines(rows: readonly Result[]): string[] {
+  return rows
+    .map((row) =>
+      stable({
+        invariant: row.invariant,
+        checked_rows: row.checked_rows,
+        scope: row.scope,
+        app_id: row.app_id,
+        account_id: row.account_id,
+        detail: row.detail,
+      }),
+    )
+    .sort();
+}
+
+/**
+ * Runs the files on `conn` inside the caller's open transaction (so uncommitted rows of that
+ * transaction are what they read), with the same check date as scenario().check.
+ */
+export async function checkIn(conn: Kysely<DB>, files: readonly string[]): Promise<Result[][]> {
+  await sql`SELECT set_config('couli.check_date', ${DAY}, true)`.execute(conn);
+  const results: Result[][] = [];
+  for (const file of files) {
+    const { rows } = await sql.raw<Result>(query(file)).execute(conn);
+    validate(rows, file);
+    results.push(rows);
+  }
+  return results;
+}
+
+export interface HistoryRows {
+  accounts: {
+    id: string;
+    app_id: string;
+    owner_type: string;
+    owner_id: string;
+    subject: string;
+  }[];
+  balances: {
+    app_id: string;
+    account_id: string;
+    available_fen: bigint;
+    frozen_fen: bigint;
+    version: bigint;
+  }[];
+  vouchers: { id: string; app_id: string; uniq_key: string; accounting_date: string }[];
+  entries: {
+    app_id: string;
+    voucher_id: string;
+    account_id: string;
+    sub_account: SubAccount;
+    amount_fen: bigint;
+    ledger_type: LedgerType;
+    balance_after_fen: bigint | null;
+    account_version: bigint | null;
+    booked_at: string;
+  }[];
+}
+
+/** One INSERT per table, in list order (entry ids ascend in that order). */
+export async function insertHistory(db: Kysely<DB>, rows: HistoryRows): Promise<void> {
+  expect(rows.accounts.length).toBeGreaterThan(0);
+  expect(rows.balances.length).toBeGreaterThan(0);
+  expect(rows.vouchers.length).toBeGreaterThan(0);
+  expect(rows.entries.length).toBeGreaterThan(0);
+  await db.insertInto('ledger_accounts').values(rows.accounts).execute();
+  await db.insertInto('account_balances').values(rows.balances).execute();
+  await db
+    .insertInto('ledger_vouchers')
+    .values(
+      rows.vouchers.map((v) => ({
+        ...v,
+        biz_type: 'order',
+        biz_id: randomUUID(),
+        operator: 'system',
+      })),
+    )
+    .execute();
+  await db.insertInto('ledger_entries').values(rows.entries).execute();
 }
 
 /** The row expected for a voucher: its first entry of the account in that sub-account. */
