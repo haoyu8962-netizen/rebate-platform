@@ -15,7 +15,10 @@
 //   4. one READ COMMITTED transaction: the account by phone blind index (status <> deleted;
 //      cooling-off counts as existing), then
 //      - an existing account: its users row locked FOR NO KEY UPDATE and its status reread under
-//        the lock (users first, as the deletion expiry); deleting (deletion processing, B1-15f;
+//        the lock (users first, as the deletion expiry); the number confirmed under the lock as
+//        still the account's (B1-20b, Codex money r1 S0 #3: a phone change that committed while
+//        the login waited moved it away → the owner is judged again on the committed state: another
+//        account, or none and the login registers; never a session for the old owner); deleting (deletion processing, B1-15f;
 //        BR-ID-27) → 10007 with data.stage=processing in either scope: nothing created, issued
 //        or recorded;
 //      - restricted, no account → 10405 no_account, nothing written, no token; the minimum in the
@@ -211,20 +214,39 @@ function refusal(blocked: {
     : { code: 44001, data: { risk_msg_code: blocked.data.risk_msg_code } };
 }
 
+/** Times the owner of a number is looked up again after it changed under the lock. */
+const OWNER_LOOKUPS = 3;
+
 /**
  * BR-ID-27: an account whose deletion is processing logs in by no method (10007,
  * stage=processing), in either scope; nothing is created, issued or recorded. The status is read
  * under the users row lock (lockAccountStatus), held until the login commits, so a concurrent
  * deletion expiry (users lock → deleting) either sees this login committed first or is seen here.
+ *
+ * The account holding the login number, its users row locked (FOR NO KEY UPDATE) and the number
+ * confirmed under that lock (B1-20b, Codex money r1 S0 #3; BR-ID-06: once a change commits, the
+ * old number is no longer the account's). The lookup runs unlocked; a phone change of that account
+ * committing while this login waited for the row moves the number away, so the locked row must
+ * still hold phoneHmac (and not be deleted), else the owner is looked up again on the committed
+ * state (READ COMMITTED: a new statement sees it) — another account or none (then the login
+ * registers). Deleting under the lock → 10007 (BR-ID-27). undefined: no account
+ * holds the number. A number that keeps moving away (OWNER_LOOKUPS times) → thrown, rolled back.
  */
-async function assertNotDeleting(
+async function lockedOwner(
   trx: Transaction<DB>,
   appId: string,
-  userId: string,
-): Promise<void> {
-  const locked = await lockAccountStatus(trx, appId, userId);
-  if (locked === undefined) throw new Error('identity: the login account has no user row');
-  if (locked.status === 'deleting') throw new LoginAbort(DELETING);
+  phoneHmac: string,
+): Promise<LoginAccount | undefined> {
+  for (let lookup = 0; lookup < OWNER_LOOKUPS; lookup += 1) {
+    const found = await findAccountByPhone(trx, appId, phoneHmac);
+    if (found === undefined) return undefined;
+    const locked = await lockAccountStatus(trx, appId, found.id);
+    if (locked === undefined) throw new Error('identity: the login account has no user row');
+    if (locked.phone_hmac !== phoneHmac || locked.status === 'deleted') continue;
+    if (locked.status === 'deleting') throw new LoginAbort(DELETING);
+    return found;
+  }
+  throw new Error('identity: the login number kept changing owner');
 }
 
 interface Signed {
@@ -248,10 +270,9 @@ export function createSmsLoginService(options: SmsLoginOptions): SmsLoginService
     config: SmsConfigReader | undefined,
   ): Promise<Signed> {
     const appId = command.app_id;
-    const existing = await findAccountByPhone(trx, appId, phoneHmac);
+    const existing = await lockedOwner(trx, appId, phoneHmac);
     const ignored = inviteCode === undefined ? {} : { invite_bind: IGNORED_EXISTING_USER };
     if (existing !== undefined) {
-      await assertNotDeleting(trx, appId, existing.id);
       return {
         user_id: existing.id,
         is_new_user: false,
@@ -294,11 +315,10 @@ export function createSmsLoginService(options: SmsLoginOptions): SmsLoginService
     });
     if ('outcome' in registered) {
       // BR-ID-04 细则「并发的首次登录」: the earlier request created the account; log it in.
-      const winner = await findAccountByPhone(trx, appId, phoneHmac);
+      const winner = await lockedOwner(trx, appId, phoneHmac);
       if (winner === undefined) {
         throw new Error('identity: phone_taken without a visible account');
       }
-      await assertNotDeleting(trx, appId, winner.id);
       logger.info({ app_id: appId }, 'sms_login_concurrent_first_login');
       return {
         user_id: winner.id,

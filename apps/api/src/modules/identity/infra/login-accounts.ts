@@ -37,16 +37,18 @@ export async function findAccountByPhone(
  * lock; the deletion expiry locks users before deletion_requests), and its status read under
  * that lock. Once the expiry committed deleting, the login sees it here and writes nothing; while
  * the login holds the lock the expiry waits, so a session is never issued to a deleting account.
+ * B1-20b (Codex money r1 S0 #3): phone_hmac is read under the same lock, so a login found by
+ * number can confirm the number is still this account's once a concurrent change committed.
  * undefined: no row of this app with that id.
  */
 export async function lockAccountStatus(
   trx: Transaction<DB>,
   appId: string,
   userId: string,
-): Promise<{ readonly status: string } | undefined> {
+): Promise<{ readonly status: string; readonly phone_hmac: string | null } | undefined> {
   return trx
     .selectFrom('users')
-    .select('status')
+    .select(['status', 'phone_hmac'])
     .where('app_id', '=', appId)
     .where('id', '=', userId)
     .forNoKeyUpdate()

@@ -12,7 +12,11 @@
 //
 // A change (B1-20b, D10-2189 / D10-2192; the account has a phone_hmac). Stage ⑫ (withStepUp in the
 // controller) has already judged and reserved the phone_change step_up_token; it is consumed only
-// for code 0. Under the users row lock taken first: the switch account.phone_change_enabled
+// for code 0. Under the users row lock taken first (Codex money r1 S0 #1 / #2): the request's
+// session still live (else 10002) → the token ⑫ passed in this request (command.step_up) is a
+// phone_change token bound to the locked current phone_hmac (phone-change-binding.ts; none, another
+// action or another number → 10003); both judged on the locked row, before any code is consumed or
+// anything written → the switch account.phone_change_enabled
 // (phone-change-switch.ts; only the boolean false turns it off) → 30414 → normalize_phone → 20001
 // phone_invalid → the normalised number equals the current one → 20001 data.fields=[phone] (no code
 // consumed) → verifyAndConsume(purpose=bind) of the new number → 20002 / 20003 → the blocklist →
@@ -65,7 +69,9 @@ import {
   type MergeBarrierPort,
 } from './merge-conditions.ts';
 import { instantPlus } from './config-seconds.ts';
+import { phoneChangeBindingMatches } from './phone-change-binding.ts';
 import { PHONE_CHANGE_DISABLED, type PhoneChangeSwitch } from './phone-change-switch.ts';
+import type { JudgedStepUp } from './step-up-verify.ts';
 import type { SmsCodeService } from './sms-codes.ts';
 
 /** The verified request: uid, app and device come from the token and the signed device only. */
@@ -75,6 +81,12 @@ export interface BindPhoneCommand {
   readonly device_id: string;
   /** The access token's session: a change keeps it and revokes the user's other sessions. */
   readonly sid?: string;
+  /**
+   * What stage ⑫ passed in this request (withStepUp's StepUpContext.judged(); null or absent: no
+   * token was judged). A change requires a phone_change token bound to the number it replaces,
+   * judged under the users row lock (B1-20b, Codex money r1 S0 #1 / #2).
+   */
+  readonly step_up?: JudgedStepUp | null;
   readonly body: { readonly phone: string; readonly code: string };
 }
 
@@ -93,6 +105,7 @@ export type BindPhoneResult =
       readonly code: 30411;
       readonly data?: { readonly reason: 'mergeable'; readonly merge_ticket: string };
     }
+  | { readonly code: 10002 }
   | { readonly code: 10003 }
   | { readonly code: 50001 };
 
@@ -236,6 +249,29 @@ export function createBindPhoneService(options: BindPhoneOptions): BindPhoneServ
     const account = { app_id: command.app_id, user_id: command.user_id };
     const sid = command.sid;
     if (sid === undefined || sid.length === 0) return { code: 10003 };
+    // Codex money r1 S0 #2: the request's session is still live under the lock (a change committed
+    // while this request waited revoked it) → 10002 as stage ② answers a revoked session.
+    const session = await trx
+      .selectFrom('sessions')
+      .select('revoked_at')
+      .where('app_id', '=', account.app_id)
+      .where('sid', '=', sid)
+      .where('user_id', '=', account.user_id)
+      .executeTakeFirst();
+    if (session === undefined || session.revoked_at !== null) return { code: 10002 };
+    // Codex money r1 S0 #1 / #2: the change is judged on the locked row, not on stage ⑫'s unlocked
+    // read. This request must have passed a phone_change token (a first binding that lost the race
+    // to another first binding passed none), issued by SMS for the number being replaced (a token
+    // for a number already changed away does not prove this one) → else 10003.
+    const judged = command.step_up;
+    if (
+      judged === undefined ||
+      judged === null ||
+      judged.action !== 'phone_change' ||
+      !phoneChangeBindingMatches(judged, current.phone_hmac)
+    ) {
+      return { code: 10003 };
+    }
     if (!(await ports.switch.enabled(account.app_id, transaction))) return PHONE_CHANGE_DISABLED;
     const normalized = normalize_phone(command.body.phone);
     if (normalized.code !== 0) {

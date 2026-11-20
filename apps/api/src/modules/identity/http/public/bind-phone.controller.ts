@@ -31,6 +31,7 @@ interface RawReply {
 }
 
 const ERRORS = {
+  10002: { status: 401, msg: 'access_token 过期' },
   10003: { status: 403, msg: '为保障资金安全，请先完成短信验证' },
   20001: { status: 400, msg: '请输入 11 位中国大陆手机号' },
   20002: { status: 400, msg: '验证码错误，请重新输入' },
@@ -88,7 +89,9 @@ export class BindPhoneController {
       // Stage ⑫ judges the phone_change step_up_token inside the claim only for an account that
       // already has a phone (step-up-verify.ts); a first binding passes without one. The token is
       // consumed only for code 0 (B1-20b, BR-ID-08).
-      const result = await withStepUp(request, () =>
+      // B1-20b (Codex money r1 S0 #1): what ⑫ passed is handed to the service explicitly, which
+      // judges a change on its locked users row.
+      const result = await withStepUp(request, (stepUp) =>
         idempotency.executeInTransaction(
           {
             appId: principal.app_id,
@@ -108,6 +111,7 @@ export class BindPhoneController {
                 user_id: principal.uid,
                 device_id: device.deviceId,
                 sid: principal.sid,
+                step_up: stepUp.judged(),
                 body: request.body,
               }),
               request.id,

@@ -9,6 +9,7 @@ import {
 } from '../../platform/index.ts';
 import type { TokenKeyProvider } from './access-tokens.ts';
 import type { OauthAttemptService } from './oauth-attempts.ts';
+import { phoneChangeBinding, phoneChangeBindingMatches } from './phone-change-binding.ts';
 import type { SmsCodeService } from './sms-codes.ts';
 import { createStepUpService, stepUpDigest, type ThirdPartyIdentityPort } from './step-up.ts';
 
@@ -347,4 +348,69 @@ it('[AC-B1-02zzzb#4] stepUpDigest: the server normalises the account and signs o
   expect(stepUpDigest(blind, 'withdraw', { ...WITHDRAW_SUMMARY, amount_fen: 1.5 })).toMatchObject({
     code: 20001,
   });
+});
+
+it('[B1-20b][Codex money r1 S2 #4] 未绑号账号用第三方凭证申请 phone_change：尝试核对通过后回 20001 [action]，不换取身份、不签发令牌', async () => {
+  const exchange = vi.fn<ThirdPartyIdentityPort['exchange']>(async () => ({ union_id: 'union-1' }));
+  const context = setup({ bound: false, union: 'union-1', port: { exchange } });
+  const result = await context.service.verify({
+    principal: PRINCIPAL,
+    verifiedDevice: DEVICE,
+    body: { ...WECHAT, action: 'phone_change' },
+  });
+  expect(result).toEqual({ code: 20001, data: { fields: ['action'] } });
+  expect(result).not.toHaveProperty('data.step_up_token');
+  expect(context.consume).toHaveBeenCalledWith(expect.objectContaining({ action: 'phone_change' }));
+  expect(exchange).not.toHaveBeenCalled();
+  // An attempt of another action is still a plain mismatch (20004), judged first.
+  const mismatch = setup({ bound: false, consume: { code: 20004 }, port: { exchange } });
+  expect(
+    await mismatch.service.verify({
+      principal: PRINCIPAL,
+      verifiedDevice: DEVICE,
+      body: { ...WECHAT, action: 'phone_change' },
+    }),
+  ).toEqual({ code: 20004 });
+  // account_deletion by the third-party way is issued as before.
+  const deletion = setup({ bound: false, union: 'union-1', port: { exchange } });
+  const issued = await deletion.service.verify({
+    principal: PRINCIPAL,
+    verifiedDevice: DEVICE,
+    body: WECHAT,
+  });
+  expect(issued.code).toBe(0);
+});
+
+it('[B1-20b][Codex money r1 S0 #2] 短信签发的 phone_change 令牌带旧号绑定声明（jti 与当前 phone_hmac 的哈希，非摘要、不含号码），其他 action 不带', async () => {
+  const context = setup({ bound: true });
+  const result = await context.service.verify({
+    principal: PRINCIPAL,
+    verifiedDevice: DEVICE,
+    body: { action: 'phone_change', code: '123456' },
+  });
+  if (result.code !== 0) throw new Error(`expected a token, got ${result.code}`);
+  const claims = decodeJwt(result.data.step_up_token);
+  expect(claims.phone_binding).toBe(phoneChangeBinding(String(claims.jti), 'hmac'));
+  expect(claims.phone_binding).toMatch(/^[0-9a-f]{64}$/);
+  expect(claims).not.toHaveProperty('summary');
+  expect(JSON.stringify(claims)).not.toContain(PHONE);
+  expect(
+    phoneChangeBindingMatches(
+      { jti: String(claims.jti), phone_binding: String(claims.phone_binding) },
+      'hmac',
+    ),
+  ).toBe(true);
+  expect(
+    phoneChangeBindingMatches(
+      { jti: String(claims.jti), phone_binding: String(claims.phone_binding) },
+      'another-hmac',
+    ),
+  ).toBe(false);
+  const deletion = await setup({ bound: true }).service.verify({
+    principal: PRINCIPAL,
+    verifiedDevice: DEVICE,
+    body: { action: 'account_deletion', code: '123456' },
+  });
+  if (deletion.code !== 0) throw new Error(`expected a token, got ${deletion.code}`);
+  expect(decodeJwt(deletion.data.step_up_token)).not.toHaveProperty('phone_binding');
 });
