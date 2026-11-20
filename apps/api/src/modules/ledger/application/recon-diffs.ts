@@ -123,13 +123,6 @@ async function findExisting(
   return undefined;
 }
 
-/**
- * B2-02zc: a conflicting unresolved ticket can be concluded by a concurrent transaction between the
- * INSERT that met it and the read-back (READ COMMITTED). Then nothing is found under any key and the
- * INSERT is simply tried again (it now goes through, or meets the row that replaced it).
- */
-const REGISTER_ATTEMPTS = 3;
-
 /** B2-15n: what one registration did — the stored row, and whether this call inserted it. */
 export interface ReconDiffRegistration {
   readonly row: ReconDiff;
@@ -171,20 +164,6 @@ export async function registerReconDiffOnce(
 ): Promise<ReconDiffRegistration> {
   checkInput(input);
   const now = dependencies.clock.now();
-  for (let attempt = 1; ; attempt += 1) {
-    const registration = await tryRegister(trx, input, now);
-    if (registration !== undefined) return registration;
-    if (attempt >= REGISTER_ATTEMPTS) {
-      throw new Error('ledger: recon diff conflicted but no existing row was found');
-    }
-  }
-}
-
-async function tryRegister(
-  trx: Transaction<DB>,
-  input: RegisterReconDiffInput,
-  now: Date,
-): Promise<ReconDiffRegistration | undefined> {
   const inserted = await insertReconDiffIfAbsent(trx, {
     id: newUuidV7(now),
     app_id: input.appId,
@@ -205,8 +184,14 @@ async function tryRegister(
     updated_at: now,
   });
   if (inserted !== undefined) return { row: inserted, inserted: true };
+  // B2-02zc: a conflicting unresolved ticket concluded by a concurrent transaction between this
+  // INSERT and the read-back is found under no key; the error rolls the caller back and the
+  // at-least-once job registers again on its retry (the INSERT then goes through).
   const existing = await findExisting(trx, input);
-  return existing === undefined ? undefined : { row: existing, inserted: false };
+  if (existing === undefined) {
+    throw new Error('ledger: recon diff conflicted but no existing row was found');
+  }
+  return { row: existing, inserted: false };
 }
 
 /** Uses the supplied connection/snapshot and never locks or writes. */
