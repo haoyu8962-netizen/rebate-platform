@@ -124,6 +124,11 @@ import {
   AdminWithdrawalsController,
 } from './http/admin/withdrawals.controller.ts';
 import {
+  ADMIN_PAYOUT_BATCH_READS,
+  AdminPayoutBatchesReadController,
+} from './http/admin/payout-batches-read.controller.ts';
+import type { AdminPayoutBatchesReadDeps } from './application/admin-payout-batches-read.ts';
+import {
   WITHDRAW_APPLY,
   WITHDRAW_RULES,
   WITHDRAW_READS,
@@ -935,6 +940,7 @@ export interface PayoutAdminOptions extends AdminPayoutWatermarkPorts {
  * process) and the overview (payout.execute or fund.view, read only), the same rule.
  * B2-09m: W8, the offline payment entry (payout.manual_entry, step-up totp), the same rule.
  * B2-09s: the unknown result disposal (payout.execute; the writes with step-up totp), the same rule.
+ * B2-07g: the batch list and detail (payout.execute or fund.view, read only, no audit), the same rule.
  */
 export class PayoutAdminModule {
   static forAdmin(options: PayoutAdminOptions): DynamicModule {
@@ -947,6 +953,7 @@ export class PayoutAdminModule {
         AdminPayoutBatchController,
         AdminManualPaidController,
         AdminUnknownPayoutsController,
+        AdminPayoutBatchesReadController,
       ],
       providers: [
         {
@@ -1176,6 +1183,23 @@ export class PayoutAdminModule {
                   config: options.config(clock),
                   logger: logger.child({ module: 'payout' }),
                   adminNames: options.adminNames,
+                },
+        },
+        {
+          provide: ADMIN_PAYOUT_BATCH_READS,
+          inject: [CLOCK, ROOT_LOGGER, { token: DB_TOKEN, optional: true }],
+          useFactory: (
+            clock: Clock,
+            logger: RootLogger,
+            db?: Kysely<DB>,
+          ): AdminPayoutBatchesReadDeps | null =>
+            db === undefined
+              ? null
+              : {
+                  db,
+                  clock,
+                  config: options.config(clock),
+                  logger: logger.child({ module: 'payout' }),
                 },
         },
       ],

@@ -9,8 +9,6 @@ export const plannedOperations: ReadonlySet<string> = new Set([
   "adminListInvitees",
   "adminSearch",
   "bindOauthIdentity",
-  "getAdminPayoutBatch",
-  "listAdminPayoutBatches",
   "loginByHuawei",
   "recalcBalanceAdminReconDiff",
 ]);
