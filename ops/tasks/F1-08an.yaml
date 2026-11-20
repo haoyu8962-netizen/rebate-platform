@@ -8,6 +8,7 @@ type: impl
 # 写测与评审：Codex 额度用尽（D10-2003），规则测试与首轮评审由无上下文的独立 Claude（claude-run.sh），证据如实记 claude-independent。写测时发现冻结用例（入口清单、只读断言、TODO 对应的「不出现」断言）受影响，先报编排再补 modify_existing（D10-1712 / D10-1899）。写操作一律照 F1-08ce 结果未知处理（D10-1731）。
 # 2026-11-20 补丁 1（fe，编排 D10-2167，同 D10-1733 / D10-1899 / D10-2100）：写测第 1 轮报冻结冲突——本单【一键组批】持 payout.execute（超管）时不勾选也可用，F1-08a [AC-F1-08a-READONLY#1] / [#3]、[AC-F1-08a-BROWSER#1] 与 F1-08ai [AC-F1-08ai-ACCESS#1] 的全量权限 / 超管写入口须为空。改法：入口清单改为「恰为当时已落地的入口」（toEqual 严格相等，持 payout.execute 或超管时恰多【一键组批】、不点它；【批量自动打款】未勾选仍禁；无 payout.execute 的角色一字不变并保留看不到【一键组批】的反向用例）；admin-withdrawals/helpers.ts 的 assertReadOnly、admin-withdrawal-batch-approve/helpers.ts 的 assertNoOtherActions、pages.browser.test.ts 顶层 WRITE 只做纯插入（加可选的「已落地入口」参数：不传参时行为逐字不变、禁词表不删；传入的入口同时断言确实在），按文件级 scope: support 登记。每份冻结测试文件各补 1 条本单新块在主干上红（D10-1812）。页签计数若改变 server.reads() 次数，按 D10-2167 ③ 改成新的确切次数、逐条另登。金额、请求体、揭示断言不动。
 # 2026-11-20 补丁 2（fe，编排 D10-2172 / D10-2173，同 D10-1899）：① 实现撞 F1-08al [AC-F1-08al-ACCESS#1]（持 fund.view + payout.execute + export + config.business 时 APPROVED 行不可勾），而本单【批量自动打款】要求 payout.execute 先勾选（BR-WDR-12）：manual-paid/selection.test.ts 列进 test_paths，块级 modify_existing——第一组 ['fund.view'] 不动；第二组可勾、未勾选时三个批量入口都没有、勾选后【批量手动打款】【批量通过】恰为空、可用批量入口恰为【批量自动打款】（不点）、无写请求；另补一组 ['fund.view','export','config.business'] 走原断言保住「不可勾」反例；GRANTS 半段不动。同文件末尾补 1 条本单新块在主干上红（D10-1812）。② 删去补丁 1 的 [AC-F1-08a-READONLY#3] 条：写测第 2 轮核实它的断言都在详情页上，块未改（D10-2172）。red_exempt 待写测第 3 轮后的正式先红结果另登。
+# 2026-11-20 补丁 3（fe，编排 D10-2179，approvals 第 115 条）：实现 r1 的页签计数（进页时 5 个页签各一次 page_size=1 读，D10-2017）使 F1-14c [AC-F1-14c-WITHDRAWALS#1]–[#7] 与 F1-08ba [AC-F1-08ba-TABS#1] 的「列表读」1 → 6。改法：列表读只取 page_size 不为 '1' 的读、原期望一字不动；每处旁边配计数读断言（排序后 toEqual 恰 5 条，各带页签快捷筛选与 page '1'、page_size '1'，不许 ≥ / toContain / 只数个数）；admin-route-status-param/withdrawals.test.ts 加并列顶层函数、原 queries() 不改（scope: support）；两份文件各补 1 条新红块（D10-1812）。red_exempt 待写测第 4 次后的正式先红另登。
 refs: [BR-WDR-12, BR-WDR-11, BR-ID-34]
 refs_hash:
   BR-WDR-12: 37adcd14e97f
@@ -25,6 +26,8 @@ test_paths:
   - 'test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts'
   - 'test/spec/frontend/admin-withdrawal-batch-approve/helpers.ts'
   - 'test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts'
+  - 'test/spec/frontend/admin-route-status-param/withdrawals.test.ts'
+  - 'test/spec/frontend/admin-payouts-readonly/tabs.test.ts'
 impl: claude
 tester: claude-independent
 modify_existing:
@@ -56,6 +59,62 @@ modify_existing:
     br: [BR-WDR-12, BR-WDR-11]
     ruling: D10-2173
     note: '同 D10-1899 通例（D10-2173）：F1-08an 落地【批量自动打款】后持 payout.execute 的账号须能勾 APPROVED 行（BR-WDR-12），「不可勾」随入口落地对该组解除；第一组 [fund.view] 一字不动；第二组（fund.view + payout.execute + export + config.business）改为 APPROVED 行恰一个可用勾选框、未勾选时【批量手动打款】【批量通过】【批量自动打款】都没有、勾选后【批量手动打款】【批量通过】toEqual([])、可用批量入口恰为【批量自动打款】（不点）、server.writes() 为空；另补一组 [fund.view, export, config.business] 走原「不可勾、两个入口都没有、无写请求」断言；循环之后 GRANTS 半段一字不动；金额、请求体断言不涉及'
+  - file: 'test/spec/frontend/admin-route-status-param/withdrawals.test.ts'
+    test: '[AC-F1-14c-WITHDRAWALS#1] 进页 /withdrawals?status=PENDING_REVIEW：首个（也是唯一一个）列表请求即带 status=PENDING_REVIEW，提现状态控件显示「待审核」，只列待审核的单，不报错、不提示筛选未应用'
+    retitle_to: '[AC-F1-14c-WITHDRAWALS#1] 进页 /withdrawals?status=PENDING_REVIEW：首个（也是唯一一个）列表请求（另有 5 个页签计数读，F1-08an）即带 status=PENDING_REVIEW，提现状态控件显示「待审核」，只列待审核的单，不报错、不提示筛选未应用'
+    reason: rule_change
+    br: [BR-WDR-12]
+    ruling: D10-2179
+    note: "D10-2179（approvals 第 115 条）：本单进页时 5 个状态页签各一次 page_size=1 计数读（D10-2017），使本块「列表读」由 1 次变 6 次；改为列表读只取 page_size 不为 '1' 的读、原期望一字不动，旁边配计数读严格断言（排序后 toEqual 恰 5 条、各带该页签快捷筛选与 page '1'、page_size '1'）；其余断言、金额 / 请求体 / 揭示断言不涉及"
+  - file: 'test/spec/frontend/admin-route-status-param/withdrawals.test.ts'
+    test: '[AC-F1-14c-WITHDRAWALS#2] 地址里的其他参数不影响：/withdrawals?dashboard_probe=case0&status=PAID_MANUAL&review_mode=auto&page=2 首个列表请求只带 page=1、page_size 与 status=PAID_MANUAL，控件显示「线下打款成功」，只列该单'
+    reason: rule_change
+    br: [BR-WDR-12]
+    ruling: D10-2179
+    note: "D10-2179（approvals 第 115 条）：本单进页时 5 个状态页签各一次 page_size=1 计数读（D10-2017），使本块「列表读」由 1 次变 6 次；改为列表读只取 page_size 不为 '1' 的读、原期望一字不动，旁边配计数读严格断言（排序后 toEqual 恰 5 条、各带该页签快捷筛选与 page '1'、page_size '1'）；其余断言、金额 / 请求体 / 揭示断言不涉及"
+  - file: 'test/spec/frontend/admin-route-status-param/withdrawals.test.ts'
+    test: '[AC-F1-14c-WITHDRAWALS#3] 带 status=PENDING_REVIEW 进页后点【重置】：只重读一次且不带 status，控件清空，七张单重新列出'
+    reason: rule_change
+    br: [BR-WDR-12]
+    ruling: D10-2179
+    note: "D10-2179（approvals 第 115 条）：本单进页时 5 个状态页签各一次 page_size=1 计数读（D10-2017），使本块「列表读」由 1 次变 6 次；改为列表读只取 page_size 不为 '1' 的读、原期望一字不动，旁边配计数读严格断言（排序后 toEqual 恰 5 条、各带该页签快捷筛选与 page '1'、page_size '1'）；其余断言、金额 / 请求体 / 揭示断言不涉及"
+  - file: 'test/spec/frontend/admin-route-status-param/withdrawals.test.ts'
+    test: '[AC-F1-14c-WITHDRAWALS#4] 带 status=PENDING_REVIEW 进页后把提现状态改为「已驳回」并【查询】：改选时不发请求，【查询】只发一次、带 status=REJECTED，控件显示「已驳回」，只列驳回单'
+    reason: rule_change
+    br: [BR-WDR-12]
+    ruling: D10-2179
+    note: "D10-2179（approvals 第 115 条）：本单进页时 5 个状态页签各一次 page_size=1 计数读（D10-2017），使本块「列表读」由 1 次变 6 次；改为列表读只取 page_size 不为 '1' 的读、原期望一字不动，旁边配计数读严格断言（排序后 toEqual 恰 5 条、各带该页签快捷筛选与 page '1'、page_size '1'）；其余断言、金额 / 请求体 / 揭示断言不涉及"
+  - file: 'test/spec/frontend/admin-route-status-param/withdrawals.test.ts'
+    test: '[AC-F1-14c-WITHDRAWALS#5] 带 status=PENDING_REVIEW 进页后换页与切页签照常：第 2 页请求 page=2 仍带 status；切「待审」页签请求 page=1、display_status=pending_review 且仍带 status'
+    reason: rule_change
+    br: [BR-WDR-12]
+    ruling: D10-2179
+    note: "D10-2179（approvals 第 115 条）：本单进页时 5 个状态页签各一次 page_size=1 计数读（D10-2017），使本块「列表读」由 1 次变 6 次；改为列表读只取 page_size 不为 '1' 的读、原期望一字不动，旁边配计数读严格断言（排序后 toEqual 恰 5 条、各带该页签快捷筛选与 page '1'、page_size '1'）；其余断言、金额 / 请求体 / 揭示断言不涉及"
+  - file: 'test/spec/frontend/admin-route-status-param/withdrawals.test.ts'
+    test: '[AC-F1-14c-WITHDRAWALS#6] status 缺省或为空照旧：合法的 status=APPROVED 生效；而 ?status=、?dashboard_probe=case0、?status=&dashboard_probe=case1 进页时首个列表请求不带 status，控件为空，七张单全列，不报错'
+    reason: rule_change
+    br: [BR-WDR-12]
+    ruling: D10-2179
+    note: "D10-2179（approvals 第 115 条）：本单进页时 5 个状态页签各一次 page_size=1 计数读（D10-2017），使本块「列表读」由 1 次变 6 次；改为列表读只取 page_size 不为 '1' 的读、原期望一字不动，旁边配计数读严格断言（排序后 toEqual 恰 5 条、各带该页签快捷筛选与 page '1'、page_size '1'）；其余断言、金额 / 请求体 / 揭示断言不涉及"
+  - file: 'test/spec/frontend/admin-route-status-param/withdrawals.test.ts'
+    test: '[AC-F1-14c-WITHDRAWALS#7] status 不是契约枚举值照旧：合法的 status=FAILED 生效；而 pending_review（小写）、Pending_Review（大小写不同）、pending（未知值）进页时首个列表请求不带 status，控件不显示该值，七张单全列，不报错'
+    reason: rule_change
+    br: [BR-WDR-12]
+    ruling: D10-2179
+    note: "D10-2179（approvals 第 115 条）：本单进页时 5 个状态页签各一次 page_size=1 计数读（D10-2017），使本块「列表读」由 1 次变 6 次；改为列表读只取 page_size 不为 '1' 的读、原期望一字不动，旁边配计数读严格断言（排序后 toEqual 恰 5 条、各带该页签快捷筛选与 page '1'、page_size '1'）；其余断言、金额 / 请求体 / 揭示断言不涉及"
+  - file: 'test/spec/frontend/admin-payouts-readonly/tabs.test.ts'
+    test: '[AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts'
+    retitle_to: '[AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（另有 5 个页签计数读，F1-08an）（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts'
+    reason: rule_change
+    br: [BR-WDR-12]
+    ruling: D10-2179
+    note: "D10-2179（approvals 第 115 条）：本单进页时 5 个状态页签各一次 page_size=1 计数读（D10-2017），使本块「列表读」由 1 次变 6 次；改为列表读只取 page_size 不为 '1' 的读、原期望一字不动，旁边配计数读严格断言（排序后 toEqual 恰 5 条、各带该页签快捷筛选与 page '1'、page_size '1'）；其余断言、金额 / 请求体 / 揭示断言不涉及"
+  - file: 'test/spec/frontend/admin-route-status-param/withdrawals.test.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-WDR-12]
+    ruling: D10-2179
+    note: "块外支撑改动按 D10-2100 文件级条目登记（D10-2179 (a)）：只新增与 queries() 并列的顶层函数（列表读 / 计数读，判据只认 page_size 是否为 '1'），原 queries() 与其余顶层代码不改。"
   - file: 'test/spec/frontend/admin-withdrawals/helpers.ts'
     scope: support
     reason: rule_change
