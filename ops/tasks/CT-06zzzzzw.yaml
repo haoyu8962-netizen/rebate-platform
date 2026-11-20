@@ -28,5 +28,5 @@ accept:
   - 'test/spec/ci/support-nested-type/**'
   - 'test/spec/ci/support-allowlist/**'
   - 'test/spec/ci/modify-existing-support/**'
-status: todo
-pr: null
+status: done
+pr: 401
