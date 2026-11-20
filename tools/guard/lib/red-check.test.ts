@@ -4772,3 +4772,249 @@ it('[CT-06zzzzzr] mixedOnlyFiles keeps the as-const file expected when one row o
     ]),
   ).toEqual({ mixed: [], expected: [R2_FILE] });
 });
+
+// CT-06zzzzzv (D10-2152 / D10-2163): a top-level for…of table over an inline array literal is
+// compared row by row. The risk-state shape (B1-02zzzc's http.int.test.ts [AC-B1-03h#17]): 6 rows,
+// the first `path: SEARCH` from the kit, one path made with randomUUID(), the step-up row's
+// body.action withdraw → phone_change, the title holding `${JSON.stringify(route.body)}`.
+const FO = 'test/spec/risk/fo/http.int.test.ts';
+const FO_KIT = 'test/spec/risk/fo/kit.ts';
+const FO_ROWS = [
+  "{ method: 'GET', path: SEARCH, body: undefined }",
+  "{ method: 'GET', path: '/v1/orders', body: {} }",
+  "{ method: 'POST', path: '/v1/consents', body: { type: 'privacy', accepted: false } }",
+  "{ method: 'POST', path: `/v1/links/${randomUUID()}/open`, body: {} }",
+  "{ method: 'POST', path: '/v1/auth/step-up', body: { action: 'withdraw', code: '123456' } }",
+  "{ method: 'DELETE', path: '/v1/me/sessions', body: {} }",
+];
+const FO_HEAD_ROWS = FO_ROWS.map((r) => r.replace("'withdraw'", "'phone_change'"));
+const FO_TITLE =
+  '[AC-B1-03h#17] banned ${route.method} ${route.path} ${JSON.stringify(route.body)} 10006';
+const foName = (method: string, path: string, body: unknown): string =>
+  `[AC-B1-03h#17] banned ${method} ${path} ${JSON.stringify(body) ?? 'undefined'} 10006`;
+const FO_PLAIN = '[AC-B1-03h#16] a whitelisted search passes';
+const FO_NEW = '[AC-B1-03h#18] a banned user cannot step up for a phone change';
+const FO_STEP_BASE = foName('POST', '/v1/auth/step-up', { action: 'withdraw', code: '123456' });
+const FO_STEP_HEAD = foName('POST', '/v1/auth/step-up', { action: 'phone_change', code: '123456' });
+/** The five unchanged rows' names, in a run where randomUUID() gave `uuid`. */
+const foUnchanged = (uuid: string): string[] => [
+  foName('GET', '/v1/search', undefined),
+  foName('GET', '/v1/orders', {}),
+  foName('POST', '/v1/consents', { type: 'privacy', accepted: false }),
+  foName('POST', `/v1/links/${uuid}/open`, {}),
+  foName('DELETE', '/v1/me/sessions', {}),
+];
+/** The report's names at the head, in registration order. */
+const foNames = (uuid: string): string[] => {
+  const u = foUnchanged(uuid);
+  return [FO_PLAIN, ...u.slice(0, 4), FO_STEP_HEAD, u[4] as string, FO_NEW];
+};
+function foFile(
+  rows: readonly string[],
+  o: { loop?: string; imports?: string; added?: boolean; stepUp?: boolean } = {},
+): string {
+  return [
+    "import { randomUUID } from 'node:crypto';",
+    "import { expect, it } from 'vitest';",
+    `import { ${o.imports ?? 'SEARCH, send'} } from './kit.ts';`,
+    ...(o.stepUp === true ? ["import { stepUp } from './step-up.ts';"] : []),
+    '',
+    `it('${FO_PLAIN}', async () => {`,
+    "  expect(await send('GET', SEARCH, undefined)).toBe(200);",
+    '});',
+    '',
+    ...(o.loop === undefined
+      ? ['for (const route of [', ...rows.map((r) => `  ${r},`), ']) {']
+      : [o.loop]),
+    `  it(\`${FO_TITLE}\`, async () => {`,
+    '    expect(await send(route.method, route.path, route.body)).toBe(10006);',
+    '  });',
+    '}',
+    '',
+    ...(o.added === true
+      ? [
+          `it('${FO_NEW}', async () => {`,
+          "  expect(await stepUp('phone_change')).toBe(10006);",
+          '});',
+          '',
+        ]
+      : []),
+  ].join('\n');
+}
+const FO_RED = 'AssertionError: expected 200 to be 10006';
+const foLedger = (parts: Partial<Parameters<typeof ruleTestsLeftOut>[2]> = {}) => ({
+  renames: [],
+  expected_values: [],
+  red_exempt_outside: [],
+  red_exempt: [],
+  red_exempt_rows: [],
+  modify_existing: [],
+  ...parts,
+});
+const foModify = (test: string): ModifyExistingDeclaration => ({
+  file: FO,
+  test,
+  reason: 'rule_change',
+  ruling: 'D10-2152',
+  note: 'the step-up row now asks for phone_change instead of withdraw',
+  br: ['BR-ID-31'],
+});
+const foExempt = (test: string) => ({
+  file: FO,
+  test,
+  reason: 'unchanged frozen row of the whitelist table, green on the old code by construction',
+});
+/** The red run of FO as red-check runs it (FO_NEW red, every other test green). */
+function foJudge(
+  base: string,
+  head: string,
+  l: ReturnType<typeof foLedger>,
+  names: readonly string[],
+  o: { kit?: [string, string]; changes?: Change[]; scope?: string[] } = {},
+) {
+  const read = reader(
+    { [FO]: base, ...(o.kit === undefined ? {} : { [FO_KIT]: o.kit[0] }) },
+    { [FO]: head, ...(o.kit === undefined ? {} : { [FO_KIT]: o.kit[1] }) },
+  );
+  const left = ruleTestsLeftOut([FO], read, l);
+  const baselines = ruleTestBaselines(
+    left.expected,
+    o.changes ?? [],
+    o.scope ?? [],
+    read,
+    l.renames,
+    l.expected_values,
+    l.red_exempt_outside,
+    l.red_exempt_rows,
+    l.modify_existing,
+  );
+  const result = checkRedReports(
+    [
+      redReport(
+        FO,
+        names.map((n): RedTest => (n === FO_NEW ? [n, 'failed', FO_RED] : [n, 'passed'])),
+      ),
+    ],
+    left.expected,
+    ROOT,
+    baselines,
+    l.red_exempt,
+    l.red_exempt_rows,
+    l.modify_existing,
+    left.modifiedLeftOut,
+  );
+  return { expected: left.expected, baselines, result };
+}
+const UUID_1 = '0193a6f2-5c1e-7d40-8b2a-3f9e1c7d4a01';
+const UUID_2 = '0193a6f2-5c1e-7d40-8b2a-3f9e1c7d4a02';
+
+it('[CT-06zzzzzv] the risk-state shape, its step-up row declared by the full name after the change and the other 5 rows in red_exempt (the file’s import change in red_exempt_outside): 0 problems in every run', () => {
+  const base = foFile(FO_ROWS);
+  const head = foFile(FO_HEAD_ROWS, { added: true, stepUp: true });
+  for (const uuid of [UUID_1, UUID_2]) {
+    const l = foLedger({
+      red_exempt_outside: [{ file: FO, reason: 'imports the step-up helper of the new test' }],
+      red_exempt: [FO_PLAIN, ...foUnchanged(uuid)].map(foExempt),
+      modify_existing: [foModify(FO_STEP_HEAD)],
+    });
+    const { expected, baselines, result } = foJudge(base, head, l, foNames(uuid));
+    expect(expected).toEqual([FO]);
+    expect(baselines.get(FO)?.kind).toBe('support');
+    expect(result.problems, uuid).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(result.red).toEqual([`${FO} > ${FO_NEW}`]);
+    const exempt = result.exempt ?? [];
+    expect(exempt.filter((e) => e.modified === true).map((e) => e.test)).toEqual([FO_STEP_HEAD]);
+    for (const n of foUnchanged(uuid)) {
+      expect(
+        exempt.some((e) => e.test === n && e.declared === true && e.modified !== true),
+        n,
+      ).toBe(true);
+    }
+  }
+});
+
+it('[CT-06zzzzzv] the risk-state shape compared test by test (only the table and the new test changed): the step-up row declared by its new full name, 0 problems; the unchanged rows exempt by themselves', () => {
+  const base = foFile(FO_ROWS);
+  const head = foFile(FO_HEAD_ROWS, { added: true, imports: 'SEARCH, send, stepUp' });
+  const baseSame = base.replace('SEARCH, send }', 'SEARCH, send, stepUp }');
+  const l = foLedger({ modify_existing: [foModify(FO_STEP_HEAD)] });
+  const { baselines, result } = foJudge(baseSame, head, l, foNames(UUID_1));
+  expect(baselines.get(FO)?.kind).toBe('tests');
+  expect(result.problems).toEqual([]);
+  expect(result.red).toEqual([`${FO} > ${FO_NEW}`]);
+});
+
+it('[CT-06zzzzzv] the risk-state shape declared by the base full name (withdraw): not taken — the changed row green is a problem; the unchanged rows stay exempt', () => {
+  const base = foFile(FO_ROWS);
+  const head = foFile(FO_HEAD_ROWS, { added: true, stepUp: true });
+  const l = foLedger({
+    red_exempt_outside: [{ file: FO, reason: 'imports the step-up helper of the new test' }],
+    red_exempt: [FO_PLAIN, ...foUnchanged(UUID_1)].map(foExempt),
+    modify_existing: [foModify(FO_STEP_BASE)],
+  });
+  const { result } = foJudge(base, head, l, foNames(UUID_1));
+  expect(result.ok).toBe(false);
+  expect(
+    result.problems.some((p) => p.test === FO_STEP_HEAD && /green on the skeleton/.test(p.reason)),
+  ).toBe(true);
+  expect(result.problems.some((p) => p.test === FO_STEP_BASE)).toBe(true);
+  for (const n of foUnchanged(UUID_1)) {
+    expect(
+      result.problems.some((p) => p.test === n),
+      n,
+    ).toBe(false);
+  }
+});
+
+it('[CT-06zzzzzv] spec-test r2 S2 ①: the kit unchanged and not among the changes, only the import form changed (for (const route of ROUTES)): the table is no inline literal, the file judged as a whole', () => {
+  const kit = [
+    "import { randomUUID } from 'node:crypto';",
+    "export const SEARCH = '/v1/search';",
+    'export const ROUTES = [',
+    ...FO_HEAD_ROWS.map((r) => `  ${r},`),
+    '];',
+    '',
+  ].join('\n');
+  const base = foFile(FO_ROWS);
+  const head = foFile([], {
+    loop: 'for (const route of ROUTES) {',
+    imports: 'ROUTES, SEARCH, send',
+  });
+  const l = foLedger({ modify_existing: [foModify(FO_STEP_HEAD)] });
+  const names = foNames(UUID_1).filter((n) => n !== FO_NEW);
+  const { expected, baselines, result } = foJudge(base, head, l, names, { kit: [kit, kit] });
+  expect(expected).toEqual([FO]);
+  expect(baselines.get(FO)?.kind).toBe('whole');
+  for (const n of foUnchanged(UUID_1)) {
+    expect(
+      result.problems.some((p) => p.test === n),
+      n,
+    ).toBe(true);
+  }
+  // The control: the inline table on both sides is compared by rows.
+  const control = foJudge(base, foFile(FO_HEAD_ROWS), l, names, { kit: [kit, kit] });
+  expect(control.expected).toEqual([]);
+});
+
+it('[CT-06zzzzzv] spec-test r2 S2 ②: for…in under a title of field interpolations (`${route.path}`, not `${k}`) is judged as a whole table because of `in`; the same text with `of` is compared by rows', () => {
+  const forIn = (rows: readonly string[], o: { added?: boolean } = {}): string =>
+    foFile(rows, o).replace('for (const route of [', 'for (const route in [');
+  const l = foLedger({ modify_existing: [foModify(FO_STEP_HEAD)] });
+  const names = foNames(UUID_1);
+  const { baselines, result } = foJudge(
+    forIn(FO_ROWS),
+    forIn(FO_HEAD_ROWS, { added: true }),
+    l,
+    names,
+  );
+  expect(baselines.get(FO)?.kind).toBe('whole');
+  for (const n of foUnchanged(UUID_1)) {
+    expect(
+      result.problems.some((p) => p.test === n),
+      n,
+    ).toBe(true);
+  }
+  const control = foJudge(foFile(FO_ROWS), foFile(FO_HEAD_ROWS, { added: true }), l, names);
+  expect(control.result.problems).toEqual([]);
+});

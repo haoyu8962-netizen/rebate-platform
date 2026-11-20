@@ -795,6 +795,15 @@ export type ComparedBlock = {
    * reads it, and only for a changed block whose `names` are null; `names` is unchanged.
    */
   inlineEach?: string[] | null;
+  /**
+   * CT-06zzzzzv (D10-2152 / D10-2163; compareTestFileRows and compareOutsideChangedRows only): the
+   * rows of a qualifying top-level for…of table whose it block is the base's (forOfRows), in table
+   * order: each row's full-name pattern (exact when the row tells it, wildcards where a value is
+   * not known) and whether its source text differs from the base's row at the same index. The
+   * block itself is then marked changed (a reader that does not know the rows judges the whole
+   * table); forOfRowBlocks turns it into one block per row by the report's names.
+   */
+  forOf?: { pattern: RegExp; changed: boolean }[];
 };
 
 export type FileComparison =
@@ -921,6 +930,16 @@ type Value = string | number | bigint | boolean | null | undefined;
 type Field = { literal: true; value: Value } | { literal: false };
 /** A row of an `.each` / `.for` table: its items (a primitive is one item), or an object. */
 type Row = { kind: 'items'; items: Value[] } | { kind: 'object'; fields: Map<string, Field> };
+/**
+ * CT-06zzzzzv: an expression as far as it is literal (literalReader's deepIn): a value (literals
+ * at any depth), an object literal with some fields of code, a template with `${…}` (its static
+ * parts, null for each `${…}`), or code.
+ */
+type Deep =
+  | { kind: 'value'; value: unknown }
+  | { kind: 'object'; fields: Map<string, Deep> }
+  | { kind: 'tpl'; segments: Segment[] }
+  | { kind: 'code' };
 
 /**
  * The value-format truncation Vitest applies to `$name` attributes (CT-06zzzd). Basis: vitest
@@ -1466,7 +1485,68 @@ function literalReader(tokens: readonly Token[], match: readonly number[]) {
     }
     return null;
   };
-  return { rowsIn, outerAsConst, valueEnd };
+  // CT-06zzzzzv (D10-2152 / D10-2163): the value of the expression tokens[from, to) as far as it is
+  // literal (Deep): a primitive (primitiveAt as compareEachRows reads it), an array literal or an
+  // object literal of such values at any depth — then a value —, an object literal some of whose
+  // fields are code (`object`: the literal fields stay known), a template with `${…}` (`tpl`: its
+  // static parts known), or code. A spread, a hole, a computed or shorthand key, a method,
+  // `__proto__` or a key given twice: code.
+  const deepIn = (from: number, to: number): Deep => {
+    const code: Deep = { kind: 'code' };
+    if (to <= from) return code;
+    const t = tokens[from] as Token;
+    if (t.kind === 'punct' && t.text === '{' && match[from] === to - 1) {
+      const fields = new Map<string, Deep>();
+      let k = from + 1;
+      const end = to - 1;
+      while (k < end) {
+        const u = tokens[k] as Token;
+        const key =
+          u.kind === 'id'
+            ? u.text
+            : u.kind === 'str' && typeof u.value === 'string'
+              ? u.value
+              : null;
+        if (key === null || key === '__proto__' || fields.has(key)) return code;
+        if (tokens[k + 1]?.text !== ':') return code;
+        const e = valueEnd(k + 2, end);
+        if (e === k + 2) return code;
+        fields.set(key, deepIn(k + 2, e));
+        k = e + 1;
+      }
+      const values: Record<string, unknown> = {};
+      for (const [key, f] of fields) {
+        if (f.kind !== 'value') return { kind: 'object', fields };
+        values[key] = f.value;
+      }
+      return { kind: 'value', value: values };
+    }
+    if (t.kind === 'punct' && t.text === '[' && match[from] === to - 1) {
+      const items: unknown[] = [];
+      let k = from + 1;
+      const end = to - 1;
+      while (k < end) {
+        const e = valueEnd(k, end);
+        if (e === k) return code;
+        const d = deepIn(k, e);
+        if (d.kind !== 'value') return code;
+        items.push(d.value);
+        k = e + 1;
+      }
+      return { kind: 'value', value: items };
+    }
+    if (t.kind === 'tpl' && to === from + 1 && t.parts !== undefined && t.parts.length > 1) {
+      const segments: Segment[] = [];
+      t.parts.forEach((p, i) => {
+        if (i > 0) segments.push(null);
+        segments.push(p);
+      });
+      return t.parts.includes(null) ? code : { kind: 'tpl', segments };
+    }
+    const one = primitiveAt(from, true);
+    return one !== null && one.next === to ? { kind: 'value', value: one.value } : code;
+  };
+  return { rowsIn, outerAsConst, valueEnd, deepIn };
 }
 
 function outsideView(source: string, kit?: KitReader): OutsideView {
@@ -2304,6 +2384,377 @@ export function compareEachRows(base: string, head: string): (EachRows | null)[]
   });
 }
 
+// Rows of a top-level for…of table (CT-06zzzzzv, FU-FOR-OF-LITERAL-TABLE-ROWS; orchestrator
+// rulings D10-2152 / D10-2163, after B1-02zzzc's test/spec/risk/risk-state/http.int.test.ts
+// [AC-B1-03h#17]): one form only is compared row by row — `for (const <x> of [ <rows> ]) { it(…); }`
+// at the top level of the file, the table an inline array literal (no name, import, call or
+// spread), the body exactly one plain `it` / `test` call (no modifier) whose title is a template
+// with `${…}`. On both sides the file must have the same number of such loops, paired in order,
+// each with as many rows as the base and the same normalised it call (its body token for token).
+// Rows are judged by their source text, row k against the base's row k:
+// - The same text, character for character: an unchanged row, whatever its fields (a name from a
+//   kit, a `${randomUUID()}` path). Its full name may not be told from the row; it is taken by its
+//   index (forOfRowBlocks: the report's names that match the loop's title in report order).
+// - A changed row: literal throughout on both sides (deepIn: a value), its line breaks as many as
+//   the base row's, its full name told from the row (forOfTitle: `${x.f}` and
+//   `${JSON.stringify(x.f)}` of literal fields), the name no other row's (nor matched by the
+//   pattern of a row whose name is not certain) nor any other test's of the file, and its text no
+//   base row's (a row moved or copied). It is declared by that name after the change
+//   (compareModifiedBlocks finds it at the head by the name, at the base by the index).
+// - A name the ledger declares in modify_existing that an unchanged row may produce: the whole
+//   table (the declared row is not changed).
+// Anything else — another form, rows added, removed or moved, a changed row with a field of code,
+// a changed loop body, a duplicated name — is not compared row by row (forOfRows null): the file is
+// compared as before (its shared rest differs: the whole file). For the comparison the changed rows
+// of both sides are masked (one `0` each, its line breaks kept), so that the shared rest and the
+// blocks' places are the base's exactly when nothing but those rows changed.
+
+/** One row of a qualifying for…of table, on one side (forOfLoops). */
+type ForOfRow = {
+  raw: string;
+  /** Source offsets of the row: first character, after the last. */
+  start: number;
+  end: number;
+  /** Line terminators inside the row. */
+  breaks: number;
+  /** The whole row is literal (deepIn: a value). */
+  literal: boolean;
+  /** The full name the row gives (null segments: not known). */
+  segments: Segment[];
+};
+
+/** A qualifying for…of loop of one side: its test call (index among the outermost test calls). */
+type ForOfLoop = { test: number; rows: ForOfRow[]; call: string };
+
+const LINE_BREAK = /\r\n|[\n\r\u2028\u2029]/g;
+
+/** The token lists of the `${…}` expressions of the template token `t` of `source`, in order. */
+function templateExpressions(source: string, t: Token): Token[][] {
+  const out: Token[][] = [];
+  const from = t.start ?? 0;
+  const end = from + t.text.length - 1; // the closing backtick
+  let j = from + 1;
+  while (j < end) {
+    const d = source[j];
+    if (d === '\\') {
+      j += 2;
+      continue;
+    }
+    if (d === '$' && source[j + 1] === '{') {
+      const e = lex(source, j + 2, true);
+      out.push(e.tokens);
+      j = e.end;
+      continue;
+    }
+    j += 1;
+  }
+  return out;
+}
+
+/**
+ * The text a `${…}` expression of a for…of title gives for one row (`name` the loop variable, `row`
+ * the row as deepIn reads it): `name.a.b…` (a primitive by String, a template field by its static
+ * parts) or `JSON.stringify(name.a.b…)` of a literal value; anything else, a field of code or a
+ * missing field: not known ([null]).
+ */
+function forOfTitleValue(expr: readonly Token[], name: string, row: Deep): Segment[] {
+  const unknown: Segment[] = [null];
+  const chain = (from: number, to: number): Deep | null => {
+    const head = expr[from];
+    if (head?.kind !== 'id' || head.text !== name) return null;
+    let d: Deep = row;
+    let k = from + 1;
+    while (k < to) {
+      const key = expr[k + 1];
+      if (expr[k]?.text !== '.' || key?.kind !== 'id') return null;
+      if (d.kind === 'object') d = d.fields.get(key.text) ?? { kind: 'code' };
+      else if (
+        d.kind === 'value' &&
+        typeof d.value === 'object' &&
+        d.value !== null &&
+        !Array.isArray(d.value) &&
+        Object.hasOwn(d.value, key.text)
+      )
+        d = { kind: 'value', value: (d.value as Record<string, unknown>)[key.text] };
+      else d = { kind: 'code' };
+      k += 2;
+    }
+    return d;
+  };
+  const whole = chain(0, expr.length);
+  if (whole !== null) {
+    if (whole.kind === 'tpl') return whole.segments;
+    if (whole.kind !== 'value') return unknown;
+    const v = whole.value;
+    return v === null || (typeof v !== 'object' && typeof v !== 'function' && typeof v !== 'symbol')
+      ? [String(v as string | number | bigint | boolean | undefined | null)]
+      : unknown;
+  }
+  const n = expr.length;
+  if (
+    expr[0]?.text === 'JSON' &&
+    expr[1]?.text === '.' &&
+    expr[2]?.text === 'stringify' &&
+    expr[3]?.text === '(' &&
+    expr[n - 1]?.text === ')'
+  ) {
+    const arg = chain(4, n - 1);
+    if (arg?.kind !== 'value') return unknown;
+    try {
+      const s: unknown = JSON.stringify(arg.value);
+      return [typeof s === 'string' ? s : 'undefined'];
+    } catch {
+      return unknown; // a BigInt
+    }
+  }
+  return unknown;
+}
+
+/** The qualifying for…of loops of a rule-test file (see the comment above); throws TestParseError. */
+function forOfLoops(source: string): ForOfLoop[] {
+  const { tokens, match, sep, tests } = scanTests(source);
+  const depth = new Array<number>(tokens.length).fill(0);
+  {
+    let d = 0;
+    tokens.forEach((t, k) => {
+      if (t.kind === 'punct' && (t.text === ')' || t.text === ']' || t.text === '}')) d -= 1;
+      depth[k] = d;
+      if (t.kind === 'punct' && (t.text === '(' || t.text === '[' || t.text === '{')) d += 1;
+    });
+  }
+  const { valueEnd, deepIn } = literalReader(tokens, match);
+  const is = (k: number, text: string, kind: Token['kind']): boolean =>
+    tokens[k]?.text === text && tokens[k]?.kind === kind;
+  const out: ForOfLoop[] = [];
+  tests.forEach((c, ti) => {
+    // `for (const <x> of [ … ]) { <the call> }`, the loop at the top level.
+    const brace = c.start - 1;
+    if (!is(brace, '{', 'punct') || match[brace] !== c.end + 1) return;
+    const cp = brace - 1;
+    if (!is(cp, ')', 'punct')) return;
+    const op = match[cp] as number;
+    if (!is(op - 1, 'for', 'id') || depth[op - 1] !== 0 || tokens[op - 2]?.text === '.') return;
+    const variable = tokens[op + 2];
+    if (!is(op + 1, 'const', 'id') || variable?.kind !== 'id' || !is(op + 3, 'of', 'id')) return;
+    const open = op + 4;
+    const close = cp - 1;
+    if (!is(open, '[', 'punct') || match[open] !== close) return;
+    // A plain call (no modifier, no type arguments) whose title is a template with `${…}`.
+    if (c.open !== c.start + 1 || !is(c.open + 2, ',', 'punct')) return;
+    const title = tokens[c.open + 1] as Token;
+    if (title.kind !== 'tpl' || title.parts === undefined || title.parts.length < 2) return;
+    if (title.parts.includes(null)) return;
+    const exprs = templateExpressions(source, title);
+    if (exprs.length !== title.parts.length - 1) return;
+    const rows: ForOfRow[] = [];
+    let k = open + 1;
+    while (k < close) {
+      const e = valueEnd(k, close);
+      if (e === k || tokens[k]?.text === '...') return; // a hole, a spread
+      const first = tokens[k] as Token;
+      const last = tokens[e - 1] as Token;
+      const start = first.start ?? 0;
+      const end = (last.start ?? 0) + last.text.length;
+      const raw = source.slice(start, end);
+      const row = deepIn(k, e);
+      const segments: Segment[] = [];
+      (title.parts as string[]).forEach((p, i) => {
+        if (i > 0) segments.push(...forOfTitleValue(exprs[i - 1] as Token[], variable.text, row));
+        segments.push(p);
+      });
+      rows.push({
+        raw,
+        start,
+        end,
+        breaks: [...raw.matchAll(LINE_BREAK)].length,
+        literal: row.kind === 'value',
+        segments,
+      });
+      k = e;
+      if (k === close) break;
+      k += 1;
+    }
+    out.push({ test: ti, rows, call: joinTokens(tokens, c.start, c.end, sep) });
+  });
+  return out;
+}
+
+/** A row's full-name pattern (top level: no describe). */
+const forOfPattern = (segments: readonly Segment[]): RegExp => patternOf([], segments);
+/** A row's full name, or null when a segment is not known. */
+const forOfName = (segments: readonly Segment[]): string | null =>
+  segments.includes(null) ? null : segments.join('');
+
+/** The rows of the qualifying for…of tables of a base and a head (forOfRows). */
+export type ForOfRows = {
+  /** The base and the head with their changed rows masked (see the comment above). */
+  base: string;
+  head: string;
+  loops: {
+    /** The loop's test call: index among the outermost test calls of the base, of the head. */
+    baseTest: number;
+    headTest: number;
+    rows: {
+      changed: boolean;
+      /** The head row's full name (null segments: not known). */
+      segments: Segment[];
+      /** The row's source text at the base and at the head. */
+      before: string;
+      after: string;
+    }[];
+  }[];
+};
+
+/**
+ * The qualifying for…of tables of `base` and `head` compared row by row (see the comment above),
+ * or null when there is none whose rows changed or anything else is found (the file is then
+ * compared as before). `declared`: the full names (at the head) the ledger declares in
+ * modify_existing for the file; one an unchanged row may produce makes it null.
+ */
+export function forOfRows(
+  base: string,
+  head: string,
+  declared: readonly string[] = [],
+): ForOfRows | null {
+  let bl: ForOfLoop[];
+  let hl: ForOfLoop[];
+  let headBlocks: TestBlock[];
+  try {
+    bl = forOfLoops(base);
+    hl = forOfLoops(head);
+    headBlocks = parseTestFile(head).blocks;
+  } catch {
+    return null;
+  }
+  if (bl.length === 0 || bl.length !== hl.length) return null;
+  const loops: ForOfRows['loops'] = [];
+  for (const [i, y] of hl.entries()) {
+    const x = bl[i] as ForOfLoop;
+    if (x.rows.length !== y.rows.length || x.call !== y.call) return null;
+    const rows: ForOfRows['loops'][number]['rows'] = [];
+    for (const [k, r] of y.rows.entries()) {
+      const b = x.rows[k] as ForOfRow;
+      const changed = b.raw !== r.raw;
+      if (changed) {
+        if (!b.literal || !r.literal || b.breaks !== r.breaks) return null;
+        if (forOfName(r.segments) === null) return null;
+        // Its text another row's at the base, or the base row's still at the head: moved or copied.
+        if (x.rows.some((o) => o.raw === r.raw) || y.rows.some((o) => o.raw === b.raw)) return null;
+      }
+      rows.push({ changed, segments: r.segments, before: b.raw, after: r.raw });
+    }
+    loops.push({ baseTest: x.test, headTest: y.test, rows });
+  }
+  const all = loops.flatMap((l) => l.rows);
+  if (!all.some((r) => r.changed)) return null;
+  const loopTests = new Set(loops.map((l) => l.headTest));
+  for (const r of all) {
+    if (!r.changed) continue;
+    const name = forOfName(r.segments) as string;
+    if (all.some((o) => o !== r && forOfPattern(o.segments).test(name))) return null;
+    if (headBlocks.some((b, i) => !loopTests.has(i) && b.pattern.test(name))) return null;
+  }
+  for (const n of declared) {
+    if (all.some((o) => !o.changed && forOfPattern(o.segments).test(n))) return null;
+  }
+  const mask = (source: string, side: readonly ForOfLoop[]): string => {
+    const spans = side
+      .flatMap((l, i) => l.rows.filter((_, k) => loops[i]?.rows[k]?.changed === true))
+      .sort((p, q) => q.start - p.start);
+    let text = source;
+    for (const r of spans) {
+      text = `${text.slice(0, r.start)}0${'\n'.repeat(r.breaks)}${text.slice(r.end)}`;
+    }
+    return text;
+  };
+  return { base: mask(base, bl), head: mask(head, hl), loops };
+}
+
+/** The blocks with the rows of each for…of loop of `rows` attached (ComparedBlock.forOf). */
+function withForOfRows(blocks: readonly ComparedBlock[], rows: ForOfRows): ComparedBlock[] {
+  const out = [...blocks];
+  for (const l of rows.loops) {
+    const b = out[l.headTest];
+    // A loop block that is not the base's in its place stays changed as a whole.
+    if (b === undefined || b.changed) continue;
+    out[l.headTest] = {
+      ...b,
+      changed: true,
+      forOf: l.rows.map((r) => ({ pattern: forOfPattern(r.segments), changed: r.changed })),
+    };
+  }
+  return out;
+}
+
+/**
+ * compareTestFile, and for a file judged as a whole because its shared rest differs, the same
+ * comparison with the changed rows of its qualifying for…of tables masked (forOfRows; CT-06zzzzzv):
+ * when nothing else differs, the blocks, the loop blocks with their rows (ComparedBlock.forOf).
+ */
+export function compareTestFileRows(
+  base: string,
+  head: string,
+  declared: readonly string[] = [],
+): FileComparison {
+  const compared = compareTestFile(base, head);
+  if (!compared.whole || compared.outside !== true) return compared;
+  const rows = forOfRows(base, head, declared);
+  if (rows === null) return compared;
+  const masked = compareTestFile(rows.base, rows.head);
+  return masked.whole ? compared : { whole: false, blocks: withForOfRows(masked.blocks, rows) };
+}
+
+/** compareOutsideChanged with the rows of qualifying for…of tables, as compareTestFileRows. */
+export function compareOutsideChangedRows(
+  base: string,
+  head: string,
+  modules?: ImportedModules,
+  declared: readonly string[] = [],
+): OutsideComparison {
+  const rows = forOfRows(base, head, declared);
+  if (rows === null) return compareOutsideChanged(base, head, modules);
+  const masked = compareOutsideChanged(rows.base, rows.head, modules);
+  if (masked.whole) return compareOutsideChanged(base, head, modules);
+  return { ...masked, blocks: withForOfRows(masked.blocks, rows) };
+}
+
+/** The block without its for…of rows (a block judged changed as a whole, CT-06zzzzzv). */
+export function withoutForOfRows(b: ComparedBlock): ComparedBlock {
+  const out = { ...b };
+  delete out.forOf;
+  return out;
+}
+
+/**
+ * The blocks with each for…of loop block (ComparedBlock.forOf) split into one block per row
+ * (CT-06zzzzzv), by the report's full names: those the loop's title matches and no other block's
+ * pattern does, in report order, are its rows' names by index — as many as rows, each matching its
+ * row's pattern (a row whose name the row tells: that name exactly). Each row block then matches
+ * its name exactly and is changed as its row. Otherwise the loop block stays, changed: the whole
+ * table.
+ */
+export function forOfRowBlocks(
+  blocks: readonly ComparedBlock[],
+  fullNames: readonly string[],
+): ComparedBlock[] {
+  return blocks.flatMap((b): ComparedBlock[] => {
+    const rows = b.forOf;
+    if (rows === undefined) return [b];
+    const whole = withoutForOfRows({ ...b, changed: true });
+    const others = blocks.filter((o) => o !== b);
+    const mine = fullNames.filter(
+      (n) => n !== '' && b.pattern.test(n) && !others.some((o) => o.pattern.test(n)),
+    );
+    if (mine.length !== rows.length) return [whole];
+    if (rows.some((r, k) => !r.pattern.test(mine[k] as string))) return [whole];
+    return rows.map((r, k) => ({
+      pattern: new RegExp(`^${escapeRegex(mine[k] as string)}$`),
+      title: `${b.title} (for…of row ${k + 1} of ${rows.length})`,
+      changed: r.changed,
+    }));
+  });
+}
+
 // Declared changes of frozen tests (CT-06zzzg; orchestrator ruling D10-701, after B2-09v and
 // FU-B209R-FLAKE): a task may tighten a frozen test, or fix its flakiness, keeping it green before
 // and after. The ledger names each such test (`modify_existing`); compareModifiedBlocks tells, for
@@ -2449,9 +2900,13 @@ export function compareModifiedBlocks(
 ): ModifiedComparison {
   let before: ReturnType<typeof blockViews>;
   let after: ReturnType<typeof blockViews>;
+  // CT-06zzzzzv (D10-2152 / D10-2163): the changed rows of qualifying for…of tables masked on both
+  // sides (forOfRows); a declared name is then one row, found at the head by its full name and at
+  // the base by its index, and a changed row no name declares is a difference besides.
+  const forOf = forOfRows(base, head);
   try {
     before = blockViews(
-      base,
+      forOf?.base ?? base,
       modules === undefined ? undefined : { file: modules.file, read: modules.base },
     );
   } catch (err) {
@@ -2459,7 +2914,7 @@ export function compareModifiedBlocks(
   }
   try {
     after = blockViews(
-      head,
+      forOf?.head ?? head,
       modules === undefined ? undefined : { file: modules.file, read: modules.head },
     );
   } catch (err) {
@@ -2496,6 +2951,29 @@ export function compareModifiedBlocks(
   };
   const rowTag = (e: Extract<EachExpansion, { ok: true }>, k: number): string =>
     `\n// .each row ${k + 1} of ${e.rows.length}: ${e.raw[k] as string}`;
+  // CT-06zzzzzv: the for…of row a name names at the head — null when its one block of the head is
+  // no qualifying loop with a title that is not static — or why it is not found.
+  const loopRow = (name: string): { at: number; row: number } | { reason: string } | null => {
+    if (forOf === null) return null;
+    const hits = after.blocks.flatMap((v, i) => (v.pattern.test(name) ? [i] : []));
+    if (hits.length !== 1) return null;
+    const hj = hits[0] as number;
+    const at = forOf.loops.findIndex((l) => l.headTest === hj);
+    if (at < 0 || (after.blocks[hj] as BlockView).static) return null;
+    const rows = (forOf.loops[at] as ForOfRows['loops'][number]).rows;
+    const exact = rows.flatMap((r, k) => (forOfName(r.segments) === name ? [k] : []));
+    const unsure = rows.filter(
+      (r) => forOfName(r.segments) === null && forOfPattern(r.segments).test(name),
+    );
+    if (exact.length !== 1 || unsure.length > 0) {
+      return {
+        reason:
+          'no row of the for…of table at the head gives exactly this full name (a row is named by its full name after the change; a row whose name holds a run-time value cannot be named)',
+      };
+    }
+    return { at, row: exact[0] as number };
+  };
+  const rowsTaken = new Set<string>();
   const pairs = new Map<number, number>();
   const plainBase = new Set<number>();
   // Row entries by head block: the base block, and the entry indexes with their row.
@@ -2503,6 +2981,37 @@ export function compareModifiedBlocks(
   const blocks = names.map((test, at): ModifiedBlock => {
     const headTest = headNames?.[at] ?? test;
     const renamed = headTest !== test;
+    const loop = loopRow(headTest);
+    if (loop !== null && forOf !== null) {
+      if ('reason' in loop) return { test, found: false, reason: loop.reason };
+      if (renamed) {
+        return {
+          test,
+          found: false,
+          reason:
+            'a row of a for…of table may not be renamed (retitle_to): it is declared by its full name after the change',
+        };
+      }
+      const key = `${loop.at}:${loop.row}`;
+      if (rowsTaken.has(key)) {
+        return { test, found: false, reason: 'another declared name is on the same for…of row' };
+      }
+      rowsTaken.add(key);
+      const l = forOf.loops[loop.at] as ForOfRows['loops'][number];
+      const r = l.rows[loop.row] as ForOfRows['loops'][number]['rows'][number];
+      const x = before.blocks[l.baseTest] as BlockView;
+      const y = after.blocks[l.headTest] as BlockView;
+      const tag = (text: string): string =>
+        `\n// for…of row ${loop.row + 1} of ${l.rows.length}: ${text}`;
+      return {
+        test,
+        headTest,
+        found: true,
+        before: `${x.raw}${tag(r.before)}`,
+        after: `${y.raw}${tag(r.after)}`,
+        changed: r.changed,
+      };
+    }
     const b = locate(before, test, 'base');
     if (!('index' in b)) return { test, found: false, reason: b.reason };
     const h = locate(after, headTest, 'head');
@@ -2664,6 +3173,16 @@ export function compareModifiedBlocks(
         }
       } else if (x.key !== y.key) {
         outside = `test block ${i + 1} ("${y.title}") is not declared and differs from the base`;
+        break;
+      }
+    }
+  }
+  // CT-06zzzzzv: every changed row of a for…of table must be a found declared one.
+  if (outside === null && forOf !== null) {
+    for (const [at, l] of forOf.loops.entries()) {
+      const k = l.rows.findIndex((r, j) => r.changed && !rowsTaken.has(`${at}:${j}`));
+      if (k >= 0) {
+        outside = `row ${k + 1} of the for…of table of test block ${l.headTest + 1} changed and is not declared`;
         break;
       }
     }
