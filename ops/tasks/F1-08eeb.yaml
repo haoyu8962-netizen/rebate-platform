@@ -1,0 +1,30 @@
+id: F1-08eeb
+repo: rebate-platform
+title: 'F1-08eeb：差错单「类型 → 操作」七种负例——R1 / R2 / 月末 / 月结两种 / 预估变化 / 黑名单待复核都不出【去调账】【申诉恢复】（F1-08ee 伴随测试单，D10-2211）'
+type: test-change
+# 2026-11-20 fe 入账（编排 D10-2211，同 F1-08anb / B2-02xb 的伴随单做法）。F1-08ee 写测 3 轮用满，第 3 轮的类型矩阵（D10-2206：【去调账】只在 ledger_mismatch、
+# 【申诉恢复】只在 appeal_restore / platform_restore 上出，其余类型都不出）里，七条负例 [AC-F1-08ee-TYPES#2/3/5/6/7/9/10]（union_mismatch、channel_mismatch、
+# month_end_unbalanced、settle_amount_mismatch、settle_missing、estimate_changed_after_credit、blacklist_after_credit 待处理时两个入口都不出）在骨架上天然为绿，
+# red-check 的 red_exempt 不适用于新增用例，所以从 F1-08ee 的规则测试提交里整块移出（原文存 couli-runs/F1-08ee/moved-to-eeb/），在本单名下补回。
+# 做法：只新增 test/spec/frontend/admin-recon-adjust-restore/eeb/ 下的文件，把这七块与它们调用的文件内辅助 entriesOfType **原文照搬**，
+# 标题改为 [AC-F1-08eeb-TYPES#n]，断言逐字不变；可 import 同目录 fixtures.ts / helpers.ts 已导出的内容，不改 F1-08ee 的任何文件。
+# 顺序（D10-2211）：工作分支基在 task/F1-08ee 的实现头上，新用例在实现上为绿；探针：实现的「类型 → 操作」常量表里给这七种类型逐个加上【去调账】或【申诉恢复】，
+# 对应用例须红，探针实测结果写进证据（D10-1843 / D10-1879）。F1-08ee 实现完成、本单新用例绿且探针杀到之后，F1-08ee 才 land，本单随后变基 land，
+# 「其余类型不出入口」在主干上不留没有测试守着的空档；新块在实现上为绿，标题定稿后台账补丁登 red_exempt（带探针）。
+# tester claude-independent（本单调用数从零算），spec-test 由 Codex 做全量，评审 Codex。
+refs: [BR-FUND-24, BR-FUND-19]
+refs_hash:
+  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-19: 34f619112535
+deps: [F1-08ee]
+paths:
+  - 'test/spec/frontend/admin-recon-adjust-restore/eeb/**'
+test_paths:
+  - 'test/spec/frontend/admin-recon-adjust-restore/eeb/**' # 新文件
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-recon-adjust-restore/eeb/**'
+status: todo
+pr: null
