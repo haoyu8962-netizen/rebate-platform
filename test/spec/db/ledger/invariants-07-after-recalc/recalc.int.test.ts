@@ -31,7 +31,7 @@ import {
 } from './kit.ts';
 
 it(
-  '[AC-B2-02zb#1] ⑦ 余额缓存按分录重算下调到负数后，下一笔正常入账（余额回升但仍为负）不报；同场景下真扣款与首笔为负照报（含早于校验日的扣款 10 → −1、校验日回升到 1 后仍报），CLAWBACK / SETTLE_ADJUST / ADMIN_ADJUST 与改派红冲降到负照旧不报；空账本只出一条 none 行且 checked_rows = 0，有数据时 checked_rows = 用户分录数',
+  '[AC-B2-02zb#1] ⑦ 余额缓存按分录重算下调到负数后，下一笔正常入账（余额回升但仍为负）不报；同场景下真扣款与首笔为负照报（含早于校验日的扣款 10 → −1、校验日回升到 1 后仍报），CLAWBACK / SETTLE_ADJUST / ADMIN_ADJUST 与改派红冲降到负照旧不报；重算上调（−260 → −200）后真扣款 30（→ −230，高于历史分录 −260）照报；普通键 ordinary:REVERSE 的 REBATE_CREDIT 凭证即使 voucher_kind 与 sub_type 写成 REASSIGN_REV、0 → −5 照报（豁免只按 uniq_key 精确片段）；空账本只出一条 none 行且 checked_rows = 0，有数据时 checked_rows = 用户分录数',
   async () => {
     await scenario(createTestDatabase, async ({ db, check }) => {
       const file = active();
@@ -47,6 +47,7 @@ it(
         lines: readonly Line[];
         uniqKey?: string;
         date?: string;
+        voucherKind?: string;
       }): Promise<Booked> {
         const booked = await book(db, { ...voucher, counter: counter(voucher.appId) });
         all.push(booked);
@@ -159,11 +160,61 @@ it(
       });
       expect(await cache(db, early)).toMatchObject({ available: 1n, frozen: 0n });
 
-      const expected = [
+      // Control (recalculation upward): +100 (balance_after 100); the cache is changed to 40 and
+      // a CLAWBACK of 300 is posted on it (balance_after −260, entries now total −200); the
+      // recalculation raises the cache from −260 to −200. A real deduction of 30 (not an allowed
+      // type) then takes it to −230: below zero and a drop from −200, though above the last
+      // entry's −260. 07 compares with −260 and misses it; the replacement must report it, so a
+      // check that also requires "below the previous entry's balance_after_fen" fails here.
+      const raised = await openUser(db, APP);
+      await post({
+        appId: APP,
+        lines: [{ account: raised, sub: 'available', amount: -100n, type: 'REBATE_CREDIT' }],
+      });
+      await drift(db, raised, 40n);
+      await post({
+        appId: APP,
+        lines: [{ account: raised, sub: 'available', amount: 300n, type: 'CLAWBACK' }],
+      });
+      expect(await cache(db, raised)).toMatchObject({ available: -260n, frozen: 0n });
+      expect(await recalc(db, raised)).toMatchObject({ available: -200n, frozen: 0n });
+      const raisedDeduction = await post({
+        appId: APP,
+        lines: [{ account: raised, sub: 'available', amount: 30n, type: 'WITHDRAW_FEE' }],
+      });
+      expect(await cache(db, raised)).toMatchObject({ available: -230n, frozen: 0n });
+
+      // Control on metadata: an ordinary key (ordinary:REVERSE, no :REASSIGN_REV: segment), type
+      // REBATE_CREDIT, voucher_kind and the entry's sub_type both REASSIGN_REV, taking 0 → −5.
+      // The exemption is the exact uniq_key segment only, never the voucher or entry metadata:
+      // reported by both versions.
+      const tagged = await openUser(db, APP);
+      const taggedDebit = await post({
+        appId: APP,
+        uniqKey: 'ordinary:REVERSE',
+        voucherKind: 'REASSIGN_REV',
+        lines: [
+          {
+            account: tagged,
+            sub: 'available',
+            amount: 5n,
+            type: 'REBATE_CREDIT',
+            subType: 'REASSIGN_REV',
+          },
+        ],
+      });
+      expect(await cache(db, tagged)).toMatchObject({ available: -5n, frozen: 0n });
+
+      // Real deductions both versions report.
+      const deductions = [
         expectedRow(charged, deduction),
         expectedRow(fresh, first),
         expectedRow(early, earlyDeduction),
-      ].sort();
+        expectedRow(tagged, taggedDebit),
+      ];
+      // A real deduction after an upward recalculation: the replacement must report it, 07 cannot.
+      const missedByLegacy = [expectedRow(raised, raisedDeduction)];
+      const expected = [...deductions, ...missedByLegacy].sort();
       const falsePositives = [
         expectedRow(credited, credit),
         expectedRow(elsewhere, elsewhereCredit),
@@ -172,8 +223,9 @@ it(
 
       const [legacy, current] = await check([LEGACY, file]);
       // Confirms the mechanism: 07 compares with the previous balance_after_fen, which was taken
-      // from the cache before the recalculation (100), so each credit above reads as a drop.
-      expect(reported(legacy!)).toEqual([...expected, ...falsePositives].sort());
+      // from the cache before the recalculation (100), so each credit above reads as a drop; and
+      // after the upward recalculation it compares −230 with −260 and sees no drop.
+      expect(reported(legacy!)).toEqual([...deductions, ...falsePositives].sort());
       for (const row of legacy!) expect(row.checked_rows).toBe(userEntries(all));
       // The check the daily run loads today must report exactly the real deductions, over the
       // same user entries.

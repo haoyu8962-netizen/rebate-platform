@@ -95,6 +95,8 @@ export interface Line {
   /** Signed storage amount: a user's balance moves by −amount_fen (user liability account). */
   amount: bigint;
   type: LedgerType;
+  /** ledger_entries.sub_type; null when omitted. Metadata only: ⑦ exempts by uniq_key alone. */
+  subType?: string;
 }
 export interface BookedEntry {
   id: string;
@@ -430,6 +432,7 @@ export async function cache(db: Kysely<DB>, a: UserAccount): Promise<Cache> {
  * that order), each carrying its sub-account's cache value after the whole voucher and the
  * account's next version; then a platform counter line for the remainder; then the cache.
  * `date` is the voucher's accounting date and the entries' booked_at day (default: DAY).
+ * `voucherKind` fills ledger_vouchers.voucher_kind (null when omitted).
  */
 export async function book(
   db: Kysely<DB>,
@@ -439,6 +442,7 @@ export async function book(
     lines: readonly Line[];
     uniqKey?: string;
     date?: string;
+    voucherKind?: string;
   },
 ): Promise<Booked> {
   const date = voucher.date ?? DAY;
@@ -458,19 +462,19 @@ export async function book(
   const voucherId = randomUUID();
   const uniqKey = voucher.uniqKey ?? `fixture:${randomUUID()}`;
   await sql`INSERT INTO app.ledger_vouchers
-    (id, app_id, biz_type, biz_id, uniq_key, accounting_date, operator)
+    (id, app_id, biz_type, biz_id, uniq_key, accounting_date, operator, voucher_kind)
     VALUES (${voucherId}, ${voucher.appId}, 'order', ${randomUUID()}, ${uniqKey}, ${date},
-      'system')`.execute(db);
+      'system', ${voucher.voucherKind ?? null})`.execute(db);
   const entries: BookedEntry[] = [];
   let net = 0n;
   for (const line of voucher.lines) {
     const next = after.get(line.account.id)!.next;
     const balanceAfter = line.sub === 'available' ? next.available : next.frozen;
     const { rows } = await sql<{ id: bigint | string }>`INSERT INTO app.ledger_entries
-      (app_id, voucher_id, account_id, sub_account, amount_fen, ledger_type,
+      (app_id, voucher_id, account_id, sub_account, amount_fen, ledger_type, sub_type,
        balance_after_fen, account_version, booked_at)
       VALUES (${voucher.appId}, ${voucherId}, ${line.account.id}, ${line.sub}, ${line.amount},
-       ${line.type}, ${balanceAfter}, ${next.version}, ${bookedAt(date)})
+       ${line.type}, ${line.subType ?? null}, ${balanceAfter}, ${next.version}, ${bookedAt(date)})
       RETURNING id`.execute(db);
     entries.push({ id: String(rows[0]!.id), account_id: line.account.id, sub_account: line.sub });
     net = net + line.amount;
@@ -608,7 +612,13 @@ export interface HistoryRows {
     frozen_fen: bigint;
     version: bigint;
   }[];
-  vouchers: { id: string; app_id: string; uniq_key: string; accounting_date: string }[];
+  vouchers: {
+    id: string;
+    app_id: string;
+    uniq_key: string;
+    accounting_date: string;
+    voucher_kind: string | null;
+  }[];
   entries: {
     app_id: string;
     voucher_id: string;
@@ -616,6 +626,7 @@ export interface HistoryRows {
     sub_account: SubAccount;
     amount_fen: bigint;
     ledger_type: LedgerType;
+    sub_type: string | null;
     balance_after_fen: bigint | null;
     account_version: bigint | null;
     booked_at: string;

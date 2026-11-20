@@ -4,12 +4,16 @@
 // Runs and seed only through @couli/testing. Each sample writes its history inside its own
 // transaction (one INSERT per table), runs both versions there and rolls back, so every sample
 // (shrunk ones included) sees its own history and nothing else.
+// Coverage: the edges the comparison is about are reached by a fixed list of histories run
+// through the same per-sample procedure before the property; only those are required to hit
+// (the random part is recorded, never held to a minimum, so a small PROP_RUNS cannot fail it).
 import { randomUUID } from 'node:crypto';
+import type { DB } from '@couli/db';
 import { createTestDatabase } from '@couli/db/testing';
 import { addFen, subFen } from '@couli/money';
 import { createPropStats, propRuns, propSeed, type PropStats } from '@couli/testing';
 import fc from 'fast-check';
-import { sql } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { expect, it } from 'vitest';
 import { APP, OTHER_APP } from '../invariants/kit.ts';
 import {
@@ -60,9 +64,19 @@ const plannedLine = fc.record({
   sub: fc.constantFrom('available' as const, 'available' as const, 'frozen' as const),
   amount,
   type: fc.constantFrom(...LEDGER_TYPES),
+  // Entry metadata: REASSIGN_REV here never exempts (only the uniq_key segment does).
+  subType: fc.constantFrom(null, null, 'REASSIGN_REV' as const),
 });
 const plannedVoucher = fc.record({
   app: fc.integer({ min: 0, max: 1 }),
+  // Voucher metadata: REASSIGN_REV here never exempts either.
+  kind: fc.constantFrom(
+    null,
+    null,
+    'CREDIT' as const,
+    'CLAWBACK' as const,
+    'REASSIGN_REV' as const,
+  ),
   // reassign: R14 reversal key; decoys: an underscore wildcard and a longer segment name.
   key: fc.constantFrom(
     'plain' as const,
@@ -98,6 +112,7 @@ interface Planned {
   sub: SubAccount;
   amount: bigint;
   type: LedgerType;
+  subType: string | null;
 }
 interface State {
   available: bigint;
@@ -108,6 +123,8 @@ interface Built {
   rows: HistoryRows;
   /** Voucher id → index in DAYS of its accounting date. */
   days: Map<string, number>;
+  /** Vouchers tagged REASSIGN_REV only in voucher_kind / sub_type, not in uniq_key. */
+  metadataOnly: Set<string>;
   userLines: bigint;
 }
 
@@ -160,6 +177,7 @@ function build(plans: readonly PlannedVoucher[], stats: PropStats): Built {
     return known;
   };
   const days = new Map<string, number>();
+  const metadataOnly = new Set<string>();
   let day = 0;
   let userLines = 0n;
   for (const plan of plans) {
@@ -170,6 +188,7 @@ function build(plans: readonly PlannedVoucher[], stats: PropStats): Built {
       sub: l.sub,
       amount: l.amount,
       type: l.type,
+      subType: l.subType,
     }));
     const head = planned[0]!;
     const before = state(head.account.id)[head.sub];
@@ -218,11 +237,19 @@ function build(plans: readonly PlannedVoucher[], stats: PropStats): Built {
     const voucherId = randomUUID();
     const appId = accounts[0]!.app_id;
     days.set(voucherId, day);
+    if (
+      plan.key !== 'reassign' &&
+      (plan.kind === 'REASSIGN_REV' || voucherLines.some((l) => l.subType === 'REASSIGN_REV'))
+    ) {
+      metadataOnly.add(voucherId);
+      stats.hit('reassign-metadata-only');
+    }
     rows.vouchers.push({
       id: voucherId,
       app_id: appId,
       uniq_key: uniqKey(plan.key, voucherLines[0]!.account.owner_id),
       accounting_date: DAYS[day]!,
+      voucher_kind: plan.kind,
     });
     let net = 0n;
     for (const line of voucherLines) {
@@ -235,6 +262,7 @@ function build(plans: readonly PlannedVoucher[], stats: PropStats): Built {
         sub_account: line.sub,
         amount_fen: line.amount,
         ledger_type: line.type,
+        sub_type: line.subType,
         balance_after_fen: balance,
         account_version: after.version,
         booked_at: bookedAt(DAYS[day]!),
@@ -251,6 +279,7 @@ function build(plans: readonly PlannedVoucher[], stats: PropStats): Built {
         sub_account: 'available',
         amount_fen: subFen(0n, net),
         ledger_type: voucherLines[0]!.type,
+        sub_type: null,
         balance_after_fen: null,
         account_version: null,
         booked_at: bookedAt(DAYS[day]!),
@@ -278,14 +307,126 @@ function build(plans: readonly PlannedVoucher[], stats: PropStats): Built {
       });
     }
   }
-  return { rows, days, userLines };
+  return { rows, days, metadataOnly, userLines };
 }
 
 function voucherOf(row: Result): string {
   return String((row.detail as Record<string, unknown>)['voucher_id']);
 }
 
-it('[AC-B2-02zb#5] 属性：不含重算的随机过账历史（多分录凭证、同凭证同子户多条、available / frozen、首笔为负、白名单类型、改派红冲与相似键、多账户多 app、校验日前后多日、超过 2^31 分的金额与余额、负余额下净零凭证、正余额恰扣到 0），缓存始终与分录一致时，当前生效的替换版与旧 07 输出的行逐行相同（含 checked_rows = 用户分录数）；空账本两版都只出一条 checked_rows = 0 的 none 行', async () => {
+/**
+ * One sample: writes the history inside its own transaction, runs both versions there,
+ * compares them row for row and rolls back.
+ */
+async function sample(
+  db: Kysely<DB>,
+  file: string,
+  plans: readonly PlannedVoucher[],
+  stats: PropStats,
+): Promise<void> {
+  const built = build(plans, stats);
+  await db.connection().execute(async (conn) => {
+    await sql`BEGIN`.execute(conn);
+    try {
+      await insertHistory(conn, built.rows);
+      const [legacy, current] = await checkIn(conn, [LEGACY, file]);
+      for (const row of legacy!) {
+        expect(row.checked_rows, `${LEGACY}: checked user entries`).toBe(built.userLines);
+      }
+      expect(lines(current!), `${file} vs ${LEGACY}`).toEqual(lines(legacy!));
+      const reportedVouchers = legacy!
+        .filter((row) => row.scope === 'account')
+        .map((row) => voucherOf(row));
+      const reportedDays = reportedVouchers.map((voucher) => built.days.get(voucher));
+      if (reportedDays.length > 0) stats.hit('legacy-reports');
+      if (reportedDays.some((d) => d !== undefined && d < CHECK_DAY)) {
+        stats.hit('legacy-reports-before-check-date');
+      }
+      if (reportedDays.some((d) => d !== undefined && d > CHECK_DAY)) {
+        stats.hit('legacy-reports-after-check-date');
+      }
+      if (reportedVouchers.some((voucher) => built.metadataOnly.has(voucher))) {
+        stats.hit('legacy-reports-reassign-metadata');
+      }
+    } finally {
+      await sql`ROLLBACK`.execute(conn);
+    }
+  });
+}
+
+type PlannedLine = PlannedVoucher['lines'][number];
+
+function fixedLine(
+  account: number,
+  sub: SubAccount,
+  amount: bigint,
+  type: LedgerType,
+  subType: PlannedLine['subType'],
+): PlannedLine {
+  return { account, sub, amount, type, subType };
+}
+
+function fixedVoucher(
+  lines: PlannedLine[],
+  options: Partial<Omit<PlannedVoucher, 'lines'>>,
+): PlannedVoucher {
+  return { app: 0, kind: null, key: 'plain', shape: 'free', advance: false, ...options, lines };
+}
+
+/**
+ * Fixed histories, run before the property through sample(); together they reach every edge
+ * the comparison is about (asserted on their own stats). Comments give the intended balances.
+ */
+function fixedHistories(): PlannedVoucher[][] {
+  return [
+    [
+      // App 0, day 0. Account 0: the first voucher 0 → −30 by a fee whose voucher_kind and
+      // sub_type say REASSIGN_REV under an ordinary key (reported, before the check date).
+      fixedVoucher([fixedLine(0, 'available', 30n, 'WITHDRAW_FEE', 'REASSIGN_REV')], {
+        kind: 'REASSIGN_REV',
+      }),
+      // Net-zero voucher on −30: a debit of 20 and a credit of 20 in one sub-account.
+      fixedVoucher(
+        [
+          fixedLine(0, 'available', 20n, 'WITHDRAW_FEE', null),
+          fixedLine(0, 'available', -20n, 'REBATE_CREDIT', null),
+        ],
+        { shape: 'net-zero', kind: 'CREDIT' },
+      ),
+      // Reassignment reversal key: −30 → −40.
+      fixedVoucher([fixedLine(0, 'available', 10n, 'REBATE_CREDIT', null)], { key: 'reassign' }),
+      // Allowed type below zero: −40 → −45; voucher_kind CLAWBACK.
+      fixedVoucher([fixedLine(0, 'available', 5n, 'CLAWBACK', null)], { kind: 'CLAWBACK' }),
+      // Account 1: credit 10, then exactly to zero by a fee (to-zero replaces the amount by 10).
+      fixedVoucher([fixedLine(1, 'available', -10n, 'REBATE_CREDIT', null)], {}),
+      fixedVoucher([fixedLine(1, 'available', 3n, 'WITHDRAW_FEE', null)], { shape: 'to-zero' }),
+      // Account 2: a frozen line (0 → 50 frozen), then a credit beyond 2^31.
+      fixedVoucher([fixedLine(2, 'frozen', -50n, 'WITHDRAW_FREEZE', null)], {}),
+      fixedVoucher([fixedLine(2, 'available', -OVER_LIMIT, 'REBATE_CREDIT', null)], {}),
+      // Day 1: a deduction beyond 2^31 → −2,147,483,651 (reported).
+      fixedVoucher([fixedLine(2, 'available', 4_294_967_300n, 'TAX_WITHHOLD', null)], {
+        advance: true,
+      }),
+      // Day 2 (the check date): decoy keys in app 1, credits only.
+      fixedVoucher([fixedLine(0, 'available', -7n, 'REWARD', 'REASSIGN_REV')], {
+        app: 1,
+        key: 'wildcard',
+        advance: true,
+      }),
+      fixedVoucher([fixedLine(0, 'available', -3n, 'REWARD', null)], { app: 1, key: 'prefixed' }),
+      // Day 3: account 1 of app 0 goes 0 → −7 by a fee (reported, after the check date).
+      fixedVoucher([fixedLine(1, 'available', 7n, 'WITHDRAW_FEE', null)], { advance: true }),
+    ],
+    [
+      // The shared owner in both apps: the same deduction in each app, compared per app only.
+      fixedVoucher([fixedLine(0, 'available', -5n, 'REBATE_CREDIT', null)], {}),
+      fixedVoucher([fixedLine(0, 'available', 9n, 'WITHDRAW_FEE', null)], { app: 1 }),
+      fixedVoucher([fixedLine(0, 'available', 9n, 'WITHDRAW_FEE', null)], {}),
+    ],
+  ];
+}
+
+it('[AC-B2-02zb#5] 属性：不含重算的随机过账历史（多分录凭证、同凭证同子户多条、available / frozen、首笔为负、白名单类型、改派红冲与相似键、voucher_kind / sub_type 写成 REASSIGN_REV 的普通键凭证、多账户多 app、校验日前后多日、超过 2^31 分的金额与余额、负余额下净零凭证、正余额恰扣到 0），缓存始终与分录一致时，当前生效的替换版与旧 07 输出的行逐行相同（含 checked_rows = 用户分录数）；空账本两版都只出一条 checked_rows = 0 的 none 行', async () => {
   // The replacement must be registered; a missing one is an assertion failure, never skipped.
   registration();
   const file = active();
@@ -361,37 +502,19 @@ it('[AC-B2-02zb#5] 属性：不含重算的随机过账历史（多分录凭证�
   });
 
   const runs = propRuns();
+  const fixedStats = createPropStats('B2-02zb#5 07 vs replacement (fixed histories)');
   const stats = createPropStats('B2-02zb#5 07 vs replacement');
   let samples = 0;
   await scenario(createTestDatabase, async ({ db, check }) => {
     empty(await check([LEGACY, file]));
+    // Deterministic part: the fixed histories through the same per-sample procedure.
+    for (const plans of fixedHistories()) await sample(db, file, plans, fixedStats);
+    empty(await check([LEGACY, file]));
+    // Random part.
     await fc.assert(
       fc.asyncProperty(history, async (plans) => {
         samples += 1;
-        const built = build(plans, stats);
-        await db.connection().execute(async (conn) => {
-          await sql`BEGIN`.execute(conn);
-          try {
-            await insertHistory(conn, built.rows);
-            const [legacy, current] = await checkIn(conn, [LEGACY, file]);
-            for (const row of legacy!) {
-              expect(row.checked_rows, `${LEGACY}: checked user entries`).toBe(built.userLines);
-            }
-            expect(lines(current!), `${file} vs ${LEGACY}`).toEqual(lines(legacy!));
-            const reportedDays = legacy!
-              .filter((row) => row.scope === 'account')
-              .map((row) => built.days.get(voucherOf(row)));
-            if (reportedDays.length > 0) stats.hit('legacy-reports');
-            if (reportedDays.some((d) => d !== undefined && d < CHECK_DAY)) {
-              stats.hit('legacy-reports-before-check-date');
-            }
-            if (reportedDays.some((d) => d !== undefined && d > CHECK_DAY)) {
-              stats.hit('legacy-reports-after-check-date');
-            }
-          } finally {
-            await sql`ROLLBACK`.execute(conn);
-          }
-        });
+        await sample(db, file, plans, stats);
         return true;
       }),
       { numRuns: runs, seed: propSeed() },
@@ -399,23 +522,28 @@ it('[AC-B2-02zb#5] 属性：不含重算的随机过账历史（多分录凭证�
     // Every sample was rolled back: the ledger is empty again.
     empty(await check([LEGACY, file]));
   });
-  const record = stats.flush();
+  const fixedRecord = fixedStats.flush();
+  // Recorded for the run report only; the random part has no minimum hit count.
+  stats.flush();
   expect(samples).toBeGreaterThanOrEqual(runs);
-  // The generator must reach the cases the comparison is about.
+  // The deterministic part must reach the cases the comparison is about.
   for (const bucket of [
     'legacy-reports',
     'legacy-reports-before-check-date',
+    'legacy-reports-after-check-date',
+    'legacy-reports-reassign-metadata',
     'negative-balance',
     'first-voucher-negative',
     'frozen-line',
     'same-sub-multi-line',
     'reassign-key',
+    'reassign-metadata-only',
     'allowed-type-below-zero',
     'net-zero-while-negative',
     'exact-zero-from-positive',
     'amount-over-2^31',
     'balance-over-2^31',
   ]) {
-    expect(record.hits[bucket] ?? 0, `generator coverage: ${bucket}`).toBeGreaterThan(0);
+    expect(fixedRecord.hits[bucket] ?? 0, `fixed-history coverage: ${bucket}`).toBeGreaterThan(0);
   }
 }, 900_000);
