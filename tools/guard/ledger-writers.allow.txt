@@ -1,0 +1,37 @@
+# 账务单一写入点守卫的放行清单（tools/guard/ledger-writers.ts，CT-06zzzzzx）。
+# 格式：一行一个路径（文件，或以 / 结尾的目录），Tab 后写理由；# 开头是注释。不许用通配。
+# 放行只按这里列出的文件 / 目录本身，不按所在模块。新增条目是门禁改动，要经负责人。
+
+# 记账写入点
+apps/api/src/modules/ledger/infra/store.ts	唯一的记账写入点；B2-02x 的余额重算经它写，不另列（D10-2223）
+
+# 已合并迁移（只增不改，留存历史；新迁移写账务表一律拦）
+db/migrations/0054_ledger-user-accounts-backfill.sql	已合并的用户账户回填迁移，只增不改，留存历史
+
+# 字符串里的 SQL 文本，不执行写
+apps/api/src/modules/identity/infra/registration-store.test.ts	单元测试断言记账函数发出的 SQL 文本，不连库、不执行
+apps/api/src/modules/ledger/application/ledger-locks.test.ts	单元测试断言记账函数发出的 SQL 文本，不连库、不执行
+tools/ci/lint-migrations.test.ts	迁移 lint 的夹具字符串（TRUNCATE 被拦的样例）
+
+# 规则测试夹具（只限 test/spec 下逐条列出的目录）：建测试数据要直写账务表
+test/spec/agent/write-scope/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/db/ledger/backfill/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/db/ledger/core/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/db/ledger/invariants-07-after-recalc/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/growth/admin-invite-rewards/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/growth/invite-reward/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/identity/bind-phone-merge-conditions/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/identity/deletion-expiry/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/identity/deletion-progress-message/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/identity/deletion-request/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/identity/reverify-gates/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/ledger/admin-fund-ledger/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/ledger/admin-ledger-read/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/ledger/admin-recon-balance-recalc/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/ledger/daily-check/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/ledger/posting/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/ledger/wallet-ledger/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/ledger/wallet-summary/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/payment/recon/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/risk/appeal-restore/	规则测试夹具：在测试库里造账务数据或核对只插入约束
+test/spec/settlement/union-receipts-schema/	规则测试夹具：在测试库里造账务数据或核对只插入约束
