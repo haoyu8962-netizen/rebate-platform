@@ -154,5 +154,5 @@ tester: none
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/notification/balance-corrected/**'
-status: todo
-pr: null
+status: done
+pr: 371
