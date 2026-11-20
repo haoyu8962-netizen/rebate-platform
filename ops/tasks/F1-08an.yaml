@@ -6,6 +6,7 @@ type: impl
 # 范围：apps/admin/src/pages/withdrawals/WithdrawalsPage.tsx 与批量栏。持 payout.execute 时勾到 APPROVED 单出【批量自动打款】（确认对话框列将处理与跳过的单、执行前检查与后果 → 动态码 → 只发一次 POST /admin/v1/payout-batches，1–200 单；整批拒绝原因与逐单结果如实显示，部分成功不报全成）；一键组批按 listAdminWithdrawals 已有的 hold_reason / blocked 筛选选中可执行单（纯前端，不另发写请求）；各状态页签计数用每个页签一次 page_size=1 的 total（D10-2017「各页签取一次总数」）。与 F1-08al【批量手动打款】同一批量栏、各管各的勾选子集。顺手更新 WithdrawalsPage.tsx 头部 TODO（【导出】等 be ③ 契约、「自动到账设置」另见 F1-08ap）。
 # 资金写操作（RV2）：money 评审。
 # 写测与评审：Codex 额度用尽（D10-2003），规则测试与首轮评审由无上下文的独立 Claude（claude-run.sh），证据如实记 claude-independent。写测时发现冻结用例（入口清单、只读断言、TODO 对应的「不出现」断言）受影响，先报编排再补 modify_existing（D10-1712 / D10-1899）。写操作一律照 F1-08ce 结果未知处理（D10-1731）。
+# 2026-11-20 补丁 1（fe，编排 D10-2167，同 D10-1733 / D10-1899 / D10-2100）：写测第 1 轮报冻结冲突——本单【一键组批】持 payout.execute（超管）时不勾选也可用，F1-08a [AC-F1-08a-READONLY#1] / [#3]、[AC-F1-08a-BROWSER#1] 与 F1-08ai [AC-F1-08ai-ACCESS#1] 的全量权限 / 超管写入口须为空。改法：入口清单改为「恰为当时已落地的入口」（toEqual 严格相等，持 payout.execute 或超管时恰多【一键组批】、不点它；【批量自动打款】未勾选仍禁；无 payout.execute 的角色一字不变并保留看不到【一键组批】的反向用例）；admin-withdrawals/helpers.ts 的 assertReadOnly、admin-withdrawal-batch-approve/helpers.ts 的 assertNoOtherActions、pages.browser.test.ts 顶层 WRITE 只做纯插入（加可选的「已落地入口」参数：不传参时行为逐字不变、禁词表不删；传入的入口同时断言确实在），按文件级 scope: support 登记。每份冻结测试文件各补 1 条本单新块在主干上红（D10-1812）。页签计数若改变 server.reads() 次数，按 D10-2167 ③ 改成新的确切次数、逐条另登。金额、请求体、揭示断言不动。
 refs: [BR-WDR-12, BR-WDR-11, BR-ID-34]
 refs_hash:
   BR-WDR-12: 37adcd14e97f
@@ -17,8 +18,59 @@ paths:
   - 'apps/admin/src/texts/withdrawals.ts'
 test_paths:
   - 'test/spec/frontend/admin-withdrawal-batch-payout/**'
+  - 'test/spec/frontend/admin-withdrawals/readonly.test.ts'
+  - 'test/spec/frontend/admin-withdrawals/pages.browser.test.ts'
+  - 'test/spec/frontend/admin-withdrawals/helpers.ts'
+  - 'test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts'
+  - 'test/spec/frontend/admin-withdrawal-batch-approve/helpers.ts'
 impl: claude
 tester: claude-independent
+modify_existing:
+  - file: 'test/spec/frontend/admin-withdrawals/readonly.test.ts'
+    test: '[AC-F1-08a-READONLY#1] 审核列表（账号持 withdraw.review、payout.execute、payout.manual_entry、export、pii.reveal_identity、pii.reveal_phone 等全部写与查看全量权限点）：没有可点的【批量通过】【批量手动打款】【批量自动打款】【导出】等写入口，点任何写入口或【查看】类入口都只发允许的 GET'
+    retitle_to: '[AC-F1-08a-READONLY#1] 审核列表（账号持 withdraw.review、payout.execute、payout.manual_entry、export、pii.reveal_identity、pii.reveal_phone 等全部写与查看全量权限点）：可用写入口恰为【一键组批】（F1-08an，不点），没有可点的【批量通过】【批量手动打款】【批量自动打款】【导出】等其他写入口，点其余写入口或【查看】类入口都只发允许的 GET'
+    reason: rule_change
+    br: [BR-WDR-12, BR-WDR-11]
+    ruling: D10-2167
+    note: '同 D10-1733 / D10-1899 通例（D10-2167 甲）：持 payout.execute 或超管的审核列表在 F1-08an 落地【一键组批】后，可用写入口由空改为恰为【一键组批】（toEqual 严格相等，不点它）；【批量自动打款】未勾选时仍不出现；其余禁词、只发允许的 GET、揭示与不出现完整账号 / 姓名 / 手机号的断言不变'
+  - file: 'test/spec/frontend/admin-withdrawals/readonly.test.ts'
+    test: '[AC-F1-08a-READONLY#3] 列表进详情一路（列表 → 【详情】 → 详情，全部权限点）只请求 GET /admin/v1/withdrawals 与 GET /admin/v1/withdrawals/{id}，不请求打款、导出、自动到账设置、风险标签重算或查看全量'
+    reason: rule_change
+    br: [BR-WDR-12, BR-WDR-11]
+    ruling: D10-2167
+    note: '同 D10-1733 / D10-1899 通例（D10-2167 甲）：持 payout.execute 或超管的审核列表在 F1-08an 落地【一键组批】后，可用写入口由空改为恰为【一键组批】（toEqual 严格相等，不点它）；【批量自动打款】未勾选时仍不出现；其余禁词、只发允许的 GET、揭示与不出现完整账号 / 姓名 / 手机号的断言不变'
+  - file: 'test/spec/frontend/admin-withdrawals/pages.browser.test.ts'
+    test: '[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下也没有可点的写入口，全程只发允许的 GET'
+    retitle_to: '[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下列表可用写入口恰为【一键组批】（F1-08an，不点）、详情没有可点的写入口，全程只发允许的 GET'
+    reason: rule_change
+    br: [BR-WDR-12, BR-WDR-11]
+    ruling: D10-2167
+    note: '同 D10-1733 / D10-1899 通例（D10-2167 甲）：持 payout.execute 或超管的审核列表在 F1-08an 落地【一键组批】后，可用写入口由空改为恰为【一键组批】（toEqual 严格相等，不点它）；【批量自动打款】未勾选时仍不出现；其余禁词、只发允许的 GET、揭示与不出现完整账号 / 姓名 / 手机号的断言不变'
+  - file: 'test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts'
+    test: '[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏'
+    retitle_to: '[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏；持 payout.execute 或超管时恰多可用的【一键组批】（F1-08an），只持审核权限看不到它'
+    reason: rule_change
+    br: [BR-WDR-12, BR-WDR-11]
+    ruling: D10-2167
+    note: '同 D10-1733 / D10-1899 通例（D10-2167 甲）：持 payout.execute 或超管的审核列表在 F1-08an 落地【一键组批】后，可用写入口由空改为恰为【一键组批】（toEqual 严格相等，不点它）；【批量自动打款】未勾选时仍不出现；其余禁词、只发允许的 GET、揭示与不出现完整账号 / 姓名 / 手机号的断言不变'
+  - file: 'test/spec/frontend/admin-withdrawals/helpers.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-WDR-12, BR-WDR-11]
+    ruling: D10-2167
+    note: '块外支撑改动按 D10-2100 文件级条目登记（D10-2167 ②）：只做纯插入——断言函数 / 顶层 WRITE 加可选的「已落地入口」参数或旁路常量，不传参时行为逐字不变、禁词表不删；传入的入口（持 payout.execute 或超管时的【一键组批】）同时断言确实在、恰好多这一个。'
+  - file: 'test/spec/frontend/admin-withdrawal-batch-approve/helpers.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-WDR-12, BR-WDR-11]
+    ruling: D10-2167
+    note: '块外支撑改动按 D10-2100 文件级条目登记（D10-2167 ②）：只做纯插入——断言函数 / 顶层 WRITE 加可选的「已落地入口」参数或旁路常量，不传参时行为逐字不变、禁词表不删；传入的入口（持 payout.execute 或超管时的【一键组批】）同时断言确实在、恰好多这一个。'
+  - file: 'test/spec/frontend/admin-withdrawals/pages.browser.test.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-WDR-12, BR-WDR-11]
+    ruling: D10-2167
+    note: '块外支撑改动按 D10-2100 文件级条目登记（D10-2167 ②）：只做纯插入——断言函数 / 顶层 WRITE 加可选的「已落地入口」参数或旁路常量，不传参时行为逐字不变、禁词表不删；传入的入口（持 payout.execute 或超管时的【一键组批】）同时断言确实在、恰好多这一个。'
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-withdrawal-batch-payout/**'
