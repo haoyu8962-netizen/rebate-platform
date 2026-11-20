@@ -723,3 +723,9 @@ approvals:
     granted: true
     date: '2026-11-20'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（评审轮次属门禁流程小改动），D10-2229，先例第 107 条、第 112 条、第 114 条、第 115 条：前两轮不是同一问题连续不过——spec-test r1（Codex 全量）报 7 条 S1（跨日扣款、净零 / 恰到零、superseded 只增、空账本 none 行、属性隔离与回调内断言、次数、金额超 2^31），写测第 2 次全部补上，r2（Codex 增量）确认已补；r2 新报 S1：只钉了「重算下调后正常入账不报」，没钉「重算上调后真实扣款仍报」（实现若附加「结果余额低于上一条历史分录余额」会漏报），正是本单（负余额来源自检 07 换版、新单 A 自动更正的前置）的核心口径，拆单会使 land 顺序绕行，故不拆。范围写死（任务书 couli-runs/B2-02zb/brief-test3.md §7）：r3 只判写测第 3 次是否钉住上述三条及其改动是否放宽已有断言；只对 B2-02zb、只多 spec-test 1 轮；Codex 经 codex-run.sh（证据 engine 记 codex）；照常不调 bump-attempt（按编排例外轮记），其余次数上限与熔断不变；r3 再出新的 S1 即停报编排，不再加轮。'
+  - id: 118
+    row: 4
+    title: 'F1-08anb 任务专属一次性追加：写规则测试第 4 次 + spec-test 第 4 轮（Codex 增量）——范围写死为 LIST 组新增一条「带 execute_blocked=queue_paused 的自动审核单执行后翻页重读，回执仍在、状态列随重读变」，配探针「只给 execute_blocked 为空的单保留回执」须红；其余用例一字不动'
+    granted: true
+    date: '2026-11-20'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测次数属门禁流程小改动），D10-2231，先例第 115 条（F1-08an 第 4 次写测）、第 117 条：F1-08anb 是 F1-08an 的伴随测试单（D10-2201），写测 3 次是约定上限、不是工具熔断（独立调用 3 / 10）；三轮不是同一问题连续不过——Codex spec-test r1 报 3 条 S1（回执不随到账改写、拒绝后可控时钟、2,000,001 分边界，D10-2214），r2 补上后报 2 条夹具 S1（人工审核单到账后 paid_auto_review、AMOUNT 通道开通水位充足），r3 补上后报 1 条：LIST#5 的自动审核单 execute_blocked 写死为 null，漏了「自动审核通过、首次自动执行受阻（如 queue_paused）后由财务手动执行」的真实形状；实现已核对是对的（WithdrawalsPage.tsx 按单号取回执、不看 execute_blocked），缺的只是一个夹具变体与一条断言，开伴随单的伴随单流程过重故不拆（D10-2231）。范围写死：只在 test/spec/frontend/admin-withdrawal-batch-payout/anb/list.test.ts 新增一条 it（LIST 组），已有用例、夹具与辅助一字不动；探针在 F1-08an 实现提交上做，结果进证据。只对 F1-08anb、只多写测 1 次与 spec-test 1 轮；写测由全新无上下文的独立 Claude（claude-run.sh，approvals 第 36 条，证据记 claude-independent），spec-test 由 Codex（codex-run.sh，证据记 codex）；照常不调 bump-attempt（按编排例外轮记），其余次数上限与熔断不变；r4 再出新的 S1 即停报编排，属实的登 FU、不再加轮。'
