@@ -8,11 +8,12 @@ type: guard-change
 # 测试夹具豁免按清单（目录级，逐条列出，不用 test/** 通配）：11-20 主干直写这三张表的测试在 test/spec 下 24 个文件、19 个目录（db/ledger/{backfill,core}、ledger/{admin-fund-ledger,admin-ledger-read,daily-check,posting,wallet-ledger,wallet-summary}、identity/{bind-phone-merge-conditions,deletion-expiry,deletion-progress-message,deletion-request,reverify-gates}、growth/{admin-invite-rewards,invite-reward}、payment/recon、risk/appeal-restore、settlement/union-receipts-schema、agent/write-scope）；写测前以主干实扫为准。只豁免 test/spec 与 packages/testing 下列出的目录，apps / packages 里的 *.test.ts 不豁免（单元测试不连库，不该有写语句）。
 # 报错写清文件:行、命中的表与写法、怎么办（「只能经 ledger 模块记账函数；确需新增写入点要门禁改动并经负责人」）。已知限制如实写进守卫头注释：表名由变量或 sql.table / sql.id 拼出时认不出（实现时顺带扫一遍主干确认没有这种写法）。
 # 门禁改动：合并要 owner-approved 标签（approvals 16，编排加）；改的是只收紧的新守卫，不放宽任何现有检查。tester codex（Codex 可用；写测后 spec-test 由独立 Claude，approvals 19），评审 money。
+# 补丁 1（2026-11-20 w1）：paths 加 tools/guard/guard-cli.test.ts——它的两条用例把 guard static 输出写死（12 行、6 passed），挂上 ledger-writers 后只做机械跟改（插 PASS ledger-writers、6→7 passed），不改别的断言。
 refs: []
 refs_hash: {}
 deps: [B1-20b, B2-02x]
 paths:
-  - 'tools/guard/{ledger-writers.ts,ledger-writers.test.ts,ledger-writers.allow.txt,run.ts}'
+  - 'tools/guard/{ledger-writers.ts,ledger-writers.test.ts,ledger-writers.allow.txt,run.ts,guard-cli.test.ts}'
   - 'ops/tasks/CT-06zzzzzx.yaml'
 test_paths:
   - 'test/spec/ci/ledger-single-writer/**'
