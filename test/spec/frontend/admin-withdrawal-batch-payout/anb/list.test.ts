@@ -360,3 +360,106 @@ it(
     await receiptCase('query', 'auto');
   },
 );
+
+// ---- LIST#6: an auto withdrawal whose first (system) execution was blocked by the paused queue ----
+// BR-WDR-12 / BR-WDR-30：判 auto 的单由系统建 kind=auto 批次执行，① 队列暂停（payout.queue_paused）即整批拒绝、
+// 什么都不写：单据留在 APPROVED、不挂批次（batch_id null），auto_decision 追加 execute_blocked=queue_paused
+// （契约 AdminWithdrawalAutoDecision），转人工执行。持 payout.execute 勾它组人工批次执行；执行受阻的标记随
+// auto_decision 留在状态列（marksOf），「执行结果」只取这次回执。
+
+it(
+  '[AC-F1-08anb-LIST#6] 自动审核通过、首次自动执行因打款队列暂停受阻（review_mode auto、auto_decision.execute_blocked=queue_paused、留在 APPROVED、未挂批次）的待执行单：超管勾它执行，服务端回 executed、paying 恰为这一张；关闭结果对话框、列表重读后该行「执行结果」恰为「本次执行结果：已发起打款」；翻到第 2 页再回第 1 页，服务端已把它改为 PAID_API、display_status paid_auto_system：状态列恰为「接口打款成功」「自动到账」与执行受阻标记、不再是「打款中」，「执行结果」仍恰为这次回执原文；只发一笔写',
+  { timeout: 180_000 },
+  async () => {
+    const decided = samples().find((one) => one.review_mode === 'auto')?.auto_decision;
+    expect(decided?.result, 'fixture: an auto decision').toBe('auto');
+    const blocked = row(1, 'APPROVED', 1234567, 'alipay', {
+      review_mode: 'auto',
+      auto_decision: { ...decided!, execute_blocked: 'queue_paused' },
+      reviewer_id: null,
+      reviewed_at: decided!.decided_at,
+      batch_id: null,
+      batch: null,
+      batch_items: [],
+    });
+    /** The execute-blocked mark beside the status (texts executeBlocked, the raw code). */
+    const mark = '执行受阻：queue_paused';
+    const statusCell = (status: 'APPROVED' | 'PAYING' | 'PAID_API'): string =>
+      compact(`${STATUS_NAME[status]}${REVIEW_MODE_NAME.auto}${mark}`);
+    const rest = older();
+    const server = serverFor([blocked, ...rest]);
+    server.once('POST', '/admin/v1/payout-batches', () =>
+      executedReply(server, [blocked.withdrawal_id], []),
+    );
+    await mount(server, SUPER);
+    expect(rowsOf(main(), rest[19]!.out_biz_no), 'page one holds 20 rows').toEqual([]);
+    expect(
+      compact(cellOf(blocked.out_biz_no, STATUS_COLUMN).textContent),
+      `${blocked.out_biz_no}: APPROVED, auto, blocked by the paused queue`,
+    ).toBe(statusCell('APPROVED'));
+    expect(resultLines(blocked.out_biz_no), 'no receipt before the execution').toEqual([]);
+
+    await select([blocked]);
+    const modal = await openBatch(server);
+    await confirm(server, modal);
+    const at = server.log.length;
+    await verify();
+    await waitFor(() => expect(writes(server)).toHaveLength(1));
+    await settled(server);
+    assertBatch(server, 0, [blocked.withdrawal_id]);
+    await readAfter(server, at, 'the list read again after the execution');
+    await closeResult();
+    await waitFor(() =>
+      expect(shows(cellOf(blocked.out_biz_no, STATUS_COLUMN), STATUS_SHOWN.PAYING)).toBe(true),
+    );
+    await settled(server);
+    expect(dialogs(), 'asserted on the list, not in a dialog').toEqual([]);
+    expect(
+      compact(cellOf(blocked.out_biz_no, STATUS_COLUMN).textContent),
+      `${blocked.out_biz_no}: PAYING after the reread`,
+    ).toBe(statusCell('PAYING'));
+    const receipt = line(TEXT.paying);
+    expect(resultLines(blocked.out_biz_no), `${blocked.out_biz_no}: the receipt`).toEqual(receipt);
+
+    // The same page session reads the list again; this time the server has paid it (PAID_API).
+    await toPage(server, 2);
+    await waitFor(() => expect(rowsOf(main(), rest[19]!.out_biz_no)).toHaveLength(1));
+    expect(rowsOf(main(), blocked.out_biz_no), 'page two does not hold it').toEqual([]);
+    expect(resultLines(rest[19]!.out_biz_no), 'an unticked row has no receipt').toEqual([]);
+    paidOnServer(server, blocked.withdrawal_id, 'auto');
+    await toPage(server, 1);
+    await waitFor(() =>
+      expect(shows(cellOf(blocked.out_biz_no, STATUS_COLUMN), STATUS_NAME.PAID_API)).toBe(true),
+    );
+    await settled(server);
+    expect(dialogs()).toEqual([]);
+    const reread = server.state.find((one) => one.withdrawal_id === blocked.withdrawal_id);
+    expect(
+      [
+        reread?.status,
+        reread?.review_mode,
+        reread?.display_status,
+        reread?.auto_decision?.execute_blocked,
+      ],
+      `${blocked.out_biz_no}: as listAdminWithdrawals answers an auto PAID_API row`,
+    ).toEqual(['PAID_API', 'auto', 'paid_auto_system', 'queue_paused']);
+    const status = cellOf(blocked.out_biz_no, STATUS_COLUMN);
+    expect(compact(status.textContent), `${blocked.out_biz_no}: the new status`).toBe(
+      statusCell('PAID_API'),
+    );
+    expect(shows(status, STATUS_SHOWN.PAYING), `${blocked.out_biz_no}: no longer paying`).toBe(
+      false,
+    );
+    expect(
+      resultLines(blocked.out_biz_no),
+      `${blocked.out_biz_no}: still this execution's receipt`,
+    ).toEqual(receipt);
+    expect(
+      shows(cellOf(blocked.out_biz_no, '原因 / 执行结果'), STATUS_NAME.PAID_API),
+      'the receipt column does not take the new status',
+    ).toBe(false);
+    for (const one of rest.slice(0, 19))
+      expect(resultLines(one.out_biz_no), `${one.out_biz_no}: not ticked, no receipt`).toEqual([]);
+    expect(writeLines(server), 'the rereads write nothing').toEqual(ONE_BATCH);
+  },
+);
