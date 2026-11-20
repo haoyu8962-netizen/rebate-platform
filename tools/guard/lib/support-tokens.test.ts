@@ -1513,3 +1513,193 @@ it('[CT-06zzzzzp] r2 kept: members named keyof / new (also with a modifier, unty
     expect(gap(OPERATED, row, row.replace(from, to)), `${row} ${to}`).toEqual([]);
   }
 });
+
+// CT-06zzzzzw (FU-SUPPORT-TOKENS-ANGLE-COMMA-MEMBER-START, FU-SUPPORT-TOKENS-QMARK-ANGLE-MEMBER-END,
+// FU-SUPPORT-TOKENS-INSERTED-BRACE-INTERIOR): a `,` inside type arguments separates no members,
+// a conditional type's `?` and type parameters' `>` end no member, and an inserted object type
+// follows the member syntax. Only tightening: each `kept` row passed before and still does.
+
+const ANGLED = [
+  'type T = {\n  a: Map<K,\n    keyof\n    V>\n};',
+  'interface I {\n  a: Promise<Map<K,\n    V>>\n}',
+  'type U = {\n  a: Map<K\n    , V>\n};',
+  'type C = {\n  a: X extends Y ?\n    Z : W\n};',
+  'interface G {\n  a: <U>\n    (x: U) => U\n}',
+  'interface M {\n  m<T>\n    (x: T): T\n}',
+  'type N = {\n  a: new <T>\n    (x: T) => T\n};',
+  'type E = {\n  a: Map<K, V>,\n};',
+  'interface P {\n  a: Promise<Map<K, V>>,\n  c: (x: K) => V,\n}',
+  'type O = {\n  a?\n};',
+  "type Q = {\n  'q'?\n};",
+  'type R = {\n  a: Map<K, V>\n  c: Set<Map<K, V>>\n};',
+];
+
+/** The problems of inserting `added` on a line of its own after `after` in the ANGLED row `row`. */
+function angled(row: string, after: string, added: string): string[] {
+  return gap(ANGLED, row, row.replace(`${after}\n`, `${after}\n  ${added}\n`));
+}
+/** The head line of the line inserted after `after` in the ANGLED row `row`. */
+const angledLine = (row: string, after: string): number =>
+  gapLine(ANGLED, row) + row.slice(0, row.indexOf(`${after}\n`)).split('\n').length;
+
+it('[CT-06zzzzzw] ① now: a member (or a lone separator) inserted after a comma inside type arguments, between their words, or before such a comma is refused on its line', () => {
+  const cases: [string, string][] = [
+    ['type T = {\n  a: Map<K,\n    keyof\n    V>\n};', 'Map<K,'],
+    ['type T = {\n  a: Map<K,\n    keyof\n    V>\n};', 'keyof'],
+    ['interface I {\n  a: Promise<Map<K,\n    V>>\n}', 'Map<K,'],
+    ['type U = {\n  a: Map<K\n    , V>\n};', 'Map<K'],
+  ];
+  for (const [row, after] of cases) {
+    for (const added of ['b?: string', 'b?: string;', ';']) {
+      const got = angled(row, after, added);
+      expect(
+        names(got, angledLine(row, after)),
+        `${row} ${after} ${added}\n${got.join('\n')}`,
+      ).toBe(true);
+    }
+  }
+});
+
+it('[CT-06zzzzzw] ② now: a member inserted after the ? of a conditional type or after the type parameters of a generic function type, method or construct type is refused on its line', () => {
+  const cases: [string, string][] = [
+    ['type C = {\n  a: X extends Y ?\n    Z : W\n};', '?'],
+    ['interface G {\n  a: <U>\n    (x: U) => U\n}', '<U>'],
+    ['interface M {\n  m<T>\n    (x: T): T\n}', 'm<T>'],
+    ['type N = {\n  a: new <T>\n    (x: T) => T\n};', '<T>'],
+  ];
+  for (const [row, after] of cases) {
+    const got = angled(row, after, 'b?: string');
+    expect(names(got, angledLine(row, after)), `${row} ${after}\n${got.join('\n')}`).toBe(true);
+  }
+});
+
+it('[CT-06zzzzzw] ①② kept: after a member whose type arguments close before a separating comma, after >> or an arrow type, after an untyped optional member, and after each member of the refused rows an optional member still passes', () => {
+  const kept: [string, string][] = [
+    ['type E = {\n  a: Map<K, V>,\n};', 'Map<K, V>,'],
+    ['interface P {\n  a: Promise<Map<K, V>>,\n  c: (x: K) => V,\n}', 'Map<K, V>>,'],
+    ['interface P {\n  a: Promise<Map<K, V>>,\n  c: (x: K) => V,\n}', '=> V,'],
+    ['type O = {\n  a?\n};', 'a?'],
+    ["type Q = {\n  'q'?\n};", "'q'?"],
+    ['type R = {\n  a: Map<K, V>\n  c: Set<Map<K, V>>\n};', 'a: Map<K, V>'],
+    ['type R = {\n  a: Map<K, V>\n  c: Set<Map<K, V>>\n};', 'Set<Map<K, V>>'],
+    ['type T = {\n  a: Map<K,\n    keyof\n    V>\n};', 'V>'],
+    ['interface I {\n  a: Promise<Map<K,\n    V>>\n}', 'V>>'],
+    ['type U = {\n  a: Map<K\n    , V>\n};', ', V>'],
+    ['type C = {\n  a: X extends Y ?\n    Z : W\n};', 'Z : W'],
+    ['interface G {\n  a: <U>\n    (x: U) => U\n}', '=> U'],
+    ['interface M {\n  m<T>\n    (x: T): T\n}', '(x: T): T'],
+    ['type N = {\n  a: new <T>\n    (x: T) => T\n};', '=> T'],
+  ];
+  for (const [row, after] of kept) {
+    expect(angled(row, after, 'b?: string'), `${row} ${after}`).toEqual([]);
+  }
+  // On the same line, after a whole member with type arguments.
+  const e = 'type E = {\n  a: Map<K, V>,\n};';
+  expect(gap(ANGLED, e, e.replace('Map<K, V>,', 'Map<K, V>, b?: string'))).toEqual([]);
+  expect(gap(ANGLED, e, e.replace('Map<K, V>,', 'Map<K, V>, b?: Map<K, V>,'))).toEqual([]);
+});
+
+const OBJECTS = ['type T = {\n  a: number;\n};', 'interface I {\n  a: number;\n}'];
+
+/**
+ * The problems of OBJECTS alone (no GAPS: its names, like `x`, would be refused as redeclared by
+ * rule 3) → the same with `from` replaced once by `to`.
+ */
+function alone(rows: readonly string[], from: string, to: string): string[] {
+  const base = [...rows, ''].join('\n');
+  const at = base.indexOf(from);
+  expect(at >= 0 && base.indexOf(from, at + 1) < 0, from).toBe(true);
+  return problemsOf(base, `${base.slice(0, at)}${to}${base.slice(at + from.length)}`);
+}
+/** The 1-based line on which `row` of `rows` (alone) starts. */
+const aloneLine = (rows: readonly string[], row: string): number =>
+  rows.slice(0, rows.indexOf(row)).join('\n').split('\n').length + (rows.indexOf(row) > 0 ? 1 : 0);
+
+it('[CT-06zzzzzw] ③ now: an inserted object type (also nested, in a parameter or a tuple) that breaks the member syntax is refused on its line', () => {
+  const refused = [
+    'b?: { x: void: string }',
+    'b?: { x;: number }',
+    'b?: { x,: number }',
+    'b?: { x:?: number }',
+    'b?: { x: number = 1 }',
+    'b?: { x number }',
+    'b?: { ; }',
+    'b?: { x: number;; }',
+    'b?: { , x: number }',
+    'b?: { x: }',
+    'b?: { y: { x;: number } }',
+    'b?: { m(p: { x,: number }, q: string): void }',
+    'b?: [{ x: void: string }]',
+    'b?: { m(p: { x;: number }): void }',
+    'b?: { -readonly x: number }',
+  ];
+  for (const row of OBJECTS) {
+    const line = aloneLine(OBJECTS, row) + 2;
+    for (const added of refused) {
+      const got = alone(OBJECTS, row, row.replace('a: number;\n', `a: number;\n  ${added}\n`));
+      expect(names(got, line), `${row} ${added}\n${got.join('\n')}`).toBe(true);
+    }
+  }
+  // Also as the type of an inserted parameter or variable annotation.
+  const rows = ['function q(y) { void y; }', 'let w = 1;'];
+  expect(names(alone(rows, '(y)', '(y: { x;: number })'), aloneLine(rows, rows[0] as string))).toBe(
+    true,
+  );
+  expect(
+    names(
+      alone(rows, 'let w = 1', 'let w: { x: void: string } = 1'),
+      aloneLine(rows, 'let w = 1;'),
+    ),
+  ).toBe(true);
+});
+
+it('[CT-06zzzzzw] ③ kept: legal inserted object types — separators, modifiers, index / mapped keys, methods, call and construct signatures, nesting, commas in type arguments or parameters, members over several lines — still pass', () => {
+  const allowed = [
+    'b?: { x: number }',
+    'b?: { x?: number; y: string }',
+    'b?: { x: number, }',
+    'b?: { x: number; }',
+    'b?: { readonly x: number }',
+    'b?: { [k: string]: number }',
+    'b?: { readonly [k: string]: number }',
+    'b?: { m(): void }',
+    'b?: { m<T>(x: T): T }',
+    'b?: { (x: number): string }',
+    'b?: { <T>(x: T): T }',
+    'b?: { new (x: number): T }',
+    'b?: { get x(): number; set x(v: number) }',
+    'b?: { x: { y: number } }',
+    'b?: {}',
+    'b?: { x }',
+    'b?: { readonly: number; get: string; new: boolean }',
+    'b?: { x: Map<K, V> }',
+    'b?: { x: Map<K, Map<K, V>>; y: string }',
+    'b?: { m(p: number, q: string): void; n(p: Map<K, V>): void }',
+    'b?: { [P in K]?: V }',
+    'b?: { -readonly [P in K]-?: V }',
+    "b?: { 'x-y': number; 1: string }",
+    'b?: { x: number } | { y: string }',
+    'b?: [{ x: number }, { y: string }]',
+    'b?: {\n    x: number;\n  }',
+    'b?: {\n    x: number\n    y: string\n  }',
+    'b?: {\n    x: number,\n    m(): void\n  }',
+  ];
+  for (const row of OBJECTS) {
+    for (const added of allowed) {
+      const got = alone(OBJECTS, row, row.replace('a: number;\n', `a: number;\n  ${added}\n`));
+      expect(got, `${row} ${added}`).toEqual([]);
+    }
+  }
+  // A function type stays refused by rule 2 alone (an inserted `=>`, as before), not by the
+  // member syntax of its object type.
+  for (const row of OBJECTS) {
+    const added = 'b?: { f: (p: number, q: string) => void }';
+    const got = alone(OBJECTS, row, row.replace('a: number;\n', `a: number;\n  ${added}\n`));
+    expect(got, row).toEqual([
+      `head:${aloneLine(OBJECTS, row) + 2} an arrow function \`=>\` inserted`,
+    ]);
+  }
+  const rows = ['function q(y) { void y; }', 'let w = 1;'];
+  expect(alone(rows, '(y)', '(y?: { x: Map<K, V>; f(p: number, r: string): void })')).toEqual([]);
+  expect(alone(rows, 'let w = 1', 'let w: { x: number, y?: string } = 1')).toEqual([]);
+});
