@@ -32,6 +32,90 @@ import {
 
 const s = suite();
 
+type Trace = Awaited<ReturnType<typeof untouched>>;
+
+/** notice.int: BALANCE_CORRECTED and contracts/texts.default.json inbox.title.BALANCE_CORRECTED. */
+const CODE = 'BALANCE_CORRECTED';
+const TITLE = '余额更正';
+
+/** The one notice of a recalculation whose available changed: member, difference, version after. */
+interface Notice {
+  readonly userId: string;
+  readonly diffId: string;
+  readonly version: bigint;
+}
+
+/** The trace without inbox and notifyLogs (those are checked by expectNotices). */
+function apartFromNotices(t: Trace) {
+  return {
+    vouchers: t.vouchers,
+    entries: t.entries,
+    events: t.events,
+    withdrawals: t.withdrawals,
+    holds: t.holds,
+    diffs: t.diffs,
+  };
+}
+
+function sorted<T>(rows: readonly T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const x = JSON.stringify(a);
+    const y = JSON.stringify(b);
+    return x < y ? -1 : x > y ? 1 : 0;
+  });
+}
+
+/**
+ * The inbox_messages and notify_logs rows there before stay row for row; exactly one inbox message
+ * (the member, BALANCE_CORRECTED, 余额更正) and one notify log (the member, BALANCE_CORRECTED, inbox,
+ * success, balance_corrected:<difference>:<version after>, as notice.int #49 / #53) per notice are
+ * added, nothing else.
+ */
+function expectNotices(now: Trace, trace: Trace, notices: readonly Notice[]): void {
+  const inboxIds = new Set(trace.inbox.map((row) => row.message_id));
+  const logIds = new Set(trace.notifyLogs.map((row) => row.id));
+  expect(
+    now.inbox.filter((row) => inboxIds.has(row.message_id)),
+    '原有站内信逐行原样',
+  ).toEqual(trace.inbox);
+  expect(
+    now.notifyLogs.filter((row) => logIds.has(row.id)),
+    '原有通知日志逐行原样',
+  ).toEqual(trace.notifyLogs);
+  expect(
+    sorted(
+      now.inbox
+        .filter((row) => !inboxIds.has(row.message_id))
+        .map((row) => ({ user_id: row.user_id, code: row.code, title: row.title })),
+    ),
+    '新增站内信恰好是本会员本差错单的那一条',
+  ).toEqual(sorted(notices.map((n) => ({ user_id: n.userId, code: CODE, title: TITLE }))));
+  expect(
+    sorted(
+      now.notifyLogs
+        .filter((row) => !logIds.has(row.id))
+        .map((row) => ({
+          user_id: row.user_id,
+          code: row.code,
+          channel: row.channel,
+          status: row.status,
+          dedupe_key: row.dedupe_key,
+        })),
+    ),
+    '新增通知日志恰好是本会员本差错单的那一条',
+  ).toEqual(
+    sorted(
+      notices.map((n) => ({
+        user_id: n.userId,
+        code: CODE,
+        channel: 'inbox',
+        status: 'success',
+        dedupe_key: `balance_corrected:${n.diffId}:${n.version.toString()}`,
+      })),
+    ),
+  );
+}
+
 it('[AC-B2-02x#14] BR-FUND-19 例：缓存 5000、分录合计 4900 → 应答 before 5000 / after 4900、changed true、recalculated_at 为服务端时钟；余额行改为 4900（frozen 0、negative_since 空、version + 1），凭证与分录一条不多一条不改，审计 recon_diff_balance_recalc 记差错单、会员、去空白的原因、changed 与前后值', async () => {
   const f = fixture(s);
   await withRecalcAdmin(f, async (h) => {
@@ -52,9 +136,13 @@ it('[AC-B2-02x#14] BR-FUND-19 例：缓存 5000、分录合计 4900 → 应答 b
       written(before, { available: 4900n, frozen: 0n, negativeSince: null }),
     );
     expect(await entrySums(f, m)).toEqual({ available: 4900n, frozen: 0n });
-    expect(await untouched(f), '凭证、分录、事件、站内信、提现单、冻结记录、差错单都不变').toEqual(
-      trace,
+    const now = await untouched(f);
+    expect(apartFromNotices(now), '凭证、分录、事件、提现单、冻结记录、差错单都不变').toEqual(
+      apartFromNotices(trace),
     );
+    expectNotices(now, trace, [
+      { userId: m.userId, diffId: diff.id, version: (await cacheOf(f, m)).version },
+    ]);
     const row = await expectRecalcAudit(f, {
       adminId: h.recon.id,
       diffId: diff.id,
@@ -92,7 +180,11 @@ it('[AC-B2-02x#15] 两个子户各按自己的分录合计（会员方向 0 − 
     expect(await balanceCache(f), '只改这一个会员的余额行').toEqual(
       cache.map((row) => (row.account_id === m.accountId ? after : row)),
     );
-    expect(await untouched(f)).toEqual(trace);
+    const now = await untouched(f);
+    expect(apartFromNotices(now)).toEqual(apartFromNotices(trace));
+    expectNotices(now, trace, [
+      { userId: m.userId, diffId: diff.id, version: (await cacheOf(f, m)).version },
+    ]);
     await expectRecalcAudit(f, {
       adminId: h.recon.id,
       diffId: diff.id,
@@ -232,7 +324,7 @@ it('[AC-B2-02x#18] 会员自身状态不影响：注销中、已注销的会员�
   });
 });
 
-it('[AC-B2-02x#19] 不推送钱包变更（D10-2033）：改大、改小、只改 frozen 的重算都不写 event_log（无 wallet.* 也无别的事件）、不写站内信与通知日志', async () => {
+it('[AC-B2-02x#19] 不推送钱包变更（D10-2033）：改大、改小、只改 frozen 的重算都不写 event_log（无 wallet.* 也无别的事件）；站内信只在可提现变了时写（改大、改小各一条 BALANCE_CORRECTED，只改 frozen 不写，D10-2092 ⑤）', async () => {
   const f = fixture(s);
   await withRecalcAdmin(f, async (h) => {
     const up = await plainMember(f, 1500n);
@@ -247,6 +339,7 @@ it('[AC-B2-02x#19] 不推送钱包变更（D10-2033）：改大、改小、只�
       { m: frozen, before: 300n, after: 300n, frozenBefore: 50n },
     ];
     const trace = await untouched(f);
+    const notices: Notice[] = [];
     for (const c of cases) {
       const diff = await seedMismatch(f, c.m);
       await expectRecalculated(f, await h.recalc(diff.id, { reason: '核对' }), {
@@ -255,11 +348,21 @@ it('[AC-B2-02x#19] 不推送钱包变更（D10-2033）：改大、改小、只�
         after: { available: c.after, frozen: 0n },
         changed: true,
       });
+      if (c.after !== c.before) {
+        notices.push({
+          userId: c.m.userId,
+          diffId: diff.id,
+          version: (await cacheOf(f, c.m)).version,
+        });
+      }
     }
+    expect(
+      notices.map((n) => n.userId),
+      '改大、改小各一条，只改 frozen 没有',
+    ).toEqual([up.userId, down.userId]);
     const now = await untouched(f);
     expect(now.events, '没有任何事件').toEqual(trace.events);
-    expect(now.inbox, '没有站内信').toEqual(trace.inbox);
-    expect(now.notifyLogs, '没有通知').toEqual(trace.notifyLogs);
+    expectNotices(now, trace, notices);
     expect(now.vouchers).toEqual(trace.vouchers);
     expect(now.entries).toEqual(trace.entries);
   });
