@@ -4,11 +4,15 @@
 // ledger tables (see LEDGER_TABLES) outside the allowlist ledger-writers.allow.txt.
 //
 // Scanned: the files of the tree listing ending in `.ts` or `.sql`, except anything under
-// node_modules, generated `*.gen.ts` files and db/schema.sql. Comments are blanked first
-// (`//`, `/* */` in TypeScript; `--`, `/* */` in SQL), so a table named in a comment is no hit.
+// node_modules, generated `*.gen.ts` files and db/schema.sql. With git, run.ts passes the
+// tracked files only (trackedFiles): an untracked local draft does not fail the check; without
+// .git (verify container) the walked tree is scanned. Comments are blanked first (`//`,
+// `/* */` in TypeScript; `--`, nested `/* */` in SQL files and in the SQL of every TypeScript
+// string and template, quoted SQL text kept, line numbers kept), so a table named in a comment
+// is no hit and a comment between a keyword and the table does not hide a write.
 //
 // Counted as a write (case-insensitive, across lines; the table may carry the `app.` schema,
-// double quotes and an alias):
+// with whitespace or comments around the dot, double quotes and an alias):
 // - Kysely insertInto / updateTable / deleteFrom / mergeInto / replaceInto whose argument is
 //   a string literal naming the table;
 // - in TypeScript strings and templates (including `sql` tagged templates) and in SQL files:
@@ -27,6 +31,7 @@
 // not recognised. A scan of main on 2026-11-20 found no such write to the ledger tables.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { tryGit } from '../lib/git.ts';
 import { result } from './lib/cli.ts';
 import type { CheckResult } from './lib/cli.ts';
 import type { TreeListing } from './lib/tree.ts';
@@ -85,29 +90,96 @@ function skipRegex(text: string, at: number): number {
   return text.length;
 }
 
-/** TypeScript source with comments replaced by spaces; strings and templates are kept. */
+/** One character of SQL text and the source offsets it was read from (an escape spans two). */
+type SqlChar = { c: string; from: number; to: number };
+
+/**
+ * Blanks the SQL comments (`--` to the end of the line, `/* … *\/`, nested as in PostgreSQL)
+ * of one SQL text: a `.sql` file, or the content of one TypeScript string or template literal.
+ * Text in single quotes (literals) and double quotes (identifiers) is kept.
+ */
+function blankSqlStream(text: string, chars: readonly SqlChar[], out: string[]): void {
+  const blankRange = (a: number, b: number): void => {
+    for (let k = a; k < b; k++) {
+      const ch = chars[k];
+      if (ch !== undefined) blank(text, ch.from, ch.to, out);
+    }
+  };
+  const at = (k: number): string => chars[k]?.c ?? '';
+  let k = 0;
+  while (k < chars.length) {
+    const ch = at(k);
+    const next = at(k + 1);
+    if (ch === '-' && next === '-') {
+      let end = k + 2;
+      while (end < chars.length && at(end) !== '\n') end++;
+      blankRange(k, end);
+      k = end;
+    } else if (ch === '/' && next === '*') {
+      let depth = 1;
+      let end = k + 2;
+      while (end < chars.length && depth > 0) {
+        if (at(end) === '/' && at(end + 1) === '*') {
+          depth++;
+          end += 2;
+        } else if (at(end) === '*' && at(end + 1) === '/') {
+          depth--;
+          end += 2;
+        } else end++;
+      }
+      blankRange(k, end);
+      k = end;
+    } else if (ch === "'" || ch === '"') {
+      let end = k + 1;
+      while (end < chars.length && at(end) !== ch) end++;
+      k = end + 1;
+    } else k++;
+  }
+}
+
+/** The character an escape `\x` in a TypeScript string stands for, as SQL sees it. */
+function unescaped(ch: string): string {
+  if (ch === 'n' || ch === 'r' || ch === '\n') return '\n';
+  if (ch === 't') return ' ';
+  return ch;
+}
+
+/**
+ * TypeScript source with comments replaced by spaces. Strings and templates are kept, but the
+ * SQL comments inside each of them are blanked too (`'-- UPDATE …'` is no write, and
+ * `UPDATE /* … *\/ app.<table>` still is one).
+ */
 export function blankTsComments(text: string): string {
   const out = text.split('');
-  // Each frame is a template literal (`tpl`) or a `${ … }` substitution (brace depth).
-  const stack: ({ kind: 'tpl' } | { kind: 'sub'; depth: number })[] = [];
+  // Each frame is a template literal (`tpl`, with its SQL text so far) or a `${ … }`
+  // substitution (brace depth).
+  type Frame = { kind: 'tpl'; sql: SqlChar[] } | { kind: 'sub'; depth: number };
+  const stack: Frame[] = [];
   let i = 0;
-  const inTemplate = (): boolean => stack.at(-1)?.kind === 'tpl';
   // `\n`, `\r`, `\t` in a string separate words (`'…\nTRUNCATE …'`): blank them as spaces.
-  const escape = (at: number): number => {
+  const escape = (at: number, sql: SqlChar[]): number => {
     if (/[nrt]/.test(text[at + 1] ?? '')) out[at] = out[at + 1] = ' ';
+    sql.push({ c: unescaped(text[at + 1] ?? ''), from: at, to: Math.min(at + 2, text.length) });
     return at + 2;
   };
   while (i < text.length) {
-    const ch = text[i];
-    if (inTemplate()) {
-      if (ch === '\\') i = escape(i);
+    const ch = text[i] ?? '';
+    const top = stack.at(-1);
+    if (top?.kind === 'tpl') {
+      if (ch === '\\') i = escape(i, top.sql);
       else if (ch === '`') {
+        blankSqlStream(text, top.sql, out);
         stack.pop();
         i++;
       } else if (ch === '$' && text[i + 1] === '{') {
+        // The substitution becomes a query parameter: a placeholder of no width.
+        top.sql.push({ c: '0', from: i, to: i });
         stack.push({ kind: 'sub', depth: 0 });
         i += 2;
-      } else i++;
+      } else {
+        top.sql.push({ c: ch, from: i, to: i + 1 });
+        i++;
+      }
       continue;
     }
     const next = text[i + 1];
@@ -124,16 +196,21 @@ export function blankTsComments(text: string): string {
     } else if (ch === '/' && regexStarts(text, i)) {
       i = skipRegex(text, i);
     } else if (ch === "'" || ch === '"') {
+      const sql: SqlChar[] = [];
       let j = i + 1;
       while (j < text.length && text[j] !== ch && text[j] !== '\n') {
-        j = text[j] === '\\' ? escape(j) : j + 1;
+        if (text[j] === '\\') j = escape(j, sql);
+        else {
+          sql.push({ c: text[j] ?? '', from: j, to: j + 1 });
+          j++;
+        }
       }
+      blankSqlStream(text, sql, out);
       i = j + 1;
     } else if (ch === '`') {
-      stack.push({ kind: 'tpl' });
+      stack.push({ kind: 'tpl', sql: [] });
       i++;
     } else {
-      const top = stack.at(-1);
       if (top?.kind === 'sub') {
         if (ch === '{') top.depth++;
         else if (ch === '}') {
@@ -144,31 +221,20 @@ export function blankTsComments(text: string): string {
       i++;
     }
   }
+  // An unterminated template still has its SQL comments blanked.
+  for (const frame of stack) if (frame.kind === 'tpl') blankSqlStream(text, frame.sql, out);
   return out.join('');
 }
 
-/** SQL text with `--` and `/* … *\/` comments replaced by spaces; quoted text is kept. */
+/**
+ * SQL text with `--` and `/* … *\/` comments replaced by spaces; quoted text is kept. The same
+ * rules as for the SQL inside TypeScript strings and templates.
+ */
 export function blankSqlComments(text: string): string {
   const out = text.split('');
-  let i = 0;
-  while (i < text.length) {
-    const ch = text[i];
-    const next = text[i + 1];
-    if (ch === '-' && next === '-') {
-      const end = text.indexOf('\n', i);
-      const stop = end === -1 ? text.length : end;
-      blank(text, i, stop, out);
-      i = stop;
-    } else if (ch === '/' && next === '*') {
-      const end = text.indexOf('*/', i + 2);
-      const stop = end === -1 ? text.length : end + 2;
-      blank(text, i, stop, out);
-      i = stop;
-    } else if (ch === "'" || ch === '"') {
-      const end = text.indexOf(ch, i + 1);
-      i = end === -1 ? text.length : end + 1;
-    } else i++;
-  }
+  const chars: SqlChar[] = [];
+  for (let i = 0; i < text.length; i++) chars.push({ c: text[i] ?? '', from: i, to: i + 1 });
+  blankSqlStream(text, chars, out);
   return out.join('');
 }
 
@@ -178,10 +244,16 @@ export function blankSqlComments(text: string): string {
 // An optional double quote, also escaped (`\"`) inside a TypeScript string.
 const Q = '(?:\\\\?")?';
 const NAMES = LEDGER_TABLES.join('|');
-/** A ledger table reference; group 1 is the bare table name. */
-const TABLE = `(?<![\\w$."])${Q}(?:app${Q}\\s*\\.\\s*${Q})?(${NAMES})${Q}(?![\\w$])`;
-/** Any table reference (for the TRUNCATE list). */
-const ANY_TABLE = `(?:only\\s+)?[\\w$."\\\\]+\\s*\\*?`;
+/**
+ * A ledger table reference; group 1 is the bare table name. Whitespace (comments are blanked to
+ * whitespace before) may stand between the schema, the dot and the name; a name qualified by
+ * another schema (`other.<table>`, also `other . <table>`) is no hit.
+ */
+const TABLE = `(?<![\\w$."]|\\.\\s*)${Q}(?:app${Q}\\s*\\.\\s*${Q})?(${NAMES})${Q}(?![\\w$])`;
+/** One identifier: bare, or double-quoted (the quotes escaped inside a TypeScript string). */
+const IDENT = `(?:\\\\?"[^"\\\\\\n]*\\\\?"|[\\w$]+)`;
+/** Any table reference of a TRUNCATE list: `[ONLY] [schema .] name [*]`, spaces allowed. */
+const ANY_TABLE = `(?:only\\s+)?${IDENT}(?:\\s*\\.\\s*${IDENT})?(?:\\s*\\*)?`;
 
 const SQL_WRITES: { operation: string; pattern: RegExp }[] = [
   { operation: 'INSERT INTO', pattern: new RegExp(`\\binsert\\s+into\\s+${TABLE}`, 'giu') },
@@ -203,7 +275,7 @@ const KYSELY_WRITE = new RegExp(
 );
 
 const TRUNCATE_LIST = new RegExp(
-  `\\btruncate\\s+(?:table\\s+)?(${ANY_TABLE}(?:,\\s*${ANY_TABLE})*)`,
+  `\\btruncate\\s+(?:table\\s+)?(${ANY_TABLE}(?:\\s*,\\s*${ANY_TABLE})*)`,
   'giu',
 );
 const TABLE_ONLY = new RegExp(TABLE, 'giu');
@@ -269,6 +341,18 @@ export function isScanned(path: string): boolean {
   if (path.split('/').includes('node_modules')) return false;
   if (path.endsWith('.gen.ts')) return false;
   return path !== 'db/schema.sql';
+}
+
+/**
+ * The listing narrowed to the files git tracks, for this check only (an untracked local draft
+ * is not part of the commit CI checks). A walked tree (no .git) is returned unchanged.
+ */
+export function trackedFiles(root: string, tree: TreeListing): TreeListing {
+  if (tree.mode !== 'git') return tree;
+  const listed = tryGit(['-c', 'core.quotepath=false', 'ls-files', '-z'], { cwd: root });
+  if (listed.status !== 0) throw new Error(`git ls-files failed in ${root}: ${listed.stderr}`);
+  const tracked = new Set(listed.stdout.split('\0').filter((p) => p !== ''));
+  return { files: tree.files.filter((file) => tracked.has(file)), mode: 'git' };
 }
 
 // ---------------------------------------------------------------------------------------------

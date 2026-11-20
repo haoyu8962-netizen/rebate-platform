@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -11,7 +12,9 @@ import {
   isScanned,
   ledgerWritersCheck,
   parseLedgerAllowlist,
+  trackedFiles,
 } from './ledger-writers.ts';
+import { listTreeFiles } from './lib/tree.ts';
 
 // Statements are assembled at run time so this file itself holds no ledger write.
 const BALANCES = ['account', 'balances'].join('_');
@@ -107,4 +110,96 @@ it('every write of an unlisted file is reported with its line', () => {
     'apps/a.ts:3: 直接写账务表',
   ]);
   expect(result.notices).toHaveLength(1);
+});
+
+it('an SQL comment inside a TypeScript template or string is no write (review r1 S1)', () => {
+  const text =
+    'const q = sql`\n' +
+    `  -- ${update(`app.${BALANCES}`)} only through the ledger module\n` +
+    `  /* DELETE FROM app.${ENTRIES} */ SELECT * FROM app.${BALANCES}\n` +
+    '`;\n' +
+    `const s = '-- ${update(BALANCES)}';\n`;
+  expect(findLedgerWrites('a.ts', text)).toEqual([]);
+  expect(blankTsComments(text)).toHaveLength(text.length);
+});
+
+it('a comment between the keyword and the table does not hide a write (review r1 S1)', () => {
+  const tpl =
+    'const q = sql`\n' +
+    `  UPDATE /* repair */ app.${BALANCES} SET version = version + 1;\n` +
+    `  DELETE -- why\n  FROM app . /* x */ ${ENTRIES} WHERE id = \${id};\n` +
+    '`;\n';
+  expect(findLedgerWrites('a.ts', tpl)).toEqual([
+    { line: 2, table: BALANCES, operation: 'UPDATE' },
+    { line: 4, table: ENTRIES, operation: 'DELETE FROM' },
+  ]);
+  const str = `const s = 'INSERT /* a */ INTO -- b\\n app.${BALANCES} (id) VALUES (1)';\n`;
+  expect(findLedgerWrites('a.ts', str)).toEqual([
+    { line: 1, table: BALANCES, operation: 'INSERT INTO' },
+  ]);
+  const file = `UPDATE /* repair */ app.${BALANCES} SET version = 1;\n-- ${update(ENTRIES)}\n`;
+  expect(findLedgerWrites('a.sql', file)).toEqual([
+    { line: 1, table: BALANCES, operation: 'UPDATE' },
+  ]);
+});
+
+it('a quoted SQL text keeps its dashes and a nested block comment is blanked whole', () => {
+  const file =
+    `SELECT '-- x' AS a; ${update(BALANCES)};\n` + `/* a /* b */ ${update(ENTRIES)} */ SELECT 1;\n`;
+  expect(findLedgerWrites('a.sql', file)).toEqual([
+    { line: 1, table: BALANCES, operation: 'UPDATE' },
+  ]);
+  // `--` inside an SQL literal is text, not a comment: dynamic SQL (`EXECUTE '…'`) still counts.
+  const ts = `const t = "EXECUTE '-- x\\n${update(BALANCES)}'";\n`;
+  expect(findLedgerWrites('a.ts', ts)).toEqual([{ line: 1, table: BALANCES, operation: 'UPDATE' }]);
+  const quoted = `const t = "SELECT '-- ${update(BALANCES)}' AS note";\n`;
+  expect(findLedgerWrites('a.ts', quoted)).toHaveLength(1);
+});
+
+it('TRUNCATE across lines, with comments, and every ledger table of its list (review r1 S1)', () => {
+  const file =
+    `TRUNCATE TABLE app.\n  ${BALANCES};\n` +
+    `TRUNCATE ONLY app /* s */ . "${ENTRIES}" *,\n  other.x,\n  app.\n  ${BALANCES} CASCADE;\n` +
+    `TRUNCATE other.${ENTRIES}, other . ${BALANCES};\n`;
+  expect(findLedgerWrites('a.sql', file)).toEqual([
+    { line: 2, table: BALANCES, operation: 'TRUNCATE' },
+    { line: 3, table: ENTRIES, operation: 'TRUNCATE' },
+    { line: 6, table: BALANCES, operation: 'TRUNCATE' },
+  ]);
+  const ts = `const s = \`TRUNCATE TABLE app.\n${BALANCES}\`;\n`;
+  expect(findLedgerWrites('a.ts', ts)).toEqual([
+    { line: 2, table: BALANCES, operation: 'TRUNCATE' },
+  ]);
+});
+
+it('whitespace around the schema dot counts for the other writes and Kysely calls', () => {
+  const text =
+    `db.insertInto('app . ${BALANCES}');\n` +
+    `const s = \`MERGE INTO app\n.${ENTRIES} USING x ON true\`;\n` +
+    `db.updateTable('other . ${BALANCES}');\n`;
+  expect(findLedgerWrites('a.ts', text)).toEqual([
+    { line: 1, table: BALANCES, operation: 'insertInto' },
+    { line: 3, table: ENTRIES, operation: 'MERGE INTO' },
+  ]);
+});
+
+it('with git only tracked files are checked; an untracked draft does not fail (review r1 S2)', () => {
+  const root = tree({
+    'db/seeds/tracked.sql': 'SELECT 1;\n',
+    'db/seeds/local-repair.sql': `${update(`app.${BALANCES}`)};\n`,
+  });
+  const run = (...args: string[]): void => {
+    const res = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+    expect(res.status, res.stderr).toBe(0);
+  };
+  run('init', '-q');
+  run('add', 'db/seeds/tracked.sql');
+  const listing = listTreeFiles(root);
+  expect(listing.files).toContain('db/seeds/local-repair.sql');
+  expect(trackedFiles(root, listing).files).toEqual(['db/seeds/tracked.sql']);
+  expect(ledgerWritersCheck(root, trackedFiles(root, listing)).status).toBe('pass');
+  expect(ledgerWritersCheck(root, listing).status).toBe('fail');
+  // Without .git the walked tree is kept as it is.
+  const walked = { files: ['db/seeds/local-repair.sql'], mode: 'walk' as const };
+  expect(trackedFiles(root, walked)).toBe(walked);
 });
