@@ -165,7 +165,12 @@ export interface DetailPayoutActionsProps {
 export function DetailPayoutActions(props: DetailPayoutActionsProps): ReactElement {
   return (
     <>
-      <DetailExecute item={props.item} access={props.access} onChanged={props.onChanged} />
+      <DetailExecute
+        item={props.item}
+        access={props.access}
+        clock={props.clock}
+        onChanged={props.onChanged}
+      />
       <DetailManualPaid {...props} />
     </>
   );
@@ -189,17 +194,13 @@ function executeFailure(cause: unknown): string {
   return te.failed;
 }
 
-function DetailExecute({
-  item,
-  access,
-  onChanged,
-}: Omit<DetailPayoutActionsProps, 'clock'>): ReactElement {
+function DetailExecute({ item, access, clock, onChanged }: DetailPayoutActionsProps): ReactElement {
   const { customOf, verify } = useVerify();
   const { token } = theme.useToken();
   const { phase, phaseRef, setPhase } = usePhase();
   const alive = useAlive();
-  // F1-08at (D10-2075): the result-unknown marker of 提现审核 (the system clock: no page clock here).
-  const marker = useUnknownMarker(MARKER_PAGE);
+  // F1-08at (D10-2075): the result-unknown marker of 提现审核, at the page's injected clock.
+  const marker = useUnknownMarker(MARKER_PAGE, clock);
   /** The withdrawal as it was when the dialog opened (the page may read it again meanwhile). */
   const [snapshot, setSnapshot] = useState<WithdrawalDetail>();
   const [overview, setOverview] = useState<OverviewState>({ status: 'loading' });
@@ -249,6 +250,8 @@ function DetailExecute({
 
   const check = () => {
     if (phaseRef.current !== 'unknown') return;
+    // F1-08at: given up still unknown — its marker stays; the next submission starts afresh.
+    marker.leave();
     forget();
     setSnapshot(undefined);
     setPhase('edit');
@@ -595,6 +598,8 @@ function DetailManualPaid({
 
   const check = () => {
     if (phaseRef.current !== 'unknown') return;
+    // F1-08at: given up still unknown — its marker stays; the next submission starts afresh.
+    marker.leave();
     forget();
     setSnapshot(undefined);
     setPhase('edit');

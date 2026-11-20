@@ -244,6 +244,9 @@ export function ManualPaid({
   const toList = () => {
     if (phaseRef.current !== 'unknown') return;
     closedRef.current = true;
+    // F1-08at: the given-up submission keeps holding the marker (only 【关闭】 or nothing of this
+    // instance drops it); the next batch is judged afresh and its answer settles only itself.
+    marker.leave();
     forget();
     setSnapshot(undefined);
     setPhase('edit');

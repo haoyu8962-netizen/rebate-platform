@@ -6,6 +6,7 @@
 import { Alert, Button, Descriptions, Flex, Form, Input, Modal, theme } from 'antd';
 import { useId, useState, type ReactElement, type ReactNode } from 'react';
 import { plannedButtonProps } from '../../components/planned/index.ts';
+import type { MarkerClock } from '../../components/unknown-marker/index.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
 import { stepUpTexts } from '../../texts/step-up.ts';
 import {
@@ -35,6 +36,8 @@ export interface ReverseDialogProps {
   /** The original form (APPROVED, not a reversal, not reversed). */
   readonly item: Adjustment;
   readonly planned: boolean;
+  /** The page's injected clock: the moment of the result-unknown marker (F1-08at). */
+  readonly clock: MarkerClock;
   readonly onClose: () => void;
   readonly onReversed: (executed: Executed) => void;
   /** 20902: the original was reversed meanwhile (the page refreshes and says so). */
@@ -50,6 +53,7 @@ export function ReverseDialog({
   onReversed,
   onStale,
   onCheck,
+  clock,
 }: ReverseDialogProps): ReactElement {
   const { token } = theme.useToken();
   const ids = { note: useId(), phone: useId() };
@@ -61,6 +65,7 @@ export function ReverseDialog({
 
   const write = useAdjustmentWrite({
     operation: w.reverseOperation,
+    clock,
     onDone: onReversed,
     onFailed: (cause) => {
       if (alreadyReversed(cause)) onStale();

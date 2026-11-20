@@ -21,6 +21,13 @@ export interface MarkerClock {
   now(): number;
 }
 
+/**
+ * The console's default clock (AGENTS.md §4 rule 5) for a page that was given none: one source
+ * for 提现审核, the withdrawal detail and 调账与核销, so every marker's moment comes from the same
+ * injected clock rather than each writer reading the time on its own.
+ */
+export const CONSOLE_CLOCK: MarkerClock = Object.freeze({ now: () => Date.now() });
+
 /** Where a marker belongs: the page and the signed-in account (undefined while unknown). */
 export interface MarkerScope {
   readonly page: string;

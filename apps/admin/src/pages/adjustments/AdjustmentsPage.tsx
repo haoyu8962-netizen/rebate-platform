@@ -14,7 +14,12 @@ import { Alert, Button, Card, Flex, Result, Tabs, Typography } from 'antd';
 import { useCallback, useRef, useState, type ReactElement } from 'react';
 import { Link, useLocation } from 'react-router';
 import { PlannedPage, plannedButtonProps, usePlanned } from '../../components/planned/index.ts';
-import { UnknownMarkerBanner, useMarkerAccount } from '../../components/unknown-marker/index.ts';
+import {
+  CONSOLE_CLOCK,
+  UnknownMarkerBanner,
+  useMarkerAccount,
+  type MarkerClock,
+} from '../../components/unknown-marker/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { adjustmentsTexts as t } from '../../texts/adjustments.ts';
 import { AdjustmentsTab, type Notice } from './AdjustmentsTab.tsx';
@@ -30,6 +35,11 @@ const MARKER_PAGE = 'adjustments';
 
 export interface AdjustmentsPageProps {
   readonly access: AccessControl;
+  /**
+   * Injected clock (AGENTS.md §4 rule 5), epoch ms: the moment of the result-unknown marker of the
+   * writes (F1-08at); the console's default clock (as on 提现审核) when left out.
+   */
+  readonly clock?: MarkerClock | undefined;
 }
 
 function Title(): ReactElement {
@@ -40,7 +50,10 @@ function Title(): ReactElement {
   );
 }
 
-export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement {
+export function AdjustmentsPage({
+  access,
+  clock = CONSOLE_CLOCK,
+}: AdjustmentsPageProps): ReactElement {
   const planned = usePlanned('adminListAdjustments');
   const writePlanned = usePlanned('adminCreateAdjustment');
   const location = useLocation();
@@ -127,6 +140,7 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
                 canAdjust={canAdjust}
                 planned={writePlanned}
                 version={version}
+                clock={clock}
                 {...(opening.detail === undefined ? {} : { initialDetail: opening.detail })}
                 onNotice={setNotice}
                 onListRead={listRead}
@@ -141,7 +155,11 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
             key: 'writeoffs',
             label: t.tabs.writeoffs,
             children: (
-              <WriteoffsTab canWriteoff={access.can('fund.writeoff')} onNotice={setNotice} />
+              <WriteoffsTab
+                canWriteoff={access.can('fund.writeoff')}
+                clock={clock}
+                onNotice={setNotice}
+              />
             ),
           },
         ]
@@ -197,6 +215,7 @@ export function AdjustmentsPage({ access }: AdjustmentsPageProps): ReactElement 
           key={createSession}
           open={createOpen}
           planned={writePlanned}
+          clock={clock}
           onClose={cancelCreate}
           onCreated={created}
           onCheck={checkCreate}

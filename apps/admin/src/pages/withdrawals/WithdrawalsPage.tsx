@@ -43,7 +43,11 @@ import {
   type ReactElement,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { UnknownMarkerBanner, useMarkerAccount } from '../../components/unknown-marker/index.ts';
+import {
+  CONSOLE_CLOCK,
+  UnknownMarkerBanner,
+  useMarkerAccount,
+} from '../../components/unknown-marker/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { withdrawalsTexts as t } from '../../texts/withdrawals.ts';
 import { BatchApprove } from './BatchApprove.tsx';
@@ -108,7 +112,8 @@ export interface WithdrawalsPageProps {
   readonly clock?: ManualPaidClock | undefined;
 }
 
-const SYSTEM_CLOCK: ManualPaidClock = { now: () => Date.now() };
+/** No clock injected: the console's default clock (the same source as 调账与核销, F1-08at). */
+const SYSTEM_CLOCK: ManualPaidClock = CONSOLE_CLOCK;
 
 export function Forbidden(): ReactElement {
   return (

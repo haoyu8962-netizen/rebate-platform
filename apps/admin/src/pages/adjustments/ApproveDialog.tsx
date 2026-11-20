@@ -29,6 +29,7 @@ import {
 } from 'antd';
 import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { plannedButtonProps } from '../../components/planned/index.ts';
+import type { MarkerClock } from '../../components/unknown-marker/index.ts';
 import { adjustmentsTexts } from '../../texts/adjustments.ts';
 import { stepUpTexts } from '../../texts/step-up.ts';
 import {
@@ -74,6 +75,8 @@ export interface ApproveDialogProps {
   readonly approvePlanned: boolean;
   readonly rejectPlanned: boolean;
   /** 【取消】; `uncertain`: a write of this dialog may have been carried out (refresh). */
+  /** The page's injected clock: the moment of the result-unknown marker (F1-08at). */
+  readonly clock: MarkerClock;
   readonly onClose: (uncertain: boolean) => void;
   readonly onApproved: (executed: Executed) => void;
   readonly onRejected: (rejection: Rejection) => void;
@@ -92,6 +95,7 @@ export function ApproveDialog({
   onRejected,
   onStale,
   onCheck,
+  clock,
 }: ApproveDialogProps): ReactElement {
   const { token } = theme.useToken();
   const ids = { reason: useId(), phone: useId() };
@@ -137,6 +141,7 @@ export function ApproveDialog({
 
   const approval = useAdjustmentWrite<ApproveRequest, Executed>({
     operation: a.operation,
+    clock,
     url: approveUrl(item.adjust_id),
     onDone: onApproved,
     onFailed: failed,
@@ -144,6 +149,7 @@ export function ApproveDialog({
   });
   const rejection = useAdjustmentWrite<RejectRequest, Rejection>({
     operation: a.reject,
+    clock,
     url: rejectUrl(item.adjust_id),
     verify: false,
     onDone: onRejected,

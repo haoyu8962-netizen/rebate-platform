@@ -11,7 +11,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { holdUnknown, releaseUnknown, type MarkerClock, type MarkerScope } from './marker.ts';
 
-const SYSTEM_CLOCK: MarkerClock = { now: () => Date.now() };
 const NOT_SIGNED_IN = 10001;
 
 function accountOf(identity: unknown): string | undefined {
@@ -67,17 +66,18 @@ export interface UnknownMarkerControl {
    */
   clear(): void;
   /**
-   * The session ended (10001) and the submission is given up unsettled (its key is dropped): its
-   * marker stays until 【关闭】, and no later answer of this instance drops it.
+   * The submission is given up while its result is still unknown — the session ended (10001), or
+   * the dialog was closed by 【去列表核对】 / 【核对】 (its key is dropped): its marker stays until
+   * 【关闭】, and no later answer of this instance drops it; the next submission starts afresh.
    */
   leave(): void;
 }
 
-/** The marker of `page` for the signed-in account. */
-export function useUnknownMarker(
-  page: string,
-  clock: MarkerClock = SYSTEM_CLOCK,
-): UnknownMarkerControl {
+/**
+ * The marker of `page` for the signed-in account; its moment comes from `clock`, the page's
+ * injected clock (CONSOLE_CLOCK when the page was given none), never from the time read here.
+ */
+export function useUnknownMarker(page: string, clock: MarkerClock): UnknownMarkerControl {
   const account = useMarkerAccount();
   const scope = useMemo<MarkerScope>(() => ({ page, account }), [page, account]);
   const scopeRef = useRef(scope);

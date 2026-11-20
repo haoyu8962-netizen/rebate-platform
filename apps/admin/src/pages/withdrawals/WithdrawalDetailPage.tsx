@@ -30,7 +30,11 @@ import {
 } from 'antd';
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { UnknownMarkerBanner, useMarkerAccount } from '../../components/unknown-marker/index.ts';
+import {
+  CONSOLE_CLOCK,
+  UnknownMarkerBanner,
+  useMarkerAccount,
+} from '../../components/unknown-marker/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { withdrawalsTexts } from '../../texts/withdrawals.ts';
 import {
@@ -62,7 +66,8 @@ type Attempt = WithdrawalDetail['payout_attempts'][number];
 type BatchItem = WithdrawalDetail['batch_items'][number];
 type Hold = WithdrawalDetail['holds'][number];
 
-const SYSTEM_CLOCK: ManualPaidClock = { now: () => Date.now() };
+/** No clock injected: the console's default clock (the same source as 调账与核销, F1-08at). */
+const SYSTEM_CLOCK: ManualPaidClock = CONSOLE_CLOCK;
 
 type DetailState =
   | { readonly status: 'loading' }

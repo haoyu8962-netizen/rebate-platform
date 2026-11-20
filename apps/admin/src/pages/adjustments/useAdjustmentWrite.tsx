@@ -61,8 +61,11 @@ export interface AdjustmentWriteOptions<R extends BaseRecord = Executed> {
   readonly onFailed: (cause: unknown, stillUnknown: boolean) => void;
   /** The write got no reply in the unified envelope (`unknown` is now true). */
   readonly onUnknown?: () => void;
-  /** The moment kept with the result-unknown marker (F1-08at); the system clock when left out. */
-  readonly clock?: MarkerClock;
+  /**
+   * The page's injected clock: the moment kept with the result-unknown marker (F1-08at), passed
+   * down from 调账与核销 (CONSOLE_CLOCK there when none was injected).
+   */
+  readonly clock: MarkerClock;
 }
 
 /** The marker's page: the menu id of 调账与核销. */
