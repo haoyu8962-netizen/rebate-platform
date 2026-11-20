@@ -14,6 +14,7 @@ import {
   confirm,
   disabled,
   fill,
+  landedFor,
   main,
   mount,
   open,
@@ -28,7 +29,7 @@ import {
 } from './helpers.ts';
 
 it(
-  '[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏',
+  '[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏；持 payout.execute 或超管时恰多可用的【一键组批】（F1-08an），只持审核权限看不到它',
   { timeout: 90_000 },
   async () => {
     for (const permissions of [
@@ -66,6 +67,12 @@ it(
         expect(within(main()).queryAllByRole('checkbox')).toEqual([]);
       }
       expect(buttons(main(), '批量通过')).toEqual([]);
+      const grouping = permissions.permissions.includes('payout.execute') ? 1 : 0;
+      expect(buttons(main(), '一键组批'), 'shown 一键组批 entries').toHaveLength(grouping);
+      expect(
+        buttons(main(), '一键组批').filter((node) => !disabled(node)),
+        'usable 一键组批 entries',
+      ).toHaveLength(grouping);
       expect(server.writes()).toEqual([]);
       cleanup();
     }
@@ -73,10 +80,16 @@ it(
       const server = serverFor();
       await mount(server, permissions);
       expect(buttons(main(), '批量通过')).toEqual([]);
+      const grouping = permissions.isSuper ? 1 : 0;
+      expect(buttons(main(), '一键组批'), 'shown 一键组批 entries').toHaveLength(grouping);
+      expect(
+        buttons(main(), '一键组批').filter((node) => !disabled(node)),
+        'usable 一键组批 entries',
+      ).toHaveLength(grouping);
       for (const item of server.state) expect(checkbox(item).checked).toBe(false);
       await select([server.state[0]!]);
       expect(disabled(button(main(), '批量通过'))).toBe(false);
-      assertNoOtherActions();
+      assertNoOtherActions(landedFor(permissions));
       expect(server.writes()).toEqual([]);
       cleanup();
     }
@@ -173,5 +186,32 @@ it(
     await verify();
     await settled(server);
     assertRequest(server, [items[0]!]);
+  },
+);
+
+it(
+  '[AC-F1-08an-ACCESS#1] 持 withdraw.review 与 payout.execute 时提现审核页【一键组批】恰为 1 个且可用（不点），勾选待审核单后【批量通过】照旧可用、【一键组批】仍恰为 1 个；只持 withdraw.review 时没有【一键组批】',
+  { timeout: 60_000 },
+  async () => {
+    const both = { isSuper: false, permissions: ['withdraw.review', 'payout.execute'] };
+    for (const { permissions, grouping } of [
+      { permissions: both, grouping: 1 },
+      { permissions: REVIEW, grouping: 0 },
+    ]) {
+      const server = serverFor();
+      await mount(server, permissions);
+      expect(buttons(main(), '一键组批'), 'shown 一键组批 entries').toHaveLength(grouping);
+      expect(
+        buttons(main(), '一键组批').filter((node) => !disabled(node)),
+        'usable 一键组批 entries',
+      ).toHaveLength(grouping);
+      await select([server.state[0]!]);
+      expect(disabled(button(main(), '批量通过'))).toBe(false);
+      expect(buttons(main(), '一键组批'), 'still one 一键组批 after selecting').toHaveLength(
+        grouping,
+      );
+      expect(server.writes()).toEqual([]);
+      cleanup();
+    }
   },
 );

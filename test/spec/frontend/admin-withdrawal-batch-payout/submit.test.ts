@@ -33,6 +33,7 @@ import {
   openBatch,
   resultNotShown,
   resultShown,
+  row,
   rowOf,
   select,
   serverFor,
@@ -43,6 +44,7 @@ import {
   verify,
   writes,
   yuan,
+  type LeftReason,
   type Withdrawal,
 } from './helpers.ts';
 import { overview } from '../admin-payouts-readonly/fixtures.ts';
@@ -197,5 +199,60 @@ it(
     await resultShown(rows.p.out_biz_no, TEXT.unreviewed);
     resultNotShown(rows.p.out_biz_no, TEXT.paying);
     expect(shows(document.body, TEXT.unknown), 'a settled answer, not unknown').toBe(false);
+  },
+);
+
+it(
+  '[AC-F1-08an-SUBMIT#4] 逐单原因各自如实显示：五张待执行单一张进入打款，其余四张分别因已有转账记录、打款通道未开通、已不是待执行、会员有提现阻断留在待执行；每张留下的单只显示自己那句原因全文（不出别人的原因、不出「已发起打款」），进入打款的那张不出任何留下原因；不显示「全部成功」类提示',
+  { timeout: 90_000 },
+  async () => {
+    const rows = [
+      row(1, 'APPROVED', 1234567),
+      row(2, 'APPROVED', 9801, 'bank_card'),
+      row(3, 'APPROVED', 50000),
+      row(4, 'APPROVED', 7700),
+      row(5, 'APPROVED', 4400),
+    ];
+    const [go, ...stay] = rows as [Withdrawal, ...Withdrawal[]];
+    const reasons: readonly LeftReason[] = [
+      'has_transfer_attempt',
+      'channel_disabled',
+      'not_approved',
+      'member_blocked',
+    ];
+    const server = serverFor(rows);
+    server.once('POST', '/admin/v1/payout-batches', () =>
+      executedReply(
+        server,
+        [go.withdrawal_id],
+        stay.map((one, index) => ({ withdrawal_id: one.withdrawal_id, reason: reasons[index]! })),
+      ),
+    );
+    await mount(server, EXECUTOR);
+    await select(rows);
+    const modal = await openBatch(server);
+    await confirm(server, modal);
+    await verify();
+    await waitFor(() => expect(writes(server)).toHaveLength(1));
+    await settled(server);
+    assertBatch(
+      server,
+      0,
+      rows.map((one) => one.withdrawal_id),
+    );
+
+    await resultShown(go.out_biz_no, TEXT.paying);
+    for (const text of Object.values(LEFT_TEXT)) resultNotShown(go.out_biz_no, text);
+    for (const [index, one] of stay.entries()) {
+      const own = LEFT_TEXT[reasons[index]!];
+      await resultShown(one.out_biz_no, own);
+      resultNotShown(one.out_biz_no, TEXT.paying);
+      for (const other of Object.values(LEFT_TEXT).filter((text) => text !== own))
+        resultNotShown(one.out_biz_no, other);
+    }
+    for (const claim of ['全部成功', '全部已发起', '全部发起', '进入打款 5 张', '5 张已发起'])
+      expect(shows(document.body, claim), `not reported as all paying: ${claim}`).toBe(false);
+    expect(shows(document.body, TEXT.unknown), 'a settled answer, not unknown').toBe(false);
+    expect(writes(server)).toHaveLength(1);
   },
 );

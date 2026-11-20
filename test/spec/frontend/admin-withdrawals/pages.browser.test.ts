@@ -81,6 +81,12 @@ function usable(name: RegExp): HTMLElement[] {
 function usableWrites(): HTMLElement[] {
   return usable(WRITE);
 }
+/** Write entries already landed on the list for every write point (F1-08an), never pressed here. */
+const LANDED_ON_LIST = ['一键组批'];
+/** An entry's accessible name or text, spaces removed. */
+function nameOf(node: HTMLElement): string {
+  return (node.getAttribute('aria-label') || node.textContent || '').replace(/\s+/g, '');
+}
 /** Usable reveal entries, leaving out the 【查看】 detail entries of list rows. */
 function usableReveals(): HTMLElement[] {
   return usable(REVEAL).filter((node) => {
@@ -101,7 +107,7 @@ function unmaskedShown(): string[] {
   return UNMASKED_VALUES.filter((value) => all.includes(value));
 }
 
-it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下也没有可点的写入口，全程只发允许的 GET', async () => {
+it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下列表可用写入口恰为【一键组批】（F1-08an，不点）、详情没有可点的写入口，全程只发允许的 GET', async () => {
   await page.viewport(1440, 1080);
   const server = await show();
   const area = page.getByRole('main');
@@ -116,7 +122,10 @@ it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与�
   await expect
     .element(area.getByRole('row').filter({ hasText: NO.pending }))
     .toMatchTextContent(STATUS_NAME.PENDING_REVIEW);
-  expect(usableWrites(), 'no usable write entry on the list').toEqual([]);
+  expect(
+    usableWrites().map((node) => nameOf(node)),
+    'the only usable write entry on the list is the landed 一键组批 (not pressed)',
+  ).toEqual(LANDED_ON_LIST);
 
   const buttons = row.getByRole('button', { name: ENTRY });
   const links = row.getByRole('link', { name: ENTRY });
@@ -141,4 +150,38 @@ it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与�
   expect(unmaskedShown(), 'no unmasked phone number, payee account or payee name').toEqual([]);
   expect(server.writes(), 'only GET requests').toEqual([]);
   expect(disallowedRequests(server.log), 'only the allowed GET reads').toEqual([]);
+});
+
+it('[AC-F1-08an-BROWSER#1] /withdrawals 审核列表（Chromium）：持 payout.execute 时【一键组批】恰 1 个且可用（不点）；不持 payout.execute（其余权限点照持）时没有【一键组批】；全程只发允许的 GET', async () => {
+  await page.viewport(1440, 1080);
+  const GROUP = /^一键组批$/;
+  for (const { permissions, want } of [
+    { permissions: ALL_GRANTS, want: 1 },
+    { permissions: ALL_GRANTS.filter((point) => point !== 'payout.execute'), want: 0 },
+  ]) {
+    const server = await show(createServer(undefined, { permissions }));
+    const area = page.getByRole('main');
+    const tab = area.getByRole('tab', { name: /^审核列表/ });
+    const row = area.getByRole('row').filter({ hasText: NO.pending });
+    await expect
+      .poll(() => tab.elements().length + row.elements().length, FIRST)
+      .toBeGreaterThan(0);
+    if (tab.elements().length > 0) await tab.first().click();
+    await expect.element(row, FIRST).toBeVisible();
+    await expect.poll(() => usable(GROUP).length, FIRST).toBe(want);
+    expect(
+      [
+        ...area.getByRole('button', { name: GROUP }).elements(),
+        ...area.getByRole('link', { name: GROUP }).elements(),
+      ],
+      'shown 一键组批 entries (hidden, not greyed out, without payout.execute)',
+    ).toHaveLength(want);
+    expect(server.writes(), 'only GET requests').toEqual([]);
+    expect(disallowedRequests(server.log), 'only the allowed GET reads').toEqual([]);
+    root?.unmount();
+    root = undefined;
+    auth?.dispose();
+    auth = undefined;
+    document.body.replaceChildren();
+  }
 });

@@ -24,13 +24,13 @@ import {
 // unmasked phone number, payee account or payee name at any time. These tests press every entry.
 
 it(
-  '[AC-F1-08a-READONLY#1] 审核列表（账号持 withdraw.review、payout.execute、payout.manual_entry、export、pii.reveal_identity、pii.reveal_phone 等全部写与查看全量权限点）：没有可点的【批量通过】【批量手动打款】【批量自动打款】【导出】等写入口，点任何写入口或【查看】类入口都只发允许的 GET',
+  '[AC-F1-08a-READONLY#1] 审核列表（账号持 withdraw.review、payout.execute、payout.manual_entry、export、pii.reveal_identity、pii.reveal_phone 等全部写与查看全量权限点）：可用写入口恰为【一键组批】（F1-08an，不点），没有可点的【批量通过】【批量手动打款】【批量自动打款】【导出】等其他写入口，点其余写入口或【查看】类入口都只发允许的 GET',
   async () => {
     const server = createServer(undefined, { permissions: ALL_GRANTS });
     await mount(server);
     await openList(server, NO.pending);
     await settled(server);
-    await assertReadOnly(server);
+    await assertReadOnly(server, {}, ['一键组批']);
   },
   FLOW_TIMEOUT,
 );
@@ -147,6 +147,36 @@ it(
       await settled(server);
       expect(actions(area, PAYOUT).map(nameOf).sort(), `${label}: shown entries`).toEqual(want);
       expect(usable(area, PAYOUT).map(nameOf).sort(), `${label}: usable entries`).toEqual(want);
+      expect(server.writes(), `${label}: no request other than GET`).toEqual([]);
+      assertOnlyReads();
+      cleanup();
+    }
+  },
+  FLOW_TIMEOUT * 2,
+);
+
+it(
+  '[AC-F1-08an-READONLY#1] 审核列表按权限点出【一键组批】：全部权限点（含 payout.execute）时恰 1 个且可用；不持 payout.execute（其余写与查看权限点照持）时不出现（隐藏，不是置灰）；未勾选时都没有【批量自动打款】；都不点，只发允许的 GET',
+  async () => {
+    const { actions } = await import('./helpers.ts');
+    const GROUP = /^一键组批$/;
+    const AUTO = /^批量自动打款$/;
+    const cases = [
+      { label: 'all grants', permissions: ALL_GRANTS, want: 1 },
+      {
+        label: 'all but payout.execute',
+        permissions: ALL_GRANTS.filter((point) => point !== 'payout.execute'),
+        want: 0,
+      },
+    ];
+    for (const { label, permissions, want } of cases) {
+      const server = createServer(undefined, { permissions });
+      await mount(server);
+      await openList(server, NO.pending);
+      await settled(server);
+      expect(actions(main(), GROUP), `${label}: shown 一键组批`).toHaveLength(want);
+      expect(usable(main(), GROUP), `${label}: usable 一键组批`).toHaveLength(want);
+      expect(actions(main(), AUTO), `${label}: no 批量自动打款 without a selection`).toEqual([]);
       expect(server.writes(), `${label}: no request other than GET`).toEqual([]);
       assertOnlyReads();
       cleanup();

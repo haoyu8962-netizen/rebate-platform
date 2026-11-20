@@ -165,7 +165,7 @@ export async function mount(
   await waitFor(() => expect(server.reads().length).toBeGreaterThan(0));
   await waitFor(() => expect(rowsOf(main(), server.state[0]!.out_biz_no)).toHaveLength(1));
   await settled(server);
-  assertNoOtherActions();
+  assertNoOtherActions(landedFor(permissions));
 }
 
 export function main(): HTMLElement {
@@ -191,9 +191,22 @@ export function button(root: HTMLElement, name: string): HTMLElement {
   return found[0]!;
 }
 
-export function assertNoOtherActions(): void {
+export function assertNoOtherActions(landed?: readonly string[]): void {
   for (const name of ['批量手动打款', '批量自动打款', '一键组批', '导出', '保存', '恢复默认值'])
-    expect(buttons(main(), name), `out-of-scope action: ${name}`).toEqual([]);
+    if (landed?.includes(name) !== true)
+      expect(buttons(main(), name), `out-of-scope action: ${name}`).toEqual([]);
+  if (landed !== undefined)
+    expect(
+      landed.map((name) => buttons(main(), name).filter((node) => !disabled(node)).length),
+      `landed actions present and usable, exactly once each: ${landed.join(', ')}`,
+    ).toEqual(landed.map(() => 1));
+}
+
+/** The landed page-level entries for `permissions` (F1-08an: 【一键组批】 with payout.execute). */
+export function landedFor(permissions: PermissionSnapshot): readonly string[] | undefined {
+  return permissions.isSuper || permissions.permissions.includes('payout.execute')
+    ? ['一键组批']
+    : undefined;
 }
 
 export function disabled(node: HTMLElement): boolean {
