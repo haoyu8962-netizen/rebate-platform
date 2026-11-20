@@ -1,0 +1,707 @@
+{
+  "task": "B1-02zzzc",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "c246ee5c36333a14f119cdf55ce2fd71aaf45cdf",
+  "red_tests": [
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带支付宝形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带银行卡形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带微信形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] payout_account_change 带提现形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] phone_change 带提现形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] account_deletion 带提现形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#18] post /v1/withdrawals 缺 x-sensitive-operation 时 conformance 报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#18] put /v1/me/payout-account 缺 x-sensitive-operation 时 conformance 报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#18] post /v1/me/phone 缺 x-sensitive-operation 时 conformance 报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#18] post /v1/me/deletion 缺 x-sensitive-operation 时 conformance 报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] post /v1/withdrawals 的 x-sensitive-operation 为 false（不是布尔 true）时报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] post /v1/withdrawals 的 x-sensitive-operation 为 \"true\"（不是布尔 true）时报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] put /v1/me/payout-account 的 x-sensitive-operation 为 false（不是布尔 true）时报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] put /v1/me/payout-account 的 x-sensitive-operation 为 \"true\"（不是布尔 true）时报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] post /v1/me/phone 的 x-sensitive-operation 为 false（不是布尔 true）时报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] post /v1/me/phone 的 x-sensitive-operation 为 \"true\"（不是布尔 true）时报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] post /v1/me/deletion 的 x-sensitive-operation 为 false（不是布尔 true）时报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] post /v1/me/deletion 的 x-sensitive-operation 为 \"true\"（不是布尔 true）时报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#20] 四个敏感操作以外的 post /v1/idempotency-keys/abandon 带 x-sensitive-operation: true 时报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#20] 四个敏感操作以外的 get /v1/withdrawals/rules 带 x-sensitive-operation: true 时报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#20] 四个敏感操作以外的 post /v1/auth/step-up 带 x-sensitive-operation: true 时报错",
+    "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#21] POST /v1/withdrawals 再带 x-step-up withdraw（连同 X-Step-Up-Token 与 10003）时报错：提现不再是 step-up 操作",
+    "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#10] createWithdrawal 去 x-step-up、X-Step-Up-Token 参数与 10003；签名、幂等、realname、版本闸、20903 与敏感操作标记保留",
+    "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#11] savePayoutAccount 仍要二次验证：x-step-up payout_account_change、X-Step-Up-Token、10003 与 20903 保留，并带 x-sensitive-operation: true",
+    "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#11] bindPhone 仍要二次验证：x-step-up phone_change、X-Step-Up-Token、10003 与 20903 保留，并带 x-sensitive-operation: true",
+    "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#11] requestDeletion 仍要二次验证：x-step-up account_deletion、X-Step-Up-Token、10003 与 20903 保留，并带 x-sensitive-operation: true",
+    "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#12] 全契约恰好四个操作带 x-sensitive-operation（值为 true），恰好三个带 x-step-up",
+    "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#13] StepUpAction 去 withdraw；StepUpSummary 去 StepUpSummaryWithdraw 且全文不再引用它",
+    "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#14] AbandonIdempotencyKeyRequest.action 改引用新枚举 IdempotencyAbandonAction（四个动作，仍含 withdraw）",
+    "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#15] source：stepUp 请求体不再接受 action=withdraw 与提现形状的 summary；其余三个动作照常",
+    "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#15] generated：stepUp 请求体不再接受 action=withdraw 与提现形状的 summary；其余三个动作照常",
+    "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#16] source：作废请求体四个动作都接受（含 withdraw），未知动作拒绝；createWithdrawal 不再声明 X-Step-Up-Token 头",
+    "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#16] generated：作废请求体四个动作都接受（含 withdraw），未知动作拒绝；createWithdrawal 不再声明 X-Step-Up-Token 头",
+    "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#17] 生成的 TS 类型同步：openapi.gen.ts 去 StepUpSummaryWithdraw、新增 IdempotencyAbandonAction",
+    "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#1] 不带 X-Step-Up-Token 的提现照常受理：契约响应、建单冻结一次、幂等键存结果；同键原样重放不再建单",
+    "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#2] 提现不判 X-Step-Up-Token：带别的动作的有效 token 或乱码 token 都照常受理，各建一单",
+    "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#3] 其余要求照旧（BR-WDR-01）：缺 Idempotency-Key 20001、签名错 10401、h5_token 10403，均无副作用；三项齐全且不带 step-up 才受理",
+    "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#4] 检查顺序去掉 ②：封禁用户不带 token 答 10006（不是 10003），1xxxx 不写幂等结果、无副作用",
+    "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#5] 检查顺序去掉 ②：未实名用户不带 token 答 30304（不是 10003），不建单",
+    "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#6] 开关关闭不带 token 答 30306 并存幂等结果、同键原样重放；开关打开的应用里同样不带 token 受理",
+    "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#7] 余额不足不带 token 答 30301 并存幂等结果（3xxxx 写入），补款后同键原样重放、新键受理",
+    "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#8] 【放弃上一笔提现】照旧：action=withdraw 作废未到达的键，之后同键 20903 不建单；已完成的键返回原结果；新键不带 token 受理",
+    "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#9] POST /v1/auth/step-up 不再签发 withdraw：action=withdraw → 20001，不发 token；收款账号变更带提现形状的 summary → 20001",
+    "test/spec/payout/withdraw-no-step-up/stage-check.test.ts > [AC-B1-02zzzc#22] ⑫ 在 HTTP 请求内不再判 POST /v1/withdrawals：无 withStepUp、无令牌直接放过，不碰 Redis",
+    "test/spec/payout/withdraw-no-step-up/stage-check.test.ts > [AC-B1-02zzzc#23] ⑫ 对仍要二次验证的收款账号变更、注销照旧：HTTP 内缺 step-up 上下文即 10003；提现同一检查器放过"
+  ],
+  "risk_note": "RV2 (payout / identity, BR-ID-08, BR-WDR-01, BR-WDR-03, BR-WDR-07; owner 2026-11-14 「用户提现不需要二次验证了」, D10-1665 / D10-1666 / D10-1671 / D10-1701). POST /v1/withdrawals no longer takes a step-up: the contract drops x-step-up, the X-Step-Up-Token parameter and 10003 from createWithdrawal, StepUpAction and enums step_up_action lose withdraw, StepUpSummary loses StepUpSummaryWithdraw; abandoning an idempotency key keeps withdraw through the new IdempotencyAbandonAction; the four sensitive operations carry x-sensitive-operation: true (x-step-up stays on payout_account_change, phone_change, account_deletion); stage ⑫ drops the withdrawal mapping, the withdrawal controller drops withStepUp. Access token, request signature, Idempotency-Key and risk re-verification (reverify) are unchanged. oasdiff accepted lines added (request tightening, server and apps move together). Frozen tests: changed expectations within the five kinds the owner approved (D10-1702, D10-2166), sample / carrier rewrites (D10-1705, D10-1706, approvals 113), 3 file-level support entries; 58 red_exempt + 1 red_exempt_outside confirmed by the rule-test reviewer; second frozen batch (step-up-digest/issue.int.test.ts, owner 2026-11-20 option A, D10-2193; plan A D10-2205): 6 REFUSED rows moved verbatim into a new .each block with exact field sets, [AC-B1-02zzzb#8] changed in-block, 1 red_exempt_outside + 7 red_exempt confirmed by a gate-scope confirmation (D10-1987). The formal red run passes.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c246ee5c36333a14f119cdf55ce2fd71aaf45cdf",
+      "tree": "29862df95342532e29702bc4571d059fb0b21801",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-20T07:23:32Z",
+      "finished_at": "2026-11-20T07:23:52Z",
+      "red_tests": [
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带支付宝形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带银行卡形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带微信形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] payout_account_change 带提现形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] phone_change 带提现形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] account_deletion 带提现形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#18] post /v1/withdrawals 缺 x-sensitive-operation 时 conformance 报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#18] put /v1/me/payout-account 缺 x-sensitive-operation 时 conformance 报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#18] post /v1/me/phone 缺 x-sensitive-operation 时 conformance 报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#18] post /v1/me/deletion 缺 x-sensitive-operation 时 conformance 报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] post /v1/withdrawals 的 x-sensitive-operation 为 false（不是布尔 true）时报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] post /v1/withdrawals 的 x-sensitive-operation 为 \"true\"（不是布尔 true）时报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] put /v1/me/payout-account 的 x-sensitive-operation 为 false（不是布尔 true）时报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] put /v1/me/payout-account 的 x-sensitive-operation 为 \"true\"（不是布尔 true）时报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] post /v1/me/phone 的 x-sensitive-operation 为 false（不是布尔 true）时报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] post /v1/me/phone 的 x-sensitive-operation 为 \"true\"（不是布尔 true）时报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] post /v1/me/deletion 的 x-sensitive-operation 为 false（不是布尔 true）时报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#19] post /v1/me/deletion 的 x-sensitive-operation 为 \"true\"（不是布尔 true）时报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#20] 四个敏感操作以外的 post /v1/idempotency-keys/abandon 带 x-sensitive-operation: true 时报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#20] 四个敏感操作以外的 get /v1/withdrawals/rules 带 x-sensitive-operation: true 时报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#20] 四个敏感操作以外的 post /v1/auth/step-up 带 x-sensitive-operation: true 时报错",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts > [AC-B1-02zzzc#21] POST /v1/withdrawals 再带 x-step-up withdraw（连同 X-Step-Up-Token 与 10003）时报错：提现不再是 step-up 操作",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#10] createWithdrawal 去 x-step-up、X-Step-Up-Token 参数与 10003；签名、幂等、realname、版本闸、20903 与敏感操作标记保留",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#11] savePayoutAccount 仍要二次验证：x-step-up payout_account_change、X-Step-Up-Token、10003 与 20903 保留，并带 x-sensitive-operation: true",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#11] bindPhone 仍要二次验证：x-step-up phone_change、X-Step-Up-Token、10003 与 20903 保留，并带 x-sensitive-operation: true",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#11] requestDeletion 仍要二次验证：x-step-up account_deletion、X-Step-Up-Token、10003 与 20903 保留，并带 x-sensitive-operation: true",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#12] 全契约恰好四个操作带 x-sensitive-operation（值为 true），恰好三个带 x-step-up",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#13] StepUpAction 去 withdraw；StepUpSummary 去 StepUpSummaryWithdraw 且全文不再引用它",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#14] AbandonIdempotencyKeyRequest.action 改引用新枚举 IdempotencyAbandonAction（四个动作，仍含 withdraw）",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#15] source：stepUp 请求体不再接受 action=withdraw 与提现形状的 summary；其余三个动作照常",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#15] generated：stepUp 请求体不再接受 action=withdraw 与提现形状的 summary；其余三个动作照常",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#16] source：作废请求体四个动作都接受（含 withdraw），未知动作拒绝；createWithdrawal 不再声明 X-Step-Up-Token 头",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#16] generated：作废请求体四个动作都接受（含 withdraw），未知动作拒绝；createWithdrawal 不再声明 X-Step-Up-Token 头",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts > [AC-B1-02zzzc#17] 生成的 TS 类型同步：openapi.gen.ts 去 StepUpSummaryWithdraw、新增 IdempotencyAbandonAction",
+        "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#1] 不带 X-Step-Up-Token 的提现照常受理：契约响应、建单冻结一次、幂等键存结果；同键原样重放不再建单",
+        "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#2] 提现不判 X-Step-Up-Token：带别的动作的有效 token 或乱码 token 都照常受理，各建一单",
+        "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#3] 其余要求照旧（BR-WDR-01）：缺 Idempotency-Key 20001、签名错 10401、h5_token 10403，均无副作用；三项齐全且不带 step-up 才受理",
+        "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#4] 检查顺序去掉 ②：封禁用户不带 token 答 10006（不是 10003），1xxxx 不写幂等结果、无副作用",
+        "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#5] 检查顺序去掉 ②：未实名用户不带 token 答 30304（不是 10003），不建单",
+        "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#6] 开关关闭不带 token 答 30306 并存幂等结果、同键原样重放；开关打开的应用里同样不带 token 受理",
+        "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#7] 余额不足不带 token 答 30301 并存幂等结果（3xxxx 写入），补款后同键原样重放、新键受理",
+        "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#8] 【放弃上一笔提现】照旧：action=withdraw 作废未到达的键，之后同键 20903 不建单；已完成的键返回原结果；新键不带 token 受理",
+        "test/spec/payout/withdraw-no-step-up/http.int.test.ts > [AC-B1-02zzzc#9] POST /v1/auth/step-up 不再签发 withdraw：action=withdraw → 20001，不发 token；收款账号变更带提现形状的 summary → 20001",
+        "test/spec/payout/withdraw-no-step-up/stage-check.test.ts > [AC-B1-02zzzc#22] ⑫ 在 HTTP 请求内不再判 POST /v1/withdrawals：无 withStepUp、无令牌直接放过，不碰 Redis",
+        "test/spec/payout/withdraw-no-step-up/stage-check.test.ts > [AC-B1-02zzzc#23] ⑫ 对仍要二次验证的收款账号变更、注销照旧：HTTP 内缺 step-up 上下文即 10003；提现同一检查器放过"
+      ],
+      "expected": [
+        "test/spec/identity/step-up-digest/issue.int.test.ts",
+        "test/spec/payout/withdraw-no-step-up/conformance.test.ts",
+        "test/spec/payout/withdraw-no-step-up/contract.test.ts",
+        "test/spec/payout/withdraw-no-step-up/http.int.test.ts",
+        "test/spec/payout/withdraw-no-step-up/stage-check.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "3eb2be1f6e194744fabc9cb4f9f4bee633539a39b7681e90af9c240a07f6c5ef"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "bb260ac01f28a3c94a04a401daa54a75c1df37a48aa104cde76b9f55cb94ea55"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Independent Claude via tools/agent/claude-run.sh (Codex usage limit until 2026-11-20 13:01, approvals 36): money r1 pass with no findings on the first implementation; r2 after the rebase onto main (with B1-02zzzb) and the mechanical unit-test fix, covering head 5cf2b20c5 (the later commits only touch frozen test files): pass, no findings (couli-runs/B1-02zzzc/review-money-r2.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests by independent Claude (ledger tester claude-independent), attempt 2 only rewrote stage-check #22 / #23 so the old code fails by an assertion. spec-test r1 pass (2 S2); the gate confirmation round (fresh independent Claude, handwritten brief listing every declaration by file) confirmed all 58 red_exempt and the red_exempt_outside one by one (couli-runs/B1-02zzzc/review-spec-test-r2.json). Ledger patch 7 (#397) added 7 red_exempt and 1 red_exempt_outside for step-up-digest/issue.int.test.ts: confirmed one by one by a fresh independent Claude as a gate-scope confirmation that does not count as a spec-test round (D10-1987; Codex refused by codex-run because it wrote attempt 1 of these rule tests, approvals 19), pass (couli-runs/B1-02zzzc/v1120c/review-red-exempt-confirm-p7.json)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "807daa3b9ff77d8ba6c5b8c96007499dfcc8f514",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/identity/reverify-gates/withdraw.int.test.ts",
+      "test": "[AC-B1-02zq#4] ② 先于 ③b：不带 step-up → 10003，带了才是 10010",
+      "retitle_to": "[AC-B1-02zq#4] ② 已取消：不带 step-up 也直接是 ③b 的 10010",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02zq#4] ② 先于 ③b：不带 step-up → 10003，带了才是 10010', async () => {\n  const f = await gates(kit);\n  const m = await f.member();\n  await f.flag(m.uid, { realname: true, providers: [] });\n  const c = f.on(m);\n  const required = answer(kit, WITHDRAW, 'post', await c.withdraw({ step: null }), 10003);\n  expect(required).not.toHaveProperty('data');\n  refused(kit, WITHDRAW, 'post', await c.withdraw(), ID_NUMBER);\n});",
+      "after": "it('[AC-B1-02zq#4] ② 已取消：不带 step-up 也直接是 ③b 的 10010', async () => {\n  const f = await gates(kit);\n  const m = await f.member();\n  await f.flag(m.uid, { realname: true, providers: [] });\n  const c = f.on(m);\n  refused(kit, WITHDRAW, 'post', await c.withdraw({ step: null }), ID_NUMBER);\n  refused(kit, WITHDRAW, 'post', await c.withdraw(), ID_NUMBER);\n});",
+      "br": ["BR-WDR-01", "BR-WDR-03"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/reverify-gates/withdraw.int.test.ts",
+      "test": "[AC-B1-02zq#5] 10010 不写幂等结果、不消耗 step-up：加验通过后同设备、同令牌、新幂等键建单成功",
+      "retitle_to": "[AC-B1-02zq#5] 10010 不写幂等结果：加验通过后同设备、新幂等键建单成功（提现不带 step-up）",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02zq#5] 10010 不写幂等结果、不消耗 step-up：加验通过后同设备、同令牌、新幂等键建单成功', async () => {\n  const f = await gates(kit);\n  const m = await f.member();\n  await f.flag(m.uid, { realname: true, providers: [] });\n  const c = f.on(m);\n  const step = await c.stepUp('withdraw');\n  refused(kit, WITHDRAW, 'post', await c.withdraw({ step }), ID_NUMBER);\n  expect(await f.idempotencyRows(WITHDRAW)).toEqual([]);\n\n  await f.passById(m);\n  const created = answer(kit, WITHDRAW, 'post', await c.withdraw({ step }), 0);\n  expect(created.data).toMatchObject({ status: 'PENDING_REVIEW', amount_fen: 1000 });\n  expect(await f.withdrawals(m.uid)).toHaveLength(1);\n});",
+      "after": "it('[AC-B1-02zq#5] 10010 不写幂等结果：加验通过后同设备、新幂等键建单成功（提现不带 step-up）', async () => {\n  const f = await gates(kit);\n  const m = await f.member();\n  await f.flag(m.uid, { realname: true, providers: [] });\n  const c = f.on(m);\n  refused(kit, WITHDRAW, 'post', await c.withdraw({ step: null }), ID_NUMBER);\n  expect(await f.idempotencyRows(WITHDRAW)).toEqual([]);\n\n  await f.passById(m);\n  const created = answer(kit, WITHDRAW, 'post', await c.withdraw({ step: null }), 0);\n  expect(created.data).toMatchObject({ status: 'PENDING_REVIEW', amount_fen: 1000 });\n  expect(await f.withdrawals(m.uid)).toHaveLength(1);\n});",
+      "br": ["BR-WDR-01", "BR-WDR-03"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/reverify-gates/withdraw.int.test.ts",
+      "test": "[AC-B1-02zq#6] 同一令牌连续被 10010 拦下多次，每次都不占用它",
+      "retitle_to": "[AC-B1-02zq#6] 不带 step-up 连续被 10010 拦下多次，每次都不建单",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02zq#6] 同一令牌连续被 10010 拦下多次，每次都不占用它', async () => {\n  const f = await gates(kit);\n  const m = await f.member();\n  await f.flag(m.uid, { realname: true, providers: [] });\n  const c = f.on(m);\n  const step = await c.stepUp('withdraw');\n  refused(kit, WITHDRAW, 'post', await c.withdraw({ step }), ID_NUMBER);\n  refused(kit, WITHDRAW, 'post', await c.withdraw({ step }), ID_NUMBER);\n  expect(await f.withdrawals(m.uid)).toEqual([]);\n});",
+      "after": "it('[AC-B1-02zq#6] 不带 step-up 连续被 10010 拦下多次，每次都不建单', async () => {\n  const f = await gates(kit);\n  const m = await f.member();\n  await f.flag(m.uid, { realname: true, providers: [] });\n  const c = f.on(m);\n  refused(kit, WITHDRAW, 'post', await c.withdraw({ step: null }), ID_NUMBER);\n  refused(kit, WITHDRAW, 'post', await c.withdraw({ step: null }), ID_NUMBER);\n  expect(await f.withdrawals(m.uid)).toEqual([]);\n});",
+      "br": ["BR-WDR-01", "BR-WDR-03"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/staging-test-phone/audit.int.test.ts",
+      "test": "[AC-B1-02zza#25] 测试号 step_up 成功写一条审计（purpose=step_up、is_new_user=false）；核销失败与普通号码不写；日志与响应不含完整号码和固定码",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02zza#25] 测试号 step_up 成功写一条审计（purpose=step_up、is_new_user=false）；核销失败与普通号码不写；日志与响应不含完整号码和固定码', async () => {\n  const appId = `stp_${randomBytes(10).toString('hex')}`;\n  const phone = testPhone();\n  const db = kit.db.withSchema('app');\n  const uid = await seedUser(kit.db, appId, {\n    phoneHmac: kit.crypto.blindIndex(phone, PHONE_BLIND_INDEX_CONTEXT),\n  });\n  await db\n    .updateTable('users')\n    .set({ phone_cipher: Buffer.from(kit.crypto.encrypt(phone, PHONE_CIPHER_CONTEXT), 'utf8') })\n    .where('id', '=', uid)\n    .execute();\n  const { logger, lines } = memoryLogger();\n  const verifyAndConsume = vi.fn<SmsCodeService['verifyAndConsume']>(async () => ({\n    code: 0,\n    staging_test_phone: true,\n  }));\n  const service = createStepUpService({\n    db,\n    clock: new FixedClock('2026-11-04T10:00:00+08:00'),\n    crypto: kit.crypto,\n    keys: keys(),\n    config: { configValue: async () => null },\n    sms: { send: async () => ({ code: 50001 }), verifyAndConsume },\n    attempts: { issue: async () => ({ code: 50001 }), consume: async () => ({ code: 50001 }) },\n    logger,\n  });\n  const principal = {\n    uid,\n    app_id: appId,\n    sid: randomUUID(),\n    device_id: randomUUID(),\n    scp: 'full' as const,\n  };\n  const command = {\n    principal,\n    verifiedDevice: { appId, deviceId: principal.device_id },\n    body: { action: 'withdraw' as const, code: FIXED },\n  };\n  verifyAndConsume.mockResolvedValueOnce({ code: 20002 });\n  expect(await service.verify(command)).toEqual({ code: 20002 });\n  verifyAndConsume.mockResolvedValueOnce({ code: 0 });\n  expect((await service.verify(command)).code).toBe(0);\n  expect(auditLines(lines)).toEqual([]);\n  const result = await service.verify(command);\n  expect(result.code).toBe(0);\n  expect(verifyAndConsume).toHaveBeenLastCalledWith({\n    app_id: appId,\n    phone,\n    purpose: 'step_up',\n    code: FIXED,\n  });\n  expect(auditLines(lines)).toEqual([\n    expect.objectContaining({\n      event: AUDIT_EVENT,\n      purpose: 'step_up',\n      is_new_user: false,\n      phone_masked: masked(phone),\n      user_id: uid,\n    }),\n  ]);\n  expectNoLeak(lines.join(''), phone);\n  expectNoLeak(JSON.stringify(result), phone);\n});",
+      "after": "it('[AC-B1-02zza#25] 测试号 step_up 成功写一条审计（purpose=step_up、is_new_user=false）；核销失败与普通号码不写；日志与响应不含完整号码和固定码', async () => {\n  const appId = `stp_${randomBytes(10).toString('hex')}`;\n  const phone = testPhone();\n  const db = kit.db.withSchema('app');\n  const uid = await seedUser(kit.db, appId, {\n    phoneHmac: kit.crypto.blindIndex(phone, PHONE_BLIND_INDEX_CONTEXT),\n  });\n  await db\n    .updateTable('users')\n    .set({ phone_cipher: Buffer.from(kit.crypto.encrypt(phone, PHONE_CIPHER_CONTEXT), 'utf8') })\n    .where('id', '=', uid)\n    .execute();\n  const { logger, lines } = memoryLogger();\n  const verifyAndConsume = vi.fn<SmsCodeService['verifyAndConsume']>(async () => ({\n    code: 0,\n    staging_test_phone: true,\n  }));\n  const service = createStepUpService({\n    db,\n    clock: new FixedClock('2026-11-04T10:00:00+08:00'),\n    crypto: kit.crypto,\n    keys: keys(),\n    config: { configValue: async () => null },\n    sms: { send: async () => ({ code: 50001 }), verifyAndConsume },\n    attempts: { issue: async () => ({ code: 50001 }), consume: async () => ({ code: 50001 }) },\n    logger,\n  });\n  const principal = {\n    uid,\n    app_id: appId,\n    sid: randomUUID(),\n    device_id: randomUUID(),\n    scp: 'full' as const,\n  };\n  const command = {\n    principal,\n    verifiedDevice: { appId, deviceId: principal.device_id },\n    body: { action: 'phone_change' as const, code: FIXED },\n  };\n  verifyAndConsume.mockResolvedValueOnce({ code: 20002 });\n  expect(await service.verify(command)).toEqual({ code: 20002 });\n  verifyAndConsume.mockResolvedValueOnce({ code: 0 });\n  expect((await service.verify(command)).code).toBe(0);\n  expect(auditLines(lines)).toEqual([]);\n  const result = await service.verify(command);\n  expect(result.code).toBe(0);\n  expect(verifyAndConsume).toHaveBeenLastCalledWith({\n    app_id: appId,\n    phone,\n    purpose: 'step_up',\n    code: FIXED,\n  });\n  expect(auditLines(lines)).toEqual([\n    expect.objectContaining({\n      event: AUDIT_EVENT,\n      purpose: 'step_up',\n      is_new_user: false,\n      phone_masked: masked(phone),\n      user_id: uid,\n    }),\n  ]);\n  expectNoLeak(lines.join(''), phone);\n  expectNoLeak(JSON.stringify(result), phone);\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "reverse check of the rewrite (D10-2180): the base block on the new contract does not compile — its withdraw is typed as StepUpAction, which no longer has it (PR #385 CI run 44669594749, pnpm build: staging-test-phone/audit.int.test.ts(118/120/122) TS2345, step-up/sms.int.test.ts(44) TS2322), so the rewrite is forced by the changed rule; the block itself is green on the old implementation, it asserts behaviour the rule change did not touch",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-bound-phone/contract.test.ts",
+      "test": "[AC-B1-02zzz#2] source 请求契约：step_up 不带 phone；login / bind 仍必须带 phone",
+      "reason": "rule_change",
+      "before": "it.each(['source', 'generated'] as const)(\n  '[AC-B1-02zzz#2] %s 请求契约：step_up 不带 phone；login / bind 仍必须带 phone',\n  async (source) => {\n    const schema =\n      source === 'source'\n        ? (await document()).paths[SMS]!.post.requestBody.content['application/json'].schema\n        : CONTRACT_ROUTE_SCHEMAS.sendSmsCode.body;\n    const validate = createValidatorCompiler()({ schema, httpPart: 'body' });\n    for (const action of [\n      'withdraw',\n      'payout_account_change',\n      'phone_change',\n      'account_deletion',\n    ]) {\n      expect(validate({ purpose: 'step_up', action }), JSON.stringify(validate.errors)).toBe(true);\n    }\n    for (const purpose of ['login', 'bind']) {\n      expect(validate({ purpose, phone: '13800138000' })).toBe(true);\n      expect(validate({ purpose })).toBe(false);\n    }\n  },\n);\n// .each row 1 of 2: 'source'",
+      "after": "it.each(['source', 'generated'] as const)(\n  '[AC-B1-02zzz#2] %s 请求契约：step_up 不带 phone；login / bind 仍必须带 phone',\n  async (source) => {\n    const schema =\n      source === 'source'\n        ? (await document()).paths[SMS]!.post.requestBody.content['application/json'].schema\n        : CONTRACT_ROUTE_SCHEMAS.sendSmsCode.body;\n    const validate = createValidatorCompiler()({ schema, httpPart: 'body' });\n    for (const action of ['payout_account_change', 'phone_change', 'account_deletion']) {\n      expect(validate({ purpose: 'step_up', action }), JSON.stringify(validate.errors)).toBe(true);\n    }\n    // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.\n    expect(validate({ purpose: 'step_up', action: 'withdraw' })).toBe(false);\n    for (const purpose of ['login', 'bind']) {\n      expect(validate({ purpose, phone: '13800138000' })).toBe(true);\n      expect(validate({ purpose })).toBe(false);\n    }\n  },\n);\n// .each row 1 of 2: 'source'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-bound-phone/contract.test.ts",
+      "test": "[AC-B1-02zzz#2] generated 请求契约：step_up 不带 phone；login / bind 仍必须带 phone",
+      "reason": "rule_change",
+      "before": "it.each(['source', 'generated'] as const)(\n  '[AC-B1-02zzz#2] %s 请求契约：step_up 不带 phone；login / bind 仍必须带 phone',\n  async (source) => {\n    const schema =\n      source === 'source'\n        ? (await document()).paths[SMS]!.post.requestBody.content['application/json'].schema\n        : CONTRACT_ROUTE_SCHEMAS.sendSmsCode.body;\n    const validate = createValidatorCompiler()({ schema, httpPart: 'body' });\n    for (const action of [\n      'withdraw',\n      'payout_account_change',\n      'phone_change',\n      'account_deletion',\n    ]) {\n      expect(validate({ purpose: 'step_up', action }), JSON.stringify(validate.errors)).toBe(true);\n    }\n    for (const purpose of ['login', 'bind']) {\n      expect(validate({ purpose, phone: '13800138000' })).toBe(true);\n      expect(validate({ purpose })).toBe(false);\n    }\n  },\n);\n// .each row 2 of 2: 'generated'",
+      "after": "it.each(['source', 'generated'] as const)(\n  '[AC-B1-02zzz#2] %s 请求契约：step_up 不带 phone；login / bind 仍必须带 phone',\n  async (source) => {\n    const schema =\n      source === 'source'\n        ? (await document()).paths[SMS]!.post.requestBody.content['application/json'].schema\n        : CONTRACT_ROUTE_SCHEMAS.sendSmsCode.body;\n    const validate = createValidatorCompiler()({ schema, httpPart: 'body' });\n    for (const action of ['payout_account_change', 'phone_change', 'account_deletion']) {\n      expect(validate({ purpose: 'step_up', action }), JSON.stringify(validate.errors)).toBe(true);\n    }\n    // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.\n    expect(validate({ purpose: 'step_up', action: 'withdraw' })).toBe(false);\n    for (const purpose of ['login', 'bind']) {\n      expect(validate({ purpose, phone: '13800138000' })).toBe(true);\n      expect(validate({ purpose })).toBe(false);\n    }\n  },\n);\n// .each row 2 of 2: 'generated'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-bound-phone/sms.int.test.ts",
+      "test": "[AC-B1-02zzz#4] withdraw 从登录账号取绑定手机发码，并能完成相应用途的二次验证",
+      "reason": "rule_change",
+      "before": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    const message = await sendBound(f, action);\n    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.\n    const summary =\n      action === 'payout_account_change'\n        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n        : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 1 of 4: 'withdraw'",
+      "after": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    if (action === 'withdraw') {\n      // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.\n      rejected(kit, SMS, await f.post(SMS, { purpose: 'step_up', action }), 20001);\n      rejected(kit, STEP_UP, await f.post(STEP_UP, { action, code: '000000' }), 20001);\n      return;\n    }\n    const message = await sendBound(f, action);\n    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.\n    const summary =\n      action === 'payout_account_change'\n        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n        : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 1 of 4: 'withdraw'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-bound-phone/sms.int.test.ts",
+      "test": "[AC-B1-02zzz#4] payout_account_change 从登录账号取绑定手机发码，并能完成相应用途的二次验证",
+      "reason": "rule_change",
+      "before": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    const message = await sendBound(f, action);\n    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.\n    const summary =\n      action === 'payout_account_change'\n        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n        : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 2 of 4: 'payout_account_change'",
+      "after": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    if (action === 'withdraw') {\n      // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.\n      rejected(kit, SMS, await f.post(SMS, { purpose: 'step_up', action }), 20001);\n      rejected(kit, STEP_UP, await f.post(STEP_UP, { action, code: '000000' }), 20001);\n      return;\n    }\n    const message = await sendBound(f, action);\n    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.\n    const summary =\n      action === 'payout_account_change'\n        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n        : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 2 of 4: 'payout_account_change'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts issues every step_up_token with the wrong action (phone_change ↔ another), i.e. the token no longer binds the action asked for; probe worktree at e16ae2936 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/8, tree e57995204bc1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-bound-phone/sms.int.test.ts",
+      "test": "[AC-B1-02zzz#4] phone_change 从登录账号取绑定手机发码，并能完成相应用途的二次验证",
+      "reason": "rule_change",
+      "before": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    const message = await sendBound(f, action);\n    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.\n    const summary =\n      action === 'payout_account_change'\n        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n        : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 3 of 4: 'phone_change'",
+      "after": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    if (action === 'withdraw') {\n      // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.\n      rejected(kit, SMS, await f.post(SMS, { purpose: 'step_up', action }), 20001);\n      rejected(kit, STEP_UP, await f.post(STEP_UP, { action, code: '000000' }), 20001);\n      return;\n    }\n    const message = await sendBound(f, action);\n    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.\n    const summary =\n      action === 'payout_account_change'\n        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n        : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 3 of 4: 'phone_change'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts issues every step_up_token with the wrong action (phone_change ↔ another), i.e. the token no longer binds the action asked for; probe worktree at e16ae2936 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/8, tree e57995204bc1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-bound-phone/sms.int.test.ts",
+      "test": "[AC-B1-02zzz#4] account_deletion 从登录账号取绑定手机发码，并能完成相应用途的二次验证",
+      "reason": "rule_change",
+      "before": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    const message = await sendBound(f, action);\n    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.\n    const summary =\n      action === 'payout_account_change'\n        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n        : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 4 of 4: 'account_deletion'",
+      "after": "it.each(ACTIONS)(\n  '[AC-B1-02zzz#4] %s 从登录账号取绑定手机发码，并能完成相应用途的二次验证',\n  async (action) => {\n    const f = await account(kit);\n    if (action === 'withdraw') {\n      // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.\n      rejected(kit, SMS, await f.post(SMS, { purpose: 'step_up', action }), 20001);\n      rejected(kit, STEP_UP, await f.post(STEP_UP, { action, code: '000000' }), 20001);\n      return;\n    }\n    const message = await sendBound(f, action);\n    // B1-02zzzb (D10-1666): only payout_account_change carries a summary; withdraw takes none.\n    const summary =\n      action === 'payout_account_change'\n        ? { payout_method: 'alipay', alipay_logon_id: '13800138000' }\n        : undefined;\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, {\n        action,\n        code: message.code,\n        ...(summary === undefined ? {} : { summary }),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({ action });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toContain(data.step_up_token);\n  },\n);\n// .each row 4 of 4: 'account_deletion'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts issues every step_up_token with the wrong action (phone_change ↔ another), i.e. the token no longer binds the action asked for; probe worktree at e16ae2936 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/8, tree e57995204bc1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-bound-phone/sms.int.test.ts",
+      "test": "[AC-B1-02zzz#11] 不同设备和 action 仍共享绑定手机号的发送间隔",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02zzz#11] 不同设备和 action 仍共享绑定手机号的发送间隔', async () => {\n  const f = await account(kit);\n  await sendBound(f);\n  const secondDevice = await client(kit, f.appId);\n  const session = await f.issue(f.uid, secondDevice.deviceId);\n  const response = await secondDevice.post(\n    SMS,\n    {\n      purpose: 'step_up',\n      action: 'withdraw',\n    },\n    session.access_token,\n  );\n  expect(response.statusCode).toBe(429);\n  expect(response.json()).toMatchObject({ code: 42901 });\n  expect(String(response.headers['retry-after'])).toBe('60');\n  validate(kit, SMS, response);\n  expect(messages(f)).toHaveLength(1);\n});",
+      "after": "it('[AC-B1-02zzz#11] 不同设备和 action 仍共享绑定手机号的发送间隔', async () => {\n  const f = await account(kit);\n  await sendBound(f);\n  const secondDevice = await client(kit, f.appId);\n  const session = await f.issue(f.uid, secondDevice.deviceId);\n  const response = await secondDevice.post(\n    SMS,\n    {\n      purpose: 'step_up',\n      action: 'phone_change',\n    },\n    session.access_token,\n  );\n  expect(response.statusCode).toBe(429);\n  expect(response.json()).toMatchObject({ code: 42901 });\n  expect(String(response.headers['retry-after'])).toBe('60');\n  validate(kit, SMS, response);\n  expect(messages(f)).toHaveLength(1);\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "reverse check of the rewrite: the frozen blocks put back to the merge base on the new implementation (implementation kept, test put back) — the base block no longer holds once withdraw is not a step-up action, so the rewrite is forced by the changed rule; this row is green on the old implementation, it asserts behaviour the rule change did not touch; probe worktree at 5cf2b20c5 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/6, tree 21e167395c1e): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-bound-phone/sms.int.test.ts",
+      "test": "[AC-B1-02zzz#12] deletion_only 只放行 login 与注销 step_up；其他用途拒绝且不发码",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02zzz#12] deletion_only 只放行 login 与注销 step_up；其他用途拒绝且不发码', async () => {\n  const f = await account(kit);\n  const session = await restrictedSession(f);\n  for (const action of ['withdraw', 'payout_account_change', 'phone_change']) {\n    rejected(\n      kit,\n      SMS,\n      await f.post(SMS, { purpose: 'step_up', action }, session.access_token),\n      10405,\n    );\n  }\n  rejected(\n    kit,\n    SMS,\n    await f.post(SMS, { purpose: 'bind', phone: phone('138') }, session.access_token),\n    10405,\n  );\n  expect(messages(f)).toEqual([]);\n  accepted(\n    kit,\n    SMS,\n    await f.post(\n      SMS,\n      {\n        purpose: 'step_up',\n        action: 'account_deletion',\n      },\n      session.access_token,\n    ),\n  );\n  expect(messages(f)).toHaveLength(1);\n  expect(messages(f)[0]).toMatchObject({ phone: f.number, purpose: 'step_up' });\n  const loginPhone = phone('138');\n  accepted(\n    kit,\n    SMS,\n    await f.post(SMS, { purpose: 'login', phone: loginPhone }, session.access_token),\n  );\n  expect(messages(f).map((message) => [message.phone, message.purpose])).toEqual([\n    [f.number, 'step_up'],\n    [loginPhone, 'login'],\n  ]);\n});",
+      "after": "it('[AC-B1-02zzz#12] deletion_only 只放行 login 与注销 step_up；其他用途拒绝且不发码', async () => {\n  const f = await account(kit);\n  const session = await restrictedSession(f);\n  for (const action of ['withdraw', 'payout_account_change', 'phone_change']) {\n    rejected(\n      kit,\n      SMS,\n      await f.post(SMS, { purpose: 'step_up', action }, session.access_token),\n      // B1-02zzzc (D10-1665, D10-1702 ⑤, D10-2166): withdraw is no step-up action any more, so\n      // the request is refused as 20001 (still no code sent); the other two stay 10405.\n      action === 'withdraw' ? 20001 : 10405,\n    );\n  }\n  rejected(\n    kit,\n    SMS,\n    await f.post(SMS, { purpose: 'bind', phone: phone('138') }, session.access_token),\n    10405,\n  );\n  expect(messages(f)).toEqual([]);\n  accepted(\n    kit,\n    SMS,\n    await f.post(\n      SMS,\n      {\n        purpose: 'step_up',\n        action: 'account_deletion',\n      },\n      session.access_token,\n    ),\n  );\n  expect(messages(f)).toHaveLength(1);\n  expect(messages(f)[0]).toMatchObject({ phone: f.number, purpose: 'step_up' });\n  const loginPhone = phone('138');\n  accepted(\n    kit,\n    SMS,\n    await f.post(SMS, { purpose: 'login', phone: loginPhone }, session.access_token),\n  );\n  expect(messages(f).map((message) => [message.phone, message.purpose])).toEqual([\n    [f.number, 'step_up'],\n    [loginPhone, 'login'],\n  ]);\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-verify/order.int.test.ts",
+      "test": "[AC-B1-02y#18] 版本过低（④a 10405）先命中时不校验、不占用 token；升级后沿用原键通过，之后该 token 不可再用",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02y#18] 版本过低（④a 10405）先命中时不校验、不占用 token；升级后沿用原键通过，之后该 token 不可再用', async () => {\n  const u = await user(f, { minVersion: '2.0.0' });\n  const token = await u.mint('withdraw');\n  const key = randomUUID();\n  const old = await u.send('withdraw', { stepUp: token, key, version: '1.0.0' });\n  failed(old, 403, 10405);\n  // 10405 wins over a missing or invalid token as well: ⑫ comes later.\n  failed(await u.send('withdraw', { stepUp: null, version: '1.0.0' }), 403, 10405);\n  expect(u.handled()).toBe(0);\n  succeeded(await u.send('withdraw', { stepUp: token, key, version: '2.0.0' }));\n  expect(u.handled()).toBe(1);\n  await stepUpRequired(await u.send('withdraw', { stepUp: token, version: '2.0.0' }));\n  expect(u.handled()).toBe(1);\n});",
+      "after": "it('[AC-B1-02y#18] 版本过低（④a 10405）先命中时不校验、不占用 token；升级后沿用原键通过，之后该 token 不可再用', async () => {\n  const u = await user(f, { minVersion: '2.0.0' });\n  const token = await u.mint('phone_change');\n  const key = randomUUID();\n  const old = await u.send('phone', { stepUp: token, key, version: '1.0.0' });\n  failed(old, 403, 10405);\n  // 10405 wins over a missing or invalid token as well: ⑫ comes later.\n  failed(await u.send('phone', { stepUp: null, version: '1.0.0' }), 403, 10405);\n  expect(u.handled()).toBe(0);\n  succeeded(await u.send('phone', { stepUp: token, key, version: '2.0.0' }));\n  expect(u.handled()).toBe(1);\n  await stepUpRequired(await u.send('phone', { stepUp: token, version: '2.0.0' }));\n  expect(u.handled()).toBe(1);\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579 / D10-2174): identity/application/step-up-verify.ts stage ⑫ drops its POST /v1/me/phone → phone_change mapping, i.e. the phone change no longer judges or consumes its step-up token; probe worktree at 2feab9579 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/13, tree cb8647389fe5): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-verify/order.int.test.ts",
+      "test": "[AC-B1-02y#19] 封禁（⑤ 10006）先命中时不占用 token；解封后同一 token 通过一次",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02y#19] 封禁（⑤ 10006）先命中时不占用 token；解封后同一 token 通过一次', async () => {\n  const u = await user(f);\n  const set = (state: 'banned' | 'normal') =>\n    f.kit.db.transaction().execute((trx) =>\n      f.risk.setRiskState(trx, {\n        app_id: u.appId,\n        user_id: u.uid,\n        state,\n        reason: 'b1-02y fixture',\n        reason_category: state === 'normal' ? null : 'other',\n        frozen_until: null,\n        changed_by: 'fixture_operator',\n      }),\n    );\n  await set('banned');\n  const token = await u.mint('withdraw');\n  const key = randomUUID();\n  failed(await u.send('withdraw', { stepUp: token, key }), 403, 10006);\n  // Without a token: on a BR-ID-01 global-order operation ⑤ answers before ⑫ (B1-02zk, D10-265).\n  failed(await sendPhone(f, u, { stepUp: null }), 403, 10006);\n  expect(u.handled()).toBe(0);\n  await set('normal');\n  // The same request once unbanned reaches ⑫: 10003 was really behind 10006.\n  failed(await sendPhone(f, u, { stepUp: null }), 403, 10003);\n  succeeded(await u.send('withdraw', { stepUp: token, key }));\n  expect(u.handled()).toBe(1);\n  await stepUpRequired(await u.send('withdraw', { stepUp: token }));\n  expect(u.handled()).toBe(1);\n});",
+      "after": "it('[AC-B1-02y#19] 封禁（⑤ 10006）先命中时不占用 token；解封后同一 token 通过一次', async () => {\n  const u = await user(f);\n  const set = (state: 'banned' | 'normal') =>\n    f.kit.db.transaction().execute((trx) =>\n      f.risk.setRiskState(trx, {\n        app_id: u.appId,\n        user_id: u.uid,\n        state,\n        reason: 'b1-02y fixture',\n        reason_category: state === 'normal' ? null : 'other',\n        frozen_until: null,\n        changed_by: 'fixture_operator',\n      }),\n    );\n  await set('banned');\n  const token = await u.mint('phone_change');\n  const key = randomUUID();\n  failed(await u.send('phone', { stepUp: token, key }), 403, 10006);\n  // Without a token: on a BR-ID-01 global-order operation ⑤ answers before ⑫ (B1-02zk, D10-265).\n  failed(await sendPhone(f, u, { stepUp: null }), 403, 10006);\n  expect(u.handled()).toBe(0);\n  await set('normal');\n  // The same request once unbanned reaches ⑫: 10003 was really behind 10006.\n  failed(await sendPhone(f, u, { stepUp: null }), 403, 10003);\n  succeeded(await u.send('phone', { stepUp: token, key }));\n  expect(u.handled()).toBe(1);\n  await stepUpRequired(await u.send('phone', { stepUp: token }));\n  expect(u.handled()).toBe(1);\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579 / D10-2174): identity/application/step-up-verify.ts stage ⑫ drops its POST /v1/me/phone → phone_change mapping, i.e. the phone change no longer judges or consumes its step-up token; probe worktree at 2feab9579 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/13, tree cb8647389fe5): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-verify/token.int.test.ts",
+      "test": "[AC-B1-02y#7] action 与接口不对应返回 10003：withdraw 的 token 调注销、account_deletion 的调提现",
+      "retitle_to": "[AC-B1-02y#7] action 与接口不对应返回 10003：phone_change 的 token 调注销；提现不判 token，带 account_deletion / phone_change 的也照常受理",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02y#7] action 与接口不对应返回 10003：withdraw 的 token 调注销、account_deletion 的调提现', async () => {\n  const u = await user(f);\n  await stepUpRequired(await u.send('deletion', { stepUp: await u.mint('withdraw') }));\n  await stepUpRequired(await u.send('deletion', { stepUp: await u.mint('payout_account_change') }));\n  await stepUpRequired(await u.send('withdraw', { stepUp: await u.mint('account_deletion') }));\n  await stepUpRequired(await u.send('withdraw', { stepUp: await u.mint('phone_change') }));\n  expect(u.handled()).toBe(0);\n  succeeded(await u.send('withdraw', { stepUp: await u.mint('withdraw') }));\n  succeeded(await u.send('deletion', { stepUp: await u.mint('account_deletion') }));\n  expect(u.handled()).toBe(2);\n});",
+      "after": "it('[AC-B1-02y#7] action 与接口不对应返回 10003：phone_change 的 token 调注销；提现不判 token，带 account_deletion / phone_change 的也照常受理', async () => {\n  const u = await user(f);\n  await stepUpRequired(await u.send('deletion', { stepUp: await u.mint('phone_change') }));\n  await stepUpRequired(await u.send('deletion', { stepUp: await u.mint('payout_account_change') }));\n  expect(u.handled()).toBe(0);\n  succeeded(await u.send('withdraw', { stepUp: await u.mint('account_deletion') }));\n  succeeded(await u.send('withdraw', { stepUp: await u.mint('phone_change') }));\n  expect(u.handled()).toBe(2);\n  succeeded(await u.send('withdraw', { stepUp: await u.mint('withdraw') }));\n  succeeded(await u.send('deletion', { stepUp: await u.mint('account_deletion') }));\n  expect(u.handled()).toBe(4);\n});",
+      "br": ["BR-WDR-01", "BR-WDR-03"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-verify/withdraw-order.int.test.ts",
+      "test": "[AC-B1-02zk#1] 提现提交：封禁且未带有效 token 回 10003；带有效 token 回 10006 且不占用，解封后同一 token 通过一次",
+      "retitle_to": "[AC-B1-02zk#1] 提现提交：封禁用户不论带不带 token 都回 10006 且不建单，解封后同一 token 换新键也照常受理",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02zk#1] 提现提交：封禁且未带有效 token 回 10003；带有效 token 回 10006 且不占用，解封后同一 token 通过一次', async () => {\n  const u = await user(f);\n  await riskState(u, 'banned');\n  await stepUpRequired(await u.send('withdraw', { stepUp: null }));\n  await stepUpRequired(await u.send('withdraw', { stepUp: await u.mint('account_deletion') }));\n  expect(u.handled()).toBe(0);\n  const token = await u.mint('withdraw');\n  const key = randomUUID();\n  failed(await u.send('withdraw', { stepUp: token, key }), 403, 10006);\n  failed(await u.send('withdraw', { stepUp: token }), 403, 10006);\n  expect(u.handled()).toBe(0);\n  await riskState(u, 'normal');\n  succeeded(await u.send('withdraw', { stepUp: token, key }));\n  expect(u.handled()).toBe(1);\n  await stepUpRequired(await u.send('withdraw', { stepUp: token }));\n  expect(u.handled()).toBe(1);\n});",
+      "after": "it('[AC-B1-02zk#1] 提现提交：封禁用户不论带不带 token 都回 10006 且不建单，解封后同一 token 换新键也照常受理', async () => {\n  const u = await user(f);\n  await riskState(u, 'banned');\n  failed(await u.send('withdraw', { stepUp: null }), 403, 10006);\n  failed(await u.send('withdraw', { stepUp: await u.mint('account_deletion') }), 403, 10006);\n  expect(u.handled()).toBe(0);\n  const token = await u.mint('withdraw');\n  const key = randomUUID();\n  failed(await u.send('withdraw', { stepUp: token, key }), 403, 10006);\n  failed(await u.send('withdraw', { stepUp: token }), 403, 10006);\n  expect(u.handled()).toBe(0);\n  await riskState(u, 'normal');\n  succeeded(await u.send('withdraw', { stepUp: token, key }));\n  expect(u.handled()).toBe(1);\n  succeeded(await u.send('withdraw', { stepUp: token }));\n  expect(u.handled()).toBe(2);\n});",
+      "br": ["BR-WDR-01", "BR-WDR-03"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#29][BR-ID-08] 配置 step-up TTL，复用短信核销端口并指定绑定手机号与用途",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02f#29][BR-ID-08] 配置 step-up TTL，复用短信核销端口并指定绑定手机号与用途', async () => {\n  const f = await fixture(kit, true);\n  const code = await f.send();\n  const verifyAndConsume = vi.fn(f.sms.verifyAndConsume);\n  const service = createStepUpService({\n    db: f.db,\n    clock: kit.clock,\n    crypto: f.crypto,\n    keys: f.keys,\n    config: {\n      configValue: async (app, key) => {\n        expect(app).toBe(f.appId);\n        return key === 'auth.step_up_ttl_sec' ? { value: 75, version: 1 } : null;\n      },\n    },\n    sms: { ...f.sms, verifyAndConsume },\n    attempts: { issue: async () => ({ code: 50001 }), consume: async () => ({ code: 50001 }) },\n  });\n  const result = await service.verify({\n    principal: f.principal,\n    verifiedDevice: { appId: f.appId, deviceId: f.device.deviceId },\n    body: { action: 'withdraw', code },\n  });\n  expect(result.code).toBe(0);\n  if (result.code !== 0) throw new Error('unreachable after assertion');\n  expect(jwt(f, result.data.step_up_token, 'step_up', 75, result.data.expire_at)).toHaveProperty(\n    'action',\n    'withdraw',\n  );\n  expect(verifyAndConsume).toHaveBeenCalledExactlyOnceWith({\n    app_id: f.appId,\n    phone: f.number,\n    purpose: 'step_up',\n    code,\n  });\n  expect(\n    await f.sms.verifyAndConsume({ app_id: f.appId, phone: f.number, purpose: 'step_up', code }),\n  ).toEqual({ code: 20003 });\n});",
+      "after": "it('[AC-B1-02f#29][BR-ID-08] 配置 step-up TTL，复用短信核销端口并指定绑定手机号与用途', async () => {\n  const f = await fixture(kit, true);\n  const code = await f.send();\n  const verifyAndConsume = vi.fn(f.sms.verifyAndConsume);\n  const service = createStepUpService({\n    db: f.db,\n    clock: kit.clock,\n    crypto: f.crypto,\n    keys: f.keys,\n    config: {\n      configValue: async (app, key) => {\n        expect(app).toBe(f.appId);\n        return key === 'auth.step_up_ttl_sec' ? { value: 75, version: 1 } : null;\n      },\n    },\n    sms: { ...f.sms, verifyAndConsume },\n    attempts: { issue: async () => ({ code: 50001 }), consume: async () => ({ code: 50001 }) },\n  });\n  const result = await service.verify({\n    principal: f.principal,\n    verifiedDevice: { appId: f.appId, deviceId: f.device.deviceId },\n    body: { action: 'phone_change', code },\n  });\n  expect(result.code).toBe(0);\n  if (result.code !== 0) throw new Error('unreachable after assertion');\n  expect(jwt(f, result.data.step_up_token, 'step_up', 75, result.data.expire_at)).toHaveProperty(\n    'action',\n    'phone_change',\n  );\n  expect(verifyAndConsume).toHaveBeenCalledExactlyOnceWith({\n    app_id: f.appId,\n    phone: f.number,\n    purpose: 'step_up',\n    code,\n  });\n  expect(\n    await f.sms.verifyAndConsume({ app_id: f.appId, phone: f.number, purpose: 'step_up', code }),\n  ).toEqual({ code: 20003 });\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts issues every step_up_token with the wrong action (phone_change ↔ another), i.e. the token no longer binds the action asked for; probe worktree at e16ae2936 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/8, tree e57995204bc1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#20][BR-ID-08] 短信签发 withdraw：ES256、300 秒、身份与 action 绑定",
+      "reason": "rule_change",
+      "before": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary\n      // of the account it is for; the other actions take none.\n      await f.post(STEP_UP, {\n        action,\n        code,\n        ...(action === 'payout_account_change'\n          ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }\n          : {}),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 1 of 4: 'withdraw'",
+      "after": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const response = await f.post(STEP_UP, {\n      action,\n      code,\n      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary\n      // of the account it is for; the other actions take none.\n      ...(action === 'payout_account_change'\n        ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }\n        : {}),\n    });\n    if (action === 'withdraw') {\n      // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.\n      rejected(kit, STEP_UP, response, 20001);\n      return;\n    }\n    const data = accepted<Schema<'StepUpData'>>(kit, STEP_UP, response);\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 1 of 4: 'withdraw'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#20][BR-ID-08] 短信签发 payout_account_change：ES256、300 秒、身份与 action 绑定",
+      "reason": "rule_change",
+      "before": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary\n      // of the account it is for; the other actions take none.\n      await f.post(STEP_UP, {\n        action,\n        code,\n        ...(action === 'payout_account_change'\n          ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }\n          : {}),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 2 of 4: 'payout_account_change'",
+      "after": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const response = await f.post(STEP_UP, {\n      action,\n      code,\n      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary\n      // of the account it is for; the other actions take none.\n      ...(action === 'payout_account_change'\n        ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }\n        : {}),\n    });\n    if (action === 'withdraw') {\n      // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.\n      rejected(kit, STEP_UP, response, 20001);\n      return;\n    }\n    const data = accepted<Schema<'StepUpData'>>(kit, STEP_UP, response);\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 2 of 4: 'payout_account_change'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts issues every step_up_token with the wrong action (phone_change ↔ another), i.e. the token no longer binds the action asked for; probe worktree at e16ae2936 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/8, tree e57995204bc1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#20][BR-ID-08] 短信签发 phone_change：ES256、300 秒、身份与 action 绑定",
+      "reason": "rule_change",
+      "before": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary\n      // of the account it is for; the other actions take none.\n      await f.post(STEP_UP, {\n        action,\n        code,\n        ...(action === 'payout_account_change'\n          ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }\n          : {}),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 3 of 4: 'phone_change'",
+      "after": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const response = await f.post(STEP_UP, {\n      action,\n      code,\n      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary\n      // of the account it is for; the other actions take none.\n      ...(action === 'payout_account_change'\n        ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }\n        : {}),\n    });\n    if (action === 'withdraw') {\n      // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.\n      rejected(kit, STEP_UP, response, 20001);\n      return;\n    }\n    const data = accepted<Schema<'StepUpData'>>(kit, STEP_UP, response);\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 3 of 4: 'phone_change'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts issues every step_up_token with the wrong action (phone_change ↔ another), i.e. the token no longer binds the action asked for; probe worktree at e16ae2936 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/8, tree e57995204bc1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#20][BR-ID-08] 短信签发 account_deletion：ES256、300 秒、身份与 action 绑定",
+      "reason": "rule_change",
+      "before": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const data = accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary\n      // of the account it is for; the other actions take none.\n      await f.post(STEP_UP, {\n        action,\n        code,\n        ...(action === 'payout_account_change'\n          ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }\n          : {}),\n      }),\n    );\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 4 of 4: 'account_deletion'",
+      "after": "it.each(['withdraw', 'payout_account_change', 'phone_change', 'account_deletion'] as const)(\n  '[AC-B1-02f#20][BR-ID-08] 短信签发 %s：ES256、300 秒、身份与 action 绑定',\n  async (action) => {\n    const f = await fixture(kit, true);\n    const code = await f.send();\n    const response = await f.post(STEP_UP, {\n      action,\n      code,\n      // B1-02zzzb (BR-ID-08 细则「绑定业务摘要」): payout_account_change is issued with the summary\n      // of the account it is for; the other actions take none.\n      ...(action === 'payout_account_change'\n        ? { summary: { payout_method: 'alipay', alipay_logon_id: 'step-up@example.com' } }\n        : {}),\n    });\n    if (action === 'withdraw') {\n      // B1-02zzzc (D10-1665, D10-1702): StepUpAction no longer has withdraw.\n      rejected(kit, STEP_UP, response, 20001);\n      return;\n    }\n    const data = accepted<Schema<'StepUpData'>>(kit, STEP_UP, response);\n    expect(jwt(f, data.step_up_token, 'step_up', 300, data.expire_at)).toMatchObject({\n      action,\n      jti: expect.any(String),\n    });\n    const logs = kit.lines.join('');\n    expect(logs).not.toContain(data.step_up_token);\n    expect(logs).not.toContain(f.number);\n    expect(logs).not.toMatch(new RegExp(`(?<!\\\\d)${code}(?!\\\\d)`));\n  },\n);\n// .each row 4 of 4: 'account_deletion'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/step-up.ts issues every step_up_token with the wrong action (phone_change ↔ another), i.e. the token no longer binds the action asked for; probe worktree at e16ae2936 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/8, tree e57995204bc1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#21][BR-ID-08] 验证码核销，同码再次提交 20003，无第二个 token",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02f#21][BR-ID-08] 验证码核销，同码再次提交 20003，无第二个 token', async () => {\n  const f = await fixture(kit, true);\n  const code = await f.send();\n  accepted(kit, STEP_UP, await f.post(STEP_UP, { action: 'withdraw', code }));\n  const again = await f.post(STEP_UP, { action: 'withdraw', code });\n  rejected(kit, STEP_UP, again, 20003);\n  expect(again.json()).not.toHaveProperty('data.step_up_token');\n});",
+      "after": "it('[AC-B1-02f#21][BR-ID-08] 验证码核销，同码再次提交 20003，无第二个 token', async () => {\n  const f = await fixture(kit, true);\n  const code = await f.send();\n  accepted(kit, STEP_UP, await f.post(STEP_UP, { action: 'phone_change', code }));\n  const again = await f.post(STEP_UP, { action: 'phone_change', code });\n  rejected(kit, STEP_UP, again, 20003);\n  expect(again.json()).not.toHaveProperty('data.step_up_token');\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "reverse check of the rewrite: the frozen blocks put back to the merge base on the new implementation (implementation kept, test put back) — the base block no longer holds once withdraw is not a step-up action, so the rewrite is forced by the changed rule; this row is green on the old implementation, it asserts behaviour the rule change did not touch; probe worktree at 5cf2b20c5 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/6, tree 21e167395c1e): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#22][BR-ID-08] 错码 20002，随后正确码仍可验证",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02f#22][BR-ID-08] 错码 20002，随后正确码仍可验证', async () => {\n  const f = await fixture(kit, true);\n  const code = await f.send();\n  rejected(\n    kit,\n    STEP_UP,\n    await f.post(STEP_UP, { action: 'withdraw', code: code === '000000' ? '000001' : '000000' }),\n    20002,\n  );\n  expect(\n    accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, { action: 'withdraw', code }),\n    ).step_up_token,\n  ).toEqual(expect.any(String));\n});",
+      "after": "it('[AC-B1-02f#22][BR-ID-08] 错码 20002，随后正确码仍可验证', async () => {\n  const f = await fixture(kit, true);\n  const code = await f.send();\n  rejected(\n    kit,\n    STEP_UP,\n    await f.post(STEP_UP, {\n      action: 'phone_change',\n      code: code === '000000' ? '000001' : '000000',\n    }),\n    20002,\n  );\n  expect(\n    accepted<Schema<'StepUpData'>>(\n      kit,\n      STEP_UP,\n      await f.post(STEP_UP, { action: 'phone_change', code }),\n    ).step_up_token,\n  ).toEqual(expect.any(String));\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "reverse check of the rewrite: the frozen blocks put back to the merge base on the new implementation (implementation kept, test put back) — the base block no longer holds once withdraw is not a step-up action, so the rewrite is forced by the changed rule; this row is green on the old implementation, it asserts behaviour the rule change did not touch; probe worktree at 5cf2b20c5 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/6, tree 21e167395c1e): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#23][BR-ID-08] 短信满 300 秒失效，返回 20003",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02f#23][BR-ID-08] 短信满 300 秒失效，返回 20003', async () => {\n  const f = await fixture(kit, true);\n  const code = await f.send();\n  kit.clock.advanceMs(300_000);\n  rejected(kit, STEP_UP, await f.post(STEP_UP, { action: 'withdraw', code }), 20003);\n});",
+      "after": "it('[AC-B1-02f#23][BR-ID-08] 短信满 300 秒失效，返回 20003', async () => {\n  const f = await fixture(kit, true);\n  const code = await f.send();\n  kit.clock.advanceMs(300_000);\n  rejected(kit, STEP_UP, await f.post(STEP_UP, { action: 'phone_change', code }), 20003);\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "reverse check of the rewrite: the frozen blocks put back to the merge base on the new implementation (implementation kept, test put back) — the base block no longer holds once withdraw is not a step-up action, so the rewrite is forced by the changed rule; this row is green on the old implementation, it asserts behaviour the rule change did not touch; probe worktree at 5cf2b20c5 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/6, tree 21e167395c1e): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#25][BR-ID-08] 账号手机号从服务端取，另一账号验证码不能验证本账号",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02f#25][BR-ID-08] 账号手机号从服务端取，另一账号验证码不能验证本账号', async () => {\n  const f = await fixture(kit, true);\n  const other = await fixture(kit, true);\n  const foreign = await other.send();\n  rejected(kit, STEP_UP, await f.post(STEP_UP, { action: 'withdraw', code: foreign }), 20003);\n  expect(\n    await other.sms.verifyAndConsume({\n      app_id: other.appId,\n      phone: other.number,\n      purpose: 'step_up',\n      code: foreign,\n    }),\n  ).toEqual({ code: 0 });\n});",
+      "after": "it('[AC-B1-02f#25][BR-ID-08] 账号手机号从服务端取，另一账号验证码不能验证本账号', async () => {\n  const f = await fixture(kit, true);\n  const other = await fixture(kit, true);\n  const foreign = await other.send();\n  rejected(kit, STEP_UP, await f.post(STEP_UP, { action: 'phone_change', code: foreign }), 20003);\n  expect(\n    await other.sms.verifyAndConsume({\n      app_id: other.appId,\n      phone: other.number,\n      purpose: 'step_up',\n      code: foreign,\n    }),\n  ).toEqual({ code: 0 });\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "reverse check of the rewrite: the frozen blocks put back to the merge base on the new implementation (implementation kept, test put back) — the base block no longer holds once withdraw is not a step-up action, so the rewrite is forced by the changed rule; this row is green on the old implementation, it asserts behaviour the rule change did not touch; probe worktree at 5cf2b20c5 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/6, tree 21e167395c1e): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/sms.int.test.ts",
+      "test": "[AC-B1-02f#26][BR-ID-08] login 短信不能替代 purpose=step_up 的验证码",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-02f#26][BR-ID-08] login 短信不能替代 purpose=step_up 的验证码', async () => {\n  const f = await fixture(kit, true);\n  const code = await f.send('login');\n  rejected(kit, STEP_UP, await f.post(STEP_UP, { action: 'withdraw', code }), 20003);\n  expect(\n    await f.sms.verifyAndConsume({ app_id: f.appId, phone: f.number, purpose: 'login', code }),\n  ).toEqual({ code: 0 });\n});",
+      "after": "it('[AC-B1-02f#26][BR-ID-08] login 短信不能替代 purpose=step_up 的验证码', async () => {\n  const f = await fixture(kit, true);\n  const code = await f.send('login');\n  rejected(kit, STEP_UP, await f.post(STEP_UP, { action: 'phone_change', code }), 20003);\n  expect(\n    await f.sms.verifyAndConsume({ app_id: f.appId, phone: f.number, purpose: 'login', code }),\n  ).toEqual({ code: 0 });\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "reverse check of the rewrite: the frozen blocks put back to the merge base on the new implementation (implementation kept, test put back) — the base block no longer holds once withdraw is not a step-up action, so the rewrite is forced by the changed rule; this row is green on the old implementation, it asserts behaviour the rule change did not touch; probe worktree at 5cf2b20c5 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/6, tree 21e167395c1e): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/third-party.int.test.ts",
+      "test": "[AC-B1-02f#33][BR-ID-04/08] HTTP uid 不符 20004，攻击请求不能烧掉尝试",
+      "reason": "rule_change",
+      "before": "it.each(['uid', 'device', 'action', 'provider'] as const)(\n  '[AC-B1-02f#33][BR-ID-04/08] HTTP %s 不符 20004，攻击请求不能烧掉尝试',\n  async (field) => {\n    const f = await fixture(kit);\n    const unionId = await f.bindOauth();\n    kit.exchange.mockResolvedValue({ union_id: unionId });\n    const data = await attempt(f);\n    const body = oauthBody(data.attempt_id);\n    if (field === 'uid') {\n      const otherUser = await seedUser(f.db, f.appId);\n      const otherSession = await f.issue(otherUser);\n      rejected(kit, STEP_UP, await f.post(STEP_UP, body, otherSession.access_token), 20004);\n    } else if (field === 'device') {\n      const otherDevice = await client(kit, f.appId);\n      const otherSession = await f.issue(f.uid, otherDevice.deviceId);\n      rejected(\n        kit,\n        STEP_UP,\n        await otherDevice.post(STEP_UP, body, otherSession.access_token),\n        20004,\n      );\n    } else {\n      const changed =\n        field === 'action' ? { ...body, action: 'withdraw' } : oauthBody(data.attempt_id, 'apple');\n      rejected(kit, STEP_UP, await f.post(STEP_UP, changed), 20004);\n    }\n    expect(kit.exchange).not.toHaveBeenCalled();\n    expect(\n      accepted<Schema<'StepUpData'>>(kit, STEP_UP, await f.post(STEP_UP, body)).step_up_token,\n    ).toEqual(expect.any(String));\n    expect(kit.exchange).toHaveBeenCalledTimes(1);\n  },\n);\n// .each row 1 of 4: 'uid'",
+      "after": "it.each(['uid', 'device', 'action', 'provider'] as const)(\n  '[AC-B1-02f#33][BR-ID-04/08] HTTP %s 不符 20004，攻击请求不能烧掉尝试',\n  async (field) => {\n    const f = await fixture(kit);\n    const unionId = await f.bindOauth();\n    kit.exchange.mockResolvedValue({ union_id: unionId });\n    const data = await attempt(f);\n    const body = oauthBody(data.attempt_id);\n    if (field === 'uid') {\n      const otherUser = await seedUser(f.db, f.appId);\n      const otherSession = await f.issue(otherUser);\n      rejected(kit, STEP_UP, await f.post(STEP_UP, body, otherSession.access_token), 20004);\n    } else if (field === 'device') {\n      const otherDevice = await client(kit, f.appId);\n      const otherSession = await f.issue(f.uid, otherDevice.deviceId);\n      rejected(\n        kit,\n        STEP_UP,\n        await otherDevice.post(STEP_UP, body, otherSession.access_token),\n        20004,\n      );\n    } else {\n      const changed =\n        field === 'action'\n          ? { ...body, action: 'phone_change' }\n          : oauthBody(data.attempt_id, 'apple');\n      rejected(kit, STEP_UP, await f.post(STEP_UP, changed), 20004);\n    }\n    expect(kit.exchange).not.toHaveBeenCalled();\n    expect(\n      accepted<Schema<'StepUpData'>>(kit, STEP_UP, await f.post(STEP_UP, body)).step_up_token,\n    ).toEqual(expect.any(String));\n    expect(kit.exchange).toHaveBeenCalledTimes(1);\n  },\n);\n// .each row 1 of 4: 'uid'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/oauth-attempts.ts consume no longer checks the attempt binding (uid / device / action / provider); probe worktree at e16ae2936 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/9, tree d62ce677abe2): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/third-party.int.test.ts",
+      "test": "[AC-B1-02f#33][BR-ID-04/08] HTTP device 不符 20004，攻击请求不能烧掉尝试",
+      "reason": "rule_change",
+      "before": "it.each(['uid', 'device', 'action', 'provider'] as const)(\n  '[AC-B1-02f#33][BR-ID-04/08] HTTP %s 不符 20004，攻击请求不能烧掉尝试',\n  async (field) => {\n    const f = await fixture(kit);\n    const unionId = await f.bindOauth();\n    kit.exchange.mockResolvedValue({ union_id: unionId });\n    const data = await attempt(f);\n    const body = oauthBody(data.attempt_id);\n    if (field === 'uid') {\n      const otherUser = await seedUser(f.db, f.appId);\n      const otherSession = await f.issue(otherUser);\n      rejected(kit, STEP_UP, await f.post(STEP_UP, body, otherSession.access_token), 20004);\n    } else if (field === 'device') {\n      const otherDevice = await client(kit, f.appId);\n      const otherSession = await f.issue(f.uid, otherDevice.deviceId);\n      rejected(\n        kit,\n        STEP_UP,\n        await otherDevice.post(STEP_UP, body, otherSession.access_token),\n        20004,\n      );\n    } else {\n      const changed =\n        field === 'action' ? { ...body, action: 'withdraw' } : oauthBody(data.attempt_id, 'apple');\n      rejected(kit, STEP_UP, await f.post(STEP_UP, changed), 20004);\n    }\n    expect(kit.exchange).not.toHaveBeenCalled();\n    expect(\n      accepted<Schema<'StepUpData'>>(kit, STEP_UP, await f.post(STEP_UP, body)).step_up_token,\n    ).toEqual(expect.any(String));\n    expect(kit.exchange).toHaveBeenCalledTimes(1);\n  },\n);\n// .each row 2 of 4: 'device'",
+      "after": "it.each(['uid', 'device', 'action', 'provider'] as const)(\n  '[AC-B1-02f#33][BR-ID-04/08] HTTP %s 不符 20004，攻击请求不能烧掉尝试',\n  async (field) => {\n    const f = await fixture(kit);\n    const unionId = await f.bindOauth();\n    kit.exchange.mockResolvedValue({ union_id: unionId });\n    const data = await attempt(f);\n    const body = oauthBody(data.attempt_id);\n    if (field === 'uid') {\n      const otherUser = await seedUser(f.db, f.appId);\n      const otherSession = await f.issue(otherUser);\n      rejected(kit, STEP_UP, await f.post(STEP_UP, body, otherSession.access_token), 20004);\n    } else if (field === 'device') {\n      const otherDevice = await client(kit, f.appId);\n      const otherSession = await f.issue(f.uid, otherDevice.deviceId);\n      rejected(\n        kit,\n        STEP_UP,\n        await otherDevice.post(STEP_UP, body, otherSession.access_token),\n        20004,\n      );\n    } else {\n      const changed =\n        field === 'action'\n          ? { ...body, action: 'phone_change' }\n          : oauthBody(data.attempt_id, 'apple');\n      rejected(kit, STEP_UP, await f.post(STEP_UP, changed), 20004);\n    }\n    expect(kit.exchange).not.toHaveBeenCalled();\n    expect(\n      accepted<Schema<'StepUpData'>>(kit, STEP_UP, await f.post(STEP_UP, body)).step_up_token,\n    ).toEqual(expect.any(String));\n    expect(kit.exchange).toHaveBeenCalledTimes(1);\n  },\n);\n// .each row 2 of 4: 'device'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/oauth-attempts.ts consume no longer checks the attempt binding (uid / device / action / provider); probe worktree at e16ae2936 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/9, tree d62ce677abe2): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/third-party.int.test.ts",
+      "test": "[AC-B1-02f#33][BR-ID-04/08] HTTP action 不符 20004，攻击请求不能烧掉尝试",
+      "reason": "rule_change",
+      "before": "it.each(['uid', 'device', 'action', 'provider'] as const)(\n  '[AC-B1-02f#33][BR-ID-04/08] HTTP %s 不符 20004，攻击请求不能烧掉尝试',\n  async (field) => {\n    const f = await fixture(kit);\n    const unionId = await f.bindOauth();\n    kit.exchange.mockResolvedValue({ union_id: unionId });\n    const data = await attempt(f);\n    const body = oauthBody(data.attempt_id);\n    if (field === 'uid') {\n      const otherUser = await seedUser(f.db, f.appId);\n      const otherSession = await f.issue(otherUser);\n      rejected(kit, STEP_UP, await f.post(STEP_UP, body, otherSession.access_token), 20004);\n    } else if (field === 'device') {\n      const otherDevice = await client(kit, f.appId);\n      const otherSession = await f.issue(f.uid, otherDevice.deviceId);\n      rejected(\n        kit,\n        STEP_UP,\n        await otherDevice.post(STEP_UP, body, otherSession.access_token),\n        20004,\n      );\n    } else {\n      const changed =\n        field === 'action' ? { ...body, action: 'withdraw' } : oauthBody(data.attempt_id, 'apple');\n      rejected(kit, STEP_UP, await f.post(STEP_UP, changed), 20004);\n    }\n    expect(kit.exchange).not.toHaveBeenCalled();\n    expect(\n      accepted<Schema<'StepUpData'>>(kit, STEP_UP, await f.post(STEP_UP, body)).step_up_token,\n    ).toEqual(expect.any(String));\n    expect(kit.exchange).toHaveBeenCalledTimes(1);\n  },\n);\n// .each row 3 of 4: 'action'",
+      "after": "it.each(['uid', 'device', 'action', 'provider'] as const)(\n  '[AC-B1-02f#33][BR-ID-04/08] HTTP %s 不符 20004，攻击请求不能烧掉尝试',\n  async (field) => {\n    const f = await fixture(kit);\n    const unionId = await f.bindOauth();\n    kit.exchange.mockResolvedValue({ union_id: unionId });\n    const data = await attempt(f);\n    const body = oauthBody(data.attempt_id);\n    if (field === 'uid') {\n      const otherUser = await seedUser(f.db, f.appId);\n      const otherSession = await f.issue(otherUser);\n      rejected(kit, STEP_UP, await f.post(STEP_UP, body, otherSession.access_token), 20004);\n    } else if (field === 'device') {\n      const otherDevice = await client(kit, f.appId);\n      const otherSession = await f.issue(f.uid, otherDevice.deviceId);\n      rejected(\n        kit,\n        STEP_UP,\n        await otherDevice.post(STEP_UP, body, otherSession.access_token),\n        20004,\n      );\n    } else {\n      const changed =\n        field === 'action'\n          ? { ...body, action: 'phone_change' }\n          : oauthBody(data.attempt_id, 'apple');\n      rejected(kit, STEP_UP, await f.post(STEP_UP, changed), 20004);\n    }\n    expect(kit.exchange).not.toHaveBeenCalled();\n    expect(\n      accepted<Schema<'StepUpData'>>(kit, STEP_UP, await f.post(STEP_UP, body)).step_up_token,\n    ).toEqual(expect.any(String));\n    expect(kit.exchange).toHaveBeenCalledTimes(1);\n  },\n);\n// .each row 3 of 4: 'action'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/oauth-attempts.ts consume no longer checks the attempt binding (uid / device / action / provider); probe worktree at e16ae2936 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/9, tree d62ce677abe2): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up/third-party.int.test.ts",
+      "test": "[AC-B1-02f#33][BR-ID-04/08] HTTP provider 不符 20004，攻击请求不能烧掉尝试",
+      "reason": "rule_change",
+      "before": "it.each(['uid', 'device', 'action', 'provider'] as const)(\n  '[AC-B1-02f#33][BR-ID-04/08] HTTP %s 不符 20004，攻击请求不能烧掉尝试',\n  async (field) => {\n    const f = await fixture(kit);\n    const unionId = await f.bindOauth();\n    kit.exchange.mockResolvedValue({ union_id: unionId });\n    const data = await attempt(f);\n    const body = oauthBody(data.attempt_id);\n    if (field === 'uid') {\n      const otherUser = await seedUser(f.db, f.appId);\n      const otherSession = await f.issue(otherUser);\n      rejected(kit, STEP_UP, await f.post(STEP_UP, body, otherSession.access_token), 20004);\n    } else if (field === 'device') {\n      const otherDevice = await client(kit, f.appId);\n      const otherSession = await f.issue(f.uid, otherDevice.deviceId);\n      rejected(\n        kit,\n        STEP_UP,\n        await otherDevice.post(STEP_UP, body, otherSession.access_token),\n        20004,\n      );\n    } else {\n      const changed =\n        field === 'action' ? { ...body, action: 'withdraw' } : oauthBody(data.attempt_id, 'apple');\n      rejected(kit, STEP_UP, await f.post(STEP_UP, changed), 20004);\n    }\n    expect(kit.exchange).not.toHaveBeenCalled();\n    expect(\n      accepted<Schema<'StepUpData'>>(kit, STEP_UP, await f.post(STEP_UP, body)).step_up_token,\n    ).toEqual(expect.any(String));\n    expect(kit.exchange).toHaveBeenCalledTimes(1);\n  },\n);\n// .each row 4 of 4: 'provider'",
+      "after": "it.each(['uid', 'device', 'action', 'provider'] as const)(\n  '[AC-B1-02f#33][BR-ID-04/08] HTTP %s 不符 20004，攻击请求不能烧掉尝试',\n  async (field) => {\n    const f = await fixture(kit);\n    const unionId = await f.bindOauth();\n    kit.exchange.mockResolvedValue({ union_id: unionId });\n    const data = await attempt(f);\n    const body = oauthBody(data.attempt_id);\n    if (field === 'uid') {\n      const otherUser = await seedUser(f.db, f.appId);\n      const otherSession = await f.issue(otherUser);\n      rejected(kit, STEP_UP, await f.post(STEP_UP, body, otherSession.access_token), 20004);\n    } else if (field === 'device') {\n      const otherDevice = await client(kit, f.appId);\n      const otherSession = await f.issue(f.uid, otherDevice.deviceId);\n      rejected(\n        kit,\n        STEP_UP,\n        await otherDevice.post(STEP_UP, body, otherSession.access_token),\n        20004,\n      );\n    } else {\n      const changed =\n        field === 'action'\n          ? { ...body, action: 'phone_change' }\n          : oauthBody(data.attempt_id, 'apple');\n      rejected(kit, STEP_UP, await f.post(STEP_UP, changed), 20004);\n    }\n    expect(kit.exchange).not.toHaveBeenCalled();\n    expect(\n      accepted<Schema<'StepUpData'>>(kit, STEP_UP, await f.post(STEP_UP, body)).step_up_token,\n    ).toEqual(expect.any(String));\n    expect(kit.exchange).toHaveBeenCalledTimes(1);\n  },\n);\n// .each row 4 of 4: 'provider'",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579): identity/application/oauth-attempts.ts consume no longer checks the attempt binding (uid / device / action / provider); probe worktree at e16ae2936 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/9, tree d62ce677abe2): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/payout/apply/http.int.test.ts",
+      "test": "[AC-B2-05d#50] 真实 POST 返回契约响应；重放忽略已消费 step-up，换键不能复用它",
+      "retitle_to": "[AC-B2-05d#50] 真实 POST 返回契约响应；重放原样返回，同一 step-up 令牌换新键照常受理、再建一单",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-B2-05d#50] 真实 POST 返回契约响应；重放忽略已消费 step-up，换键不能复用它',\n  async () => {\n    const c = await client();\n    const step = await c.stepUp();\n    const key = randomUUID();\n    const response = await c.post({ step, key });\n    expect(response.statusCode).toBe(200);\n    expect(response.json()).toMatchObject({\n      code: 0,\n      data: {\n        status: 'PENDING_REVIEW',\n        amount_fen: 1000,\n        fee_fen: 0,\n        tax_fen: 0,\n        net_fen: 1000,\n        payout_channel: 'alipay',\n        payout_channel_name: '支付宝',\n        masked_account: 'zh***@example.com',\n        reason_code: null,\n        fail_action: null,\n        channel_order_id: null,\n      },\n    });\n    await assertContract(response, 'WithdrawalResponse');\n    const before = await c.state();\n    expect((await c.post({ step: null, key })).body).toBe(response.body);\n    expect((await c.post({ step, key: randomUUID() })).json()).toMatchObject({ code: 10003 });\n    expect(await c.state()).toEqual(before);\n  },\n  TIMEOUT,\n);",
+      "after": "it(\n  '[AC-B2-05d#50] 真实 POST 返回契约响应；重放原样返回，同一 step-up 令牌换新键照常受理、再建一单',\n  async () => {\n    const c = await client();\n    const step = await c.stepUp();\n    const key = randomUUID();\n    const response = await c.post({ step, key });\n    expect(response.statusCode).toBe(200);\n    expect(response.json()).toMatchObject({\n      code: 0,\n      data: {\n        status: 'PENDING_REVIEW',\n        amount_fen: 1000,\n        fee_fen: 0,\n        tax_fen: 0,\n        net_fen: 1000,\n        payout_channel: 'alipay',\n        payout_channel_name: '支付宝',\n        masked_account: 'zh***@example.com',\n        reason_code: null,\n        fail_action: null,\n        channel_order_id: null,\n      },\n    });\n    await assertContract(response, 'WithdrawalResponse');\n    const before = await c.state();\n    expect((await c.post({ step: null, key })).body).toBe(response.body);\n    // B1-02zzzc (D10-1665, D10-1702): the token is neither judged nor consumed.\n    expect((await c.post({ step, key: randomUUID() })).json()).toMatchObject({ code: 0 });\n    expect((await c.state()).withdrawals).toHaveLength(before.withdrawals.length + 1);\n  },\n  TIMEOUT,\n);",
+      "br": ["BR-WDR-01", "BR-WDR-03"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/payout/apply/http.int.test.ts",
+      "test": "[AC-B2-05d#54] step-up missing → 10003，同键补齐后成功",
+      "reason": "rule_change",
+      "before": "it.each(['missing', 'wrong-action'] as const)(\n  '[AC-B2-05d#54] step-up %s → 10003，同键补齐后成功',\n  async (mode) => {\n    const c = await client();\n    const key = randomUUID();\n    const before = await c.state();\n    const response = await c.post({\n      key,\n      step: mode === 'missing' ? null : await c.stepUp('payout_account_change'),\n    });\n    expect(response.statusCode).toBe(403);\n    expect(response.json()).toMatchObject({ code: 10003 });\n    expect(await c.state()).toEqual(before);\n    expect((await c.post({ key })).json()).toMatchObject({ code: 0 });\n  },\n);\n// .each row 1 of 2: 'missing'",
+      "after": "it.each(['missing', 'wrong-action'] as const)(\n  '[AC-B2-05d#54] step-up %s → 10003，同键补齐后成功',\n  async (mode) => {\n    const c = await client();\n    const key = randomUUID();\n    const before = await c.state();\n    const response = await c.post({\n      key,\n      step: mode === 'missing' ? null : await c.stepUp('payout_account_change'),\n    });\n    // B1-02zzzc (D10-1665, D10-1702): no token or another action's token, accepted alike.\n    expect(response.statusCode).toBe(200);\n    expect(response.json()).toMatchObject({ code: 0 });\n    expect((await c.state()).withdrawals).toHaveLength(before.withdrawals.length + 1);\n    expect((await c.post({ key })).json()).toMatchObject({ code: 0 });\n  },\n);\n// .each row 1 of 2: 'missing'",
+      "br": ["BR-WDR-01", "BR-WDR-03"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/payout/apply/http.int.test.ts",
+      "test": "[AC-B2-05d#54] step-up wrong-action → 10003，同键补齐后成功",
+      "reason": "rule_change",
+      "before": "it.each(['missing', 'wrong-action'] as const)(\n  '[AC-B2-05d#54] step-up %s → 10003，同键补齐后成功',\n  async (mode) => {\n    const c = await client();\n    const key = randomUUID();\n    const before = await c.state();\n    const response = await c.post({\n      key,\n      step: mode === 'missing' ? null : await c.stepUp('payout_account_change'),\n    });\n    expect(response.statusCode).toBe(403);\n    expect(response.json()).toMatchObject({ code: 10003 });\n    expect(await c.state()).toEqual(before);\n    expect((await c.post({ key })).json()).toMatchObject({ code: 0 });\n  },\n);\n// .each row 2 of 2: 'wrong-action'",
+      "after": "it.each(['missing', 'wrong-action'] as const)(\n  '[AC-B2-05d#54] step-up %s → 10003，同键补齐后成功',\n  async (mode) => {\n    const c = await client();\n    const key = randomUUID();\n    const before = await c.state();\n    const response = await c.post({\n      key,\n      step: mode === 'missing' ? null : await c.stepUp('payout_account_change'),\n    });\n    // B1-02zzzc (D10-1665, D10-1702): no token or another action's token, accepted alike.\n    expect(response.statusCode).toBe(200);\n    expect(response.json()).toMatchObject({ code: 0 });\n    expect((await c.state()).withdrawals).toHaveLength(before.withdrawals.length + 1);\n    expect((await c.post({ key })).json()).toMatchObject({ code: 0 });\n  },\n);\n// .each row 2 of 2: 'wrong-action'",
+      "br": ["BR-WDR-01", "BR-WDR-03"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665: POST /v1/withdrawals behind step-up, StepUpAction with withdraw): the rule-test head 7cb55413f without the implementation commits; probe worktree at 7cb55413f (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/5, tree 0c397ca05bd1): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/risk/risk-state/http.int.test.ts",
+      "test": "[AC-B1-03h#19][BR-ID-01] 真实 ④a 在 ⑤ 前：低版本 banned 得到 10405；支持版本得到 10006",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-03h#19][BR-ID-01] 真实 ④a 在 ⑤ 前：低版本 banned 得到 10405；支持版本得到 10006', async () => {\n  const c = await client(f);\n  await sql`INSERT INTO app.app_versions (id, app_id, platform, channel, latest_version, min_supported_version, update_title, update_notes, store_url, default_store, store_listings)\n    VALUES (${randomUUID()}, ${c.appId}, 'ios', 'appstore', '9.0.0', '8.0.0', 'fixture', 'fixture', 'https://example.test/store', 'appstore', '[]'::jsonb)`.execute(\n    f.db,\n  );\n  const body = { action: 'withdraw', code: '123456' };\n  const response = await c.send('POST', '/v1/auth/step-up', body);\n  expect(response.statusCode).toBe(403);\n  expect(response.json()).toMatchObject({ code: 10405, data: { min_supported_version: '8.0.0' } });\n  await banned(await c.send('POST', '/v1/auth/step-up', body, { 'x-app-version': '9.0.0' }));\n});",
+      "after": "it('[AC-B1-03h#19][BR-ID-01] 真实 ④a 在 ⑤ 前：低版本 banned 得到 10405；支持版本得到 10006', async () => {\n  const c = await client(f);\n  await sql`INSERT INTO app.app_versions (id, app_id, platform, channel, latest_version, min_supported_version, update_title, update_notes, store_url, default_store, store_listings)\n    VALUES (${randomUUID()}, ${c.appId}, 'ios', 'appstore', '9.0.0', '8.0.0', 'fixture', 'fixture', 'https://example.test/store', 'appstore', '[]'::jsonb)`.execute(\n    f.db,\n  );\n  const body = { action: 'phone_change', code: '123456' };\n  const response = await c.send('POST', '/v1/auth/step-up', body);\n  expect(response.statusCode).toBe(403);\n  expect(response.json()).toMatchObject({ code: 10405, data: { min_supported_version: '8.0.0' } });\n  await banned(await c.send('POST', '/v1/auth/step-up', body, { 'x-app-version': '9.0.0' }));\n});",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579 / D10-2174): risk/application/risk-state.ts the BR-ID-31 10006 whitelist lets POST /v1/auth/step-up through for action phone_change as well as account_deletion; probe worktree at 2feab9579 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/14, tree 6da174463b9a): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-verify/kit.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-ID-08"],
+      "before_sha256": "e28f50ebea194fb9de56db503f3705043f3b60cab16e0882af89af9091cee9ac",
+      "after_sha256": "69574ea0397c29c50d94a1520216931ea42fa0e171d0c0d68c0cbfbf87754c7a",
+      "reverse_red": [
+        "test/spec/identity/step-up-verify/order.int.test.ts > [AC-B1-02y#18] 版本过低（④a 10405）先命中时不校验、不占用 token；升级后沿用原键通过，之后该 token 不可再用",
+        "test/spec/identity/step-up-verify/order.int.test.ts > [AC-B1-02y#19] 封禁（⑤ 10006）先命中时不占用 token；解封后同一 token 通过一次"
+      ],
+      "note": "put back to the merge base on the new implementation (head 2feab9579, couli-runs/B1-02zzzc/tests/11): these tests turn red"
+    },
+    {
+      "file": "test/spec/identity/step-up-verify/withdraw-order.int.test.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-ID-08"],
+      "before_sha256": "80a61c845fbe1bd91123584d91205c3d97946a958c39415348aef282adaccdda",
+      "after_sha256": "0e97b5794a5e1f557cbdd81aea5de5a4c01e7dba9efc239a0f96730bd5cad137",
+      "reverse_red": [
+        "test/spec/identity/step-up-verify/withdraw-order.int.test.ts > [AC-B1-02zk#1] 提现提交：封禁且未带有效 token 回 10003；带有效 token 回 10006 且不占用，解封后同一 token 通过一次"
+      ],
+      "note": "put back to the merge base on the new implementation (head 2feab9579, couli-runs/B1-02zzzc/tests/10): these tests turn red"
+    },
+    {
+      "file": "test/spec/risk/risk-state/http.int.test.ts",
+      "test": "[AC-B1-03h#17][BR-ID-31] 真签名白名单外 POST /v1/auth/step-up {\"action\":\"phone_change\",\"code\":\"123456\"} 返回契约 10006",
+      "reason": "rule_change",
+      "before": "it(`[AC-B1-03h#17][BR-ID-31] 真签名白名单外 ${route.method} ${route.path} ${JSON.stringify(route.body)} 返回契约 10006`, async () => {\n    const c = await client(f);\n    await banned(await c.send(route.method, route.path, route.body));\n    expect(\n      await f.db.selectFrom('consent_records').selectAll().where('app_id', '=', c.appId).execute(),\n    ).toEqual([]);\n    expect(\n      await f.db.selectFrom('idempotency_keys').selectAll().where('app_id', '=', c.appId).execute(),\n    ).toEqual([]);\n  });\n// for…of row 6 of 6: { method: 'POST', path: '/v1/auth/step-up', body: { action: 'withdraw', code: '123456' } }",
+      "after": "it(`[AC-B1-03h#17][BR-ID-31] 真签名白名单外 ${route.method} ${route.path} ${JSON.stringify(route.body)} 返回契约 10006`, async () => {\n    const c = await client(f);\n    await banned(await c.send(route.method, route.path, route.body));\n    expect(\n      await f.db.selectFrom('consent_records').selectAll().where('app_id', '=', c.appId).execute(),\n    ).toEqual([]);\n    expect(\n      await f.db.selectFrom('idempotency_keys').selectAll().where('app_id', '=', c.appId).execute(),\n    ).toEqual([]);\n  });\n// for…of row 6 of 6: { method: 'POST', path: '/v1/auth/step-up', body: { action: 'phone_change', code: '123456' } }",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "mutation probe (探针，非旧规则, D10-1579 / D10-2174): risk/application/risk-state.ts the BR-ID-31 10006 whitelist lets POST /v1/auth/step-up through for action phone_change as well as account_deletion; probe worktree at 2feab9579 (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/14, tree 6da174463b9a): this row red",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/identity/step-up-digest/issue.int.test.ts",
+      "test": "[AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001',\n  async () => {\n    const m = await member(kit);\n    for (const action of ['phone_change', 'account_deletion', 'withdraw'] as const) {\n      const token = await m.token(action);\n      expect(claimsOf(token)).toMatchObject({ uid: m.uid, action, aud: 'step_up' });\n      expect(digestsOf(token)).toEqual([]);\n    }\n    const refused = answered(\n      kit,\n      STEP_UP,\n      'post',\n      await m.stepUp('withdraw', WITHDRAW_SHAPE),\n      20001,\n    );\n    expect(refused.data).toEqual({ fields: ['summary'] });\n  },\n  TIMEOUT,\n);",
+      "after": "it(\n  '[AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001',\n  async () => {\n    const m = await member(kit);\n    for (const action of ['phone_change', 'account_deletion'] as const) {\n      const token = await m.token(action);\n      expect(claimsOf(token)).toMatchObject({ uid: m.uid, action, aud: 'step_up' });\n      expect(digestsOf(token)).toEqual([]);\n    }\n    const withdrawRefused: [Summary | undefined, string[]][] = [\n      // 这组字段是参数校验对 StepUpRequest 四分支 oneOf 的合并报告，不是设计口径，见 FU-20001-ONEOF-FIELDS-NOISE（D10-2193）。\n      [\n        undefined,\n        [\n          'action',\n          'attempt_id',\n          'authorization_code',\n          'body',\n          'code',\n          'identity_token',\n          'provider',\n        ],\n      ],\n      [\n        WITHDRAW_SHAPE,\n        [\n          'action',\n          'attempt_id',\n          'authorization_code',\n          'body',\n          'code',\n          'identity_token',\n          'provider',\n          'summary',\n          'summary.alipay_logon_id',\n          'summary.amount_fen',\n          'summary.attempt_id',\n          'summary.card_no',\n          'summary.payout_account_id',\n          'summary.payout_method',\n        ],\n      ],\n    ];\n    for (const [summary, fields] of withdrawRefused) {\n      const response = await m.stepUp('withdraw', summary);\n      const refused = answered(kit, STEP_UP, 'post', response, 20001);\n      expect({ ...refused.data, fields: [...(refused.data!.fields as string[])].sort() }).toEqual({\n        fields,\n      });\n      expect(response.body).not.toContain('step_up_token');\n    }\n  },\n  TIMEOUT,\n);",
+      "br": ["BR-ID-08"],
+      "mutation": [
+        {
+          "mutant": "old implementation (the rule before D10-1665) on the second frozen batch (D10-2193 / D10-2205): the rule-test head f0152ea8d without the implementation commits, test/spec/identity/step-up-digest/issue.int.test.ts; probe worktree at f0152ea8d (not committed or pushed); verify-container --tests on the test machine (couli-runs/B1-02zzzc/tests/21, tree e4cea710bcdb): this row red",
+          "result": "killed"
+        }
+      ]
+    }
+  ]
+}
