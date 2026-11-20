@@ -23,6 +23,9 @@ import {
   formatObjectTitle,
   TITLE_VALUE_TRUNCATE,
   compareTestFile,
+  compareTestFileRows,
+  forOfRowBlocks,
+  forOfRows,
   cook,
   listedDirectories,
   mayImportRuleTest,
@@ -4606,4 +4609,168 @@ it('[CT-06zzzzzu] a misplaced separator (1__0, 0_1 after a leading 0) still is n
       /cannot be expanded for certain/,
     );
   }
+});
+
+// CT-06zzzzzv (D10-2152 / D10-2163): rows of a top-level for…of table over an inline array literal.
+// The risk-state shape (B1-02zzzc's http.int.test.ts [AC-B1-03h#17]): 6 rows, the first with
+// `path: SEARCH` from the kit, one path made with randomUUID(), the step-up row's body.action
+// withdraw → phone_change, the title holding `${JSON.stringify(route.body)}`.
+const RS_ROWS = [
+  "{ method: 'GET', path: SEARCH, body: undefined }",
+  "{ method: 'GET', path: '/v1/orders', body: {} }",
+  "{ method: 'POST', path: '/v1/consents', body: { type: 'privacy', accepted: false } }",
+  "{ method: 'POST', path: `/v1/links/${randomUUID()}/open`, body: {} }",
+  "{ method: 'POST', path: '/v1/auth/step-up', body: { action: 'withdraw', code: '123456' } }",
+  "{ method: 'DELETE', path: '/v1/me/sessions', body: {} }",
+];
+const RS_HEAD_ROWS = RS_ROWS.map((r) => r.replace("'withdraw'", "'phone_change'"));
+const RS_TITLE =
+  '[AC-B1-03h#17] banned ${route.method} ${route.path} ${JSON.stringify(route.body)} 10006';
+const rsName = (method: string, path: string, body: unknown): string =>
+  `[AC-B1-03h#17] banned ${method} ${path} ${JSON.stringify(body) ?? 'undefined'} 10006`;
+const RS_STEP_BASE = rsName('POST', '/v1/auth/step-up', { action: 'withdraw', code: '123456' });
+const RS_STEP_HEAD = rsName('POST', '/v1/auth/step-up', { action: 'phone_change', code: '123456' });
+/** The rule-test file: a plain test, the loop (`loop` its head), a new test when `added`. */
+function rsFile(
+  rows: readonly string[],
+  o: { loop?: string; imports?: string; added?: boolean } = {},
+): string {
+  return [
+    "import { randomUUID } from 'node:crypto';",
+    "import { expect, it } from 'vitest';",
+    `import { ${o.imports ?? 'SEARCH, send'} } from './kit.ts';`,
+    '',
+    "it('[AC-B1-03h#16] a whitelisted search passes', async () => {",
+    "  expect(await send('GET', SEARCH, undefined)).toBe(200);",
+    '});',
+    '',
+    ...(o.loop === undefined
+      ? ['for (const route of [', ...rows.map((r) => `  ${r},`), ']) {']
+      : [o.loop]),
+    `  it(\`${RS_TITLE}\`, async () => {`,
+    '    expect(await send(route.method, route.path, route.body)).toBe(10006);',
+    '  });',
+    '}',
+    '',
+    ...(o.added === true
+      ? [
+          "it('[AC-B1-03h#18] a banned user cannot step up for a phone change', async () => {",
+          "  expect(await send('POST', '/v1/auth/step-up', { action: 'phone_change' })).toBe(10006);",
+          '});',
+          '',
+        ]
+      : []),
+  ].join('\n');
+}
+
+it('[CT-06zzzzzv] the risk-state shape: only the step-up row changed, its full name after the change told from the row; the others unchanged (SEARCH and randomUUID() rows included)', () => {
+  const rows = forOfRows(rsFile(RS_ROWS), rsFile(RS_HEAD_ROWS));
+  expect(rows).not.toBeNull();
+  const loop = rows?.loops[0];
+  expect(rows?.loops).toHaveLength(1);
+  expect(loop?.rows.map((r) => r.changed)).toEqual([false, false, false, false, true, false]);
+  expect(loop?.rows[4]?.segments.join('')).toBe(RS_STEP_HEAD);
+  // The SEARCH and randomUUID() rows: their names are not told from the rows.
+  expect(loop?.rows[0]?.segments).toContain(null);
+  expect(loop?.rows[3]?.segments).toContain(null);
+  // Compared by rows: the loop block carries them, the other blocks are the base's.
+  const c = compareTestFileRows(rsFile(RS_ROWS), rsFile(RS_HEAD_ROWS, { added: true }));
+  expect(c.whole).toBe(false);
+  const blocks = c.whole ? [] : c.blocks;
+  expect(blocks.map((b) => b.changed)).toEqual([false, true, true]);
+  expect(blocks[1]?.forOf?.map((r) => r.changed)).toEqual([
+    false,
+    false,
+    false,
+    false,
+    true,
+    false,
+  ]);
+  // Without the rows the same file is judged as a whole, as before.
+  expect(compareTestFile(rsFile(RS_ROWS), rsFile(RS_HEAD_ROWS)).whole).toBe(true);
+});
+
+it('[CT-06zzzzzv] the risk-state shape: compareModifiedBlocks finds the step-up row by its full name after the change (row text withdraw → phone_change, nothing else differs); by the base name it is not found', () => {
+  const base = rsFile(RS_ROWS);
+  const head = rsFile(RS_HEAD_ROWS);
+  const r = compareModifiedBlocks(base, head, [RS_STEP_HEAD]);
+  expect(r.ok).toBe(true);
+  if (!r.ok) return;
+  expect(r.outside).toBeNull();
+  const b = r.blocks[0];
+  expect(b?.found).toBe(true);
+  if (b?.found !== true) return;
+  expect(b.changed).toBe(true);
+  expect(b.before.endsWith(`\n// for…of row 5 of 6: ${RS_ROWS[4] ?? ''}`)).toBe(true);
+  expect(b.after.endsWith(`\n// for…of row 5 of 6: ${RS_HEAD_ROWS[4] ?? ''}`)).toBe(true);
+  const byBase = compareModifiedBlocks(base, head, [RS_STEP_BASE]);
+  expect(byBase.ok && byBase.blocks[0]?.found).toBe(false);
+  // Nothing declared: the changed row is a difference besides.
+  const none = compareModifiedBlocks(base, head, []);
+  expect(none.ok && none.outside).toMatch(/row 5 of the for…of table .* not declared/);
+});
+
+it('[CT-06zzzzzv] spec-test r2 S2 ①: the table imported from the same-directory kit at the head (the kit itself unchanged, only the import form) is no inline literal: not compared by rows', () => {
+  const base = rsFile(RS_ROWS);
+  const head = rsFile([], {
+    loop: 'for (const route of ROUTES) {',
+    imports: 'ROUTES, SEARCH, send',
+  });
+  expect(forOfRows(base, head)).toBeNull();
+  expect(compareTestFileRows(base, head).whole).toBe(true);
+  // The same kit form on both sides: no inline table at all.
+  expect(forOfRows(head, head)).toBeNull();
+});
+
+it('[CT-06zzzzzv] spec-test r2 S2 ②: for…in with a title of field interpolations (`${route.path}`, not `${k}`) is not compared by rows because of `in` (the same text with `of` is)', () => {
+  const forIn = (rows: readonly string[]): string =>
+    rsFile(rows).replace('for (const route of [', 'for (const route in [');
+  expect(forIn(RS_ROWS)).toContain('for (const route in [');
+  expect(forOfRows(forIn(RS_ROWS), forIn(RS_HEAD_ROWS))).toBeNull();
+  expect(compareTestFileRows(forIn(RS_ROWS), forIn(RS_HEAD_ROWS)).whole).toBe(true);
+  // With `of` the same rows and title are compared by rows: the title is told from the row.
+  const of = forOfRows(rsFile(RS_ROWS), rsFile(RS_HEAD_ROWS));
+  expect(of?.loops[0]?.rows[4]?.segments.join('')).toBe(RS_STEP_HEAD);
+});
+
+it('[CT-06zzzzzv] the declared name of an unchanged row, a changed row of code, a changed row count, a changed loop body: not compared by rows', () => {
+  const base = rsFile(RS_ROWS);
+  const head = rsFile(RS_HEAD_ROWS);
+  const orders = rsName('GET', '/v1/orders', {});
+  expect(forOfRows(base, head, [RS_STEP_HEAD])).not.toBeNull();
+  expect(forOfRows(base, head, [RS_STEP_HEAD, orders])).toBeNull();
+  const searchChanged = RS_HEAD_ROWS.map((r, i) => (i === 0 ? r.replace('undefined', '{}') : r));
+  expect(forOfRows(base, rsFile(searchChanged))).toBeNull();
+  expect(
+    forOfRows(base, rsFile([...RS_HEAD_ROWS, "{ method: 'PUT', path: '/v1/me', body: {} }"])),
+  ).toBeNull();
+  expect(forOfRows(base, head.replace('toBe(10006)', 'toBe(10007)'))).toBeNull();
+});
+
+it('[CT-06zzzzzv] forOfRowBlocks takes the rows by the report names in report order (the run-time name too); a count that differs keeps the loop changed as a whole', () => {
+  const c = compareTestFileRows(rsFile(RS_ROWS), rsFile(RS_HEAD_ROWS, { added: true }));
+  const blocks = c.whole ? [] : c.blocks;
+  const names = [
+    '[AC-B1-03h#16] a whitelisted search passes',
+    rsName('GET', '/v1/search', undefined),
+    rsName('GET', '/v1/orders', {}),
+    rsName('POST', '/v1/consents', { type: 'privacy', accepted: false }),
+    rsName('POST', '/v1/links/0193a6f2-5c1e-7d40-8b2a-3f9e1c7d4a01/open', {}),
+    RS_STEP_HEAD,
+    rsName('DELETE', '/v1/me/sessions', {}),
+    '[AC-B1-03h#18] a banned user cannot step up for a phone change',
+  ];
+  const split = forOfRowBlocks(blocks, names);
+  expect(split).toHaveLength(8);
+  for (const n of names.slice(0, 5)) expect(unchangedTest(n, split), n).toBe(true);
+  expect(unchangedTest(RS_STEP_HEAD, split)).toBe(false);
+  expect(unchangedTest(names[6] as string, split)).toBe(true);
+  expect(unchangedTest(names[7] as string, split)).toBe(false);
+  // A row missing from the report: the whole table.
+  const fewer = forOfRowBlocks(
+    blocks,
+    names.filter((n) => n !== names[2]),
+  );
+  expect(fewer).toHaveLength(3);
+  expect(unchangedTest(names[3] as string, fewer)).toBe(false);
 });

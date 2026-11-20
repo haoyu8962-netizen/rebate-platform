@@ -291,8 +291,11 @@ import {
   compareEachRows,
   compareModifiedBlocks,
   compareOutsideChanged,
+  compareOutsideChangedRows,
   compareSupportFile,
   compareTestFile,
+  compareTestFileRows,
+  forOfRowBlocks,
   helperImpact,
   helperNamedInLiteral,
   type PathKind,
@@ -301,6 +304,7 @@ import {
   relativeClosure,
   topLevelHelpers,
   unchangedTest,
+  withoutForOfRows,
   valueChangeRefusal,
   valueSkeleton,
 } from './test-blocks.ts';
@@ -1054,7 +1058,11 @@ export function ruleTestBaselines(
     }
     // CT-06zxe (D10-371): the registered expected values of this file (see the header).
     const registered = applyExpectedValues(file, before, expectedValues);
-    let compared = compareTestFile(before, after);
+    // CT-06zzzzzv (D10-2152 / D10-2163): the rows of a qualifying top-level for…of table are
+    // compared row by row (test-blocks.ts forOfRows); the names the ledger declares in
+    // modify_existing for the file (at the head) say whether a declared row is unchanged.
+    const declaredHere = modified.filter((d) => d.file === file).map((d) => d.retitle_to ?? d.test);
+    let compared = compareTestFileRows(before, after, declaredHere);
     // The base text the blocks were compared with (CT-06zzze: the .each tables are read from it).
     let comparedBase = before;
     let affected: boolean[] | null = null;
@@ -1101,11 +1109,13 @@ export function ruleTestBaselines(
       const lenientBase = withValues ? registered.text : before;
       // CT-06zzzzi (D10-1046 ①): an `.each` table imported from a same-directory kit is read
       // from the kit at the base and at the head.
-      const lenient = compareOutsideChanged(lenientBase, after, {
-        file,
-        base: (p) => read.base(p),
-        head: (p) => read.head(p),
-      });
+      // CT-06zzzzzv: the rows of a qualifying for…of table, as compareTestFileRows.
+      const lenient = compareOutsideChangedRows(
+        lenientBase,
+        after,
+        { file, base: (p) => read.base(p), head: (p) => read.head(p) },
+        declaredHere,
+      );
       if (lenient.whole) {
         outsideVoid(lenient.reason);
       } else if (withValues && ev !== undefined) {
@@ -1148,7 +1158,10 @@ export function ruleTestBaselines(
     let blocks =
       affected === null
         ? compared.blocks
-        : compared.blocks.map((b, i) => (affected[i] === true ? { ...b, changed: true } : b));
+        : compared.blocks.map((b, i) =>
+            // CT-06zzzzzv: a for…of loop calling a changed helper is changed as a whole table.
+            affected[i] === true ? withoutForOfRows({ ...b, changed: true }) : b,
+          );
     // CT-06zzze (D10-657): for a file the ledger's red_exempt_rows name, whether each .each block
     // keeps rows of a base table (compareEachRows); a block calling a registered changed helper
     // (CT-06zxe) never does.
@@ -1756,6 +1769,8 @@ export function checkRedReports(
     const tests = Array.isArray(entry.assertionResults)
       ? (entry.assertionResults as AssertionResult[])
       : [];
+    // CT-06zzzzzv: the report's full names in report order (forOfRowBlocks takes rows by index).
+    const names = tests.map((t) => text(t.fullName));
     // Browser leniency only for a browser rule-test file that the red reporter saw run in a
     // browser; Vitest's own JSON report (no `browser`, no causes) never gets it.
     const browser: BrowserFile =
@@ -1868,14 +1883,15 @@ export function checkRedReports(
       );
       wholeDespite('the report is not from the red reporter');
     } else if (baseline?.kind === 'tests') {
-      blocks = baseline.blocks;
+      // CT-06zzzzzv: a for…of loop block split into its rows by the report's names, by index.
+      blocks = forOfRowBlocks(baseline.blocks, names);
       if (declaredHere.length > 0) {
         notes.push(
           `${file}: ${declaredHere.length} declared exemption(s) are not needed: the file is judged test by test (its unchanged tests are exempt by themselves)`,
         );
       }
     } else if (baseline?.kind === 'support') {
-      declarable = baseline.blocks;
+      declarable = forOfRowBlocks(baseline.blocks, names);
       notes.push(
         `${file}: existed at the base, judged as a whole except the tests the ledger declares exempt (every other test must be red): ${baseline.reason}`,
       );

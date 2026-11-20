@@ -1,0 +1,113 @@
+{
+  "task": "CT-06zzzzzv",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "spec_commit": "60872d373576930eea7ff3c69ec6839f4c52c58c",
+  "red_tests": [
+    "test/spec/ci/for-of-literal-table/evidence.test.ts > [CT-06zzzzzv#11] compareModifiedBlocks locates the declared changed row by its expanded full name: found, changed, its row text before (withdraw) and after (phone_change), nothing else differs; an unchanged or run-time row named instead does not let the change through",
+    "test/spec/ci/for-of-literal-table/evidence.test.ts > [CT-06zzzzzv#12] the changed row as the file’s only change, declared: modifiedOnlyFiles leaves the file out, and evidence-check’s expected list is red-check’s (the new file alone); without the trusted entry both keep it",
+    "test/spec/ci/for-of-literal-table/evidence.test.ts > [CT-06zzzzzv#13] every form judged as a whole table: the declared row does not let the change through compareModifiedBlocks, the file is not left out, and red-check and evidence-check agree file for file",
+    "test/spec/ci/for-of-literal-table/evidence.test.ts > [CT-06zzzzzv#21] under the title with the body the changed row is located by its full name after the change (row text withdraw → phone_change), the file left out by both checks; by the base’s name it is not located, and both keep the file",
+    "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#1] the B1-02zzzc shape — one row of the for…of table changed and declared in modify_existing, a new test next to it — passes: the unchanged rows are exempt, the declared row passes green as a declared change, the new test is red",
+    "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#2] the changed row undeclared must be red as before: green it is the only problem (the unchanged rows stay exempt), red the run is ok",
+    "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#3] in a file whose change outside the tests is declared in red_exempt_outside, the unchanged rows can be declared in red_exempt (declared exemptions that apply) next to the declared changed row",
+    "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#4] the run-time row (its path made with randomUUID()) unchanged is taken by its index, whatever name the run gave it: exempt green in every run",
+    "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#14] under the B1-02zzzc title `${JSON.stringify(route.body)}` the changed row’s full name follows its data: declared by the name after the change (phone_change) it passes as a declared change; declared by the base’s name (withdraw) it is not taken and must be red as before",
+    "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#15] unchanged rows with non-literal fields — path: SEARCH imported from the same-directory kit, a path made with randomUUID() — are taken by their index and exempt in every run, next to the declared changed literal row",
+    "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#16] in the qualifying form a new test next to the table that is green is the only problem, green on the skeleton — it is not taken as the run-time row",
+    "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#5] a table that is no inline literal — a top-level const, the result of a call — is judged as a whole table",
+    "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#6] a spread in the table, or a changed row with a non-literal field (path: SEARCH from the kit, declared), makes the whole table changed",
+    "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#7] any changed token of the loop body makes the whole table changed",
+    "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#8] rows added, removed or swapped make the whole table changed",
+    "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#9] the run-time row (randomUUID() in its title) with its text changed makes the whole table changed",
+    "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#10] a loop that is not top-level (inside a describe), not for…of (forEach), or makes two it per row is judged as a whole table",
+    "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#17] a table imported from the same-directory kit (for (const route of ROUTES), the step-up row changed in the kit, both kits in the trees) is judged as a whole table, and red-check and evidence-check agree on the file",
+    "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#18] for…in over the inline array instead of for…of is judged as a whole table",
+    "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#19] a row declared changed that has no row at its index in the base (a row added), or whose text is the base’s (declared all the same), makes the whole table changed",
+    "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#20] a changed row whose full name after the change is another row’s of the table or another test’s of the file makes the whole table changed"
+  ],
+  "risk_note": "Guard change (tools/**, RV2 by path). CT-06zzzzzv (D10-2152 / D10-2163): red-check and evidence-check compare a top-level for…of over an inline array literal (same row count and order, loop body token for token the same, one it per row) row by row. A row whose source text equals the base row at the same index is an unchanged test (red_exempt applies), literal or not; a changed row must be wholly literal, exist at the same base index and differ, and is declared in modify_existing by its full name after the change (its title follows the row data); the evidence records the row text before and after. Anything else — a table by name, imported or from a call, a spread, a changed loop body, added / removed / moved rows, a changed row with a non-literal, a duplicate name, for…in, not top level — falls back to the whole-file judgement. tools/ci/evidence-check.ts itself unchanged (compareModifiedBlocks carries the row). No existing test changed. Pre-check: B1-02zzzc's formal red with this branch's tools and its draft ledger as trusted root — PASS, 39 rule tests in 4 files, 0 problems.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "60872d373576930eea7ff3c69ec6839f4c52c58c",
+      "tree": "2b2a68167779ef62913a877026572be4b5525e2a",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-20T01:26:05Z",
+      "finished_at": "2026-11-20T01:26:09Z",
+      "red_tests": [
+        "test/spec/ci/for-of-literal-table/evidence.test.ts > [CT-06zzzzzv#11] compareModifiedBlocks locates the declared changed row by its expanded full name: found, changed, its row text before (withdraw) and after (phone_change), nothing else differs; an unchanged or run-time row named instead does not let the change through",
+        "test/spec/ci/for-of-literal-table/evidence.test.ts > [CT-06zzzzzv#12] the changed row as the file’s only change, declared: modifiedOnlyFiles leaves the file out, and evidence-check’s expected list is red-check’s (the new file alone); without the trusted entry both keep it",
+        "test/spec/ci/for-of-literal-table/evidence.test.ts > [CT-06zzzzzv#13] every form judged as a whole table: the declared row does not let the change through compareModifiedBlocks, the file is not left out, and red-check and evidence-check agree file for file",
+        "test/spec/ci/for-of-literal-table/evidence.test.ts > [CT-06zzzzzv#21] under the title with the body the changed row is located by its full name after the change (row text withdraw → phone_change), the file left out by both checks; by the base’s name it is not located, and both keep the file",
+        "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#1] the B1-02zzzc shape — one row of the for…of table changed and declared in modify_existing, a new test next to it — passes: the unchanged rows are exempt, the declared row passes green as a declared change, the new test is red",
+        "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#2] the changed row undeclared must be red as before: green it is the only problem (the unchanged rows stay exempt), red the run is ok",
+        "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#3] in a file whose change outside the tests is declared in red_exempt_outside, the unchanged rows can be declared in red_exempt (declared exemptions that apply) next to the declared changed row",
+        "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#4] the run-time row (its path made with randomUUID()) unchanged is taken by its index, whatever name the run gave it: exempt green in every run",
+        "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#14] under the B1-02zzzc title `${JSON.stringify(route.body)}` the changed row’s full name follows its data: declared by the name after the change (phone_change) it passes as a declared change; declared by the base’s name (withdraw) it is not taken and must be red as before",
+        "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#15] unchanged rows with non-literal fields — path: SEARCH imported from the same-directory kit, a path made with randomUUID() — are taken by their index and exempt in every run, next to the declared changed literal row",
+        "test/spec/ci/for-of-literal-table/rows.test.ts > [CT-06zzzzzv#16] in the qualifying form a new test next to the table that is green is the only problem, green on the skeleton — it is not taken as the run-time row",
+        "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#5] a table that is no inline literal — a top-level const, the result of a call — is judged as a whole table",
+        "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#6] a spread in the table, or a changed row with a non-literal field (path: SEARCH from the kit, declared), makes the whole table changed",
+        "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#7] any changed token of the loop body makes the whole table changed",
+        "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#8] rows added, removed or swapped make the whole table changed",
+        "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#9] the run-time row (randomUUID() in its title) with its text changed makes the whole table changed",
+        "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#10] a loop that is not top-level (inside a describe), not for…of (forEach), or makes two it per row is judged as a whole table",
+        "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#17] a table imported from the same-directory kit (for (const route of ROUTES), the step-up row changed in the kit, both kits in the trees) is judged as a whole table, and red-check and evidence-check agree on the file",
+        "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#18] for…in over the inline array instead of for…of is judged as a whole table",
+        "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#19] a row declared changed that has no row at its index in the base (a row added), or whose text is the base’s (declared all the same), makes the whole table changed",
+        "test/spec/ci/for-of-literal-table/whole-table.test.ts > [CT-06zzzzzv#20] a changed row whose full name after the change is another row’s of the table or another test’s of the file makes the whole table changed"
+      ],
+      "expected": [
+        "test/spec/ci/for-of-literal-table/evidence.test.ts",
+        "test/spec/ci/for-of-literal-table/rows.test.ts",
+        "test/spec/ci/for-of-literal-table/whole-table.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "fa9a09223283984fff3c366c835af923b09a5d65e5e67b661fcfa6acfca88126"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (Codex usage limit until 2026-11-20 13:01, approvals 36): money r1 pass, one S2 (fail-closed: in a file judged as a whole, an unchanged row whose title holds a run-time value can be exempted only by its exact name, which a static ledger cannot know) left to the orchestrator as a follow-up (couli-runs/CT-06zzzzzv/review-money-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by independent Claude (ledger tester claude-independent): attempt 1 red (13), one mechanical edit by the orchestrating line so the trusted test-guard's describe pattern does not hit fixture text (comment 'describe', fixture ${'describe'}(), not counted as an attempt; attempt 2 after ruling D10-2163 added #14–#21, red 21. spec-test r1 pass (5 S2, answered by attempt 2), r2 pass (2 S2, pinned by the implementation's unit tests) (couli-runs/CT-06zzzzzv/review-spec-test-r1.json, -r2.json)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "06c1b30c5c07f3c872b1dd5f1589b5daa629f753",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

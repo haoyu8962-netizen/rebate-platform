@@ -3871,3 +3871,63 @@ it('[CT-06zzzzzr] checkEvidence: rows of it.each(ACTIONS) with ACTIONS from a sa
   expect(text).toContain(`spec_commit: rule tests changed after the rule-test commit: ${FILE} (M)`);
   expect(text).toContain('cannot be expanded for certain');
 });
+
+// CT-06zzzzzv (D10-2152 / D10-2163): the risk-state shape (B1-02zzzc's http.int.test.ts
+// [AC-B1-03h#17]: 6 rows, `path: SEARCH`, a randomUUID() path, the step-up row withdraw →
+// phone_change, the title holding `${JSON.stringify(route.body)}`) as the file's only change.
+const FO_FILE = 'test/spec/risk/fo/http.int.test.ts';
+const FO_NEW_FILE = 'test/spec/risk/fo/phone.int.test.ts';
+const FO_ROWS = [
+  "{ method: 'GET', path: SEARCH, body: undefined }",
+  "{ method: 'GET', path: '/v1/orders', body: {} }",
+  "{ method: 'POST', path: '/v1/consents', body: { type: 'privacy', accepted: false } }",
+  "{ method: 'POST', path: `/v1/links/${randomUUID()}/open`, body: {} }",
+  "{ method: 'POST', path: '/v1/auth/step-up', body: { action: 'withdraw', code: '123456' } }",
+  "{ method: 'DELETE', path: '/v1/me/sessions', body: {} }",
+];
+const foFile = (rows: readonly string[]): string =>
+  [
+    "import { randomUUID } from 'node:crypto';",
+    "import { expect, it } from 'vitest';",
+    "import { SEARCH, send } from './kit.ts';",
+    '',
+    'for (const route of [',
+    ...rows.map((r) => `  ${r},`),
+    ']) {',
+    '  it(`[AC-B1-03h#17] banned ${route.method} ${route.path} ${JSON.stringify(route.body)} 10006`, async () => {',
+    '    expect(await send(route.method, route.path, route.body)).toBe(10006);',
+    '  });',
+    '}',
+    '',
+  ].join('\n');
+const foStep = (action: string): string =>
+  `[AC-B1-03h#17] banned POST /v1/auth/step-up ${JSON.stringify({ action, code: '123456' })} 10006`;
+
+it('[CT-06zzzzzv] expectedRedFiles: the risk-state step-up row declared by its full name after the change is the file’s only change — the file is left out as red-check leaves it out; declared by the base name both keep it', () => {
+  const head = foFile(FO_ROWS.map((r) => r.replace("'withdraw'", "'phone_change'")));
+  const read = {
+    base: (p: string) => (p === FO_FILE ? foFile(FO_ROWS) : null),
+    head: (p: string) =>
+      p === FO_FILE ? head : p === FO_NEW_FILE ? "import { it } from 'vitest';\n" : null,
+  };
+  const ledger = { renames: [], expected_values: [], red_exempt_outside: [], red_exempt: [] };
+  const entry = (test: string) => ({
+    file: FO_FILE,
+    test,
+    reason: 'rule_change' as const,
+    ruling: 'D10-2152',
+    note: 'the step-up row now asks for phone_change instead of withdraw',
+    br: ['BR-ID-31'],
+  });
+  const files = [FO_FILE, FO_NEW_FILE];
+  const byHead = [entry(foStep('phone_change'))];
+  expect(expectedRedFiles(files, read, ledger, byHead)).toEqual([FO_NEW_FILE]);
+  expect(ruleTestsLeftOut(files, read, { ...ledger, modify_existing: byHead }).expected).toEqual([
+    FO_NEW_FILE,
+  ]);
+  const byBase = [entry(foStep('withdraw'))];
+  expect(expectedRedFiles(files, read, ledger, byBase)).toEqual(files);
+  expect(ruleTestsLeftOut(files, read, { ...ledger, modify_existing: byBase }).expected).toEqual(
+    files,
+  );
+});
