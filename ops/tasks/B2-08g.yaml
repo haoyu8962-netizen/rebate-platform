@@ -2,21 +2,42 @@ id: B2-08g
 repo: rebate-platform
 title: admin：提现单导出的实现（CT-24zzp）——导出 worker 接 withdrawals 资源，取数经 payout 只读入口（与 listAdminWithdrawals 同一查询与排序），恒为脱敏（D10-2017 ③）
 type: impl
-# 2026-11-18 be 入账（编排 D10-2017 ③）。照 CT-24zzm 的 ledger 导出：admin 模块导出任务（admin-exports.ts / export-worker.ts）接 withdrawals，取数经 payout 模块的只读入口，不在 admin 里直读 payout 表；权限与可见范围、重试、过期照已有资源。
-# 前置：app.export_tasks 的 resource CHECK 要加 withdrawals。照 CT-24zzma 先例另开 DB 单（两条迁移 NOT VALID 再 VALIDATE、db:snapshot 走 couli-ci、冻结 [AC-B1-34b#4] 按 rule_change 改并登 modify_existing / red_exempt）；本单开工前由 be 入账并报编排，本单 deps 届时补上。
+# 2026-11-18 be 入账（编排 D10-2017 ③）。照 CT-24zzm 的 ledger 导出：admin 模块导出任务（admin-exports.ts / export-worker.ts）接 withdrawals，取数经 payout 模块的只读入口，不在 admin 里直读 payout 表；权限与可见范围、重试、过期照已有资源。前置 resource CHECK 已由 CT-24zzpa（#398）完成。
 # 规则测试要钉：filters 与列表同形；只持 user.lookup 不带 user_id 拒；导出行与列表同一筛选的结果一致；手机号脱敏、无全量收款账号；带 unmasked 拒；app 隔离。
+# 2026-11-20 补丁 1（D10-2221 定甲）：CT-24zzp 单落不了（controller 按枚举分支 tsc 红、前端 SOURCE_OPTIONS 夹具写死 5 项），照 CT-24zzm 并入本单，CT-24zzp 置 void。带：契约提交 e64a3573f（含降权下载 10403；补「已有任务无标志按未清空」）+ 后端 + export_tasks 标志列迁移（land 前报号、设冻结）+ 规则测试 + 前端来源名「提现单」（texts/exports.ts）+ SOURCE_OPTIONS 末尾加一项（modify_existing，D10-2221 / D10-1899）。契约槽就绪时公告排队再占。标题按 guard-git 规矩保留原文（D10-2226），实际范围以本注释与 paths / deps 为准。
 refs: [BR-ID-42, BR-ID-33]
 refs_hash:
   BR-ID-42: 2f9cd1710ed3
   BR-ID-33: 01b25f773b29
-deps: [CT-24zzp]
+deps: [CT-24zzpa]
 paths:
+  - 'contracts/enums/admin.yaml'
+  - 'contracts/openapi.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/admin/src/texts/exports.ts'
+  - 'db/migrations/*_export-tasks-*.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
   - 'apps/api/src/modules/admin/**'
   - 'apps/api/src/modules/payout/application/admin-withdrawals*.ts'
   - 'apps/api/src/modules/payout/index.ts'
   - 'apps/api/src/modules/payout/read.ts'
 test_paths:
   - 'test/spec/admin/export-withdrawals/**'
+  - 'test/spec/frontend/admin-exports-filters/exports-fixtures.ts' # 只在 SOURCE_OPTIONS 末尾加「提现单」一项（见 modify_existing）
+  - 'test/spec/frontend/admin-exports-filters/source.test.ts' # 测试体不动，只因夹具变化登 modify_existing
+modify_existing:
+  - file: 'test/spec/frontend/admin-exports-filters/source.test.ts'
+    test: '[AC-F1-08fd-SOURCE#1] 来源页面列全部 export_resource（中文名取 resource 表、无名显示编码）外加全部，选定后按【查询】才带 resource，选全部不带；任何状态的行都没有【重新导出】'
+    reason: rule_change
+    br: [BR-ID-42]
+    ruling: D10-2221
+    note: '依 D10-2017 ③ / D10-2221（export_resource 加 withdrawals，中文名「提现单」）：测试体不动，只改其期望夹具 exports-fixtures.ts 的 SOURCE_OPTIONS——末尾加「提现单」一项，其余五项与顺序不变。反向验证：基线为不带本单前端文案与契约的主干，本条因 toEqual 期望多一项而红'
 impl: claude
 tester: claude-independent
 accept:
