@@ -374,7 +374,8 @@ export function ManualPaid({
       }
       if (isSettledRejection(cause)) {
         // 服务端确定拒绝（10403、20001 等）：解锁，提示全文；下次提交换新键。会话失效（10001）不算确定的回答，标记留着。
-        if (uncertainRef.current && !endsSession(cause)) marker.clear();
+        if (endsSession(cause)) marker.leave();
+        else marker.clear();
         forget();
         setFailure(failureNotice(cause));
         setPhase('edit');

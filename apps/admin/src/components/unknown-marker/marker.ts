@@ -43,6 +43,19 @@ function changed(): void {
   for (const listener of Array.from(listeners)) listener();
 }
 
+/**
+ * The submissions of this tab whose result is unknown under the stored marker of a key, and the
+ * moment of that marker. Only in memory: nothing more than {page, unknown, at} is ever stored.
+ * FOREIGN stands for a marker this tab did not write in this run (left before a reload): no
+ * submission here can resolve it, so only 【关闭】 drops it.
+ */
+interface Holding {
+  readonly at: string;
+  readonly holders: Set<object>;
+}
+const holders = new Map<string, Holding>();
+const FOREIGN: object = Object.freeze({});
+
 function storage(): Storage | undefined {
   try {
     return typeof window === 'undefined' ? undefined : window.sessionStorage;
@@ -74,11 +87,13 @@ export function markUnknown(scope: MarkerScope, clock: MarkerClock): void {
   changed();
 }
 
-/** Drops the marker of `scope` (closed by hand, or the unknown result was resolved). */
+/** Drops the marker of `scope` whatever holds it (the prompt's 【关闭】 by hand). */
 export function clearUnknown(scope: MarkerScope): void {
   const key = keyOf(scope);
   const area = storage();
-  if (key === undefined || area === undefined) return;
+  if (key === undefined) return;
+  holders.delete(key);
+  if (area === undefined) return;
   try {
     if (area.getItem(key) === null) return;
     area.removeItem(key);
@@ -115,4 +130,45 @@ export function readUnknown(scope: MarkerScope): UnknownMarker | undefined {
   if (page !== scope.page || unknown !== true || typeof at !== 'string') return undefined;
   if (!ISO.test(at) || Number.isNaN(Date.parse(at))) return undefined;
   return { page, unknown: true, at };
+}
+
+/**
+ * `holder` (one submission) entered the result-unknown state at `clock`'s now. Without a marker
+ * for `scope` one is kept at that moment; with one, it stays as it is (its earlier moment wins)
+ * and `holder` only joins the submissions it stands for.
+ */
+export function holdUnknown(scope: MarkerScope, clock: MarkerClock, holder: object): void {
+  const key = keyOf(scope);
+  if (key === undefined || storage() === undefined) return;
+  const kept = readUnknown(scope);
+  if (kept === undefined) {
+    markUnknown(scope, clock);
+    const written = readUnknown(scope);
+    if (written !== undefined) holders.set(key, { at: written.at, holders: new Set([holder]) });
+    return;
+  }
+  let holding = holders.get(key);
+  if (holding?.at !== kept.at) {
+    holding = { at: kept.at, holders: new Set([FOREIGN]) };
+    holders.set(key, holding);
+  }
+  holding.holders.add(holder);
+}
+
+/**
+ * `holder`'s unknown submission got a settled answer. The marker goes only when no other
+ * submission it stands for is still unknown; a holder that never held it changes nothing.
+ */
+export function releaseUnknown(scope: MarkerScope, holder: object): void {
+  const key = keyOf(scope);
+  if (key === undefined) return;
+  const holding = holders.get(key);
+  if (holding?.holders.delete(holder) !== true) return;
+  if (readUnknown(scope)?.at !== holding.at) {
+    // Closed by hand or replaced meanwhile: that marker is not this holding's to drop.
+    if (holders.get(key) === holding) holders.delete(key);
+    return;
+  }
+  if (holding.holders.size > 0) return;
+  clearUnknown(scope);
 }

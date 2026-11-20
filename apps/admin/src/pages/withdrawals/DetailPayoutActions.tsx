@@ -333,7 +333,8 @@ function DetailExecute({
       }
       if (isSettledRejection(cause)) {
         // A settled refusal settles an unknown submission; an ended session (10001) settles nothing.
-        if (uncertainRef.current && !endsSession(cause)) marker.clear();
+        if (endsSession(cause)) marker.leave();
+        else marker.clear();
         forget();
         setNotice(executeFailure(cause));
         setPhase('edit');
@@ -681,7 +682,8 @@ function DetailManualPaid({
       }
       if (isSettledRejection(cause)) {
         // A settled refusal settles an unknown submission; an ended session (10001) settles nothing.
-        if (uncertainRef.current && !endsSession(cause)) marker.clear();
+        if (endsSession(cause)) marker.leave();
+        else marker.clear();
         forget();
         setNotice(manualFailure(cause));
         setPhase('edit');

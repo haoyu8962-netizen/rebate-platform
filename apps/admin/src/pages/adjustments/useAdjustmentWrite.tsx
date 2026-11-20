@@ -16,7 +16,8 @@
 //   20902、10403 等）后下次提交换新键。任何失败都不自动重发。
 // 一次打开（抽屉或对话框）一个写操作一个实例；卸载后迟到的回答被丢弃。
 // F1-08at（D10-2075）：进入「结果未知」时为本页（adjustments）与登录账号存一个不含业务数据的标记，
-// 重试拿到确定的回答（成功或确定的拒绝）时清掉；10001（会话失效）不算确定的回答，标记留给重新登录后的提示。
+// 带外壳的 5xx / 40901（保留原键、未落定）同样存标记；拿到确定的回答（成功或确定的拒绝）时清掉；
+// 10001（会话失效）不算确定的回答，标记留给重新登录后的提示。
 import { useDataProvider, type BaseRecord } from '@refinedev/core';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
@@ -230,8 +231,8 @@ export function useAdjustmentWrite<
             : { stepUpToken, idempotencyKey: key },
       });
       if (!alive.current) return;
-      // The unknown submission has its settled answer (the idempotent replay or the first time).
-      if (unknownRef.current) marker.clear();
+      // A settled answer (the idempotent replay or the first time): the submission's marker goes.
+      marker.clear();
       keyRef.current = undefined;
       setUnknown(false);
       setPhase('idle');
@@ -256,15 +257,20 @@ export function useAdjustmentWrite<
       }
       if (noEnvelope(cause)) {
         // It may have taken effect: keep the key and the body, lock, no failure prompt.
-        if (!unknownRef.current) marker.mark();
+        marker.mark();
         setUnknown(true);
         setPhase('idle');
         onUnknown?.();
         return;
       }
-      if (!outcomeUnknown(cause)) {
-        // A settled refusal settles the unknown submission too; an ended session settles nothing.
-        if (unknownRef.current && !endsSession(cause)) marker.clear();
+      if (outcomeUnknown(cause)) {
+        // An enveloped 5xx / 40901: the key is kept, the write may have taken effect, so it is
+        // result-unknown for the marker too (D10-2075 / D10-1731).
+        marker.mark();
+      } else {
+        // A settled refusal settles the submission; an ended session (10001) settles nothing.
+        if (endsSession(cause)) marker.leave();
+        else marker.clear();
         keyRef.current = undefined;
         setUnknown(false);
       }
