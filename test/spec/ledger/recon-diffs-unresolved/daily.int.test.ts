@@ -5,8 +5,13 @@
 // concluded (adjusted / written_off / closed) the difference opens a new ticket with one new hold.
 // A global difference still switches settle.auto.enabled off on every run that finds it (现状，本单
 // 不改). Only recon_diffs and withdraw_holds are pinned (编排 D10-2280).
+// Differences grouped by sub-order (ref_type order, e.g. ④ `04:<order_key>`, one ticket may name
+// several beneficiaries) are outside that dedupe (编排 D10-2295 甲, 宁多冻不漏冻): one ticket per
+// accounting day, each holding its own involved users.
+import { randomUUID } from 'node:crypto';
 import { createTestDatabase } from '@couli/db/testing';
 import { expect, it } from 'vitest';
+import type { DailyCheckFiledDifference } from '../../../../apps/api/src/modules/ledger/index.ts';
 import {
   APP,
   DAY,
@@ -23,12 +28,14 @@ import {
   holdInput,
   holdsOf,
   negativeDropDiff,
+  orderKey,
   platformAccount,
   sourceOf,
   userAccount,
   voucher,
   voucherDiff,
   withHarness,
+  type UserAccount,
 } from '../daily-check-execute/kit.ts';
 import {
   CONCLUDED,
@@ -41,6 +48,35 @@ import {
   conclude,
   moveTo,
 } from './kit.ts';
+
+/**
+ * ④ difference of one (sub-order, beneficiary, role) key, as 04_beneficiary-net.sql emits it
+ * (scope global, no account; the executor groups it by order_key into ref_id `04:<order_key>`,
+ * ref_type order, and holds the beneficiary_user_id of each row of the group).
+ */
+function beneficiaryNetDiff(
+  key: string,
+  account: UserAccount,
+  role: string,
+  netFen: bigint,
+): DailyCheckFiledDifference {
+  return {
+    file: '04_beneficiary-net.sql',
+    invariant: '04',
+    scope: 'global',
+    app_id: account.appId,
+    account_id: null,
+    detail: {
+      order_key: key,
+      beneficiary_user_id: account.userId,
+      role,
+      min_net_fen: '0',
+      net_fen: netFen.toString(),
+      vouchers: '1',
+      voucher_ids: [randomUUID()],
+    },
+  };
+}
 
 it(
   '[AC-B2-02zc#1] 账户级差异（①）D 日登记 1 张并加 1 条冻结；D+1、D+2 同一差异再现 → 差错单仍 1 张（period=D 等逐字段不变）、inserted=false、冻结仍 1 条、端口只调 1 次；对照：同一账户 D+1 首次出现的 ⑦ 另登记 1 张、另加 1 条冻结',
@@ -356,6 +392,117 @@ it(
       expect(h.settle.turnOffs).toHaveLength(2);
       expect(h.settle.turnOffs[1]!.input).toMatchObject({ appId: APP, key: SWITCH_KEY });
       expect(h.settle.turnOffs[1]!.input.reason).toContain(NEXT_DAY);
+    });
+  },
+  TIMEOUT,
+);
+
+it(
+  '[AC-B2-02zc#14] 按子订单归组的差异（④，ref_type order）维持按会计日每天一张、各自冻结：D 日只有受益人甲变负 → 登记 1 张、冻结甲；D+1 同一子订单受益人乙也变负（首张仍未结）→ 照常新开一张（period=D+1、新 id、inserted=true），并为乙新增冻结（source_ref 指新单）；D 日那张与甲的冻结逐字段不变；对照：同一轮的账户级差异（①）D+1 再现不新开、不新增冻结',
+  async () => {
+    await withHarness(createTestDatabase, async (h) => {
+      const key = orderKey();
+      const refId = `04:${key}`;
+      const self = await userAccount(h);
+      const invitee = await userAccount(h);
+      const other = await userAccount(h);
+      const selfNet = beneficiaryNetDiff(key, self, 'self', -50n);
+      const inviteeNet = beneficiaryNetDiff(key, invitee, 'direct', -30n);
+      const cache = balanceCacheDiff(other, { expected: 300n, cache: 500n });
+
+      // D: only 甲 (self) of the sub-order is negative; ① of another account in the same run.
+      const day = await h.executor.execute(h.db, {
+        accountingDate: DAY,
+        differences: [selfNet, cache],
+      });
+      const first = await diffByRef(h, refId);
+      expectRegistered(first, { refType: 'order', refId, expectedFen: 0n, actualFen: 0n });
+      expect(executedOf(day, first)).toMatchObject({
+        refId,
+        inserted: true,
+        heldUserIds: [self.userId],
+      });
+      const account = await diffByRef(h, `01:${other.accountId}`);
+      expect(executedOf(day, account)).toMatchObject({
+        inserted: true,
+        heldUserIds: [other.userId],
+      });
+      const held = await holdsOf(h);
+      expect(held).toHaveLength(2);
+      const firstHolds = held.filter((hold) => hold.source_ref === sourceOf(first.id));
+      expect(firstHolds).toHaveLength(1);
+      expectHold(firstHolds[0], first, self.userId, h);
+      const accountHolds = held.filter((hold) => hold.source_ref === sourceOf(account.id));
+      expect(accountHolds).toHaveLength(1);
+      expectHold(accountHolds[0], account, other.userId, h);
+      expect(h.holds.calls).toHaveLength(2);
+
+      // D+1: 乙 (invitee) of the same sub-order is negative too, the D ticket still open.
+      h.clock.set(RUN_NEXT);
+      const next = await h.executor.execute(h.db, {
+        accountingDate: NEXT_DAY,
+        differences: [selfNet, inviteeNet, cache],
+      });
+      const afterNext = await diffsOf(h);
+
+      // 对照：账户级差异未结 → 次日不新开、不新增冻结。
+      expect(
+        afterNext.filter((row) => row.ref_id === `01:${other.accountId}`),
+        '账户级差异未结：次日不新生成差错单，首张逐字段不变',
+      ).toEqual([account]);
+      expect(executedOf(next, account)).toMatchObject({ inserted: false, heldUserIds: [] });
+
+      // 按子订单归组：照常新开一张，各自冻结。
+      const fresh = await diffByRef(h, refId, NEXT_DAY);
+      expectRegistered(fresh, {
+        period: NEXT_DAY,
+        refType: 'order',
+        refId,
+        expectedFen: 0n,
+        actualFen: 0n,
+      });
+      expect(fresh.id).not.toBe(first.id);
+      const beneficiaries = [self.userId, invitee.userId].sort();
+      expect(executedOf(next, fresh)).toMatchObject({
+        refId,
+        inserted: true,
+        heldUserIds: beneficiaries,
+      });
+      expect(
+        afterNext.filter((row) => row.ref_id === refId),
+        'D 日那张逐字段不变，另有 D+1 新单',
+      ).toEqual([first, fresh]);
+      expect(afterNext).toHaveLength(3);
+      expect(next.reconDiffs).toHaveLength(2);
+
+      const heldNext = await holdsOf(h);
+      expect(
+        heldNext.filter((hold) => hold.source_ref === sourceOf(first.id)),
+        'D 日那张对甲的冻结不变',
+      ).toEqual(firstHolds);
+      expect(
+        heldNext.filter((hold) => hold.source_ref === sourceOf(account.id)),
+        '账户级差异未结：不新增冻结，原冻结原样',
+      ).toEqual(accountHolds);
+      const freshHolds = heldNext.filter((hold) => hold.source_ref === sourceOf(fresh.id));
+      expect(freshHolds.map((hold) => hold.user_id).sort()).toEqual(beneficiaries);
+      expectHold(
+        freshHolds.find((hold) => hold.user_id === invitee.userId),
+        fresh,
+        invitee.userId,
+        h,
+      );
+      expectHold(
+        freshHolds.find((hold) => hold.user_id === self.userId),
+        fresh,
+        self.userId,
+        h,
+      );
+      expect(heldNext).toHaveLength(4);
+      expect(h.holds.calls).toHaveLength(4);
+      expect(h.holds.calls.slice(2).map((call) => call.input)).toEqual(
+        beneficiaries.map((userId) => holdInput(fresh, userId)),
+      );
     });
   },
   TIMEOUT,

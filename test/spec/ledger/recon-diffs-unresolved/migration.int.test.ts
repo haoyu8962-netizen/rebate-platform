@@ -1,10 +1,12 @@
 // B2-02zc: the migration itself (D10-2224 B ①). recon_diffs_unresolved_internal_key is a partial
 // unique index (app_id, type, ref_id) WHERE type = 'ledger_mismatch' AND status IN ('open',
-// 'processing'), named in its own migration (located by file-name suffix); in the database a second
-// unresolved ledger_mismatch of the same app and ref_id is refused with 23505 whatever its period,
-// a concluded one is accepted, and other types, apps and refs are not affected. Applied over
-// existing duplicates (two unresolved tickets of one ref, one hold each; open / open and
-// open / processing, each group in its own scratch database) the migration fails with 23505 on
+// 'processing') AND ref_type <> 'order' (编排 D10-2295 甲: tickets grouped by sub-order stay one
+// per accounting day), named in its own migration (located by file-name suffix); in the database a
+// second unresolved ledger_mismatch of the same app and ref_id is refused with 23505 whatever its
+// period, a concluded one is accepted, and other types, apps, refs and ref_type order are not
+// affected. Applied over existing duplicates (two unresolved tickets of one ref, one hold each, both
+// of the same user; open / open and open / processing, each group in its own scratch database) the
+// migration fails with 23505 on
 // that index and changes no business row (it never concludes or rewrites tickets). Applied over an
 // unresolved ticket without duplicate and its live hold it succeeds, the index is there and valid,
 // and the ticket and the hold are unchanged field by field (it never releases holds).
@@ -54,8 +56,13 @@ async function preIndexDatabase(): Promise<Scratch> {
   return scratch;
 }
 
-/** Inserts a ledger_mismatch ticket and one live hold (released_at null) sourced from it. */
-async function seedTicketWithHold(db: Kysely<DB>, diff: Row, group: string): Promise<void> {
+/** Inserts a ledger_mismatch ticket and one live hold (released_at null) of `userId` from it. */
+async function seedTicketWithHold(
+  db: Kysely<DB>,
+  diff: Row,
+  group: string,
+  userId: string = randomUUID(),
+): Promise<void> {
   expect(
     await sqlState(insert(db, 'recon_diffs', diff)),
     `${group}：差错单 ${String(diff['status'])}`,
@@ -65,7 +72,7 @@ async function seedTicketWithHold(db: Kysely<DB>, diff: Row, group: string): Pro
       insert(db, 'withdraw_holds', {
         id: randomUUID(),
         app_id: diff['app_id'],
-        user_id: randomUUID(),
+        user_id: userId,
         reason: 'ledger_mismatch',
         source_ref: `recon_diff:${String(diff['id'])}`,
         created_by: 'system',
@@ -98,7 +105,7 @@ async function applyMigration(db: Kysely<DB>, migration: string): Promise<unknow
     );
 }
 
-it('[AC-B2-02zc#9] 迁移（按后缀定位）显式建唯一索引 recon_diffs_unresolved_internal_key：键 (app_id, type, ref_id)、有效、非约束，谓词只含 ledger_mismatch 与 open / processing', async () => {
+it('[AC-B2-02zc#9] 迁移（按后缀定位）显式建唯一索引 recon_diffs_unresolved_internal_key：键 (app_id, type, ref_id)、有效、非约束，谓词恰为 type = ledger_mismatch、status 为 open / processing、ref_type <> order 三项', async () => {
   await ready(h.app);
   const source = unresolvedMigrationSource();
   expect(source).toMatch(
@@ -118,7 +125,7 @@ it('[AC-B2-02zc#9] 迁移（按后缀定位）显式建唯一索引 recon_diffs_
   });
   const predicate = index.predicate ?? '';
   const literals = [...predicate.matchAll(/'([^']*)'/gu)].map((match) => match[1]).sort();
-  expect(literals, predicate).toEqual(['ledger_mismatch', 'open', 'processing']);
+  expect(literals, predicate).toEqual(['ledger_mismatch', 'open', 'order', 'processing']);
   const words = new Set(
     (
       predicate
@@ -127,10 +134,15 @@ it('[AC-B2-02zc#9] 迁移（按后缀定位）显式建唯一索引 recon_diffs_
         .match(/[a-z_]+/gu) ?? []
     ).filter((word) => !['text', 'and', 'any', 'array', 'in'].includes(word)),
   );
-  expect([...words].sort(), predicate).toEqual(['status', 'type']);
+  expect([...words].sort(), predicate).toEqual(['ref_type', 'status', 'type']);
+  // 编排 D10-2295 甲：按子订单归组的差错单不在此索引内（ref_type <> 'order'，PG 存为 <>）。
+  const notOrder = /\bref_type\s*<>\s*'order'(?:::text)?/u;
+  const mismatchOnly = /\btype\s*=\s*'ledger_mismatch'(?:::text)?/u;
+  expect(predicate, '谓词含 ref_type <> order').toMatch(notOrder);
+  expect(predicate, '谓词含 type = ledger_mismatch').toMatch(mismatchOnly);
 });
 
-it('[AC-B2-02zc#10] 库内直接 INSERT：同 app 同 ref_id 已有未结 ledger_mismatch 时，第二张 open / processing（任何 period）23505；第二张已结案可插；首张结案后可再开；对外类型、别的 app、别的 ref 不受影响', async () => {
+it('[AC-B2-02zc#10] 库内直接 INSERT：同 app 同 ref_id 已有未结 ledger_mismatch 时，第二张 open / processing（任何 period）23505；第二张已结案可插；首张结案后可再开；对外类型、别的 app、别的 ref 不受影响；ref_type order 的同 ref_id 两张未结（不同 period）都可插', async () => {
   await ready(h.app);
   const refId = `01:${randomUUID()}`;
   const first = recon({ ref_type: 'ledger_account', ref_id: refId, period: '2032-06-15' });
@@ -183,6 +195,18 @@ it('[AC-B2-02zc#10] 库内直接 INSERT：同 app 同 ref_id 已有未结 ledger
     ).toBe('ok');
   }
 
+  // 编排 D10-2295 甲：按子订单归组（ref_type order）的不在索引内——同 app、同 ref_id 的两张未结
+  // ledger_mismatch（不同 period）都可插入，维持按会计日每天一张。
+  const orderRef = `04:taobao:${randomUUID()}`;
+  for (const period of ['2032-06-15', '2032-06-16']) {
+    expect(
+      await sqlState(
+        insert(h.app, 'recon_diffs', another(period, { ref_type: 'order', ref_id: orderRef })),
+      ),
+      `order 级未结 ${period}`,
+    ).toBe('ok');
+  }
+
   const stored = await sql<{ status: string; period: string }>`
     SELECT status, period FROM app.recon_diffs
     WHERE app_id = ${first['app_id']} AND type = 'ledger_mismatch' AND ref_id = ${refId}
@@ -196,7 +220,7 @@ it('[AC-B2-02zc#10] 库内直接 INSERT：同 app 同 ref_id 已有未结 ledger
   ]);
 });
 
-it('[AC-B2-02zc#12] 迁移遇存量重复：无该索引的库里已有同 app、同 ref_id、不同 period 的两张未结 ledger_mismatch 及各自一条冻结，open / open 与 open / processing 两组各用独立的临时库 → 每组执行迁移文件原文都得 23505（建该索引失败），回滚后两张单与两条冻结逐行不变、索引不存在（迁移不自动结案、不改写业务数据）', async () => {
+it('[AC-B2-02zc#12] 迁移遇存量重复：无该索引的库里已有同 app、同 ref_id、不同 period 的两张未结 ledger_mismatch 及各自一条冻结（同一用户），open / open 与 open / processing 两组各用独立的临时库 → 每组执行迁移文件原文都得 23505（建该索引失败），回滚后两张单与两条冻结逐行不变、索引不存在（迁移不自动结案、不改写业务数据）', async () => {
   const migration = unresolvedMigrationFile();
   for (const secondStatus of UNRESOLVED) {
     const group = `open / ${secondStatus}`;
@@ -219,7 +243,9 @@ it('[AC-B2-02zc#12] 迁移遇存量重复：无该索引的库里已有同 app�
         status: secondStatus,
         dedupe_key: `R3:2032-06-16:${refId}`,
       });
-      for (const diff of [first, second]) await seedTicketWithHold(db, diff, group);
+      // 真实存量里同一账户两张单的两条冻结属于同一用户（FU-B2-02ZC-MIGRATION-SAME-USER-HOLDS）。
+      const userId = randomUUID();
+      for (const diff of [first, second]) await seedTicketWithHold(db, diff, group, userId);
       const before = await businessRows(db);
       expect(before.diffs, group).toHaveLength(2);
       expect(before.holds, group).toHaveLength(2);
