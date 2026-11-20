@@ -29,5 +29,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/union/taobao-raw-json-text/**'
-status: todo
-pr: null
+status: done
+pr: 390
