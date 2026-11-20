@@ -1171,6 +1171,7 @@ it('[AC-B1-02zza#u11] identity.module passes APP_ENV and the opened test phones 
     },
     { issue: vi.fn(), consume: vi.fn() },
     null,
+    { enabled: async () => true },
     db,
     { decrypt: (text: string) => text },
   ) as StepUpService;
