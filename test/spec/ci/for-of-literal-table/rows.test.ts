@@ -4,13 +4,31 @@
 // as a declared change (undeclared it must be red), and a row whose title holds a run-time value
 // is taken by its index while its text is unchanged. Where declarations apply (a file listed in
 // red_exempt_outside), the unchanged rows may be declared in red_exempt.
+//
+// D10-2163: under a title with the body (`${JSON.stringify(route.body)}`) the changed row is
+// declared by its full name after the change (the base's name is not taken: it must be red as
+// before); unchanged rows with non-literal fields (path: SEARCH from the kit, a randomUUID() path)
+// are taken by their index; a new test next to the table green is a problem of its own and is no
+// run-time row.
 import { expect, it } from 'vitest';
 import {
   BASE_ROWS,
+  B_BASE,
+  B_CONSENT,
+  B_GET,
+  B_HEAD,
+  B_LEDGER_BASE,
+  B_LEDGER_HEAD,
+  B_STEP_BASE,
+  B_STEP_HEAD,
   F,
   HEAD_ROWS,
+  KIT,
+  NL_BASE,
+  NL_HEAD,
   N_CONSENT,
   N_GET,
+  N_SEARCH,
   N_STEP,
   Q_BASE,
   Q_HEAD,
@@ -23,13 +41,20 @@ import {
   T_NEW,
   UUID_A,
   UUID_B,
+  bLinkName,
+  bTests,
   exemptOf,
+  judge,
   judgeF,
+  kitFile,
   ledger,
   linkName,
   modifyOf,
+  nlTests,
+  outcomesOf,
   outsideOf,
   qTests,
+  reader,
   testFile,
 } from './kit.ts';
 
@@ -127,4 +152,71 @@ it('[CT-06zzzzzv#4] the run-time row (its path made with randomUUID()) unchanged
   ]);
   expect(result.problems).toEqual([]);
   expect(result.red).toEqual([`${F} > ${T_NEW}`]);
+});
+
+it('[CT-06zzzzzv#14] under the B1-02zzzc title `${JSON.stringify(route.body)}` the changed row’s full name follows its data: declared by the name after the change (phone_change) it passes as a declared change; declared by the base’s name (withdraw) it is not taken and must be red as before', () => {
+  expect(B_STEP_HEAD).not.toBe(B_STEP_BASE);
+  expect(B_STEP_HEAD).toContain('"action":"phone_change"');
+  // Declared by the full name after the change.
+  const byHead = judgeF(B_BASE, B_HEAD, B_LEDGER_HEAD, bTests());
+  expect(byHead.expected).toEqual([F]);
+  expect(byHead.result.problems).toEqual([]);
+  expect(byHead.result.ok).toBe(true);
+  expect(byHead.result.red).toEqual([`${F} > ${T_NEW}`]);
+  const exempt = byHead.result.exempt ?? [];
+  expect(exempt.filter((e) => e.modified === true).map((e) => e.test)).toEqual([B_STEP_HEAD]);
+  for (const name of [T1, B_GET, B_CONSENT, bLinkName(UUID_A)]) {
+    expect(
+      exempt.some((e) => e.file === F && e.test === name && e.modified !== true),
+      name,
+    ).toBe(true);
+  }
+  // Declared by the base's name: the changed row is undeclared, green it is a problem …
+  const green = judgeF(B_BASE, B_HEAD, B_LEDGER_BASE, bTests());
+  expect(green.result.ok).toBe(false);
+  expect(
+    green.result.problems.some((p) => p.file === F && p.test === B_STEP_HEAD),
+    JSON.stringify(green.result.problems, null, 2),
+  ).toBe(true);
+  expect((green.result.exempt ?? []).some((e) => e.test === B_STEP_HEAD)).toBe(false);
+  // … and red it is shown red, no problem of its own.
+  const red = judgeF(B_BASE, B_HEAD, B_LEDGER_BASE, bTests(), [B_STEP_HEAD, T_NEW]);
+  expect(red.result.red).toContain(`${F} > ${B_STEP_HEAD}`);
+  expect(red.result.problems.some((p) => p.test === B_STEP_HEAD)).toBe(false);
+});
+
+it('[CT-06zzzzzv#15] unchanged rows with non-literal fields — path: SEARCH imported from the same-directory kit, a path made with randomUUID() — are taken by their index and exempt in every run, next to the declared changed literal row', () => {
+  const kit = kitFile();
+  const read = reader({ [F]: NL_BASE, [KIT]: kit }, { [F]: NL_HEAD, [KIT]: kit });
+  for (const uuid of [UUID_A, UUID_B]) {
+    const { expected, result } = judge([F], read, Q_LEDGER, outcomesOf(nlTests(uuid)));
+    expect(expected, uuid).toEqual([F]);
+    expect(result.problems, uuid).toEqual([]);
+    expect(result.ok, uuid).toBe(true);
+    expect(result.red, uuid).toEqual([`${F} > ${T_NEW}`]);
+    const exempt = result.exempt ?? [];
+    for (const name of [N_GET, N_SEARCH, N_CONSENT, linkName(uuid)]) {
+      expect(
+        exempt.some((e) => e.file === F && e.test === name && e.modified !== true),
+        `${uuid}: ${name}`,
+      ).toBe(true);
+    }
+    expect(exempt.filter((e) => e.modified === true).map((e) => e.test)).toEqual([N_STEP]);
+  }
+});
+
+it('[CT-06zzzzzv#16] in the qualifying form a new test next to the table that is green is the only problem, green on the skeleton — it is not taken as the run-time row', () => {
+  for (const uuid of [UUID_A, UUID_B]) {
+    const { result } = judgeF(Q_BASE, Q_HEAD, Q_LEDGER, qTests(uuid), []);
+    expect(result.ok, uuid).toBe(false);
+    expect(
+      result.problems.map((p) => [p.file, p.test]),
+      uuid,
+    ).toEqual([[F, T_NEW]]);
+    expect(result.problems[0]?.reason, uuid).toMatch(/green on the skeleton/);
+    expect(
+      (result.exempt ?? []).some((e) => e.test === T_NEW),
+      uuid,
+    ).toBe(false);
+  }
 });

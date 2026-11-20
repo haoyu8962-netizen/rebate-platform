@@ -4,9 +4,18 @@
 // else differs, red-check leaves the file out as modifiedOnlyFiles says and evidence-check wants a
 // red test of exactly the files red-check runs. Every form still judged as a whole table keeps the
 // declared row unlocated or something else different, and the file expected, in both.
+//
+// D10-2163: under the title with the body the changed row is located by its full name after the
+// change (the base's name does not let the change through, and the file stays expected).
 import { expect, it } from 'vitest';
 import {
   ALL_WHOLE,
+  B_BASE,
+  B_LEDGER_BASE,
+  B_LEDGER_HEAD,
+  B_PLAIN,
+  B_STEP_BASE,
+  B_STEP_HEAD,
   F,
   N_GET,
   N_STEP,
@@ -16,12 +25,14 @@ import {
   Q_LEDGER,
   Q_PLAIN,
   UUID_A,
+  bLinkName,
   compareModifiedBlocks,
   expectedRedFiles,
   linkName,
   modifiedOnlyFiles,
   reader,
   ruleTestsLeftOut,
+  treesOf,
 } from './kit.ts';
 
 const sorted = (list: readonly string[]): string[] => [...list].sort();
@@ -72,11 +83,44 @@ it('[CT-06zzzzzv#13] every form judged as a whole table: the declared row does n
   for (const c of ALL_WHOLE) {
     const declared = c.ledger.modify_existing.map((d) => ('test' in d ? d.test : ''));
     expect(clean(compareModifiedBlocks(c.base, c.plain, declared)), c.name).toBe(false);
-    const read = reader({ [F]: c.base }, { [F]: c.plain, [NEW]: NEW_HEAD });
+    const t = treesOf(c, c.plain);
+    const read = reader(t.base, { ...t.head, [NEW]: NEW_HEAD });
     expect(modifiedOnlyFiles([F], read, c.ledger.modify_existing), c.name).toEqual([]);
     const wanted = expectedRedFiles(files, read, c.ledger, c.ledger.modify_existing);
     const red = ruleTestsLeftOut(files, read, c.ledger).expected;
     expect(sorted(wanted), c.name).toEqual(sorted(files));
     expect(sorted(wanted), c.name).toEqual(sorted(red));
   }
+});
+
+it('[CT-06zzzzzv#21] under the title with the body the changed row is located by its full name after the change (row text withdraw → phone_change), the file left out by both checks; by the base’s name it is not located, and both keep the file', () => {
+  // By the name after the change.
+  const compared = compareModifiedBlocks(B_BASE, B_PLAIN, [B_STEP_HEAD]);
+  expect(clean(compared)).toBe(true);
+  const block = compared.ok ? compared.blocks[0] : undefined;
+  const before = block?.found === true ? block.before : '';
+  const after = block?.found === true ? block.after : '';
+  expect(before).toContain("action: 'withdraw'");
+  expect(before).not.toContain('phone_change');
+  expect(after).toContain("action: 'phone_change'");
+  expect(after).not.toContain("'withdraw'");
+  const read = reader({ [F]: B_BASE }, { [F]: B_PLAIN, [NEW]: NEW_HEAD });
+  const files = [F, NEW];
+  expect(modifiedOnlyFiles([F], read, B_LEDGER_HEAD.modify_existing)).toEqual([
+    { file: F, tests: [B_STEP_HEAD] },
+  ]);
+  const left = ruleTestsLeftOut(files, read, B_LEDGER_HEAD);
+  expect(left.expected).toEqual([NEW]);
+  expect(left.modifiedLeftOut).toEqual([F]);
+  expect(expectedRedFiles(files, read, B_LEDGER_HEAD, B_LEDGER_HEAD.modify_existing)).toEqual([
+    NEW,
+  ]);
+  // By the base's name (or an unchanged / run-time row's): not located, the file kept by both.
+  expect(clean(compareModifiedBlocks(B_BASE, B_PLAIN, [B_STEP_BASE]))).toBe(false);
+  expect(clean(compareModifiedBlocks(B_BASE, B_PLAIN, [bLinkName(UUID_A)]))).toBe(false);
+  expect(modifiedOnlyFiles([F], read, B_LEDGER_BASE.modify_existing)).toEqual([]);
+  const kept = ruleTestsLeftOut(files, read, B_LEDGER_BASE).expected;
+  const wanted = expectedRedFiles(files, read, B_LEDGER_BASE, B_LEDGER_BASE.modify_existing);
+  expect(sorted(kept)).toEqual(sorted(files));
+  expect(sorted(wanted)).toEqual(sorted(kept));
 });
