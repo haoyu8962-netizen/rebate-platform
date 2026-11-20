@@ -12,7 +12,6 @@ import {
   GRANTS,
   MANUAL,
   approvedRows,
-  buttons,
   confirm,
   dialogs,
   failure,
@@ -57,10 +56,15 @@ const PAGE = 'withdrawals';
 const FIRST = accountOf('finance-jia', ADMIN_ID.first, GRANTS);
 const SECOND = accountOf('finance-yi', ADMIN_ID.second, GRANTS);
 
-/** 提现审核 is shown and its list was read after the first `since` requests. */
+/**
+ * 提现审核 is shown and its list was read after the first `since` requests: the list row of the
+ * first withdrawal is on the page (as the frozen manual-paid `mount()` waits). 【批量手动打款】 only
+ * appears once an APPROVED row is ticked (frozen selection.test.ts / flow.test.ts), so it is not
+ * waited for here.
+ */
 async function ready(server: Server, since: number): Promise<void> {
   await waitFor(() => expect(readSince(server.log, since, LIST)).toBe(true));
-  await waitFor(() => expect(buttons(main(), '批量手动打款')).toHaveLength(1));
+  await waitFor(() => expect(rowsOf(main(), server.state[0]!.out_biz_no)).toHaveLength(1));
   await settled(server);
 }
 
