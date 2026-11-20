@@ -1,0 +1,74 @@
+{
+  "risk_note": "Guard change (tools/**, RV2 by path). CT-06zzzzzw merges three follow-ups (FU-SUPPORT-TOKENS-ANGLE-COMMA-MEMBER-START, FU-SUPPORT-TOKENS-QMARK-ANGLE-MEMBER-END, FU-SUPPORT-TOKENS-INSERTED-BRACE-INTERIOR) in tools/guard/lib/support-tokens.ts; every change only tightens the support-file whitelist: a comma inside type-argument angles is not a member separator, the ? of a conditional type and the > closing type parameters <U> of a generic function type are not member ends, and the interior of a newly inserted brace type is checked with member syntax. No existing test changed; support-tokens.test.ts only gains unit tests. Replay of all 1191 historical support-file change pairs on main gives output byte-identical to the base (couli-runs/CT-06zzzzzw/replay/baseline-486e56b.jsonl vs head-impl1.jsonl), so no past legal change is newly refused. Known stricter-than-needed cases left as follow-ups (refuse more, never let more through): an unclosed angle in an inserted member type (FU-SUPPORT-TOKENS-UNCLOSED-ANGLE-INSERT) and a Prettier-wrapped multi-line conditional type inside an inserted brace type (money r1 S2, FU-SUPPORT-TOKENS-MULTILINE-CONDITIONAL).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (approvals 36): money r1 pass, one S2 (fail-closed false refusal of a multi-line conditional type inside an inserted brace type, support-tokens.ts:2252) left as FU-SUPPORT-TOKENS-MULTILINE-CONDITIONAL (couli-runs/CT-06zzzzzw/review-money-r1.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by independent Claude (ledger tester claude-independent), attempt 1; formal red: 4 of 4 red with AssertionError, trusted test-guard passed. spec-test r1 pass with two S2 (controls lacked legal commas inside angles / nested parameter lists); both were made no-false-refusal requirements of the implementation and pinned by its unit tests (couli-runs/CT-06zzzzzw/review-spec-test-r1.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-06zzzzzw",
+  "spec_commit": "d009d65ebfc4167074912fecc465d1b9d53c2a4e",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "red_tests": [
+    "test/spec/ci/support-member-syntax/member-syntax.test.ts > [AC-CT-06zzzzzw#1] a member inserted after a comma inside the angles of type arguments is refused, in a type alias and an interface body; after the member ends it stays allowed",
+    "test/spec/ci/support-member-syntax/member-syntax.test.ts > [AC-CT-06zzzzzw#2] a member inserted after the ? of a conditional type is refused, in a type alias and an interface body; after the member ends, and after an untyped optional member a?, it stays allowed",
+    "test/spec/ci/support-member-syntax/member-syntax.test.ts > [AC-CT-06zzzzzw#3] a member inserted after the type parameters <U> of a generic function type is refused, in a type alias and an interface body; after the member ends it stays allowed",
+    "test/spec/ci/support-member-syntax/member-syntax.test.ts > [AC-CT-06zzzzzw#4] an inserted optional member whose type is a new object type is refused when that object type breaks the member syntax, in a type alias and an interface body; legal object types stay allowed"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d009d65ebfc4167074912fecc465d1b9d53c2a4e",
+      "tree": "1cb72a6e9ecf2cbda884839ed9cf022c3b140db6",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-20T08:01:13Z",
+      "finished_at": "2026-11-20T08:01:19Z",
+      "red_tests": [
+        "test/spec/ci/support-member-syntax/member-syntax.test.ts > [AC-CT-06zzzzzw#1] a member inserted after a comma inside the angles of type arguments is refused, in a type alias and an interface body; after the member ends it stays allowed",
+        "test/spec/ci/support-member-syntax/member-syntax.test.ts > [AC-CT-06zzzzzw#2] a member inserted after the ? of a conditional type is refused, in a type alias and an interface body; after the member ends, and after an untyped optional member a?, it stays allowed",
+        "test/spec/ci/support-member-syntax/member-syntax.test.ts > [AC-CT-06zzzzzw#3] a member inserted after the type parameters <U> of a generic function type is refused, in a type alias and an interface body; after the member ends it stays allowed",
+        "test/spec/ci/support-member-syntax/member-syntax.test.ts > [AC-CT-06zzzzzw#4] an inserted optional member whose type is a new object type is refused when that object type breaks the member syntax, in a type alias and an interface body; legal object types stay allowed"
+      ],
+      "expected": ["test/spec/ci/support-member-syntax/member-syntax.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "862ff78e93fb674f8831c464a77957e217e78de2c09c5d4f50b96593454d34b5"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "455831a74e5613e3c60a69280b2ef3fd3504c147",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}
