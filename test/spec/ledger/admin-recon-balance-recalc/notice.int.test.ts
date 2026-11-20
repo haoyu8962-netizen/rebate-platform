@@ -289,3 +289,209 @@ it('[AC-B2-02x#53] D10-2084：同一差错单两次回正（缓存 −200 → �
     expect(await events(f), '回正不发事件').toEqual([]);
   });
 });
+
+// B2-02xb (claude-independent, B2-02x Codex r5 / r6 S1, D10-2198 / D10-2200): the notice is an
+// insert only — rows the member already has (an older BALANCE_CORRECTED message still unread and its
+// notify log, a message and a log of another code, the notice of an earlier recalculation) stay
+// exactly as they were, every column; the one new message and log are this recalculation's.
+
+it('[AC-B2-02xb#1] 预置旧通知不被改写：会员已有一条未读的旧 BALANCE_CORRECTED 站内信及其通知日志、一条别的 code 的已读站内信及其通知日志 → 重算（可提现变化）后预置的站内信与通知日志逐行全字段原样（旧站内信 read_at 仍为 NULL，通知日志 status / dedupe_key / 时间戳不变），新增恰为本差错单一条站内信（会员、BALANCE_CORRECTED、余额更正）与一条通知日志（会员、BALANCE_CORRECTED、inbox、success、去重键 balance_corrected:<差错单>:<重算后版本>）', async () => {
+  const f = fixture(s);
+  await withRecalcAdmin(f, async (h) => {
+    const m = await plainMember(f, 2500n);
+    const earlier = new Date('2026-11-10T01:00:00.000Z');
+    const read = new Date('2026-11-11T01:00:00.000Z');
+    const oldMessage = crypto.randomUUID();
+    const otherMessage = crypto.randomUUID();
+    const oldLog = crypto.randomUUID();
+    const otherLog = crypto.randomUUID();
+    await f.db
+      .insertInto('inbox_messages')
+      .values([
+        {
+          message_id: oldMessage,
+          app_id: m.appId,
+          user_id: m.userId,
+          code: CODE,
+          title: TITLE,
+          body: '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可用余额由 ¥1 调整为 ¥2。',
+          route: null,
+          read_at: null,
+          row_version: 0,
+          created_at: earlier,
+          updated_at: earlier,
+        },
+        {
+          message_id: otherMessage,
+          app_id: m.appId,
+          user_id: m.userId,
+          code: 'WITHDRAW_PAID',
+          title: '合成旧通知',
+          body: '合成旧通知正文',
+          route: null,
+          read_at: read,
+          row_version: 1,
+          created_at: earlier,
+          updated_at: read,
+        },
+      ])
+      .execute();
+    await f.db
+      .insertInto('notify_logs')
+      .values([
+        {
+          id: oldLog,
+          app_id: m.appId,
+          user_id: m.userId,
+          code: CODE,
+          channel: 'inbox',
+          dedupe_key: `balance_corrected:${crypto.randomUUID()}:3`,
+          planned_at: earlier,
+          sent_at: earlier,
+          status: 'success',
+          row_version: 0,
+          created_at: earlier,
+          updated_at: earlier,
+          suppress_reason: null,
+          sms_biz_id: null,
+        },
+        {
+          id: otherLog,
+          app_id: m.appId,
+          user_id: m.userId,
+          code: 'WITHDRAW_PAID',
+          channel: 'push',
+          dedupe_key: `withdraw_paid:${crypto.randomUUID()}`,
+          planned_at: earlier,
+          sent_at: null,
+          status: 'suppressed',
+          row_version: 2,
+          created_at: earlier,
+          updated_at: read,
+          suppress_reason: 'push_disabled',
+          sms_biz_id: null,
+        },
+      ])
+      .execute();
+    const seeded = await notices(f, m);
+    expect(seeded.inbox.map((row) => row.message_id).sort(), '预置的两条站内信在库').toEqual(
+      [oldMessage, otherMessage].sort(),
+    );
+    expect(seeded.logs.map((row) => row.id).sort(), '预置的两条通知日志在库').toEqual(
+      [oldLog, otherLog].sort(),
+    );
+    expect(
+      seeded.inbox.find((row) => row.message_id === oldMessage),
+      '旧 BALANCE_CORRECTED 未读',
+    ).toMatchObject({ code: CODE, read_at: null });
+
+    await tamper(f, m, { available: 1000n, frozen: 0n, negativeSince: null });
+    const diff = await seedMismatch(f, m);
+    await expectRecalculated(f, await h.recalc(diff.id, { reason: '旧通知在库' }), {
+      m,
+      before: { available: 1000n, frozen: 0n },
+      after: { available: 2500n, frozen: 0n },
+      changed: true,
+    });
+    const version = (await cacheOf(f, m)).version;
+
+    const after = await notices(f, m);
+    const oldInbox = new Set(seeded.inbox.map((row) => row.message_id));
+    const oldLogs = new Set(seeded.logs.map((row) => row.id));
+    expect(
+      after.inbox.filter((row) => oldInbox.has(row.message_id)),
+      '预置站内信逐行全字段原样（read_at 仍为 NULL）',
+    ).toEqual(seeded.inbox);
+    expect(
+      after.logs.filter((row) => oldLogs.has(row.id)),
+      '预置通知日志逐行全字段原样',
+    ).toEqual(seeded.logs);
+    const freshInbox = after.inbox.filter((row) => !oldInbox.has(row.message_id));
+    const freshLogs = after.logs.filter((row) => !oldLogs.has(row.id));
+    expect(freshInbox, '新增恰好一条站内信').toHaveLength(1);
+    expect(freshInbox[0]).toMatchObject({
+      app_id: m.appId,
+      user_id: m.userId,
+      code: CODE,
+      title: TITLE,
+      read_at: null,
+    });
+    expect(freshLogs, '新增恰好一条通知日志').toHaveLength(1);
+    expect(freshLogs[0]).toMatchObject({
+      app_id: m.appId,
+      user_id: m.userId,
+      code: CODE,
+      channel: 'inbox',
+      status: 'success',
+      dedupe_key: dedupeKey(diff.id, version),
+    });
+  });
+});
+
+it('[AC-B2-02xb#2] 同一会员连续两次重算（两次可提现都变）：第一次写的站内信与通知日志在第二次之后逐行全字段原样，第二次新增恰为一条站内信与一条通知日志，去重键 balance_corrected:<第二张差错单>:<第二次重算后版本>', async () => {
+  const f = fixture(s);
+  await withRecalcAdmin(f, async (h) => {
+    const m = await plainMember(f, 800n);
+    const start = await tamper(f, m, { available: 100n, frozen: 0n, negativeSince: null });
+    const firstDiff = await seedMismatch(f, m);
+    await expectRecalculated(f, await h.recalc(firstDiff.id, { reason: '第一次' }), {
+      m,
+      before: { available: 100n, frozen: 0n },
+      after: { available: 800n, frozen: 0n },
+      changed: true,
+    });
+    const once = await notices(f, m);
+    expect(once.logs, '第一次一条通知日志').toHaveLength(1);
+    expect(once.inbox, '第一次一条站内信').toHaveLength(1);
+    expect(once.logs[0]).toMatchObject({
+      dedupe_key: dedupeKey(firstDiff.id, start.version + 1n),
+    });
+
+    await tamper(f, m, { available: 300n, frozen: 0n, negativeSince: null });
+    // recon_diffs_business_key is UNIQUE (app_id, type, period, ref_id): the second difference of the
+    // same account is the next day's check (kit PERIOD 2026-11-17 → 2026-11-18).
+    const nextPeriod = '2026-11-18';
+    const secondDiff = await seedMismatch(f, m, {
+      period: nextPeriod,
+      resolution: { source: 'ledger_daily_check', accounting_date: nextPeriod, invariant: '01' },
+    });
+    expect(secondDiff.id, '第二张差错单').not.toBe(firstDiff.id);
+    await expectRecalculated(f, await h.recalc(secondDiff.id, { reason: '第二次' }), {
+      m,
+      before: { available: 300n, frozen: 0n },
+      after: { available: 800n, frozen: 0n },
+      changed: true,
+    });
+    const version = (await cacheOf(f, m)).version;
+    expect(version, '第二次 version 再 +1').toBe(start.version + 2n);
+
+    const twice = await notices(f, m);
+    const firstInbox = new Set(once.inbox.map((row) => row.message_id));
+    const firstLogs = new Set(once.logs.map((row) => row.id));
+    expect(
+      twice.inbox.filter((row) => firstInbox.has(row.message_id)),
+      '第一次的站内信逐行全字段原样',
+    ).toEqual(once.inbox);
+    expect(
+      twice.logs.filter((row) => firstLogs.has(row.id)),
+      '第一次的通知日志逐行全字段原样',
+    ).toEqual(once.logs);
+    const freshInbox = twice.inbox.filter((row) => !firstInbox.has(row.message_id));
+    const freshLogs = twice.logs.filter((row) => !firstLogs.has(row.id));
+    expect(freshInbox, '第二次新增恰好一条站内信').toHaveLength(1);
+    expect(freshInbox[0]).toMatchObject({
+      user_id: m.userId,
+      code: CODE,
+      title: TITLE,
+      read_at: null,
+    });
+    expect(freshLogs, '第二次新增恰好一条通知日志').toHaveLength(1);
+    expect(freshLogs[0]).toMatchObject({
+      user_id: m.userId,
+      code: CODE,
+      channel: 'inbox',
+      status: 'success',
+      dedupe_key: dedupeKey(secondDiff.id, version),
+    });
+  });
+});
