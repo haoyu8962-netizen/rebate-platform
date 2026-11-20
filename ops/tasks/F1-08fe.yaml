@@ -9,7 +9,7 @@ type: impl
 refs: [BR-FUND-16, BR-FUND-12]
 refs_hash:
   BR-FUND-16: 077f6d412d5a
-  BR-FUND-12: 8d69aa9c2ca9
+  BR-FUND-12: c685237ab670
 deps: [F1-08fa, F1-08cd]
 paths:
   - 'apps/admin/src/pages/ledger/**'

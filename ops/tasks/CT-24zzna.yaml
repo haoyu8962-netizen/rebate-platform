@@ -8,7 +8,7 @@ type: contract
 # 另把 B2-02x 已定的另外三项写进说明（D10-2032）：negative_since 沿用入账路径同一规则（重算后 < 0 且重算前也 < 0 有值则沿用，重算后 < 0 而重算前 ≥ 0 取当天会计日，重算后 ≥ 0 置 NULL）；不推送钱包变更；有变化时 version + 1（按 version CAS），前后相同不写余额行、version 不变（审计照写）。
 refs: [BR-FUND-19, BR-FUND-16]
 refs_hash:
-  BR-FUND-19: 34f619112535
+  BR-FUND-19: a918eec09fff
   BR-FUND-16: 077f6d412d5a
 contract_sections: ['11.1']
 deps: [CT-24zzn]

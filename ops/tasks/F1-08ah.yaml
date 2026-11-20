@@ -8,10 +8,10 @@ type: impl
 # 资金页面（apps/admin/src/**/withdrawals/** 属 RV2）：规则测试 Codex 写、独立 Claude 审；实现 Claude Opus；代码评审 money。写操作每次 StepUpModal（totp 档，BR-ID-34），提交中禁用、对话框保留，CAS / 状态已变（20902）提示后刷新；按钮按状态与权限点隐藏不置灰（规格 §6）；金额只经 @couli/money。任务书带 D10-1477（本机不裸跑全量检查）、D10-1503（推送前测试机 verify:fast）。
 refs: [BR-WDR-05, BR-WDR-10, BR-TEXT-08, BR-ID-34]
 refs_hash:
-  BR-WDR-05: 99e2e2654ce0
+  BR-WDR-05: 32894d40942c
   BR-WDR-10: 1db6b508e224
   BR-TEXT-08: b3178ff2da40
-  BR-ID-34: 6a2bdd4ca3ce
+  BR-ID-34: 6f4bb7f212cb
 deps: []
 paths:
   - 'apps/admin/src/pages/withdrawals/**'

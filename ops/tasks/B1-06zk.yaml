@@ -8,7 +8,7 @@ type: impl
 # 规则测试新目录 test/spec/linking/merge-pdd-open-tombstone/**，新鲜独立 Claude 写；spec-test 新鲜独立 Claude（D10-1080）；money 评审 Codex medium（D10-1075）。RV2。deps：B1-06zi（同一路径的备案读写）、B1-20c（userTombstonedOn）。
 refs: [BR-ID-06]
 refs_hash:
-  BR-ID-06: 379a6a53b315
+  BR-ID-06: c7cd53a04cae
 deps: [B1-06zi, B1-20c]
 paths:
   - 'apps/api/src/modules/linking/application/pdd-authority.ts'

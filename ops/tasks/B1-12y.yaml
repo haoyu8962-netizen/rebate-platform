@@ -8,7 +8,7 @@ type: impl
 # 受理后 BizId 写进对应 notify_logs 行的回执编号列（BR-TEXT-20、04 §3）；SMS_CODE 不写 notify_logs（identity 自有发送记录）。超时仍记 unknown 不重发（B1-12w）。
 refs: [BR-TEXT-20]
 refs_hash:
-  BR-TEXT-20: f1a1f1898b2d
+  BR-TEXT-20: 009a57b78f99
 deps: [B1-12w, B1-12x]
 paths:
   - 'apps/api/src/modules/notification/sms/**'

@@ -7,7 +7,7 @@ type: test-change
 # 2026-11-05 改 tester: none、去 test_paths：有它们时 evidence-check 要求先红，这组用例实现前后都绿，红不了（同 B2-09o）。
 refs: [BR-WDR-05]
 refs_hash:
-  BR-WDR-05: 99e2e2654ce0
+  BR-WDR-05: 32894d40942c
 deps: [B2-09p]
 paths:
   - 'test/spec/payout/went-negative-lock-order/**'

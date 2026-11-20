@@ -6,7 +6,7 @@ type: contract
 # 2026-11-02 编排：SPEC_REF 升到 couli 7acc096（含 #256），refs 补 BR-TEXT-25。
 refs: [BR-TEXT-25]
 refs_hash:
-  BR-TEXT-25: d3e9134dcc9e
+  BR-TEXT-25: 6ef805a6fd94
 contract_sections: ['11.1']
 deps: []
 paths:

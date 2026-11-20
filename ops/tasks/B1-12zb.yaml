@@ -8,7 +8,7 @@ type: impl
 # 冻结列全集测试（B1-12e send-log、B1-12f template-override、B1-12x sms-channel / sms-pending）只把新列补进列全集、其余不动（第一类保护路径，#24 由编排核对）。
 refs: [BR-TEXT-20]
 refs_hash:
-  BR-TEXT-20: f1a1f1898b2d
+  BR-TEXT-20: 009a57b78f99
 deps: [B1-12z, B1-12x]
 paths:
   - 'db/migrations/**'

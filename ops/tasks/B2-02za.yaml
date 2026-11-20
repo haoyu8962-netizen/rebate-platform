@@ -13,7 +13,7 @@ type: test-change
 # 8 行去掉 retitle_to、test 名照主干原名；标题用词与断言不一致登 FU-B202ZA-EACH-TITLE-WORD。
 refs: [BR-TEXT-19]
 refs_hash:
-  BR-TEXT-19: 49112cf6e025
+  BR-TEXT-19: 833dc40d2edc
 deps: [B2-02z]
 paths:
   - 'test/spec/notification/balance-corrected/texts.ts'

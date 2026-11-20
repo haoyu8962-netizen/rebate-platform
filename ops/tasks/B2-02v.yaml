@@ -8,7 +8,7 @@ type: impl
 # 规则 fund: 'true'、severity critical。for 取 0m：BR-FUND-19 明写 5 分钟内，通用 for 5m 加抓取与缓存会超过；冻结 [AC-B1-01zzi#4] 要求一律 5m，只对这一条例外，#24 编排核。无迁移、无契约。
 refs: [BR-FUND-19]
 refs_hash:
-  BR-FUND-19: 34f619112535
+  BR-FUND-19: a918eec09fff
 deps: []
 paths:
   - 'apps/api/src/modules/ledger/application/credit-postcheck-open-read*.ts'

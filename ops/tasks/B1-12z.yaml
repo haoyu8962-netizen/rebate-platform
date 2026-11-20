@@ -7,7 +7,7 @@ type: impl
 # 跨模块只经导出（GT-23bgm S1）：content/index.ts 导出既有 BR-TEXT-12 / 13 校验与资金术语键判定（不抄一份）；admin/index.ts 导出只读端口取操作人验证手机号（admin_users 属 admin，不直读表）。 实现即把 CT-24t 的六个后台操作去掉 planned（照 B2-15b 先例，codegen 重生成物）。
 refs: [BR-TEXT-20, BR-ID-45, BR-ID-05]
 refs_hash:
-  BR-TEXT-20: f1a1f1898b2d
+  BR-TEXT-20: 009a57b78f99
   BR-ID-45: 0b4839cbc54b
   BR-ID-05: 0737ee3b67e2
 deps: [CT-24t, B1-12x, B1-12y]

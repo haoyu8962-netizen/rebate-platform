@@ -7,7 +7,7 @@ type: contract
 # 权限点源文件 specs/permissions.yaml 加 notify.channels（step_up_tier totp），由 codegen 重生 permissions.gen.ts，不手改生成物；冻结预言 expected.ts 由 CT-24u 先放行（GT-23bgm S1）。D10-335 / 337 / 339：20001 补 reason notify_channel_locked / notify_preview_vars_mismatch / notify_code_ttl_mismatch（08 已登记，同步 error-codes.yaml）；编码字段同步 notify_template.code 枚举（含 DATA_COPY_READY / DATA_COPY_CODE）；补待测试登记、测试结果、启用 / 重新测试 / 放弃动作与短信就绪标志。
 refs: [BR-TEXT-20, BR-ID-45]
 refs_hash:
-  BR-TEXT-20: f1a1f1898b2d
+  BR-TEXT-20: 009a57b78f99
   BR-ID-45: 0b4839cbc54b
 contract_sections: ['11.2']
 deps: [CT-24q, CT-24u]

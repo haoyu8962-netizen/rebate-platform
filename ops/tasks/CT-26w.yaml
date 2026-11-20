@@ -6,7 +6,7 @@ type: contract
 # 规则测试钉：八键都在 texts.default.json、非空、不含数字与 BR-TEXT-13 禁用词、在 fund-term-keys 里归类；不钉具体措辞（等 08 回写）。
 refs: [BR-TEXT-01, BR-TEXT-13]
 refs_hash:
-  BR-TEXT-01: e4ef1bcb1985
+  BR-TEXT-01: 0a949bfde1bf
   BR-TEXT-13: 225ce1a6f17e
 deps: []
 paths:

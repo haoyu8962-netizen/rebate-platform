@@ -8,8 +8,8 @@ type: impl
 # 2026-11-15 补丁 1（fe，同 D10-1733）：F1-08cb 的 entry.test.ts 与 F1-08cc 测试目录里对超管（持全部权限点，含 fund.writeoff）写死的写入口清单，随本单落地改为「恰为当时已落地的入口」（严格相等，加入【批准核销】），另补反向用例（无 fund.writeoff 看不到批准核销）；先列进 test_paths，只改入口清单用例块。modify_existing（rule_change，br BR-FUND-12，ruling D10-1733）等这些文件随 F1-08cb / cc 进主干后另开补丁登记。
 refs: [BR-FUND-12, BR-ID-34]
 refs_hash:
-  BR-FUND-12: 8d69aa9c2ca9
-  BR-ID-34: 6a2bdd4ca3ce
+  BR-FUND-12: c685237ab670
+  BR-ID-34: 6f4bb7f212cb
 deps: [F1-08cc]
 paths:
   - 'apps/admin/src/pages/adjustments/**'

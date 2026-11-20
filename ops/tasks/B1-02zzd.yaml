@@ -10,8 +10,8 @@ type: impl
 # BR-ID-04 细则受限登录「查不到账号」不保存令牌的既有口径不变（不在本单）。生产 Apple revoker 未配置与注销主流程同为既有状态，不在本单。
 refs: [BR-ID-27, BR-ID-28]
 refs_hash:
-  BR-ID-27: ae0901d32567
-  BR-ID-28: 205ab4bdd1d4
+  BR-ID-27: b6a7f00720b4
+  BR-ID-28: 0723f447192c
 deps: [B1-02zw, B1-02zy]
 paths:
   - 'apps/api/src/modules/identity/application/oauth-login.ts'

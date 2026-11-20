@@ -10,7 +10,7 @@ type: contract
 # hold_reason、item result、batch kind 的后台中文名 BR-TEXT-25 没有行：契约只给编码，不在契约里造中文名；中文名待规划回写（编排记）。
 refs: [BR-WDR-12, BR-WDR-14, BR-WDR-17]
 refs_hash:
-  BR-WDR-12: 37adcd14e97f
+  BR-WDR-12: 3a822658ab35
   BR-WDR-14: 6328f3cda2e6
   BR-WDR-17: f6119a685e00
 contract_sections: ['11.1']

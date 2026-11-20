@@ -9,8 +9,8 @@ type: impl
 # 2026-11-19 be：D10-2084 ③——标题里「voucherId 允许为空」半句作废：选（甲），voucherId 保持必填 string、只改注释，payout 零改动，冻结 back-to-nonnegative/kit.ts 未碰。
 refs: [BR-FUND-12, BR-WDR-05]
 refs_hash:
-  BR-FUND-12: 8d69aa9c2ca9
-  BR-WDR-05: 99e2e2654ce0
+  BR-FUND-12: c685237ab670
+  BR-WDR-05: 32894d40942c
 deps: []
 paths:
   - 'apps/api/src/modules/ledger/application/ledger.ts'

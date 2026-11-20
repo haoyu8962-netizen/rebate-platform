@@ -8,7 +8,7 @@ type: contract
 # 契约槽：openapi 类，w1 持槽（D10-1677）；与 B1-02zzzc 同槽，本单先、B1-02zzzc 后。
 refs: [BR-TEXT-14, BR-ID-33]
 refs_hash:
-  BR-TEXT-14: 64dbe29dc97c
+  BR-TEXT-14: dd8fad131e0d
   BR-ID-33: 01b25f773b29
 deps: []
 paths:

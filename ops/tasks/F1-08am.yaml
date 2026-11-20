@@ -10,9 +10,9 @@ type: impl
 # 2026-11-20 补丁 2（fe，同 F1-08cc 先例）：正式先红 red-check 把 readonly.test.ts 整份判定（helpers.ts import 链不闭合），未改的 [AC-F1-08a-READONLY#1] / [#3] 在骨架上绿被记 2 个问题；按 red_exempt 登记这两条，块体未改。
 refs: [BR-WDR-12, BR-WDR-16, BR-ID-34]
 refs_hash:
-  BR-WDR-12: 37adcd14e97f
+  BR-WDR-12: 3a822658ab35
   BR-WDR-16: c5899cc85558
-  BR-ID-34: 6a2bdd4ca3ce
+  BR-ID-34: 6f4bb7f212cb
 deps: [F1-08al]
 paths:
   - 'apps/admin/src/pages/withdrawals/**'

@@ -8,7 +8,7 @@ type: impl
 # 必须复用：B1-12b 的 session-bindings（绑定代际、条件更新）、platform 的会话 / 设备头解析与 Clock、配置读取现有做法；不读 process.env。子模块不从 notification/index.ts 导入。
 refs: [BR-ID-07]
 refs_hash:
-  BR-ID-07: 4f2a4bdf0a2a
+  BR-ID-07: 365206f04062
 deps: [B1-12b, CT-15j]
 paths:
   - 'apps/api/src/modules/notification/**'

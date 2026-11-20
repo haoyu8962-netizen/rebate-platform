@@ -19,9 +19,9 @@ type: test-change
 refs: [BR-FUND-24, BR-FUND-19, BR-WDR-23, BR-ID-34]
 refs_hash:
   BR-FUND-24: 0f1a6ecb3334
-  BR-FUND-19: 34f619112535
+  BR-FUND-19: a918eec09fff
   BR-WDR-23: 98981fee10c7
-  BR-ID-34: 6a2bdd4ca3ce
+  BR-ID-34: 6f4bb7f212cb
 deps: [F1-08ee]
 paths:
   - 'test/spec/frontend/admin-recon-adjust-restore/eec/**'
