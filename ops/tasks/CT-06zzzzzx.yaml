@@ -2,15 +2,15 @@ id: CT-06zzzzzx
 repo: rebate-platform
 title: 'CT-06zzzzzx：账务单一写入点守卫——除记账写入点与重算用例外，任何文件写 ledger_entries / ledger_vouchers / account_balances 就不让合并（D10-2219）'
 type: guard-change
-# 2026-11-20 w1 入账（编排 D10-2219：负责人 16:24 账本复审三题定 B 后，编排要的自动检查；排在 B1-20b 之后）。依据 AGENTS.md §4 第 2 条「只有 ledger 模块改余额」、BR-FUND-16 分录只插入。
+# 2026-11-20 w1 入账（编排 D10-2219：负责人 16:24 账本复审三题定 B 后，编排要的自动检查；排在 B1-20b 之后；D10-2223 deps 加 B2-02x）。依据 AGENTS.md §4 第 2 条「只有 ledger 模块改余额」、BR-FUND-16 分录只插入。
 # 做法：tools/guard 新增一个静态守卫并挂进 run.ts static（guard:static 已在 CI 的 verify-static 里跑，不动 package.json scripts 与 .github）。扫描全仓已跟踪的 .ts / .sql（node_modules、生成物除外），找对三张表的写语句：Kysely insertInto / updateTable / deleteFrom / mergeInto / replaceInto（表名带不带 app.、带不带别名），以及 sql 模板与 .sql 文件里的 INSERT INTO / UPDATE / DELETE FROM / MERGE INTO / TRUNCATE / COPY … FROM（不分大小写、跨行）。建分区等 DDL 不算写（packages/db/src/partitions.ts 照旧）。
-# 放行清单（随守卫入库，逐行写文件与理由）：apps/api/src/modules/ledger/infra/store.ts（11-20 主干唯一的写语句所在）；ledger/application/ledger.ts 只在确有写语句时列入；重算用例的文件随 B2-02x 合并后的实际路径列入（本单若先于 B2-02x 合并，清单先不列，B2-02x 落地时由编排另开门禁小单加一行，见下）；已合并迁移 db/migrations/0054_ledger-user-accounts-backfill.sql（只增不改，留存历史）。新迁移写这三张表一律拦。
+# 放行清单（随守卫入库，逐行写文件与理由）：apps/api/src/modules/ledger/infra/store.ts（11-20 主干唯一的写语句所在）；ledger/application/ledger.ts 只在确有写语句时列入；重算用例（B2-02x，D10-2223 定乙：本单 deps 含 B2-02x，等它合并后开工，清单一次列全）——若它经 ledger/infra/store.ts 已有或新增的函数写 account_balances，清单不另加；若 admin-recon-diff-balance-recalc*.ts 等文件自己有写语句，按合并后的实际文件列入，理由写「只把缓存改成分录合计、不能填金额」；已合并迁移 db/migrations/0054_ledger-user-accounts-backfill.sql（只增不改，留存历史）。新迁移写这三张表一律拦。
 # 测试夹具豁免按清单（目录级，逐条列出，不用 test/** 通配）：11-20 主干直写这三张表的测试在 test/spec 下 24 个文件、19 个目录（db/ledger/{backfill,core}、ledger/{admin-fund-ledger,admin-ledger-read,daily-check,posting,wallet-ledger,wallet-summary}、identity/{bind-phone-merge-conditions,deletion-expiry,deletion-progress-message,deletion-request,reverify-gates}、growth/{admin-invite-rewards,invite-reward}、payment/recon、risk/appeal-restore、settlement/union-receipts-schema、agent/write-scope）；写测前以主干实扫为准。只豁免 test/spec 与 packages/testing 下列出的目录，apps / packages 里的 *.test.ts 不豁免（单元测试不连库，不该有写语句）。
 # 报错写清文件:行、命中的表与写法、怎么办（「只能经 ledger 模块记账函数；确需新增写入点要门禁改动并经负责人」）。已知限制如实写进守卫头注释：表名由变量或 sql.table / sql.id 拼出时认不出（实现时顺带扫一遍主干确认没有这种写法）。
 # 门禁改动：合并要 owner-approved 标签（approvals 16，编排加）；改的是只收紧的新守卫，不放宽任何现有检查。tester codex（Codex 可用；写测后 spec-test 由独立 Claude，approvals 19），评审 money。
 refs: []
 refs_hash: {}
-deps: [B1-20b]
+deps: [B1-20b, B2-02x]
 paths:
   - 'tools/guard/{ledger-writers.ts,ledger-writers.test.ts,ledger-writers.allow.txt,run.ts}'
   - 'ops/tasks/CT-06zzzzzx.yaml'
