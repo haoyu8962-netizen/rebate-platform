@@ -62,7 +62,7 @@ export const FILES = {
   '02': '02_voucher-balanced.sql',
   '03': '09_credit-unique-net.sql',
   '05': '05_union-receivable.sql',
-  '07': '07_negative-balance-drops.sql',
+  '07': '11_negative-balance-drops-by-amount.sql',
   '08': '10_invalid-still-credited-since-restore.sql',
   'pay-01': 'pay-01_voucher-no-user-balance.sql',
   'pay-04': 'pay-04_suspense-equals-open-anomalies.sql',

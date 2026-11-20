@@ -8,5 +8,10 @@
     "file": "08_invalid-still-credited.sql",
     "replaced_by": "10_invalid-still-credited-since-restore.sql",
     "reason": "BR-FUND-19 ⑧ 与 BR-FUND-22：P7 后经平台恢复 R12 / R13 合法回到 CREDITED 的子订单，旧 08 因仍有成功的 INVALID_AFTER_SETTLE 记录而报假差异；10 只计 updated_at 不早于该单最后一次 R12 / R13（order_status_history 中 field = rebate、event = ADMIN_RESTORE、from_status 为 VOID / CLAWED_BACK 的 max(at)）的成功记录，从未恢复的单全部计入，platform_status = INVALID 一支不受恢复截断；其余口径、account / global 两种行与 detail 形状照旧，输出编号仍为 08。"
+  },
+  {
+    "file": "07_negative-balance-drops.sql",
+    "replaced_by": "11_negative-balance-drops-by-amount.sql",
+    "reason": "BR-FUND-19 ⑦：07 用 LAG 把分录 balance_after_fen 与同子户前一条比，而 balance_after_fen 取自过账时的余额缓存；缓存按分录重算后，下调会使下一笔正常入账被误报为「降到负且下降」（全量历史查询，此后每天再报），上调会使真实扣款漏报。11 改按本凭证在该（账户、子户）的 amount_fen 合计 > 0（余额下降）且该条 balance_after_fen < 0 判，只报组内按 (account_version, id) 排第一的那条，白名单类型与 :REASSIGN_REV: 豁免作用在那一条上；无重算历史时与 07 逐行等价，detail 形状与输出编号 07 不变。"
   }
 ]
