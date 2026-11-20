@@ -373,11 +373,16 @@ it(
   async () => {
     const decided = samples().find((one) => one.review_mode === 'auto')?.auto_decision;
     expect(decided?.result, 'fixture: an auto decision').toBe('auto');
+    // Created 2026-11-19 10:58:00 +08:00 (row 1), decided and reviewed by the system right after.
     const blocked = row(1, 'APPROVED', 1234567, 'alipay', {
       review_mode: 'auto',
-      auto_decision: { ...decided!, execute_blocked: 'queue_paused' },
+      auto_decision: {
+        ...decided!,
+        decided_at: '2026-11-19T10:58:05+08:00',
+        execute_blocked: 'queue_paused',
+      },
       reviewer_id: null,
-      reviewed_at: decided!.decided_at,
+      reviewed_at: '2026-11-19T10:58:06+08:00',
       batch_id: null,
       batch: null,
       batch_items: [],
