@@ -135,6 +135,7 @@ function rebatchRows(): Record<'a' | 's' | 'r' | 'p', Withdrawal> {
         decided_at: '2026-11-19T10:57:01+08:00',
         execute_blocked: 'channel_disabled',
       },
+      reviewed_at: '2026-11-19T10:57:01+08:00',
       batch_id: OLD_AUTO,
       batch: { batch_id: OLD_AUTO, kind: 'auto', created_at: '2026-11-19T10:57:01+08:00' },
       batch_items: [
@@ -149,6 +150,19 @@ function rebatchRows(): Record<'a' | 's' | 'r' | 'p', Withdrawal> {
       payout_attempts: [],
     }),
     r: row(3, 'APPROVED', 20000, 'alipay', {
+      auto_decision: {
+        result: 'manual',
+        failed_conditions: ['max_amount', 'risk_flag:first_withdrawal'],
+        warn_values: {
+          high_commission_order_ratio_bp: 1200,
+          invalid_ratio_bp: 300,
+          withdraw_received_ratio_bp: 4500,
+        },
+        rule_version: 3,
+        decided_at: '2026-11-19T10:56:01+08:00',
+        execute_blocked: null,
+      },
+      reviewed_at: '2026-11-19T10:56:05+08:00',
       hold_reason: 'daily_cap',
       hold_at: '2026-11-19T10:56:20+08:00',
       executor_id: null,
