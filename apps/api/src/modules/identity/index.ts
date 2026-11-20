@@ -280,7 +280,11 @@ export type {
   InitialLevelLogEntry,
   RecordInitialLevel,
 } from './application/initial-level-log.ts';
-export type { AccountAssetsPort, AccountRiskPort } from './application/bind-phone.ts';
+export type {
+  AccountAssetsPort,
+  AccountRiskPort,
+  PhoneChangeAuditPort,
+} from './application/bind-phone.ts';
 // B1-20c: the account merge's cross-module ports (POST /v1/auth/merge), assembled by app.module.
 export type { AccountMergePort } from './application/merge-conditions.ts';
 // Stage ⑫ step-up check (BR-ID-08, B1-02y): app.module hands the check to RiskModule; the handlers

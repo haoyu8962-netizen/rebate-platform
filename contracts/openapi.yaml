@@ -48713,6 +48713,7 @@ components:
         - system:payout
         - system:ledger
         - system:settlement
+        - system:self_service
     AdminAuditLogListItem:
       type: object
       additionalProperties: false

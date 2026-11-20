@@ -33,6 +33,11 @@
 // client fingerprint; WeChat takes the attempt_id. An Alipay logon id that cannot be normalised
 // has no fingerprint → 20001 data.fields=[summary]. The digest and the account are never logged.
 //
+// Phone change switch (B1-20b, BR-ID-06 细则「第 1 步就返回 30414」, D10-2189): action=phone_change
+// while account.phone_change_enabled is the boolean false → 30414, after 10405 (stage ④a, before
+// this service) and the 10403 app check, before the summary, the code or the attempt is read,
+// checked or consumed (no error counted). Without the switch option the change counts as on.
+//
 // Also compiled by the `test` project: erasable syntax only, `import type` for types, `.ts`
 // relative imports, no decorators.
 import { randomUUID } from 'node:crypto';
@@ -54,6 +59,7 @@ import {
 import { STEP_UP_AUDIENCE, signScopedToken, type TokenKeyProvider } from './access-tokens.ts';
 import { configuredSeconds, instantPlus } from './config-seconds.ts';
 import type { OauthAttemptService } from './oauth-attempts.ts';
+import { PHONE_CHANGE_DISABLED, type PhoneChangeSwitch } from './phone-change-switch.ts';
 import {
   STAGING_TEST_PHONE_AUDIT_EVENT,
   type SmsCodeService,
@@ -92,7 +98,7 @@ export interface StepUpCommand {
 
 export type StepUpResult =
   | { readonly code: 0; readonly data: Schema<'StepUpData'> }
-  | { readonly code: 10403 | 20002 | 20003 | 50001 }
+  | { readonly code: 10403 | 20002 | 20003 | 30414 | 50001 }
   | { readonly code: 20001; readonly data: { readonly fields: readonly string[] } }
   | { readonly code: 20004; readonly data?: { readonly reason: 'identity_mismatch' } }
   | { readonly code: 50305; readonly data: { readonly provider: Schema<'LoginProvider'> } };
@@ -110,6 +116,8 @@ export interface StepUpOptions {
   readonly sms: SmsCodeService;
   readonly attempts: OauthAttemptService;
   readonly thirdPartyIdentity?: ThirdPartyIdentityPort;
+  /** account.phone_change_enabled (B1-20b); absent → on. */
+  readonly phoneChange?: PhoneChangeSwitch;
   /**
    * B1-02zza (D10-611): where the pino audit line of a staging test phone's step-up goes
    * (event staging_test_phone_login, purpose step_up). identity.module passes the root logger.
@@ -367,6 +375,14 @@ export function createStepUpService(options: StepUpOptions): StepUpService {
       // principal.app_id is that checked app_id (attempt keys, users, user_oauth, the token).
       if (principal.app_id !== verifiedDevice.appId) return { code: 10403 };
       const body = command.body as SmsBody | OauthBody;
+      const { phoneChange } = options;
+      if (
+        body.action === 'phone_change' &&
+        phoneChange !== undefined &&
+        !(await phoneChange.enabled(principal.app_id))
+      ) {
+        return PHONE_CHANGE_DISABLED;
+      }
       // B1-02zzzb: the summary before either way reads, checks or consumes anything.
       const digest = stepUpDigest(crypto, body.action, body.summary);
       if (digest.code !== 0) return digest;

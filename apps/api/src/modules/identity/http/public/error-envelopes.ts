@@ -14,6 +14,7 @@ const MESSAGES: Readonly<Record<number, string>> = Object.freeze({
   20002: '验证码错误，请重新输入',
   20003: '验证码已失效，请重新获取',
   20004: '授权未完成，请重新授权',
+  30414: '暂不支持自助更换手机号，请联系客服',
   30415: '本月昵称修改次数已用完，下月可再修改',
   50001: '服务端错误',
   50305: '该登录方式暂时不可用，请稍后再试或改用其他登录方式',
@@ -29,13 +30,14 @@ const STATUSES: Readonly<Record<number, number>> = Object.freeze({
   20002: 400,
   20003: 400,
   20004: 400,
+  30414: 422,
   30415: 422,
   50001: 500,
   50305: 503,
 });
 
 export type IdentityFailure =
-  | { readonly code: 10001 | 10002 | 10403 | 20002 | 20003 | 30415 | 50001 }
+  | { readonly code: 10001 | 10002 | 10403 | 20002 | 20003 | 30414 | 30415 | 50001 }
   | { readonly code: 20001; readonly data: { readonly fields: readonly string[] } }
   | { readonly code: 20001; readonly data: { readonly reason: 'nickname_sensitive' } }
   | { readonly code: 20004; readonly data?: { readonly reason: 'identity_mismatch' } }

@@ -13,6 +13,7 @@
 //     token unbinding of B1-12b, push-tokens.ts unbindRevoked); a failing hook rolls the
 //     revocation back with the caller's transaction.
 // The refresh reuse detection (refresh.ts) revokes one sid with revokeSession and the same hook.
+// The self-service phone change (B1-20b) revokes every session of the user but its own sid.
 //
 // Also compiled by the `test` project: erasable syntax only, `import type` for type-only imports.
 import type { DB } from '@couli/db';
@@ -62,17 +63,18 @@ async function revokeWhere(
   value: string,
   clock: Clock,
   afterRevoked: AfterSessionsRevoked | undefined,
+  keepSid?: string,
 ): Promise<string[]> {
   checkReason(input.reason);
   const now = clock.now();
-  const rows = await trx
+  let update = trx
     .updateTable('sessions')
     .set({ revoked_at: now, revoke_reason: input.reason, updated_at: now })
     .where('app_id', '=', input.app_id)
     .where(column, '=', value)
-    .where('revoked_at', 'is', null)
-    .returning('sid')
-    .execute();
+    .where('revoked_at', 'is', null);
+  if (keepSid !== undefined) update = update.where('sid', '<>', keepSid);
+  const rows = await update.returning('sid').execute();
   const sids = rows.map((row) => row.sid);
   if (sids.length > 0 && afterRevoked !== undefined) {
     await afterRevoked(trx, sids, { app_id: input.app_id });
@@ -97,4 +99,20 @@ export async function revokeSessionsByDevice(
   afterRevoked?: AfterSessionsRevoked,
 ): Promise<string[]> {
   return revokeWhere(trx, input, 'device_id', input.device_id, clock, afterRevoked);
+}
+
+/**
+ * Every session of the user except `keep_sid` (B1-20b, D10-2192: a self-service phone change keeps
+ * the session that made it). Caller owns the transaction; the hook joins it.
+ */
+export async function revokeOtherSessionsOfUser(
+  trx: Transaction<DB>,
+  input: { app_id: string; user_id: string; keep_sid: string; reason: SessionRevokeReason },
+  clock: Clock,
+  afterRevoked?: AfterSessionsRevoked,
+): Promise<string[]> {
+  if (typeof input.keep_sid !== 'string' || input.keep_sid.length === 0) {
+    throw new TypeError('identity: revoking the other sessions needs the session to keep');
+  }
+  return revokeWhere(trx, input, 'user_id', input.user_id, clock, afterRevoked, input.keep_sid);
 }

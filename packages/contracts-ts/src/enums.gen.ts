@@ -183,6 +183,7 @@ export const audit_system_actor = [
   "system:payout", // 系统（打款）
   "system:ledger", // 系统（账务）
   "system:settlement", // 系统（结算）
+  "system:self_service", // 用户本人（自助）
 ] as const;
 export type AuditSystemActor = (typeof audit_system_actor)[number];
 
