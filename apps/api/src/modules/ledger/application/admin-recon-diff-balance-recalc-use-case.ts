@@ -208,8 +208,6 @@ export async function recalcBalanceAdminReconDiff(
   const notApplicable = (): HandlerResult => fieldsRefusal(['recon_diff_id'], traceId);
 
   return deps.db.transaction().execute(async (trx): Promise<HandlerResult> => {
-    // One Clock read per call: the response time and the accounting day of negative_since.
-    const at = deps.clock.now();
     const diff = await lockAdminReconDiff(trx, appId, id);
     if (diff === undefined) return notApplicable();
     const accountId = recalcAccountOf(diff);
@@ -225,6 +223,9 @@ export async function recalcBalanceAdminReconDiff(
 
     // Read after both locks: a posting committed while this call waited is in both.
     const sums = await memberEntrySums(trx, appId, accountId);
+    // One Clock read per call, taken after both locks and the sums: a call that waited for the
+    // locks across midnight dates negative_since and the response by when it actually decided.
+    const at = deps.clock.now();
     const plan = decideBalanceRecalc({ cache, sums, accountingDay: accountingDate(at) });
     const record = recalcBalanceAuditRecord({
       reconDiffId: id,

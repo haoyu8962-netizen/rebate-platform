@@ -469,6 +469,36 @@ it('[AC-B2-02x-UNIT#22] 只改 frozen（含下调）：写余额行（frozen 写
   expect(bothDown.notices).toMatchObject([{ facts: { before_fen: 900n, after_fen: 200n } }]);
 });
 
+it('[AC-B2-02x-UNIT#23] 时钟在两把锁与合计之后才读、只读一次：等锁跨过零点（+08:00 11-30 23:59:59.999 → 12-01 00:00:00.001）时 negative_since 与应答时间取拿锁后的那一刻', async () => {
+  state.sums = { available_fen: -100n, frozen_fen: 0n };
+  state.balances = [balance(0n, 0n)];
+  const h = harness();
+  const BEFORE_LOCKS = new Date('2026-11-30T15:59:59.999Z');
+  const AFTER_LOCKS = new Date('2026-11-30T16:00:00.001Z');
+  const deps: BalanceRecalcDeps = {
+    ...h.deps,
+    clock: {
+      now: () => {
+        state.calls.push('clock');
+        return state.calls.includes('lockBalance') ? AFTER_LOCKS : BEFORE_LOCKS;
+      },
+    },
+  };
+  const sent = await recalcBalanceAdminReconDiff(
+    deps,
+    { appId: APP, adminId: ADMIN, ip: '127.0.0.1' },
+    DIFF,
+    { body: { reason: '核对无误' }, traceId: 'trace-1' },
+  );
+  expect(state.calls.filter((c) => c === 'clock')).toHaveLength(1);
+  expect(state.calls.indexOf('clock')).toBeGreaterThan(state.calls.indexOf('sums'));
+  expect(state.updates).toMatchObject([{ available_fen: -100n, negative_since: '2026-12-01' }]);
+  expect(sent).toMatchObject({
+    status: 200,
+    envelope: { data: { recalculated_at: AFTER_LOCKS.toISOString() } },
+  });
+});
+
 it('[AC-B2-02x-UNIT#16] recalcAccountOf：只认 {invariant}:{uuid}（恰一个冒号、UUID 转小写），其余为 undefined', () => {
   expect(recalcAccountOf(diffRow({ ref_id: `06:${ACCOUNT.toUpperCase()}` }))).toBe(ACCOUNT);
   expect(recalcAccountOf(diffRow({ status: 'processing' }))).toBe(ACCOUNT);
