@@ -1,0 +1,332 @@
+{
+  "risk_note": "B2-02za (D10-2132 / 2133 / 2146 method A / 2154; test-change, tester none). Planning write-back couli#8 (7b4b8bb): the BALANCE_CORRECTED default body word 可用余额 → BR-TEXT-01 user term 可提现余额. Renderer DEFAULT_BODY, its header comment and unit-test expectation change that one word. Frozen helper texts.ts is untouched except a new TEMPLATE_WITHDRAWABLE at its end; the rule-test blocks that expect the default body (render #1 / #2 it.each rows / #2 property / #4, record.int 5 blocks, rollback.int 1 block) build it from TEMPLATE_WITHDRAWABLE, each registered in the ledger's modify_existing (17 blocks, 4 support files); the #2 it.each title keeps the old word (.each rows cannot be renamed, D10-2154, FU-B202ZA-EACH-TITLE-WORD). Title, variables, amount formatting, send conditions and dedupe key untouched. Reverse check: the renderer put back to 可用余额 turns render's 11 changed tests red (run locally). Test machine: test/spec/notification/balance-corrected green and verify:fast green on the final content.",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Fresh independent Claude via claude-run.sh (approvals #27 / #36), one round, no findings; validate ok, positions unchanged (couli-runs/B2-02za/review-money-r1.json)."
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Incremental round on method A (D10-2146 / 2154): pass, no findings in scope; one carried-over out_of_scope S1 about BR-TEXT-01 wording for a negative balance (可提现余额 shown with a signed amount) reported to the orchestrator as FU-BALANCE-CORRECTED-NEGATIVE-WORDING (couli-runs/B2-02za/review-money-r2.json)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [],
+  "modify_existing": [
+    {
+      "file": "test/spec/notification/balance-corrected/render.test.ts",
+      "test": "[AC-B2-02z#1] 默认标题「余额更正」；默认正文逐字为 D10-2092 的模板，{before} {after} 换成更正前后的可用余额",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it('[AC-B2-02z#1] 默认标题「余额更正」；默认正文逐字为 D10-2092 的模板，{before} {after} 换成更正前后的可用余额', () => {\n  expect(TEMPLATE).toBe(bodyOf('{before}', '{after}'));\n  const decrease = { before_fen: 1000n, after_fen: 1n };\n  expect(renderBalanceCorrectedMessage(decrease, null)).toEqual({\n    code: 'BALANCE_CORRECTED',\n    variant: 'default',\n    category: 'service',\n    title: '余额更正',\n    body: '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可用余额由 ¥10 调整为 ¥0.01。如有疑问，请联系客服。',\n  });\n  const increase = { before_fen: 990n, after_fen: 123_456n };\n  expect(renderBalanceCorrectedMessage(increase, null)).toEqual({\n    code: 'BALANCE_CORRECTED',\n    variant: 'default',\n    category: 'service',\n    title: '余额更正',\n    body: '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可用余额由 ¥9.9 调整为 ¥1234.56。如有疑问，请联系客服。',\n  });\n}, 900_000);",
+      "after": "it('[AC-B2-02z#1] 默认标题「余额更正」；默认正文逐字为 D10-2092 的模板，{before} {after} 换成更正前后的可用余额', () => {\n  expect(TEMPLATE).toBe(bodyOf('{before}', '{after}'));\n  const decrease = { before_fen: 1000n, after_fen: 1n };\n  expect(renderBalanceCorrectedMessage(decrease, null)).toEqual({\n    code: 'BALANCE_CORRECTED',\n    variant: 'default',\n    category: 'service',\n    title: '余额更正',\n    body: '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可提现余额由 ¥10 调整为 ¥0.01。如有疑问，请联系客服。',\n  });\n  const increase = { before_fen: 990n, after_fen: 123_456n };\n  expect(renderBalanceCorrectedMessage(increase, null)).toEqual({\n    code: 'BALANCE_CORRECTED',\n    variant: 'default',\n    category: 'service',\n    title: '余额更正',\n    body: '核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可提现余额由 ¥9.9 调整为 ¥1234.56。如有疑问，请联系客服。',\n  });\n}, 900_000);",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/render.test.ts",
+      "test": "[AC-B2-02z#2] 调增：更正前 990n 分、更正后 123456n 分 → 正文「…可用余额由 ¥9.9 调整为 ¥1234.56。…」",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: bodyOf(beforeText, afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 1 of 8: ['调增', 990n, 123_456n, '¥9.9', '¥1234.56']",
+      "after": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: TEMPLATE_WITHDRAWABLE.replace('{before}', beforeText).replace('{after}', afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 1 of 8: ['调增', 990n, 123_456n, '¥9.9', '¥1234.56']",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/render.test.ts",
+      "test": "[AC-B2-02z#2] 调减：更正前 1000n 分、更正后 1n 分 → 正文「…可用余额由 ¥10 调整为 ¥0.01。…」",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: bodyOf(beforeText, afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 2 of 8: ['调减', 1000n, 1n, '¥10', '¥0.01']",
+      "after": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: TEMPLATE_WITHDRAWABLE.replace('{before}', beforeText).replace('{after}', afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 2 of 8: ['调减', 1000n, 1n, '¥10', '¥0.01']",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/render.test.ts",
+      "test": "[AC-B2-02z#2] 调减到负数：更正前 500n 分、更正后 -1234n 分 → 正文「…可用余额由 ¥5 调整为 -¥12.34。…」",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: bodyOf(beforeText, afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 3 of 8: ['调减到负数', 500n, -1234n, '¥5', '-¥12.34']",
+      "after": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: TEMPLATE_WITHDRAWABLE.replace('{before}', beforeText).replace('{after}', afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 3 of 8: ['调减到负数', 500n, -1234n, '¥5', '-¥12.34']",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/render.test.ts",
+      "test": "[AC-B2-02z#2] 由负数调增为正数（正数不带 +，末尾 0 去掉）：更正前 -150n 分、更正后 600n 分 → 正文「…可用余额由 -¥1.5 调整为 ¥6。…」",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: bodyOf(beforeText, afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 4 of 8: ['由负数调增为正数（正数不带 +，末尾 0 去掉）', -150n, 600n, '-¥1.5', '¥6']",
+      "after": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: TEMPLATE_WITHDRAWABLE.replace('{before}', beforeText).replace('{after}', afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 4 of 8: ['由负数调增为正数（正数不带 +，末尾 0 去掉）', -150n, 600n, '-¥1.5', '¥6']",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/render.test.ts",
+      "test": "[AC-B2-02z#2] 调到 0（App 表「¥0」，不是后台「¥0.00」）：更正前 -120n 分、更正后 0n 分 → 正文「…可用余额由 -¥1.2 调整为 ¥0。…」",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: bodyOf(beforeText, afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 5 of 8: ['调到 0（App 表「¥0」，不是后台「¥0.00」）', -120n, 0n, '-¥1.2', '¥0']",
+      "after": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: TEMPLATE_WITHDRAWABLE.replace('{before}', beforeText).replace('{after}', afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 5 of 8: ['调到 0（App 表「¥0」，不是后台「¥0.00」）', -120n, 0n, '-¥1.2', '¥0']",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/render.test.ts",
+      "test": "[AC-B2-02z#2] 由 0 调增（不加千分位）：更正前 0n 分、更正后 2000000n 分 → 正文「…可用余额由 ¥0 调整为 ¥20000。…」",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: bodyOf(beforeText, afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 6 of 8: ['由 0 调增（不加千分位）', 0n, 2_000_000n, '¥0', '¥20000']",
+      "after": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: TEMPLATE_WITHDRAWABLE.replace('{before}', beforeText).replace('{after}', afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 6 of 8: ['由 0 调增（不加千分位）', 0n, 2_000_000n, '¥0', '¥20000']",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/render.test.ts",
+      "test": "[AC-B2-02z#2] 大额调减到负数（不加千分位）：更正前 123456789n 分、更正后 -2000000n 分 → 正文「…可用余额由 ¥1234567.89 调整为 -¥20000。…」",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: bodyOf(beforeText, afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 7 of 8: ['大额调减到负数（不加千分位）', 123_456_789n, -2_000_000n, '¥1234567.89', '-¥20000']",
+      "after": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: TEMPLATE_WITHDRAWABLE.replace('{before}', beforeText).replace('{after}', afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 7 of 8: ['大额调减到负数（不加千分位）', 123_456_789n, -2_000_000n, '¥1234567.89', '-¥20000']",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/render.test.ts",
+      "test": "[AC-B2-02z#2] 负数之间调减：更正前 -1n 分、更正后 -100n 分 → 正文「…可用余额由 -¥0.01 调整为 -¥1。…」",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: bodyOf(beforeText, afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 8 of 8: ['负数之间调减', -1n, -100n, '-¥0.01', '-¥1']",
+      "after": "it.each(AMOUNT_VECTORS)(\n  '[AC-B2-02z#2] %s：更正前 %s 分、更正后 %s 分 → 正文「…可用余额由 %s 调整为 %s。…」',\n  (label, before, after, beforeText, afterText) => {\n    const facts = { before_fen: before, after_fen: after };\n    const message = renderBalanceCorrectedMessage(facts, null);\n    expect(message, label).toEqual({\n      code: CODE,\n      variant: 'default',\n      category: 'service',\n      title: TITLE,\n      body: TEMPLATE_WITHDRAWABLE.replace('{before}', beforeText).replace('{after}', afterText),\n    });\n    // '-' sits before '¥'; never a '+', never a thousands separator, never 「¥-」.\n    expect(message?.body, label).not.toContain('+');\n    expect(message?.body, label).not.toContain(',');\n    expect(message?.body, label).not.toContain('¥-');\n  },\n  900_000,\n);\n// .each row 8 of 8: ['负数之间调减', -1n, -100n, '-¥0.01', '-¥1']",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/render.test.ts",
+      "test": "[AC-B2-02z#2] 任意更正前后金额（调增、调减、正负、0）：默认正文按 BR-TEXT-10 App 写法格式化两个金额",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it('[AC-B2-02z#2] 任意更正前后金额（调增、调减、正负、0）：默认正文按 BR-TEXT-10 App 写法格式化两个金额', () => {\n  fc.assert(\n    fc.property(changed, ([before, after]) => {\n      const facts = { before_fen: before, after_fen: after };\n      expect(renderBalanceCorrectedMessage(facts, null)).toEqual({\n        code: CODE,\n        variant: 'default',\n        category: 'service',\n        title: TITLE,\n        body: bodyOf(appYuan(before), appYuan(after)),\n      });\n      return true;\n    }),\n    propParams(),\n  );\n}, 900_000);",
+      "after": "it('[AC-B2-02z#2] 任意更正前后金额（调增、调减、正负、0）：默认正文按 BR-TEXT-10 App 写法格式化两个金额', () => {\n  fc.assert(\n    fc.property(changed, ([before, after]) => {\n      const facts = { before_fen: before, after_fen: after };\n      expect(renderBalanceCorrectedMessage(facts, null)).toEqual({\n        code: CODE,\n        variant: 'default',\n        category: 'service',\n        title: TITLE,\n        body: TEMPLATE_WITHDRAWABLE.replace('{before}', appYuan(before)).replace(\n          '{after}',\n          appYuan(after),\n        ),\n      });\n      return true;\n    }),\n    propParams(),\n  );\n}, 900_000);",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/render.test.ts",
+      "test": "[AC-B2-02z#4] 只覆盖标题时正文用默认，只覆盖正文时标题用默认，两项都为空即全用默认",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it('[AC-B2-02z#4] 只覆盖标题时正文用默认，只覆盖正文时标题用默认，两项都为空即全用默认', () => {\n  const facts = { before_fen: 500n, after_fen: -1234n };\n  const titleOnly = { title_override: '余额已更正', body_override: null };\n  expect(renderBalanceCorrectedMessage(facts, titleOnly)).toEqual({\n    code: CODE,\n    variant: 'default',\n    category: 'service',\n    title: '余额已更正',\n    body: bodyOf('¥5', '-¥12.34'),\n  });\n  const bodyOnly = { title_override: null, body_override: '可用余额 {before} → {after}' };\n  expect(renderBalanceCorrectedMessage(facts, bodyOnly)).toEqual({\n    code: CODE,\n    variant: 'default',\n    category: 'service',\n    title: TITLE,\n    body: '可用余额 ¥5 → -¥12.34',\n  });\n  const neither = { title_override: null, body_override: null };\n  expect(renderBalanceCorrectedMessage(facts, neither)).toEqual({\n    code: CODE,\n    variant: 'default',\n    category: 'service',\n    title: TITLE,\n    body: bodyOf('¥5', '-¥12.34'),\n  });\n}, 900_000);",
+      "after": "it('[AC-B2-02z#4] 只覆盖标题时正文用默认，只覆盖正文时标题用默认，两项都为空即全用默认', () => {\n  const facts = { before_fen: 500n, after_fen: -1234n };\n  const titleOnly = { title_override: '余额已更正', body_override: null };\n  expect(renderBalanceCorrectedMessage(facts, titleOnly)).toEqual({\n    code: CODE,\n    variant: 'default',\n    category: 'service',\n    title: '余额已更正',\n    body: TEMPLATE_WITHDRAWABLE.replace('{before}', '¥5').replace('{after}', '-¥12.34'),\n  });\n  const bodyOnly = { title_override: null, body_override: '可用余额 {before} → {after}' };\n  expect(renderBalanceCorrectedMessage(facts, bodyOnly)).toEqual({\n    code: CODE,\n    variant: 'default',\n    category: 'service',\n    title: TITLE,\n    body: '可用余额 ¥5 → -¥12.34',\n  });\n  const neither = { title_override: null, body_override: null };\n  expect(renderBalanceCorrectedMessage(facts, neither)).toEqual({\n    code: CODE,\n    variant: 'default',\n    category: 'service',\n    title: TITLE,\n    body: TEMPLATE_WITHDRAWABLE.replace('{before}', '¥5').replace('{after}', '-¥12.34'),\n  });\n}, 900_000);",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/record.int.test.ts",
+      "test": "[AC-B2-02z#8] 写入：一条 notify_logs（站内信渠道、success、去重键 balance_corrected:{reconDiffId}:{balanceVersion}）加一条站内信（标题「余额更正」、正文按模板与 BR-TEXT-10），没有推送与短信记录",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it('[AC-B2-02z#8] 写入：一条 notify_logs（站内信渠道、success、去重键 balance_corrected:{reconDiffId}:{balanceVersion}）加一条站内信（标题「余额更正」、正文按模板与 BR-TEXT-10），没有推送与短信记录', async () => {\n  const m = await member(db, { status: 'normal' });\n  const input = inputOf(m, { before_fen: 1000n, after_fen: -1234n }, { balanceVersion: 7 });\n\n  expect(await record(db, input)).toBe(true);\n\n  const { logs, inbox } = await rowsOf(db, m.appId);\n  expect(logs).toHaveLength(1);\n  expect(logs[0]).toMatchObject({\n    app_id: m.appId,\n    user_id: m.uid,\n    code: CODE,\n    channel: 'inbox',\n    status: 'success',\n    dedupe_key: `balance_corrected:${input.reconDiffId}:7`,\n    suppress_reason: null,\n  });\n  expect(logs[0]?.sent_at).not.toBeNull();\n  expect(logs.filter((row) => row.channel !== 'inbox')).toEqual([]);\n  expect(inbox).toHaveLength(1);\n  expect(inbox[0]).toMatchObject({\n    app_id: m.appId,\n    user_id: m.uid,\n    code: CODE,\n    title: TITLE,\n    body: bodyOf('¥10', '-¥12.34'),\n    read_at: null,\n  });\n  expect(inbox[0]?.created_at.getTime()).toBe(NOW.getTime());\n}, 900_000);",
+      "after": "it('[AC-B2-02z#8] 写入：一条 notify_logs（站内信渠道、success、去重键 balance_corrected:{reconDiffId}:{balanceVersion}）加一条站内信（标题「余额更正」、正文按模板与 BR-TEXT-10），没有推送与短信记录', async () => {\n  const m = await member(db, { status: 'normal' });\n  const input = inputOf(m, { before_fen: 1000n, after_fen: -1234n }, { balanceVersion: 7 });\n\n  expect(await record(db, input)).toBe(true);\n\n  const { logs, inbox } = await rowsOf(db, m.appId);\n  expect(logs).toHaveLength(1);\n  expect(logs[0]).toMatchObject({\n    app_id: m.appId,\n    user_id: m.uid,\n    code: CODE,\n    channel: 'inbox',\n    status: 'success',\n    dedupe_key: `balance_corrected:${input.reconDiffId}:7`,\n    suppress_reason: null,\n  });\n  expect(logs[0]?.sent_at).not.toBeNull();\n  expect(logs.filter((row) => row.channel !== 'inbox')).toEqual([]);\n  expect(inbox).toHaveLength(1);\n  expect(inbox[0]).toMatchObject({\n    app_id: m.appId,\n    user_id: m.uid,\n    code: CODE,\n    title: TITLE,\n    body: TEMPLATE_WITHDRAWABLE.replace('{before}', '¥10').replace('{after}', '-¥12.34'),\n    read_at: null,\n  });\n  expect(inbox[0]?.created_at.getTime()).toBe(NOW.getTime());\n}, 900_000);",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/record.int.test.ts",
+      "test": "[AC-B2-02z#8] 调增同样写一条（D10-2092：调增调减都发），正文为更正前后的可用余额",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it('[AC-B2-02z#8] 调增同样写一条（D10-2092：调增调减都发），正文为更正前后的可用余额', async () => {\n  const m = await member(db, { status: 'normal' });\n  const input = inputOf(m, { before_fen: -150n, after_fen: 0n });\n\n  expect(await record(db, input)).toBe(true);\n\n  const { logs, inbox } = await rowsOf(db, m.appId);\n  expect(logs.map((row) => [row.channel, row.status, row.dedupe_key])).toEqual([\n    ['inbox', 'success', dedupeKeyOf(input)],\n  ]);\n  expect(inbox.map((row) => [row.code, row.title, row.body])).toEqual([\n    [CODE, TITLE, bodyOf('-¥1.5', '¥0')],\n  ]);\n}, 900_000);",
+      "after": "it('[AC-B2-02z#8] 调增同样写一条（D10-2092：调增调减都发），正文为更正前后的可用余额', async () => {\n  const m = await member(db, { status: 'normal' });\n  const input = inputOf(m, { before_fen: -150n, after_fen: 0n });\n\n  expect(await record(db, input)).toBe(true);\n\n  const { logs, inbox } = await rowsOf(db, m.appId);\n  expect(logs.map((row) => [row.channel, row.status, row.dedupe_key])).toEqual([\n    ['inbox', 'success', dedupeKeyOf(input)],\n  ]);\n  expect(inbox.map((row) => [row.code, row.title, row.body])).toEqual([\n    [CODE, TITLE, TEMPLATE_WITHDRAWABLE.replace('{before}', '-¥1.5').replace('{after}', '¥0')],\n  ]);\n}, 900_000);",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/record.int.test.ts",
+      "test": "[AC-B2-02z#8] 同一差异单再次重算出新的余额版本 → 另写一条（去重键带余额版本）",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it('[AC-B2-02z#8] 同一差异单再次重算出新的余额版本 → 另写一条（去重键带余额版本）', async () => {\n  const m = await member(db, { status: 'normal' });\n  const first = inputOf(m, { before_fen: 500n, after_fen: 300n }, { balanceVersion: 4 });\n  const again = inputOf(\n    m,\n    { before_fen: 300n, after_fen: 200n },\n    { reconDiffId: first.reconDiffId, balanceVersion: 5 },\n  );\n\n  expect(await record(db, first)).toBe(true);\n  expect(await record(db, again)).toBe(true);\n\n  const { logs, inbox } = await rowsOf(db, m.appId);\n  const diff = first.reconDiffId;\n  const keys = logs.map((row) => row.dedupe_key).sort();\n  expect(keys).toEqual([`balance_corrected:${diff}:4`, `balance_corrected:${diff}:5`]);\n  const bodies = inbox.map((row) => row.body).sort();\n  expect(bodies).toEqual([bodyOf('¥3', '¥2'), bodyOf('¥5', '¥3')]);\n}, 900_000);",
+      "after": "it('[AC-B2-02z#8] 同一差异单再次重算出新的余额版本 → 另写一条（去重键带余额版本）', async () => {\n  const m = await member(db, { status: 'normal' });\n  const first = inputOf(m, { before_fen: 500n, after_fen: 300n }, { balanceVersion: 4 });\n  const again = inputOf(\n    m,\n    { before_fen: 300n, after_fen: 200n },\n    { reconDiffId: first.reconDiffId, balanceVersion: 5 },\n  );\n\n  expect(await record(db, first)).toBe(true);\n  expect(await record(db, again)).toBe(true);\n\n  const { logs, inbox } = await rowsOf(db, m.appId);\n  const diff = first.reconDiffId;\n  const keys = logs.map((row) => row.dedupe_key).sort();\n  expect(keys).toEqual([`balance_corrected:${diff}:4`, `balance_corrected:${diff}:5`]);\n  const bodies = inbox.map((row) => row.body).sort();\n  expect(bodies).toEqual([\n    TEMPLATE_WITHDRAWABLE.replace('{before}', '¥3').replace('{after}', '¥2'),\n    TEMPLATE_WITHDRAWABLE.replace('{before}', '¥5').replace('{after}', '¥3'),\n  ]);\n}, 900_000);",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/record.int.test.ts",
+      "test": "[AC-B2-02z#7] 注销冷静期内（有 cooling 的注销申请、users.status 仍为 normal）照写一条",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it('[AC-B2-02z#7] 注销冷静期内（有 cooling 的注销申请、users.status 仍为 normal）照写一条', async () => {\n  const m = await member(db, { status: 'normal' });\n  await deletionRequest(db, m, 'cooling');\n  const input = inputOf(m, { before_fen: 800n, after_fen: 100n });\n\n  expect(await record(db, input)).toBe(true);\n\n  const { logs, inbox } = await rowsOf(db, m.appId);\n  expect(logs.map((row) => [row.user_id, row.channel, row.status, row.dedupe_key])).toEqual([\n    [m.uid, 'inbox', 'success', dedupeKeyOf(input)],\n  ]);\n  expect(inbox.map((row) => [row.user_id, row.title, row.body])).toEqual([\n    [m.uid, TITLE, bodyOf('¥8', '¥1')],\n  ]);\n}, 900_000);",
+      "after": "it('[AC-B2-02z#7] 注销冷静期内（有 cooling 的注销申请、users.status 仍为 normal）照写一条', async () => {\n  const m = await member(db, { status: 'normal' });\n  await deletionRequest(db, m, 'cooling');\n  const input = inputOf(m, { before_fen: 800n, after_fen: 100n });\n\n  expect(await record(db, input)).toBe(true);\n\n  const { logs, inbox } = await rowsOf(db, m.appId);\n  expect(logs.map((row) => [row.user_id, row.channel, row.status, row.dedupe_key])).toEqual([\n    [m.uid, 'inbox', 'success', dedupeKeyOf(input)],\n  ]);\n  expect(inbox.map((row) => [row.user_id, row.title, row.body])).toEqual([\n    [m.uid, TITLE, TEMPLATE_WITHDRAWABLE.replace('{before}', '¥8').replace('{after}', '¥1')],\n  ]);\n}, 900_000);",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/record.int.test.ts",
+      "test": "[AC-B2-02z#4] 写入时读本 app 的 notify_templates 覆盖行：标题与正文用运营措辞、变量照样替换；别的 app 的覆盖不用",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it('[AC-B2-02z#4] 写入时读本 app 的 notify_templates 覆盖行：标题与正文用运营措辞、变量照样替换；别的 app 的覆盖不用', async () => {\n  const m = await member(db, { status: 'normal' });\n  await overrideRow(db, m.appId, {\n    title_override: '余额已更正',\n    body_override: '可用余额：{before} → {after}（$& 照字面）',\n  });\n  const other = await member(db, { status: 'normal' });\n  await overrideRow(db, other.appId, {\n    title_override: '别家的标题',\n    body_override: '别家 {after}',\n  });\n  const plain = await member(db, { status: 'normal' });\n\n  expect(await record(db, inputOf(m, { before_fen: 500n, after_fen: -1234n }))).toBe(true);\n  expect(await record(db, inputOf(plain, { before_fen: 500n, after_fen: -1234n }))).toBe(true);\n\n  const reworded = await rowsOf(db, m.appId);\n  expect(reworded.inbox.map((row) => [row.title, row.body])).toEqual([\n    ['余额已更正', '可用余额：¥5 → -¥12.34（$& 照字面）'],\n  ]);\n  const defaults = await rowsOf(db, plain.appId);\n  expect(defaults.inbox.map((row) => [row.title, row.body])).toEqual([\n    [TITLE, bodyOf('¥5', '-¥12.34')],\n  ]);\n  expect(await rowsOf(db, other.appId)).toEqual({ logs: [], inbox: [] });\n}, 900_000);",
+      "after": "it('[AC-B2-02z#4] 写入时读本 app 的 notify_templates 覆盖行：标题与正文用运营措辞、变量照样替换；别的 app 的覆盖不用', async () => {\n  const m = await member(db, { status: 'normal' });\n  await overrideRow(db, m.appId, {\n    title_override: '余额已更正',\n    body_override: '可用余额：{before} → {after}（$& 照字面）',\n  });\n  const other = await member(db, { status: 'normal' });\n  await overrideRow(db, other.appId, {\n    title_override: '别家的标题',\n    body_override: '别家 {after}',\n  });\n  const plain = await member(db, { status: 'normal' });\n\n  expect(await record(db, inputOf(m, { before_fen: 500n, after_fen: -1234n }))).toBe(true);\n  expect(await record(db, inputOf(plain, { before_fen: 500n, after_fen: -1234n }))).toBe(true);\n\n  const reworded = await rowsOf(db, m.appId);\n  expect(reworded.inbox.map((row) => [row.title, row.body])).toEqual([\n    ['余额已更正', '可用余额：¥5 → -¥12.34（$& 照字面）'],\n  ]);\n  const defaults = await rowsOf(db, plain.appId);\n  expect(defaults.inbox.map((row) => [row.title, row.body])).toEqual([\n    [TITLE, TEMPLATE_WITHDRAWABLE.replace('{before}', '¥5').replace('{after}', '-¥12.34')],\n  ]);\n  expect(await rowsOf(db, other.appId)).toEqual({ logs: [], inbox: [] });\n}, 900_000);",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/rollback.int.test.ts",
+      "test": "[AC-B2-02z#9] 随调用方事务回滚：事务内写入后回滚 → notify_logs 与站内信都没有行；之后同一键照常写入一条",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before": "it('[AC-B2-02z#9] 随调用方事务回滚：事务内写入后回滚 → notify_logs 与站内信都没有行；之后同一键照常写入一条', async () => {\n  const m = await member(db, { status: 'normal' });\n  const input = inputOf(m, { before_fen: 1000n, after_fen: -1234n });\n  const rollback = new Error('fixture rollback');\n  const seen: { wrote?: boolean; inside?: Awaited<ReturnType<typeof rowsOf>> } = {};\n\n  try {\n    await db.transaction().execute(async (trx) => {\n      seen.wrote = await recordBalanceCorrectedMessage(trx, input);\n      seen.inside = await rowsOf(trx, m.appId);\n      throw rollback;\n    });\n  } catch (error) {\n    if (error !== rollback) throw error;\n  }\n\n  expect(seen.wrote).toBe(true);\n  expect(seen.inside?.logs.map((row) => [row.channel, row.dedupe_key])).toEqual([\n    ['inbox', dedupeKeyOf(input)],\n  ]);\n  expect(seen.inside?.inbox.map((row) => [row.code, row.title])).toEqual([[CODE, TITLE]]);\n  // Rolled back with the caller: nothing was written on a connection of its own.\n  expect(await rowsOf(db, m.appId)).toEqual({ logs: [], inbox: [] });\n\n  expect(await record(db, input)).toBe(true);\n  const { logs, inbox } = await rowsOf(db, m.appId);\n  expect(logs.map((row) => [row.channel, row.status, row.dedupe_key])).toEqual([\n    ['inbox', 'success', dedupeKeyOf(input)],\n  ]);\n  expect(inbox.map((row) => [row.title, row.body])).toEqual([[TITLE, bodyOf('¥10', '-¥12.34')]]);\n}, 900_000);",
+      "after": "it('[AC-B2-02z#9] 随调用方事务回滚：事务内写入后回滚 → notify_logs 与站内信都没有行；之后同一键照常写入一条', async () => {\n  const m = await member(db, { status: 'normal' });\n  const input = inputOf(m, { before_fen: 1000n, after_fen: -1234n });\n  const rollback = new Error('fixture rollback');\n  const seen: { wrote?: boolean; inside?: Awaited<ReturnType<typeof rowsOf>> } = {};\n\n  try {\n    await db.transaction().execute(async (trx) => {\n      seen.wrote = await recordBalanceCorrectedMessage(trx, input);\n      seen.inside = await rowsOf(trx, m.appId);\n      throw rollback;\n    });\n  } catch (error) {\n    if (error !== rollback) throw error;\n  }\n\n  expect(seen.wrote).toBe(true);\n  expect(seen.inside?.logs.map((row) => [row.channel, row.dedupe_key])).toEqual([\n    ['inbox', dedupeKeyOf(input)],\n  ]);\n  expect(seen.inside?.inbox.map((row) => [row.code, row.title])).toEqual([[CODE, TITLE]]);\n  // Rolled back with the caller: nothing was written on a connection of its own.\n  expect(await rowsOf(db, m.appId)).toEqual({ logs: [], inbox: [] });\n\n  expect(await record(db, input)).toBe(true);\n  const { logs, inbox } = await rowsOf(db, m.appId);\n  expect(logs.map((row) => [row.channel, row.status, row.dedupe_key])).toEqual([\n    ['inbox', 'success', dedupeKeyOf(input)],\n  ]);\n  expect(inbox.map((row) => [row.title, row.body])).toEqual([\n    [TITLE, TEMPLATE_WITHDRAWABLE.replace('{before}', '¥10').replace('{after}', '-¥12.34')],\n  ]);\n}, 900_000);",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/notification/application/balance-corrected-message.ts DEFAULT_BODY put back to the old word 可用余额 (the rule before couli#8): the changed expectation (TEMPLATE_WITHDRAWABLE / 可提现余额) fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/texts.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before_sha256": "784e4c7e23cbd5e96fae50e703ce3d3b9ba5a9a7def1b3ef2c4a6c0b8127fb63",
+      "after_sha256": "baed2fb3568ec3b8f9ae5bf17443e7fdb2790f99c2fe1d5a7e07e725222119f3",
+      "reverse_red": [
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#4] 只覆盖标题时正文用默认，只覆盖正文时标题用默认，两项都为空即全用默认"
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/render.test.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before_sha256": "14b7851ca031294be06417fe62fd362de922cd74d09919aa70b8e73463d71a81",
+      "after_sha256": "5d8a04a359d36d94370a5d9d2ba4a2abc647c4827226cf705bd13ad9d55414e5",
+      "reverse_red": [
+        "test/spec/notification/balance-corrected/render.test.ts > [AC-B2-02z#1] 默认标题「余额更正」；默认正文逐字为 D10-2092 的模板，{before} {after} 换成更正前后的可用余额"
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/record.int.test.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before_sha256": "abe520a2e37727f8c0d32d00a8eb5132a0ada07abe67d6ff4b0128f145ec9d93",
+      "after_sha256": "6e5e32bcde02da9ae642d0f2804a5aec00d46a6b7a6103895ef3b0afa51b18a0",
+      "reverse_red": [
+        "test/spec/notification/balance-corrected/record.int.test.ts > [AC-B2-02z#8] 写入：一条 notify_logs（站内信渠道、success、去重键 balance_corrected:{reconDiffId}:{balanceVersion}）加一条站内信（标题「余额更正」、正文按模板与 BR-TEXT-10），没有推送与短信记录"
+      ]
+    },
+    {
+      "file": "test/spec/notification/balance-corrected/rollback.int.test.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-TEXT-19"],
+      "before_sha256": "4b9bd2bc853e4ca633e8280e956d182cec222554c05af40e967cdf787809a56b",
+      "after_sha256": "8c85a35e87021c9b48800c9d1938cd1c862db101b7ef397371cd535f38b60f46",
+      "reverse_red": [
+        "test/spec/notification/balance-corrected/rollback.int.test.ts > [AC-B2-02z#9] 随调用方事务回滚：事务内写入后回滚 → notify_logs 与站内信都没有行；之后同一键照常写入一条"
+      ]
+    }
+  ],
+  "task": "B2-02za",
+  "spec_commit": "4b88c5f64a1c48224d2ca4dc069f8de1ea2cf7f6",
+  "spec_ref": "ba6655b11b76fa9e5ab661c3a128e8de925e7f54",
+  "runs": [],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b4130d609452daa18003e6d573f8f824b134701c",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}

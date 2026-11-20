@@ -16,7 +16,8 @@ import {
   recordBalanceCorrectedMessage,
   rowsOf,
 } from './db-kit.ts';
-import { CODE, TITLE, bodyOf } from './texts.ts';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- B2-02za: bodyOf keeps the old wording and is no longer used here; this frozen file may only gain tokens, so the name stays (FU)
+import { CODE, TEMPLATE_WITHDRAWABLE, TITLE, bodyOf } from './texts.ts';
 
 let database: TestDatabase;
 let db: Kysely<DB>;
@@ -61,7 +62,9 @@ it('[AC-B2-02z#9] 随调用方事务回滚：事务内写入后回滚 → notify
   expect(logs.map((row) => [row.channel, row.status, row.dedupe_key])).toEqual([
     ['inbox', 'success', dedupeKeyOf(input)],
   ]);
-  expect(inbox.map((row) => [row.title, row.body])).toEqual([[TITLE, bodyOf('¥10', '-¥12.34')]]);
+  expect(inbox.map((row) => [row.title, row.body])).toEqual([
+    [TITLE, TEMPLATE_WITHDRAWABLE.replace('{before}', '¥10').replace('{after}', '-¥12.34')],
+  ]);
 }, 900_000);
 
 it('[AC-B2-02z#9] 调用方在写入之后的步骤失败（如写余额行出错）→ 整笔回滚，两张表都没有行', async () => {

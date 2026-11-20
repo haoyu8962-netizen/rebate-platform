@@ -6,7 +6,7 @@ import {
 } from './balance-corrected-message.ts';
 
 const BODY = (before: string, after: string): string =>
-  `核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可用余额由 ${before} 调整为 ${after}。如有疑问，请联系客服。`;
+  `核对账目时发现你的余额显示与流水明细不一致，已按流水明细更正：可提现余额由 ${before} 调整为 ${after}。如有疑问，请联系客服。`;
 
 it('[AC-B2-02z#u1] default title and body, both amounts in the App format (negative with - before ¥, no +)', () => {
   expect(renderBalanceCorrectedMessage({ before_fen: 123_456n, after_fen: -150n }, null)).toEqual({
