@@ -1,0 +1,24 @@
+id: B2-02zda
+repo: rebate-platform
+title: test-change（B2-02zd 前置）：config-registry 登记 ledger.auto_correct.enabled（boolean、未设置即关）与 ledger.auto_correct.max_accounts（0–1000、未设置即 3），冻结注册表用例只追加、计数 +2
+type: test-change
+# 2026-11-21 be 入账（编排 D10-2299 ①：照 B2-04zo / B2-02ta 先例单开前置，冻结注册表用例逐条钉全部键）。两个键都是 config.business、可编辑、无种子行：
+# enabled 未设置 = 关（读取方 `value === true`，08 默认 false，D10-2230 ④）；max_accounts 未设置 = 3（08 默认，0–1000）。插在 B1-22y Agent 段之前（union.pdd.service_fee_bp 之后），不动别的键。
+# 探针（主干 + 两个键，测试机 275 文件 6869 例，couli-runs/B2-02zda/tests/2）红的正是先例 B2-02ta 那批文件：content 单测 2 份 + 冻结注册表用例 8 份（kit.ts 追加 *_UNSEEDED 一段）。各用例只追加这两个键、计数 +2，不动别的键与断言。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'test/spec/content/config-items/**'
+  - 'test/spec/content/config-settle/**'
+  - 'test/spec/content/invite-reward-config/**'
+  - 'test/spec/content/invite-reward-eligibility/**'
+  - 'ops/tasks/B2-02zda.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
