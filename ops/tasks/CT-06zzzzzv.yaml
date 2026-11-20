@@ -25,4 +25,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/for-of-literal-table/**'
-status: todo
+status: done
+pr: 374
