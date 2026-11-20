@@ -8,8 +8,10 @@
 // tracked files only (trackedFiles): an untracked local draft does not fail the check; without
 // .git (verify container) the walked tree is scanned. Comments are blanked first (`//`,
 // `/* */` in TypeScript; `--`, nested `/* */` in SQL files and in the SQL of every TypeScript
-// string and template, quoted SQL text kept, line numbers kept), so a table named in a comment
-// is no hit and a comment between a keyword and the table does not hide a write. The SQL lexing
+// string and template, line numbers kept), so a table named in a comment is no hit and a
+// comment between a keyword and the table does not hide a write. The content of an SQL string
+// literal ('…', E'…') is data and is blanked the same way (`COMMENT ON … IS 'Never UPDATE …'`
+// is no write); only the literal right after EXECUTE is kept and read as SQL. The SQL lexing
 // follows PostgreSQL: `''` in literals, backslash escapes in `E'…'`, `""` in identifiers, and
 // dollar quotes (`$$ … $$`, `$tag$ … $tag$`; not `$1`) that end only at the same delimiter;
 // the content of a dollar quote is scanned again on its own (a DO block or function body is
@@ -34,7 +36,9 @@
 // Known limits: a table name assembled at run time (a variable, string concatenation,
 // `sql.table(...)` / `sql.id(...)`, Kysely `withSchema` plus a table held in a variable) is
 // not recognised, nor is dynamic SQL built in the database (`EXECUTE format('… %I …', t)`,
-// `EXECUTE 'UPDATE ' || t`, `quote_ident`). A scan of main on 2026-11-20 found no such write
+// `EXECUTE 'UPDATE ' || t`, `quote_ident`). SQL string literals are read as SQL only right
+// after EXECUTE: a write held in any other literal (`EXECUTE format('UPDATE app.<table> …')`,
+// a string passed to a function that runs it) is not recognised. A scan of main on 2026-11-20 found no such write
 // to the ledger tables. Further forms this guard does not cover (D10-2278; followup
 // FU-LEDGER-WRITERS-LEXER-LIMITS): Unicode-escaped identifiers (`U&"…"`); a write through a
 // view, a synonym-like alias or a renamed table; a write performed inside a database
@@ -119,8 +123,9 @@ const DOLLAR_TAG_CHAR = /[\w\u0080-￿]/u;
 /**
  * Blanks the SQL comments (`--` to the end of the line, `/* … *\/`, nested as in PostgreSQL)
  * of one SQL text: a `.sql` file, or the content of one TypeScript string or template literal.
- * Text in single quotes (literals; `''` is a quote, and in `E'…'` a backslash escapes) and in
- * double quotes (identifiers; `""` is a quote) is kept.
+ * Text in double quotes (identifiers; `""` is a quote) is kept. The content of a single-quoted
+ * literal (`''` is a quote, and in `E'…'` a backslash escapes) is data and is blanked too, except
+ * for the literal right after the keyword EXECUTE (dynamic SQL), which is kept as it is.
  *
  * Dollar quotes (`$$ … $$`, `$tag$ … $tag$`; not `$1` parameters, not inside an identifier) are
  * closed only by the same delimiter: nothing inside them (`'`, `"`, `--`, `/*`) starts a literal
@@ -155,6 +160,9 @@ function blankSqlStream(text: string, chars: readonly SqlChar[], out: string[]):
   };
   const scan = (lo: number, hi: number): void => {
     let k = lo;
+    // The last two words read (lower case; '' after any other token), to tell `EXECUTE '…'`.
+    let word = '';
+    let prevWord = '';
     while (k < hi) {
       const ch = at(k);
       const next = k + 1 < hi ? at(k + 1) : '';
@@ -192,10 +200,16 @@ function blankSqlStream(text: string, chars: readonly SqlChar[], out: string[]):
             else break;
           } else end++;
         }
+        // A string literal is data (`COMMENT ON … IS 'Never UPDATE …'`): its content is blanked.
+        // Only the literal right after EXECUTE is dynamic SQL and stays to be read.
+        const executed = (escapes ? prevWord : word) === 'execute';
+        if (ch === "'" && !executed) blankRange(k + 1, Math.min(end, hi));
+        word = prevWord = '';
         k = end + 1;
       } else if (ch === '$') {
         const tag = dollarTag(k, lo, hi);
         if (tag === null) {
+          word = prevWord = '';
           k++;
           continue;
         }
@@ -204,8 +218,20 @@ function blankSqlStream(text: string, chars: readonly SqlChar[], out: string[]):
         while (close + tag.length <= hi && !startsWith(close, tag)) close++;
         if (close + tag.length > hi) close = hi; // unterminated: the body runs to the end
         scan(bodyStart, close);
+        word = prevWord = '';
         k = Math.min(close + tag.length, hi);
-      } else k++;
+      } else if (SQL_IDENT_CHAR.test(ch)) {
+        let end = k + 1;
+        while (end < hi && SQL_IDENT_CHAR.test(at(end))) end++;
+        let read = '';
+        for (let d = k; d < end; d++) read += at(d);
+        prevWord = word;
+        word = read.toLowerCase();
+        k = end;
+      } else {
+        if (!/\s/.test(ch)) word = prevWord = '';
+        k++;
+      }
     }
   };
   scan(0, chars.length);

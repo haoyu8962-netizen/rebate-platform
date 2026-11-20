@@ -153,7 +153,32 @@ it('a quoted SQL text keeps its dashes and a nested block comment is blanked who
   const ts = `const t = "EXECUTE '-- x\\n${update(BALANCES)}'";\n`;
   expect(findLedgerWrites('a.ts', ts)).toEqual([{ line: 1, table: BALANCES, operation: 'UPDATE' }]);
   const quoted = `const t = "SELECT '-- ${update(BALANCES)}' AS note";\n`;
-  expect(findLedgerWrites('a.ts', quoted)).toHaveLength(1);
+  expect(findLedgerWrites('a.ts', quoted)).toEqual([]);
+});
+
+it('an SQL string literal is data; only the literal right after EXECUTE is read (review r3 S1)', () => {
+  const comment = `COMMENT ON TABLE app.recon_diffs IS 'Never ${update(`app.${BALANCES}`)} directly';\n`;
+  expect(findLedgerWrites('a.sql', comment)).toEqual([]);
+  const tsComment = `const q = sql\`${comment}\`;\n`;
+  expect(findLedgerWrites('a.ts', tsComment)).toEqual([]);
+  const escaped = `SELECT E'it\\'s ${update(BALANCES)}', 'a''b ${update(ENTRIES)}';\n`;
+  expect(findLedgerWrites('a.sql', escaped)).toEqual([]);
+  // Dynamic SQL: EXECUTE '…' and EXECUTE E'…' (also with a comment or a line break between).
+  const dynamic =
+    'DO $body$\nBEGIN\n' +
+    `  EXECUTE '${update(`app.${BALANCES}`)}';\n` +
+    `  EXECUTE /* x */\n    E'DELETE FROM app.${ENTRIES}';\n` +
+    `  PERFORM f('${update(`app.${BALANCES}`)}');\n` +
+    'END $body$;\n';
+  expect(findLedgerWrites('a.sql', dynamic)).toEqual([
+    { line: 3, table: BALANCES, operation: 'UPDATE' },
+    { line: 5, table: ENTRIES, operation: 'DELETE FROM' },
+  ]);
+  // Line numbers after a blanked multi-line literal are kept.
+  const multi = `SELECT 'a\n${update(BALANCES)}\nb';\n${update(`app.${ENTRIES}`)};\n`;
+  expect(findLedgerWrites('a.sql', multi)).toEqual([
+    { line: 4, table: ENTRIES, operation: 'UPDATE' },
+  ]);
 });
 
 it('TRUNCATE across lines, with comments, and every ledger table of its list (review r1 S1)', () => {
@@ -206,11 +231,11 @@ it('with git only tracked files are checked; an untracked draft does not fail (r
 
 it('a dollar quote holding an apostrophe, -- or /* does not hide a later write (review r2 S1)', () => {
   const body =
-    'DO $$\nBEGIN\n' +
+    'DO $body$\nBEGIN\n' +
     "  RAISE NOTICE $msg$it's a replay -- or /* not$msg$;\n" +
     `  UPDATE /* replay */ app.${BALANCES} SET version = version + 1;\n` +
     "  RAISE NOTICE $$it's$$;\n" +
-    'END $$;\n';
+    'END $body$;\n';
   const tpl = `const q = sql\`\n${body}\`;\n`;
   expect(findLedgerWrites('a.ts', tpl)).toEqual([
     { line: 5, table: BALANCES, operation: 'UPDATE' },
