@@ -203,3 +203,66 @@ it('with git only tracked files are checked; an untracked draft does not fail (r
   const walked = { files: ['db/seeds/local-repair.sql'], mode: 'walk' as const };
   expect(trackedFiles(root, walked)).toBe(walked);
 });
+
+it('a dollar quote holding an apostrophe, -- or /* does not hide a later write (review r2 S1)', () => {
+  const body =
+    'DO $$\nBEGIN\n' +
+    "  RAISE NOTICE $msg$it's a replay -- or /* not$msg$;\n" +
+    `  UPDATE /* replay */ app.${BALANCES} SET version = version + 1;\n` +
+    "  RAISE NOTICE $$it's$$;\n" +
+    'END $$;\n';
+  const tpl = `const q = sql\`\n${body}\`;\n`;
+  expect(findLedgerWrites('a.ts', tpl)).toEqual([
+    { line: 5, table: BALANCES, operation: 'UPDATE' },
+  ]);
+  expect(findLedgerWrites('a.sql', body)).toEqual([
+    { line: 4, table: BALANCES, operation: 'UPDATE' },
+  ]);
+  // The empty tag closes only at `$$`; the apostrophe inside it starts no literal.
+  const plain = `SELECT $$it's -- /*$$; DELETE /* x */ FROM app.${ENTRIES};\n`;
+  expect(findLedgerWrites('a.sql', plain)).toEqual([
+    { line: 1, table: ENTRIES, operation: 'DELETE FROM' },
+  ]);
+  // A comment inside a function body (a dollar quote) is still blanked: the write counts.
+  const fn = `CREATE FUNCTION f() RETURNS void AS $fn$\n  -- note\n  ${update(`/* c */ app.${BALANCES}`)};\n$fn$ LANGUAGE sql;\n`;
+  expect(findLedgerWrites('a.sql', fn)).toEqual([
+    { line: 3, table: BALANCES, operation: 'UPDATE' },
+  ]);
+});
+
+it('$1 parameters, ${} substitutions and $ inside identifiers are no dollar quotes', () => {
+  const sqlText = `SELECT $1, a$b$ FROM t WHERE x = 'it''s'; -- gone ${update(BALANCES)}\n${update(`app.${ENTRIES}`)};\n`;
+  expect(findLedgerWrites('a.sql', sqlText)).toEqual([
+    { line: 2, table: ENTRIES, operation: 'UPDATE' },
+  ]);
+  const tpl = `const q = sql\`SELECT \${a}$ -- gone ${update(BALANCES)}\n${update(`/* c */ app.${ENTRIES}`)}\`;\n`;
+  expect(findLedgerWrites('a.ts', tpl)).toEqual([{ line: 2, table: ENTRIES, operation: 'UPDATE' }]);
+});
+
+it("E'…' backslash escapes and '' doubled quotes keep the literal bounds", () => {
+  const file = `SELECT E'it\\'s -- x', 'a''b -- y'; /* c */ ${update(`/* d */ app.${BALANCES}`)};\n`;
+  expect(findLedgerWrites('a.sql', file)).toEqual([
+    { line: 1, table: BALANCES, operation: 'UPDATE' },
+  ]);
+  // In a plain literal the backslash is text: the quote after it closes the literal.
+  const plainBackslash = `SELECT 'a\\'; -- gone ${update(ENTRIES)}\n${update(`app.${BALANCES}`)};\n`;
+  expect(findLedgerWrites('a.sql', plainBackslash)).toEqual([
+    { line: 2, table: BALANCES, operation: 'UPDATE' },
+  ]);
+});
+
+it('a double-quoted identifier with "" goes on to the next table of the list (review r2 S2)', () => {
+  const file = `TRUNCATE "audit""snapshot", app.${BALANCES};\nTRUNCATE "x"", app.${ENTRIES}", other.y;\n`;
+  expect(findLedgerWrites('a.sql', file)).toEqual([
+    { line: 1, table: BALANCES, operation: 'TRUNCATE' },
+  ]);
+  const ts = `const s = ${JSON.stringify(`TRUNCATE "audit""snapshot", "app"."${ENTRIES}"`)};\n`;
+  expect(findLedgerWrites('a.ts', ts)).toEqual([
+    { line: 1, table: ENTRIES, operation: 'TRUNCATE' },
+  ]);
+  // The same identifier rules for the other writes: a quoted name is read whole.
+  const other = `${update(`"app"."${BALANCES}"`)};\n${update(`"app"".${BALANCES}"`)};\n`;
+  expect(findLedgerWrites('a.sql', other)).toEqual([
+    { line: 1, table: BALANCES, operation: 'UPDATE' },
+  ]);
+});

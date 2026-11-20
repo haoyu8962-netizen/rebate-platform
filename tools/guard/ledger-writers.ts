@@ -9,7 +9,12 @@
 // .git (verify container) the walked tree is scanned. Comments are blanked first (`//`,
 // `/* */` in TypeScript; `--`, nested `/* */` in SQL files and in the SQL of every TypeScript
 // string and template, quoted SQL text kept, line numbers kept), so a table named in a comment
-// is no hit and a comment between a keyword and the table does not hide a write.
+// is no hit and a comment between a keyword and the table does not hide a write. The SQL lexing
+// follows PostgreSQL: `''` in literals, backslash escapes in `E'…'`, `""` in identifiers, and
+// dollar quotes (`$$ … $$`, `$tag$ … $tag$`; not `$1`) that end only at the same delimiter;
+// the content of a dollar quote is scanned again on its own (a DO block or function body is
+// executable SQL). Table references are read with the PostgreSQL identifier rules (bare or
+// double-quoted with `""`; names compared without case, which errs towards reporting).
 //
 // Counted as a write (case-insensitive, across lines; the table may carry the `app.` schema,
 // with whitespace or comments around the dot, double quotes and an alias):
@@ -28,7 +33,19 @@
 //
 // Known limits: a table name assembled at run time (a variable, string concatenation,
 // `sql.table(...)` / `sql.id(...)`, Kysely `withSchema` plus a table held in a variable) is
-// not recognised. A scan of main on 2026-11-20 found no such write to the ledger tables.
+// not recognised, nor is dynamic SQL built in the database (`EXECUTE format('… %I …', t)`,
+// `EXECUTE 'UPDATE ' || t`, `quote_ident`). A scan of main on 2026-11-20 found no such write
+// to the ledger tables. Further forms this guard does not cover (D10-2278; followup
+// FU-LEDGER-WRITERS-LEXER-LIMITS): Unicode-escaped identifiers (`U&"…"`); a write through a
+// view, a synonym-like alias or a renamed table; a write performed inside a database
+// function, procedure or trigger whose body is not in a scanned .ts / .sql file; and other
+// lexical forms one has to pick on purpose to get past a static scan.
+//
+// Scope (D10-2278): the guard catches an honest developer or agent writing a ledger table
+// outside the ledger module by mistake, in the usual forms (INSERT / UPDATE / DELETE / MERGE /
+// TRUNCATE / COPY … FROM and the Kysely write calls, with or without a schema prefix, quoted,
+// across lines, with ordinary comments). It is not a defence against deliberate bypass; that
+// layer is review plus the database side (the append-only triggers and the grants).
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tryGit } from '../lib/git.ts';
@@ -93,10 +110,23 @@ function skipRegex(text: string, at: number): number {
 /** One character of SQL text and the source offsets it was read from (an escape spans two). */
 type SqlChar = { c: string; from: number; to: number };
 
+/** A character that may continue an SQL identifier (PostgreSQL also allows `$` and digits). */
+const SQL_IDENT_CHAR = /[\w$\u0080-￿]/u;
+/** A character that may start or continue the tag of a dollar quote (no `$`, no leading digit). */
+const DOLLAR_TAG_START = /[A-Za-z_\u0080-￿]/u;
+const DOLLAR_TAG_CHAR = /[\w\u0080-￿]/u;
+
 /**
  * Blanks the SQL comments (`--` to the end of the line, `/* … *\/`, nested as in PostgreSQL)
  * of one SQL text: a `.sql` file, or the content of one TypeScript string or template literal.
- * Text in single quotes (literals) and double quotes (identifiers) is kept.
+ * Text in single quotes (literals; `''` is a quote, and in `E'…'` a backslash escapes) and in
+ * double quotes (identifiers; `""` is a quote) is kept.
+ *
+ * Dollar quotes (`$$ … $$`, `$tag$ … $tag$`; not `$1` parameters, not inside an identifier) are
+ * closed only by the same delimiter: nothing inside them (`'`, `"`, `--`, `/*`) starts a literal
+ * or a comment that runs past it. Their content is not blanked as a whole: it is scanned again
+ * on its own (bounded by the delimiters), because a `DO` block or a function body holding a
+ * dollar quote is executable SQL whose comments must not hide a write.
  */
 function blankSqlStream(text: string, chars: readonly SqlChar[], out: string[]): void {
   const blankRange = (a: number, b: number): void => {
@@ -106,35 +136,79 @@ function blankSqlStream(text: string, chars: readonly SqlChar[], out: string[]):
     }
   };
   const at = (k: number): string => chars[k]?.c ?? '';
-  let k = 0;
-  while (k < chars.length) {
-    const ch = at(k);
-    const next = at(k + 1);
-    if (ch === '-' && next === '-') {
-      let end = k + 2;
-      while (end < chars.length && at(end) !== '\n') end++;
-      blankRange(k, end);
-      k = end;
-    } else if (ch === '/' && next === '*') {
-      let depth = 1;
-      let end = k + 2;
-      while (end < chars.length && depth > 0) {
-        if (at(end) === '/' && at(end + 1) === '*') {
-          depth++;
-          end += 2;
-        } else if (at(end) === '*' && at(end + 1) === '/') {
-          depth--;
-          end += 2;
-        } else end++;
-      }
-      blankRange(k, end);
-      k = end;
-    } else if (ch === "'" || ch === '"') {
-      let end = k + 1;
-      while (end < chars.length && at(end) !== ch) end++;
-      k = end + 1;
-    } else k++;
-  }
+  const startsWith = (k: number, delimiter: string): boolean => {
+    for (let d = 0; d < delimiter.length; d++) if (at(k + d) !== delimiter[d]) return false;
+    return true;
+  };
+  /** The dollar-quote delimiter opening at `k` (within lo…hi), or null. */
+  const dollarTag = (k: number, lo: number, hi: number): string | null => {
+    if (at(k) !== '$' || (k > lo && SQL_IDENT_CHAR.test(at(k - 1)))) return null;
+    let e = k + 1;
+    if (e < hi && at(e) !== '$') {
+      if (!DOLLAR_TAG_START.test(at(e))) return null;
+      while (e < hi && DOLLAR_TAG_CHAR.test(at(e))) e++;
+    }
+    if (e >= hi || at(e) !== '$') return null;
+    let tag = '';
+    for (let d = k; d <= e; d++) tag += at(d);
+    return tag;
+  };
+  const scan = (lo: number, hi: number): void => {
+    let k = lo;
+    while (k < hi) {
+      const ch = at(k);
+      const next = k + 1 < hi ? at(k + 1) : '';
+      if (ch === '-' && next === '-') {
+        let end = k + 2;
+        while (end < hi && at(end) !== '\n') end++;
+        blankRange(k, end);
+        k = end;
+      } else if (ch === '/' && next === '*') {
+        let depth = 1;
+        let end = k + 2;
+        while (end < hi && depth > 0) {
+          if (at(end) === '/' && end + 1 < hi && at(end + 1) === '*') {
+            depth++;
+            end += 2;
+          } else if (at(end) === '*' && end + 1 < hi && at(end + 1) === '/') {
+            depth--;
+            end += 2;
+          } else end++;
+        }
+        blankRange(k, end);
+        k = end;
+      } else if (ch === "'" || ch === '"') {
+        // E'…' (also e'…'): a backslash escapes the next character.
+        const escapes =
+          ch === "'" &&
+          k > lo &&
+          /[eE]/.test(at(k - 1)) &&
+          !(k - 1 > lo && SQL_IDENT_CHAR.test(at(k - 2)));
+        let end = k + 1;
+        while (end < hi) {
+          if (escapes && at(end) === '\\') end += 2;
+          else if (at(end) === ch) {
+            if (end + 1 < hi && at(end + 1) === ch) end += 2;
+            else break;
+          } else end++;
+        }
+        k = end + 1;
+      } else if (ch === '$') {
+        const tag = dollarTag(k, lo, hi);
+        if (tag === null) {
+          k++;
+          continue;
+        }
+        const bodyStart = k + tag.length;
+        let close = bodyStart;
+        while (close + tag.length <= hi && !startsWith(close, tag)) close++;
+        if (close + tag.length > hi) close = hi; // unterminated: the body runs to the end
+        scan(bodyStart, close);
+        k = Math.min(close + tag.length, hi);
+      } else k++;
+    }
+  };
+  scan(0, chars.length);
 }
 
 /** The character an escape `\x` in a TypeScript string stands for, as SQL sees it. */
@@ -241,44 +315,90 @@ export function blankSqlComments(text: string): string {
 // ---------------------------------------------------------------------------------------------
 // Write detection.
 
-// An optional double quote, also escaped (`\"`) inside a TypeScript string.
-const Q = '(?:\\\\?")?';
-const NAMES = LEDGER_TABLES.join('|');
+/** An identifier read from source: its value (quotes resolved) and where it stands. */
+type Ident = { value: string; at: number; end: number };
+/** A table reference: `[ONLY] [schema .] name [*]`; `nameAt` is where the name starts. */
+type TableRef = { schema: string | null; name: string; nameAt: number; end: number };
+
+const UNQUOTED_IDENT = /[A-Za-z_\u0080-\uffff][\w$\u0080-\uffff]*/uy;
+const SPACE = /\s*/y;
+
+function skipSpace(code: string, i: number): number {
+  SPACE.lastIndex = i;
+  SPACE.exec(code);
+  return SPACE.lastIndex;
+}
+
 /**
- * A ledger table reference; group 1 is the bare table name. Whitespace (comments are blanked to
- * whitespace before) may stand between the schema, the dot and the name; a name qualified by
- * another schema (`other.<table>`, also `other . <table>`) is no hit.
+ * One identifier at `i`, as PostgreSQL reads it: bare, or in double quotes where `""` stands
+ * for one quote. Inside a TypeScript string the quotes may be escaped (`\"`, doubled `\"\"`).
  */
-const TABLE = `(?<![\\w$."]|\\.\\s*)${Q}(?:app${Q}\\s*\\.\\s*${Q})?(${NAMES})${Q}(?![\\w$])`;
-/** One identifier: bare, or double-quoted (the quotes escaped inside a TypeScript string). */
-const IDENT = `(?:\\\\?"[^"\\\\\\n]*\\\\?"|[\\w$]+)`;
-/** Any table reference of a TRUNCATE list: `[ONLY] [schema .] name [*]`, spaces allowed. */
-const ANY_TABLE = `(?:only\\s+)?${IDENT}(?:\\s*\\.\\s*${IDENT})?(?:\\s*\\*)?`;
+function readIdent(code: string, i: number): Ident | null {
+  const delimiter = code.startsWith('\\"', i) ? '\\"' : code[i] === '"' ? '"' : null;
+  if (delimiter === null) {
+    UNQUOTED_IDENT.lastIndex = i;
+    const match = UNQUOTED_IDENT.exec(code);
+    return match === null ? null : { value: match[0], at: i, end: i + match[0].length };
+  }
+  let value = '';
+  let j = i + delimiter.length;
+  while (j < code.length && code[j] !== '\n') {
+    if (code.startsWith(delimiter + delimiter, j)) {
+      value += '"';
+      j += 2 * delimiter.length;
+    } else if (code.startsWith(delimiter, j)) {
+      return { value, at: i, end: j + delimiter.length };
+    } else {
+      value += code[j];
+      j++;
+    }
+  }
+  return null;
+}
 
+/** The table reference at `i` (whitespace before it allowed), or null when none stands there. */
+function readTableRef(code: string, i: number): TableRef | null {
+  const p = skipSpace(code, i);
+  let first = readIdent(code, p);
+  if (first === null) return null;
+  // A bare `ONLY` before the table (UPDATE ONLY, DELETE FROM ONLY, TRUNCATE ONLY).
+  const gap = skipSpace(code, first.end);
+  if (/^only$/i.test(code.slice(first.at, first.end)) && gap > first.end) {
+    const after = readIdent(code, gap);
+    if (after !== null) first = after;
+  }
+  const dot = skipSpace(code, first.end);
+  let ref: TableRef = { schema: null, name: first.value, nameAt: first.at, end: first.end };
+  if (code[dot] === '.') {
+    const second = readIdent(code, skipSpace(code, dot + 1));
+    if (second === null) return null;
+    ref = { schema: first.value, name: second.value, nameAt: second.at, end: second.end };
+  }
+  const star = skipSpace(code, ref.end);
+  if (code[star] === '*') ref.end = star + 1;
+  return ref;
+}
+
+/** The ledger table a reference names (no schema or `app`, any case), or null. */
+function ledgerTable(ref: TableRef | null): string | null {
+  if (ref === null) return null;
+  if (ref.schema !== null && ref.schema.toLowerCase() !== 'app') return null;
+  const name = ref.name.toLowerCase();
+  return (LEDGER_TABLES as readonly string[]).includes(name) ? name : null;
+}
+
+/** Statements whose keyword is followed by one table reference that is written. */
 const SQL_WRITES: { operation: string; pattern: RegExp }[] = [
-  { operation: 'INSERT INTO', pattern: new RegExp(`\\binsert\\s+into\\s+${TABLE}`, 'giu') },
-  { operation: 'UPDATE', pattern: new RegExp(`\\bupdate\\s+(?:only\\s+)?${TABLE}`, 'giu') },
-  {
-    operation: 'DELETE FROM',
-    pattern: new RegExp(`\\bdelete\\s+from\\s+(?:only\\s+)?${TABLE}`, 'giu'),
-  },
-  { operation: 'MERGE INTO', pattern: new RegExp(`\\bmerge\\s+into\\s+${TABLE}`, 'giu') },
-  {
-    operation: 'COPY … FROM',
-    pattern: new RegExp(`\\bcopy\\s+${TABLE}\\s*(?:\\([^)]*\\)\\s*)?from\\b`, 'giu'),
-  },
+  { operation: 'INSERT INTO', pattern: /\binsert\s+into\b/giu },
+  { operation: 'UPDATE', pattern: /\bupdate\b/giu },
+  { operation: 'DELETE FROM', pattern: /\bdelete\s+from\b/giu },
+  { operation: 'MERGE INTO', pattern: /\bmerge\s+into\b/giu },
 ];
-
-const KYSELY_WRITE = new RegExp(
-  `\\b(insertInto|updateTable|deleteFrom|mergeInto|replaceInto)\\s*(?:<[^>()]*>\\s*)?\\(\\s*['"\`]\\s*${TABLE}`,
-  'giu',
-);
-
-const TRUNCATE_LIST = new RegExp(
-  `\\btruncate\\s+(?:table\\s+)?(${ANY_TABLE}(?:\\s*,\\s*${ANY_TABLE})*)`,
-  'giu',
-);
-const TABLE_ONLY = new RegExp(TABLE, 'giu');
+const COPY = /\bcopy\b/giu;
+const COPY_FROM = /\s*(?:\([^)]*\)\s*)?from\b/iuy;
+const TRUNCATE = /\btruncate\b(?:\s*\btable\b)?/giu;
+const KYSELY_WRITE =
+  /\b(insertInto|updateTable|deleteFrom|mergeInto|replaceInto)\s*(?:<[^>()]*>\s*)?\(\s*['"`]/giu;
 
 function lineStarts(text: string): number[] {
   const starts = [0];
@@ -306,30 +426,38 @@ export function findLedgerWrites(path: string, text: string): LedgerWrite[] {
   const add = (offset: number, table: string, operation: string): void => {
     writes.push({ line: lineAt(starts, offset), table: table.toLowerCase(), operation });
   };
-  const tableOffset = (match: RegExpExecArray, table: string): number =>
-    match.index + match[0].toLowerCase().indexOf(table.toLowerCase());
+  const one = (end: number, operation: string): void => {
+    const ref = readTableRef(code, end);
+    const table = ledgerTable(ref);
+    if (ref !== null && table !== null) add(ref.nameAt, table, operation);
+  };
 
   for (const { operation, pattern } of SQL_WRITES) {
-    for (const match of code.matchAll(pattern)) {
-      const table = match[1] ?? '';
-      add(tableOffset(match, table), table, operation);
-    }
+    for (const match of code.matchAll(pattern)) one(match.index + match[0].length, operation);
   }
-  for (const match of code.matchAll(TRUNCATE_LIST)) {
-    const list = match[1] ?? '';
-    const listStart = match.index + match[0].length - list.length;
-    for (const hit of list.matchAll(TABLE_ONLY)) {
-      add(
-        listStart + hit.index + hit[0].toLowerCase().indexOf((hit[1] ?? '').toLowerCase()),
-        hit[1] ?? '',
-        'TRUNCATE',
-      );
+  for (const match of code.matchAll(COPY)) {
+    const ref = readTableRef(code, match.index + match[0].length);
+    const table = ledgerTable(ref);
+    if (ref === null || table === null) continue;
+    COPY_FROM.lastIndex = ref.end;
+    if (COPY_FROM.test(code)) add(ref.nameAt, table, 'COPY … FROM');
+  }
+  // Every table of the list counts; the list goes on while a comma follows a reference.
+  for (const match of code.matchAll(TRUNCATE)) {
+    let p = match.index + match[0].length;
+    for (;;) {
+      const ref = readTableRef(code, p);
+      if (ref === null) break;
+      const table = ledgerTable(ref);
+      if (table !== null) add(ref.nameAt, table, 'TRUNCATE');
+      p = skipSpace(code, ref.end);
+      if (code[p] !== ',') break;
+      p++;
     }
   }
   if (!isSql) {
     for (const match of code.matchAll(KYSELY_WRITE)) {
-      const table = match[2] ?? '';
-      add(tableOffset(match, table), table, match[1] ?? '');
+      one(match.index + match[0].length, match[1] ?? '');
     }
   }
   return writes.sort((a, b) => a.line - b.line || a.table.localeCompare(b.table));
