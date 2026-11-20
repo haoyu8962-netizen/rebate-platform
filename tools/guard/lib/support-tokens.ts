@@ -59,7 +59,9 @@
 //       after an operand is refused as ambiguous; CT-06zzzzzp, D10-2007: a class field's
 //       annotation, an optional method signature with an annotated parameter in a type
 //       literal, no header walk past an earlier declaration's `}`; refused: a lone separator
-//       inside a member, `?:` or a second annotation in an annotation);
+//       inside a member, `?:` or a second annotation in an annotation; CT-06zzzzzw: a `,` inside
+//       type arguments separates no members, a conditional type's `?` and the `>` of type
+//       parameters end none, an inserted object type `{ … }` follows the member syntax);
 //    P4 the trailing comma of a list (alone too: a re-wrapped call).
 //    Expressions: identifiers (no keyword), member access `a.b` on an identifier, literals (no
 //    template with `${…}`), object literals of these (properties first, spreads at the end),
@@ -743,9 +745,66 @@ class Tree {
     const ts = this.ts;
     const before = ts[f - 1];
     if (f - 1 === p || before?.block === true) return true;
-    if (before?.kind === 'punct' && (before.text === ';' || before.text === ',')) return true;
+    if (before?.kind === 'punct' && before.text === ';') return true;
+    // CT-06zzzzzw (FU ①): a `,` inside the angles of type arguments (`Map<K,⏎V>`) separates no
+    // members — angles are no brackets of the tree.
+    if (before?.kind === 'punct' && before.text === ',') return !this.inOpenAngles(p, f - 1);
     if (before?.kind === 'punct' && before.text === '}' && this.parent[f - 1] === p) return true;
     return asiAt(ts, f);
+  }
+
+  /**
+   * CT-06zzzzzw (FU ①): whether token k, directly in the braces at p, stands inside angles `<`
+   * not yet closed by `>` / `>>` / `>>>` before it — walking back over the tokens directly in
+   * the braces (a bracket as one), to the `{`, a `;` or a test block.
+   */
+  inOpenAngles(p: number, k: number): boolean {
+    const ts = this.ts;
+    let depth = 0;
+    for (let j = k - 1; j > p; j -= 1) {
+      const t = ts[j] as OutsideToken;
+      if (t.block === true || isOpen(t)) return false;
+      if (isClose(t)) {
+        j = this.match[j] as number;
+        if (j < 0) return false;
+        continue;
+      }
+      if (t.kind !== 'punct') continue;
+      if (t.text === ';') return false;
+      if (t.text === '<') {
+        if (depth === 0) return true;
+        depth -= 1;
+      } else if (t.text === '>' || t.text === '>>' || t.text === '>>>') {
+        depth += t.text.length;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * CT-06zzzzzw (FU ②): the `<` the `>` / `>>` / `>>>` at x (directly in the braces at p)
+   * closes last — the outermost of the angles it ends — or -1.
+   */
+  angleOpen(p: number, x: number): number {
+    const ts = this.ts;
+    let depth = 0;
+    for (let j = x; j > p; j -= 1) {
+      const t = ts[j] as OutsideToken;
+      if (t.block === true || isOpen(t)) return -1;
+      if (isClose(t)) {
+        j = this.match[j] as number;
+        if (j < 0) return -1;
+        continue;
+      }
+      if (t.kind !== 'punct') continue;
+      if (t.text === ';') return -1;
+      if (t.text === '>' || t.text === '>>' || t.text === '>>>') depth += t.text.length;
+      else if (t.text === '<') {
+        depth -= 1;
+        if (depth <= 0) return j;
+      }
+    }
+    return -1;
   }
 
   /**
@@ -2077,6 +2136,7 @@ function allowListProblems(
         for (let x = j + 1; x < c; x += 1) {
           if (!typeToken(x)) return fail(x, `${what(x)} in an inserted type`);
         }
+        if (objectTypesIn(j) < 0) return -1;
         j = c + 1;
         continue;
       }
@@ -2103,6 +2163,124 @@ function allowListProblems(
       j += 1;
     }
     return j === k ? fail(k, 'a type expected after `:`') : j;
+  };
+
+  /**
+   * CT-06zzzzzw (FU ③): the object types `{ … }` in an inserted type — the one at o, or the
+   * ones in the bracket at o (a parameter list, a tuple, an index) — follow the member syntax
+   * (objectType); 0, or -1 (failed).
+   */
+  const objectTypesIn = (o: number): number => {
+    if (punct(o, '{')) return objectType(o);
+    const c = close(o);
+    for (let x = o + 1; x < c; x += 1) {
+      if (!isOpen(ts[x])) continue;
+      if (objectTypesIn(x) < 0) return -1;
+      x = close(x);
+    }
+    return 0;
+  };
+  /** A member's name: an identifier, a string, a number or a computed / index / mapped `[…]`. */
+  const memberKey = (x: number, c: number): boolean => {
+    const t = ts[x];
+    if (t === undefined || x >= c) return false;
+    return isId(t) || t.kind === 'str' || t.kind === 'num' || punct(x, '[');
+  };
+  /** The type parameters `<…>` at x of a method, call or construct signature; past their `>`. */
+  const typeParams = (x: number, c: number): number => {
+    let depth = 0;
+    for (let j = x; j < c; j += 1) {
+      if (isOpen(ts[j])) {
+        if (objectTypesIn(j) < 0) return -1;
+        j = close(j);
+        continue;
+      }
+      if (punct(j, '<')) depth += 1;
+      else if (punct(j, '>') || punct(j, '>>') || punct(j, '>>>')) {
+        depth -= tx(j).length;
+        if (depth === 0) return j + 1;
+        if (depth < 0) return fail(j, `${what(j)} in an inserted object type (CT-06zzzzzw)`);
+      }
+    }
+    return fail(x, `${what(x)} not closed in an inserted object type (CT-06zzzzzw)`);
+  };
+  /** `[<…>] (…) [: T]` of a method, call or construct signature at x. */
+  const signature = (x: number, c: number): number => {
+    let j = x;
+    if (punct(j, '<')) {
+      j = typeParams(j, c);
+      if (j < 0) return -1;
+    }
+    if (!punct(j, '(') || j >= c) {
+      return fail(j, `${what(j)} in an inserted object type where \`(\` is expected (CT-06zzzzzw)`);
+    }
+    if (objectTypesIn(j) < 0) return -1;
+    j = close(j) + 1;
+    return punct(j, ':') && j < c ? typeSpan(j + 1, c, true) : j;
+  };
+  /**
+   * One member of an object type with its close at c, from k: `[readonly | get | set] key [?]
+   * [: T]` (a computed / index / mapped key `[…]`, `-readonly […]`, `[…]-?`), a method
+   * `key[?][<…>](…)[: T]`, a call signature `[<…>](…)[: T]`, a construct signature `new …`;
+   * past it.
+   */
+  const typeMember = (k: number, c: number): number => {
+    let j = k;
+    if (punct(j, '-') && isId(ts[j + 1], 'readonly') && punct(j + 2, '[')) j += 2;
+    else if (isId(ts[j]) && ['readonly', 'get', 'set'].includes(tx(j)) && memberKey(j + 1, c)) {
+      j += 1;
+    }
+    if (j === k && isId(ts[j], 'new') && (punct(j + 1, '(') || punct(j + 1, '<'))) {
+      return signature(j + 1, c);
+    }
+    if (j === k && (punct(j, '(') || punct(j, '<'))) return signature(j, c);
+    if (!memberKey(j, c)) {
+      return fail(
+        j,
+        `${what(j)} in an inserted object type where a member starts (a name, \`[\`, \`(\` or \`<\`, CT-06zzzzzw)`,
+      );
+    }
+    const computed = punct(j, '[');
+    if (computed) {
+      if (objectTypesIn(j) < 0) return -1;
+      j = close(j) + 1;
+    } else {
+      j += 1;
+    }
+    if (computed && punct(j, '-') && punct(j + 1, '?')) j += 2;
+    else if (punct(j, '?')) j += 1;
+    if (punct(j, ':') && j < c) return typeSpan(j + 1, c, true);
+    if (punct(j, '(') || punct(j, '<')) return signature(j, c);
+    return j;
+  };
+  /**
+   * CT-06zzzzzw (FU ③): an object type `{ … }` at o in an inserted type (its tokens are type
+   * tokens already): members (typeMember) separated by `;`, `,` or a line break, a trailing
+   * separator allowed — no `{ x: void: string }`, `{ x;: number }`, `{ x,: number }`,
+   * `{ x:?: number }`; 0, or -1 (failed).
+   */
+  const objectType = (o: number): number => {
+    const c = close(o);
+    let k = o + 1;
+    while (k < c) {
+      const j = typeMember(k, c);
+      if (j < 0) return -1;
+      if (j <= k) return offList(k);
+      if (j >= c) break;
+      if (punct(j, ';') || punct(j, ',')) {
+        k = j + 1;
+        continue;
+      }
+      if (ts[j]?.nl === true) {
+        k = j;
+        continue;
+      }
+      return fail(
+        j,
+        `${what(j)} after a member of an inserted object type (members are separated by \`;\`, \`,\` or a line break, CT-06zzzzzw)`,
+      );
+    }
+    return 0;
   };
 
   /** Bracketed items from `(` / `[` at o to its close, each an operand; past the close. */
@@ -2373,20 +2551,47 @@ function allowListProblems(
      * none inside an annotation (`{ a:; number }`); after an inserted member on a line of its
      * own, the existing code on the next line starts a member.
      */
+    /** Whether the name at f (its modifiers before it) stands at a member's start. */
+    const named = (f: number): boolean => {
+      let g = f;
+      while (!ht.memberStart(p, g) && isId(ts[g - 1]) && MEMBER_MODIFIERS.has(tx(g - 1))) {
+        g -= 1;
+      }
+      return ht.memberStart(p, g);
+    };
     const memberEnds = (x: number): boolean => {
       const t = ts[x];
       if (t === undefined || t.block === true) return false;
+      // CT-06zzzzzw (FU ①): nothing inside type arguments not closed yet (`Map<K,⏎ keyof⏎ V>`)
+      // ends a member.
+      if (ht.inOpenAngles(p, x + 1)) return false;
       if (t.kind === 'id' && TYPE_OPERATOR_WORDS.has(t.text)) {
         // CT-06zzzzzp (money r2 S2): a type operator (`a: keyof⏎U`) ends no member; the word
         // ends one only as the member's own name, at a member's start (`{ keyof }`, `{ new }`).
-        let f = x;
-        while (!ht.memberStart(p, f) && isId(ts[f - 1]) && MEMBER_MODIFIERS.has(tx(f - 1))) {
-          f -= 1;
-        }
-        return ht.memberStart(p, f);
+        return named(x);
       }
       if (t.kind !== 'punct') return t.kind !== 're';
-      return [')', ']', '}', '>', '>>', '>>>', '?'].includes(t.text);
+      if (t.text === '?') {
+        // CT-06zzzzzw (FU ②): a `?` ends a member only as the optional mark of an untyped
+        // member, right after its name (`{ a? }`, `{ [k]? }`) — not a conditional type's `?`.
+        const q = ts[x - 1];
+        if (q === undefined) return false;
+        if (q.kind === 'punct' && q.text === ']') {
+          const f = ht.match[x - 1] as number;
+          return f >= 0 && named(f);
+        }
+        return (isId(q) || q.kind === 'str' || q.kind === 'num') && named(x - 1);
+      }
+      if (['>', '>>', '>>>'].includes(t.text)) {
+        // CT-06zzzzzw (FU ②): the `>` of type arguments after a name (`Map<K, V>`) ends a
+        // member; the `>` of type parameters (a generic function type `a: <U>⏎(x: U) => U`, a
+        // generic method or call signature `m<T>(…)`, `new <T>(…)`) is followed by its `(`.
+        const lt = ht.angleOpen(p, x);
+        if (lt < 0) return true;
+        const q = ts[lt - 1];
+        return isId(q) && !TYPE_OPERATOR_WORDS.has(q?.text ?? '') && !named(lt - 1);
+      }
+      return [')', ']', '}'].includes(t.text);
     };
     const memberStarts = (x: number): boolean => {
       const t = ts[x];
@@ -2400,7 +2605,12 @@ function allowListProblems(
         `a lone separator ${what(x)} inserted inside an existing member (no member before or after it, CT-06zzzzzp)`,
       );
     let k = s;
-    let needSep = !(s - 1 === p || isSep(s - 1));
+    // CT-06zzzzzw (FU ①): in a member list a `,` inside type arguments (`Map<K,`) is no
+    // separator (Tree.memberStart).
+    let needSep = !(
+      s - 1 === p ||
+      (isSep(s - 1) && (opts.members !== true || ht.memberStart(p, s)))
+    );
     let last = false;
     // CT-06zzzzzp (independent Claude money r1, two S2): in a member list a run that follows no
     // separator and no `{` stands after a whole member — not inside an annotation (`a:⏎b?:
