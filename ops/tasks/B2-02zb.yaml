@@ -13,6 +13,7 @@ type: impl
 # 规则测试另含一条属性测试：随机过账（多分录凭证、跨子户、首笔为负、白名单类型、改派红冲），不做重算 → 新旧两版输出的差异行逐行相同（次数 / 种子经 @couli/testing）。
 # 实现（证实后）：新文件 db/invariants/ledger/11_negative-balance-drops-by-amount.sql（下降改按本凭证在该子户的净发生额 < 0 判，不再与缓存派生的前一条 balance_after_fen 比；
 # 报哪一条与豁免口径同 07），superseded.json 追加 07 → 11（只增不改）。不改 07 原文件、不改 ledger 过账代码。
+# 2026-11-20 补丁 1（D10-2237，money r1 S2）：07 由 11_negative-balance-drops-by-amount.sql 替代后，两个冻结夹具写死的旧文件名照 B2-04zzr / D10-1140 先例改成新文件名——test/spec/ledger/daily-check-execute/kit.ts:65（FILES['07']）与 test/spec/settlement/admin-union-receipts/kit.ts:96（INVARIANT_FILES），只改这两处（D10-1670 类，不动金额期望、不删不放宽断言），modify_existing 两条；superseded.json 的追加照 approvals 61 / D10-1150 算规则测试资产，列入 test_paths、由写测提交（approvals 一次性条目，写测第 4 次只改这三处，新鲜独立 Claude 改 + 另一位只读复审）。
 refs: [BR-FUND-19]
 refs_hash:
   BR-FUND-19: 34f619112535
@@ -20,8 +21,13 @@ deps: []
 paths:
   - 'db/invariants/ledger/11_negative-balance-drops-by-amount.sql'
   - 'db/invariants/ledger/superseded.json'
+  - 'test/spec/ledger/daily-check-execute/kit.ts'
+  - 'test/spec/settlement/admin-union-receipts/kit.ts'
 test_paths:
+  - 'db/invariants/ledger/superseded.json'
   - 'test/spec/db/ledger/invariants-07-after-recalc/**'
+  - 'test/spec/ledger/daily-check-execute/kit.ts'
+  - 'test/spec/settlement/admin-union-receipts/kit.ts'
 impl: claude
 tester: claude-independent
 accept:
