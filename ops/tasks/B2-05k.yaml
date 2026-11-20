@@ -7,7 +7,7 @@ type: impl
 # 状态备注：等 B2-05e 合并（消费者与 blocked_reason 写法在它里面）。
 refs: [BR-WDR-05, BR-FUND-10]
 refs_hash:
-  BR-WDR-05: 99e2e2654ce0
+  BR-WDR-05: 32894d40942c
   BR-FUND-10: 3ed330a761d1
 deps: [B2-05e, B2-04ka]
 paths:

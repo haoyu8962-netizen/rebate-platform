@@ -8,9 +8,9 @@ type: impl
 # 2026-11-14 补丁 1（fe）：补 refs。批量栏（已选统计与【批量通过】）只在勾选至少一张后出现（规格 §2「勾选后点【批量通过】」、§6 隐藏不置灰），未勾选时列表与 F1-08a 冻结用例 READONLY#1 / BROWSER#1 的列表部分照旧没有可点的写入口，故不登记 modify_existing；红跑若显示冻结用例受影响再另补。
 refs: [BR-WDR-05, BR-WDR-10, BR-ID-34]
 refs_hash:
-  BR-WDR-05: 99e2e2654ce0
+  BR-WDR-05: 32894d40942c
   BR-WDR-10: 1db6b508e224
-  BR-ID-34: 6a2bdd4ca3ce
+  BR-ID-34: 6f4bb7f212cb
 deps: [F1-08ah]
 paths:
   - 'apps/admin/src/pages/withdrawals/**'

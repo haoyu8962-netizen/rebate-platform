@@ -18,7 +18,7 @@ type: test-change
 # 发布门禁清单：本单与 B2-02x 都合并前，上述三点没有测试守着（D10-2198 / D10-2200）。
 refs: [BR-FUND-19]
 refs_hash:
-  BR-FUND-19: 34f619112535
+  BR-FUND-19: a918eec09fff
 deps: [B2-02x]
 paths:
   - 'test/spec/ledger/admin-recon-balance-recalc/notice.int.test.ts'

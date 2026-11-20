@@ -11,7 +11,7 @@ refs_hash:
   BR-CALC-13: 54c06125032c
   BR-FUND-04: 497806f6f068
   BR-FUND-05: 972b05594c07
-  BR-FUND-19: 34f619112535
+  BR-FUND-19: a918eec09fff
 deps: []
 paths:
   - 'packages/domain/src/settlement/credit/**'

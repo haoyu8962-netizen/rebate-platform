@@ -17,7 +17,7 @@ type: test-change
 # tester claude-independent（本单调用数从零算），spec-test 由 Codex 做全量，评审 Codex。
 refs: [BR-WDR-12, BR-WDR-11]
 refs_hash:
-  BR-WDR-12: 37adcd14e97f
+  BR-WDR-12: 3a822658ab35
   BR-WDR-11: 9193f1c7ed27
 deps: [F1-08an]
 paths:

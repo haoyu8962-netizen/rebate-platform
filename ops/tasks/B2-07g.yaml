@@ -8,7 +8,7 @@ type: impl
 # 11-20 be 补 paths（D10-2157 开工时发现）：契约两接口仍是 x-implementation: planned，实现要去掉并同步生成物，照 B2-02x 写法。
 refs: [BR-WDR-12, BR-WDR-14, BR-WDR-17]
 refs_hash:
-  BR-WDR-12: 37adcd14e97f
+  BR-WDR-12: 3a822658ab35
   BR-WDR-14: 6328f3cda2e6
   BR-WDR-17: f6119a685e00
 deps: [CT-24zzo]

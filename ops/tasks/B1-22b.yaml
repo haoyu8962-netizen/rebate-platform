@@ -8,7 +8,7 @@ type: impl
 refs: [BR-ID-24, BR-TEXT-20]
 refs_hash:
   BR-ID-24: 4cba1bd5dd15
-  BR-TEXT-20: f1a1f1898b2d
+  BR-TEXT-20: 009a57b78f99
 deps: [B1-22a]
 paths:
   - 'apps/api/src/modules/union/**'

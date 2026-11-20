@@ -8,7 +8,7 @@ type: impl
 # 冻结库表测试精确断言列全集（send-log 约 134 / 165 行、template-override 约 81 / 391 行、send-log-suppressed 约 94 行）：测试阶段由测试作者只把新列补进列全集、其余断言不动（第一类保护路径，照 B1-12n 先例，#24 标签由编排核对；GT-23bgm S1）。
 refs: [BR-TEXT-20]
 refs_hash:
-  BR-TEXT-20: f1a1f1898b2d
+  BR-TEXT-20: 009a57b78f99
 deps: [B1-12f]
 paths:
   - 'db/migrations/**'

@@ -7,7 +7,7 @@ type: impl
 refs: [BR-FUND-15, BR-TEXT-19]
 refs_hash:
   BR-FUND-15: 849cd1eab9f2
-  BR-TEXT-19: 49112cf6e025
+  BR-TEXT-19: 833dc40d2edc
 deps: [B2-04y, B2-13a]
 paths:
   - 'apps/api/src/modules/ledger/wallet-ledger.module.ts'

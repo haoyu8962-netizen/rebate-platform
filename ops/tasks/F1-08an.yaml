@@ -12,9 +12,9 @@ type: impl
 # 2026-11-20 补丁 4（fe，同 F1-08am 补丁 2 / F1-08cc 先例）：写测第 4 次后正式先红（规则测试提交 7b6c0de38，couli-runs/F1-08an/red/2）把 6 份冻结文件中有改动块或读了 support 改动的整份判定，未改的 11 条在骨架上绿被记问题；按 red_exempt 登记这 11 条，块体均未改。
 refs: [BR-WDR-12, BR-WDR-11, BR-ID-34]
 refs_hash:
-  BR-WDR-12: 37adcd14e97f
+  BR-WDR-12: 3a822658ab35
   BR-WDR-11: 9193f1c7ed27
-  BR-ID-34: 6a2bdd4ca3ce
+  BR-ID-34: 6f4bb7f212cb
 deps: [F1-08al]
 paths:
   - 'apps/admin/src/pages/withdrawals/**'

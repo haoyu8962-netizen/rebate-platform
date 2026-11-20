@@ -6,7 +6,7 @@ type: impl
 # 2026-11-12 done：#3211 合并（头 c0cab90bcc75，主干 d1ca69ea34a9）。规则测试 1 次（claim-result-terminal 4 条，先红 4 条）；Codex spec-test r1 pass、money r1 pass。readNotifyBeneficiaries 加可选 exclude_terminal（默认语句不变），找回结果通知传 true。本条 done 台账由编排代补：账号 4 当日被要求验证，union 线停着。
 refs: [BR-TEXT-09, BR-CALC-15]
 refs_hash:
-  BR-TEXT-09: f65fc659a6f3
+  BR-TEXT-09: f6ccbeb61808
   BR-CALC-15: dec05fa8363f
 deps: []
 paths:

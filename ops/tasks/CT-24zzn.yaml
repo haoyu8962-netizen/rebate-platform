@@ -11,9 +11,9 @@ type: contract
 # 资金单：后续 B2-02x 强度 high、资金评审逐项、写测与评审独立 Claude（D10-2003）、合并前挂批准标签。本契约单只改契约与生成物。
 refs: [BR-FUND-19, BR-FUND-16, BR-ID-34]
 refs_hash:
-  BR-FUND-19: 34f619112535
+  BR-FUND-19: a918eec09fff
   BR-FUND-16: 077f6d412d5a
-  BR-ID-34: 6a2bdd4ca3ce
+  BR-ID-34: 6f4bb7f212cb
 contract_sections: ['11.1']
 deps: []
 paths:

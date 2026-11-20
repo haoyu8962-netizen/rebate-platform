@@ -9,7 +9,7 @@ type: impl
 # 2026-11-13 更正（be）：① 迁移号改 0140（D10-1494：门禁要求取下一个空号、编号连续，CT-13e 先落地；title 里的「0141」按台账守卫不改，以 paths 为准；0141 改给 B1-34q）。② 分区维护不扩共享函数（冻结 test/spec/db/partitions/day-functions.int.test.ts:172、:243 钉着它们只认 link_logs，编排 21:49 同意），改为 events 专用的 ensure_events_day_partition / drop_expired_events_day_partitions，另加 purge_expired_events_default 删 DEFAULT 里过期行（Codex money r1 S1，编排 22:07 同意）。③ D10-1489：events.user_id 只许非空 → 空（列级 UPDATE (user_id) + 触发器），注销时解除关联的默认待负责人确认，refs 补 BR-ID-28。
 refs: [BR-ID-28, BR-ID-30]
 refs_hash:
-  BR-ID-28: 205ab4bdd1d4
+  BR-ID-28: 0723f447192c
   BR-ID-30: 8ea92988c8cd
 deps: []
 paths:
