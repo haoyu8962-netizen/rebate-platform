@@ -1,0 +1,51 @@
+id: B2-02xb
+repo: rebate-platform
+title: 'B2-02xb：差错单重算补规则测试三件——预置旧通知不被改写、frozen 下调落库、合计 ±2^53 边界（B2-02x Codex r5 / r6 S1，规划/11 §2.5 拆小任务，D10-2198 / D10-2200）'
+type: test-change
+# 2026-11-20 be 入账（D10-2198 ①），D10-2200 扩范围、改顺序。B2-02x 写测 5 次、独立 Claude 10 次都到顶，补测试在本单名下做；
+# 全是纯新增块 / 新文件，不动 recalc.int 三处与任何已冻结块、不改辅助文件（kit.ts 只读引用）。三件：
+# ① test/spec/ledger/admin-recon-balance-recalc/notice.int.test.ts 末尾新增：取快照前给目标会员预置一条未读旧 BALANCE_CORRECTED 站内信 + 对应通知日志 + 一条别的 code 的旧站内信，
+#    重算（可提现变化）后旧行逐行原样（含 read_at 仍为空）、新增恰为本差错单那一条（站内信 user / code / title，通知日志 user / code /
+#    channel / status / dedupe_key=balance_corrected:<差错单 id>:<重算后 version>）；同一会员连续两次重算，第一次那条在第二次后逐行原样（Codex r5 S1）；
+# ② 新文件 test/spec/ledger/admin-recon-balance-recalc/frozen-down.int.test.ts：缓存 available 300 / frozen 50、分录合计 300 / 0，重算后读余额行 available_fen=300、frozen_fen=0、
+#    version 恰 +1；另一条 available 与 frozen 同时下调，余额行两项都等于分录合计（Codex r6 S1：只查应答不查余额行）；
+# ③ 同新文件 frozen-down.int.test.ts：分录合计 available 或 frozen 为 2^53 / −2^53（JSON 安全整数之外）→ 20001 [recon_diff_id]、余额行与 version
+#    不变、审计记拒绝原因；2^53−1 / −(2^53−1)（frozen 仍须 ≥0）接受（Codex r6 oos：只按 PG bigint 校验会接受、JSON 失真）。
+# 顺序（D10-2200）：本单工作分支基在 task/B2-02x 头上，测试先写、在 B2-02x 实现上跑；绿的配实现探针证明有牙——漏写 frozen 下调、插入时把旧站内信置已读、
+# 改写旧通知日志 status、只按 bigint 校验——探针实测结果写进证据；红的即实现有问题，在 B2-02x 实现提交里改。B2-02x 先 land，本单变基后 land；
+# 新块在 B2-02x 实现上为绿，标题定稿后台账补丁登 red_exempt（带探针，D10-2198 / D10-1812）；同目录被整份重判的已冻结块也在那时登 red_exempt。
+# tester claude-independent（本单调用数从零算），spec-test 由 Codex 做全量，评审 Codex。FU-B202X-APART-FROM-NOTICES-KEYS 不并入（单列）。
+# 发布门禁清单：本单与 B2-02x 都合并前，上述三点没有测试守着（D10-2198 / D10-2200）。
+refs: [BR-FUND-19]
+refs_hash:
+  BR-FUND-19: 34f619112535
+deps: [B2-02x]
+paths:
+  - 'test/spec/ledger/admin-recon-balance-recalc/notice.int.test.ts'
+  - 'test/spec/ledger/admin-recon-balance-recalc/frozen-down.int.test.ts'
+test_paths:
+  - 'test/spec/ledger/admin-recon-balance-recalc/notice.int.test.ts' # 只在末尾新增块
+  - 'test/spec/ledger/admin-recon-balance-recalc/frozen-down.int.test.ts' # 新文件
+red_exempt:
+  - file: 'test/spec/ledger/admin-recon-balance-recalc/notice.int.test.ts'
+    test: '[AC-B2-02x#49] 调增、调减各写一条站内信 BALANCE_CORRECTED（同一事务、标题「余额更正」、正文带调用方给的前后金额）；通知日志只有站内信一条，去重键 balance_corrected:<差错单>:<重算后余额版本号>；不推送、不发短信、不写事件'
+    reason: '冻结用例、测试体未改：B2-02x 的规则测试，在 B2-02x 实现上照旧绿；同文件因新增块整份重判（D10-2198 / D10-1812）'
+  - file: 'test/spec/ledger/admin-recon-balance-recalc/notice.int.test.ts'
+    test: '[AC-B2-02x#50] 不写站内信：只改 frozen（可提现前后相同）、前后都相同、拒绝（frozen 合计为负）都没有通知日志、没有站内信'
+    reason: '冻结用例、测试体未改：B2-02x 的规则测试，在 B2-02x 实现上照旧绿；同文件因新增块整份重判（D10-2198 / D10-1812）'
+  - file: 'test/spec/ledger/admin-recon-balance-recalc/notice.int.test.ts'
+    test: '[AC-B2-02x#51] 会员状态（D10-2097）：users.status 为 deleting、deleted 的会员照样重算但不写站内信；注销冷静期（status normal、注销申请 cooling）照写一条'
+    reason: '冻结用例、测试体未改：B2-02x 的规则测试，在 B2-02x 实现上照旧绿；同文件因新增块整份重判（D10-2198 / D10-1812）'
+  - file: 'test/spec/ledger/admin-recon-balance-recalc/notice.int.test.ts'
+    test: '[AC-B2-02x#52] 同一事务：重算在写余额或写审计时失败 → 50001，没有通知日志、没有站内信；再调一次即恰好一条'
+    reason: '冻结用例、测试体未改：B2-02x 的规则测试，在 B2-02x 实现上照旧绿；同文件因新增块整份重判（D10-2198 / D10-1812）'
+  - file: 'test/spec/ledger/admin-recon-balance-recalc/notice.int.test.ts'
+    test: '[AC-B2-02x#53] D10-2084：同一差错单两次回正（缓存 −200 → 分录 500，缓存再漂成 −200 后再重算）→ 两个不同的重算后版本、两条站内信，去重键分别带这两个版本；第一次回正解除 NEGATIVE_BALANCE 拦截，两次都不发事件'
+    reason: '冻结用例、测试体未改：B2-02x 的规则测试，在 B2-02x 实现上照旧绿；同文件因新增块整份重判（D10-2198 / D10-1812）'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/admin-recon-balance-recalc/**'
+status: todo
+pr: null
