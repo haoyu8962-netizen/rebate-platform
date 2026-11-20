@@ -29,7 +29,7 @@ import {
 } from './helpers.ts';
 
 it(
-  '[AC-F1-08al-ACCESS#1] 仅手动补录权限可勾真实 APPROVED；无此权限不可勾，不能借补录权限批量通过',
+  '[AC-F1-08al-ACCESS#1] 仅手动补录权限可勾真实 APPROVED 并出【批量手动打款】；持 payout.execute 不持补录时可勾 APPROVED、勾选后可用批量入口恰为【批量自动打款】（F1-08an），不出【批量手动打款】【批量通过】；两者都不持时不可勾，不能借补录权限批量通过',
   { timeout: 90_000 },
   async () => {
     const rows = samples();
@@ -38,9 +38,34 @@ it(
     for (const permissions of [
       { isSuper: false, permissions: ['fund.view'] },
       { isSuper: false, permissions: ['fund.view', 'payout.execute', 'export', 'config.business'] },
+      { isSuper: false, permissions: ['fund.view', 'export', 'config.business'] },
     ]) {
       const server = serverFor(rows);
       await mount(server, permissions);
+      if (permissions.permissions.includes('payout.execute')) {
+        // F1-08an (BR-WDR-12): payout.execute selects APPROVED rows for 批量自动打款 only.
+        expect(
+          within(rowOf(main(), approved.out_biz_no))
+            .queryAllByRole('checkbox')
+            .filter((node) => !disabled(node)),
+        ).toEqual([checkbox(approved)]);
+        expect(buttons(main(), '批量手动打款')).toEqual([]);
+        expect(buttons(main(), '批量通过')).toEqual([]);
+        expect(buttons(main(), '批量自动打款')).toEqual([]);
+        await select([approved]);
+        expect(buttons(main(), '批量手动打款')).toEqual([]);
+        expect(buttons(main(), '批量通过')).toEqual([]);
+        const auto = buttons(main(), '批量自动打款');
+        expect(auto).toHaveLength(1);
+        expect(
+          ['批量手动打款', '批量通过', '批量自动打款']
+            .flatMap((name) => buttons(main(), name))
+            .filter((node) => !disabled(node)),
+        ).toEqual(auto);
+        expect(server.writes()).toEqual([]);
+        cleanup();
+        continue;
+      }
       expect(
         within(rowOf(main(), approved.out_biz_no))
           .queryAllByRole('checkbox')
@@ -156,6 +181,25 @@ it(
     expect(inputs(modal)).toEqual([]);
     expect(disabled(button(modal, '确认录入'))).toBe(true);
     await click(button(modal, '确认录入'));
+    expect(server.writes()).toEqual([]);
+  },
+);
+
+it(
+  '[AC-F1-08an-ACCESS#2] 仅持 fund.view 与 payout.execute 时可勾真实 APPROVED，勾选后【批量自动打款】恰 1 个且可用，不出【批量手动打款】【批量通过】，不点不写',
+  { timeout: 60_000 },
+  async () => {
+    const rows = samples();
+    const approved = rows.find((row) => row.status === 'APPROVED')!;
+    approved.display_status = 'pending_review';
+    const server = serverFor(rows);
+    await mount(server, { isSuper: false, permissions: ['fund.view', 'payout.execute'] });
+    await select([approved]);
+    const auto = buttons(main(), '批量自动打款');
+    expect(auto).toHaveLength(1);
+    expect(disabled(auto[0]!)).toBe(false);
+    expect(buttons(main(), '批量手动打款')).toEqual([]);
+    expect(buttons(main(), '批量通过')).toEqual([]);
     expect(server.writes()).toEqual([]);
   },
 );
