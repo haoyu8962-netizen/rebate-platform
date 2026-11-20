@@ -2,6 +2,8 @@ id: F1-08eeb
 repo: rebate-platform
 title: 'F1-08eeb：差错单「类型 → 操作」七种负例——R1 / R2 / 月末 / 月结两种 / 预估变化 / 黑名单待复核都不出【去调账】【申诉恢复】（F1-08ee 伴随测试单，D10-2211）'
 type: test-change
+# **作废**（2026-11-20，D10-2219）：负责人定账本复审三题为 B / B / B 后，【去调账】口径更正为只在 union_mismatch（R1）与 channel_mismatch（R2）上出、ledger_mismatch 不出
+# （更正 D10-2206），本单标题里「R1 / R2 都不出」已不成立；已入账任务不得改 title，故由 **F1-08eec** 取代（范围扩为两种出、其余不出，并入 F1-08ee 与旧口径冲突的块和 Codex r2 的 10 条 S1）。本单未开工。
 # 2026-11-20 fe 入账（编排 D10-2211，同 F1-08anb / B2-02xb 的伴随单做法）。F1-08ee 写测 3 轮用满，第 3 轮的类型矩阵（D10-2206：【去调账】只在 ledger_mismatch、
 # 【申诉恢复】只在 appeal_restore / platform_restore 上出，其余类型都不出）里，七条负例 [AC-F1-08ee-TYPES#2/3/5/6/7/9/10]（union_mismatch、channel_mismatch、
 # month_end_unbalanced、settle_amount_mismatch、settle_missing、estimate_changed_after_credit、blacklist_after_credit 待处理时两个入口都不出）在骨架上天然为绿，
@@ -26,5 +28,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-recon-adjust-restore/eeb/**'
-status: todo
+status: void
 pr: null

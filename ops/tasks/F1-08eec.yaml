@@ -1,0 +1,36 @@
+id: F1-08eec
+repo: rebate-platform
+title: 'F1-08eec：差错单【去调账】按类型出入口（R1 / R2 出、内部日终差异不出）、预填与调账提交的规则测试（F1-08ee 伴随测试单，取代 F1-08eeb，D10-2219）'
+type: test-change
+# 2026-11-20 fe 入账（编排 D10-2219；取代 F1-08eeb，作废原因见该台账）。负责人定账本复审三题为 B / B / B：余额缓存 ≠ 分录由系统自动按分录更正，
+# 内部自检类（ledger_mismatch）不再由财务处理，不能诱导人用调账把缓存差额「做平」。【去调账】新口径（更正 D10-2206）：持 fund.adjust、状态 open / processing、
+# 类型为 union_mismatch（R1）或 channel_mismatch（R2）时出；ledger_mismatch 不出，其余类型不出（依据 BR-FUND-24 ②「RECON_FIX 关联 R1 / R2 / R3 差错单、
+# PAYOUT_RECOVERY 关联提现单与差错单」与 BR-WDR-23 的重复打款例）。F1-08ee 写测 3 轮已满，与旧口径冲突的块（adjust.test.ts 全部 7 块与 entries.test.ts 的
+# TYPES#1 / #11 / #12、SUPER#1 / #2，原文存 couli-runs/F1-08ee/moved-to-eeb-v2/）从 F1-08ee 整块移出，在本单按新口径重写。本单要钉：
+# ① 类型 → 操作：契约 AdminReconDiffType 的 10 种逐个钉（toEqual 严格）——【去调账】恰在 union_mismatch / channel_mismatch 上出（open、processing 都出；adjusted /
+#    written_off / closed 不出），ledger_mismatch 与其余七种不出；【申诉恢复】只在 appeal_restore / platform_restore 上出（与 F1-08ee 一致）；超管同口径；无 fund.adjust 不出。
+# ② 预填：union_mismatch 预填原因 RECON_FIX；channel_mismatch 原因必选，选项恰为 RECON_FIX 与 PAYOUT_RECOVERY 两项、不预填；关联单据预填该差错单号；
+#    用户与金额不预填（D10-2204：用户必选，未选不能提交，请求 user_id 恰为所选，不出现由差错单推出的用户）；差错单 ref_type / ref_id 原样显示。
+# ③ 调账提交：短信档顺序、请求体逐字段（所选用户、方向、整数分、原因、关联单据、所选科目、说明）、响应余额前后（含负余额）、不设单笔上限、0.00 拦截、
+#    verify_phone_missing、结果未知（含已生效后丢响应），并补 F1-08ee Codex spec-test r2 的 10 条 S1（couli-runs/F1-08ee/review-spec-r2b.json）。
+# 顺序（同 F1-08anb / D10-2211）：工作分支基在 task/F1-08ee 的实现头上，新用例在实现上为绿；探针：常量表给 ledger_mismatch 或其余类型加上【去调账】、
+# 去掉 R1 / R2 的入口、channel_mismatch 预填原因或多给原因选项等，对应用例须红，探针实测结果写进证据。F1-08ee 实现完成、本单新用例绿且探针杀到之后，
+# F1-08ee 才 land，本单随后变基 land；新块在实现上为绿，标题定稿后台账补丁登 red_exempt（带探针）。tester claude-independent（本单调用数从零算），spec-test 由 Codex 做全量。
+refs: [BR-FUND-24, BR-FUND-19, BR-WDR-23, BR-ID-34]
+refs_hash:
+  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-19: 34f619112535
+  BR-WDR-23: 98981fee10c7
+  BR-ID-34: 6a2bdd4ca3ce
+deps: [F1-08ee]
+paths:
+  - 'test/spec/frontend/admin-recon-adjust-restore/eec/**'
+test_paths:
+  - 'test/spec/frontend/admin-recon-adjust-restore/eec/**' # 新文件
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-recon-adjust-restore/eec/**'
+status: todo
+pr: null
