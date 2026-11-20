@@ -693,3 +693,9 @@ approvals:
     granted: true
     date: '2026-11-20'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测次数属门禁流程小改动），D10-2149，先例第 107 条（B2-02x 第 4 次）、第 110 条：前 4 次不是连续不过（第 4 次后先红合格、spec-test r3 通过），这次是之后负责人定了「余额更正要通知」（D10-2091 / 2092 / 2097）与来源号口径（D10-2084），规则变了要补测试。范围写死（任务书 couli-runs/B2-02x/brief-test5-draft.md §7）：① 来源号为 recalc:<recon_diff_id>:<重算后余额版本号>，钉格式，并钉同一差错单两次回正得两个不同号；② 重算在同一事务里经 notification 的 recordBalanceCorrectedMessage 写站内信：调增、调减各写一条，只有冻结变化（可提现前后相同）、前后相同、拒绝时不写，users.status 为 deleting / deleted 不写，注销冷静期照写，只站内信、不推送不发短信；若钉默认正文，以 B2-02za 落地后的「可提现余额」常量为准，不钉旧词；③ test/spec/ledger/admin-recon-balance-recalc/plan.test.ts 第 238、260、267、282 行四处 propParams() 用例补 `}, 900_000);`（D10-750），只加超时参数。不改已有用例的期望值、不删断言、不动其余用例与文件。全新无上下文的独立 Claude（claude-run.sh，approvals 第 36 条），证据记 claude-independent；照常不调 bump-attempt（按编排例外轮记），次数上限与熔断（10 次独立调用）不变；写完先红核对与 spec-test 增量一轮，再报编排。'
+  - id: 113
+    row: 4
+    title: 'B1-02zzzc 任务专属一次性追加：冻结用例丙类专项三处——test/spec/identity/step-up-verify/kit.ts 换绑手机接同一个桩（只做 token 纯插入调用 detachPhoneReply / fillPhoneBody，分支逻辑在 test_paths 新文件 payout/withdraw-no-step-up/phone-stub.ts）、order.int.test.ts [AC-B1-02y#18] / [#19] 载体由提现换成换绑手机（期望值不变）、risk/risk-state/http.int.test.ts 65 行 for 头部路由表 step-up 一行 body.action withdraw → phone_change（期望 10006 不变）'
+    granted: true
+    date: '2026-11-20'
+    note: '编排会话按 规划/11 §7.1 第 4 行（冻结用例改动由编排按第 24 条逐处核），D10-1706 / D10-1780 ③ ④ / D10-2166：提现免二次验证（负责人 2026-11-14，D10-1665）后 StepUpAction 去 withdraw，原用例的提现载体与 withdraw 动作已无法到达被测检查，纯插入做不到（换桩守卫单参、无外挂点、注销当不了载体；for 头部表无合法插入点）。实跑：测试机 step-up-verify 四文件（order / once / token / withdraw-order）23 例绿、受影响 10 目录 53 文件 625 例绿（couli-runs/B1-02zzzc/tests/1、tests/2）；评审：现行写法全新只读独立 Claude 评审 pass、无发现（couli-runs/B1-02zzzc/frozen-cand/c-review2/review.json；逐项核了期望值未改、换桩只对 phone 生效、handled 计数、已实现路由检查、risk-state 那行不被 20001 抢先）。台账 B1-02zzzc 补丁 3（#375）对应条目 ruling D10-1706。只对本单这三处生效，不扩到别的冻结文件。'
