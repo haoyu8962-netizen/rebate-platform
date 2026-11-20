@@ -79,7 +79,10 @@ it('[CT-06zzzzzx#4] 拦截 TS 字符串、普通模板和 sql 标签模板里的
     [
       'merge',
       BALANCES,
-      ['MERGE INTO', `app.${BALANCES} AS b USING staging AS s ON false WHEN MATCHED THEN DO NOTHING;`].join(' '),
+      [
+        'MERGE INTO',
+        `app.${BALANCES} AS b USING staging AS s ON false WHEN MATCHED THEN DO NOTHING;`,
+      ].join(' '),
     ],
     ['truncate', ENTRIES, ['TRUNCATE TABLE', `app.${ENTRIES};`].join(' ')],
     ['copy', VOUCHERS, ['COPY', `app.${VOUCHERS} (app_id) FROM STDIN;`].join(' ')],
