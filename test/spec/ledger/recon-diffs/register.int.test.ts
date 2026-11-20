@@ -126,12 +126,15 @@ it('[AC-B2-04k#4] 非空 dedupe_key 跨业务键去重；已关闭差错单也�
 
 it('[AC-B2-04k#5] NULL 去重键不相互冲突；业务键各维度及 app 隔离', async () => {
   const { input, clock } = fixture();
+  // B2-02zc (D10-2224 B ①): an external type, whose business key (app_id, type, period, ref_id)
+  // keeps one ticket per period; unresolved ledger_mismatch is pinned by recon-diffs-unresolved.
+  const base = { ...input, type: 'union_mismatch' as const };
   const inputs = [
-    input,
-    { ...input, type: 'platform_restore' as const },
-    { ...input, period: '2032-07' },
-    { ...input, refId: randomUUID() },
-    { ...input, appId: `${input.appId}-other` },
+    base,
+    { ...base, type: 'platform_restore' as const },
+    { ...base, period: '2032-07' },
+    { ...base, refId: randomUUID() },
+    { ...base, appId: `${input.appId}-other` },
   ];
   const registered = [];
   for (const request of inputs)
