@@ -4,7 +4,7 @@
 // 不串行；没勾的行没有结果行。约定见 ../helpers.ts 与 ./helpers.ts 开头。
 import { waitFor, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
-import { STATUS_NAME } from '../../admin-withdrawals/fixtures.ts';
+import { REVIEW_MODE_NAME, STATUS_NAME, samples } from '../../admin-withdrawals/fixtures.ts';
 import {
   LEFT_TEXT,
   STATUS_SHOWN,
@@ -87,9 +87,12 @@ it(
   },
 );
 
-// ---- LIST#2–#4: the receipt is this execution's answer, not the row's later status ------------
+// ---- LIST#2–#5: the receipt is this execution's answer, not the row's later status ------------
 // 本次执行结果只取这次回答（WithdrawalsPage 列说明：列表重读后状态以服务端为准）：同一页面会话里再读一次列表、
 // 该单到账为 PAID_API，状态列跟着变，「执行结果」仍恰为这次的回执原文；点【查询】【重置】或切状态页签后回执清空。
+// 重读时的夹具照契约 listAdminWithdrawals：人工审核单（review_mode manual，LIST#2–#4）为 display_status
+// paid_auto_review，自动审核单（review_mode auto，LIST#5）为 paid_auto_system；状态列按 status 显示「接口打款成功」，
+// 其下是审核方式「人工审核」/「自动到账」（admin_dict）。
 // 再读一次用真实分页：第 1 页 → 第 2 页 → 回第 1 页（翻页清空勾选、不清回执，见 WithdrawalsPage changePage）。
 
 /** The list column of the withdrawal status (texts columns.status). */
@@ -165,19 +168,55 @@ async function toPage(server: Server, n: number): Promise<void> {
   );
 }
 
+type Mode = 'manual' | 'auto';
+/**
+ * listAdminWithdrawals display_status of a PAID_API withdrawal: paid_auto_system only for an
+ * auto-reviewed one (review_mode auto), paid_auto_review otherwise (contracts AdminWithdrawalDisplayStatus).
+ */
+const PAID_DISPLAY: Readonly<Record<Mode, Withdrawal['display_status']>> = {
+  manual: 'paid_auto_review',
+  auto: 'paid_auto_system',
+};
+
 /** The withdrawal moves PAYING → PAID_API on the server (paid by the payout process). */
-function paidOnServer(server: Server, id: string): void {
+function paidOnServer(server: Server, id: string, mode: Mode): void {
   const item = server.state.find((one) => one.withdrawal_id === id);
   expect(item, `server row ${id}`).toBeDefined();
+  expect(item!.review_mode, `fixture: ${id} review_mode`).toBe(mode);
   item!.status = 'PAID_API';
-  item!.display_status = 'paid_auto_system';
+  item!.display_status = PAID_DISPLAY[mode];
   item!.paid_at = '2026-11-19T12:05:00+08:00';
+}
+
+/**
+ * The status cell of a PAID_API row, exactly: the status name (admin_dict.withdrawal_status.PAID_API)
+ * and the review mode name under it (admin_dict.withdrawals.review_mode.<mode>), no mark.
+ */
+function paidStatusCell(mode: Mode): string {
+  return compact(`${STATUS_NAME.PAID_API}${REVIEW_MODE_NAME[mode]}`);
+}
+
+/** A: APPROVED alipay ¥12,345.67 reviewed by `mode` (auto: the auto decision of an auto row). */
+function rowsFor(mode: Mode): ReturnType<typeof mixedRows> {
+  const rows = mixedRows();
+  if (mode === 'manual') return rows;
+  const decided = samples().find((one) => one.review_mode === 'auto')?.auto_decision;
+  expect(decided?.result, 'fixture: an auto decision').toBe('auto');
+  expect(decided?.execute_blocked, 'fixture: not blocked').toBeNull();
+  return {
+    ...rows,
+    a: row(1, 'APPROVED', 1234567, 'alipay', {
+      review_mode: 'auto',
+      auto_decision: decided!,
+      reviewer_id: null,
+    }),
+  };
 }
 
 type Clearing = 'query' | 'reset' | 'tab';
 
-async function receiptCase(clearing: Clearing): Promise<void> {
-  const rows = mixedRows();
+async function receiptCase(clearing: Clearing, mode: Mode = 'manual'): Promise<void> {
+  const rows = rowsFor(mode);
   const { a, b, p } = rows;
   const rest = older();
   const server = serverFor([...listOf(rows), ...rest]);
@@ -218,14 +257,22 @@ async function receiptCase(clearing: Clearing): Promise<void> {
   await toPage(server, 2);
   await waitFor(() => expect(rowsOf(main(), rest[19]!.out_biz_no)).toHaveLength(1));
   expect(rowsOf(main(), a.out_biz_no), 'page two does not hold A').toEqual([]);
-  paidOnServer(server, a.withdrawal_id);
+  paidOnServer(server, a.withdrawal_id, mode);
   await toPage(server, 1);
   await waitFor(() =>
     expect(shows(cellOf(a.out_biz_no, STATUS_COLUMN), STATUS_NAME.PAID_API)).toBe(true),
   );
   await settled(server);
   expect(dialogs()).toEqual([]);
+  const reread = server.state.find((one) => one.withdrawal_id === a.withdrawal_id);
+  expect(
+    [reread?.status, reread?.review_mode, reread?.display_status],
+    `${a.out_biz_no}: as listAdminWithdrawals answers a ${mode} PAID_API row`,
+  ).toEqual(['PAID_API', mode, PAID_DISPLAY[mode]]);
   const status = cellOf(a.out_biz_no, STATUS_COLUMN);
+  expect(compact(status.textContent), `${a.out_biz_no}: the status column of ${mode}`).toBe(
+    paidStatusCell(mode),
+  );
   expect(shows(status, STATUS_SHOWN.PAYING), `${a.out_biz_no}: the status column moved on`).toBe(
     false,
   );
@@ -283,7 +330,7 @@ async function receiptCase(clearing: Clearing): Promise<void> {
 }
 
 it(
-  '[AC-F1-08anb-LIST#2] 回执不随到账改写：执行后列表重读，进入打款那行「执行结果」恰为「本次执行结果：已发起打款」；同一页面会话里翻到第 2 页再回第 1 页，服务端已把该单改为 PAID_API：状态列显示「接口打款成功」、不再是「打款中」，「执行结果」仍恰为这次的回执原文（留下与未审核两行也不变）；点【查询】后回执清空，该行不再有「本次执行结果：」',
+  '[AC-F1-08anb-LIST#2] 回执不随到账改写：执行后列表重读，进入打款那行「执行结果」恰为「本次执行结果：已发起打款」；同一页面会话里翻到第 2 页再回第 1 页，服务端已把该人工审核单（review_mode manual）改为 PAID_API、display_status paid_auto_review：状态列恰为「接口打款成功」与「人工审核」、不再是「打款中」，「执行结果」仍恰为这次的回执原文（留下与未审核两行也不变）；点【查询】后回执清空，该行不再有「本次执行结果：」',
   { timeout: 180_000 },
   async () => {
     await receiptCase('query');
@@ -291,7 +338,7 @@ it(
 );
 
 it(
-  '[AC-F1-08anb-LIST#3] 回执不随到账改写，点【重置】后清空：同 LIST#2 的执行与重读（状态列为「接口打款成功」、执行结果仍为这次回执原文），点【重置】后列表重读，三行都不再有「本次执行结果：」',
+  '[AC-F1-08anb-LIST#3] 回执不随到账改写，点【重置】后清空：同 LIST#2 的执行与重读（人工审核单 PAID_API、display_status paid_auto_review，状态列恰为「接口打款成功」与「人工审核」、执行结果仍为这次回执原文），点【重置】后列表重读，三行都不再有「本次执行结果：」',
   { timeout: 180_000 },
   async () => {
     await receiptCase('reset');
@@ -299,9 +346,17 @@ it(
 );
 
 it(
-  '[AC-F1-08anb-LIST#4] 回执不随到账改写，切状态页签后清空：同 LIST#2 的执行与重读，切到「自动」页签（status=PAID_API）列出该单、它不再有「本次执行结果：」；切回「全部」三行都没有回执',
+  '[AC-F1-08anb-LIST#4] 回执不随到账改写，切状态页签后清空：同 LIST#2 的执行与重读（人工审核单 display_status paid_auto_review），切到「自动」页签（status=PAID_API）列出该单、它不再有「本次执行结果：」；切回「全部」三行都没有回执',
   { timeout: 180_000 },
   async () => {
     await receiptCase('tab');
+  },
+);
+
+it(
+  '[AC-F1-08anb-LIST#5] 回执不随到账改写（自动审核单）：进入打款那张为 review_mode auto 的待执行单，同 LIST#2 的执行与重读；服务端把它改为 PAID_API、display_status paid_auto_system：状态列恰为「接口打款成功」与「自动到账」、不再是「打款中」，「执行结果」仍恰为「本次执行结果：已发起打款」（留下与未审核两行也不变）；点【查询】后回执清空',
+  { timeout: 180_000 },
+  async () => {
+    await receiptCase('query', 'auto');
   },
 );
