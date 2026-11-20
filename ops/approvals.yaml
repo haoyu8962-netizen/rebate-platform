@@ -729,3 +729,9 @@ approvals:
     granted: true
     date: '2026-11-20'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测次数属门禁流程小改动），D10-2231，先例第 115 条（F1-08an 第 4 次写测）、第 117 条：F1-08anb 是 F1-08an 的伴随测试单（D10-2201），写测 3 次是约定上限、不是工具熔断（独立调用 3 / 10）；三轮不是同一问题连续不过——Codex spec-test r1 报 3 条 S1（回执不随到账改写、拒绝后可控时钟、2,000,001 分边界，D10-2214），r2 补上后报 2 条夹具 S1（人工审核单到账后 paid_auto_review、AMOUNT 通道开通水位充足），r3 补上后报 1 条：LIST#5 的自动审核单 execute_blocked 写死为 null，漏了「自动审核通过、首次自动执行受阻（如 queue_paused）后由财务手动执行」的真实形状；实现已核对是对的（WithdrawalsPage.tsx 按单号取回执、不看 execute_blocked），缺的只是一个夹具变体与一条断言，开伴随单的伴随单流程过重故不拆（D10-2231）。范围写死：只在 test/spec/frontend/admin-withdrawal-batch-payout/anb/list.test.ts 新增一条 it（LIST 组），已有用例、夹具与辅助一字不动；探针在 F1-08an 实现提交上做，结果进证据。只对 F1-08anb、只多写测 1 次与 spec-test 1 轮；写测由全新无上下文的独立 Claude（claude-run.sh，approvals 第 36 条，证据记 claude-independent），spec-test 由 Codex（codex-run.sh，证据记 codex）；照常不调 bump-attempt（按编排例外轮记），其余次数上限与熔断不变；r4 再出新的 S1 即停报编排，属实的登 FU、不再加轮。'
+  - id: 119
+    row: 4
+    title: 'B2-02xb 任务专属一次性追加：写规则测试第 4 次 + Codex spec-test 增量 1 轮——只把 frozen-down.int.test.ts 审计字段名匹配改为按契约键名 available_fen / frozen_fen 精确匹配，并配探针「键名写成 unavailable_fen」须红；其余一字不动'
+    granted: true
+    date: '2026-11-20'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审轮次属门禁流程小改动），D10-2232，先例第 115 条、第 118 条：前几轮不是同一问题连续不过——spec-test r1（Codex 全量）pass，其中被校验器移出的两条 S1 由写测第 3 次补上（#8 缓存正端点、#9 审计按子户字段、#5 #7 拒绝审计按字段）；r2（Codex 增量）确认这些已补，新报两条 S1：其一审计字段名用 /available/i 匹配，after.unavailable_fen 这类错键也能过（属实、纯测试缺口，本条处理）；其二拒绝原因取值契约未定、标签互换测不出，登 FU-RECALC-REFUSAL-CAUSE-ENUM 并入新单 D，不在本条。范围写死：只改 test/spec/ledger/admin-recon-balance-recalc/frozen-down.int.test.ts 中审计字段名的匹配（sideLeaves 等按键名取值处）为与契约键名 available_fen / frozen_fen 精确相等，不放宽任何已有断言、不改其他用例与文件；配实现探针「成功审计 after 的 available_fen 键名写成 unavailable_fen」须红。只对 B2-02xb、只多写测 1 次与 spec-test 1 轮；写测由全新无上下文的独立 Claude（claude-run.sh，approvals 第 36 条）承担，证据记 claude-independent；评审由 Codex（codex-run.sh）增量，证据记 codex；照常不调 bump-attempt（按编排例外轮记），其余次数上限与熔断不变；r3 再出新的 S1 即停报编排，属实的登 FU，不再加轮。'
