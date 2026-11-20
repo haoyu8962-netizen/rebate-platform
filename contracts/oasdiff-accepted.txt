@@ -122,3 +122,6 @@ POST /v1/auth/step-up removed `#/components/schemas/StepUpSummaryWithdraw` from 
 POST /v1/auth/step-up removed `#/components/schemas/StepUpSummaryWithdraw` from the `oneOf[#/components/schemas/StepUpByHuaweiRequest]/summary` request property `oneOf` list
 POST /v1/auth/step-up removed `#/components/schemas/StepUpSummaryWithdraw` from the `oneOf[#/components/schemas/StepUpBySmsRequest]/summary` request property `oneOf` list
 POST /v1/auth/step-up removed `#/components/schemas/StepUpSummaryWithdraw` from the `oneOf[#/components/schemas/StepUpByWechatRequest]/summary` request property `oneOf` list
+# B1-20b（D10-2217 / D10-484）：audit_system_actor 追加 system:self_service（用户本人自助换号的系统审计行），只是响应枚举加值，后台审计列表 / 详情按枚举给中文名（audit-log-view.ts 已补）。
+GET /admin/v1/audit-logs added the new `system:self_service` enum value to the `data/items/items/system_actor` response property for the response status `200`
+GET /admin/v1/audit-logs/{id} added the new `system:self_service` enum value to the `data/system_actor` response property for the response status `200`
