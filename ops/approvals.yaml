@@ -759,3 +759,9 @@ approvals:
     granted: true
     date: '2026-11-21'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（实现 / 评审轮次属门禁流程小改动），D10-2282，先例第 115 条、第 118 条、第 121 条。原因：CT-06zzzzzx（账务单一写入点守卫，tools/guard/ledger-writers.ts）实现 3 / 3 用满（规划/11 §2.5）；三轮不是同一问题连续不过——money r1 报 SQL 注释误报 / 漏报、跨行 TRUNCATE、未跟踪文件，r2 报美元引号、"" 转义标识符，各轮都已修好并经下一轮确认；money r3（couli-runs/CT-06zzzzzx/review-money-codex-r3.json）新报 S1：迁移里 COMMENT ON TABLE … IS ''…UPDATE app.account_balances…'' 这类单引号说明文字被当成写入误拦，属常规写法的误报（D10-2278 口径），另 S2 一条守卫单测夹具 DO $$ 内外同定界符不是可执行块。范围写死（任务书 couli-runs/CT-06zzzzzx/impl-prompt-r4.md）：只改 tools/guard/ledger-writers.ts 的单引号字面量处理（内容按数据替换成空白、保留行号；紧跟 EXECUTE 的字面量照旧识别）与 tools/guard/ledger-writers.test.ts（夹具外层改 $body$；补单测钉「COMMENT ON / 普通字符串里的说明文字不误报、EXECUTE ''…写入…'' 仍拦」）；规则测试（test/spec/ci/ledger-single-writer）一字不动、照旧全绿；不放宽其余识别。只对 CT-06zzzzzx、只多实现 1 次（Opus 5.5，opus-impl 例外跑、不调 bump-attempt）与 Codex money 增量 1 轮（codex-run.sh，证据记 codex），其余次数上限与熔断不变。止损写死（D10-2282）：增量评审若报常规写法的漏报（放过真写入）即停报编排；误报方向（多拦、fail-safe）或少见词法记已知限制并登 FU（FU-LEDGER-WRITERS-LEXER-LIMITS），以当时的头落地，不再加轮、不再开条目。'
+  - id: 124
+    row: 4
+    title: 'B2-02zc 任务专属一次性追加：写规则测试第 4 次 + Codex spec-test 增量 1 轮——只改 test/spec/ledger/recon-diffs-unresolved/migration.int.test.ts 两组存量夹具：① open / open 与 open / processing 两组存量冲突都断言迁移 23505 且差错单、冻结逐行不变；② 无重复存量（一张未结 ledger_mismatch + 其生效冻结）迁移成功且差错单与冻结逐字段不变；其余一字不动'
+    granted: true
+    date: '2026-11-21'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审轮次属门禁流程小改动），D10-2284，先例第 117 条、第 119 条。原因：Codex spec-test r1（全量）四条 S1 已由写测第 3 次补齐并经 r2 确认关闭；r2（couli-runs/B2-02zc/review-spec-test-r2-codex.json）新报两条 S1 都在迁移对存量的保护上，指向已定口径 D10-2275 ③（迁移不改业务数据），各给出具体错误实现（自动结案较早单后建索引；顺手批量解除 ledger_mismatch 冻结）。写测 3 / 3、spec-test 2 / 2 已用满。止损：r3 再出新 S1 即停下报编排，属实的登 FU，不再加轮。'
