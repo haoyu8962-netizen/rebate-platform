@@ -705,3 +705,9 @@ approvals:
     granted: true
     date: '2026-11-20'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（评审轮次属门禁流程小改动），D10-2175，先例第 107 条、第 112 条：前两轮不是连续不过——spec-test r1 pass、r2 pass（增量：写测第 2 次把 interface JsonTexts 改 type 修 fc.letrec 类型）；实现后规则 12 目录 679 条全绿、tsc / eslint / depcruise 过、money r1 pass 0 发现，verify:fast 只因静态门禁 hidden-unicode 拦 literal.test.ts:42 两个原字符 U+2028 而红，写测第 3 次（3/3）只把这两处改成转义。范围写死：只对 B1-04zzzzj、只多 spec-test 一轮，只核这一行两处的词法改动；评审方须自己核改前改后两个字符串字面量解析出的值逐字相同（各算一次码点），不只看 diff；其余用例、标题、期望与文件不动。全新无上下文的独立 Claude（claude-run.sh，approvals 第 36 条），证据记 claude-independent；照常不调 bump-attempt（按编排例外轮记），次数上限与熔断（10 次独立调用）不变。'
+  - id: 115
+    row: 4
+    title: 'F1-08an 任务专属一次性追加：写规则测试第 4 次 + spec-test 第 4 轮——只改两份冻结文件的列表读次数断言：test/spec/frontend/admin-route-status-param/withdrawals.test.ts [AC-F1-14c-WITHDRAWALS#1]–[#7] 与 test/spec/frontend/admin-payouts-readonly/tabs.test.ts [AC-F1-08ba-TABS#1]；列表读原期望不动，另配计数读严格断言'
+    granted: true
+    date: '2026-11-20'
+    note: "编排会话按 规划/11 §7.1 第 5 行例外决定（写测次数属门禁流程小改动），D10-2179，先例第 107 条、第 112 条、第 114 条：前三轮不是同一问题连续不过——spec-test r1 fail（2 S1，r2 修）、r2 pass、r3 pass（r3 按 D10-2173 改 F1-08al ACCESS#1）；实现 r1 后测试机 verify:fast（couli-runs/F1-08an/verify-fast/1）spec-tests 只红 9 条：1 条为 r3 已改的 ACCESS#1，8 条为本单进页时 5 个页签各一次 page_size=1 计数读（D10-2017）使上述两份冻结文件的「列表读」1 → 6，是实现后才暴露的冻结冲突。范围写死（任务书 couli-runs/F1-08an/r4/brief-r4.md §7）：withdrawals.test.ts 加并列顶层函数（列表读 = page_size 不为 '1' 的读、计数读 = page_size 为 '1' 的读），原 queries() 不改；第 76/77、94/95、109/110、129/130、151/152、183/184、192/193、206/207、216 行与 tabs.test.ts 第 69–71 行的列表读期望一字不动、改为只取列表读，每处旁边配计数读断言：排序后 toEqual 恰 5 条、各带该页签快捷筛选与 page:'1'、page_size:'1'（不许 ≥ / toContain / 只数个数）；两份文件各补 1 条新红块（D10-1812）；其余用例、期望与文件不动，金额 / 请求体 / 揭示断言不涉及。只对 F1-08an、只多写测 1 次与 spec-test 1 轮；全新无上下文的独立 Claude（claude-run.sh，approvals 第 36 条、D10-2003），证据记 claude-independent；照常不调 bump-attempt（按编排例外轮记），次数上限与熔断（10 次独立调用，本次后到 10）不变；spec-test r4 不过即停报编排，不再加。"
