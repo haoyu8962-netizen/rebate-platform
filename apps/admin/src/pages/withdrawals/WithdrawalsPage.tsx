@@ -11,8 +11,12 @@
 // 持 payout.manual_entry（超管持有全部点）时待执行（APPROVED，按真实 status）行可勾选，勾到待执行单时
 // 批量栏出现【批量手动打款】（F1-08al，ManualPaid.tsx，契约 adminBatchManualPaid）；待审核单的勾选与
 // 【批量通过】不受影响。页面时钟由 props 注入（clock，缺省为系统时钟）。
-// TODO(规划/11 §7): 【批量自动打款】与一键组批、【导出】、「自动到账设置」页签与各页签计数 — blocked on
-// 契约未出
+// 持 payout.execute（超管持有全部点）时待执行行也可勾选，列表上方出工具条：【一键组批】不勾选也可用（纯前端
+// 选中本页可执行的待执行单），勾到待执行单时出现【批量自动打款】（F1-08an，BatchPayout.tsx，契约
+// adminCreatePayoutBatch）；逐单结果写进本页「原因 / 执行结果」列（只取这次回答，列表重读后状态以服务端为准）。
+// 各状态页签显示计数：每个页签一次 page_size=1 的 listAdminWithdrawals（只带该页签的快捷筛选），显示返回的
+// total；进页时与【批量自动打款】执行后各读一次，读取失败时该页签不显示计数、不报错、不阻塞列表。
+// TODO(规划/11 §7): 【导出】 — blocked on be ③ 契约未出；「自动到账设置」页签另见 F1-08ap
 import { ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import {
@@ -51,6 +55,7 @@ import {
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { withdrawalsTexts as t } from '../../texts/withdrawals.ts';
 import { BatchApprove } from './BatchApprove.tsx';
+import { BatchPayout } from './BatchPayout.tsx';
 import { MARKER_PAGE, ManualPaid, type ManualPaidClock } from './ManualPaid.tsx';
 import { PayoutQueuePanel, UnknownPayoutsPanel } from './PayoutTabs.tsx';
 import {
@@ -144,6 +149,7 @@ export function WithdrawalsPage({
     <WithdrawalsList
       reviewer={access.can(REVIEW_PERMISSION)}
       recorder={access.can(MANUAL_ENTRY_PERMISSION)}
+      executor={access.can(EXECUTE_PERMISSION)}
       clock={clock}
     />
   ) : (
@@ -198,10 +204,20 @@ interface WithdrawalsListProps {
   readonly reviewer: boolean;
   /** payout.manual_entry: APPROVED rows can be ticked for 【批量手动打款】. */
   readonly recorder: boolean;
+  /** payout.execute: APPROVED rows can be ticked for 【批量自动打款】, and 【一键组批】 is shown. */
+  readonly executor: boolean;
   readonly clock: ManualPaidClock;
 }
 
-function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): ReactElement {
+/** The status tab counts: the `total` of one page_size=1 read per tab (absent: not read / failed). */
+type Counts = Partial<Record<StatusTab, number>>;
+
+function WithdrawalsList({
+  reviewer,
+  recorder,
+  executor,
+  clock,
+}: WithdrawalsListProps): ReactElement {
   const loadingClock = useLoadingClock();
   const getProvider = useDataProvider();
   const navigate = useNavigate();
@@ -235,13 +251,18 @@ function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): R
   const [selected, setSelected] = useState<readonly string[]>([]);
   const [approveBusy, setApproveBusy] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
-  const batchBusy = approveBusy || manualBusy;
-  const selectable = reviewer || recorder;
+  const [payoutBusy, setPayoutBusy] = useState(false);
+  const batchBusy = approveBusy || manualBusy || payoutBusy;
+  const selectable = reviewer || recorder || executor;
   const canTick = useCallback(
     (row: WithdrawalRow) =>
-      (reviewer && canApprove(row.status)) || (recorder && canRecordPaid(row.status)),
-    [reviewer, recorder],
+      (reviewer && canApprove(row.status)) || ((recorder || executor) && canRecordPaid(row.status)),
+    [reviewer, recorder, executor],
   );
+  const [counts, setCounts] = useState<Counts>({});
+  const [countAttempt, setCountAttempt] = useState(0);
+  /** The per-withdrawal results of the last 【批量自动打款】 answer (the 「执行结果」 column). */
+  const [payoutResults, setPayoutResults] = useState<ReadonlyMap<string, string>>(new Map());
 
   // The list: page `page` of the status tab under the applied `filters`; `attempt` reads again.
   useEffect(() => {
@@ -270,6 +291,43 @@ function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): R
     };
   }, [getProvider, tab, filters, page, attempt]);
 
+  // The tab counts: one page_size=1 read per status tab with only its quick filter (D10-2017); the
+  // page shows the answered `total`, never a sum of its own. A failed read shows no count.
+  useEffect(() => {
+    let current = true;
+    const custom = getProvider().custom;
+    if (custom === undefined) throw new Error('Missing custom data provider');
+    for (const key of STATUS_TABS)
+      custom<WithdrawalPage>({
+        url: LIST_URL,
+        method: 'get',
+        query: { ...listQuery(key, {}, 1), page_size: 1 },
+      }).then(
+        (response) => {
+          if (!current) return;
+          const total: unknown = (response.data as { total?: unknown } | undefined)?.total;
+          setCounts((previous) => {
+            const next = { ...previous };
+            if (typeof total === 'number' && Number.isSafeInteger(total) && total >= 0)
+              next[key] = total;
+            else delete next[key];
+            return next;
+          });
+        },
+        () => {
+          if (!current) return;
+          setCounts((previous) => {
+            const next = { ...previous };
+            delete next[key];
+            return next;
+          });
+        },
+      );
+    return () => {
+      current = false;
+    };
+  }, [getProvider, countAttempt]);
+
   const reload = () => {
     setStatus('loading');
     setAttempt((value) => value + 1);
@@ -292,12 +350,26 @@ function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): R
     () => (recorder ? selectedRows.filter((row) => canRecordPaid(row.status)) : []),
     [recorder, selectedRows],
   );
+  // 【批量自动打款】 takes the APPROVED ones; ticked PENDING_REVIEW ones are listed as 「未审核」.
+  const payoutRows = useMemo(
+    () =>
+      executor
+        ? selectedRows.filter((row) => canRecordPaid(row.status) || canApprove(row.status))
+        : [],
+    [executor, selectedRows],
+  );
 
   const batchFinished = useCallback(() => {
     setSelected([]);
     setStatus('loading');
     setAttempt((value) => value + 1);
   }, []);
+  // 【批量自动打款】 executed (or left to the list): the tab counts are read again as well.
+  const payoutFinished = useCallback(() => {
+    batchFinished();
+    setCountAttempt((value) => value + 1);
+  }, [batchFinished]);
+  const group = useCallback((ids: readonly string[]) => setSelected(ids), []);
 
   const runQuery = () => {
     const checked = checkDraft(draft);
@@ -310,6 +382,7 @@ function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): R
     setFilters(checked.filters);
     setPage(1);
     setSelected([]);
+    setPayoutResults(new Map());
     reload();
   };
 
@@ -320,6 +393,7 @@ function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): R
     setFilters({});
     setPage(1);
     setSelected([]);
+    setPayoutResults(new Map());
     reload();
   };
 
@@ -329,6 +403,7 @@ function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): R
     setTab(next);
     setPage(1);
     setSelected([]);
+    setPayoutResults(new Map());
     reload();
   };
 
@@ -426,6 +501,7 @@ function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): R
       title: t.columns.reason,
       render: (_, row) => {
         const conditions = row.auto_decision?.failed_conditions ?? [];
+        const outcome = payoutResults.get(row.withdrawal_id);
         return (
           <Flex vertical gap={2}>
             {conditions.length === 0 ? null : (
@@ -451,6 +527,12 @@ function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): R
               <span>
                 <span style={secondary}>{t.colon(t.batch)}</span>
                 <span style={code}>{row.batch_id}</span>
+              </span>
+            )}
+            {outcome === undefined ? null : (
+              <span>
+                <span style={secondary}>{t.colon(t.batchPayout.listResult)}</span>
+                {outcome}
               </span>
             )}
           </Flex>
@@ -517,6 +599,9 @@ function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): R
           {...(selectable
             ? {
                 rowSelection: {
+                  // No select-all box (as the payout queue): ticking is per row, 【一键组批】
+                  // picks the executable ones; a select-all would mix subsets of different batches.
+                  hideSelectAll: true,
                   selectedRowKeys: selectedRows.map((row) => row.withdrawal_id),
                   onChange: (keys: readonly Key[]) => {
                     if (!batchBusy) setSelected(keys.map(String));
@@ -690,8 +775,32 @@ function WithdrawalsList({ reviewer, recorder, clock }: WithdrawalsListProps): R
           activeKey={tab}
           onChange={changeTab}
           style={{ paddingInline: 16 }}
-          items={STATUS_TABS.map((key) => ({ key, label: t.statusTabs[key] }))}
+          items={STATUS_TABS.map((key) => ({
+            key,
+            label: (
+              <span>
+                <span>{t.statusTabs[key]}</span>
+                {counts[key] === undefined ? null : (
+                  <span style={{ ...secondary, marginInlineStart: token.marginXXS }}>
+                    {counts[key]}
+                  </span>
+                )}
+              </span>
+            ),
+          }))}
         />
+        {executor ? (
+          <BatchPayout
+            rows={payoutRows}
+            listed={data?.items ?? []}
+            clock={clock}
+            locked={batchBusy || status !== 'ready'}
+            onGroup={group}
+            onExecuted={setPayoutResults}
+            onFinished={payoutFinished}
+            onBusyChange={setPayoutBusy}
+          />
+        ) : null}
         {reviewer ? (
           <BatchApprove
             rows={approveRows}
