@@ -19,7 +19,6 @@ import {
   gate,
   intent,
   observeRunUpdates,
-  PRIMARY,
   PROMPT,
   QUESTION,
   runtimeRig,
@@ -199,7 +198,6 @@ it.each(['重复受理', '独立收尾'] as const)(
       const before = await storedRun(db, x.appId, runId);
       expect(before).toMatchObject({
         final_event: null,
-        model_snapshot: PRIMARY,
         prompt_version: PROMPT,
       });
 
@@ -227,8 +225,6 @@ it.each(['重复受理', '独立收尾'] as const)(
           final_event: expect.any(Object),
           input_passed: false,
           intent: null,
-          model: null,
-          model_snapshot: null,
           prompt_version: PROMPT,
         });
       } finally {

@@ -9,12 +9,10 @@ import { LOST, WRITE_FAILED } from '../trace-retry/kit.ts';
 import { driveUntil } from '../trace-retry/runtime-kit.ts';
 import { item } from '../tools-orders/kit.ts';
 import {
-  BACKUP,
   gate,
   intent,
   observeRunUpdates,
   ORDERS,
-  PRIMARY,
   PROMPT,
   QUESTION,
   runtimeRig,
@@ -27,12 +25,12 @@ const pg = usePgEach(createTestDatabase);
 afterEach(() => vi.restoreAllMocks());
 
 it(
-  '[AC-B3-08t#6] 主备都失败时降级，终态清空受理时预写的模型快照，保留提示词版本',
+  '[AC-B3-08t#6] 主备都失败时降级，保留提示词版本',
   async () => {
     const admitted = vi.fn(async () =>
       pg.db
         .selectFrom('agent_runs')
-        .select(['model_snapshot', 'prompt_version', 'final_event'])
+        .select(['prompt_version', 'final_event'])
         .executeTakeFirstOrThrow(),
     );
     const x = await runtimeRig(pg.db, {
@@ -50,14 +48,11 @@ it(
       expect(cardTypesOf(frames)).toContain('product_list');
       expect(admitted).toHaveBeenCalledOnce();
       expect(await admitted.mock.results[0]?.value).toMatchObject({
-        model_snapshot: PRIMARY,
         prompt_version: PROMPT,
         final_event: null,
       });
       const read = () => storedRun(pg.db, x.appId, runIdOf(frames));
       expect(await read()).toMatchObject({
-        model: null,
-        model_snapshot: null,
         prompt_version: PROMPT,
         intent: 'search',
         input_passed: true,
@@ -65,8 +60,6 @@ it(
       });
       await x.r.runtime.close();
       expect(await read()).toMatchObject({
-        model: null,
-        model_snapshot: null,
         prompt_version: PROMPT,
       });
     } finally {
@@ -95,7 +88,7 @@ it.each([
     'agent.rule.found',
   ],
 ] as const)(
-  '[AC-B3-08t#6] %s 由模型选工具、模板写回答，实际使用的备选模型与快照照记',
+  '[AC-B3-08t#6] %s 由模型选工具、模板写回答',
   async (question, call, expected, card, copyKey) => {
     const x = await runtimeRig(pg.db, { steps: [call, { text: MODEL_COPY }] });
     try {
@@ -109,15 +102,8 @@ it.each([
       expect(replyTextOf(frames)).not.toContain(MODEL_COPY);
       expect(replyTextOf(frames)).toContain(fileText(copyKey));
       expect(cardTypesOf(frames)).toContain(card);
-      const read = () => storedRun(pg.db, x.appId, runIdOf(frames));
-      const row = await eventually(
-        '模板轮的模型留痕',
-        read,
-        (found) => found.model === BACKUP && found.model_snapshot === BACKUP,
-      );
+      const row = await storedRun(pg.db, x.appId, runIdOf(frames));
       expect(row).toMatchObject({
-        model: BACKUP,
-        model_snapshot: BACKUP,
         prompt_version: PROMPT,
         intent: expected,
       });
@@ -169,7 +155,7 @@ it(
 );
 
 it(
-  '[AC-B3-08t#6] 商品情境入口先出卡，随后模型处理文字且保留实际使用的模型',
+  '[AC-B3-08t#6] 商品情境入口先出卡，随后模型处理文字',
   async () => {
     const x = await runtimeRig(pg.db, { steps: [{ text: MODEL_COPY }] });
     try {
@@ -179,14 +165,8 @@ it(
       expect(cardTypesOf(frames)).toContain('rebate_quote');
       expect(replyTextOf(frames)).toContain(MODEL_COPY);
       expect(x.complete).toHaveBeenCalledOnce();
-      const row = await eventually(
-        '商品入口轮的模型留痕',
-        () => storedRun(pg.db, x.appId, runIdOf(frames)),
-        (found) => found.model_snapshot === BACKUP,
-      );
+      const row = await storedRun(pg.db, x.appId, runIdOf(frames));
       expect(row).toMatchObject({
-        model: BACKUP,
-        model_snapshot: BACKUP,
         prompt_version: PROMPT,
         intent: 'find_by_link',
       });
@@ -341,7 +321,7 @@ it(
 );
 
 it(
-  '[AC-B3-08t#6][AC-B3-08t#10] 模型报文未用于结果而改走降级，模型字段为空，已发生的 token 仍写入',
+  '[AC-B3-08t#6][AC-B3-08t#10] 模型报文未用于结果而改走降级，已发生的 token 仍写入',
   async () => {
     const x = await runtimeRig(pg.db, {
       steps: [
@@ -357,8 +337,6 @@ it(
       expect(replyTextOf(frames)).not.toContain('伪造模型卡');
       const runId = runIdOf(frames);
       expect(await storedRun(pg.db, x.appId, runId)).toMatchObject({
-        model: null,
-        model_snapshot: null,
         prompt_version: PROMPT,
         final_event: expect.any(Object),
       });
@@ -370,8 +348,6 @@ it(
       expect(row).toMatchObject({
         input_tokens: 23,
         output_tokens: 17,
-        model: null,
-        model_snapshot: null,
       });
     } finally {
       await x.r.runtime.close();

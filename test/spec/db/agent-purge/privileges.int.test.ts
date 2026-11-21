@@ -75,6 +75,7 @@ const UPDATABLE: Record<Table, string[]> = {
     'cancel_requested_at',
     'finalize_hold',
     'finalize_hold_at',
+    'input_passed',
   ],
 };
 const PRIVATE: Partial<Record<Table, string[]>> = {

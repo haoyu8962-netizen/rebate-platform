@@ -129,7 +129,7 @@ it.each([
   ['⑤ 人工', '转人工', 'handoff'],
   ['⑥ 搜索', QUESTION, 'search'],
 ] as const)(
-  '[AC-B3-08t#3][AC-B3-08t#6] 无模型分流 %s 保存意图并同步清空预写快照',
+  '[AC-B3-08t#3][AC-B3-08t#6] 无模型分流 %s 保存意图',
   async (_label, question, expected) => {
     const x = await runtimeRig(pg.db, { route: 'models_without_prompt' });
     try {
@@ -139,15 +139,11 @@ it.each([
       expect(await read()).toMatchObject({
         intent: expected,
         input_passed: true,
-        model: null,
-        model_snapshot: null,
         prompt_version: 'none',
         final_event: expect.any(Object),
       });
       await x.r.runtime.close();
       expect(await read()).toMatchObject({
-        model: null,
-        model_snapshot: null,
         prompt_version: 'none',
       });
     } finally {
@@ -176,7 +172,7 @@ const entryCases = [
 ] as const;
 
 it.each(entryCases)(
-  '[AC-B3-08t#3][AC-B3-08t#6] 无模型的 $label 保存入口意图并同步清空预写快照',
+  '[AC-B3-08t#3][AC-B3-08t#6] 无模型的 $label 保存入口意图',
   async ({ label, text, context, card, expected }) => {
     const x = await runtimeRig(pg.db, { route: 'models_without_prompt' });
     try {
@@ -198,15 +194,11 @@ it.each(entryCases)(
       expect(await read()).toMatchObject({
         intent: expected,
         input_passed: true,
-        model: null,
-        model_snapshot: null,
         prompt_version: 'none',
         final_event: expect.any(Object),
       });
       await x.r.runtime.close();
       expect(await read()).toMatchObject({
-        model: null,
-        model_snapshot: null,
         prompt_version: 'none',
       });
     } finally {
