@@ -35,7 +35,7 @@
 | 看板 | `pnpm ops:status` |
 | 任务书 | `pnpm ops:brief <任务编号>` |
 
-只验证自己改的包：`pnpm --filter <包名> test`、`pnpm exec tsc -b <目录>`、`pnpm exec eslint <路径>`。
+本机只许对改动文件跑 `pnpm exec prettier --check <文件>` 与 `pnpm exec eslint <文件>`；tsc、整包测试与 lint 全量走测试机（`tools/ops/verify-container.sh <编号> --fast` / `--tests <路径>` / `--related`）。
 
 ## 3. 分工与风险级
 

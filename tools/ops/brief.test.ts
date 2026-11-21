@@ -58,6 +58,12 @@ const PROTECTED = JSON.stringify({
   class2_verify_config: ['**/vitest*.config.*', 'turbo.json'],
   class3_gates: ['tools/**', '**/AGENTS.md'],
 });
+// D10-2404 / 2406: what every brief allows locally, and who runs the heavy checks.
+const LOCAL_BLOCK =
+  '```\npnpm exec prettier --check <改动文件>\npnpm exec eslint <改动的 .ts / .tsx 文件>\n```';
+const ORCHESTRATOR_RUNS =
+  '类型检查、lint 与测试由编排者在测试机上跑（`tools/ops/verify-container.sh <编号> --fast`，及 `--tests` / `--related` 轻量档）';
+const LOCAL_ONLY = `本机只许对改动文件跑 \`pnpm exec prettier --check <改动文件>\` 与 \`pnpm exec eslint <改动的 .ts / .tsx 文件>\`；不跑 tsc、\`pnpm typecheck\`、\`pnpm lint\`（全量）、\`vitest\`、\`pnpm test\`、\`pnpm verify:fast\`；${ORCHESTRATOR_RUNS}。`;
 
 let base = '';
 let root = '';
@@ -176,7 +182,7 @@ it('writes the eight sections of the template in order', () => {
     '- 仓库：rebate-platform；分支：`task/X1-01`；第 1 次尝试',
     '- 规格版本：`SPEC_REF=',
     '- 风险级：RV2；实现：codex；规则测试作者：claude',
-    '- 本轮阶段：impl（实现：规则测试已冻结，不改不删；测试只经可信容器入口跑）',
+    '- 本轮阶段：impl（实现：规则测试已冻结，不改不删；类型检查、lint 与测试由编排者在测试机上跑）',
     '- 依赖任务：无',
     '## 1. 目标',
     '演示任务：金额类型。关联验收编号：AC-S1-01。',
@@ -205,14 +211,14 @@ it('writes the eight sections of the template in order', () => {
     '更深一级的规则。',
     '## 6. 验收命令',
     '```\npnpm verify:fast\npnpm --filter demo test\n```',
-    '必须变绿的规则测试：`test/spec/demo/**`。完整验证由编排者在沙箱外跑。',
-    '`<couli-runs>/trusted/rebate-platform/tools/ops/verify-container.sh X1-01 --fast`',
+    '必须变绿的规则测试：`test/spec/demo/**`。上面的验收命令由编排者在测试机上跑，完整验证由编排者在沙箱外跑。',
+    '本机只许对改动文件跑 `pnpm exec prettier --check <改动文件>` 与 `pnpm exec eslint <改动的 .ts / .tsx 文件>`；',
     '## 7. 上一轮失败输出（第 2 次起才有）',
     '（第 1 次尝试，没有上一轮。）',
     '## 8. 输出',
     '| `task_done` | 是否认为完成 |',
     '| `notes` | 需要评审方注意的地方，三句以内 |',
-    'Do not commit. Do not install dependencies. Do not modify any file under `ops/` or `docs/`. 规则测试已冻结，不改不删；它们是 Codex 写的，只在容器里运行，不在宿主上跑。除可信容器入口 `tools/ops/verify-container.sh <编号> --fast` 外，不要运行需要网络、Docker、数据库或监听端口的命令。',
+    'Do not commit. Do not install dependencies. Do not modify any file under `ops/` or `docs/`. 规则测试已冻结，不改不删；它们是 Codex 写的，只在容器里运行，不在宿主上跑。不在本机跑 tsc / pnpm typecheck / pnpm lint / vitest / verify:fast；不要运行需要网络、Docker、数据库或监听端口的命令。',
   ];
   const positions = marks.map((m) => text.indexOf(m));
   expect(positions.filter((p) => p < 0)).toEqual([]);
@@ -281,12 +287,12 @@ it('[ops/approvals.yaml id 19] the test phase lets Codex add rule tests and skel
     '- 任务路径内只放 `NotImplemented` 骨架，逐条顶层语句检查',
     '- `packages/demo/src/**`',
     '- 第一类保护路径（规则测试资产）里已有的文件：不能改、不能删；`test_paths` 以外的规则测试资产不能碰。',
-    '```\npnpm typecheck\npnpm lint\n```',
-    '本轮要的是「先红」',
+    '```\npnpm exec prettier --check <改动文件>\npnpm exec eslint <改动的 .ts / .tsx 文件>\n```',
+    '本轮要的是「先红」：改动文件的 prettier 与 eslint 通过；',
     '找不到模块、`TypeError`、语法错误的红不算',
     'Codex 沙箱里只做不执行测试的静态检查',
-    '| `tests_passed` | 类型检查与 lint 通过时填 true（测试由编排者在容器里跑，先红由它核对） |',
-    '只写规则 / 验收测试与 `NotImplemented` 骨架，不写实现。只做静态检查，不运行测试；不要运行需要网络、Docker、数据库或监听端口的命令。',
+    '| `tests_passed` | 改动文件的 prettier 与 eslint 通过时填 true（类型检查与测试由编排者在测试机上跑，先红由它核对） |',
+    '只写规则 / 验收测试与 `NotImplemented` 骨架，不写实现。只做静态检查，不运行测试，不跑 tsc / pnpm typecheck / pnpm lint 全量；不要运行需要网络、Docker、数据库或监听端口的命令。',
   ];
   const positions = marks.map((m) => test.indexOf(m));
   expect(positions.filter((p) => p < 0)).toEqual([]);
@@ -302,14 +308,19 @@ it('[ops/approvals.yaml id 19] the test phase lets Codex add rule tests and skel
 
   const handover = readFileSync(generateBrief('X1-01', opts({ phase: 'handover' })), 'utf8');
   expect(handover).toContain('- 本轮阶段：handover（换家实现（Codex，一次）');
-  expect(handover).toContain('```\npnpm typecheck\npnpm lint\n```');
+  expect(handover).toContain(
+    '```\npnpm exec prettier --check <改动文件>\npnpm exec eslint <改动的 .ts / .tsx 文件>\n```',
+  );
   expect(handover).toContain('Codex 沙箱里只做不执行测试的静态检查');
-  expect(handover).not.toContain('verify-container.sh');
+  // RO-04: verify-container.sh only appears as what the orchestrator runs on the test machine,
+  // never as an entry for the agent (no trusted path, no task id to call it with).
+  expect(handover.replace(ORCHESTRATOR_RUNS, '')).not.toContain('verify-container.sh');
+  expect(handover).not.toContain('verify-container.sh X1-01');
   expect(
     handover
       .trimEnd()
       .endsWith(
-        '规则测试已冻结，不改不删。只做静态检查，不运行测试；不要运行需要网络、Docker、数据库或监听端口的命令。',
+        '规则测试已冻结，不改不删。只做静态检查，不运行测试，不跑 tsc / pnpm typecheck / pnpm lint 全量；不要运行需要网络、Docker、数据库或监听端口的命令。',
       ),
   ).toBe(true);
 
@@ -364,6 +375,101 @@ it('[legacy flow] a legacy impl: codex ledger gets the old implementation brief,
   } finally {
     removeDir(join(root, 'tools', 'guard', 'legacy-tasks.json'));
   }
+});
+
+it('[D10-2406] every phase that writes code allows only prettier and eslint on the changed files locally; the orchestrator runs the rest on the test machine', () => {
+  writeFiles(root, {
+    'ops/tasks/X1-11.yaml': taskYaml({
+      id: 'X1-11',
+      impl: 'claude',
+      tester: 'codex',
+      test_paths: "\n  - 'test/spec/demo/**'",
+      accept: "\n  - 'pnpm verify'\n  - 'test/spec/demo/**'",
+    }),
+    'ops/tasks/X1-12.yaml': taskYaml({
+      id: 'X1-12',
+      impl: 'codex',
+      tester: 'claude',
+      test_paths: "\n  - 'test/spec/demo/**'",
+    }),
+    'tools/guard/codex-impl-tasks.json': JSON.stringify({ approval: 23, tasks: ['X1-12'] }),
+  });
+  try {
+    const section6 = (text: string): string =>
+      text.slice(text.indexOf('## 6. 验收命令'), text.indexOf('## 7.'));
+    const briefs = {
+      test: readFileSync(generateBrief('X1-11', opts({ phase: 'test', attempt: 1 })), 'utf8'),
+      handover: readFileSync(
+        generateBrief('X1-11', opts({ phase: 'handover', attempt: 1 })),
+        'utf8',
+      ),
+      codexFirst: readFileSync(generateBrief('X1-12', opts({ attempt: 1 })), 'utf8'),
+      claudeImpl: readFileSync(generateBrief('X1-11', opts({ attempt: 1 })), 'utf8'),
+    };
+    expect(briefs.codexFirst).toContain('Codex 首发');
+    for (const [name, text] of Object.entries(briefs)) {
+      const six = section6(text);
+      expect(six, name).toContain(LOCAL_ONLY);
+      expect(six, name).toContain('由编排者在测试机上跑');
+      expect(six, name).not.toContain('```\npnpm typecheck');
+      expect(six, name).not.toContain('pnpm lint\n```');
+      // RO-04: no container entry handed to the agent, only what the orchestrator runs.
+      expect(six, name).not.toContain(
+        '<couli-runs>/trusted/rebate-platform/tools/ops/verify-container.sh',
+      );
+      expect(six, name).not.toContain('verify-container.sh X1-11 --fast');
+      expect(six, name).not.toContain('verify-container.sh X1-12 --fast');
+    }
+    // The Codex sandbox phases list exactly the two local checks; the Claude implementation
+    // still lists the acceptance commands, run by the orchestrator.
+    expect(section6(briefs.test)).toContain(LOCAL_BLOCK);
+    expect(section6(briefs.handover)).toContain(LOCAL_BLOCK);
+    expect(section6(briefs.codexFirst)).toContain(LOCAL_BLOCK);
+    expect(section6(briefs.claudeImpl)).toContain('```\npnpm verify:fast\n');
+    expect(section6(briefs.claudeImpl)).toContain('上面的验收命令由编排者在测试机上跑');
+    expect(section6(briefs.claudeImpl)).not.toContain('Docker 不可用就停下报告');
+    // Red first keeps its own explanation; only the static part changed.
+    expect(section6(briefs.test)).toContain(
+      '本轮要的是「先红」：改动文件的 prettier 与 eslint 通过；',
+    );
+    expect(section6(briefs.test)).not.toContain('类型检查与 lint 通过');
+    // The implementation tail no longer names a container entry of its own.
+    const implTail = briefs.claudeImpl.trimEnd().split('\n').at(-1) ?? '';
+    expect(implTail).not.toContain('可信容器入口');
+    expect(implTail).toContain(
+      '不在本机跑 tsc / pnpm typecheck / pnpm lint / vitest / verify:fast',
+    );
+    expect(briefs.claudeImpl).toContain(
+      '| `tests_passed` | 改动文件的 prettier 与 eslint 通过时填 true（类型检查与测试由编排者在测试机上跑） |',
+    );
+    for (const text of [briefs.test, briefs.handover, briefs.codexFirst]) {
+      expect(text.trimEnd().split('\n').at(-1)).toContain(
+        '只做静态检查，不运行测试，不跑 tsc / pnpm typecheck / pnpm lint 全量；',
+      );
+    }
+  } finally {
+    removeDir(join(root, 'tools', 'guard', 'codex-impl-tasks.json'));
+  }
+});
+
+it('[D10-2406] the review brief carries no local-command rule; the three other phases do', () => {
+  writeFiles(root, {
+    'ops/tasks/X1-13.yaml': taskYaml({
+      id: 'X1-13',
+      impl: 'claude',
+      tester: 'codex',
+      test_paths: "\n  - 'test/spec/demo/**'",
+    }),
+  });
+  for (const phase of ['test', 'impl', 'handover'] as const) {
+    const text = readFileSync(generateBrief('X1-13', opts({ phase, attempt: 1 })), 'utf8');
+    expect(text, phase).toContain('本机只许');
+  }
+  const review = readFileSync(
+    generateBrief('X1-13', opts({ phase: 'review', attempt: 1 })),
+    'utf8',
+  );
+  expect(review).not.toContain('本机只许');
 });
 
 it('refuses a brief over 24 KB and tells that the task must be split', () => {
@@ -674,13 +780,15 @@ it('[approvals 23] a listed impl: codex, tester: claude ledger gets the Codex-fi
     // Like a handover: static checks only in the sandbox, tests in the container or CI.
     expect(impl).toContain('Codex 沙箱里只做不执行测试的静态检查');
     // The command block holds the static checks only, no test command (GT-23a S1).
-    expect(impl).toContain('## 6. 验收命令\n\n```\npnpm typecheck\npnpm lint\n```\n');
+    expect(impl).toContain(
+      '## 6. 验收命令\n\n```\npnpm exec prettier --check <改动文件>\npnpm exec eslint <改动的 .ts / .tsx 文件>\n```\n',
+    );
     expect(impl).not.toContain('pnpm verify:fast\n');
     expect(impl).toContain(
-      '| `tests_passed` | 类型检查与 lint 通过时填 true（测试由编排者在容器里跑） |',
+      '| `tests_passed` | 改动文件的 prettier 与 eslint 通过时填 true（类型检查与测试由编排者在测试机上跑） |',
     );
     expect(impl.trimEnd().split('\n').at(-1)).toBe(
-      'Do not commit. Do not install dependencies. Do not modify any file under `ops/` or `docs/`. 规则测试已冻结，不改不删。只做静态检查，不运行测试；不要运行需要网络、Docker、数据库或监听端口的命令。',
+      'Do not commit. Do not install dependencies. Do not modify any file under `ops/` or `docs/`. 规则测试已冻结，不改不删。只做静态检查，不运行测试，不跑 tsc / pnpm typecheck / pnpm lint 全量；不要运行需要网络、Docker、数据库或监听端口的命令。',
     );
     const test = readFileSync(generateBrief('X1-07', opts({ phase: 'test', attempt: 1 })), 'utf8');
     expect(test).toContain('写规则 / 验收测试（Claude 子代理）');
