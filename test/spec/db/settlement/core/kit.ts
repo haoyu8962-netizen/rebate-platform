@@ -6,6 +6,8 @@ import { createDb, destroyDb, type DB } from '@couli/db';
 import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, expect } from 'vitest';
 
+import { appendSettleBillsStatements } from './settle-bills-source.ts';
+
 export type Row = Record<string, unknown>;
 export const TABLES = [
   'settle_jobs',
@@ -57,9 +59,8 @@ export async function ready(db: Kysely<DB>): Promise<void> {
 }
 
 // The settlement-core migration, followed by the statements of every later migration that ALTER
-// app.settle_batches (B2-04zy: credited_count with its named CHECK and its grant) or
-// app.settle_bills (B2-18a: unsettled_count and amount_mismatch_count with their named CHECKs and
-// grants); comments stripped. Only those statements are taken from a later migration.
+// app.settle_batches (B2-04zy: credited_count with its named CHECK and its grant); comments
+// stripped. Only those statements are taken from a later migration.
 export function migrationSource(): string {
   const directory = new URL('../../../../../db/migrations/', import.meta.url);
   const strip = (name: string) =>
@@ -72,15 +73,15 @@ export function migrationSource(): string {
   const names = all.filter((name) => /^\d{4}_settlement-core\.sql$/.test(name));
   expect(names, '迁移按后缀定位，不固定序号').toHaveLength(1);
   const core = names[0]!;
-  const alters =
-    /\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?app\.(?:settle_batches|settle_bills)\b/i;
-  const touches = /\bapp\.(?:settle_batches|settle_bills)\b/i;
+  const alters = /\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?app\.settle_batches\b/i;
+  const touches = /\bapp\.settle_batches\b/i;
   const later = all
     .filter((name) => name > core)
     .map((name) => strip(name).replace(/"/g, ''))
     .filter((source) => alters.test(source))
     .flatMap((source) => source.split(';').filter((statement) => touches.test(statement)))
     .map((statement) => `${statement.trim()};`);
+  appendSettleBillsStatements(later, all, core, strip);
   return [strip(core), ...later].join('\n');
 }
 
