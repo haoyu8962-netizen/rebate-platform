@@ -33,7 +33,8 @@ accept:
   - 'pnpm verify'
   - 'pnpm contracts:check'
   - 'test/spec/identity/me-masked-phone/**'
-status: todo
+status: done
+pr: 127
 modify_existing:
   - file: 'test/spec/identity/me/me.int.test.ts'
     test: '[AC-B1-02z#1] 新微信号：member、未绑手机、默认昵称头像、可补填且截止为建号 +168h、余额 0、两平台未授权、实名 none'

@@ -27,4 +27,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/red-check-mixed-leave-out/**'
-status: todo
+status: done
+pr: 342
