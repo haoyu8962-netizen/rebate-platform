@@ -1,0 +1,31 @@
+id: B1-01zzw
+repo: rebate-platform
+title: 参数校验 20001 的 data.fields 对组合请求体（oneOf / anyOf）只报请求实际要走的分支——去掉未选中分支与连带 unevaluatedProperties 的噪声，字段名格式不变（FU-20001-ONEOF-FIELDS-NOISE，D10-2260 甲）
+type: impl
+# 2026-11-21 w1 入账（D10-2260 / D10-2267 口径甲；D10-2317 ③ 负责人同意改 7 行冻结用例；D10-2318 ① 开工）。方案 couli-runs/FU-20001-ONEOF/plan.md，影响面试跑 impact-list.md（162 目录 956 文件 8931 例只红 step-up-digest 7 条），试跑实现 trial-impl.diff。
+# 只改 platform/validation/index.ts 的 validationErrorEnvelope 与头注释：从最里层组合往外逐层挑分支——(a) 分支自身属性 enum / const 不符即未选中；(b) 余下取出错字段最少的一支，打平时都不报、只留组合位置名，打平的分支都只缺必填（「至少给一个」）则报并集；(c) 全部判别值不符只报判别字段；(d) 组合失败时同层 unevaluatedProperties 连带错误去掉；(e) 组合位置名（根上 body）保留。
+# 只删 Ajv 错误、不改错误转字段名的方法（D10-2233）：每个请求的 fields 都是现状的子集；契约、错误码、04 §7 不动（规划回写由编排做），不占契约槽。已知不完美：stepUp 带非法 provider 时按短信分支报，头注释写明。4 处模块自建 Ajv 不动。
+# 冻结用例：step-up-digest/issue.int.test.ts 的 7 处 fields 数组变短，期望码 20001、不签发断言不变。#8 登 modify_existing（ruling_correction：D10-2193 钉的是 oneOf 合并报告）；#1 的 6 行在内联 .each 表里、表行引用顶层常量，modify_existing 不能按行展开（同 D10-2205），不登；该文件按逐条判，6 行改了期望、旧实现下红即合规，未动用例自动免红（门禁试跑 couli-runs/B1-01zzw/red/1：PASS，8 红）。冻结改动靠 owner 标签（approvals 24）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/platform/validation/index.ts'
+test_paths:
+  - 'test/spec/platform/validation/oneof-fields.test.ts'
+  - 'test/spec/identity/step-up-digest/issue.int.test.ts'
+modify_existing:
+  - file: 'test/spec/identity/step-up-digest/issue.int.test.ts'
+    test: '[AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001'
+    reason: ruling_correction
+    overturned: D10-2193
+    ruling: D10-2317
+    basis: '规划/04 §7'
+    note: '负责人 2026-11-21 同意（D10-2317 ③）：D10-2193 把 StepUpRequest 四分支 oneOf 的合并报告钉成期望字段集（当时注明不是设计口径，留 FU-20001 整理）；口径甲下 withdraw 不带 summary 与带提现形状两处都只报 [action, body]。只改 withdrawRefused 两个数组与其注释，20001、不签发与 phone_change / account_deletion 签发断言一字不动。'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/validation/**'
+  - 'test/spec/identity/step-up-digest/**'
+status: todo
