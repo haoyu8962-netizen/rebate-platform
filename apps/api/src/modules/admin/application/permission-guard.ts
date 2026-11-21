@@ -21,8 +21,13 @@
 //   5. the token is claimed (SET NX of a claim key, atomically with its existence check), so
 //      concurrent requests with one token run the operation at most once; the operation runs;
 //      HTTP 2xx with code 0 consumes the token (the claim stays until the token's expiry);
-//      any other answer, or a thrown error, releases the claim: the token stays usable while
-//      it is valid.
+//      any other answer (a business refusal), or a thrown error that is a known roll-back,
+//      releases the claim: the token stays usable while it is valid. A thrown error whose
+//      outcome is unknown (B2-02ze, BR-ID-34 一次性: the COMMIT failed or its acknowledgement
+//      was lost — SQLSTATE class 08, 57P01–57P03, a driver's dropped-connection error without
+//      SQLSTATE, IdempotencyError('outcome_unknown'), the agreed AdminOutcomeUnknownError;
+//      classifier and its reasons in ./step-up-outcome.ts) keeps the claim until the token's
+//      expiry: the token is void, a retry needs a fresh step-up, and the error is rethrown.
 //
 // Pure module apart from Nest's HttpException (no decorators, erasable syntax).
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -32,6 +37,7 @@ import { later } from '../domain/login-policy.ts';
 import { requiredStepUpTier, type AdminStepUpTier } from '../domain/permission-catalog.ts';
 import { issuedBeforeVoid, type AdminRevocations } from '../infra/admin-revocations.ts';
 import { STEP_UP_CLEANUP_MARGIN_SEC, STEP_UP_TOKEN_TTL_MS } from '../domain/step-up-policy.ts';
+import { isOutcomeUnknown } from './step-up-outcome.ts';
 
 /** Redis namespace shared by the HTTP issuance and every guarded operation. */
 export const ADMIN_STEP_UP_NAMESPACE = 'admin-step-up';
@@ -276,7 +282,8 @@ export function createAdminStepUpGate(deps: {
       try {
         result = await business();
       } catch (error) {
-        await quietly(RELEASE_SCRIPT, claimKey(digest));
+        // Outcome unknown: the claim stays until the token expires (never given back).
+        if (!isOutcomeUnknown(error)) await quietly(RELEASE_SCRIPT, claimKey(digest));
         throw error;
       }
       if (succeeded(result)) await quietly(CONSUME_SCRIPT, tokenKey(digest));

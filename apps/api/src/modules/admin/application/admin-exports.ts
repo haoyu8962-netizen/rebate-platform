@@ -386,9 +386,6 @@ export function createAdminExports(deps: AdminExportsDeps): AdminExports {
     actor.isSuper ||
     (typeof point === 'string' ? points.has(point) : point.some((one) => points.has(one)));
 
-  const nameOf = async (appId: string, adminId: string): Promise<string | null> =>
-    (await names.displayNames(appId, [adminId])).get(adminId) ?? null;
-
   /** The actor's own task by its public id; another account's, another app's or none → 20001. */
   const ownTask = async (actor: AdminActor, publicId: string): Promise<TaskRow> => {
     const row = await db
@@ -402,16 +399,24 @@ export function createAdminExports(deps: AdminExportsDeps): AdminExports {
     return row;
   };
 
-  /** Holds the creator's row (shared) for the transaction; it must still be active. */
-  const lockActiveCreator = async (trx: Transaction<DB>, actor: AdminActor): Promise<void> => {
+  /**
+   * Holds the creator's row (shared) for the transaction; it must still be active. Returns the
+   * creator's display name (display_name, else login_name, as AdminDisplayNameReader answers),
+   * read here, before the COMMIT: nothing that can fail runs after a create or retry has committed
+   * (B2-02ze money r1 S1: a failure after the commit would give the step-up token back while the
+   * task, its audit records and its job stay, and a retry would create a second task).
+   */
+  const lockActiveCreator = async (trx: Transaction<DB>, actor: AdminActor): Promise<string> => {
     const creator = await trx
       .selectFrom('admin_users')
-      .select('status')
+      .select(['status', 'display_name', 'login_name'])
       .where('app_id', '=', actor.appId)
       .where('id', '=', actor.adminId)
       .forShare()
       .executeTakeFirst();
     if (creator?.status !== ADMIN_ACTIVE_CREATOR) throw new ExportCreatorInactiveError();
+    const display = creator.display_name;
+    return display === null || display === '' ? creator.login_name : display;
   };
 
   const enqueue = (trx: Transaction<DB>, row: TaskRow) =>
@@ -457,8 +462,9 @@ export function createAdminExports(deps: AdminExportsDeps): AdminExports {
     async create(actor: AdminActor, command: ExportCreateCommand, ip: string | null) {
       const masked = maskedOf(command);
       const now = clock.now();
-      const row = await db.transaction().execute(async (trx) => {
-        await lockActiveCreator(trx, actor);
+      // The answer is built inside the transaction: nothing runs after its COMMIT.
+      return await db.transaction().execute(async (trx) => {
+        const creatorName = await lockActiveCreator(trx, actor);
         const inserted = await trx
           .insertInto('export_tasks')
           .values({
@@ -514,9 +520,8 @@ export function createAdminExports(deps: AdminExportsDeps): AdminExports {
           });
         }
         await enqueue(trx, inserted);
-        return inserted;
+        return toView(inserted, creatorName);
       });
-      return toView(row, await nameOf(actor.appId, actor.adminId));
     },
 
     async list(actor: AdminActor, query: ExportListQuery) {
@@ -619,7 +624,7 @@ export function createAdminExports(deps: AdminExportsDeps): AdminExports {
       const step = transitionExportTask(statusOf(task), 'RETRY');
       if (!step.ok) throw new ExportStatusError(statusOf(task));
       const outcome = await db.transaction().execute(async (trx) => {
-        await lockActiveCreator(trx, actor);
+        const creatorName = await lockActiveCreator(trx, actor);
         const now = clock.now();
         const updated = await trx
           .updateTable('export_tasks')
@@ -664,14 +669,16 @@ export function createAdminExports(deps: AdminExportsDeps): AdminExports {
           });
         }
         await enqueue(trx, updated);
-        return updated;
+        // The answer is built before the COMMIT: nothing that can fail runs after it.
+        return toView(updated, creatorName);
       });
       if (outcome === undefined) {
-        // Lost the CAS (a concurrent retry, or the task changed meanwhile): report it as it is now.
+        // Lost the CAS (a concurrent retry, or the task changed meanwhile): nothing was written,
+        // so a failure of this read gives back a token nothing was done with. Report it as it is.
         const current = await ownTask(actor, task.public_id);
         throw new ExportStatusError(statusOf(current));
       }
-      return toView(outcome, await nameOf(actor.appId, actor.adminId));
+      return outcome;
     },
   });
 }
