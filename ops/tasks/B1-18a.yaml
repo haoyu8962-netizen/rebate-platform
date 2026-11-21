@@ -7,7 +7,7 @@ type: impl
 # 完成 2026-11-10（#3112，头 956f4846c403）：taobao.md 新建、pdd.md 补齐；规则测试 14 条（spec-test r2 pass），money r1 pass。负责人签字随 B1-18 文档一并转。
 refs: [BR-CALC-03]
 refs_hash:
-  BR-CALC-03: f2d8ebebbc0c
+  BR-CALC-03: cd58e7d6c02b
 deps: [B1-04zzb, B1-08zh]
 paths:
   - 'specs/union/taobao.md'
