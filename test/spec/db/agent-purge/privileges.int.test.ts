@@ -13,6 +13,7 @@ import {
   type Harness,
   type Table,
 } from './kit.ts';
+import { allowAgentRunsInputPassed } from './agent-runs-input-passed.ts';
 
 let h: Harness;
 beforeAll(async () => {
@@ -77,7 +78,7 @@ const UPDATABLE: Record<Table, string[]> = {
     'finalize_hold_at',
   ],
 };
-UPDATABLE.agent_runs.push('input_passed');
+allowAgentRunsInputPassed(UPDATABLE);
 const PRIVATE: Partial<Record<Table, string[]>> = {
   agent_messages: ['text', 'report_reason'],
   agent_runs: ['user_text'],
