@@ -3,7 +3,7 @@
 #
 #   verify-container.sh <id> [--worktree <path>]
 #                           [--fast | --red [--base <ref>] | --related [--base <ref>] | --browser
-#                            | --tests <path> [<path>…]]
+#                            | --tests <path> [<path>…] | --int-shard <i|rest>]
 #                           [--dry-run]
 #
 #   (default)  `pnpm verify` — the task's verification; it alone decides the task. verify/<n>/
@@ -88,9 +88,29 @@
 #              1 when all passed but no screenshot was exported. Like --fast an implementer's own
 #              check, never
 #              evidence of verification (tools/ci/evidence-check.ts accepts verify and red only).
+#   --int-shard <i|rest>  one segment of `pnpm test:int` as CI runs it (CT-06zzzzzzza, D10-2443 ②
+#              ③): the segments and their commands are those tools/ci/int-shards.ts reads from the
+#              trusted root's .github/workflows/ci.yml (verify-int-<i>: shard i/N of
+#              @couli/spec-tests; rest: every other package, unsharded) — never the worktree's; a
+#              segment not in that list stops the run (exit 2). Runs alone (not with --fast, --red,
+#              --related, --browser, --tests or --base). Same container, network, one-shot PostgreSQL
+#              and Redis (or host services), PROP_SEED / PROP_RUNS, memory and time limit as the
+#              default pnpm verify, and the verify slot as it; inside, a trusted inline script
+#              (INT_SHARD_SH) runs that command with Vitest's JSON reporter added after `--` (each
+#              package's report lands in out/<package dir>.vitest-report.json). result.json adds
+#              segment, command, files and tests (the test files and tests of the reports, summed by
+#              the trusted int-shards.ts --sum-reports) and int_files_total (every test:int file of
+#              the snapshot, int-shards.ts --count-int-files; the same on every segment of a tree).
+#              Exit code = the command's (124 = time limit); a command that exits 0 while a
+#              package it ran has no report in out/ (or a report there is not a regular Vitest
+#              report) is recorded with exit_code 2 and `error` ("report missing: <package>"), and
+#              the script exits 2; a failed command keeps its code, `error` added. Output
+#              int-shard/<n>/. Several
+#              segments of one tree make one full verify only through
+#              tools/ops/verify-sharded-summary.ts.
 #   --dry-run  prints what would run (script, commit, tree, red files, test_guard counts; --related:
-#              base and sources; --tests: files and plan) as one JSON line and starts nothing; no run
-#              directory is created.
+#              base and sources; --tests: files and plan; --int-shard: int_shard { segment, command })
+#              as one JSON line and starts nothing; no run directory is created.
 #
 # There is no host fallback (CR-01; 规划/11 §4.1, §8): every test or task file runs only in this
 # container. `--host` is refused; without Docker the script stops (exit 2) and the run goes to CI.
@@ -109,7 +129,7 @@
 # Exit code = the exit code of the script run (124 = time limit); --red: red-check's. Exit code
 # 2 = usage or infrastructure error (no result.json is written in that case).
 #
-# Output: <runs>/<id>/{verify,verify-fast,red,related,browser}/<n>/log.txt and result.json
+# Output: <runs>/<id>/{verify,verify-fast,red,related,browser,int-shard}/<n>/log.txt and result.json
 #   { mode: container, script: verify|verify:fast|red|related|browser, exit_code, commit, tree,
 #     prop_seed, prop_runs, started_at, finished_at }  — red adds red_tests, expected and reports
 #     (path + sha256); related writes related.json beside it; browser leaves its screenshots and
@@ -145,8 +165,8 @@
 #
 # Verify slot (CT-06zzzx, FU-COLIMA-VERIFY-SLOT, D10-950: several verify:fast runs at once in the
 # Colima VM ran its root `tsc -b` out of memory, exit 137). --fast and the default pnpm verify run
-# one at a time per slot directory; --red, --related, --tests, --browser and --dry-run never take or
-# check the slot.
+# one at a time per slot directory (and --int-shard, a part of pnpm verify, with them: CT-06zzzzzzza);
+# --red, --related, --tests, --browser and --dry-run never take or check the slot.
 #   COULI_VERIFY_SLOT_DIR          default <runs>/verify-slot (created when missing)
 #   COULI_VERIFY_SLOT_WAIT_SECS    the longest wait for the slot, default 1800 (a positive integer);
 #                                  past it exit 2 naming the holder, before any container is
@@ -233,7 +253,7 @@ DEFAULT_PROP_SEED=20261001
 
 log() { printf '%s\n' "$*" >&2; }
 die() { log "verify-container: $*"; exit 2; }
-usage() { log "usage: verify-container.sh <id> [--worktree <path>] [--fast | --red [--base <ref>] | --related [--base <ref>] | --browser | --tests <path> [<path>...]] [--dry-run]"; exit 2; }
+usage() { log "usage: verify-container.sh <id> [--worktree <path>] [--fast | --red [--base <ref>] | --related [--base <ref>] | --browser | --tests <path> [<path>...] | --int-shard <i|rest>] [--dry-run]"; exit 2; }
 
 sha256_stdin() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1
@@ -264,7 +284,12 @@ TESTS_PATHS=()
 TESTS_N=0
 TESTS_MAX=200
 TESTS_ALONE="--tests runs alone: not with --fast, --red, --related, --browser or --base"
+# --int-shard (CT-06zzzzzzza): the segment as given; its command comes from the trusted root.
+INT_SHARD=''
+INT_SHARD_CMD=''
+INT_SHARD_ALONE="--int-shard runs alone: not with --fast, --red, --related, --browser, --tests or --base"
 set_script() {
+  [ "$SCRIPT" != int-shard ] || die "$INT_SHARD_ALONE"
   [ "$SCRIPT" != tests ] || die "$TESTS_ALONE"
   [ "$SCRIPT" = verify ] || die "give at most one of --fast, --red and --browser (or --related)"
   SCRIPT="$1"
@@ -279,6 +304,7 @@ tests_path_ok() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --tests)
+      [ "$SCRIPT" != int-shard ] || die "$INT_SHARD_ALONE"
       [ "$SCRIPT" = verify ] || die "$TESTS_ALONE"
       SCRIPT='tests'
       shift
@@ -291,6 +317,14 @@ while [ $# -gt 0 ]; do
         shift
       done
       [ "$TESTS_N" -gt 0 ] || die "--tests needs at least one test file or directory (repository-relative)"
+      ;;
+    --int-shard)
+      [ "$SCRIPT" = verify ] || die "$INT_SHARD_ALONE"
+      { [ $# -ge 2 ] && [[ "$2" =~ ^([1-9][0-9]{0,3}|rest)$ ]]; } ||
+        die "--int-shard needs a segment: a shard number 1..N or rest (tools/ci/int-shards.ts)"
+      SCRIPT='int-shard'
+      INT_SHARD="$2"
+      shift 2
       ;;
     --fast)
       set_script 'verify:fast'
@@ -338,6 +372,7 @@ done
 [ -n "$ID" ] || usage
 if ! [[ "$ID" =~ ^[A-Z][A-Z0-9]*-[0-9]+[a-z]*$ ]]; then die "invalid task id: $ID"; fi
 if [ -n "$BASE_ARG" ] && [ "$SCRIPT" = tests ]; then die "$TESTS_ALONE"; fi
+if [ -n "$BASE_ARG" ] && [ "$SCRIPT" = int-shard ]; then die "$INT_SHARD_ALONE"; fi
 if [ -n "$BASE_ARG" ] && [ "$SCRIPT" != red ] && [ "$SCRIPT" != related ]; then die "--base applies to --red and --related only"; fi
 if [ -n "$BASE_ARG" ] && ! [[ "$BASE_ARG" =~ ^[A-Za-z0-9][A-Za-z0-9._/@^~-]*$ ]]; then die "invalid --base: $BASE_ARG"; fi
 
@@ -380,6 +415,27 @@ case "$SELF_ROOT/" in
     ;;
 esac
 IMG_DIR="$SELF_DIR/verify-image"
+
+# --int-shard (CT-06zzzzzzza): the segment's command from the trusted root's ci.yml, read by the
+# trusted tools/ci/int-shards.ts (never the worktree's workflow). A segment not in its list stops
+# the run; the command must look like what int-shards.ts accepts (plain words, no shell syntax but
+# the quotes of the negated filter).
+INT_CMD_RE="^pnpm test:int( [A-Za-z0-9_./@=:'!-]+)*\$"
+if [ "$SCRIPT" = int-shard ]; then
+  int_shards_doc="$(cd "$TRUSTED" && node tools/ci/int-shards.ts --workflow "$TRUSTED/.github/workflows/ci.yml")" ||
+    die "cannot read the test:int segments of $TRUSTED/.github/workflows/ci.yml (tools/ci/int-shards.ts)"
+  INT_SHARD_CMD="$(node -e '
+    const doc = JSON.parse(process.argv[1]);
+    const seg = doc.segments.find((s) => s.id === process.argv[2]);
+    if (seg === undefined) {
+      process.stderr.write(doc.segments.map((s) => s.id).join(", "));
+      process.exit(1);
+    }
+    process.stdout.write(seg.command);
+  ' "$int_shards_doc" "$INT_SHARD" 2>&1)" ||
+    die "--int-shard $INT_SHARD is not a segment of $TRUSTED/.github/workflows/ci.yml (segments: $INT_SHARD_CMD)"
+  [[ "$INT_SHARD_CMD" =~ $INT_CMD_RE ]] || die "unexpected test:int command for segment $INT_SHARD: $INT_SHARD_CMD"
+fi
 
 [ -n "$WORKTREE" ] || WORKTREE="$RUNS/worktrees/$ID"
 [ -d "$WORKTREE" ] || die "worktree does not exist: $WORKTREE"
@@ -436,9 +492,10 @@ if [ -n "$VERIFY_MEMORY" ]; then
 fi
 
 # The verify slot (header: CT-06zzzx): only the two modes that run verify:fast in the container
-# take it, and only for a real run; their settings are checked here, before anything else runs.
+# (and --int-shard, a segment of pnpm verify's test:int: CT-06zzzzzzza) take it, and only for a
+# real run; their settings are checked here, before anything else runs.
 SLOT_NEEDED=0
-if [ "$DRY_RUN" = 0 ] && { [ "$SCRIPT" = verify ] || [ "$SCRIPT" = 'verify:fast' ]; }; then SLOT_NEEDED=1; fi
+if [ "$DRY_RUN" = 0 ] && { [ "$SCRIPT" = verify ] || [ "$SCRIPT" = 'verify:fast' ] || [ "$SCRIPT" = int-shard ]; }; then SLOT_NEEDED=1; fi
 if [ "$SLOT_NEEDED" = 1 ]; then
   SLOT_WAIT_SECS="${COULI_VERIFY_SLOT_WAIT_SECS:-1800}"
   SLOT_REPORT_SECS="${COULI_VERIFY_SLOT_REPORT_SECS:-60}"
@@ -718,7 +775,7 @@ if [ "$DRY_RUN" = 1 ]; then
     dry_tree="\"$dt\""
     shape_args_for "$dt"
   fi
-  node -e '
+  INT_SHARD_SEGMENT="$INT_SHARD" INT_SHARD_COMMAND="$INT_SHARD_CMD" node -e '
     const [script, commit, tree, files, plan, tgFindings, tgAddOnly, memory, base, sources, testsFiles, testsPlan] = process.argv.slice(1);
     const out = { script, commit: commit === "" ? null : commit, tree: JSON.parse(tree), memory: memory === "" ? null : memory };
     if (script === "red") {
@@ -738,6 +795,10 @@ if [ "$DRY_RUN" = 1 ]; then
       const fs = require("node:fs");
       out.files = fs.readFileSync(testsFiles, "utf8").split("\n").filter((l) => l !== "");
       out.plan = JSON.parse(fs.readFileSync(testsPlan, "utf8")).groups;
+    }
+    if (script === "int-shard") {
+      // CT-06zzzzzzza: the segment and the trusted CI command it runs (passed in the environment).
+      out.int_shard = { segment: process.env.INT_SHARD_SEGMENT, command: process.env.INT_SHARD_COMMAND };
     }
     process.stdout.write(JSON.stringify(out) + "\n");
   ' "$SCRIPT" "$head" "$dry_tree" "$RED_FILES" "$RED_PLAN" "$TG_FINDINGS" "$TG_ADD_ONLY" "$VERIFY_MEMORY" "$BASE_ARG" "$RELATED_SOURCES" "$TESTS_FILES_TMP" "$TESTS_PLAN_TMP" \
@@ -1096,6 +1157,7 @@ case "$SCRIPT" in
   related) VBASE="$RUN/related" ;;
   browser) VBASE="$RUN/browser" ;;
   tests) VBASE="$RUN/tests" ;;
+  int-shard) VBASE="$RUN/int-shard" ;;
 esac
 mkdir -p "$VBASE"
 N=1
@@ -1200,7 +1262,52 @@ write_result() {
       fs.writeFileSync(file, JSON.stringify(result, null, 2) + "\n");
     ' "$tmp" "$VDIR/red-check.json" "$VDIR/out" || die "cannot record the red run in result.json"
   fi
+  if [ "$SCRIPT" = int-shard ]; then int_shard_record "$tmp" "$1"; fi
   mv "$tmp" "$RESULT"
+}
+
+# --int-shard (CT-06zzzzzzza), from write_result (after the host services are gone and the password
+# is out of out/): <result file> <exit code>. The segment, its command, int_files_total (counted on
+# the snapshot before the run) and the files and tests of the Vitest reports in out/, summed by the
+# trusted int-shards.ts --sum-reports (out/ is written by the tests' code: regular files only),
+# which also names the packages the segment ran whose report is not in out/ (--snapshot, --segment:
+# @couli/spec-tests for a numbered segment, the other test:int packages for rest). A missing report
+# or reports it rejects (not a regular file, not a Vitest report) are recorded in `error`; after a
+# run that exited 0 the recorded exit code is 2 (the counts would be short), after a failed run it
+# stays the run's own. Sets INT_SHARD_RC, the exit code finish ends with.
+INT_SHARD_RC=''
+int_shard_record() {
+  local counts src=0 error=''
+  counts="$( (cd "$TRUSTED" && node tools/ci/int-shards.ts --sum-reports "$VDIR/out" --snapshot "$SRC" --segment "$INT_SHARD") 2>>"$LOG")" || src=$?
+  if [ "$src" != 0 ]; then
+    error="reports rejected by int-shards.ts --sum-reports (exit $src), see the log"
+    counts='{"files":0,"tests":0,"missing":[]}'
+  fi
+  INT_SHARD_RC="$(INT_SHARD_SEGMENT="$INT_SHARD" INT_SHARD_COMMAND="$INT_SHARD_CMD" node -e '
+    const fs = require("node:fs");
+    const [file, counts, total, rc, rejected] = process.argv.slice(1);
+    const result = JSON.parse(fs.readFileSync(file, "utf8"));
+    const { files, tests, missing } = JSON.parse(counts);
+    const errors = [];
+    if (rejected !== "") errors.push(rejected);
+    if (missing.length > 0) errors.push(`report missing: ${missing.join(", ")}`);
+    const exit = errors.length > 0 && Number(rc) === 0 ? 2 : Number(rc);
+    Object.assign(result, {
+      exit_code: exit,
+      segment: process.env.INT_SHARD_SEGMENT,
+      command: process.env.INT_SHARD_COMMAND,
+      files,
+      tests,
+      int_files_total: Number(total),
+    });
+    if (errors.length > 0) result.error = errors.join("; ");
+    fs.writeFileSync(file, JSON.stringify(result, null, 2) + "\n");
+    process.stdout.write(String(exit));
+  ' "$1" "$counts" "$INT_FILES_TOTAL" "$2" "$error")" || die "cannot record the test:int segment in result.json"
+  [[ "$INT_SHARD_RC" =~ ^[0-9]+$ ]] || die "cannot record the test:int segment in result.json"
+  if [ "$INT_SHARD_RC" != "$2" ]; then
+    step "the segment exited $2 but its Vitest reports are incomplete (error in result.json): exit $INT_SHARD_RC"
+  fi
 }
 
 # CT-06zzzzzz (D10-2341): after red-check, the trusted evidence-check --early on the commit of the
@@ -1248,6 +1355,8 @@ finish() {
   fi
   if [ "$SCRIPT" = red ]; then evidence_shape; fi
   write_result "$1"
+  # --int-shard: the recorded exit code (2 when a run that exited 0 left a report missing).
+  if [ -n "$INT_SHARD_RC" ]; then set -- "$INT_SHARD_RC"; fi
   # The snapshot is identified by `tree` in result.json; the copy itself is not kept.
   rm -rf "$SRC"
   log "verify-container: $ID run $N ($MODE, $SCRIPT) exit $1${RUN_NOTE:+ ($RUN_NOTE)}; log: $LOG"
@@ -2440,6 +2549,87 @@ if [ "$SCRIPT" = 'verify:fast' ] || [ "$SCRIPT" = related ]; then
     "${FAST_ENV[@]}" \
     "$IMAGE" "${FAST_CMD[@]}" >>"$LOG" 2>&1 </dev/null || rc=$?
   if [ "$SCRIPT" = related ]; then related_judge "$rc"; fi
+  finish "$rc"
+fi
+
+# --int-shard inside its container (CT-06zzzzzzza): the command ($1, from the trusted root's ci.yml,
+# checked again here) after the same copy and offline install as the entrypoint's prepare_repo,
+# under VERIFY_TIMEOUT_SECS, with Vitest's JSON reporter added after `--` (relative outputFile:
+# each package writes its report in its own directory). Every report is then copied to
+# /out/<package dir, / as ->.vitest-report.json. Exit code = the command's (124 = time limit); the
+# host (int_shard_record) turns an exit 0 with a package's report missing from /out into exit 2.
+IFS= read -r -d '' INT_SHARD_SH <<'SH' || true
+set -euo pipefail
+limit="${VERIFY_TIMEOUT_SECS:?VERIFY_TIMEOUT_SECS is required}"
+mkdir -p "$HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
+[ -d /out ] && [ -w /out ] || { echo "[int-shard] /out is not mounted writable" >&2; exit 2; }
+cmd="${1:-}"
+re="^pnpm test:int( [A-Za-z0-9_./@=:'!-]+)*\$"
+[[ "$cmd" =~ $re ]] || { echo "[int-shard] unexpected command: $cmd" >&2; exit 2; }
+report='.int-shard.vitest-report.json'
+reporter="--reporter=default --reporter=json --outputFile.json=$report"
+case " $cmd " in
+  *" -- "*) full="$cmd $reporter" ;;
+  *) full="$cmd -- $reporter" ;;
+esac
+mkdir -p /work/repo
+tar -C /src \
+  --exclude=node_modules --exclude=.git --exclude=dist --exclude=.turbo --exclude=.tmp \
+  --exclude='*.tsbuildinfo' \
+  -cf - . | tar -C /work/repo -xf -
+cd /work/repo
+echo "[int-shard] pnpm install --offline --frozen-lockfile"
+pnpm install --offline --frozen-lockfile --store-dir /store
+echo "[int-shard] ${full} (limit ${limit}s)"
+started=$(date +%s)
+rc=0
+timeout --signal=TERM --kill-after=10 "$limit" bash -c "$full" </dev/null || rc=$?
+elapsed=$(( $(date +%s) - started ))
+if [ "$rc" -eq 137 ] && [ "$elapsed" -ge "$limit" ]; then rc=124; fi
+while IFS= read -r f; do
+  dir="${f#./}"
+  dir="${dir%/$report}"
+  # A failed copy leaves the report missing in /out: the host records that (exit 2 after exit 0).
+  cp "$f" "/out/$(printf '%s' "$dir" | tr '/' '-').vitest-report.json" ||
+    echo "[int-shard] cannot copy $f to /out" >&2
+done < <(find . -name node_modules -prune -o -type f -name "$report" -print 2>/dev/null || true)
+echo "[int-shard] exited ${rc} after ${elapsed}s"
+exit "$rc"
+SH
+
+if [ "$SCRIPT" = int-shard ]; then
+  # The number of test:int files of the snapshot, counted by trusted code before anything runs.
+  INT_FILES_TOTAL="$(cd "$TRUSTED" && node tools/ci/int-shards.ts --count-int-files "$SRC" | node -e '
+    const doc = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+    if (!Number.isInteger(doc.int_files_total) || doc.int_files_total < 0) throw new Error("int_files_total");
+    process.stdout.write(String(doc.int_files_total));
+  ')" || die "cannot count the test:int files of the snapshot (tools/ci/int-shards.ts --count-int-files)"
+  # The container (uid 1000) writes out/ as "other" (as for --browser).
+  mkdir -p "$VDIR/out"
+  chmod 1733 "$VDIR/out"
+  INT_NET=(--network "$NET")
+  slot_check 'the services'
+  if [ "$HOST_SVC" = 1 ]; then
+    start_host_services "test:int segment $INT_SHARD"
+    INT_NET=("${EXT_RUN[@]}")
+  else
+    start_services "test:int segment $INT_SHARD"
+  fi
+  step "running test:int segment $INT_SHARD ($INT_SHARD_CMD; $INT_FILES_TOTAL test:int file(s) in the tree) in $IMAGE (limit ${TIMEOUT_SECS}s)"
+  INT_ENV=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e TEST_PG_ADMIN_URL -e TEST_REDIS_URL
+    -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS")
+  [ -z "${PROP_RUNS:-}" ] || INT_ENV+=(-e "PROP_RUNS=$PROP_RUNS")
+  slot_check 'the verify container'
+  rc=0
+  svc_run docker run --rm --name "$VERIFY_NAME" "${LABELS[@]}" ${SLOT_LABEL[@]+"${SLOT_LABEL[@]}"} "${HARDEN[@]}" ${MEMORY_ARGS[@]+"${MEMORY_ARGS[@]}"} "${TMPFS[@]}" \
+    "${INT_NET[@]}" \
+    -v "$SRC:/src:ro" \
+    -v "$STORE_VOL:/store:ro" \
+    -v "$VDIR/out:/out" \
+    --tmpfs "/store/v10/projects:rw,nosuid,uid=1000,gid=1000,mode=0755" \
+    ${SPEC_ARGS[@]+"${SPEC_ARGS[@]}"} \
+    "${INT_ENV[@]}" \
+    "$IMAGE" ${EXT_WRAP[@]+"${EXT_WRAP[@]}"} bash -c "$INT_SHARD_SH" couli-int-shard "$INT_SHARD_CMD" >>"$LOG" 2>&1 </dev/null || rc=$?
   finish "$rc"
 fi
 

@@ -14,6 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
+import { readIntShards } from '../ci/int-shards.ts';
 import { repoRoot } from '../lib/paths.ts';
 import {
   CLI_TIMEOUT,
@@ -758,9 +759,10 @@ it('[CT-06zzzzu] only the containers that run tests get --memory and --memory-sw
   const mentions = (cmd: string) =>
     names.some((n) => cmd.includes(`\${${n}[@]`)) || /(^|\s)--memory(-swap)?[\s=]/.test(cmd);
 
-  // Test containers: --browser, --fast and the full verify (one line for both service modes) …
+  // Test containers: --browser, --fast, --int-shard (CT-06zzzzzzza) and the full verify (one line
+  // for both service modes) …
   const verifyRuns = dockerRuns(text, 'docker run --rm --name "$VERIFY_NAME"');
-  expect(verifyRuns).toHaveLength(3);
+  expect(verifyRuns).toHaveLength(4);
   // … and the --red groups (red_container, with or without a database).
   const redRuns = dockerRuns(text, 'docker run --rm --name "$1"');
   expect(redRuns).toHaveLength(1);
@@ -1047,6 +1049,8 @@ function answer(text, code) {
   process.exit(code);
 }
 if (args[0] === 'version') answer('28.0.1', 0);
+// Redis readiness (start_services, --int-shard): the reply, not the exit code.
+if (args[0] === 'exec' && args.includes('ping')) answer('PONG', 0);
 const at = args.indexOf('--name');
 const name = at === -1 ? '' : args[at + 1] || '';
 if (args[0] === 'run' && /-run-/.test(name)) {
@@ -1940,4 +1944,167 @@ it(
     expect(log.some((line) => line.includes('cannot read'))).toBe(false);
   },
   JUDGE_TIMEOUT,
+);
+
+// --- CT-06zzzzzzza (FU-VERIFY-FULL-SHARDED, D10-2443 ②): --int-shard -----------------------------
+// One segment of test:int as CI runs it; the segments and commands come from the trusted root's
+// .github/workflows/ci.yml (tools/ci/int-shards.ts), never from the worktree.
+
+it(
+  '[CT-06zzzzzzza] --int-shard --dry-run prints the segment and its trusted CI command, starts nothing',
+  () => {
+    const repo = committedFixture('int-shard-dry');
+    // The worktree's own ci.yml (one shard, another command) is not read.
+    writeFiles(repo, {
+      '.github/workflows/ci.yml':
+        'jobs:\n  verify-int-1:\n    steps:\n      - run: pnpm test:int --filter=@couli/spec-tests -- --shard=1/1\n      - run: pnpm test:int --filter=x\n',
+    });
+    fixtureGit(repo, ['add', '-A']);
+    fixtureGit(repo, ['commit', '-q', '-m', 'workflow']);
+    const head = fixtureGit(repo, ['rev-parse', 'HEAD']);
+    const tree = fixtureGit(repo, ['rev-parse', 'HEAD^{tree}']);
+    const trusted = readIntShards(
+      readFileSync(join(repoRoot(), '.github/workflows/ci.yml'), 'utf8'),
+    ).segments;
+    expect(trusted.length).toBeGreaterThan(1);
+    for (const seg of trusted) {
+      const res = run(['V1-09', '--worktree', repo, '--int-shard', seg.id, '--dry-run']);
+      expect(res.status, res.stderr).toBe(0);
+      expect(res.stdout.trimEnd().split('\n')).toHaveLength(1);
+      expect(planWithoutMemory(res.stdout)).toEqual({
+        script: 'int-shard',
+        commit: head,
+        tree,
+        int_shard: { segment: seg.id, command: seg.command },
+      });
+    }
+    expect(existsSync(join(runs, 'V1-09'))).toBe(false);
+  },
+  CLI_TIMEOUT * 2,
+);
+
+it(
+  '[CT-06zzzzzzza] --int-shard: no segment, a segment not in the trusted ci.yml, another mode or --base → exit 2',
+  () => {
+    const repo = committedFixture('int-shard-usage');
+    const dry = (...args: string[]) => run(['V1-10', '--worktree', repo, ...args, '--dry-run']);
+    for (const bad of [[], ['0'], ['bogus'], ['1/6'], ['-1']]) {
+      const res = dry('--int-shard', ...bad);
+      expect(res.status, bad.join(' ')).toBe(2);
+      expect(res.stderr, bad.join(' ')).toContain('--int-shard needs a segment');
+    }
+    const n = readIntShards(readFileSync(join(repoRoot(), '.github/workflows/ci.yml'), 'utf8')).n;
+    const beyond = dry('--int-shard', String(n + 1));
+    expect(beyond.status).toBe(2);
+    expect(beyond.stderr).toContain('is not a segment of');
+    for (const other of [
+      ['--fast'],
+      ['--red'],
+      ['--related'],
+      ['--browser'],
+      ['--tests', 'test'],
+      ['--base', 'main'],
+      ['--int-shard', 'rest'],
+    ]) {
+      for (const args of [
+        ['--int-shard', '1', ...other],
+        [...other, '--int-shard', '1'],
+      ]) {
+        const res = dry(...args);
+        expect(res.status, args.join(' ')).toBe(2);
+        expect(res.stderr, args.join(' ')).toContain('--int-shard runs alone');
+      }
+    }
+    expect(existsSync(join(runs, 'V1-10'))).toBe(false);
+  },
+  CLI_TIMEOUT * 2,
+);
+
+// --- CT-06zzzzzzza r2 (money-codex r1 S1): a segment that exits 0 without its Vitest report -------
+// The stub test container exits as told and leaves in out/ only the files of the case; the host
+// then sums the reports with the trusted int-shards.ts and names the packages without one.
+
+function intShardWorkspace(name: string): string {
+  const root = JSON.parse(readFileSync(join(repoRoot(), 'package.json'), 'utf8')) as {
+    packageManager: string;
+  };
+  const ws = join(base, name);
+  writeFiles(ws, {
+    'package.json': `${JSON.stringify(
+      { name, private: true, packageManager: root.packageManager, scripts: {} },
+      null,
+      2,
+    )}\n`,
+    'pnpm-workspace.yaml': 'packages:\n  - test\n',
+    'pnpm-lock.yaml': "lockfileVersion: '9.0'\n",
+    'test/package.json': `${JSON.stringify({
+      name: '@couli/spec-tests',
+      private: true,
+      scripts: { 'test:int': 'vitest run -c vitest.integration.config.ts' },
+    })}\n`,
+    'test/spec/a/one.int.test.ts': "it('[X-1] one', () => {});\n",
+    'test/spec/b/two.int.test.ts': "it('[X-2] two', () => {});\n",
+  });
+  return ws;
+}
+
+const INT_REPORT = JSON.stringify({
+  numTotalTests: 3,
+  numFailedTests: 0,
+  testResults: [{ name: '/work/repo/test/spec/a/one.int.test.ts' }],
+});
+
+it(
+  '[CT-06zzzzzzza] --int-shard: exit 0 with the spec-tests report missing from out/ → result exit_code 2 with error, script exits 2',
+  async () => {
+    const ws = intShardWorkspace('int-shard-report');
+    const runsDir = join(base, 'is-report');
+    const result = (n: number) =>
+      readJson(join(runsDir, 'V1-12', 'int-shard', String(n), 'result.json'));
+
+    const missing = await runStubbed(['V1-12', '--worktree', ws, '--int-shard', '1'], runsDir, {
+      exit: 0,
+      files: {},
+    });
+    expect(missing.timedOut).toBe(false);
+    expect(missing.status, missing.stderr).toBe(2);
+    expect(testContainer(missing.calls)).toBeDefined();
+    expect(result(1)).toMatchObject({
+      script: 'int-shard',
+      segment: '1',
+      exit_code: 2,
+      files: 0,
+      tests: 0,
+      int_files_total: 2,
+    });
+    expect(String(result(1)['error'])).toContain('report missing: @couli/spec-tests');
+
+    // The same run with the report in out/: exit 0, counted, no error.
+    const ok = await runStubbed(['V1-12', '--worktree', ws, '--int-shard', '1'], runsDir, {
+      exit: 0,
+      files: { 'test.vitest-report.json': { text: INT_REPORT } },
+    });
+    expect(ok.status, ok.stderr).toBe(0);
+    expect(result(2)).toMatchObject({ exit_code: 0, files: 1, tests: 3, int_files_total: 2 });
+    expect(result(2)).not.toHaveProperty('error');
+
+    // A failed command keeps its own exit code; the missing report is only added as error.
+    const failed = await runStubbed(['V1-12', '--worktree', ws, '--int-shard', '1'], runsDir, {
+      exit: 1,
+      files: {},
+    });
+    expect(failed.status, failed.stderr).toBe(1);
+    expect(result(3)).toMatchObject({ exit_code: 1, files: 0 });
+    expect(String(result(3)['error'])).toContain('report missing: @couli/spec-tests');
+
+    // A report that is not a regular file after exit 0: exit 2, the rejection in error.
+    const linked = await runStubbed(['V1-12', '--worktree', ws, '--int-shard', '1'], runsDir, {
+      exit: 0,
+      files: { 'test.vitest-report.json': { symlink: '/etc/hosts' } },
+    });
+    expect(linked.status, linked.stderr).toBe(2);
+    expect(result(4)).toMatchObject({ exit_code: 2, files: 0, tests: 0 });
+    expect(String(result(4)['error'])).toMatch(/rejected/);
+  },
+  JUDGE_TIMEOUT * 2,
 );

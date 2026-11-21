@@ -1,0 +1,127 @@
+{
+  "task": "CT-06zzzzzzza",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "spec_commit": "ace02480f1a9c799c9d78a83321fdd9a5cb4ab3a",
+  "red_tests": [
+    "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#1] the real workflow yields the six CI commands and the unsharded command",
+    "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#2] commands follow shard order and retain the workflow text",
+    "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when a shard is missing",
+    "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when a job index is duplicated",
+    "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when a command repeats another index",
+    "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when shard indices are swapped between their named jobs",
+    "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when a shard index exceeds N even though there are N numbered jobs",
+    "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when shard denominators differ",
+    "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when the numbered commands differ beyond the shard index",
+    "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when rest is missing",
+    "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when rest occurs twice",
+    "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when an extra numbered job has no test:int command",
+    "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#4] dry-run uses the trusted CI command for segment 1",
+    "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#4] dry-run uses the trusted CI command for segment rest",
+    "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#5] rejects segments absent from the trusted workflow, even if present in the task worktree",
+    "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#6] rejects a shard combined with --fast in either argument order",
+    "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#6] rejects a shard combined with --red in either argument order",
+    "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#6] rejects a shard combined with --related in either argument order",
+    "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#6] rejects a shard combined with --browser in either argument order",
+    "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#6] rejects a shard combined with --tests in either argument order",
+    "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#10] reports a green tree with ordered segments, durations and counts",
+    "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#11] selects by finished_at after restricting both kinds of run to the requested tree",
+    "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#12] reports each missing or failed result without borrowing results from another tree",
+    "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#13] uses the latest failure instead of an earlier green run of the same tree",
+    "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#14] rejects disagreement about the total even when the file sum matches two segments",
+    "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#15] rejects a common total of 5 when six files actually ran",
+    "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#15] rejects a common total of 7 when six files actually ran",
+    "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#16] returns usage error for a missing tree or an unreadable or invalid workflow"
+  ],
+  "risk_note": "Gate tooling only (FU-VERIFY-FULL-SHARDED, D10-2443). tools/ci/int-shards.ts reads the test:int segments from .github/workflows/ci.yml (verify-int-1..N with --shard=i/N on @couli/spec-tests, plus the one unsharded rest command), only from step run: scalars and block bodies; any shape mismatch (missing / duplicate / out-of-range index, job name and index out of step, differing commands, no or several rest commands) exits 2. tools/ops/verify-container.sh --int-shard <i|rest> runs that one segment, taken from the trusted root, in the same container, one-shot PostgreSQL / Redis, network-off and time limit as the --tests integration groups; mutually exclusive with every other mode (stderr names --int-shard); result.json in int-shard/<n>/ records segment, command, exit_code, commit, tree, files, tests and int_files_total, counted by trusted code from the vitest reports and the snapshot tree; a segment that exits 0 but leaves a missing / non-regular / uncopyable report is recorded and exits 2. tools/ops/verify-sharded-summary.ts judges one tree: green only with fast exit 0, every segment present with exit 0, one int_files_total equal to the sum of files; output states scope fast+test:int and not_covered (from the root verify script: test:browser, test:smoke, db:check; --browser can cover test:browser). Existing modes (verify, --fast, --red, --related, --tests, --browser) unchanged. Two README paragraphs. No money, ledger or attribution code touched.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "ace02480f1a9c799c9d78a83321fdd9a5cb4ab3a",
+      "tree": "2b0b3450d1315f7b4fd49d513e8a6465b393b5e3",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-21T21:26:36Z",
+      "finished_at": "2026-11-21T21:26:41Z",
+      "red_tests": [
+        "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#1] the real workflow yields the six CI commands and the unsharded command",
+        "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#2] commands follow shard order and retain the workflow text",
+        "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when a shard is missing",
+        "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when a job index is duplicated",
+        "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when a command repeats another index",
+        "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when shard indices are swapped between their named jobs",
+        "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when a shard index exceeds N even though there are N numbered jobs",
+        "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when shard denominators differ",
+        "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when the numbered commands differ beyond the shard index",
+        "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when rest is missing",
+        "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when rest occurs twice",
+        "test/spec/ci/verify-int-shard/int-shards.test.ts > [AC-CT-06zzzzzzza#3] rejects the workflow when an extra numbered job has no test:int command",
+        "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#4] dry-run uses the trusted CI command for segment 1",
+        "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#4] dry-run uses the trusted CI command for segment rest",
+        "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#5] rejects segments absent from the trusted workflow, even if present in the task worktree",
+        "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#6] rejects a shard combined with --fast in either argument order",
+        "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#6] rejects a shard combined with --red in either argument order",
+        "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#6] rejects a shard combined with --related in either argument order",
+        "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#6] rejects a shard combined with --browser in either argument order",
+        "test/spec/ci/verify-int-shard/verify-container.test.ts > [AC-CT-06zzzzzzza#6] rejects a shard combined with --tests in either argument order",
+        "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#10] reports a green tree with ordered segments, durations and counts",
+        "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#11] selects by finished_at after restricting both kinds of run to the requested tree",
+        "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#12] reports each missing or failed result without borrowing results from another tree",
+        "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#13] uses the latest failure instead of an earlier green run of the same tree",
+        "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#14] rejects disagreement about the total even when the file sum matches two segments",
+        "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#15] rejects a common total of 5 when six files actually ran",
+        "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#15] rejects a common total of 7 when six files actually ran",
+        "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts > [AC-CT-06zzzzzzza#16] returns usage error for a missing tree or an unreadable or invalid workflow"
+      ],
+      "expected": [
+        "test/spec/ci/verify-int-shard/int-shards.test.ts",
+        "test/spec/ci/verify-int-shard/verify-container.test.ts",
+        "test/spec/ci/verify-int-shard/verify-sharded-summary.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "0a6798e79aaad15931f6ffbd781b9f4ab06b5624d146d7df5905bb30b36b0868"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27; tools/** is RV2). r1 fail, 2 S1 + 1 S2, fixed in implementation attempt 2: the summary called fast + test:int a full pass although the root verify also runs test:browser, test:smoke and db:check (now scope / not_covered); a segment whose vitest report could not be exported was recorded as 0 files with exit 0 (now exit 2); a rest command quoted in an env value was taken as a segment (now run: only). Attempt 3 only narrowed one index for tsc (fast TS2322). r2 (incremental) pass, 2 S2 logged as FU-INT-SHARDS-PARSE-HARDEN (an env key literally named run; a package.json outside the pnpm workspace declaring test:int). Test machine on the final tree: --tests 6 files 112 tests green, verify:fast exit 0; a non-gating real run of --int-shard rest (trusted root = the implementation commit, main has no --int-shard yet) exited 0 with 12 files / 74 tests, matching the vitest log, int_files_total 2185."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (gpt-6.2-sol, ledger tester codex, attempts 1-2), so the spec-test review went to a fresh independent Claude (approvals 19; D10-2199 does not apply). r1 fail: 1 S1 (the mutual-exclusion cases exited 2 on the fixture whatever the implementation did) + 1 S2 (job name / index swap and out-of-range index not rejected) - attempt 2 asserts that stderr names the conflict and differs from the mode alone, and adds both rejection rows. r2 (incremental) pass. Out of scope: the real-run artefacts of --int-shard (covered by the non-gating trial run above)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "a201bbc19b748a9eb153cef25b19dbf1f377ee82",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

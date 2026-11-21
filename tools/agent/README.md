@@ -230,6 +230,8 @@ TODO(规划/11 §2.4, §9.3)：上面第 2–4 步尚未执行 — blocked on �
 
 `verify-container.sh` 的 `--fast` 是为这一步加的（`tools/ops/README.md`）：只跑 `pnpm run verify:fast`，不起 PostgreSQL、容器 `--network none`，结果放 `verify-fast/<n>/`，与决定任务成败的 `verify/<n>/` 分开。
 
+测试机上完整 `pnpm verify` 超过 3600 秒时按段跑（CT-06zzzzzzza，D10-2443 ②）：同一棵树先 `--fast`，再 `--int-shard 1` … `--int-shard <N>` 与 `--int-shard rest`（两台测试机可并行各跑一段，名额照 lan-run 排），最后 `tools/ops/verify-sharded-summary.ts <id> --tree <树>` 判定。汇总 green 的意思只是「fast 与 test:int 全段在同一棵树上通过」（输出 `scope: "fast+test:int"`），不等于根 `pnpm verify` 全绿：`not_covered` 列出没覆盖的步骤（取自根 package.json 的 verify 脚本，现为 test:browser、test:smoke、db:check）。test:browser 在同一棵树上另跑 `--browser`，汇总加 `--browser` 后其 exit 0 才把它移出 not_covered；test:smoke 与 db:check 由 CI 判。证据里如实写覆盖范围（scope 与 not_covered），不写「测试机全量绿」。中途改了代码（树变了）就全部重跑，别的树的结果一律不算。
+
 ## 11. 规则测试过审（spec-test）交 Claude 新子代理
 
 Codex 写的规则测试由另一家过审（规划/11 §2.3 第 4 步，RV2 必做）：
