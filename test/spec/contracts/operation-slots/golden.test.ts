@@ -43,6 +43,18 @@ function expired(item: Obj): boolean {
   return typeof item['end_at'] === 'string' && Date.parse(String(item['end_at'])) < at0;
 }
 
+/**
+ * 参照时刻正处在生效区间内：没有开始时刻或开始时刻不晚于参照时刻，且没有结束时刻或结束时刻晚于参照时刻
+ * （spec-test r2 S2：还没到开始时刻的条目不下发、也不展示，不算「可保留」）。
+ */
+function active(node: Obj): boolean {
+  const start = node['start_at'];
+  const end = node['end_at'];
+  const started = typeof start !== 'string' || Date.parse(start) <= at0;
+  const notEnded = typeof end !== 'string' || Date.parse(end) > at0;
+  return started && notEnded;
+}
+
 // BR-TEXT-28 不可配清单：订单、钱包、提现、设置等核心入口与隐私、授权、协议入口不得出现在运营位里。
 const CORE_ROUTES = [
   'OrderList',
@@ -113,14 +125,15 @@ it('[AC-CT-27#17] golden 有通过的 me 与 search 样例：me 的 more_service
   ).toBe(true);
 });
 
-it(`[AC-CT-27#18] golden 有过期条目：通过的样例里某 section 的一个 static 条目 end_at 早于 ${GOLDEN_REFERENCE_NOW}，同 section 另有未过期条目`, () => {
-  // BR-TEXT-29：客户端按本机时间再过滤，过了结束时刻立即隐藏；BR-TEXT-28 细则「回落」：只去掉该条目，
-  // 一个 section 的条目全没了才隐藏整个 section。
+it(`[AC-CT-27#18] golden 有过期条目：通过的样例里某个在 ${GOLDEN_REFERENCE_NOW} 生效的 section 有一个 static 条目 end_at 早于该时刻，同 section 另有该时刻正在生效（已开始、未结束）的条目`, () => {
+  // BR-TEXT-29：客户端按本机时间再过滤，过了结束时刻立即隐藏；还没到开始时刻的不下发、不展示。
+  // BR-TEXT-28 细则「回落」：只去掉该条目，一个 section 的条目全没了才隐藏整个 section——所以同 section
+  // 必须另有参照时刻正在生效的条目，「11-23 才开始」的条目不算（spec-test r2 S2）。
   const hits: string[] = [];
   for (const { name, page } of validGoldens()) {
     looseSections(page).forEach((section, i) => {
       const items = itemsOf(section);
-      if (items.some(expired) && items.some((item) => !expired(item))) {
+      if (active(section) && items.some(expired) && items.some(active)) {
         hits.push(`${name} sections.${i}`);
         expect(isValidPage(page), `${name} 通过 home-schema.json`).toBe(true);
       }

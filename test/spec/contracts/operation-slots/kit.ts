@@ -646,6 +646,23 @@ export function response200Schema(doc: Obj, path: string, method: string): Obj {
   return resolve(doc, at(response, 'content', 'application/json', 'schema'));
 }
 
+/** 200 响应的全部示例（example 与 examples 的每个 value）。 */
+export function response200Examples(doc: Obj, path: string, method: string): unknown[] {
+  const op = at(doc, 'paths', path, method);
+  const response = resolve(doc, at(op, 'responses', '200'));
+  const media = at(response, 'content', 'application/json');
+  const out: unknown[] = [];
+  if (Object.hasOwn(media, 'example')) out.push(clone(media['example']));
+  if (isObj(media['examples'])) {
+    for (const entry of Object.values(media['examples'])) {
+      const example = resolve(doc, entry);
+      if (Object.hasOwn(example, 'value')) out.push(clone(example['value']));
+    }
+  }
+  expect(out.length, `${method.toUpperCase()} ${path} 的 200 响应示例`).toBeGreaterThan(0);
+  return out;
+}
+
 /** 200 响应的示例（example 或 examples 的第一个）。 */
 export function response200Example(doc: Obj, path: string, method: string): unknown {
   const op = at(doc, 'paths', path, method);
@@ -678,17 +695,75 @@ export type Candidate = { type: string; section: Obj };
 
 export const SEARCH_TOP_ID = 'search_top';
 
+/** home-schema.json 里任何 `properties.id` 上写死的取值（const / enum）。 */
+function schemaIdConsts(): string[] {
+  const out = new Set<string>();
+  walk(homeSchema(), (node) => {
+    const props = node['properties'];
+    if (!isObj(props) || props['id'] === undefined) return;
+    for (const v of constValues(props['id'])) if (typeof v === 'string') out.add(v);
+  });
+  return [...out].sort();
+}
+
+/** home-schema.json 里出现过的全部属性名（任何 `properties` 表的键）。 */
+export function schemaPropertyNames(): string[] {
+  const out = new Set<string>();
+  walk(homeSchema(), (node) => {
+    const props = node['properties'];
+    if (isObj(props)) for (const name of Object.keys(props)) out.add(name);
+  });
+  return [...out].sort();
+}
+
+/** 通过的 search golden 里的全部 section（副本）。 */
+function searchGoldenSections(): Obj[] {
+  return validGoldens()
+    .filter(({ page: p }) => p['page_key'] === SEARCH)
+    .flatMap(({ page: p }) => sectionsOf(p))
+    .map((s) => clone(s));
+}
+
 /**
  * search 结果页置顶位的两种候选（08 BR-TEXT-28 准入表 search 行：`banner` 或接商品池的 `product_scroll`，
- * 以契约为准），各自独立、取自首页 golden（跳转换成站内路由）。
+ * 以契约为准），各自独立：优先取 search golden 里该类型的 section（保留它自己的 id），没有就取首页 golden
+ * 的同类 section（跳转换成站内路由，product_scroll 换成商品池），id 依次试 search golden 用过的 id、
+ * `search_top`、契约里写死的 section id 与几个常见名，取第一个能让该卡独立通过的（spec-test r2 S1 #3：
+ * 契约可以给两种置顶卡各定一个 id，不能因 id 不对把合法的卡当成「不收」）。都不行时保留 `search_top`。
  */
 export function searchCandidates(): Candidate[] {
-  const banner: Obj = { ...homeSection('banner'), id: SEARCH_TOP_ID };
-  const scroll: Obj = {
-    ...homeSection('product_scroll'),
-    id: SEARCH_TOP_ID,
-    data_source: { kind: 'product_pool', pool_id: 'pool_demo_hot', limit: 10 },
+  const golden = searchGoldenSections();
+  const ids = [
+    ...new Set([
+      ...golden.map((s) => s['id']).filter((id): id is string => typeof id === 'string'),
+      SEARCH_TOP_ID,
+      ...schemaIdConsts(),
+      'search_products',
+      'search_banner',
+      'search_scroll',
+      'top',
+    ]),
+  ];
+  const pickId = (base: Obj): Obj => {
+    const id = ids.find((candidate) =>
+      isValidPage(page(SEARCH, [{ ...clone(base), id: candidate }])),
+    );
+    return { ...clone(base), id: id ?? SEARCH_TOP_ID };
   };
+  const goldenBanner = golden.find((s) => s['type'] === 'banner');
+  const goldenScroll = golden.find(
+    (s) =>
+      s['type'] === 'product_scroll' &&
+      isObj(s['data_source']) &&
+      s['data_source']['kind'] === 'product_pool',
+  );
+  const banner: Obj = goldenBanner ?? pickId(homeSection('banner'));
+  const scroll: Obj =
+    goldenScroll ??
+    pickId({
+      ...homeSection('product_scroll'),
+      data_source: { kind: 'product_pool', pool_id: 'pool_demo_hot', limit: 10 },
+    });
   return [
     { type: 'banner', section: banner },
     { type: 'product_scroll', section: scroll },
@@ -714,8 +789,9 @@ function escapePointer(key: string): string {
 /**
  * home-schema.json `$defs` 里的准入定义（04 §6.2「运营位」①：每个 page_key 一张准入表，放在契约里供
  * 服务端保存校验与后台表单共用）。名字没定，认两种写法：① `$defs` 里某个对象同时有 `me`、`search` 两个键
- * （不是 properties 表）；② 一对 `$defs` 名字只差 `me` / `search` 一段、且名字含 admission / sections / allow
- * （如 `admission_me` / `admission_search`、`sections_me` / `sections_search`）。
+ * （不是 properties 表），取其中 pageKey 那一键；② 一组 `$defs` 名字只差 `me` / `search` / pageKey 一段、
+ * 且名字含 admission / sections / allow（如 `admission_me` / `admission_search` / `admission_home`）。
+ * pageKey 为 `home` 时同理（批 1 的三个页面各一张，spec-test r2 S1 #2）。
  */
 function admissionPointers(pageKey: string): string[] {
   const defs = homeSchema()['$defs'];
@@ -727,7 +803,12 @@ function admissionPointers(pageKey: string): string[] {
       return;
     }
     if (!isObj(node)) return;
-    if (parentKey !== 'properties' && isObj(node[ME]) && isObj(node[SEARCH])) {
+    if (
+      parentKey !== 'properties' &&
+      isObj(node[ME]) &&
+      isObj(node[SEARCH]) &&
+      isObj(node[pageKey])
+    ) {
       out.add(`${ptr}/${escapePointer(pageKey)}`);
     }
     for (const [key, child] of Object.entries(node)) {
@@ -738,9 +819,11 @@ function admissionPointers(pageKey: string): string[] {
   const names = Object.keys(defs);
   for (const name of names) {
     if (!/(^|[_-])me($|[_-])/.test(name) || !/admission|sections|allow/i.test(name)) continue;
-    const partner = name.replace(/(^|[_-])me(?=$|[_-])/, `$1${SEARCH}`);
-    if (partner !== name && names.includes(partner)) {
-      out.add(`#/$defs/${escapePointer(pageKey === ME ? name : partner)}`);
+    const swap = (key: string): string => name.replace(/(^|[_-])me(?=$|[_-])/, `$1${key}`);
+    const partner = swap(SEARCH);
+    const target = swap(pageKey);
+    if (partner !== name && names.includes(partner) && names.includes(target)) {
+      out.add(`#/$defs/${escapePointer(target)}`);
     }
   }
   return [...out].sort();
@@ -765,14 +848,56 @@ export function admissionEntries(pageKey: string): Admission[] {
   });
 }
 
-/** me.more_services 带 n 个互不相同的条目（以 golden 第一个条目为底，跳转各指一篇帮助文章）。 */
-export function meWithItems(n: number): Obj {
+const HOT_RANK_PLATFORMS = [
+  'taobao',
+  'jd',
+  'pdd',
+  'meituan',
+  'vip',
+  'douyin',
+  'eleme',
+  'kuaishou',
+  'suning',
+] as const;
+
+/**
+ * 几种合法的站内跳转（routes.json 已登记、entry 含 in_app、不是核心入口；BR-TEXT-30），第 i 个条目用的
+ * params 各不相同：帮助文章、热销榜、站内 H5（https WebPage）、搜索、公告。
+ */
+export const ITEM_TARGET_KINDS: { name: string; at(i: number): Obj }[] = [
+  { name: 'Help', at: (i) => ({ route: 'Help', params: { article_id: `guide_${i}` } }) },
+  {
+    name: 'HotRankList',
+    at: (i) => ({
+      route: 'HotRankList',
+      params: { platform: HOT_RANK_PLATFORMS[i % HOT_RANK_PLATFORMS.length] as string },
+    }),
+  },
+  {
+    name: 'WebPage',
+    at: (i) => ({ route: 'WebPage', params: { url: `https://h5.example.com/topic/${i}` } }),
+  },
+  { name: 'Search', at: (i) => ({ route: 'Search', params: { q: `入口${i}` } }) },
+  { name: 'Notice', at: (i) => ({ route: 'Notice', params: { article_id: `notice_${i}` } }) },
+];
+
+/** 第 i 个条目轮换使用 ITEM_TARGET_KINDS（第 i 个用第 i mod 5 种）。 */
+export function variedTarget(i: number): Obj {
+  const kind = ITEM_TARGET_KINDS[i % ITEM_TARGET_KINDS.length] as { at(i: number): Obj };
+  return kind.at(i);
+}
+
+/**
+ * me.more_services 带 n 个互不相同的条目（以 golden 第一个条目为底）；第 i 个条目的跳转为 targetAt(i)，
+ * 默认按 variedTarget 轮换几种站内路由（spec-test r2 S1 #4：上限不能只对某一种路由计数）。
+ */
+export function meWithItems(n: number, targetAt: (i: number) => Obj = variedTarget): Obj {
   const section = clone(moreServices(meBase()));
   const first = firstItem(section);
   const items: Obj[] = [];
   for (let i = 0; i < n; i += 1) {
     const item = clone(first);
-    item['action'] = { route: 'Help', params: { article_id: `guide_${i}` } };
+    item['action'] = targetAt(i);
     for (const key of ['id', 'item_id', 'key', 'slug']) {
       if (typeof item[key] === 'string') item[key] = `${String(item[key])}_${i}`;
     }
@@ -812,12 +937,23 @@ export function getAt(value: unknown, path: Path): unknown {
   return node;
 }
 
-/** 副本上把 path 处换成 next（next 为 undefined 时删掉该键）。 */
+/**
+ * 副本上把 path 处换成 next（next 为 undefined 时删掉该键）。路上缺的父对象（如示例省略了可选的
+ * data.search）先补成空对象再设值；删除时父对象本来就缺则原样返回。不抛 TypeError（spec-test r2 S2）。
+ */
 export function setAt(value: unknown, path: Path, next: unknown): unknown {
   if (path.length === 0) return clone(next);
   const copy = clone(value);
+  if (!isObj(copy) && !Array.isArray(copy)) return copy;
   let node = copy as Record<string, unknown>;
-  for (const key of path.slice(0, -1)) node = node[String(key)] as Record<string, unknown>;
+  for (const key of path.slice(0, -1)) {
+    const child = node[String(key)];
+    if (!isObj(child) && !Array.isArray(child)) {
+      if (next === undefined) return copy;
+      node[String(key)] = {};
+    }
+    node = node[String(key)] as Record<string, unknown>;
+  }
   const last = String(path.at(-1));
   if (next === undefined) delete node[last];
   else node[last] = clone(next);
@@ -906,4 +1042,60 @@ export function pageKeyDefinitions(doc: Obj): Definition[] {
     }
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// 批 1 的补充（spec-test r2）
+
+export type EffectiveParam = { where: string; operationId: string; schema: Obj };
+
+/**
+ * 某路径下某方法实际生效的路径参数（OpenAPI：操作级同名同位置的参数覆盖路径级的），schema 已解析引用。
+ * 只返回 `in: path` 且名字为 name 的那一个；没有时为 undefined。
+ */
+export function effectivePathParam(
+  doc: Obj,
+  path: string,
+  method: string,
+  name: string,
+): EffectiveParam | undefined {
+  const item = at(doc, 'paths', path);
+  const op = at(item, method);
+  const pick = (list: unknown): Obj | undefined =>
+    (Array.isArray(list) ? list : [])
+      .map((raw) => resolve(doc, raw))
+      .find((p) => p['name'] === name && p['in'] === 'path');
+  const param = pick(op['parameters']) ?? pick(item['parameters']);
+  if (param === undefined) return undefined;
+  return {
+    where: `${method.toUpperCase()} ${path} 实际生效的路径参数 ${name}`,
+    operationId: typeof op['operationId'] === 'string' ? op['operationId'] : '',
+    schema: resolve(doc, param['schema']),
+  };
+}
+
+/** 公开的 `/v1/pages/{page_key}…` 下的 GET 操作路径。 */
+export function publicPageReadPaths(doc: Obj): string[] {
+  return Object.entries(at(doc, 'paths'))
+    .filter(
+      ([path, item]) =>
+        path.startsWith('/v1/pages/{page_key}') && isObj(item) && isObj(item['get']),
+    )
+    .map(([path]) => path)
+    .sort();
+}
+
+/**
+ * section 的 static 条目补到至少两个（不够时以第一个为底补一个跳帮助文章的条目），用于检查「第二项及以后」。
+ * 补出来的 section 不合契约时（如契约限定该卡只有一个条目）原样返回。
+ */
+export function atLeastTwo(pageKey: string, section: Obj): Obj {
+  const next = clone(section);
+  const items = itemsOf(next);
+  expect(items.length, `${String(next['id'])} 至少一个条目`).toBeGreaterThan(0);
+  if (items.length >= 2) return next;
+  const extra = clone(items[0] as Obj);
+  extra['action'] = { route: 'Help', params: { article_id: 'second_entry' } };
+  object(next['data_source'])['items'] = [...items, extra];
+  return isValidPage(page(pageKey, [next])) ? next : clone(section);
 }

@@ -13,13 +13,19 @@ import {
   SEARCH,
   WEBPAGE_TARGET,
   admittedSearch,
+  atLeastTwo,
   clone,
   expectPage,
+  findPaths,
   homeSection,
+  isObj,
+  isValidPage,
   itemsOf,
   meBase,
   moreServices,
   page,
+  schemaPropertyNames,
+  setAt,
   type Obj,
 } from './kit.ts';
 
@@ -28,20 +34,6 @@ function withAction(pageKey: string, section: Obj, index: number, action: Obj): 
   const next = clone(section);
   (itemsOf(next)[index] as Obj)['action'] = clone(action);
   return page(pageKey, [next]);
-}
-
-/** 保证至少两个原本合法的条目：不够时以第一个条目为底补一个跳帮助文章的条目。 */
-function atLeastTwo(section: Obj): Obj {
-  const next = clone(section);
-  const items = itemsOf(next);
-  expect(items.length, `${String(next['id'])} 至少一个条目`).toBeGreaterThan(0);
-  if (items.length < 2) {
-    const extra = clone(items[0] as Obj);
-    extra['action'] = { route: 'Help', params: { article_id: 'second_entry' } };
-    const source = next['data_source'] as Obj;
-    source['items'] = [...items, extra];
-  }
-  return next;
 }
 
 // ExternalPage 一律拒收，与 url 指向哪里无关（「ExternalPage 与任何白名单外的地址都拒收」）。
@@ -64,16 +56,20 @@ it('[AC-CT-27#12] me、search 的每个条目只许站内路由与 https 的 Web
   // 例：运营给「更多服务」配一格跳 https://example.com/活动（外部网站）→ 保存被拒（20001）；
   // 同一地址配在首页 banner 上 → 照旧可以保存（只按 BR-ATTR-29 ① 校验）。
   const cases: { label: string; pageKey: string; section: Obj }[] = [
-    { label: 'me.more_services', pageKey: ME, section: atLeastTwo(moreServices(meBase())) },
+    { label: 'me.more_services', pageKey: ME, section: atLeastTwo(ME, moreServices(meBase())) },
     // 契约启用、且带跳转字段（static 条目）的每种 search 置顶形状。
     ...admittedSearch()
       .filter(({ section }) => itemsOf(section).length > 0)
       .map(({ type, section }) => ({
         label: `search.${type}`,
         pageKey: SEARCH,
-        section: atLeastTwo(section),
+        section: atLeastTwo(SEARCH, section),
       })),
   ];
+  expect(
+    itemsOf(cases[0]?.section ?? {}).length,
+    'me.more_services 至少两个条目（检查到非首项）',
+  ).toBeGreaterThanOrEqual(2);
   for (const { label, pageKey, section } of cases) {
     expectPage(page(pageKey, [clone(section)]), true, `${label} 两个以上合法条目`);
     const count = itemsOf(section).length;
@@ -96,6 +92,7 @@ it('[AC-CT-27#12] me、search 的每个条目只许站内路由与 https 的 Web
   }
 
   // 范围之外照旧：首页 banner、金刚区、弹窗、活动入口的 ExternalPage 照收（BR-ATTR-29 ① 由服务端另查）。
+  // 每个条目（含非首项）都查。
   for (const type of ['banner', 'icon_grid', 'popup', 'activity_entry']) {
     const section = homeSection(type);
     const count = itemsOf(section).length;
@@ -105,6 +102,66 @@ it('[AC-CT-27#12] me、search 的每个条目只许站内路由与 https 的 Web
         true,
         `首页 ${type} 条目 #${i} 跳 ExternalPage`,
       );
+    }
+  }
+});
+
+/** props 里放跳转的常见键名（03 §6.3 product_scroll「更多按钮 action」，04 未定名）。 */
+const PROP_TARGET_GUESSES = [
+  'more_action',
+  'more',
+  'more_target',
+  'more_link',
+  'more_route',
+  'action',
+  'target',
+  'link',
+  'route',
+];
+
+const isTarget = (value: unknown): boolean => isObj(value) && typeof value['route'] === 'string';
+
+it('[AC-CT-27#36] me、search 卡片 props 里的跳转（如商品滚动卡的「更多」按钮）同样只许站内路由与 https 的 WebPage：golden props 里已有的跳转，以及 props 能收跳转的每个键，换成 ExternalPage 或非 https 的 WebPage 都拒收', () => {
+  // 08 BR-TEXT-30「跳转目标」：适用范围是本次新增的 page_key（me、search）里的跳转，不只 static 条目的 action。
+  // spec-test r2 S1 #7：启用接商品池的 product_scroll 时沿用开放的 props，「更多」按钮就能配外链——这里
+  // ① 改 golden props 里已有的跳转；② 对契约里出现过的每个属性名与常见名，props 若能收一个站内跳转，
+  // 就不能收外链（props 开放时任何键都能收，于是任何键都不能收外链）。首页原有类型不在此列（#12 末段）。
+  const cases: { label: string; pageKey: string; section: Obj }[] = [
+    { label: 'me.more_services', pageKey: ME, section: moreServices(meBase()) },
+    ...admittedSearch().map(({ type, section }) => ({
+      label: `search.${type}`,
+      pageKey: SEARCH,
+      section,
+    })),
+  ];
+  const names = [...new Set([...schemaPropertyNames(), ...PROP_TARGET_GUESSES])];
+  for (const { label, pageKey, section } of cases) {
+    expectPage(page(pageKey, [clone(section)]), true, `${label} 原样`);
+    const props: Obj = isObj(section['props']) ? section['props'] : {};
+    const withProp = (path: (string | number)[], value: unknown): Obj => {
+      const next = clone(section);
+      next['props'] = setAt(props, path, value) as Obj;
+      return page(pageKey, [next]);
+    };
+    for (const path of findPaths(props, isTarget)) {
+      const where = `${label} props.${path.join('.')}`;
+      for (const action of GOOD_TARGETS) {
+        expectPage(withProp(path, action), true, `${where} 跳 ${JSON.stringify(action)}`);
+      }
+      for (const action of [...EXTERNALS, ...BAD_WEBPAGES]) {
+        expectPage(withProp(path, action), false, `${where} 跳 ${JSON.stringify(action)}`);
+      }
+    }
+    for (const name of names) {
+      if (Object.hasOwn(props, name)) continue;
+      if (!isValidPage(withProp([name], IN_APP_TARGET))) continue;
+      for (const action of [...EXTERNALS, ...BAD_WEBPAGES]) {
+        expectPage(
+          withProp([name], action),
+          false,
+          `${label} props.${name}（能收站内跳转）跳 ${JSON.stringify(action)}`,
+        );
+      }
     }
   }
 });

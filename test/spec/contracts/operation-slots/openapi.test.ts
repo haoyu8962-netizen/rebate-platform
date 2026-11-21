@@ -18,6 +18,7 @@ import {
   defaultWordFields,
   describesSearchBoxDefault,
   findPaths,
+  getAt,
   isObj,
   object,
   openapi,
@@ -25,7 +26,7 @@ import {
   requestExamples,
   requestSchema,
   resolve,
-  response200Example,
+  response200Examples,
   response200Schema,
   setAt,
   text,
@@ -138,9 +139,12 @@ it('[AC-CT-27#16] 用户侧有搜索框默认词字段（热词接口或 /v1/con
     expect(validate(12), `${where} 拒数字`).toBe(false);
     expect(!field.required || validate(null), `${where} 可不下发（非必填或可为 null）`).toBe(true);
 
-    // 完整响应：以该接口自己的 200 示例为底，配了「洗衣液」与没配置两种都合整份响应契约。
+    // 完整响应：以该接口自己的 200 示例为底，配了「洗衣液」与没配置两种都合整份响应契约。优先取已带
+    // 该字段父对象（如可选的 data.search）的示例；都没有时 setAt 先补上空的父对象再设值（spec-test r2 S2）。
     const envelope = compileOpenapi(doc, response200Schema(doc, field.path, 'get'));
-    const example = response200Example(doc, field.path, 'get');
+    const examples = response200Examples(doc, field.path, 'get');
+    const parent = field.bodyPath.slice(0, -1);
+    const example = examples.find((e) => isObj(getAt(e, parent))) ?? examples[0];
     expect(envelope(example), `${field.path} 的 200 示例合契约`).toBe(true);
     const configured = setAt(example, field.bodyPath, '洗衣液');
     expect(envelope(configured), `${where}=「洗衣液」的完整响应`).toBe(true);
@@ -155,6 +159,7 @@ it('[AC-CT-27#16] 用户侧有搜索框默认词字段（热词接口或 /v1/con
 
 const HOT_KEY = 'search.hot_words';
 const ROUTES_KEY = 'search.keyword_routes';
+const CONFIG_KEYS = [HOT_KEY, ROUTES_KEY];
 const WORD_21 = '一二三四五六七八九十一二三四五六七八九十一';
 
 const isHotList = (node: unknown): boolean =>
@@ -254,6 +259,28 @@ function expectWrites(
       expect(identifies, `${name}：共用操作的样例标明配置键 ${key}`).toBe(true);
       expect(validate(setAt(example, path, other)), `${name}：把另一项的值写进 ${key}`).toBe(false);
     }
+    // 配置键与列表绑定（spec-test r2 S1 #9）：示例里写出配置键时，列表不动、只把键换成另一项、未知键或
+    // 变形的键都拒收——否则保存方按键写入时会把热词值提交给直达配置。
+    const keyPaths = findPaths(example, (node) => node === key);
+    const shortKey = key.slice(key.indexOf('.') + 1);
+    const wrongKeys = [
+      ...CONFIG_KEYS.filter((k) => k !== key),
+      'search.unknown',
+      'search.hot_word',
+      'search.keyword_route',
+      shortKey,
+      `${key} `,
+      key.toUpperCase(),
+      '',
+    ];
+    for (const keyPath of keyPaths) {
+      for (const wrong of wrongKeys) {
+        expect(
+          validate(setAt(example, keyPath, wrong)),
+          `${name}：${key} 的列表配上键 ${keyPath.join('.')}=${JSON.stringify(wrong)}`,
+        ).toBe(false);
+      }
+    }
     for (const value of good) {
       const body = setAt(example, path, value);
       expect(validate(body), `${name}：${key} 写 ${JSON.stringify(value)}`).toBe(true);
@@ -265,12 +292,12 @@ function expectWrites(
   }
 }
 
-it('[AC-CT-27#29] 热词后台写接口的请求体能提交 search.hot_words 的值：[{text}]（1–20 字、至多 10 个、可为空列表）通过，错形状、空文字、超长、多余键、超量都拒收', () => {
+it('[AC-CT-27#29] 热词后台写接口的请求体能提交 search.hot_words 的值：[{text}]（1–20 字、至多 10 个、可为空列表）通过，错形状、空文字、超长、多余键、超量都拒收；示例写出配置键时，键换成 search.keyword_routes 或未知键都拒收', () => {
   // 04 §6.3：读写仍是 search.hot_words 这个配置项；值的形状同用户侧 SearchHotWord（text 1–20 字）、至多 10 个。
   expectWrites(HOT_WORDS, isHotList, HOT_KEY, GOOD_HOT, BAD_HOT, [ROUTE_HOT_RANK]);
 });
 
-it('[AC-CT-27#30] 关键词直达后台写接口的请求体能提交 search.keyword_routes 的值：[{keyword, target:{route, params}}] 通过；缺目标、目标不是 {route}、http 外链 / WebPage、超长、超量都拒收', () => {
+it('[AC-CT-27#30] 关键词直达后台写接口的请求体能提交 search.keyword_routes 的值：[{keyword, target:{route, params}}] 通过；缺目标、目标不是 {route}、http 外链 / WebPage、超长、超量都拒收；示例写出配置键时，键换成 search.hot_words 或未知键都拒收', () => {
   // 04 §6.3：读写仍是 search.keyword_routes；直达目标按 routes.json 校验，非法项整条拒绝（D10-419）；
   // D10-2383：目标受白名单约束，契约能表达的「外链只收 https」要钉住。
   expectWrites(KEYWORD_ROUTES, isRouteList, ROUTES_KEY, GOOD_ROUTES, BAD_ROUTES, [

@@ -16,6 +16,7 @@ import {
   batch2Section,
   clone,
   compileOpenapi,
+  effectivePathParam,
   expectPage,
   homeSection,
   isValidPage,
@@ -25,10 +26,12 @@ import {
   openapi,
   page,
   pageKeyDefinitions,
+  publicPageReadPaths,
   resolve,
   searchBase,
   searchCandidates,
   sectionsOf,
+  type EffectiveParam,
   type Obj,
 } from './kit.ts';
 
@@ -289,6 +292,87 @@ it('[AC-CT-27#24] 契约里有 me、search 的准入定义（供保存校验与�
       expect(isValidPage(page(pageKey, sections)), `整页 schema：${pageKey} ${label}`).toBe(
         expected,
       );
+    }
+  }
+});
+
+it('[AC-CT-27#31] 公开读口（GET /v1/pages/{page_key} 及其下的 GET）实际生效的 page_key 路径参数收 me、search，拒收表外键与 wallet / orders（预览口只要求收）', () => {
+  // BR-TEXT-28 细则「准入表」：表外的 page_key 一律拒收；细则「不可配清单」末项：订单页、钱包页不设运营位。
+  // spec-test r2 S1 #1：不只编译 PageKeyPath 组件，而是解析每个公开读操作实际引用的参数（操作级覆盖路径级），
+  // 内联成 `type: string` 也要被抓到。previewPage 只认后台签发的令牌（错的一律 30701），只要求收 me / search。
+  const doc = openapi();
+  const paths = publicPageReadPaths(doc);
+  expect(paths, '公开读口含 GET /v1/pages/{page_key}').toContain('/v1/pages/{page_key}');
+  for (const path of paths) {
+    const param = effectivePathParam(doc, path, 'get', 'page_key');
+    expect(param, `GET ${path} 有路径参数 page_key`).toBeDefined();
+    const { where, operationId, schema } = param as EffectiveParam;
+    const validate = compileOpenapi(doc, schema);
+    for (const key of GOOD_KEYS) expect(validate(key), `${where} 收 ${key}`).toBe(true);
+    if (operationId === 'previewPage') continue;
+    for (const key of BAD_KEYS) {
+      expect(validate(key), `${where}（${operationId}）拒 ${JSON.stringify(key)}`).toBe(false);
+    }
+  }
+  const getPage = effectivePathParam(doc, '/v1/pages/{page_key}', 'get', 'page_key');
+  expect(getPage?.operationId, 'GET /v1/pages/{page_key} 是 getPage').toBe('getPage');
+});
+
+it('[AC-CT-27#32] 契约里也有 home 的准入定义：首页既有各类型照收，popup 0 个、1 个都收，2 个（任一位置）拒收；与整页 schema 对同一组样例结论一致', () => {
+  // 08 BR-TEXT-28 准入表 home 行：现有各类型照旧（个数与位置沿用现有校验）；popup 至多 1 个（原有）。
+  // 04 §6.2「运营位」①：每个 page_key 一张准入表，供保存校验与后台表单共用（spec-test r2 S1 #2：
+  // 不能只发布 me / search 两张，首页弹窗上限只写在下发根 schema 里）。批 2 的新类型本单不作要求。
+  const all = REGISTERED.map((type) => ({ ...homeSection(type), id: `${type}_1` }));
+  const popup = all.find((s) => s['type'] === 'popup') as Obj;
+  const popup2: Obj = { ...clone(popup), id: 'popup_2' };
+  const withoutPopup = all.filter((s) => s['type'] !== 'popup');
+  const cases: [string, Obj[], boolean][] = [
+    ['空页', [], true],
+    ['既有 8 类各一个（含 1 个 popup）', all.map((s) => clone(s)), true],
+    ['既有 7 类、0 个 popup', withoutPopup.map((s) => clone(s)), true],
+    ['只有 1 个 popup', [clone(popup)], true],
+    ['既有 8 类再加第 2 个 popup', [...all.map((s) => clone(s)), clone(popup2)], false],
+    ['只有 2 个 popup', [clone(popup), clone(popup2)], false],
+    [
+      '2 个 popup 分在两头',
+      [clone(popup2), ...withoutPopup.map((s) => clone(s)), clone(popup)],
+      false,
+    ],
+  ];
+  for (const section of all) {
+    cases.push([`只有 ${String(section['type'])}`, [clone(section)], true]);
+  }
+  const entries = admissionEntries('home');
+  for (const [label, sections, expected] of cases) {
+    for (const entry of entries) {
+      expect(entry.admits(sections), `${entry.where}：home ${label}`).toBe(expected);
+    }
+    expect(isValidPage(page('home', sections)), `整页 schema：home ${label}`).toBe(expected);
+  }
+});
+
+it('[AC-CT-27#33] search 置顶位总数至多 1 个：契约启用的每种置顶卡保留各自合法的 id 独立通过；任意两张（同一张两次、两类任一顺序）一起提交整页与准入定义都拒收', () => {
+  // 08 BR-TEXT-28 准入表 search 行：结果页置顶位 1 个（banner 或接商品池的 product_scroll）。
+  // spec-test r2 S1 #3：两种卡可以各有自己的合法 id（如 search_top / search_products），组合时不改 id，
+  // 免得组合因 id 不合法被拒而放过「两张各自合法的置顶卡并存」。
+  const admitted = admittedSearch();
+  const entries = admissionEntries(SEARCH);
+  for (const { type, section } of admitted) {
+    const id = String(section['id']);
+    expectPage(page(SEARCH, [clone(section)]), true, `search 只放 ${type}（id=${id}）`);
+    for (const entry of entries) {
+      expect(entry.admits([clone(section)]), `${entry.where}：search 只放 ${type}`).toBe(true);
+    }
+  }
+  for (const a of admitted) {
+    for (const b of admitted) {
+      const ids = [a, b].map((c) => `${c.type}(${String(c.section['id'])})`);
+      const label = `search 放 ${ids.join(' + ')}`;
+      const sections = [clone(a.section), clone(b.section)];
+      expectPage(page(SEARCH, sections), false, label);
+      for (const entry of entries) {
+        expect(entry.admits(sections), `${entry.where}：${label}`).toBe(false);
+      }
     }
   }
 });
