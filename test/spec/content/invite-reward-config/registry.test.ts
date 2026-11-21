@@ -56,6 +56,7 @@ it.each(CONFIGS)('[AC-F1-02zn#1] $key：类型、权限、可编辑性与整数�
 // B2-04zzlt (B2-04zzl prerequisite, BR-ATTR-26, D10-1095) appends order.blacklist_clawback.enabled after it.
 // B1-18c (D10-1250 ①, BR-CALC-25) appends union.taobao / jd / pdd.subsidy_itemized after it, in this order.
 // B1-18e (D10-1250 ②, BR-CALC-03) appends union.taobao / pdd.service_fee_bp after them, in this order.
+// B2-02zda (B2-02zd prerequisite, BR-FUND-19, D10-2299) appends ledger.auto_correct.enabled / max_accounts after them, in this order.
 // B1-22y (Agent A10, D10-1306 / D10-1307) appends the 26 Agent keys after them, in this order.
 it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
   const keys = configRegistry().map((entry) => entry.key);
@@ -166,6 +167,8 @@ it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
     'union.pdd.subsidy_itemized',
     'union.taobao.service_fee_bp',
     'union.pdd.service_fee_bp',
+    'ledger.auto_correct.enabled',
+    'ledger.auto_correct.max_accounts',
     'agent.member_daily_quota',
     'agent.guest_daily_quota',
     'agent.guest_ip_daily_quota',

@@ -175,6 +175,8 @@ const SUBSIDY_ITEMIZED_KEYS = [
 ];
 // B1-18e (D10-1250 ②, BR-CALC-03): union.taobao / pdd.service_fee_bp follow them, in this order, now ending the tail.
 const SERVICE_FEE_BP_KEYS = ['union.taobao.service_fee_bp', 'union.pdd.service_fee_bp'];
+// B2-02zda (B2-02zd prerequisite, BR-FUND-19, D10-2299): ledger.auto_correct.enabled / max_accounts follow them, in this order.
+const AUTO_CORRECT_KEYS = ['ledger.auto_correct.enabled', 'ledger.auto_correct.max_accounts'];
 // B1-22y (Agent A10, D10-1306 / D10-1307): the 26 Agent keys follow them, in this order, now ending the tail.
 const AGENT_A10_KEYS = [
   'agent.member_daily_quota',
@@ -244,6 +246,7 @@ it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天�
     ...BLACKLIST_CLAWBACK_KEYS,
     ...SUBSIDY_ITEMIZED_KEYS,
     ...SERVICE_FEE_BP_KEYS,
+    ...AUTO_CORRECT_KEYS,
     ...AGENT_A10_KEYS,
   ];
   const end = registry.length - tail.length;
