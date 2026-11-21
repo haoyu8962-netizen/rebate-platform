@@ -6,11 +6,12 @@ type: test-change
 # 来由：B3-08t money r1 ④ 是 r2 修出来的回归——「订单返利规则是什么？别查我的订单」「别查我的订单」「不用查我的订单，返利规则是什么」「不是查我的订单」
 #   这类否定 / 问规则的句子曾被本人查单规则判成订单意图。r3 起修好，但反例只在实现方单测 apps/api/src/modules/agent/orchestrator/intents/classify.test.ts（[AC-B3-08t#1] 之后的 it.each）里，冻结的规则测试层没有。
 # 做法：只新增 test/spec/agent/run-fields/own-order-negation.int.test.ts 一个文件（kit.ts 等现有辅助文件只读引用，不改任何冻结文件）；
-#   ① 这些句子整轮走生产装配（runtimeRig），模型协议自报 order_query 时，意图端口记下的判定不是 order_query，终态落库 intent 不是 order_query；
+#   ① 这些句子整轮走生产装配（runtimeRig），模型协议自报非订单标签（rule_qa）时，服务端不改判 order_query（不出订单登录卡），终态落库 intent 为模型标签、不是 order_query；
+#     （补丁 1 更正：分类器对这些句子给 unknown，意图端口保留模型标签——port.ts serverIntent——模型自己报 order_query 时保留它是允许的，不断言那种情形。）
 #   ② 对照：同一装配下正例「查一下我的订单」「帮我查一下我的订单，谢谢」仍落 order_query（防止测试靠「全不判订单」变绿）。
 # 实现已在主干（#467），新块在主干上应为绿；有牙由探针清单证明（D10-2264）：探针至少含 P1 去掉否定词判定、P2 本人查单改回「含『我的订单』即判订单」、P3 终态改落模型自报标签，
 #   每个探针杀到哪几条写进 PR 正文与证据。不登 red_exempt（不适用于新块，D10-2264 ③）。
-# spec-test 由独立 Claude 做（任务书原样附 D10-2317 ①）；子代理本机只跑单文件、maxWorkers=2（D10-2262），整目录上测试机。
+# spec-test 由独立 Claude 做（任务书原样附 D10-2317 ①）；本机不跑 vitest，单文件也走测试机 --tests（D10-2404 / D10-2406 / D10-2478）。
 refs: [BR-AI-01, BR-AI-19]
 refs_hash:
   BR-AI-01: 654d69df14f4
