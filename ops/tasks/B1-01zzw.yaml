@@ -6,11 +6,17 @@ type: impl
 # 只改 platform/validation/index.ts 的 validationErrorEnvelope 与头注释：从最里层组合往外逐层挑分支——(a) 分支自身属性 enum / const 不符即未选中；(b) 余下取出错字段最少的一支，打平时都不报、只留组合位置名，打平的分支都只缺必填（「至少给一个」）则报并集；(c) 全部判别值不符只报判别字段；(d) 组合失败时同层 unevaluatedProperties 连带错误去掉；(e) 组合位置名（根上 body）保留。
 # 只删 Ajv 错误、不改错误转字段名的方法（D10-2233）：每个请求的 fields 都是现状的子集；契约、错误码、04 §7 不动（规划回写由编排做），不占契约槽。已知不完美：stepUp 带非法 provider 时按短信分支报，头注释写明。4 处模块自建 Ajv 不动。
 # 冻结用例：step-up-digest/issue.int.test.ts 的 7 处 fields 数组变短，期望码 20001、不签发断言不变。#8 登 modify_existing（ruling_correction：D10-2193 钉的是 oneOf 合并报告）；#1 的 6 行在内联 .each 表里、表行引用顶层常量，modify_existing 不能按行展开（同 D10-2205），不登；该文件按逐条判，6 行改了期望、旧实现下红即合规，未动用例自动免红（门禁试跑 couli-runs/B1-01zzw/red/1：PASS，8 红）。冻结改动靠 owner 标签（approvals 24）。
+# 台账补丁 1（2026-11-21，D10-2348 甲）：money r1 S1——contracts/openapi.yaml adminCreateAdjustment 描述写明 schema 失败时 data.fields 报两种形状（与口径甲冲突，方案漏查）。只改那段 description 为「只报请求实际要走的那一形状的问题加 body」，schema / 枚举 / 其余文字不动（oasdiff 无破坏），pnpm codegen 重生 openapi.gen.ts（试过只动这一份；其余从契约生成的文件按 CT-06n 一并列入，不改）；占契约槽。规则测试加一行零金额新调账 → [amount_fen, body]（写测第 3 次）；后台调账页单字段文案分支不变的证据放 validation 单测。
 refs: []
 refs_hash: {}
 deps: []
 paths:
   - 'apps/api/src/modules/platform/validation/index.ts'
+  - 'apps/api/src/modules/platform/validation/index.test.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/{openapi,planned-operations}.gen.ts'
+  - 'apps/api/src/modules/platform/{http/auth-routes,validation/signing-routes}.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
 test_paths:
   - 'test/spec/platform/validation/oneof-fields.test.ts'
   - 'test/spec/identity/step-up-digest/issue.int.test.ts'
