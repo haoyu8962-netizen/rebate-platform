@@ -6,6 +6,7 @@ type: contract
 # contracts/home-schema.json：page_key 加 me、search 与每个 page_key 的准入表（BR-TEXT-28；custom:<slug> 专题页随批 2）；section 与 static 条目的起止时刻；icon_grid props 定稿（列数、徽标三种与到期，BR-TEXT-29）。悬浮按钮、开屏图（float_button / splash）随批 2，不在本单。
 # contracts/openapi.yaml：热词（search.hot_words）与关键词直达（search.keyword_routes）的后台增改接口；搜索框默认词字段（现无配置键，契约先定字段）。形状照 04 §6.2「运营位」、§6.6 pages。
 # golden 样例含过期条目、超长徽标、外链跳转、准入表外类型（拒收）。验收：oasdiff 通过（新增枚举 / 字段按 contracts/oasdiff-accepted.txt 规矩登记）；三端与后台生成物无漂移。
+# 2026-11-22 编排 D10-2433 ①：首页金刚区旧向量 specs/client/home-sdui-vectors.json 的字符串徽标随本单改成徽标对象（BR-TEXT-29 只收对象；B1-36 保存不做字符串转换、直接 20001），paths 加这份向量文件。
 refs: [BR-TEXT-28, BR-TEXT-29, BR-TEXT-30]
 refs_hash:
   BR-TEXT-28: b63875b517fd
@@ -14,6 +15,7 @@ refs_hash:
 deps: []
 paths:
   - 'contracts/**'
+  - 'specs/client/home-sdui-vectors.json'
   - 'packages/contracts-ts/**'
   - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
   - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
