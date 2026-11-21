@@ -8,7 +8,7 @@ import {
 import type { AdmissionLimits, RunEnding, RunReply } from '../admission/index.ts';
 import type { TerminalFrame } from '../run/types.ts';
 import { createFrameValidator } from '../writer/index.ts';
-import type { FinalizeHold, FinalizeOutcome, PgRunDeps } from './types.ts';
+import type { FinalizeHold, FinalizeOutcome, LiveRunFields, PgRunDeps } from './types.ts';
 import { defaultDraft, decideEnding } from './ending.ts';
 import type { EndingMemo } from './ending.ts';
 import { fromStored, redactedStored, StoredFrameInvalid, toStored, withQuota } from './frames.ts';
@@ -60,6 +60,7 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
     limits: AdmissionLimits,
     live?: EndingMemo,
     reply?: RunReply,
+    fields?: LiveRunFields,
   ): Promise<FinalizeOutcome> {
     let row = initial;
     try {
@@ -114,11 +115,16 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
         erased && row.end_draft !== null
           ? sql`${JSON.stringify(redactedStored(toStored(draft)))}::jsonb`
           : sql`end_draft`;
+      // B3-08t (BR-AI-19 细则「运行级字段」, BR-AI-05 ⑤): intent and input_passed of the process that
+      // ran the run, and the model columns of a run that used no model output, in this UPDATE.
+      const run = runFieldsSql(fields);
       await q.query(sql`UPDATE app.agent_runs SET
         settle_result = ${refunded ? 'refunded' : 'counted'}, settled_at = ${now},
         final_event = ${JSON.stringify(stored)}::jsonb, end_draft = ${endDraft},
         ended_at = GREATEST(${now}, accepted_at),
-        finish_reason = COALESCE(finish_reason, ${frame.event === 'done' ? frame.data.finish_reason : 'error'})
+        finish_reason = COALESCE(finish_reason, ${frame.event === 'done' ? frame.data.finish_reason : 'error'}),
+        intent = ${run.intent}, input_passed = ${run.inputPassed},
+        model = ${run.model}, model_snapshot = ${run.snapshot}
         WHERE app_id = ${row.app_id} AND id = ${row.id} AND final_event IS NULL`);
       // B3-08zc (BR-AI-19 细则「助手回复落库」): the reply of the process that ran the run, in this
       // same transaction — committed with the terminal state or not at all.
@@ -173,6 +179,7 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
     runId: string,
     live?: EndingMemo,
     reply?: RunReply,
+    fields?: LiveRunFields,
   ): Promise<FinalizeOutcome> {
     const step = live ? 'settle' : 'finalize';
     for (let attempt = 0; ; attempt += 1) {
@@ -197,7 +204,16 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
             ) {
               deps.logger?.warn({ run_id: runId }, 'agent.deadline_mismatch');
             }
-            return finalizeRun(q, session, row, now, limits, live, live ? reply : undefined);
+            return finalizeRun(
+              q,
+              session,
+              row,
+              now,
+              limits,
+              live,
+              live ? reply : undefined,
+              live ? fields : undefined,
+            );
           },
           async (q) => {
             // F0 precedes BEGIN: the limits were read before the connection was leased (a failed
@@ -224,8 +240,13 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
     }
   }
 
-  async function requireFinal(runId: string, live: EndingMemo, reply?: RunReply) {
-    const out = await independent(runId, live, reply);
+  async function requireFinal(
+    runId: string,
+    live: EndingMemo,
+    reply?: RunReply,
+    fields?: LiveRunFields,
+  ) {
+    const out = await independent(runId, live, reply, fields);
     if (out.kind === 'held') throw new AdmissionHeldError(out.reason);
     if (out.kind !== 'final') throw new AdmissionUnavailableError('rolled_back');
     return out;
@@ -234,3 +255,31 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
 }
 
 export type Finalization = ReturnType<typeof createFinalization>;
+
+/**
+ * B3-08t: the run-level columns of the F5 UPDATE. Without live fields (another request finalizes:
+ * this process's result is unknown) intent / input_passed / model stay, and the snapshot written
+ * at admission is cleared when no model was recorded. prompt_version is never touched (04 §3.2).
+ */
+function runFieldsSql(fields: LiveRunFields | undefined) {
+  const unknownSnapshot = sql`CASE WHEN model IS NULL THEN NULL ELSE model_snapshot END`;
+  if (fields === undefined) {
+    return {
+      intent: sql`intent`,
+      inputPassed: sql`input_passed`,
+      model: sql`model`,
+      snapshot: unknownSnapshot,
+    };
+  }
+  return {
+    intent: sql`${fields.intent}`,
+    inputPassed: sql`${fields.inputPassed}`,
+    model: fields.modelUsed === false ? sql`NULL` : sql`model`,
+    snapshot:
+      fields.modelUsed === true
+        ? sql`model_snapshot`
+        : fields.modelUsed === false
+          ? sql`NULL`
+          : unknownSnapshot,
+  };
+}

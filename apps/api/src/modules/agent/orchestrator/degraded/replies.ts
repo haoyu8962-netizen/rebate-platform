@@ -4,6 +4,7 @@
 // dictionary has no entry (a lookup that fails, is empty or answers the key itself).
 import type { RunBodyResult, RunContext, UnnumberedCard } from '../../stream/run/index.ts';
 import type { AgentRunTexts } from '../core/ports.ts';
+import { markDegradedUnserved } from '../core/degraded-intent.ts';
 
 type Done = Extract<RunBodyResult, { kind: 'done' }>;
 
@@ -81,6 +82,8 @@ export async function emptyReply(
     items.push({ text: item, send_text: item });
   }
   if (ctx.signal.aborted) return { kind: 'done', finishReason: 'stop' };
+  // B3-08t (BR-AI-19 细则「运行级字段」): greetings only / no product word, no search: no intent.
+  markDegradedUnserved(ctx);
   ctx.text(text);
   ctx.suggestions(items);
   return { kind: 'done', finishReason: 'stop' };

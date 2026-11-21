@@ -129,6 +129,8 @@ export type {
   PgRunRegistry,
   CancelQuery,
   PgRunPorts,
+  PgAdmission,
+  LiveRunFields,
 } from './types.ts';
 export { fromStored, StoredFrameInvalid, toStored, withQuota } from './frames.ts';
 export type { StoredFrame } from './frames.ts';

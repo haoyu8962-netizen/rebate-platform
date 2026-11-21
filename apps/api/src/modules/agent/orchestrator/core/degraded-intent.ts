@@ -21,6 +21,8 @@ interface RouteSlot {
   readonly fixed: boolean;
   intent: DegradedIntent | null;
   open: boolean;
+  /** B3-08t: the path served the message without an intent (see markDegradedUnserved). */
+  unserved: boolean;
 }
 
 /** Slot of each degraded run call, keyed by the context the core handed it (see header). */
@@ -45,10 +47,24 @@ export function routeDegradedIntent(ctx: RunContext, intent: DegradedIntent): bo
   return true;
 }
 
+/**
+ * B3-08t · BR-AI-19 细则「运行级字段」: the no-model path answered without serving an intent
+ * (greetings only, or no product word and so no search): agent_runs.intent stays null. The trace
+ * intent is not changed. Best effort and silent: a context without a slot (another path's, e.g.
+ * the intent fallback's) or a slot already closed changes nothing.
+ */
+export function markDegradedUnserved(ctx: RunContext): void {
+  const slot = slots.get(ctx);
+  if (slot === undefined || slot.fixed || !slot.open) return;
+  slot.unserved = true;
+}
+
 /** Core only: the intent slot of one DegradedPath.run call. */
 export interface DegradedRoute {
   /** The registered intent (null: none, or the model's is kept); no registration counts after. */
   close(): DegradedIntent | null;
+  /** B3-08t: markDegradedUnserved was called on the slot's context before it was closed. */
+  unserved(): boolean;
 }
 
 /**
@@ -57,12 +73,13 @@ export interface DegradedRoute {
  */
 export function openDegradedRoute(ctx: RunContext, fixed: boolean): DegradedRoute {
   if (slots.has(ctx)) throw new Error('openDegradedRoute: context already bound');
-  const slot: RouteSlot = { fixed, intent: null, open: true };
+  const slot: RouteSlot = { fixed, intent: null, open: true, unserved: false };
   slots.set(ctx, slot);
   return {
     close() {
       slot.open = false;
       return slot.fixed ? null : slot.intent;
     },
+    unserved: () => slot.unserved,
   };
 }

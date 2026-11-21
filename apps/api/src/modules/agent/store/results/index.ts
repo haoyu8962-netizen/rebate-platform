@@ -54,6 +54,7 @@
 // FOR SHARE is on agent_sessions only (couli_app holds column UPDATE grants there).
 import type { DB } from '@couli/db';
 import { fenToJsonNumber, parseFen } from '@couli/money';
+import type { PageGuideRejectReason } from '@couli/contracts-ts';
 import type { Kysely } from 'kysely';
 import { sql } from 'kysely';
 import { chainProblem } from '../../orchestrator/results/store.ts';
@@ -87,6 +88,25 @@ export interface ToolCallRecord {
 export type ToolCallInitiator = 'model' | 'server';
 
 /**
+ * B3-08t · BR-AI-19 细则「运行级字段」: the run-level columns of agent_runs written with the trace
+ * (asynchronously, after or around the terminal state). Every value is the run's final one, so a
+ * write again overwrites with the same values (never accumulates).
+ */
+export interface RunFieldsRecord {
+  /** The model whose output the run used (model and model_snapshot); null: leave both alone. */
+  readonly model: string | null;
+  /** Summed over every model answer of the run; null: no model answered. */
+  readonly input_tokens: number | null;
+  readonly output_tokens: number | null;
+  readonly ttft_ms: number | null;
+  readonly latency_ms: number | null;
+  /** output_filtered is written as filter_hits being non-empty (the table's CHECK). */
+  readonly filter_hits: readonly ('amount' | 'url' | 'tpwd')[];
+  readonly output_truncated: boolean;
+  readonly page_guide_reject_reason: PageGuideRejectReason | null;
+}
+
+/**
  * Both methods resolve undefined once written and the string TRACE_SKIPPED when the session is
  * detached from its user (B3-08y, BR-AI-22): typed void so the B3-08q callers stay unchanged.
  */
@@ -98,6 +118,12 @@ export interface AgentTraceWriter {
     cards: readonly CardInput[],
   ): Promise<void>;
   recordToolCalls(appId: string, runId: string, calls: readonly ToolCallRecord[]): Promise<void>;
+  /**
+   * B3-08t: the run-level columns of the run (one UPDATE of agent_runs by app and run, outside a
+   * transaction, so no row lock is held after it; never intent, input_passed or prompt_version).
+   * Optional: a writer without it writes no run-level columns.
+   */
+  recordRunFields?(appId: string, runId: string, fields: RunFieldsRecord): Promise<void>;
 }
 
 /** What a trace write resolves when its session is detached from its user (BR-AI-22). */
@@ -576,6 +602,34 @@ export function createPgAgentTraceWriter(deps: {
           .execute();
         return undefined;
       });
+    },
+
+    // B3-08t: set by value (a write again after a lost acknowledgement stores the same values).
+    // Only the columns of this writer; intent / input_passed belong to the terminal transaction,
+    // and model / model_snapshot are set only for a run that used a model's output.
+    async recordRunFields(appId, runId, fields) {
+      if (!isUuid(runId))
+        throw new AgentTraceRejected('recordRunFields: run not found in this app');
+      const hits = [...new Set(fields.filter_hits)];
+      const result = await db
+        .updateTable('agent_runs')
+        .set({
+          ...(fields.model === null ? {} : { model: fields.model, model_snapshot: fields.model }),
+          input_tokens: fields.input_tokens,
+          output_tokens: fields.output_tokens,
+          ttft_ms: fields.ttft_ms,
+          latency_ms: fields.latency_ms,
+          output_filtered: hits.length > 0,
+          filter_hits: hits,
+          output_truncated: fields.output_truncated,
+          page_guide_reject_reason: fields.page_guide_reject_reason,
+        })
+        .where('app_id', '=', appId)
+        .where('id', '=', runId)
+        .executeTakeFirst();
+      if (result.numUpdatedRows === 0n) {
+        throw new AgentTraceRejected('recordRunFields: run not found in this app');
+      }
     },
   };
 }

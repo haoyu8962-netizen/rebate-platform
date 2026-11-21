@@ -268,6 +268,10 @@ class AgentRun {
   private intent: string | null = null;
   private formatInvalid = false;
   private model: string | null = null;
+  /** B3-08t: tokens of every model answer of the run, summed (null: no model answered). */
+  private usage: { input_tokens: number; output_tokens: number } | null = null;
+  /** B3-08t: the run's result is the no-model path's (degrade() was entered). */
+  private degraded = false;
   private promptVersion = 'none';
   private readonly attempts: AttemptRecord[] = [];
   private readonly toolTrace: OrchestratorTrace['tool_calls'][number][] = [];
@@ -684,6 +688,8 @@ class AgentRun {
   }
 
   private async degrade(proceed: InputProceed, reason: DegradeReason): Promise<RunBodyResult> {
+    // B3-08t (BR-AI-19 细则「运行级字段」): from here no model output is used for the result.
+    this.degraded = true;
     // B3-05q: a product entry run without a model ends at the entry (no 问法分流, no search).
     const entryEnd = await this.entryEnd();
     if (entryEnd !== null) return entryEnd;
@@ -744,6 +750,7 @@ class AgentRun {
         return this.finishText('stop');
       }
       this.model = outcome.model;
+      this.addUsage(outcome.usage);
       const deltas: string[] = [];
       const calls: AssembledToolCall[] = [];
       for (const event of outcome.events) {
@@ -1329,8 +1336,19 @@ class AgentRun {
     };
   }
 
+  /** B3-08t: one model answer's tokens added to the run's (non-negative integers only). */
+  private addUsage(usage: { readonly input_tokens: number; readonly output_tokens: number }): void {
+    const count = (value: unknown): number =>
+      typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+    const sum = this.usage ?? { input_tokens: 0, output_tokens: 0 };
+    sum.input_tokens += count(usage?.input_tokens);
+    sum.output_tokens += count(usage?.output_tokens);
+    this.usage = sum;
+  }
+
   private recordTrace(): void {
     this.traced = true;
+    const unserved = this.routed?.unserved() ?? false;
     const routed = this.routed?.close() ?? null;
     if (routed !== null) this.intent = routed;
     if (this.intent === null && this.entryIntent !== null) this.intent = this.entryIntent;
@@ -1351,6 +1369,9 @@ class AgentRun {
       output_truncated: summary?.outputTruncated ?? false,
       model_format_invalid: this.formatInvalid,
       ...(this.replaced ? { text_replaced_by_template: true } : {}),
+      ...(this.usage === null ? {} : { usage: { ...this.usage } }),
+      ...(this.degraded ? { degraded: true as const } : {}),
+      ...(unserved ? { degraded_unserved: true as const } : {}),
       ...(this.cardSources.length > 0 ? { card_sources: [...this.cardSources] } : {}),
       ...(this.linkRegistrations.length > 0
         ? { link_registrations: [...this.linkRegistrations] }
