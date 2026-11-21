@@ -400,11 +400,12 @@ it('[AC-CT-27] 兼容：客户端向量里首页的金刚区、商品滚动卡�
     expect(items(v.popup)).toEqual([]);
     expectSections('home', [clone(v.popup)], true);
   }
-  // getPage 的说明：没有条目的 section 不下发只限依赖条目渲染、条目又被过滤完的；纯展示弹窗照常下发。
+  // getPage 的说明：没有条目的 section 不下发只限依赖条目渲染、条目又被过滤完的；纯展示弹窗（配置时
+  // items 为空）在自身区间内照常下发（配了条目的弹窗见下方「回落口径」单测）。
   const description = String((doc.paths['/v1/pages/{page_key}']!['get'] as Json)['description']);
   expect(description).toMatch(/whose rendering depends on its items/);
   expect(description).toMatch(
-    /display-only popup[\s\S]*is still sent|still sent[\s\S]*display-only popup/,
+    /display-only[\s\S]*popup is only one configured with `data_source\.items: \[\]`[\s\S]*it is\s+sent while inside its own range/,
   );
   expect(description).not.toMatch(/a section left with no item is not sent/);
 });
@@ -530,4 +531,74 @@ it('[AC-CT-27] 四个 /admin/v1/search/* 操作显式声明 x-signed: false（ad
     expect(op['x-signed'], `${method} ${path}`).toBe(false);
     expect(op['x-auth'], `${method} ${path}`).toBe('admin');
   }
+});
+
+it('[AC-CT-27] admission_home 单独校验只收首页 8 类已注册卡片：splash、float_button 与任意未注册类型拒收；下发整页仍容忍未注册卡片（客户端静默跳过，03 §6.2）', () => {
+  // sweep-r4 (b)：准入定义与整页 schema 共用 $defs/home_registered_section，不另抄清单。
+  const registered = (schema.$defs['home_registered_section'] as Json)['properties'] as Json;
+  const listed = (registered['type'] as Json)['enum'] as string[];
+  expect([...listed].sort()).toEqual(
+    [...new Set(homeFull().sections.map((s) => s['type'] as string))].sort(),
+  );
+  for (const type of listed) {
+    expect(admission['home']!([homeSection(type)]), `admission_home 收 ${type}`).toBe(true);
+  }
+  const unknownPage = golden('unknown-type.json');
+  const future = unknownPage.sections.find((s) => s['type'] === 'video_wall')!;
+  const strangers: Json[] = [
+    clone(future),
+    {
+      id: 'splash_1',
+      type: 'splash',
+      version: 1,
+      props: { image: 'https://cdn.example.com/s.png' },
+    },
+    {
+      id: 'float_1',
+      type: 'float_button',
+      version: 1,
+      props: { image: 'https://cdn.example.com/f.png' },
+    },
+    { id: 'custom_1', type: 'custom:promo', version: 1 },
+  ];
+  for (const stranger of strangers) {
+    const label = String(stranger['type']);
+    expect(admission['home']!([clone(stranger)]), `admission_home 拒 ${label}`).toBe(false);
+    expect(
+      admission['home']!([homeSection('banner'), clone(stranger)]),
+      `admission_home 拒 banner + ${label}`,
+    ).toBe(false);
+    // 下发整页：未注册卡片只校外壳，结论不变。
+    const whole = { page_key: 'home', version: 1, ttl_sec: 300, sections: [clone(stranger)] };
+    expect(page(whole), `整页 home 容忍 ${label}`).toBe(true);
+  }
+  // golden unknown-type.json：整页照收；其 sections 交给 admission_home 拒收，去掉未注册卡片即收。
+  expect(page(unknownPage)).toBe(true);
+  expect(admission['home']!(clone(unknownPage.sections))).toBe(false);
+  expect(admission['home']!(unknownPage.sections.filter((s) => s['type'] !== 'video_wall'))).toBe(
+    true,
+  );
+  // 已注册类型仍按类型严格校验：admission_home 与整页对坏 props 同拒。
+  const badGrid = homeSection('product_grid');
+  (badGrid['props'] as Json)['columns'] = 3;
+  expectSections('home', [badGrid], false);
+});
+
+it('[AC-CT-27] getPage 说明钉住回落口径（BR-TEXT-28 细则「回落」、BR-TEXT-29）：配了条目的弹窗条目全过期不下发；纯展示弹窗只认配置时 items 为空；客户端只去掉单条、全没了整块隐藏；me 回落内置格子；search 不出置顶位、商品池取空同此', () => {
+  const op = doc.paths['/v1/pages/{page_key}']!['get'] as Json;
+  const text = (op['description'] as string).replace(/\s+/g, ' ');
+  const required = [
+    'a popup configured with one or more static items) is not sent once the server has filtered out all of its items',
+    'a popup whose configured items have all expired or not yet started is therefore not sent, like a banner',
+    'A display-only popup is only one configured with `data_source.items: []`',
+    'it removes only that item, and a section left with no items is hidden as a whole, never shown as an empty shell',
+    'including a popup configured with items',
+    'the client falls back to its built-in default 「更多服务」 grid',
+    'or a product_scroll whose product pool returns no product at request time), no top slot is shown',
+    'What has not reached its start_at is never sent, so the client cannot cache it and show it early',
+    'failing any one of them means not sent',
+  ];
+  for (const sentence of required) expect(text, sentence).toContain(sentence);
+  // 旧口径不得残留：「不靠条目渲染的 section 照发」不能把配了条目的弹窗也算进去。
+  expect(text).not.toContain('a section that renders without items is still sent');
 });

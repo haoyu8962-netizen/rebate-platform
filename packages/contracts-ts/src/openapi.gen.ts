@@ -881,13 +881,29 @@ export interface paths {
          *     X-App-Version (TECH-07, 05 F1-02), and its condition, which uses only login, has_parent,
          *     union_authorized and has_order (03 §6.1, BR-INV-23); the bearer token is optional and
          *     only decides those conditions. Sections and static data source items with `start_at` /
-         *     `end_at` are sent only while the server clock is inside that range (BR-TEXT-29; the
-         *     client filters again by its own clock). A section whose rendering depends on its items
-         *     (banner, icon_grid, activity_entry, a static notice_bar) and whose items have all been
-         *     filtered out is not sent (01 F-HOME-05, no empty shell); a section that renders without
-         *     items is still sent while inside its own range, notably a display-only popup with only
-         *     props.image and `data_source.items: []` (its daily count and time window are then
-         *     decided by the client, specs/client/home-sdui-vectors.json popup G14_guest_show);
+         *     `end_at` are sent only while the server clock is inside that range (BR-TEXT-29); these
+         *     filters stand side by side with rollout, condition and min_app_version, and failing any
+         *     one of them means not sent. What has not reached its start_at is never sent, so the client
+         *     cannot cache it and show it early.
+         *     Fall-back when items are gone (BR-TEXT-28 细则「回落」, 01 F-HOME-05, no empty shell):
+         *     (1) A section whose rendering depends on its items (banner, icon_grid, activity_entry, a
+         *     static notice_bar, and a popup configured with one or more static items) is not sent
+         *     once the server has filtered out all of its items; a popup whose configured items have
+         *     all expired or not yet started is therefore not sent, like a banner. A display-only
+         *     popup is only one configured with `data_source.items: []` (props.image only): it is
+         *     sent while inside its own range (its daily count and time window are then decided by
+         *     the client, specs/client/home-sdui-vectors.json popup G14_guest_show).
+         *     (2) The client filters again by its own clock and drops items it cannot validate (route
+         *     since / bridge_origins, BR-TEXT-30); it removes only that item, and a section left with
+         *     no items is hidden as a whole, never shown as an empty shell. This applies to every
+         *     section that renders from its items, including a popup configured with items.
+         *     (3) `me`: when there is no more_services (not configured, empty or rolled back to an
+         *     empty version, all of its items filtered out by the server so the section is not sent,
+         *     or all of its items removed on the client), the client falls back to its built-in
+         *     default 「更多服务」 grid.
+         *     (4) `search`: when there is no search_top (not configured, filtered out, all items
+         *     removed on the client, or a product_scroll whose product pool returns no product at
+         *     request time), no top slot is shown and the client leaves no gap.
          *     `me` and `search` follow the admission definitions of contracts/home-schema.json
          *     (BR-TEXT-28). A page_key of the right shape whose page does not exist,
          *     has no published version or has no version left for this request → 30701. `ttl_sec` is
