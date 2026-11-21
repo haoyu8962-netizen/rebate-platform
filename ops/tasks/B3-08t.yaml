@@ -23,8 +23,16 @@ paths:
   - 'packages/db/src/**'
 test_paths:
   - 'test/spec/agent/run-fields/**'
+  - 'test/spec/db/agent-purge/privileges.int.test.ts' # D10-2398：只在 UPDATABLE.agent_runs 末尾追加 'input_passed'（见 modify_existing）
 impl: claude
 tester: codex
+modify_existing:
+  - file: 'test/spec/db/agent-purge/privileges.int.test.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-AI-05, BR-AI-19]
+    ruling: D10-2398
+    note: '#467 CI verify-int-6：本单迁移 0153 给 couli_app 授 agent_runs.input_passed 的列级 UPDATE（BR-AI-05 ⑤「输入已通过」随终态写，BR-AI-19 运行级字段），冻结的列级授权清单相应只在块外常量 UPDATABLE.agent_runs 里纯插入一项；it 块与断言不动；反向验证：去掉迁移里的 GRANT UPDATE (input_passed) → 本条变红（期望有 input_passed 而实得没有）'
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/run-fields/**'
