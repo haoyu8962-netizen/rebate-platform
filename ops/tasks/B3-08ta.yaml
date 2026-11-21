@@ -26,5 +26,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/run-fields/**'
-status: todo
-pr: null
+status: done
+pr: 514
