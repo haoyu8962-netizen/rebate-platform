@@ -20998,7 +20998,7 @@ export interface components {
             /** @description The reason for the reversal, at most 500 characters, not blank after trimming. */
             note: string;
         };
-        /** @description Body of POST /admin/v1/adjustments, a new adjustment or a reversal. Each branch is a closed object; a body that fits neither is 20001 with data.fields listing what fails in both branches plus `body`. */
+        /** @description Body of POST /admin/v1/adjustments, a new adjustment or a reversal. Each branch is a closed object; a body that fits neither is 20001 with data.fields listing only what fails in the branch the request means plus `body` (rules in the description of POST /admin/v1/adjustments). */
         AdminAdjustmentCreateRequest: components["schemas"]["AdminAdjustmentCreateNew"] | components["schemas"]["AdminAdjustmentCreateReversal"];
         /** @description The form in effect, with `available` before and after, as read in the transaction that wrote the voucher. */
         AdminAdjustmentExecuted: {

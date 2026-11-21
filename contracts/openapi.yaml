@@ -35961,7 +35961,7 @@ components:
             - adjust_id
         trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
     AdminAdjustmentReasonCodeInvalid:
-      summary: 20001 reason_code RESTORE or ACCOUNT_CLOSED cannot be chosen by hand; a schema failure lists the fields of both request shapes
+      summary: 20001 reason_code RESTORE or ACCOUNT_CLOSED cannot be chosen by hand; reason_code is outside the new-adjustment enum, so that shape is set aside on its discriminating value and the reversal shape is reported, the new-adjustment fields (reason_code among them) listed as fields that shape does not allow, plus `body`
       value:
         code: 20001
         msg: 参数错误
@@ -35972,8 +35972,6 @@ components:
             - user_id
             - direction
             - amount_fen
-            - refs
-            - contra_subject
             - body
         trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
     AdminAdjustmentRefsInvalid:
@@ -55853,7 +55851,7 @@ components:
           description: The reason for the reversal, at most 500 characters, not blank after trimming.
     AdminAdjustmentCreateRequest:
       type: object
-      description: Body of POST /admin/v1/adjustments, a new adjustment or a reversal. Each branch is a closed object; a body that fits neither is 20001 with data.fields listing what fails in both branches plus `body`.
+      description: Body of POST /admin/v1/adjustments, a new adjustment or a reversal. Each branch is a closed object; a body that fits neither is 20001 with data.fields listing only what fails in the branch the request means plus `body` (rules in the description of POST /admin/v1/adjustments).
       unevaluatedProperties: false
       oneOf:
         - $ref: '#/components/schemas/AdminAdjustmentCreateNew'
