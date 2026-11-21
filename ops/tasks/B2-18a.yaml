@@ -1,0 +1,27 @@
+id: B2-18a
+repo: rebate-platform
+title: 'B2-18a：settlement 月结「应结未结」只计数——账单月内无联盟结算数据的子订单不再登记 settle_missing 差错单、不计差错单数，账单另记应结未结数；settle_bills 加两列（应结未结数、重生成后仍不一致数）'
+type: impl
+# 2026-11-21 funds 入账（规划/05 B2-18 行 ③ 的前半；负责人 2026-11-21 确认，docs/changes/20261121-对外差错单方案B.md §5-9；编排 D10-2369 / D10-2415 拆自 B2-18，先于 B2-18 落）。资金单：Claude 实现、独立方写测、Codex 全量 spec-test 与资金评审。
+# 范围：月结出账任务与补充发起遇 missing_settlement（settle_period = 账单月、未 hold、未维权、截至生成开始无联盟结算数据）——不登记差错单、不计入 error_count，订单保持 WAITING，结算数据到达后照旧进补充批次或下一期账单；出账任务把这类单数记进 settle_bills 新列（应结未结数）。
+# 迁移：settle_bills 加两列非负整数（应结未结数；重生成后仍不一致数，后者由 B2-18 写，本单只建列），具名 CHECK，不动已有列与约束；land 前设主干冻结、测试机全量绿（D10-2398）。recon_diff_type 的 settle_missing 取值保留、不再生成。
+# 不在本单：超宽限期提示、账单详情与后台显示这两个数（FU-B2-18-BILL-COUNTS-CONTRACT，要契约槽）；金额不一致重生成（B2-18）；ESTIMATED 先补拉（FU-B2-18B-REPULL-BY-ORDER）。拼多多 / 京东订单本单之后只是不再开 settle_missing，仍不入账（D10-2402，couli-runs/D10-2335/verify.md）。
+# 受影响冻结用例（现断言登记 settle_missing 的 11 条，清单 couli-runs/B2-18/frozen-inventory.md 的 B 类）的 modify_existing 待负责人点头后以补丁补入，补入前不写测。
+refs: [BR-FUND-04, BR-FUND-09]
+refs_hash:
+  BR-FUND-04: 1c403c23b8bb
+  BR-FUND-09: d6b5a66ad5a9
+deps: []
+paths:
+  - 'apps/api/src/modules/settlement/**'
+  - 'db/migrations/*_settle-bills-*.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/settlement/bill-unsettled-count/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/bill-unsettled-count/**'
+status: todo
