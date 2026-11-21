@@ -24,7 +24,7 @@ impl: claude
 tester: claude-independent
 accept:
   - 'pnpm verify'
-status: todo
+status: done
 modify_existing:
   - file: 'test/spec/db/events/storage.int.test.ts'
     test: '[AC-CT-13e#1] events has the analytics columns, nullable identities and RANGE(server_at); dedup is unpartitioned'
@@ -40,4 +40,4 @@ modify_existing:
     ruling: D10-1519
     basis: '规划/02 §12.3'
     note: '依 D10-1519 / D10-1580：跨 app 同 (event_type, event_id) 由「被 23505 拒」改为两边各自可插入，同 app 同键（跨日期）仍被拒、不同类型或 UUID 仍可插入；反向验证：放回旧主键（不跑 0143）→ 本块变红'
-pr: null
+pr: 92

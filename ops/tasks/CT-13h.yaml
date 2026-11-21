@@ -21,7 +21,7 @@ impl: claude
 tester: codex
 accept:
   - 'pnpm verify'
-status: todo
+status: done
 modify_existing:
   - file: 'test/spec/linking/link-jump-report/http.int.test.ts'
     test: '[AC-B1-06zo#19] 其他全部已登记事件收下且不写库，不承诺 saved，也不生成业务事件或修改点击证据'
@@ -48,4 +48,4 @@ modify_existing:
     br: [BR-ID-30]
     ruling: D10-1589
     note: '依 D10-1589：it.each 展开行，只把 h.evidence（及 h.mutations，如有）的比较排除 app.events 与 app.event_dedup，其余表一字不动；加正向断言「新增的行只出现在这两张表里」；反向验证用探针（接线顺手改一行点击证据 → 本行变红），记为「探针，非旧规则」；归属证据类，owner-approved 待负责人本人确认（D10-1356）'
-pr: null
+pr: 110

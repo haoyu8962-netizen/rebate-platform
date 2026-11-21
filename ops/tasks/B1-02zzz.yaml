@@ -36,7 +36,8 @@ accept:
   - 'pnpm verify'
   - 'pnpm contracts:check'
   - 'test/spec/identity/step-up-bound-phone/**'
-status: todo
+status: done
+pr: 109
 modify_existing:
   - file: 'test/spec/identity/sms-codes/http.int.test.ts'
     test: '[BR-ID-05] HTTP step_up 发码成功，响应过契约，验证码与 captcha_token 不出现在响应或日志'

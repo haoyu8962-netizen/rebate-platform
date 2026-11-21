@@ -13,8 +13,7 @@ type: guard-change
 #   依赖它的用例在新实现上变红（至少一条用例全名）；记录缺、哈希不符、反向验证为空都拒。
 # ⑤ 计入 modify_existing + red_exempt ≤ RED_EXEMPT_MAX（300）的合计。red-check 不把文件级条目当成要跑的用例，只在报告里列出（与 red_exempt_outside 同样写清）。
 # 读者一致：tools/lib/task-file.ts（解析与①②⑤）、tools/ops/task.ts check、tools/guard/lib/red-check.ts、tools/guard/lib/test-blocks.ts（块外差异行）、tools/ci/evidence-check.ts（①③④）；
-#   tools/README.md 与 tools/ops/README.md 各补一段。规则测试 test/spec/ci/modify-existing-support/**（独立子代理写、先红）；实现方另补单元测试。
-# 分工：规则测试与对抗评审都是桌面全新子代理（claude-independent，Codex 到 11-20 不可用，approvals 36），实现是另一个子代理；本机不跑全量（D10-1477），测试机跑。
+#   tools/README.md 与 tools/ops/README.md 各补一段。规则测试 test/spec/ci/modify-existing-support/**（独立子代理写、先红）；实现方另补单元测试。 分工：规则测试与对抗评审都是桌面全新子代理（claude-independent，Codex 到 11-20 不可用，approvals 36），实现是另一个子代理；本机不跑全量（D10-1477），测试机跑。
 refs: []
 refs_hash: {}
 deps: []
@@ -37,4 +36,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/modify-existing-support/**'
-status: todo
+status: done
+pr: 188
