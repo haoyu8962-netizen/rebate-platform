@@ -162,6 +162,7 @@ function rebatchRows(): Record<'a' | 's' | 'r' | 'p', Withdrawal> {
         decided_at: '2026-11-19T10:56:01+08:00',
         execute_blocked: null,
       },
+      reviewer_id: 'ad000001-0000-4000-8000-0000000000a1',
       reviewed_at: '2026-11-19T10:56:05+08:00',
       hold_reason: 'daily_cap',
       hold_at: '2026-11-19T10:56:20+08:00',
