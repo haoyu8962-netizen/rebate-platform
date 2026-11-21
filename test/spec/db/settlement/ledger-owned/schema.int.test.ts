@@ -98,6 +98,28 @@ it('[AC-B2-04b#4] 同一迁移创建并授权三表，资金表约束与独立�
   await ready(h.app);
   const source = migrationSource().replace(/"/g, '');
   const escape = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // B2-02zc (D10-2224 B ①): indexes of these tables added by later migrations (merged migrations
+  // never change) are looked up in those migrations too; tables, grants and constraints stay 0060's.
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const directory = new URL('../../../../../db/migrations/', import.meta.url);
+  const later = readdirSync(directory)
+    .filter((name) => /^\d{4}_.+\.sql$/.test(name) && Number(name.slice(0, 4)) > 60)
+    .sort()
+    .map((name) =>
+      readFileSync(new URL(name, directory), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/--[^\n]*/g, '')
+        .replace(/"/g, ''),
+    )
+    .filter((text) =>
+      TABLES.some((table) =>
+        new RegExp(
+          `\\bCREATE\\s+(?:UNIQUE\\s+)?INDEX\\b[^;]*\\bON\\s+(?:ONLY\\s+)?app\\.${table}\\b`,
+          'i',
+        ).test(text),
+      ),
+    );
+  const indexSource = [source, ...later].join('\n');
   for (const table of TABLES) {
     expect(source).toMatch(
       new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?app\\.${table}\\s*\\(`, 'i'),
@@ -118,7 +140,7 @@ it('[AC-B2-04b#4] 同一迁移创建并授权三表，资金表约束与独立�
     }
     for (const index of await indexes(h.app, table)) {
       if (!index.constraint_backed) {
-        expect(source, index.name).toMatch(
+        expect(indexSource, index.name).toMatch(
           new RegExp(
             `\\bCREATE\\s+(?:UNIQUE\\s+)?INDEX\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${escape(index.name)}\\s`,
             'i',

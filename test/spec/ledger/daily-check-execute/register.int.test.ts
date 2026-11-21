@@ -243,7 +243,7 @@ it(
 );
 
 it(
-  '[AC-B2-02p#8] 同日重跑不新增、不改写已有差错单（inserted=false）；次日同一差异另登记 period 为次日的一张',
+  '[AC-B2-02p#8] 同日重跑不新增、不改写已有差错单（inserted=false）；次日同一差异在前一张未结时不新增、不改写',
   async () => {
     await withHarness(createTestDatabase, async (h) => {
       const account = await userAccount(h);
@@ -259,18 +259,10 @@ it(
 
       h.clock.set('2032-06-16T17:00:00.000Z');
       const next = await h.executor.execute(h.db, { accountingDate: NEXT_DAY, differences });
-      const rows = await diffsOf(h);
-      expect(rows).toHaveLength(2);
-      const later = await diffByRef(h, `01:${account.accountId}`, NEXT_DAY);
-      expectRegistered(later, {
-        period: NEXT_DAY,
-        refType: 'ledger_account',
-        refId: `01:${account.accountId}`,
-        expectedFen: 300n,
-        actualFen: 500n,
-      });
-      expect(later.id).not.toBe(first!.id);
-      expect(executedOf(next, later).inserted).toBe(true);
+      expect(await diffsOf(h)).toEqual([first]);
+      expect(next.reconDiffs).toHaveLength(1);
+      expect(next.reconDiffs[0]!.reconDiffId).toBe(first!.id);
+      expect(executedOf(next, first!).inserted).toBe(false);
     });
   },
   TIMEOUT,

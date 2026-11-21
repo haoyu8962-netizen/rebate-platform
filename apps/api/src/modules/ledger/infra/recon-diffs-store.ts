@@ -11,7 +11,8 @@ export interface ReconDiffInsert extends Omit<Insertable<DB['recon_diffs']>, 're
 
 /**
  * INSERT … ON CONFLICT DO NOTHING without a conflict target: every unique index of the table is an
- * arbiter (recon_diffs_business_key, recon_diffs_dedupe_key_key, recon_diffs_month_end_key), and a
+ * arbiter (recon_diffs_business_key, recon_diffs_dedupe_key_key, recon_diffs_month_end_key,
+ * recon_diffs_unresolved_internal_key), and a
  * conflicting row of a concurrent open transaction is waited for, never raised as 23505.
  * The inserted row, or undefined when a unique key already holds one.
  */
@@ -59,6 +60,27 @@ export async function findReconDiffByBusinessKey(
     .where('type', '=', key.type)
     .where('period', '=', key.period)
     .where('ref_id', '=', key.refId)
+    .executeTakeFirst();
+}
+
+/**
+ * B2-02zc: the unresolved (open / processing) ticket of an internal self-check type under
+ * recon_diffs_unresolved_internal_key (app_id, type, ref_id), whatever its period; like the index,
+ * never an order-level ticket (ref_type order keeps one per accounting day, D10-2295).
+ */
+export async function findUnresolvedReconDiff(
+  trx: Transaction<DB>,
+  key: { readonly appId: string; readonly type: string; readonly refId: string },
+): Promise<ReconDiffRow | undefined> {
+  return trx
+    .withSchema('app')
+    .selectFrom('recon_diffs')
+    .selectAll()
+    .where('app_id', '=', key.appId)
+    .where('type', '=', key.type)
+    .where('ref_id', '=', key.refId)
+    .where('status', 'in', ['open', 'processing'])
+    .where('ref_type', '<>', 'order')
     .executeTakeFirst();
 }
 

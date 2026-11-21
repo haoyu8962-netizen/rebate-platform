@@ -448,6 +448,13 @@ it('[AC-B2-02xb#2] 同一会员连续两次重算（两次可提现都变）：�
     });
 
     await tamper(f, m, { available: 300n, frozen: 0n, negativeSince: null });
+    // B2-02zc (D10-2224 B ①): while the first ledger_mismatch of this account is unresolved no second
+    // one may exist; the recalculation does not close it, so it is concluded before the next day's.
+    await f.db
+      .updateTable('recon_diffs')
+      .set({ status: 'closed', closed_at: f.clock.now(), updated_at: f.clock.now() })
+      .where('id', '=', firstDiff.id)
+      .execute();
     // recon_diffs_business_key is UNIQUE (app_id, type, period, ref_id): the second difference of the
     // same account is the next day's check (kit PERIOD 2026-11-17 → 2026-11-18).
     const nextPeriod = '2026-11-18';

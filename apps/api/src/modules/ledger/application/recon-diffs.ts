@@ -8,6 +8,7 @@ import {
   findReconDiffByBusinessKey,
   findReconDiffByDedupeKey,
   findReconDiffByMonthEnd,
+  findUnresolvedReconDiff,
   insertReconDiffIfAbsent,
   selectReconDiffs,
 } from '../infra/recon-diffs-store.ts';
@@ -43,6 +44,12 @@ const TYPES: readonly string[] = recon_diff_type;
 /** Same shape as the recon_diffs_period_check constraint: YYYY-MM or YYYY-MM-DD. */
 const PERIOD = /^[0-9]{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?$/;
 const MONTH_END: ReconDiffType = 'month_end_unbalanced';
+/**
+ * B2-02zc (BR-FUND-19 细则「账务自检异常」, D10-2224 B ①): internal self-check types whose unresolved
+ * ticket is unique per (app_id, type, ref_id) across periods (recon_diffs_unresolved_internal_key),
+ * except an order-level ticket (ref_type order), which keeps one per accounting day (D10-2295).
+ */
+const UNRESOLVED_UNIQUE: readonly ReconDiffType[] = ['ledger_mismatch'];
 
 function text(value: unknown, name: string): string {
   if (typeof value !== 'string' || value.length === 0) {
@@ -99,7 +106,8 @@ function checkInput(input: RegisterReconDiffInput): void {
 
 /**
  * The row already registered under one of the unique keys of recon_diffs, in this order: the
- * nullable dedupe_key, the business key (app_id, type, period, ref_id), the month-end key.
+ * nullable dedupe_key, the business key (app_id, type, period, ref_id), the month-end key, and for an
+ * internal self-check type the unresolved ticket of (app_id, type, ref_id) in any period (B2-02zc).
  */
 async function findExisting(
   trx: Transaction<DB>,
@@ -112,6 +120,7 @@ async function findExisting(
   const byBusiness = await findReconDiffByBusinessKey(trx, input);
   if (byBusiness !== undefined) return byBusiness;
   if (input.type === MONTH_END) return findReconDiffByMonthEnd(trx, input.appId, input.period);
+  if (UNRESOLVED_UNIQUE.includes(input.type)) return findUnresolvedReconDiff(trx, input);
   return undefined;
 }
 
@@ -176,6 +185,9 @@ export async function registerReconDiffOnce(
     updated_at: now,
   });
   if (inserted !== undefined) return { row: inserted, inserted: true };
+  // B2-02zc: a conflicting unresolved ticket concluded by a concurrent transaction between this
+  // INSERT and the read-back is found under no key; the error rolls the caller back and the
+  // at-least-once job registers again on its retry (the INSERT then goes through).
   const existing = await findExisting(trx, input);
   if (existing === undefined) {
     throw new Error('ledger: recon diff conflicted but no existing row was found');

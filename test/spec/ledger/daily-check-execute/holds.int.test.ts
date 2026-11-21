@@ -239,7 +239,7 @@ it(
 );
 
 it(
-  '[AC-B2-02p#18] 同日重跑（差错单已存在）不再加冻结；次日的新差错单另加 1 条',
+  '[AC-B2-02p#18] 同日重跑（差错单已存在）不再加冻结；前一张未结时次日也不再加冻结',
   async () => {
     await withHarness(createTestDatabase, async (h) => {
       const account = await userAccount(h);
@@ -255,12 +255,8 @@ it(
       expect(executedOf(again, diff)).toMatchObject({ inserted: false, heldUserIds: [] });
 
       await h.executor.execute(h.db, { accountingDate: NEXT_DAY, differences });
-      const later = await diffByRef(h, `01:${account.accountId}`, NEXT_DAY);
-      const holds = await holdsOf(h);
-      expect(holds).toHaveLength(2);
-      expect(holds.map((hold) => hold.source_ref).sort()).toEqual(
-        [sourceOf(diff.id), sourceOf(later.id)].sort(),
-      );
+      expect(await holdsOf(h)).toEqual(before);
+      expect(h.holds.calls).toHaveLength(1);
     });
   },
   TIMEOUT,

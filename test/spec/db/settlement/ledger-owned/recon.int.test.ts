@@ -64,7 +64,8 @@ it('[AC-B2-04b#6] 应用账号可登记日差错和月差错，保留正负差�
 
 it('[AC-B2-04b#7] 原业务键拒绝重复，app、类型、周期、引用各自区分差错', async () => {
   await ready(h.app);
-  const row = recon();
+  // B2-02zc (D10-2224 B ①): an external type; unresolved ledger_mismatch is pinned elsewhere.
+  const row = recon({ type: 'union_mismatch' });
   expect(await sqlState(insert(h.app, 'recon_diffs', row))).toBe('ok');
   expect(await sqlState(insert(h.app, 'recon_diffs', { ...row, id: randomUUID() }))).toBe('23505');
   for (const change of [

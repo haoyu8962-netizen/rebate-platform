@@ -1,0 +1,183 @@
+{
+  "risk_note": "B2-02zc (BR-FUND-19 细则「账务自检异常」第 4 条, couli#9 / couli#12; 编排 D10-2219 / D10-2224 B ① / D10-2295 甲 / D10-2298 / D10-2318): migration 0152 adds the partial unique index recon_diffs_unresolved_internal_key (app_id, type, ref_id) WHERE type = 'ledger_mismatch' AND status IN ('open','processing') AND ref_type <> 'order' — account- and voucher-level self-check differences are not registered or held again on later accounting days while unresolved; order-level ones keep one per day (FU-B2-02ZC-ORDER-LEVEL-DEDUP). registerReconDiffOnce reads the unresolved ticket back after a conflict (inserted = false, no rewrite, no second hold). 0152 holds no DML (two SET LOCAL and one CREATE UNIQUE INDEX); existing duplicates make it fail with 23505 (fail closed; staging pre-check per D10-2275 ③).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Codex money r1 (full) fail: S1 order-level beneficiaries missed by the dedupe → D10-2295 甲 (ref_type <> 'order'); r2 fail: the one S1 was the planning conflict (BR-FUND-19 then had no order-level exception) → couli#12 merged, SPEC_REF c3060ba021c2 (#438); r3 incremental under approvals 126 (D10-2318 ②) pass, no findings: the conflict closed and 0152 verified to hold no DML (couli-runs/B2-02zc/review-money-r3-codex.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 4,
+    "last_verdict": "fail",
+    "note": "Rule tests by fresh independent Claude (claude-run.sh, approvals 36): attempts 1–3, a 4th under approvals 124 and a 5th under approvals 125. Codex spec-test r1 / r2 / r3 / r4 each fail; their S1 were closed by the next attempt except the last ones, logged as FU-B2-02ZC-MIGRATION-SAME-USER-HOLDS (closed by attempt 5) and FU-B2-02ZC-ORDER-REPLAY-MIGRATION-STOCK (编排 D10-2297: regression guards for a hypothetical implementation, to be done with FU-B2-02ZC-ORDER-LEVEL-DEDUP). The ledger declares no red_exempt / rows / renames / expected_values, so evidence-check does not require a pass here (D10-2289 / D10-2290)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#1] 账户级差异（①）D 日登记 1 张并加 1 条冻结；D+1、D+2 同一差异再现 → 差错单仍 1 张（period=D 等逐字段不变）、inserted=false、冻结仍 1 条、端口只调 1 次；对照：同一账户 D+1 首次出现的 ⑦ 另登记 1 张、另加 1 条冻结",
+    "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#2] 未结含 processing：首张置 processing 后次日同一差异再现 → 不新生成差错单（首张逐字段不变）、inserted=false、不新增冻结",
+    "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#11] 未结期间同一差异再现但金额变了（① D 日分录 300 / 缓存 500 → D+1 400 / 600 → D+2 350 / 700）→ 仍读回 D 日原单：inserted=false、返回旧单 id，旧单金额、period、resolution 等逐字段不变；冻结仍 1 条、端口只调 1 次",
+    "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#3] 未结时次日不新开；首张结案为 adjusted（旧冻结随之按关单写法解除）后再次日同一差异 → 新开一张（period 为当日、新 id、inserted=true）并加 1 条指向新单的有效冻结，旧单与已解除的旧冻结不变；再追加一个会计日 → 读回重开的未结单（不是旧结案单）、inserted=false，两张单与冻结逐行不变",
+    "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#3] 未结时次日不新开；首张结案为 written_off（旧冻结随之按关单写法解除）后再次日同一差异 → 新开一张（period 为当日、新 id、inserted=true）并加 1 条指向新单的有效冻结，旧单与已解除的旧冻结不变；再追加一个会计日 → 读回重开的未结单（不是旧结案单）、inserted=false，两张单与冻结逐行不变",
+    "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#3] 未结时次日不新开；首张结案为 closed（旧冻结随之按关单写法解除）后再次日同一差异 → 新开一张（period 为当日、新 id、inserted=true）并加 1 条指向新单的有效冻结，旧单与已解除的旧冻结不变；再追加一个会计日 → 读回重开的未结单（不是旧结案单）、inserted=false，两张单与冻结逐行不变",
+    "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#4] 全局差异（② 凭证不平）：D 日登记并冻结、关 settle.auto.enabled；D+1 再现 → 不新生成差错单、inserted=false、不新增冻结，但 settle.auto.enabled 照样再关一次（每轮发现即关）",
+    "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#14] 按子订单归组的差异（④，ref_type order）维持按会计日每天一张、各自冻结：D 日只有受益人甲变负 → 登记 1 张、冻结甲；D+1 同一子订单受益人乙也变负（首张仍未结）→ 照常新开一张（period=D+1、新 id、inserted=true），并为乙新增冻结（source_ref 指新单）；D 日那张与甲的冻结逐字段不变；对照：同一轮的账户级差异（①）D+1 再现不新开、不新增冻结",
+    "test/spec/ledger/recon-diffs-unresolved/migration.int.test.ts > [AC-B2-02zc#9] 迁移（按后缀定位）显式建唯一索引 recon_diffs_unresolved_internal_key：键 (app_id, type, ref_id)、有效、非约束，谓词恰为 type = ledger_mismatch、status 为 open / processing、ref_type <> order 三项",
+    "test/spec/ledger/recon-diffs-unresolved/migration.int.test.ts > [AC-B2-02zc#10] 库内直接 INSERT：同 app 同 ref_id 已有未结 ledger_mismatch 时，第二张 open / processing（任何 period）23505；第二张已结案可插；首张结案后可再开；对外类型、别的 app、别的 ref 不受影响；ref_type order 的同 ref_id 两张未结（不同 period）都可插",
+    "test/spec/ledger/recon-diffs-unresolved/migration.int.test.ts > [AC-B2-02zc#12] 迁移遇存量重复：无该索引的库里已有同 app、同 ref_id、不同 period 的两张未结 ledger_mismatch 及各自一条冻结（同一用户），open / open 与 open / processing 两组各用独立的临时库 → 每组执行迁移文件原文都得 23505（建该索引失败），回滚后两张单与两条冻结逐行不变、索引不存在（迁移不自动结案、不改写业务数据）",
+    "test/spec/ledger/recon-diffs-unresolved/migration.int.test.ts > [AC-B2-02zc#13] 迁移遇无重复存量：无该索引的库里只有一张未结 ledger_mismatch 与其一条生效冻结（released_at 为空）→ 执行迁移文件原文成功，索引存在、唯一、有效；差错单与冻结逐字段与迁移前相同（迁移不解除冻结、不改写差错单）",
+    "test/spec/ledger/recon-diffs-unresolved/register.int.test.ts > [AC-B2-02zc#8] 并发：同 app、同 ref_id、不同 period 的 ledger_mismatch，第一张未提交时第二个事务登记 → 等待后恰好 1 张、恰好一方 inserted=true，另一方不抛错、读回同一行、事务仍可用；对照：union_mismatch 同 ref_id 不同 period 首张未结仍各开一张"
+  ],
+  "modify_existing": [
+    {
+      "file": "test/spec/ledger/daily-check-execute/register.int.test.ts",
+      "test": "[AC-B2-02p#8] 同日重跑不新增、不改写已有差错单（inserted=false）；次日同一差异另登记 period 为次日的一张",
+      "retitle_to": "[AC-B2-02p#8] 同日重跑不新增、不改写已有差错单（inserted=false）；次日同一差异在前一张未结时不新增、不改写",
+      "reason": "rule_change",
+      "br": ["BR-FUND-19"],
+      "before": "it(\n  '[AC-B2-02p#8] 同日重跑不新增、不改写已有差错单（inserted=false）；次日同一差异另登记 period 为次日的一张',\n  async () => {\n    await withHarness(createTestDatabase, async (h) => {\n      const account = await userAccount(h);\n      const differences = [balanceCacheDiff(account, { expected: 300n, cache: 500n })];\n      await h.executor.execute(h.db, { accountingDate: DAY, differences });\n      const [first] = await diffsOf(h);\n      expect(first).toBeDefined();\n\n      h.clock.set('2032-06-15T19:00:00.000Z');\n      const again = await h.executor.execute(h.db, { accountingDate: DAY, differences });\n      expect(await diffsOf(h)).toEqual([first]);\n      expect(executedOf(again, first!).inserted).toBe(false);\n\n      h.clock.set('2032-06-16T17:00:00.000Z');\n      const next = await h.executor.execute(h.db, { accountingDate: NEXT_DAY, differences });\n      const rows = await diffsOf(h);\n      expect(rows).toHaveLength(2);\n      const later = await diffByRef(h, `01:${account.accountId}`, NEXT_DAY);\n      expectRegistered(later, {\n        period: NEXT_DAY,\n        refType: 'ledger_account',\n        refId: `01:${account.accountId}`,\n        expectedFen: 300n,\n        actualFen: 500n,\n      });\n      expect(later.id).not.toBe(first!.id);\n      expect(executedOf(next, later).inserted).toBe(true);\n    });\n  },\n  TIMEOUT,\n);",
+      "after": "it(\n  '[AC-B2-02p#8] 同日重跑不新增、不改写已有差错单（inserted=false）；次日同一差异在前一张未结时不新增、不改写',\n  async () => {\n    await withHarness(createTestDatabase, async (h) => {\n      const account = await userAccount(h);\n      const differences = [balanceCacheDiff(account, { expected: 300n, cache: 500n })];\n      await h.executor.execute(h.db, { accountingDate: DAY, differences });\n      const [first] = await diffsOf(h);\n      expect(first).toBeDefined();\n\n      h.clock.set('2032-06-15T19:00:00.000Z');\n      const again = await h.executor.execute(h.db, { accountingDate: DAY, differences });\n      expect(await diffsOf(h)).toEqual([first]);\n      expect(executedOf(again, first!).inserted).toBe(false);\n\n      h.clock.set('2032-06-16T17:00:00.000Z');\n      const next = await h.executor.execute(h.db, { accountingDate: NEXT_DAY, differences });\n      expect(await diffsOf(h)).toEqual([first]);\n      expect(next.reconDiffs).toHaveLength(1);\n      expect(next.reconDiffs[0]!.reconDiffId).toBe(first!.id);\n      expect(executedOf(next, first!).inserted).toBe(false);\n    });\n  },\n  TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "db/migrations/0152_recon-diffs-unresolved-internal-key.sql with no index (the rule before BR-FUND-19 「账务自检异常」第 4 条: a later day registers and holds again) — measured on the test machine, couli-runs/B2-02zc/mut/M1.diff, tests/6",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/ledger/daily-check-execute/holds.int.test.ts",
+      "test": "[AC-B2-02p#18] 同日重跑（差错单已存在）不再加冻结；次日的新差错单另加 1 条",
+      "retitle_to": "[AC-B2-02p#18] 同日重跑（差错单已存在）不再加冻结；前一张未结时次日也不再加冻结",
+      "reason": "rule_change",
+      "br": ["BR-FUND-19"],
+      "before": "it(\n  '[AC-B2-02p#18] 同日重跑（差错单已存在）不再加冻结；次日的新差错单另加 1 条',\n  async () => {\n    await withHarness(createTestDatabase, async (h) => {\n      const account = await userAccount(h);\n      const differences = [balanceCacheDiff(account, { expected: 300n, cache: 500n })];\n      await h.executor.execute(h.db, { accountingDate: DAY, differences });\n      const before = await holdsOf(h);\n      expect(before).toHaveLength(1);\n\n      const again = await h.executor.execute(h.db, { accountingDate: DAY, differences });\n      expect(await holdsOf(h)).toEqual(before);\n      expect(h.holds.calls).toHaveLength(1);\n      const diff = await diffByRef(h, `01:${account.accountId}`);\n      expect(executedOf(again, diff)).toMatchObject({ inserted: false, heldUserIds: [] });\n\n      await h.executor.execute(h.db, { accountingDate: NEXT_DAY, differences });\n      const later = await diffByRef(h, `01:${account.accountId}`, NEXT_DAY);\n      const holds = await holdsOf(h);\n      expect(holds).toHaveLength(2);\n      expect(holds.map((hold) => hold.source_ref).sort()).toEqual(\n        [sourceOf(diff.id), sourceOf(later.id)].sort(),\n      );\n    });\n  },\n  TIMEOUT,\n);",
+      "after": "it(\n  '[AC-B2-02p#18] 同日重跑（差错单已存在）不再加冻结；前一张未结时次日也不再加冻结',\n  async () => {\n    await withHarness(createTestDatabase, async (h) => {\n      const account = await userAccount(h);\n      const differences = [balanceCacheDiff(account, { expected: 300n, cache: 500n })];\n      await h.executor.execute(h.db, { accountingDate: DAY, differences });\n      const before = await holdsOf(h);\n      expect(before).toHaveLength(1);\n\n      const again = await h.executor.execute(h.db, { accountingDate: DAY, differences });\n      expect(await holdsOf(h)).toEqual(before);\n      expect(h.holds.calls).toHaveLength(1);\n      const diff = await diffByRef(h, `01:${account.accountId}`);\n      expect(executedOf(again, diff)).toMatchObject({ inserted: false, heldUserIds: [] });\n\n      await h.executor.execute(h.db, { accountingDate: NEXT_DAY, differences });\n      expect(await holdsOf(h)).toEqual(before);\n      expect(h.holds.calls).toHaveLength(1);\n    });\n  },\n  TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "db/migrations/0152_recon-diffs-unresolved-internal-key.sql with no index (the rule before BR-FUND-19 「账务自检异常」第 4 条: a later day registers and holds again) — measured on the test machine, couli-runs/B2-02zc/mut/M1.diff, tests/6",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/ledger/admin-recon-balance-recalc/notice.int.test.ts",
+      "test": "[AC-B2-02xb#2] 同一会员连续两次重算（两次可提现都变）：第一次写的站内信与通知日志在第二次之后逐行全字段原样，第二次新增恰为一条站内信与一条通知日志，去重键 balance_corrected:<第二张差错单>:<第二次重算后版本>",
+      "reason": "rule_change",
+      "br": ["BR-FUND-19"],
+      "before": "it('[AC-B2-02xb#2] 同一会员连续两次重算（两次可提现都变）：第一次写的站内信与通知日志在第二次之后逐行全字段原样，第二次新增恰为一条站内信与一条通知日志，去重键 balance_corrected:<第二张差错单>:<第二次重算后版本>', async () => {\n  const f = fixture(s);\n  await withRecalcAdmin(f, async (h) => {\n    const m = await plainMember(f, 800n);\n    const start = await tamper(f, m, { available: 100n, frozen: 0n, negativeSince: null });\n    const firstDiff = await seedMismatch(f, m);\n    await expectRecalculated(f, await h.recalc(firstDiff.id, { reason: '第一次' }), {\n      m,\n      before: { available: 100n, frozen: 0n },\n      after: { available: 800n, frozen: 0n },\n      changed: true,\n    });\n    const once = await notices(f, m);\n    expect(once.logs, '第一次一条通知日志').toHaveLength(1);\n    expect(once.inbox, '第一次一条站内信').toHaveLength(1);\n    expect(once.logs[0]).toMatchObject({\n      dedupe_key: dedupeKey(firstDiff.id, start.version + 1n),\n    });\n\n    await tamper(f, m, { available: 300n, frozen: 0n, negativeSince: null });\n    // recon_diffs_business_key is UNIQUE (app_id, type, period, ref_id): the second difference of the\n    // same account is the next day's check (kit PERIOD 2026-11-17 → 2026-11-18).\n    const nextPeriod = '2026-11-18';\n    const secondDiff = await seedMismatch(f, m, {\n      period: nextPeriod,\n      resolution: { source: 'ledger_daily_check', accounting_date: nextPeriod, invariant: '01' },\n    });\n    expect(secondDiff.id, '第二张差错单').not.toBe(firstDiff.id);\n    await expectRecalculated(f, await h.recalc(secondDiff.id, { reason: '第二次' }), {\n      m,\n      before: { available: 300n, frozen: 0n },\n      after: { available: 800n, frozen: 0n },\n      changed: true,\n    });\n    const version = (await cacheOf(f, m)).version;\n    expect(version, '第二次 version 再 +1').toBe(start.version + 2n);\n\n    const twice = await notices(f, m);\n    const firstInbox = new Set(once.inbox.map((row) => row.message_id));\n    const firstLogs = new Set(once.logs.map((row) => row.id));\n    expect(\n      twice.inbox.filter((row) => firstInbox.has(row.message_id)),\n      '第一次的站内信逐行全字段原样',\n    ).toEqual(once.inbox);\n    expect(\n      twice.logs.filter((row) => firstLogs.has(row.id)),\n      '第一次的通知日志逐行全字段原样',\n    ).toEqual(once.logs);\n    const freshInbox = twice.inbox.filter((row) => !firstInbox.has(row.message_id));\n    const freshLogs = twice.logs.filter((row) => !firstLogs.has(row.id));\n    expect(freshInbox, '第二次新增恰好一条站内信').toHaveLength(1);\n    expect(freshInbox[0]).toMatchObject({\n      user_id: m.userId,\n      code: CODE,\n      title: TITLE,\n      read_at: null,\n    });\n    expect(freshLogs, '第二次新增恰好一条通知日志').toHaveLength(1);\n    expect(freshLogs[0]).toMatchObject({\n      user_id: m.userId,\n      code: CODE,\n      channel: 'inbox',\n      status: 'success',\n      dedupe_key: dedupeKey(secondDiff.id, version),\n    });\n  });\n});",
+      "after": "it('[AC-B2-02xb#2] 同一会员连续两次重算（两次可提现都变）：第一次写的站内信与通知日志在第二次之后逐行全字段原样，第二次新增恰为一条站内信与一条通知日志，去重键 balance_corrected:<第二张差错单>:<第二次重算后版本>', async () => {\n  const f = fixture(s);\n  await withRecalcAdmin(f, async (h) => {\n    const m = await plainMember(f, 800n);\n    const start = await tamper(f, m, { available: 100n, frozen: 0n, negativeSince: null });\n    const firstDiff = await seedMismatch(f, m);\n    await expectRecalculated(f, await h.recalc(firstDiff.id, { reason: '第一次' }), {\n      m,\n      before: { available: 100n, frozen: 0n },\n      after: { available: 800n, frozen: 0n },\n      changed: true,\n    });\n    const once = await notices(f, m);\n    expect(once.logs, '第一次一条通知日志').toHaveLength(1);\n    expect(once.inbox, '第一次一条站内信').toHaveLength(1);\n    expect(once.logs[0]).toMatchObject({\n      dedupe_key: dedupeKey(firstDiff.id, start.version + 1n),\n    });\n\n    await tamper(f, m, { available: 300n, frozen: 0n, negativeSince: null });\n    // B2-02zc (D10-2224 B ①): while the first ledger_mismatch of this account is unresolved no second\n    // one may exist; the recalculation does not close it, so it is concluded before the next day's.\n    await f.db\n      .updateTable('recon_diffs')\n      .set({ status: 'closed', closed_at: f.clock.now(), updated_at: f.clock.now() })\n      .where('id', '=', firstDiff.id)\n      .execute();\n    // recon_diffs_business_key is UNIQUE (app_id, type, period, ref_id): the second difference of the\n    // same account is the next day's check (kit PERIOD 2026-11-17 → 2026-11-18).\n    const nextPeriod = '2026-11-18';\n    const secondDiff = await seedMismatch(f, m, {\n      period: nextPeriod,\n      resolution: { source: 'ledger_daily_check', accounting_date: nextPeriod, invariant: '01' },\n    });\n    expect(secondDiff.id, '第二张差错单').not.toBe(firstDiff.id);\n    await expectRecalculated(f, await h.recalc(secondDiff.id, { reason: '第二次' }), {\n      m,\n      before: { available: 300n, frozen: 0n },\n      after: { available: 800n, frozen: 0n },\n      changed: true,\n    });\n    const version = (await cacheOf(f, m)).version;\n    expect(version, '第二次 version 再 +1').toBe(start.version + 2n);\n\n    const twice = await notices(f, m);\n    const firstInbox = new Set(once.inbox.map((row) => row.message_id));\n    const firstLogs = new Set(once.logs.map((row) => row.id));\n    expect(\n      twice.inbox.filter((row) => firstInbox.has(row.message_id)),\n      '第一次的站内信逐行全字段原样',\n    ).toEqual(once.inbox);\n    expect(\n      twice.logs.filter((row) => firstLogs.has(row.id)),\n      '第一次的通知日志逐行全字段原样',\n    ).toEqual(once.logs);\n    const freshInbox = twice.inbox.filter((row) => !firstInbox.has(row.message_id));\n    const freshLogs = twice.logs.filter((row) => !firstLogs.has(row.id));\n    expect(freshInbox, '第二次新增恰好一条站内信').toHaveLength(1);\n    expect(freshInbox[0]).toMatchObject({\n      user_id: m.userId,\n      code: CODE,\n      title: TITLE,\n      read_at: null,\n    });\n    expect(freshLogs, '第二次新增恰好一条通知日志').toHaveLength(1);\n    expect(freshLogs[0]).toMatchObject({\n      user_id: m.userId,\n      code: CODE,\n      channel: 'inbox',\n      status: 'success',\n      dedupe_key: dedupeKey(secondDiff.id, version),\n    });\n  });\n});",
+      "mutation": [
+        {
+          "mutant": "db/migrations/0152 predicate without the status filter (concluded tickets still block a new one) — measured, mut/M2.diff, tests/7",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/ledger/recon-diffs/register.int.test.ts",
+      "test": "[AC-B2-04k#5] NULL 去重键不相互冲突；业务键各维度及 app 隔离",
+      "reason": "rule_change",
+      "br": ["BR-FUND-19"],
+      "before": "it('[AC-B2-04k#5] NULL 去重键不相互冲突；业务键各维度及 app 隔离', async () => {\n  const { input, clock } = fixture();\n  const inputs = [\n    input,\n    { ...input, type: 'platform_restore' as const },\n    { ...input, period: '2032-07' },\n    { ...input, refId: randomUUID() },\n    { ...input, appId: `${input.appId}-other` },\n  ];\n  const registered = [];\n  for (const request of inputs)\n    registered.push(\n      await h.db.transaction().execute((trx) => registerReconDiff(trx, request, { clock })),\n    );\n  expect(new Set(registered.map((row) => row.id)).size).toBe(5);\n  expect(await rows(h.db, input.appId)).toHaveLength(4);\n  const keyed = { ...input, refId: randomUUID(), dedupeKey: 'same-across-apps' };\n  const a = await h.db.transaction().execute((trx) => registerReconDiff(trx, keyed, { clock }));\n  const b = await h.db\n    .transaction()\n    .execute((trx) =>\n      registerReconDiff(trx, { ...keyed, appId: `${input.appId}-other` }, { clock }),\n    );\n  expect(a.id).not.toBe(b.id);\n  expect(b.app_id).toBe(`${input.appId}-other`);\n});",
+      "after": "it('[AC-B2-04k#5] NULL 去重键不相互冲突；业务键各维度及 app 隔离', async () => {\n  const { input, clock } = fixture();\n  // B2-02zc (D10-2224 B ①): an external type, whose business key (app_id, type, period, ref_id)\n  // keeps one ticket per period; unresolved ledger_mismatch is pinned by recon-diffs-unresolved.\n  const base = { ...input, type: 'union_mismatch' as const };\n  const inputs = [\n    base,\n    { ...base, type: 'platform_restore' as const },\n    { ...base, period: '2032-07' },\n    { ...base, refId: randomUUID() },\n    { ...base, appId: `${input.appId}-other` },\n  ];\n  const registered = [];\n  for (const request of inputs)\n    registered.push(\n      await h.db.transaction().execute((trx) => registerReconDiff(trx, request, { clock })),\n    );\n  expect(new Set(registered.map((row) => row.id)).size).toBe(5);\n  expect(await rows(h.db, input.appId)).toHaveLength(4);\n  const keyed = { ...input, refId: randomUUID(), dedupeKey: 'same-across-apps' };\n  const a = await h.db.transaction().execute((trx) => registerReconDiff(trx, keyed, { clock }));\n  const b = await h.db\n    .transaction()\n    .execute((trx) =>\n      registerReconDiff(trx, { ...keyed, appId: `${input.appId}-other` }, { clock }),\n    );\n  expect(a.id).not.toBe(b.id);\n  expect(b.app_id).toBe(`${input.appId}-other`);\n});",
+      "mutation": [
+        {
+          "mutant": "db/migrations/0152 predicate without the type filter (every recon diff type deduplicated across periods) — measured, mut/M3.diff, tests/8",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/db/settlement/ledger-owned/recon.int.test.ts",
+      "test": "[AC-B2-04b#7] 原业务键拒绝重复，app、类型、周期、引用各自区分差错",
+      "reason": "rule_change",
+      "br": ["BR-FUND-19"],
+      "before": "it('[AC-B2-04b#7] 原业务键拒绝重复，app、类型、周期、引用各自区分差错', async () => {\n  await ready(h.app);\n  const row = recon();\n  expect(await sqlState(insert(h.app, 'recon_diffs', row))).toBe('ok');\n  expect(await sqlState(insert(h.app, 'recon_diffs', { ...row, id: randomUUID() }))).toBe('23505');\n  for (const change of [\n    { app_id: `other-${randomUUID()}` },\n    { type: 'platform_restore' },\n    { period: '2032-07-01' },\n    { ref_id: randomUUID() },\n  ]) {\n    expect(\n      await sqlState(insert(h.app, 'recon_diffs', { ...row, ...change, id: randomUUID() })),\n    ).toBe('ok');\n  }\n});",
+      "after": "it('[AC-B2-04b#7] 原业务键拒绝重复，app、类型、周期、引用各自区分差错', async () => {\n  await ready(h.app);\n  // B2-02zc (D10-2224 B ①): an external type; unresolved ledger_mismatch is pinned elsewhere.\n  const row = recon({ type: 'union_mismatch' });\n  expect(await sqlState(insert(h.app, 'recon_diffs', row))).toBe('ok');\n  expect(await sqlState(insert(h.app, 'recon_diffs', { ...row, id: randomUUID() }))).toBe('23505');\n  for (const change of [\n    { app_id: `other-${randomUUID()}` },\n    { type: 'platform_restore' },\n    { period: '2032-07-01' },\n    { ref_id: randomUUID() },\n  ]) {\n    expect(\n      await sqlState(insert(h.app, 'recon_diffs', { ...row, ...change, id: randomUUID() })),\n    ).toBe('ok');\n  }\n});",
+      "mutation": [
+        {
+          "mutant": "db/migrations/0152 predicate without the type filter (every recon diff type deduplicated across periods) — measured, mut/M3.diff, tests/8",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/db/settlement/ledger-owned/schema.int.test.ts",
+      "test": "[AC-B2-04b#4] 同一迁移创建并授权三表，资金表约束与独立索引全部显式具名",
+      "reason": "rule_change",
+      "br": ["BR-FUND-19"],
+      "before": "it('[AC-B2-04b#4] 同一迁移创建并授权三表，资金表约束与独立索引全部显式具名', async () => {\n  await ready(h.app);\n  const source = migrationSource().replace(/\"/g, '');\n  const escape = (name: string) => name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n  for (const table of TABLES) {\n    expect(source).toMatch(\n      new RegExp(`CREATE\\\\s+TABLE\\\\s+(?:IF\\\\s+NOT\\\\s+EXISTS\\\\s+)?app\\\\.${table}\\\\s*\\\\(`, 'i'),\n    );\n    expect(source).toMatch(\n      new RegExp(\n        `GRANT\\\\s+[^;]+\\\\bON\\\\s+(?:TABLE\\\\s+)?[^;]*\\\\bapp\\\\.${table}\\\\b[^;]*\\\\bTO\\\\s+couli_app\\\\b`,\n        'i',\n      ),\n    );\n    const constraints = await sql<{ name: string }>`SELECT conname AS name FROM pg_constraint\n      WHERE conrelid = to_regclass(${`app.${table}`}) AND contype IN ('p', 'u', 'c', 'f')`.execute(\n      h.app,\n    );\n    expect(constraints.rows.length).toBeGreaterThan(0);\n    for (const { name } of constraints.rows) {\n      expect(source, name).toMatch(new RegExp(`\\\\bCONSTRAINT\\\\s+${escape(name)}\\\\s`, 'i'));\n    }\n    for (const index of await indexes(h.app, table)) {\n      if (!index.constraint_backed) {\n        expect(source, index.name).toMatch(\n          new RegExp(\n            `\\\\bCREATE\\\\s+(?:UNIQUE\\\\s+)?INDEX\\\\s+(?:IF\\\\s+NOT\\\\s+EXISTS\\\\s+)?${escape(index.name)}\\\\s`,\n            'i',\n          ),\n        );\n      }\n    }\n  }\n});",
+      "after": "it('[AC-B2-04b#4] 同一迁移创建并授权三表，资金表约束与独立索引全部显式具名', async () => {\n  await ready(h.app);\n  const source = migrationSource().replace(/\"/g, '');\n  const escape = (name: string) => name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n  // B2-02zc (D10-2224 B ①): indexes of these tables added by later migrations (merged migrations\n  // never change) are looked up in those migrations too; tables, grants and constraints stay 0060's.\n  const { readdirSync, readFileSync } = await import('node:fs');\n  const directory = new URL('../../../../../db/migrations/', import.meta.url);\n  const later = readdirSync(directory)\n    .filter((name) => /^\\d{4}_.+\\.sql$/.test(name) && Number(name.slice(0, 4)) > 60)\n    .sort()\n    .map((name) =>\n      readFileSync(new URL(name, directory), 'utf8')\n        .replace(/\\/\\*[\\s\\S]*?\\*\\//g, '')\n        .replace(/--[^\\n]*/g, '')\n        .replace(/\"/g, ''),\n    )\n    .filter((text) =>\n      TABLES.some((table) =>\n        new RegExp(\n          `\\\\bCREATE\\\\s+(?:UNIQUE\\\\s+)?INDEX\\\\b[^;]*\\\\bON\\\\s+(?:ONLY\\\\s+)?app\\\\.${table}\\\\b`,\n          'i',\n        ).test(text),\n      ),\n    );\n  const indexSource = [source, ...later].join('\\n');\n  for (const table of TABLES) {\n    expect(source).toMatch(\n      new RegExp(`CREATE\\\\s+TABLE\\\\s+(?:IF\\\\s+NOT\\\\s+EXISTS\\\\s+)?app\\\\.${table}\\\\s*\\\\(`, 'i'),\n    );\n    expect(source).toMatch(\n      new RegExp(\n        `GRANT\\\\s+[^;]+\\\\bON\\\\s+(?:TABLE\\\\s+)?[^;]*\\\\bapp\\\\.${table}\\\\b[^;]*\\\\bTO\\\\s+couli_app\\\\b`,\n        'i',\n      ),\n    );\n    const constraints = await sql<{ name: string }>`SELECT conname AS name FROM pg_constraint\n      WHERE conrelid = to_regclass(${`app.${table}`}) AND contype IN ('p', 'u', 'c', 'f')`.execute(\n      h.app,\n    );\n    expect(constraints.rows.length).toBeGreaterThan(0);\n    for (const { name } of constraints.rows) {\n      expect(source, name).toMatch(new RegExp(`\\\\bCONSTRAINT\\\\s+${escape(name)}\\\\s`, 'i'));\n    }\n    for (const index of await indexes(h.app, table)) {\n      if (!index.constraint_backed) {\n        expect(indexSource, index.name).toMatch(\n          new RegExp(\n            `\\\\bCREATE\\\\s+(?:UNIQUE\\\\s+)?INDEX\\\\s+(?:IF\\\\s+NOT\\\\s+EXISTS\\\\s+)?${escape(index.name)}\\\\s`,\n            'i',\n          ),\n        );\n      }\n    }\n  }\n});",
+      "mutation": [
+        {
+          "mutant": "db/migrations/0152 creating the index without a name (not named in its migration) — measured, mut/M4.diff, tests/9",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "task": "B2-02zc",
+  "spec_commit": "c93d9938e59e2dc67fc08abce164014d767a5327",
+  "spec_ref": "c3060ba021c2308d64251ac25f4ad6c35836d539",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c93d9938e59e2dc67fc08abce164014d767a5327",
+      "tree": "190663c26460f0098db7a327b860d2b0dd5b7624",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-21T09:12:48Z",
+      "finished_at": "2026-11-21T09:12:55Z",
+      "red_tests": [
+        "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#1] 账户级差异（①）D 日登记 1 张并加 1 条冻结；D+1、D+2 同一差异再现 → 差错单仍 1 张（period=D 等逐字段不变）、inserted=false、冻结仍 1 条、端口只调 1 次；对照：同一账户 D+1 首次出现的 ⑦ 另登记 1 张、另加 1 条冻结",
+        "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#2] 未结含 processing：首张置 processing 后次日同一差异再现 → 不新生成差错单（首张逐字段不变）、inserted=false、不新增冻结",
+        "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#11] 未结期间同一差异再现但金额变了（① D 日分录 300 / 缓存 500 → D+1 400 / 600 → D+2 350 / 700）→ 仍读回 D 日原单：inserted=false、返回旧单 id，旧单金额、period、resolution 等逐字段不变；冻结仍 1 条、端口只调 1 次",
+        "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#3] 未结时次日不新开；首张结案为 adjusted（旧冻结随之按关单写法解除）后再次日同一差异 → 新开一张（period 为当日、新 id、inserted=true）并加 1 条指向新单的有效冻结，旧单与已解除的旧冻结不变；再追加一个会计日 → 读回重开的未结单（不是旧结案单）、inserted=false，两张单与冻结逐行不变",
+        "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#3] 未结时次日不新开；首张结案为 written_off（旧冻结随之按关单写法解除）后再次日同一差异 → 新开一张（period 为当日、新 id、inserted=true）并加 1 条指向新单的有效冻结，旧单与已解除的旧冻结不变；再追加一个会计日 → 读回重开的未结单（不是旧结案单）、inserted=false，两张单与冻结逐行不变",
+        "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#3] 未结时次日不新开；首张结案为 closed（旧冻结随之按关单写法解除）后再次日同一差异 → 新开一张（period 为当日、新 id、inserted=true）并加 1 条指向新单的有效冻结，旧单与已解除的旧冻结不变；再追加一个会计日 → 读回重开的未结单（不是旧结案单）、inserted=false，两张单与冻结逐行不变",
+        "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#4] 全局差异（② 凭证不平）：D 日登记并冻结、关 settle.auto.enabled；D+1 再现 → 不新生成差错单、inserted=false、不新增冻结，但 settle.auto.enabled 照样再关一次（每轮发现即关）",
+        "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts > [AC-B2-02zc#14] 按子订单归组的差异（④，ref_type order）维持按会计日每天一张、各自冻结：D 日只有受益人甲变负 → 登记 1 张、冻结甲；D+1 同一子订单受益人乙也变负（首张仍未结）→ 照常新开一张（period=D+1、新 id、inserted=true），并为乙新增冻结（source_ref 指新单）；D 日那张与甲的冻结逐字段不变；对照：同一轮的账户级差异（①）D+1 再现不新开、不新增冻结",
+        "test/spec/ledger/recon-diffs-unresolved/migration.int.test.ts > [AC-B2-02zc#9] 迁移（按后缀定位）显式建唯一索引 recon_diffs_unresolved_internal_key：键 (app_id, type, ref_id)、有效、非约束，谓词恰为 type = ledger_mismatch、status 为 open / processing、ref_type <> order 三项",
+        "test/spec/ledger/recon-diffs-unresolved/migration.int.test.ts > [AC-B2-02zc#10] 库内直接 INSERT：同 app 同 ref_id 已有未结 ledger_mismatch 时，第二张 open / processing（任何 period）23505；第二张已结案可插；首张结案后可再开；对外类型、别的 app、别的 ref 不受影响；ref_type order 的同 ref_id 两张未结（不同 period）都可插",
+        "test/spec/ledger/recon-diffs-unresolved/migration.int.test.ts > [AC-B2-02zc#12] 迁移遇存量重复：无该索引的库里已有同 app、同 ref_id、不同 period 的两张未结 ledger_mismatch 及各自一条冻结（同一用户），open / open 与 open / processing 两组各用独立的临时库 → 每组执行迁移文件原文都得 23505（建该索引失败），回滚后两张单与两条冻结逐行不变、索引不存在（迁移不自动结案、不改写业务数据）",
+        "test/spec/ledger/recon-diffs-unresolved/migration.int.test.ts > [AC-B2-02zc#13] 迁移遇无重复存量：无该索引的库里只有一张未结 ledger_mismatch 与其一条生效冻结（released_at 为空）→ 执行迁移文件原文成功，索引存在、唯一、有效；差错单与冻结逐字段与迁移前相同（迁移不解除冻结、不改写差错单）",
+        "test/spec/ledger/recon-diffs-unresolved/register.int.test.ts > [AC-B2-02zc#8] 并发：同 app、同 ref_id、不同 period 的 ledger_mismatch，第一张未提交时第二个事务登记 → 等待后恰好 1 张、恰好一方 inserted=true，另一方不抛错、读回同一行、事务仍可用；对照：union_mismatch 同 ref_id 不同 period 首张未结仍各开一张"
+      ],
+      "expected": [
+        "test/spec/ledger/recon-diffs-unresolved/daily.int.test.ts",
+        "test/spec/ledger/recon-diffs-unresolved/migration.int.test.ts",
+        "test/spec/ledger/recon-diffs-unresolved/register.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "18fa8defec0de5d51e34a6f9e153e44f53930f541c67a4097c22478f838426bb"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3ad740a101f275b7c9ce12f2c9efc6793d339fd5",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}
