@@ -59,9 +59,11 @@
 //   ③): before naming fields, the Ajv errors of a failed oneOf / anyOf are narrowed to the
 //   branch the request means, innermost combinator first (by schemaPath; an error belongs to a
 //   branch when its schemaPath continues the combinator's path with that branch's whole `/`
-//   segment). Per combinator: (a) a branch with an enum / const error on one of its own
-//   properties (a discriminator such as purpose, payout_method, auth_method, provider, action
-//   that does not match) is not chosen; (b) of the rest, the branch naming fewest fields keeps
+//   segment). A combinator instance is its schemaPath plus its instancePath: only errors at or
+//   below that instancePath (whole `/` segments) belong to it, so the same oneOf under several
+//   array items narrows each item on its own (money r1 S2). Per combinator: (a) a branch with an
+//   enum / const error on one of its own properties (a discriminator such as purpose,
+//   payout_method, auth_method, provider, action that does not match) is not chosen; (b) of the rest, the branch naming fewest fields keeps
 //   its errors; on a tie no branch error is kept and only the combinator's location remains,
 //   except that a tie of branches that only miss required properties ("give one of these")
 //   keeps them all; (c) when every branch fails its discriminator only those discriminator
@@ -332,10 +334,15 @@ function narrowCombinators(input: readonly ValidationIssue[]): ValidationIssue[]
     if (combinator === undefined) return issues;
     done.add(combinator);
     const prefix = `${combinator.schemaPath}/`;
-    // The branch index of an error under this combinator (whole `/` segment, so oneOf/1 never
-    // matches oneOf/10), or undefined for an error outside it, which is always kept.
+    const at = combinator.instancePath;
+    // One combinator instance is its schemaPath plus its instancePath: the same oneOf under two
+    // array items fails twice, and each item picks its own branch (money r1 S2).
+    const within = (issue: ValidationIssue): boolean =>
+      issue.instancePath === at || issue.instancePath.startsWith(`${at}/`);
+    // The branch index of an error under this combinator instance (whole `/` segment, so oneOf/1
+    // never matches oneOf/10), or undefined for an error outside it, which is always kept.
     const branchOf = (issue: ValidationIssue): string | undefined =>
-      issue !== combinator && issue.schemaPath?.startsWith(prefix) === true
+      issue !== combinator && issue.schemaPath?.startsWith(prefix) === true && within(issue)
         ? issue.schemaPath.slice(prefix.length).split('/')[0]
         : undefined;
     // An enum / const on one of the branch's own properties: the discriminator does not match.
@@ -357,10 +364,7 @@ function narrowCombinators(input: readonly ValidationIssue[]): ValidationIssue[]
     issues = issues.filter(
       (issue) =>
         (branchOf(issue) === undefined || keep.has(issue)) &&
-        !(
-          issue.keyword === 'unevaluatedProperties' &&
-          issue.instancePath === combinator.instancePath
-        ),
+        !(issue.keyword === 'unevaluatedProperties' && issue.instancePath === at),
     );
   }
 }
