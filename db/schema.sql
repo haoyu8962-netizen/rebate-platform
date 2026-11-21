@@ -3024,6 +3024,7 @@ CREATE TABLE app.agent_runs (
     cancel_requested_at timestamp with time zone,
     finalize_hold text,
     finalize_hold_at timestamp with time zone,
+    input_passed boolean DEFAULT false NOT NULL,
     CONSTRAINT agent_runs_cancel_order_check CHECK ((cancel_requested_at >= accepted_at)),
     CONSTRAINT agent_runs_counts_check CHECK (((input_tokens >= 0) AND (output_tokens >= 0) AND (cost_mfen >= 0) AND (ttft_ms >= 0) AND (latency_ms >= 0))),
     CONSTRAINT agent_runs_deadline_order_check CHECK ((deadline_at >= accepted_at)),
@@ -3072,6 +3073,13 @@ END),
     CONSTRAINT agent_runs_settle_pair_check CHECK (((settle_result IS NULL) = (settled_at IS NULL))),
     CONSTRAINT agent_runs_settle_result_check CHECK ((settle_result = ANY (ARRAY['counted'::text, 'refunded'::text])))
 );
+
+
+--
+-- Name: COLUMN agent_runs.input_passed; Type: COMMENT; Schema: app; Owner: -
+--
+
+COMMENT ON COLUMN app.agent_runs.input_passed IS 'BR-AI-05 ⑤: the run passed step 1 of the decision order; written with the terminal state';
 
 
 --
@@ -14702,6 +14710,14 @@ GRANT SELECT(finalize_hold) ON TABLE app.agent_runs TO couli_readonly;
 
 GRANT UPDATE(finalize_hold_at) ON TABLE app.agent_runs TO couli_app;
 GRANT SELECT(finalize_hold_at) ON TABLE app.agent_runs TO couli_readonly;
+
+
+--
+-- Name: COLUMN agent_runs.input_passed; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(input_passed) ON TABLE app.agent_runs TO couli_app;
+GRANT SELECT(input_passed) ON TABLE app.agent_runs TO couli_readonly;
 
 
 --
