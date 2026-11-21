@@ -42,8 +42,11 @@
 // to the ledger tables. Further forms this guard does not cover (D10-2278; followup
 // FU-LEDGER-WRITERS-LEXER-LIMITS): Unicode-escaped identifiers (`U&"…"`); a write through a
 // view, a synonym-like alias or a renamed table; a write performed inside a database
-// function, procedure or trigger whose body is not in a scanned .ts / .sql file; and other
-// lexical forms one has to pick on purpose to get past a static scan.
+// function, procedure or trigger whose body is not in a scanned .ts / .sql file; psql inline
+// data (`COPY … FROM STDIN` followed by data rows ending in `\.`), whose apostrophes are read
+// as the start of an SQL string literal and can hide the statements after it (the repository's
+// migrations and seeds do not use this format); and other lexical forms one has to pick on
+// purpose to get past a static scan.
 //
 // Scope (D10-2278): the guard catches an honest developer or agent writing a ledger table
 // outside the ledger module by mistake, in the usual forms (INSERT / UPDATE / DELETE / MERGE /
