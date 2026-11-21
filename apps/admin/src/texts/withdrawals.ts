@@ -797,7 +797,8 @@ export const withdrawalsTexts = {
     masterForbidden: '无权限查看（需要 switch.* 权限点）',
     masterLoading: '读取中…',
     masterFailed: '读取失败',
-    masterNote: '总开关在本页只读；开启与关闭只在紧急开关页办理（需 switch.all）。',
+    masterNote:
+      '总开关在本页只读。紧急开关页只能关闭总开关（需 switch.all）；开启不在控制台办理，须先满足下方「开启前置检查」并经负责人确认。',
     switchEntry: '去紧急开关页',
     noAuto: '不自动到账',
     noAutoNote: '花卷云只有这一个选项，本页只读。',
@@ -818,7 +819,7 @@ export const withdrawalsTexts = {
     },
     checksTitle: '开启前置检查',
     checksIntro:
-      '把总开关改为开启之前，系统逐项校验下列条目，任一条不成立都不能开启（开启在紧急开关页办理，并须负责人确认）。本页只列条目，不显示校验结果。',
+      '把总开关改为开启之前，系统逐项校验下列条目，任一条不成立都不能开启；开启须经负责人确认，不在控制台办理（紧急开关页只能关闭总开关）。本页只列条目，不显示校验结果。',
     checks: [
       '单笔与单日限额（BR-WDR-22 ②）须在规划/09 判为支持',
       '失败码与查询状态（BR-WDR-22 ⑤）须在规划/09 判为支持',
@@ -847,12 +848,22 @@ export const withdrawalsTexts = {
     forbidden: '无权限修改自动到账设置（需要 config.business 权限点）',
     invalid: '提交内容有误，已标出有问题的项，请修改后再保存',
     failed: '保存失败，请稍后重试',
+    rateLimited: '请求过于频繁，本次改动没有保存，请稍候几秒再保存。',
+    refreshFailed: '读取最新设置失败，请再点【刷新】。',
     unknownTitle: '保存结果未知',
     unknown:
       '上次保存没有收到确定的回应，结果未知，可能已经生效。请【刷新核对】读取服务端的实际设置，或【原样重试】按原请求重新提交（需重新输入动态码）；不会自动重发。',
     unknownRetry: '原样重试',
     unknownRecheck: '刷新核对',
     recheckFailed: '读取失败，结果仍未知，请稍后再点【刷新核对】',
+    timedOut: (seconds: number): string =>
+      `保存超过 ${seconds} 秒没有回应，已停止等待；上次保存可能已经生效，不会自动重发。`,
+    unreadable: '服务端的回应没有逐项给出本次保存的设置，无法确认是否已生效。',
+    retryRateLimited:
+      '重试因请求过于频繁被拒，上次保存的结果仍未知；请稍候几秒再【原样重试】，或先【刷新核对】。',
+    retryConflict:
+      '重试被拒：服务端设置的版本已变化（可能正是上次保存已生效），请【刷新核对】读取实际设置。',
+    retryUnsettled: '这次重试没有得到确定的回应，上次保存的结果仍未知。',
   },
   /**
    * F1-08at（D10-2075）：结果未知期间会话过期、重新登录后页面顶部的提示（components/unknown-marker，

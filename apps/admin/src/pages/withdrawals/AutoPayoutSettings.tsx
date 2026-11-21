@@ -8,10 +8,13 @@
 // 写：【保存】只送改过的键，一次 POST /admin/v1/config-items/batch {items:[{key,value,expected_version}]}；
 // config.business 为 totp 档动态码，凭证一次性，每次保存都重新要动态码。成功后以回答的新 version 刷新。
 // 20001 data.fields 逐项标出；20902 提示已被他人修改需刷新、不自动重发；10403 无权限；普通 10003 重新要动态码
-// 后原样重发。结果未知（D10-1731 / D10-1739 / D10-2060 / D10-2061）：无回应、网络错误、无法解析、带外壳的 5xx →
-// 锁定表单，只给【原样重试】（同一请求体，重新要动态码）与【刷新核对】；重试收到 10403、10003 +
-// verify_phone_missing、20902 仍结果未知；普通 10003 重验后原样重发；20001 等确定拒绝解锁。进入结果未知时记
-// unknown-marker（page=withdrawals），拿到确定结果或【刷新核对】后清本实例那一份（D10-2075）。
+// 后原样重发；42901 按 Retry-After 禁用【保存】【原样重试】。【刷新】读取期间表单锁定，过期的读取回答不采用。
+// 结果未知（D10-1731 / D10-1739 / D10-2060 / D10-2061）：无回应、超过 SAVE_DEADLINE_MS 未回应、网络错误、
+// 无法解析、带外壳的 5xx、成功回答没有逐项给出所送的每个键 → 锁定表单，只给【原样重试】（同一请求体，重新要
+// 动态码）与【刷新核对】；不自动重发。重试只有成功或 20001 算确定结果；10403、10003 + verify_phone_missing、
+// 20902、42901 等仍结果未知、请求体不变；普通 10003 重验后原样重发。unknown-marker（page=withdrawals）在
+// 请求发出前就记下、按回答的分类增删，与页面是否还在无关（离开页面时在途的保存留着标记）；拿到确定结果或
+// 【刷新核对】后清本实例那一份（D10-2075）。标记的写、读、清不按账号角色分支（D10-2470）。
 // 资金评审（D10-2050）：没有无交互角色却带点击 / 按键处理的元素（时段用原生下拉、标签用原生勾选框），
 // 也没有任何把金额、默认值或当前时间填进输入框的入口。
 import type { Schema } from '@couli/contracts-ts';
@@ -76,16 +79,31 @@ const t = withdrawalsTexts.autoPayout;
 const FORBIDDEN = 10403;
 const INVALID = 20001;
 const CONFLICT = 20902;
+const RATE_LIMITED = 42901;
+/** contracts/error-codes.yaml 42901: buttons disabled for Retry-After, 5 seconds by default. */
+const DEFAULT_RETRY_AFTER_S = 5;
+/**
+ * How long a save waits for its answer (ms) before its result counts as unknown. The batch is
+ * one short transaction on the server (a normal answer takes well under a second); 30 s leaves
+ * ample room for a slow network or a busy server without leaving the admin on 「发送中」 for good.
+ * Giving up early loses nothing: past the deadline the result is unknown, not failed — the send
+ * is aborted and never resent by itself; only 【原样重试】 (same body, a new dynamic code) or
+ * 【刷新核对】 remain, and a late answer is ignored.
+ */
+export const SAVE_DEADLINE_MS = 30_000;
 /** Upper bound of list pages read (the registry is far smaller). */
 const MAX_PAGES = 20;
 
 type ConfigPage = Schema<'AdminConfigItemPage'>;
-type BatchRequest = { readonly items: readonly AutoPayoutEntry[] };
+export type BatchRequest = { readonly items: readonly AutoPayoutEntry[] };
 
 type Load = 'loading' | 'ready' | 'failed' | 'forbidden';
 type MasterState = AutoPayoutMaster | 'loading' | 'failed';
-/** edit: the form is usable; verify / sending: a save is under way; unknown / rechecking: locked. */
-type Phase = 'edit' | 'verify' | 'sending' | 'unknown' | 'rechecking';
+/**
+ * edit: the form is usable; verify / sending: a save is under way; unknown / rechecking: locked;
+ * refreshing: 【刷新】 after a 20902 is reading the settings (locked until they are back).
+ */
+type Phase = 'edit' | 'verify' | 'sending' | 'unknown' | 'rechecking' | 'refreshing';
 type Notice = { readonly type: 'success' | 'warning' | 'error'; readonly text: string };
 
 const ERROR_TEXT: Readonly<Record<AutoPayoutError, string>> = t.errors;
@@ -103,23 +121,126 @@ function refusalText(cause: unknown): string {
   if (cause.code === FORBIDDEN) return t.forbidden;
   if (cause.code === CONFLICT) return t.conflict;
   if (cause.code === INVALID) return t.invalid;
+  if (cause.code === RATE_LIMITED) return t.rateLimited;
   if (cause.code === 10003) return stepUpTexts.verifyPhoneMissing;
   return t.failed;
 }
 
-/** The items of a batch answer (undefined when the answer does not say what was stored). */
-function answeredItems(data: unknown): AutoPayoutItem[] | undefined {
+/** The note in the result-unknown notice when a retry got a refusal that settles nothing. */
+function retryNote(cause: unknown): string {
+  if (!(cause instanceof AdminApiError) || cause.kind !== 'api') return t.retryUnsettled;
+  if (cause.code === FORBIDDEN) return t.forbidden;
+  if (cause.code === CONFLICT) return t.retryConflict;
+  if (cause.code === RATE_LIMITED) return t.retryRateLimited;
+  if (keepsUnknown(cause)) return stepUpTexts.verifyPhoneMissing;
+  return t.retryUnsettled;
+}
+
+/** The save had no answer within SAVE_DEADLINE_MS: its result is unknown (never resent). */
+export class SaveDeadline extends Error {
+  constructor() {
+    super('No answer to the save within the deadline');
+    this.name = 'SaveDeadline';
+  }
+}
+
+/**
+ * `start`'s request, given up after `ms` without an answer: the request is aborted and the
+ * promise rejects with SaveDeadline; an answer arriving later is ignored. Nothing is sent again.
+ */
+export function withDeadline<T>(
+  start: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+): Promise<T> {
+  const controller = new AbortController();
+  let request: Promise<T>;
+  try {
+    request = start(controller.signal);
+  } catch (cause) {
+    // Failed before anything was sent: no deadline to keep.
+    return Promise.reject(cause instanceof Error ? cause : new Error(String(cause)));
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new SaveDeadline());
+      controller.abort();
+    }, ms);
+  });
+  // The loser of the race is dropped without an unhandled rejection.
+  request.catch(() => undefined);
+  deadline.catch(() => undefined);
+  return Promise.race([request, deadline]).finally(() => {
+    clearTimeout(timer);
+  });
+}
+
+/**
+ * The items of a batch answer: exactly one per key of `body` (no key missing, none extra or
+ * twice), each with a value and a usable version. Undefined when the answer does not say what
+ * is stored now for every key sent — an answer that settles nothing.
+ */
+export function answeredItems(data: unknown, body: BatchRequest): AutoPayoutItem[] | undefined {
   if (typeof data !== 'object' || data === null) return undefined;
   const items = (data as { items?: unknown }).items;
-  if (!Array.isArray(items)) return undefined;
-  const valid = items.every(
-    (item: unknown) =>
-      typeof item === 'object' &&
-      item !== null &&
-      typeof (item as { key?: unknown }).key === 'string' &&
-      Number.isSafeInteger((item as { version?: unknown }).version),
+  if (!Array.isArray(items) || items.length !== body.items.length) return undefined;
+  const expected = new Map<string, number>(
+    body.items.map((entry) => [entry.key, entry.expected_version]),
   );
-  return valid ? (items as AutoPayoutItem[]) : undefined;
+  const seen = new Set<string>();
+  for (const item of items as unknown[]) {
+    if (typeof item !== 'object' || item === null || !('value' in item)) return undefined;
+    const { key, version } = item as { key?: unknown; version?: unknown };
+    if (typeof key !== 'string' || seen.has(key)) return undefined;
+    const sentVersion = expected.get(key);
+    if (sentVersion === undefined) return undefined;
+    if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < sentVersion)
+      return undefined;
+    seen.add(key);
+  }
+  return seen.size === expected.size ? (items as AutoPayoutItem[]) : undefined;
+}
+
+/** What one send of the batch settled. */
+export type SaveOutcome =
+  /** Stored: the answer gives every key sent as it is now. */
+  | { readonly kind: 'saved'; readonly items: readonly AutoPayoutItem[] }
+  /** A plain 10003: the pass was not accepted; a new dynamic code, the same body. */
+  | { readonly kind: 'again' }
+  /** 10001: the session ended (an earlier unknown send stays unknown). */
+  | { readonly kind: 'ended' }
+  /** A settled refusal: nothing was stored by this body. */
+  | { readonly kind: 'refused'; readonly cause: AdminApiError }
+  /** No settled answer: it may have taken effect. */
+  | { readonly kind: 'unknown'; readonly note?: string };
+
+/**
+ * Classifies one send's answer. `uncertain`: an earlier send of the same body got no settled
+ * answer, so only a success or a 20001 (the body itself refused) settles it; a 10403, a 10003 +
+ * verify_phone_missing, a 20902, a 42901 or any other refusal of the retry leaves it unknown.
+ */
+export function outcomeOf(
+  answer:
+    { readonly ok: true; readonly data: unknown } | { readonly ok: false; readonly cause: unknown },
+  body: BatchRequest,
+  uncertain: boolean,
+): SaveOutcome {
+  if (answer.ok) {
+    const items = answeredItems(answer.data, body);
+    return items === undefined ? { kind: 'unknown', note: t.unreadable } : { kind: 'saved', items };
+  }
+  const { cause } = answer;
+  if (cause instanceof SaveDeadline)
+    return { kind: 'unknown', note: t.timedOut(SAVE_DEADLINE_MS / 1000) };
+  if (verifyAgain(cause)) return { kind: 'again' };
+  if (endsSession(cause)) return { kind: 'ended' };
+  if (uncertain) {
+    if (isSettledRejection(cause) && (cause as AdminApiError).code === INVALID)
+      return { kind: 'refused', cause: cause as AdminApiError };
+    return { kind: 'unknown', note: retryNote(cause) };
+  }
+  if (isSettledRejection(cause)) return { kind: 'refused', cause: cause as AdminApiError };
+  return { kind: 'unknown' };
 }
 
 export function AutoPayoutSettings({
@@ -151,13 +272,39 @@ export function AutoPayoutSettings({
   /** An earlier send of this body got no settled answer: it may have taken effect. */
   const uncertainRef = useRef(false);
   const alive = useRef(true);
+  /**
+   * The latest read of the settings (and saves bump it too): an answer of an older read is
+   * dropped, so a late read never overwrites newer values and versions.
+   */
+  const readSeq = useRef(0);
+  /** 42901: 【保存】 and 【原样重试】 wait for Retry-After. */
+  const [cooling, setCooling] = useState(false);
+  const coolTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
+      clearTimeout(coolTimer.current);
     };
   }, []);
+
+  /** A 42901: disable 【保存】 / 【原样重试】 for its Retry-After (5 s by default). */
+  const coolDown = (cause: unknown) => {
+    if (!(cause instanceof AdminApiError) || cause.code !== RATE_LIMITED) return;
+    const seconds = cause.retryAfterSeconds ?? DEFAULT_RETRY_AFTER_S;
+    clearTimeout(coolTimer.current);
+    setCooling(true);
+    coolTimer.current = setTimeout(() => {
+      if (alive.current) setCooling(false);
+    }, seconds * 1000);
+  };
+
+  /** Starts a read: its answer is used only while no later read or save began. */
+  const nextRead = (): number => {
+    readSeq.current += 1;
+    return readSeq.current;
+  };
 
   const setPhase = (next: Phase) => {
     phaseRef.current = next;
@@ -196,14 +343,15 @@ export function AutoPayoutSettings({
   // The settings: read when the tab is entered (this component mounts then), and on 【重试】 / 【刷新】.
   useEffect(() => {
     let current = true;
+    const seq = nextRead();
     readItems().then(
       (next) => {
-        if (!current) return;
+        if (!current || seq !== readSeq.current) return;
         show(next);
         setLoad('ready');
       },
       (cause: unknown) => {
-        if (!current) return;
+        if (!current || seq !== readSeq.current) return;
         setLoad(
           cause instanceof AdminApiError && cause.code === FORBIDDEN ? 'forbidden' : 'failed',
         );
@@ -271,7 +419,7 @@ export function AutoPayoutSettings({
   };
 
   const save = () => {
-    if (phaseRef.current !== 'edit') return;
+    if (phaseRef.current !== 'edit' || cooling) return;
     const result = checkDraft(items, draft);
     if ('errors' in result) {
       const marks: Partial<Record<AutoPayoutKey, string>> = {};
@@ -297,7 +445,7 @@ export function AutoPayoutSettings({
   };
 
   const retry = () => {
-    if (phaseRef.current !== 'unknown' || bodyRef.current === undefined) return;
+    if (phaseRef.current !== 'unknown' || bodyRef.current === undefined || cooling) return;
     setAgain(false);
     setPhase('verify');
   };
@@ -330,70 +478,76 @@ export function AutoPayoutSettings({
     }
   };
 
-  /** No settled answer: lock the form; only 【原样重试】 and 【刷新核对】 remain. */
-  const unknown = (note?: string) => {
-    if (!uncertainRef.current) marker.mark();
-    uncertainRef.current = true;
-    setNotice(undefined);
-    setUnknownNote(note);
-    setPhase('unknown');
-  };
-
-  /** A settled answer: drop this instance's marker (the session ending settles nothing). */
-  const settledBy = (cause?: unknown) => {
-    if (uncertainRef.current) {
-      if (cause !== undefined && endsSession(cause)) marker.leave();
-      else marker.clear();
-    }
+  /** A settled answer: the form forgets the save (its marker was dropped in `send`). */
+  const settled = () => {
     uncertainRef.current = false;
     bodyRef.current = undefined;
     setUnknownNote(undefined);
   };
 
+  /**
+   * The marker follows what the send settled, whether or not the page is still shown (it was
+   * kept before the request left): stored or settled refused → dropped; a plain 10003 → dropped
+   * unless an earlier send of the body is unknown; 10001 → given up while unknown (stays for the
+   * prompt after signing in again), dropped otherwise; no settled answer → kept.
+   */
+  const markerAfter = (outcome: SaveOutcome, uncertain: boolean) => {
+    if (outcome.kind === 'unknown') return;
+    if (outcome.kind === 'ended' && uncertain) marker.leave();
+    else if (outcome.kind === 'again' && uncertain) return;
+    else marker.clear();
+  };
+
   const send = async (body: BatchRequest, stepUpToken: string): Promise<void> => {
+    const uncertain = uncertainRef.current;
+    // Kept before the request leaves: leaving the page (or the session ending) while it is
+    // under way keeps the marker; only a settled answer drops it.
+    marker.mark();
+    let answer:
+      | { readonly ok: true; readonly data: unknown }
+      | { readonly ok: false; readonly cause: unknown };
     try {
-      const response = await customOf()({
-        url: CONFIG_BATCH_URL,
-        method: 'post',
-        payload: body,
-        meta: { stepUpToken },
-      });
-      if (!alive.current) return;
-      const answered = answeredItems(response.data);
-      if (answered === undefined) {
-        // An answer that does not say what was stored is no answer.
-        unknown();
+      const response = await withDeadline(
+        (signal) =>
+          customOf()({
+            url: CONFIG_BATCH_URL,
+            method: 'post',
+            payload: body,
+            meta: { stepUpToken, signal },
+          }),
+        SAVE_DEADLINE_MS,
+      );
+      answer = { ok: true, data: response.data };
+    } catch (cause) {
+      answer = { ok: false, cause };
+    }
+    const outcome = outcomeOf(answer, body, uncertain);
+    markerAfter(outcome, uncertain);
+    if (outcome.kind === 'unknown') uncertainRef.current = true;
+    // The form only while the page is shown.
+    if (!alive.current) return;
+    const cause = answer.ok ? undefined : answer.cause;
+    coolDown(cause);
+    switch (outcome.kind) {
+      case 'saved': {
+        settled();
+        // A read begun before this answer must not show older values or versions.
+        nextRead();
+        const byKey = new Map(outcome.items.map((item) => [item.key, item]));
+        show(items.map((item) => byKey.get(item.key) ?? item));
+        setStale(false);
+        setNotice({ type: 'success', text: t.saved });
+        setPhase('edit');
         return;
       }
-      settledBy();
-      const byKey = new Map(answered.map((item) => [item.key, item]));
-      const next = items.map((item) => byKey.get(item.key) ?? item);
-      show(next);
-      setStale(false);
-      setNotice({ type: 'success', text: t.saved });
-      setPhase('edit');
-    } catch (cause) {
-      if (!alive.current) return;
-      if (verifyAgain(cause)) {
+      case 'again':
         // The pass was not accepted (used up or expired): a new dynamic code, the same body.
         setAgain(true);
         setPhase('verify');
         return;
-      }
-      if (
-        uncertainRef.current &&
-        (keepsUnknown(cause) ||
-          (cause instanceof AdminApiError && cause.kind === 'api' && cause.code === CONFLICT))
-      ) {
-        // The first send may have taken effect: a 10403 / 10003 + verify_phone_missing / 20902
-        // of the retry settles nothing; still locked, the body unchanged.
-        unknown(refusalText(cause));
-        return;
-      }
-      if (endsSession(cause)) {
+      case 'ended':
         // The session ended: the shell signs in again; an unknown result stays unknown.
-        if (uncertainRef.current) {
-          marker.leave();
+        if (uncertain) {
           setPhase('unknown');
           return;
         }
@@ -401,23 +555,27 @@ export function AutoPayoutSettings({
         setNotice({ type: 'error', text: t.failed });
         setPhase('edit');
         return;
-      }
-      if (isSettledRejection(cause)) {
-        settledBy(cause);
-        if (cause instanceof AdminApiError && cause.code === INVALID) {
+      case 'refused': {
+        settled();
+        if (outcome.cause.code === INVALID) {
           const marks: Partial<Record<AutoPayoutKey, string>> = {};
-          for (const key of fieldsOf(cause))
+          for (const key of fieldsOf(outcome.cause))
             if (typeof key === 'string' && items.some((item) => item.key === key))
               marks[key as AutoPayoutKey] = t.errors.server;
           setErrors(marks);
         }
-        if (cause instanceof AdminApiError && cause.code === CONFLICT) setStale(true);
-        setNotice({ type: 'error', text: refusalText(cause) });
+        if (outcome.cause.code === CONFLICT) setStale(true);
+        setNotice({ type: 'error', text: refusalText(outcome.cause) });
         setPhase('edit');
         return;
       }
-      // Dropped, unparsable, an enveloped 5xx, 40901 …: the result is unknown.
-      unknown();
+      case 'unknown':
+        // Dropped, past the deadline, unparsable, an enveloped 5xx, 40901, an answer missing a
+        // key …; or a retry refused in a way that settles nothing: locked, the body unchanged.
+        setNotice(undefined);
+        setUnknownNote(outcome.note);
+        setPhase('unknown');
+        return;
     }
   };
 
@@ -432,29 +590,47 @@ export function AutoPayoutSettings({
   const recheck = () => {
     if (phaseRef.current !== 'unknown') return;
     setPhase('rechecking');
+    const seq = nextRead();
     readItems().then(
       (next) => {
-        if (!alive.current) return;
-        settledBy();
+        if (!alive.current || seq !== readSeq.current) return;
+        marker.clear();
+        settled();
         show(next);
         setStale(false);
         setNotice(undefined);
         setPhase('edit');
       },
       () => {
-        if (!alive.current) return;
+        if (!alive.current || seq !== readSeq.current) return;
         setUnknownNote(t.recheckFailed);
         setPhase('unknown');
       },
     );
   };
 
-  /** 【刷新】 after 20902: read the settings again (what was typed is dropped). */
+  /**
+   * 【刷新】 after 20902: read the settings again (what was typed is dropped). The form stays
+   * locked until the values and versions are back; a failed read keeps 【刷新】 offered.
+   */
   const refresh = () => {
     if (phaseRef.current !== 'edit') return;
-    setStale(false);
-    setNotice(undefined);
-    setAttempt((value) => value + 1);
+    setPhase('refreshing');
+    const seq = nextRead();
+    readItems().then(
+      (next) => {
+        if (!alive.current || seq !== readSeq.current) return;
+        show(next);
+        setStale(false);
+        setNotice(undefined);
+        setPhase('edit');
+      },
+      () => {
+        if (!alive.current || seq !== readSeq.current) return;
+        setNotice({ type: 'error', text: t.refreshFailed });
+        setPhase('edit');
+      },
+    );
   };
 
   if (load === 'forbidden')
@@ -500,7 +676,7 @@ export function AutoPayoutSettings({
                 <Button
                   autoInsertSpace={false}
                   type="primary"
-                  disabled={phase !== 'unknown'}
+                  disabled={phase !== 'unknown' || cooling}
                   onClick={retry}
                 >
                   {t.unknownRetry}
@@ -521,7 +697,13 @@ export function AutoPayoutSettings({
           {...(stale && notice.type === 'error'
             ? {
                 action: (
-                  <Button autoInsertSpace={false} size="small" onClick={refresh}>
+                  <Button
+                    autoInsertSpace={false}
+                    size="small"
+                    loading={phase === 'refreshing'}
+                    disabled={phase !== 'edit' && phase !== 'refreshing'}
+                    onClick={refresh}
+                  >
                     {t.refresh}
                   </Button>
                 ),
@@ -554,7 +736,7 @@ export function AutoPayoutSettings({
             <Button
               autoInsertSpace={false}
               type="primary"
-              disabled={locked || (changed === 0 && !hasErrors)}
+              disabled={locked || cooling || (changed === 0 && !hasErrors)}
               onClick={save}
             >
               {t.save}
