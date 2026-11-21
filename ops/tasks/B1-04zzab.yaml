@@ -1,0 +1,24 @@
+id: B1-04zzab
+repo: rebate-platform
+title: 'B1-04zzab：淘宝违规解冻（punish_status=1）不当处罚扣回——实测前不恢复、不补钱，解冻信号进待处理表并告警（BR-FUND-22 决-06 实测前 A；D10-2335 (c3)）'
+type: impl
+# 2026-11-21 be 入账（编排 D10-2335 (c3) / D10-2402；核对报告 couli-runs/UNION-FIELDS-1121/report.md 第 11 行：taobao/punishments.ts:281 与 orders/jobs/rights-sync.ts:10–12 把 punish 窗口每一行都当 PUNISH SUCCEEDED 写，punish_status=1 解冻也全额扣回）。
+# 规划/12 §1.3 处罚表「解冻」行（SPEC_REF 6c631c258963 第 318 行）：实测前不恢复、不补钱，解冻信号按映射表外的码进待处理表并告警、留下证据；实测证实后按决-06 B 只生成差错单、人工处理（不在本单）。
+# 范围：punish.window 遇 punish_status=1 的行不经 rights 写者走 PUNISH 扣回；改写待处理表（与表外码同一张，原因可辨认为处罚解冻）并告警；已有的 PUNISH 扣回不撤销、不恢复；punish_status=0 照旧。资金单：Claude 实现、独立方写测、money 评审。
+refs: [BR-FUND-22, BR-FUND-02]
+refs_hash:
+  BR-FUND-22: c9930aaf2459
+  BR-FUND-02: 382c4075d2cb
+deps: []
+paths:
+  - 'apps/api/src/modules/orders/**'
+  - 'apps/api/src/modules/union/infra/taobao/punishments.ts'
+  - 'apps/api/src/modules/union/infra/taobao/punishments.test.ts'
+test_paths:
+  - 'test/spec/orders/taobao-punish-unfreeze/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/taobao-punish-unfreeze/**'
+status: todo
