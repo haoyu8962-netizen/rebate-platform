@@ -78,6 +78,7 @@ const INVALID = [
   'me-external-page.json',
   'me-icon-and-image.json',
   'me-icon-digest-unbound.json',
+  'me-invite-share.json',
   'me-item-end-at-utc.json',
   'me-items-over-limit.json',
   'me-labor-agreement.json',

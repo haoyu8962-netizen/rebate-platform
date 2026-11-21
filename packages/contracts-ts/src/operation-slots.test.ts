@@ -366,11 +366,7 @@ const vectors = readJson<{
   popup: { name: string; popup: Json; expect: { decisionRaw: string } }[];
 }>(new URL('../../../specs/client/home-sdui-vectors.json', import.meta.url));
 
-/** A legacy string badge (CT-07a client vectors), not the BR-TEXT-29 badge object. */
-const hasStringBadge = (section: Json): boolean =>
-  items(section).some((item) => typeof item['badge'] === 'string');
-
-it('[AC-CT-27] 兼容：客户端第 1 版向量里首页的金刚区、商品滚动卡与纯展示弹窗照旧通过（icon 为图片地址字符串、props.more_action、items 为空的弹窗）；只有字符串徽标按 BR-TEXT-29 拒收，换成徽标对象即通过', () => {
+it('[AC-CT-27] 兼容：客户端向量里首页的金刚区、商品滚动卡与纯展示弹窗全部通过（icon 为图片地址字符串、props.more_action、items 为空的弹窗、徽标为对象）', () => {
   const sections = Object.values(vectors.goldenPages)
     .flatMap((p) => p.sections)
     // ad_label 只许 banner 是 CT-07a 的既有规则（BR-TEXT-17），与本单无关，带它的向量不在比较范围。
@@ -383,19 +379,18 @@ it('[AC-CT-27] 兼容：客户端第 1 版向量里首页的金刚区、商品�
   expect(items(legacyIcon).some((item) => typeof item['icon'] === 'string')).toBe(true);
   const scrollVector = vectors.goldenPages['product_scroll']!.sections[0]!;
   expect((scrollVector['props'] as Json)['more_action']).toBeDefined();
-  for (const section of sections) {
-    if (section['type'] === 'icon_grid' && hasStringBadge(section)) {
-      // 与 BR-TEXT-29（徽标只有无 / 红点 / 至多 2 字三种，首页金刚区同）及规则测试 AC-CT-27#8 冲突：只列不改。
-      expectSections('home', [clone(section)], false);
-      const fixed = clone(section);
-      for (const item of items(fixed)) {
-        if (typeof item['badge'] === 'string') {
-          item['badge'] = { kind: 'text', text: item['badge'] };
-        }
-      }
-      expectSections('home', [fixed], true);
-      continue;
+  // 向量里的徽标已是 BR-TEXT-29 的徽标对象（D10-2433 ①），没有字符串徽标。
+  expect(items(legacyIcon).map((item) => item['badge'])).toContainEqual({
+    kind: 'text',
+    text: '测试',
+  });
+  for (const section of Object.values(vectors.goldenPages).flatMap((p) => p.sections)) {
+    const list = (section['data_source'] as { items?: Json[] } | undefined)?.items ?? [];
+    for (const item of list) {
+      expect(typeof item['badge'], `${String(section['id'])} badge`).not.toBe('string');
     }
+  }
+  for (const section of sections) {
     expectSections('home', [clone(section)], true);
   }
   // 纯展示弹窗（只有 props.image、items 为 []）是合法 section，客户端向量预期照常展示。
@@ -414,9 +409,29 @@ it('[AC-CT-27] 兼容：客户端第 1 版向量里首页的金刚区、商品�
   expect(description).not.toMatch(/a section left with no item is not sent/);
 });
 
-it('[AC-CT-27] 核心入口（BR-TEXT-28 不可配清单，含协议入口 LaborAgreement）在 me 与 search 一律拒收，空参数也拒；golden 反例只因签署协议一格被拒', () => {
+it('[AC-CT-27] 首页金刚区的字符串徽标（如 "新"）拒收：徽标只收对象（无 / 红点 / 至多 2 字），保存时不做转换（BR-TEXT-29，D10-2433 ①）', () => {
+  for (const badge of ['新', '测试', '']) {
+    const icons = homeSection('icon_grid');
+    items(icons)[0]!['badge'] = badge;
+    expectSections('home', [icons], false);
+  }
+  const icons = homeSection('icon_grid');
+  items(icons)[0]!['badge'] = { kind: 'text', text: '新' };
+  expectSections('home', [icons], true);
+});
+
+it('[AC-CT-27] 核心入口（BR-TEXT-28 不可配清单，含协议入口 LaborAgreement 与「推广与邀请」组的 ShareHub / InviteShare / Earnings）在 me 与 search 一律拒收，空参数也拒；golden 反例只因签署协议 / 邀请好友一格被拒', () => {
   const core = (schema['$defs'] as Record<string, { enum: string[] }>)['core_route']!.enum;
-  for (const route of ['LaborAgreement', 'Agreement', 'AuthManage', 'PrivacyCenter', 'Withdraw']) {
+  for (const route of [
+    'LaborAgreement',
+    'Agreement',
+    'AuthManage',
+    'PrivacyCenter',
+    'Withdraw',
+    'InviteShare',
+    'ShareHub',
+    'Earnings',
+  ]) {
     expect(core, route).toContain(route);
   }
   const routes = readJson<{ routes: Record<string, unknown> }>(
@@ -437,13 +452,18 @@ it('[AC-CT-27] 核心入口（BR-TEXT-28 不可配清单，含协议入口 Labor
       expectSections('home', [icons], true);
     }
   }
-  const bad = invalid('me-labor-agreement.json');
-  expect(page(bad)).toBe(false);
-  const fixed = clone(bad);
-  const last = items(fixed.sections[0]!).at(-1)!;
-  expect(last['action']).toEqual({ route: 'LaborAgreement', params: {} });
-  last['action'] = IN_APP[0];
-  expect(page(fixed)).toBe(true);
+  for (const [file, route] of [
+    ['me-labor-agreement.json', 'LaborAgreement'],
+    ['me-invite-share.json', 'InviteShare'],
+  ] as const) {
+    const bad = invalid(file);
+    expect(page(bad), file).toBe(false);
+    const fixed = clone(bad);
+    const last = items(fixed.sections[0]!).at(-1)!;
+    expect(last['action']).toEqual({ route, params: {} });
+    last['action'] = IN_APP[0];
+    expect(page(fixed), file).toBe(true);
+  }
 });
 
 it('[AC-CT-27] 热词、关键词直达的关键词与默认词至少含一个非空白字符：只含空格（含全角空格）的条目拒收（20001，示例在案）；首尾带空格但有字照收', () => {

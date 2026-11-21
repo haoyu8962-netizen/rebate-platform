@@ -394,7 +394,7 @@
     },
     "core_route": {
       "type": "string",
-      "$comment": "Core entries no operation slot may show (BR-TEXT-28 不可配清单): orders (OrderList, OrderDetail, FindOrder), wallet and earnings (Wallet, Earnings, Ledger), withdrawal and its steps (Withdraw, WithdrawRecords, PayoutAccount, RealName, Reverify), settings (Settings), privacy and authorization (PrivacyCenter, DeleteAccount, DataCopy, AuthManage) and agreements (Agreement, LaborAgreement), whatever their params (empty params included). The server checks the same list again when saving.",
+      "$comment": "Core entries no operation slot may show (BR-TEXT-28 不可配清单): orders (OrderList, OrderDetail, FindOrder), wallet and earnings (Wallet, Earnings, Ledger), withdrawal and its steps (Withdraw, WithdrawRecords, PayoutAccount, RealName, Reverify), the fixed 推广与邀请 group (ShareHub, InviteShare; Earnings above), settings (Settings), privacy and authorization (PrivacyCenter, DeleteAccount, DataCopy, AuthManage) and agreements (Agreement, LaborAgreement), whatever their params (empty params included). The server checks the same list again when saving.",
       "enum": [
         "OrderList",
         "OrderDetail",
@@ -407,6 +407,8 @@
         "PayoutAccount",
         "RealName",
         "Reverify",
+        "ShareHub",
+        "InviteShare",
         "Settings",
         "PrivacyCenter",
         "DeleteAccount",
