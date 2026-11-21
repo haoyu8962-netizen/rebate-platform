@@ -13,7 +13,7 @@ type: impl
 # 告警（日志行，字段不含个人信息）：每次自动更正警告级；同一账户 30 天内第二次被自动更正、或一轮更正数 ≥ ceil(max_accounts / 2)（默认 3 → 2）升最高级；被护栏拦下一律最高级（D10-2224 ③ / D10-2235 ②）。指标 couli_ledger_auto_corrected_total{app_id}（platform/metrics，ledger 目前无指标，照 credit-postcheck 先例）。
 # 日结存缺行或不平（01 的 daily_balance / missing_daily_balance）本身：账户没有余额缓存偏差时只告警并重跑生成，不冻结（BR-FUND-19 细则）；有偏差的按上面 (b) 处理。
 # 与 B2-02zc 的交集（D10-2298）：被拦账户走「登记差错单」那条路径，以及「已有未结 ledger_mismatch 的账户本轮核对得上被自动更正时不新开、不关那张旧单（人工关单解冻）」——B2-02zc 未合并，写测书与实现标明「等 B2-02zc 合并后变基」，相关用例先按 B2-02zc 的口径写。
-# 补丁 1（D10-2299 / D10-2300）：配置键由前置 B2-02zda 登记（deps 加 B2-02zda，本单不再改 config-registry）；测试把余额缓存改坏须直写 account_balances，paths 加 tools/guard/ledger-writers.allow.txt（D10-2292；test_paths 只收规则测试资产，故由实现方在实现提交里加本目录一行，land 时随 PR 过 owner 标签）。
+# 补丁 1（D10-2299 / D10-2300）：配置键由前置 B2-02zda 登记（deps 加 B2-02zda，本单不再改 config-registry）；测试把余额缓存改坏须直写 account_balances，paths 加 tools/guard/ledger-writers.allow.txt（D10-2292；test_paths 只收规则测试资产，故由实现方在实现提交里加本目录一行，land 时随 PR 过 owner 标签）。补丁 2：paths 加 platform/metrics/registry.ts（指标族渲染处，照 credit-postcheck 在同文件登记 couli_ledger_auto_corrected_total）。
 refs: [BR-FUND-19, BR-FUND-16]
 refs_hash:
   BR-FUND-19: a918eec09fff
@@ -23,6 +23,7 @@ paths:
   - 'apps/api/src/modules/ledger/**'
   - 'apps/api/src/modules/platform/metrics/ledger-auto-correct*.ts'
   - 'apps/api/src/modules/platform/metrics/collect.ts'
+  - 'apps/api/src/modules/platform/metrics/registry.ts'
   - 'apps/api/src/app.module.ts'
   - 'tools/guard/ledger-writers.allow.txt'
 test_paths:
