@@ -7,7 +7,7 @@ type: test-change
 # 完成 2026-11-11（#3178，头 68a7bb21b774）：service_fee_bp 两键登记（object、无种子行、不填费率），冻结配置清单只追加；新鲜 Claude 改，Codex money 只读复核 pass。
 refs: [BR-CALC-03]
 refs_hash:
-  BR-CALC-03: f2d8ebebbc0c
+  BR-CALC-03: cd58e7d6c02b
 deps: [B1-18ct]
 paths:
   - 'apps/api/src/modules/content/domain/config-registry.ts'
