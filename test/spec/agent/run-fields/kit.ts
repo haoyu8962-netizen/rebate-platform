@@ -109,6 +109,15 @@ export async function runtimeRig(
     vi.spyOn(bodyAssembly, 'createStreamAgentBody').mockImplementation((deps) =>
       original({
         ...deps,
+        business: {
+          ...deps.business,
+          safety: {
+            inputCheck: deps.inputCheck,
+            review: deps.review,
+            ...deps.business.safety,
+            outputReview: { forRun: () => ({ review: options.review ?? (async () => 'pass') }) },
+          },
+        },
         route: async () => modelRoute,
         prompt: {
           current: async () =>
