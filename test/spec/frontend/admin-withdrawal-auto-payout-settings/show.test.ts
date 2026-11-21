@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, waitFor, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
-import { card } from '../admin-payouts-readonly/helpers.ts';
+import { card, panelOf, selectTab } from '../admin-payouts-readonly/helpers.ts';
 import {
   BUSINESS_GRANTS,
   ENABLE_CHECK_ITEMS,
@@ -28,9 +28,11 @@ import {
   accountOf,
   fenOfShown,
   registry,
+  rowOf,
   serverFor,
   type BatchEntry,
   type ConfigRow,
+  type PayoutServer,
 } from './fixtures.ts';
 import {
   FLOW_TIMEOUT,
@@ -43,7 +45,9 @@ import {
   handlersWithoutRole,
   input,
   isShown,
+  itemReads,
   main,
+  mount,
   openSettings,
   save,
   settled,
@@ -306,9 +310,47 @@ it(
   },
 );
 
+/**
+ * Reopens 「自动到账设置」 on a fresh mount of the shell over `server` (the page's own state is gone;
+ * the flags shown can only come from a new config-items read answering what the server holds now).
+ */
+async function reopen(server: PayoutServer): Promise<HTMLElement> {
+  cleanup();
+  const before = itemReads(server).length;
+  await mount(server, SUPER);
+  const panel = await panelOf(await selectTab(main(), TAB.auto));
+  await waitFor(() =>
+    expect(itemReads(server).length, 'the reopened tab reads the items again').toBeGreaterThan(
+      before,
+    ),
+  );
+  await settled(server);
+  await waitFor(() => expect(input(panel, LABEL.maxAmount)).toBeTruthy());
+  return panel;
+}
+
+/**
+ * Every BR-WDR-29 label of the 「本系统附加」 group, one by one: exactly the codes of `ticked` (and the
+ * fixed blacklist_hit) are checked, every other label is not.
+ */
+async function onlyTicked(
+  panel: HTMLElement,
+  ticked: readonly string[],
+  why: string,
+): Promise<void> {
+  const extra = card(panel, GROUP.extra);
+  const wanted = (code: string): boolean => code === 'blacklist_hit' || ticked.includes(code);
+  await waitFor(() => {
+    for (const code of FLAG_CODES)
+      expect(flagBox(extra, FLAG_NAME[code]).checked, `${why}: ${code}`).toBe(wanted(code));
+  });
+  for (const code of FLAG_CODES)
+    expect(flagBox(extra, FLAG_NAME[code]).checked, `${why}: ${code}`).toBe(wanted(code));
+}
+
 it(
-  '[AC-F1-08ap-SHOW#8] 阻断风险标签恰为 BR-WDR-29 全部 11 个标签各一个勾选框，除「命中黑名单」外都可勾；勾上此前未覆盖的「当日有入账」「60 天失效占比高」「60 天高佣占比高」「30 天提现额与 60 天确认收货返利比例异常」「收款账号曾属他人」「风险计算失败」后保存：risk_block_flags 恰为原集合加这六个 code（版本 4）',
-  { timeout: FLOW_TIMEOUT },
+  '[AC-F1-08ap-SHOW#8] 阻断风险标签恰为 BR-WDR-29 全部 11 个标签各一个勾选框，除「命中黑名单」外都可勾；勾上此前未覆盖的「当日有入账」「60 天失效占比高」「60 天高佣占比高」「30 天提现额与 60 天确认收货返利比例异常」「收款账号曾属他人」「风险计算失败」后保存：risk_block_flags 恰为原集合加这六个 code（版本 4）；重新打开页签回读时恰这九个标签与「命中黑名单」勾选、「首次提现」未勾',
+  { timeout: MULTI_TIMEOUT },
   async () => {
     const server = serverFor();
     const panel = await openSettings(server, SUPER);
@@ -361,6 +403,12 @@ it(
         'withdraw_vs_received',
       ].sort(),
     );
+    const stored = (rowOf(server, KEY.riskFlags).value as string[]).filter(
+      (code) => code !== 'blacklist_hit',
+    );
+    expect(stored.sort(), 'the server holds the saved set').toEqual([...codes].sort());
+    const again = await reopen(server);
+    await onlyTicked(again, codes, 'read back after saving the six');
   },
 );
 
@@ -372,10 +420,25 @@ function noFlagsStored(): ConfigRow[] {
   return registry().map((row) => (row.key === KEY.riskFlags ? { ...row, value: [] } : row));
 }
 
+/** The registry with exactly `codes` stored as risk_block_flags (version 4). */
+function flagsStored(codes: readonly string[]): ConfigRow[] {
+  return registry().map((row) => (row.key === KEY.riskFlags ? { ...row, value: [...codes] } : row));
+}
+
 it(
-  '[AC-F1-08ap-SHOW#9] 阻断风险标签逐个单独勾选（表驱动列全 BR-WDR-29 除「命中黑名单」外的 10 个标签，已存集合为空）：每次只勾一个、其余不勾，保存后 risk_block_flags 恰多出该标签的 code（「60 天失效占比高」→ invalid_ratio_60d、「60 天高佣占比高」→ high_commission_ratio_60d 等，版本 4）',
-  { timeout: 900_000 },
+  '[AC-F1-08ap-SHOW#9] 阻断风险标签逐个单独勾选（表驱动列全 BR-WDR-29 除「命中黑名单」外的 10 个标签，已存集合为空）：每次只勾一个、其余不勾，保存后 risk_block_flags 恰多出该标签的 code（「60 天失效占比高」→ invalid_ratio_60d、「60 天高佣占比高」→ high_commission_ratio_60d 等，版本 4）；每行保存后重新打开页签，回读时 11 个标签逐个比对、恰该标签与「命中黑名单」勾选；另两行已存集合只含 invalid_ratio_60d / 只含 high_commission_ratio_60d，进页签后恰「60 天失效占比高」/「60 天高佣占比高」勾选',
+  { timeout: 1_800_000 },
   async () => {
+    const storedOnly: readonly (readonly [(typeof OPTIONAL_FLAGS)[number], string])[] = [
+      ['invalid_ratio_60d', FLAG_NAME.invalid_ratio_60d],
+      ['high_commission_ratio_60d', FLAG_NAME.high_commission_ratio_60d],
+    ];
+    for (const [code, name] of storedOnly) {
+      const server = serverFor({ items: flagsStored([code]) });
+      const panel = await openSettings(server, SUPER);
+      await onlyTicked(panel, [code], `stored only ${code}: only ${name} shows ticked`);
+      cleanup();
+    }
     expect(OPTIONAL_FLAGS, 'every BR-WDR-29 label but blacklist_hit').toHaveLength(10);
     const table: readonly (readonly [(typeof OPTIONAL_FLAGS)[number], string])[] =
       OPTIONAL_FLAGS.map((code) => [code, FLAG_NAME[code]] as const);
@@ -401,6 +464,12 @@ it(
       expect(items[0]!.expected_version).toBe(VERSION.flags);
       const codes = (items[0]!.value as string[]).filter((one) => one !== 'blacklist_hit');
       expect(codes, `ticking ${name} adds exactly ${code}`).toEqual([code]);
+      const stored = (rowOf(server, KEY.riskFlags).value as string[]).filter(
+        (one) => one !== 'blacklist_hit',
+      );
+      expect(stored, `the server holds only ${code}`).toEqual([code]);
+      const again = await reopen(server);
+      await onlyTicked(again, [code], `read back after saving ${name}`);
       cleanup();
     }
   },
