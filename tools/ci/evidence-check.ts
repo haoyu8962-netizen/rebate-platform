@@ -9,6 +9,24 @@
 // way guard-git does), with the PR checkout as data: the risk map and the protected-path list
 // come from this script's own checkout, never from the PR.
 //
+//   node tools/ci/evidence-check.ts --early --pr <dir> --task <id> --base <ref> --spec <commit>
+//     [--json]
+//
+// Early shape check (CT-06zzzzzz, D10-2341; run by tools/ops/verify-container.sh --red after
+// red-check): the shape half of the class 1 check below, at the rule-test stage instead of at land.
+// The range is merge-base(<base>, <spec>) → <spec> (the rule-test commit), the ledger is
+// ops/tasks/<id>.yaml at <spec>, the protected-path list this script's own. Every class 1 hit of
+// the range is judged as land judges a hit after spec_commit (class1Hits, then the block /
+// support judgement of modifiedHitProblem: compareModifiedBlocks or supportHitProblem, kits read
+// per side): an added file is not a hit; a modified file needs a modify_existing entry that lets
+// its change through; a removal or a rename is a problem, named by its original path. Unlike land
+// it reads no evidence file (absent or invalid alike), does not look up the owner approval label
+// (declared entries are judged as if approved and a note says the label is checked at land) and
+// does not judge the risk level, reviews, runs or trees. A declared file unchanged in the range
+// gets a note. Output { task, base, spec, problems, notes } (--json: one line; otherwise text
+// ending with `evidence shape: N problem(s)`); exit 1 with a problem, 0 without, 2 on usage
+// (also with --head / --head-ref / --pr-number), an unresolvable commit or an unreadable ledger.
+//
 // What is checked, per risk level (computed by tools/guard/lib/risk.ts from the changed paths):
 //   RV0 / RV1  pass; an evidence file for the task, when present, is validated all the same.
 //   RV2        ops/evidence/<id>.json must exist at the head (id from the branch `task/<id>`):
@@ -598,6 +616,24 @@ function modifiedHitProblem(
   if (modifyApprovalProblem(modify, head) !== null) {
     return 'declared in modify_existing, but without the owner approval label';
   }
+  return declaredHitProblem(prDir, from, head, hit, declared, support);
+}
+
+/**
+ * The shape half of modifiedHitProblem (CT-06zzzzzz, D10-2341): why a class 1 hit whose file has
+ * modify_existing entries (`declared` block entries, `support` its file-level support entry) is not
+ * let through from `from` to `head`, the owner approval aside, or null when it is. Shared by the
+ * land check (after the approval) and --early (which cannot see the label).
+ */
+function declaredHitProblem(
+  prDir: string,
+  from: string,
+  head: string,
+  hit: { path: string; status: string },
+  declared: readonly ModifyExistingBlockDeclaration[],
+  support: ModifyExistingSupportDeclaration | undefined,
+): string | null {
+  const names = declared.map((e) => e.test);
   if (hit.status !== 'M') return 'declared in modify_existing, but removed or renamed';
   const before = showOrNull(prDir, from, hit.path);
   const after = showOrNull(prDir, head, hit.path);
@@ -2023,7 +2059,170 @@ export function checkEvidence(input: EvidenceInput): EvidenceReport {
   };
 }
 
+/**
+ * Input of the early shape check (CT-06zzzzzz, D10-2341): the rule-test worktree, the task, the
+ * base the red run used and the rule-test commit (any ref git resolves in `prDir`).
+ */
+export type EarlyInput = {
+  prDir: string;
+  task: string;
+  base: string;
+  spec: string;
+  /** The checkout whose protected-path list is used (this script's own). */
+  trusted: string;
+};
+
+/** Result of the early shape check: `base` and `spec` resolved to full commit ids. */
+export type EarlyReport = {
+  task: string;
+  base: string;
+  spec: string;
+  problems: string[];
+  notes: string[];
+};
+
+/** The full commit id of `ref` in `prDir`; throws (usage, exit 2) when it is not a commit. */
+function resolveCommit(prDir: string, flag: string, ref: string): string {
+  if (ref === '' || ref.startsWith('-')) throw new Error(`--${flag} must be a commit or a ref`);
+  const res = tryGit(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { cwd: prDir });
+  const sha = res.stdout.trim();
+  if (res.status !== 0 || !SHA.test(sha)) {
+    throw new Error(`--${flag} ${ref} is not a commit in ${prDir}`);
+  }
+  return sha;
+}
+
+/**
+ * The early shape check (CT-06zzzzzz, D10-2341): the class 1 hits of merge-base(base, spec) → spec
+ * (class1Hits, as the land check takes them after spec_commit) against the modify_existing of the
+ * ledger at `spec`, each declared hit judged by declaredHitProblem, the land check's judgement
+ * without the owner approval (the label is looked up at land only; registered entries get a note).
+ * A modified hit without an entry, a removal and a rename are problems (a rename is reported on
+ * its original path, the removal side, as well as on its target when that is class 1). A file the
+ * ledger declares that did not change in the range gets a note. No evidence file is read. Throws
+ * (exit 2) when a commit cannot be resolved or the ledger at `spec` cannot be read.
+ */
+export function checkEarly(input: EarlyInput): EarlyReport {
+  if (!TASK_ID.test(input.task)) throw new Error(`--task ${input.task} is not a task id`);
+  const base = resolveCommit(input.prDir, 'base', input.base);
+  const spec = resolveCommit(input.prDir, 'spec', input.spec);
+  const rel = `ops/tasks/${input.task}.yaml`;
+  const text = showOrNull(input.prDir, spec, rel);
+  if (text === null) throw new Error(`cannot read ${rel} at the rule-test commit ${spec}`);
+  const ledger = parseTaskFile(text, rel);
+  if (ledger.id !== input.task) {
+    throw new Error(`${rel} at ${spec} is the ledger of ${ledger.id}, not ${input.task}`);
+  }
+  const cfg = loadProtected(input.trusted);
+  const mergeBase = git(['merge-base', base, spec], { cwd: input.prDir });
+  const entries = ledger.modify_existing;
+  const problems: string[] = [];
+  const notes: string[] = [];
+  // Old path → new path of the renames in the range, to name both sides of a rename.
+  const all = changedBetween(input.prDir, mergeBase, spec);
+  const renamedTo = new Map<string, string>();
+  const renamedFrom = new Map<string, string>();
+  all.forEach((c, i) => {
+    const old = all[i + 1];
+    if (c.status === 'R' && old !== undefined && old.status === 'D') {
+      renamedTo.set(old.path, c.path);
+      renamedFrom.set(c.path, old.path);
+    }
+  });
+  const hits = class1Hits(input.prDir, mergeBase, spec, cfg);
+  for (const hit of hits) {
+    const declared = blockEntries(entries).filter((e) => e.file === hit.path);
+    const support = supportEntries(entries).find((e) => e.file === hit.path);
+    const to = renamedTo.get(hit.path);
+    const from = renamedFrom.get(hit.path);
+    const what =
+      hit.status === 'R'
+        ? `renamed from ${from ?? 'another path'}`
+        : hit.status === 'D'
+          ? to === undefined
+            ? 'removed'
+            : `removed (renamed to ${to})`
+          : 'modified';
+    const at = `${hit.path} (${hit.status}, ${what})`;
+    if (declared.length === 0 && support === undefined) {
+      problems.push(
+        hit.status === 'M'
+          ? `${at}: undeclared change of a frozen class 1 file, not declared in the ledger's modify_existing`
+          : `${at}: class 1 files are add-only, a removal or rename is refused whether or not modify_existing declares it (not declared)`,
+      );
+      continue;
+    }
+    const why = declaredHitProblem(input.prDir, mergeBase, spec, hit, declared, support);
+    if (why !== null) problems.push(`${at}: ${why}`);
+  }
+  if (entries.length > 0) {
+    notes.push(
+      `the owner approval label (owner-approved-<head 12>) is not checked here: a local run cannot see it, land looks it up; the ${entries.length} modify_existing entr${entries.length === 1 ? 'y was' : 'ies were'} judged as if approved`,
+    );
+  }
+  const hitPaths = new Set(hits.map((h) => h.path));
+  for (const file of [...new Set(entries.map((e) => e.file))]) {
+    if (!hitPaths.has(file)) {
+      notes.push(
+        `${file}: declared in modify_existing but unchanged from the merge base to the rule-test commit (not a problem here)`,
+      );
+    }
+  }
+  return { task: input.task, base, spec, problems, notes };
+}
+
+/** `--early` (CT-06zzzzzz): its own arguments; --head, --head-ref and --pr-number are refused. */
+function earlyMain(argv: readonly string[]): number {
+  const usage =
+    'usage: evidence-check.ts --early --pr <dir> --task <id> --base <ref> --spec <commit> [--json]';
+  const values = new Map<string, string>();
+  let json = false;
+  let early = false;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] ?? '';
+    if (arg === '--json' || arg === '--early') {
+      if (arg === '--json') json = true;
+      else if (early) throw new Error(usage);
+      else early = true;
+      continue;
+    }
+    const value = argv[i + 1];
+    if (
+      !['--pr', '--task', '--base', '--spec'].includes(arg) ||
+      value === undefined ||
+      values.has(arg)
+    ) {
+      throw new Error(usage);
+    }
+    values.set(arg, value);
+    i++;
+  }
+  const prDir = values.get('--pr');
+  const task = values.get('--task');
+  const base = values.get('--base');
+  const spec = values.get('--spec');
+  if (prDir === undefined || task === undefined || base === undefined || spec === undefined) {
+    throw new Error(`--pr, --task, --base and --spec are required; ${usage}`);
+  }
+  const report = checkEarly({
+    prDir: resolve(prDir),
+    task,
+    base,
+    spec,
+    trusted: resolve(import.meta.dirname, '../..'),
+  });
+  if (json) {
+    console.log(JSON.stringify(report));
+  } else {
+    for (const note of report.notes) console.log(`evidence-check --early: note: ${note}`);
+    for (const problem of report.problems) console.log(`evidence-check --early: ${problem}`);
+    console.log(`evidence shape: ${report.problems.length} problem(s)`);
+  }
+  return report.problems.length === 0 ? 0 : 1;
+}
+
 async function main(argv: readonly string[]): Promise<number> {
+  if (argv.includes('--early')) return earlyMain(argv);
   const values = new Map<string, string>();
   let json = false;
   for (let i = 0; i < argv.length; i++) {

@@ -8,6 +8,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest';
 import {
   CI_REFUSED,
   MONEY_PATHS,
+  checkEarly,
   checkEvidence,
   engineProblem,
   evidenceProblems,
@@ -3930,4 +3931,97 @@ it('[CT-06zzzzzv] expectedRedFiles: the risk-state step-up row declared by its f
   expect(ruleTestsLeftOut(files, read, { ...ledger, modify_existing: byBase }).expected).toEqual(
     files,
   );
+});
+
+// CT-06zzzzzz (D10-2341): the early shape check, merge-base(base, spec) → spec against the ledger
+// at spec; no evidence file, no owner label. (The rule tests of test/spec/ci/evidence-check-early
+// cover the CLI; these the cases next to them.)
+const EARLY_FROZEN = 'test/spec/identity/early/frozen.test.ts';
+const earlyLedger = (modifyExisting = ''): string =>
+  [
+    'id: X1-07',
+    'repo: rebate-platform',
+    'title: early shape fixture',
+    'type: guard-change',
+    'refs: []',
+    'refs_hash: {}',
+    'deps: []',
+    'paths:',
+    "  - 'tools/ci/evidence-check.ts'",
+    'test_paths:',
+    "  - 'test/spec/ci/early/**'",
+    'impl: claude',
+    'tester: codex',
+    'accept:',
+    "  - 'pnpm verify'",
+    'status: todo',
+    ...(modifyExisting === '' ? [] : ['modify_existing:', modifyExisting]),
+    '',
+  ].join('\n');
+const EARLY_SUPPORT = [
+  `  - file: '${EARLY_FROZEN}'`,
+  '    scope: support',
+  '    reason: tighten_only',
+  '    ruling: D10-2341',
+  '    note: shared setup only',
+].join('\n');
+
+/** A fixture repository: EARLY_FROZEN on main, then a task branch commit with `files`. */
+function earlyRepo(name: string, files: Record<string, string>, rename?: [string, string]) {
+  const dir = join(SCRATCH, `early-${name}`);
+  mkdirSync(dir, { recursive: true });
+  git(dir, ['init', '-q', '-b', 'main']);
+  write(dir, { [EARLY_FROZEN]: "import { it } from 'vitest';\nit('[AC-X1-07#1] t', () => {});\n" });
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '-q', '-m', 'base']);
+  const mainSha = git(dir, ['rev-parse', 'HEAD']);
+  git(dir, ['checkout', '-q', '-b', 'task/X1-07']);
+  if (rename !== undefined) {
+    mkdirSync(dirname(join(dir, rename[1])), { recursive: true });
+    git(dir, ['mv', rename[0], rename[1]]);
+  }
+  write(dir, files);
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '-q', '-m', 'rule tests']);
+  return { dir, mainSha, spec: git(dir, ['rev-parse', 'HEAD']) };
+}
+
+it('[CT-06zzzzzz] checkEarly reports a frozen file renamed out of the class 1 paths by its original path, even when the ledger declares it', () => {
+  const moved = 'notes/frozen.test.ts';
+  const { dir, mainSha, spec } = earlyRepo(
+    'rename-out',
+    { 'ops/tasks/X1-07.yaml': earlyLedger(EARLY_SUPPORT) },
+    [EARLY_FROZEN, moved],
+  );
+  const report = checkEarly({ prDir: dir, task: 'X1-07', base: 'main', spec, trusted: REPO });
+  expect(report).toMatchObject({ task: 'X1-07', base: mainSha, spec });
+  expect(report.problems).toHaveLength(1);
+  expect(report.problems[0]).toContain(EARLY_FROZEN);
+  expect(report.problems[0]).toContain(`renamed to ${moved}`);
+  expect(report.problems[0]).toMatch(/removed or renamed/u);
+});
+
+it('[CT-06zzzzzz] checkEarly passes an untouched declared file with a note, notes the label once, and ignores an evidence file', () => {
+  const { dir, spec } = earlyRepo('declared-unchanged', {
+    'ops/tasks/X1-07.yaml': earlyLedger(EARLY_SUPPORT),
+    'ops/evidence/X1-07.json': 'not json\n',
+    'test/spec/ci/early/new.test.ts':
+      "import { it } from 'vitest';\nit('[AC-X1-07#2] n', () => {});\n",
+  });
+  const report = checkEarly({ prDir: dir, task: 'X1-07', base: 'main', spec, trusted: REPO });
+  expect(report.problems).toEqual([]);
+  expect(report.notes).toHaveLength(2);
+  expect(report.notes.filter((n) => n.includes('owner-approved-'))).toHaveLength(1);
+  expect(report.notes.find((n) => n.startsWith(EARLY_FROZEN))).toMatch(/unchanged/u);
+});
+
+it("[CT-06zzzzzz] checkEarly refuses (throws, exit 2) a ledger at spec that is another task's or missing, and an unresolvable spec", () => {
+  const { dir, spec } = earlyRepo('ledger', {
+    'ops/tasks/X1-07.yaml': earlyLedger().replace('id: X1-07', 'id: X1-08'),
+  });
+  const run = (task: string, at: string) => () =>
+    checkEarly({ prDir: dir, task, base: 'main', spec: at, trusted: REPO });
+  expect(run('X1-07', spec)).toThrow(/invalid task file|ledger of X1-08/u);
+  expect(run('X1-09', spec)).toThrow(/cannot read ops\/tasks\/X1-09\.yaml/u);
+  expect(run('X1-07', 'f'.repeat(40))).toThrow(/is not a commit/u);
 });
