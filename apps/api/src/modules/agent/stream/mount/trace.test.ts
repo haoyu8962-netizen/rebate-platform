@@ -233,3 +233,78 @@ it('[AC-B3-08q#1][AC-B3-08zc#1][BR-AI-19] storedCard（随终态写库）：earn
   const notice = card('c2');
   expect(storedCard(notice)).toBe(notice);
 });
+
+it('[AC-B3-08t#5][AC-B3-08t#10] 记录器（runFields）：终态取意图、输入通过与模型使用，留痕带耗时、用量与过滤', async () => {
+  const q = queue();
+  let now = 1_000;
+  const clock = { now: () => new Date(now) };
+  const recorder = createRunTraceRecorder({ queue: q, runFields: { clock } as never });
+  const texts: string[] = [];
+  const ctx = { ...context(), text: (delta: string) => texts.push(delta) } as unknown as RunContext;
+  const body = recorder.body(input(), async (inner) => {
+    recorder.inputPassed(RUN);
+    now += 137;
+    inner.text('合成');
+    now += 284;
+    recorder.sink.record(RUN, {
+      ...trace([{ name: 'search_products', args: { q: '合成' }, status: 'ok' }], 'synthetic-plus'),
+      usage: { input_tokens: 32, output_tokens: 18 },
+      filter_hits: ['url', 'amount', 'url'],
+      output_filtered: true,
+      output_truncated: true,
+    });
+    return DONE;
+  });
+  expect(await body(ctx)).toEqual(DONE);
+  expect(texts).toEqual(['合成']);
+  expect(recorder.settleFields(RUN)).toEqual({
+    intent: 'search',
+    inputPassed: true,
+    modelUsed: true,
+  });
+  // Taken once: a second settle gets nothing.
+  expect(recorder.settleFields(RUN)).toBeUndefined();
+  await flushed();
+  expect(q.persist.mock.calls[0]?.[0].runFields).toEqual({
+    model: 'synthetic-plus',
+    input_tokens: 32,
+    output_tokens: 18,
+    ttft_ms: 137,
+    latency_ms: 421,
+    filter_hits: ['url', 'amount'],
+    output_truncated: true,
+    page_guide_reject_reason: null,
+  });
+});
+
+it('[AC-B3-08t#6] 记录器（runFields）：降级结果不记模型；核心未留痕时模型使用未知', async () => {
+  const q = queue();
+  const clock = { now: () => new Date(0) };
+  const recorder = createRunTraceRecorder({
+    queue: q,
+    runFields: { clock } as never,
+  });
+  const degraded = recorder.body(input(), async () => {
+    recorder.sink.record(RUN, { ...trace([], 'synthetic-plus'), degraded: true });
+    return DONE;
+  });
+  await degraded({ ...context(), text: () => undefined } as unknown as RunContext);
+  expect(recorder.settleFields(RUN)).toEqual({
+    intent: null,
+    inputPassed: false,
+    modelUsed: false,
+  });
+  await flushed();
+  expect(q.persist.mock.calls[0]?.[0].runFields?.model).toBeNull();
+
+  let release!: () => void;
+  const pending = recorder.body(
+    input(),
+    () => new Promise((resolve) => (release = () => resolve(DONE))),
+  );
+  const running = pending({ ...context(), text: () => undefined } as unknown as RunContext);
+  recorder.inputPassed(RUN);
+  expect(recorder.settleFields(RUN)).toEqual({ intent: null, inputPassed: true, modelUsed: null });
+  release();
+  await running;
+});

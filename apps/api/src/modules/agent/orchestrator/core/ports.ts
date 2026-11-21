@@ -212,6 +212,15 @@ export interface OrchestratorTrace extends ToolTraceFragment {
   /** B3-08m · BR-AI-07: true when template text replaced the model's reply (reply-templates.ts);
    * false or absent otherwise. */
   readonly text_replaced_by_template?: boolean;
+  /** B3-08t (BR-AI-19 细则「运行级字段」): input / output tokens of every model answer of the run,
+   * summed (also of an answer not used for the result); absent when no model answered. */
+  readonly usage?: { readonly input_tokens: number; readonly output_tokens: number };
+  /** B3-08t: the run's result came from the no-model path (DegradedPath.run, or the entry's end
+   * without a model): no model output was used, even when a model answered before. */
+  readonly degraded?: true;
+  /** B3-08t: the no-model path served the message without an intent (greetings only, no product
+   * word: no search); the trace intent is unchanged, agent_runs.intent stays null. */
+  readonly degraded_unserved?: true;
 }
 
 export interface RunTraceSink {

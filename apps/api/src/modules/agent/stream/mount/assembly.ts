@@ -75,6 +75,7 @@ import type { AgentEarningsProvidedPorts } from './earnings.ts';
 import { createScenarioEntryReaders } from './entry.ts';
 import type { ScenarioEntryReaders } from '../../orchestrator/entry/index.ts';
 import type { DailyCounter } from './orders.ts';
+import { recordIntentVerdict } from './trace.ts';
 
 /**
  * What the composition root (app.module, stream entry) provides from union / catalog / linking /
@@ -436,8 +437,10 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
       // itself (core/reply-templates.ts) and does not consult this port for them.
       calls: async () => [],
       // B3-08q: the cards this port writes reach the run trace (./trace.ts) as written frames.
-      // TODO(规划/11 §2.3): 意图 trace 的 intent / page_guide_reject_reason 写入 agent_runs — blocked on agent_runs 的 run 级 trace 字段写者（stream/pg，另单）
-      record: () => undefined,
+      // B3-08t (BR-AI-19 细则「运行级字段」): the verdict (server-checked intent, page guide
+      // rejection reason) goes to the run's recorder: intent with the terminal state, the reason
+      // with the trace.
+      record: (appId, runId, value) => recordIntentVerdict(appId, runId, value),
     },
     clarification: createClarification(continuation),
     continuation: {
