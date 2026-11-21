@@ -833,7 +833,7 @@ export const withdrawalsTexts = {
       count: '请输入不小于 0 的整数',
       percent: '请输入 0–100 的百分比，最多两位小数',
       required: '请填写',
-      window: '结束时间须晚于开始时间',
+      timeWindow: '结束时间须晚于开始时间',
       option: '请选择列出的选项',
       server: '服务端校验不接受该值，请修改后再保存',
     },

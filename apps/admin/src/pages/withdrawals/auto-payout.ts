@@ -57,7 +57,7 @@ export interface AutoPayoutEntry {
 
 /** Why a field was refused before sending (the page maps it to its text). */
 export type AutoPayoutError =
-  'amount' | 'platformAmount' | 'count' | 'percent' | 'required' | 'window' | 'option';
+  'amount' | 'platformAmount' | 'count' | 'percent' | 'required' | 'timeWindow' | 'option';
 
 /** The checked draft: the changed entries, or the message of each wrong key. */
 export type AutoPayoutCheck =
@@ -329,8 +329,8 @@ export function checkDraft(
   const start = timeOf(AUTO_KEY.windowStart);
   const end = timeOf(AUTO_KEY.windowEnd);
   if (start !== undefined && end !== undefined && !(end > start)) {
-    errors[AUTO_KEY.windowStart] ??= 'window';
-    errors[AUTO_KEY.windowEnd] ??= 'window';
+    errors[AUTO_KEY.windowStart] ??= 'timeWindow';
+    errors[AUTO_KEY.windowEnd] ??= 'timeWindow';
   }
 
   if (Object.keys(errors).length > 0) return { errors };
