@@ -1,0 +1,32 @@
+id: CT-06zzzzzz
+repo: rebate-platform
+title: CT-06zzzzzz（FU-EVIDENCE-CHECK-EARLY）：证据检查的形状部分提前到先红——evidence-check 加 --early（不要证据文件，按 merge-base → 规则测试提交判冻结文件改动与台账 modify_existing 块 / 支撑条目是否相符），verify-container --red 在 red-check 之后顺带跑一遍、结果写进先红目录，不改先红退出码（D10-2341）
+type: guard-change
+# 2026-11-21 w1 入账（D10-2341：F1-08an 支撑文件形状到 land 才被 evidence-check 拦，写测阶段没人跑它）。
+# ① tools/ci/evidence-check.ts 加 --early --pr <dir> --task <id> --base <ref> --spec <sha> [--json]：不读证据文件；
+#    对 merge-base(base, spec) → spec 的第一类命中逐个按 modifiedHitProblem / supportHitProblem 同一套判定（台账从 --pr 的 HEAD 读，
+#    与先红同口径），modify_existing 台账记录的一致性照 modifyRecordProblems 能离线判的部分判；owner 标签本地看不到，只记 note 不算问题。
+#    输出 { task, base, spec, problems, notes }，有 problem 退 1、无退 0、用法错退 2。land 时的完整检查一字不改。
+# ② tools/ops/verify-container.sh --red：red-check 之后用受信根跑 ①，写 red/<n>/evidence-shape.json，日志末尾加一行
+#    「evidence shape: N problem(s)」；① 本身出错只记一行、不影响先红；先红退出码仍是 red-check 的。
+# ③ tools/ops/README.md 写测步骤与 tools/agent/README.md 各加一句：先红后看 evidence-shape.json，有 problem 先改测试再往下走。
+# 门禁改动，按 approvals 16 由编排核后加 owner 标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ci/evidence-check.ts'
+  - 'tools/ci/evidence-check.test.ts'
+  - 'tools/ops/verify-container.sh'
+  - 'tools/ops/verify-container.test.ts'
+  - 'tools/ops/README.md'
+  - 'tools/agent/README.md'
+  - 'ops/tasks/CT-06zzzzzz.yaml'
+test_paths:
+  - 'test/spec/ci/evidence-check-early/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/evidence-check-early/**'
+status: todo
