@@ -322,7 +322,7 @@ it('[AC-CT-27#32] 契约里也有 home 的准入定义：首页既有各类型�
   // 08 BR-TEXT-28 准入表 home 行：现有各类型照旧（个数与位置沿用现有校验）；popup 至多 1 个（原有）。
   // 04 §6.2「运营位」①：每个 page_key 一张准入表，供保存校验与后台表单共用（spec-test r2 S1 #2：
   // 不能只发布 me / search 两张，首页弹窗上限只写在下发根 schema 里）。批 2 的新类型本单不作要求。
-  const all = REGISTERED.map((type) => ({ ...homeSection(type), id: `${type}_1` }));
+  const all: Obj[] = REGISTERED.map((type) => ({ ...homeSection(type), id: `${type}_1` }));
   const popup = all.find((s) => s['type'] === 'popup') as Obj;
   const popup2: Obj = { ...clone(popup), id: 'popup_2' };
   const withoutPopup = all.filter((s) => s['type'] !== 'popup');
