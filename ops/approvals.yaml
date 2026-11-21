@@ -819,3 +819,9 @@ approvals:
     granted: true
     date: '2026-11-21'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-2399，先例第 124–130 条。原因：#467 CI 红 11 条已有冻结规则测试（couli-runs/B3-08t/ci-467/）：A 组 4 条（B3-03g 收尾后重放要 model_snapshot 保留）与本单 run-fields 要求清空直接冲突，正落在 D10-2377 已延后的 model 归属上，按 D10-2380 止损预案拆单，不改 B3-03g 冻结用例；B 组 6 条为实现包装 inputCheck 的缺陷；C 组 1 条授权清单另走台账补丁 modify_existing（#470）。land 前测试机全量 verify（不是 --related）全绿。FU-B3-08T-MODEL-ATTRIBUTION 与 B4 范围改为 model / model_snapshot 的写入、清空与归属整块。止损：任一轮范围内再出 S0 / S1，或全量再撞别的冻结用例，停下报编排。'
+  - id: 134
+    row: 4
+    title: 'F1-08ap 任务专属一次性追加（最后一次）：写规则测试第 5 次（独立方）+ Codex spec-test 增量 1 轮——写测范围写死：test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts 的 [AC-F1-08ap-SHOW#9] 每行保存后重新打开页签、断言回读时只有对应标签勾选（两个占比 code invalid_ratio_60d / high_commission_ratio_60d 的读侧映射）；同文件其余只测写侧、没测回读的同类用例一并补回读断言（同类一次列全）；其余一字不动'
+    granted: true
+    date: '2026-11-21'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审轮次属门禁流程小改动），D10-2421，先例第 118、124、125、128、131、132 条。原因：第 132 条的写测第 4 次（4a432e6c8）补齐 spec-test r2 的 5 条 S1，增量 r3（couli-runs/F1-08ap/review-spec-r3.json）确认全部关闭，只新报 1 条 S1，落在第 4 次新增的 SHOW#9 上（读已存 risk_block_flags 时两个占比 code 互换抓不到，BR-WDR-30 ⑫）；本单台账有 red_exempt，land 要 spec-test 结论 pass。止损：本轮再出新 S1，不再开条目，剩余条目列为实现必满足项，由编排按 D10-2380 的办法写范围裁定后再评一轮。'
