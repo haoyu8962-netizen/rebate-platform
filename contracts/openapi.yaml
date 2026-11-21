@@ -25118,14 +25118,16 @@ paths:
           any of those fields in the request is 20001 at the schema (BR-FUND-24 细则「红冲只按原单整笔」).
           To correct +500 to +50: reverse the whole +500, then submit a new +50.
 
-        What `data.fields` lists depends on where the body is refused. The schema comes first and
-        reports both shapes: a body that fits neither shape (a `reason_code` of RESTORE or
-        ACCOUNT_CLOSED, a `note` over 500 characters, more than 10 `refs`, an `amount_fen` of 0, a
-        value outside an enum, a missing required field, a field of the other shape) is 20001
-        with `data.fields` listing what fails in each of the two shapes, usually fields of the
-        other shape too, plus `body`; it does not single out the field at fault. Every
-        `data.fields` naming one field in this description is a check the service makes after the
-        body has fit one shape.
+        What `data.fields` lists depends on where the body is refused. The schema comes first: a
+        body that fits neither shape (a `reason_code` of RESTORE or ACCOUNT_CLOSED, a `note` over
+        500 characters, more than 10 `refs`, an `amount_fen` of 0, a value outside an enum, a
+        missing required field, a field of the other shape) is 20001 with `data.fields` listing
+        only what fails in the shape the request means, plus `body`: a shape whose discriminating
+        value does not match is set aside, and of the rest the shape with fewer failing fields is
+        the one reported; when both fail in as many fields, only `body` (unless both only miss
+        required fields: then those of both) (request validation, 口径甲). Every `data.fields`
+        naming one field in this description is a check the service makes after the body has fit
+        one shape.
 
         Linked documents by reason code (BR-FUND-24 ②③), all refused as 20001 with
         `data.fields=[refs]`: RECON_FIX needs at least one `recon_diff`. PAYOUT_RECOVERY needs at
@@ -35959,7 +35961,7 @@ components:
             - adjust_id
         trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
     AdminAdjustmentReasonCodeInvalid:
-      summary: 20001 reason_code RESTORE or ACCOUNT_CLOSED cannot be chosen by hand; a schema failure lists the fields of both request shapes
+      summary: 20001 reason_code RESTORE or ACCOUNT_CLOSED cannot be chosen by hand; reason_code is outside the new-adjustment enum, so that shape is set aside on its discriminating value and the reversal shape is reported, the new-adjustment fields (reason_code among them) listed as fields that shape does not allow, plus `body`
       value:
         code: 20001
         msg: 参数错误
@@ -35970,8 +35972,6 @@ components:
             - user_id
             - direction
             - amount_fen
-            - refs
-            - contra_subject
             - body
         trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
     AdminAdjustmentRefsInvalid:
@@ -55851,7 +55851,7 @@ components:
           description: The reason for the reversal, at most 500 characters, not blank after trimming.
     AdminAdjustmentCreateRequest:
       type: object
-      description: Body of POST /admin/v1/adjustments, a new adjustment or a reversal. Each branch is a closed object; a body that fits neither is 20001 with data.fields listing what fails in both branches plus `body`.
+      description: Body of POST /admin/v1/adjustments, a new adjustment or a reversal. Each branch is a closed object; a body that fits neither is 20001 with data.fields listing only what fails in the branch the request means plus `body` (rules in the description of POST /admin/v1/adjustments).
       unevaluatedProperties: false
       oneOf:
         - $ref: '#/components/schemas/AdminAdjustmentCreateNew'

@@ -55,6 +55,31 @@
 //   that never repeats a submitted value. Any other error (not FST_ERR_VALIDATION, or without
 //   an array `validation`) → undefined: the caller handles it as before.
 //
+//   Combined request bodies (FU-20001-ONEOF-FIELDS-NOISE, 口径甲: D10-2260 / D10-2267, D10-2317
+//   ③): before naming fields, the Ajv errors of a failed oneOf / anyOf are narrowed to the
+//   branch the request means, innermost combinator first (by schemaPath; an error belongs to a
+//   branch when its schemaPath continues the combinator's path with that branch's whole `/`
+//   segment). A combinator instance is its schemaPath plus its instancePath: only errors at or
+//   below that instancePath (whole `/` segments) belong to it, so the same oneOf under several
+//   array items narrows each item on its own (money r1 S2). Per combinator: (a) a branch with an
+//   enum / const error on one of its own properties (a discriminator such as purpose,
+//   payout_method, auth_method, provider, action that does not match) is not chosen; (b) of the rest, the branch naming fewest fields keeps
+//   its errors; on a tie no branch error is kept and only the combinator's location remains,
+//   except that a tie of branches that only miss required properties ("give one of these")
+//   keeps them all; (c) when every branch fails its discriminator only those discriminator
+//   errors stay; (d) unevaluatedProperties errors at the combinator's instance location are
+//   dropped; (e) the combinator's own error stays, so its location is still named ('body' at
+//   the root, 'summary' when nested). A oneOf failing because several branches pass
+//   (`passingSchemas` is an array) keeps only its own error. Errors outside every branch (a
+//   sibling required, an enum under properties) are always kept. Errors are only removed,
+//   never edited, and the naming above is unchanged (D10-2233), so `fields` is always a subset
+//   of what the un-narrowed errors would name; a body without combinators is unaffected.
+//   Known imperfection: stepUp with an unknown provider (for example qq) excludes the three
+//   third-party branches by their provider discriminator and reports the SMS branch
+//   (attempt_id / provider / code) instead of provider alone. The four modules that build
+//   their own Ajv (user-reverified-devices, settle-adjustments, notify-channels, hot-words
+//   route-table) do not go through this function.
+//
 // fieldsErrorEnvelope(fields, traceId) → ValidationErrorResponse
 //   The same HTTP 400 / 20001 envelope for a check that runs after the route schema (for example
 //   a device hash on the invalid list, BR-ID-09): `data.fields` is a copy of `fields`, `msg` and
@@ -130,6 +155,7 @@ export type ValidateFunction = ((data: unknown) => boolean) & {
 export interface ValidationIssue {
   readonly keyword: string;
   readonly instancePath: string;
+  readonly schemaPath?: string;
   readonly params: { readonly [name: string]: unknown };
   readonly message?: string;
 }
@@ -254,28 +280,113 @@ export function validationErrorEnvelope(
     return undefined;
 
   const part = 'validationContext' in error ? String(error.validationContext) : 'body';
-  const issues = error.validation as ValidationIssue[];
+  const issues = narrowCombinators(error.validation as ValidationIssue[]);
   const hasNonIf = issues.some((issue) => issue.keyword !== 'if');
   const fields = new Set<string>();
   for (const issue of issues) {
     if (issue.keyword === 'if' && hasNonIf) continue;
-    const segments =
-      issue.instancePath === ''
-        ? []
-        : issue.instancePath
-            .slice(1)
-            .split('/')
-            .map((segment) => segment.replace(/~1/g, '/').replace(/~0/g, '~'));
-    const property =
-      issue.keyword === 'required'
-        ? issue.params['missingProperty']
-        : issue.keyword === 'additionalProperties'
-          ? issue.params['additionalProperty']
-          : undefined;
-    if (typeof property === 'string') segments.push(property);
-    fields.add(segments.length > 0 ? segments.join('.') : part);
+    fields.add(fieldOf(issue, part));
   }
   return fieldsErrorEnvelope([...fields], traceId);
+}
+
+/** The field an Ajv error names (see validationErrorEnvelope above; D10-2233, unchanged). */
+function fieldOf(issue: ValidationIssue, part: string): string {
+  const segments =
+    issue.instancePath === ''
+      ? []
+      : issue.instancePath
+          .slice(1)
+          .split('/')
+          .map((segment) => segment.replace(/~1/g, '/').replace(/~0/g, '~'));
+  const property =
+    issue.keyword === 'required'
+      ? issue.params['missingProperty']
+      : issue.keyword === 'additionalProperties'
+        ? issue.params['additionalProperty']
+        : undefined;
+  if (typeof property === 'string') segments.push(property);
+  return segments.length > 0 ? segments.join('.') : part;
+}
+
+function isCombinator(issue: ValidationIssue): boolean {
+  return (
+    (issue.keyword === 'oneOf' || issue.keyword === 'anyOf') && typeof issue.schemaPath === 'string'
+  );
+}
+
+/** Number of `/`-separated segments of a schemaPath: deeper combinators are narrowed first. */
+function depthOf(issue: ValidationIssue): number {
+  return (issue.schemaPath ?? '').split('/').length;
+}
+
+/**
+ * Drops the Ajv errors of the branches the request did not mean (D10-2260 甲, D10-2317 ③); see
+ * "Combined request bodies" in the header. Only removes errors, never edits or adds one.
+ */
+function narrowCombinators(input: readonly ValidationIssue[]): ValidationIssue[] {
+  let issues = [...input];
+  const done = new Set<ValidationIssue>();
+  for (;;) {
+    const combinator = issues
+      .filter((issue) => isCombinator(issue) && !done.has(issue))
+      .sort((a, b) => depthOf(b) - depthOf(a))[0];
+    if (combinator === undefined) return issues;
+    done.add(combinator);
+    const prefix = `${combinator.schemaPath}/`;
+    const at = combinator.instancePath;
+    // One combinator instance is its schemaPath plus its instancePath: the same oneOf under two
+    // array items fails twice, and each item picks its own branch (money r1 S2).
+    const within = (issue: ValidationIssue): boolean =>
+      issue.instancePath === at || issue.instancePath.startsWith(`${at}/`);
+    // The branch index of an error under this combinator instance (whole `/` segment, so oneOf/1
+    // never matches oneOf/10), or undefined for an error outside it, which is always kept.
+    const branchOf = (issue: ValidationIssue): string | undefined =>
+      issue !== combinator && issue.schemaPath?.startsWith(prefix) === true && within(issue)
+        ? issue.schemaPath.slice(prefix.length).split('/')[0]
+        : undefined;
+    // An enum / const on one of the branch's own properties: the discriminator does not match.
+    const isDiscriminator = (issue: ValidationIssue, branch: string): boolean =>
+      (issue.keyword === 'enum' || issue.keyword === 'const') &&
+      /^properties\/[^/]+\/(?:enum|const)$/.test(
+        (issue.schemaPath ?? '').slice(prefix.length + branch.length + 1),
+      );
+    const branches = new Map<string, ValidationIssue[]>();
+    for (const issue of issues) {
+      const branch = branchOf(issue);
+      if (branch !== undefined) branches.set(branch, [...(branches.get(branch) ?? []), issue]);
+    }
+    const keep = new Set<ValidationIssue>(
+      combinator.keyword === 'oneOf' && Array.isArray(combinator.params['passingSchemas'])
+        ? [] // several branches pass: only the combinator's own error (its location) stays
+        : chooseBranches(branches, isDiscriminator),
+    );
+    issues = issues.filter(
+      (issue) =>
+        (branchOf(issue) === undefined || keep.has(issue)) &&
+        !(issue.keyword === 'unevaluatedProperties' && issue.instancePath === at),
+    );
+  }
+}
+
+function chooseBranches(
+  branches: ReadonlyMap<string, readonly ValidationIssue[]>,
+  isDiscriminator: (issue: ValidationIssue, branch: string) => boolean,
+): ValidationIssue[] {
+  const entries = [...branches.entries()];
+  const open = entries.filter(([branch, list]) => !list.some((i) => isDiscriminator(i, branch)));
+  // Every branch fails its discriminator: only the discriminator errors stay.
+  if (open.length === 0)
+    return entries.flatMap(([branch, list]) => list.filter((i) => isDiscriminator(i, branch)));
+  const score = (list: readonly ValidationIssue[]): number =>
+    new Set(list.filter((i) => i.keyword !== 'if').map((i) => fieldOf(i, ''))).size;
+  const least = Math.min(...open.map(([, list]) => score(list)));
+  const best = open.filter(([, list]) => score(list) === least);
+  if (best.length === 1) return [...best[0]![1]];
+  // A tie of branches that only miss required properties ("give one of these"): all of them.
+  if (best.every(([, list]) => list.every((i) => i.keyword === 'required')))
+    return best.flatMap(([, list]) => list);
+  return [];
 }
 
 export function fieldsErrorEnvelope(

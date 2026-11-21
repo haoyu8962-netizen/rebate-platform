@@ -9130,14 +9130,16 @@ export interface paths {
          *       any of those fields in the request is 20001 at the schema (BR-FUND-24 细则「红冲只按原单整笔」).
          *       To correct +500 to +50: reverse the whole +500, then submit a new +50.
          *
-         *     What `data.fields` lists depends on where the body is refused. The schema comes first and
-         *     reports both shapes: a body that fits neither shape (a `reason_code` of RESTORE or
-         *     ACCOUNT_CLOSED, a `note` over 500 characters, more than 10 `refs`, an `amount_fen` of 0, a
-         *     value outside an enum, a missing required field, a field of the other shape) is 20001
-         *     with `data.fields` listing what fails in each of the two shapes, usually fields of the
-         *     other shape too, plus `body`; it does not single out the field at fault. Every
-         *     `data.fields` naming one field in this description is a check the service makes after the
-         *     body has fit one shape.
+         *     What `data.fields` lists depends on where the body is refused. The schema comes first: a
+         *     body that fits neither shape (a `reason_code` of RESTORE or ACCOUNT_CLOSED, a `note` over
+         *     500 characters, more than 10 `refs`, an `amount_fen` of 0, a value outside an enum, a
+         *     missing required field, a field of the other shape) is 20001 with `data.fields` listing
+         *     only what fails in the shape the request means, plus `body`: a shape whose discriminating
+         *     value does not match is set aside, and of the rest the shape with fewer failing fields is
+         *     the one reported; when both fail in as many fields, only `body` (unless both only miss
+         *     required fields: then those of both) (request validation, 口径甲). Every `data.fields`
+         *     naming one field in this description is a check the service makes after the body has fit
+         *     one shape.
          *
          *     Linked documents by reason code (BR-FUND-24 ②③), all refused as 20001 with
          *     `data.fields=[refs]`: RECON_FIX needs at least one `recon_diff`. PAYOUT_RECOVERY needs at
@@ -20996,7 +20998,7 @@ export interface components {
             /** @description The reason for the reversal, at most 500 characters, not blank after trimming. */
             note: string;
         };
-        /** @description Body of POST /admin/v1/adjustments, a new adjustment or a reversal. Each branch is a closed object; a body that fits neither is 20001 with data.fields listing what fails in both branches plus `body`. */
+        /** @description Body of POST /admin/v1/adjustments, a new adjustment or a reversal. Each branch is a closed object; a body that fits neither is 20001 with data.fields listing only what fails in the branch the request means plus `body` (rules in the description of POST /admin/v1/adjustments). */
         AdminAdjustmentCreateRequest: components["schemas"]["AdminAdjustmentCreateNew"] | components["schemas"]["AdminAdjustmentCreateReversal"];
         /** @description The form in effect, with `available` before and after, as read in the transaction that wrote the voucher. */
         AdminAdjustmentExecuted: {
