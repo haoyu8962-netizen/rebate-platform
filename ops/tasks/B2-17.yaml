@@ -9,6 +9,7 @@ type: impl
 # ④ 拒绝由人发起、关联单据含联盟对账（union_mismatch）或通道对账（channel_mismatch）差错单的调账单（20001，adjust_ref_invalid）。⑤ 调账与红冲不动 withdraw_holds。
 # 契约（openapi.yaml）：调账预填单（PAYOUT_RECOVERY 来源 / 只读金额）与执行 / 红冲路径上的 20902 recon_diff 响应要登记——**占契约槽**（D10-2361：等 w1 B1-01zzw 释放后排给 be）；若契约改动由契约线另拆 CT 单，本单 deps 补上、paths 去掉 contracts。
 # 不在本单：「账单金额不一致」改为系统按 R7 以联盟结算数据重生成分佣快照再校验、仍不一致告警工程不开差错单（BR-FUND-04 细则 2026-11-21 改写）——规划/05 未单列行，入账公告请编排定归属（D10-2361）。
+# 2026-11-21 补丁 1（funds，编排 D10-2417）：拆两张，本单收窄为 ①②④⑤（ledger：执行时 CAS、（差错单，用户）唯一、红冲退回 processing、拒人工关联对外差错单；契约只给创建 / 批准登记 20902 recon_diff），③ 与预填单的批准 / 驳回归 B2-17a。涉及用户名单在登记差错单时写进差错单，名单为空或存量差错单按只涉及正在调账的这一个用户；红冲时差错单不存在或不在 adjusted 就不动；差错单状态沿用带条件的更新（FU-RECON-DIFF-STATE-MACHINE）。8 条冻结用例对同一张差错单连续执行多张调账，改为每张各种一张差错单、期望值不改（modify_existing，D10-1670 委托）；[AC-B2-12c#6] 的期望改动待负责人点头后另补。标题按门禁保留原文。
 refs: [BR-FUND-24, BR-WDR-23, BR-WDR-05]
 refs_hash:
   BR-FUND-24: efcdeeafa452
@@ -30,8 +31,58 @@ paths:
   - 'apps/api/src/app.module.ts'
 test_paths:
   - 'test/spec/ledger/recon-plan-b/**'
+  - 'test/spec/ledger/admin-adjustments/{negative,idempotency,rollback,rollback-audit,access,large-amounts,message,posting}.int.test.ts'
 impl: claude
 tester: claude-independent
+modify_existing:
+  - file: 'test/spec/ledger/admin-adjustments/negative.int.test.ts'
+    test: '[AC-B2-12c#8] 只在跨过 0 时发 account.went_negative：调减到正好 0 不发；再调减 1 到 −1 发一条；已为负再调减不再发'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-2417
+    note: 'BR-FUND-24 ⑨：同一差错单对同一用户至多一张已执行、未红冲的调账单。本用例的夹具对同一张 R3 差错单、同一会员连续执行多张调账单（要测的是别的事），第二张起会被 20902 拦；只把夹具改为每张调账单各用一张新种的差错单，断言与期望值未改'
+  - file: 'test/spec/ledger/admin-adjustments/idempotency.int.test.ts'
+    test: '[AC-B2-12c#24] Idempotency-Key 必填（不带 → 20001，不留痕）；10003 之后同一 key 带令牌照常生效；同一 key 的第一次还在执行时再发（同体或换体）→ 40901，放行后第一次照常完成，之后重放得到它的应答'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-2417
+    note: 'BR-FUND-24 ⑨：同一差错单对同一用户至多一张已执行、未红冲的调账单。本用例的夹具对同一张 R3 差错单、同一会员连续执行多张调账单（要测的是别的事），第二张起会被 20902 拦；只把夹具改为每张调账单各用一张新种的差错单，断言与期望值未改'
+  - file: 'test/spec/ledger/admin-adjustments/rollback.int.test.ts'
+    test: '[AC-B2-12c#27] 调减提交时写审计或写站内信失败 → 50001，整笔回滚：没有单、凭证、余额变动、事件、站内信与幂等记录；同一 key 重发即一次生效'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-2417
+    note: 'BR-FUND-24 ⑨：同一差错单对同一用户至多一张已执行、未红冲的调账单。本用例的夹具对同一张 R3 差错单、同一会员连续执行多张调账单（要测的是别的事），第二张起会被 20902 拦；只把夹具改为每张调账单各用一张新种的差错单，断言与期望值未改'
+  - file: 'test/spec/ledger/admin-adjustments/rollback-audit.int.test.ts'
+    test: '[AC-B2-12c#42] 调减提交时写审计或写站内信失败 → 50001，audit_logs 与失败前逐行相同（没有成功审计也没有别的记录）；同一 key 重发成功后恰好多一条 adjustment_create，操作人是提交人，内容即最终调账（单号、会员、方向、金额、原因码、前后余额）'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-2417
+    note: 'BR-FUND-24 ⑨：同一差错单对同一用户至多一张已执行、未红冲的调账单。本用例的夹具对同一张 R3 差错单、同一会员连续执行多张调账单（要测的是别的事），第二张起会被 20902 拦；只把夹具改为每张调账单各用一张新种的差错单，断言与期望值未改'
+  - file: 'test/spec/ledger/admin-adjustments/access.int.test.ts'
+    test: '[AC-B2-12c#21] 短信档 step-up：有 fund.adjust 的账号与超管，不带令牌、带动态码档令牌 → 10003 tier=sms；没登记验证手机号的（超管也一样）→ 10003 verify_phone_missing；都不留痕、不写 adjustment_denied；之后带短信档令牌一次生效'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-2417
+    note: 'BR-FUND-24 ⑨：同一差错单对同一用户至多一张已执行、未红冲的调账单。本用例的夹具对同一张 R3 差错单、同一会员连续执行多张调账单（要测的是别的事），第二张起会被 20902 拦；只把夹具改为每张调账单各用一张新种的差错单，断言与期望值未改'
+  - file: 'test/spec/ledger/admin-adjustments/large-amounts.int.test.ts'
+    test: '[AC-B2-12c#40] 超过 2^31 的整数分：调增 4294967297、调减 6442450951（余额 −2147482654）、两张各整笔红冲，一步生效；应答、单、凭证分录、余额与审计都按精确整数，借贷和为 0，余额回到 1000'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-2417
+    note: 'BR-FUND-24 ⑨：同一差错单对同一用户至多一张已执行、未红冲的调账单。本用例的夹具对同一张 R3 差错单、同一会员连续执行多张调账单（要测的是别的事），第二张起会被 20902 拦；只把夹具改为每张调账单各用一张新种的差错单，断言与期望值未改'
+  - file: 'test/spec/ledger/admin-adjustments/message.int.test.ts'
+    test: '[AC-B2-12c#29] 每张调减单给会员一条站内信 BALANCE_ADJUSTED（标题「余额调整」，正文按 BR-TEXT-19：¥1.2 结算核对更正、¥100 重复到账追回、¥0.05 人工调账）；调增单不发；正文不含内部说明、操作人与单据号'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-2417
+    note: 'BR-FUND-24 ⑨：同一差错单对同一用户至多一张已执行、未红冲的调账单。本用例的夹具对同一张 R3 差错单、同一会员连续执行多张调账单（要测的是别的事），第二张起会被 20902 拦；只把夹具改为每张调账单各用一张新种的差错单，断言与期望值未改'
+  - file: 'test/spec/ledger/admin-adjustments/posting.int.test.ts'
+    test: '[AC-B2-12c#5] $reason · $contra（$channel）：调增、调减各一张一步生效，再各整笔红冲；每张凭证分录与 specs/ledger-templates.csv 模板逐行一致、借贷和为 0、不碰 frozen；单与应答、操作人、会计日、余额前后都对；各写一条 adjustment_create / adjustment_reverse 审计'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-2417
+    note: 'BR-FUND-24 ⑨：同一差错单对同一用户至多一张已执行、未红冲的调账单。本用例的夹具对同一张 R3 差错单、同一会员连续执行多张调账单（要测的是别的事），第二张起会被 20902 拦；只把夹具改为每张调账单各用一张新种的差错单，断言与期望值未改'
 accept:
   - 'pnpm verify'
   - 'test/spec/ledger/recon-plan-b/**'
