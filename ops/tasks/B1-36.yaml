@@ -1,0 +1,26 @@
+id: B1-36
+repo: rebate-platform
+title: 'B1-36：content 运营位服务端——pages 保存与发布按准入表、起止时刻、徽标与跳转白名单校验（20001）；GET /v1/pages/{page_key} 支持 me / search 并按起止时刻过滤；热词与关键词直达的增改接口、默认词下发'
+type: impl
+# 2026-11-21 be 入账（规划/05 B1-36 行；docs/changes/20261120-运营位后台可配.md；批 1 三项，编排 D10-2317 ④ / D10-2361）。依赖 CT-27 契约。
+# content：page-config-admin.ts 保存 / 发布校验（准入表、起止时刻、徽标、跳转白名单，违者 20001）；page-reader.ts 支持 page_key me、search，按起止时刻过滤下发；me 页为空时返回空数组。
+# catalog / content：热词与关键词直达的后台增改接口（仍写 search.hot_words、search.keyword_routes 两个配置项）；默认词下发（新配置键由本单登记，冻结注册表用例照 B2-04zo / B2-02ta 先例另开前置 test-change，入账后探针定文件清单）。
+# 规则测试覆盖准入、到期过滤、新增运营位的外链拒收与首页原有类型外链照旧；me 页为空时返回空数组。
+refs: [BR-TEXT-28, BR-TEXT-29, BR-TEXT-30]
+refs_hash:
+  BR-TEXT-28: b63875b517fd
+  BR-TEXT-29: e67c8270e5e0
+  BR-TEXT-30: babc5180aaa0
+deps: [CT-27]
+paths:
+  - 'apps/api/src/modules/content/**'
+  - 'apps/api/src/modules/catalog/**'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/content/operation-slots/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/operation-slots/**'
+status: todo

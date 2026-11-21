@@ -1,0 +1,38 @@
+id: B2-17
+repo: rebate-platform
+title: 'B2-17：对外差错单方案 B 后端——调账执行同事务 CAS 置差错单 adjusted、（差错单，受益用户）唯一、红冲退回 processing、R2 确有多付时系统预填 PAYOUT_RECOVERY 待批追回单、拒人发起关联对外差错单的调账'
+type: impl
+# 2026-11-21 be 入账（规划/05 B2-17 行；负责人 2026-11-21 方案 B，编排 D10-2317 ② / D10-2332 / D10-2361；docs/changes/20261121-对外差错单方案B.md）。资金单：Claude 实现、独立方写测、Codex 全量 spec-test 与资金评审。
+# ① 关联差错单的调账单执行时（ledger admin-adjustment / admin-adjustment-closing 的执行事务），同一事务锁定所关联的差错单，CAS open / processing → adjusted；任一张不符整单 20902（data.resource=recon_diff），不写凭证。
+# ② 唯一：同一差错单对同一受益用户至多一张 APPROVED 且未被红冲的调账单（约束形式由 ledger 定，可为部分唯一索引，带迁移）；涉及的全部受益用户都已有这样一张时，由最后一张的执行事务 CAS 置 adjusted，其间保持 processing（编排裁定 2026-11-21，可被负责人推翻）；红冲（reverse.ts / ADJ:<id>:REVERSE）同一事务把差错单退回 processing。
+# ③ R2 登记确有多付的通道对账差错单时（payout/jobs/recon-job.ts registerDiff，type channel_mismatch），同一事务系统预填 PAYOUT_RECOVERY 待批调减单（用户取登记时匹配到的提现单，金额 = 多付额、只读；同一差错单同时最多一张待批预填单；「确有多付」的情形与金额取法见 BR-WDR-23 细则）；内部记已付而通道没付或少付的只登记差错单、冻结并告警工程，不预填任何调账（负责人 2026-11-21：不做补付）。现 recon-job 没有显式多付 / 少付分类，需新增判定。
+# ④ 拒绝由人发起、关联单据含联盟对账（union_mismatch）或通道对账（channel_mismatch）差错单的调账单（20001，adjust_ref_invalid）。⑤ 调账与红冲不动 withdraw_holds。
+# 契约（openapi.yaml）：调账预填单（PAYOUT_RECOVERY 来源 / 只读金额）与执行 / 红冲路径上的 20902 recon_diff 响应要登记——**占契约槽**（D10-2361：等 w1 B1-01zzw 释放后排给 be）；若契约改动由契约线另拆 CT 单，本单 deps 补上、paths 去掉 contracts。
+# 不在本单：「账单金额不一致」改为系统按 R7 以联盟结算数据重生成分佣快照再校验、仍不一致告警工程不开差错单（BR-FUND-04 细则 2026-11-21 改写）——规划/05 未单列行，入账公告请编排定归属（D10-2361）。
+refs: [BR-FUND-24, BR-WDR-23, BR-WDR-05]
+refs_hash:
+  BR-FUND-24: efcdeeafa452
+  BR-WDR-23: 14059410a548
+  BR-WDR-05: 378fe8ee0fee
+deps: []
+paths:
+  - 'apps/api/src/modules/ledger/**'
+  - 'apps/api/src/modules/payout/**'
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/ledger/recon-plan-b/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/recon-plan-b/**'
+status: todo
