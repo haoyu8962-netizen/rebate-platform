@@ -1,0 +1,22 @@
+id: B2-07h
+repo: rebate-platform
+title: 'B2-07h：payout 通道对账——同一已付提现单在另一个账单日又出现一条不同通道单号的成功行，按重复打款登记差错单并冻结（现记成正常匹配，漏报）'
+type: impl
+# 2026-11-21 funds 入账（编排 D10-2417 (5)，FU-R2-DUPLICATE-LINE-CROSS-DAY；上线前必修，排在 B2-17 之前）。资金单：Claude 实现、独立方写测、Codex 全量 spec-test 与资金评审。
+# 实跑证据（测试机，主干 d77abe549，临时探针不入库，couli-runs/FU-R2-DUPLICATE-LINE-CROSS-DAY/）：同一账单日两条成功行 → 登记 duplicate_line 差错单并冻结（绿）；账单日 D 一条成功行已匹配，D+1 又来一条同 out_biz_no、同额、不同 channel_order_id 的成功行 → 记成 matched，差错单 0 张、冻结 0 条（红）。原因：payout/jobs/recon-job.ts 日跑判「同一提现单第二条成功行」只靠单次运行内的 seen 集合，跨账单日不查；latePaidCheck 对 PAID_API 也把各日成功行都算作本单的。
+# 范围：日跑与 latePaidCheck 遇成功行按 out_biz_no 对上已付（PAID_*）提现单时，若该提现单在别的账单日已有通道单号不同的成功行 → 这条按 BR-WDR-23 ③ 登记 channel_mismatch（与同日 duplicate_line 同一口径：关联账单行的通道单号、应付 0 / 实付行金额）、冻结该会员（recon_diff）、告警；同一通道单号在两天账单上重复列示仍是同一笔付款，不登记；重跑、重投不重复登记。先后到达的顺序不同（先到的那条是哪一天）结果一致。
+# 不改：只有一条成功行而通道单号与本单记录不同的 PAID_API 单照旧算匹配（冻结用例 recon-late-paid/worker.int.test.ts 钉着）；系统预填追回单归 B2-17a。若需要给 recon_channel 加索引或列，停下报编排补 paths。
+refs: [BR-WDR-23]
+refs_hash:
+  BR-WDR-23: 14059410a548
+deps: []
+paths:
+  - 'apps/api/src/modules/payout/**'
+test_paths:
+  - 'test/spec/payout/recon-cross-day-duplicate/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/recon-cross-day-duplicate/**'
+status: todo
