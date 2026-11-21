@@ -1,0 +1,27 @@
+id: B2-18
+repo: rebate-platform
+title: 'B2-18：settlement 月结校验跟随联盟——基数不等按 R7 以联盟结算数据重生成分佣快照再校验，一致进批次候选不开差错单；仍不一致或重生成失败告警工程、保持 WAITING、不以旧快照入账；应结未结只计数超宽限期才提示；对上 ESTIMATED 先按单号补拉一次'
+type: impl
+# 2026-11-21 be 入账（规划/05 B2-18 行，SPEC_REF 6c631c258963；负责人 2026-11-21「账单金额不一致以联盟为准、系统自动跟随」，docs/changes/20261121-对外差错单方案B.md §5-9；编排 D10-2369 / D10-2385）。资金单：Claude 实现、独立方写测、Codex 全量 spec-test 与资金评审。
+# ① 联盟结算基数 ≠ 分佣快照当前版本基数：按 BR-FUND-01 R7（BR-CALC-02）以联盟结算数据重生成分佣快照版本后再校验一次，一致即进批次候选、不开差错单。
+# ② 重生成后仍不一致（或重生成失败）：告警工程、不进财务待办，订单保持 WAITING，不得以旧快照入账。
+# ③「应结未结」只计入账单计数、不开差错单，超宽限期才提示。④ 联盟结算数据对上我方 ESTIMATED 的，先按单号自动补拉一次联盟订单（B1-08）再按本条校验；补拉后仍 ESTIMATED 才按 BR-FUND-09 登记。
+# 取值、容差与宽限期只读 08，不在台账复述。验收指向 10 AC-S2-51 ① 的 b、b2、c 项。依赖 B2-04（月结出账与一致性校验）、B2-03（分佣快照版本）、B1-08（按单号补拉），均已在主干。
+refs: [BR-FUND-04, BR-FUND-09]
+refs_hash:
+  BR-FUND-04: 1c403c23b8bb
+  BR-FUND-09: d6b5a66ad5a9
+deps: []
+paths:
+  - 'apps/api/src/modules/settlement/**'
+  - 'apps/api/src/modules/commission/**'
+  - 'apps/api/src/modules/union/**'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/settlement/bill-follow-union/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/bill-follow-union/**'
+status: todo
