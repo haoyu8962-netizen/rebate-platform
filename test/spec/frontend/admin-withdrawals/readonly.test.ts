@@ -6,7 +6,6 @@ import {
   FLOW_TIMEOUT,
   WRITE,
   assertOnlyReads,
-  assertReadOnly,
   detailShown,
   main,
   mount,
@@ -18,6 +17,7 @@ import {
   textOf,
   usable,
 } from './helpers.ts';
+import { assertReadOnlyLanded } from '../admin-withdrawal-batch-payout/frozen-moved/readonly-landed.ts';
 
 // Every test of this folder records all requests and renderings (helpers.ts afterEach): nothing
 // but GET /admin/v1/withdrawals, GET /admin/v1/withdrawals/{id} and the common reads, and no
@@ -30,7 +30,7 @@ it(
     await mount(server);
     await openList(server, NO.pending);
     await settled(server);
-    await assertReadOnly(server, {}, ['一键组批']);
+    await assertReadOnlyLanded(server, {}, ['一键组批']);
   },
   FLOW_TIMEOUT,
 );

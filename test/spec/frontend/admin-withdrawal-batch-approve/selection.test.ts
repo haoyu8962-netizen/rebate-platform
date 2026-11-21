@@ -5,7 +5,6 @@ import { expect, it } from 'vitest';
 import {
   APPROVE,
   REVIEW,
-  assertNoOtherActions,
   assertRequest,
   button,
   buttons,
@@ -14,7 +13,6 @@ import {
   confirm,
   disabled,
   fill,
-  landedFor,
   main,
   mount,
   open,
@@ -27,6 +25,11 @@ import {
   succeed,
   verify,
 } from './helpers.ts';
+import {
+  assertNoOtherActionsLanded,
+  landedFor,
+  mountLanded,
+} from '../admin-withdrawal-batch-payout/frozen-moved/batch-approve-landed.ts';
 
 it(
   '[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏；持 payout.execute 或超管时恰多可用的【一键组批】（F1-08an），只持审核权限看不到它',
@@ -48,7 +51,7 @@ it(
       const server = permissions.permissions.includes('payout.manual_entry')
         ? serverFor(samples())
         : serverFor();
-      await mount(server, permissions);
+      await mountLanded(server, permissions);
       if (permissions.permissions.includes('payout.manual_entry')) {
         expect(
           server.state
@@ -78,7 +81,7 @@ it(
     }
     for (const permissions of [REVIEW, { isSuper: true, permissions: [] }]) {
       const server = serverFor();
-      await mount(server, permissions);
+      await mountLanded(server, permissions);
       expect(buttons(main(), '批量通过')).toEqual([]);
       const grouping = permissions.isSuper ? 1 : 0;
       expect(buttons(main(), '一键组批'), 'shown 一键组批 entries').toHaveLength(grouping);
@@ -89,7 +92,7 @@ it(
       for (const item of server.state) expect(checkbox(item).checked).toBe(false);
       await select([server.state[0]!]);
       expect(disabled(button(main(), '批量通过'))).toBe(false);
-      assertNoOtherActions(landedFor(permissions));
+      assertNoOtherActionsLanded(landedFor(permissions));
       expect(server.writes()).toEqual([]);
       cleanup();
     }
@@ -199,7 +202,7 @@ it(
       { permissions: REVIEW, grouping: 0 },
     ]) {
       const server = serverFor();
-      await mount(server, permissions);
+      await mountLanded(server, permissions);
       expect(buttons(main(), '一键组批'), 'shown 一键组批 entries').toHaveLength(grouping);
       expect(
         buttons(main(), '一键组批').filter((node) => !disabled(node)),

@@ -20,6 +20,10 @@ import {
   disallowedRequests,
   snapshot,
 } from './fixtures.ts';
+import {
+  LANDED_ON_LIST,
+  nameOf,
+} from '../admin-withdrawal-batch-payout/frozen-moved/landed-list.ts';
 
 // The real /withdrawals route of the admin app in Chromium: the review list with dictionary
 // names, a row's 【详情】 to /withdrawals/{id}, the masked payee, and no usable write entry even
@@ -80,12 +84,6 @@ function usable(name: RegExp): HTMLElement[] {
 }
 function usableWrites(): HTMLElement[] {
   return usable(WRITE);
-}
-/** Write entries already landed on the list for every write point (F1-08an), never pressed here. */
-const LANDED_ON_LIST = ['一键组批'];
-/** An entry's accessible name or text, spaces removed. */
-function nameOf(node: HTMLElement): string {
-  return (node.getAttribute('aria-label') || node.textContent || '').replace(/\s+/g, '');
 }
 /** Usable reveal entries, leaving out the 【查看】 detail entries of list rows. */
 function usableReveals(): HTMLElement[] {
@@ -150,38 +148,4 @@ it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与�
   expect(unmaskedShown(), 'no unmasked phone number, payee account or payee name').toEqual([]);
   expect(server.writes(), 'only GET requests').toEqual([]);
   expect(disallowedRequests(server.log), 'only the allowed GET reads').toEqual([]);
-});
-
-it('[AC-F1-08an-BROWSER#1] /withdrawals 审核列表（Chromium）：持 payout.execute 时【一键组批】恰 1 个且可用（不点）；不持 payout.execute（其余权限点照持）时没有【一键组批】；全程只发允许的 GET', async () => {
-  await page.viewport(1440, 1080);
-  const GROUP = /^一键组批$/;
-  for (const { permissions, want } of [
-    { permissions: ALL_GRANTS, want: 1 },
-    { permissions: ALL_GRANTS.filter((point) => point !== 'payout.execute'), want: 0 },
-  ]) {
-    const server = await show(createServer(undefined, { permissions }));
-    const area = page.getByRole('main');
-    const tab = area.getByRole('tab', { name: /^审核列表/ });
-    const row = area.getByRole('row').filter({ hasText: NO.pending });
-    await expect
-      .poll(() => tab.elements().length + row.elements().length, FIRST)
-      .toBeGreaterThan(0);
-    if (tab.elements().length > 0) await tab.first().click();
-    await expect.element(row, FIRST).toBeVisible();
-    await expect.poll(() => usable(GROUP).length, FIRST).toBe(want);
-    expect(
-      [
-        ...area.getByRole('button', { name: GROUP }).elements(),
-        ...area.getByRole('link', { name: GROUP }).elements(),
-      ],
-      'shown 一键组批 entries (hidden, not greyed out, without payout.execute)',
-    ).toHaveLength(want);
-    expect(server.writes(), 'only GET requests').toEqual([]);
-    expect(disallowedRequests(server.log), 'only the allowed GET reads').toEqual([]);
-    root?.unmount();
-    root = undefined;
-    auth?.dispose();
-    auth = undefined;
-    document.body.replaceChildren();
-  }
 });

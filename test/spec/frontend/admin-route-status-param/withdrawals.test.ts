@@ -34,6 +34,12 @@ import {
   shownValue,
   unmountPage,
 } from './helpers.ts';
+import {
+  countQueries,
+  listQueries,
+  listReadsOf,
+  tabCounts,
+} from '../admin-withdrawal-batch-payout/frozen-moved/route-status-counts.ts';
 
 // 提现审核 opened from the workbench card at /withdrawals?status=<WithdrawalStatus>
 // (listAdminWithdrawals `status`, contracts/openapi.yaml WithdrawalStatus). A contract value is the
@@ -66,41 +72,6 @@ async function open(address: string, server: Server = createServer()): Promise<S
 /** The query of every list read, in order. */
 function queries(server: Server): Record<string, string>[] {
   return server.reads().map((read) => read.query);
-}
-/** The list reads (page_size other than '1'), in order; page_size=1 reads are tab counts. */
-function listReadsOf(server: Server): ReturnType<Server['reads']> {
-  return server.reads().filter((read) => read.query['page_size'] !== '1');
-}
-/** The query of every list read (page_size other than '1'), in order. */
-function listQueries(server: Server): Record<string, string>[] {
-  return listReadsOf(server).map((read) => read.query);
-}
-/** Plain code-unit order of two strings. */
-function byText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-/** A key that does not depend on the order of the query parameters. */
-function queryKey(query: Readonly<Record<string, string>>): string {
-  return JSON.stringify(Object.entries(query).sort(([a], [b]) => byText(a, b)));
-}
-/** Queries sorted by queryKey. */
-function sortedQueries(list: readonly Record<string, string>[]): Record<string, string>[] {
-  return [...list].sort((a, b) => byText(queryKey(a), queryKey(b)));
-}
-/** The query of every tab count read (page_size '1'), sorted. */
-function countQueries(server: Server): Record<string, string>[] {
-  const counts = server.reads().filter((read) => read.query['page_size'] === '1');
-  return sortedQueries(counts.map((read) => read.query));
-}
-/** The five tab count reads (全部 / 待审 / 驳回 / 手动 / 自动), each only its tab's quick filter, sorted. */
-function tabCounts(): Record<string, string>[] {
-  return sortedQueries([
-    { page: '1', page_size: '1' },
-    { display_status: 'paid_manual', page: '1', page_size: '1' },
-    { display_status: 'pending_review', page: '1', page_size: '1' },
-    { display_status: 'rejected', page: '1', page_size: '1' },
-    { page: '1', page_size: '1', status: 'PAID_API' },
-  ]);
 }
 
 it(
@@ -262,23 +233,5 @@ it(
       expect(shownValue(STATUS_FILTER), `status=${value}`).toBe('');
       expect(main().querySelector('.ant-result'), `status=${value}`).toBeNull();
     }
-  },
-);
-
-it(
-  '[AC-F1-08an-COUNTS#1] 进页 /withdrawals 与 /withdrawals?status=PENDING_REVIEW：恰 5 个 page_size=1 的页签计数读（全部 / 待审 / 驳回 / 手动 / 自动，各只带该页签的快捷筛选、不带地址里的 status），列表读恰 1 条',
-  { timeout: MULTI_TIMEOUT },
-  async () => {
-    const bare = await open('/withdrawals');
-    await waitFor(() => expect(countQueries(bare), 'five tab counts').toEqual(tabCounts()));
-    await settled(bare);
-    expect(countQueries(bare), 'five tab counts, once each').toEqual(tabCounts());
-    expect(listQueries(bare), 'one list read').toHaveLength(1);
-    unmountPage();
-    const server = await open('/withdrawals?status=PENDING_REVIEW');
-    await waitFor(() => expect(countQueries(server), 'five tab counts').toEqual(tabCounts()));
-    await settled(server);
-    expect(countQueries(server), 'no address status in the counts').toEqual(tabCounts());
-    expect(listQueries(server), 'one list read').toHaveLength(1);
   },
 );
