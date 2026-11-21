@@ -11,6 +11,7 @@ type: impl
 # 2026-11-20 补丁 3（fe，编排 D10-2179，approvals 第 115 条）：实现 r1 的页签计数（进页时 5 个页签各一次 page_size=1 读，D10-2017）使 F1-14c [AC-F1-14c-WITHDRAWALS#1]–[#7] 与 F1-08ba [AC-F1-08ba-TABS#1] 的「列表读」1 → 6。改法：列表读只取 page_size 不为 '1' 的读、原期望一字不动；每处旁边配计数读断言（排序后 toEqual 恰 5 条，各带页签快捷筛选与 page '1'、page_size '1'，不许 ≥ / toContain / 只数个数）；admin-route-status-param/withdrawals.test.ts 加并列顶层函数、原 queries() 不改（scope: support）；两份文件各补 1 条新红块（D10-1812）。red_exempt 待写测第 4 次后的正式先红另登。
 # 2026-11-20 补丁 4（fe，同 F1-08am 补丁 2 / F1-08cc 先例）：写测第 4 次后正式先红（规则测试提交 7b6c0de38，couli-runs/F1-08an/red/2）把 6 份冻结文件中有改动块或读了 support 改动的整份判定，未改的 11 条在骨架上绿被记问题；按 red_exempt 登记这 11 条，块体均未改。
 # 2026-11-21 补丁 5（fe，同 B2-03s / CT-06zzzc 先例）：land 时正式先红（couli-runs/F1-08an/red/3）判 admin-withdrawal-batch-approve/selection.test.ts 块外有改动（只新增导入 landedFor，供补丁 1 登记的改动块 [AC-F1-08ai-ACCESS#1] 调用），整份判定，该文件 3 条 red_exempt 不生效；按 red_exempt_outside 登记该文件，未改的 3 条照旧豁免，改动块与本单新块仍须红。
+# 2026-11-21 补丁 6（fe，D10-2341 / D10-2345 / D10-2349，approvals 第 127 条）：land 时 evidence-check 判 4 条 scope: support 条目形状不符 CT-06zzzzzj；本线机械搬家（couli-runs/F1-08an/relocate/，编排逐行核过）后两份 helpers.ts 与主干逐字相同、两份测试文件块外只剩 import，删去这 4 条 support 条目；readonly.test.ts 块外改了 import，登 red_exempt_outside，selection.test.ts 的原因按搬家后的实际改写。
 refs: [BR-WDR-12, BR-WDR-11, BR-ID-34]
 refs_hash:
   BR-WDR-12: 3a822658ab35
@@ -67,8 +68,10 @@ red_exempt:
     test: '[AC-F1-08am-READONLY#1] 已通过待执行单（银行卡、没有转账尝试）的详情按权限点出入口：不持 payout.execute 与 payout.manual_entry 时（其余写与查看权限点照持，或只持查看）【执行打款】【手动成功】都不出现（隐藏，不是置灰）；持 payout.execute 不持 payout.manual_entry 时只出可用的【执行打款】；持 payout.manual_entry 不持 payout.execute 时只出可用的【手动成功】；都不点，只发允许的 GET、不出现完整账号 / 姓名 / 手机号'
     reason: 'F1-08a / F1-08am 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08a-READONLY#1] 与本单新块、且其 helpers.ts 按 support 改过（assertReadOnly 纯插入），被整份判定；它的断言都在提现单详情页上，本单只改审核列表页（入口与页签计数），新旧实现下都成立'
 red_exempt_outside:
+  - file: test/spec/frontend/admin-withdrawals/readonly.test.ts
+    reason: 块外只改导入（D10-2345 机械搬家）：新增 import assertReadOnlyLanded（admin-withdrawal-batch-payout/frozen-moved/readonly-landed.ts，即原 helpers.ts 补丁 1 改过的 assertReadOnly 原样搬出改名），供登记的改动块 [AC-F1-08a-READONLY#1] 调用；从 ./helpers.ts 的导入列表去掉 assertReadOnly（本文件已无调用）；未改用例块 [AC-F1-08a-READONLY#2] / [#3] / [AC-F1-08am-READONLY#1] 与基线相同
   - file: test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts
-    reason: 块外只新增导入 landedFor（helpers.ts 按补丁 1 纯插入的函数），供登记的改动块 [AC-F1-08ai-ACCESS#1] 的 assertNoOtherActions(landedFor(permissions)) 用；未改用例块 [AC-F1-08ai-SELECT#1] / [#2] / [AC-F1-08ai-FILTER#1] 与基线相同
+    reason: 块外只改导入（补丁 5 后经 D10-2345 机械搬家）：新增 import assertNoOtherActionsLanded / landedFor / mountLanded（admin-withdrawal-batch-payout/frozen-moved/batch-approve-landed.ts，即原 helpers.ts 补丁 1 改过的函数原样搬出），供登记的改动块 [AC-F1-08ai-ACCESS#1] 与本单新块调用；从 ./helpers.ts 的导入列表去掉 assertNoOtherActions（本文件已无调用）；未改用例块 [AC-F1-08ai-SELECT#1] / [#2] / [AC-F1-08ai-FILTER#1] 与基线相同
 modify_existing:
   - file: 'test/spec/frontend/admin-withdrawals/readonly.test.ts'
     test: '[AC-F1-08a-READONLY#1] 审核列表（账号持 withdraw.review、payout.execute、payout.manual_entry、export、pii.reveal_identity、pii.reveal_phone 等全部写与查看全量权限点）：没有可点的【批量通过】【批量手动打款】【批量自动打款】【导出】等写入口，点任何写入口或【查看】类入口都只发允许的 GET'
@@ -148,30 +151,6 @@ modify_existing:
     br: [BR-WDR-12]
     ruling: D10-2179
     note: "D10-2179（approvals 第 115 条）：本单进页时 5 个状态页签各一次 page_size=1 计数读（D10-2017），使本块「列表读」由 1 次变 6 次；改为列表读只取 page_size 不为 '1' 的读、原期望一字不动，旁边配计数读严格断言（排序后 toEqual 恰 5 条、各带该页签快捷筛选与 page '1'、page_size '1'）；其余断言、金额 / 请求体 / 揭示断言不涉及"
-  - file: 'test/spec/frontend/admin-route-status-param/withdrawals.test.ts'
-    scope: support
-    reason: rule_change
-    br: [BR-WDR-12]
-    ruling: D10-2179
-    note: "块外支撑改动按 D10-2100 文件级条目登记（D10-2179 (a)）：只新增与 queries() 并列的顶层函数（列表读 / 计数读，判据只认 page_size 是否为 '1'），原 queries() 与其余顶层代码不改。"
-  - file: 'test/spec/frontend/admin-withdrawals/helpers.ts'
-    scope: support
-    reason: rule_change
-    br: [BR-WDR-12, BR-WDR-11]
-    ruling: D10-2167
-    note: '块外支撑改动按 D10-2100 文件级条目登记（D10-2167 ②）：只做纯插入——断言函数 / 顶层 WRITE 加可选的「已落地入口」参数或旁路常量，不传参时行为逐字不变、禁词表不删；传入的入口（持 payout.execute 或超管时的【一键组批】）同时断言确实在、恰好多这一个。'
-  - file: 'test/spec/frontend/admin-withdrawal-batch-approve/helpers.ts'
-    scope: support
-    reason: rule_change
-    br: [BR-WDR-12, BR-WDR-11]
-    ruling: D10-2167
-    note: '块外支撑改动按 D10-2100 文件级条目登记（D10-2167 ②）：只做纯插入——断言函数 / 顶层 WRITE 加可选的「已落地入口」参数或旁路常量，不传参时行为逐字不变、禁词表不删；传入的入口（持 payout.execute 或超管时的【一键组批】）同时断言确实在、恰好多这一个。'
-  - file: 'test/spec/frontend/admin-withdrawals/pages.browser.test.ts'
-    scope: support
-    reason: rule_change
-    br: [BR-WDR-12, BR-WDR-11]
-    ruling: D10-2167
-    note: '块外支撑改动按 D10-2100 文件级条目登记（D10-2167 ②）：只做纯插入——断言函数 / 顶层 WRITE 加可选的「已落地入口」参数或旁路常量，不传参时行为逐字不变、禁词表不删；传入的入口（持 payout.execute 或超管时的【一键组批】）同时断言确实在、恰好多这一个。'
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-withdrawal-batch-payout/**'
