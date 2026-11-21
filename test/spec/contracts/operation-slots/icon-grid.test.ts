@@ -9,18 +9,28 @@ import {
   GOOD_INSTANTS,
   ICON_GRID_COLUMNS,
   ME,
+  MORE_SERVICES,
+  SEARCH,
+  admittedSearch,
   badge,
   badgeKeys,
   clone,
   columnsKey,
   expectPage,
+  findPaths,
   firstItem,
+  getAt,
   homeSection,
   isObj,
   isValidPage,
+  itemsOf,
   meBase,
+  meWithItems,
   moreServices,
   page,
+  sectionsOf,
+  setAt,
+  validGoldens,
   type BadgeKeys,
   type Obj,
 } from './kit.ts';
@@ -152,4 +162,94 @@ it('[AC-CT-27#11] icon_grid 的 props 定稿后关闭：golden 的 props 照收�
       );
     }
   }
+});
+
+/** 条目数上限的探测范围：上限须是不超过它的有限正整数。 */
+const MAX_PROBE = 100;
+
+it(`[AC-CT-27#25] me.more_services 的 static 条目数有有限上限（≤ ${MAX_PROBE}）：恰好到上限通过，再加一个合法且不同的条目即拒收`, () => {
+  // 08 BR-TEXT-28 准入表 me 行：「条目数上限、列数由契约线定稿」——定稿契约必须给出有限上限。
+  const results: boolean[] = [];
+  for (let n = 1; n <= MAX_PROBE + 1; n += 1) results.push(isValidPage(meWithItems(n)));
+  const limit = results.indexOf(false);
+  expect(limit, `me.more_services 在 ${MAX_PROBE} 个以内有条目数上限`).toBeGreaterThan(0);
+  expect(results.slice(0, limit).every(Boolean), `1～${limit} 个条目都收（上限以内不留空洞）`).toBe(
+    true,
+  );
+  expect(results.slice(limit).some(Boolean), `超过上限 ${limit} 后一律拒收`).toBe(false);
+  expectPage(meWithItems(limit), true, `恰好 ${limit} 个条目`);
+  expectPage(meWithItems(limit + 1), false, `${limit + 1} 个条目`);
+  const goldenCount = itemsOf(moreServices(meBase())).length;
+  expect(goldenCount, 'me golden 的条目数不超过上限').toBeLessThanOrEqual(limit);
+});
+
+it('[AC-CT-27#26] 徽标只用于 icon_grid 条目：首页 popup、banner、活动入口与 search 置顶位的条目加合法红点 / 文字徽标都拒收', () => {
+  // 08 BR-TEXT-29 细则「徽标」末项：本批徽标只用于 icon_grid 条目（「我的 · 更多服务」与首页金刚区）。
+  const keys = badgeKeys();
+  const cases: { label: string; pageKey: string; section: Obj }[] = [
+    { label: 'home.popup', pageKey: 'home', section: homeSection('popup') },
+    { label: 'home.banner', pageKey: 'home', section: homeSection('banner') },
+    { label: 'home.activity_entry', pageKey: 'home', section: homeSection('activity_entry') },
+    ...admittedSearch()
+      .filter(({ section }) => itemsOf(section).length > 0)
+      .map(({ type, section }) => ({ label: `search.${type}`, pageKey: SEARCH, section })),
+  ];
+  for (const { label, pageKey, section } of cases) {
+    expectPage(page(pageKey, [clone(section)]), true, `${label} 不带徽标`);
+    for (const value of [badge(keys, 'dot'), textBadge(keys, '新')]) {
+      const next = clone(section);
+      firstItem(next)['badge'] = value;
+      expectPage(page(pageKey, [next]), false, `${label} 条目带徽标 ${JSON.stringify(value)}`);
+    }
+  }
+});
+
+const DIGEST = /^[0-9a-f]{64}$/;
+
+it('[AC-CT-27#27] me 的下发图标带可核对的摘要：golden 每个条目有 https 图标地址与 64 位小写十六进制摘要；去掉摘要、改坏摘要、图标改 http 都拒收', () => {
+  // 08 BR-TEXT-30 细则「图标」第 3 项：下发图片存 OSS media，下发带摘要（同 BR-TEXT-24、BR-TEXT-26 的做法，
+  // 即 popup lottie 的 sha256：64 位小写十六进制）；字段名契约定，这里按值找（跳转字段除外）。
+  const goldens = validGoldens().filter(({ page: p }) => p['page_key'] === ME);
+  expect(
+    goldens.map((g) => g.name),
+    'page_key=me 的 golden',
+  ).not.toEqual([]);
+  let checked = 0;
+  for (const { name, page: base } of goldens) {
+    sectionsOf(base).forEach((section, s) => {
+      if (section['id'] !== MORE_SERVICES) return;
+      itemsOf(section).forEach((item, i) => {
+        const where = `${name} sections.${s} 条目 #${i}`;
+        const itemPath = ['sections', s, 'data_source', 'items', i];
+        const isDigest = (v: unknown): boolean => typeof v === 'string' && DIGEST.test(v);
+        const isHttps = (v: unknown): boolean => typeof v === 'string' && v.startsWith('https://');
+        const digests = findPaths(item, isDigest, ['action']);
+        const urls = findPaths(item, isHttps, ['action']);
+        expect(digests.length, `${where} 带图标摘要`).toBeGreaterThan(0);
+        expect(urls.length, `${where} 带 https 图标地址`).toBeGreaterThan(0);
+        for (const rel of digests) {
+          const path = [...itemPath, ...rel];
+          const value = String(getAt(base, path));
+          expectPage(setAt(base, path, undefined), false, `${where} 去掉摘要 ${rel.join('.')}`);
+          for (const bad of [
+            value.slice(1),
+            `${value}0`,
+            `g${value.slice(1)}`,
+            `A${value.slice(1)}`,
+            `sha256:${value}`,
+          ]) {
+            expectPage(setAt(base, path, bad), false, `${where} 摘要改成 ${bad}`);
+          }
+        }
+        for (const rel of urls) {
+          const path = [...itemPath, ...rel];
+          const value = String(getAt(base, path));
+          const http = `http://${value.slice('https://'.length)}`;
+          expectPage(setAt(base, path, http), false, `${where} 图标改 http`);
+        }
+        checked += 1;
+      });
+    });
+  }
+  expect(checked, 'me golden 的 more_services 条目').toBeGreaterThan(0);
 });

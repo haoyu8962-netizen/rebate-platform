@@ -1,23 +1,25 @@
 // CT-27 · section 与 static 条目的起止时刻（08 BR-TEXT-29「运营位的排期、频次与徽标」细则「起止时间」；
 // 04 §6.2「运营位」②：建议名 start_at / end_at，ISO 8601 带 +08:00，BR-TEXT-11）。
-// 时刻格式按契约既有写法（notice_item 的 date-time）；条目区间不超出 section 区间是保存时的服务端校验
-// （20001，04 §6.6），JSON Schema 表达不了，不在本文件。
-import { it } from 'vitest';
+// 「section 与其中每个条目都可设起止时刻」：覆盖批 1 用到的每一类 section（首页原有 8 类、me 的
+// more_services、契约启用的每种 search 置顶位）与 static 数据源的每一个条目（不只第一个）。
+// 公告条条目（notice_item）已有的生效与失效时刻照旧（BR-TEXT-13 细则），不在本文件重复检查。
+// 条目区间不超出 section 区间是保存时的服务端校验（20001，04 §6.6），JSON Schema 表达不了，不在本文件。
+import { expect, it } from 'vitest';
 import {
   BAD_INSTANTS,
   GOOD_INSTANTS,
   ME,
+  OFFSET_BAD_INSTANTS,
+  REGISTERED,
   SEARCH,
+  admittedSearch,
   clone,
   expectPage,
-  firstItem,
   homeSection,
   itemsOf,
   meBase,
   moreServices,
   page,
-  searchBase,
-  sectionsOf,
   type Obj,
 } from './kit.ts';
 
@@ -28,20 +30,35 @@ const GOOD_RANGES: Obj[] = [
   { start_at: START },
   { end_at: LATER },
 ];
+/** 格式不合，或语法合法但偏移量不是 +08:00。 */
+const REJECTED: unknown[] = [...BAD_INSTANTS, ...OFFSET_BAD_INSTANTS];
 
 type Case = { label: string; pageKey: string; section: Obj };
 
-/** 批 1 用得到的几种 section：me 的 more_services、search 的置顶位、首页弹窗（后台表单带起止时刻）与首页 banner。 */
+/** 批 1 用到的各类 section：首页原有 8 类、me 的 more_services、契约启用的每种 search 置顶位。 */
 function sectionCases(): Case[] {
   return [
     { label: 'me.more_services', pageKey: ME, section: moreServices(meBase()) },
-    { label: 'search 置顶位', pageKey: SEARCH, section: sectionsOf(searchBase())[0] as Obj },
-    { label: 'home.popup', pageKey: 'home', section: homeSection('popup') },
-    { label: 'home.banner', pageKey: 'home', section: homeSection('banner') },
+    ...admittedSearch().map(({ type, section }) => ({
+      label: `search.${type}`,
+      pageKey: SEARCH,
+      section,
+    })),
+    ...REGISTERED.map((type) => ({
+      label: `home.${type}`,
+      pageKey: 'home',
+      section: homeSection(type),
+    })),
   ];
 }
 
-it('[AC-CT-27#5] section 可带起止时刻 start_at / end_at（date-time，可只设一端），格式不合拒收', () => {
+function withItem(section: Obj, index: number, fields: Obj): Obj {
+  const next = clone(section);
+  Object.assign(itemsOf(next)[index] as Obj, fields);
+  return next;
+}
+
+it('[AC-CT-27#5] 每类 section 可带起止时刻 start_at / end_at（+08:00 的 date-time，可只设一端）；格式不合或偏移量不是 +08:00（Z、+09:00 等）拒收', () => {
   for (const { label, pageKey, section } of sectionCases()) {
     expectPage(page(pageKey, [clone(section)]), true, `${label} 不设起止`);
     for (const range of GOOD_RANGES) {
@@ -51,7 +68,7 @@ it('[AC-CT-27#5] section 可带起止时刻 start_at / end_at（date-time，可�
         `${label} 带 ${JSON.stringify(range)}`,
       );
     }
-    for (const bad of BAD_INSTANTS) {
+    for (const bad of REJECTED) {
       for (const key of ['start_at', 'end_at']) {
         expectPage(
           page(pageKey, [{ ...clone(section), [key]: bad }]),
@@ -63,20 +80,34 @@ it('[AC-CT-27#5] section 可带起止时刻 start_at / end_at（date-time，可�
   }
 });
 
-it('[AC-CT-27#6] static 数据源的每个条目可带起止时刻 start_at / end_at（date-time，可只设一端），格式不合拒收', () => {
+it('[AC-CT-27#6] static 数据源的每个条目（含第二个及以后）可带起止时刻 start_at / end_at；任一条目格式不合或偏移量不是 +08:00 都拒收', () => {
   // BR-TEXT-29：section 与其中每个条目都可设起止时刻；例：双十一活动格 end_at=11-12T00:00:00+08:00。
-  const cases = sectionCases().filter(({ section }) => itemsOf(section).length > 0);
+  const cases = sectionCases().filter(
+    ({ section }) => section['type'] !== 'notice_bar' && itemsOf(section).length > 0,
+  );
+  const multi = cases.filter(({ section }) => itemsOf(section).length > 1).map((c) => c.label);
+  // 首页 banner、金刚区、活动入口的 golden 都有两个以上条目：保证「第二项」真的被检查到。
+  for (const label of ['home.banner', 'home.icon_grid', 'home.activity_entry']) {
+    expect(multi, `${label} 的 golden 至少两个条目`).toContain(label);
+  }
   for (const { label, pageKey, section } of cases) {
-    for (const range of GOOD_RANGES) {
-      const next = clone(section);
-      Object.assign(firstItem(next), range);
-      expectPage(page(pageKey, [next]), true, `${label} 条目带 ${JSON.stringify(range)}`);
-    }
-    for (const bad of BAD_INSTANTS) {
-      for (const key of ['start_at', 'end_at']) {
-        const next = clone(section);
-        firstItem(next)[key] = bad;
-        expectPage(page(pageKey, [next]), false, `${label} 条目 ${key}=${JSON.stringify(bad)}`);
+    const count = itemsOf(section).length;
+    for (let i = 0; i < count; i += 1) {
+      for (const range of GOOD_RANGES) {
+        expectPage(
+          page(pageKey, [withItem(section, i, range)]),
+          true,
+          `${label} 条目 #${i} 带 ${JSON.stringify(range)}`,
+        );
+      }
+      for (const bad of REJECTED) {
+        for (const key of ['start_at', 'end_at']) {
+          expectPage(
+            page(pageKey, [withItem(section, i, { [key]: bad })]),
+            false,
+            `${label} 条目 #${i} ${key}=${JSON.stringify(bad)}`,
+          );
+        }
       }
     }
   }

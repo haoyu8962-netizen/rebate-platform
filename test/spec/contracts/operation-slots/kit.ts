@@ -579,31 +579,331 @@ export function response200Data(doc: Obj, path: string, method: string): Obj {
   return resolve(doc, at(schema, 'properties', 'data'));
 }
 
-export type Field = { where: string; name: string; schema: Obj; required: boolean };
+export type Field = {
+  where: string;
+  path: string;
+  /** 字段在 200 响应体里的位置（如 ['data', 'default_word']）。 */
+  bodyPath: string[];
+  name: string;
+  schema: Obj;
+  required: boolean;
+};
 
-function fieldsOf(doc: Obj, where: string, schema: Obj): Field[] {
+function fieldsOf(doc: Obj, path: string, bodyPath: string[], where: string, schema: Obj): Field[] {
   const props = isObj(schema['properties']) ? schema['properties'] : {};
   const required = Array.isArray(schema['required']) ? schema['required'] : [];
   return Object.entries(props).map(([name, def]) => ({
     where,
+    path,
+    bodyPath: [...bodyPath, name],
     name,
     schema: resolve(doc, def),
     required: required.includes(name),
   }));
 }
 
+/** 名字像默认词（default / placeholder）。 */
+const DEFAULT_WORD_NAME = /default|placeholder/i;
+/** 名字像、语义不对的（评审 S1 #11 的 default_locale 一类）：直接排除。 */
+const NOT_DEFAULT_WORD = /locale|lang|currency|region|timezone|sort|order|tab|platform|channel/i;
+
 /**
- * 搜索框默认词字段的候选（01 F-PROD-16：随热词接口或 `/v1/config` 下发，以契约为准；04 / 08 未定名）：
- * `GET /v1/search/hot-words` 的 data、`GET /v1/config` 的 data 及其名字含 search 的一层子对象里，
- * 名字含 default 或 placeholder 的属性。
+ * 搜索框默认词字段的候选（01 F-PROD-16：随热词接口或 `/v1/config` 下发，以契约为准；04 / 08 未定名）。
+ * 只收「搜索语境」里的字段：`GET /v1/search/hot-words` 的 data 本身就是搜索语境；`GET /v1/config` 只看
+ * data 里名字含 search 的字段，以及名字含 search 的一层子对象里的字段。名字须含 default 或 placeholder，
+ * 且不含 locale、lang 等别的语义。字段说明是否明确写了「搜索框默认词」由用例另查。
  */
 export function defaultWordFields(doc: Obj): Field[] {
-  const semantic = /default|placeholder/i;
-  const hotData = response200Data(doc, '/v1/search/hot-words', 'get');
-  const hot = fieldsOf(doc, 'getSearchHotWords.data', hotData);
-  const config = fieldsOf(doc, 'getConfig.data', response200Data(doc, '/v1/config', 'get'));
-  const nested = config
-    .filter((f) => /search/i.test(f.name))
-    .flatMap((f) => fieldsOf(doc, `getConfig.data.${f.name}`, f.schema));
-  return [...hot, ...config, ...nested].filter((f) => semantic.test(f.name));
+  const hotPath = '/v1/search/hot-words';
+  const configPath = '/v1/config';
+  const hotData = response200Data(doc, hotPath, 'get');
+  const hot = fieldsOf(doc, hotPath, ['data'], 'getSearchHotWords.data', hotData);
+  const configData = response200Data(doc, configPath, 'get');
+  const config = fieldsOf(doc, configPath, ['data'], 'getConfig.data', configData).filter((f) =>
+    /search/i.test(f.name),
+  );
+  const nested = config.flatMap((f) =>
+    fieldsOf(doc, configPath, f.bodyPath, `getConfig.data.${f.name}`, f.schema),
+  );
+  return [...hot, ...config, ...nested].filter(
+    (f) => DEFAULT_WORD_NAME.test(f.name) && !NOT_DEFAULT_WORD.test(f.name),
+  );
+}
+
+/** 字段说明明确写了「搜索（输入）框的默认词 / 占位文字」。 */
+export function describesSearchBoxDefault(schema: Obj): boolean {
+  const description = typeof schema['description'] === 'string' ? schema['description'] : '';
+  const box = /搜索框|搜索输入框|search[ _-]?(box|bar|input|field)/i;
+  const word =
+    /默认词|默认搜索词|默认文字|默认提示|占位|placeholder|default (search )?(word|term|keyword|text|query)/i;
+  return box.test(description) && word.test(description);
+}
+
+/** 200 响应的 schema（整份响应信封）。 */
+export function response200Schema(doc: Obj, path: string, method: string): Obj {
+  const op = at(doc, 'paths', path, method);
+  const response = resolve(doc, at(op, 'responses', '200'));
+  return resolve(doc, at(response, 'content', 'application/json', 'schema'));
+}
+
+/** 200 响应的示例（example 或 examples 的第一个）。 */
+export function response200Example(doc: Obj, path: string, method: string): unknown {
+  const op = at(doc, 'paths', path, method);
+  const response = resolve(doc, at(op, 'responses', '200'));
+  const media = at(response, 'content', 'application/json');
+  if (Object.hasOwn(media, 'example')) return clone(media['example']);
+  const examples = isObj(media['examples']) ? Object.values(media['examples']) : [];
+  expect(examples.length, `${method.toUpperCase()} ${path} 的 200 响应示例`).toBeGreaterThan(0);
+  return clone(resolve(doc, examples[0])['value']);
+}
+
+// ---------------------------------------------------------------------------------------------
+// 批 1 的补充（spec-test r1）
+
+/** 08 BR-TEXT-28 细则「不可配清单」：订单页、钱包页不设运营位，这些名字不是 page_key。 */
+export const NO_SLOT_PAGE_KEYS = ['wallet', 'orders', 'order', 'withdraw'] as const;
+
+/**
+ * BR-TEXT-29 细则「起止时间」：ISO 8601 带 +08:00（BR-TEXT-11）。下列时刻语法合法，但偏移量不是 +08:00，
+ * 不能作为下发值。
+ */
+export const OFFSET_BAD_INSTANTS = [
+  '2026-11-11T00:00:00Z',
+  '2026-11-10T16:00:00.000Z',
+  '2026-11-11T01:00:00+09:00',
+  '2026-11-11T00:00:00+00:00',
+];
+
+export type Candidate = { type: string; section: Obj };
+
+export const SEARCH_TOP_ID = 'search_top';
+
+/**
+ * search 结果页置顶位的两种候选（08 BR-TEXT-28 准入表 search 行：`banner` 或接商品池的 `product_scroll`，
+ * 以契约为准），各自独立、取自首页 golden（跳转换成站内路由）。
+ */
+export function searchCandidates(): Candidate[] {
+  const banner: Obj = { ...homeSection('banner'), id: SEARCH_TOP_ID };
+  const scroll: Obj = {
+    ...homeSection('product_scroll'),
+    id: SEARCH_TOP_ID,
+    data_source: { kind: 'product_pool', pool_id: 'pool_demo_hot', limit: 10 },
+  };
+  return [
+    { type: 'banner', section: banner },
+    { type: 'product_scroll', section: scroll },
+  ];
+}
+
+/** 契约实际启用的 search 置顶位候选（至少一种）。 */
+export function admittedSearch(): Candidate[] {
+  const admitted = searchCandidates().filter(({ section }) =>
+    isValidPage(page(SEARCH, [clone(section)])),
+  );
+  expect(
+    admitted.map((c) => c.type),
+    'search 至少收 banner、接商品池的 product_scroll 之一作置顶位',
+  ).not.toEqual([]);
+  return admitted;
+}
+
+function escapePointer(key: string): string {
+  return key.replaceAll('~', '~0').replaceAll('/', '~1');
+}
+
+/**
+ * home-schema.json `$defs` 里的准入定义（04 §6.2「运营位」①：每个 page_key 一张准入表，放在契约里供
+ * 服务端保存校验与后台表单共用）。名字没定，认两种写法：① `$defs` 里某个对象同时有 `me`、`search` 两个键
+ * （不是 properties 表）；② 一对 `$defs` 名字只差 `me` / `search` 一段、且名字含 admission / sections / allow
+ * （如 `admission_me` / `admission_search`、`sections_me` / `sections_search`）。
+ */
+function admissionPointers(pageKey: string): string[] {
+  const defs = homeSchema()['$defs'];
+  const out = new Set<string>();
+  if (!isObj(defs)) return [];
+  const visit = (node: unknown, ptr: string, parentKey: string): void => {
+    if (Array.isArray(node)) {
+      node.forEach((child, i) => visit(child, `${ptr}/${i}`, String(i)));
+      return;
+    }
+    if (!isObj(node)) return;
+    if (parentKey !== 'properties' && isObj(node[ME]) && isObj(node[SEARCH])) {
+      out.add(`${ptr}/${escapePointer(pageKey)}`);
+    }
+    for (const [key, child] of Object.entries(node)) {
+      visit(child, `${ptr}/${escapePointer(key)}`, key);
+    }
+  };
+  visit(defs, '#/$defs', '$defs');
+  const names = Object.keys(defs);
+  for (const name of names) {
+    if (!/(^|[_-])me($|[_-])/.test(name) || !/admission|sections|allow/i.test(name)) continue;
+    const partner = name.replace(/(^|[_-])me(?=$|[_-])/, `$1${SEARCH}`);
+    if (partner !== name && names.includes(partner)) {
+      out.add(`#/$defs/${escapePointer(pageKey === ME ? name : partner)}`);
+    }
+  }
+  return [...out].sort();
+}
+
+export type Admission = { where: string; admits(sections: Obj[]): boolean };
+
+/**
+ * page_key 的准入定义，编译成校验函数：它是该页 `sections` 数组的 JSON Schema（整页 schema 按 page_key
+ * 引用它），服务端保存与后台表单读同一份。`admits(sections)` 即该数组过这份定义。
+ */
+export function admissionEntries(pageKey: string): Admission[] {
+  const pointers = admissionPointers(pageKey);
+  expect(
+    pointers,
+    `home-schema.json $defs 里 ${pageKey} 的准入定义（04 §6.2「运营位」①，供保存校验与后台表单共用）`,
+  ).not.toEqual([]);
+  const root = homeSchema();
+  return pointers.map((ptr) => {
+    const validate = compileStrict({ $schema: root['$schema'], $defs: root['$defs'], $ref: ptr });
+    return { where: ptr, admits: (sections: Obj[]) => validate(clone(sections)) };
+  });
+}
+
+/** me.more_services 带 n 个互不相同的条目（以 golden 第一个条目为底，跳转各指一篇帮助文章）。 */
+export function meWithItems(n: number): Obj {
+  const section = clone(moreServices(meBase()));
+  const first = firstItem(section);
+  const items: Obj[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const item = clone(first);
+    item['action'] = { route: 'Help', params: { article_id: `guide_${i}` } };
+    for (const key of ['id', 'item_id', 'key', 'slug']) {
+      if (typeof item[key] === 'string') item[key] = `${String(item[key])}_${i}`;
+    }
+    items.push(item);
+  }
+  section['data_source'] = { ...object(section['data_source']), items };
+  return page(ME, [section]);
+}
+
+export type Path = (string | number)[];
+
+/** 值里满足条件的节点的位置（命中后不再往下找）。 */
+export function findPaths(
+  value: unknown,
+  match: (node: unknown) => boolean,
+  skip: readonly string[] = [],
+  path: Path = [],
+): Path[] {
+  if (match(value)) return [path];
+  if (Array.isArray(value)) {
+    return value.flatMap((child, i) => findPaths(child, match, skip, [...path, i]));
+  }
+  if (isObj(value)) {
+    return Object.entries(value)
+      .filter(([key]) => !skip.includes(key))
+      .flatMap(([key, child]) => findPaths(child, match, skip, [...path, key]));
+  }
+  return [];
+}
+
+export function getAt(value: unknown, path: Path): unknown {
+  let node = value;
+  for (const key of path) {
+    if (!isObj(node) && !Array.isArray(node)) return undefined;
+    node = (node as Record<string, unknown>)[String(key)];
+  }
+  return node;
+}
+
+/** 副本上把 path 处换成 next（next 为 undefined 时删掉该键）。 */
+export function setAt(value: unknown, path: Path, next: unknown): unknown {
+  if (path.length === 0) return clone(next);
+  const copy = clone(value);
+  let node = copy as Record<string, unknown>;
+  for (const key of path.slice(0, -1)) node = node[String(key)] as Record<string, unknown>;
+  const last = String(path.at(-1));
+  if (next === undefined) delete node[last];
+  else node[last] = clone(next);
+  return copy;
+}
+
+/** 后台写操作请求体的示例（example 与 examples 的每个 value）。 */
+export function requestExamples(doc: Obj, op: Obj): unknown[] {
+  if (op['requestBody'] === undefined) return [];
+  const content = resolve(doc, op['requestBody'])['content'];
+  if (!isObj(content) || !isObj(content['application/json'])) return [];
+  const media = content['application/json'];
+  const out: unknown[] = [];
+  if (Object.hasOwn(media, 'example')) out.push(clone(media['example']));
+  if (isObj(media['examples'])) {
+    for (const entry of Object.values(media['examples'])) {
+      const example = resolve(doc, entry);
+      if (Object.hasOwn(example, 'value')) out.push(clone(example['value']));
+    }
+  }
+  return out;
+}
+
+export function requestSchema(doc: Obj, op: Obj): Obj {
+  const body = resolve(doc, op['requestBody']);
+  return resolve(doc, at(body, 'content', 'application/json', 'schema'));
+}
+
+/** 从一个 openapi 节点出发、经 $ref 能到的全部 `properties.<prop>` 定义（跳过示例）。 */
+function propertyDefsIn(doc: Obj, root: unknown, prop: string): Obj[] {
+  const out: Obj[] = [];
+  const seen = new Set<string>();
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (!isObj(node)) return;
+    const ref = node['$ref'];
+    if (typeof ref === 'string') {
+      if (!ref.startsWith('#/') || seen.has(ref)) return;
+      seen.add(ref);
+      visit(pointer(doc, ref));
+      return;
+    }
+    const props = node['properties'];
+    if (isObj(props) && props[prop] !== undefined) out.push(resolve(doc, props[prop]));
+    for (const [key, child] of Object.entries(node)) {
+      if (key !== 'example' && key !== 'examples') visit(child);
+    }
+  };
+  visit(root);
+  return out;
+}
+
+export type Definition = { where: string; schema: Obj };
+
+const PAGE_PATHS = /^\/(admin\/)?v1\/pages(\/|$)/;
+const METHODS = ['get', 'post', 'put', 'patch', 'delete'];
+
+/**
+ * 页面配置各操作（`/v1/pages…` 与后台 `/admin/v1/pages…` 的保存、读取、发布等）实际用到的页面键定义：
+ * 路径参数 page_key，以及请求体、响应里的 page_key 属性。
+ */
+export function pageKeyDefinitions(doc: Obj): Definition[] {
+  const out: Definition[] = [];
+  for (const [path, item] of Object.entries(at(doc, 'paths'))) {
+    if (!PAGE_PATHS.test(path) || !isObj(item)) continue;
+    const shared: unknown[] = Array.isArray(item['parameters']) ? item['parameters'] : [];
+    for (const method of METHODS) {
+      const op = item[method];
+      if (!isObj(op)) continue;
+      const name = `${method.toUpperCase()} ${path}`;
+      const own: unknown[] = Array.isArray(op['parameters']) ? op['parameters'] : [];
+      for (const raw of [...shared, ...own]) {
+        const param = resolve(doc, raw);
+        if (param['name'] === 'page_key' && param['in'] === 'path') {
+          out.push({ where: `${name} 路径参数 page_key`, schema: resolve(doc, param['schema']) });
+        }
+      }
+      for (const part of ['requestBody', 'responses'] as const) {
+        propertyDefsIn(doc, op[part], 'page_key').forEach((schema, i) => {
+          out.push({ where: `${name} ${part} 里的 page_key #${i}`, schema });
+        });
+      }
+    }
+  }
+  return out;
 }

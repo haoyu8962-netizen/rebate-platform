@@ -221,23 +221,74 @@ it('[AC-CT-27#21] golden 有准入表外类型的拒收样例：me / search 放�
   ).not.toEqual([]);
 });
 
+/** 带起止时刻、每日次数与时段的首页弹窗 section。 */
+function timedPopup(s: Obj): boolean {
+  if (s['type'] !== 'popup') return false;
+  const timed = [s, ...itemsOf(s)].some(
+    (node) => typeof node['start_at'] === 'string' || typeof node['end_at'] === 'string',
+  );
+  const props = isObj(s['props']) ? s['props'] : {};
+  return timed && props['daily_max'] !== undefined && props['time_window'] !== undefined;
+}
+
 it('[AC-CT-27#22] golden 有带起止时刻的首页弹窗：popup 带 start_at / end_at 与每日次数、时段，通过校验', () => {
   // 批 1 ②：首页弹窗补后台表单，弹窗带起止时刻（BR-TEXT-29）与每日次数、时段（01 F-HOME-08）。
   const hits = validGoldens().filter(
-    ({ page }) =>
-      page['page_key'] === 'home' &&
-      looseSections(page).some((s) => {
-        if (s['type'] !== 'popup') return false;
-        const timed = [s, ...itemsOf(s)].some(
-          (node) => typeof node['start_at'] === 'string' || typeof node['end_at'] === 'string',
-        );
-        const props = isObj(s['props']) ? s['props'] : {};
-        return timed && props['daily_max'] !== undefined && props['time_window'] !== undefined;
-      }),
+    ({ page }) => page['page_key'] === 'home' && looseSections(page).some(timedPopup),
   );
   expect(
     hits.map((g) => g.name),
     '带起止时刻、每日次数与时段的首页弹窗样例',
   ).not.toEqual([]);
   for (const { name, page } of hits) expect(isValidPage(page), `${name} 通过`).toBe(true);
+});
+
+it('[AC-CT-27#28] 首页弹窗的每日次数是正整数、时段是两个 HH:mm：在带起止时刻的合法弹窗 golden 上单独改每个字段，非正整数次数、越界时刻、长度不对的时段都拒收', () => {
+  // 08 BR-TEXT-29 细则「每日次数与时段」：弹窗带每日展示次数上限与每日时段（沿用 01 F-HOME-08）；
+  // 后台表单（批 1 ②）提交的就是这两个字段。键名 daily_max / time_window 是契约已有的名字。
+  const hits = validGoldens().filter(
+    ({ page }) => page['page_key'] === 'home' && looseSections(page).some(timedPopup),
+  );
+  expect(
+    hits.map((g) => g.name),
+    '带起止时刻、每日次数与时段的首页弹窗样例',
+  ).not.toEqual([]);
+  const { name, page: base } = hits[0] as Golden;
+  expect(isValidPage(base), `${name} 通过`).toBe(true);
+  const index = looseSections(base).findIndex(timedPopup);
+
+  const withProp = (key: string, value: unknown): Obj => {
+    const next = clone(base);
+    const section = looseSections(next)[index] as Obj;
+    section['props'] = { ...object(section['props']), [key]: value };
+    return next;
+  };
+  const cases: [string, unknown, boolean][] = [
+    ['daily_max', 1, true],
+    ['daily_max', 3, true],
+    ['daily_max', 0, false],
+    ['daily_max', -1, false],
+    ['daily_max', 1.5, false],
+    ['daily_max', '1', false],
+    ['daily_max', null, false],
+    ['time_window', ['00:00', '23:59'], true],
+    ['time_window', ['08:00', '23:00'], true],
+    ['time_window', ['25:00', '23:00'], false],
+    ['time_window', ['08:00', '24:00'], false],
+    ['time_window', ['08:60', '23:00'], false],
+    ['time_window', ['8:00', '23:00'], false],
+    ['time_window', ['08:00:00', '23:00:00'], false],
+    ['time_window', ['25:00'], false],
+    ['time_window', ['08:00'], false],
+    ['time_window', ['08:00', '12:00', '23:00'], false],
+    ['time_window', [], false],
+    ['time_window', '08:00-23:00', false],
+    ['time_window', null, false],
+  ];
+  for (const [key, value, valid] of cases) {
+    const label = `${name} 弹窗 ${key}=${JSON.stringify(value)}`;
+    expect(isValidPage(withProp(key, value)), `${label}：期望${valid ? '通过' : '被拒'}`).toBe(
+      valid,
+    );
+  }
 });
