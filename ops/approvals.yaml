@@ -795,3 +795,9 @@ approvals:
     granted: true
     date: '2026-11-21'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 实现 / 评审轮次属门禁流程小改动），D10-2368，先例第 124–128 条。原因：B3-08t 实现 3 / 3 已用满；money r1 六条 S1 由实现 r3 修复并经 money r2 确认关闭（⑤ 的 gateway 一半按 D10-2362 并入 B4），money r2 新报三条 S1 与 r1 ③⑥ 同类、两轮没修干净。做法按 CLAUDE.md「先补检查、再升强度」：留痕字段统一为「只落核对过的，没核对过留空」，宁可漏判留空、不可误判。止损：money r3 再出新 S1 即停报编排，属实的登 FU，不再加轮。'
+  - id: 130
+    row: 4
+    title: 'B3-08t 任务专属一次性追加：Codex money 评审增量 1 轮（r4），不改代码——评审书只附范围裁定 D10-2362（model-gateway 失败尝试用量，延后到 FU-GATEWAY-FAILED-ATTEMPT-USAGE）与 D10-2377（模型路径启用后 model / model_snapshot 的归属，延后到 FU-B3-08T-MODEL-ATTRIBUTION），两者均为「启用模型前必须」；范围内照常评审：intent、input_passed、落库时点、事务、迁移 0153 与变基带入的差异，发现 S0 / S1 照报、结论照实'
+    granted: true
+    date: '2026-11-21'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-2380，先例第 124–129 条。原因：B3-08t 代码评审 3 轮与第 129 条已用满；money r3（couli-runs/B3-08t/review-money-r3-codex.json）两条 S1 只在启用模型路径后可达、只碰 model / model_snapshot，编排按 D10-2377 裁为本单范围外；evidence-check 要求代码评审 verdict pass，门禁不绕、标签不替它作数（D10-2244），故再评一轮，评审书不得写「请改判 pass」。止损：r4 在范围内再出 S0 / S1 即停报编排，不再开条目，改为拆出 intent / input_passed 最小集单独落地、model 两列挪到 B4。'
