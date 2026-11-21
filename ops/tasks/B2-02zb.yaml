@@ -16,7 +16,7 @@ type: impl
 # 2026-11-20 补丁 1（D10-2237，money r1 S2）：07 由 11_negative-balance-drops-by-amount.sql 替代后，两个冻结夹具写死的旧文件名照 B2-04zzr / D10-1140 先例改成新文件名——test/spec/ledger/daily-check-execute/kit.ts:65（FILES['07']）与 test/spec/settlement/admin-union-receipts/kit.ts:96（INVARIANT_FILES），只改这两处（D10-1670 类，不动金额期望、不删不放宽断言），modify_existing 两条；superseded.json 的追加照 approvals 61 / D10-1150 算规则测试资产，列入 test_paths、由写测提交（approvals 一次性条目，写测第 4 次只改这三处，新鲜独立 Claude 改 + 另一位只读复审）。
 refs: [BR-FUND-19]
 refs_hash:
-  BR-FUND-19: a918eec09fff
+  BR-FUND-19: ab824a70d47c
 deps: []
 paths:
   - 'db/invariants/ledger/11_negative-balance-drops-by-amount.sql'

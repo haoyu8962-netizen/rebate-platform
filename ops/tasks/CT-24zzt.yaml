@@ -7,7 +7,7 @@ type: contract
 # 大数用例由实现方（B2-02x）补单元测试，不进规则测试（D10-2067）。
 refs: [BR-FUND-19, BR-FUND-16]
 refs_hash:
-  BR-FUND-19: a918eec09fff
+  BR-FUND-19: ab824a70d47c
   BR-FUND-16: 077f6d412d5a
 contract_sections: ['11.1']
 deps: [CT-24zzna]

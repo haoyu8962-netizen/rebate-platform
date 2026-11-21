@@ -12,7 +12,7 @@ refs_hash:
   BR-WDR-08: 8c55a3ce6b57
   BR-WDR-09: 68225c9af85f
   BR-WDR-17: f6119a685e00
-  BR-FUND-19: a918eec09fff
+  BR-FUND-19: ab824a70d47c
 contract_sections: ['11.1']
 deps: [CT-24w]
 paths:

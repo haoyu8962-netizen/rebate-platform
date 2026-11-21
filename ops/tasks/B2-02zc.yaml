@@ -13,7 +13,7 @@ type: impl
 # 入账前探针（主干 + 0152 + 读回未结单，测试机 519 文件 4162 例，B2-02zc/tests/1）另红 4 条，均因旧用例在同一 ref_id 上并存两张未结 ledger_mismatch 或索引不在 0060：B2-02xb#2、B2-04k#5、B2-04b#7、B2-04b#4，一并登记（只改造数据 / 查找范围，断言不放宽）。
 refs: [BR-FUND-19]
 refs_hash:
-  BR-FUND-19: a918eec09fff
+  BR-FUND-19: ab824a70d47c
 deps: []
 paths:
   - 'db/migrations/0152_recon-diffs-unresolved-internal-key.sql'

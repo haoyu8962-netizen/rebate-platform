@@ -16,7 +16,7 @@ type: impl
 # 补丁 1（D10-2299 / D10-2300）：配置键由前置 B2-02zda 登记（deps 加 B2-02zda，本单不再改 config-registry）；测试把余额缓存改坏须直写 account_balances，paths 加 tools/guard/ledger-writers.allow.txt（D10-2292；test_paths 只收规则测试资产，故由实现方在实现提交里加本目录一行，land 时随 PR 过 owner 标签）。补丁 2：paths 加 platform/metrics/registry.ts（指标族渲染处，照 credit-postcheck 在同文件登记 couli_ledger_auto_corrected_total）。
 refs: [BR-FUND-19, BR-FUND-16]
 refs_hash:
-  BR-FUND-19: a918eec09fff
+  BR-FUND-19: ab824a70d47c
   BR-FUND-16: 077f6d412d5a
 deps: [B2-02x, B2-02zb, B2-02zda]
 paths:

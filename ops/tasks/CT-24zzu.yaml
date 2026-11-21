@@ -8,7 +8,7 @@ type: contract
 # 会碰的钉子：packages/contracts-ts/src/fund-term-keys.test.ts:94 要求每个编码在 specs/fund-term-keys.yaml 恰在一段（本单加进 fund 段即满足）；冻结 test/spec/contracts/settle-adjusted-template/texts.test.ts [AC-CT-26za#7] 钉 inbox.title.* 按字典序（新键插对位置即可）；fund-terms.test.ts [AC-CT-26za#9] 钉 ordinary 段整份（本单不进 ordinary 段，不受影响）。
 refs: [BR-FUND-19, BR-FUND-24]
 refs_hash:
-  BR-FUND-19: a918eec09fff
+  BR-FUND-19: ab824a70d47c
   BR-FUND-24: 0f1a6ecb3334
 contract_sections: ['11.1']
 deps: []
