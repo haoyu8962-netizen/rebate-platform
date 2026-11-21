@@ -99,8 +99,16 @@ it.each(['--fast', '--red', '--related', '--browser', '--tests'])(
     expect(valid.status, valid.stderr).toBe(0);
 
     const other = flag === '--tests' ? [flag, 'test/spec'] : [flag];
-    expect(dryRun('--int-shard', '1', ...other).status).toBe(2);
-    expect(dryRun(...other, '--int-shard', '1').status).toBe(2);
+    const otherOnly = dryRun(...other);
+    for (const args of [
+      ['--int-shard', '1', ...other],
+      [...other, '--int-shard', '1'],
+    ]) {
+      const cli = dryRun(...args);
+      expect(cli.status, cli.stderr).toBe(2);
+      expect(cli.stderr).toMatch(/--int-shard|mutually exclusive|at most one|runs alone/i);
+      expect(cli.stderr.trim()).not.toBe(otherOnly.stderr.trim());
+    }
   },
   CLI_TIMEOUT,
 );

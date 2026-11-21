@@ -113,6 +113,14 @@ it.each([
   ['a shard is missing', workflow(job(1, FIRST, REST))],
   ['a job index is duplicated', workflow(job(1, FIRST), job(1, FIRST, REST), job(2, SECOND))],
   ['a command repeats another index', workflow(job(1, FIRST), job(2, FIRST, REST))],
+  [
+    'shard indices are swapped between their named jobs',
+    workflow(job(1, SECOND), job(2, FIRST, REST)),
+  ],
+  [
+    'a shard index exceeds N even though there are N numbered jobs',
+    workflow(job(1, FIRST), job(3, FIRST.replace('--shard=1/2', '--shard=3/2'), REST)),
+  ],
   ['shard denominators differ', workflow(job(1, FIRST), job(2, SECOND.replace('/2', '/3'), REST))],
   [
     'the numbered commands differ beyond the shard index',
