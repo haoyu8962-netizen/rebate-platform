@@ -8,7 +8,7 @@ type: impl
 refs: [BR-FUND-16, BR-FUND-19]
 refs_hash:
   BR-FUND-16: 077f6d412d5a
-  BR-FUND-19: a918eec09fff
+  BR-FUND-19: ab824a70d47c
 deps: [B2-02e]
 paths:
   - 'db/invariants/ledger/**'

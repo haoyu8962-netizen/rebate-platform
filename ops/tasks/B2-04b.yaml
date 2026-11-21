@@ -8,7 +8,7 @@ type: migration
 refs: [BR-FUND-18, BR-FUND-19, BR-FUND-22, BR-FUND-23]
 refs_hash:
   BR-FUND-18: c7ebd23ee75e
-  BR-FUND-19: a918eec09fff
+  BR-FUND-19: ab824a70d47c
   BR-FUND-22: c9930aaf2459
   BR-FUND-23: f1a3da3d602b
 deps: []

@@ -14,7 +14,7 @@ type: impl
 #   ⑤ 跨零照入账路径（D10-2041，契约 CT-24zzna）：available 由 ≥0 变 <0 时 account.went_negative 恰发一次且在同一事务里（事务失败回滚则不发）；由 <0 回到 ≥0 时恢复钩子（balanceRecoveredHook）恰调一次；不跨零、拒绝、前后相同时两者都不发生。用入账路径同一个跨零判定函数。
 refs: [BR-FUND-19, BR-FUND-16, BR-ID-34]
 refs_hash:
-  BR-FUND-19: a918eec09fff
+  BR-FUND-19: ab824a70d47c
   BR-FUND-16: 077f6d412d5a
   BR-ID-34: 6f4bb7f212cb
 deps: [CT-24zzn, CT-24zzna, B2-02y, CT-24zzt, CT-24zzu, B2-02z]

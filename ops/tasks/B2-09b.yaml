@@ -9,7 +9,7 @@ type: impl
 # 不含：申诉恢复 ADMIN_RESTORE（R12 / R13，order.restore 动态码，改订单状态并写 ADMIN_ADJUST）、重算余额缓存（短信档）、R2 迟到成功核销（payout W11）——另入账。
 refs: [BR-FUND-19, BR-WDR-05]
 refs_hash:
-  BR-FUND-19: a918eec09fff
+  BR-FUND-19: ab824a70d47c
   BR-WDR-05: 32894d40942c
 deps: [CT-24w, B2-09a]
 paths:
