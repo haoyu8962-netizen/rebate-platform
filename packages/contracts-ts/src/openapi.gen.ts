@@ -3158,9 +3158,11 @@ export interface paths {
          *     `code=0`); after that a request with it is 10003. When such a request is refused or fails,
          *     the server may release the token, and the token may then be reused until `expire_at`, but
          *     this is not guaranteed: for example, it cannot be reused when the outcome of the commit is
-         *     unknown or when the release could not be recorded. The console may replay the request with
-         *     the same token; whenever the answer is 10003 it asks for a new verification, and it does
-         *     not assume that the token can still be used. While one request holds the token,
+         *     unknown or when the release could not be recorded. The caller may replay the request with
+         *     the same token; after an answer of 10003 it must obtain a new token before submitting
+         *     again, through a new verification, and the caller decides whether to ask again at once or
+         *     to let the administrator start the operation again; it must not assume that the token can
+         *     still be used. While one request holds the token,
          *     another request with it is 10003. An operation that needs no step-up ignores a token sent
          *     with it. Not fixed by BR-ID-34 and left open here: whether wrong step-up codes count
          *     towards the login-failure lock, and the token lifetime (the response carries `expire_at`;
