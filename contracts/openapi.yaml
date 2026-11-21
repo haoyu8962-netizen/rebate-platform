@@ -2399,7 +2399,12 @@ paths:
         union_authorized and has_order (03 §6.1, BR-INV-23); the bearer token is optional and
         only decides those conditions. Sections and static data source items with `start_at` /
         `end_at` are sent only while the server clock is inside that range (BR-TEXT-29; the
-        client filters again by its own clock), and a section left with no item is not sent;
+        client filters again by its own clock). A section whose rendering depends on its items
+        (banner, icon_grid, activity_entry, a static notice_bar) and whose items have all been
+        filtered out is not sent (01 F-HOME-05, no empty shell); a section that renders without
+        items is still sent while inside its own range, notably a display-only popup with only
+        props.image and `data_source.items: []` (its daily count and time window are then
+        decided by the client, specs/client/home-sdui-vectors.json popup G14_guest_show);
         `me` and `search` follow the admission definitions of contracts/home-schema.json
         (BR-TEXT-28). A page_key of the right shape whose page does not exist,
         has no published version or has no version left for this request → 30701. `ttl_sec` is
@@ -18521,6 +18526,7 @@ paths:
         config item `version` (0 for an item never written), which the console sends back as
         `expected_version` of the matching write. Implemented by B1-36.
       x-auth: admin
+      x-signed: false
       x-implementation: planned
       x-error-codes:
         - 10001
@@ -18584,10 +18590,13 @@ paths:
         Permission point `content.page`, no step-up (04 §6.3 2026-11-20; BR-TEXT-28 细则「权限与日志」,
         编排 D10-2383); lacking it is 10403 with `data.reason=admin_permission_denied`. Replaces
         config item `search.hot_words` with `hot_words` (the whole list in display order, at most
-        10, each text 1–20 characters; an empty list shows no hot words). This operation writes
+        10, each text 1–20 characters with at least one character that is not whitespace; an
+        empty list shows no hot words). This operation writes
         only that item: the body has no config key, so it cannot be applied to another item.
         A list of the wrong shape is 20001 with `data.fields` naming the offending field as a
-        dotted path (e.g. `hot_words.0.text`). CAS: `expected_version` is `hot_words_version` as
+        dotted path (e.g. `hot_words.0.text`); one invalid entry refuses the whole list, so
+        `[{"text": "洗衣液"}, {"text": " "}]` (the second entry only a space) is 20001 with
+        `data.fields=[hot_words.1.text]` and nothing is stored. CAS: `expected_version` is `hot_words_version` as
         GET /admin/v1/search/settings showed it; a change adds 1 and stores a history version of
         the item, a mismatch → 20902 with `data.resource=config_item`. Writing the list the item
         already has with a matching version succeeds without change. `reason` is optional and
@@ -18595,6 +18604,7 @@ paths:
         before and after values); GET /v1/search/hot-words serves it within that item's cache
         period. Implemented by B1-36.
       x-auth: admin
+      x-signed: false
       x-implementation: planned
       x-error-codes:
         - 10001
@@ -18658,6 +18668,8 @@ paths:
               examples:
                 valueInvalid:
                   $ref: '#/components/examples/AdminSearchHotWordsInvalid'
+                blankEntry:
+                  $ref: '#/components/examples/AdminSearchHotWordsBlank'
                 conflict:
                   $ref: '#/components/examples/AdminConfigItemConflict'
                 noPermission:
@@ -18676,7 +18688,7 @@ paths:
         Permission point `content.page`, no step-up (04 §6.3 2026-11-20; BR-TEXT-28 细则「权限与日志」,
         编排 D10-2383); lacking it is 10403 with `data.reason=admin_permission_denied`. Replaces
         config item `search.keyword_routes` with `keyword_routes` (the whole list, at most 50, each
-        keyword 1–20 characters). This operation writes only that item: the body has no config
+        keyword 1–20 characters with at least one character that is not whitespace). This operation writes only that item: the body has no config
         key, so it cannot be applied to another item. Every target is checked when saved against
         contracts/routes.json (a registered route with entry in_app, params valid for that route)
         and an ExternalPage url additionally against BR-ATTR-29 ① (union host block) and BR-ID-33
@@ -18688,6 +18700,7 @@ paths:
         is optional and kept with the history version. Written to the audit log (action
         config_item_change, before and after values). Implemented by B1-36.
       x-auth: admin
+      x-signed: false
       x-implementation: planned
       x-error-codes:
         - 10001
@@ -18762,6 +18775,8 @@ paths:
               examples:
                 targetInvalid:
                   $ref: '#/components/examples/AdminSearchKeywordTargetInvalid'
+                blankKeyword:
+                  $ref: '#/components/examples/AdminSearchKeywordBlank'
                 conflict:
                   $ref: '#/components/examples/AdminConfigItemConflict'
                 noPermission:
@@ -18779,7 +18794,8 @@ paths:
       description: |
         Permission point `content.page`, no step-up (01 F-PROD-16; BR-TEXT-28 细则「权限与日志」);
         lacking it is 10403 with `data.reason=admin_permission_denied`. Sets config item
-        `search.default_word` (the search box default word, 1–20 characters) or clears it with
+        `search.default_word` (the search box default word, 1–20 characters with at least one
+        character that is not whitespace; a value of only spaces is 20001) or clears it with
         null, after which the client shows text key `search.placeholder`. The text passes the
         BR-TEXT-13 banned-word check; a failure or a value of the wrong shape is 20001 with
         `data.fields=[default_word]`. CAS: `expected_version` is `default_word_version` as GET
@@ -18787,6 +18803,7 @@ paths:
         mismatch → 20902 with `data.resource=config_item`. `reason` is optional. Written to the
         audit log (action config_item_change). Implemented by B1-36.
       x-auth: admin
+      x-signed: false
       x-implementation: planned
       x-error-codes:
         - 10001
@@ -18841,6 +18858,8 @@ paths:
               examples:
                 valueInvalid:
                   $ref: '#/components/examples/AdminSearchDefaultWordInvalid'
+                blankWord:
+                  $ref: '#/components/examples/AdminSearchDefaultWordBlank'
                 conflict:
                   $ref: '#/components/examples/AdminConfigItemConflict'
                 noPermission:
@@ -34925,6 +34944,24 @@ components:
           fields:
             - hot_words.0.text
         trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminSearchHotWordsBlank:
+      summary: '20001 a hot word of only whitespace, e.g. [{"text": "洗衣液"}, {"text": " "}] (whole list refused)'
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - hot_words.1.text
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminSearchKeywordBlank:
+      summary: '20001 a keyword of only whitespace, e.g. {"keyword": " ", ...} (whole list refused)'
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - keyword_routes.0.keyword
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
     AdminSearchKeywordTargetInvalid:
       summary: 20001 a keyword target not in routes.json, not https or refused by BR-ATTR-29 (whole list refused)
       value:
@@ -34936,6 +34973,15 @@ components:
         trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
     AdminSearchDefaultWordInvalid:
       summary: 20001 the default word is empty, too long or fails the banned-word check
+      value:
+        code: 20001
+        msg: 参数错误
+        data:
+          fields:
+            - default_word
+        trace_id: 0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b
+    AdminSearchDefaultWordBlank:
+      summary: '20001 the default word is only whitespace, e.g. {"default_word": "  "}'
       value:
         code: 20001
         msg: 参数错误
@@ -43936,9 +43982,28 @@ components:
             - type: 'null'
     SearchDefaultWord:
       type: string
-      description: A search box default word, 1–20 characters (as a hot word).
+      description: |
+        A search box default word, 1–20 characters (as a hot word), with at least one character
+        that is not whitespace (a value of only spaces is refused, 20001).
       minLength: 1
       maxLength: 20
+      pattern: '\S'
+    AdminSearchHotWord:
+      type: object
+      description: |
+        One hot word as the console saves it: text 1–20 characters with at least one character
+        that is not whitespace. An entry of only spaces (e.g. `{"text": " "}`) is refused with the
+        whole list, 20001 with `data.fields` naming it (`hot_words.<n>.text`); it is never stored,
+        so GET /v1/search/hot-words never meets a blank entry.
+      additionalProperties: false
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 20
+          pattern: '\S'
     AdminSearchKeywordTarget:
       type: object
       description: |
@@ -43983,7 +44048,11 @@ components:
           type: string
           minLength: 1
           maxLength: 20
-          description: Matched against the trimmed input as a whole word, ignoring case.
+          pattern: '\S'
+          description: |
+            Matched against the trimmed input as a whole word, ignoring case. At least one
+            character that is not whitespace: a keyword of only spaces is refused with the whole
+            list, 20001 with `data.fields` naming it (`keyword_routes.<n>.keyword`).
         target:
           $ref: '#/components/schemas/AdminSearchKeywordTarget'
     AdminSearchHotWordsUpdateRequest:
@@ -43998,7 +44067,7 @@ components:
           type: array
           maxItems: 10
           items:
-            $ref: '#/components/schemas/SearchHotWord'
+            $ref: '#/components/schemas/AdminSearchHotWord'
         expected_version:
           allOf:
             - $ref: '#/components/schemas/AdminConfigVersionNumber'

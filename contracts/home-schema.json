@@ -394,19 +394,26 @@
     },
     "core_route": {
       "type": "string",
-      "$comment": "Core entries no operation slot may show (BR-TEXT-28 不可配清单: orders, wallet, withdrawal, settings, privacy, authorization, agreements). The server checks the same list again when saving.",
+      "$comment": "Core entries no operation slot may show (BR-TEXT-28 不可配清单): orders (OrderList, OrderDetail, FindOrder), wallet and earnings (Wallet, Earnings, Ledger), withdrawal and its steps (Withdraw, WithdrawRecords, PayoutAccount, RealName, Reverify), settings (Settings), privacy and authorization (PrivacyCenter, DeleteAccount, DataCopy, AuthManage) and agreements (Agreement, LaborAgreement), whatever their params (empty params included). The server checks the same list again when saving.",
       "enum": [
         "OrderList",
         "OrderDetail",
+        "FindOrder",
         "Wallet",
+        "Earnings",
+        "Ledger",
         "Withdraw",
         "WithdrawRecords",
-        "Ledger",
         "PayoutAccount",
+        "RealName",
+        "Reverify",
         "Settings",
         "PrivacyCenter",
+        "DeleteAccount",
+        "DataCopy",
         "AuthManage",
-        "Agreement"
+        "Agreement",
+        "LaborAgreement"
       ]
     },
     "in_app_target": {
@@ -524,16 +531,8 @@
     },
     "icon_grid_item": {
       "type": "object",
-      "$comment": "One icon_grid entry (03 §6.3; 01 F-HOME-10: icon, name, order, badge, target, start / end). The picture is either image (a plain address, home 金刚区 as before) or icon ({url, sha256}), never both; me requires icon (admission_me).",
-      "additionalProperties": false,
-      "not": {
-        "type": "object",
-        "required": ["image", "icon"],
-        "properties": {
-          "image": true,
-          "icon": true
-        }
-      },
+      "$comment": "One icon_grid entry of home (金刚区, 03 §6.3; 01 F-HOME-10). The shape the existing home drafts and the client vectors use is kept (CT-07a; specs/client/home-sdui-vectors.json goldenPages.icon_grid): keys other than those below stay open, the picture is image or icon, and icon may be a plain picture address as before or an {url, sha256} object. The digest binding of BR-TEXT-30 applies to me only ($defs/me_item, admission_me). badge is $defs/badge, the only badge shape of BR-TEXT-29 (none / dot / text up to 2 characters, optional expiry), on home as on me; badges exist only on icon_grid items.",
+      "additionalProperties": true,
       "properties": {
         "action": {
           "$ref": "#/$defs/route_target"
@@ -543,12 +542,18 @@
           "minLength": 1
         },
         "icon": {
-          "$ref": "#/$defs/icon_asset"
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "$ref": "#/$defs/icon_asset"
+            }
+          ]
         },
         "title": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 6
+          "type": "string"
         },
         "badge": {
           "$ref": "#/$defs/badge"
@@ -575,22 +580,6 @@
           "items": {
             "$ref": "#/$defs/icon_grid_item"
           }
-        }
-      }
-    },
-    "product_scroll_more": {
-      "type": "object",
-      "$comment": "The 「更多」 button of a product strip (03 §6.3): optional label and its target. action uses the same target rule as the static items of the same page: RouteTarget on home, in-app only on search (admission_search, BR-TEXT-30, D10-2401 ④).",
-      "additionalProperties": false,
-      "required": ["action"],
-      "properties": {
-        "text": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 8
-        },
-        "action": {
-          "$ref": "#/$defs/route_target"
         }
       }
     },
@@ -829,22 +818,12 @@
     },
     "section_product_scroll": {
       "type": "object",
-      "$comment": "Horizontal product strip (03 §6.3): title and the 「更多」 button (more: {text, action}). On home props stay open beside these two keys; on search they are closed and more.action is an in-app target (admission_search). product_pool / union_material.",
+      "$comment": "Horizontal product strip (03 §6.3): title and the 「更多」 button target more_action (a RouteTarget; the key of the first client version, specs/client/home-sdui-vectors.json goldenPages.product_scroll). On home props stay open as before (CT-07a; the client drops a more_action it cannot route, 03 §4.4) and more_action may be any RouteTarget like home's static items; on search props are closed to title and more_action, and more_action is an in-app target (admission_search, BR-TEXT-30, D10-2401 ④). product_pool / union_material.",
       "required": ["data_source"],
       "properties": {
         "props": {
           "type": "object",
-          "additionalProperties": true,
-          "properties": {
-            "title": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 20
-            },
-            "more": {
-              "$ref": "#/$defs/product_scroll_more"
-            }
-          }
+          "additionalProperties": true
         },
         "data_source": {
           "oneOf": [
@@ -1076,7 +1055,9 @@
       "required": ["title", "icon", "action"],
       "properties": {
         "title": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 6
         },
         "icon": {
           "$ref": "#/$defs/icon_asset"
@@ -1093,11 +1074,12 @@
         "end_at": {
           "$ref": "#/$defs/instant"
         }
-      }
+      },
+      "$comment": "One entry of me more_services (BR-TEXT-28 / 30): name 1–6 characters, icon {url, sha256} (the picture shown and its digest bound in one object, no other picture field), an in-app target, an optional badge and range. Closed."
     },
     "slot_search_top": {
       "type": "object",
-      "$comment": "The one section of search (BR-TEXT-28 准入表 search row): the result-page top slot, id search_top, either a banner or a product_scroll on a product pool; which of the two is used and whether optional props are filled does not change the limit of one (D10-2401 ①). Every jump target in it (banner items, the product_scroll 「更多」 button) is an in-app target; product_scroll props are closed.",
+      "$comment": "The one section of search (BR-TEXT-28 准入表 search row): the result-page top slot, id search_top, either a banner or a product_scroll on a product pool; which of the two is used and whether optional props are filled does not change the limit of one (D10-2401 ①). Every jump target in it (banner items, the product_scroll 「更多」 button more_action) is an in-app target; product_scroll props are closed.",
       "allOf": [
         {
           "$ref": "#/$defs/section"
@@ -1158,13 +1140,8 @@
                     "minLength": 1,
                     "maxLength": 20
                   },
-                  "more": {
-                    "type": "object",
-                    "properties": {
-                      "action": {
-                        "$ref": "#/$defs/in_app_target"
-                      }
-                    }
+                  "more_action": {
+                    "$ref": "#/$defs/in_app_target"
                   }
                 }
               },

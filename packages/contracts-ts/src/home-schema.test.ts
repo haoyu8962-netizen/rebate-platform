@@ -80,6 +80,7 @@ const INVALID = [
   'me-icon-digest-unbound.json',
   'me-item-end-at-utc.json',
   'me-items-over-limit.json',
+  'me-labor-agreement.json',
   'me-unlisted-type.json',
   'min-app-version-bad.json',
   'notice-bar-api-with-items.json',

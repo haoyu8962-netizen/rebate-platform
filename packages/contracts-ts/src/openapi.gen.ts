@@ -882,7 +882,12 @@ export interface paths {
          *     union_authorized and has_order (03 §6.1, BR-INV-23); the bearer token is optional and
          *     only decides those conditions. Sections and static data source items with `start_at` /
          *     `end_at` are sent only while the server clock is inside that range (BR-TEXT-29; the
-         *     client filters again by its own clock), and a section left with no item is not sent;
+         *     client filters again by its own clock). A section whose rendering depends on its items
+         *     (banner, icon_grid, activity_entry, a static notice_bar) and whose items have all been
+         *     filtered out is not sent (01 F-HOME-05, no empty shell); a section that renders without
+         *     items is still sent while inside its own range, notably a display-only popup with only
+         *     props.image and `data_source.items: []` (its daily count and time window are then
+         *     decided by the client, specs/client/home-sdui-vectors.json popup G14_guest_show);
          *     `me` and `search` follow the admission definitions of contracts/home-schema.json
          *     (BR-TEXT-28). A page_key of the right shape whose page does not exist,
          *     has no published version or has no version left for this request → 30701. `ttl_sec` is
@@ -6708,10 +6713,13 @@ export interface paths {
          * @description Permission point `content.page`, no step-up (04 §6.3 2026-11-20; BR-TEXT-28 细则「权限与日志」,
          *     编排 D10-2383); lacking it is 10403 with `data.reason=admin_permission_denied`. Replaces
          *     config item `search.hot_words` with `hot_words` (the whole list in display order, at most
-         *     10, each text 1–20 characters; an empty list shows no hot words). This operation writes
+         *     10, each text 1–20 characters with at least one character that is not whitespace; an
+         *     empty list shows no hot words). This operation writes
          *     only that item: the body has no config key, so it cannot be applied to another item.
          *     A list of the wrong shape is 20001 with `data.fields` naming the offending field as a
-         *     dotted path (e.g. `hot_words.0.text`). CAS: `expected_version` is `hot_words_version` as
+         *     dotted path (e.g. `hot_words.0.text`); one invalid entry refuses the whole list, so
+         *     `[{"text": "洗衣液"}, {"text": " "}]` (the second entry only a space) is 20001 with
+         *     `data.fields=[hot_words.1.text]` and nothing is stored. CAS: `expected_version` is `hot_words_version` as
          *     GET /admin/v1/search/settings showed it; a change adds 1 and stores a history version of
          *     the item, a mismatch → 20902 with `data.resource=config_item`. Writing the list the item
          *     already has with a matching version succeeds without change. `reason` is optional and
@@ -6740,7 +6748,7 @@ export interface paths {
          * @description Permission point `content.page`, no step-up (04 §6.3 2026-11-20; BR-TEXT-28 细则「权限与日志」,
          *     编排 D10-2383); lacking it is 10403 with `data.reason=admin_permission_denied`. Replaces
          *     config item `search.keyword_routes` with `keyword_routes` (the whole list, at most 50, each
-         *     keyword 1–20 characters). This operation writes only that item: the body has no config
+         *     keyword 1–20 characters with at least one character that is not whitespace). This operation writes only that item: the body has no config
          *     key, so it cannot be applied to another item. Every target is checked when saved against
          *     contracts/routes.json (a registered route with entry in_app, params valid for that route)
          *     and an ExternalPage url additionally against BR-ATTR-29 ① (union host block) and BR-ID-33
@@ -6772,7 +6780,8 @@ export interface paths {
          * Set or clear the search box default word
          * @description Permission point `content.page`, no step-up (01 F-PROD-16; BR-TEXT-28 细则「权限与日志」);
          *     lacking it is 10403 with `data.reason=admin_permission_denied`. Sets config item
-         *     `search.default_word` (the search box default word, 1–20 characters) or clears it with
+         *     `search.default_word` (the search box default word, 1–20 characters with at least one
+         *     character that is not whitespace; a value of only spaces is 20001) or clears it with
          *     null, after which the client shows text key `search.placeholder`. The text passes the
          *     BR-TEXT-13 banned-word check; a failure or a value of the wrong shape is 20001 with
          *     `data.fields=[default_word]`. CAS: `expected_version` is `default_word_version` as GET
@@ -15317,8 +15326,20 @@ export interface components {
              */
             default_word?: components["schemas"]["SearchDefaultWord"] | null;
         };
-        /** @description A search box default word, 1–20 characters (as a hot word). */
+        /**
+         * @description A search box default word, 1–20 characters (as a hot word), with at least one character
+         *     that is not whitespace (a value of only spaces is refused, 20001).
+         */
         SearchDefaultWord: string;
+        /**
+         * @description One hot word as the console saves it: text 1–20 characters with at least one character
+         *     that is not whitespace. An entry of only spaces (e.g. `{"text": " "}`) is refused with the
+         *     whole list, 20001 with `data.fields` naming it (`hot_words.<n>.text`); it is never stored,
+         *     so GET /v1/search/hot-words never meets a blank entry.
+         */
+        AdminSearchHotWord: {
+            text: string;
+        };
         /**
          * @description Target of a keyword shortcut as the console saves it: a RouteTarget whose route the
          *     server checks against contracts/routes.json; ExternalPage and WebPage only with an https
@@ -15327,13 +15348,17 @@ export interface components {
          */
         AdminSearchKeywordTarget: components["schemas"]["RouteTarget"] & unknown;
         AdminSearchKeywordRoute: {
-            /** @description Matched against the trimmed input as a whole word, ignoring case. */
+            /**
+             * @description Matched against the trimmed input as a whole word, ignoring case. At least one
+             *     character that is not whitespace: a keyword of only spaces is refused with the whole
+             *     list, 20001 with `data.fields` naming it (`keyword_routes.<n>.keyword`).
+             */
             keyword: string;
             target: components["schemas"]["AdminSearchKeywordTarget"];
         };
         /** @description Writes config item `search.hot_words` only (the operation fixes the item; no key in the body). */
         AdminSearchHotWordsUpdateRequest: {
-            hot_words: components["schemas"]["SearchHotWord"][];
+            hot_words: components["schemas"]["AdminSearchHotWord"][];
             /** @description `hot_words_version` as the console showed it; a mismatch is 20902. */
             expected_version: components["schemas"]["AdminConfigVersionNumber"];
             reason?: components["schemas"]["AdminConfigReason"];

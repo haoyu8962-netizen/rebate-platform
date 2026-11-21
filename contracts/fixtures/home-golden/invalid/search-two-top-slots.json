@@ -44,13 +44,10 @@
       "version": 1,
       "props": {
         "title": "今日好价",
-        "more": {
-          "text": "更多",
-          "action": {
-            "route": "HotRankList",
-            "params": {
-              "platform": "taobao"
-            }
+        "more_action": {
+          "route": "HotRankList",
+          "params": {
+            "platform": "taobao"
           }
         }
       },

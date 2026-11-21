@@ -9,13 +9,10 @@
       "version": 1,
       "props": {
         "title": "今日好价",
-        "more": {
-          "text": "更多",
-          "action": {
-            "route": "ExternalPage",
-            "params": {
-              "url": "https://example.com/activity/autumn"
-            }
+        "more_action": {
+          "route": "ExternalPage",
+          "params": {
+            "url": "https://example.com/activity/autumn"
           }
         }
       },

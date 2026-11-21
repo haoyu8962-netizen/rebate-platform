@@ -168,10 +168,10 @@ it('[AC-CT-27-MUST#3] 徽标只在 icon_grid 条目上：banner（首页与 sear
   expect(page(fixed)).toBe(true);
 });
 
-it('[AC-CT-27-MUST#4] search 商品滚动卡的 more.action 与同页静态条目同一套站内白名单：外链与非 https 的 WebPage 拒收；首页商品滚动卡同首页静态条目照旧', () => {
+it('[AC-CT-27-MUST#4] search 商品滚动卡的「更多」props.more_action（第 1 版客户端的键名）与同页静态条目同一套站内白名单：外链、非 https 的 WebPage、核心入口拒收；首页商品滚动卡同首页静态条目照旧', () => {
   const withMore = (section: Json, action: Json): Json => {
     const next = clone(section);
-    next['props'] = { ...(next['props'] as Json), more: { text: '更多', action } };
+    next['props'] = { ...(next['props'] as Json), more_action: action };
     return next;
   };
   for (const action of IN_APP) expectSections('search', [withMore(scroll(), action)], true);
@@ -180,6 +180,7 @@ it('[AC-CT-27-MUST#4] search 商品滚动卡的 more.action 与同页静态条�
     { route: 'WebPage', params: { url: 'http://h5.example.com/x' } },
     { route: 'WebPage' },
     { route: 'Withdraw' },
+    { route: 'LaborAgreement', params: {} },
   ]) {
     expectSections('search', [withMore(scroll(), action)], false);
     // 同页静态条目（search banner）同样拒收。
@@ -187,13 +188,17 @@ it('[AC-CT-27-MUST#4] search 商品滚动卡的 more.action 与同页静态条�
     items(b)[0]!['action'] = action;
     expectSections('search', [b], false);
   }
-  // 首页原有类型照旧可用 ExternalPage（BR-TEXT-30 适用范围），more.action 同首页静态条目。
+  // 首页原有类型照旧可用 ExternalPage（BR-TEXT-30 适用范围），more_action 同首页静态条目。
   expectSections('home', [withMore(homeSection('product_scroll'), EXTERNAL)], true);
+  // search 不收第 1 版以外的新键（如 more: {text, action}），避免同一按钮两种写法。
+  const other = scroll();
+  other['props'] = { title: '今日好价', more: { text: '更多', action: IN_APP[0] } };
+  expectSections('search', [other], false);
   // golden 反例：search 的「更多」跳外链；换成站内路由即通过。
   const bad = invalid('search-more-external.json');
   expect(page(bad)).toBe(false);
   const fixed = clone(bad);
-  ((fixed.sections[0]!['props'] as Json)['more'] as Json)['action'] = IN_APP[1];
+  (fixed.sections[0]!['props'] as Json)['more_action'] = IN_APP[1];
   expect(page(fixed)).toBe(true);
 });
 
@@ -233,12 +238,17 @@ it('[AC-CT-27-MUST#5] me 的图标摘要与实际显示的图片绑在同一对�
   ]) {
     expectSections('me', [mutate(change)], false);
   }
-  // 首页金刚区：image 与 icon 二选一，不能并存。
+  // 首页金刚区沿用旧形状（契约评审 r1 S1）：绑定只对 me 生效，首页 icon 可以是旧的图片地址字符串。
   const icons = homeSection('icon_grid');
-  items(icons)[0]!['icon'] = clone(items(grid)[0]!['icon']);
-  expectSections('home', [icons], false);
   delete items(icons)[0]!['image'];
+  items(icons)[0]!['icon'] = 'https://img.example.com/icon-a.png';
   expectSections('home', [icons], true);
+  // 同一个旧形状条目放进 me 即拒收（me 只收 icon {url, sha256}）。
+  const legacy = clone(items(grid)[0]!);
+  legacy['icon'] = 'https://img.example.com/icon-a.png';
+  const meLegacy = clone(grid);
+  items(meLegacy)[0] = legacy;
+  expectSections('me', [meLegacy], false);
   // golden 反例：摘要离开图标对象 / 图标旁另带 image。
   for (const name of ['me-icon-digest-unbound.json', 'me-icon-and-image.json']) {
     expect(page(invalid(name)), name).toBe(false);
@@ -348,5 +358,156 @@ it('[AC-CT-27] golden 反例各只因一处被拒：超长徽标、外链、表�
     const fixed = clone(bad);
     fix(fixed);
     expect(page(fixed), `${name} fixed: ${JSON.stringify(page.errors ?? null)}`).toBe(true);
+  }
+});
+
+const vectors = readJson<{
+  goldenPages: Record<string, { sections: Json[] }>;
+  popup: { name: string; popup: Json; expect: { decisionRaw: string } }[];
+}>(new URL('../../../specs/client/home-sdui-vectors.json', import.meta.url));
+
+/** A legacy string badge (CT-07a client vectors), not the BR-TEXT-29 badge object. */
+const hasStringBadge = (section: Json): boolean =>
+  items(section).some((item) => typeof item['badge'] === 'string');
+
+it('[AC-CT-27] 兼容：客户端第 1 版向量里首页的金刚区、商品滚动卡与纯展示弹窗照旧通过（icon 为图片地址字符串、props.more_action、items 为空的弹窗）；只有字符串徽标按 BR-TEXT-29 拒收，换成徽标对象即通过', () => {
+  const sections = Object.values(vectors.goldenPages)
+    .flatMap((p) => p.sections)
+    // ad_label 只许 banner 是 CT-07a 的既有规则（BR-TEXT-17），与本单无关，带它的向量不在比较范围。
+    .filter((s) => ['icon_grid', 'product_scroll', 'popup'].includes(String(s['type'])))
+    .filter((s) => s['ad_label'] === undefined);
+  expect(sections.map((s) => s['type'])).toEqual(
+    expect.arrayContaining(['icon_grid', 'product_scroll', 'popup']),
+  );
+  const legacyIcon = vectors.goldenPages['icon_grid']!.sections[0]!;
+  expect(items(legacyIcon).some((item) => typeof item['icon'] === 'string')).toBe(true);
+  const scrollVector = vectors.goldenPages['product_scroll']!.sections[0]!;
+  expect((scrollVector['props'] as Json)['more_action']).toBeDefined();
+  for (const section of sections) {
+    if (section['type'] === 'icon_grid' && hasStringBadge(section)) {
+      // 与 BR-TEXT-29（徽标只有无 / 红点 / 至多 2 字三种，首页金刚区同）及规则测试 AC-CT-27#8 冲突：只列不改。
+      expectSections('home', [clone(section)], false);
+      const fixed = clone(section);
+      for (const item of items(fixed)) {
+        if (typeof item['badge'] === 'string') {
+          item['badge'] = { kind: 'text', text: item['badge'] };
+        }
+      }
+      expectSections('home', [fixed], true);
+      continue;
+    }
+    expectSections('home', [clone(section)], true);
+  }
+  // 纯展示弹窗（只有 props.image、items 为 []）是合法 section，客户端向量预期照常展示。
+  const shown = vectors.popup.filter((v) => v.expect.decisionRaw === 'show');
+  expect(shown.length).toBeGreaterThan(0);
+  for (const v of vectors.popup) {
+    expect(items(v.popup)).toEqual([]);
+    expectSections('home', [clone(v.popup)], true);
+  }
+  // getPage 的说明：没有条目的 section 不下发只限依赖条目渲染、条目又被过滤完的；纯展示弹窗照常下发。
+  const description = String((doc.paths['/v1/pages/{page_key}']!['get'] as Json)['description']);
+  expect(description).toMatch(/whose rendering depends on its items/);
+  expect(description).toMatch(
+    /display-only popup[\s\S]*is still sent|still sent[\s\S]*display-only popup/,
+  );
+  expect(description).not.toMatch(/a section left with no item is not sent/);
+});
+
+it('[AC-CT-27] 核心入口（BR-TEXT-28 不可配清单，含协议入口 LaborAgreement）在 me 与 search 一律拒收，空参数也拒；golden 反例只因签署协议一格被拒', () => {
+  const core = (schema['$defs'] as Record<string, { enum: string[] }>)['core_route']!.enum;
+  for (const route of ['LaborAgreement', 'Agreement', 'AuthManage', 'PrivacyCenter', 'Withdraw']) {
+    expect(core, route).toContain(route);
+  }
+  const routes = readJson<{ routes: Record<string, unknown> }>(
+    new URL('routes.json', contractsDir),
+  ).routes;
+  for (const route of core) {
+    expect(routes[route], `${route} 在 routes.json 登记`).toBeDefined();
+    for (const action of [{ route }, { route, params: {} }]) {
+      const grid = meGrid();
+      items(grid)[1]!['action'] = action;
+      expectSections('me', [grid], false);
+      const b = banner();
+      items(b)[0]!['action'] = action;
+      expectSections('search', [b], false);
+      // 首页原有类型不在 BR-TEXT-30 适用范围，照旧（金刚区的订单入口是既有 golden）。
+      const icons = homeSection('icon_grid');
+      items(icons)[0]!['action'] = action;
+      expectSections('home', [icons], true);
+    }
+  }
+  const bad = invalid('me-labor-agreement.json');
+  expect(page(bad)).toBe(false);
+  const fixed = clone(bad);
+  const last = items(fixed.sections[0]!).at(-1)!;
+  expect(last['action']).toEqual({ route: 'LaborAgreement', params: {} });
+  last['action'] = IN_APP[0];
+  expect(page(fixed)).toBe(true);
+});
+
+it('[AC-CT-27] 热词、关键词直达的关键词与默认词至少含一个非空白字符：只含空格（含全角空格）的条目拒收（20001，示例在案）；首尾带空格但有字照收', () => {
+  const body = (path: string): ValidateFn => {
+    const op = doc.paths[path]!['put'] as Op;
+    return newAjv().compile(op.requestBody.content['application/json'].schema);
+  };
+  const hot = body('/admin/v1/search/hot-words');
+  const keyword = body('/admin/v1/search/keyword-routes');
+  const word = body('/admin/v1/search/default-word');
+  const target = { route: 'HotRankList', params: {} };
+  for (const blank of [' ', '  ', '　', '\t', ' 　 ']) {
+    expect(
+      hot({ hot_words: [{ text: '洗衣液' }, { text: blank }], expected_version: 3 }),
+      `hot ${JSON.stringify(blank)}`,
+    ).toBe(false);
+    expect(
+      keyword({ keyword_routes: [{ keyword: blank, target }], expected_version: 1 }),
+      `keyword ${JSON.stringify(blank)}`,
+    ).toBe(false);
+    expect(
+      word({ default_word: blank, expected_version: 0 }),
+      `word ${JSON.stringify(blank)}`,
+    ).toBe(false);
+  }
+  expect(hot({ hot_words: [{ text: '洗衣液' }, { text: ' 纸巾 ' }], expected_version: 3 })).toBe(
+    true,
+  );
+  expect(keyword({ keyword_routes: [{ keyword: '热销 榜', target }], expected_version: 1 })).toBe(
+    true,
+  );
+  expect(word({ default_word: null, expected_version: 0 })).toBe(true);
+  // 20001 示例：第二项只含空格时 data.fields 指向它。
+  const examples = (doc as unknown as { components: { examples: Record<string, Json> } }).components
+    .examples;
+  const fieldsOf = (name: string): unknown =>
+    ((examples[name]!['value'] as Json)['data'] as Json)['fields'];
+  expect(fieldsOf('AdminSearchHotWordsBlank')).toEqual(['hot_words.1.text']);
+  expect(fieldsOf('AdminSearchKeywordBlank')).toEqual(['keyword_routes.0.keyword']);
+  expect(fieldsOf('AdminSearchDefaultWordBlank')).toEqual(['default_word']);
+  for (const [path, name] of [
+    ['/admin/v1/search/hot-words', 'blankEntry'],
+    ['/admin/v1/search/keyword-routes', 'blankKeyword'],
+    ['/admin/v1/search/default-word', 'blankWord'],
+  ] as const) {
+    const op = doc.paths[path]!['put'] as Json;
+    const responses = op['responses'] as Record<string, Json>;
+    const error = (responses['4XX']!['content'] as Record<string, Json>)['application/json']!;
+    const listed = error['examples'] as Record<string, Json>;
+    expect((listed[name]!['value'] as Json)['code'] as number, `${path} ${name}`).toBe(20001);
+  }
+});
+
+it('[AC-CT-27] 四个 /admin/v1/search/* 操作显式声明 x-signed: false（admin 鉴权、不签名）', () => {
+  const ops: [string, string][] = [
+    ['/admin/v1/search/settings', 'get'],
+    ['/admin/v1/search/hot-words', 'put'],
+    ['/admin/v1/search/keyword-routes', 'put'],
+    ['/admin/v1/search/default-word', 'put'],
+  ];
+  for (const [path, method] of ops) {
+    const op = doc.paths[path]![method] as Json;
+    expect(Object.hasOwn(op, 'x-signed'), `${method} ${path}`).toBe(true);
+    expect(op['x-signed'], `${method} ${path}`).toBe(false);
+    expect(op['x-auth'], `${method} ${path}`).toBe('admin');
   }
 });
