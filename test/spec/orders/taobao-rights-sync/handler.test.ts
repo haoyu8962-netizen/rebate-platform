@@ -266,7 +266,7 @@ it('[AC-B1-04zza#31] 回扫窗口（scene rescan）照样写入，推进的是�
   expect(f.advance).toHaveBeenCalledWith(rescan);
 });
 
-it('[AC-B1-04zza#32] punish.window 取完全部页：每条记 PUNISH / SUCCEEDED，违规单号作去重号，发生时间取同步时刻，不推水位', async () => {
+it('[AC-B1-04zza#32] punish.window 取完全部页：冻结（punish_status 0）的每条记 PUNISH / SUCCEEDED，违规单号作去重号，发生时间取同步时刻，不推水位；解冻（punish_status 1）的不交给写入方（B1-04zzab）', async () => {
   const first = punishment(1);
   const second = punishment(2, { punish_status: '1' });
   const third = punishment(3);
@@ -292,7 +292,7 @@ it('[AC-B1-04zza#32] punish.window 取完全部页：每条记 PUNISH / SUCCEEDE
       platform_rights_no: p.punishment_id,
     },
   });
-  expect(f.writes()).toEqual([item(first), item(second), item(third)]);
+  expect(f.writes()).toEqual([item(first), item(third)]);
   expect(f.advance).not.toHaveBeenCalled();
   expect(f.listRefunds).not.toHaveBeenCalled();
 });

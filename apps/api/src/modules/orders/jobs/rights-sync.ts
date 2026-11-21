@@ -29,6 +29,7 @@ import type {
   RightsSyncWriteResult,
   RightsSyncWriter,
 } from '../application/rights-sync.ts';
+import type { PunishPendingPort } from '../application/punish-pending.ts';
 import type { SyncAccessPort, SyncLogger } from '../application/sync-ports.ts';
 import { OrderSyncPayloadError } from './order-sync.ts';
 
@@ -40,6 +41,12 @@ export interface RightsSyncHandlerDeps {
   readonly registry: RightsSyncRegistry;
   readonly writer: RightsSyncWriter;
   readonly logger?: SyncLogger;
+  /**
+   * B1-04zzab (BR-FUND-22 决-06 实测前 A, D10-2412): where punish.window puts a row reported unfrozen
+   * (punish_status '1') or with a status other than '0' / '1', instead of the writer. Absent (an
+   * assembly without it) → such a row is still never given to the writer; it is logged and counted only.
+   */
+  readonly pending?: PunishPendingPort;
 }
 
 interface WindowFields {
