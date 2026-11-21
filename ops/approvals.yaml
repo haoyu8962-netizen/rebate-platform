@@ -771,3 +771,9 @@ approvals:
     granted: true
     date: '2026-11-21'
     note: "编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审轮次属门禁流程小改动），D10-2295，先例第 117 条、第 119 条、第 124 条。原因：Codex money r1（couli-runs/B2-02zc/review-money-r1-codex.json）S1 属实——按子订单归组的自检差异一组可含多个受益人，0152 按（app、type、ref_id）去重时 D+1 新增变负的受益人不被冻结；取甲：索引谓词加 ref_type <> 'order'，订单级维持按会计日登记与冻结（宁多冻不漏冻），订单级去重另登 FU-B2-02ZC-ORDER-LEVEL-DEDUP。写测 4 / 4、spec-test 已用满（approvals 124 一轮）。止损：本轮 Codex spec-test 或 money 再出新 S1 即停下报编排，不再加轮。"
+  - id: 126
+    row: 4
+    title: 'B2-02zc 任务专属一次性追加：money 评审增量 1 轮——范围写死为两项：① 确认 money r2 的 S1「规划口径冲突」（BR-FUND-19 不按会计日重复对订单级差异）随 couli#12 合并（SPEC_REF → c3060ba021c2）关闭；② 逐行核 db/migrations/0152 无 DML（只 SET LOCAL 两行与一条 CREATE UNIQUE INDEX）；其余不再评审，pass 即 land'
+    granted: true
+    date: '2026-11-21'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-2298 / D10-2317 ⑤ / D10-2318 ②，先例第 117、119、124、125 条。原因：B2-02zc money r2（couli-runs/B2-02zc/review-money-r2-codex.json）唯一 S1 是规划口径冲突（订单级排除与当时的 BR-FUND-19 原文不符），负责人 11-21 回「都按你的建议」后 couli#12 已合并（90eaecd4bf0c），BR-FUND-19 细则写明按子订单归组的差异暂不适用，SPEC_REF 已换（D10-2318 ①）。money 次数已用满。止损：本轮再出新 S0 / S1 即停报编排。'
