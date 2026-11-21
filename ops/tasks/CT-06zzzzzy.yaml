@@ -1,0 +1,20 @@
+id: CT-06zzzzzy
+repo: rebate-platform
+title: CT-06zzzzzy：规则测试评审提示词写入 S1 门槛——须同时给出违反的条款与现有用例和变异探针都抓不到的具体错误实现，否则进 out_of_scope 登 FU；同类缺口首轮一次列全（D10-2317 ①）；ledger-writers 头注释补 COPY … FROM STDIN 已知限制
+type: guard-change
+# 2026-11-21 w1 入账（D10-2317 ① 负责人同意「都按你的建议」，D10-2318 w1 ② ③）。
+# ① tools/agent/prompts/review-spec-test.md 在「What the change is measured against」前加一节：D10-2317 ① 原文照录，并写明落法——S1 的 rule 写条款或裁定号、scenario 写具体错误实现；给不出 (a)(b) 的进 out_of_scope（schema 无 S3，记 S2、rule 以 [out-of-scope] 开头），不计入结论；首轮同一夹具 / 文件同类缺口一次列全，增量轮对未改动的夹具不再报新 S1；实现代码的评审（review-money.md 等）不动。提示词其余要求一字不改；codex-run.sh / claude-run.sh 的 spec-test 都读这一份提示词，脚本不改。
+# ② tools/guard/ledger-writers.ts 头注释「Known limits」补一句 psql 内联数据（COPY … FROM STDIN 后接数据行、以 \. 结束）的撇号会屏蔽后续语句（CT-06zzzzzx money r4 S2，FU-LEDGER-WRITERS-LEXER-LIMITS，D10-2282 止损）；只改注释，代码不动。
+# 规划/11 的对应一句由编排回写。门禁改动，按 approvals 16 由编排核后加 owner 标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/agent/prompts/review-spec-test.md'
+  - 'tools/guard/ledger-writers.ts'
+  - 'ops/tasks/CT-06zzzzzy.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo

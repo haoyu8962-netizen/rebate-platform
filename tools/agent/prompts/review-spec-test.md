@@ -79,6 +79,30 @@ disagree, the rules below win.
    scope defined below (same fields as a finding, a key never used in `findings`); it is `[]`
    when there are none.
 
+## The bar for S1 in a rule-test review (owner decision 2026-11-21, D10-2317 ①)
+
+This bar applies to every `S1` this review reports, in Parts 1–4 alike, and wins over any other
+wording of this prompt. The owner's decision, verbatim:
+
+> spec-test 评审要判 S1，必须同时给出 (a) 违反的规则条款（BR / 裁定号）与 (b) 一个现有用例与变异探针都抓不到的**具体错误实现**；只说「夹具不够真实」而给不出 (a)(b) 的记 S3 / out_of_scope，登 FU，不挡合并。同一夹具或同一文件的同类缺口须在首轮**一次列全**，增量轮不得对未改动的夹具再拆出新的 S1。实现代码的 money 评审标准不变。
+
+How to apply it:
+
+- An `S1` names (a) in `rule` (the BR clause, or the orchestrator ruling `D10-<n>`) and (b) in
+  `scenario`: a concrete wrong implementation — what the code does wrong, on which input — that
+  passes every existing test and every mutation probe of the change, and the test that should
+  have caught it. A missing clause test (Part 1) or a mutation no test kills (Part 2) is reported
+  as `S1` only in this form.
+- A gap without (a) and (b) — "the fixture is not realistic enough", "the test could be
+  stronger" — is not an `S1`. The output schema has no `S3`: put it into `out_of_scope` as `S2`,
+  with `rule` starting with `[out-of-scope]`; it is collected for a followup and never counts
+  toward the verdict.
+- First round: list every gap of the same kind in one fixture or one file together, in one
+  entry or side by side. Incremental rounds: a fixture or file the increment does not change gets
+  no new `S1`; a gap there that the first round could have listed goes into `out_of_scope`.
+- The review of implementation code (`review-money.md` and the other review types) is not
+  changed by this bar.
+
 ## What the change is measured against
 
 Only the BR clauses of the rules listed in the task's refs: the line "In-scope rules (the task's
