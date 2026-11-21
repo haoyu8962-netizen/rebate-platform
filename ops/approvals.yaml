@@ -879,3 +879,9 @@ approvals:
     granted: true
     date: '2026-11-22'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-2457，先例第 130、137、139 条。原因：CT-27 契约评审 r5（第 139 条）两条 S1 都出在 r4 照同类清单新加的说明里；按拆单方案本单退回已评过的范围（r3 全部 + r4 两处），删掉的说明挪到 CT-27a 按正确范围补回。evidence-check 要求契约评审结论 pass，门禁不绕，故以收口性质再评一轮。止损：r6 仍不过即停，编排逐行读契约差异定。'
+  - id: 144
+    row: 4
+    title: "F1-08ap 任务专属一次性追加：Codex spec-test 增量 1 轮——范围写死为规则测试提交 44c75df26 与 0b0c7bd50 两处改动：test/spec/frontend/admin-withdrawal-auto-payout-settings/relogin.test.ts 的 FIRST / SECOND 账号快照由 SUPER 换为 accountOf([...BUSINESS_GRANTS, 'switch.all'])（断言一字不动），只核这处换账号有没有削弱 [AC-F1-08ap-RELOGIN#1]–[#3] 的抓错能力；以及 0b0c7bd50 把 [AC-F1-08ap-TABS-FROZEN#1] 由 admin-payouts-readonly/tabs.test.ts 原样搬到 admin-withdrawal-auto-payout-settings/tabs-frozen.test.ts（只改 import、复制两个常量）是否等价"
+    granted: true
+    date: '2026-11-22'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-2452 / D10-2454，先例第 118、124–128、131、132、134 条。原因：实现 r2 在测试机 verify:fast 只剩 RELOGIN#1–3 三红，诊断为规则测试不可满足——超管重登后按外壳既有落地规则（F-ADM-26，App.tsx ShellFrame）落到工作台，提现审核页卸载、等待审核列表读取必然超时；改法只换夹具不动断言（D10-1670 委托范围，先例 D10-2318 ① / D10-2324），由本线机械改、diff 经编排核。写测与 spec-test 次数已用满（第 132、134 条）。搬家：先红的 evidence shape（#488）判冻结文件 tabs.test.ts 在 modify_existing 之外多了测试块，本线机械搬家（照 D10-2345），等价由 couli-runs/F1-08ap/relocate/prove.txt 与编排逐行核对承担，D10-1812 的「冻结文件须有新红」由 TABS#2 改动块本身的红满足。止损：增量再出新 S1 即停报编排。'
