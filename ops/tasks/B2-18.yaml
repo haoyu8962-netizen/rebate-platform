@@ -8,6 +8,7 @@ type: impl
 # ③「应结未结」只计入账单计数、不开差错单，超宽限期才提示。④ 联盟结算数据对上我方 ESTIMATED 的，先按单号自动补拉一次联盟订单（B1-08）再按本条校验；补拉后仍 ESTIMATED 才按 BR-FUND-09 登记。
 # 取值、容差与宽限期只读 08，不在台账复述。验收指向 10 AC-S2-51 ① 的 b、b2、c 项。依赖 B2-04（月结出账与一致性校验）、B2-03（分佣快照版本）、B1-08（按单号补拉），均已在主干。
 # 2026-11-21 补丁 1（funds，编排 D10-2415）：拆三张，本单收窄为上面的 ①②（基数不等按 R7 重生成再校验；仍不一致、重生成失败或联盟结算佣金为 0 而快照基数 > 0 的告警工程、保持 WAITING，账单任务不作废订单）；重生成只追加一个金额版本，比例与受益人不动。月结判定与补充发起不再读「结论为以联盟为准视为一致」（读口与字段先留，FU-B2-18-RETIRE-UNION-CONCLUSION）。③ 的不开差错单与计数归 B2-18a（先落）；④ 先不入账（FU-B2-18B-REPULL-BY-ORDER，期间照旧登记 union_mismatch）；账单详情显示与超宽限期提示归 FU-B2-18-BILL-COUNTS-CONTRACT。标题按门禁保留原文。受影响冻结用例的 modify_existing 待负责人点头后另补（清单 couli-runs/B2-18/frozen-inventory.md）。
+# 补丁 2（funds，D10-2425）：负责人 2026-11-21 同意；登记 11 条现断言「登记 settle_amount_mismatch」或依赖「以联盟为准」结论入批的冻结用例（金额期望值不动）。recon-outcome/monthly.int.test.ts 的 19 条整份删除另走 test-change 单（门禁不认任务分支上删冻结文件），先于本单合并。
 refs: [BR-FUND-04, BR-FUND-09]
 refs_hash:
   BR-FUND-04: 1c403c23b8bb
@@ -20,8 +21,82 @@ paths:
   - 'apps/api/src/app.module.ts'
 test_paths:
   - 'test/spec/settlement/bill-follow-union/**'
+  - 'test/spec/settlement/bill/{validation,batches}.int.test.ts'
+  - 'test/spec/settlement/supplement/{validation,idempotency,switch}.int.test.ts'
+  - 'test/spec/settlement/admin-settle-commands/supplement.int.test.ts'
 impl: claude
 tester: claude-independent
+modify_existing:
+  - file: 'test/spec/settlement/bill/validation.int.test.ts'
+    test: '[AC-B2-04n#9] 金额一致性：$label'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。金额不一致不再生成差错单：超容差的两行 diffs 由 1 张改为 0 张；本用例夹具不注入重生成端口，按「重生成失败」处理——逐单结果仍为 amount_mismatch、不进批次；容差内各行不动'
+  - file: 'test/spec/settlement/bill/validation.int.test.ts'
+    test: '[AC-B2-04n#10] 使用最大分佣版本，结算零佣金是有数据而非应结未结'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。结算佣金为 0 而快照基数 850：不再登记 settle_amount_mismatch；按 D10-2415 ④(i) 不作废、不重生成、不进批次；「有数据而非应结未结」的其余断言不动'
+  - file: 'test/spec/settlement/bill/validation.int.test.ts'
+    test: '[AC-B2-04n#12] 以联盟为准只豁免金额差异，不能越过 hold 或缺结算数据'
+    retitle_to: '[AC-B2-04n#12] 以联盟为准的结论不再豁免金额差异（B2-18），也不能越过 hold 或缺结算数据'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。月结判定不再读「以联盟为准」结论（D10-2415 ③）：unionAuthoritative 为 true 而金额不一致的那一单不再进批次（夹具不注入重生成端口，按重生成失败处理）；hold 与缺结算数据不被越过的断言不动'
+  - file: 'test/spec/settlement/bill/batches.int.test.ts'
+    test: '[AC-B2-04n#18] credit.enabled=%s 不生成任何批次，仍保存逐单校验、差错与暂缓'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。bad 单（结算 9000、基数 850）不再登记 settle_amount_mismatch：diffs 与 error_count 各再减 1（B2-18a 已先去掉应结未结那张）；逐单结果仍含 amount_mismatch、held_count 不动'
+  - file: 'test/spec/settlement/bill/batches.int.test.ts'
+    test: '[AC-B2-04n#19] 超过 JS 安全整数的联盟佣金合计用十进制整数串持久化，无一分钱丢失'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。两单原靠 unionAuthoritative 进合计；结论不再读后，把两单的夹具改为金额一致（快照基数与结算额换算相等），保留「超安全整数的合计按十进制串持久化」的原意，合计期望值 18014398509481987 不改'
+  - file: 'test/spec/settlement/supplement/validation.int.test.ts'
+    test: '[AC-B2-04r#3] 金额不一致经差错结论「以联盟为准」后进入补充批次，B_settle 取联盟结算额换算'
+    retitle_to: '[AC-B2-04r#3] 金额不一致不登记差错单；差错结论「以联盟为准」不再使其进入补充批次（B2-18）'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。账单日不再登记 settle_amount_mismatch；「结论以联盟为准后进补充批次」的路径取消——夹具不注入重生成端口，该单按重生成失败处理、补充发起仍不入批；按联盟结算额换算入批的断言由本单新目录用生产装配的用例接替'
+  - file: 'test/spec/settlement/supplement/validation.int.test.ts'
+    test: '[AC-B2-04r#4] 仍不一致的不入批且同账单同单差错不重复；补充时新发现的不一致按目标账单月登记'
+    retitle_to: '[AC-B2-04r#4] 仍不一致的不入批、不登记差错单（B2-18）'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。仍不一致的不入批不变；不再登记 settle_amount_mismatch（各处 diffs 张数相应减少、登记内容的断言去掉）；逐单结果 amount_mismatch 不动'
+  - file: 'test/spec/settlement/supplement/validation.int.test.ts'
+    test: '[AC-B2-04r#28] 补充前已追加分佣快照 v2：联盟仍按 v1 结算的按当前版本判不一致，不入批'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。按当前版本判不一致、不入批不变；不再登记 settle_amount_mismatch（expected 1700 / actual 850 那张）'
+  - file: 'test/spec/settlement/supplement/idempotency.int.test.ts'
+    test: '[AC-B2-04r#24] 明细实际写入后故障整体回滚，不留补充批次、差错或完成的任务行；同键重试可生成'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。故障回滚后重试：late 单不再登记差错单，diffs 由 before + 1 改为 before + 0；不留补充批次与任务行、同键重试可生成的断言不动'
+  - file: 'test/spec/settlement/supplement/switch.int.test.ts'
+    test: '[AC-B2-04r#16] 开关 off 期间账单只留校验结果；打开后对该账单发起补充，候选与补记项入批，差错不重复'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。开关 off 期间 bad 单不再登记差错单（before.diffs 由 1 改为 0）；逐单结果 amount_mismatch 与打开后候选、补记项入批的断言不动'
+  - file: 'test/spec/settlement/admin-settle-commands/supplement.int.test.ts'
+    test: '[AC-B2-09f#29] 校验范围：只看所发起平台和本应用的子订单；hold、维权中的单不入批；金额不符的单不入批且登记 R1 差错 settle_amount_mismatch，账期为账单月；已入账子订单上开着的补记义务生成受益人明细（order_count 不计）；差错数与暂缓数不回写账单（D10-280 ③）'
+    retitle_to: '[AC-B2-09f#29] 校验范围：只看所发起平台和本应用的子订单；hold、维权中的单不入批；金额不符的单不入批、不登记差错单（B2-18）；已入账子订单上开着的补记义务生成受益人明细（order_count 不计）；差错数与暂缓数不回写账单（D10-280 ③）'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。金额不符的单不入批不变；不再登记 R1 差错 settle_amount_mismatch（diffs 由 1 张改为 0 张）；范围、hold、维权、补记义务明细、不回写账单的断言不动'
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/bill-follow-union/**'

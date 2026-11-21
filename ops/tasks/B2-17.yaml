@@ -83,6 +83,13 @@ modify_existing:
     br: [BR-FUND-24]
     ruling: D10-2417
     note: 'BR-FUND-24 ⑨：同一差错单对同一用户至多一张已执行、未红冲的调账单。本用例的夹具对同一张 R3 差错单、同一会员连续执行多张调账单（要测的是别的事），第二张起会被 20902 拦；只把夹具改为每张调账单各用一张新种的差错单，断言与期望值未改'
+  - file: 'test/spec/ledger/admin-adjustments/negative.int.test.ts'
+    test: '[AC-B2-12c#6] 契约示例：available 3000 以 PAYOUT_RECOVERY 调减 10000（支付宝提现单 + 差错单）→ 应答前后 3000 / −7000，借 USER_BALANCE.available 10000 / 贷 CASH_ALIPAY 10000，negative_since 记为当天，event_log 恰好一条 account.went_negative，审计 adjustment_create 含单号、会员、方向、金额、原因码与前后 available'
+    retitle_to: '[AC-B2-12c#6] 人工发起、关联通道对账差错单的 PAYOUT_RECOVERY 调减不受理：20001 fields=[refs]、reason=adjust_ref_invalid，不写单、凭证、余额、事件与审计（B2-17；这个场景只走系统预填追回单）'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。BR-FUND-24 ⑨：由人发起、关联通道对账差错单的调账单不受理。本用例夹具是 R2 channel_mismatch 差错单，期望由「成功、余额 3000 → −7000」改为 20001 adjust_ref_invalid 且不留痕；原场景的成功路径（系统预填追回单批准后 −7000）由 B2-17a 新目录的用例接替，金额口径不变'
 accept:
   - 'pnpm verify'
   - 'test/spec/ledger/recon-plan-b/**'

@@ -7,6 +7,7 @@ type: impl
 # ② 同一差错单同时至多一张待批预填追回单（库约束兜底）；预填追回单的批准（短信档，同事务照 B2-17 的 CAS 置差错单 adjusted）与驳回（必填原因）——现批准 / 驳回入口与调账状态机的预填迁移只认 ACCOUNT_CLOSED，发起人为空的 CHECK 也只允许 ACCOUNT_CLOSED，都要放开到系统预填的 PAYOUT_RECOVERY（带迁移；land 前设冻结、测试机全量绿）。
 # ③ 契约：批准 / 驳回接口的说明与 20902 recon_diff、预填追回单的形状（发起人为空 = 系统预填）——占契约槽，紧接 B2-17。追回单被红冲或驳回后的再生成、差错单结案时待批预填单的处置仍待定（变更记录 §5-10 / §5-11），不在本单。
 # 受影响冻结用例（[AC-B2-12c#6]、[AC-B2-12a#10]、状态机 [AC-B2-12a#26 / #27 / #30]）是资金用例的期望改动，待负责人点头后以补丁补 modify_existing，补入前不写测。清单 couli-runs/B2-17/inventory.md。
+# 补丁 1（funds，D10-2425）：负责人 2026-11-21 同意；登记 [AC-B2-12a#10]（参数表去掉 PAYOUT_RECOVERY 一行）。状态机冻结用例 [AC-B2-12a#26 / #27 / #30] 核过不钉 AA1 的 guard 全文（只要求含注销相关词），guard 文字放开到系统预填的 PAYOUT_RECOVERY 不会使其变红，不登记；[AC-B2-12c#6] 登在 B2-17。
 refs: [BR-FUND-24, BR-WDR-23, BR-WDR-05]
 refs_hash:
   BR-FUND-24: efcdeeafa452
@@ -28,8 +29,17 @@ paths:
   - 'apps/api/src/app.module.ts'
 test_paths:
   - 'test/spec/ledger/recon-plan-b-prefill/**'
+  - 'test/spec/db/admin-adjustments/adjustments.int.test.ts'
 impl: claude
 tester: claude-independent
+modify_existing:
+  - file: 'test/spec/db/admin-adjustments/adjustments.int.test.ts'
+    test: '[AC-B2-12a#10] %s 单 created_by 必填：只有系统预填的 ACCOUNT_CLOSED 单发起人可空'
+    retitle_to: '[AC-B2-12a#10] %s 单 created_by 必填：只有系统预填的 ACCOUNT_CLOSED、PAYOUT_RECOVERY 单发起人可空'
+    reason: rule_change
+    br: [BR-FUND-24]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。BR-FUND-24 ⑨：通道对账确有多付时系统预填 PAYOUT_RECOVERY 追回单，发起人为空表示系统预填（与注销预填单同一表示法）。参数表只去掉 PAYOUT_RECOVERY 一行，RESTORE、RECON_FIX、OTHER 三行与断言不动；PAYOUT_RECOVERY 发起人可空的正例由本单新目录用例钉'
 accept:
   - 'pnpm verify'
   - 'test/spec/ledger/recon-plan-b-prefill/**'
