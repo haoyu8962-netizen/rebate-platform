@@ -230,6 +230,10 @@ export interface AgentRuns {
   finalize_hold_at: Timestamp | null;
   finish_reason: string | null;
   id: string;
+  /**
+   * BR-AI-05 ⑤: the run passed step 1 of the decision order; written with the terminal state
+   */
+  input_passed: Generated<boolean>;
   input_tokens: number | null;
   intent: string | null;
   judge_model: string | null;
