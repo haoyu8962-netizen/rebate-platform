@@ -4025,3 +4025,48 @@ it("[CT-06zzzzzz] checkEarly refuses (throws, exit 2) a ledger at spec that is a
   expect(run('X1-09', spec)).toThrow(/cannot read ops\/tasks\/X1-09\.yaml/u);
   expect(run('X1-07', 'f'.repeat(40))).toThrow(/is not a commit/u);
 });
+
+it('[CT-06zzzzzz] checkEarly judges a rename by its original path: a unit test moved into test/spec from apps/ is an addition (exit 0)', () => {
+  const unit = 'apps/api/src/modules/identity/early.test.ts';
+  const target = 'test/spec/identity/early/moved.test.ts';
+  const dir = join(SCRATCH, 'early-rename-in');
+  mkdirSync(dir, { recursive: true });
+  git(dir, ['init', '-q', '-b', 'main']);
+  write(dir, { [unit]: "import { it } from 'vitest';\nit('[AC-X1-07#3] u', () => {});\n" });
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '-q', '-m', 'base']);
+  git(dir, ['checkout', '-q', '-b', 'task/X1-07']);
+  mkdirSync(dirname(join(dir, target)), { recursive: true });
+  git(dir, ['mv', unit, target]);
+  write(dir, { 'ops/tasks/X1-07.yaml': earlyLedger() });
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '-q', '-m', 'rule tests']);
+  const spec = git(dir, ['rev-parse', 'HEAD']);
+  // Git sees the move as a rename whose target is class 1 and whose source is not.
+  expect(
+    git(dir, ['diff', '--name-status', '-M', 'main', spec])
+      .split('\n')
+      .filter((l) => l.startsWith('R')),
+  ).toHaveLength(1);
+  const report = checkEarly({ prDir: dir, task: 'X1-07', base: 'main', spec, trusted: REPO });
+  expect(report.problems).toEqual([]);
+  const cli = spawnSync(
+    'node',
+    [
+      join(REPO, 'tools/ci/evidence-check.ts'),
+      '--early',
+      '--pr',
+      dir,
+      '--task',
+      'X1-07',
+      '--base',
+      'main',
+      '--spec',
+      spec,
+      '--json',
+    ],
+    { encoding: 'utf8' },
+  );
+  expect(cli.status, cli.stderr).toBe(0);
+  expect(JSON.parse(cli.stdout)).toMatchObject({ problems: [] });
+});

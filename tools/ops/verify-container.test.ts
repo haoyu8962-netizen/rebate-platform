@@ -21,6 +21,7 @@ import {
   OPS_DIR,
   removeDir,
   scratchDir,
+  taskYaml,
   writeFiles,
 } from './test-helpers.ts';
 
@@ -1765,3 +1766,178 @@ it("[CT-06zzzzz] tools/ops/README.md: report the cleaned stdout lines, never cop
   expect(readme).not.toContain('原样报出');
   expect(readme).toMatch(/完整集成测试套件以 CI 为准/);
 });
+
+// CT-06zzzzzz (D10-2341; money-codex r1 S1 ① ③): the evidence shape check of --red runs on the
+// commit of the snapshot tree red-check ran (uncommitted rule tests included), and when it cannot
+// run the log gets one line only, its stderr going to evidence-shape.err. A stub docker copies a
+// canned report into the red run's out/; the real test-guard, red-check and evidence-check run.
+// The task is this one: the red run takes its test_paths from the trusted ledger, as the rule tests
+// of test/spec/ci/evidence-check-early do; the frozen test lies outside those paths.
+const SHAPE_TASK = 'CT-06zzzzzz';
+const SHAPE_FROZEN = 'test/spec/identity/shape-unit/frozen.test.ts';
+const SHAPE_NEW = 'test/spec/ci/evidence-check-early/shape-unit.test.ts';
+const SHAPE_TITLE = '[AC-CT-06#1] shape unit new test';
+const SHAPE_DOCKER = [
+  '#!/bin/bash',
+  'set -eu',
+  'if [[ "$1" == run && "${@: -1}" == red ]]; then',
+  '  for arg in "$@"; do',
+  '    case "$arg" in',
+  '      *:/out) cp "$SHAPE_UNIT_REPORT" "${arg%:/out}/spec-unit.json"; exit 0 ;;',
+  '    esac',
+  '  done',
+  '  exit 2',
+  'fi',
+  'exit 0',
+  '',
+].join('\n');
+
+/** main with a frozen rule test, then the task branch with the ledger and a new red test, uncommitted. */
+function shapeFixture(name: string, ledger: boolean): { root: string; repo: string; base: string } {
+  const root = join(base, `shape-${name}`);
+  const repo = join(root, 'rule test worktree');
+  writeFiles(repo, {
+    'package.json': '{"private":true,"packageManager":"pnpm@10.33.1"}\n',
+    'pnpm-lock.yaml': "lockfileVersion: '9.0'\n",
+    'pnpm-workspace.yaml': 'packages: []\n',
+    'test-manifest.json': '{}\n',
+    [SHAPE_FROZEN]:
+      "import { expect, it } from 'vitest';\nit('[AC-CT-06#2] frozen', () => {\n  expect(1).toBeGreaterThan(0);\n});\n",
+  });
+  fixtureGit(repo, ['init', '-q', '-b', 'main', '--object-format=sha1']);
+  fixtureGit(repo, ['add', '-A']);
+  fixtureGit(repo, ['-c', 'commit.gpgSign=false', 'commit', '-qm', 'baseline']);
+  const baseSha = fixtureGit(repo, ['rev-parse', 'HEAD']);
+  fixtureGit(repo, ['switch', '-qc', `task/${SHAPE_TASK}`]);
+  writeFiles(repo, {
+    [SHAPE_NEW]: `import { expect, it } from 'vitest';\nit('${SHAPE_TITLE}', () => {\n  expect(1).toBe(2);\n});\n`,
+    ...(ledger
+      ? {
+          [`ops/tasks/${SHAPE_TASK}.yaml`]: taskYaml({
+            id: SHAPE_TASK,
+            title: 'Evidence shape unit fixture',
+            type: 'guard-change',
+            refs: '[]',
+            refs_hash: '{}',
+            paths: "\n  - 'tools/ci/evidence-check.ts'",
+            test_paths: "\n  - 'test/spec/ci/evidence-check-early/**'",
+            impl: 'claude',
+            tester: 'codex',
+          }),
+        }
+      : {}),
+  });
+  return { root, repo, base: baseSha };
+}
+
+function shapeRun(
+  fx: { root: string; repo: string; base: string },
+  status: 'failed' | 'passed',
+  dryRun = false,
+) {
+  const runsDir = join(fx.root, 'runs');
+  writeFiles(fx.root, {
+    'bin/docker': SHAPE_DOCKER,
+    'report.json': JSON.stringify({
+      testResults: [
+        {
+          name: `${RUN_ROOT}/${SHAPE_NEW}`,
+          assertionResults: [
+            {
+              fullName: SHAPE_TITLE,
+              status,
+              failureMessages: status === 'failed' ? ['AssertionError: expected 1 to be 2'] : [],
+            },
+          ],
+        },
+      ],
+    }),
+  });
+  chmodSync(join(fx.root, 'bin', 'docker'), 0o755);
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const name of ['COULI_VERIFY_MEMORY', 'COULI_VERIFY_TIMEOUT_SECS']) {
+    Reflect.deleteProperty(env, name);
+  }
+  const res = spawnSync(
+    'bash',
+    [
+      SCRIPT,
+      SHAPE_TASK,
+      '--worktree',
+      fx.repo,
+      '--red',
+      '--base',
+      fx.base,
+      ...(dryRun ? ['--dry-run'] : []),
+    ],
+    {
+      encoding: 'utf8',
+      timeout: CLI_TIMEOUT,
+      env: {
+        ...env,
+        PATH: `${join(fx.root, 'bin')}:${process.env['PATH'] ?? ''}`,
+        COULI_RUNS: runsDir,
+        COULI_TRUSTED_ROOT: repoRoot(),
+        COULI_VERIFY_HOST_SERVICES: '',
+        SHAPE_UNIT_REPORT: join(fx.root, 'report.json'),
+      },
+    },
+  );
+  return { res, vdir: join(runsDir, SHAPE_TASK, 'red', '1') };
+}
+
+it(
+  '[CT-06zzzzzz] --red checks the evidence shape of the snapshot it ran: an uncommitted change of a frozen test is reported',
+  () => {
+    const fx = shapeFixture('uncommitted', true);
+    writeFiles(fx.repo, {
+      [SHAPE_FROZEN]:
+        "import { expect, it } from 'vitest';\nit('[AC-CT-06#2] frozen', () => {\n  expect(1).toBe(1);\n});\n",
+    });
+    const head = fixtureGit(fx.repo, ['rev-parse', 'HEAD']);
+    const dry = shapeRun(fx, 'failed', true);
+    expect(dry.res.status, dry.res.stderr).toBe(0);
+    const args = (JSON.parse(dry.res.stdout) as { evidence_shape: string[] }).evidence_shape;
+    const planned = args[args.indexOf('--spec') + 1] ?? '';
+    expect(planned).toMatch(/^[0-9a-f]{40}$/u);
+    expect(planned).not.toBe(head);
+
+    const { res, vdir } = shapeRun(fx, 'failed');
+    expect(res.status, res.stderr).toBe(0);
+    const result = readJson(join(vdir, 'result.json'));
+    expect(result).toMatchObject({ exit_code: 0, commit: head });
+    const shape = readJson(join(vdir, 'evidence-shape.json'));
+    // The snapshot commit: the tree red-check ran, on HEAD; the same one --dry-run planned.
+    expect(shape['spec']).toBe(planned);
+    expect(fixtureGit(fx.repo, ['rev-parse', `${planned}^{tree}`])).toBe(result['tree']);
+    expect(fixtureGit(fx.repo, ['rev-parse', `${planned}^`])).toBe(head);
+    expect(shape['problems']).toEqual([expect.stringContaining(SHAPE_FROZEN)]);
+    // No ref moved, the work tree still has its uncommitted changes.
+    expect(fixtureGit(fx.repo, ['rev-parse', 'HEAD'])).toBe(head);
+    expect(fixtureGit(fx.repo, ['status', '--porcelain'])).toContain(SHAPE_FROZEN);
+    const log = readFileSync(join(vdir, 'log.txt'), 'utf8').trimEnd().split('\n');
+    expect(log.at(-1)).toMatch(/evidence shape: 1 problem\(s\)$/u);
+    expect(log.at(-2)).toContain(
+      `checked ${planned}, a commit of the snapshot tree on HEAD ${head}`,
+    );
+  },
+  JUDGE_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzzz] --red: when the evidence shape check exits 2 the log gets only the one not-checked line, its stderr goes to evidence-shape.err',
+  () => {
+    const fx = shapeFixture('no-ledger', false);
+    const { res, vdir } = shapeRun(fx, 'passed');
+    expect(res.status, res.stderr).toBe(1);
+    const err = readFileSync(join(vdir, 'evidence-shape.err'), 'utf8');
+    expect(err).toMatch(/cannot read ops\/tasks\/CT-06zzzzzz\.yaml/u);
+    const log = readFileSync(join(vdir, 'log.txt'), 'utf8').trimEnd().split('\n');
+    expect(log.filter((line) => /evidence shape|evidence-check[: ]/u.test(line))).toEqual([
+      expect.stringMatching(/evidence shape: not checked \(exit 2\)$/u),
+    ]);
+    expect(log.at(-1)).toMatch(/evidence shape: not checked \(exit 2\)$/u);
+    expect(log.some((line) => line.includes('cannot read'))).toBe(false);
+  },
+  JUDGE_TIMEOUT,
+);

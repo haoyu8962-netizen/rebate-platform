@@ -19,7 +19,9 @@
 // the range is judged as land judges a hit after spec_commit (class1Hits, then the block /
 // support judgement of modifiedHitProblem: compareModifiedBlocks or supportHitProblem, kits read
 // per side): an added file is not a hit; a modified file needs a modify_existing entry that lets
-// its change through; a removal or a rename is a problem, named by its original path. Unlike land
+// its change through; a removal or a rename is a problem, named by its original path. A rename is
+// judged by its original path only: a file moved into the class 1 paths from elsewhere counts as
+// an addition (money-codex r1 S1; land judges both sides, unchanged). Unlike land
 // it reads no evidence file (absent or invalid alike), does not look up the owner approval label
 // (declared entries are judged as if approved and a note says the label is checked at land) and
 // does not judge the risk level, reviews, runs or trees. A declared file unchanged in the range
@@ -2097,8 +2099,10 @@ function resolveCommit(prDir: string, flag: string, ref: string): string {
  * (class1Hits, as the land check takes them after spec_commit) against the modify_existing of the
  * ledger at `spec`, each declared hit judged by declaredHitProblem, the land check's judgement
  * without the owner approval (the label is looked up at land only; registered entries get a note).
- * A modified hit without an entry, a removal and a rename are problems (a rename is reported on
- * its original path, the removal side, as well as on its target when that is class 1). A file the
+ * A modified hit without an entry, a removal and a rename are problems. A rename is judged only by
+ * its original path (money-codex r1 S1): when that is class 1 the removal side is the problem (its
+ * text names the original path and where it went); the target side is not judged, so a file moved
+ * into the class 1 paths from elsewhere counts as an addition. The land check is unchanged. A file the
  * ledger declares that did not change in the range gets a note. No evidence file is read. Throws
  * (exit 2) when a commit cannot be resolved or the ledger at `spec` cannot be read.
  */
@@ -2118,31 +2122,27 @@ export function checkEarly(input: EarlyInput): EarlyReport {
   const entries = ledger.modify_existing;
   const problems: string[] = [];
   const notes: string[] = [];
-  // Old path → new path of the renames in the range, to name both sides of a rename.
+  // Old path → new path of the renames in the range (changedBetween lists a rename as R of the
+  // new path followed by D of the old one), to name where a renamed class 1 file went.
   const all = changedBetween(input.prDir, mergeBase, spec);
   const renamedTo = new Map<string, string>();
-  const renamedFrom = new Map<string, string>();
   all.forEach((c, i) => {
     const old = all[i + 1];
-    if (c.status === 'R' && old !== undefined && old.status === 'D') {
+    if (c.status === 'R' && old !== undefined && old.status === 'D')
       renamedTo.set(old.path, c.path);
-      renamedFrom.set(c.path, old.path);
-    }
   });
-  const hits = class1Hits(input.prDir, mergeBase, spec, cfg);
+  // A rename is judged by its original path only (the D side): the R side, the target, is left out.
+  const hits = class1Hits(input.prDir, mergeBase, spec, cfg).filter((h) => h.status !== 'R');
   for (const hit of hits) {
     const declared = blockEntries(entries).filter((e) => e.file === hit.path);
     const support = supportEntries(entries).find((e) => e.file === hit.path);
     const to = renamedTo.get(hit.path);
-    const from = renamedFrom.get(hit.path);
     const what =
-      hit.status === 'R'
-        ? `renamed from ${from ?? 'another path'}`
-        : hit.status === 'D'
-          ? to === undefined
-            ? 'removed'
-            : `removed (renamed to ${to})`
-          : 'modified';
+      hit.status === 'D'
+        ? to === undefined
+          ? 'removed'
+          : `removed (renamed to ${to})`
+        : 'modified';
     const at = `${hit.path} (${hit.status}, ${what})`;
     if (declared.length === 0 && support === undefined) {
       problems.push(

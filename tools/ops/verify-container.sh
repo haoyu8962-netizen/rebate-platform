@@ -28,11 +28,13 @@
 #              CI whatever the owner label); add-only findings (changed frozen test assets) are
 #              noted on stderr and the run goes on.
 #              After red-check (CT-06zzzzzz, D10-2341) the trusted tools/ci/evidence-check.ts
-#              --early checks the shape of the frozen-test changes (merge-base(base, HEAD) → HEAD
-#              against the ledger's modify_existing at HEAD): its JSON goes to
-#              red/<n>/evidence-shape.json and the log ends with `evidence shape: N problem(s)`
-#              (`evidence shape: not checked (exit X)` when it could not run). It never changes
-#              the exit code. --dry-run prints its arguments as `evidence_shape`.
+#              --early checks the shape of the frozen-test changes (merge-base(base, S) → S
+#              against the ledger's modify_existing at S, S the commit of the snapshot tree the
+#              red run used: HEAD, or a commit-tree object on HEAD when the work tree has
+#              uncommitted changes): its JSON goes to red/<n>/evidence-shape.json, its stderr to
+#              red/<n>/evidence-shape.err, and the log ends with `evidence shape: N problem(s)`
+#              (only `evidence shape: not checked (exit X)` when it could not run). It never
+#              changes the exit code. --dry-run prints its arguments as `evidence_shape`.
 #   --related  the tests related to the branch's source changes, on the PR head (CT-06zzzzv,
 #              FU-RED-RUNS-TEST-GUARD, D10-1292 step 1, round 2 D10-1337; --red is unchanged): the
 #              files changed from the branch point with --base (default as for --red) to the
@@ -582,11 +584,33 @@ IS_TOP=0
 if [ -n "$top" ] && [ "$(cd "$top" && pwd -P)" = "$WT" ]; then IS_TOP=1; fi
 head=''
 if [ "$IS_TOP" = 1 ]; then head="$(git -C "$WT" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null || true)"; fi
-# CT-06zzzzzz (D10-2341): the arguments of the early evidence shape check of --red (after red-check).
+# CT-06zzzzzz (D10-2341): the arguments of the early evidence shape check of --red (after
+# red-check), set by shape_args_for once the snapshot tree is known. --spec is the commit of the
+# tree red-check runs on: HEAD when the snapshot tree is HEAD's, otherwise (rule tests not yet
+# committed; money-codex r1 S1) a commit object of the snapshot tree on top of HEAD made with
+# git commit-tree: no ref moves, the work tree and index are untouched; its dates are HEAD's, so
+# --dry-run and the run name the same commit. Empty: not checked (no HEAD, or commit-tree failed).
 SHAPE_ARGS=()
-if [ "$SCRIPT" = red ] && [ -n "$head" ]; then
-  SHAPE_ARGS=(--early --pr "$WT" --task "$ID" --base "$BASE_ARG" --spec "$head" --json)
-fi
+SHAPE_SPEC=''
+shape_args_for() { # $1: the snapshot tree of this run
+  local htree spec when
+  SHAPE_ARGS=()
+  SHAPE_SPEC=''
+  [ "$SCRIPT" = red ] && [ -n "$head" ] || return 0
+  spec="$head"
+  htree="$(git -C "$WT" rev-parse --verify -q 'HEAD^{tree}' 2>/dev/null || true)"
+  if [ "$1" != "$htree" ]; then
+    when="$(git -C "$WT" log -1 --format='%ct' "$head" 2>/dev/null || true)"
+    spec="$(printf 'verify-container --red snapshot of %s (uncommitted changes)\n' "$ID" |
+      GIT_AUTHOR_NAME=verify-container GIT_AUTHOR_EMAIL=verify-container@localhost \
+        GIT_COMMITTER_NAME=verify-container GIT_COMMITTER_EMAIL=verify-container@localhost \
+        GIT_AUTHOR_DATE="@${when:-0} +0000" GIT_COMMITTER_DATE="@${when:-0} +0000" \
+        git -C "$WT" commit-tree "$1" -p "$head" 2>/dev/null || true)"
+    [[ "$spec" =~ ^[0-9a-f]{40,64}$ ]] || return 0
+    SHAPE_SPEC="$spec"
+  fi
+  SHAPE_ARGS=(--early --pr "$WT" --task "$ID" --base "$BASE_ARG" --spec "$spec" --json)
+}
 
 # --related (CT-06zzzzv): the source files of the tree that will run — the snapshot tree of the
 # work tree (tree_of_worktree: uncommitted and untracked files included; result.json records the
@@ -690,7 +714,9 @@ if [ "$DRY_RUN" = 1 ]; then
   elif [ -n "$TESTS_TREE" ]; then
     dry_tree="\"$TESTS_TREE\""
   elif [ "$IS_TOP" = 1 ]; then
-    dry_tree="\"$(tree_of_worktree "$RUNS/.dry-index.$ID.$$")\""
+    dt="$(tree_of_worktree "$RUNS/.dry-index.$ID.$$")"
+    dry_tree="\"$dt\""
+    shape_args_for "$dt"
   fi
   node -e '
     const [script, commit, tree, files, plan, tgFindings, tgAddOnly, memory, base, sources, testsFiles, testsPlan] = process.argv.slice(1);
@@ -1117,6 +1143,7 @@ if [ "$IS_TOP" = 1 ]; then
     die "the worktree changed after its test files were listed (tree $TESTS_TREE, now $tree): run --tests again"
   fi
   TREE="\"$tree\""
+  shape_args_for "$tree"
   # Export exactly that tree object (deterministic: the archive is built from the object
   # database, not from the live files; .gitattributes sets no export-ignore).
   git -C "$WT" archive --format=tar "$tree" | tar -C "$SRC" -xf - ||
@@ -1176,17 +1203,19 @@ write_result() {
   mv "$tmp" "$RESULT"
 }
 
-# CT-06zzzzzz (D10-2341): after red-check, the trusted evidence-check --early on the worktree's
-# HEAD; its JSON to evidence-shape.json, one summary line at the end of the log. Whatever it says or
-# however it fails, the exit code of the red run stays red-check's.
+# CT-06zzzzzz (D10-2341): after red-check, the trusted evidence-check --early on the commit of the
+# run's snapshot (shape_args_for); its JSON to evidence-shape.json, its stderr to
+# evidence-shape.err (never to the log: money-codex r1 S1), one summary line at the end of the log.
+# Whatever it says or however it fails, the exit code of the red run stays red-check's.
 evidence_shape() {
-  local out="$VDIR/evidence-shape.json" erc=0 n=''
-  if [ -z "$head" ]; then
+  local out="$VDIR/evidence-shape.json" err="$VDIR/evidence-shape.err" erc=0 n=''
+  if [ "${#SHAPE_ARGS[@]}" = 0 ]; then
     : >"$out" || true
-    step "evidence shape: not checked (no HEAD commit in $WT)"
+    step "evidence shape: not checked (no commit to check in $WT)"
     return 0
   fi
-  (cd "$TRUSTED" && node tools/ci/evidence-check.ts "${SHAPE_ARGS[@]}") >"$out" 2>>"$LOG" || erc=$?
+  (cd "$TRUSTED" && node tools/ci/evidence-check.ts "${SHAPE_ARGS[@]}") >"$out" 2>"$err" || erc=$?
+  [ -s "$err" ] || rm -f "$err"
   if [ "$erc" = 0 ] || [ "$erc" = 1 ]; then
     n="$(node -e '
       const doc = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
@@ -1195,6 +1224,10 @@ evidence_shape() {
     ' "$out" 2>/dev/null)" || n=''
   fi
   if [ -n "$n" ]; then
+    if [ -n "$SHAPE_SPEC" ]; then
+      printf '[verify-container %s] evidence-check --early checked %s, a commit of the snapshot tree on HEAD %s (snapshot: uncommitted changes)\n' \
+        "$(now_utc)" "$SHAPE_SPEC" "$head" >>"$LOG"
+    fi
     step "evidence shape: $n problem(s)"
   else
     : >"$out" || true
