@@ -15,7 +15,7 @@ import {
 import type { RightsCommandPort } from '../../../../apps/api/src/modules/orders/application/rights-ports.ts';
 import type { RightsSyncHandlerDeps } from '../../../../apps/api/src/modules/orders/jobs/rights-sync.ts';
 import type { UnionPunish } from '../../../../apps/api/src/modules/union/domain/types.ts';
-import { NOW, fixture as handlerFixture, punishWindow } from './kit.ts';
+import { NOW, fixture as handlerFixture, lateWindow, punishWindow } from './kit.ts';
 
 /** The part of @couli/db/testing's TestDatabase this kit uses. */
 export interface TestDatabaseUrls {
@@ -182,20 +182,210 @@ export function windowOf(appId: string): PunishSyncWindow {
   return { ...punishWindow(), app_id: appId };
 }
 
+/** The punish window of `appId` that ended 12 minutes before the injected Clock (kit lateWindow). */
+export function lateWindowOf(appId: string): PunishSyncWindow {
+  return { ...lateWindow(), app_id: appId };
+}
+
+export interface DbHandlerOptions {
+  /** Wraps the production pending recorder (e.g. to fail one call). */
+  readonly wrap?: (recorder: PunishPendingPort) => PunishPendingPort;
+}
+
 /**
  * The handler over the real database: fake adapter pages and gates (the frozen B1-04zza kit), the
  * real rights writer over a settlement stand-in that only records being called, and the
  * production pending recorder.
  */
-export function dbHandler(db: Kysely<DB>, pages: readonly (readonly UnionPunish[])[]) {
+export function dbHandler(
+  db: Kysely<DB>,
+  pages: readonly (readonly UnionPunish[])[],
+  options: DbHandlerOptions = {},
+) {
   const base = handlerFixture({ punishPages: pages });
   const record = vi.fn<RightsCommandPort['record']>(async () => ({ kind: 'applied' }));
   const rights: RightsCommandPort = { record };
-  const pending: PunishPendingPort = createPunishPendingRecorder({ db });
+  const recorder: PunishPendingPort = createPunishPendingRecorder({ db });
+  const pending = options.wrap === undefined ? recorder : options.wrap(recorder);
   const deps: RightsSyncHandlerDeps = {
     ...base.bare,
     writer: createRightsSyncWriter({ db, clock: base.clock, rights }),
     pending,
   };
-  return { deps, rightsRecord: record, logger: base.logger, now: new Date(NOW) };
+  return {
+    deps,
+    rightsRecord: record,
+    logger: base.logger,
+    listPunishments: base.listPunishments,
+    now: new Date(NOW),
+  };
+}
+
+/** A user of `appId` (the attributed member of a credited order). */
+export async function seedUser(db: Kysely<DB>, appId: string): Promise<string> {
+  const id = randomUUID();
+  await db
+    .insertInto('users')
+    .values({
+      id,
+      app_id: appId,
+      nickname: 'synthetic',
+      avatar: 'synthetic',
+      invite_code: randomUUID(),
+      attr_code: randomUUID(),
+      level: 'L1',
+      register_method: 'sms',
+      created_at: PAID,
+      updated_at: PAID,
+    })
+    .execute();
+  return id;
+}
+
+/** The China (+08:00) calendar date of an instant, for ledger_vouchers.accounting_date. */
+function chinaDate(at: Date): string {
+  return new Date(at.getTime() + 8 * 3_600_000).toISOString().slice(0, 10);
+}
+
+export interface ClawedBackLedger {
+  /** The member's USER_BALANCE account. */
+  readonly userAccountId: string;
+  /** account_balances of that account after the clawback (other orders keep it non-zero). */
+  readonly availableFen: bigint;
+  readonly frozenFen: bigint;
+}
+
+/**
+ * The ledger an earlier credit and its PUNISH clawback left for `order` (synthetic, debit
+ * positive): the credit (UNION_RECEIVABLE debit `n`, USER_BALANCE credit `base`, COMMISSION_REVENUE
+ * credit the rest), the clawback reversing it, and the member's balance row.
+ */
+export async function seedClawedBackLedger(
+  db: Kysely<DB>,
+  order: Order,
+  userId: string,
+  amounts: {
+    readonly n: bigint;
+    readonly base: bigint;
+    readonly credited: Date;
+    readonly clawed: Date;
+  },
+): Promise<ClawedBackLedger> {
+  const appId = order.app_id;
+  const orderKey = `${order.platform}:${order.sub_order_id}`;
+  const account = async (ownerType: 'user' | 'platform', ownerId: string, subject: string) => {
+    const id = randomUUID();
+    await db
+      .insertInto('ledger_accounts')
+      .values({
+        id,
+        app_id: appId,
+        owner_type: ownerType,
+        owner_id: ownerId,
+        subject,
+        created_at: amounts.credited,
+      })
+      .execute();
+    return id;
+  };
+  const member = await account('user', userId, 'USER_BALANCE');
+  const receivable = await account('platform', 'platform', `UNION_RECEIVABLE:${order.platform}`);
+  const revenue = await account('platform', 'platform', 'COMMISSION_REVENUE');
+  const voucher = async (
+    kind: 'CREDIT' | 'CLAWBACK',
+    ledgerType: 'REBATE_CREDIT' | 'CLAWBACK',
+    sign: 1n | -1n,
+    at: Date,
+  ) => {
+    const id = randomUUID();
+    await db
+      .insertInto('ledger_vouchers')
+      .values({
+        id,
+        app_id: appId,
+        biz_type: kind === 'CREDIT' ? 'ORDER_CREDIT' : 'ORDER_CLAWBACK',
+        biz_id: orderKey,
+        uniq_key: `${orderKey}:${userId}:self:${kind}`,
+        accounting_date: chinaDate(at),
+        operator: 'system',
+        memo: kind === 'CLAWBACK' ? 'reason=PUNISH' : null,
+        order_key: orderKey,
+        beneficiary_user_id: userId,
+        role: 'self',
+        voucher_kind: kind,
+        created_at: at,
+      })
+      .execute();
+    await db
+      .insertInto('ledger_entries')
+      .values(
+        [
+          { account_id: receivable, amount_fen: sign * amounts.n },
+          { account_id: member, amount_fen: -sign * amounts.base },
+          { account_id: revenue, amount_fen: -sign * (amounts.n - amounts.base) },
+        ].map((line) => ({
+          app_id: appId,
+          voucher_id: id,
+          account_id: line.account_id,
+          sub_account: 'available',
+          amount_fen: line.amount_fen,
+          ledger_type: ledgerType,
+          sub_type: kind === 'CLAWBACK' ? 'PUNISH' : null,
+          income_type: null,
+          balance_after_fen: null,
+          account_version: null,
+          booked_at: at,
+          created_at: at,
+        })),
+      )
+      .execute();
+  };
+  await voucher('CREDIT', 'REBATE_CREDIT', 1n, amounts.credited);
+  await voucher('CLAWBACK', 'CLAWBACK', -1n, amounts.clawed);
+  const availableFen = 1_234n;
+  const frozenFen = 56n;
+  await db
+    .insertInto('account_balances')
+    .values({
+      app_id: appId,
+      account_id: member,
+      available_fen: availableFen,
+      frozen_fen: frozenFen,
+      negative_since: null,
+      version: 2n,
+      created_at: amounts.credited,
+    })
+    .execute();
+  return { userAccountId: member, availableFen, frozenFen };
+}
+
+/** Everything of `appId` a restore or a payout would write: ledger, balances, recon diffs. */
+export async function moneyOf(db: Kysely<DB>, appId: string) {
+  return {
+    accounts: await db
+      .selectFrom('ledger_accounts')
+      .selectAll()
+      .where('app_id', '=', appId)
+      .orderBy('id')
+      .execute(),
+    balances: await db
+      .selectFrom('account_balances')
+      .selectAll()
+      .where('app_id', '=', appId)
+      .orderBy('account_id')
+      .execute(),
+    vouchers: await db
+      .selectFrom('ledger_vouchers')
+      .selectAll()
+      .where('app_id', '=', appId)
+      .orderBy('id')
+      .execute(),
+    entries: await ledgerOf(db, appId),
+    diffs: await db
+      .selectFrom('recon_diffs')
+      .selectAll()
+      .where('app_id', '=', appId)
+      .orderBy('id')
+      .execute(),
+  };
 }

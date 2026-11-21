@@ -14,8 +14,14 @@ import type { RightsSyncHandlerDeps } from '../../../../apps/api/src/modules/ord
 import type { UnionPunish } from '../../../../apps/api/src/modules/union/domain/types.ts';
 import {
   APP,
+  DAY_MS,
+  MINUTE_MS,
   NOW,
+  NOW_MS,
+  PUNISH_DAYS,
   fixture as rightsFixture,
+  iso,
+  punishWindow,
   type FixtureOptions,
 } from '../taobao-rights-sync/kit.ts';
 
@@ -56,12 +62,27 @@ export function unfrozen(index: number, patch: Partial<UnionPunish> = {}): Union
   return { ...plain(index), punish_status: '1', ...patch };
 }
 
-/** 违规单：报文里根本没有 punish_status 这个成员。 */
-export function withoutStatus(index: number, patch: Partial<UnionPunish> = {}): UnionPunish {
-  const kept = Object.entries({ ...plain(index), ...patch }).filter(
-    ([key]) => key !== 'punish_status',
-  );
-  return Object.fromEntries(kept) as unknown as UnionPunish;
+/** 违规单：报文里没有 punish_status（适配器归一后为 null，union/infra/taobao/punishments.ts）。 */
+export function missingStatus(index: number, patch: Partial<UnionPunish> = {}): UnionPunish {
+  return { ...plain(index), punish_status: null, ...patch };
+}
+
+/**
+ * 订单号「转成 Number 再打印与原串相同」的 index（19 位、末三位 000：双精度间隔 512 < 1000，最短十进制
+ * 表示就是原串）；其余 index 的订单号转 Number 后会打印成别的数（任务书 11.2 第 7 条）。
+ */
+export const ROUND_TRIP_INDEXES = [0, 1000] as const;
+
+/**
+ * 窗口在 NOW 前 12 分钟结束、注入时钟仍是 NOW（任务产生于 03:48、04:00 才执行）：detected_at /
+ * occurred_at 必须取注入时钟，不取窗口结束时刻（任务书 11.2 第 5 条）。
+ */
+export const LAG_MS = 12 * MINUTE_MS;
+export function lateWindow() {
+  return punishWindow({
+    window_start: iso(NOW_MS - LAG_MS - PUNISH_DAYS * DAY_MS),
+    window_end: iso(NOW_MS - LAG_MS),
+  });
 }
 
 /** 与冻结夹具 punishment(index) 同形的一条，单号按 index 区分（结算月 202610）。 */
@@ -122,6 +143,68 @@ export function linesOf(fn: MockLike, event: string): Record<string, unknown>[] 
     .filter(
       (fields): fields is Record<string, unknown> => typeof fields === 'object' && fields !== null,
     );
+}
+
+/** 一个日志参数里的全部叶子值，打印成文本：字符串原样，数值 / bigint / 布尔按十进制，Date 按 ISO；递归。 */
+export function leaves(value: unknown, out: string[] = []): string[] {
+  if (typeof value === 'string') out.push(value);
+  else if (typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean') {
+    out.push(String(value));
+  } else if (value instanceof Date) out.push(value.toISOString());
+  else if (Array.isArray(value)) for (const item of value) leaves(item, out);
+  else if (typeof value === 'object' && value !== null) {
+    for (const item of Object.values(value)) leaves(item, out);
+  }
+  return out;
+}
+
+/** 一个日志参数里的全部字段名（递归）。 */
+export function keysOf(value: unknown, out: string[] = []): string[] {
+  if (Array.isArray(value)) for (const item of value) keysOf(item, out);
+  else if (typeof value === 'object' && value !== null && !(value instanceof Date)) {
+    for (const [key, item] of Object.entries(value)) {
+      out.push(key);
+      keysOf(item, out);
+    }
+  }
+  return out;
+}
+
+/** 看起来是金额的字段名。 */
+export const AMOUNT_KEY = /fen|amount|deduction/i;
+
+/**
+ * 日志里不许出现的东西：订单号、违规单号（订单号:结算月），以及它们转成 Number 再打印的样子（含与
+ * 结算月重新拼出的违规单号），金额（扣款分）的十进制。
+ */
+export function markersOf(rows: readonly UnionPunish[]): string[] {
+  const out = new Set<string>();
+  for (const row of rows) {
+    const numeric = String(Number(row.order_id));
+    out.add(row.order_id);
+    out.add(row.punishment_id);
+    out.add(numeric);
+    out.add(`${numeric}:${row.settle_month}`);
+    if (row.deduction_fen !== null) out.add(row.deduction_fen.toString());
+  }
+  return [...out];
+}
+
+/** 这些 mock 的全部调用里，含禁用标记的叶子值与像金额的字段名（应为空）。 */
+export function leaksIn(fns: readonly MockLike[], markers: readonly string[]) {
+  const values: string[] = [];
+  const amountKeys: string[] = [];
+  for (const fn of fns) {
+    for (const call of fn.mock.calls) {
+      for (const arg of call) {
+        for (const leaf of leaves(arg)) {
+          if (markers.some((marker) => leaf.includes(marker))) values.push(leaf);
+        }
+        amountKeys.push(...keysOf(arg).filter((key) => AMOUNT_KEY.test(key)));
+      }
+    }
+  }
+  return { values, amountKeys };
 }
 
 /** 冻结夹具 + 假待处理端口：`handler` 注入了它，`bare` 是没注入的装配（9.2 第 7 条后半句）。 */

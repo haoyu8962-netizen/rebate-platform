@@ -4,15 +4,22 @@
 // - '1' 解冻：不交写入方（任何 type 都不交），交待处理端口一条 UNFREEZE_SIGNAL（raw_status '1'，detected_at =
 //   注入时钟），warn 级告警一条、窗口结束日志单独计数，不混进 applied / not_found / unknown_status。
 // - 0 / 1 以外的值：不交写入方，待处理 UNMAPPED_STATUS（raw_status 原值），warn 并单独计数。
-// - 缺字段（null / 没有这个成员）：照现状按处罚交写入方，窗口结束日志单独计数缺字段条数；'0' 不计入。
-// - 未注入待处理端口时解冻 / 未知值行同样不交写入方；待处理写入失败错误外抛。
-// 日志只断言事件名、级别与计数字段，并断言任何字段里不出现订单号、违规单号与金额。
+// - 缺字段（适配器归一后的 null）：照现状按处罚交写入方，窗口结束日志单独计数缺字段条数；'0' 不计入。
+// - 未注入待处理端口时解冻 / 未知值行同样不交写入方；待处理写入失败错误原样外抛、就此停下（同页其后的行
+//   不交写入方、不取下一页），重投后补上。
+// - detected_at / occurred_at 取注入时钟，不取窗口结束时刻（任务书 11.2 第 5 条）。
+// 日志只断言事件名、级别与计数字段，并断言任何字段（递归，字符串化与数值化后）里不出现订单号、违规单号与
+// 金额，也没有金额字段。
 import { expect, it } from 'vitest';
 import { handlePunishWindow } from '../../../../apps/api/src/modules/orders/jobs/rights-sync.ts';
+import type { UnionPunish } from '../../../../apps/api/src/modules/union/domain/types.ts';
 import {
+  DONE_EVENT,
   MARKED_FEN,
   MISSING_COUNT,
+  NOW,
   PUNISH_JOB,
+  ROUND_TRIP_INDEXES,
   UNFREEZE_COUNT,
   UNFREEZE_EVENT,
   UNMAPPED_COUNT,
@@ -20,13 +27,17 @@ import {
   fixture,
   frozen,
   job,
+  lateWindow,
+  leaksIn,
+  linesOf,
+  markersOf,
+  missingStatus,
   printed,
   punishItem,
   punishWindow,
   signalOf,
   targetOf,
   unfrozen,
-  withoutStatus,
   type Fixture,
 } from './kit.ts';
 
@@ -39,9 +50,15 @@ function doneOf(f: Fixture): Record<string, unknown> {
   return lines[0]!;
 }
 
-function expectNoMarkers(f: Fixture, markers: readonly string[]) {
+/** Every logger call of the window (info, warn, error): no order number, punishment id or amount. */
+function expectNoMarkers(f: Fixture, rows: readonly UnionPunish[], extra: readonly string[] = []) {
+  const markers = [...markersOf(rows), ...extra];
   const logs = printed(f.logger.info, f.logger.warn, f.logger.error);
   for (const marker of markers) expect(logs).not.toContain(marker);
+  expect(leaksIn([f.logger.info, f.logger.warn, f.logger.error], markers)).toEqual({
+    values: [],
+    amountKeys: [],
+  });
 }
 
 it('[AC-B1-04zzab#1] 冻结（punish_status 0）照旧：交写入方 PUNISH / SUCCEEDED，违规单号作去重号、发生时间取同步时刻、violation_type 原样进 extras；不写待处理', async () => {
@@ -85,13 +102,7 @@ it('[AC-B1-04zzab#3] 解冻告警：一条 warn 级日志带本窗解冻条数�
     not_applicable: 0,
     unknown_status: 0,
   });
-  expectNoMarkers(f, [
-    a.order_id,
-    a.punishment_id,
-    b.order_id,
-    b.punishment_id,
-    MARKED_FEN.toString(),
-  ]);
+  expectNoMarkers(f, [a, b], [MARKED_FEN.toString()]);
 });
 
 it('[AC-B1-04zzab#4] 装配没注入待处理端口：解冻行仍不交写入方（宁可只留日志，不退回成扣回），告警与计数照旧，不抛错', async () => {
@@ -194,7 +205,7 @@ it.each(['2', '-1'])(
       unknown_status: 0,
     });
     expect(f.warned(UNFREEZE_EVENT)).toEqual([]);
-    expectNoMarkers(f, [odd.order_id, odd.punishment_id, MARKED_FEN.toString()]);
+    expectNoMarkers(f, [odd, kept], [MARKED_FEN.toString()]);
   },
 );
 
@@ -207,16 +218,16 @@ it('[AC-B1-04zzab#9] 0 / 1 以外的值且装配没注入待处理端口：同�
   expect(doneOf(f)).toMatchObject({ [UNMAPPED_COUNT]: 1 });
 });
 
-it('[AC-B1-04zzab#10] punish_status 缺失（null 或报文没有这个成员）：照现状按处罚交写入方，窗口结束日志单独计数缺字段条数；带 0 的行不计入', async () => {
-  const nulled = frozen(1, { punish_status: null });
-  const absent = withoutStatus(2);
+it('[AC-B1-04zzab#10] punish_status 缺失（适配器归一后的 null）：照现状按处罚交写入方，窗口结束日志单独计数缺字段条数；带 0 的行不计入', async () => {
+  const nulled = missingStatus(1);
+  const other = missingStatus(2);
   const zero = frozen(3);
-  const f = fixture({ punishPages: [[nulled, absent, zero]] });
+  const f = fixture({ punishPages: [[nulled, other, zero]] });
   await handlePunishWindow(job(PUNISH_JOB, WINDOW), f.handler);
 
   expect(f.writes()).toEqual([
     { target: targetOf(nulled), item: punishItem(nulled) },
-    { target: targetOf(absent), item: punishItem(absent) },
+    { target: targetOf(other), item: punishItem(other) },
     { target: targetOf(zero), item: punishItem(zero) },
   ]);
   expect(f.record).not.toHaveBeenCalled();
@@ -226,7 +237,7 @@ it('[AC-B1-04zzab#10] punish_status 缺失（null 或报文没有这个成员）
     [UNFREEZE_COUNT]: 0,
     [UNMAPPED_COUNT]: 0,
   });
-  expectNoMarkers(f, [nulled.order_id, absent.order_id, zero.order_id]);
+  expectNoMarkers(f, [nulled, other, zero]);
 
   const g = fixture({ punishPages: [[frozen(4), frozen(5)]] });
   await handlePunishWindow(job(PUNISH_JOB, WINDOW), g.handler);
@@ -262,4 +273,107 @@ it('[AC-B1-04zzab#11] 解冻、未知值、缺字段、冻结同窗：计数各�
     unknown_status: 0,
     not_found: 0,
   });
+});
+
+it('[AC-B1-04zzab#21] 窗口结束时刻 ≠ 注入时钟（03:48 结束的窗 04:00 才执行）：解冻与表外值的 detected_at、冻结与缺字段行的 occurred_at 都取注入时钟', async () => {
+  const late = lateWindow();
+  expect(Date.parse(late.window_end)).not.toBe(Date.parse(NOW));
+  const z = frozen(1, { violation_type: '2' });
+  const u = unfrozen(2);
+  const odd = frozen(3, { punish_status: '2' });
+  const m = missingStatus(4);
+  const f = fixture({ punishPages: [[z, u, odd, m]] });
+  await handlePunishWindow(job(PUNISH_JOB, late), f.handler);
+
+  expect(f.writes()).toEqual([
+    { target: targetOf(z), item: punishItem(z) },
+    { target: targetOf(m), item: punishItem(m) },
+  ]);
+  expect(f.writes().map((w) => w.item.occurred_at.toISOString())).toEqual([NOW, NOW]);
+  expect(f.signals()).toEqual([
+    signalOf(u, 'UNFREEZE_SIGNAL', '1'),
+    signalOf(odd, 'UNMAPPED_STATUS', '2'),
+  ]);
+  expect(f.signals().map((s) => s.detected_at.toISOString())).toEqual([NOW, NOW]);
+});
+
+it.each([
+  ['解冻', 'UNFREEZE_SIGNAL', '1', 'UNMAPPED_STATUS', '2'],
+  ['表外值', 'UNMAPPED_STATUS', '2', 'UNFREEZE_SIGNAL', '1'],
+] as const)(
+  '[AC-B1-04zzab#22] 待处理写入失败（%s 行）即停：错误原样外抛，同页其后的冻结行不交写入方、不取下一页；重投后失败前写过的再交一次、没写成的补上，冻结行各交一次',
+  async (_name, failReason, failRaw, okReason, okRaw) => {
+    const earlier = frozen(1, { punish_status: okRaw });
+    const failing = frozen(2, { punish_status: failRaw });
+    const after = frozen(3);
+    const next = frozen(4);
+    const f = fixture({ punishPages: [[earlier, failing, after], [next]] });
+    const broken = new Error('synthetic order_sync_pending failure');
+    let failed = false;
+    f.record.mockImplementation(async (signal) => {
+      if (!failed && signal.sub_order_id === failing.order_id) {
+        failed = true;
+        throw broken;
+      }
+    });
+    const first = [signalOf(earlier, okReason, okRaw), signalOf(failing, failReason, failRaw)];
+
+    await expect(handlePunishWindow(job(PUNISH_JOB, WINDOW), f.handler)).rejects.toBe(broken);
+    expect(f.write).not.toHaveBeenCalled();
+    expect(f.listPunishments).toHaveBeenCalledTimes(1);
+    expect(f.signals()).toEqual(first);
+    expect(f.advance).not.toHaveBeenCalled();
+
+    await expect(
+      handlePunishWindow(job(PUNISH_JOB, WINDOW, 2), f.handler),
+    ).resolves.toBeUndefined();
+    expect(f.signals()).toEqual([...first, ...first]);
+    expect(f.writes()).toEqual([
+      { target: targetOf(after), item: punishItem(after) },
+      { target: targetOf(next), item: punishItem(next) },
+    ]);
+    expect(f.listPunishments).toHaveBeenCalledTimes(3);
+  },
+);
+
+it('[AC-B1-04zzab#23] 两条 warn 与窗口结束日志不泄露单号：订单号转 Number 打印与原串相同的也查；全部字段值（递归、字符串化与数值化后）不含订单号、违规单号与金额，也没有金额字段', async () => {
+  const [sameIndex, otherSameIndex] = ROUND_TRIP_INDEXES;
+  const u0 = unfrozen(sameIndex, { deduction_fen: MARKED_FEN });
+  const u1 = unfrozen(7, { deduction_fen: MARKED_FEN });
+  const odd0 = frozen(otherSameIndex, { punish_status: '2', deduction_fen: MARKED_FEN });
+  const odd1 = frozen(9, { punish_status: '3' });
+  const z = frozen(11);
+  const m = missingStatus(12);
+  // Fixture check: these two print as themselves once turned into a Number, those two do not.
+  for (const row of [u0, odd0]) expect(String(Number(row.order_id))).toBe(row.order_id);
+  for (const row of [u1, odd1]) expect(String(Number(row.order_id))).not.toBe(row.order_id);
+  const f = fixture({
+    punishPages: [
+      [u0, z, odd0],
+      [u1, m, odd1],
+    ],
+  });
+  await handlePunishWindow(job(PUNISH_JOB, WINDOW), f.handler);
+
+  expect(f.warned(UNFREEZE_EVENT)).toHaveLength(1);
+  expect(f.warned(UNMAPPED_EVENT)).toHaveLength(1);
+  expect(doneOf(f)).toMatchObject({
+    applied: 2,
+    [UNFREEZE_COUNT]: 2,
+    [UNMAPPED_COUNT]: 2,
+    [MISSING_COUNT]: 1,
+  });
+  const rows = [u0, u1, odd0, odd1, z, m];
+  const markers = [...markersOf(rows), MARKED_FEN.toString()];
+  for (const line of [
+    ...f.warned(UNFREEZE_EVENT),
+    ...f.warned(UNMAPPED_EVENT),
+    ...linesOf(f.logger.info, DONE_EVENT),
+  ]) {
+    expect(leaksIn([{ mock: { calls: [[line]] } }], markers)).toEqual({
+      values: [],
+      amountKeys: [],
+    });
+  }
+  expectNoMarkers(f, rows, [MARKED_FEN.toString()]);
 });
