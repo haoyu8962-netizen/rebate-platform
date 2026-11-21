@@ -8,6 +8,7 @@ type: impl
 # 写测与评审：Codex 额度用尽（D10-2003），规则测试与首轮评审由无上下文的独立 Claude（claude-run.sh），证据如实记 claude-independent。写测时发现冻结用例（入口清单、只读断言、TODO 对应的「不出现」断言）受影响，先报编排再补 modify_existing（D10-1712 / D10-1899）。写操作一律照 F1-08ce 结果未知处理（D10-1731）。
 # 2026-11-21 补丁 1（fe，编排 D10-2375，同 D10-1733 / D10-1899）：本单在提现审核页加第四个页签「自动到账设置」（只对持 config.business 的账号出现，超管持有全部点），F1-08ba [AC-F1-08ba-TABS#2] 超管那组断言页签恰为三个会红：tabs.test.ts 列进 test_paths，块级 modify_existing 只把超管那组的期望改为恰为「审核列表」「打款队列」「结果待确认」「自动到账设置」四个（toEqual 严格相等），fund.view / payout.execute 两组与 withdraw.review / user.lookup 两组一字不动；同文件补 1 条本单新块在主干上红（D10-1812）。另按 D10-2375 口径 ①：标题里「总开关只能关」以 BR-WDR-30 细则「后台配置页」与设计规格为准——本页只读显示 withdraw.auto_payout.enabled 状态并放【去紧急开关页】入口，不发任何 kill-switch 写请求（已入账任务的标题门禁不许改，D10-2062，故写在这里）；口径 ②：保存跨键校验 max_amount_fen ≤ withdraw.max_amount_fen、platform_daily_max_fen ≤ payout.daily_cap_fen 不在本单（out_of_scope，be FU-WDR30-CROSSKEY-VALIDATION），前端只做 window_end > window_start 与单键范围。
 # 2026-11-21 补丁 2（fe，同 F1-08an 补丁 4）：写测第 2 次后正式先红（规则测试提交 1f6f1d1c7，couli-runs/F1-08ap/red/1）把 tabs.test.ts 因有登记的改动块与本单新块整份判定，块体未改的 3 条在骨架上绿被记问题；按 red_exempt 登记这 3 条。改动块 [AC-F1-08ba-TABS#2] 与新块 [AC-F1-08ap-TABS-FROZEN#1] 在骨架上为红；块外未改。
+# 2026-11-22 补丁 3（fe，编排 D10-2454）：evidence shape（#488）判 tabs.test.ts 在 modify_existing 之外多了测试块；本线把补丁 1 时加的新块 [AC-F1-08ap-TABS-FROZEN#1] 原样搬到本单目录 tabs-frozen.test.ts（只改 import，couli-runs/F1-08ap/relocate/），tabs.test.ts 相对基线只剩登记的 TABS#2 块；D10-1812 的「冻结文件须有新红」由 TABS#2 改动块在骨架上红满足。3 条 red_exempt 的原因随之改写，豁免本身不变。另：relogin.test.ts 两个账号快照由超管换为 BUSINESS_GRANTS + switch.all（D10-2452，本单目录内、断言不动）。
 refs: [BR-WDR-30, BR-ID-34]
 refs_hash:
   BR-WDR-30: ec74379ec48c
@@ -24,13 +25,13 @@ tester: claude-independent
 red_exempt:
   - file: test/spec/frontend/admin-payouts-readonly/tabs.test.ts
     test: '[AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（另有 5 个页签计数读，F1-08an）（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts'
-    reason: 'F1-08ba 冻结原有用例（F1-08an 补丁 3 改过、已在主干），本单块体未改；同文件有登记的改动块 [AC-F1-08ba-TABS#2] 与本单新块 [AC-F1-08ap-TABS-FROZEN#1]，被整份判定；它用的账号持 fund.view + payout.execute、不持 config.business，本单新页签不出现，页签清单与读取次数在新旧实现下都成立'
+    reason: 'F1-08ba 冻结原有用例（F1-08an 补丁 3 改过、已在主干），本单块体未改；同文件有登记的改动块 [AC-F1-08ba-TABS#2]，被整份判定（本单新块 [AC-F1-08ap-TABS-FROZEN#1] 已按 D10-2454 原样搬到 admin-withdrawal-auto-payout-settings/tabs-frozen.test.ts）；它用的账号持 fund.view + payout.execute、不持 config.business，本单新页签不出现，页签清单与读取次数在新旧实现下都成立'
   - file: test/spec/frontend/admin-payouts-readonly/tabs.test.ts
     test: '[AC-F1-08ba-TABS#3] 进「打款队列」只读一次 payout-overview（不带参数）、不读 unknown-payouts；进「结果待确认」只读一次 unknown-payouts；再回「审核列表」，审核列表的行照旧（全部状态、申请时间倒序）'
-    reason: 'F1-08ba 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08ba-TABS#2] 与本单新块 [AC-F1-08ap-TABS-FROZEN#1]，被整份判定；它看进打款队列 / 结果待确认页签的只读请求与回到审核列表，账号不持 config.business，本单新页签不出现，新旧实现下都成立'
+    reason: 'F1-08ba 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08ba-TABS#2]，被整份判定（本单新块 [AC-F1-08ap-TABS-FROZEN#1] 已按 D10-2454 原样搬到 admin-withdrawal-auto-payout-settings/tabs-frozen.test.ts）；它看进打款队列 / 结果待确认页签的只读请求与回到审核列表，账号不持 config.business，本单新页签不出现，新旧实现下都成立'
   - file: test/spec/frontend/admin-payouts-readonly/tabs.test.ts
     test: '[AC-F1-08an-COUNTS#1] 持 fund.view + payout.execute 进 /withdrawals：恰 5 个 page_size=1 的页签计数读（全部 / 待审 / 驳回 / 手动 / 自动，各只带该页签的快捷筛选），审核列表的列表读恰 1 条'
-    reason: 'F1-08an 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08ba-TABS#2] 与本单新块 [AC-F1-08ap-TABS-FROZEN#1]，被整份判定；它看页签计数读与列表读次数，账号持 fund.view + payout.execute、不持 config.business，本单新页签不出现、未进页签不读设置，新旧实现下都成立'
+    reason: 'F1-08an 冻结原有用例，块体未改；同文件有登记的改动块 [AC-F1-08ba-TABS#2]，被整份判定（本单新块 [AC-F1-08ap-TABS-FROZEN#1] 已按 D10-2454 原样搬到 admin-withdrawal-auto-payout-settings/tabs-frozen.test.ts）；它看页签计数读与列表读次数，账号持 fund.view + payout.execute、不持 config.business，本单新页签不出现、未进页签不读设置，新旧实现下都成立'
 modify_existing:
   - file: 'test/spec/frontend/admin-payouts-readonly/tabs.test.ts'
     test: '[AC-F1-08ba-TABS#2] 只持 fund.view、只持 payout.execute、超管：都见三个页签且默认审核列表（只持 payout.execute 时审核列表显示无权限、不读提现单）；只持 withdraw.review 或只持 user.lookup：不见「打款队列」「结果待确认」；未进页签时都不请求 payout-overview 与 unknown-payouts'
