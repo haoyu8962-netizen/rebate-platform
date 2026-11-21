@@ -102,8 +102,8 @@ red_exempt:
   - file: test/spec/db/agent-purge/privileges.int.test.ts
     test: '[AC-B3-09f#7][BR-AI-22] agent_messages remains without a user trigger'
     reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
-status: todo
-pr: null
+status: done
+pr: 467
 red_exempt_outside:
   - file: 'test/spec/db/agent-purge/privileges.int.test.ts'
     reason: '块外只插入两行：一行 import allowAgentRunsInputPassed（同目录新文件 agent-runs-input-passed.ts）与 UPDATABLE 声明后的一条裸函数调用 allowAgentRunsInputPassed(UPDATABLE)，函数只往 agent_runs 追加 input_passed（迁移 0153 的列级 UPDATE 授权；support 条目 D10-2398，形状 D10-2465）；it 块、断言与其余表的清单未动；块体未改的 21 条已登 red_exempt（D10-2429）'
