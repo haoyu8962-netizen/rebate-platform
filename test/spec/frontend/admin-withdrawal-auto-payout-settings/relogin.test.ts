@@ -30,12 +30,13 @@ import {
   takeBaseline,
 } from '../admin-unknown-relogin-marker/helpers.ts';
 import {
+  BUSINESS_GRANTS,
   KEY,
   LABEL,
   NOTICE,
   RETRY,
-  SUPER,
   TAB,
+  accountOf as snapshotOf,
   allowedHereToo,
   dropped,
   failedWith,
@@ -65,8 +66,16 @@ import {
 
 /** The stored marker's page: the menu id of 提现审核. */
 const PAGE = 'withdrawals';
-const FIRST = consoleAccount('finance-jia', ADMIN_ID.first, SUPER);
-const SECOND = consoleAccount('finance-yi', ADMIN_ID.second, SUPER);
+const FIRST = consoleAccount(
+  'finance-jia',
+  ADMIN_ID.first,
+  snapshotOf([...BUSINESS_GRANTS, 'switch.all']),
+);
+const SECOND = consoleAccount(
+  'finance-yi',
+  ADMIN_ID.second,
+  snapshotOf([...BUSINESS_GRANTS, 'switch.all']),
+);
 
 /** 提现审核 is shown with its tabs, and its list was read after the first `since` requests. */
 async function ready(server: PayoutServer, since: number): Promise<void> {
