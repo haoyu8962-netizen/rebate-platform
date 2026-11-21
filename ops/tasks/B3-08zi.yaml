@@ -1,0 +1,37 @@
+id: B3-08zi
+repo: rebate-platform
+title: 'A8 后一半（规划 11-12 §3.1 A8，BR-ID-01 ⑦）：/v1/agent/* 补判隐私最低版本——stream 入口另装 Agent 用的第 ⑦ 段，已登录且用户级隐私同意低于 legal.privacy.min_version → 10004 consent_type=privacy，排在 BR-AI-23 的 30501 之前；游客不判'
+type: impl
+# 2026-11-22 agent 线入账（编排 D10-2484 / D10-2488 取甲；入账前说明 couli-runs/AGENT-lane/b3-08zi-prep.md）。A8 前一半是 B3-06c（审核起拦等级）。
+# 规则：BR-ID-01 判定顺序（10_ID 第 196、214 行）——/v1/agent/* 先过 ①–⑦，再按 BR-AI-23（① 30501 → ② 10001 / 10005 → ③ 10004 ai_third_party …）。
+# 现状：identity/application/privacy-consent.ts 的 createPrivacyConsentChecks 只判 x-auth 为 login / phone / realname 的路由，optional 的（全部 /v1/agent/*）不判；
+#   所有 /v1/agent/* 都由 stream 入口提供（agent.module.ts:202），stream 不装第 ⑦ 段（app.module.ts:4919），第 ⑥ 段装在 streamRiskModule（app.module.ts:670–676）。
+# 做法（甲，D10-2488 ①）：① createPrivacyConsentChecks 一字不动（冻结的 [AC-B1-02zh#6] 钉住它对 /v1/agent/* 跳过、不读库也不读配置，继续成立）；
+#   privacy-consent.ts 只许「把判定抽成一个导出的共用函数」这一种改动，行为不变，现有冻结测试 test/spec/identity/privacy-min-version/** 必须原样绿。
+#   ② 给 stream 入口另装一个 Agent 用的第 ⑦ 段检查，调用同一个共用函数（不抄第二份判定），只对已登录的 caller 判，排在第 ⑥ 段之后、BR-AI-23 之前；app.module.ts 只加 stream 入口这一处装配。
+# 先后（D10-2488 ②，规则测试逐条钉）：已登录且最新用户级隐私记录 version < min_version 或 accepted=false → 10004 consent_type=privacy，先于 30501（开关关着也先回它）；
+#   游客（没有 user_id）不判、不读同意记录（BR-ID-13）；已登录但没有用户级记录、min_version 缺失 / 不合法、读失败——都照现有守卫的既有规则，与 api 入口同一结果；
+#   隐私满足 → 往下照常走 BR-AI-23，结果与现在相同。覆盖 /v1/agent/* 的 POST 与 GET 接口。
+# 不在本单：RunGuard（进行中的 run 不重判隐私同意，D10-2488 ③）；契约（openapi 里那几句顺序说明登 FU-AGENT-PRIVACY-ORDER-DOC，D10-2488 ④）；三端对 10004 privacy 的处理（各端自核）。
+# 风险级：含 app.module.ts → RV2，用户授权边界；评审照 approvals 27 由 Codex general 做，另加必核：api 入口对 login 级路由的行为逐字不变（D10-2488 ⑤）。
+# spec-test 任务书原样附 D10-2317 ①；本机不跑 vitest，单文件也走测试机（D10-2478）；探针放一次性工作树（D10-2481）。
+refs: [BR-ID-01]
+refs_hash:
+  BR-ID-01: fa91c30c2e54
+deps: [B1-02zh, B3-03i]
+paths:
+  - 'apps/api/src/modules/identity/application/privacy-consent.ts'
+  - 'apps/api/src/modules/identity/application/agent-privacy-consent.ts'
+  - 'apps/api/src/modules/identity/identity.module.ts'
+  - 'apps/api/src/modules/identity/index.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/identity/agent-privacy-min-version/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/agent-privacy-min-version/**'
+  - 'test/spec/identity/privacy-min-version/**'
+status: todo
+pr: null
