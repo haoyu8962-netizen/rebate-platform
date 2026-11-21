@@ -801,3 +801,9 @@ approvals:
     granted: true
     date: '2026-11-21'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-2380，先例第 124–129 条。原因：B3-08t 代码评审 3 轮与第 129 条已用满；money r3（couli-runs/B3-08t/review-money-r3-codex.json）两条 S1 只在启用模型路径后可达、只碰 model / model_snapshot，编排按 D10-2377 裁为本单范围外；evidence-check 要求代码评审 verdict pass，门禁不绕、标签不替它作数（D10-2244），故再评一轮，评审书不得写「请改判 pass」。止损：r4 在范围内再出 S0 / S1 即停报编排，不再开条目，改为拆出 intent / input_passed 最小集单独落地、model 两列挪到 B4。'
+  - id: 131
+    row: 4
+    title: 'CT-27 任务专属一次性追加：Codex spec-test 增量 1 轮（r3）——范围写死为核 spec-test r2（couli-runs/CT-27/review-spec-test-r2-codex.json）的 9 条 S1 与 2 条 S2 是否由写测第 3 次关闭：公开 GET /v1/pages/{page_key} 实际参数、home 共享准入表 popup 至多一个、search 两种置顶卡各用合法 id 并存拒收、more_services 条目上限按全部条目、非首项 banner 带徽标拒收、条目起止可都不填、product_scroll 更多跳转、图标摘要与图片绑定、共用操作配置键与列表绑定，以及 #18 夹具与 #16 缺父对象 TypeError；其余不再评审'
+    granted: true
+    date: '2026-11-21'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-2387，先例第 124–130 条。原因：CT-27（运营位批 1 契约，F1-16 / 17、APP-20 / 21、HM-16、B1-36 的地基）写测第 2 次后 Codex spec-test r2（2 / 2 已用满）仍报 9 条 S1，多数是准入规则未被测试钉住，带缺口进实现会让下游各端各自猜，故不取「先实现、缺口登伴随单」；写测第 3 次（3 / 3）按 D10-2317 ① 同类位置一次列全。止损：r3 再出新 S1 即停报编排，属实的列为实现必满足项并登伴随单，不再加轮、不再开条目。'
