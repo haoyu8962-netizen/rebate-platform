@@ -85,7 +85,8 @@ export function notCoveredSteps(packageJsonText: string): string[] {
   const names = verify.split('&&').map((step) => {
     const words = step.trim().split(/\s+/);
     const at = words.indexOf('run');
-    return at >= 0 && words[at + 1] !== undefined ? words[at + 1] : step.trim();
+    const next = at >= 0 ? words[at + 1] : undefined;
+    return next !== undefined ? next : step.trim();
   });
   for (const needed of ['verify:fast', 'test:int']) {
     if (!names.includes(needed)) throw new Error(`the verify script does not run ${needed}`);
