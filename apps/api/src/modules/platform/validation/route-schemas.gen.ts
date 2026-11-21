@@ -17538,7 +17538,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
     },
     "body": {
       "type": "object",
-      "description": "Body of POST /admin/v1/adjustments, a new adjustment or a reversal. Each branch is a closed object; a body that fits neither is 20001 with data.fields listing what fails in both branches plus `body`.",
+      "description": "Body of POST /admin/v1/adjustments, a new adjustment or a reversal. Each branch is a closed object; a body that fits neither is 20001 with data.fields listing only what fails in the branch the request means plus `body` (rules in the description of POST /admin/v1/adjustments).",
       "unevaluatedProperties": false,
       "oneOf": [
         {
