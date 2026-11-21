@@ -813,3 +813,9 @@ approvals:
     granted: true
     date: '2026-11-21'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审轮次属门禁流程小改动），D10-2395，先例第 118、124、125、128、131 条。原因：F1-08ap 写测 3 / 3 已用满；Codex spec-test r1（全量，couli-runs/F1-08ap/review-spec-r1.json）13 条 S1 由写测第 3 次补齐、经 r2 确认关闭；r2（couli-runs/F1-08ap/review-spec-r2.json）新报 5 条 S1 都落在第 3 次新增的用例行上，各带条款与具体错误实现（D10-2317 ①）。本单台账有 red_exempt，land 要 spec-test 结论 pass，不能改走实现必满足项。止损：本轮增量再出新 S1 即停报编排，届时属实的列为实现必满足项，不再加轮。'
+  - id: 133
+    row: 4
+    title: 'B3-08t 任务专属一次性追加（拆成 intent / input_passed 最小集，model 两列整块挪到 B4）：① 写规则测试追加 1 次（独立方）——只把 test/spec/agent/run-fields/** 里断言 model / model_snapshot 清空或归属的用例与断言移出本单（原文存 couli-runs/B3-08t/moved-to-B4/），其余不动；② Opus 实现第 5 次——去掉 model / model_snapshot 的同步清空与本单新增的归属逻辑（主干行为原样保留），不包装 inputCheck 对象（输入审核结果交给留痕），只留 intent / input_passed 的写入与迁移 0153；③ Codex spec-test 增量 1 轮 + money 增量 1 轮，范围为拆分后的差异'
+    granted: true
+    date: '2026-11-21'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-2399，先例第 124–130 条。原因：#467 CI 红 11 条已有冻结规则测试（couli-runs/B3-08t/ci-467/）：A 组 4 条（B3-03g 收尾后重放要 model_snapshot 保留）与本单 run-fields 要求清空直接冲突，正落在 D10-2377 已延后的 model 归属上，按 D10-2380 止损预案拆单，不改 B3-03g 冻结用例；B 组 6 条为实现包装 inputCheck 的缺陷；C 组 1 条授权清单另走台账补丁 modify_existing（#470）。land 前测试机全量 verify（不是 --related）全绿。FU-B3-08T-MODEL-ATTRIBUTION 与 B4 范围改为 model / model_snapshot 的写入、清空与归属整块。止损：任一轮范围内再出 S0 / S1，或全量再撞别的冻结用例，停下报编排。'
