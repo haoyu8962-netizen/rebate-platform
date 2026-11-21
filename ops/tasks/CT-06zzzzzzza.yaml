@@ -1,0 +1,36 @@
+id: CT-06zzzzzzza
+repo: rebate-platform
+title: CT-06zzzzzzza（FU-VERIFY-FULL-SHARDED）：verify-container 加 --int-shard，按 CI 同一份分片（.github/workflows/ci.yml 的 verify-int-1…N 与不分片的其余包）逐段跑 test:int；新增汇总脚本把 fast 与各段结果合成一个「测试机全量」结论（D10-2443 ② ③）
+type: guard-change
+# 2026-11-22 w1 入账（D10-2443 ③）。起因：测试机全量 verify 自 11-09 起每次在 3600 秒处超时（exit 124，couli-runs 各单 verify/*/result.json），
+# 各线只能手工按目录切 --tests。时长增长（couli-runs/W1-search-linking/work/shard-research/）：test:int 文件 11-08 1798 → 11-12 2046
+# → 11-22 2188（+22%，大半在 11-08..12）；CI verify-int-1..6 合计 11-14 约 5.8–7.0k 秒、11-20/21 约 6.4–7.0k 秒，单文件均摊约
+# 2.8 → 3.0 秒，在波动内——主要是用例变多，未见测试机变慢的证据（测试机 11-09 后无跑完样本，实现时顺带记各段时长再判）。
+# ① tools/ci/int-shards.ts：从 ci.yml 读 verify-int-* 的 test:int 命令（解析法同 tools/ci/ci-int-shards-workflow.test.ts，不另写清单），
+#    出段表 [1/N … N/N, rest]（rest = --filter='!@couli/spec-tests'）；ci.yml 形状不符（i 缺漏重复、命令除 i 外不同）就报错退 2。
+# ② verify-container.sh --int-shard <i | rest>：段命令取自受信根的 ①，在全量 verify 同样的容器、PG / Redis、PROP_RUNS 下只跑该段，
+#    自带 3600 秒上限；产物 <runs>/<id>/int-shard/<n>/{log.txt,result.json}，result 记 segment、命令、exit_code、commit、tree、
+#    文件数与用例数（vitest JSON 报告由受信代码汇总，同 --tests）；--dry-run 打印段命令。不占 verify 槽之外的新锁；--fast / verify 不变。
+# ③ tools/ops/verify-sharded-summary.ts <id> --tree <tree>：取同一 tree 的最近一次 verify-fast 与每一段 int-shard，全部 exit 0、
+#    段齐全（与 ① 的段表一致）、各段文件数之和等于该 tree 的 test:int 文件总数，才判 green；输出一份 JSON（各段文件 / 用例 / 时长、
+#    合计、缺段、不同 tree）供证据引用。exit 0 green、1 red 或缺段、2 用法错。
+# ④ tools/ops/README.md 与 tools/agent/README.md 写明用法：两台测试机可并行各跑一段（名额照 lan-run 排），中途改代码全部重跑。
+# 门禁改动，按 approvals 16 由编排核后加 owner 标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ci/int-shards{,.test}.ts'
+  - 'tools/ops/verify-container{.sh,.test.ts}'
+  - 'tools/ops/verify-sharded-summary{,.test}.ts'
+  - 'tools/ops/README.md'
+  - 'tools/agent/README.md'
+  - 'ops/tasks/CT-06zzzzzzza.yaml'
+test_paths:
+  - 'test/spec/ci/verify-int-shard/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/verify-int-shard/**'
+status: todo
