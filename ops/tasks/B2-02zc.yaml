@@ -73,4 +73,5 @@ accept:
   - 'pnpm verify'
   - 'test/spec/ledger/recon-diffs-unresolved/**'
   - 'test/spec/ledger/daily-check-execute/**'
-status: todo
+status: done
+pr: 449
