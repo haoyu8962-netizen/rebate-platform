@@ -7,9 +7,11 @@
 //   per_request，经 ctx.gateUpstream），nextCursor 是不透明串。归档 kind = order。上游只能查近 30 天，
 //   本地不另做裁剪。
 // - 映射（data.results[]）：order_id = tb_trade_id；punishment_id = `<tb_trade_id>:<settle_month>`；
-//   deduction_fen = null（违规无扣款字段，按 BR-FUND 走 PUNISH 全额扣回）；punish_status /
+//   deduction_fen = null（违规无扣款字段，冻结行按 BR-FUND 走 PUNISH 全额扣回）；punish_status /
 //   violation_type / settle_month 原样字符串（JSON 数字取原文）。tb_trade_id 或 settle_month 缺失 /
-//   非法 → 跳过该条并告警。
+//   非法 → 跳过该条并告警。本适配器不解释 punish_status：0 冻结、1 解冻原样交出，由 orders 的
+//   punish.window 区分（B1-04zzab，BR-FUND-22 决-06 实测前 A：只有 0 与缺字段的行按处罚交写入方；
+//   1 解冻与其他值不扣回，进 order_sync_pending 并告警；见 orders/jobs/rights-sync.ts）。
 // - 推广位过滤：只留 tk_adzone_id 属于 orderSlots 给出的推广位（PID 最后一段，含 retired，与 orders.ts
 //   同口径）的记录；别家每页计数告警一次；清单为空 → 不发请求、返回空页并告警一次；订单源或推广位
 //   端口未注入 → adapter_unimplemented。

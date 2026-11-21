@@ -7,9 +7,19 @@
 //   occurred_at = refund_created_at (absent: the Clock). rights_status PROCESSING / SUCCEEDED /
 //   FAILED as is, CLOSED_NO_CHARGE → FAILED (counted), null → nothing written (counted). The
 //   stream's cursor moves once, after every page.
-// - punish.window: every page of listPunishments, each as type PUNISH, status SUCCEEDED,
-//   platform_rights_no = punishment_id, occurred_at = the Clock, violation_type passed on as is
-//   in the writer's extras (B2-04zze, for settlement's reason_sub); no cursor.
+// - punish.window: every page of listPunishments; no cursor. By punish_status (B1-04zzab: 08
+//   BR-FUND-22 决-06 实测前 A, BR-FUND-02; 规划/12 §1.3 处罚表; D10-2335 (c3), D10-2412):
+//   · '0' (frozen) → the writer as type PUNISH, status SUCCEEDED, platform_rights_no =
+//     punishment_id, occurred_at = the Clock, violation_type passed on as is in the writer's extras
+//     (B2-04zze, for settlement's reason_sub). Field absent (null) → the same, counted apart
+//     (missing_punish_status) for the field check of 规划/09 V-48.
+//   · '1' (unfrozen) → never the writer (no order_rights row, no R6 / R8, no ledger entry; an earlier
+//     PUNISH clawback stays): an UNFREEZE_SIGNAL pending record (deps.pending), counted
+//     (unfreeze_signal) and one warn per window. Any other value → the same with UNMAPPED_STATUS
+//     (raw_status as delivered), counted (unmapped_punish_status), its own warn. No order column is
+//     touched on either path. Without deps.pending such rows are still not given to the writer
+//     (logged and counted only). A failed pending write is thrown: the window stops there, the
+//     queue retries it (the open record of a key is one, order_sync_pending_open_key).
 // - not_found (an order of someone else's slot) is counted only; logs never carry order numbers.
 import type { Clock, ReceivedJob } from '../../platform/index.ts';
 import {
@@ -29,7 +39,11 @@ import type {
   RightsSyncWriteResult,
   RightsSyncWriter,
 } from '../application/rights-sync.ts';
-import type { PunishPendingPort } from '../application/punish-pending.ts';
+import {
+  punishStatusKind,
+  type PunishPendingPort,
+  type PunishPendingReason,
+} from '../application/punish-pending.ts';
 import type { SyncAccessPort, SyncLogger } from '../application/sync-ports.ts';
 import { OrderSyncPayloadError } from './order-sync.ts';
 
@@ -303,7 +317,68 @@ export async function handleRightsWindow(
   logDone(deps, fields, counts, { scene: win.scene, advanced }, event);
 }
 
-/** punish.window: every page of listPunishments, each as PUNISH / SUCCEEDED; no cursor. */
+/** The punish window's own counters (B1-04zzab), in its window-end line even when 0. */
+interface PunishCounts {
+  unfreeze_signal: number;
+  unmapped_punish_status: number;
+  missing_punish_status: number;
+}
+
+/**
+ * A punish window that stopped part way (a page fetch, the writer or a pending write threw): which
+ * kind of signal failed to be recorded (that one is not in the counts), if it was a pending write.
+ */
+interface WindowStop {
+  readonly failed: PunishPendingReason | null;
+}
+
+/**
+ * One warn per window and kind of signal, with the count only (no order number, no amount). The
+ * counts are of the signals handled: recorded by deps.pending (or, without it, passed). On a window
+ * that stopped part way (stop given) a kind warns when some of it was handled or its pending write
+ * threw (money r2 S1: the first signal of a kind failing must still alert; a retry may see it
+ * changed), with window_complete false and not_recorded 1 on the kind whose pending write threw
+ * (0 otherwise); the error itself is the caller's to rethrow.
+ */
+function warnSignals(
+  deps: RightsSyncHandlerDeps,
+  fields: WindowFields,
+  counts: PunishCounts,
+  event: string,
+  stop?: WindowStop,
+): void {
+  const recorded = deps.pending !== undefined;
+  const failed = (kind: PunishPendingReason) => stop !== undefined && stop.failed === kind;
+  const stopped = (kind: PunishPendingReason) =>
+    stop === undefined ? {} : { window_complete: false, not_recorded: failed(kind) ? 1 : 0 };
+  if (counts.unfreeze_signal > 0 || failed('UNFREEZE_SIGNAL')) {
+    deps.logger?.warn(
+      {
+        ...fields,
+        unfreeze_signal: counts.unfreeze_signal,
+        recorded,
+        ...stopped('UNFREEZE_SIGNAL'),
+      },
+      `${event}_unfreeze_signal`,
+    );
+  }
+  if (counts.unmapped_punish_status > 0 || failed('UNMAPPED_STATUS')) {
+    deps.logger?.warn(
+      {
+        ...fields,
+        unmapped_punish_status: counts.unmapped_punish_status,
+        recorded,
+        ...stopped('UNMAPPED_STATUS'),
+      },
+      `${event}_unmapped_punish_status`,
+    );
+  }
+}
+
+/**
+ * punish.window: every page of listPunishments; '0' and a missing punish_status as PUNISH /
+ * SUCCEEDED, '1' and other values to the pending port only; no cursor.
+ */
 export async function handlePunishWindow(
   job: ReceivedJob,
   deps: RightsSyncHandlerDeps,
@@ -328,28 +403,67 @@ export async function handlePunishWindow(
   // D10-645 ③: a punishment has no time of its own; it is recorded at the sync instant.
   const syncedAt = deps.clock.now();
   const counts = newCounts();
-  await eachPage(
-    (cursor) => listPunishments.call(adapter, range, ctx, cursor === undefined ? {} : { cursor }),
-    async (punishments: readonly UnionPunish[]) => {
-      counts.pages += 1;
-      for (const punishment of punishments) {
-        counts.count += 1;
-        const result = await deps.writer.write(
-          targetOf(win, punishment.order_id),
-          {
-            type: 'PUNISH',
-            status: 'SUCCEEDED',
-            amount_fen: null,
-            deduction_commission_fen: punishment.deduction_fen,
-            occurred_at: syncedAt,
-            platform_rights_no: punishment.punishment_id,
-          },
-          // B2-04zze (D10-862): the violation text as delivered, for settlement's reason_sub.
-          { violation_type: punishment.violation_type ?? null },
-        );
-        tally(counts, result);
-      }
-    },
-  );
-  logDone(deps, fields, counts, {}, event);
+  const signals: PunishCounts = {
+    unfreeze_signal: 0,
+    unmapped_punish_status: 0,
+    missing_punish_status: 0,
+  };
+  // B1-04zzab: set when a pending write throws, for the warns of a window that stopped part way.
+  const stop: { failed: PunishPendingReason | null } = { failed: null };
+  try {
+    await eachPage(
+      (cursor) => listPunishments.call(adapter, range, ctx, cursor === undefined ? {} : { cursor }),
+      async (punishments: readonly UnionPunish[]) => {
+        counts.pages += 1;
+        for (const punishment of punishments) {
+          counts.count += 1;
+          const raw = punishment.punish_status ?? null;
+          const kind = punishStatusKind(raw);
+          if (raw !== null && kind !== 'punish') {
+            // BR-FUND-22 决-06 实测前 A / BR-FUND-02: not a punishment; evidence only, never the writer.
+            try {
+              await deps.pending?.record({
+                app_id: win.app_id,
+                platform: win.platform,
+                sub_order_id: punishment.order_id,
+                reason: kind,
+                raw_status: raw,
+                detected_at: syncedAt,
+              });
+            } catch (error) {
+              stop.failed = kind;
+              throw error;
+            }
+            // Counted once handled (recorded, or passed without deps.pending), never before.
+            if (kind === 'UNFREEZE_SIGNAL') signals.unfreeze_signal += 1;
+            else signals.unmapped_punish_status += 1;
+            continue;
+          }
+          if (raw === null) signals.missing_punish_status += 1;
+          const result = await deps.writer.write(
+            targetOf(win, punishment.order_id),
+            {
+              type: 'PUNISH',
+              status: 'SUCCEEDED',
+              amount_fen: null,
+              deduction_commission_fen: punishment.deduction_fen,
+              occurred_at: syncedAt,
+              platform_rights_no: punishment.punishment_id,
+            },
+            // B2-04zze (D10-862): the violation text as delivered, for settlement's reason_sub.
+            { violation_type: punishment.violation_type ?? null },
+          );
+          tally(counts, result);
+        }
+      },
+    );
+  } catch (error) {
+    // BR-FUND-22 决-06 实测前 A / BR-FUND-02: signals already recorded, and the one whose pending
+    // write threw, are alerted even when the window does not finish (a retry may no longer see
+    // them); no window-end line; the error as is.
+    warnSignals(deps, fields, signals, event, stop);
+    throw error;
+  }
+  logDone(deps, fields, counts, { ...signals }, event);
+  warnSignals(deps, fields, signals, event);
 }
