@@ -8,6 +8,7 @@ type: impl
 # 不在本单：超宽限期提示、账单详情与后台显示这两个数（FU-B2-18-BILL-COUNTS-CONTRACT，要契约槽）；金额不一致重生成（B2-18）；ESTIMATED 先补拉（FU-B2-18B-REPULL-BY-ORDER）。拼多多 / 京东订单本单之后只是不再开 settle_missing，仍不入账（D10-2402，couli-runs/D10-2335/verify.md）。
 # 受影响冻结用例（现断言登记 settle_missing 的 11 条，清单 couli-runs/B2-18/frozen-inventory.md 的 B 类）的 modify_existing 待负责人点头后以补丁补入，补入前不写测。
 # 补丁 1（funds，D10-2425）：负责人 2026-11-21 同意这批冻结资金用例的期望改动；登记 11 条现断言「登记 settle_missing / 计入 error_count」的冻结用例（7 个文件进 test_paths），只改登记块内与应结未结有关的期望（金额期望值不动），其余不动。
+# 补丁 2（funds，D10-2431）：参数化用例 [AC-B2-04n#18] 改按展开后的两行标题登记（门禁按行认）；补登 [AC-B2-04r#4] 的应结未结部分（D10-2425 (a) 范围内）；db/settlement/core/kit.ts 文件级 support 条目（取迁移源的范围扩到 settle_bills）。
 refs: [BR-FUND-04, BR-FUND-09]
 refs_hash:
   BR-FUND-04: 1c403c23b8bb
@@ -20,6 +21,7 @@ paths:
   - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/settlement/bill-unsettled-count/**'
+  - 'test/spec/db/settlement/core/kit.ts'
   - 'test/spec/settlement/bill/validation.int.test.ts'
   - 'test/spec/settlement/bill/batches.int.test.ts'
   - 'test/spec/settlement/bill/idempotency.int.test.ts'
@@ -37,7 +39,13 @@ modify_existing:
     ruling: D10-2425
     note: '负责人 2026-11-21 同意。应结未结只计数、不生成差错单：账单月内无结算数据的那一单，diffs 由含一张 settle_missing 改为空数组；逐单结果仍是 missing_settlement、范围断言不动'
   - file: 'test/spec/settlement/bill/batches.int.test.ts'
-    test: '[AC-B2-04n#18] credit.enabled=%s 不生成任何批次，仍保存逐单校验、差错与暂缓'
+    test: '[AC-B2-04n#18] credit.enabled=off 不生成任何批次，仍保存逐单校验、差错与暂缓'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。两组参数里无结算数据的那一单不再登记：diffs 由 2 张改为 1 张（只剩金额不一致那张）、error_count 由 2 改为 1；held_count 与逐单结果断言不动（金额不一致那张归 B2-18）'
+  - file: 'test/spec/settlement/bill/batches.int.test.ts'
+    test: '[AC-B2-04n#18] credit.enabled=undefined 不生成任何批次，仍保存逐单校验、差错与暂缓'
     reason: rule_change
     br: [BR-FUND-04]
     ruling: D10-2425
@@ -61,6 +69,12 @@ modify_existing:
     br: [BR-FUND-04]
     ruling: D10-2425
     note: '负责人 2026-11-21 同意。账单日应结未结：before.diffs 由含一张 settle_missing 改为空数组；结算后到进补充批次的断言不动'
+  - file: 'test/spec/settlement/supplement/validation.int.test.ts'
+    test: '[AC-B2-04r#4] 仍不一致的不入批且同账单同单差错不重复；补充时新发现的不一致按目标账单月登记'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。差错单张数由 2 改 1、补充后由 3 改 2，原因是其中一张为应结未结（结算数据晚于账单日截点才到的那一单，账单日不再登记 settle_missing）；金额不一致那张的登记与不入批的断言本单不动（归 B2-18，已在 B2-18 台账登记）'
   - file: 'test/spec/settlement/supplement/validation.int.test.ts'
     test: '[AC-B2-04r#6] 校验截点取发起时的 Clock（含等号），不取名义请求时刻；更晚取得的结算数据不计'
     reason: rule_change
@@ -98,6 +112,12 @@ modify_existing:
     br: [BR-FUND-04]
     ruling: D10-2425
     note: '负责人 2026-11-21 同意。装配的出账处理器对无结算数据的单不再登记：registerDiff 的调用由恰一次 settle_missing 改为零次；readSource、联盟为准读口的调用断言不动'
+  - file: 'test/spec/db/settlement/core/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2431
+    note: '只换支撑、不动断言（D10-1670 委托，编排 D10-2431；照 B2-04zy 给 settle_batches 加列时的先例）：migrationSource 里取后续迁移语句的两条正则由只认 app.settle_batches 扩成也认 app.settle_bills，使本单新迁移给 settle_bills 加的两个具名 CHECK 能被 [AC-B2-04a#4] 读到；不新增函数与控制流，不改任何含断言的语句'
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/bill-unsettled-count/**'
