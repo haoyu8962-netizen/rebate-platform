@@ -8,7 +8,9 @@ type: guard-change
 #    vitest / verify:fast；类型检查、lint 与测试由编排者在测试机跑（lan-run：--tests / --related 轻量档、--fast）」，
 #    实现阶段原先指向的 verify-container --fast 改为同一说法；先红与必须变绿的规则测试的说明不变。
 # ② 第 8 节 `tests_passed` 的含义随之改为「改动文件的 prettier 与 eslint 通过时填 true」（三处行文同步）。
-# ③ tools/ops/brief.test.ts 跟改期望；tools/ops/README.md「任务书」一节加一句。根 AGENTS.md 第 2 节同类说法是第三类保护文件，本单不改，另报编排。
+# ③ tools/ops/brief.test.ts 跟改期望；tools/ops/README.md「任务书」一节加一句。
+# ④ 补丁 1（D10-2445）：根 AGENTS.md §2「只验证自己改的包」那一句改为本机只许改动文件的 prettier --check 与 eslint，tsc、整包测试走测试机
+#    （verify-container --fast / --tests / --related）；别处不动（负责人 11-12 已定开发测试搬测试机，按 approvals 16 核后加标签）。
 # 门禁改动，按 approvals 16 由编排核后加 owner 标签。
 refs: []
 refs_hash: {}
@@ -17,6 +19,7 @@ paths:
   - 'tools/ops/brief.ts'
   - 'tools/ops/brief.test.ts'
   - 'tools/ops/README.md'
+  - 'AGENTS.md'
   - 'ops/tasks/CT-06zzzzzzz.yaml'
 impl: claude
 tester: none
