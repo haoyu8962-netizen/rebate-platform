@@ -1,0 +1,99 @@
+{
+  "task": "CT-06zzzzzz",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "spec_commit": "e3ac53cfb62e41f4e82238d7a04daf13a37bb11d",
+  "red_tests": [
+    "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#1] reports undeclared edits across class 1 paths",
+    "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#2] limits the comparison and ledger to the rule-test commit",
+    "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#3] reports a change outside a declared block",
+    "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#4] lets a support entry add an import and notes a declaration with no file change",
+    "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#5] reports a function inserted into a frozen support file",
+    "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#6] reports a frozen deletion and rename despite declarations",
+    "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#7] allows a new test without evidence while land still requires evidence for RV2",
+    "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#8] distinguishes usage and unreadable inputs from a valid early invocation",
+    "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#9] ends the human-readable output with the problem count",
+    "test/spec/ci/evidence-check-early/undeclared-removal.test.ts > [AC-CT-06#13] reports a frozen deletion without a modify_existing entry",
+    "test/spec/ci/evidence-check-early/undeclared-removal.test.ts > [AC-CT-06#14] reports the original path of a frozen rename without a modify_existing entry",
+    "test/spec/ci/evidence-check-early/verify-red.test.ts > [AC-CT-06#10] includes the evidence-check arguments in the red dry-run plan",
+    "test/spec/ci/evidence-check-early/verify-red.test.ts > [AC-CT-06#11] records evidence problems while a valid red verdict still exits zero",
+    "test/spec/ci/evidence-check-early/verify-red.test.ts > [AC-CT-06#12] logs an unreadable spec ledger and keeps the failing red verdict"
+  ],
+  "risk_note": "Gate tooling only (FU-EVIDENCE-CHECK-EARLY, D10-2341 / D10-2391). tools/ci/evidence-check.ts gains --early --pr <dir> --task <id> --base <ref> --spec <commit> [--json]: the shape half of the class 1 check at the rule-test stage - range merge-base(base, spec) -> spec, ledger at spec, the same block / support judgement as land (modifiedHitProblem's shape part extracted unchanged into declaredHitProblem, shared by both paths); no evidence file read, no owner-label lookup (a note instead), added files not judged, a removal or a rename judged by its source path. Exit 1 with a problem, 0 without, 2 on usage / unresolvable commit / unreadable ledger. The land path (without --early) is unchanged: its 63 existing unit tests pass and the money review r1 / r2 confirmed identical return values and problem texts. tools/ops/verify-container.sh --red runs it after red-check on the red run's own snapshot (a temporary commit object from git commit-tree when the snapshot differs from HEAD; no ref moves), writes red/<n>/evidence-shape.json and one log line; its stderr goes to evidence-shape.err; the red exit code stays red-check's; --dry-run shows evidence_shape. Two README sentences. No money, ledger or attribution code touched.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "e3ac53cfb62e41f4e82238d7a04daf13a37bb11d",
+      "tree": "ec521b78ed1d881a66939c9078c36104a7ed08cf",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-21T16:35:36Z",
+      "finished_at": "2026-11-21T16:35:44Z",
+      "red_tests": [
+        "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#1] reports undeclared edits across class 1 paths",
+        "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#2] limits the comparison and ledger to the rule-test commit",
+        "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#3] reports a change outside a declared block",
+        "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#4] lets a support entry add an import and notes a declaration with no file change",
+        "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#5] reports a function inserted into a frozen support file",
+        "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#6] reports a frozen deletion and rename despite declarations",
+        "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#7] allows a new test without evidence while land still requires evidence for RV2",
+        "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#8] distinguishes usage and unreadable inputs from a valid early invocation",
+        "test/spec/ci/evidence-check-early/evidence.test.ts > [AC-CT-06#9] ends the human-readable output with the problem count",
+        "test/spec/ci/evidence-check-early/undeclared-removal.test.ts > [AC-CT-06#13] reports a frozen deletion without a modify_existing entry",
+        "test/spec/ci/evidence-check-early/undeclared-removal.test.ts > [AC-CT-06#14] reports the original path of a frozen rename without a modify_existing entry",
+        "test/spec/ci/evidence-check-early/verify-red.test.ts > [AC-CT-06#10] includes the evidence-check arguments in the red dry-run plan",
+        "test/spec/ci/evidence-check-early/verify-red.test.ts > [AC-CT-06#11] records evidence problems while a valid red verdict still exits zero",
+        "test/spec/ci/evidence-check-early/verify-red.test.ts > [AC-CT-06#12] logs an unreadable spec ledger and keeps the failing red verdict"
+      ],
+      "expected": [
+        "test/spec/ci/evidence-check-early/evidence.test.ts",
+        "test/spec/ci/evidence-check-early/undeclared-removal.test.ts",
+        "test/spec/ci/evidence-check-early/verify-red.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "adfdb7d4fc757389fafe55c158aa96c8d1211c363ac5457e0cdf3b69cbd7865b"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27). r1 fail, 3 S1, all fixed in implementation attempt 2: a red run before the rule-test commit judged HEAD instead of the working-tree snapshot; a rename into test/spec from a non-class-1 path was reported; --early's stderr reached the red log on exit 2. r2 (incremental) pass, 1 S2 (a commit made by someone else while a red run is between reading HEAD and the snapshot can pair the new tree with the old HEAD; logged as FU-EVIDENCE-EARLY-HEAD-RACE). Implementation attempt 1 was cut off by the account's usage limit and continued uncounted (D10-2117)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (gpt-6.2-sol, ledger tester codex, attempts 1-2), so the spec-test review went to a fresh independent Claude (approvals 19; D10-2199 does not apply). r1 fail: 1 S1 (an undeclared deletion / rename of a frozen file had no case) - attempt 2 added undeclared-removal.test.ts. r2 (incremental) pass, 1 S2 (a rename out of class 1 judged by its source path) - passed to the implementation and covered by its unit test."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "560aaa1b1499efc9adea5083d169ec3b8b9932cd",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
