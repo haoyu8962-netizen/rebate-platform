@@ -260,8 +260,11 @@ export type Finalization = ReturnType<typeof createFinalization>;
  * B3-08t: the run-level columns of the F5 UPDATE. Without live fields (another request finalizes:
  * this process's result is unknown) intent / input_passed / model stay, and the snapshot written
  * at admission is cleared when no model was recorded. prompt_version is never touched (04 §3.2).
+ * 统一原则 (D10-2368): only what was checked is written — the intent the recorder derived from
+ * checked facts (null otherwise), and model / model_snapshot cleared unless the result used model
+ * output; an unknown use never writes a model. Exported for its unit test only.
  */
-function runFieldsSql(fields: LiveRunFields | undefined) {
+export function runFieldsSql(fields: LiveRunFields | undefined) {
   const unknownSnapshot = sql`CASE WHEN model IS NULL THEN NULL ELSE model_snapshot END`;
   if (fields === undefined) {
     return {

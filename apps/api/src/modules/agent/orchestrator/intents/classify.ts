@@ -47,10 +47,6 @@ export interface IntentTextPatterns {
   readonly location: string;
   /** Asking how to start an operation (怎么提现) → an entry page. */
   readonly howTo: string;
-  /** B3-08t: the whole sentence asks to look up the user's own orders, or briefly points at one,
-   * without a progress word (查一下我的订单, 我的订单, 我那单) → order_query. A sentence that also
-   * asks about rules or says not to look (别查我的订单) is not this. */
-  readonly ownOrderQuery: string;
 }
 
 export function intentTextPatterns(): IntentTextPatterns {
@@ -74,9 +70,105 @@ export function intentTextPatterns(): IntentTextPatterns {
     location:
       '在哪(?!一步|步|个环节|个阶段|(?:里|儿)?了)|(?<![到在])哪(?:里|儿)(?!了)|(?<!到)哪(?:看|找|查)|哪个(?:页面|入口|地方)|哪一页|入口|从哪',
     howTo: '(?:怎么|如何|怎样)(?:才能|可以|能)?(?:提现|查看|看|找|打开|进入|进|邀请|授权|绑定)',
-    ownOrderQuery:
-      '^(?:(?:帮我|麻烦|请|给我)?(?:查一?下|查查|查询|查看|看一?下|看看|查|看)(?:一下)?)?(?:我的?|我那|我这)(?:订单|那单|这单|单子?)(?:呢|吧|啊|呀|嘛)?$',
   };
+}
+
+// B3-08t · 判定顺序② 本人订单 without a progress word (编排 D10-2368: 只落核对过的；宁可漏判留空，不可
+// 误判): a fixed list of positive expressions, no pattern guessing. A message is an own-order query
+// only when, after trimming and folding full-width punctuation to half-width, it is exactly one of
+// OWN_ORDER_REQUESTS, optionally followed by one closing courtesy (OWN_ORDER_ENDINGS, after nothing,
+// a comma or a space) and closing punctuation (OWN_ORDER_CLOSING). Anything else is not decided here.
+
+/** Pointing at the user's own order (指向本人 + 订单名词). */
+const OWN_ORDER_OBJECTS: readonly string[] = [
+  '我的订单',
+  '我那订单',
+  '我这订单',
+  '我的那单',
+  '我的这单',
+  '我那单',
+  '我这单',
+  '我的单子',
+  '我那单子',
+  '我这单子',
+];
+/** Look-up verbs (查询动词). */
+const OWN_ORDER_VERBS: readonly string[] = ['查', '查一下', '查查', '查询', '看', '看一下', '看看'];
+/** Opening courtesies (句首客套), only before a verb. */
+const OWN_ORDER_OPENINGS: readonly string[] = ['', '帮我', '麻烦', '请', '给我'];
+/** Closing courtesies (句尾客套), longest first. */
+const OWN_ORDER_ENDINGS: readonly string[] = ['谢谢你', '谢谢', '谢了', '呢', '吧', '啊'];
+/** What may separate the request and its closing courtesy (after punctuation folding). */
+const OWN_ORDER_SEPARATORS: readonly string[] = [',', ' '];
+/** Closing punctuation (after folding), any number of them. */
+const OWN_ORDER_CLOSING = new Set(['.', '?', '!', '~', '…']);
+/** Negations of looking up and rule wording: a message with any of them is never an own-order query. */
+const OWN_ORDER_EXCLUDED: readonly string[] = [
+  '别查',
+  '别看',
+  '不用查',
+  '不用看',
+  '不要查',
+  '不要看',
+  '不是查',
+  '不是看',
+  '规则',
+  '怎么算',
+  '是什么',
+  '怎么来的',
+];
+
+/** The positive list: object alone, or opening + verb + object (e.g. 帮我查一下我的订单). */
+export const OWN_ORDER_REQUESTS: readonly string[] = Object.freeze([
+  ...OWN_ORDER_OBJECTS,
+  ...OWN_ORDER_OPENINGS.flatMap((opening) =>
+    OWN_ORDER_VERBS.flatMap((verb) => OWN_ORDER_OBJECTS.map((object) => opening + verb + object)),
+  ),
+]);
+const OWN_ORDER_SET: ReadonlySet<string> = new Set(OWN_ORDER_REQUESTS);
+
+const FULL_WIDTH_PUNCTUATION: Readonly<Record<string, string>> = {
+  '，': ',',
+  '。': '.',
+  '？': '?',
+  '！': '!',
+  '～': '~',
+  '\u3000': ' ',
+};
+
+/** Trim, then full-width punctuation (and the ideographic space) as half-width; nothing else. */
+function foldOwnOrderText(input: string): string {
+  let text = '';
+  for (const char of input.trim()) text += FULL_WIDTH_PUNCTUATION[char] ?? char;
+  return text;
+}
+
+/**
+ * B3-08t: the message is exactly a listed own-order request (OWN_ORDER_REQUESTS), with at most one
+ * closing courtesy and closing punctuation; a negation or rule wording anywhere excludes it.
+ */
+export function isOwnOrderRequest(input: string): boolean {
+  let text = foldOwnOrderText(input);
+  if (OWN_ORDER_EXCLUDED.some((word) => text.includes(word))) return false;
+  const stripClosing = (value: string): string => {
+    let end = value.length;
+    while (end > 0 && OWN_ORDER_CLOSING.has(value[end - 1] ?? '')) end -= 1;
+    return value.slice(0, end);
+  };
+  text = stripClosing(text);
+  if (OWN_ORDER_SET.has(text)) return true;
+  for (const ending of OWN_ORDER_ENDINGS) {
+    if (!text.endsWith(ending)) continue;
+    const body = text.slice(0, text.length - ending.length);
+    if (OWN_ORDER_SET.has(body)) return true;
+    for (const separator of OWN_ORDER_SEPARATORS) {
+      if (body.endsWith(separator) && OWN_ORDER_SET.has(body.slice(0, -separator.length))) {
+        return true;
+      }
+    }
+    return false;
+  }
+  return false;
 }
 
 /** Degrade targets and text hints named by BR-AI-01 细则「判定顺序」④ / 「页面引导」 examples. The
@@ -127,7 +219,6 @@ export function createTextClassifier(
   const specificRef = re(patterns.specificRef);
   const location = re(patterns.location);
   const howTo = re(patterns.howTo);
-  const ownOrderQuery = re(patterns.ownOrderQuery);
   const routeHint = (text: string): string | null => {
     if (/提现(?:记录|明细|历史)/u.test(text)) return targets.withdrawRecords;
     if (/钱包|余额|提现/u.test(text)) return targets.wallet;
@@ -153,10 +244,10 @@ export function createTextClassifier(
           return { kind: 'personal', withdrawal };
         }
       }
-      // 本人订单 without a progress word: only a sentence that as a whole asks to look up the
-      // user's own orders or briefly points at one (查一下我的订单, 我的订单, 我那单). A rule question
-      // or a negation (订单返利规则是什么？别查我的订单) keeps the reading below.
-      if (ownOrderQuery.test(text)) return { kind: 'order' };
+      // B3-08t 本人订单 without a progress word: only a message on the fixed positive list
+      // (isOwnOrderRequest: 查一下我的订单, 帮我查一下我的订单，谢谢, 我的订单, 我那单); a negation or
+      // a rule question (订单返利规则是什么？别查我的订单) is never on it and keeps the reading below.
+      if (isOwnOrderRequest(input)) return { kind: 'order' };
       if (isGeneric) return { kind: 'rule' };
       return { kind: 'unknown' };
     },

@@ -254,6 +254,7 @@ it('[AC-B3-08t#5][AC-B3-08t#10] 记录器（runFields）：终态取意图、输
     now += 284;
     recorder.sink.record(RUN, {
       ...trace([{ name: 'search_products', args: { q: '合成' }, status: 'ok' }], 'synthetic-plus'),
+      result_model: 'synthetic-plus',
       usage: { input_tokens: 32, output_tokens: 18 },
       filter_hits: ['url', 'amount', 'url'],
       output_filtered: true,
@@ -291,7 +292,11 @@ it('[AC-B3-08t#6] 记录器（runFields）：降级结果不记模型；核心�
     runFields: { clock } as never,
   });
   const degraded = recorder.body(input(), async () => {
-    recorder.sink.record(RUN, { ...trace([], 'synthetic-plus'), degraded: true });
+    recorder.sink.record(RUN, {
+      ...trace([], 'synthetic-plus'),
+      result_model: 'synthetic-plus',
+      degraded: true,
+    });
     return DONE;
   });
   await degraded({ ...context(), text: () => undefined } as unknown as RunContext);
@@ -326,6 +331,7 @@ it('[AC-B3-08t#5][AC-B3-08t#10] 记录器（runFields）：无模型分流的页
     recorder.sink.record(RUN, {
       ...trace([], null),
       intent: 'page_guide',
+      intent_ruled: true,
       degraded: true,
       page_guide_reject_reason: 'disabled',
     });
@@ -360,6 +366,7 @@ it('[AC-B3-08t#3][AC-B3-08t#6] 记录器（runFields）：商品情境入口的�
     inner.text('合成');
     recorder.sink.record(RUN, {
       ...trace([{ name: 'get_rebate_quote', args: null, status: 'ok' }]),
+      result_model: 'synthetic-model',
       intent: 'page_guide',
       entry_intent: 'find_by_link',
     });
@@ -375,19 +382,104 @@ it('[AC-B3-08t#3][AC-B3-08t#6] 记录器（runFields）：商品情境入口的�
   expect(q.persist.mock.calls[0]?.[0].runFields?.page_guide_reject_reason).toBe('disabled');
 });
 
-it('[AC-B3-08t#1][AC-B3-08t#2] 记录器（runFields）：模板轮次未经意图端口核对的模型标签不落库，按首个工具推断', async () => {
+// B3-08t 统一原则 (D10-2368: 只落核对过的，没核对过就留空): the exit points settleFields (sync,
+// finalize.ts F5) and runFieldsOf (async) of this recorder, one test each.
+
+function fieldsRecorder() {
+  const q = queue();
   const recorder = createRunTraceRecorder({
-    queue: queue(),
+    queue: q,
     runFields: { clock: { now: () => new Date(0) } } as never,
   });
-  const body = recorder.body(input(), async () => {
-    recorder.sink.record(RUN, {
-      ...trace([{ name: 'list_my_orders', args: null, status: 'ok' }]),
-      intent: 'earnings_query',
-      intent_unchecked: true,
-    });
-    return DONE;
+  const ctx = { ...context(), text: () => undefined } as unknown as RunContext;
+  return {
+    q,
+    recorder,
+    async ran(core: OrchestratorTrace, verdict?: IntentTrace) {
+      const body = recorder.body(input(), async () => {
+        recorder.inputPassed(RUN);
+        if (verdict !== undefined) recordIntentVerdict(APP, RUN, verdict);
+        recorder.sink.record(RUN, core);
+        return DONE;
+      });
+      await body(ctx);
+    },
+  };
+}
+
+it('[AC-B3-08t#1][AC-B3-08t#2] exit settleFields/intent: a template run (model label, no verdict) is not stored, the first tool decides', async () => {
+  const x = fieldsRecorder();
+  await x.ran({
+    ...trace([{ name: 'list_my_orders', args: null, status: 'ok' }]),
+    intent: 'earnings_query',
   });
-  await body({ ...context(), text: () => undefined } as unknown as RunContext);
-  expect(recorder.settleFields(RUN)?.intent).toBe('order_query');
+  expect(x.recorder.settleFields(RUN)?.intent).toBe('order_query');
+});
+
+it('[AC-B3-08t#1][AC-B3-08t#7] exit settleFields/intent (money r2 S1-2): stopped before the port recorded → the model label is not stored, null', async () => {
+  const x = fieldsRecorder();
+  await x.ran({ ...trace([]), intent: 'earnings_query' });
+  expect(x.recorder.settleFields(RUN)?.intent).toBeNull();
+});
+
+it('[AC-B3-08t#1] exit settleFields/intent: the port verdict recorded is stored over the model label', async () => {
+  const x = fieldsRecorder();
+  await x.ran(
+    { ...trace([]), intent: 'earnings_query' },
+    {
+      intent: 'order_query',
+      text_replaced_by_template: true,
+      page_guide_reject_reason: null,
+    },
+  );
+  expect(x.recorder.settleFields(RUN)?.intent).toBe('order_query');
+});
+
+it('[AC-B3-08t#3] exit settleFields/intent: a rule (intent_ruled) is stored; a no-model path that served nothing is not', async () => {
+  const ruled = fieldsRecorder();
+  await ruled.ran({ ...trace([], null), intent: 'find_by_link', intent_ruled: true });
+  expect(ruled.recorder.settleFields(RUN)?.intent).toBe('find_by_link');
+  const unserved = fieldsRecorder();
+  await unserved.ran({
+    ...trace([], null),
+    intent: 'search',
+    intent_ruled: true,
+    degraded: true,
+    degraded_unserved: true,
+  });
+  expect(unserved.recorder.settleFields(RUN)?.intent).toBeNull();
+});
+
+it('[AC-B3-08t#4] exit settleFields/intent (money r2 S2): U-7 withheld → null even after a tool', async () => {
+  const x = fieldsRecorder();
+  await x.ran({
+    ...trace([{ name: 'search_products', args: null, status: 'ok' }]),
+    intent: 'earnings_query',
+    intent_withheld: true,
+  });
+  expect(x.recorder.settleFields(RUN)?.intent).toBeNull();
+});
+
+it('[AC-B3-08t#6] exit settleFields/runFieldsOf model (money r2 S1-1): a model answered but no output was used → modelUsed false, async model null', async () => {
+  const x = fieldsRecorder();
+  await x.ran({ ...trace([], 'synthetic-backup'), result_model: null });
+  expect(x.recorder.settleFields(RUN)?.modelUsed).toBe(false);
+  await flushed();
+  expect(x.q.persist.mock.calls[0]?.[0].runFields?.model).toBeNull();
+});
+
+it('[AC-B3-08t#6] exit settleFields/runFieldsOf model: the result model, not the last model that answered, is stored', async () => {
+  const x = fieldsRecorder();
+  await x.ran({ ...trace([], 'synthetic-backup'), result_model: 'synthetic-primary' });
+  expect(x.recorder.settleFields(RUN)?.modelUsed).toBe(true);
+  await flushed();
+  expect(x.q.persist.mock.calls[0]?.[0].runFields?.model).toBe('synthetic-primary');
+});
+
+it('[AC-B3-08t#6] exit runFieldsOf model: a trace without result_model reports no model (never the answering one)', async () => {
+  const x = fieldsRecorder();
+  await x.ran(trace([], 'synthetic-backup'));
+  expect(x.recorder.settleFields(RUN)?.modelUsed).toBe(false);
+  await flushed();
+  expect(x.q.persist.mock.calls[0]?.[0].runFields?.model).toBeNull();
 });
