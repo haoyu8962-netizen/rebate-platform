@@ -1,0 +1,37 @@
+{
+  "task": "CT-06zzzzzzz",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "spec_commit": "08f0e26b1e35c292c7082fbf9382639439725c3c",
+  "red_tests": [],
+  "risk_note": "Gate tooling text only (FU-BRIEF-NO-LOCAL-HEAVY, D10-2404 / D10-2406 / D10-2445). tools/ops/brief.ts: section 6 of the test, handover and Codex-first impl briefs lists only the two local checks on the changed files (pnpm exec prettier --check, pnpm exec eslint) instead of pnpm typecheck / pnpm lint; every phase but review and the legacy Codex flow gets one sentence: no tsc, typecheck, full lint, vitest, pnpm test or verify:fast on this machine, the orchestrator runs them on the test machine (verify-container --fast, --tests, --related). The Claude impl brief no longer sends the agent to the trusted container entry; the impl phase label, the tests_passed rows and the tails follow. Red-first wording otherwise unchanged; no phase offers a container entry of its own (RO-04). Briefs grow by about 0.5 KB; over 24 KB they are refused as before. brief.test.ts follows the texts and adds per-phase cases. Root AGENTS.md section 2: the one sentence on local checks now says the same (ledger patch 1, #495). No money, ledger or attribution code touched.",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27; tools/** is RV2). r1 pass, 1 S2: the tools/ops/README.md table row of verify-container.sh still reads as if the Opus subagent ran --fast itself; logged as FU-README-VERIFY-ROW. Implementation attempts 1-2 (attempt 2 fixed the impl phase label and kept the local-only sentence out of review briefs). Test machine: verify:fast exit 0 on the implementation tree (brief.test.ts 22/22 there); a --tests run of brief.test.ts failed only the real-ledger case because the --tests container has no planning snapshot (FU-TESTS-MODE-NO-SPEC)."
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "560aaa1b1499efc9adea5083d169ec3b8b9932cd",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
