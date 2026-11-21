@@ -398,14 +398,6 @@ export function createAgentStreamRuntime(
   });
   // B3-08t (BR-AI-19 细则「运行级字段」): run-level fields too, timed on the runtime's Clock.
   const trace = createRunTraceRecorder({ queue: traceQueue, runFields: { clock } });
-  // B3-08t (BR-AI-05 ⑤): a check that let the message through marks the run's input as passed.
-  const observedInput = (check: InputCheckPort): InputCheckPort => ({
-    async check(input, signal) {
-      const result = await check.check(input, signal);
-      if (result.kind === 'proceed' && !signal.aborted) trace.inputPassed(input.runId);
-      return result;
-    },
-  });
   const pg = createPgRunPorts({
     db,
     clock,
@@ -492,7 +484,7 @@ export function createAgentStreamRuntime(
     business === undefined
       ? createAgentBodyAssembly({
           tools,
-          inputCheck: observedInput(seams?.inputCheck ?? failClosedInputCheck()),
+          inputCheck: seams?.inputCheck ?? failClosedInputCheck(),
           errorMsg,
           model,
           modelClock,
@@ -507,9 +499,7 @@ export function createAgentStreamRuntime(
           model,
           modelClock,
           prompt,
-          inputCheck: observedInput(
-            seams?.inputCheck ?? business.safety?.inputCheck ?? failClosedInputCheck(),
-          ),
+          inputCheck: seams?.inputCheck ?? business.safety?.inputCheck ?? failClosedInputCheck(),
           review: business.safety?.review ?? fallbackReview,
           trace: trace.sink,
           route,

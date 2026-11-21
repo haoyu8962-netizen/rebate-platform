@@ -472,6 +472,8 @@ class AgentRun {
         ...(checked.ending === undefined ? {} : { ending: checked.ending }),
       });
     }
+    // B3-08t: the input passed 「判定顺序」 step 1 (agent_runs.input_passed, via the run trace).
+    this.deps.trace?.inputPassed?.(this.input.runId);
     this.placeholders = checked.placeholders;
     // Notices: once, by the core, before any path output; never "delivered content" (U-11).
     for (const notice of checked.notices) {

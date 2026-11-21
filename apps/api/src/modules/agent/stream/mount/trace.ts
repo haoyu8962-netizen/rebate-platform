@@ -25,9 +25,9 @@
 // test/spec/agent/run-fields/**), with `runFields` in the deps (the stream runtime passes its Clock):
 //   sync — settleFields(runId), called by the runtime right before admission.settle, gives the
 //     terminal transaction the run's intent (orchestrator storedIntentOf over the intent port's
-//     verdict, a rule's intent and the first tool called), input_passed (inputPassed(runId),
-//     called by the runtime's input check wrapper when the check let the message through: review
-//     passed, no refusal pre-check, no prohibited goods) and whether model output was used (the core
+//     verdict, a rule's intent and the first tool called), input_passed (sink.inputPassed(runId),
+//     called by the core when its input check let the message through: review passed, no refusal
+//     pre-check, no prohibited goods) and whether model output was used (the core
 //     trace's result_model, not a degraded result; unknown while the core has not recorded its trace yet,
 //     e.g. a run cancelled while its model call is pending). What arrives after settle is never
 //     written by the terminal transaction.
@@ -241,6 +241,11 @@ export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceReco
     };
   }
 
+  function markInputPassed(runId: string): void {
+    const run = open.get(runId);
+    if (run !== undefined && !run.settled) run.inputPassed = true;
+  }
+
   function flush(run: AgentRunTrace): void {
     open.delete(run.runId);
     run.flushed = true;
@@ -273,6 +278,7 @@ export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceReco
         run.toolCalls = initiatedCalls(trace);
         run.core = trace;
       },
+      inputPassed: (runId) => markInputPassed(runId),
     },
     body(input, inner) {
       return async (ctx) => {
@@ -304,10 +310,7 @@ export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceReco
         }
       };
     },
-    inputPassed(runId) {
-      const run = open.get(runId);
-      if (run !== undefined && !run.settled) run.inputPassed = true;
-    },
+    inputPassed: (runId) => markInputPassed(runId),
     settleFields(runId) {
       if (clock === undefined) return undefined;
       const run = open.get(runId) ?? ended.get(runId);

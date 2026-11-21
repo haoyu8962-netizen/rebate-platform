@@ -241,6 +241,10 @@ export interface OrchestratorTrace extends ToolTraceFragment {
 
 export interface RunTraceSink {
   record(runId: string, trace: OrchestratorTrace): void;
+  /** B3-08t (BR-AI-05 ⑤, agent_runs.input_passed): called by the core once its input check let
+   * the run's message through (「判定顺序」 step 1: review passed, no refusal pre-check, no
+   * prohibited goods), before any path runs; never for a refusal or a cancelled check. */
+  inputPassed?(runId: string): void;
 }
 
 /**
