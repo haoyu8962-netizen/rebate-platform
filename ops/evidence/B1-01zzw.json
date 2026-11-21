@@ -1,0 +1,141 @@
+{
+  "task": "B1-01zzw",
+  "spec_ref": "3eafae406a6b42252fa293cd5b061bd7263fcef4",
+  "spec_commit": "b5c8fa34ae0b3a55fa3b920190c5a1e8fddd214e",
+  "red_tests": [
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带支付宝形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带银行卡形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带微信形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] payout_account_change 带提现形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] phone_change 带提现形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] account_deletion 带提现形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+    "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp withdraw 带支付宝形状",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp withdraw 不带 summary",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp withdraw 带提现形状",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp payout_account_change 带提现形状",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp phone_change 带提现形状",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp account_deletion 带提现形状",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp 短信码格式错",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp 微信缺 attempt_id",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp 支付宝 summary 缺账号",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] savePayoutAccount 支付宝缺账号和收款人",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] savePayoutAccount 方式非法",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] bindUnion web_code 缺 code 和 state",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] createOauthAttempt step_up 缺 action",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] createOauthAttempt purpose 非法",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] adminCreateExport users 缺 filters",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] adminCreateAdjustment 新调账金额为零",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#2] oneOf 打平且都只缺必填时报并集（产品池、空消息标记）",
+    "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#3] 嵌套 anyOf 按 const 选分支并保留数组下标及转义后的字段名"
+  ],
+  "risk_note": "Request validation only (FU-20001-ONEOF-FIELDS-NOISE; D10-2260 / D10-2267 口径甲, D10-2317 ③, D10-2348). validationErrorEnvelope (apps/api/src/modules/platform/validation/index.ts) now keeps, for a request body with oneOf / anyOf, only the errors of the branch the request means: innermost combinator first, a combinator instance bounded by schemaPath + instancePath; a branch failing an enum / const on its own property is set aside; of the rest the branch with fewest failing fields is kept, a tie reports only the combinator location unless every tied branch only misses required properties (then their union); when every branch fails its discriminator only those errors stay; unevaluatedProperties errors of the same level are dropped; errors outside the combinator and the combinator location (body at the root) are kept; a oneOf failing because several branches passed keeps its own error. Only Ajv errors are removed, the error-to-field mapping is unchanged (D10-2233), so every data.fields is a subset of the previous one. Contract: only descriptive text for adminCreateAdjustment (operation description, component AdminAdjustmentCreateRequest, example AdminAdjustmentReasonCodeInvalid) follows the new behaviour; schema, enums and codes unchanged; generated openapi.gen.ts and route-schemas.gen.ts regenerated. Known imperfections in the header comment: stepUp with an unknown provider and adminCreateAdjustment with reason_code RESTORE / ACCOUNT_CLOSED are reported by the other branch. Frozen test step-up-digest/issue.int.test.ts: the owner agreed to shorten 7 fields arrays (D10-2317 ③): #8 declared ruling_correction (D10-2193 overturned, 规划/04 §7), #1's 6 inline .each rows cannot be expanded by the tools and are judged test by test (red on the old code). No money, ledger or attribution code touched. Contract slot held by B1-01zzw (D10-2348).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b5c8fa34ae0b3a55fa3b920190c5a1e8fddd214e",
+      "tree": "4760a30c3ba5fa66971b5d8670f9bdc21210482e",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-21T11:18:22Z",
+      "finished_at": "2026-11-21T11:18:52Z",
+      "red_tests": [
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带支付宝形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带银行卡形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] withdraw 带微信形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] payout_account_change 带提现形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] phone_change 带提现形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#1] account_deletion 带提现形状 → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token",
+        "test/spec/identity/step-up-digest/issue.int.test.ts > [AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp withdraw 带支付宝形状",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp withdraw 不带 summary",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp withdraw 带提现形状",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp payout_account_change 带提现形状",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp phone_change 带提现形状",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp account_deletion 带提现形状",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp 短信码格式错",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp 微信缺 attempt_id",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] stepUp 支付宝 summary 缺账号",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] savePayoutAccount 支付宝缺账号和收款人",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] savePayoutAccount 方式非法",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] bindUnion web_code 缺 code 和 state",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] createOauthAttempt step_up 缺 action",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] createOauthAttempt purpose 非法",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] adminCreateExport users 缺 filters",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#1] adminCreateAdjustment 新调账金额为零",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#2] oneOf 打平且都只缺必填时报并集（产品池、空消息标记）",
+        "test/spec/platform/validation/oneof-fields.test.ts > [AC-B1-01zzw#3] 嵌套 anyOf 按 const 选分支并保留数组下标及转义后的字段名"
+      ],
+      "expected": [
+        "test/spec/identity/step-up-digest/issue.int.test.ts",
+        "test/spec/platform/validation/oneof-fields.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "4f428512f8c2284da46add4fe97fd6a7a034c09533f7cc8732cc36fa90b4c33c"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "9571b02ded4683280946f6e325acef394fcafbc3baeaec4c73e5fe565d245c87"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27). r1 fail: S1 the adminCreateAdjustment operation description promised fields of both shapes (contract conflict; orchestrator D10-2348 甲: change that description, codegen, one more rule-test row, contract slot) + S2 combinator instances in arrays shared a schemaPath - fixed in r2. r2 fail (output rejected by the validator for a key/file path mismatch, content read and acted on): S1 component AdminAdjustmentCreateRequest and example AdminAdjustmentReasonCodeInvalid still said both shapes - fixed in r3 (contract text only; route-schemas.gen.ts regenerated in a separate chore(gen) commit). r3 (incremental): pass, 1 S2 (order of the example's fields list), non-blocking (couli-runs/B1-01zzw/review-money-codex-r1.json, review-codex.json.rejected, rev-money-3)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (gpt-6.2-sol, ledger tester codex, attempts 1-3), so the spec-test review went to a fresh independent Claude (approvals 19; D10-2199 does not apply). r1 fail: 1 S1 (errors outside the combinator not pinned) + 1 S2 (oneOf failing on several passing branches) - attempt 2 added them inside [AC-B1-01zzw#2]. r2 (incremental) pass. After that: one expectation fixed mechanically by w1 (markMessagesRead {} -> [all, body, message_ids], the brief had the pre-refinement value; D10-2337 accepted), and attempt 3 added one row (zero-amount new adjustment -> [amount_fen, body], D10-2348) reviewed in money r2 / r3."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ada37d0c2ef603fa71632f0b0d3a9dcfc3be2889",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/identity/step-up-digest/issue.int.test.ts",
+      "test": "[AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001",
+      "reason": "ruling_correction",
+      "overturned": "D10-2193",
+      "basis": "规划/04 §7",
+      "before": "it(\n  '[AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001',\n  async () => {\n    const m = await member(kit);\n    for (const action of ['phone_change', 'account_deletion'] as const) {\n      const token = await m.token(action);\n      expect(claimsOf(token)).toMatchObject({ uid: m.uid, action, aud: 'step_up' });\n      expect(digestsOf(token)).toEqual([]);\n    }\n    const withdrawRefused: [Summary | undefined, string[]][] = [\n      // 这组字段是参数校验对 StepUpRequest 四分支 oneOf 的合并报告，不是设计口径，见 FU-20001-ONEOF-FIELDS-NOISE（D10-2193）。\n      [\n        undefined,\n        [\n          'action',\n          'attempt_id',\n          'authorization_code',\n          'body',\n          'code',\n          'identity_token',\n          'provider',\n        ],\n      ],\n      [\n        WITHDRAW_SHAPE,\n        [\n          'action',\n          'attempt_id',\n          'authorization_code',\n          'body',\n          'code',\n          'identity_token',\n          'provider',\n          'summary',\n          'summary.alipay_logon_id',\n          'summary.amount_fen',\n          'summary.attempt_id',\n          'summary.card_no',\n          'summary.payout_account_id',\n          'summary.payout_method',\n        ],\n      ],\n    ];\n    for (const [summary, fields] of withdrawRefused) {\n      const response = await m.stepUp('withdraw', summary);\n      const refused = answered(kit, STEP_UP, 'post', response, 20001);\n      expect({ ...refused.data, fields: [...(refused.data!.fields as string[])].sort() }).toEqual({\n        fields,\n      });\n      expect(response.body).not.toContain('step_up_token');\n    }\n  },\n  TIMEOUT,\n);",
+      "after": "it(\n  '[AC-B1-02zzzb#8] 只有 payout_account_change 绑摘要：phone_change、account_deletion、withdraw 不带 summary 照常签发且无摘要 claim，同一会员 withdraw 带 summary 则 20001',\n  async () => {\n    const m = await member(kit);\n    for (const action of ['phone_change', 'account_deletion'] as const) {\n      const token = await m.token(action);\n      expect(claimsOf(token)).toMatchObject({ uid: m.uid, action, aud: 'step_up' });\n      expect(digestsOf(token)).toEqual([]);\n    }\n    const withdrawRefused: [Summary | undefined, string[]][] = [\n      // 口径甲（FU-20001 / D10-2317 ③）只报实际要走的分支。\n      [undefined, ['action', 'body']],\n      [WITHDRAW_SHAPE, ['action', 'body']],\n    ];\n    for (const [summary, fields] of withdrawRefused) {\n      const response = await m.stepUp('withdraw', summary);\n      const refused = answered(kit, STEP_UP, 'post', response, 20001);\n      expect({ ...refused.data, fields: [...(refused.data!.fields as string[])].sort() }).toEqual({\n        fields,\n      });\n      expect(response.body).not.toContain('step_up_token');\n    }\n  },\n  TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "old implementation (validationErrorEnvelope before this task, reporting every oneOf branch): the rule-test head c88364af6 without the implementation commits; red run in a detached worktree on the test machine (couli-runs/B1-01zzw/red/5, red-check PASS): this block red",
+          "result": "killed"
+        }
+      ]
+    }
+  ]
+}
