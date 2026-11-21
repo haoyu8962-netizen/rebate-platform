@@ -82,9 +82,11 @@ it(
     );
     const s = await state(h);
     expect(s.items.map((i) => i.order_id).sort()).toEqual([old.id, current.id].sort());
-    expect(s.diffs).toEqual([
+    // B2-18a：账单月内无结算数据只计入应结未结数，不再登记 settle_missing。
+    expect(s.diffs).not.toContainEqual(
       expect.objectContaining({ type: 'settle_missing', ref_id: missing.key, period: MONTH }),
-    ]);
+    );
+    expect(s.diffs).toEqual([]);
     expect(
       s.items.some((i) => [future.id, oldMissing.id, futureMissing.id].includes(i.order_id)),
     ).toBe(false);

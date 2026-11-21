@@ -398,8 +398,8 @@ it.each(['off', undefined])(
     const s = await state(h);
     expect(s.batches).toEqual([]);
     expect(s.items).toEqual([]);
-    expect(s.diffs).toHaveLength(2);
-    expect(s.bills[0]).toMatchObject({ error_count: 2, held_count: 1 });
+    expect(s.diffs).toHaveLength(1);
+    expect(s.bills[0]).toMatchObject({ error_count: 1, held_count: 1 });
     expect(await validations(h)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ orderKey: good.key, result: 'candidate' }),

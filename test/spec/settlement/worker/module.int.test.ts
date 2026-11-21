@@ -284,7 +284,7 @@ it(
 );
 
 it(
-  '[AC-B2-04ze#25] 装配的处理器：账单日快照已完成时 bill 经生产 readSource（联盟为准读口取本平台订单键）生成账单，应结未结登记差错单，settle_jobs 记 (bill, 平台, D 00:00 +08:00) done；credit.enabled 未设（缺省 off）不生成批次、不读归属',
+  '[AC-B2-04ze#25] 装配的处理器：账单日快照已完成时 bill 经生产 readSource（联盟为准读口取本平台订单键）生成账单，应结未结只计数、不登记差错单（B2-18a），settle_jobs 记 (bill, 平台, D 00:00 +08:00) done；credit.enabled 未设（缺省 off）不生成批次、不读归属',
   async () => {
     await withDatabase(createTestDatabase, async (db) => {
       const missing = await seedOrder(db, APP, TAOBAO);
@@ -319,7 +319,7 @@ it(
             { appId: APP, orderKeys: [missing.key] },
           ]);
           expect(calls.diffs.map((diff) => ({ type: diff.type, refId: diff.refId }))).toStrictEqual(
-            [{ type: 'settle_missing', refId: missing.key }],
+            [],
           );
           expect(await countRows(db, 'settle_batches')).toBe(0);
           expect(calls.attribution).toStrictEqual([]);

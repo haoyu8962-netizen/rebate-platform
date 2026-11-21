@@ -42,7 +42,7 @@ it(
     expect(s.bills).toHaveLength(1);
     expect(s.batches).toHaveLength(1);
     expect(s.items).toEqual([expect.objectContaining({ order_id: good.id })]);
-    expect(s.diffs).toHaveLength(1);
+    expect(s.diffs).toHaveLength(0);
     expect(s.validations).toHaveLength(2);
     expect(await jobConstraint(h)).toEqual([
       { definition: 'UNIQUE (app_id, job, platform, run_at)' },
@@ -137,7 +137,7 @@ it(
     expect(recovered.bills).toHaveLength(1);
     expect(recovered.batches).toHaveLength(1);
     expect(recovered.items).toEqual([expect.objectContaining({ order_id: o.id })]);
-    expect(recovered.diffs).toHaveLength(1);
+    expect(recovered.diffs).toHaveLength(0);
     expect(recovered.validations).toHaveLength(2);
   },
   TIMEOUT,
