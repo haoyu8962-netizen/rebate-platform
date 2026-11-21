@@ -21,23 +21,59 @@
 //     failed half again for up to 24 hours and logs agent.trace_lost when it gives up; it never
 //     rejects. Repeated writes stay one row through the writer's unique keys (ON CONFLICT DO
 //     NOTHING).
-// Out of scope (BR-AI-19, other tasks): run-level fields of agent_runs (model snapshot, tokens,
-// cost, intent); retention (BR-ID-30 ①); the trace-missing alert (FU-AGENT-TRACE-ALERT).
+// B3-08t (BR-AI-19 细则「运行级字段」, BR-AI-05 细则「上下文块」⑤; rule tests
+// test/spec/agent/run-fields/**), with `runFields` in the deps (the stream runtime passes its Clock):
+//   sync — settleFields(runId), called by the runtime right before admission.settle, gives the
+//     terminal transaction the run's intent (orchestrator storedIntentOf over the intent port's
+//     verdict, a rule's intent and the first tool called), input_passed (inputPassed(runId),
+//     called by the runtime's input check wrapper when the check let the message through: review
+//     passed, no refusal pre-check, no prohibited goods) and whether model output was used (the core
+//     trace's result_model, not a degraded result; unknown while the core has not recorded its trace yet,
+//     e.g. a run cancelled while its model call is pending). What arrives after settle is never
+//     written by the terminal transaction.
+//   async — with the record handed to the queue at the body's end: runFields (the used model as
+//     model and model_snapshot, tokens summed over the run's model answers, ttft_ms = first text
+//     delta since the body started, latency_ms = the body's whole time, both from the Clock; the
+//     filter hits, truncation and the page guide rejection reason). The writer sets them by value.
+//   The intent port of the business assembly reports its verdict through recordIntentVerdict
+//   (appId, runId), kept only for a run whose body is open in this process.
+// Out of scope (BR-AI-19, other tasks): cost (B4); retention (BR-ID-30 ①); the trace-missing alert
+// (FU-AGENT-TRACE-ALERT).
+import type { PageGuideRejectReason } from '@couli/contracts-ts';
 import type { RunBodyInput } from '../../http/index.ts';
+import type { Clock } from '../../../platform/index.ts';
 import type { OrchestratorTrace, RunTraceSink } from '../../orchestrator/core/ports.ts';
-import type { ToolCallRecord } from '../../store/results/index.ts';
-import type { RunBody } from '../run/index.ts';
+import { storedIntentOf } from '../../orchestrator/core/run-intent.ts';
+import type { IntentTrace } from '../../orchestrator/intents/index.ts';
+import type { RunFieldsRecord, ToolCallRecord } from '../../store/results/index.ts';
+import type { LiveRunFields } from '../pg/index.ts';
+import type { RunBody, RunContext } from '../run/index.ts';
 import type { RunTraceRecord, TraceRedoQueue } from './trace-retry.ts';
 
 export { TRACE_WRITE_FAILED } from './trace-retry.ts';
 
 export interface RunTraceRecorderDeps {
   readonly queue: Pick<TraceRedoQueue, 'persist'>;
+  /** B3-08t: record the run-level fields (sync and async), timed on this Clock. */
+  readonly runFields?: { readonly clock: Clock };
 }
 
 export interface RunTraceRecorder {
   readonly sink: RunTraceSink;
   body(input: RunBodyInput, inner: RunBody): RunBody;
+  /** B3-08t: the input check let this run's message through (「判定顺序」 step 1 passed). */
+  inputPassed(runId: string): void;
+  /**
+   * B3-08t: the fields the terminal transaction writes for a run whose body this recorder opened
+   * (undefined otherwise, or without `runFields`). Called once, right before settle.
+   */
+  settleFields(runId: string): LiveRunFields | undefined;
+}
+
+/** The intent port's verdict of one run (its last record). */
+interface IntentVerdict {
+  readonly intent: string | null;
+  readonly reason: PageGuideRejectReason | null;
 }
 
 /** One run's trace while its body is in progress (server-side app / session / run only). */
@@ -46,6 +82,99 @@ interface AgentRunTrace {
   readonly sessionId: string;
   readonly runId: string;
   toolCalls: OrchestratorTrace['tool_calls'];
+  /** B3-08t: the core's trace of the run (null until recorded). */
+  core: OrchestratorTrace | null;
+  inputPassed: boolean;
+  startedMs: number | null;
+  firstTextMs: number | null;
+  /** settleFields was called: what changes later is for the async write only. */
+  settled: boolean;
+  /** The body ended and the record was handed to the queue. */
+  flushed: boolean;
+  /** The intent port's verdict as of the body's end (null: none, or not ended yet). */
+  verdict: IntentVerdict | null;
+}
+
+/** B3-08t: open slots for the intent port's verdicts, by run id (UUIDv7, server generated). */
+const verdictSlots = new Map<string, { readonly appId: string; verdict: IntentVerdict | null }>();
+
+/**
+ * B3-08t: the business assembly's intent port reports its verdict (IntentDeps.trace.record): the
+ * server-checked intent (判定顺序②) and the page guide rejection reason. Kept for a run whose body
+ * is in progress under a recorder of this process and of the same app; anything else is ignored.
+ */
+export function recordIntentVerdict(appId: string, runId: string, value: IntentTrace): void {
+  const slot = verdictSlots.get(runId);
+  if (slot === undefined || slot.appId !== appId) return;
+  slot.verdict = { intent: value.intent, reason: value.page_guide_reject_reason };
+}
+
+// B3-08t 统一原则 (编排 D10-2368): the run-level fields store only what was checked; anything
+// unchecked stays empty (宁可漏判留空，不可误判) — the intent from the port's recorded verdict, a rule
+// or the first tool (never the model's own label); the model only when its output was used.
+
+/** B3-08t: the core's trace as the stored intent's facts. */
+function intentOf(run: AgentRunTrace, verdict: IntentVerdict | null) {
+  const core = run.core;
+  const ruled = core?.intent_ruled === true && core.degraded_unserved !== true;
+  return storedIntentOf({
+    entry: core?.entry_intent ?? null,
+    ...(verdict === null ? {} : { checked: verdict.intent }),
+    ruled: ruled ? core.intent : null,
+    withheld: core?.intent_withheld === true,
+    firstTool: core?.tool_calls[0]?.name ?? null,
+  });
+}
+
+/** B3-08t: the model whose output the run's result used (null: none, or not reported). */
+function usedModel(core: OrchestratorTrace): string | null {
+  return core.degraded === true ? null : (core.result_model ?? null);
+}
+
+/** B3-08t: the core's filter hits as stored (the three contract values, once each). */
+function filterHits(core: OrchestratorTrace | null): RunFieldsRecord['filter_hits'] {
+  const hits: RunFieldsRecord['filter_hits'][number][] = [];
+  for (const hit of core?.filter_hits ?? []) {
+    if ((hit === 'amount' || hit === 'url' || hit === 'tpwd') && !hits.includes(hit)) {
+      hits.push(hit);
+    }
+  }
+  return hits;
+}
+
+/** B3-08t: a non-negative whole number of ms between two Clock readings, else null. */
+function elapsed(from: number | null, to: number | null): number | null {
+  if (from === null || to === null) return null;
+  const ms = Math.round(to - from);
+  return Number.isSafeInteger(ms) && ms >= 0 ? ms : null;
+}
+
+/**
+ * B3-08t: the run context the core gets, observing the first text delta (ttft). Every member is
+ * passed through unchanged (the same signal and counters).
+ */
+function timedContext(ctx: RunContext, firstText: () => void): RunContext {
+  return {
+    get runId() {
+      return ctx.runId;
+    },
+    get sessionId() {
+      return ctx.sessionId;
+    },
+    get signal() {
+      return ctx.signal;
+    },
+    get cardsDelivered() {
+      return ctx.cardsDelivered;
+    },
+    text(delta) {
+      ctx.text(delta);
+      if (delta !== '') firstText();
+    },
+    toolStatus: (tool, phase, displayText) => ctx.toolStatus(tool, phase, displayText),
+    card: (card, delivered) => ctx.card(card, delivered),
+    suggestions: (items) => ctx.suggestions(items),
+  };
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -83,10 +212,46 @@ export function initiatedCalls(trace: OrchestratorTrace): OrchestratorTrace['too
 
 export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceRecorder {
   const open = new Map<string, AgentRunTrace>();
+  /** B3-08t: bodies that ended before their settle (the sync fields are still to be taken). */
+  const ended = new Map<string, AgentRunTrace>();
+  const clock = deps.runFields?.clock;
+
+  function nowMs(): number | null {
+    if (clock === undefined) return null;
+    try {
+      return clock.now().getTime();
+    } catch {
+      return null;
+    }
+  }
+
+  /** B3-08t: the async run-level columns of a run whose body ended. */
+  function runFieldsOf(run: AgentRunTrace, verdict: IntentVerdict | null): RunFieldsRecord {
+    const core = run.core;
+    return {
+      model: core === null ? null : usedModel(core),
+      input_tokens: core?.usage?.input_tokens ?? null,
+      output_tokens: core?.usage?.output_tokens ?? null,
+      ttft_ms: elapsed(run.startedMs, run.firstTextMs),
+      latency_ms: elapsed(run.startedMs, nowMs()),
+      filter_hits: filterHits(core),
+      output_truncated: core?.output_truncated === true,
+      // The intent port's reason, else the no-model path's (BR-AI-19 细则「运行级字段」).
+      page_guide_reject_reason: verdict?.reason ?? core?.page_guide_reject_reason ?? null,
+    };
+  }
 
   function flush(run: AgentRunTrace): void {
     open.delete(run.runId);
-    if (run.toolCalls.length === 0) return;
+    run.flushed = true;
+    const slot = verdictSlots.get(run.runId);
+    const verdict = slot?.verdict ?? null;
+    verdictSlots.delete(run.runId);
+    // The verdict as of the body's end, for the settle that follows.
+    run.verdict = verdict;
+    if (clock !== undefined && !run.settled) ended.set(run.runId, run);
+    const runFields = clock === undefined ? undefined : runFieldsOf(run, verdict);
+    if (run.toolCalls.length === 0 && runFields === undefined) return;
     const record: RunTraceRecord = {
       appId: run.appId,
       sessionId: run.sessionId,
@@ -94,6 +259,7 @@ export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceReco
       // B3-08zc: the cards are stored with the terminal state, never by the trace.
       cards: [],
       toolCalls: toolCallRecords(run.toolCalls),
+      ...(runFields === undefined ? {} : { runFields }),
     };
     // Apart from the stream: never awaited by the run; never a rejection left unhandled.
     void deps.queue.persist(record).catch(() => undefined);
@@ -103,7 +269,9 @@ export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceReco
     sink: {
       record(runId, trace) {
         const run = open.get(runId);
-        if (run !== undefined) run.toolCalls = initiatedCalls(trace);
+        if (run === undefined) return;
+        run.toolCalls = initiatedCalls(trace);
+        run.core = trace;
       },
     },
     body(input, inner) {
@@ -113,13 +281,44 @@ export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceReco
           sessionId: ctx.sessionId,
           runId: ctx.runId,
           toolCalls: [],
+          core: null,
+          inputPassed: false,
+          startedMs: nowMs(),
+          firstTextMs: null,
+          settled: false,
+          flushed: false,
+          verdict: null,
         };
         open.set(run.runId, run);
+        if (clock !== undefined) verdictSlots.set(run.runId, { appId: run.appId, verdict: null });
+        const inside =
+          clock === undefined
+            ? ctx
+            : timedContext(ctx, () => {
+                if (run.firstTextMs === null && !run.flushed) run.firstTextMs = nowMs();
+              });
         try {
-          return await inner(ctx);
+          return await inner(inside);
         } finally {
           flush(run);
         }
+      };
+    },
+    inputPassed(runId) {
+      const run = open.get(runId);
+      if (run !== undefined && !run.settled) run.inputPassed = true;
+    },
+    settleFields(runId) {
+      if (clock === undefined) return undefined;
+      const run = open.get(runId) ?? ended.get(runId);
+      ended.delete(runId);
+      if (run === undefined || run.settled) return undefined;
+      run.settled = true;
+      const verdict = run.flushed ? run.verdict : (verdictSlots.get(runId)?.verdict ?? null);
+      return {
+        intent: intentOf(run, verdict),
+        inputPassed: run.inputPassed,
+        modelUsed: run.core === null ? null : usedModel(run.core) !== null,
       };
     },
   };

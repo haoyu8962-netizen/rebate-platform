@@ -8,7 +8,7 @@
 // run degrades exactly like "no usable model answer": DegradedPath with reason `models_failed`
 // (done fallback, or whatever the path returns). After delivery the guard tail is flushed and the
 // run ends done stop. OrchestratorTrace.model_format_invalid records the deviation.
-import type { Platform } from '@couli/contracts-ts';
+import type { PageGuideRejectReason, Platform } from '@couli/contracts-ts';
 import type { Candidate } from '../../../parsing/index.ts';
 import type { AgentCaller, RunBodyInput } from '../../http/index.ts';
 import type { FilterHit, SentenceReviewPort } from '../../guard/index.ts';
@@ -212,6 +212,31 @@ export interface OrchestratorTrace extends ToolTraceFragment {
   /** B3-08m · BR-AI-07: true when template text replaced the model's reply (reply-templates.ts);
    * false or absent otherwise. */
   readonly text_replaced_by_template?: boolean;
+  /** B3-08t (BR-AI-19 细则「运行级字段」): input / output tokens of every model answer of the run,
+   * summed (also of an answer not used for the result); absent when no model answered. */
+  readonly usage?: { readonly input_tokens: number; readonly output_tokens: number };
+  /** B3-08t: the run's result came from the no-model path (DegradedPath.run, or the entry's end
+   * without a model): no model output was used, even when a model answered before. */
+  readonly degraded?: true;
+  /** B3-08t: the no-model path served the message without an intent (greetings only, no product
+   * word: no search); the trace intent is unchanged, agent_runs.intent stays null. */
+  readonly degraded_unserved?: true;
+  /** B3-08t: the scenario entry's intent (product → find_by_link, order → order_query), a
+   * deterministic fact that agent_runs.intent keeps over any later text handling. */
+  readonly entry_intent?: string;
+  /** B3-08t (BR-AI-19 细则「运行级字段」, 只落核对过的): `intent` is a deterministic server rule's
+   * result (the link path, the order entry, the no-model path's ①–⑥), so agent_runs.intent may
+   * store it. Absent: `intent` is not checked (the model's own label is never stored as such). */
+  readonly intent_ruled?: true;
+  /** B3-08t: the run was answered without an intent the server checked (U-7, no IntentPort: the
+   * model's label is dropped for out_of_scope): agent_runs.intent stays null. */
+  readonly intent_withheld?: true;
+  /** B3-08t: the model whose output the result actually used (a tool call of its round executed,
+   * or its text written); absent (or null) when none was. Not changed by output the format check, U-10, the
+   * tool call budget, a card cap or a template dropped. agent_runs.model / model_snapshot. */
+  readonly result_model?: string | null;
+  /** B3-08t: why the no-model path's page guide was not sent (agent_runs.page_guide_reject_reason). */
+  readonly page_guide_reject_reason?: PageGuideRejectReason;
 }
 
 export interface RunTraceSink {

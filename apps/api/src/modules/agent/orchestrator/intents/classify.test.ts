@@ -1,5 +1,11 @@
 import { expect, it } from 'vitest';
-import { createTextClassifier, guideTargets, intentTextPatterns } from './classify.ts';
+import {
+  OWN_ORDER_REQUESTS,
+  createTextClassifier,
+  guideTargets,
+  intentTextPatterns,
+  isOwnOrderRequest,
+} from './classify.ts';
 
 // Synthetic questions only. BR-AI-01 细则「判定顺序」②: a measure word (这笔 / 那笔) is no evidence
 // of an order; account wording wins over order nouns; generic wording is a rule question unless
@@ -26,8 +32,87 @@ it.each([
   '订单号123456789012返了没',
   '刚下单的怎么还没显示',
   '上一单的返利呢',
+  '查一下我的订单',
+  '我的订单',
+  '我那单',
 ])('[B3-05f][BR-AI-01] 有订单类名词仍判订单：%s', (text) => {
   expect(classifier.classify(text)).toEqual({ kind: 'order' });
+});
+
+// B3-08t (money r2 S1-3, 编排 D10-2368): 判定顺序② 本人订单 without a progress word is a fixed
+// positive list (OWN_ORDER_REQUESTS) plus closing courtesies; nothing outside it is guessed.
+it.each([
+  '查一下我的订单',
+  '帮我查一下我的订单，谢谢',
+  '帮我查一下我的订单,谢谢',
+  '帮我查一下我的订单 谢谢',
+  '帮我查一下我的订单谢谢你',
+  '麻烦查查我的订单',
+  '请查询我的订单。',
+  '给我看看我的订单吧',
+  '看一下我的订单呢？',
+  '查我的订单啊',
+  '查一下我的订单，谢了！',
+  '帮我查查我的订单',
+  '看看我的订单呢',
+  '查查我的单子',
+  '我的订单',
+  '我那单',
+  '我这单',
+  '我的订单？',
+  '  我那单呢  ',
+])('[AC-B3-08t#1][BR-AI-01] 本人查单正例清单（含句首句尾客套）判订单：%s', (text) => {
+  expect(isOwnOrderRequest(text)).toBe(true);
+  expect(classifier.classify(text)).toEqual({ kind: 'order' });
+});
+
+it.each([
+  // r1 / r2 评审例句：否定与问规则
+  '订单返利规则是什么？别查我的订单',
+  '别查我的订单',
+  '不用查我的订单，返利规则是什么',
+  '不是查我的订单',
+  '我的订单返利规则是什么',
+  '我的订单是怎么来的',
+  // 其余否定、问规则与清单外的说法
+  '不要查我的订单',
+  '别看我的订单',
+  '我的订单怎么算',
+  '我的订单是什么',
+  '帮我查一下我的订单好吗',
+  '查一下我的订单和收益',
+  '帮帮我查一下我的订单',
+  '请帮我查一下我的订单',
+  '订单吧',
+  '订单',
+  '查一下订单',
+  '谢谢',
+  '查一下我的订单。谢谢',
+])('[AC-B3-08t#1][BR-AI-01] 清单外、否定或问规则的说法不判本人订单：%s', (text) => {
+  expect(isOwnOrderRequest(text)).toBe(false);
+  expect(classifier.classify(text)).not.toEqual({ kind: 'order' });
+});
+
+it.each([
+  '订单返利规则是什么？别查我的订单',
+  '别查我的订单',
+  '不用查我的订单，返利规则是什么',
+  '不是查我的订单',
+  '我的订单返利规则是什么',
+  '我的订单是怎么来的',
+])(
+  '[AC-B3-08t#1][BR-AI-01] 否定或问规则时，提到「我的订单」不判订单（保留模型标签）：%s',
+  (text) => {
+    expect(classifier.classify(text)).toEqual({ kind: 'unknown' });
+  },
+);
+
+it('[AC-B3-08t#1] 正例清单是写死的有限清单：每条都含指向本人的订单名词', () => {
+  expect(OWN_ORDER_REQUESTS.length).toBeGreaterThan(0);
+  expect(Object.isFrozen(OWN_ORDER_REQUESTS)).toBe(true);
+  for (const request of OWN_ORDER_REQUESTS) {
+    expect(request).toMatch(/我(?:的|那|这)(?:订单|那单|这单|单子?)$/u);
+  }
 });
 
 it.each([

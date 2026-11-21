@@ -32,7 +32,7 @@ import { createOutputGuard } from '../../guard/index.ts';
 import type { FilterHit, GuardEmit, OutputGuard, SentenceReviewPort } from '../../guard/index.ts';
 import type { DegradeReason } from '../../model-gateway/degraded/index.ts';
 import type { AssembledToolCall, ChatMessage } from '../../model-gateway/openai-compat/index.ts';
-import type { AttemptRecord } from '../../model-gateway/routing/index.ts';
+import type { AttemptRecord, ModelOutcome } from '../../model-gateway/routing/index.ts';
 import type { RunBodyResult, RunContext, UnnumberedCard } from '../../stream/run/index.ts';
 import { StreamProtocolError } from '../../stream/writer/index.ts';
 import { openCardCall } from './card-references.ts';
@@ -49,6 +49,7 @@ import { copyOf } from '../degraded/replies.ts';
 import { bindServerCalls } from './intent-fallback.ts';
 import type { ServerToolCallResult, ServerToolCalls } from './intent-fallback.ts';
 import { bindQueryCheck, checkQuery } from './query-check.ts';
+import { contractIntentOf } from './run-intent.ts';
 import type {
   AgentRunBodyDeps,
   OrchestratorToolCall,
@@ -95,6 +96,11 @@ interface EntryProduct {
 type ToolStatus = OrchestratorTrace['tool_calls'][number]['status'];
 type CardSource = NonNullable<ToolTraceFragment['card_sources']>[number];
 type LinkRegistration = NonNullable<ToolTraceFragment['link_registrations']>[number];
+/** B3-08t: one model round's output origin (its answering model and the round number). */
+interface ModelSource {
+  readonly model: string;
+  readonly round: number;
+}
 
 /** The platform argument as a validated enum value; anything else uses the generic template. */
 function platformOf(args: unknown): Platform | undefined {
@@ -253,6 +259,21 @@ export function isStructuredText(text: string): boolean {
   return false;
 }
 
+/**
+ * B3-08t: the usage the gateway metered on an attempt that did not answer (null: none reported).
+ * The router's AttemptRecord does not declare it yet; read structurally so that a router reporting
+ * it (model-gateway/routing, another task) is counted without a change here.
+ */
+function meteredUsageOf(
+  attempt: AttemptRecord,
+): { readonly input_tokens: number; readonly output_tokens: number } | null {
+  const usage: unknown = (attempt as { readonly usage?: unknown }).usage;
+  if (typeof usage !== 'object' || usage === null) return null;
+  const { input_tokens: input, output_tokens: output } = usage as Record<string, unknown>;
+  if (typeof input !== 'number' || typeof output !== 'number') return null;
+  return { input_tokens: input, output_tokens: output };
+}
+
 class AgentRun {
   private readonly deps: AgentRunBodyDeps;
   private readonly input: RunBodyInput;
@@ -268,6 +289,21 @@ class AgentRun {
   private intent: string | null = null;
   private formatInvalid = false;
   private model: string | null = null;
+  /** B3-08t: tokens of every model answer of the run, summed (null: no model answered). */
+  private usage: { input_tokens: number; output_tokens: number } | null = null;
+  /** B3-08t: the run's result is the no-model path's (degrade() was entered). */
+  private degraded = false;
+  // B3-08t (BR-AI-19 细则「运行级字段」), 统一原则: the run-level fields store only what was checked;
+  // unchecked stays empty (宁可漏判留空，不可误判). See recordTrace and run-intent.ts.
+  /** B3-08t: `intent` is a deterministic rule's result (link path, order entry, no-model ①–⑥). */
+  private intentRuled = false;
+  /** B3-08t: U-7 (no IntentPort) dropped the model's label: no intent is stored. */
+  private intentWithheld = false;
+  /** B3-08t: the model whose output the result used, and the round of that output (0: none). */
+  private resultModel: string | null = null;
+  private resultRound = 0;
+  /** B3-08t: model and round of the latest model text pushed into the guard (used once written). */
+  private textSource: ModelSource | null = null;
   private promptVersion = 'none';
   private readonly attempts: AttemptRecord[] = [];
   private readonly toolTrace: OrchestratorTrace['tool_calls'][number][] = [];
@@ -449,6 +485,9 @@ class AgentRun {
     if (entryPath !== undefined && entry !== null) {
       if (entry.kind === 'order') {
         this.intent = ORDER_INTENT;
+        // B3-08t: the entry's intent is a fact agent_runs.intent keeps (BR-AI-19 细则).
+        this.entryIntent = ORDER_INTENT;
+        this.intentRuled = true;
         const result = await this.wait(
           entryPath.order(
             { input: this.input, proceed: checked },
@@ -594,6 +633,8 @@ class AgentRun {
 
   private async linkPath(proceed: InputProceed): Promise<RunBodyResult> {
     this.intent = LINK_INTENT;
+    // B3-08t: a link message is find_by_link by rule (BR-AI-19 细则「运行级字段」).
+    this.intentRuled = true;
     const deterministic = this.deps.deterministic;
     if (deterministic !== undefined) {
       const result = await this.wait(
@@ -684,6 +725,8 @@ class AgentRun {
   }
 
   private async degrade(proceed: InputProceed, reason: DegradeReason): Promise<RunBodyResult> {
+    // B3-08t (BR-AI-19 细则「运行级字段」): from here no model output is used for the result.
+    this.degraded = true;
     // B3-05q: a product entry run without a model ends at the entry (no 问法分流, no search).
     const entryEnd = await this.entryEnd();
     if (entryEnd !== null) return entryEnd;
@@ -693,6 +736,8 @@ class AgentRun {
     // search's. Nothing changes it once the trace is recorded (recordTrace closes the slot).
     const modelIntent = this.intent !== null;
     if (!modelIntent) this.intent = DEGRADED_INTENT;
+    // B3-08t: the no-model path's ①–⑥ are rules; a model label kept here stays unchecked.
+    if (!modelIntent) this.intentRuled = true;
     const ctx = this.pathContext();
     this.routed = openDegradedRoute(ctx, modelIntent);
     const request = { reason, input: this.input, proceed };
@@ -726,6 +771,8 @@ class AgentRun {
       );
       if (outcome === ABORTED) return done('stop');
       this.attempts.push(...outcome.attempts);
+      // B3-08t: tokens the gateway metered in this call, whatever its outcome (once per attempt).
+      this.addOutcomeUsage(outcome);
       if (outcome.kind === 'aborted') return done('stop');
       if (outcome.kind === 'refused') {
         // B3-08p: held text goes out before the refusal (dropped in a template run).
@@ -743,7 +790,9 @@ class AgentRun {
         if (!this.templated && !this.delivered) return this.degrade(proceed, outcome.reason);
         return this.finishText('stop');
       }
+      // trace.model: the last model that answered (B3-05p initiator); not the result's (below).
       this.model = outcome.model;
+      const source: ModelSource = { model: outcome.model, round };
       const deltas: string[] = [];
       const calls: AssembledToolCall[] = [];
       for (const event of outcome.events) {
@@ -751,7 +800,10 @@ class AgentRun {
         else if (event.t === 'tool_call') calls.push(event.call);
       }
       const roundText = deltas.join('');
-      if (calls.length === 0) return this.finalRound(proceed, deltas, roundText);
+      if (calls.length === 0) return this.finalRound(proceed, deltas, roundText, source);
+      // B3-08t (BR-AI-19 细则「运行级字段」): this round's model becomes the result model only when
+      // its output is used — a call of it executed (runTool) or its text written (writeEmits);
+      // the format check, U-10, the tool call budget or a template dropping it changes nothing.
       for (const call of calls) this.requested.add(call.function.name);
       // B3-08m: after a template call no model text is delivered; it never reaches the guard.
       const templatedBefore = this.templated;
@@ -764,6 +816,7 @@ class AgentRun {
       // The round asking for its first template tool still passes the guard (review, trace,
       // safety ending, as in B3-08m); its text is held and never delivered.
       if (!templatedBefore) {
+        if (roundText.trim() !== '') this.textSource = source;
         const pushed = await this.pushText(deltas);
         if (pushed !== null) return pushed;
       }
@@ -773,7 +826,7 @@ class AgentRun {
       for (const call of calls) {
         if (this.toolCalls >= this.deps.limits.toolCalls) return this.finishText('limit');
         this.toolCalls += 1;
-        const step = await this.runTool(call, known);
+        const step = await this.runTool(call, known, source);
         if (!('view' in step)) return step;
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(step.view) });
       }
@@ -784,11 +837,17 @@ class AgentRun {
     proceed: InputProceed,
     deltas: readonly string[],
     text: string,
+    source: ModelSource,
   ): Promise<RunBodyResult> {
     const blank = text.trim() === '';
     const intent = blank ? undefined : intentOf(text);
+    // B3-08t (BR-AI-19 细则「运行级字段」): the model's own label is the trace intent but never
+    // counts as checked (intentRuled stays as it is): agent_runs.intent takes the IntentPort's
+    // recorded verdict, a rule or the first tool, else null — also when the run is cancelled or
+    // fails before the port recorded its verdict.
     if (intent !== undefined) this.intent = intent.name;
     if (this.templated) {
+      // B3-08t: the templates drop this round's text and intent object: the result model stays.
       // B3-08m · BR-AI-07: ordinary, blank, intent or structured text alike: only the templates;
       // the IntentPort is not consulted.
       if (intent === undefined && !blank && isStructuredText(text)) this.formatInvalid = true;
@@ -810,6 +869,9 @@ class AgentRun {
       else this.releaseHeld();
       if (handled === null && this.out.limitHit) return done('limit');
       if (handled !== null) {
+        // B3-08t: the port answered on this round's intent object (one of the known labels): it
+        // is this round's output used for the result; anything else (broken JSON) is not.
+        if (intent !== undefined && contractIntentOf(intent.name) !== null) this.adoptModel(source);
         // B3-05o: a server-initiated template call answers with the BR-AI-07 templates.
         if (handled.kind === 'done' && this.templated)
           return this.writeTemplates(handled.finishReason);
@@ -822,6 +884,8 @@ class AgentRun {
     }
     if (intents === undefined && intent !== undefined) {
       // U-7: without an IntentPort every intent output is out_of_scope; model text is dropped.
+      // B3-08t: no checked intent either: agent_runs.intent stays null; the model is not used.
+      this.intentWithheld = true;
       if (!(await this.fixed('agent.refuse.out_of_scope')) && this.signal.aborted) {
         return done('stop');
       }
@@ -830,6 +894,7 @@ class AgentRun {
     if (isStructuredText(text)) return this.invalidFormat(proceed);
     // B3-05o: blank model text delivers nothing (white space never goes out as an answer).
     if (!blank) {
+      this.textSource = source;
       const pushed = await this.pushText(deltas);
       if (pushed !== null) return pushed;
     }
@@ -1045,7 +1110,10 @@ class AgentRun {
       if (this.out.limitHit || this.signal.aborted) return;
       if (this.out.text(text)) {
         this.delivered = true;
-        if (model && text.trim() !== '') this.explained = true;
+        if (model && text.trim() !== '') {
+          this.explained = true;
+          this.adoptText();
+        }
       }
     }
   }
@@ -1146,7 +1214,10 @@ class AgentRun {
       }
       if (this.out.text(text)) {
         this.delivered = true;
-        if (emit.kind === 'text' && text.trim() !== '') this.explained = true;
+        if (emit.kind === 'text' && text.trim() !== '') {
+          this.explained = true;
+          this.adoptText();
+        }
       }
       if (emit.kind === 'fixed' && emit.key === 'agent.refuse.output_blocked') {
         return done('safety');
@@ -1171,6 +1242,7 @@ class AgentRun {
   private async runTool(
     call: AssembledToolCall,
     known: ReadonlySet<string>,
+    source: ModelSource,
   ): Promise<{ readonly view: unknown } | RunBodyResult> {
     const name = call.function.name;
     const parsed = parseArgs(call.function.arguments);
@@ -1194,6 +1266,8 @@ class AgentRun {
     const requoted = parsed.ok ? await this.entryRequote(name, parsed.args) : null;
     if (requoted === ABORTED) return done('stop');
     if (requoted !== null) {
+      // B3-08t: the model's tool choice is answered (from the entry card): its output is used.
+      this.adoptModel(source);
       // B3-05q: answered from the entry card of this run; nothing executes, no card goes out.
       const end = await this.wait(texts.toolDisplay(this.appId, name, 'end', platform));
       if (end === ABORTED) return done('stop');
@@ -1208,6 +1282,8 @@ class AgentRun {
     try {
       let outcome: ToolOutcome;
       if (parsed.ok) {
+        // B3-08t: the model's tool choice is executed: its output is used for the result.
+        this.adoptModel(source);
         const executed = await this.wait(
           this.deps.tools.execute(
             { id: call.id, name, args: parsed.args },
@@ -1329,8 +1405,51 @@ class AgentRun {
     };
   }
 
+  /**
+   * B3-08t (BR-AI-19 细则「运行级字段」): `source`'s output was used for the result, so its model is
+   * the result model, unless a later round's output was used already (a held tail of an earlier
+   * round written at the end does not move it back).
+   */
+  private adoptModel(source: ModelSource): void {
+    if (source.round < this.resultRound) return;
+    this.resultModel = source.model;
+    this.resultRound = source.round;
+  }
+
+  /** B3-08t: model text was written: the round that pushed the latest text is used. */
+  private adoptText(): void {
+    if (this.textSource !== null) this.adoptModel(this.textSource);
+  }
+
+  /**
+   * B3-08t (BR-AI-19 细则「运行级字段」): the tokens of one router call, added to the run's: the
+   * answer's usage once (outcome `model`), plus the usage the gateway metered on any other attempt
+   * of the call (a failed assembly, a refusal) when the attempt record carries it. The answering
+   * attempt's own record is never counted again.
+   */
+  private addOutcomeUsage(outcome: ModelOutcome): void {
+    for (const attempt of outcome.attempts) {
+      if (attempt.result === 'ok') continue;
+      const usage = meteredUsageOf(attempt);
+      if (usage !== null) this.addUsage(usage);
+    }
+    if (outcome.kind === 'model') this.addUsage(outcome.usage);
+  }
+
+  /** B3-08t: one model answer's tokens added to the run's (non-negative integers only). */
+  private addUsage(usage: { readonly input_tokens: number; readonly output_tokens: number }): void {
+    const count = (value: unknown): number =>
+      typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+    const sum = this.usage ?? { input_tokens: 0, output_tokens: 0 };
+    sum.input_tokens += count(usage?.input_tokens);
+    sum.output_tokens += count(usage?.output_tokens);
+    this.usage = sum;
+  }
+
   private recordTrace(): void {
     this.traced = true;
+    const unserved = this.routed?.unserved() ?? false;
+    const guideRejected = this.routed?.guideRejected() ?? null;
     const routed = this.routed?.close() ?? null;
     if (routed !== null) this.intent = routed;
     if (this.intent === null && this.entryIntent !== null) this.intent = this.entryIntent;
@@ -1351,6 +1470,14 @@ class AgentRun {
       output_truncated: summary?.outputTruncated ?? false,
       model_format_invalid: this.formatInvalid,
       ...(this.replaced ? { text_replaced_by_template: true } : {}),
+      ...(this.usage === null ? {} : { usage: { ...this.usage } }),
+      ...(this.degraded ? { degraded: true as const } : {}),
+      ...(unserved ? { degraded_unserved: true as const } : {}),
+      ...(this.entryIntent === null ? {} : { entry_intent: this.entryIntent }),
+      ...(this.intentRuled ? { intent_ruled: true as const } : {}),
+      ...(this.intentWithheld ? { intent_withheld: true as const } : {}),
+      ...(this.resultModel === null ? {} : { result_model: this.resultModel }),
+      ...(guideRejected === null ? {} : { page_guide_reject_reason: guideRejected }),
       ...(this.cardSources.length > 0 ? { card_sources: [...this.cardSources] } : {}),
       ...(this.linkRegistrations.length > 0
         ? { link_registrations: [...this.linkRegistrations] }
