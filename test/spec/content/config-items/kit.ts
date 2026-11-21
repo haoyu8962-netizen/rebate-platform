@@ -526,6 +526,18 @@ export const SERVICE_FEE_BP_UNSEEDED: readonly string[] = [
   'union.taobao.service_fee_bp',
   'union.pdd.service_fee_bp',
 ];
+// B2-02zda (B2-02zd prerequisite, BR-FUND-19, D10-2299): then ledger.auto_correct.enabled / max_accounts, in this
+// order; editable config.business items right after SERVICE_FEE_BP, options null. Not part of
+// expectedNow() either.
+export const AUTO_CORRECT: readonly Expected[] = [
+  row('ledger.auto_correct.enabled', 'boolean', 'config.business'),
+  row('ledger.auto_correct.max_accounts', 'number', 'config.business'),
+];
+/** B2-02zda: unset = off / unset cap = 3 through the reader, hence no seed rows. */
+export const AUTO_CORRECT_UNSEEDED: readonly string[] = [
+  'ledger.auto_correct.enabled',
+  'ledger.auto_correct.max_accounts',
+];
 // B1-22y (Agent A10, D10-1287 / D10-1306 / D10-1307): then the 26 Agent keys, in this order;
 // all editable, options null except the three config.risk enums. Admission, quota and safety
 // items config.risk (agent.require_phone too, though listed with the texts), the BR-AI-16 budget
@@ -606,6 +618,7 @@ export const expectedOf = (key: string): Expected => {
     ...BLACKLIST_CLAWBACK,
     ...SUBSIDY_ITEMIZED,
     ...SERVICE_FEE_BP,
+    ...AUTO_CORRECT,
     ...AGENT_A10,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();

@@ -415,6 +415,13 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // Registration only.
   spec('union.taobao.service_fee_bp', 'object', 'config.business'),
   spec('union.pdd.service_fee_bp', 'object', 'config.business'),
+  // B2-02zda（B2-02zd 前置；D10-2219 / D10-2224 / D10-2230 / D10-2299，BR-FUND-19 细则「差异以分录为准修正」）:
+  // the daily ledger check's auto-correction switch and its per-run account cap, config.business,
+  // editable. No seed rows: unset = off (the reader's `value === true`; 08's default false until
+  // alerts reach a person) and unset cap = 3 (08's default; 0–1000). Registration only; B2-02zd
+  // reads them.
+  spec('ledger.auto_correct.enabled', 'boolean', 'config.business'),
+  businessInteger('ledger.auto_correct.max_accounts', 0, 1000),
   // B1-22y（Agent A10，D10-1287 / D10-1306 / D10-1307）
   // The Agent keys the agent module (and /v1/config) already reads, plus the ones 08 / 04 give
   // without a reader yet, all editable, in this order: admission, quota and safety items

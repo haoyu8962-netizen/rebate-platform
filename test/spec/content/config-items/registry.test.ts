@@ -60,6 +60,8 @@
 // SUBSIDY_ITEMIZED), unset (= true) by default with no seed rows (SUBSIDY_ITEMIZED_UNSEEDED).
 // B1-18e (D10-1250 ②, BR-CALC-03): then union.taobao / pdd.service_fee_bp, in this order (kit
 // SERVICE_FEE_BP), unset (= no fallback) by default with no seed rows (SERVICE_FEE_BP_UNSEEDED).
+// B2-02zda (B2-02zd prerequisite, BR-FUND-19, D10-2299): then ledger.auto_correct.enabled / max_accounts, in this
+// order (kit AUTO_CORRECT), unset (= off / cap 3) by default with no seed rows (AUTO_CORRECT_UNSEEDED).
 // B1-22y (Agent A10, D10-1287 / D10-1306 / D10-1307): then the 26 Agent keys, in this order (kit
 // AGENT_A10), unset (= the agent readers' defaults) with no seed rows (AGENT_A10_UNSEEDED).
 import { expect, it } from 'vitest';
@@ -95,6 +97,8 @@ import {
   SUBSIDY_ITEMIZED_UNSEEDED,
   SERVICE_FEE_BP,
   SERVICE_FEE_BP_UNSEEDED,
+  AUTO_CORRECT,
+  AUTO_CORRECT_UNSEEDED,
   AGENT_A10,
   AGENT_A10_UNSEEDED,
   EXPECTED,
@@ -183,6 +187,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...BLACKLIST_CLAWBACK_UNSEEDED,
         ...SUBSIDY_ITEMIZED_UNSEEDED,
         ...SERVICE_FEE_BP_UNSEEDED,
+        ...AUTO_CORRECT_UNSEEDED,
         ...AGENT_A10_UNSEEDED,
       ]),
     ]),
@@ -207,6 +212,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
     ...BLACKLIST_CLAWBACK_UNSEEDED,
     ...SUBSIDY_ITEMIZED_UNSEEDED,
     ...SERVICE_FEE_BP_UNSEEDED,
+    ...AUTO_CORRECT_UNSEEDED,
     ...AGENT_A10_UNSEEDED,
   ]) {
     expect(seeds, key).not.toContain(key);
@@ -253,6 +259,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...BLACKLIST_CLAWBACK,
         ...SUBSIDY_ITEMIZED,
         ...SERVICE_FEE_BP,
+        ...AUTO_CORRECT,
         ...AGENT_A10,
       ].map((entry) => entry.key),
     ),
@@ -309,6 +316,7 @@ it('[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 o
       BLACKLIST_CLAWBACK_UNSEEDED.length -
       SUBSIDY_ITEMIZED_UNSEEDED.length -
       SERVICE_FEE_BP_UNSEEDED.length -
+      AUTO_CORRECT_UNSEEDED.length -
       AGENT_A10_UNSEEDED.length,
   );
   expect(registered('agent.page_guide.routes').valueType).toBe('object');
@@ -466,6 +474,7 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...BLACKLIST_CLAWBACK,
     ...SUBSIDY_ITEMIZED,
     ...SERVICE_FEE_BP,
+    ...AUTO_CORRECT,
     ...AGENT_A10,
   ].map((e) => e.key);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
@@ -538,6 +547,7 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...BLACKLIST_CLAWBACK,
     ...SUBSIDY_ITEMIZED,
     ...SERVICE_FEE_BP,
+    ...AUTO_CORRECT,
     ...AGENT_A10,
   ];
   const head = keys.length - tail.length;
@@ -618,6 +628,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...BLACKLIST_CLAWBACK,
       ...SUBSIDY_ITEMIZED,
       ...SERVICE_FEE_BP,
+      ...AUTO_CORRECT,
       ...AGENT_A10,
     ].map((entry) => entry.key),
   );
@@ -649,6 +660,7 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
     ...BLACKLIST_CLAWBACK,
     ...SUBSIDY_ITEMIZED,
     ...SERVICE_FEE_BP,
+    ...AUTO_CORRECT,
   ]) {
     const payoutSpec = registered(entry.key);
     expect({
