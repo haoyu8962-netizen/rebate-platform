@@ -8,7 +8,7 @@ type: impl
 refs: [BR-FUND-18, BR-WDR-05]
 refs_hash:
   BR-FUND-18: c7ebd23ee75e
-  BR-WDR-05: 32894d40942c
+  BR-WDR-05: 378fe8ee0fee
 deps: [B2-05c]
 paths:
   - 'apps/api/src/app.module.ts'

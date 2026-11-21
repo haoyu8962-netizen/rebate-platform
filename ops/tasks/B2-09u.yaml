@@ -7,8 +7,8 @@ type: impl
 # 冻结用例（D10-327）：recon-late-paid/worker.int.test.ts 只改 [AC-B2-09t#35]，期望不变，只把「等不到」从测试超时改成到点断言失败，回归时报错清楚、不占 CI 一分钟（编排 11-05 12:48 记的 FU）。
 refs: [BR-WDR-23, BR-WDR-15]
 refs_hash:
-  BR-WDR-23: 98981fee10c7
-  BR-WDR-15: 862cdb2e711a
+  BR-WDR-23: 14059410a548
+  BR-WDR-15: 81861ee42c9b
 deps: [B2-09s, B2-09t]
 paths:
   - 'apps/api/src/modules/payout/application/admin-unknown-payouts.ts'

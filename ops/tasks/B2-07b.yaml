@@ -5,7 +5,7 @@ type: impl
 # 2026-10-29 入账（ops 线，D10-408；R2 先只做支付宝）。硬规则 7：平台差异止于适配器，没有真实录制只用演示适配器。
 refs: [BR-WDR-23, BR-WDR-22]
 refs_hash:
-  BR-WDR-23: 98981fee10c7
+  BR-WDR-23: 14059410a548
   BR-WDR-22: 3fc7a8bd4852
 deps: [B2-06f]
 paths:

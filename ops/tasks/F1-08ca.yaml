@@ -8,7 +8,7 @@ type: impl
 # 2026-11-15 补丁 1（fe，编排 D10-1724）：deps 加 F1-08caa——/adjustments 成为真页面会让主干冻结 [AC-F1-14a-MENU#3] / [#4] 变红，由 test-change 单 F1-08caa 先把落地菜单换成仍是占位页的菜单，再落本单。
 refs: [BR-FUND-24, BR-FUND-12]
 refs_hash:
-  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-24: efcdeeafa452
   BR-FUND-12: c685237ab670
 deps: [F1-08caa]
 paths:

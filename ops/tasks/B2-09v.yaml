@@ -7,7 +7,7 @@ type: test-change
 # 2026-11-06 作废（D10-700 / D10-749）：D10-743 曾移给 withdraw 重开，实测原 #35 对「等待优先于已报告」的变异已是断言红（46–111 ms，单跑 / 整文件 / 整目录三种跑法都不超时），拿不出 tighten_only 要的「改后杀、改前杀不了」的变异体，不做。实测报告 couli-runs/B2-09v/mut-*.json；task/B2-09v 的本地提交不推。
 refs: [BR-WDR-23]
 refs_hash:
-  BR-WDR-23: 98981fee10c7
+  BR-WDR-23: 14059410a548
 deps: [B2-09t]
 paths:
   - 'test/spec/payout/recon-late-paid/worker.int.test.ts'

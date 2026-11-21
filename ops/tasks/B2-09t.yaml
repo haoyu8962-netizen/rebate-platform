@@ -9,7 +9,7 @@ type: impl
 # W10 判成功的一行入队等 B2-09s 合并后接，本单不碰 admin-unknown-payouts.ts。不动冻结测试，实跑若要动按 D10-327 先报。
 refs: [BR-WDR-23, BR-WDR-16]
 refs_hash:
-  BR-WDR-23: 98981fee10c7
+  BR-WDR-23: 14059410a548
   BR-WDR-16: c5899cc85558
 deps: [B2-07c, B2-09m]
 paths:

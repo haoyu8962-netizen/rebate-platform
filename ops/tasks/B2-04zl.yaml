@@ -7,7 +7,7 @@ type: impl
 # 改登 **FU-BILL-OPEN-DEDUCTIONS-DISPLAY（P1，不排期）**：后台账单页合计与 b_settle 未减未关闭应扣、直接读金额行的风控标签偏大。
 refs: [BR-FUND-04, BR-FUND-06, BR-CALC-15]
 refs_hash:
-  BR-FUND-04: 497806f6f068
+  BR-FUND-04: 1c403c23b8bb
   BR-FUND-06: f903ec00076a
   BR-CALC-15: dec05fa8363f
 deps: [B2-03s]

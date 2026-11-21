@@ -4,7 +4,7 @@ title: 调账读与一步提交：adminListAdjustments、adminGetAdjustment、ad
 type: impl
 refs: [BR-FUND-24, BR-FUND-10, BR-FUND-16, BR-TEXT-19]
 refs_hash:
-  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-24: efcdeeafa452
   BR-FUND-10: 3ed330a761d1
   BR-FUND-16: 077f6d412d5a
   BR-TEXT-19: 833dc40d2edc

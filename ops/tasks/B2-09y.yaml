@@ -12,7 +12,7 @@ type: impl
 #   两个文件其余用例逐字不动，登 red_exempt。规则测试改由新鲜独立 Claude 写（Codex 额度用尽至 11-11，approvals #36、D10-775），另一位独立 Claude 只读复审。
 refs: [BR-WDR-15, BR-WDR-14]
 refs_hash:
-  BR-WDR-15: 862cdb2e711a
+  BR-WDR-15: 81861ee42c9b
   BR-WDR-14: 6328f3cda2e6
 deps: [B2-09u, B2-09w, B2-09x]
 paths:

@@ -8,7 +8,7 @@ type: impl
 # 2026-11-15 补丁 1（fe，编排 D10-1733，同 D10-1712 (a)）：F1-08cb 的 [AC-F1-08cb-ENTRY#1] / [#2] / [#4] 对 fund.adjust / 超管的入口清单随本单落地改为「恰为当时已落地的入口」（严格相等），未落地的【批准核销】继续禁，另补反向用例（无 fund.adjust 看不到批准 / 驳回）；entry.test.ts 先列进 test_paths。modify_existing（rule_change，br BR-FUND-24，ruling D10-1733）等该文件随 F1-08cb 进主干后另开补丁登记。
 refs: [BR-FUND-24, BR-ID-34]
 refs_hash:
-  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-24: efcdeeafa452
   BR-ID-34: 6f4bb7f212cb
 deps: [F1-08cb]
 paths:

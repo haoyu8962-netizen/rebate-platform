@@ -10,7 +10,7 @@ type: impl
 refs: [BR-FUND-19, BR-WDR-05]
 refs_hash:
   BR-FUND-19: ab824a70d47c
-  BR-WDR-05: 32894d40942c
+  BR-WDR-05: 378fe8ee0fee
 deps: [CT-24w, B2-09a]
 paths:
   - 'apps/api/src/modules/ledger/application/*recon-diff*.ts'

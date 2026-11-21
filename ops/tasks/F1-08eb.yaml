@@ -8,7 +8,7 @@ type: impl
 # Codex 到 11-02 不可用：规则测试由新鲜独立 Claude 写（approvals #36），实现 Claude Opus，评审独立 Claude；独立 Claude 每任务 10 次上限（D10-319 / D10-417）。
 refs: [BR-WDR-23]
 refs_hash:
-  BR-WDR-23: 98981fee10c7
+  BR-WDR-23: 14059410a548
 deps: [CT-24za, B2-07e, B2-07f, F1-08e, F1-08eba]
 paths:
   - 'apps/admin/src/pages/recon/**'

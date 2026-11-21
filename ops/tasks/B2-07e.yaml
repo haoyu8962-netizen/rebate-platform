@@ -5,7 +5,7 @@ type: impl
 # 2026-10-30 入账（withdraw 线，编排 10-30 10:05 派工）。资金类（RV2，payout 单一写者）：Codex 不可用至 11-02，规则测试与 money 评审均由新鲜独立 Claude 做；money 评审必过。装配照 B2-09b：ledger 不 import payout / admin，app.module 把 payout 的 W11 命令（新端口 ReconDiffWriteOff：proveChannelSuccess(trx, {...})）与 admin 的审计写者注入 LedgerAdminModule.forAdmin；控制器放 ledger/http/admin/recon-diff-write-off.controller.ts，用例 ledger/application/admin-recon-diff-write-off.ts，W11 命令放 payout/application/withdrawal-proven-success.ts（只经生成的 transitionWithdrawal、CAS 0 行抛 WithdrawalConflictError 20902 withdrawal、分录只经 ledger.post、锁序 BR-WDR-07）。 尝试记录按编排裁定 D10-428（否 A 授权迁移、否 B 不记）：不加迁移、不改授权；新 payout 队列 attempt-append 登记 platform/queue/catalog.ts 与 worker-plan.ts，队列冻结计数测试照 D10-415 ①（新鲜独立 Claude 单列 test(spec) 调计划合计，其余未改用例 red_exempt）。开关 payout.proven_success_writeoff.enabled 经 content 的 ContentReader.configValue 读，缺省按 08 BR-WDR-08 细则「默认 on」。
 refs: [BR-WDR-23, BR-WDR-08]
 refs_hash:
-  BR-WDR-23: 98981fee10c7
+  BR-WDR-23: 14059410a548
   BR-WDR-08: 8c55a3ce6b57
 deps: [CT-24za, B2-07c, B2-09b, B2-09c]
 paths:

@@ -7,7 +7,7 @@ type: contract
 # 新 reason 注册 error-codes.yaml 与 catalog.test.ts；后台同发，判定接口的 data.reason 是自由文本时不登 oasdiff，若有枚举按 D10-557 登。实现另开 B2-09x。
 refs: [BR-WDR-15, BR-TEXT-14]
 refs_hash:
-  BR-WDR-15: 862cdb2e711a
+  BR-WDR-15: 81861ee42c9b
   BR-TEXT-14: dd8fad131e0d
 deps: [CT-24zt]
 paths:

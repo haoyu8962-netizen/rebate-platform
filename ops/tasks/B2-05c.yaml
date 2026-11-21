@@ -10,7 +10,7 @@ refs: [BR-WDR-03, BR-WDR-04, BR-WDR-05, BR-WDR-06, BR-WDR-31]
 refs_hash:
   BR-WDR-03: c1b5f37a0dd1
   BR-WDR-04: e64ad363f9a2
-  BR-WDR-05: 32894d40942c
+  BR-WDR-05: 378fe8ee0fee
   BR-WDR-06: 2a30a20531c1
   BR-WDR-31: 6bb92e7844fd
 deps: [B2-05b, B1-13h, B1-13e, B1-02zf]

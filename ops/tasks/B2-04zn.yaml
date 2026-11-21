@@ -5,9 +5,9 @@ type: impl
 # 2026-11-03 W1 入账（D10-564 改派，D10-587，方案 couli-runs/B3-lane/b204zb-plan-20261103.md）。扣回是余额变负的主路径，现在不发事件，在途提现拦不住；结算入账回正不解除拦截（BR-WDR-05 (a)）。只动装配。顺手删 clawback/index.ts、credit/index.ts、beneficiary-gate.ts、settlement.module.ts、bill/job.ts 的陈旧注释。
 refs: [BR-WDR-05, BR-FUND-08, BR-FUND-04]
 refs_hash:
-  BR-WDR-05: 32894d40942c
+  BR-WDR-05: 378fe8ee0fee
   BR-FUND-08: 4135d1b47230
-  BR-FUND-04: 497806f6f068
+  BR-FUND-04: 1c403c23b8bb
 deps: []
 paths:
   - 'apps/api/src/app.module.ts'

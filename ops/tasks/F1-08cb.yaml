@@ -8,7 +8,7 @@ type: impl
 # 2026-11-15 补丁（fe，编排 D10-1734）：本单在 f7d4ffbd（money r1 pass）落地，**须与 F1-08ce 一起发布**——D10-1731（结果未知锁表单、原键原体重试）与 D10-1732（成功提示调账前后可用余额）由 F1-08ce 接手；F1-08ce 合并前后台不得晋升到生产。
 refs: [BR-FUND-24, BR-ID-34]
 refs_hash:
-  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-24: efcdeeafa452
   BR-ID-34: 6f4bb7f212cb
 deps: [F1-08ca]
 paths:

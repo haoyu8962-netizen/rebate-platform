@@ -7,7 +7,7 @@ type: contract
 # 工作台卡片 settle_bill_pending 的 route 用 /settle-bills?awaiting_confirm=true，count = 该筛选的 total；无候选的 issued 账单不计。只加参数，响应与其他行为不变；实现与计数另开单。前端筛选项归 fe。
 refs: [BR-FUND-04]
 refs_hash:
-  BR-FUND-04: 497806f6f068
+  BR-FUND-04: 1c403c23b8bb
 contract_sections: ['11.1']
 deps: []
 paths:

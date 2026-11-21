@@ -11,7 +11,7 @@ refs: [BR-WDR-07, BR-WDR-08, BR-WDR-05]
 refs_hash:
   BR-WDR-07: 3eaedce150d8
   BR-WDR-08: 8c55a3ce6b57
-  BR-WDR-05: 32894d40942c
+  BR-WDR-05: 378fe8ee0fee
 deps: [B2-05a, B2-02f]
 paths:
   - 'db/migrations/**'
