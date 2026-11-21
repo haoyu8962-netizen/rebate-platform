@@ -101,7 +101,11 @@
 #              segment, command, files and tests (the test files and tests of the reports, summed by
 #              the trusted int-shards.ts --sum-reports) and int_files_total (every test:int file of
 #              the snapshot, int-shards.ts --count-int-files; the same on every segment of a tree).
-#              Exit code = the command's (124 = time limit). Output int-shard/<n>/. Several
+#              Exit code = the command's (124 = time limit); a command that exits 0 while a
+#              package it ran has no report in out/ (or a report there is not a regular Vitest
+#              report) is recorded with exit_code 2 and `error` ("report missing: <package>"), and
+#              the script exits 2; a failed command keeps its code, `error` added. Output
+#              int-shard/<n>/. Several
 #              segments of one tree make one full verify only through
 #              tools/ops/verify-sharded-summary.ts.
 #   --dry-run  prints what would run (script, commit, tree, red files, test_guard counts; --related:
@@ -1265,31 +1269,45 @@ write_result() {
 # --int-shard (CT-06zzzzzzza), from write_result (after the host services are gone and the password
 # is out of out/): <result file> <exit code>. The segment, its command, int_files_total (counted on
 # the snapshot before the run) and the files and tests of the Vitest reports in out/, summed by the
-# trusted int-shards.ts --sum-reports (out/ is written by the tests' code: regular files only).
-# Reports it rejects after a run that exited 0: exit 2, no result; after a failed run (a report cut
-# off by the time limit) the run is recorded with 0 files and 0 tests (it is red either way).
+# trusted int-shards.ts --sum-reports (out/ is written by the tests' code: regular files only),
+# which also names the packages the segment ran whose report is not in out/ (--snapshot, --segment:
+# @couli/spec-tests for a numbered segment, the other test:int packages for rest). A missing report
+# or reports it rejects (not a regular file, not a Vitest report) are recorded in `error`; after a
+# run that exited 0 the recorded exit code is 2 (the counts would be short), after a failed run it
+# stays the run's own. Sets INT_SHARD_RC, the exit code finish ends with.
+INT_SHARD_RC=''
 int_shard_record() {
-  local counts src=0
-  counts="$( (cd "$TRUSTED" && node tools/ci/int-shards.ts --sum-reports "$VDIR/out") 2>>"$LOG")" || src=$?
+  local counts src=0 error=''
+  counts="$( (cd "$TRUSTED" && node tools/ci/int-shards.ts --sum-reports "$VDIR/out" --snapshot "$SRC" --segment "$INT_SHARD") 2>>"$LOG")" || src=$?
   if [ "$src" != 0 ]; then
-    [ "$2" != 0 ] || die "int-shards.ts rejected the Vitest reports in $VDIR/out (exit $src), see $LOG"
-    step "the Vitest reports in out/ could not be summed after exit $2: recorded as 0 files, 0 tests"
-    counts='{"files":0,"tests":0}'
+    error="reports rejected by int-shards.ts --sum-reports (exit $src), see the log"
+    counts='{"files":0,"tests":0,"missing":[]}'
   fi
-  INT_SHARD_SEGMENT="$INT_SHARD" INT_SHARD_COMMAND="$INT_SHARD_CMD" node -e '
+  INT_SHARD_RC="$(INT_SHARD_SEGMENT="$INT_SHARD" INT_SHARD_COMMAND="$INT_SHARD_CMD" node -e '
     const fs = require("node:fs");
-    const [file, counts, total] = process.argv.slice(1);
+    const [file, counts, total, rc, rejected] = process.argv.slice(1);
     const result = JSON.parse(fs.readFileSync(file, "utf8"));
-    const { files, tests } = JSON.parse(counts);
+    const { files, tests, missing } = JSON.parse(counts);
+    const errors = [];
+    if (rejected !== "") errors.push(rejected);
+    if (missing.length > 0) errors.push(`report missing: ${missing.join(", ")}`);
+    const exit = errors.length > 0 && Number(rc) === 0 ? 2 : Number(rc);
     Object.assign(result, {
+      exit_code: exit,
       segment: process.env.INT_SHARD_SEGMENT,
       command: process.env.INT_SHARD_COMMAND,
       files,
       tests,
       int_files_total: Number(total),
     });
+    if (errors.length > 0) result.error = errors.join("; ");
     fs.writeFileSync(file, JSON.stringify(result, null, 2) + "\n");
-  ' "$1" "$counts" "$INT_FILES_TOTAL" || die "cannot record the test:int segment in result.json"
+    process.stdout.write(String(exit));
+  ' "$1" "$counts" "$INT_FILES_TOTAL" "$2" "$error")" || die "cannot record the test:int segment in result.json"
+  [[ "$INT_SHARD_RC" =~ ^[0-9]+$ ]] || die "cannot record the test:int segment in result.json"
+  if [ "$INT_SHARD_RC" != "$2" ]; then
+    step "the segment exited $2 but its Vitest reports are incomplete (error in result.json): exit $INT_SHARD_RC"
+  fi
 }
 
 # CT-06zzzzzz (D10-2341): after red-check, the trusted evidence-check --early on the commit of the
@@ -1337,6 +1355,8 @@ finish() {
   fi
   if [ "$SCRIPT" = red ]; then evidence_shape; fi
   write_result "$1"
+  # --int-shard: the recorded exit code (2 when a run that exited 0 left a report missing).
+  if [ -n "$INT_SHARD_RC" ]; then set -- "$INT_SHARD_RC"; fi
   # The snapshot is identified by `tree` in result.json; the copy itself is not kept.
   rm -rf "$SRC"
   log "verify-container: $ID run $N ($MODE, $SCRIPT) exit $1${RUN_NOTE:+ ($RUN_NOTE)}; log: $LOG"
@@ -2536,7 +2556,8 @@ fi
 # checked again here) after the same copy and offline install as the entrypoint's prepare_repo,
 # under VERIFY_TIMEOUT_SECS, with Vitest's JSON reporter added after `--` (relative outputFile:
 # each package writes its report in its own directory). Every report is then copied to
-# /out/<package dir, / as ->.vitest-report.json. Exit code = the command's (124 = time limit).
+# /out/<package dir, / as ->.vitest-report.json. Exit code = the command's (124 = time limit); the
+# host (int_shard_record) turns an exit 0 with a package's report missing from /out into exit 2.
 IFS= read -r -d '' INT_SHARD_SH <<'SH' || true
 set -euo pipefail
 limit="${VERIFY_TIMEOUT_SECS:?VERIFY_TIMEOUT_SECS is required}"
@@ -2568,7 +2589,9 @@ if [ "$rc" -eq 137 ] && [ "$elapsed" -ge "$limit" ]; then rc=124; fi
 while IFS= read -r f; do
   dir="${f#./}"
   dir="${dir%/$report}"
-  cp "$f" "/out/$(printf '%s' "$dir" | tr '/' '-').vitest-report.json" || true
+  # A failed copy leaves the report missing in /out: the host records that (exit 2 after exit 0).
+  cp "$f" "/out/$(printf '%s' "$dir" | tr '/' '-').vitest-report.json" ||
+    echo "[int-shard] cannot copy $f to /out" >&2
 done < <(find . -name node_modules -prune -o -type f -name "$report" -print 2>/dev/null || true)
 echo "[int-shard] exited ${rc} after ${elapsed}s"
 exit "$rc"

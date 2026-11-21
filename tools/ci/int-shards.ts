@@ -20,6 +20,9 @@
 //     under test: regular files only, no links, at most 256 MiB each, shape checked), the number of
 //     test files (testResults entries) and of tests (numTotalTests) summed over them. Exit 2 on a
 //     report that is not a regular file or not of that shape.
+//   node tools/ci/int-shards.ts --sum-reports <dir> --snapshot <dir> --segment <i|rest>
+//     { files, tests, missing }: as above, and the packages whose report should be in <dir> but is
+//     not — one report per package the segment's command runs (expectedReports below).
 //
 // Node built-in modules only; the line-based YAML reading is that of
 // tools/ci/ci-int-shards-workflow.test.ts (no YAML dependency).
@@ -37,7 +40,8 @@ import { join, resolve } from 'node:path';
 export type IntSegment = { id: string; command: string };
 export type IntShards = { n: number; segments: IntSegment[] };
 
-const SPEC_FILTER = '--filter=@couli/spec-tests';
+const SPEC_PACKAGE = '@couli/spec-tests';
+const SPEC_FILTER = `--filter=${SPEC_PACKAGE}`;
 const REST_FILTER = /(?:^|\s)--filter=(['"]?)!@couli\/spec-tests\1(?=\s|$)/;
 const SHARD = /--shard=(\d+)\/(\d+)/g;
 const INT_JOB = /^verify-int-(\d+)$/;
@@ -83,19 +87,38 @@ function jobsOf(text: string): Job[] {
   return jobs;
 }
 
-/** The test:int commands of a job's lines: `run:` values and lines of `run: |` blocks. */
+/**
+ * The test:int commands of a job's lines, taken only from step `run:` values: the scalar after
+ * `run:` and the body of a `run: |` / `run: >` block (the lines indented deeper than the `run`
+ * key). The same text under any other key (a name, a multi-line `env:` value, …) is not a command.
+ */
 function testIntCommands(lines: string[]): string[] {
   const out: string[] = [];
+  // The column of the key whose block scalar is being skipped or read, and whether it is `run`.
+  let block: { column: number; run: boolean } | null = null;
   for (const line of lines) {
-    if (isBlankOrComment(line) || !line.includes('test:int')) continue;
-    const keyed = /^\s*(?:-\s+)?([A-Za-z0-9_-]+):(?:\s+(.*))?$/.exec(line);
-    let command: string;
-    if (keyed) {
-      if (keyed[1] !== 'run') continue;
-      command = scalar(keyed[2] ?? '');
-    } else {
-      command = line.trim().replace(/^-\s+/, '');
+    if (isBlankOrComment(line)) continue;
+    if (block !== null && indentOf(line) > block.column) {
+      if (!block.run || !line.includes('test:int')) continue;
+      const command = line.trim();
+      if (!/^pnpm (?:run )?test:int(?:\s|$)/.test(command)) {
+        throw new Error(`a test:int command that is not \`pnpm test:int …\`: ${command}`);
+      }
+      out.push(command);
+      continue;
     }
+    block = null;
+    const keyed = /^(\s*(?:-\s+)?)([A-Za-z0-9_-]+):(?:\s+(.*))?$/.exec(line);
+    if (!keyed) continue;
+    const column = (keyed[1] ?? '').length;
+    const value = (keyed[3] ?? '').replace(/\s+#.*$/, '').trim();
+    const isRun = keyed[2] === 'run';
+    if (/^[|>][0-9+-]*$/.test(value)) {
+      block = { column, run: isRun };
+      continue;
+    }
+    if (!isRun || !value.includes('test:int')) continue;
+    const command = scalar(value);
     if (!/^pnpm (?:run )?test:int(?:\s|$)/.test(command)) {
       throw new Error(`a test:int command that is not \`pnpm test:int …\`: ${command}`);
     }
@@ -198,11 +221,13 @@ function walk(dir: string, rel: string, out: string[]): void {
   }
 }
 
-/** The number of test:int files in the snapshot directory `root`. */
-export function countIntFiles(root: string): number {
+type IntPackage = { name: string | null; dir: string; include: RegExp[] };
+
+/** The packages of the snapshot `root` with a test:int script (not the root), and its files. */
+function intPackagesOf(root: string): { packages: IntPackage[]; files: string[] } {
   const files: string[] = [];
   walk(root, '', files);
-  const packages: { dir: string; include: RegExp[] }[] = [];
+  const packages: IntPackage[] = [];
   for (const f of files) {
     if (!f.endsWith('/package.json')) continue;
     let pkg: unknown;
@@ -217,8 +242,18 @@ export function countIntFiles(root: string): number {
     if (typeof (scripts as Record<string, unknown>)['test:int'] !== 'string') continue;
     const include =
       (typeof name === 'string' ? INT_INCLUDE[name] : undefined) ?? DEFAULT_INT_INCLUDE;
-    packages.push({ dir: f.slice(0, -'/package.json'.length), include });
+    packages.push({
+      name: typeof name === 'string' ? name : null,
+      dir: f.slice(0, -'/package.json'.length),
+      include,
+    });
   }
+  return { packages, files };
+}
+
+/** The number of test:int files in the snapshot directory `root`. */
+export function countIntFiles(root: string): number {
+  const { packages, files } = intPackagesOf(root);
   let total = 0;
   for (const { dir, include } of packages) {
     const prefix = `${dir}/`;
@@ -282,14 +317,52 @@ export function sumReports(dir: string): { files: number; tests: number } {
   return { files, tests };
 }
 
+/**
+ * The Vitest reports a segment that exited 0 must have left in out/: one per package its command
+ * ran — @couli/spec-tests for a numbered segment, every other test:int package of the snapshot
+ * for "rest" (the filters readIntShards accepts) — named as the container copies them
+ * (`<package dir, / as ->.vitest-report.json`).
+ */
+export function expectedReports(root: string, segment: string): { name: string; file: string }[] {
+  if (segment !== 'rest' && !/^[1-9][0-9]*$/.test(segment)) {
+    throw new Error(`not a segment: ${segment}`);
+  }
+  return intPackagesOf(root)
+    .packages.filter((p) => (p.name === SPEC_PACKAGE) === (segment !== 'rest'))
+    .map((p) => ({
+      name: p.name ?? p.dir,
+      file: `${p.dir.replace(/\//g, '-')}.vitest-report.json`,
+    }))
+    .sort((a, b) => a.file.localeCompare(b.file));
+}
+
+/**
+ * sumReports over `dir`, plus `missing`: the packages of expectedReports(root, segment) whose
+ * report is not in `dir` (a report there that is not a regular file throws, as in sumReports).
+ */
+export function segmentReports(
+  dir: string,
+  root: string,
+  segment: string,
+): { files: number; tests: number; missing: string[] } {
+  const expected = expectedReports(root, segment);
+  const sums = sumReports(dir);
+  const present = new Set(readdirSync(dir));
+  const missing = expected.filter((e) => !present.has(e.file)).map((e) => e.name);
+  return { ...sums, missing };
+}
+
 // --- command line ----------------------------------------------------------------------------------
 
 function main(argv: string[]): number {
   const usage =
-    'usage: int-shards.ts [--workflow <path>] | --count-int-files <dir> | --sum-reports <dir>';
+    'usage: int-shards.ts [--workflow <path>] | --count-int-files <dir> | ' +
+    '--sum-reports <dir> [--snapshot <dir> --segment <i|rest>]';
   let workflow: string | null = null;
   let countDir: string | null = null;
   let reportsDir: string | null = null;
+  let snapshot: string | null = null;
+  let segment: string | null = null;
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
@@ -297,13 +370,19 @@ function main(argv: string[]): number {
     if (flag === '--workflow' && workflow === null) workflow = value;
     else if (flag === '--count-int-files' && countDir === null) countDir = value;
     else if (flag === '--sum-reports' && reportsDir === null) reportsDir = value;
+    else if (flag === '--snapshot' && snapshot === null) snapshot = value;
+    else if (flag === '--segment' && segment === null) segment = value;
     else throw new Error(usage);
     i += 1;
   }
   if ([workflow, countDir, reportsDir].filter((v) => v !== null).length > 1) throw new Error(usage);
+  if ((snapshot === null) !== (segment === null)) throw new Error(usage);
+  if (snapshot !== null && reportsDir === null) throw new Error(usage);
   let out: unknown;
   if (countDir !== null) out = { int_files_total: countIntFiles(countDir) };
-  else if (reportsDir !== null) out = sumReports(reportsDir);
+  else if (reportsDir !== null && snapshot !== null && segment !== null) {
+    out = segmentReports(reportsDir, snapshot, segment);
+  } else if (reportsDir !== null) out = sumReports(reportsDir);
   else {
     const path = workflow ?? resolve(import.meta.dirname, '../../.github/workflows/ci.yml');
     out = readIntShards(readFileSync(path, 'utf8'));

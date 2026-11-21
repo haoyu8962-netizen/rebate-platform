@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import type { IntShards } from '../ci/int-shards.ts';
 import { CLI_TIMEOUT, removeDir, runCli, scratchDir, writeFiles } from './test-helpers.ts';
-import { summarize } from './verify-sharded-summary.ts';
+import { notCoveredSteps, summarize } from './verify-sharded-summary.ts';
 
 const TASK = 'V1-01';
 const TREE = '1'.repeat(40);
@@ -33,13 +33,16 @@ beforeEach(() => {
 });
 afterEach(() => removeDir(base));
 
-function put(kind: 'verify-fast' | 'int-shard', run: number, doc: unknown): void {
+function put(kind: 'verify-fast' | 'int-shard' | 'browser', run: number, doc: unknown): void {
   writeFiles(runs, {
     [`${TASK}/${kind}/${String(run)}/result.json`]:
       typeof doc === 'string' ? doc : JSON.stringify(doc),
   });
 }
 const times = { started_at: '2026-11-22T00:00:00Z', finished_at: '2026-11-22T00:01:30Z' };
+const ROOT_VERIFY =
+  'pnpm run verify:fast && pnpm run test:int && pnpm --filter @couli/spec-tests run test:browser' +
+  ' && pnpm --filter @couli/spec-tests run test:smoke && pnpm run db:check';
 const fast = (run: number, extra: object = {}) =>
   put('verify-fast', run, { script: 'verify:fast', tree: TREE, exit_code: 0, ...times, ...extra });
 const seg = (run: number, segment: string, extra: object = {}) =>
@@ -70,6 +73,9 @@ it('[CT-06zzzzzzza] green: fast and every segment exit 0, totals agree and add u
     ],
     totals: { files: 4, tests: 10, int_files_total: 4 },
     problems: [],
+    scope: 'fast+test:int',
+    not_covered: [],
+    browser: null,
   });
 });
 
@@ -162,6 +168,115 @@ it(
       const res = runCli('verify-sharded-summary.ts', bad);
       expect(res.status, bad.join(' ')).toBe(2);
       expect(res.stdout, bad.join(' ')).toBe('');
+    }
+  },
+  CLI_TIMEOUT,
+);
+
+it('[CT-06zzzzzzza] notCoveredSteps: the root verify steps besides verify:fast and test:int', () => {
+  expect(notCoveredSteps(JSON.stringify({ scripts: { verify: ROOT_VERIFY } }))).toEqual([
+    'test:browser',
+    'test:smoke',
+    'db:check',
+  ]);
+  expect(() => notCoveredSteps('{}')).toThrow(/verify/);
+  expect(() =>
+    notCoveredSteps(JSON.stringify({ scripts: { verify: 'pnpm run test:int' } })),
+  ).toThrow(/verify:fast/);
+  expect(() => notCoveredSteps('{not json')).toThrow();
+});
+
+it('[CT-06zzzzzzza] scope and not_covered; --browser of the same tree with exit 0 covers test:browser', () => {
+  const steps = ['test:browser', 'test:smoke', 'db:check'];
+  fast(1);
+  seg(1, '1');
+  seg(2, 'rest');
+  const plain = summarize(TASK, TREE, runs, SHARDS, { notCovered: steps, browser: false });
+  expect(plain).toMatchObject({ status: 'green', scope: 'fast+test:int', browser: null });
+  expect(plain.not_covered).toEqual(steps);
+
+  put('browser', 1, { script: 'browser', tree: TREE, exit_code: 0, ...times });
+  put('browser', 2, {
+    script: 'browser',
+    tree: OTHER,
+    exit_code: 1,
+    finished_at: '2026-11-23T00:00:00Z',
+    started_at: times.started_at,
+  });
+  const covered = summarize(TASK, TREE, runs, SHARDS, { notCovered: steps, browser: true });
+  expect(covered).toMatchObject({
+    status: 'green',
+    scope: 'fast+test:int+test:browser',
+    browser: { run: 1, exit_code: 0 },
+  });
+  expect(covered.not_covered).toEqual(['test:smoke', 'db:check']);
+  // Without --browser the browser run is not read.
+  expect(
+    summarize(TASK, TREE, runs, SHARDS, { notCovered: steps, browser: false }).not_covered,
+  ).toEqual(steps);
+
+  // The latest browser run of the tree failed: test:browser stays uncovered; status is unchanged.
+  put('browser', 3, {
+    script: 'browser',
+    tree: TREE,
+    exit_code: 1,
+    ...times,
+    finished_at: '2026-11-22T00:09:00Z',
+  });
+  const failed = summarize(TASK, TREE, runs, SHARDS, { notCovered: steps, browser: true });
+  expect(failed).toMatchObject({
+    status: 'green',
+    scope: 'fast+test:int',
+    browser: { run: 3, exit_code: 1 },
+  });
+  expect(failed.not_covered).toEqual(steps);
+});
+
+it(
+  '[CT-06zzzzzzza] CLI: not_covered from --package-json; one without a usable verify script exits 2',
+  () => {
+    writeFiles(base, {
+      'package.json': JSON.stringify({ scripts: { verify: ROOT_VERIFY } }),
+      'bad-package.json': JSON.stringify({ scripts: { verify: 'pnpm run lint' } }),
+    });
+    fast(1);
+    seg(1, '1');
+    seg(2, 'rest');
+    put('browser', 1, { script: 'browser', tree: TREE, exit_code: 0, ...times });
+    const args = (pkg: string, ...extra: string[]) => [
+      TASK,
+      '--tree',
+      TREE,
+      '--runs',
+      runs,
+      '--workflow',
+      join(base, 'ci.yml'),
+      '--package-json',
+      join(base, pkg),
+      ...extra,
+    ];
+    const ok = runCli('verify-sharded-summary.ts', args('package.json'));
+    expect(ok.status, ok.stderr).toBe(0);
+    expect(JSON.parse(ok.stdout)).toMatchObject({
+      scope: 'fast+test:int',
+      not_covered: ['test:browser', 'test:smoke', 'db:check'],
+    });
+    const withBrowser = runCli('verify-sharded-summary.ts', args('package.json', '--browser'));
+    expect(withBrowser.status, withBrowser.stderr).toBe(0);
+    expect(JSON.parse(withBrowser.stdout)).toMatchObject({
+      scope: 'fast+test:int+test:browser',
+      not_covered: ['test:smoke', 'db:check'],
+    });
+    // The default (with --workflow): this checkout's root package.json.
+    const own = runCli('verify-sharded-summary.ts', args('package.json').slice(0, -2));
+    expect(own.status, own.stderr).toBe(0);
+    expect(JSON.parse(own.stdout)).toMatchObject({
+      not_covered: ['test:browser', 'test:smoke', 'db:check'],
+    });
+    for (const pkg of ['bad-package.json', 'missing.json']) {
+      const res = runCli('verify-sharded-summary.ts', args(pkg));
+      expect(res.status, pkg).toBe(2);
+      expect(res.stdout, pkg).toBe('');
     }
   },
   CLI_TIMEOUT,

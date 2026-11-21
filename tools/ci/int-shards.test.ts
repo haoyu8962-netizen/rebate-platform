@@ -5,7 +5,13 @@ import { readFileSync, symlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { CLI_TIMEOUT, removeDir, scratchDir, writeFiles } from '../ops/test-helpers.ts';
-import { countIntFiles, readIntShards, sumReports } from './int-shards.ts';
+import {
+  countIntFiles,
+  expectedReports,
+  readIntShards,
+  segmentReports,
+  sumReports,
+} from './int-shards.ts';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 const CLI = join(ROOT, 'tools/ci/int-shards.ts');
@@ -57,6 +63,54 @@ it('[CT-06zzzzzzza] reads run values, quoted values, block lines and ignores com
       { id: 'rest', command: REST },
     ],
   });
+});
+
+it('[CT-06zzzzzzza] the same text in a multi-line env value or a with: block is not a command', () => {
+  const text = workflow(
+    job(
+      'verify-int-1',
+      '      - name: diagnostics',
+      '        env:',
+      '          OLD_REST: |',
+      `            ${REST}`,
+      '          OLD_SHARD: >-',
+      `            ${shard(1, 1)} -- --bail`,
+      '        run: echo keep',
+      '      - uses: some/action@v1',
+      '        with:',
+      '          script: |',
+      `            ${REST}`,
+      '      - run: >',
+      `          ${shard(1, 1)}`,
+    ),
+    job(
+      'verify-other',
+      '      - env:',
+      `          X: ${REST}`,
+      '        run: |',
+      '          echo a',
+      `          ${REST}`,
+    ),
+  );
+  expect(readIntShards(text)).toEqual({
+    n: 1,
+    segments: [
+      { id: '1', command: shard(1, 1) },
+      { id: 'rest', command: REST },
+    ],
+  });
+  // With the run step gone, a rest command kept only in an env value does not count.
+  const envOnly = workflow(
+    job(
+      'verify-int-1',
+      run(shard(1, 1)),
+      '      - env:',
+      '          OLD: |',
+      `            ${REST}`,
+      '        run: echo x',
+    ),
+  );
+  expect(() => readIntShards(envOnly)).toThrow(/one rest command/);
 });
 
 it.each([
@@ -182,4 +236,47 @@ it('[CT-06zzzzzzza] sumReports: files and tests over the reports; a link or a wr
   writeFiles(shape, { 'x.vitest-report.json': JSON.stringify({ testResults: [] }) });
   expect(() => sumReports(shape)).toThrow(/Vitest JSON report/);
   expect(cli('--sum-reports', shape).status).toBe(2);
+});
+
+it('[CT-06zzzzzzza] segmentReports: the packages a segment ran whose report is not in out/', () => {
+  const snap = join(base, 'snapshot-reports');
+  writeFiles(snap, {
+    'package.json': JSON.stringify({ scripts: { 'test:int': 'turbo run test:int' } }),
+    'test/package.json': JSON.stringify({
+      name: '@couli/spec-tests',
+      scripts: { 'test:int': 'v' },
+    }),
+    'apps/api/package.json': JSON.stringify({ name: '@couli/api', scripts: { 'test:int': 'v' } }),
+    'packages/db/package.json': JSON.stringify({ name: '@couli/db', scripts: { 'test:int': 'v' } }),
+    'packages/money/package.json': JSON.stringify({ name: '@couli/money', scripts: { test: 'v' } }),
+  });
+  expect(expectedReports(snap, '1')).toEqual([
+    { name: '@couli/spec-tests', file: 'test.vitest-report.json' },
+  ]);
+  expect(expectedReports(snap, 'rest')).toEqual([
+    { name: '@couli/api', file: 'apps-api.vitest-report.json' },
+    { name: '@couli/db', file: 'packages-db.vitest-report.json' },
+  ]);
+  expect(() => expectedReports(snap, '../x')).toThrow(/segment/);
+
+  const report = JSON.stringify({ numTotalTests: 4, testResults: [{}, {}] });
+  const out = join(base, 'out-segment');
+  writeFiles(out, { 'apps-api.vitest-report.json': report });
+  // The command exited 0, but packages/db left no report: named, so the host records exit 2.
+  expect(segmentReports(out, snap, 'rest')).toEqual({ files: 2, tests: 4, missing: ['@couli/db'] });
+  expect(segmentReports(out, snap, '1')).toMatchObject({ missing: ['@couli/spec-tests'] });
+  writeFiles(out, { 'packages-db.vitest-report.json': report });
+  expect(segmentReports(out, snap, 'rest')).toEqual({ files: 4, tests: 8, missing: [] });
+
+  const res = cli('--sum-reports', out, '--snapshot', snap, '--segment', '2');
+  expect(res.status, res.stderr).toBe(0);
+  expect(JSON.parse(res.stdout)).toEqual({ files: 4, tests: 8, missing: ['@couli/spec-tests'] });
+  for (const args of [
+    ['--sum-reports', out, '--snapshot', snap],
+    ['--sum-reports', out, '--segment', 'rest'],
+    ['--snapshot', snap, '--segment', 'rest'],
+    ['--sum-reports', out, '--snapshot', snap, '--segment', 'x/y'],
+  ]) {
+    expect(cli(...args).status, args.join(' ')).toBe(2);
+  }
 });

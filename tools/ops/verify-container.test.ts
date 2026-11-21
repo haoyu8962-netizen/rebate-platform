@@ -1049,6 +1049,8 @@ function answer(text, code) {
   process.exit(code);
 }
 if (args[0] === 'version') answer('28.0.1', 0);
+// Redis readiness (start_services, --int-shard): the reply, not the exit code.
+if (args[0] === 'exec' && args.includes('ping')) answer('PONG', 0);
 const at = args.indexOf('--name');
 const name = at === -1 ? '' : args[at + 1] || '';
 if (args[0] === 'run' && /-run-/.test(name)) {
@@ -2016,4 +2018,93 @@ it(
     expect(existsSync(join(runs, 'V1-10'))).toBe(false);
   },
   CLI_TIMEOUT * 2,
+);
+
+// --- CT-06zzzzzzza r2 (money-codex r1 S1): a segment that exits 0 without its Vitest report -------
+// The stub test container exits as told and leaves in out/ only the files of the case; the host
+// then sums the reports with the trusted int-shards.ts and names the packages without one.
+
+function intShardWorkspace(name: string): string {
+  const root = JSON.parse(readFileSync(join(repoRoot(), 'package.json'), 'utf8')) as {
+    packageManager: string;
+  };
+  const ws = join(base, name);
+  writeFiles(ws, {
+    'package.json': `${JSON.stringify(
+      { name, private: true, packageManager: root.packageManager, scripts: {} },
+      null,
+      2,
+    )}\n`,
+    'pnpm-workspace.yaml': 'packages:\n  - test\n',
+    'pnpm-lock.yaml': "lockfileVersion: '9.0'\n",
+    'test/package.json': `${JSON.stringify({
+      name: '@couli/spec-tests',
+      private: true,
+      scripts: { 'test:int': 'vitest run -c vitest.integration.config.ts' },
+    })}\n`,
+    'test/spec/a/one.int.test.ts': "it('[X-1] one', () => {});\n",
+    'test/spec/b/two.int.test.ts': "it('[X-2] two', () => {});\n",
+  });
+  return ws;
+}
+
+const INT_REPORT = JSON.stringify({
+  numTotalTests: 3,
+  numFailedTests: 0,
+  testResults: [{ name: '/work/repo/test/spec/a/one.int.test.ts' }],
+});
+
+it(
+  '[CT-06zzzzzzza] --int-shard: exit 0 with the spec-tests report missing from out/ → result exit_code 2 with error, script exits 2',
+  async () => {
+    const ws = intShardWorkspace('int-shard-report');
+    const runsDir = join(base, 'is-report');
+    const result = (n: number) =>
+      readJson(join(runsDir, 'V1-12', 'int-shard', String(n), 'result.json'));
+
+    const missing = await runStubbed(['V1-12', '--worktree', ws, '--int-shard', '1'], runsDir, {
+      exit: 0,
+      files: {},
+    });
+    expect(missing.timedOut).toBe(false);
+    expect(missing.status, missing.stderr).toBe(2);
+    expect(testContainer(missing.calls)).toBeDefined();
+    expect(result(1)).toMatchObject({
+      script: 'int-shard',
+      segment: '1',
+      exit_code: 2,
+      files: 0,
+      tests: 0,
+      int_files_total: 2,
+    });
+    expect(String(result(1)['error'])).toContain('report missing: @couli/spec-tests');
+
+    // The same run with the report in out/: exit 0, counted, no error.
+    const ok = await runStubbed(['V1-12', '--worktree', ws, '--int-shard', '1'], runsDir, {
+      exit: 0,
+      files: { 'test.vitest-report.json': { text: INT_REPORT } },
+    });
+    expect(ok.status, ok.stderr).toBe(0);
+    expect(result(2)).toMatchObject({ exit_code: 0, files: 1, tests: 3, int_files_total: 2 });
+    expect(result(2)).not.toHaveProperty('error');
+
+    // A failed command keeps its own exit code; the missing report is only added as error.
+    const failed = await runStubbed(['V1-12', '--worktree', ws, '--int-shard', '1'], runsDir, {
+      exit: 1,
+      files: {},
+    });
+    expect(failed.status, failed.stderr).toBe(1);
+    expect(result(3)).toMatchObject({ exit_code: 1, files: 0 });
+    expect(String(result(3)['error'])).toContain('report missing: @couli/spec-tests');
+
+    // A report that is not a regular file after exit 0: exit 2, the rejection in error.
+    const linked = await runStubbed(['V1-12', '--worktree', ws, '--int-shard', '1'], runsDir, {
+      exit: 0,
+      files: { 'test.vitest-report.json': { symlink: '/etc/hosts' } },
+    });
+    expect(linked.status, linked.stderr).toBe(2);
+    expect(result(4)).toMatchObject({ exit_code: 2, files: 0, tests: 0 });
+    expect(String(result(4)['error'])).toMatch(/rejected/);
+  },
+  JUDGE_TIMEOUT * 2,
 );
