@@ -1,0 +1,29 @@
+id: CT-27
+repo: rebate-platform
+title: 'CT-27：运营位批 1 的契约——home-schema 加 page_key me / search 与准入表、section 与 static 条目起止时刻、icon_grid props 定稿；openapi 加热词与关键词直达的后台增改接口、搜索框默认词字段；golden 样例'
+type: contract
+# 2026-11-21 be 入账（规划/05 CT-27 行；docs/changes/20261120-运营位后台可配.md；负责人 11-21 批 1 减为三项：「我的 · 更多服务」、首页弹窗后台表单、搜索热词 / 默认词 / 置顶位，编排 D10-2317 ④ / D10-2361）。be 线，占契约槽（等 w1 B1-01zzw 释放）。
+# contracts/home-schema.json：page_key 加 me、search 与每个 page_key 的准入表（BR-TEXT-28；custom:<slug> 专题页随批 2）；section 与 static 条目的起止时刻；icon_grid props 定稿（列数、徽标三种与到期，BR-TEXT-29）。悬浮按钮、开屏图（float_button / splash）随批 2，不在本单。
+# contracts/openapi.yaml：热词（search.hot_words）与关键词直达（search.keyword_routes）的后台增改接口；搜索框默认词字段（现无配置键，契约先定字段）。形状照 04 §6.2「运营位」、§6.6 pages。
+# golden 样例含过期条目、超长徽标、外链跳转、准入表外类型（拒收）。验收：oasdiff 通过（新增枚举 / 字段按 contracts/oasdiff-accepted.txt 规矩登记）；三端与后台生成物无漂移。
+refs: [BR-TEXT-28, BR-TEXT-29, BR-TEXT-30]
+refs_hash:
+  BR-TEXT-28: b63875b517fd
+  BR-TEXT-29: e67c8270e5e0
+  BR-TEXT-30: babc5180aaa0
+deps: []
+paths:
+  - 'contracts/**'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/operation-slots/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/contracts/operation-slots/**'
+status: todo
