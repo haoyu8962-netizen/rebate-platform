@@ -14,6 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
+import { readIntShards } from '../ci/int-shards.ts';
 import { repoRoot } from '../lib/paths.ts';
 import {
   CLI_TIMEOUT,
@@ -758,9 +759,10 @@ it('[CT-06zzzzu] only the containers that run tests get --memory and --memory-sw
   const mentions = (cmd: string) =>
     names.some((n) => cmd.includes(`\${${n}[@]`)) || /(^|\s)--memory(-swap)?[\s=]/.test(cmd);
 
-  // Test containers: --browser, --fast and the full verify (one line for both service modes) …
+  // Test containers: --browser, --fast, --int-shard (CT-06zzzzzzza) and the full verify (one line
+  // for both service modes) …
   const verifyRuns = dockerRuns(text, 'docker run --rm --name "$VERIFY_NAME"');
-  expect(verifyRuns).toHaveLength(3);
+  expect(verifyRuns).toHaveLength(4);
   // … and the --red groups (red_container, with or without a database).
   const redRuns = dockerRuns(text, 'docker run --rm --name "$1"');
   expect(redRuns).toHaveLength(1);
@@ -1940,4 +1942,78 @@ it(
     expect(log.some((line) => line.includes('cannot read'))).toBe(false);
   },
   JUDGE_TIMEOUT,
+);
+
+// --- CT-06zzzzzzza (FU-VERIFY-FULL-SHARDED, D10-2443 ②): --int-shard -----------------------------
+// One segment of test:int as CI runs it; the segments and commands come from the trusted root's
+// .github/workflows/ci.yml (tools/ci/int-shards.ts), never from the worktree.
+
+it(
+  '[CT-06zzzzzzza] --int-shard --dry-run prints the segment and its trusted CI command, starts nothing',
+  () => {
+    const repo = committedFixture('int-shard-dry');
+    // The worktree's own ci.yml (one shard, another command) is not read.
+    writeFiles(repo, {
+      '.github/workflows/ci.yml':
+        'jobs:\n  verify-int-1:\n    steps:\n      - run: pnpm test:int --filter=@couli/spec-tests -- --shard=1/1\n      - run: pnpm test:int --filter=x\n',
+    });
+    fixtureGit(repo, ['add', '-A']);
+    fixtureGit(repo, ['commit', '-q', '-m', 'workflow']);
+    const head = fixtureGit(repo, ['rev-parse', 'HEAD']);
+    const tree = fixtureGit(repo, ['rev-parse', 'HEAD^{tree}']);
+    const trusted = readIntShards(
+      readFileSync(join(repoRoot(), '.github/workflows/ci.yml'), 'utf8'),
+    ).segments;
+    expect(trusted.length).toBeGreaterThan(1);
+    for (const seg of trusted) {
+      const res = run(['V1-09', '--worktree', repo, '--int-shard', seg.id, '--dry-run']);
+      expect(res.status, res.stderr).toBe(0);
+      expect(res.stdout.trimEnd().split('\n')).toHaveLength(1);
+      expect(planWithoutMemory(res.stdout)).toEqual({
+        script: 'int-shard',
+        commit: head,
+        tree,
+        int_shard: { segment: seg.id, command: seg.command },
+      });
+    }
+    expect(existsSync(join(runs, 'V1-09'))).toBe(false);
+  },
+  CLI_TIMEOUT * 2,
+);
+
+it(
+  '[CT-06zzzzzzza] --int-shard: no segment, a segment not in the trusted ci.yml, another mode or --base → exit 2',
+  () => {
+    const repo = committedFixture('int-shard-usage');
+    const dry = (...args: string[]) => run(['V1-10', '--worktree', repo, ...args, '--dry-run']);
+    for (const bad of [[], ['0'], ['bogus'], ['1/6'], ['-1']]) {
+      const res = dry('--int-shard', ...bad);
+      expect(res.status, bad.join(' ')).toBe(2);
+      expect(res.stderr, bad.join(' ')).toContain('--int-shard needs a segment');
+    }
+    const n = readIntShards(readFileSync(join(repoRoot(), '.github/workflows/ci.yml'), 'utf8')).n;
+    const beyond = dry('--int-shard', String(n + 1));
+    expect(beyond.status).toBe(2);
+    expect(beyond.stderr).toContain('is not a segment of');
+    for (const other of [
+      ['--fast'],
+      ['--red'],
+      ['--related'],
+      ['--browser'],
+      ['--tests', 'test'],
+      ['--base', 'main'],
+      ['--int-shard', 'rest'],
+    ]) {
+      for (const args of [
+        ['--int-shard', '1', ...other],
+        [...other, '--int-shard', '1'],
+      ]) {
+        const res = dry(...args);
+        expect(res.status, args.join(' ')).toBe(2);
+        expect(res.stderr, args.join(' ')).toContain('--int-shard runs alone');
+      }
+    }
+    expect(existsSync(join(runs, 'V1-10'))).toBe(false);
+  },
+  CLI_TIMEOUT * 2,
 );
