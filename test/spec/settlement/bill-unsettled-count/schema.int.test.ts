@@ -11,9 +11,13 @@ import {
   CHECKS,
   NEW_COLUMNS,
   billCounts,
+  billCountsMigration,
   legacyBill,
+  migrationStatements,
   newColumnsPresent,
+  settleBillAlterClauses,
   settleBillColumns,
+  settleBillDataWrites,
   type NewColumn,
 } from './kit.ts';
 
@@ -174,6 +178,36 @@ it(
       unsettled_count: null,
       amount_mismatch_count: null,
     });
+  },
+  TIMEOUT,
+);
+
+// 测试库由已迁移到最新的模板克隆（@couli/db/testing 的 createTestDatabase），用例只能以业务角色连接，
+// 不能停在本单迁移之前、也不能自己跑 DDL，所以「迁移前已有的账单升级后两列仍为 NULL」改为读本单迁移源码：
+// 不回填（没有对 app.settle_bills 的数据修改，DO 块里也没有）、新列不带 DEFAULT（ADD COLUMN … DEFAULT 0 会把
+// 已有行填成 0）、不设 NOT NULL / GENERATED，也不在之后 SET DEFAULT / SET NOT NULL。
+it(
+  '[AC-B2-18a#24] 本单迁移不回填历史账单：两新列各 ADD COLUMN 一次、可空、不带 DEFAULT / NOT NULL / GENERATED，之后也不 SET DEFAULT / SET NOT NULL；全文（含 DO 块）没有对 app.settle_bills 的 UPDATE / INSERT / MERGE / DELETE / TRUNCATE / COPY',
+  () => {
+    const { name, source } = billCountsMigration();
+    const statements = migrationStatements(source);
+    const clauses = settleBillAlterClauses(statements);
+    for (const column of NEW_COLUMNS) {
+      const head = `^ADD\\s+(?:COLUMN\\s+)?(?:IF\\s+NOT\\s+EXISTS\\s+)?${column}\\b`;
+      const added = clauses.filter((c) => new RegExp(head, 'i').test(c));
+      expect(added, `${name}: ADD COLUMN ${column}`).toHaveLength(1);
+      expect(added[0], `${name}: ${column} 不带默认值或非空`).not.toMatch(
+        /\bDEFAULT\b|\bNOT\s+NULL\b|\bGENERATED\b|\bIDENTITY\b/i,
+      );
+      const altered = clauses.filter((c) =>
+        new RegExp(
+          `^ALTER\\s+(?:COLUMN\\s+)?${column}\\b[\\s\\S]*\\b(?:SET\\s+DEFAULT|SET\\s+NOT\\s+NULL|ADD\\s+GENERATED)\\b`,
+          'i',
+        ).test(c),
+      );
+      expect(altered, `${name}: ${column} 之后不设默认值或非空`).toEqual([]);
+    }
+    expect(settleBillDataWrites(statements), `${name}: 不回填 app.settle_bills`).toEqual([]);
   },
   TIMEOUT,
 );

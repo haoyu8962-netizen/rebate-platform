@@ -16,7 +16,7 @@ import {
   TIMEOUT,
   type Fixture,
 } from '../bill/kit.ts';
-import { billCounts } from './kit.ts';
+import { billCounts, failAfterCountWrite } from './kit.ts';
 
 const database = databaseFixture(createTestDatabase);
 
@@ -138,6 +138,89 @@ it(
       unsettled_count: 1,
       amount_mismatch_count: null,
     });
+  },
+  TIMEOUT,
+);
+
+it(
+  '[AC-B2-18a#22] 计数与出账同一事务：写入应结未结数的那条 SQL 执行之后、提交之前故障 → 账单三个计数、合计、任务完成状态、批次、明细与差错单全部回到跑之前；原键重试后计数各累加一次、差错单与批次各一份',
+  async () => {
+    const h = fixture(database.db);
+    await snapshot(h);
+    // 京东先出账，账单行带非零计数：1 单应结未结、1 单 hold、1 单 VOID 对上联盟结算。
+    await order(h, {}, 'jd');
+    await order(h, { hold: true }, 'jd');
+    const jdVoided = await order(h, { rebateStatus: 'VOID' }, 'jd');
+    await settlement(h, jdVoided);
+    expect((await h.run('jd')).outcome).toBe('generated');
+    const jdOnly = {
+      error_count: 1,
+      held_count: 1,
+      unsettled_count: 1,
+      amount_mismatch_count: null,
+    };
+    expect(await billCounts(h.db, h.appId)).toEqual(jdOnly);
+    // 淘宝：1 单候选、1 单 VOID 对上联盟结算、1 单应结未结、1 单维权中。
+    const good = await order(h);
+    await settlement(h, good);
+    const voided = await order(h, { rebateStatus: 'VOID' });
+    await settlement(h, voided);
+    await order(h);
+    await order(h, { rightsPending: true });
+    const before = await state(h);
+    const input = { appId: h.appId, platform: 'taobao', runAt: new Date(RUN) };
+
+    const faulty = failAfterCountWrite(h.db);
+    await expect(h.job.run(faulty.db, input)).rejects.toThrow('injected count write failure');
+    expect(faulty.fired).toBe(1);
+
+    const failed = await state(h);
+    expect(await billCounts(h.db, h.appId)).toEqual(jdOnly);
+    expect(failed.bills).toEqual(before.bills);
+    expect(failed.batches).toEqual(before.batches);
+    expect(failed.items).toEqual(before.items);
+    expect(failed.diffs).toEqual(before.diffs);
+    expect(failed.validations).toEqual(before.validations);
+    expect(failed.jobs.filter((j) => j.platform === 'jd')).toEqual(
+      before.jobs.filter((j) => j.platform === 'jd'),
+    );
+    expect(failed.jobs.filter((j) => j.platform === 'taobao' && j.status === 'done')).toEqual([]);
+
+    expect((await createBillJob(h.deps).run(h.db, input)).outcome).toBe('generated');
+    expect(await billCounts(h.db, h.appId)).toEqual({
+      error_count: 2,
+      held_count: 2,
+      unsettled_count: 2,
+      amount_mismatch_count: null,
+    });
+    const recovered = await state(h);
+    expect(recovered.bills).toEqual([
+      expect.objectContaining({
+        platform_order_counts: { jd: 0, taobao: 1 },
+        platform_settle_commission_totals: { jd: '0', taobao: '1000' },
+        beneficiary_total_fen: 552n,
+        platform_retained_fen: 298n,
+      }),
+    ]);
+    expect(recovered.jobs.map((j) => [j.platform, j.status]).sort()).toEqual([
+      ['jd', 'done'],
+      ['taobao', 'done'],
+    ]);
+    expect(recovered.batches).toEqual([
+      expect.objectContaining({ platform: 'taobao', kind: 'main', order_count: 1 }),
+    ]);
+    expect(recovered.items).toEqual([expect.objectContaining({ order_id: good.id })]);
+    expect(recovered.diffs.map((d) => [d.type, d.ref_id]).sort()).toEqual(
+      [
+        ['union_mismatch', jdVoided.key],
+        ['union_mismatch', voided.key],
+      ].sort(),
+    );
+    expect(recovered.validations).toHaveLength(3 + 4);
+
+    // 再投一次同键：duplicate，什么都不再变。
+    expect((await createBillJob(h.deps).run(h.db, input)).outcome).toBe('duplicate');
+    expect(await state(h)).toEqual(recovered);
   },
   TIMEOUT,
 );

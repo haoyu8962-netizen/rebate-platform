@@ -3,6 +3,7 @@
 // 不生成差错单，订单保持 WAITING」。其余分类（金额不一致、状态不符、暂缓、候选）一律不变。
 import { createTestDatabase } from '@couli/db/testing';
 import { expect, it } from 'vitest';
+import { appendVersion } from '../../commission/snapshot-read/fixtures.ts';
 import {
   databaseFixture,
   fixture,
@@ -11,6 +12,7 @@ import {
   snapshot,
   state,
   validations,
+  BEFORE,
   NOW,
   MONTH,
   TIMEOUT,
@@ -305,6 +307,108 @@ it(
     for (const o of [olderMissing, futureMissing]) {
       expect(seen.some(([key]) => key === o.key)).toBe(false);
     }
+  },
+  TIMEOUT,
+);
+
+/** [AC-B2-18a#18] 的一种账单：造单，返回预期的逐单结果 [order_key, result]。 */
+interface ZeroCase {
+  readonly label: string;
+  readonly held: number;
+  readonly orderCount: number;
+  readonly batches: number;
+  readonly setup: (h: Fixture) => Promise<string[][]>;
+}
+
+const ZERO_CASES: readonly ZeroCase[] = [
+  {
+    label: '只有候选（一单 1000 分、一单零基数且联盟明确结算 0 分——0 分是有结算数据）',
+    held: 0,
+    orderCount: 2,
+    batches: 1,
+    setup: async (h) => {
+      const good = await order(h);
+      await settlement(h, good);
+      const zero = await order(h);
+      await appendVersion(h.db, zero, 2, 0n, 0n, [0n, 0n, 0n], 0n, new Date(BEFORE));
+      zero.fact.order.commissionVersion = 2;
+      await settlement(h, zero, { settle_commission_fen: 0n });
+      return [
+        [good.key, 'candidate'],
+        [zero.key, 'candidate'],
+      ];
+    },
+  },
+  {
+    label: '入账开关关着（credit.enabled.taobao=off），一单有结算数据',
+    held: 0,
+    orderCount: 0,
+    batches: 0,
+    setup: async (h) => {
+      h.values.set('credit.enabled.taobao', 'off');
+      const o = await order(h);
+      await settlement(h, o);
+      return [[o.key, 'candidate']];
+    },
+  },
+  {
+    label: '只有暂缓单（hold 有数据、维权中无数据）',
+    held: 2,
+    orderCount: 0,
+    batches: 0,
+    setup: async (h) => {
+      const held = await order(h, { hold: true });
+      await settlement(h, held);
+      const rights = await order(h, { rightsPending: true });
+      return [
+        [held.key, 'deferred'],
+        [rights.key, 'deferred'],
+      ];
+    },
+  },
+  {
+    label: '范围内一单都没有（只有早于账单月无数据、晚于账单月的单）',
+    held: 0,
+    orderCount: 0,
+    batches: 0,
+    setup: async (h) => {
+      await order(h, { settlePeriod: '2032-05' });
+      await order(h, { settlePeriod: '2032-07' });
+      return [];
+    },
+  },
+];
+
+it.each(ZERO_CASES)(
+  '[AC-B2-18a#18] 出过主批次而本平台没有应结未结：unsettled_count 落 0（不是 NULL）——$label；error_count、held_count 同时断言，amount_mismatch_count 仍 NULL',
+  async (c) => {
+    const h = fixture(database.db);
+    await snapshot(h);
+    const expected = await c.setup(h);
+
+    expect(await h.run()).toMatchObject({ outcome: 'generated', billId: MONTH });
+
+    expect(await billCounts(h.db, h.appId)).toEqual({
+      error_count: 0,
+      held_count: c.held,
+      unsettled_count: 0,
+      amount_mismatch_count: null,
+    });
+    const s = await state(h);
+    expect(s.bills).toEqual([
+      expect.objectContaining({
+        bill_id: MONTH,
+        platform_order_counts: { taobao: c.orderCount },
+        error_count: 0,
+        held_count: c.held,
+      }),
+    ]);
+    expect(s.batches).toHaveLength(c.batches);
+    expect(s.items).toHaveLength(c.orderCount);
+    expect(s.diffs).toEqual([]);
+    expect(h.registerDiff).not.toHaveBeenCalled();
+    const seen = (await validations(h)).map((v) => [v.orderKey, v.result]).sort();
+    expect(seen).toEqual([...expected].sort());
   },
   TIMEOUT,
 );
