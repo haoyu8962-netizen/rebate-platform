@@ -8,7 +8,7 @@
 // run degrades exactly like "no usable model answer": DegradedPath with reason `models_failed`
 // (done fallback, or whatever the path returns). After delivery the guard tail is flushed and the
 // run ends done stop. OrchestratorTrace.model_format_invalid records the deviation.
-import type { Platform } from '@couli/contracts-ts';
+import type { PageGuideRejectReason, Platform } from '@couli/contracts-ts';
 import type { Candidate } from '../../../parsing/index.ts';
 import type { AgentCaller, RunBodyInput } from '../../http/index.ts';
 import type { FilterHit, SentenceReviewPort } from '../../guard/index.ts';
@@ -221,6 +221,14 @@ export interface OrchestratorTrace extends ToolTraceFragment {
   /** B3-08t: the no-model path served the message without an intent (greetings only, no product
    * word: no search); the trace intent is unchanged, agent_runs.intent stays null. */
   readonly degraded_unserved?: true;
+  /** B3-08t: the scenario entry's intent (product → find_by_link, order → order_query), a
+   * deterministic fact that agent_runs.intent keeps over any later text handling. */
+  readonly entry_intent?: string;
+  /** B3-08t: `intent` is the model's own label, not checked by the IntentPort (a template run's
+   * final round): agent_runs.intent falls back to the first tool called. */
+  readonly intent_unchecked?: true;
+  /** B3-08t: why the no-model path's page guide was not sent (agent_runs.page_guide_reject_reason). */
+  readonly page_guide_reject_reason?: PageGuideRejectReason;
 }
 
 export interface RunTraceSink {

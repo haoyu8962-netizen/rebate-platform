@@ -33,6 +33,27 @@ it.each([
   expect(classifier.classify(text)).toEqual({ kind: 'order' });
 });
 
+it.each(['查一下我的订单', '帮我查查我的订单', '看看我的订单呢', '我的订单', '我那单', '我这单'])(
+  '[AC-B3-08t#1][BR-AI-01] 没有进度词时，整句是查本人订单或简短指代才判订单：%s',
+  (text) => {
+    expect(classifier.classify(text)).toEqual({ kind: 'order' });
+  },
+);
+
+it.each([
+  '订单返利规则是什么？别查我的订单',
+  '别查我的订单',
+  '不用查我的订单，返利规则是什么',
+  '不是查我的订单',
+  '我的订单返利规则是什么',
+  '我的订单是怎么来的',
+])(
+  '[AC-B3-08t#1][BR-AI-01] 否定或问规则时，提到「我的订单」不判订单（保留模型标签）：%s',
+  (text) => {
+    expect(classifier.classify(text)).toEqual({ kind: 'unknown' });
+  },
+);
+
 it.each([
   '提现最低多少',
   '返利一般什么时候结算',

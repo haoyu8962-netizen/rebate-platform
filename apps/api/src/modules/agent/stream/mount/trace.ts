@@ -113,8 +113,10 @@ export function recordIntentVerdict(appId: string, runId: string, value: IntentT
 function intentOf(run: AgentRunTrace, verdict: IntentVerdict | null) {
   const core = run.core;
   return storedIntentOf({
+    entry: core?.entry_intent ?? null,
     ...(verdict === null ? {} : { checked: verdict.intent }),
     traced: core?.intent ?? null,
+    unchecked: core?.intent_unchecked === true,
     unserved: core?.degraded_unserved === true,
     firstTool: core?.tool_calls[0]?.name ?? null,
   });
@@ -230,7 +232,8 @@ export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceReco
       latency_ms: elapsed(run.startedMs, nowMs()),
       filter_hits: filterHits(core),
       output_truncated: core?.output_truncated === true,
-      page_guide_reject_reason: verdict?.reason ?? null,
+      // The intent port's reason, else the no-model path's (BR-AI-19 细则「运行级字段」).
+      page_guide_reject_reason: verdict?.reason ?? core?.page_guide_reject_reason ?? null,
     };
   }
 
