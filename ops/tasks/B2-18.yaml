@@ -28,7 +28,13 @@ impl: claude
 tester: claude-independent
 modify_existing:
   - file: 'test/spec/settlement/bill/validation.int.test.ts'
-    test: '[AC-B2-04n#9] 金额一致性：$label'
+    test: '[AC-B2-04n#9] 金额一致性：正差超过容差一分'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。金额不一致不再生成差错单：超容差的两行 diffs 由 1 张改为 0 张；本用例夹具不注入重生成端口，按「重生成失败」处理——逐单结果仍为 amount_mismatch、不进批次；容差内各行不动'
+  - file: 'test/spec/settlement/bill/validation.int.test.ts'
+    test: '[AC-B2-04n#9] 金额一致性：负差超过容差一分'
     reason: rule_change
     br: [BR-FUND-04]
     ruling: D10-2425
@@ -47,7 +53,13 @@ modify_existing:
     ruling: D10-2425
     note: '负责人 2026-11-21 同意。月结判定不再读「以联盟为准」结论（D10-2415 ③）：unionAuthoritative 为 true 而金额不一致的那一单不再进批次（夹具不注入重生成端口，按重生成失败处理）；hold 与缺结算数据不被越过的断言不动'
   - file: 'test/spec/settlement/bill/batches.int.test.ts'
-    test: '[AC-B2-04n#18] credit.enabled=%s 不生成任何批次，仍保存逐单校验、差错与暂缓'
+    test: '[AC-B2-04n#18] credit.enabled=off 不生成任何批次，仍保存逐单校验、差错与暂缓'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。bad 单（结算 9000、基数 850）不再登记 settle_amount_mismatch：diffs 与 error_count 各再减 1（B2-18a 已先去掉应结未结那张）；逐单结果仍含 amount_mismatch、held_count 不动'
+  - file: 'test/spec/settlement/bill/batches.int.test.ts'
+    test: '[AC-B2-04n#18] credit.enabled=undefined 不生成任何批次，仍保存逐单校验、差错与暂缓'
     reason: rule_change
     br: [BR-FUND-04]
     ruling: D10-2425
