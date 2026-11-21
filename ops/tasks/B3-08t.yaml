@@ -103,3 +103,6 @@ red_exempt:
     reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
 status: todo
 pr: null
+red_exempt_outside:
+  - file: 'test/spec/db/agent-purge/privileges.int.test.ts'
+    reason: '块外只在顶层常量 UPDATABLE.agent_runs 末尾纯插入一项 input_passed（迁移 0153 的列级 UPDATE 授权；文件级 support 条目 D10-2398），it 块、断言与其余表的清单未动；块体未改的 21 条已登 red_exempt（D10-2429）'
