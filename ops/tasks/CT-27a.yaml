@@ -1,0 +1,30 @@
+id: CT-27a
+repo: rebate-platform
+title: 'CT-27a：运营位批 1 契约说明补齐——回落与客户端校验按正确范围写回（渲染前校验只限 BR-TEXT-30 适用范围；me 空页回落内置格子；search 无置顶块不出置顶位、商品池取空 = 分页结束且无可展示商品；未到开始时刻不提前展示）'
+type: contract
+# 2026-11-22 be 入账（编排 D10-2457 拆单）：CT-27 契约评审 r5 两条 S1 都出在 r4 照同类清单新加的说明里（couli-runs/CT-27/review-contract-r5-codex.json、sweep-r4.md）；CT-27 退回「已评过的范围」落地，那几句说明挪到本单按正确范围补回。
+# ① 客户端渲染前按路由 since / bridge_origins 校验、去掉条目只去该条、全没了整块隐藏——只限 BR-TEXT-30 适用范围（批 1 为 me、search 与新增类型）；首页原有卡片照旧由 Router 点击时处理版本门槛。② me：没有 more_services（未配置、空版本、全被滤掉）→ 客户端回落内置默认「更多服务」格子（BR-TEXT-28 回落）。③ search：没有置顶块 → 不出置顶位、不留空；商品池取空 = 分页结束（has_more=false）且没有任何可展示商品，首轮 items 为空但 has_more=true 要继续取。④ 未到开始时刻的不下发、客户端不提前缓存展示；与灰度、人群、min_app_version 并列（BR-TEXT-29）。只改说明文字，不动形状。
+# 不挡 B1-36 与三端 APP-20/21：这些句子 08 有原文，实现以 08 为准。排在 CT-27 合并后、B2-17 与 B2-08g 之后再占契约槽；按「同一类问题一次列全」评。
+refs: [BR-TEXT-28, BR-TEXT-29, BR-TEXT-30]
+refs_hash:
+  BR-TEXT-28: b63875b517fd
+  BR-TEXT-29: e67c8270e5e0
+  BR-TEXT-30: babc5180aaa0
+deps: [CT-27]
+paths:
+  - 'contracts/**'
+  - 'specs/client/home-sdui-vectors.json'
+  - 'specs/client/manifest.json'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/operation-slots-fallback/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/contracts/operation-slots-fallback/**'
+status: todo
