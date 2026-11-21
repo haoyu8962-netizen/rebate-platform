@@ -75,9 +75,9 @@ const UPDATABLE: Record<Table, string[]> = {
     'cancel_requested_at',
     'finalize_hold',
     'finalize_hold_at',
-    'input_passed',
   ],
 };
+UPDATABLE.agent_runs.push('input_passed');
 const PRIVATE: Partial<Record<Table, string[]>> = {
   agent_messages: ['text', 'report_reason'],
   agent_runs: ['user_text'],
