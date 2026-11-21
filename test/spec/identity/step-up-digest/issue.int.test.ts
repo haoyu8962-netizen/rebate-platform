@@ -75,85 +75,18 @@ it.each(REFUSED)(
 );
 
 it.each<[string, StepUpAction, Summary | undefined, string[]]>([
-  // 这组字段是参数校验对 StepUpRequest 四分支 oneOf 的合并报告，不是设计口径，见 FU-20001-ONEOF-FIELDS-NOISE（D10-2193）。
-  [
-    'withdraw 带支付宝形状',
-    'withdraw',
-    ALIPAY_SHAPE,
-    ['action', 'attempt_id', 'authorization_code', 'body', 'code', 'identity_token', 'provider'],
-  ],
-  [
-    'withdraw 带银行卡形状',
-    'withdraw',
-    BANK_SHAPE,
-    ['action', 'attempt_id', 'authorization_code', 'body', 'code', 'identity_token', 'provider'],
-  ],
-  [
-    'withdraw 带微信形状',
-    'withdraw',
-    WECHAT_SHAPE,
-    ['action', 'attempt_id', 'authorization_code', 'body', 'code', 'identity_token', 'provider'],
-  ],
+  // 口径甲（FU-20001 / D10-2317 ③）只报实际要走的分支。
+  ['withdraw 带支付宝形状', 'withdraw', ALIPAY_SHAPE, ['action', 'body']],
+  ['withdraw 带银行卡形状', 'withdraw', BANK_SHAPE, ['action', 'body']],
+  ['withdraw 带微信形状', 'withdraw', WECHAT_SHAPE, ['action', 'body']],
   [
     'payout_account_change 带提现形状',
     'payout_account_change',
     WITHDRAW_SHAPE,
-    [
-      'attempt_id',
-      'authorization_code',
-      'body',
-      'code',
-      'identity_token',
-      'provider',
-      'summary',
-      'summary.alipay_logon_id',
-      'summary.amount_fen',
-      'summary.attempt_id',
-      'summary.card_no',
-      'summary.payout_account_id',
-      'summary.payout_method',
-    ],
+    ['body', 'summary'],
   ],
-  [
-    'phone_change 带提现形状',
-    'phone_change',
-    WITHDRAW_SHAPE,
-    [
-      'attempt_id',
-      'authorization_code',
-      'body',
-      'code',
-      'identity_token',
-      'provider',
-      'summary',
-      'summary.alipay_logon_id',
-      'summary.amount_fen',
-      'summary.attempt_id',
-      'summary.card_no',
-      'summary.payout_account_id',
-      'summary.payout_method',
-    ],
-  ],
-  [
-    'account_deletion 带提现形状',
-    'account_deletion',
-    WITHDRAW_SHAPE,
-    [
-      'attempt_id',
-      'authorization_code',
-      'body',
-      'code',
-      'identity_token',
-      'provider',
-      'summary',
-      'summary.alipay_logon_id',
-      'summary.amount_fen',
-      'summary.attempt_id',
-      'summary.card_no',
-      'summary.payout_account_id',
-      'summary.payout_method',
-    ],
-  ],
+  ['phone_change 带提现形状', 'phone_change', WITHDRAW_SHAPE, ['body', 'summary']],
+  ['account_deletion 带提现形状', 'account_deletion', WITHDRAW_SHAPE, ['body', 'summary']],
 ])(
   '[AC-B1-02zzzb#1] %s → 20001 data.fields 为参数校验的 oneOf 合并报告（见 FU-20001-ONEOF-FIELDS-NOISE），不签发 token',
   async (_name, action, summary, fields) => {
@@ -260,38 +193,9 @@ it(
       expect(digestsOf(token)).toEqual([]);
     }
     const withdrawRefused: [Summary | undefined, string[]][] = [
-      // 这组字段是参数校验对 StepUpRequest 四分支 oneOf 的合并报告，不是设计口径，见 FU-20001-ONEOF-FIELDS-NOISE（D10-2193）。
-      [
-        undefined,
-        [
-          'action',
-          'attempt_id',
-          'authorization_code',
-          'body',
-          'code',
-          'identity_token',
-          'provider',
-        ],
-      ],
-      [
-        WITHDRAW_SHAPE,
-        [
-          'action',
-          'attempt_id',
-          'authorization_code',
-          'body',
-          'code',
-          'identity_token',
-          'provider',
-          'summary',
-          'summary.alipay_logon_id',
-          'summary.amount_fen',
-          'summary.attempt_id',
-          'summary.card_no',
-          'summary.payout_account_id',
-          'summary.payout_method',
-        ],
-      ],
+      // 口径甲（FU-20001 / D10-2317 ③）只报实际要走的分支。
+      [undefined, ['action', 'body']],
+      [WITHDRAW_SHAPE, ['action', 'body']],
     ];
     for (const [summary, fields] of withdrawRefused) {
       const response = await m.stepUp('withdraw', summary);
