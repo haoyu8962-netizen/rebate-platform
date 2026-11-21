@@ -135,13 +135,20 @@ it.each([
     try {
       const frames = await x.ask(await openSession(x.r, x.caller), question);
       expect(x.complete).not.toHaveBeenCalled();
-      expect(await storedRun(pg.db, x.appId, runIdOf(frames))).toMatchObject({
+      const read = () => storedRun(pg.db, x.appId, runIdOf(frames));
+      expect(await read()).toMatchObject({
         intent: expected,
         input_passed: true,
         model: null,
         model_snapshot: null,
         prompt_version: 'none',
         final_event: expect.any(Object),
+      });
+      await x.r.runtime.close();
+      expect(await read()).toMatchObject({
+        model: null,
+        model_snapshot: null,
+        prompt_version: 'none',
       });
     } finally {
       await x.r.runtime.close();
@@ -187,13 +194,20 @@ it.each(entryCases)(
       const frames = await x.ask(session, question, context);
       expect(cardTypesOf(frames)).toContain(card);
       expect(x.complete).not.toHaveBeenCalled();
-      expect(await storedRun(pg.db, x.appId, runIdOf(frames))).toMatchObject({
+      const read = () => storedRun(pg.db, x.appId, runIdOf(frames));
+      expect(await read()).toMatchObject({
         intent: expected,
         input_passed: true,
         model: null,
         model_snapshot: null,
         prompt_version: 'none',
         final_event: expect.any(Object),
+      });
+      await x.r.runtime.close();
+      expect(await read()).toMatchObject({
+        model: null,
+        model_snapshot: null,
+        prompt_version: 'none',
       });
     } finally {
       await x.r.runtime.close();
