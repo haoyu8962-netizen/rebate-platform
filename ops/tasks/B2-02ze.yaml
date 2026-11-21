@@ -1,0 +1,29 @@
+id: B2-02ze
+repo: rebate-platform
+title: 'B2-02ze：共用组件安全加固——审计自由文本个人信息脱敏（FU-AUDIT-REASON-FREE-TEXT-PII，S0）与二次验证令牌在提交结果未知时不释放（FU-STEPUP-COMMIT-UNKNOWN-RETAIN，S1）'
+type: impl
+# 2026-11-21 be 入账（编排 D10-2227 登 FU、进公开发布前门槛；D10-2312 提到 be 队列最前）。来源：B2-02x Codex money r1（couli-runs/B2-02x/review-money-r1-codex.json）S0 / S1，机理在共用件，九个左右已合并的后台资金入口同一行为。
+# ① 审计脱敏（admin/infra/audit-redaction.ts redactSnapshot，经 audit-writer.ts 与 system-audit.ts 写 audit_logs）：现只按键名片段（phone / idcard / cardno …）与大陆手机号正则脱敏，自由文本字段（reason、note 等）里的邮箱、银行卡号 / 收款账号、身份证号原样落库，违反 BR-ID-33「日志中不得出现明文」。
+#   改为：对自由文本字段的字符串值做值级模式脱敏——邮箱、身份证号（18 位含末位 X、15 位）、银行卡号 / 收款账号（13–19 位数字，可含空格或连字符）、手机号（现有规则）；格式照 BR-ID-33 默认（证件首 1 末 1、手机 3 + 4、卡号与邮箱只留末段，形状由实现定、写进头注释）。结构化金额字段（*_fen、整数分字符串）与 id 不得被当作卡号或手机号打码。
+#   在各入口各钉一条：把含邮箱 / 卡号 / 证件号的原因或备注提交到下列已合并入口，audit_logs 里查不到明文——关差错单（recon-diff-close，reason）、差错核销（recon-diff-write-off，note）、退款（payment pay-refunds，note）、提现审核（payout withdrawal-review，note）、调账驳回（ledger admin-adjustment-closing，reason）、余额重算（recon-diff-balance-recalc，reason）；以及系统审计 appendAction 的自由文本。
+# ② 二次验证令牌（admin/application/permission-guard.ts createAdminStepUpGate.run :275–283）：现在业务处理器只要抛错就释放令牌占用（RELEASE_SCRIPT），提交已生效而响应丢失（如连接在 COMMIT 确认前断开）时，原令牌可被重用、同一操作再执行一次。
+#   改为：区分「已确认回滚」与「提交结果未知」。处理器正常返回非成功（业务拒绝）或抛出的错误发生在事务回滚已确认之后（事务回调内抛错、ROLLBACK 成功）→ 照旧释放（冻结用例 test/spec/admin/exports/create.int.test.ts [AC-B1-34f#4]「抛错回滚后令牌仍可重用」不变）；提交结果未知——COMMIT 本身失败或连接在其确认前断开（PG SQLSTATE 08 类、57P01–57P03、驱动报连接中断等）、或业务以约定的「结果未知」错误类型抛出——不释放，保留占用到过期（令牌作废，重试须重新二次验证）。
+#   判定方式由实现定（错误分类器或事务包装上打标记），写进头注释；规则测试以可注入的方式造「COMMIT 时连接中断」。逐入口说明：带幂等键的入口（调账、核销、关单、退款、提现审核等）重试同幂等键本由业务去重兜底，令牌保留多一层；余额重算无 Idempotency-Key，靠此项防重复（BR-ID-34 二次验证一次性）。
+# 不在本单：13 位以上金额字符串被当手机号打码（FU-AUDIT-AMOUNT-AS-PHONE，S2）另做；本单只保证新增的卡号 / 证件模式不误伤结构化金额。
+refs: [BR-ID-33, BR-ID-34]
+refs_hash:
+  BR-ID-33: 01b25f773b29
+  BR-ID-34: 6f4bb7f212cb
+deps: []
+paths:
+  - 'apps/api/src/modules/admin/**'
+test_paths:
+  - 'test/spec/admin/audit-free-text-pii/**'
+  - 'test/spec/admin/step-up-commit-unknown/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/admin/audit-free-text-pii/**'
+  - 'test/spec/admin/step-up-commit-unknown/**'
+status: todo
