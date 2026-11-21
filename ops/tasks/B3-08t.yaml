@@ -3,6 +3,7 @@ repo: rebate-platform
 title: Agent 运行级字段落库（规划 11-12 A2，原 B3-08t）：终态事务同步写 intent（服务端核对后的意图，映射 agent_intent）与新列 input_passed、未用模型的轮次清空 model / model_snapshot；token、耗时、出站过滤命中、页面引导拒绝原因随留痕异步写
 type: impl
 # 2026-11-21 agent 线入账（编排 D10-2327 ①；盘点 couli-runs/AGENT-lane/restart-inventory-1121.md；规划 docs/changes/20261112-Agent模型路径与缺口补全.md §2.1、§2.10、§3.1 A2；D10-985 / D10-1022 ① 原定的写者）。
+# 2026-11-22 补丁 2（D10-2429）：写测追加（approvals 133）后正式先红 red/5 把 privileges.int.test.ts 整份判定，块体未改的 21 条登 red_exempt。
 # 现状（主干 509498c0a）：agent_runs.intent、page_guide_reject_reason、model 系列与 token / 耗时列都没有写者——stream/pg/finalize.ts 终态 UPDATE 只写 settle_result / final_event / ended_at / finish_reason；stream/mount/assembly.ts 意图端口 trace.record 是空函数（TODO）；stream/mount/trace.ts 只落 tool_calls。B3-08w 的 previousIntent 读 intent，生产因此恒为 null。input_passed 列不存在。
 # 做法：① 新迁移给 agent_runs 加 input_passed boolean NOT NULL DEFAULT false 与 couli_app 的列级 UPDATE 授权（迁移号落地时在冻结窗口里取主干下一个，D10-2327 ②），db:snapshot 刷 schema.sql 与 packages/db 类型；② 终态事务（finalize，live / admit / recovery 共用）同步写 intent 与 input_passed：取值与留空的情形照 BR-AI-19 细则「运行级字段」逐条（工具推意图、链接 / 情境入口、无模型分流 ①–⑥、out_of_scope、留空的轮次），input_passed 只在输入审核通过时为 true（BR-AI-05 细则「上下文块」⑤：被拦、拒答、审核出结果前结束或崩溃的轮次为 false）；recovery 收尾拿不到本进程意图时留空；③ 结果完全没用到模型输出的轮次在同一事务里把受理时预写的 model / model_snapshot 清空；prompt_version 不动；④ 其余字段（实际用到的 model / 快照、input / output tokens、ttft_ms、latency_ms、output_filtered、filter_hits、output_truncated、page_guide_reject_reason）经现有 RunTraceSink → trace 写者异步写，失败走现有重试队列（B3-08y），不阻塞 SSE；删 assembly.ts 的 TODO。
 # 不在本单：cost_mfen 的计算与写入（BR-AI-16 成本记账，归 B4）；上下文块读 input_passed（归 B1）；后台留痕读口与契约不动（admin-traces 已读这些列）。test/spec/agent/previous-intent/kit.ts 直接写 intent 的替身不改。
@@ -36,5 +37,69 @@ modify_existing:
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/run-fields/**'
+red_exempt:
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#3][AC-B3-09f#7][BR-AI-22] agent_messages grants exactly the intended UPDATE columns and keeps INSERT'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#6][BR-AI-22] agent_messages keeps its row and denies couli_app DELETE and TRUNCATE'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#7][BR-AI-22] agent_messages readonly visibility and all non-app write restrictions remain unchanged'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#3][AC-B3-09f#7][BR-AI-22] agent_tool_calls grants exactly the intended UPDATE columns and keeps INSERT'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#6][BR-AI-22] agent_tool_calls keeps its row and denies couli_app DELETE and TRUNCATE'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#7][BR-AI-22] agent_tool_calls readonly visibility and all non-app write restrictions remain unchanged'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#3][AC-B3-09f#7][BR-AI-22] agent_cards grants exactly the intended UPDATE columns and keeps INSERT'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#6][BR-AI-22] agent_cards keeps its row and denies couli_app DELETE and TRUNCATE'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#7][BR-AI-22] agent_cards readonly visibility and all non-app write restrictions remain unchanged'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#6][BR-AI-22] agent_runs keeps its row and denies couli_app DELETE and TRUNCATE'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#7][BR-AI-22] agent_runs readonly visibility and all non-app write restrictions remain unchanged'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#3][AC-B3-09f#7][BR-AI-22] agent_result_sets grants exactly the intended UPDATE columns and keeps INSERT'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#6][BR-AI-22] agent_result_sets keeps its row and denies couli_app DELETE and TRUNCATE'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#7][BR-AI-22] agent_result_sets readonly visibility and all non-app write restrictions remain unchanged'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#3][AC-B3-09f#7][BR-AI-22] agent_result_deliveries grants exactly the intended UPDATE columns and keeps INSERT'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#6][BR-AI-22] agent_result_deliveries keeps its row and denies couli_app DELETE and TRUNCATE'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#7][BR-AI-22] agent_result_deliveries readonly visibility and all non-app write restrictions remain unchanged'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#3][AC-B3-09f#7][BR-AI-22] agent_result_chains grants exactly the intended UPDATE columns and keeps INSERT'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#6][BR-AI-22] agent_result_chains keeps its row and denies couli_app DELETE and TRUNCATE'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#7][BR-AI-22] agent_result_chains readonly visibility and all non-app write restrictions remain unchanged'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
+  - file: test/spec/db/agent-purge/privileges.int.test.ts
+    test: '[AC-B3-09f#7][BR-AI-22] agent_messages remains without a user trigger'
+    reason: 'B3-09f 冻结原有用例，块体未改；同文件有登记的块外改动（UPDATABLE.agent_runs 追加 input_passed，modify_existing scope: support，D10-2398），被整份判定，未改的用例在骨架上本来就绿（D10-2429，先例 F1-08ap 补丁 2）'
 status: todo
 pr: null
