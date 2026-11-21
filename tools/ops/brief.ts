@@ -8,13 +8,14 @@
 // Phases (default split of 2026-10-05, ops/approvals.yaml id 19):
 //   test    Codex writes the rule / acceptance tests and NotImplemented skeletons, red first;
 //           it may add rule-test assets (class 1 of the protected paths), never change them
-//   impl    (default) the Opus implementation subagent; the rule tests are frozen; tests run
-//           only through the trusted container entry tools/ops/verify-container.sh <id> --fast
+//   impl    (default) the Opus implementation subagent; the rule tests are frozen; type
+//           checks, lint and tests run on the test machine, by the orchestrator (D10-2406)
 //   handover  Codex implements once (规划/11 §2.5): rule tests frozen as in impl
 //   review  the brief as data for a reviewer: read-only
-// The Codex sandbox only does static checks that execute no test (typecheck, lint); every run
-// that executes tests is the orchestrator's, in the isolated container or in CI. Nothing Codex
-// generates (tests, skeletons, a handover implementation) runs on the host.
+// Locally every phase runs only prettier --check and eslint on the changed files (D10-2404 /
+// D10-2406): no tsc, no full typecheck or lint, no test. Type checks, lint and every run that
+// executes tests are the orchestrator's, on the test machine (verify-container.sh) or in CI.
+// Nothing Codex generates (tests, skeletons, a handover implementation) runs on the host.
 //
 // Exit codes: 0 written, 1 refused (over the size limit, banned term, bad task), 2 usage/internal.
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
@@ -59,12 +60,20 @@ export type ProtectedPaths = {
   class3_gates: string[];
 };
 
+// The only commands a brief lets the agent run locally, on the changed files (D10-2404 / 2406).
+const LOCAL_CHECKS = [
+  'pnpm exec prettier --check <改动文件>',
+  'pnpm exec eslint <改动的 .ts / .tsx 文件>',
+] as const;
+const LOCAL_ONLY_NOTE =
+  '本机只许对改动文件跑 `pnpm exec prettier --check <改动文件>` 与 `pnpm exec eslint <改动的 .ts / .tsx 文件>`；不跑 tsc、`pnpm typecheck`、`pnpm lint`（全量）、`vitest`、`pnpm test`、`pnpm verify:fast`；类型检查、lint 与测试由编排者在测试机上跑（`tools/ops/verify-container.sh <编号> --fast`，及 `--tests` / `--related` 轻量档）。';
+
 export const BRIEF_PHASES = ['test', 'impl', 'handover', 'review'] as const;
 export type BriefPhase = (typeof BRIEF_PHASES)[number];
 
 const PHASE_TEXT: Record<BriefPhase, string> = {
   test: '写规则 / 验收测试（Codex）：只写先红的规则测试和只抛 `NotImplemented` 的函数骨架，不写实现',
-  impl: '实现：规则测试已冻结，不改不删；测试只经可信容器入口跑',
+  impl: '实现：规则测试已冻结，不改不删；类型检查、lint 与测试由编排者在测试机上跑',
   handover: '换家实现（Codex，一次）：规则测试已冻结，不改不删；沙箱里只做静态检查',
   review: '评审对照（只读）：本任务书是评审的数据，不改任何文件',
 };
@@ -477,19 +486,20 @@ export function renderBrief(input: BriefInput): string {
   );
   const codexSandbox = phase === 'test' || phase === 'handover' || codexFirstImpl;
   if (codexSandbox) {
-    // The Codex sandbox runs no test (RO2-01/04): static checks only.
-    out.push('```', 'pnpm typecheck', 'pnpm lint', '```', '');
+    // The Codex sandbox runs no test (RO2-01/04); locally only the changed files are checked,
+    // never the whole workspace (D10-2406).
+    out.push('```', ...LOCAL_CHECKS, '```', '');
   } else {
     out.push('```', 'pnpm verify:fast', ...commands, '```', '');
   }
   const tests = testIds.length === 0 ? '无' : testIds.map((t) => `\`${t}\``).join('、');
   const sandboxNote =
-    'Codex 沙箱里只做不执行测试的静态检查（上面两条）；任何运行测试的命令（含 `pnpm verify:fast`、`pnpm test`）都由编排者在隔离容器或 CI 里跑，你写的东西不在宿主上运行。沙箱里没有网络，连不上数据库和 Docker，也不能监听端口；需要沙箱外的命令写进 `outside_needed`。';
+    'Codex 沙箱里只做不执行测试的静态检查（上面两条，只对改动文件）；任何运行测试的命令（含 `pnpm verify:fast`、`pnpm test`）都由编排者在隔离容器或 CI 里跑，你写的东西不在宿主上运行。沙箱里没有网络，连不上数据库和 Docker，也不能监听端口；需要沙箱外的命令写进 `outside_needed`。';
   const claudeTesterNote =
-    '你是 Claude 子代理，在任务 worktree 里工作：只做不执行测试的静态检查（上面两条）；不要在宿主上运行测试（含 `pnpm verify:fast`、`pnpm test`、`vitest`），先红由编排者在隔离容器里跑。不联网、不连库、不起容器、不监听端口；需要沙箱外的命令写进结果的 `outside_needed`。';
+    '你是 Claude 子代理，在任务 worktree 里工作：只做不执行测试的静态检查（上面两条，只对改动文件）；不要在宿主上运行测试（含 `pnpm verify:fast`、`pnpm test`、`vitest`），先红由编排者在隔离容器里跑。不联网、不连库、不起容器、不监听端口；需要沙箱外的命令写进结果的 `outside_needed`。';
   if (phase === 'test') {
     out.push(
-      `本轮要的是「先红」：类型检查与 lint 通过；新写的规则测试在骨架上全部为红，红的原因只能是断言失败、fast-check 反例或骨架抛出的 \`NotImplemented\`，找不到模块、\`TypeError\`、语法错误的红不算（编排者用 \`tools/ops/verify-container.sh ${task.id} --red\` 在隔离容器里只跑本任务新写的规则测试，\`tools/guard/red-check.ts\` 逐个文件对账；没跑到的文件也算不合格）。规则测试放在：${tests}。${task.tester === 'claude' ? claudeTesterNote : sandboxNote}`,
+      `本轮要的是「先红」：改动文件的 prettier 与 eslint 通过；新写的规则测试在骨架上全部为红，红的原因只能是断言失败、fast-check 反例或骨架抛出的 \`NotImplemented\`，找不到模块、\`TypeError\`、语法错误的红不算（编排者用 \`tools/ops/verify-container.sh ${task.id} --red\` 在隔离容器里只跑本任务新写的规则测试，\`tools/guard/red-check.ts\` 逐个文件对账；没跑到的文件也算不合格）。规则测试放在：${tests}。${task.tester === 'claude' ? claudeTesterNote : sandboxNote}`,
       '',
     );
   } else if (phase === 'handover' || codexFirstImpl) {
@@ -504,10 +514,14 @@ export function renderBrief(input: BriefInput): string {
     );
   } else {
     out.push(
-      `必须变绿的规则测试：${tests}。完整验证由编排者在沙箱外跑。测试只经可信容器入口跑：\`<couli-runs>/trusted/rebate-platform/tools/ops/verify-container.sh ${task.id} --fast\`（断网容器里的 \`pnpm verify:fast\`；Docker 不可用就停下报告，不在宿主跑测试）。不连库、不监听端口，不跑集成测试、迁移和类型生成，需要时写进 \`outside_needed\`。`,
+      `必须变绿的规则测试：${tests}。上面的验收命令由编排者在测试机上跑，完整验证由编排者在沙箱外跑。不连库、不监听端口，不跑集成测试、迁移和类型生成，需要时写进 \`outside_needed\`。`,
       '',
     );
   }
+
+  // Every phase that writes code, but the legacy Codex flow: no heavy command on this machine
+  // (D10-2404 / 2406). Review briefs are read-only data and carry no local-command rule.
+  if (!oldCodexImpl && phase !== 'review') out.push(LOCAL_ONLY_NOTE, '');
 
   out.push('## 7. 上一轮失败输出（第 2 次起才有）', '');
   if (input.attempt >= 2) {
@@ -527,10 +541,10 @@ export function renderBrief(input: BriefInput): string {
   out.push('| `commands` | 跑过的命令与退出码 |');
   out.push(
     phase === 'test'
-      ? '| `tests_passed` | 类型检查与 lint 通过时填 true（测试由编排者在容器里跑，先红由它核对） |'
-      : phase === 'handover' || codexFirstImpl
-        ? '| `tests_passed` | 类型检查与 lint 通过时填 true（测试由编排者在容器里跑） |'
-        : '| `tests_passed` | 验收命令是否通过 |',
+      ? '| `tests_passed` | 改动文件的 prettier 与 eslint 通过时填 true（类型检查与测试由编排者在测试机上跑，先红由它核对） |'
+      : oldCodexImpl || phase === 'review'
+        ? '| `tests_passed` | 验收命令是否通过 |'
+        : '| `tests_passed` | 改动文件的 prettier 与 eslint 通过时填 true（类型检查与测试由编排者在测试机上跑） |',
   );
   out.push('| `deps_needed` | 需要新装的依赖：名称、版本、理由；没有填空数组 |');
   out.push(
@@ -538,13 +552,13 @@ export function renderBrief(input: BriefInput): string {
   );
   out.push('| `blocked_reason` | 没做完或发现规格冲突时写原因；没有填空串 |');
   out.push('| `notes` | 需要评审方注意的地方，三句以内 |', '');
-  // RO-04: the implementer runs its tests through the trusted container entry, so the impl
-  // tail does not forbid that one Docker use; Codex writing tests (sandbox) and reviewers do.
+  // RO-04 / D10-2406: no phase runs tests, tsc or a full lint on this machine; the orchestrator
+  // runs them on the test machine. No tail offers a Docker or container entry of its own.
   const tail: Record<BriefPhase, string> = {
-    test: 'Do not commit. Do not install dependencies. Do not modify any file under `ops/` or `docs/`. 只写规则 / 验收测试与 `NotImplemented` 骨架，不写实现。只做静态检查，不运行测试；不要运行需要网络、Docker、数据库或监听端口的命令。',
+    test: 'Do not commit. Do not install dependencies. Do not modify any file under `ops/` or `docs/`. 只写规则 / 验收测试与 `NotImplemented` 骨架，不写实现。只做静态检查，不运行测试，不跑 tsc / pnpm typecheck / pnpm lint 全量；不要运行需要网络、Docker、数据库或监听端口的命令。',
     handover:
-      'Do not commit. Do not install dependencies. Do not modify any file under `ops/` or `docs/`. 规则测试已冻结，不改不删。只做静态检查，不运行测试；不要运行需要网络、Docker、数据库或监听端口的命令。',
-    impl: 'Do not commit. Do not install dependencies. Do not modify any file under `ops/` or `docs/`. 规则测试已冻结，不改不删；它们是 Codex 写的，只在容器里运行，不在宿主上跑。除可信容器入口 `tools/ops/verify-container.sh <编号> --fast` 外，不要运行需要网络、Docker、数据库或监听端口的命令。',
+      'Do not commit. Do not install dependencies. Do not modify any file under `ops/` or `docs/`. 规则测试已冻结，不改不删。只做静态检查，不运行测试，不跑 tsc / pnpm typecheck / pnpm lint 全量；不要运行需要网络、Docker、数据库或监听端口的命令。',
+    impl: 'Do not commit. Do not install dependencies. Do not modify any file under `ops/` or `docs/`. 规则测试已冻结，不改不删；它们是 Codex 写的，只在容器里运行，不在宿主上跑。不在本机跑 tsc / pnpm typecheck / pnpm lint / vitest / verify:fast；不要运行需要网络、Docker、数据库或监听端口的命令。',
     review:
       '评审只读：不改任何文件，不提交，不安装依赖。不要运行需要网络、Docker、数据库或监听端口的命令。',
   };
