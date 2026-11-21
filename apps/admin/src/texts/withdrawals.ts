@@ -18,7 +18,7 @@ export const withdrawalsTexts = {
   forbiddenDescription:
     '当前账号没有提现查看权限点（withdraw.review 或 fund.view），请联系超管勾选。',
   readOnlyNotice:
-    '勾选待审核的单可【批量通过】，勾选待执行的单可【批量手动打款】或【批量自动打款】（【一键组批】选中本页可执行的待执行单）；导出与自动到账设置尚未接入，接口定稿后开放；单张审核通过 / 驳回在提现单详情办理。',
+    '勾选待审核的单可【批量通过】，勾选待执行的单可【批量手动打款】或【批量自动打款】（【一键组批】选中本页可执行的待执行单）；导出尚未接入，接口定稿后开放；单张审核通过 / 驳回在提现单详情办理。',
   statusTabs: {
     all: '全部',
     pendingReview: '待审',
@@ -426,7 +426,12 @@ export const withdrawalsTexts = {
   } as Readonly<Record<string, string>>,
   channelStates: { wait_user_confirm: '等用户确认收款' } as Readonly<Record<string, string>>,
   /** 页签（F1-08ba：持 fund.view 或 payout.execute 时出现后两个）。 */
-  pageTabs: { review: '审核列表', queue: '打款队列', unknown: '结果待确认' },
+  pageTabs: {
+    review: '审核列表',
+    queue: '打款队列',
+    unknown: '结果待确认',
+    auto: '自动到账设置',
+  },
   /** 「打款队列」「结果待确认」与打款记录抽屉（规格 admin-payouts.md，只读）。 */
   payouts: {
     readOnlyNotice:
@@ -740,6 +745,114 @@ export const withdrawalsTexts = {
     invalid: '提交内容有误，请检查后重试',
     network: '网络错误，请检查网络后重试；未确认前不会重复提交',
     failed: '提交失败，请稍后重试',
+  },
+  /**
+   * 「自动到账设置」页签（F1-08ap，BR-WDR-30 细则「后台配置页」；规格 admin-withdrawals.md）。分组按
+   * 花卷云 ①–⑧ 与「本系统附加」；风险标签名只从后台字典读（与列表筛选同一张映射），这里不写。
+   */
+  autoPayout: {
+    loading: '正在读取自动到账设置…',
+    loadFailedTitle: '自动到账设置读取失败',
+    loadFailedDescription: '网络错误或服务异常，点【重试】重新读取。',
+    forbiddenTitle: '无权限查看自动到账设置',
+    forbiddenDescription: '当前账号没有 config.business 权限点，请联系超管勾选。',
+    retry: '重试',
+    mainGroup: '自动到账设置',
+    extraGroup: '本系统附加（花卷云无此项）',
+    extraNote: '以下条件花卷云无此项，属本系统已有的风控与资金控制。',
+    labels: {
+      master: '自动到账总开关',
+      maxAmount: '金额上限（元）',
+      windowLimit: '时段限制',
+      windowStart: '开始时间',
+      windowEnd: '结束时间',
+      firstLimit: '首提限制',
+      frozen: '冻结金额',
+      sameDay: '当日提现',
+      payeeDaily: '同一收款账号每日最多自动到账（次）',
+      payeeMonthly: '同一收款账号每月最多自动到账（次）',
+      userDaily: '同一会员每日最多自动到账（次）',
+      userMonthly: '同一会员每月最多自动到账（次）',
+      warnRate: '60 天内佣金比例（%）',
+      warnOrders: '60 天内高佣订单占比（%）',
+      warnInvalid: '60 天失效（含维权失效）订单占比（%）',
+      warnReceived: '30 天内提现金额占 60 天确认收货佣金比例（%）',
+      platformDaily: '全平台当日自动到账上限（元）',
+      riskFlags: '阻断类风险标签',
+    },
+    steps: {
+      master: '① 自动到账',
+      amount: '② 金额限制',
+      window: '③ 开启时段与时段限制',
+      first: '④ 首提限制',
+      frozen: '⑤ 冻结金额',
+      sameDay: '⑥ 当日提现',
+      counts: '⑦ 次数限制',
+      warn: '⑧ 订单佣金预警',
+      platform: '⑨ 全平台当日合计',
+      flags: '⑫ 阻断类风险标签',
+    },
+    masterOn: '已开启',
+    masterOff: '已关闭',
+    masterForbidden: '无权限查看（需要 switch.* 权限点）',
+    masterLoading: '读取中…',
+    masterFailed: '读取失败',
+    masterNote: '总开关在本页只读；开启与关闭只在紧急开关页办理（需 switch.all）。',
+    switchEntry: '去紧急开关页',
+    noAuto: '不自动到账',
+    noAutoNote: '花卷云只有这一个选项，本页只读。',
+    on: '开启',
+    off: '关闭',
+    unset: '未设置，按系统默认执行',
+    unsetWith: (hint: string): string => `未设置，按系统默认执行。${hint}`,
+    selectPlaceholder: '未设置',
+    hints: {
+      maxAmount:
+        '0–10000 元，最多两位小数；0 表示任何金额都不自动到账。不超过单笔提现上限（服务端校验）。',
+      windowLimit: '关闭时不限时段（开启时段不生效）；开启时只有时段内提交的单可自动到账。',
+      firstLimit: '开启时该会员须已有打款成功的提现单。',
+      count: '非负整数，0 表示不限。',
+      warn: '0–100，最多两位小数；任一项命中即转人工。',
+      platformDaily: '最多两位小数；0 表示任何金额都不自动到账。不超过打款单日上限（服务端校验）。',
+      riskFlags: '命中所选任一标签的提现单转人工审核；「命中黑名单」固定检查，不可取消。',
+    },
+    checksTitle: '开启前置检查',
+    checksIntro:
+      '把总开关改为开启之前，系统逐项校验下列条目，任一条不成立都不能开启（开启在紧急开关页办理，并须负责人确认）。本页只列条目，不显示校验结果。',
+    checks: [
+      '单笔与单日限额（BR-WDR-22 ②）须在规划/09 判为支持',
+      '失败码与查询状态（BR-WDR-22 ⑤）须在规划/09 判为支持',
+      '按日账单含 out_biz_no（BR-WDR-22 ⑧）须在规划/09 判为支持',
+      '每日通道对账（BR-WDR-23）须已连续跑通，天数由负责人在开启时定',
+    ],
+    save: '保存',
+    noChange: '没有改动，无需保存。',
+    errors: {
+      amount: '请输入 0–10000 元的金额，最多两位小数',
+      platformAmount: '请输入不小于 0 的金额，最多两位小数',
+      count: '请输入不小于 0 的整数',
+      percent: '请输入 0–100 的百分比，最多两位小数',
+      required: '请填写',
+      window: '结束时间须晚于开始时间',
+      option: '请选择列出的选项',
+      server: '服务端校验不接受该值，请修改后再保存',
+    },
+    stepUpOperation: '修改自动到账设置',
+    stepUpTarget: (count: number): string => `改动 ${count} 项设置`,
+    stepUpAgain: '动态码凭证已失效，请重新输入动态码',
+    saved: '已保存，已按服务端返回的新版本刷新',
+    conflict:
+      '设置已被他人修改，请先【刷新】读取最新设置后再改；本次改动没有保存，也不会自动重发。',
+    refresh: '刷新',
+    forbidden: '无权限修改自动到账设置（需要 config.business 权限点）',
+    invalid: '提交内容有误，已标出有问题的项，请修改后再保存',
+    failed: '保存失败，请稍后重试',
+    unknownTitle: '保存结果未知',
+    unknown:
+      '上次保存没有收到确定的回应，结果未知，可能已经生效。请【刷新核对】读取服务端的实际设置，或【原样重试】按原请求重新提交（需重新输入动态码）；不会自动重发。',
+    unknownRetry: '原样重试',
+    unknownRecheck: '刷新核对',
+    recheckFailed: '读取失败，结果仍未知，请稍后再点【刷新核对】',
   },
   /**
    * F1-08at（D10-2075）：结果未知期间会话过期、重新登录后页面顶部的提示（components/unknown-marker，

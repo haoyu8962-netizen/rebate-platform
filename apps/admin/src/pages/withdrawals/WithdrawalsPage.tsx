@@ -16,7 +16,10 @@
 // adminCreatePayoutBatch）；逐单结果写进本页「原因 / 执行结果」列（只取这次回答，列表重读后状态以服务端为准）。
 // 各状态页签显示计数：每个页签一次 page_size=1 的 listAdminWithdrawals（只带该页签的快捷筛选），显示返回的
 // total；进页时与【批量自动打款】执行后各读一次，读取失败时该页签不显示计数、不报错、不阻塞列表。
-// TODO(规划/11 §7): 【导出】 — blocked on be ③ 契约未出；「自动到账设置」页签另见 F1-08ap
+// 持 config.business（超管持有全部点）时另有第四个页签「自动到账设置」（F1-08ap，AutoPayoutSettings.tsx，
+// BR-WDR-30 细则「后台配置页」）：进入时才读 config-items 与 kill-switches，保存走 config-items/batch（totp）；
+// 不持 config.business 的账号页签栏照旧。
+// TODO(规划/11 §7): 【导出】 — blocked on be ③ 契约未出
 import { ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import {
@@ -54,6 +57,8 @@ import {
 } from '../../components/unknown-marker/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { withdrawalsTexts as t } from '../../texts/withdrawals.ts';
+import { AutoPayoutSettings } from './AutoPayoutSettings.tsx';
+import { canReadMaster, canSeeAutoPayout } from './auto-payout.ts';
 import { BatchApprove } from './BatchApprove.tsx';
 import { BatchPayout } from './BatchPayout.tsx';
 import { MARKER_PAGE, ManualPaid, type ManualPaidClock } from './ManualPaid.tsx';
@@ -133,7 +138,8 @@ export function Forbidden(): ReactElement {
   );
 }
 
-type PageTab = 'review' | 'queue' | 'unknown';
+type PageTab = 'review' | 'queue' | 'unknown' | 'auto';
+const PAGE_TABS: readonly PageTab[] = ['review', 'queue', 'unknown', 'auto'];
 
 export function WithdrawalsPage({
   access,
@@ -141,6 +147,7 @@ export function WithdrawalsPage({
 }: WithdrawalsPageProps): ReactElement {
   const reader = canRead(access);
   const payouts = canSeePayouts(access);
+  const settings = canSeeAutoPayout(access);
   const [tab, setTab] = useState<PageTab>('review');
   // F1-08at: the account whose result-unknown marker of this page is shown on top.
   const account = useMarkerAccount();
@@ -157,37 +164,53 @@ export function WithdrawalsPage({
       <Result status="403" title={t.forbiddenTitle} subTitle={t.forbiddenDescription} />
     </Card>
   );
+  const payoutTabs = [
+    {
+      key: 'queue',
+      label: t.pageTabs.queue,
+      children: (
+        <PayoutQueuePanel
+          canList={reader}
+          canExecute={access.can(EXECUTE_PERMISSION)}
+          canEnter={access.can(CASH_ENTRY_PERMISSION)}
+          canSwitch={SWITCH_PERMISSIONS.some((point) => access.can(point))}
+        />
+      ),
+    },
+    {
+      key: 'unknown',
+      label: t.pageTabs.unknown,
+      children: <UnknownPayoutsPanel canList={access.can(EXECUTE_PERMISSION)} />,
+    },
+  ];
   return (
     <Flex vertical gap={16}>
       <Typography.Title level={4} style={{ margin: 0 }}>
         {t.title}
       </Typography.Title>
       <UnknownMarkerBanner scope={{ page: MARKER_PAGE, account }} />
-      {payouts ? (
+      {payouts || settings ? (
         <Tabs
           activeKey={tab}
           onChange={(key) => {
-            if (key === 'review' || key === 'queue' || key === 'unknown') setTab(key);
+            const next = PAGE_TABS.find((item) => item === key);
+            if (next !== undefined) setTab(next);
           }}
           items={[
             { key: 'review', label: t.pageTabs.review, children: review },
-            {
-              key: 'queue',
-              label: t.pageTabs.queue,
-              children: (
-                <PayoutQueuePanel
-                  canList={reader}
-                  canExecute={access.can(EXECUTE_PERMISSION)}
-                  canEnter={access.can(CASH_ENTRY_PERMISSION)}
-                  canSwitch={SWITCH_PERMISSIONS.some((point) => access.can(point))}
-                />
-              ),
-            },
-            {
-              key: 'unknown',
-              label: t.pageTabs.unknown,
-              children: <UnknownPayoutsPanel canList={access.can(EXECUTE_PERMISSION)} />,
-            },
+            ...(payouts ? payoutTabs : []),
+            ...(settings
+              ? [
+                  {
+                    key: 'auto',
+                    label: t.pageTabs.auto,
+                    // Mounted only once the tab is entered: nothing is read before that.
+                    children: (
+                      <AutoPayoutSettings canReadMaster={canReadMaster(access)} clock={clock} />
+                    ),
+                  },
+                ]
+              : []),
           ]}
         />
       ) : (
@@ -196,7 +219,6 @@ export function WithdrawalsPage({
     </Flex>
   );
 }
-
 export { marksOf };
 
 interface WithdrawalsListProps {
