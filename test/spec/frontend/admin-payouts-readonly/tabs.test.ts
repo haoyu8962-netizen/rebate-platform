@@ -91,9 +91,10 @@ it(
 );
 
 it(
-  '[AC-F1-08ba-TABS#2] 只持 fund.view、只持 payout.execute、超管：都见三个页签且默认审核列表（只持 payout.execute 时审核列表显示无权限、不读提现单）；只持 withdraw.review 或只持 user.lookup：不见「打款队列」「结果待确认」；未进页签时都不请求 payout-overview 与 unknown-payouts',
+  '[AC-F1-08ba-TABS#2] 只持 fund.view、只持 payout.execute：都见三个页签，超管见四个页签（另有「自动到账设置」，F1-08ap），都默认审核列表（只持 payout.execute 时审核列表显示无权限、不读提现单）；只持 withdraw.review 或只持 user.lookup：不见「打款队列」「结果待确认」；未进页签时都不请求 payout-overview 与 unknown-payouts',
   { timeout: MULTI_TIMEOUT },
   async () => {
+    const PAGE_TABS_WITH_SETTINGS = [TAB.review, TAB.queue, TAB.unknown, '自动到账设置'];
     const seeing: readonly Account[] = [
       { name: 'fund.view', grants: VIEW, snapshot: everyGrant(VIEW) },
       { name: 'payout.execute', grants: EXECUTE, snapshot: everyGrant(EXECUTE) },
@@ -102,7 +103,8 @@ it(
     for (const account of seeing) {
       const server = createPayoutServer({ permissions: account.grants });
       await mount(server, account.snapshot);
-      await waitFor(() => expect(pageTabNames(), account.name).toEqual(PAGE_TABS));
+      const tabs = account.name === 'super' ? PAGE_TABS_WITH_SETTINGS : PAGE_TABS;
+      await waitFor(() => expect(pageTabNames(), account.name).toEqual(tabs));
       const review = tabsIn(main(), TAB.review)[0]!;
       const selected = review.getAttribute('aria-selected');
       expect(selected, `${account.name}: the review list is selected`).toBe('true');
@@ -188,5 +190,39 @@ it(
     expect(countsOf(), 'five tab counts, once each').toEqual(expected);
     const lists = server.listReads().filter((read) => read.query['page_size'] !== '1');
     expect(lists, 'one review list read').toHaveLength(1);
+  },
+);
+
+it(
+  '[AC-F1-08ap-TABS-FROZEN#1] 持 fund.view + payout.execute + config.business 进 /withdrawals：页签恰为「审核列表」「打款队列」「结果待确认」「自动到账设置」四个、默认选中审核列表；只持 fund.view + payout.execute：仍恰三个、不见「自动到账设置」；未进页签时都不请求 payout-overview 与 unknown-payouts',
+  { timeout: MULTI_TIMEOUT },
+  async () => {
+    const settingsTab = '自动到账设置';
+    const withConfig: Grants = ['fund.view', 'payout.execute', 'config.business'];
+    const server = createPayoutServer({ permissions: withConfig });
+    await mount(server, everyGrant(withConfig));
+    await waitFor(() =>
+      expect(pageTabNames(), 'config.business').toEqual([
+        TAB.review,
+        TAB.queue,
+        TAB.unknown,
+        settingsTab,
+      ]),
+    );
+    const review = tabsIn(main(), TAB.review)[0]!;
+    expect(review.getAttribute('aria-selected'), 'the review list is selected').toBe('true');
+    await listed(await panelOf(review), REVIEW_ROWS);
+    await settled(server);
+    expect(server.overviewReads(), 'no overview read').toEqual([]);
+    expect(server.unknownReads(), 'no unknown read').toEqual([]);
+    cleanup();
+
+    const plain = createPayoutServer({ permissions: VIEW_EXECUTE });
+    await mount(plain, everyGrant(VIEW_EXECUTE));
+    await waitFor(() => expect(pageTabNames(), 'without config.business').toEqual(PAGE_TABS));
+    await settled(plain);
+    expect(tabsIn(main(), settingsTab), 'no settings tab').toEqual([]);
+    expect(plain.overviewReads(), 'no overview read').toEqual([]);
+    expect(plain.unknownReads(), 'no unknown read').toEqual([]);
   },
 );
