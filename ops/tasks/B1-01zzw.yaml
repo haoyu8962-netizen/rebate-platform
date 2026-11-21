@@ -35,4 +35,5 @@ accept:
   - 'pnpm verify'
   - 'test/spec/platform/validation/**'
   - 'test/spec/identity/step-up-digest/**'
-status: todo
+status: done
+pr: 458
