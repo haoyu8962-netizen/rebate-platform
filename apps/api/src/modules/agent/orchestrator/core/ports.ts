@@ -224,9 +224,17 @@ export interface OrchestratorTrace extends ToolTraceFragment {
   /** B3-08t: the scenario entry's intent (product → find_by_link, order → order_query), a
    * deterministic fact that agent_runs.intent keeps over any later text handling. */
   readonly entry_intent?: string;
-  /** B3-08t: `intent` is the model's own label, not checked by the IntentPort (a template run's
-   * final round): agent_runs.intent falls back to the first tool called. */
-  readonly intent_unchecked?: true;
+  /** B3-08t (BR-AI-19 细则「运行级字段」, 只落核对过的): `intent` is a deterministic server rule's
+   * result (the link path, the order entry, the no-model path's ①–⑥), so agent_runs.intent may
+   * store it. Absent: `intent` is not checked (the model's own label is never stored as such). */
+  readonly intent_ruled?: true;
+  /** B3-08t: the run was answered without an intent the server checked (U-7, no IntentPort: the
+   * model's label is dropped for out_of_scope): agent_runs.intent stays null. */
+  readonly intent_withheld?: true;
+  /** B3-08t: the model whose output the result actually used (a tool call of its round executed,
+   * or its text written); absent (or null) when none was. Not changed by output the format check, U-10, the
+   * tool call budget, a card cap or a template dropped. agent_runs.model / model_snapshot. */
+  readonly result_model?: string | null;
   /** B3-08t: why the no-model path's page guide was not sent (agent_runs.page_guide_reject_reason). */
   readonly page_guide_reject_reason?: PageGuideRejectReason;
 }

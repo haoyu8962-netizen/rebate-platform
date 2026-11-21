@@ -25,10 +25,10 @@
 // test/spec/agent/run-fields/**), with `runFields` in the deps (the stream runtime passes its Clock):
 //   sync — settleFields(runId), called by the runtime right before admission.settle, gives the
 //     terminal transaction the run's intent (orchestrator storedIntentOf over the intent port's
-//     verdict, the core's trace intent and the first tool called), input_passed (inputPassed(runId),
+//     verdict, a rule's intent and the first tool called), input_passed (inputPassed(runId),
 //     called by the runtime's input check wrapper when the check let the message through: review
 //     passed, no refusal pre-check, no prohibited goods) and whether model output was used (the core
-//     trace's model, not a degraded result; unknown while the core has not recorded its trace yet,
+//     trace's result_model, not a degraded result; unknown while the core has not recorded its trace yet,
 //     e.g. a run cancelled while its model call is pending). What arrives after settle is never
 //     written by the terminal transaction.
 //   async — with the record handed to the queue at the body's end: runFields (the used model as
@@ -109,22 +109,26 @@ export function recordIntentVerdict(appId: string, runId: string, value: IntentT
   slot.verdict = { intent: value.intent, reason: value.page_guide_reject_reason };
 }
 
+// B3-08t 统一原则 (编排 D10-2368): the run-level fields store only what was checked; anything
+// unchecked stays empty (宁可漏判留空，不可误判) — the intent from the port's recorded verdict, a rule
+// or the first tool (never the model's own label); the model only when its output was used.
+
 /** B3-08t: the core's trace as the stored intent's facts. */
 function intentOf(run: AgentRunTrace, verdict: IntentVerdict | null) {
   const core = run.core;
+  const ruled = core?.intent_ruled === true && core.degraded_unserved !== true;
   return storedIntentOf({
     entry: core?.entry_intent ?? null,
     ...(verdict === null ? {} : { checked: verdict.intent }),
-    traced: core?.intent ?? null,
-    unchecked: core?.intent_unchecked === true,
-    unserved: core?.degraded_unserved === true,
+    ruled: ruled ? core.intent : null,
+    withheld: core?.intent_withheld === true,
     firstTool: core?.tool_calls[0]?.name ?? null,
   });
 }
 
-/** B3-08t: the model whose output the run's result used (null: none). */
+/** B3-08t: the model whose output the run's result used (null: none, or not reported). */
 function usedModel(core: OrchestratorTrace): string | null {
-  return core.degraded === true ? null : core.model;
+  return core.degraded === true ? null : (core.result_model ?? null);
 }
 
 /** B3-08t: the core's filter hits as stored (the three contract values, once each). */
