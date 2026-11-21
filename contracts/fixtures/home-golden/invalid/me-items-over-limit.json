@@ -1,0 +1,189 @@
+{
+  "page_key": "me",
+  "version": 1,
+  "ttl_sec": 300,
+  "sections": [
+    {
+      "id": "more_services",
+      "type": "icon_grid",
+      "version": 1,
+      "props": {
+        "columns": 4
+      },
+      "data_source": {
+        "kind": "static",
+        "items": [
+          {
+            "title": "入口0",
+            "icon": {
+              "url": "https://media.example.test/icons/03283134cd6814ffc96ace9adccfdb95e1245e57192cf3d3d96723a7c8fb31cb.png",
+              "sha256": "03283134cd6814ffc96ace9adccfdb95e1245e57192cf3d3d96723a7c8fb31cb"
+            },
+            "action": {
+              "route": "Help",
+              "params": {
+                "article_id": "guide_0"
+              }
+            }
+          },
+          {
+            "title": "入口1",
+            "icon": {
+              "url": "https://media.example.test/icons/c585e9c0d53483e1cb4d2d87a361570706aafdd473a2999fe4f07c6d402e28d6.png",
+              "sha256": "c585e9c0d53483e1cb4d2d87a361570706aafdd473a2999fe4f07c6d402e28d6"
+            },
+            "action": {
+              "route": "Notice",
+              "params": {
+                "article_id": "notice_1"
+              }
+            }
+          },
+          {
+            "title": "入口2",
+            "icon": {
+              "url": "https://media.example.test/icons/0e7e0c1772c4e2faafeafc873fed619012103162f224af12cd6ff841929ca6d2.png",
+              "sha256": "0e7e0c1772c4e2faafeafc873fed619012103162f224af12cd6ff841929ca6d2"
+            },
+            "action": {
+              "route": "Search",
+              "params": {
+                "q": "入口2"
+              }
+            }
+          },
+          {
+            "title": "入口3",
+            "icon": {
+              "url": "https://media.example.test/icons/9df2e25e0ca959163cbfe2f303ceb262efa5369e5e7e23209e5e64b91938193d.png",
+              "sha256": "9df2e25e0ca959163cbfe2f303ceb262efa5369e5e7e23209e5e64b91938193d"
+            },
+            "action": {
+              "route": "WebPage",
+              "params": {
+                "url": "https://h5.example.com/topic/3"
+              }
+            }
+          },
+          {
+            "title": "入口4",
+            "icon": {
+              "url": "https://media.example.test/icons/fadc5349f4ff7ed061aecf3b47a510f792d883051db790ad19422598744b52ba.png",
+              "sha256": "fadc5349f4ff7ed061aecf3b47a510f792d883051db790ad19422598744b52ba"
+            },
+            "action": {
+              "route": "Help",
+              "params": {
+                "article_id": "guide_4"
+              }
+            }
+          },
+          {
+            "title": "入口5",
+            "icon": {
+              "url": "https://media.example.test/icons/c6357f53679c4eb5b93745e4a60c7b72a1ea3c8d12191ea40039d4053d510c66.png",
+              "sha256": "c6357f53679c4eb5b93745e4a60c7b72a1ea3c8d12191ea40039d4053d510c66"
+            },
+            "action": {
+              "route": "Notice",
+              "params": {
+                "article_id": "notice_5"
+              }
+            }
+          },
+          {
+            "title": "入口6",
+            "icon": {
+              "url": "https://media.example.test/icons/93116c0a5839563531cb12c24f9fe83abebf99016eb2968f2e97f348450b28cb.png",
+              "sha256": "93116c0a5839563531cb12c24f9fe83abebf99016eb2968f2e97f348450b28cb"
+            },
+            "action": {
+              "route": "Search",
+              "params": {
+                "q": "入口6"
+              }
+            }
+          },
+          {
+            "title": "入口7",
+            "icon": {
+              "url": "https://media.example.test/icons/0ad945b355029e2b17ff02915565fc7ae082e03564f456eaaec60c4951f723f7.png",
+              "sha256": "0ad945b355029e2b17ff02915565fc7ae082e03564f456eaaec60c4951f723f7"
+            },
+            "action": {
+              "route": "WebPage",
+              "params": {
+                "url": "https://h5.example.com/topic/7"
+              }
+            }
+          },
+          {
+            "title": "入口8",
+            "icon": {
+              "url": "https://media.example.test/icons/5aa7dd071123d5a55a9a2786f733d92007d7d9e0183f5fd33b7fcf4d790905c4.png",
+              "sha256": "5aa7dd071123d5a55a9a2786f733d92007d7d9e0183f5fd33b7fcf4d790905c4"
+            },
+            "action": {
+              "route": "Help",
+              "params": {
+                "article_id": "guide_8"
+              }
+            }
+          },
+          {
+            "title": "入口9",
+            "icon": {
+              "url": "https://media.example.test/icons/e4803b68e29e4e406187aaeae9b51ffea22f458ccc95feeccd9154ba6ced4f19.png",
+              "sha256": "e4803b68e29e4e406187aaeae9b51ffea22f458ccc95feeccd9154ba6ced4f19"
+            },
+            "action": {
+              "route": "Notice",
+              "params": {
+                "article_id": "notice_9"
+              }
+            }
+          },
+          {
+            "title": "入口10",
+            "icon": {
+              "url": "https://media.example.test/icons/6c334bb56494da5120144970675e99dff86fc248ea58d1399210c442f4e5999a.png",
+              "sha256": "6c334bb56494da5120144970675e99dff86fc248ea58d1399210c442f4e5999a"
+            },
+            "action": {
+              "route": "Search",
+              "params": {
+                "q": "入口10"
+              }
+            }
+          },
+          {
+            "title": "入口11",
+            "icon": {
+              "url": "https://media.example.test/icons/6a34036b99d8d7dd4b5d205747e5f634ffc086eb73af3bd64d37ce82f09a6c38.png",
+              "sha256": "6a34036b99d8d7dd4b5d205747e5f634ffc086eb73af3bd64d37ce82f09a6c38"
+            },
+            "action": {
+              "route": "WebPage",
+              "params": {
+                "url": "https://h5.example.com/topic/11"
+              }
+            }
+          },
+          {
+            "title": "入口12",
+            "icon": {
+              "url": "https://media.example.test/icons/ac3569764b5c8ab5bdea11d3ca4dc9e55d09a376a14c52ef83442925b937a539.png",
+              "sha256": "ac3569764b5c8ab5bdea11d3ca4dc9e55d09a376a14c52ef83442925b937a539"
+            },
+            "action": {
+              "route": "Help",
+              "params": {
+                "article_id": "guide_12"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

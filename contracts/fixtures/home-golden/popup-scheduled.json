@@ -1,0 +1,32 @@
+{
+  "page_key": "home",
+  "version": 1,
+  "ttl_sec": 300,
+  "sections": [
+    {
+      "id": "popup",
+      "type": "popup",
+      "version": 1,
+      "start_at": "2026-11-20T00:00:00+08:00",
+      "end_at": "2026-12-01T00:00:00+08:00",
+      "props": {
+        "image": "https://example.com/img/popup-double11.png",
+        "daily_max": 2,
+        "time_window": ["08:00", "23:00"]
+      },
+      "data_source": {
+        "kind": "static",
+        "items": [
+          {
+            "action": {
+              "route": "InviteShare"
+            }
+          }
+        ]
+      },
+      "condition": {
+        "login": "yes"
+      }
+    }
+  ]
+}

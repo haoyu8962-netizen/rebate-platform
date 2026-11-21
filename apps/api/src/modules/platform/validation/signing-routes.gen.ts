@@ -988,6 +988,26 @@ export const CONTRACT_SIGNING_ROUTES = [
   },
   {
     "method": "GET",
+    "path": "/admin/v1/search/settings",
+    "signed": false
+  },
+  {
+    "method": "PUT",
+    "path": "/admin/v1/search/hot-words",
+    "signed": false
+  },
+  {
+    "method": "PUT",
+    "path": "/admin/v1/search/keyword-routes",
+    "signed": false
+  },
+  {
+    "method": "PUT",
+    "path": "/admin/v1/search/default-word",
+    "signed": false
+  },
+  {
+    "method": "GET",
     "path": "/admin/v1/agreements",
     "signed": false
   },

@@ -871,7 +871,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Page configuration (home, custom:*)
+         * Page configuration (home, me, search, custom:*)
          * @description The published configuration of a page (04 §6.2; shape 03 §6.1). Only published versions
          *     are served, never drafts (drafts are read through previewPage). Rollout (拍板第二批
          *     OPS-05, BR-ID-11 细则): with X-Device-Id the device is bucketed and gets the gray version
@@ -880,7 +880,11 @@ export interface paths {
          *     min_app_version for the X-Platform of the request, compared only as 「not lower than」
          *     X-App-Version (TECH-07, 05 F1-02), and its condition, which uses only login, has_parent,
          *     union_authorized and has_order (03 §6.1, BR-INV-23); the bearer token is optional and
-         *     only decides those conditions. A page_key of the right shape whose page does not exist,
+         *     only decides those conditions. Sections and static data source items with `start_at` /
+         *     `end_at` are sent only while the server clock is inside that range (BR-TEXT-29; the
+         *     client filters again by its own clock), and a section left with no item is not sent;
+         *     `me` and `search` follow the admission definitions of contracts/home-schema.json
+         *     (BR-TEXT-28). A page_key of the right shape whose page does not exist,
          *     has no published version or has no version left for this request → 30701. `ttl_sec` is
          *     the server constant 300 (the example value of 03 §6.1; 编排者默认, pending a write-back
          *     to the plan). Session scopes: full only (not on the BR-ID-01 细则「受限会话」 table).
@@ -2598,8 +2602,11 @@ export interface paths {
          *     when saved; an external link goes only through ExternalPage, and saving one on a union
          *     domain is refused (BR-ATTR-29); shortcuts stay subject to F-HOME-09 / F-LINK-11. The
          *     client checks route and params against its own routes table before opening (RouteTarget).
-         *     Readable anonymously in basic mode, without a device id. Empty lists when nothing is
-         *     configured.
+         *     `default_word` is the search box default word (搜索框默认词, 01 F-PROD-16), read from config
+         *     item `search.default_word`; absent or null when not configured, and the client then shows
+         *     text key `search.placeholder`. The three values are edited by the console through
+         *     /admin/v1/search/* (CT-27). Readable anonymously in basic mode, without a device id. Empty
+         *     lists when nothing is configured.
          */
         get: operations["getSearchHotWords"];
         put?: never;
@@ -6356,7 +6363,7 @@ export interface paths {
         /**
          * Configured pages with their released and gray versions
          * @description Permission point `content.page` (04 §11.2; step-up 「–」). One row per page that has at
-         *     least one saved version (`home`, `custom:*`), ordered by page_key, page by page (`page`,
+         *     least one saved version (`home`, `me`, `search`, `custom:*`), ordered by page_key, page by page (`page`,
          *     `page_size` ≤ 200): the fully released version, the gray version and its percentage, the
          *     newest saved version, who changed the page last and when, and the page's `revision`, the
          *     CAS value of every page write (04 §6.6 `pages`; 编排者默认).
@@ -6456,7 +6463,13 @@ export interface paths {
          *     preview token stays pinned to what it shows (编排者默认). The first save creates the page.
          *     Nothing is published: the draft takes effect only through POST
          *     /admin/v1/pages/{page_key}/publish. Saving runs the same checks as publishing (04 §6.6):
-         *     jump targets (an ExternalPage url whose host is in the `union_host` category of the
+         *     the admission definition of the page_key in contracts/home-schema.json (`home`, `me`,
+         *     `search`: allowed section types, counts, ids and data sources, BR-TEXT-28); on `me` and
+         *     `search` every jump target registered in contracts/routes.json with entry in_app, not
+         *     ExternalPage, not a core entry, WebPage only to a `bridge_origins` https origin
+         *     (BR-TEXT-30), and each `icon.url` file named by its `icon.sha256`; an item's
+         *     `start_at`..`end_at` inside its section's range and start before end (BR-TEXT-29); jump
+         *     targets (an ExternalPage url whose host is in the `union_host` category of the
          *     platform link-pattern table while switch `external_page.union_host_block` is on, BR-ATTR-29
          *     ①; personal-data placeholders in an external url, BR-ID-33 细则「外链不带个人数据」;
          *     Withdraw, PayoutAccount, LaborAgreement or RealName with params, BR-WDR-01 细则), the
@@ -6650,6 +6663,125 @@ export interface paths {
          *     version → 30701. Written to the audit log.
          */
         post: operations["adminCreatePagePreviewToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/search/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search hot words, keyword shortcuts and the search box default word
+         * @description Permission point `content.page` (04 §6.3 `GET /v1/search/hot-words` 2026-11-20: the console
+         *     page for hot words, keyword shortcuts and the default word; BR-TEXT-28 细则「权限与日志」;
+         *     read only, no step-up); lacking it is 10403 with `data.reason=admin_permission_denied`.
+         *     The three values as GET /v1/search/hot-words serves them, read from config items
+         *     `search.hot_words`, `search.keyword_routes` and `search.default_word`, each with its
+         *     config item `version` (0 for an item never written), which the console sends back as
+         *     `expected_version` of the matching write. Implemented by B1-36.
+         */
+        get: operations["adminGetSearchSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/search/hot-words": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the search hot words
+         * @description Permission point `content.page`, no step-up (04 §6.3 2026-11-20; BR-TEXT-28 细则「权限与日志」,
+         *     编排 D10-2383); lacking it is 10403 with `data.reason=admin_permission_denied`. Replaces
+         *     config item `search.hot_words` with `hot_words` (the whole list in display order, at most
+         *     10, each text 1–20 characters; an empty list shows no hot words). This operation writes
+         *     only that item: the body has no config key, so it cannot be applied to another item.
+         *     A list of the wrong shape is 20001 with `data.fields` naming the offending field as a
+         *     dotted path (e.g. `hot_words.0.text`). CAS: `expected_version` is `hot_words_version` as
+         *     GET /admin/v1/search/settings showed it; a change adds 1 and stores a history version of
+         *     the item, a mismatch → 20902 with `data.resource=config_item`. Writing the list the item
+         *     already has with a matching version succeeds without change. `reason` is optional and
+         *     kept with the history version. Written to the audit log (action config_item_change,
+         *     before and after values); GET /v1/search/hot-words serves it within that item's cache
+         *     period. Implemented by B1-36.
+         */
+        put: operations["adminUpdateSearchHotWords"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/search/keyword-routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the search keyword shortcuts
+         * @description Permission point `content.page`, no step-up (04 §6.3 2026-11-20; BR-TEXT-28 细则「权限与日志」,
+         *     编排 D10-2383); lacking it is 10403 with `data.reason=admin_permission_denied`. Replaces
+         *     config item `search.keyword_routes` with `keyword_routes` (the whole list, at most 50, each
+         *     keyword 1–20 characters). This operation writes only that item: the body has no config
+         *     key, so it cannot be applied to another item. Every target is checked when saved against
+         *     contracts/routes.json (a registered route with entry in_app, params valid for that route)
+         *     and an ExternalPage url additionally against BR-ATTR-29 ① (union host block) and BR-ID-33
+         *     细则「外链不带个人数据」; ExternalPage and WebPage take only https urls (D10-419, D10-2383).
+         *     One invalid entry refuses the whole list: 20001 with `data.fields` naming the offending
+         *     field as a dotted path (e.g. `keyword_routes.0.target`). CAS: `expected_version` is
+         *     `keyword_routes_version` as GET /admin/v1/search/settings showed it; a change adds 1 and
+         *     stores a history version, a mismatch → 20902 with `data.resource=config_item`. `reason`
+         *     is optional and kept with the history version. Written to the audit log (action
+         *     config_item_change, before and after values). Implemented by B1-36.
+         */
+        put: operations["adminUpdateSearchKeywordRoutes"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/search/default-word": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set or clear the search box default word
+         * @description Permission point `content.page`, no step-up (01 F-PROD-16; BR-TEXT-28 细则「权限与日志」);
+         *     lacking it is 10403 with `data.reason=admin_permission_denied`. Sets config item
+         *     `search.default_word` (the search box default word, 1–20 characters) or clears it with
+         *     null, after which the client shows text key `search.placeholder`. The text passes the
+         *     BR-TEXT-13 banned-word check; a failure or a value of the wrong shape is 20001 with
+         *     `data.fields=[default_word]`. CAS: `expected_version` is `default_word_version` as GET
+         *     /admin/v1/search/settings showed it; a change adds 1 and stores a history version, a
+         *     mismatch → 20902 with `data.resource=config_item`. `reason` is optional. Written to the
+         *     audit log (action config_item_change). Implemented by B1-36.
+         */
+        put: operations["adminUpdateSearchDefaultWord"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -15178,6 +15310,66 @@ export interface components {
         SearchHotWordsData: {
             hot_words: components["schemas"]["SearchHotWord"][];
             keyword_routes: components["schemas"]["SearchKeywordRoute"][];
+            /**
+             * @description The search box default word (搜索框默认词, placeholder of the search input; 01
+             *     F-PROD-16), config item `search.default_word`. Absent or null when not configured: the
+             *     client then shows text key `search.placeholder`. Never an empty string.
+             */
+            default_word?: components["schemas"]["SearchDefaultWord"] | null;
+        };
+        /** @description A search box default word, 1–20 characters (as a hot word). */
+        SearchDefaultWord: string;
+        /**
+         * @description Target of a keyword shortcut as the console saves it: a RouteTarget whose route the
+         *     server checks against contracts/routes.json; ExternalPage and WebPage only with an https
+         *     url (D10-419, D10-2383). Keyword shortcuts are not operation slots, so ExternalPage stays
+         *     allowed here (BR-TEXT-30 适用范围).
+         */
+        AdminSearchKeywordTarget: components["schemas"]["RouteTarget"] & unknown;
+        AdminSearchKeywordRoute: {
+            /** @description Matched against the trimmed input as a whole word, ignoring case. */
+            keyword: string;
+            target: components["schemas"]["AdminSearchKeywordTarget"];
+        };
+        /** @description Writes config item `search.hot_words` only (the operation fixes the item; no key in the body). */
+        AdminSearchHotWordsUpdateRequest: {
+            hot_words: components["schemas"]["SearchHotWord"][];
+            /** @description `hot_words_version` as the console showed it; a mismatch is 20902. */
+            expected_version: components["schemas"]["AdminConfigVersionNumber"];
+            reason?: components["schemas"]["AdminConfigReason"];
+        };
+        /** @description Writes config item `search.keyword_routes` only (the operation fixes the item; no key in the body). */
+        AdminSearchKeywordRoutesUpdateRequest: {
+            keyword_routes: components["schemas"]["AdminSearchKeywordRoute"][];
+            /** @description `keyword_routes_version` as the console showed it; a mismatch is 20902. */
+            expected_version: components["schemas"]["AdminConfigVersionNumber"];
+            reason?: components["schemas"]["AdminConfigReason"];
+        };
+        /** @description Writes config item `search.default_word` only (the operation fixes the item; no key in the body). */
+        AdminSearchDefaultWordUpdateRequest: {
+            /** @description The search box default word (搜索框默认词), or null to clear it. */
+            default_word: components["schemas"]["SearchDefaultWord"] | null;
+            /** @description `default_word_version` as the console showed it; a mismatch is 20902. */
+            expected_version: components["schemas"]["AdminConfigVersionNumber"];
+            reason?: components["schemas"]["AdminConfigReason"];
+        };
+        /**
+         * @description The three search settings with their config item versions (0 for an item never written).
+         *     Values are returned as stored; keyword targets saved before CT-27 keep the RouteTarget shape.
+         */
+        AdminSearchSettings: {
+            hot_words: components["schemas"]["SearchHotWord"][];
+            hot_words_version: components["schemas"]["AdminConfigVersionNumber"];
+            keyword_routes: components["schemas"]["SearchKeywordRoute"][];
+            keyword_routes_version: components["schemas"]["AdminConfigVersionNumber"];
+            default_word: components["schemas"]["SearchDefaultWord"] | null;
+            default_word_version: components["schemas"]["AdminConfigVersionNumber"];
+        };
+        AdminSearchSettingsResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminSearchSettings"];
+            trace_id: components["schemas"]["TraceId"];
         };
         SearchHotWordsResponse: {
             code: components["schemas"]["SuccessCode"];
@@ -16228,7 +16420,7 @@ export interface components {
              */
             expected_revision: number;
         };
-        /** @description Page key, `home` or `custom:<name>`. */
+        /** @description Page key, `home`, `me`, `search` or `custom:<name>` (BR-TEXT-28). */
         AdminPageKey: string;
         /** @description A configured page with its fully released and gray versions. */
         AdminPageConfig: {
@@ -22863,8 +23055,9 @@ export interface components {
         /** @description Install channel of the row; another value → 20001 with data.fields=[channel]. */
         AppVersionChannelPath: components["schemas"]["InstallChannelCode"];
         /**
-         * @description Page key: `home` or `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认);
-         *     another shape → 20001 with data.fields=[page_key].
+         * @description Page key: `home`, `me` (「我的 · 更多服务」), `search` (search result top slot) or
+         *     `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认; me and search
+         *     CT-27, BR-TEXT-28); another shape → 20001 with data.fields=[page_key].
          */
         PageKeyPath: string;
         /** @description Version of the page, counted per page from 1. */
@@ -25107,8 +25300,9 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Page key: `home` or `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认);
-                 *     another shape → 20001 with data.fields=[page_key].
+                 * @description Page key: `home`, `me` (「我的 · 更多服务」), `search` (search result top slot) or
+                 *     `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认; me and search
+                 *     CT-27, BR-TEXT-28); another shape → 20001 with data.fields=[page_key].
                  */
                 page_key: components["parameters"]["PageKeyPath"];
             };
@@ -25221,8 +25415,9 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Page key: `home` or `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认);
-                 *     another shape → 20001 with data.fields=[page_key].
+                 * @description Page key: `home`, `me` (「我的 · 更多服务」), `search` (search result top slot) or
+                 *     `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认; me and search
+                 *     CT-27, BR-TEXT-28); another shape → 20001 with data.fields=[page_key].
                  */
                 page_key: components["parameters"]["PageKeyPath"];
                 /** @description Section id, the `id` of the section in contracts/home-schema.json. */
@@ -28983,7 +29178,8 @@ export interface operations {
                      *               "params": {}
                      *             }
                      *           }
-                     *         ]
+                     *         ],
+                     *         "default_word": "洗衣液"
                      *       },
                      *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
                      *     }
@@ -36496,8 +36692,9 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Page key: `home` or `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认);
-                 *     another shape → 20001 with data.fields=[page_key].
+                 * @description Page key: `home`, `me` (「我的 · 更多服务」), `search` (search result top slot) or
+                 *     `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认; me and search
+                 *     CT-27, BR-TEXT-28); another shape → 20001 with data.fields=[page_key].
                  */
                 page_key: components["parameters"]["PageKeyPath"];
             };
@@ -36560,8 +36757,9 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Page key: `home` or `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认);
-                 *     another shape → 20001 with data.fields=[page_key].
+                 * @description Page key: `home`, `me` (「我的 · 更多服务」), `search` (search result top slot) or
+                 *     `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认; me and search
+                 *     CT-27, BR-TEXT-28); another shape → 20001 with data.fields=[page_key].
                  */
                 page_key: components["parameters"]["PageKeyPath"];
             };
@@ -36636,8 +36834,9 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Page key: `home` or `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认);
-                 *     another shape → 20001 with data.fields=[page_key].
+                 * @description Page key: `home`, `me` (「我的 · 更多服务」), `search` (search result top slot) or
+                 *     `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认; me and search
+                 *     CT-27, BR-TEXT-28); another shape → 20001 with data.fields=[page_key].
                  */
                 page_key: components["parameters"]["PageKeyPath"];
             };
@@ -36707,8 +36906,9 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Page key: `home` or `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认);
-                 *     another shape → 20001 with data.fields=[page_key].
+                 * @description Page key: `home`, `me` (「我的 · 更多服务」), `search` (search result top slot) or
+                 *     `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认; me and search
+                 *     CT-27, BR-TEXT-28); another shape → 20001 with data.fields=[page_key].
                  */
                 page_key: components["parameters"]["PageKeyPath"];
                 /** @description Version of the page, counted per page from 1. */
@@ -36770,8 +36970,9 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Page key: `home` or `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认);
-                 *     another shape → 20001 with data.fields=[page_key].
+                 * @description Page key: `home`, `me` (「我的 · 更多服务」), `search` (search result top slot) or
+                 *     `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认; me and search
+                 *     CT-27, BR-TEXT-28); another shape → 20001 with data.fields=[page_key].
                  */
                 page_key: components["parameters"]["PageKeyPath"];
             };
@@ -36836,8 +37037,9 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Page key: `home` or `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认);
-                 *     another shape → 20001 with data.fields=[page_key].
+                 * @description Page key: `home`, `me` (「我的 · 更多服务」), `search` (search result top slot) or
+                 *     `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认; me and search
+                 *     CT-27, BR-TEXT-28); another shape → 20001 with data.fields=[page_key].
                  */
                 page_key: components["parameters"]["PageKeyPath"];
             };
@@ -36896,8 +37098,9 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Page key: `home` or `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认);
-                 *     another shape → 20001 with data.fields=[page_key].
+                 * @description Page key: `home`, `me` (「我的 · 更多服务」), `search` (search result top slot) or
+                 *     `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认; me and search
+                 *     CT-27, BR-TEXT-28); another shape → 20001 with data.fields=[page_key].
                  */
                 page_key: components["parameters"]["PageKeyPath"];
             };
@@ -36959,8 +37162,9 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Page key: `home` or `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认);
-                 *     another shape → 20001 with data.fields=[page_key].
+                 * @description Page key: `home`, `me` (「我的 · 更多服务」), `search` (search result top slot) or
+                 *     `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认; me and search
+                 *     CT-27, BR-TEXT-28); another shape → 20001 with data.fields=[page_key].
                  */
                 page_key: components["parameters"]["PageKeyPath"];
             };
@@ -37028,8 +37232,9 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Page key: `home` or `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认);
-                 *     another shape → 20001 with data.fields=[page_key].
+                 * @description Page key: `home`, `me` (「我的 · 更多服务」), `search` (search result top slot) or
+                 *     `custom:<name>` with name of 1..57 characters from [a-z0-9_-] (编排者默认; me and search
+                 *     CT-27, BR-TEXT-28); another shape → 20001 with data.fields=[page_key].
                  */
                 page_key: components["parameters"]["PageKeyPath"];
             };
@@ -37071,6 +37276,317 @@ export interface operations {
             };
             429: components["responses"]["TooManyRequests"];
             /** @description Not issued (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminGetSearchSettings: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current search settings. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "hot_words": [
+                     *           {
+                     *             "text": "蓝牙耳机"
+                     *           },
+                     *           {
+                     *             "text": "洗衣液"
+                     *           }
+                     *         ],
+                     *         "hot_words_version": 3,
+                     *         "keyword_routes": [
+                     *           {
+                     *             "keyword": "热销榜",
+                     *             "target": {
+                     *               "route": "HotRankList",
+                     *               "params": {}
+                     *             }
+                     *           }
+                     *         ],
+                     *         "keyword_routes_version": 1,
+                     *         "default_word": "洗衣液",
+                     *         "default_word_version": 1
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminSearchSettingsResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not available (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminUpdateSearchHotWords: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "hot_words": [
+                 *         {
+                 *           "text": "蓝牙耳机"
+                 *         },
+                 *         {
+                 *           "text": "洗衣液"
+                 *         }
+                 *       ],
+                 *       "expected_version": 3,
+                 *       "reason": "双十一热词"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdminSearchHotWordsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The search settings as they are now. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "hot_words": [
+                     *           {
+                     *             "text": "蓝牙耳机"
+                     *           },
+                     *           {
+                     *             "text": "洗衣液"
+                     *           }
+                     *         ],
+                     *         "hot_words_version": 4,
+                     *         "keyword_routes": [
+                     *           {
+                     *             "keyword": "热销榜",
+                     *             "target": {
+                     *               "route": "HotRankList",
+                     *               "params": {}
+                     *             }
+                     *           }
+                     *         ],
+                     *         "keyword_routes_version": 1,
+                     *         "default_word": "洗衣液",
+                     *         "default_word_version": 1
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminSearchSettingsResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not changed (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminUpdateSearchKeywordRoutes: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "keyword_routes": [
+                 *         {
+                 *           "keyword": "热销榜",
+                 *           "target": {
+                 *             "route": "HotRankList",
+                 *             "params": {}
+                 *           }
+                 *         },
+                 *         {
+                 *           "keyword": "签到",
+                 *           "target": {
+                 *             "route": "Help",
+                 *             "params": {
+                 *               "article_id": "sign_in_guide"
+                 *             }
+                 *           }
+                 *         }
+                 *       ],
+                 *       "expected_version": 1,
+                 *       "reason": "加签到直达"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdminSearchKeywordRoutesUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The search settings as they are now. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "hot_words": [
+                     *           {
+                     *             "text": "蓝牙耳机"
+                     *           }
+                     *         ],
+                     *         "hot_words_version": 3,
+                     *         "keyword_routes": [
+                     *           {
+                     *             "keyword": "热销榜",
+                     *             "target": {
+                     *               "route": "HotRankList",
+                     *               "params": {}
+                     *             }
+                     *           },
+                     *           {
+                     *             "keyword": "签到",
+                     *             "target": {
+                     *               "route": "Help",
+                     *               "params": {
+                     *                 "article_id": "sign_in_guide"
+                     *               }
+                     *             }
+                     *           }
+                     *         ],
+                     *         "keyword_routes_version": 2,
+                     *         "default_word": null,
+                     *         "default_word_version": 0
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminSearchSettingsResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not changed (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminUpdateSearchDefaultWord: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "default_word": "洗衣液",
+                 *       "expected_version": 0
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdminSearchDefaultWordUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The search settings as they are now. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "hot_words": [],
+                     *         "hot_words_version": 0,
+                     *         "keyword_routes": [],
+                     *         "keyword_routes_version": 0,
+                     *         "default_word": "洗衣液",
+                     *         "default_word_version": 1
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminSearchSettingsResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not changed (codes in contracts/error-codes.yaml). */
             "4XX": {
                 headers: {
                     "X-Trace-Id": components["headers"]["TraceId"];

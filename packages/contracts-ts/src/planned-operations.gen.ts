@@ -6,8 +6,12 @@
 export const plannedOperations: ReadonlySet<string> = new Set([
   "adminChangeInviter",
   "adminChangeUserLevel",
+  "adminGetSearchSettings",
   "adminListInvitees",
   "adminSearch",
+  "adminUpdateSearchDefaultWord",
+  "adminUpdateSearchHotWords",
+  "adminUpdateSearchKeywordRoutes",
   "bindOauthIdentity",
   "loginByHuawei",
 ]);

@@ -1,0 +1,60 @@
+{
+  "page_key": "search",
+  "version": 1,
+  "ttl_sec": 300,
+  "sections": [
+    {
+      "id": "search_top",
+      "type": "banner",
+      "version": 1,
+      "props": {
+        "height_ratio": 0.25
+      },
+      "data_source": {
+        "kind": "static",
+        "items": [
+          {
+            "image": "https://example.com/img/search-top-1.png",
+            "action": {
+              "route": "Search",
+              "params": {
+                "q": "洗衣液",
+                "platform": "jd"
+              }
+            }
+          },
+          {
+            "image": "https://example.com/img/search-top-2.png",
+            "action": {
+              "route": "WebPage",
+              "params": {
+                "url": "https://h5.example.com/topic/search-week"
+              }
+            },
+            "start_at": "2026-11-20T00:00:00+08:00",
+            "end_at": "2026-11-27T00:00:00+08:00"
+          }
+        ]
+      },
+      "ad_label": "推广"
+    },
+    {
+      "id": "float",
+      "type": "float_button",
+      "version": 1,
+      "props": {
+        "image": "https://example.com/img/float.png"
+      },
+      "data_source": {
+        "kind": "static",
+        "items": [
+          {
+            "action": {
+              "route": "Help"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
