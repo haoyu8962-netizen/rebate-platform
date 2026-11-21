@@ -5,7 +5,7 @@ type: impl
 # 2026-11-03 be 入账（D10-588 ①）。pub_share_fee 含技术服务费，现直接当 N（serviceFeeDeducted=false）。BR-CALC-03：报文给服务费金额时 N = 佣金 − 服务费（D10-105）。est = pub_share_pre_fee_for_commission − 预估服务费，settle = pub_share_fee_for_commission − 结算服务费，补贴（*_for_sdy）不进 N（BR-CALC-18），字段都已在录制里。服务费取 alimm_tech_service_pre_fee / alimm_tech_service_fee，缺则取 alimama_share_fee（录制 16/16 行有，dto 9/16），都缺 est 为 null 走 SERVICE_FEE_RATE_MISSING，serviceFeeDeducted 改 true。同 B1-08zh 的做法，字段映射 verified=false，真实口径由测试单与联盟后台逐单核对后才开入账，credit.enabled.taobao 保持 off。另：分页带 jumpType；settle 只在 tk_status=3 读（BR-FUND-02 按原始状态）。金额字段是 JSON number，走保留字面值的解析，不用浮点。冻结用例钉毛额，由新鲜独立 Claude 改，编排按 #24 核。归档过滤拆到 B1-04zzc。orders 列 subsidy_commission_fen 写入在流水线，本单不动，记 FU-TB-SUBSIDY-COLUMN（B 不受影响，R1 对账要）。RV2。
 refs: [BR-CALC-03, BR-CALC-18]
 refs_hash:
-  BR-CALC-03: cd58e7d6c02b
+  BR-CALC-03: 64770116e2de
   BR-CALC-18: bb50f68578f7
 deps: []
 paths:

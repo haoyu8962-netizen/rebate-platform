@@ -9,7 +9,7 @@ type: impl
 # 场景与驱动由独立方写（Codex 先实跑，额度错再按 approvals 36 换独立 Claude），Opus 只实现 listOrders。证据须含一次实现后在测试机上跑 test:replay 全绿的容器记录（与先红同一条执行路径；verify-replay 暂不挡合并，D10-1372）。
 refs: [BR-FUND-02]
 refs_hash:
-  BR-FUND-02: 382c4075d2cb
+  BR-FUND-02: f287247d4d07
 deps: []
 paths:
   - 'apps/api/src/modules/union/infra/demo/**'

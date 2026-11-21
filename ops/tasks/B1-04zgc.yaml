@@ -7,7 +7,7 @@ type: impl
 # 完成 2026-11-09（#2950）：pdd.csv 4 / 10 → PLATFORM_INVALID，适配器经 warn 发 order_reason_sub_unmapped / pdd_invalid_with_commission；D10-1114 起 union 收尾——[AC-B1-04zgc#4] 期望按 BR-FUND-01 P7 改 SETTLED（测试第 4 次，approvals 59，D10-1115 / D10-1118），P7 的 order_rights 行另见 FU-P7-ORDER-RIGHTS-ROW（归 be，D10-1124）。
 refs: [BR-FUND-02]
 refs_hash:
-  BR-FUND-02: 382c4075d2cb
+  BR-FUND-02: f287247d4d07
 deps: [B1-08f]
 paths:
   - 'specs/order-status-map/pdd.csv'
