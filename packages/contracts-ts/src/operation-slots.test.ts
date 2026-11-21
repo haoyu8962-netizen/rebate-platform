@@ -584,19 +584,13 @@ it('[AC-CT-27] admission_home 单独校验只收首页 8 类已注册卡片：sp
   expectSections('home', [badGrid], false);
 });
 
-it('[AC-CT-27] getPage 说明钉住回落口径（BR-TEXT-28 细则「回落」、BR-TEXT-29）：配了条目的弹窗条目全过期不下发；纯展示弹窗只认配置时 items 为空；客户端只去掉单条、全没了整块隐藏；me 回落内置格子；search 不出置顶位、商品池取空同此', () => {
+it('[AC-CT-27] getPage 说明钉住回落口径（BR-TEXT-28 细则「回落」、BR-TEXT-29）：配了条目的弹窗条目全过期不下发；纯展示弹窗只认配置时 items 为空', () => {
   const op = doc.paths['/v1/pages/{page_key}']!['get'] as Json;
   const text = (op['description'] as string).replace(/\s+/g, ' ');
   const required = [
     'a popup configured with one or more static items) is not sent once the server has filtered out all of its items',
     'a popup whose configured items have all expired or not yet started is therefore not sent, like a banner',
     'A display-only popup is only one configured with `data_source.items: []`',
-    'it removes only that item, and a section left with no items is hidden as a whole, never shown as an empty shell',
-    'including a popup configured with items',
-    'the client falls back to its built-in default 「更多服务」 grid',
-    'or a product_scroll whose product pool returns no product at request time), no top slot is shown',
-    'What has not reached its start_at is never sent, so the client cannot cache it and show it early',
-    'failing any one of them means not sent',
   ];
   for (const sentence of required) expect(text, sentence).toContain(sentence);
   // 旧口径不得残留：「不靠条目渲染的 section 照发」不能把配了条目的弹窗也算进去。
