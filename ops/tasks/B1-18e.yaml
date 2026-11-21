@@ -8,7 +8,7 @@ type: impl
 # 完成 2026-11-11（#3179，头 1c5eb8e8a6a4）：淘宝报文费率 / 配置、拼多多配置回退，ceil 取整，都没有进待处理；单位按百分数读、未核实；前置 B1-18et（#3178）；money r1 + r2 增量 pass，spec-test r2 pass。
 refs: [BR-CALC-03]
 refs_hash:
-  BR-CALC-03: cd58e7d6c02b
+  BR-CALC-03: 64770116e2de
 deps: [B1-18c, B1-08zh, B1-18et]
 paths:
   - 'apps/api/src/modules/union/infra/taobao/orders.ts'

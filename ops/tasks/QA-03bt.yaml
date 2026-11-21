@@ -8,7 +8,7 @@ type: test-change
 # 分工：场景由 Codex 写（codex-run impl --phase test），独立 Claude spec-test r1 pass、Codex money r1 pass，均 0 发现；README 两段与一处类型写法由新鲜独立 Claude 机械调整（D10-1424 / D10-1427，不计次数）。非 task 分支（chore/test-change-QA-03bt）、不带证据文件，标签由编排核对后加（先例 B2-09zd）。RV2。
 refs: [BR-FUND-02, BR-FUND-19]
 refs_hash:
-  BR-FUND-02: 382c4075d2cb
+  BR-FUND-02: f287247d4d07
   BR-FUND-19: ab824a70d47c
 deps: [QA-03a]
 paths:

@@ -8,7 +8,7 @@ type: impl
 # 完成 2026-11-10（#3120，头 d66b0704d7eb）：specs/attribution.md 新建；规则测试 3 次（D10-1233）+ D10-1235 机械修去 describe，spec-test r3 pass，money r1 pass。规则缺口（BR-CALC-18 拆分、service_fee_bp 回退、京东净额未实测、后台逐单核对）已报编排。
 refs: [BR-CALC-03, BR-CALC-18]
 refs_hash:
-  BR-CALC-03: cd58e7d6c02b
+  BR-CALC-03: 64770116e2de
   BR-CALC-18: bb50f68578f7
 deps: [B1-04zb, B1-04zz, B1-08zh]
 paths:

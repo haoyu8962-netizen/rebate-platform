@@ -8,7 +8,7 @@ type: impl
 # 资金口径的落地方式改动，不是口径改动：发现要改某平台入账事件、或 08 与实现不一致，停下报编排。
 refs: [BR-FUND-02]
 refs_hash:
-  BR-FUND-02: 382c4075d2cb
+  BR-FUND-02: f287247d4d07
 deps: []
 paths:
   - 'specs/creditable-events.yaml'

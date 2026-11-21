@@ -8,7 +8,7 @@ type: impl
 # 规则测试只钉结构：文件存在、文首有草稿标注、清单里引用的每个测试 ID 在主干对应目录里真实存在、缺口条目不带测试 ID。
 refs: [BR-FUND-02]
 refs_hash:
-  BR-FUND-02: 382c4075d2cb
+  BR-FUND-02: f287247d4d07
 deps: []
 paths:
   - 'specs/loss-scenarios.md'

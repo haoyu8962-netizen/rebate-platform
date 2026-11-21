@@ -9,7 +9,7 @@ type: impl
 # **作废**（2026-11-13，D10-1429）：主干直接绿、不需要新实现，改由 QA-03bt（test-change）落地；台账守卫不许改已有任务的 type（ledger-overwrite），故本单置 void，id / type / title 不动。#3354 关闭。
 refs: [BR-FUND-02, BR-FUND-19]
 refs_hash:
-  BR-FUND-02: 382c4075d2cb
+  BR-FUND-02: f287247d4d07
   BR-FUND-19: ab824a70d47c
 deps: [QA-03a]
 paths:

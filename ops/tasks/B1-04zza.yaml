@@ -9,7 +9,7 @@ type: impl
 refs: [BR-FUND-01, BR-FUND-02, BR-FUND-06, BR-FUND-08]
 refs_hash:
   BR-FUND-01: 71daaebae9bd
-  BR-FUND-02: 382c4075d2cb
+  BR-FUND-02: f287247d4d07
   BR-FUND-06: f903ec00076a
   BR-FUND-08: 4135d1b47230
 deps: [B1-04zz]
