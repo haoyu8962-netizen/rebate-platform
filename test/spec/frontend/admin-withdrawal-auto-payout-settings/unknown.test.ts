@@ -215,3 +215,49 @@ it(
     await shows(panel, NOTICE.saved);
   },
 );
+
+it(
+  '[AC-F1-08ap-UNK#6] 首次保存（250.50 → 300 元）收到带统一外壳的 5xx 且未落库，期间另一名财务把金额上限改为 270 元（版本到 4）：【刷新核对】按服务端回填 270 元，不显示提交前的 250.50 元或待核对的 300 元；解锁后改 280 元保存带服务端版本 4',
+  { timeout: FLOW_TIMEOUT },
+  async () => {
+    const server = serverFor();
+    const panel = await openSettings(server, SUPER);
+    scriptBatch(server, () => serverError());
+    await typeInto(panel, LABEL.maxAmount, '300');
+    await save(server, panel);
+    assertBatch(server, AMOUNT, 1, 1);
+    await expectUnknown(server, panel);
+    changedElsewhere(server, KEY.maxAmount, 27000);
+    expect(rowOf(server, KEY.maxAmount)).toMatchObject({
+      value: 27000,
+      version: VERSION.maxAmount + 1,
+    });
+    const reads = itemReads(server).length;
+    await click(usable(panel, RECHECK));
+    await waitFor(() => expect(itemReads(server).length).toBeGreaterThan(reads));
+    await settled(server);
+    await waitFor(() => expect(editable(panel).length, 'unlocked').toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(fenOfShown(input(panel, LABEL.maxAmount).value), 'the server value now').toBe(27000),
+    );
+    const shownFen = fenOfShown(input(panel, LABEL.maxAmount).value);
+    expect(shownFen, 'not the value before the save').not.toBe(25050);
+    expect(shownFen, 'not the value being checked').not.toBe(30000);
+    expect(shownText(panel)).not.toMatch(NOTICE.unknown);
+    expect(batches(server), 'refreshing sends nothing').toHaveLength(1);
+
+    await typeInto(panel, LABEL.maxAmount, '280');
+    await save(server, panel);
+    assertBatch(
+      server,
+      [{ key: KEY.maxAmount, value: 28000, expected_version: VERSION.maxAmount + 1 }],
+      2,
+      verifications(server).length,
+    );
+    await shows(panel, NOTICE.saved);
+    expect(rowOf(server, KEY.maxAmount)).toMatchObject({
+      value: 28000,
+      version: VERSION.maxAmount + 2,
+    });
+  },
+);

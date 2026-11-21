@@ -634,15 +634,16 @@ export const WARN_LABEL = {
 } as const;
 
 /**
- * Each item of BR-WDR-30 细则「开启前置检查」 with the words it must carry: BR-WDR-22 ② single and
- * daily limits, ⑤ failure codes and query status, ⑧ the daily bill carrying out_biz_no, and the
- * daily channel reconciliation (BR-WDR-23) run through for consecutive days.
+ * Each item of BR-WDR-30 细则「开启前置检查」 with the words it must carry, all inside the one list
+ * item of that check: BR-WDR-22 ② single and daily limits, ⑤ failure codes and query status, ⑧ the
+ * daily bill carrying out_biz_no, and the daily channel reconciliation (BR-WDR-23) run through for
+ * consecutive days (「每日」 may not be left out).
  */
 export const ENABLE_CHECK_ITEMS: readonly (readonly RegExp[])[] = [
   [/单笔/, /单日/, /限额/],
   [/失败码/, /查询状态/],
   [/(?:按日|每日|日)账单/, /out_biz_no/],
-  [/(?:每日|按日)?通道对账|每日对账/, /连续/],
+  [/每日/, /通道对账/, /连续跑通/],
 ];
 
 /** The title of the emergency switch page (texts/kill-switches.ts, frozen). */

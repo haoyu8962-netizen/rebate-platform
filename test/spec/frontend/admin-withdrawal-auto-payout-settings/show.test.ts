@@ -8,6 +8,7 @@ import {
   ENABLE_CHECK_TITLE,
   ENABLE_CHECK_WORDS,
   EXTRA_NOTE,
+  FLAG_CODES,
   FLAG_NAME,
   GROUP,
   KEY,
@@ -26,8 +27,10 @@ import {
   WARN_LABEL,
   accountOf,
   fenOfShown,
+  registry,
   serverFor,
   type BatchEntry,
+  type ConfigRow,
 } from './fixtures.ts';
 import {
   FLOW_TIMEOUT,
@@ -260,13 +263,40 @@ it(
 );
 
 it(
-  '[AC-F1-08ap-SHOW#7] 开启前置检查逐条列全：单笔与单日限额、失败码与查询状态、按日账单含 out_biz_no、每日通道对账连续跑通；只列条目不显示满足与否',
+  '[AC-F1-08ap-SHOW#7] 开启前置检查逐条列全且各为独立列表项：单笔与单日限额、失败码与查询状态、按日账单含 out_biz_no、每日通道对账连续跑通（每项的必备词都在同一条目内，末项须写明「每日」）；只列条目不显示满足与否',
   { timeout: FLOW_TIMEOUT },
   async () => {
     const server = serverFor({ master: false });
     const panel = await openSettings(server, SUPER);
     const text = squash(textOf(panel));
     expect(text).toMatch(ENABLE_CHECK_TITLE);
+    const listItems = Array.from(
+      panel.querySelectorAll<HTMLElement>('li, [role="listitem"]'),
+    ).filter((node) => isShown(node));
+    // Only the innermost list items: an item holding other items is not one check.
+    const leaves = listItems.filter(
+      (node) => !listItems.some((other) => other !== node && node.contains(other)),
+    );
+    const matched = ENABLE_CHECK_ITEMS.map((words) => {
+      const found = leaves.filter((node) => {
+        const own = squash(textOf(node));
+        return words.every((word) => word.test(own));
+      });
+      expect(found, `one list item carrying ${words.map(String).join(' ')} together`).toHaveLength(
+        1,
+      );
+      return found[0]!;
+    });
+    expect(new Set(matched).size, 'four separate list items, not one paragraph').toBe(4);
+    for (const [index, node] of matched.entries()) {
+      const own = squash(textOf(node));
+      for (const [other, words] of ENABLE_CHECK_ITEMS.entries())
+        if (other !== index)
+          expect(
+            words.every((word) => word.test(own)),
+            `item ${index + 1} does not also hold item ${other + 1}`,
+          ).toBe(false);
+    }
     for (const words of ENABLE_CHECK_ITEMS)
       for (const word of words)
         expect(text, `the check item carries ${String(word)}`).toMatch(word);
@@ -331,5 +361,47 @@ it(
         'withdraw_vs_received',
       ].sort(),
     );
+  },
+);
+
+/** Every BR-WDR-29 code a save may add (blacklist_hit is fixed and always checked). */
+const OPTIONAL_FLAGS = FLAG_CODES.filter((code) => code !== 'blacklist_hit');
+
+/** The registry with no risk flag stored (risk_block_flags = [], version 4). */
+function noFlagsStored(): ConfigRow[] {
+  return registry().map((row) => (row.key === KEY.riskFlags ? { ...row, value: [] } : row));
+}
+
+it(
+  '[AC-F1-08ap-SHOW#9] 阻断风险标签逐个单独勾选（表驱动列全 BR-WDR-29 除「命中黑名单」外的 10 个标签，已存集合为空）：每次只勾一个、其余不勾，保存后 risk_block_flags 恰多出该标签的 code（「60 天失效占比高」→ invalid_ratio_60d、「60 天高佣占比高」→ high_commission_ratio_60d 等，版本 4）',
+  { timeout: 900_000 },
+  async () => {
+    expect(OPTIONAL_FLAGS, 'every BR-WDR-29 label but blacklist_hit').toHaveLength(10);
+    const table: readonly (readonly [(typeof OPTIONAL_FLAGS)[number], string])[] =
+      OPTIONAL_FLAGS.map((code) => [code, FLAG_NAME[code]] as const);
+    for (const [code, name] of table) {
+      const server = serverFor({ items: noFlagsStored() });
+      const panel = await openSettings(server, SUPER);
+      const extra = card(panel, GROUP.extra);
+      for (const other of OPTIONAL_FLAGS)
+        expect(flagBox(extra, FLAG_NAME[other]).checked, `${other} not stored`).toBe(false);
+      await click(flagBox(extra, name));
+      for (const other of OPTIONAL_FLAGS)
+        expect(flagBox(extra, FLAG_NAME[other]).checked, `only ${name} ticked (${other})`).toBe(
+          other === code,
+        );
+      await save(server, panel);
+      const sent = batches(server);
+      expect(sent, `one save for ${name}`).toHaveLength(1);
+      const items = (sent[0]!.body as { items: BatchEntry[] }).items;
+      expect(
+        items.map((entry) => entry.key),
+        `only the flags for ${name}`,
+      ).toEqual([KEY.riskFlags]);
+      expect(items[0]!.expected_version).toBe(VERSION.flags);
+      const codes = (items[0]!.value as string[]).filter((one) => one !== 'blacklist_hit');
+      expect(codes, `ticking ${name} adds exactly ${code}`).toEqual([code]);
+      cleanup();
+    }
   },
 );

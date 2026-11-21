@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { cleanup } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { KEY, SUPER, WARN_LABEL, registry, serverFor, type ConfigRow } from './fixtures.ts';
 import {
@@ -134,5 +135,31 @@ it(
       1,
       1,
     );
+  },
+);
+
+it(
+  '[AC-F1-08ap-WARN#5] ⑧ 四项预警两端点均可保存（表驱动列全四项 × 0% / 100%，已存 9000 / 8000 / 7000 / 500 bp）：逐项只把该项填 0 或 100 后保存，批量只送该键、值为 0 或 10000（bp）、expected_version 为 1',
+  { timeout: 600_000 },
+  async () => {
+    const fields = [
+      { label: WARN.rate, key: KEY.warnRate },
+      { label: WARN.orders, key: KEY.warnOrders },
+      { label: WARN.invalid, key: KEY.warnInvalid },
+      { label: WARN.received, key: KEY.warnReceived },
+    ] as const;
+    const ends = [
+      { text: '0', bp: 0 },
+      { text: '100', bp: 10000 },
+    ] as const;
+    for (const field of fields)
+      for (const end of ends) {
+        const server = serverFor();
+        const panel = await openSettings(server, SUPER);
+        await typeInto(panel, field.label, end.text);
+        await save(server, panel);
+        assertBatch(server, [{ key: field.key, value: end.bp, expected_version: 1 }], 1, 1);
+        cleanup();
+      }
   },
 );

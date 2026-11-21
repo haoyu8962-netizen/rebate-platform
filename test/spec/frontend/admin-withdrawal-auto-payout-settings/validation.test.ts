@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
+import { cleanup } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { choose } from '../admin-withdrawals/helpers.ts';
-import { KEY, LABEL, SUPER, VERSION, serverFor } from './fixtures.ts';
+import { KEY, LABEL, SUPER, VERSION, registry, serverFor, type ConfigRow } from './fixtures.ts';
 import {
   FLOW_TIMEOUT,
   assertBatch,
+  input,
   invalidMarks,
   markedInvalid,
   openSettings,
@@ -165,5 +167,42 @@ it(
       1,
       1,
     );
+  },
+);
+
+/** The registry with 同一会员每月 stored as 5 (version 2), so every count starts non-zero. */
+function countsStored(): ConfigRow[] {
+  return registry().map((row) =>
+    row.key === KEY.userMonthly
+      ? {
+          ...row,
+          value: 5,
+          version: 2,
+          updated_by: 'ops-yi',
+          updated_at: '2026-11-19T10:00:00+08:00',
+        }
+      : row,
+  );
+}
+
+it(
+  '[AC-F1-08ap-VAL#5] ⑦ 四项次数均允许 0（表驱动列全：同一收款账号每日 2、每月 4，同一会员每日 3、每月 5）：逐项只把该项改为 0 后保存，批量恰含该键、值为整数 0、expected_version 为显示时的版本',
+  { timeout: 300_000 },
+  async () => {
+    const table = [
+      { label: LABEL.payeeDaily, key: KEY.payeeDaily, shown: '2', version: 1 },
+      { label: LABEL.payeeMonthly, key: KEY.payeeMonthly, shown: '4', version: 1 },
+      { label: LABEL.userDaily, key: KEY.userDaily, shown: '3', version: VERSION.userDaily },
+      { label: LABEL.userMonthly, key: KEY.userMonthly, shown: '5', version: 2 },
+    ] as const;
+    for (const row of table) {
+      const server = serverFor({ items: countsStored() });
+      const panel = await openSettings(server, SUPER);
+      expect(input(panel, row.label).value, `${row.key} shown as stored`).toBe(row.shown);
+      await typeInto(panel, row.label, '0');
+      await save(server, panel);
+      assertBatch(server, [{ key: row.key, value: 0, expected_version: row.version }], 1, 1);
+      cleanup();
+    }
   },
 );
