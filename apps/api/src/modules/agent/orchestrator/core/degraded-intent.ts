@@ -12,6 +12,7 @@
 // throws instead of registering for another run. The core reads the slot when it records the
 // trace (also when the user stopped the run before the path returned), then closes it: later
 // registrations change nothing. An intent the model already gave is never replaced.
+import type { PageGuideRejectReason } from '@couli/contracts-ts';
 import type { RunContext } from '../../stream/run/index.ts';
 import { DEGRADED_INTENTS } from './ports.ts';
 import type { DegradedIntent } from './ports.ts';
@@ -23,6 +24,8 @@ interface RouteSlot {
   open: boolean;
   /** B3-08t: the path served the message without an intent (see markDegradedUnserved). */
   unserved: boolean;
+  /** B3-08t: why the path's page guide was not sent (see markDegradedGuideRejected). */
+  guideRejected: PageGuideRejectReason | null;
 }
 
 /** Slot of each degraded run call, keyed by the context the core handed it (see header). */
@@ -59,12 +62,27 @@ export function markDegradedUnserved(ctx: RunContext): void {
   slot.unserved = true;
 }
 
+/**
+ * B3-08t · BR-AI-19 细则「运行级字段」: the no-model path's page guide was refused (untrusted input,
+ * parameters asked for, agent.page_guide.enabled off, not in contract ∩ configuration): the reason
+ * goes to agent_runs.page_guide_reject_reason with the trace. Recorded whether or not the model's
+ * intent is kept (a fact of what was served, not an intent); the first reason counts. Best effort
+ * and silent: a context without a slot or a slot already closed changes nothing.
+ */
+export function markDegradedGuideRejected(ctx: RunContext, reason: PageGuideRejectReason): void {
+  const slot = slots.get(ctx);
+  if (slot === undefined || !slot.open || slot.guideRejected !== null) return;
+  slot.guideRejected = reason;
+}
+
 /** Core only: the intent slot of one DegradedPath.run call. */
 export interface DegradedRoute {
   /** The registered intent (null: none, or the model's is kept); no registration counts after. */
   close(): DegradedIntent | null;
   /** B3-08t: markDegradedUnserved was called on the slot's context before it was closed. */
   unserved(): boolean;
+  /** B3-08t: the reason markDegradedGuideRejected recorded before the slot was closed, or null. */
+  guideRejected(): PageGuideRejectReason | null;
 }
 
 /**
@@ -73,7 +91,7 @@ export interface DegradedRoute {
  */
 export function openDegradedRoute(ctx: RunContext, fixed: boolean): DegradedRoute {
   if (slots.has(ctx)) throw new Error('openDegradedRoute: context already bound');
-  const slot: RouteSlot = { fixed, intent: null, open: true, unserved: false };
+  const slot: RouteSlot = { fixed, intent: null, open: true, unserved: false, guideRejected: null };
   slots.set(ctx, slot);
   return {
     close() {
@@ -81,5 +99,6 @@ export function openDegradedRoute(ctx: RunContext, fixed: boolean): DegradedRout
       return slot.fixed ? null : slot.intent;
     },
     unserved: () => slot.unserved,
+    guideRejected: () => slot.guideRejected,
   };
 }

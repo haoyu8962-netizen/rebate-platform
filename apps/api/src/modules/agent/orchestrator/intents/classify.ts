@@ -47,6 +47,10 @@ export interface IntentTextPatterns {
   readonly location: string;
   /** Asking how to start an operation (怎么提现) → an entry page. */
   readonly howTo: string;
+  /** B3-08t: the whole sentence asks to look up the user's own orders, or briefly points at one,
+   * without a progress word (查一下我的订单, 我的订单, 我那单) → order_query. A sentence that also
+   * asks about rules or says not to look (别查我的订单) is not this. */
+  readonly ownOrderQuery: string;
 }
 
 export function intentTextPatterns(): IntentTextPatterns {
@@ -70,6 +74,8 @@ export function intentTextPatterns(): IntentTextPatterns {
     location:
       '在哪(?!一步|步|个环节|个阶段|(?:里|儿)?了)|(?<![到在])哪(?:里|儿)(?!了)|(?<!到)哪(?:看|找|查)|哪个(?:页面|入口|地方)|哪一页|入口|从哪',
     howTo: '(?:怎么|如何|怎样)(?:才能|可以|能)?(?:提现|查看|看|找|打开|进入|进|邀请|授权|绑定)',
+    ownOrderQuery:
+      '^(?:(?:帮我|麻烦|请|给我)?(?:查一?下|查查|查询|查看|看一?下|看看|查|看)(?:一下)?)?(?:我的?|我那|我这)(?:订单|那单|这单|单子?)(?:呢|吧|啊|呀|嘛)?$',
   };
 }
 
@@ -121,6 +127,7 @@ export function createTextClassifier(
   const specificRef = re(patterns.specificRef);
   const location = re(patterns.location);
   const howTo = re(patterns.howTo);
+  const ownOrderQuery = re(patterns.ownOrderQuery);
   const routeHint = (text: string): string | null => {
     if (/提现(?:记录|明细|历史)/u.test(text)) return targets.withdrawRecords;
     if (/钱包|余额|提现/u.test(text)) return targets.wallet;
@@ -146,11 +153,10 @@ export function createTextClassifier(
           return { kind: 'personal', withdrawal };
         }
       }
-      // 本人订单 without a progress word (查一下我的订单): an order noun the user points at as their
-      // own (我的订单, 我那单) is order_query; account wording still makes it earnings (above).
-      if (selfPointer.test(text) && orderNoun.test(text) && !earningsStrong.test(text)) {
-        return { kind: 'order' };
-      }
+      // 本人订单 without a progress word: only a sentence that as a whole asks to look up the
+      // user's own orders or briefly points at one (查一下我的订单, 我的订单, 我那单). A rule question
+      // or a negation (订单返利规则是什么？别查我的订单) keeps the reading below.
+      if (ownOrderQuery.test(text)) return { kind: 'order' };
       if (isGeneric) return { kind: 'rule' };
       return { kind: 'unknown' };
     },

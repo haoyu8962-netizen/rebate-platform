@@ -51,3 +51,27 @@ it('[AC-B3-08t#4] nothing served, nothing called or no valid label → null', ()
   expect(contractIntentOf(undefined)).toBeNull();
   expect(contractIntentOf('clarify')).toBe('clarify');
 });
+
+it('[AC-B3-08t#3][AC-B3-08t#6] the scenario entry intent wins over later text handling', () => {
+  expect(
+    storedIntentOf({
+      entry: 'find_by_link',
+      checked: 'page_guide',
+      traced: 'page_guide',
+      firstTool: null,
+    }),
+  ).toBe('find_by_link');
+  expect(storedIntentOf({ entry: 'order_query', traced: 'order_query', firstTool: null })).toBe(
+    'order_query',
+  );
+  expect(
+    storedIntentOf({ entry: null, checked: 'page_guide', traced: null, firstTool: null }),
+  ).toBe('page_guide');
+});
+
+it('[AC-B3-08t#1][AC-B3-08t#2] an unchecked model label (template run) is not stored: the first tool decides', () => {
+  expect(
+    storedIntentOf({ traced: 'earnings_query', unchecked: true, firstTool: 'list_my_orders' }),
+  ).toBe('order_query');
+  expect(storedIntentOf({ traced: 'earnings_query', unchecked: true, firstTool: null })).toBeNull();
+});

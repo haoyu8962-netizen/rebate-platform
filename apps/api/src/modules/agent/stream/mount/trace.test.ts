@@ -4,7 +4,13 @@ import type { OrchestratorTrace } from '../../orchestrator/core/ports.ts';
 import type { RunBodyResult, RunContext } from '../run/index.ts';
 import type { CardInput } from '../writer/index.ts';
 import { storedCard } from '../pg/reply.ts';
-import { createRunTraceRecorder, initiatedCalls, toolCallRecords } from './trace.ts';
+import type { IntentTrace } from '../../orchestrator/intents/index.ts';
+import {
+  createRunTraceRecorder,
+  initiatedCalls,
+  recordIntentVerdict,
+  toolCallRecords,
+} from './trace.ts';
 import type { TraceRedoQueue } from './trace-retry.ts';
 
 const APP = 'synthetic-app';
@@ -307,4 +313,81 @@ it('[AC-B3-08t#6] 记录器（runFields）：降级结果不记模型；核心�
   expect(recorder.settleFields(RUN)).toEqual({ intent: null, inputPassed: true, modelUsed: null });
   release();
   await running;
+});
+
+it('[AC-B3-08t#5][AC-B3-08t#10] 记录器（runFields）：无模型分流的页面引导拒绝原因随留痕写入', async () => {
+  const q = queue();
+  const recorder = createRunTraceRecorder({
+    queue: q,
+    runFields: { clock: { now: () => new Date(0) } } as never,
+  });
+  const body = recorder.body(input(), async () => {
+    recorder.inputPassed(RUN);
+    recorder.sink.record(RUN, {
+      ...trace([], null),
+      intent: 'page_guide',
+      degraded: true,
+      page_guide_reject_reason: 'disabled',
+    });
+    return DONE;
+  });
+  await body({ ...context(), text: () => undefined } as unknown as RunContext);
+  expect(recorder.settleFields(RUN)).toEqual({
+    intent: 'page_guide',
+    inputPassed: true,
+    modelUsed: false,
+  });
+  await flushed();
+  expect(q.persist.mock.calls[0]?.[0].runFields).toMatchObject({
+    model: null,
+    page_guide_reject_reason: 'disabled',
+  });
+});
+
+it('[AC-B3-08t#3][AC-B3-08t#6] 记录器（runFields）：商品情境入口的意图优先于后续文字处理，引导拒绝原因照写', async () => {
+  const q = queue();
+  const recorder = createRunTraceRecorder({
+    queue: q,
+    runFields: { clock: { now: () => new Date(0) } } as never,
+  });
+  const body = recorder.body(input(), async (inner) => {
+    recorder.inputPassed(RUN);
+    // The intent port's verdict on the entry run's text (钱包在哪 with the guide disabled).
+    recordIntentVerdict(APP, RUN, {
+      intent: 'page_guide',
+      page_guide_reject_reason: 'disabled',
+    } as IntentTrace);
+    inner.text('合成');
+    recorder.sink.record(RUN, {
+      ...trace([{ name: 'get_rebate_quote', args: null, status: 'ok' }]),
+      intent: 'page_guide',
+      entry_intent: 'find_by_link',
+    });
+    return DONE;
+  });
+  await body({ ...context(), text: () => undefined } as unknown as RunContext);
+  expect(recorder.settleFields(RUN)).toEqual({
+    intent: 'find_by_link',
+    inputPassed: true,
+    modelUsed: true,
+  });
+  await flushed();
+  expect(q.persist.mock.calls[0]?.[0].runFields?.page_guide_reject_reason).toBe('disabled');
+});
+
+it('[AC-B3-08t#1][AC-B3-08t#2] 记录器（runFields）：模板轮次未经意图端口核对的模型标签不落库，按首个工具推断', async () => {
+  const recorder = createRunTraceRecorder({
+    queue: queue(),
+    runFields: { clock: { now: () => new Date(0) } } as never,
+  });
+  const body = recorder.body(input(), async () => {
+    recorder.sink.record(RUN, {
+      ...trace([{ name: 'list_my_orders', args: null, status: 'ok' }]),
+      intent: 'earnings_query',
+      intent_unchecked: true,
+    });
+    return DONE;
+  });
+  await body({ ...context(), text: () => undefined } as unknown as RunContext);
+  expect(recorder.settleFields(RUN)?.intent).toBe('order_query');
 });

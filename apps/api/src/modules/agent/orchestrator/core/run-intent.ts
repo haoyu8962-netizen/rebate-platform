@@ -2,11 +2,14 @@
 // or null), written with the terminal state. Pure: the caller hands in what this run decided.
 //
 // Order of the sources:
+//   0. a scenario entry's intent (product → find_by_link, order → order_query): a deterministic fact,
+//      kept over any later text handling (the page guide reason of that handling is still stored);
 //   1. the intent port's verdict (判定顺序② server-checked; e.g. 查一下我的订单 with a model label
 //      earnings_query is order_query) — when the port recorded one, it is the run's label;
 //   2. otherwise the core's trace intent: the deterministic link path and the entries
-//      (find_by_link / order_query), the no-model path's ①–⑥, or the model's own label (without an
-//      intent port, or a template run);
+//      (find_by_link), the no-model path's ①–⑥, or the model's own label without an intent port;
+//      a label no port checked (a template run's final round, `unchecked`) is never stored: the
+//      first tool decides (4.);
 //   3. a degraded run that served nothing (greetings only, no product word, so no search) has none;
 //   4. a label that is not one of the 10 (null, unknown) falls back to the first tool called in the
 //      run (search_products → search, get_rebate_quote → find_by_link, the three order tools →
@@ -17,10 +20,14 @@
 import { agent_intent as AGENT_INTENTS, type AgentIntent } from '@couli/contracts-ts';
 
 export interface StoredIntentFacts {
+  /** The scenario entry's intent (OrchestratorTrace.entry_intent), when the run had an entry. */
+  readonly entry?: string | null;
   /** The intent port's verdict when it recorded one (null: it decided on none). */
   readonly checked?: string | null;
   /** The core's trace intent (OrchestratorTrace.intent). */
   readonly traced: string | null;
+  /** `traced` is the model's own label that no IntentPort checked (template run). */
+  readonly unchecked?: boolean;
   /** The no-model path served the message without an intent (greetings, no product word). */
   readonly unserved?: boolean;
   /** Name of the first tool called in the run (model or server initiated), null without one. */
@@ -47,8 +54,14 @@ export function contractIntentOf(label: string | null | undefined): AgentIntent 
 
 /** The intent agent_runs.intent stores for one run (see the header). */
 export function storedIntentOf(facts: StoredIntentFacts): AgentIntent | null {
+  const entry = contractIntentOf(facts.entry);
+  if (entry !== null) return entry;
   const label =
-    facts.checked !== undefined ? facts.checked : facts.unserved === true ? null : facts.traced;
+    facts.checked !== undefined
+      ? facts.checked
+      : facts.unserved === true || facts.unchecked === true
+        ? null
+        : facts.traced;
   const intent = contractIntentOf(label);
   if (intent !== null) return intent;
   if (facts.firstTool === null || !Object.hasOwn(TOOL_INTENTS, facts.firstTool)) return null;
