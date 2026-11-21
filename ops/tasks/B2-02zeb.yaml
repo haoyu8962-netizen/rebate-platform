@@ -1,0 +1,28 @@
+id: B2-02zeb
+repo: rebate-platform
+title: 'B2-02zeb：二次验证令牌在提交结果未知时不释放（FU-STEPUP-COMMIT-UNKNOWN-RETAIN，S1）——自 B2-02ze 拆出的令牌一半'
+type: impl
+# 2026-11-21 be 入账（编排 D10-2419；拆法见 couli-runs/B2-02ze/d2418-split.md）。B2-02ze 的两半按文件互不引用；令牌一半在 B2-02ze money r1–r3 中的 S1 均已关闭（提交后 57014 显示名前移并确认；事务内 57014 已回滚仍保留令牌按 D10-2396 认可为保守取舍），脱敏一半留在 B2-02ze 等负责人。
+# 范围：admin/application/permission-guard.ts createAdminStepUpGate——区分「已确认回滚」与「提交结果未知」：SQLSTATE 57P01 / 57P02 / 57P03 / 57014、08 类、无 SQLSTATE 的驱动断线与 outcome_unknown 不释放令牌（step-up-outcome.ts 分类器）；明文导出 create / retry 的显示名在提交前读、返回在事务内组装；后台账号写入提交后组装返回失败按结果未知。冻结用例 test/spec/admin/exports/create.int.test.ts [AC-B1-34f#4] 保持绿。
+# 规则测试取自 B2-02ze 写测 1–3 的 test/spec/admin/step-up-commit-unknown/（含编排准过的 kit 机械改 D10-2328 ①），实现取自 B2-02ze 3448859e0 的同名文件。
+refs: [BR-ID-34]
+refs_hash:
+  BR-ID-34: 6f4bb7f212cb
+deps: []
+paths:
+  - 'apps/api/src/modules/admin/application/step-up-outcome.ts'
+  - 'apps/api/src/modules/admin/application/step-up-outcome.test.ts'
+  - 'apps/api/src/modules/admin/application/permission-guard.ts'
+  - 'apps/api/src/modules/admin/application/permission-guard.test.ts'
+  - 'apps/api/src/modules/admin/application/admin-exports.ts'
+  - 'apps/api/src/modules/admin/application/admin-exports-commit.test.ts'
+  - 'apps/api/src/modules/admin/application/admin-accounts-write.ts'
+  - 'apps/api/src/modules/admin/application/admin-accounts-write.test.ts'
+test_paths:
+  - 'test/spec/admin/step-up-commit-unknown/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/admin/step-up-commit-unknown/**'
+status: todo
