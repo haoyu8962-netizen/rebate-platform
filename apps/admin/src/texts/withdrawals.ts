@@ -18,7 +18,7 @@ export const withdrawalsTexts = {
   forbiddenDescription:
     '当前账号没有提现查看权限点（withdraw.review 或 fund.view），请联系超管勾选。',
   readOnlyNotice:
-    '勾选待审核的单可【批量通过】；批量打款、导出与自动到账设置尚未接入，接口定稿后开放；单张审核通过 / 驳回在提现单详情办理。',
+    '勾选待审核的单可【批量通过】，勾选待执行的单可【批量手动打款】或【批量自动打款】（【一键组批】选中本页可执行的待执行单）；导出与自动到账设置尚未接入，接口定稿后开放；单张审核通过 / 驳回在提现单详情办理。',
   statusTabs: {
     all: '全部',
     pendingReview: '待审',
@@ -617,6 +617,33 @@ export const withdrawalsTexts = {
     invalid: '提交内容有误，请检查后重试',
     network: '网络错误，请检查网络后重试；未确认前不会重复提交',
     failed: '提交失败，请稍后重试',
+  },
+  /**
+   * 审核列表【批量自动打款】与【一键组批】（F1-08an；契约 adminCreatePayoutBatch，BR-WDR-11 / 12）。
+   * 执行前检查、逐单原因、整批原因与错误提示沿用 execute 一节。
+   */
+  batchPayout: {
+    entry: '批量自动打款',
+    group: '一键组批',
+    title: (count: number): string => `批量自动打款确认 · ${count} 张`,
+    resultTitle: (count: number): string => `批量自动打款结果 · ${count} 张`,
+    plan: '本次处理',
+    willExecute: '将执行',
+    unreviewed: '未审核',
+    unreviewedNote:
+      '勾选中的待审核单不在本操作中审核，结果显示「未审核」：请先审核通过，再执行打款。',
+    tooMany: (max: number): string => `一次最多执行 ${max} 张，请减少勾选`,
+    consequence:
+      '执行后系统按所选的待执行单组建 1 个人工批次：通过检查的单进入打款中、按单发起转账；未通过的单留在待执行，并在结果与列表「执行结果」里写明原因。',
+    toList: '去列表核对',
+    unknownTitle: '上次提交结果未知',
+    unknownDescription:
+      '没有收到确定的结果，打款可能已经发起。所选单与提交内容已锁定：可以【重试】（重新验证动态码后按原内容再提交一次，不会重复打款），或【去列表核对】。',
+    summary: (paying: number, left: number, unreviewed: number): string =>
+      `进入打款 ${paying} 张，留在待执行 ${left} 张${
+        unreviewed === 0 ? '' : `，未审核 ${unreviewed} 张`
+      }；列表与页签计数已刷新。`,
+    listResult: '本次执行结果',
   },
   /** 【录入企业支付宝余额】【录入运营账户余额】（F1-08bc；契约 adminCreatePayoutWatermark，BR-WDR-18）。 */
   watermark: {

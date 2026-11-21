@@ -1,0 +1,338 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-payouts-readonly/tabs.test.ts > [AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（另有 5 个页签计数读，F1-08an）（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts",
+    "test/spec/frontend/admin-payouts-readonly/tabs.test.ts > [AC-F1-08an-COUNTS#1] 持 fund.view + payout.execute 进 /withdrawals：恰 5 个 page_size=1 的页签计数读（全部 / 待审 / 驳回 / 手动 / 自动，各只带该页签的快捷筛选），审核列表的列表读恰 1 条",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#1] 进页 /withdrawals?status=PENDING_REVIEW：首个（也是唯一一个）列表请求（另有 5 个页签计数读，F1-08an）即带 status=PENDING_REVIEW，提现状态控件显示「待审核」，只列待审核的单，不报错、不提示筛选未应用",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#2] 地址里的其他参数不影响：/withdrawals?dashboard_probe=case0&status=PAID_MANUAL&review_mode=auto&page=2 首个列表请求只带 page=1、page_size 与 status=PAID_MANUAL，控件显示「线下打款成功」，只列该单",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#3] 带 status=PENDING_REVIEW 进页后点【重置】：只重读一次且不带 status，控件清空，七张单重新列出",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#4] 带 status=PENDING_REVIEW 进页后把提现状态改为「已驳回」并【查询】：改选时不发请求，【查询】只发一次、带 status=REJECTED，控件显示「已驳回」，只列驳回单",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#5] 带 status=PENDING_REVIEW 进页后换页与切页签照常：第 2 页请求 page=2 仍带 status；切「待审」页签请求 page=1、display_status=pending_review 且仍带 status",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#6] status 缺省或为空照旧：合法的 status=APPROVED 生效；而 ?status=、?dashboard_probe=case0、?status=&dashboard_probe=case1 进页时首个列表请求不带 status，控件为空，七张单全列，不报错",
+    "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#7] status 不是契约枚举值照旧：合法的 status=FAILED 生效；而 pending_review（小写）、Pending_Review（大小写不同）、pending（未知值）进页时首个列表请求不带 status，控件不显示该值，七张单全列，不报错",
+    "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts > [AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏；持 payout.execute 或超管时恰多可用的【一键组批】（F1-08an），只持审核权限看不到它",
+    "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts > [AC-F1-08an-ACCESS#1] 持 withdraw.review 与 payout.execute 时提现审核页【一键组批】恰为 1 个且可用（不点），勾选待审核单后【批量通过】照旧可用、【一键组批】仍恰为 1 个；只持 withdraw.review 时没有【一键组批】",
+    "test/spec/frontend/admin-withdrawal-batch-payout/counts.test.ts > [AC-F1-08an-COUNT#1] 只持 fund.view 进审核列表：每个状态页签都发 page_size=1 的读取（只带该页签的快捷筛选、不带其他条件），页签显示返回的 total（全部 128、待审 37、驳回 9、手动 15、自动 52），不是当前页的行数；切到「待审」后各页签计数不变",
+    "test/spec/frontend/admin-withdrawal-batch-payout/counts.test.ts > [AC-F1-08an-COUNT#2] 计数读取都失败（50001）：五个页签各发过一次 page_size=1 的读取，页签只显示名字、不显示任何数字，页面不出现错误提示（无 role=alert、无「加载失败」、无错误消息），列表照常列出全部提现单，切到「待审」照常列出",
+    "test/spec/frontend/admin-withdrawal-batch-payout/entry.test.ts > [AC-F1-08an-ENTRY#1] 持 fund.view + payout.execute：待执行（APPROVED）行各有一个可用勾选框（含带「暂停」标记的），待审核、打款中、已成功行没有；未勾选时没有【批量自动打款】、有一个可用的【一键组批】；勾一张待执行单后恰有一个可用的【批量自动打款】，没有【批量通过】【批量手动打款】；取消勾选后【批量自动打款】消失；全程不发写请求",
+    "test/spec/frontend/admin-withdrawal-batch-payout/entry.test.ts > [AC-F1-08an-ENTRY#2] 超管：只勾待审核单时只有【批量通过】、没有【批量自动打款】，再勾一张待执行单后【批量自动打款】【批量手动打款】都可用，【一键组批】在；只持 fund.view、只持 withdraw.review、持 fund.view + payout.manual_entry 时都没有【批量自动打款】【一键组批】（隐藏，不是置灰；勾了各自可勾的单也没有）；全程不发写请求",
+    "test/spec/frontend/admin-withdrawal-batch-payout/entry.test.ts > [AC-F1-08an-ENTRY#3] 已挂在别的批次上的待执行单可进人工组批（BR-WDR-12 换批次）：自动批次上因通道未开通受阻的单（batch_id 指向该自动批次、auto_decision.execute_blocked=channel_disabled）与经 W9 退回、仍挂在旧批次上的单（hold_reason 有值）各有一个可用勾选框；持 payout.execute 按【一键组批】选中这两张与普通待执行单（不选待审核单），超管手动勾这两张也行；动态码后请求体恰为按列表顺序的这些 withdrawal_ids",
+    "test/spec/frontend/admin-withdrawal-batch-payout/frozen-moved/group.browser.test.ts > [AC-F1-08an-BROWSER#1] /withdrawals 审核列表（Chromium）：持 payout.execute 时【一键组批】恰 1 个且可用（不点）；不持 payout.execute（其余权限点照持）时没有【一键组批】；全程只发允许的 GET",
+    "test/spec/frontend/admin-withdrawal-batch-payout/frozen-moved/route-status-counts.test.ts > [AC-F1-08an-COUNTS#1] 进页 /withdrawals 与 /withdrawals?status=PENDING_REVIEW：恰 5 个 page_size=1 的页签计数读（全部 / 待审 / 驳回 / 手动 / 自动，各只带该页签的快捷筛选、不带地址里的 status），列表读恰 1 条",
+    "test/spec/frontend/admin-withdrawal-batch-payout/group.test.ts > [AC-F1-08an-GROUP#1] 持 payout.execute 与超管：按【一键组批】不发写请求，选中的恰为两张没有「暂停」标记的待执行单（带「暂停」标记的待执行单、待审核、打款中、已成功的单都不在内，超管也不出现【批量通过】）；【批量自动打款】的确认对话框按列表顺序只列这两张，动态码后请求体恰为这两张",
+    "test/spec/frontend/admin-withdrawal-batch-payout/refused.test.ts > [AC-F1-08an-REFUSED#1] 整批拒绝（打款开关已关闭、打款队列已暂停、企业支付宝余额 W 低于预计提现 P）：显示各自全文，任何单都不显示「已发起打款」，也不是结果未知；不自动重发；勾选保留，再提交换新的 Idempotency-Key，第二次进入打款如实显示",
+    "test/spec/frontend/admin-withdrawal-batch-payout/refused.test.ts > [AC-F1-08an-REFUSED#2] 首次提交即被确定拒绝：带外壳的 10403 提示「无权限执行此操作（需要 payout.execute 权限点）」，20001 data.fields=[withdrawal_ids] 提示「提现单编号有误，请刷新页面后重试」；不进入结果未知（没有【重试】）、不报成功、不自动重发；再提交换新的 Idempotency-Key",
+    "test/spec/frontend/admin-withdrawal-batch-payout/relogin.test.ts > [AC-F1-08an-RELOGIN#1] 批量自动打款结果未知：只存一项标记 {page: withdrawals, unknown: true, at: 发生时刻}（不含单号、金额、用户、幂等键、请求体）；【重试】收到 10001 走全局重新登录后标记仍在；同一账号重新登录回到提现审核页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻 2026-11-18 12:00:00，提示条只有【关闭】、无无角色的点击 / 按键处理；不自动重发、不恢复对话框；按【关闭】后提示消失、标记清掉",
+    "test/spec/frontend/admin-withdrawal-batch-payout/submit.test.ts > [AC-F1-08an-SUBMIT#1] 持 payout.execute 倒序勾三张待执行单：【批量自动打款】先出确认对话框，按列表顺序列三张单与各自实付金额，并有「执行前检查」（打款开关、队列运行状态、单日限额余量取打款概览），【取消】不发任何请求；再打开【确认执行】→ 动态码（双击也只验一次）→ 只发一次 POST /admin/v1/payout-batches，body 恰为按列表顺序的三个 withdrawal_ids，带 X-Step-Up-Token 与 Idempotency-Key",
+    "test/spec/frontend/admin-withdrawal-batch-payout/submit.test.ts > [AC-F1-08an-SUBMIT#2] 部分成功如实显示：三张里两张进入打款（「已发起打款」）、一张留在待执行（会员有提现阻断的全文），留下的那张不显示「已发起打款」，不报三张都已发起；之后重新读列表与各页签计数、清空勾选，进入打款的单在列表里为打款中、留下的仍为已通过待打款；只发一次写",
+    "test/spec/frontend/admin-withdrawal-batch-payout/submit.test.ts > [AC-F1-08an-SUBMIT#3] 超管混选一张待审核单与两张待执行单：确认对话框里待审核单标「未审核」、不列为将执行；请求体只有两张待执行单（列表顺序），待审核单不在本操作中审核（不发 batch-approve）；结果里待审核单仍为「未审核」、两张待执行单为「已发起打款」",
+    "test/spec/frontend/admin-withdrawal-batch-payout/submit.test.ts > [AC-F1-08an-SUBMIT#4] 逐单原因各自如实显示：五张待执行单一张进入打款，其余四张分别因已有转账记录、打款通道未开通、已不是待执行、会员有提现阻断留在待执行；每张留下的单只显示自己那句原因全文（不出别人的原因、不出「已发起打款」），进入打款的那张不出任何留下原因；不显示「全部成功」类提示",
+    "test/spec/frontend/admin-withdrawal-batch-payout/unknown.test.ts > [AC-F1-08an-UNKNOWN#1] 首次提交无回应 / 无法解析的响应（HTML、残缺 JSON）/ 带外壳的 50001 / 40901：都进入「上次提交结果未知」，只有【重试】与「…核对」可用，Esc 与遮罩关不掉，不自动重发；【重试】先重新动态码，再以原 Idempotency-Key 与逐字节相同的请求体只发一次，拿到确定结果后如实显示",
+    "test/spec/frontend/admin-withdrawal-batch-payout/unknown.test.ts > [AC-F1-08an-UNKNOWN#2] 结果未知时按「…核对」：不再发写请求，重新读列表；不会凭空报成功",
+    "test/spec/frontend/admin-withdrawal-batch-payout/unknown.test.ts > [AC-F1-08an-UNKNOWN#3] 结果未知后【重试】收到带外壳的 10403，或 10003 且 data.reason=verify_phone_missing：仍是「上次提交结果未知」、只有【重试】与「…核对」、键与请求体不变；再【重试】原键原体拿到确定结果",
+    "test/spec/frontend/admin-withdrawal-batch-payout/unknown.test.ts > [AC-F1-08an-UNKNOWN#4] 结果未知后【重试】收到 20001（data.fields=[withdrawal_ids]）：解除锁定、提示「提现单编号有误，请刷新页面后重试」、不再是结果未知；之后再提交换新的 Idempotency-Key",
+    "test/spec/frontend/admin-withdrawal-batch-payout/unknown.test.ts > [AC-F1-08an-UNKNOWN#5] 普通 10003（data.tier=totp，凭证未被接受）：重新弹出动态码并提示「动态码凭证已失效，请重新输入动态码」，验证前不重发；验证后以原 Idempotency-Key 与原请求体只再发一次——首次直接收到与结果未知后重试收到都如此",
+    "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts > [AC-F1-08al-ACCESS#1] 仅手动补录权限可勾真实 APPROVED 并出【批量手动打款】；持 payout.execute 不持补录时可勾 APPROVED、勾选后可用批量入口恰为【批量自动打款】（F1-08an），不出【批量手动打款】【批量通过】；两者都不持时不可勾，不能借补录权限批量通过",
+    "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts > [AC-F1-08an-ACCESS#2] 仅持 fund.view 与 payout.execute 时可勾真实 APPROVED，勾选后【批量自动打款】恰 1 个且可用，不出【批量手动打款】【批量通过】，不点不写",
+    "test/spec/frontend/admin-withdrawals/pages.browser.test.ts > [AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下列表可用写入口恰为【一键组批】（F1-08an，不点）、详情没有可点的写入口，全程只发允许的 GET",
+    "test/spec/frontend/admin-withdrawals/readonly.test.ts > [AC-F1-08a-READONLY#1] 审核列表（账号持 withdraw.review、payout.execute、payout.manual_entry、export、pii.reveal_identity、pii.reveal_phone 等全部写与查看全量权限点）：可用写入口恰为【一键组批】（F1-08an，不点），没有可点的【批量通过】【批量手动打款】【批量自动打款】【导出】等其他写入口，点其余写入口或【查看】类入口都只发允许的 GET",
+    "test/spec/frontend/admin-withdrawals/readonly.test.ts > [AC-F1-08an-READONLY#1] 审核列表按权限点出【一键组批】：全部权限点（含 payout.execute）时恰 1 个且可用；不持 payout.execute（其余写与查看权限点照持）时不出现（隐藏，不是置灰）；未勾选时都没有【批量自动打款】；都不点，只发允许的 GET"
+  ],
+  "risk_note": "F1-08an. apps/admin only (pages/withdrawals, texts/withdrawals.ts). Adds 批量自动打款: one POST /admin/v1/payout-batches with Idempotency-Key and X-Step-Up-Token after a totp step-up, per-item left reasons and whole-batch refusals shown verbatim, result-unknown locks input and key (retry with the same key and body only, no automatic resend). 一键组批 is front-end only (no write). Tab counts are page_size=1 reads of listAdminWithdrawals showing total. No amounts are computed on the client. Frozen-test changes only widen entry lists to exactly the landed entries, add strict count-read assertions beside unchanged list-read expectations, and were checked by the orchestrator (D10-2172 / 2173 / 2179).",
+  "reviews": [
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Independent Claude via tools/agent/claude-run.sh (approvals #36, D10-2003) on 5aa512ad (the implementation, unchanged since; later only re-based onto the round 3 / 4 rule-test commits by cherry-pick). Pass with one S2 (tab counts not refreshed after 批量通过 / 批量手动打款), recorded as FU-F108AN-TAB-COUNT-STALE-AFTER-WRITE per D10-2179 (c). couli-runs/F1-08an/review-claude-money-r1.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 11,
+    "last_verdict": "pass",
+    "note": "tests by an independent Claude context (claude-run.sh), 4 rounds, then 3 mechanical fixture-value fixes in entry.test.ts after Codex rechecks (D10-2244 / 2265 / 2318); spec-test: independent Claude r1 fail (2 S1), r2-r4 pass; Codex full spec-test (D10-2199) 5 S1, all test gaps (implementation checked correct), covered by the companion ticket F1-08anb; Codex incremental rechecks 1-3 fail on fixture values, recheck 4 pass with 0 findings (couli-runs/F1-08an/review-recheck4.json); red_exempt: all 11 ledger entries confirmed by the Codex rechecks 1-4 (recheck 4 summary: 全部确认（沿用）); ledger patch 5 (red_exempt_outside for admin-withdrawal-batch-approve/selection.test.ts, outside the tests only the import landedFor): red re-run on the new ledger passed, then a scoped Codex spec-test confirmation passed (couli-runs/F1-08an/review-recheck5.json, D10-2338); mechanical relocation of the frozen support changes into admin-withdrawal-batch-payout/frozen-moved/ (approvals #127, D10-2341 / 2345 / 2349; done by the lane session, checked line by line by the orchestrator, couli-runs/F1-08an/relocate/prove-output.txt), ledger patch 6, red re-run on the new ledger, then a scoped Codex spec-test increment pass (couli-runs/F1-08an/review-recheck6.json)",
+    "model": "gpt-6.2-sol",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-withdrawals/readonly.test.ts",
+      "test": "[AC-F1-08a-READONLY#1] 审核列表（账号持 withdraw.review、payout.execute、payout.manual_entry、export、pii.reveal_identity、pii.reveal_phone 等全部写与查看全量权限点）：没有可点的【批量通过】【批量手动打款】【批量自动打款】【导出】等写入口，点任何写入口或【查看】类入口都只发允许的 GET",
+      "retitle_to": "[AC-F1-08a-READONLY#1] 审核列表（账号持 withdraw.review、payout.execute、payout.manual_entry、export、pii.reveal_identity、pii.reveal_phone 等全部写与查看全量权限点）：可用写入口恰为【一键组批】（F1-08an，不点），没有可点的【批量通过】【批量手动打款】【批量自动打款】【导出】等其他写入口，点其余写入口或【查看】类入口都只发允许的 GET",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08a-READONLY#1] 审核列表（账号持 withdraw.review、payout.execute、payout.manual_entry、export、pii.reveal_identity、pii.reveal_phone 等全部写与查看全量权限点）：没有可点的【批量通过】【批量手动打款】【批量自动打款】【导出】等写入口，点任何写入口或【查看】类入口都只发允许的 GET',\n  async () => {\n    const server = createServer(undefined, { permissions: ALL_GRANTS });\n    await mount(server);\n    await openList(server, NO.pending);\n    await settled(server);\n    await assertReadOnly(server);\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-08a-READONLY#1] 审核列表（账号持 withdraw.review、payout.execute、payout.manual_entry、export、pii.reveal_identity、pii.reveal_phone 等全部写与查看全量权限点）：可用写入口恰为【一键组批】（F1-08an，不点），没有可点的【批量通过】【批量手动打款】【批量自动打款】【导出】等其他写入口，点其余写入口或【查看】类入口都只发允许的 GET',\n  async () => {\n    const server = createServer(undefined, { permissions: ALL_GRANTS });\n    await mount(server);\n    await openList(server, NO.pending);\n    await settled(server);\n    await assertReadOnlyLanded(server, {}, ['一键组批']);\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：审核列表没有【一键组批】【批量自动打款】、APPROVED 行对 payout.execute 不可勾、进页不发页签计数读），即本单正式先红的基线（规则测试提交 7b6c0de38d21）；couli-runs/F1-08an/red/2 中本条所在文件按「每条都须红」整份判定，本条不在问题清单里，即判 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12", "BR-WDR-11"]
+    },
+    {
+      "file": "test/spec/frontend/admin-withdrawals/pages.browser.test.ts",
+      "test": "[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下也没有可点的写入口，全程只发允许的 GET",
+      "retitle_to": "[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下列表可用写入口恰为【一键组批】（F1-08an，不点）、详情没有可点的写入口，全程只发允许的 GET",
+      "reason": "rule_change",
+      "before": "it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下也没有可点的写入口，全程只发允许的 GET', async () => {\n  await page.viewport(1440, 1080);\n  const server = await show();\n  const area = page.getByRole('main');\n  const tab = area.getByRole('tab', { name: /^审核列表/ });\n  const row = area.getByRole('row').filter({ hasText: NO.rejected });\n  // With tabs, the 审核列表 tab is chosen first; without tabs the list is the page itself.\n  await expect.poll(() => tab.elements().length + row.elements().length, FIRST).toBeGreaterThan(0);\n  if (tab.elements().length > 0) await tab.first().click();\n  await expect.element(row, FIRST).toBeVisible();\n  await expect.element(row).toMatchTextContent(STATUS_NAME.REJECTED);\n  await expect.element(row).toMatchTextContent(RISK_NAME.same_device_multi_account!);\n  await expect\n    .element(area.getByRole('row').filter({ hasText: NO.pending }))\n    .toMatchTextContent(STATUS_NAME.PENDING_REVIEW);\n  expect(usableWrites(), 'no usable write entry on the list').toEqual([]);\n\n  const buttons = row.getByRole('button', { name: ENTRY });\n  const links = row.getByRole('link', { name: ENTRY });\n  await expect.poll(() => buttons.elements().length + links.elements().length).toBeGreaterThan(0);\n  await (buttons.elements().length > 0 ? buttons.first() : links.first()).click();\n\n  await expect.poll(() => window.location.pathname, FIRST).toBe(`/withdrawals/${ID.rejected}`);\n  await expect.element(page.getByText(PAYEE.rejected.masked_account).first(), FIRST).toBeVisible();\n  await expect.element(area).toMatchTextContent(PAYEE.rejected.masked_name);\n  await expect.element(area).toMatchTextContent(STATUS_NAME.REJECTED);\n  expect(server.requests('GET', detailPath(ID.rejected)).length).toBeGreaterThan(0);\n  expect(\n    usableWrites().filter(\n      (node) =>\n        !/^(审核通过|驳回)$/.test(\n          (node.getAttribute('aria-label') || node.textContent || '').replace(/\\s+/g, ''),\n        ),\n    ),\n    'no usable write entry on the detail',\n  ).toEqual([]);\n  expect(usableReveals(), 'no usable reveal entry on the detail').toEqual([]);\n  expect(unmaskedShown(), 'no unmasked phone number, payee account or payee name').toEqual([]);\n  expect(server.writes(), 'only GET requests').toEqual([]);\n  expect(disallowedRequests(server.log), 'only the allowed GET reads').toEqual([]);\n});",
+      "after": "it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下列表可用写入口恰为【一键组批】（F1-08an，不点）、详情没有可点的写入口，全程只发允许的 GET', async () => {\n  await page.viewport(1440, 1080);\n  const server = await show();\n  const area = page.getByRole('main');\n  const tab = area.getByRole('tab', { name: /^审核列表/ });\n  const row = area.getByRole('row').filter({ hasText: NO.rejected });\n  // With tabs, the 审核列表 tab is chosen first; without tabs the list is the page itself.\n  await expect.poll(() => tab.elements().length + row.elements().length, FIRST).toBeGreaterThan(0);\n  if (tab.elements().length > 0) await tab.first().click();\n  await expect.element(row, FIRST).toBeVisible();\n  await expect.element(row).toMatchTextContent(STATUS_NAME.REJECTED);\n  await expect.element(row).toMatchTextContent(RISK_NAME.same_device_multi_account!);\n  await expect\n    .element(area.getByRole('row').filter({ hasText: NO.pending }))\n    .toMatchTextContent(STATUS_NAME.PENDING_REVIEW);\n  expect(\n    usableWrites().map((node) => nameOf(node)),\n    'the only usable write entry on the list is the landed 一键组批 (not pressed)',\n  ).toEqual(LANDED_ON_LIST);\n\n  const buttons = row.getByRole('button', { name: ENTRY });\n  const links = row.getByRole('link', { name: ENTRY });\n  await expect.poll(() => buttons.elements().length + links.elements().length).toBeGreaterThan(0);\n  await (buttons.elements().length > 0 ? buttons.first() : links.first()).click();\n\n  await expect.poll(() => window.location.pathname, FIRST).toBe(`/withdrawals/${ID.rejected}`);\n  await expect.element(page.getByText(PAYEE.rejected.masked_account).first(), FIRST).toBeVisible();\n  await expect.element(area).toMatchTextContent(PAYEE.rejected.masked_name);\n  await expect.element(area).toMatchTextContent(STATUS_NAME.REJECTED);\n  expect(server.requests('GET', detailPath(ID.rejected)).length).toBeGreaterThan(0);\n  expect(\n    usableWrites().filter(\n      (node) =>\n        !/^(审核通过|驳回)$/.test(\n          (node.getAttribute('aria-label') || node.textContent || '').replace(/\\s+/g, ''),\n        ),\n    ),\n    'no usable write entry on the detail',\n  ).toEqual([]);\n  expect(usableReveals(), 'no usable reveal entry on the detail').toEqual([]);\n  expect(unmaskedShown(), 'no unmasked phone number, payee account or payee name').toEqual([]);\n  expect(server.writes(), 'only GET requests').toEqual([]);\n  expect(disallowedRequests(server.log), 'only the allowed GET reads').toEqual([]);\n});",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：审核列表没有【一键组批】【批量自动打款】、APPROVED 行对 payout.execute 不可勾、进页不发页签计数读），即本单正式先红的基线（规则测试提交 7b6c0de38d21）；couli-runs/F1-08an/red/2 中本条所在文件按「每条都须红」整份判定，本条不在问题清单里，即判 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12", "BR-WDR-11"]
+    },
+    {
+      "file": "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts",
+      "test": "[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏",
+      "retitle_to": "[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏；持 payout.execute 或超管时恰多可用的【一键组批】（F1-08an），只持审核权限看不到它",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏',\n  { timeout: 90_000 },\n  async () => {\n    for (const permissions of [\n      { isSuper: false, permissions: ['fund.view'] },\n      {\n        isSuper: false,\n        permissions: [\n          'fund.view',\n          'payout.execute',\n          'payout.manual_entry',\n          'export',\n          'config.business',\n        ],\n      },\n    ]) {\n      const server = permissions.permissions.includes('payout.manual_entry')\n        ? serverFor(samples())\n        : serverFor();\n      await mount(server, permissions);\n      if (permissions.permissions.includes('payout.manual_entry')) {\n        expect(\n          server.state\n            .filter((item) =>\n              within(rowOf(main(), item.out_biz_no))\n                .queryAllByRole('checkbox')\n                .some((node) => !disabled(node)),\n            )\n            .map((item) => item.withdrawal_id),\n        ).toEqual(\n          server.state\n            .filter((item) => item.status === 'APPROVED')\n            .map((item) => item.withdrawal_id),\n        );\n      } else {\n        expect(within(main()).queryAllByRole('checkbox')).toEqual([]);\n      }\n      expect(buttons(main(), '批量通过')).toEqual([]);\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n    for (const permissions of [REVIEW, { isSuper: true, permissions: [] }]) {\n      const server = serverFor();\n      await mount(server, permissions);\n      expect(buttons(main(), '批量通过')).toEqual([]);\n      for (const item of server.state) expect(checkbox(item).checked).toBe(false);\n      await select([server.state[0]!]);\n      expect(disabled(button(main(), '批量通过'))).toBe(false);\n      assertNoOtherActions();\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "after": "it(\n  '[AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏；持 payout.execute 或超管时恰多可用的【一键组批】（F1-08an），只持审核权限看不到它',\n  { timeout: 90_000 },\n  async () => {\n    for (const permissions of [\n      { isSuper: false, permissions: ['fund.view'] },\n      {\n        isSuper: false,\n        permissions: [\n          'fund.view',\n          'payout.execute',\n          'payout.manual_entry',\n          'export',\n          'config.business',\n        ],\n      },\n    ]) {\n      const server = permissions.permissions.includes('payout.manual_entry')\n        ? serverFor(samples())\n        : serverFor();\n      await mountLanded(server, permissions);\n      if (permissions.permissions.includes('payout.manual_entry')) {\n        expect(\n          server.state\n            .filter((item) =>\n              within(rowOf(main(), item.out_biz_no))\n                .queryAllByRole('checkbox')\n                .some((node) => !disabled(node)),\n            )\n            .map((item) => item.withdrawal_id),\n        ).toEqual(\n          server.state\n            .filter((item) => item.status === 'APPROVED')\n            .map((item) => item.withdrawal_id),\n        );\n      } else {\n        expect(within(main()).queryAllByRole('checkbox')).toEqual([]);\n      }\n      expect(buttons(main(), '批量通过')).toEqual([]);\n      const grouping = permissions.permissions.includes('payout.execute') ? 1 : 0;\n      expect(buttons(main(), '一键组批'), 'shown 一键组批 entries').toHaveLength(grouping);\n      expect(\n        buttons(main(), '一键组批').filter((node) => !disabled(node)),\n        'usable 一键组批 entries',\n      ).toHaveLength(grouping);\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n    for (const permissions of [REVIEW, { isSuper: true, permissions: [] }]) {\n      const server = serverFor();\n      await mountLanded(server, permissions);\n      expect(buttons(main(), '批量通过')).toEqual([]);\n      const grouping = permissions.isSuper ? 1 : 0;\n      expect(buttons(main(), '一键组批'), 'shown 一键组批 entries').toHaveLength(grouping);\n      expect(\n        buttons(main(), '一键组批').filter((node) => !disabled(node)),\n        'usable 一键组批 entries',\n      ).toHaveLength(grouping);\n      for (const item of server.state) expect(checkbox(item).checked).toBe(false);\n      await select([server.state[0]!]);\n      expect(disabled(button(main(), '批量通过'))).toBe(false);\n      assertNoOtherActionsLanded(landedFor(permissions));\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：审核列表没有【一键组批】【批量自动打款】、APPROVED 行对 payout.execute 不可勾、进页不发页签计数读），即本单正式先红的基线（规则测试提交 7b6c0de38d21）；couli-runs/F1-08an/red/2 中本条所在文件按「每条都须红」整份判定，本条不在问题清单里，即判 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12", "BR-WDR-11"]
+    },
+    {
+      "file": "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts",
+      "test": "[AC-F1-08al-ACCESS#1] 仅手动补录权限可勾真实 APPROVED；无此权限不可勾，不能借补录权限批量通过",
+      "retitle_to": "[AC-F1-08al-ACCESS#1] 仅手动补录权限可勾真实 APPROVED 并出【批量手动打款】；持 payout.execute 不持补录时可勾 APPROVED、勾选后可用批量入口恰为【批量自动打款】（F1-08an），不出【批量手动打款】【批量通过】；两者都不持时不可勾，不能借补录权限批量通过",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08al-ACCESS#1] 仅手动补录权限可勾真实 APPROVED；无此权限不可勾，不能借补录权限批量通过',\n  { timeout: 90_000 },\n  async () => {\n    const rows = samples();\n    const approved = rows.find((row) => row.status === 'APPROVED')!;\n    approved.display_status = 'pending_review';\n    for (const permissions of [\n      { isSuper: false, permissions: ['fund.view'] },\n      { isSuper: false, permissions: ['fund.view', 'payout.execute', 'export', 'config.business'] },\n    ]) {\n      const server = serverFor(rows);\n      await mount(server, permissions);\n      expect(\n        within(rowOf(main(), approved.out_biz_no))\n          .queryAllByRole('checkbox')\n          .filter((node) => !disabled(node)),\n      ).toEqual([]);\n      expect(buttons(main(), '批量手动打款')).toEqual([]);\n      expect(buttons(main(), '批量通过')).toEqual([]);\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n    const server = serverFor(rows);\n    await mount(server, GRANTS);\n    expect(buttons(main(), '批量手动打款')).toEqual([]);\n    for (const row of rows) {\n      const available = within(rowOf(main(), row.out_biz_no))\n        .queryAllByRole('checkbox')\n        .filter((node) => !disabled(node));\n      expect(available).toEqual(row.status === 'APPROVED' ? [checkbox(row)] : []);\n    }\n    await select([approved]);\n    expect(disabled(button(main(), '批量手动打款'))).toBe(false);\n    expect(buttons(main(), '批量通过')).toEqual([]);\n    await click(checkbox(approved));\n    expect(buttons(main(), '批量手动打款')).toEqual([]);\n    expect(server.writes()).toEqual([]);\n  },\n);",
+      "after": "it(\n  '[AC-F1-08al-ACCESS#1] 仅手动补录权限可勾真实 APPROVED 并出【批量手动打款】；持 payout.execute 不持补录时可勾 APPROVED、勾选后可用批量入口恰为【批量自动打款】（F1-08an），不出【批量手动打款】【批量通过】；两者都不持时不可勾，不能借补录权限批量通过',\n  { timeout: 90_000 },\n  async () => {\n    const rows = samples();\n    const approved = rows.find((row) => row.status === 'APPROVED')!;\n    approved.display_status = 'pending_review';\n    for (const permissions of [\n      { isSuper: false, permissions: ['fund.view'] },\n      { isSuper: false, permissions: ['fund.view', 'payout.execute', 'export', 'config.business'] },\n      { isSuper: false, permissions: ['fund.view', 'export', 'config.business'] },\n    ]) {\n      const server = serverFor(rows);\n      await mount(server, permissions);\n      if (permissions.permissions.includes('payout.execute')) {\n        // F1-08an (BR-WDR-12): payout.execute selects APPROVED rows for 批量自动打款 only.\n        expect(\n          within(rowOf(main(), approved.out_biz_no))\n            .queryAllByRole('checkbox')\n            .filter((node) => !disabled(node)),\n        ).toEqual([checkbox(approved)]);\n        expect(buttons(main(), '批量手动打款')).toEqual([]);\n        expect(buttons(main(), '批量通过')).toEqual([]);\n        expect(buttons(main(), '批量自动打款')).toEqual([]);\n        await select([approved]);\n        expect(buttons(main(), '批量手动打款')).toEqual([]);\n        expect(buttons(main(), '批量通过')).toEqual([]);\n        const auto = buttons(main(), '批量自动打款');\n        expect(auto).toHaveLength(1);\n        expect(\n          ['批量手动打款', '批量通过', '批量自动打款']\n            .flatMap((name) => buttons(main(), name))\n            .filter((node) => !disabled(node)),\n        ).toEqual(auto);\n        expect(server.writes()).toEqual([]);\n        cleanup();\n        continue;\n      }\n      expect(\n        within(rowOf(main(), approved.out_biz_no))\n          .queryAllByRole('checkbox')\n          .filter((node) => !disabled(node)),\n      ).toEqual([]);\n      expect(buttons(main(), '批量手动打款')).toEqual([]);\n      expect(buttons(main(), '批量通过')).toEqual([]);\n      expect(server.writes()).toEqual([]);\n      cleanup();\n    }\n    const server = serverFor(rows);\n    await mount(server, GRANTS);\n    expect(buttons(main(), '批量手动打款')).toEqual([]);\n    for (const row of rows) {\n      const available = within(rowOf(main(), row.out_biz_no))\n        .queryAllByRole('checkbox')\n        .filter((node) => !disabled(node));\n      expect(available).toEqual(row.status === 'APPROVED' ? [checkbox(row)] : []);\n    }\n    await select([approved]);\n    expect(disabled(button(main(), '批量手动打款'))).toBe(false);\n    expect(buttons(main(), '批量通过')).toEqual([]);\n    await click(checkbox(approved));\n    expect(buttons(main(), '批量手动打款')).toEqual([]);\n    expect(server.writes()).toEqual([]);\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：审核列表没有【一键组批】【批量自动打款】、APPROVED 行对 payout.execute 不可勾、进页不发页签计数读），即本单正式先红的基线（规则测试提交 7b6c0de38d21）；couli-runs/F1-08an/red/2 中本条所在文件按「每条都须红」整份判定，本条不在问题清单里，即判 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12", "BR-WDR-11"]
+    },
+    {
+      "file": "test/spec/frontend/admin-route-status-param/withdrawals.test.ts",
+      "test": "[AC-F1-14c-WITHDRAWALS#1] 进页 /withdrawals?status=PENDING_REVIEW：首个（也是唯一一个）列表请求即带 status=PENDING_REVIEW，提现状态控件显示「待审核」，只列待审核的单，不报错、不提示筛选未应用",
+      "retitle_to": "[AC-F1-14c-WITHDRAWALS#1] 进页 /withdrawals?status=PENDING_REVIEW：首个（也是唯一一个）列表请求（另有 5 个页签计数读，F1-08an）即带 status=PENDING_REVIEW，提现状态控件显示「待审核」，只列待审核的单，不报错、不提示筛选未应用",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-14c-WITHDRAWALS#1] 进页 /withdrawals?status=PENDING_REVIEW：首个（也是唯一一个）列表请求即带 status=PENDING_REVIEW，提现状态控件显示「待审核」，只列待审核的单，不报错、不提示筛选未应用',\n  { timeout: FLOW_TIMEOUT },\n  async () => {\n    const server = await open('/withdrawals?status=PENDING_REVIEW');\n    const size = pageSizeOf(server.reads());\n    expect(queries(server), 'first read carries the status').toEqual([\n      { page: '1', page_size: size, status: 'PENDING_REVIEW' },\n    ]);\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.pending]));\n    expect(shownValue(STATUS_FILTER), 'control shows it').toBe(STATUS_NAME.PENDING_REVIEW);\n    expect(main().textContent, 'applied, not a draft').not.toMatch(DRAFT_NOTICE);\n    expect(main().querySelector('.ant-result'), 'no error result').toBeNull();\n  },\n);",
+      "after": "it(\n  '[AC-F1-14c-WITHDRAWALS#1] 进页 /withdrawals?status=PENDING_REVIEW：首个（也是唯一一个）列表请求（另有 5 个页签计数读，F1-08an）即带 status=PENDING_REVIEW，提现状态控件显示「待审核」，只列待审核的单，不报错、不提示筛选未应用',\n  { timeout: FLOW_TIMEOUT },\n  async () => {\n    const server = await open('/withdrawals?status=PENDING_REVIEW');\n    const size = pageSizeOf(listReadsOf(server));\n    expect(listQueries(server), 'first read carries the status').toEqual([\n      { page: '1', page_size: size, status: 'PENDING_REVIEW' },\n    ]);\n    expect(countQueries(server), 'five tab counts, no address status').toEqual(tabCounts());\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.pending]));\n    expect(shownValue(STATUS_FILTER), 'control shows it').toBe(STATUS_NAME.PENDING_REVIEW);\n    expect(main().textContent, 'applied, not a draft').not.toMatch(DRAFT_NOTICE);\n    expect(main().querySelector('.ant-result'), 'no error result').toBeNull();\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：审核列表没有【一键组批】【批量自动打款】、APPROVED 行对 payout.execute 不可勾、进页不发页签计数读），即本单正式先红的基线（规则测试提交 7b6c0de38d21）；couli-runs/F1-08an/red/2 中本条所在文件按「每条都须红」整份判定，本条不在问题清单里，即判 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12"]
+    },
+    {
+      "file": "test/spec/frontend/admin-route-status-param/withdrawals.test.ts",
+      "test": "[AC-F1-14c-WITHDRAWALS#2] 地址里的其他参数不影响：/withdrawals?dashboard_probe=case0&status=PAID_MANUAL&review_mode=auto&page=2 首个列表请求只带 page=1、page_size 与 status=PAID_MANUAL，控件显示「线下打款成功」，只列该单",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-14c-WITHDRAWALS#2] 地址里的其他参数不影响：/withdrawals?dashboard_probe=case0&status=PAID_MANUAL&review_mode=auto&page=2 首个列表请求只带 page=1、page_size 与 status=PAID_MANUAL，控件显示「线下打款成功」，只列该单',\n  { timeout: FLOW_TIMEOUT },\n  async () => {\n    const server = await open(\n      '/withdrawals?dashboard_probe=case0&status=PAID_MANUAL&review_mode=auto&page=2',\n    );\n    const size = pageSizeOf(server.reads());\n    expect(queries(server), 'only the status is taken').toEqual([\n      { page: '1', page_size: size, status: 'PAID_MANUAL' },\n    ]);\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.manualPaid]));\n    expect(shownValue(STATUS_FILTER), 'control shows it').toBe(STATUS_NAME.PAID_MANUAL);\n    expect(main().querySelector('.ant-result'), 'no error result').toBeNull();\n  },\n);",
+      "after": "it(\n  '[AC-F1-14c-WITHDRAWALS#2] 地址里的其他参数不影响：/withdrawals?dashboard_probe=case0&status=PAID_MANUAL&review_mode=auto&page=2 首个列表请求只带 page=1、page_size 与 status=PAID_MANUAL，控件显示「线下打款成功」，只列该单',\n  { timeout: FLOW_TIMEOUT },\n  async () => {\n    const server = await open(\n      '/withdrawals?dashboard_probe=case0&status=PAID_MANUAL&review_mode=auto&page=2',\n    );\n    const size = pageSizeOf(listReadsOf(server));\n    expect(listQueries(server), 'only the status is taken').toEqual([\n      { page: '1', page_size: size, status: 'PAID_MANUAL' },\n    ]);\n    expect(countQueries(server), 'five tab counts, no address status').toEqual(tabCounts());\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.manualPaid]));\n    expect(shownValue(STATUS_FILTER), 'control shows it').toBe(STATUS_NAME.PAID_MANUAL);\n    expect(main().querySelector('.ant-result'), 'no error result').toBeNull();\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：审核列表没有【一键组批】【批量自动打款】、APPROVED 行对 payout.execute 不可勾、进页不发页签计数读），即本单正式先红的基线（规则测试提交 7b6c0de38d21）；couli-runs/F1-08an/red/2 中本条所在文件按「每条都须红」整份判定，本条不在问题清单里，即判 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12"]
+    },
+    {
+      "file": "test/spec/frontend/admin-route-status-param/withdrawals.test.ts",
+      "test": "[AC-F1-14c-WITHDRAWALS#3] 带 status=PENDING_REVIEW 进页后点【重置】：只重读一次且不带 status，控件清空，七张单重新列出",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-14c-WITHDRAWALS#3] 带 status=PENDING_REVIEW 进页后点【重置】：只重读一次且不带 status，控件清空，七张单重新列出',\n  { timeout: FLOW_TIMEOUT },\n  async () => {\n    const server = await open('/withdrawals?status=PENDING_REVIEW');\n    const size = pageSizeOf(server.reads());\n    expect(queries(server)).toEqual([{ page: '1', page_size: size, status: 'PENDING_REVIEW' }]);\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.pending]));\n    const before = server.reads().length;\n    await click(action(scope(), RESET));\n    await settle();\n    await settled(server);\n    expect(queries(server).slice(before), 'one read, no status').toEqual([\n      { page: '1', page_size: size },\n    ]);\n    await waitFor(() => expect(listed(ALL)).toEqual(ALL));\n    expect(shownValue(STATUS_FILTER), 'control emptied').toBe('');\n  },\n);",
+      "after": "it(\n  '[AC-F1-14c-WITHDRAWALS#3] 带 status=PENDING_REVIEW 进页后点【重置】：只重读一次且不带 status，控件清空，七张单重新列出',\n  { timeout: FLOW_TIMEOUT },\n  async () => {\n    const server = await open('/withdrawals?status=PENDING_REVIEW');\n    const size = pageSizeOf(listReadsOf(server));\n    expect(listQueries(server)).toEqual([{ page: '1', page_size: size, status: 'PENDING_REVIEW' }]);\n    expect(countQueries(server), 'five tab counts, no address status').toEqual(tabCounts());\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.pending]));\n    const before = server.reads().length;\n    await click(action(scope(), RESET));\n    await settle();\n    await settled(server);\n    expect(queries(server).slice(before), 'one read, no status').toEqual([\n      { page: '1', page_size: size },\n    ]);\n    await waitFor(() => expect(listed(ALL)).toEqual(ALL));\n    expect(shownValue(STATUS_FILTER), 'control emptied').toBe('');\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：审核列表没有【一键组批】【批量自动打款】、APPROVED 行对 payout.execute 不可勾、进页不发页签计数读），即本单正式先红的基线（规则测试提交 7b6c0de38d21）；couli-runs/F1-08an/red/2 中本条所在文件按「每条都须红」整份判定，本条不在问题清单里，即判 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12"]
+    },
+    {
+      "file": "test/spec/frontend/admin-route-status-param/withdrawals.test.ts",
+      "test": "[AC-F1-14c-WITHDRAWALS#4] 带 status=PENDING_REVIEW 进页后把提现状态改为「已驳回」并【查询】：改选时不发请求，【查询】只发一次、带 status=REJECTED，控件显示「已驳回」，只列驳回单",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-14c-WITHDRAWALS#4] 带 status=PENDING_REVIEW 进页后把提现状态改为「已驳回」并【查询】：改选时不发请求，【查询】只发一次、带 status=REJECTED，控件显示「已驳回」，只列驳回单',\n  { timeout: FLOW_TIMEOUT },\n  async () => {\n    const server = await open('/withdrawals?status=PENDING_REVIEW');\n    const size = pageSizeOf(server.reads());\n    expect(queries(server)).toEqual([{ page: '1', page_size: size, status: 'PENDING_REVIEW' }]);\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.pending]));\n    const before = server.reads().length;\n    await choose(scope(), STATUS_FILTER, /^已驳回$/);\n    expect(shownValue(STATUS_FILTER), 'control shows the choice').toBe(STATUS_NAME.REJECTED);\n    await query();\n    await settled(server);\n    expect(queries(server).slice(before), 'one read after 【查询】').toEqual([\n      { page: '1', page_size: size, status: 'REJECTED' },\n    ]);\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.rejected]));\n    expect(shownValue(STATUS_FILTER), 'control keeps it').toBe(STATUS_NAME.REJECTED);\n  },\n);",
+      "after": "it(\n  '[AC-F1-14c-WITHDRAWALS#4] 带 status=PENDING_REVIEW 进页后把提现状态改为「已驳回」并【查询】：改选时不发请求，【查询】只发一次、带 status=REJECTED，控件显示「已驳回」，只列驳回单',\n  { timeout: FLOW_TIMEOUT },\n  async () => {\n    const server = await open('/withdrawals?status=PENDING_REVIEW');\n    const size = pageSizeOf(listReadsOf(server));\n    expect(listQueries(server)).toEqual([{ page: '1', page_size: size, status: 'PENDING_REVIEW' }]);\n    expect(countQueries(server), 'five tab counts, no address status').toEqual(tabCounts());\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.pending]));\n    const before = server.reads().length;\n    await choose(scope(), STATUS_FILTER, /^已驳回$/);\n    expect(shownValue(STATUS_FILTER), 'control shows the choice').toBe(STATUS_NAME.REJECTED);\n    await query();\n    await settled(server);\n    expect(queries(server).slice(before), 'one read after 【查询】').toEqual([\n      { page: '1', page_size: size, status: 'REJECTED' },\n    ]);\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.rejected]));\n    expect(shownValue(STATUS_FILTER), 'control keeps it').toBe(STATUS_NAME.REJECTED);\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：审核列表没有【一键组批】【批量自动打款】、APPROVED 行对 payout.execute 不可勾、进页不发页签计数读），即本单正式先红的基线（规则测试提交 7b6c0de38d21）；couli-runs/F1-08an/red/2 中本条所在文件按「每条都须红」整份判定，本条不在问题清单里，即判 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12"]
+    },
+    {
+      "file": "test/spec/frontend/admin-route-status-param/withdrawals.test.ts",
+      "test": "[AC-F1-14c-WITHDRAWALS#5] 带 status=PENDING_REVIEW 进页后换页与切页签照常：第 2 页请求 page=2 仍带 status；切「待审」页签请求 page=1、display_status=pending_review 且仍带 status",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-14c-WITHDRAWALS#5] 带 status=PENDING_REVIEW 进页后换页与切页签照常：第 2 页请求 page=2 仍带 status；切「待审」页签请求 page=1、display_status=pending_review 且仍带 status',\n  { timeout: FLOW_TIMEOUT },\n  async () => {\n    const many = createServer(withFiller(200));\n    const server = await open('/withdrawals?status=PENDING_REVIEW', many);\n    const size = pageSizeOf(server.reads());\n    expect(queries(server)).toEqual([{ page: '1', page_size: size, status: 'PENDING_REVIEW' }]);\n    await waitFor(() => expect(listed([NO.pending])).toEqual([NO.pending]));\n    let before = server.reads().length;\n    await nextPage();\n    await settle();\n    await settled(server);\n    expect(queries(server).slice(before), 'page 2 keeps it').toEqual([\n      { page: '2', page_size: size, status: 'PENDING_REVIEW' },\n    ]);\n    await waitFor(() => expect(listed([NO.pending])).toEqual([]));\n    expect(shownValue(STATUS_FILTER), 'control keeps it').toBe(STATUS_NAME.PENDING_REVIEW);\n\n    const tabs = tabsNamed('待审', scope());\n    expect(tabs.length, 'a status tab 待审').toBeGreaterThan(0);\n    before = server.reads().length;\n    await click(tabs[0]!);\n    await settle();\n    await settled(server);\n    expect(queries(server).slice(before), 'tab ANDs with it').toEqual([\n      { page: '1', page_size: size, display_status: 'pending_review', status: 'PENDING_REVIEW' },\n    ]);\n    await waitFor(() => expect(listed([NO.pending])).toEqual([NO.pending]));\n    expect(shownValue(STATUS_FILTER), 'control keeps it').toBe(STATUS_NAME.PENDING_REVIEW);\n  },\n);",
+      "after": "it(\n  '[AC-F1-14c-WITHDRAWALS#5] 带 status=PENDING_REVIEW 进页后换页与切页签照常：第 2 页请求 page=2 仍带 status；切「待审」页签请求 page=1、display_status=pending_review 且仍带 status',\n  { timeout: FLOW_TIMEOUT },\n  async () => {\n    const many = createServer(withFiller(200));\n    const server = await open('/withdrawals?status=PENDING_REVIEW', many);\n    const size = pageSizeOf(listReadsOf(server));\n    expect(listQueries(server)).toEqual([{ page: '1', page_size: size, status: 'PENDING_REVIEW' }]);\n    expect(countQueries(server), 'five tab counts, no address status').toEqual(tabCounts());\n    await waitFor(() => expect(listed([NO.pending])).toEqual([NO.pending]));\n    let before = server.reads().length;\n    await nextPage();\n    await settle();\n    await settled(server);\n    expect(queries(server).slice(before), 'page 2 keeps it').toEqual([\n      { page: '2', page_size: size, status: 'PENDING_REVIEW' },\n    ]);\n    await waitFor(() => expect(listed([NO.pending])).toEqual([]));\n    expect(shownValue(STATUS_FILTER), 'control keeps it').toBe(STATUS_NAME.PENDING_REVIEW);\n\n    const tabs = tabsNamed('待审', scope());\n    expect(tabs.length, 'a status tab 待审').toBeGreaterThan(0);\n    before = server.reads().length;\n    await click(tabs[0]!);\n    await settle();\n    await settled(server);\n    expect(queries(server).slice(before), 'tab ANDs with it').toEqual([\n      { page: '1', page_size: size, display_status: 'pending_review', status: 'PENDING_REVIEW' },\n    ]);\n    await waitFor(() => expect(listed([NO.pending])).toEqual([NO.pending]));\n    expect(shownValue(STATUS_FILTER), 'control keeps it').toBe(STATUS_NAME.PENDING_REVIEW);\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：审核列表没有【一键组批】【批量自动打款】、APPROVED 行对 payout.execute 不可勾、进页不发页签计数读），即本单正式先红的基线（规则测试提交 7b6c0de38d21）；couli-runs/F1-08an/red/2 中本条所在文件按「每条都须红」整份判定，本条不在问题清单里，即判 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12"]
+    },
+    {
+      "file": "test/spec/frontend/admin-route-status-param/withdrawals.test.ts",
+      "test": "[AC-F1-14c-WITHDRAWALS#6] status 缺省或为空照旧：合法的 status=APPROVED 生效；而 ?status=、?dashboard_probe=case0、?status=&dashboard_probe=case1 进页时首个列表请求不带 status，控件为空，七张单全列，不报错",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-14c-WITHDRAWALS#6] status 缺省或为空照旧：合法的 status=APPROVED 生效；而 ?status=、?dashboard_probe=case0、?status=&dashboard_probe=case1 进页时首个列表请求不带 status，控件为空，七张单全列，不报错',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    const valid = await open('/withdrawals?status=APPROVED');\n    const validSize = pageSizeOf(valid.reads());\n    expect(queries(valid), 'contract value applied').toEqual([\n      { page: '1', page_size: validSize, status: 'APPROVED' },\n    ]);\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.approved]));\n    expect(shownValue(STATUS_FILTER), 'control shows it').toBe(STATUS_NAME.APPROVED);\n    for (const address of NO_VALUE) {\n      unmountPage();\n      const server = await open(address);\n      const size = pageSizeOf(server.reads());\n      expect(queries(server), address).toEqual([{ page: '1', page_size: size }]);\n      await waitFor(() => expect(listed(ALL), address).toEqual(ALL));\n      expect(shownValue(STATUS_FILTER), address).toBe('');\n      expect(main().querySelector('.ant-result'), address).toBeNull();\n    }\n  },\n);",
+      "after": "it(\n  '[AC-F1-14c-WITHDRAWALS#6] status 缺省或为空照旧：合法的 status=APPROVED 生效；而 ?status=、?dashboard_probe=case0、?status=&dashboard_probe=case1 进页时首个列表请求不带 status，控件为空，七张单全列，不报错',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    const valid = await open('/withdrawals?status=APPROVED');\n    const validSize = pageSizeOf(listReadsOf(valid));\n    expect(listQueries(valid), 'contract value applied').toEqual([\n      { page: '1', page_size: validSize, status: 'APPROVED' },\n    ]);\n    expect(countQueries(valid), 'five tab counts, no address status').toEqual(tabCounts());\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.approved]));\n    expect(shownValue(STATUS_FILTER), 'control shows it').toBe(STATUS_NAME.APPROVED);\n    for (const address of NO_VALUE) {\n      unmountPage();\n      const server = await open(address);\n      const size = pageSizeOf(listReadsOf(server));\n      expect(listQueries(server), address).toEqual([{ page: '1', page_size: size }]);\n      expect(countQueries(server), `${address}: five tab counts`).toEqual(tabCounts());\n      await waitFor(() => expect(listed(ALL), address).toEqual(ALL));\n      expect(shownValue(STATUS_FILTER), address).toBe('');\n      expect(main().querySelector('.ant-result'), address).toBeNull();\n    }\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：审核列表没有【一键组批】【批量自动打款】、APPROVED 行对 payout.execute 不可勾、进页不发页签计数读），即本单正式先红的基线（规则测试提交 7b6c0de38d21）；couli-runs/F1-08an/red/2 中本条所在文件按「每条都须红」整份判定，本条不在问题清单里，即判 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12"]
+    },
+    {
+      "file": "test/spec/frontend/admin-route-status-param/withdrawals.test.ts",
+      "test": "[AC-F1-14c-WITHDRAWALS#7] status 不是契约枚举值照旧：合法的 status=FAILED 生效；而 pending_review（小写）、Pending_Review（大小写不同）、pending（未知值）进页时首个列表请求不带 status，控件不显示该值，七张单全列，不报错",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-14c-WITHDRAWALS#7] status 不是契约枚举值照旧：合法的 status=FAILED 生效；而 pending_review（小写）、Pending_Review（大小写不同）、pending（未知值）进页时首个列表请求不带 status，控件不显示该值，七张单全列，不报错',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    const valid = await open('/withdrawals?status=FAILED');\n    const validSize = pageSizeOf(valid.reads());\n    expect(queries(valid), 'contract value applied').toEqual([\n      { page: '1', page_size: validSize, status: 'FAILED' },\n    ]);\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.failed]));\n    expect(shownValue(STATUS_FILTER), 'control shows it').toBe(STATUS_NAME.FAILED);\n    for (const value of NOT_CONTRACT) {\n      unmountPage();\n      const server = await open(`/withdrawals?status=${value}`);\n      const size = pageSizeOf(server.reads());\n      expect(queries(server), `status=${value}`).toEqual([{ page: '1', page_size: size }]);\n      await waitFor(() => expect(listed(ALL), value).toEqual(ALL));\n      expect(shownValue(STATUS_FILTER), `status=${value}`).toBe('');\n      expect(main().querySelector('.ant-result'), `status=${value}`).toBeNull();\n    }\n  },\n);",
+      "after": "it(\n  '[AC-F1-14c-WITHDRAWALS#7] status 不是契约枚举值照旧：合法的 status=FAILED 生效；而 pending_review（小写）、Pending_Review（大小写不同）、pending（未知值）进页时首个列表请求不带 status，控件不显示该值，七张单全列，不报错',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    const valid = await open('/withdrawals?status=FAILED');\n    const validSize = pageSizeOf(listReadsOf(valid));\n    expect(listQueries(valid), 'contract value applied').toEqual([\n      { page: '1', page_size: validSize, status: 'FAILED' },\n    ]);\n    expect(countQueries(valid), 'five tab counts, no address status').toEqual(tabCounts());\n    await waitFor(() => expect(listed(ALL)).toEqual([NO.failed]));\n    expect(shownValue(STATUS_FILTER), 'control shows it').toBe(STATUS_NAME.FAILED);\n    for (const value of NOT_CONTRACT) {\n      unmountPage();\n      const server = await open(`/withdrawals?status=${value}`);\n      const size = pageSizeOf(listReadsOf(server));\n      expect(listQueries(server), `status=${value}`).toEqual([{ page: '1', page_size: size }]);\n      expect(countQueries(server), `status=${value}: five tab counts`).toEqual(tabCounts());\n      await waitFor(() => expect(listed(ALL), value).toEqual(ALL));\n      expect(shownValue(STATUS_FILTER), `status=${value}`).toBe('');\n      expect(main().querySelector('.ant-result'), `status=${value}`).toBeNull();\n    }\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：审核列表没有【一键组批】【批量自动打款】、APPROVED 行对 payout.execute 不可勾、进页不发页签计数读），即本单正式先红的基线（规则测试提交 7b6c0de38d21）；couli-runs/F1-08an/red/2 中本条所在文件按「每条都须红」整份判定，本条不在问题清单里，即判 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12"]
+    },
+    {
+      "file": "test/spec/frontend/admin-payouts-readonly/tabs.test.ts",
+      "test": "[AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts",
+      "retitle_to": "[AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（另有 5 个页签计数读，F1-08an）（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts',\n  { timeout: FLOW_TIMEOUT },\n  async () => {\n    const server = createPayoutServer({ permissions: VIEW_EXECUTE });\n    await mount(server, everyGrant(VIEW_EXECUTE));\n    await waitFor(() => expect(pageTabNames()).toEqual(PAGE_TABS));\n    const review = tabsIn(main(), TAB.review)[0]!;\n    const selected = review.getAttribute('aria-selected');\n    expect(selected, 'the review list is selected by default').toBe('true');\n    const panel = await panelOf(review);\n    await listed(panel, REVIEW_ROWS);\n    await settled(server);\n    const size = pageSizeOf(server.listReads());\n    const queries = server.listReads().map((read) => read.query);\n    expect(queries, 'one review list read').toEqual([{ page: '1', page_size: size }]);\n    expect(server.overviewReads(), 'no overview read before its tab').toEqual([]);\n    expect(server.unknownReads(), 'no unknown read before its tab').toEqual([]);\n  },\n);",
+      "after": "it(\n  '[AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（另有 5 个页签计数读，F1-08an）（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts',\n  { timeout: FLOW_TIMEOUT },\n  async () => {\n    const server = createPayoutServer({ permissions: VIEW_EXECUTE });\n    await mount(server, everyGrant(VIEW_EXECUTE));\n    await waitFor(() => expect(pageTabNames()).toEqual(PAGE_TABS));\n    const review = tabsIn(main(), TAB.review)[0]!;\n    const selected = review.getAttribute('aria-selected');\n    expect(selected, 'the review list is selected by default').toBe('true');\n    const panel = await panelOf(review);\n    await listed(panel, REVIEW_ROWS);\n    await settled(server);\n    const lists = server.listReads().filter((read) => read.query['page_size'] !== '1');\n    const size = pageSizeOf(lists);\n    const queries = lists.map((read) => read.query);\n    expect(queries, 'one review list read').toEqual([{ page: '1', page_size: size }]);\n    const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);\n    const key = (query: Readonly<Record<string, string>>): string =>\n      JSON.stringify(Object.entries(query).sort(([a], [b]) => byText(a, b)));\n    const sorted = (list: readonly Record<string, string>[]): Record<string, string>[] =>\n      [...list].sort((a, b) => byText(key(a), key(b)));\n    const counts = server.listReads().filter((read) => read.query['page_size'] === '1');\n    expect(sorted(counts.map((read) => read.query)), 'five tab counts').toEqual(\n      sorted([\n        { page: '1', page_size: '1' },\n        { display_status: 'paid_manual', page: '1', page_size: '1' },\n        { display_status: 'pending_review', page: '1', page_size: '1' },\n        { display_status: 'rejected', page: '1', page_size: '1' },\n        { page: '1', page_size: '1', status: 'PAID_API' },\n      ]),\n    );\n    expect(server.overviewReads(), 'no overview read before its tab').toEqual([]);\n    expect(server.unknownReads(), 'no unknown read before its tab').toEqual([]);\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：审核列表没有【一键组批】【批量自动打款】、APPROVED 行对 payout.execute 不可勾、进页不发页签计数读），即本单正式先红的基线（规则测试提交 7b6c0de38d21）；couli-runs/F1-08an/red/2 中本条所在文件按「每条都须红」整份判定，本条不在问题清单里，即判 red for a valid reason——这就是反向验证本身，不是另跑的探针",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-12"]
+    }
+  ],
+  "task": "F1-08an",
+  "spec_ref": "c3060ba021c2308d64251ac25f4ad6c35836d539",
+  "spec_commit": "24f361ff97ae81a855416ef4232e4922a8bc10c2",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "24f361ff97ae81a855416ef4232e4922a8bc10c2",
+      "tree": "401b277e5fc19eaad750112d1322a288aa5048eb",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-21T08:59:23Z",
+      "finished_at": "2026-11-21T09:00:32Z",
+      "red_tests": [
+        "test/spec/frontend/admin-payouts-readonly/tabs.test.ts > [AC-F1-08ba-TABS#1] 持 fund.view + payout.execute 进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」，默认选中审核列表并照旧只读一次列表（另有 5 个页签计数读，F1-08an）（只带 page 与 page_size）、列出全部提现单；未进页签前不请求 payout-overview 与 unknown-payouts",
+        "test/spec/frontend/admin-payouts-readonly/tabs.test.ts > [AC-F1-08an-COUNTS#1] 持 fund.view + payout.execute 进 /withdrawals：恰 5 个 page_size=1 的页签计数读（全部 / 待审 / 驳回 / 手动 / 自动，各只带该页签的快捷筛选），审核列表的列表读恰 1 条",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#1] 进页 /withdrawals?status=PENDING_REVIEW：首个（也是唯一一个）列表请求（另有 5 个页签计数读，F1-08an）即带 status=PENDING_REVIEW，提现状态控件显示「待审核」，只列待审核的单，不报错、不提示筛选未应用",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#2] 地址里的其他参数不影响：/withdrawals?dashboard_probe=case0&status=PAID_MANUAL&review_mode=auto&page=2 首个列表请求只带 page=1、page_size 与 status=PAID_MANUAL，控件显示「线下打款成功」，只列该单",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#3] 带 status=PENDING_REVIEW 进页后点【重置】：只重读一次且不带 status，控件清空，七张单重新列出",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#4] 带 status=PENDING_REVIEW 进页后把提现状态改为「已驳回」并【查询】：改选时不发请求，【查询】只发一次、带 status=REJECTED，控件显示「已驳回」，只列驳回单",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#5] 带 status=PENDING_REVIEW 进页后换页与切页签照常：第 2 页请求 page=2 仍带 status；切「待审」页签请求 page=1、display_status=pending_review 且仍带 status",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#6] status 缺省或为空照旧：合法的 status=APPROVED 生效；而 ?status=、?dashboard_probe=case0、?status=&dashboard_probe=case1 进页时首个列表请求不带 status，控件为空，七张单全列，不报错",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts > [AC-F1-14c-WITHDRAWALS#7] status 不是契约枚举值照旧：合法的 status=FAILED 生效；而 pending_review（小写）、Pending_Review（大小写不同）、pending（未知值）进页时首个列表请求不带 status，控件不显示该值，七张单全列，不报错",
+        "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts > [AC-F1-08ai-ACCESS#1] 只读没有勾选或批量通过；其他资金权限（含 payout.manual_entry）没有【批量通过】，只有待执行单可勾（F1-08al）；审核权限与超管可勾选，未勾选不出现批量栏；持 payout.execute 或超管时恰多可用的【一键组批】（F1-08an），只持审核权限看不到它",
+        "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts > [AC-F1-08an-ACCESS#1] 持 withdraw.review 与 payout.execute 时提现审核页【一键组批】恰为 1 个且可用（不点），勾选待审核单后【批量通过】照旧可用、【一键组批】仍恰为 1 个；只持 withdraw.review 时没有【一键组批】",
+        "test/spec/frontend/admin-withdrawal-batch-payout/counts.test.ts > [AC-F1-08an-COUNT#1] 只持 fund.view 进审核列表：每个状态页签都发 page_size=1 的读取（只带该页签的快捷筛选、不带其他条件），页签显示返回的 total（全部 128、待审 37、驳回 9、手动 15、自动 52），不是当前页的行数；切到「待审」后各页签计数不变",
+        "test/spec/frontend/admin-withdrawal-batch-payout/counts.test.ts > [AC-F1-08an-COUNT#2] 计数读取都失败（50001）：五个页签各发过一次 page_size=1 的读取，页签只显示名字、不显示任何数字，页面不出现错误提示（无 role=alert、无「加载失败」、无错误消息），列表照常列出全部提现单，切到「待审」照常列出",
+        "test/spec/frontend/admin-withdrawal-batch-payout/entry.test.ts > [AC-F1-08an-ENTRY#1] 持 fund.view + payout.execute：待执行（APPROVED）行各有一个可用勾选框（含带「暂停」标记的），待审核、打款中、已成功行没有；未勾选时没有【批量自动打款】、有一个可用的【一键组批】；勾一张待执行单后恰有一个可用的【批量自动打款】，没有【批量通过】【批量手动打款】；取消勾选后【批量自动打款】消失；全程不发写请求",
+        "test/spec/frontend/admin-withdrawal-batch-payout/entry.test.ts > [AC-F1-08an-ENTRY#2] 超管：只勾待审核单时只有【批量通过】、没有【批量自动打款】，再勾一张待执行单后【批量自动打款】【批量手动打款】都可用，【一键组批】在；只持 fund.view、只持 withdraw.review、持 fund.view + payout.manual_entry 时都没有【批量自动打款】【一键组批】（隐藏，不是置灰；勾了各自可勾的单也没有）；全程不发写请求",
+        "test/spec/frontend/admin-withdrawal-batch-payout/entry.test.ts > [AC-F1-08an-ENTRY#3] 已挂在别的批次上的待执行单可进人工组批（BR-WDR-12 换批次）：自动批次上因通道未开通受阻的单（batch_id 指向该自动批次、auto_decision.execute_blocked=channel_disabled）与经 W9 退回、仍挂在旧批次上的单（hold_reason 有值）各有一个可用勾选框；持 payout.execute 按【一键组批】选中这两张与普通待执行单（不选待审核单），超管手动勾这两张也行；动态码后请求体恰为按列表顺序的这些 withdrawal_ids",
+        "test/spec/frontend/admin-withdrawal-batch-payout/frozen-moved/group.browser.test.ts > [AC-F1-08an-BROWSER#1] /withdrawals 审核列表（Chromium）：持 payout.execute 时【一键组批】恰 1 个且可用（不点）；不持 payout.execute（其余权限点照持）时没有【一键组批】；全程只发允许的 GET",
+        "test/spec/frontend/admin-withdrawal-batch-payout/frozen-moved/route-status-counts.test.ts > [AC-F1-08an-COUNTS#1] 进页 /withdrawals 与 /withdrawals?status=PENDING_REVIEW：恰 5 个 page_size=1 的页签计数读（全部 / 待审 / 驳回 / 手动 / 自动，各只带该页签的快捷筛选、不带地址里的 status），列表读恰 1 条",
+        "test/spec/frontend/admin-withdrawal-batch-payout/group.test.ts > [AC-F1-08an-GROUP#1] 持 payout.execute 与超管：按【一键组批】不发写请求，选中的恰为两张没有「暂停」标记的待执行单（带「暂停」标记的待执行单、待审核、打款中、已成功的单都不在内，超管也不出现【批量通过】）；【批量自动打款】的确认对话框按列表顺序只列这两张，动态码后请求体恰为这两张",
+        "test/spec/frontend/admin-withdrawal-batch-payout/refused.test.ts > [AC-F1-08an-REFUSED#1] 整批拒绝（打款开关已关闭、打款队列已暂停、企业支付宝余额 W 低于预计提现 P）：显示各自全文，任何单都不显示「已发起打款」，也不是结果未知；不自动重发；勾选保留，再提交换新的 Idempotency-Key，第二次进入打款如实显示",
+        "test/spec/frontend/admin-withdrawal-batch-payout/refused.test.ts > [AC-F1-08an-REFUSED#2] 首次提交即被确定拒绝：带外壳的 10403 提示「无权限执行此操作（需要 payout.execute 权限点）」，20001 data.fields=[withdrawal_ids] 提示「提现单编号有误，请刷新页面后重试」；不进入结果未知（没有【重试】）、不报成功、不自动重发；再提交换新的 Idempotency-Key",
+        "test/spec/frontend/admin-withdrawal-batch-payout/relogin.test.ts > [AC-F1-08an-RELOGIN#1] 批量自动打款结果未知：只存一项标记 {page: withdrawals, unknown: true, at: 发生时刻}（不含单号、金额、用户、幂等键、请求体）；【重试】收到 10001 走全局重新登录后标记仍在；同一账号重新登录回到提现审核页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻 2026-11-18 12:00:00，提示条只有【关闭】、无无角色的点击 / 按键处理；不自动重发、不恢复对话框；按【关闭】后提示消失、标记清掉",
+        "test/spec/frontend/admin-withdrawal-batch-payout/submit.test.ts > [AC-F1-08an-SUBMIT#1] 持 payout.execute 倒序勾三张待执行单：【批量自动打款】先出确认对话框，按列表顺序列三张单与各自实付金额，并有「执行前检查」（打款开关、队列运行状态、单日限额余量取打款概览），【取消】不发任何请求；再打开【确认执行】→ 动态码（双击也只验一次）→ 只发一次 POST /admin/v1/payout-batches，body 恰为按列表顺序的三个 withdrawal_ids，带 X-Step-Up-Token 与 Idempotency-Key",
+        "test/spec/frontend/admin-withdrawal-batch-payout/submit.test.ts > [AC-F1-08an-SUBMIT#2] 部分成功如实显示：三张里两张进入打款（「已发起打款」）、一张留在待执行（会员有提现阻断的全文），留下的那张不显示「已发起打款」，不报三张都已发起；之后重新读列表与各页签计数、清空勾选，进入打款的单在列表里为打款中、留下的仍为已通过待打款；只发一次写",
+        "test/spec/frontend/admin-withdrawal-batch-payout/submit.test.ts > [AC-F1-08an-SUBMIT#3] 超管混选一张待审核单与两张待执行单：确认对话框里待审核单标「未审核」、不列为将执行；请求体只有两张待执行单（列表顺序），待审核单不在本操作中审核（不发 batch-approve）；结果里待审核单仍为「未审核」、两张待执行单为「已发起打款」",
+        "test/spec/frontend/admin-withdrawal-batch-payout/submit.test.ts > [AC-F1-08an-SUBMIT#4] 逐单原因各自如实显示：五张待执行单一张进入打款，其余四张分别因已有转账记录、打款通道未开通、已不是待执行、会员有提现阻断留在待执行；每张留下的单只显示自己那句原因全文（不出别人的原因、不出「已发起打款」），进入打款的那张不出任何留下原因；不显示「全部成功」类提示",
+        "test/spec/frontend/admin-withdrawal-batch-payout/unknown.test.ts > [AC-F1-08an-UNKNOWN#1] 首次提交无回应 / 无法解析的响应（HTML、残缺 JSON）/ 带外壳的 50001 / 40901：都进入「上次提交结果未知」，只有【重试】与「…核对」可用，Esc 与遮罩关不掉，不自动重发；【重试】先重新动态码，再以原 Idempotency-Key 与逐字节相同的请求体只发一次，拿到确定结果后如实显示",
+        "test/spec/frontend/admin-withdrawal-batch-payout/unknown.test.ts > [AC-F1-08an-UNKNOWN#2] 结果未知时按「…核对」：不再发写请求，重新读列表；不会凭空报成功",
+        "test/spec/frontend/admin-withdrawal-batch-payout/unknown.test.ts > [AC-F1-08an-UNKNOWN#3] 结果未知后【重试】收到带外壳的 10403，或 10003 且 data.reason=verify_phone_missing：仍是「上次提交结果未知」、只有【重试】与「…核对」、键与请求体不变；再【重试】原键原体拿到确定结果",
+        "test/spec/frontend/admin-withdrawal-batch-payout/unknown.test.ts > [AC-F1-08an-UNKNOWN#4] 结果未知后【重试】收到 20001（data.fields=[withdrawal_ids]）：解除锁定、提示「提现单编号有误，请刷新页面后重试」、不再是结果未知；之后再提交换新的 Idempotency-Key",
+        "test/spec/frontend/admin-withdrawal-batch-payout/unknown.test.ts > [AC-F1-08an-UNKNOWN#5] 普通 10003（data.tier=totp，凭证未被接受）：重新弹出动态码并提示「动态码凭证已失效，请重新输入动态码」，验证前不重发；验证后以原 Idempotency-Key 与原请求体只再发一次——首次直接收到与结果未知后重试收到都如此",
+        "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts > [AC-F1-08al-ACCESS#1] 仅手动补录权限可勾真实 APPROVED 并出【批量手动打款】；持 payout.execute 不持补录时可勾 APPROVED、勾选后可用批量入口恰为【批量自动打款】（F1-08an），不出【批量手动打款】【批量通过】；两者都不持时不可勾，不能借补录权限批量通过",
+        "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts > [AC-F1-08an-ACCESS#2] 仅持 fund.view 与 payout.execute 时可勾真实 APPROVED，勾选后【批量自动打款】恰 1 个且可用，不出【批量手动打款】【批量通过】，不点不写",
+        "test/spec/frontend/admin-withdrawals/pages.browser.test.ts > [AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下列表可用写入口恰为【一键组批】（F1-08an，不点）、详情没有可点的写入口，全程只发允许的 GET",
+        "test/spec/frontend/admin-withdrawals/readonly.test.ts > [AC-F1-08a-READONLY#1] 审核列表（账号持 withdraw.review、payout.execute、payout.manual_entry、export、pii.reveal_identity、pii.reveal_phone 等全部写与查看全量权限点）：可用写入口恰为【一键组批】（F1-08an，不点），没有可点的【批量通过】【批量手动打款】【批量自动打款】【导出】等其他写入口，点其余写入口或【查看】类入口都只发允许的 GET",
+        "test/spec/frontend/admin-withdrawals/readonly.test.ts > [AC-F1-08an-READONLY#1] 审核列表按权限点出【一键组批】：全部权限点（含 payout.execute）时恰 1 个且可用；不持 payout.execute（其余写与查看权限点照持）时不出现（隐藏，不是置灰）；未勾选时都没有【批量自动打款】；都不点，只发允许的 GET"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-payouts-readonly/tabs.test.ts",
+        "test/spec/frontend/admin-route-status-param/withdrawals.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-approve/selection.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-payout/counts.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-payout/entry.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-payout/frozen-moved/group.browser.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-payout/frozen-moved/route-status-counts.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-payout/group.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-payout/refused.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-payout/relogin.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-payout/submit.test.ts",
+        "test/spec/frontend/admin-withdrawal-batch-payout/unknown.test.ts",
+        "test/spec/frontend/admin-withdrawal-manual-paid/selection.test.ts",
+        "test/spec/frontend/admin-withdrawals/pages.browser.test.ts",
+        "test/spec/frontend/admin-withdrawals/readonly.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-browser.json",
+          "sha256": "b9f3b92d31fafe0809d1457e7666b9dc65c7b6d8dc100069bd8e4083811e641c"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "514f72e570d8432dd6a1c83689507413ffeccc5fc7ed1f82a61e0b58411d488f"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3da656f28cf71bf27f16aee4fba7237aa5bf7abd",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}

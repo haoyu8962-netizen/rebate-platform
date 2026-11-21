@@ -20,6 +20,10 @@ import {
   disallowedRequests,
   snapshot,
 } from './fixtures.ts';
+import {
+  LANDED_ON_LIST,
+  nameOf,
+} from '../admin-withdrawal-batch-payout/frozen-moved/landed-list.ts';
 
 // The real /withdrawals route of the admin app in Chromium: the review list with dictionary
 // names, a row's 【详情】 to /withdrawals/{id}, the masked payee, and no usable write entry even
@@ -101,7 +105,7 @@ function unmaskedShown(): string[] {
   return UNMASKED_VALUES.filter((value) => all.includes(value));
 }
 
-it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下也没有可点的写入口，全程只发允许的 GET', async () => {
+it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与风险标签，行【详情】进入 /withdrawals/{id}，详情只显示脱敏收款账号与姓名、没有可点的【查看】全量入口，全部写与查看全量权限下列表可用写入口恰为【一键组批】（F1-08an，不点）、详情没有可点的写入口，全程只发允许的 GET', async () => {
   await page.viewport(1440, 1080);
   const server = await show();
   const area = page.getByRole('main');
@@ -116,7 +120,10 @@ it('[AC-F1-08a-BROWSER#1] /withdrawals 审核列表：列出字典中文名与�
   await expect
     .element(area.getByRole('row').filter({ hasText: NO.pending }))
     .toMatchTextContent(STATUS_NAME.PENDING_REVIEW);
-  expect(usableWrites(), 'no usable write entry on the list').toEqual([]);
+  expect(
+    usableWrites().map((node) => nameOf(node)),
+    'the only usable write entry on the list is the landed 一键组批 (not pressed)',
+  ).toEqual(LANDED_ON_LIST);
 
   const buttons = row.getByRole('button', { name: ENTRY });
   const links = row.getByRole('link', { name: ENTRY });

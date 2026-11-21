@@ -91,14 +91,14 @@ export function canRecordPaidDetail(item: WithdrawalDetail, access: AccessContro
 }
 
 /** A refusal that leaves an earlier unknown submission unknown (D10-2060 / D10-2061). */
-function keepsUnknown(cause: unknown): boolean {
+export function keepsUnknown(cause: unknown): boolean {
   if (!(cause instanceof AdminApiError) || cause.kind !== 'api') return false;
   if (cause.code === FORBIDDEN) return true;
   return cause.code === STEP_UP_REFUSED && reasonOf(cause) === VERIFY_PHONE_MISSING;
 }
 
 /** A plain 10003 (the step-up token was not accepted): verify again, same key and body. */
-function verifyAgain(cause: unknown): boolean {
+export function verifyAgain(cause: unknown): boolean {
   return (
     cause instanceof AdminApiError &&
     cause.code === STEP_UP_REFUSED &&
@@ -184,7 +184,7 @@ type OverviewState =
   | { readonly status: 'failed' };
 
 /** The notice of a settled refusal of the execute (the dialog unlocks). */
-function executeFailure(cause: unknown): string {
+export function executeFailure(cause: unknown): string {
   if (!(cause instanceof AdminApiError)) return te.failed;
   if (cause.code === FORBIDDEN) return te.forbidden;
   if (cause.code === STEP_UP_REFUSED && reasonOf(cause) === VERIFY_PHONE_MISSING)
