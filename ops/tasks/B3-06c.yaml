@@ -1,0 +1,31 @@
+id: B3-06c
+repo: rebate-platform
+title: 'A8 前一半（规划 11-12 §2.8）：审核起拦等级做成配置——输入 / 输出审核按本 app 的 agent.safety.block_level.input / .output 判命中（默认 low，与现实现相同），没有等级或等级不认识按审核不可用'
+type: impl
+# 2026-11-22 agent 线入账（D10-2327 顺序 ②；docs/changes/20261112-Agent模型路径与缺口补全.md §2.8、§3.1 A8；盘点 couli-runs/AGENT-lane/restart-inventory-1121.md）。
+# A8 拆两张：本单只做起拦等级；/v1/agent/* 补判隐私最低版本（BR-ID-01 ⑦）另开一张，要动 stream 入口和全局判定顺序（app.module、identity），风险级不同。
+# 现状（主干）：apps/api/src/modules/agent/guard/review/index.ts 的阿里云差异表写死 passValues ['none']、blockValues ['high','medium','low']，适配器只交出 pass / block / timeout；
+#   两个配置键 B1-22y（#3258）已登记在 content 的 config-registry.ts:447-448（riskEnum，取值 low / medium / high，权限点 config.risk、要动态码、改了记审计，后台写入路径现成），但 Agent 这边没有地方读它们。
+# 做法：① 审核适配器交出风险等级（none / low / medium / high），等级缺失或不认识照旧按不可用处理（与超时相同，fail-close，不算命中）；
+#   ② 输入审核（preprocess/input）和输出审核（stream/mount 的 output-review）按本请求的 app（input.caller.appId）读对应的 block_level——读法照 stream/mount/safety.ts 读 agent.safety.timeout_ms 的写法，每次请求现读；
+#      判法：none 通过；等级 ≥ 起拦等级算命中；配置缺失或不合法按默认 low（即与现实现相同）。默认值不改，调高要等法务（06 Q-F19），本单不动默认。
+#   ③ 验收（§2.8）：规则测试覆盖四个等级 × 三档起拦等级的判定，以及没有等级或等级不认识按不可用处理；输入与输出两侧都要钉。
+# 不在本单：配置项登记与后台改值（已有）；隐私最低版本（A8 后一半）；用真实接口核对等级字段（凭据到位后，09 U-79；适配器里的 TODO 保留）。
+# 风险级：agent 模块 RV1；spec-test 任务书原样附 D10-2317 ①；本机不跑 vitest，单文件也走测试机 --tests（D10-2478）；探针放一次性工作树（D10-2481）。
+refs: [BR-AI-18]
+refs_hash:
+  BR-AI-18: 81915a2d5a19
+deps: [B3-06b]
+paths:
+  - 'apps/api/src/modules/agent/guard/review/**'
+  - 'apps/api/src/modules/agent/preprocess/input/**'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+test_paths:
+  - 'test/spec/agent/review-block-level/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/review-block-level/**'
+status: todo
+pr: null
