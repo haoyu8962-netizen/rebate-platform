@@ -6514,10 +6514,14 @@ CREATE TABLE app.settle_bills (
     error_count integer,
     held_count integer,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    unsettled_count integer,
+    amount_mismatch_count integer,
+    CONSTRAINT settle_bills_amount_mismatch_count_check CHECK ((amount_mismatch_count >= 0)),
     CONSTRAINT settle_bills_bill_id_check CHECK ((bill_id ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'::text)),
     CONSTRAINT settle_bills_commission_totals_check CHECK ((jsonb_typeof(platform_settle_commission_totals) = 'object'::text)),
     CONSTRAINT settle_bills_counts_check CHECK (((error_count >= 0) AND (held_count >= 0))),
-    CONSTRAINT settle_bills_order_counts_check CHECK ((jsonb_typeof(platform_order_counts) = 'object'::text))
+    CONSTRAINT settle_bills_order_counts_check CHECK ((jsonb_typeof(platform_order_counts) = 'object'::text)),
+    CONSTRAINT settle_bills_unsettled_count_check CHECK ((unsettled_count >= 0))
 );
 
 
@@ -18262,6 +18266,20 @@ GRANT UPDATE(error_count) ON TABLE app.settle_bills TO couli_app;
 --
 
 GRANT UPDATE(held_count) ON TABLE app.settle_bills TO couli_app;
+
+
+--
+-- Name: COLUMN settle_bills.unsettled_count; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(unsettled_count) ON TABLE app.settle_bills TO couli_app;
+
+
+--
+-- Name: COLUMN settle_bills.amount_mismatch_count; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(amount_mismatch_count) ON TABLE app.settle_bills TO couli_app;
 
 
 --
