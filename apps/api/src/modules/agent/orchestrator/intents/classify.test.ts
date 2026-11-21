@@ -26,6 +26,9 @@ it.each([
   '订单号123456789012返了没',
   '刚下单的怎么还没显示',
   '上一单的返利呢',
+  '查一下我的订单',
+  '我的订单',
+  '我那单',
 ])('[B3-05f][BR-AI-01] 有订单类名词仍判订单：%s', (text) => {
   expect(classifier.classify(text)).toEqual({ kind: 'order' });
 });

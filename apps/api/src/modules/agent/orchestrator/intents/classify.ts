@@ -146,6 +146,11 @@ export function createTextClassifier(
           return { kind: 'personal', withdrawal };
         }
       }
+      // 本人订单 without a progress word (查一下我的订单): an order noun the user points at as their
+      // own (我的订单, 我那单) is order_query; account wording still makes it earnings (above).
+      if (selfPointer.test(text) && orderNoun.test(text) && !earningsStrong.test(text)) {
+        return { kind: 'order' };
+      }
       if (isGeneric) return { kind: 'rule' };
       return { kind: 'unknown' };
     },
