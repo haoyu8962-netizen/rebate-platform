@@ -1,0 +1,25 @@
+id: CT-06zzzzzzz
+repo: rebate-platform
+title: CT-06zzzzzzz（FU-BRIEF-NO-LOCAL-HEAVY）：任务书第 6 节不再让写测 / 实现方在本机跑类型检查、lint 与测试——自检走测试机（编排者经 lan-run 轻量档 --tests / --related 与 --fast 跑），本机只许单文件 prettier 与针对改动文件的 eslint（D10-2404 / D10-2406）
+type: guard-change
+# 2026-11-22 w1 入账（D10-2406：Codex 写测照第 6 节在本机跑 pnpm typecheck / lint，CT-06zzzzzz 一次占 300% CPU、3.8G，撞设备轮）。
+# ① tools/ops/brief.ts 第 6 节：test / handover / Codex 首发实现不再列 `pnpm typecheck`、`pnpm lint`；所有阶段改为写明「本机只许
+#    `pnpm exec prettier --check <改动文件>` 与 `pnpm exec eslint <改动的 .ts/.tsx 文件>`；不跑 tsc / pnpm typecheck / pnpm lint /
+#    vitest / verify:fast；类型检查、lint 与测试由编排者在测试机跑（lan-run：--tests / --related 轻量档、--fast）」，
+#    实现阶段原先指向的 verify-container --fast 改为同一说法；先红与必须变绿的规则测试的说明不变。
+# ② 第 8 节 `tests_passed` 的含义随之改为「改动文件的 prettier 与 eslint 通过时填 true」（三处行文同步）。
+# ③ tools/ops/brief.test.ts 跟改期望；tools/ops/README.md「任务书」一节加一句。根 AGENTS.md 第 2 节同类说法是第三类保护文件，本单不改，另报编排。
+# 门禁改动，按 approvals 16 由编排核后加 owner 标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/brief.ts'
+  - 'tools/ops/brief.test.ts'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzzzz.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify:fast'
+status: todo
