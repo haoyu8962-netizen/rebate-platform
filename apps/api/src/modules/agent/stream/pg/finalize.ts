@@ -116,15 +116,14 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
           ? sql`${JSON.stringify(redactedStored(toStored(draft)))}::jsonb`
           : sql`end_draft`;
       // B3-08t (BR-AI-19 细则「运行级字段」, BR-AI-05 ⑤): intent and input_passed of the process that
-      // ran the run, and the model columns of a run that used no model output, in this UPDATE.
+      // ran the run, in this UPDATE (model / model_snapshot stay as admission wrote them).
       const run = runFieldsSql(fields);
       await q.query(sql`UPDATE app.agent_runs SET
         settle_result = ${refunded ? 'refunded' : 'counted'}, settled_at = ${now},
         final_event = ${JSON.stringify(stored)}::jsonb, end_draft = ${endDraft},
         ended_at = GREATEST(${now}, accepted_at),
         finish_reason = COALESCE(finish_reason, ${frame.event === 'done' ? frame.data.finish_reason : 'error'}),
-        intent = ${run.intent}, input_passed = ${run.inputPassed},
-        model = ${run.model}, model_snapshot = ${run.snapshot}
+        intent = ${run.intent}, input_passed = ${run.inputPassed}
         WHERE app_id = ${row.app_id} AND id = ${row.id} AND final_event IS NULL`);
       // B3-08zc (BR-AI-19 细则「助手回复落库」): the reply of the process that ran the run, in this
       // same transaction — committed with the terminal state or not at all.
@@ -258,31 +257,14 @@ export type Finalization = ReturnType<typeof createFinalization>;
 
 /**
  * B3-08t: the run-level columns of the F5 UPDATE. Without live fields (another request finalizes:
- * this process's result is unknown) intent / input_passed / model stay, and the snapshot written
- * at admission is cleared when no model was recorded. prompt_version is never touched (04 §3.2).
+ * this process's result is unknown) intent / input_passed stay. model, model_snapshot and
+ * prompt_version are never touched (04 §3.2; model attribution: FU-B3-08T-MODEL-ATTRIBUTION).
  * 统一原则 (D10-2368): only what was checked is written — the intent the recorder derived from
- * checked facts (null otherwise), and model / model_snapshot cleared unless the result used model
- * output; an unknown use never writes a model. Exported for its unit test only.
+ * checked facts (null otherwise). Exported for its unit test only.
  */
 export function runFieldsSql(fields: LiveRunFields | undefined) {
-  const unknownSnapshot = sql`CASE WHEN model IS NULL THEN NULL ELSE model_snapshot END`;
   if (fields === undefined) {
-    return {
-      intent: sql`intent`,
-      inputPassed: sql`input_passed`,
-      model: sql`model`,
-      snapshot: unknownSnapshot,
-    };
+    return { intent: sql`intent`, inputPassed: sql`input_passed` };
   }
-  return {
-    intent: sql`${fields.intent}`,
-    inputPassed: sql`${fields.inputPassed}`,
-    model: fields.modelUsed === false ? sql`NULL` : sql`model`,
-    snapshot:
-      fields.modelUsed === true
-        ? sql`model_snapshot`
-        : fields.modelUsed === false
-          ? sql`NULL`
-          : unknownSnapshot,
-  };
+  return { intent: sql`${fields.intent}`, inputPassed: sql`${fields.inputPassed}` };
 }

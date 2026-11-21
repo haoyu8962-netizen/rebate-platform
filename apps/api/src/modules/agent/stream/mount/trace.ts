@@ -27,16 +27,16 @@
 //     terminal transaction the run's intent (orchestrator storedIntentOf over the intent port's
 //     verdict, a rule's intent and the first tool called), input_passed (sink.inputPassed(runId),
 //     called by the core when its input check let the message through: review passed, no refusal
-//     pre-check, no prohibited goods) and whether model output was used (the core
-//     trace's result_model, not a degraded result; unknown while the core has not recorded its trace yet,
-//     e.g. a run cancelled while its model call is pending). What arrives after settle is never
-//     written by the terminal transaction.
-//   async — with the record handed to the queue at the body's end: runFields (the used model as
-//     model and model_snapshot, tokens summed over the run's model answers, ttft_ms = first text
-//     delta since the body started, latency_ms = the body's whole time, both from the Clock; the
-//     filter hits, truncation and the page guide rejection reason). The writer sets them by value.
+//     pre-check, no prohibited goods). What arrives after settle is never written by the terminal
+//     transaction.
+//   async — with the record handed to the queue at the body's end: runFields (tokens summed over
+//     the run's model answers, ttft_ms = first text delta since the body started, latency_ms = the
+//     body's whole time, both from the Clock; the filter hits, truncation and the page guide
+//     rejection reason). The writer sets them by value.
 //   The intent port of the business assembly reports its verdict through recordIntentVerdict
 //   (appId, runId), kept only for a run whose body is open in this process.
+// Neither writes agent_runs.model / model_snapshot (they stay as admission wrote them; model
+// attribution is B4, FU-B3-08T-MODEL-ATTRIBUTION).
 // Out of scope (BR-AI-19, other tasks): cost (B4); retention (BR-ID-30 ①); the trace-missing alert
 // (FU-AGENT-TRACE-ALERT).
 import type { PageGuideRejectReason } from '@couli/contracts-ts';
@@ -111,7 +111,7 @@ export function recordIntentVerdict(appId: string, runId: string, value: IntentT
 
 // B3-08t 统一原则 (编排 D10-2368): the run-level fields store only what was checked; anything
 // unchecked stays empty (宁可漏判留空，不可误判) — the intent from the port's recorded verdict, a rule
-// or the first tool (never the model's own label); the model only when its output was used.
+// or the first tool (never the model's own label).
 
 /** B3-08t: the core's trace as the stored intent's facts. */
 function intentOf(run: AgentRunTrace, verdict: IntentVerdict | null) {
@@ -124,11 +124,6 @@ function intentOf(run: AgentRunTrace, verdict: IntentVerdict | null) {
     withheld: core?.intent_withheld === true,
     firstTool: core?.tool_calls[0]?.name ?? null,
   });
-}
-
-/** B3-08t: the model whose output the run's result used (null: none, or not reported). */
-function usedModel(core: OrchestratorTrace): string | null {
-  return core.degraded === true ? null : (core.result_model ?? null);
 }
 
 /** B3-08t: the core's filter hits as stored (the three contract values, once each). */
@@ -229,7 +224,6 @@ export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceReco
   function runFieldsOf(run: AgentRunTrace, verdict: IntentVerdict | null): RunFieldsRecord {
     const core = run.core;
     return {
-      model: core === null ? null : usedModel(core),
       input_tokens: core?.usage?.input_tokens ?? null,
       output_tokens: core?.usage?.output_tokens ?? null,
       ttft_ms: elapsed(run.startedMs, run.firstTextMs),
@@ -318,11 +312,7 @@ export function createRunTraceRecorder(deps: RunTraceRecorderDeps): RunTraceReco
       if (run === undefined || run.settled) return undefined;
       run.settled = true;
       const verdict = run.flushed ? run.verdict : (verdictSlots.get(runId)?.verdict ?? null);
-      return {
-        intent: intentOf(run, verdict),
-        inputPassed: run.inputPassed,
-        modelUsed: run.core === null ? null : usedModel(run.core) !== null,
-      };
+      return { intent: intentOf(run, verdict), inputPassed: run.inputPassed };
     },
   };
 }

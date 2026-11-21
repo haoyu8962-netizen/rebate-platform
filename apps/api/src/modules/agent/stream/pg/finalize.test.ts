@@ -24,36 +24,32 @@ const compiler = new Kysely<DB>({
 
 function compiled(fields: LiveRunFields | undefined) {
   const run = runFieldsSql(fields);
-  const statement = sql`SET intent = ${run.intent}, input_passed = ${run.inputPassed}, model = ${run.model}, model_snapshot = ${run.snapshot}`;
+  const statement = sql`SET intent = ${run.intent}, input_passed = ${run.inputPassed}`;
   return statement.compile(compiler);
 }
 
-it('[AC-B3-08t#4][AC-B3-08t#6] exit F5/live: nothing checked → intent NULL parameter, a run that used no model output clears model and snapshot', () => {
-  const out = compiled({ intent: null, inputPassed: true, modelUsed: false });
-  expect(out.sql).toBe('SET intent = $1, input_passed = $2, model = NULL, model_snapshot = NULL');
+it('[AC-B3-08t#4] exit F5/live: nothing checked → intent NULL parameter, input_passed as reported', () => {
+  const out = compiled({ intent: null, inputPassed: true });
+  expect(out.sql).toBe('SET intent = $1, input_passed = $2');
   expect(out.parameters).toEqual([null, true]);
 });
 
-it('[AC-B3-08t#1][AC-B3-08t#6] exit F5/live: the checked intent is written; a used model leaves model / snapshot to the trace writer', () => {
-  const out = compiled({ intent: 'order_query', inputPassed: true, modelUsed: true });
-  expect(out.sql).toBe(
-    'SET intent = $1, input_passed = $2, model = model, model_snapshot = model_snapshot',
-  );
-  expect(out.parameters).toEqual(['order_query', true]);
+it('[AC-B3-08t#1] exit F5/live: the checked intent is written', () => {
+  const out = compiled({ intent: 'order_query', inputPassed: false });
+  expect(out.sql).toBe('SET intent = $1, input_passed = $2');
+  expect(out.parameters).toEqual(['order_query', false]);
 });
 
-it('[AC-B3-08t#6] exit F5/live: use not known yet (core trace not recorded) → no model is written, the snapshot kept only beside a recorded model', () => {
-  const out = compiled({ intent: null, inputPassed: false, modelUsed: null });
-  expect(out.sql).toBe(
-    'SET intent = $1, input_passed = $2, model = model, model_snapshot = CASE WHEN model IS NULL THEN NULL ELSE model_snapshot END',
-  );
-  expect(out.parameters).toEqual([null, false]);
-});
-
-it('[AC-B3-08t#5][AC-B3-08t#6] exit F5/recovery: another request finalizes → intent / input_passed / model untouched, snapshot cleared without a model', () => {
+it('[AC-B3-08t#5] exit F5/recovery: another request finalizes → intent / input_passed untouched', () => {
   const out = compiled(undefined);
-  expect(out.sql).toBe(
-    'SET intent = intent, input_passed = input_passed, model = model, model_snapshot = CASE WHEN model IS NULL THEN NULL ELSE model_snapshot END',
-  );
+  expect(out.sql).toBe('SET intent = intent, input_passed = input_passed');
   expect(out.parameters).toEqual([]);
+});
+
+it('[AC-B3-08t#5] exit F5: the run-level columns never include model or model_snapshot', () => {
+  expect(Object.keys(runFieldsSql(undefined)).sort()).toEqual(['inputPassed', 'intent']);
+  expect(Object.keys(runFieldsSql({ intent: null, inputPassed: true })).sort()).toEqual([
+    'inputPassed',
+    'intent',
+  ]);
 });

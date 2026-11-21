@@ -215,9 +215,6 @@ export interface OrchestratorTrace extends ToolTraceFragment {
   /** B3-08t (BR-AI-19 细则「运行级字段」): input / output tokens of every model answer of the run,
    * summed (also of an answer not used for the result); absent when no model answered. */
   readonly usage?: { readonly input_tokens: number; readonly output_tokens: number };
-  /** B3-08t: the run's result came from the no-model path (DegradedPath.run, or the entry's end
-   * without a model): no model output was used, even when a model answered before. */
-  readonly degraded?: true;
   /** B3-08t: the no-model path served the message without an intent (greetings only, no product
    * word: no search); the trace intent is unchanged, agent_runs.intent stays null. */
   readonly degraded_unserved?: true;
@@ -231,10 +228,6 @@ export interface OrchestratorTrace extends ToolTraceFragment {
   /** B3-08t: the run was answered without an intent the server checked (U-7, no IntentPort: the
    * model's label is dropped for out_of_scope): agent_runs.intent stays null. */
   readonly intent_withheld?: true;
-  /** B3-08t: the model whose output the result actually used (a tool call of its round executed,
-   * or its text written); absent (or null) when none was. Not changed by output the format check, U-10, the
-   * tool call budget, a card cap or a template dropped. agent_runs.model / model_snapshot. */
-  readonly result_model?: string | null;
   /** B3-08t: why the no-model path's page guide was not sent (agent_runs.page_guide_reject_reason). */
   readonly page_guide_reject_reason?: PageGuideRejectReason;
 }

@@ -93,8 +93,6 @@ export type ToolCallInitiator = 'model' | 'server';
  * write again overwrites with the same values (never accumulates).
  */
 export interface RunFieldsRecord {
-  /** The model whose output the run used (model and model_snapshot); null: leave both alone. */
-  readonly model: string | null;
   /** Summed over every model answer of the run; null: no model answered. */
   readonly input_tokens: number | null;
   readonly output_tokens: number | null;
@@ -120,7 +118,8 @@ export interface AgentTraceWriter {
   recordToolCalls(appId: string, runId: string, calls: readonly ToolCallRecord[]): Promise<void>;
   /**
    * B3-08t: the run-level columns of the run (one UPDATE of agent_runs by app and run, outside a
-   * transaction, so no row lock is held after it; never intent, input_passed or prompt_version).
+   * transaction, so no row lock is held after it; never intent, input_passed, model,
+   * model_snapshot or prompt_version).
    * Optional: a writer without it writes no run-level columns.
    */
   recordRunFields?(appId: string, runId: string, fields: RunFieldsRecord): Promise<void>;
@@ -606,7 +605,7 @@ export function createPgAgentTraceWriter(deps: {
 
     // B3-08t: set by value (a write again after a lost acknowledgement stores the same values).
     // Only the columns of this writer; intent / input_passed belong to the terminal transaction,
-    // and model / model_snapshot are set only for a run that used a model's output.
+    // and model / model_snapshot are never written here (they stay as admission wrote them).
     async recordRunFields(appId, runId, fields) {
       if (!isUuid(runId))
         throw new AgentTraceRejected('recordRunFields: run not found in this app');
@@ -614,7 +613,6 @@ export function createPgAgentTraceWriter(deps: {
       const result = await db
         .updateTable('agent_runs')
         .set({
-          ...(fields.model === null ? {} : { model: fields.model, model_snapshot: fields.model }),
           input_tokens: fields.input_tokens,
           output_tokens: fields.output_tokens,
           ttft_ms: fields.ttft_ms,

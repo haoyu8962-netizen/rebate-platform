@@ -27,19 +27,14 @@ export type FinalizeHold = 'stored_frame_invalid' | 'facts_inconsistent';
  * B3-08t · BR-AI-19 细则「运行级字段」, BR-AI-05 细则「上下文块」⑤: what the process that ran the run
  * writes with its terminal state (the F5 UPDATE, same transaction, only while final_event IS NULL).
  * A run finalized by another request (admit's stale-run path, the recovery finalizer) has none:
- * intent and input_passed are left as they are (NULL / false), model is not touched and the
- * snapshot pre-written at admission is cleared when no model was recorded (model IS NULL).
+ * intent and input_passed are left as they are (NULL / false). model / model_snapshot are never
+ * written here.
  */
 export interface LiveRunFields {
   /** The server-checked intent (orchestrator storedIntentOf), null for none. */
   readonly intent: AgentIntent | null;
   /** The run passed step 1 of 「判定顺序」 (input review passed, not refused by the pre-checks). */
   readonly inputPassed: boolean;
-  /**
-   * true: the result used model output (model / model_snapshot are left for the trace writer);
-   * false: it used none (both set NULL); null: not known yet (as for a run finalized elsewhere).
-   */
-  readonly modelUsed: boolean | null;
 }
 
 /** Admission of the PG ports: settle also takes the live run fields (B3-08t). */

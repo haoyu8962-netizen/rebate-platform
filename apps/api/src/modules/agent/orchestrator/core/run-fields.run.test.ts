@@ -1,7 +1,7 @@
-// B3-08t (BR-AI-19 细则「运行级字段」) on the core run: the model whose output the result used, the
-// tokens of every metered call, the no-model path page guide rejection reason, and (统一原则
-// D10-2368: 只落核对过的，没核对过就留空) one test per exit point of the result model and the
-// intent facts in run.ts: nothing unchecked is marked ruled, no unused output moves result_model.
+// B3-08t (BR-AI-19 细则「运行级字段」) on the core run: the tokens of every metered call, the
+// no-model path page guide rejection reason, and (统一原则 D10-2368: 只落核对过的，没核对过就留空)
+// one test per exit point of the intent facts in run.ts: nothing unchecked is marked ruled.
+// (agent_runs.model / model_snapshot attribution is B4, FU-B3-08T-MODEL-ATTRIBUTION.)
 // Synthetic ports only (harness as reply-templates.run.test.ts).
 import { expect, it, vi } from 'vitest';
 import type { RunBodyInput } from '../../http/index.ts';
@@ -163,19 +163,6 @@ const SEARCHED: ToolOutcome = { kind: 'ok', modelView: {}, cards: [], trace: {} 
 
 // ── Exit point run.ts finalRound (templated): the templates drop the final round ──────────────
 
-it('[AC-B3-08t#6] exit finalRound/templated: the primary chose the order tool, the backup text is dropped → result model stays the primary', async () => {
-  const x = rig(
-    [
-      round('', [['list_my_orders', '{}']], 'synthetic-primary'),
-      round('{"agent_intent":"earnings_query"}', [], 'synthetic-backup'),
-    ],
-    () => ORDERS,
-  );
-  await x.run();
-  expect(x.traces[0]?.text_replaced_by_template).toBe(true);
-  expect(x.traces[0]?.result_model).toBe('synthetic-primary');
-});
-
 it('[AC-B3-08t#1][AC-B3-08t#2] exit finalRound/templated: the final round intent object is not marked ruled (the first tool decides)', async () => {
   const x = rig(
     [round('', [['list_my_orders', '{}']]), round('{"agent_intent":"earnings_query"}')],
@@ -189,7 +176,7 @@ it('[AC-B3-08t#1][AC-B3-08t#2] exit finalRound/templated: the final round intent
 
 // ── Exit point run.ts finalRound (plain text written through the guard) ──────────────────────
 
-it('[AC-B3-08t#6] exit finalRound/text: the model whose final text was written is the result model', async () => {
+it('[AC-B3-08t#1] exit finalRound/text: plain final text written after a tool → the model label is not ruled', async () => {
   const x = rig(
     [
       round('', [['search_products', '{}']], 'synthetic-primary'),
@@ -199,13 +186,12 @@ it('[AC-B3-08t#6] exit finalRound/text: the model whose final text was written i
   );
   await x.run();
   expect(x.texts.join('')).toContain('结论');
-  expect(x.traces[0]?.result_model).toBe('synthetic-backup');
   expect(x.traces[0]?.intent_ruled).toBeUndefined();
 });
 
-// ── Exit point run.ts modelPath tool round: the result model moves only with used output ──────
+// ── Exit point run.ts modelPath tool round: tokens of a dropped round ────────────────────────
 
-it('[AC-B3-08t#6] exit modelPath/format check (money r2 S1-1): the backup round with JSON text and a search call is dropped → result model stays the primary', async () => {
+it('[AC-B3-08t#10] exit modelPath/format check: the backup round with JSON text and a search call is dropped → its tokens still count once', async () => {
   const x = rig(
     [
       round('', [['list_my_orders', '{}']], 'synthetic-primary'),
@@ -220,91 +206,14 @@ it('[AC-B3-08t#6] exit modelPath/format check (money r2 S1-1): the backup round 
   expect(x.execute.mock.calls.map(([call]) => call.name)).toEqual(['list_my_orders']);
   const trace = x.traces[0];
   expect(trace?.model_format_invalid).toBe(true);
-  expect(trace?.result_model).toBe('synthetic-primary');
   // trace.model is the last model that answered; the usage of the dropped round still counts once.
   expect(trace?.model).toBe('synthetic-backup');
   expect(trace?.usage).toEqual({ input_tokens: 6, output_tokens: 5 });
 });
 
-it('[AC-B3-08t#6] exit modelPath/U-10: the last allowed round still asks for a tool, its call is not run → no result model', async () => {
-  const x = rig([round('', [['search_products', '{}']], 'synthetic-primary')], () => SEARCHED, {
-    modelRounds: 1,
-  });
-  await x.run();
-  expect(x.execute).not.toHaveBeenCalled();
-  expect(x.traces[0]?.result_model).toBeUndefined();
-});
-
-it('[AC-B3-08t#6] exit modelPath/tool budget: the backup call over limits.toolCalls is not run → result model stays the primary', async () => {
-  const x = rig(
-    [
-      round('', [['search_products', '{}']], 'synthetic-primary'),
-      round('', [['search_products', '{}']], 'synthetic-backup'),
-    ],
-    () => SEARCHED,
-    { toolCalls: 1 },
-  );
-  await x.run();
-  expect(x.execute).toHaveBeenCalledOnce();
-  expect(x.traces[0]?.model).toBe('synthetic-backup');
-  expect(x.traces[0]?.result_model).toBe('synthetic-primary');
-});
-
-it('[AC-B3-08t#6] exit runTool/rejected: an unregistered tool name or broken arguments are not executed → no result model', async () => {
-  const x = rig(
-    [
-      round('', [['no_such_tool', '{}']], 'synthetic-primary'),
-      round('', [['search_products', '{not json']], 'synthetic-backup'),
-      round('', [], 'synthetic-third'),
-    ],
-    () => SEARCHED,
-  );
-  await x.run();
-  expect(x.execute).not.toHaveBeenCalled();
-  expect(x.traces[0]?.result_model).toBeUndefined();
-});
-
-it('[AC-B3-08t#6] exit runTool/executed: the round whose call executed is the result model; an earlier round tail written later does not move it back', async () => {
-  const x = rig(
-    [
-      round('先看看。', [['search_products', '{}']], 'synthetic-primary'),
-      round('', [['search_products', '{}']], 'synthetic-backup'),
-      round('', [], 'synthetic-third'),
-    ],
-    () => SEARCHED,
-  );
-  await x.run();
-  expect(x.execute).toHaveBeenCalledTimes(2);
-  expect(x.texts.join('')).toContain('先看看');
-  expect(x.traces[0]?.result_model).toBe('synthetic-backup');
-});
-
-it('[AC-B3-08t#6] exit finalRound/format check: structured final text after delivered output is dropped → result model unchanged', async () => {
-  const x = rig(
-    [
-      round('先看看。', [['search_products', '{}']], 'synthetic-primary'),
-      round('{"card":"伪造"}', [], 'synthetic-backup'),
-    ],
-    () => SEARCHED,
-  );
-  await x.run();
-  expect(x.texts.join('')).toContain('先看看');
-  expect(x.texts.join('')).not.toContain('伪造');
-  expect(x.traces[0]?.model_format_invalid).toBe(true);
-  expect(x.traces[0]?.degraded).toBeUndefined();
-  expect(x.traces[0]?.result_model).toBe('synthetic-primary');
-});
-
-it('[AC-B3-08t#6] exit finalRound/blank: blank final text without any used output → no result model', async () => {
-  const x = rig([round('   ', [], 'synthetic-primary')], () => SEARCHED);
-  await x.run();
-  expect(x.traces[0]?.model).toBe('synthetic-primary');
-  expect(x.traces[0]?.result_model).toBeUndefined();
-});
-
 // ── Exit point run.ts finalRound with the IntentPort (money r2 S1-2) ─────────────────────────
 
-it('[AC-B3-08t#1][AC-B3-08t#7] exit finalRound/port pending (money r2 S1-2): stopped before the port recorded its verdict → the model label is not ruled, no result model', async () => {
+it('[AC-B3-08t#1][AC-B3-08t#7] exit finalRound/port pending (money r2 S1-2): stopped before the port recorded its verdict → the model label is not ruled', async () => {
   const controller = new AbortController();
   const intents: IntentPort = {
     handle: () => {
@@ -325,10 +234,9 @@ it('[AC-B3-08t#1][AC-B3-08t#7] exit finalRound/port pending (money r2 S1-2): sto
   expect(trace?.intent_ruled).toBeUndefined();
   expect(trace?.intent_withheld).toBeUndefined();
   expect(trace?.tool_calls).toEqual([]);
-  expect(trace?.result_model).toBeUndefined();
 });
 
-it('[AC-B3-08t#6] exit finalRound/port answered: the port answered on a known intent object → that round is the result model, the label still not ruled', async () => {
+it('[AC-B3-08t#1] exit finalRound/port answered: the port answered on a known intent object → the label still not ruled', async () => {
   const intents: IntentPort = {
     handle: async (_request, ctx) => {
       ctx.text('[agent.refuse.out_of_scope]');
@@ -342,27 +250,8 @@ it('[AC-B3-08t#6] exit finalRound/port answered: the port answered on a known in
     { intents },
   );
   await x.run();
-  expect(x.traces[0]?.result_model).toBe('synthetic-primary');
+  expect(x.traces[0]?.intent).toBe('out_of_scope');
   expect(x.traces[0]?.intent_ruled).toBeUndefined();
-});
-
-it('[AC-B3-08t#6] exit finalRound/port answered broken JSON: an object the port refused as broken is not used → no result model', async () => {
-  const intents: IntentPort = {
-    handle: async (_request, ctx) => {
-      ctx.text('[agent.refuse.out_of_scope]');
-      return { kind: 'done', finishReason: 'stop' };
-    },
-  };
-  const x = rig(
-    [round('{"agent_intent": ', [], 'synthetic-primary')],
-    () => ORDERS,
-    {},
-    {
-      intents,
-    },
-  );
-  await x.run();
-  expect(x.traces[0]?.result_model).toBeUndefined();
 });
 
 it('[AC-B3-08t#4] exit degrade with a model label: the no-model path after a kept model label → not ruled (the label stays unchecked)', async () => {
@@ -378,13 +267,11 @@ it('[AC-B3-08t#4] exit degrade with a model label: the no-model path after a kep
   expect(x.degraded).toHaveBeenCalledOnce();
   expect(x.traces[0]?.intent).toBe('earnings_query');
   expect(x.traces[0]?.intent_ruled).toBeUndefined();
-  expect(x.traces[0]?.degraded).toBe(true);
-  expect(x.traces[0]?.result_model).toBeUndefined();
 });
 
 // ── Exit point run.ts finalRound U-7 (money r2 S2) ───────────────────────────────────────────
 
-it('[AC-B3-08t#4] exit finalRound/U-7 (money r2 S2): without an IntentPort the label is dropped for out_of_scope → intent withheld, no result model', async () => {
+it('[AC-B3-08t#4] exit finalRound/U-7 (money r2 S2): without an IntentPort the label is dropped for out_of_scope → intent withheld', async () => {
   const x = rig(
     [
       round('', [['search_products', '{}']], 'synthetic-primary'),
@@ -397,13 +284,11 @@ it('[AC-B3-08t#4] exit finalRound/U-7 (money r2 S2): without an IntentPort the l
   const trace = x.traces[0];
   expect(trace?.intent_withheld).toBe(true);
   expect(trace?.intent_ruled).toBeUndefined();
-  // The executed search of the first round is still that round's used output.
-  expect(trace?.result_model).toBe('synthetic-primary');
 });
 
 // ── Exit points run.ts linkPath / order entry / degrade: the deterministic rules ─────────────
 
-it('[AC-B3-08t#3] exit linkPath: a link message is find_by_link by rule → ruled, no result model', async () => {
+it('[AC-B3-08t#3] exit linkPath: a link message is find_by_link by rule → ruled', async () => {
   const x = rig(
     [],
     () => SEARCHED,
@@ -414,10 +299,9 @@ it('[AC-B3-08t#3] exit linkPath: a link message is find_by_link by rule → rule
   );
   await x.run();
   expect(x.traces[0]).toMatchObject({ intent: 'find_by_link', intent_ruled: true });
-  expect(x.traces[0]?.result_model).toBeUndefined();
 });
 
-it('[AC-B3-08t#3] exit order entry: context.order_id is order_query by rule → ruled and the entry fact, no result model', async () => {
+it('[AC-B3-08t#3] exit order entry: context.order_id is order_query by rule → ruled and the entry fact', async () => {
   const entry = {
     order: vi.fn(async () => ({ kind: 'done' as const, finishReason: 'stop' as const })),
   } as unknown as ScenarioEntryPath;
@@ -437,15 +321,13 @@ it('[AC-B3-08t#3] exit order entry: context.order_id is order_query by rule → 
     entry_intent: 'order_query',
     intent_ruled: true,
   });
-  expect(x.traces[0]?.result_model).toBeUndefined();
 });
 
-it('[AC-B3-08t#3] exit degrade: the no-model path (no prompt) is ①–⑥ by rule → ruled, degraded, no result model', async () => {
+it('[AC-B3-08t#3] exit degrade: the no-model path (no prompt) is ①–⑥ by rule → ruled', async () => {
   const x = rig([], () => SEARCHED, {}, { noPrompt: true });
   await x.run();
   expect(x.degraded).toHaveBeenCalledOnce();
-  expect(x.traces[0]).toMatchObject({ intent: 'search', intent_ruled: true, degraded: true });
-  expect(x.traces[0]?.result_model).toBeUndefined();
+  expect(x.traces[0]).toMatchObject({ intent: 'search', intent_ruled: true });
 });
 
 it('[AC-B3-08t#10] tokens: a failed attempt the gateway metered counts once with the answer, the answering attempt not twice', async () => {
@@ -488,7 +370,6 @@ it('[AC-B3-08t#10] tokens: metered usage of a degraded call (every attempt faile
   const x = rig([failed], () => ORDERS);
   await x.run();
   expect(x.traces[0]?.usage).toEqual({ input_tokens: 7, output_tokens: 3 });
-  expect(x.traces[0]?.degraded).toBe(true);
 });
 
 it('[AC-B3-08t#5][AC-B3-08t#10] the no-model path page guide rejection reason reaches the trace', async () => {
