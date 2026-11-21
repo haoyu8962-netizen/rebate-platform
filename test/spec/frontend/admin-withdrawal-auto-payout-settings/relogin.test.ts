@@ -14,6 +14,7 @@ import {
   ADMIN_ID,
   LATER,
   accountOf as consoleAccount,
+  banners,
   closeBanner,
   createConsole,
   expectBanner,
@@ -21,8 +22,10 @@ import {
   expectNothingStored,
   loggedOut,
   moveClock,
+  noticeShown,
   passStepUpsUntil,
   readSince,
+  settle as markerSettle,
   startClock,
   takeBaseline,
 } from '../admin-unknown-relogin-marker/helpers.ts';
@@ -37,6 +40,7 @@ import {
   dropped,
   failedWith,
   passOf,
+  rowOf,
   scriptBatch,
   serverFor,
   type PayoutServer,
@@ -47,7 +51,9 @@ import {
   input,
   itemReads,
   main,
+  markedInvalid,
   pageTabNames,
+  passUntilSent,
   save,
   settled,
   shows,
@@ -129,5 +135,78 @@ it(
     const others = server.log.filter((request) => !allowedHereToo(request));
     const named = others.map((request) => `${request.method} ${request.path}`);
     expect(named, 'only the allowed reads, the verification and the config batch').toEqual([]);
+  },
+);
+
+/**
+ * Signed in as FIRST through the real guard: a save is dropped (marker kept), then 【原样重试】 gets
+ * `answer` (undefined: the contract's answer, a success) and settles the result; the marker is gone
+ * by itself. After the session ends and FIRST signs in again, no prompt shows and nothing is sent.
+ */
+async function settledByRetry(
+  answer: ((server: PayoutServer) => void) | undefined,
+  check: (server: PayoutServer, panel: HTMLElement) => Promise<void>,
+): Promise<void> {
+  startClock();
+  const server = serverFor();
+  const app = createConsole({ baseUrl: BASE_URL, fetch: server.fetch, accounts: [FIRST, SECOND] });
+  await app.signIn(FIRST);
+  await app.render(PAGE);
+  await ready(server, 0);
+  takeBaseline();
+
+  const panel = await openTab(server);
+  scriptBatch(server, () => dropped());
+  await typeInto(panel, LABEL.maxAmount, '300');
+  await save(server, panel);
+  await shows(panel, NOTICE.unknown);
+  await settled(server);
+  const business = [KEY.maxAmount, 'max_amount_fen', '30000', passOf(1)];
+  expectMarker(PAGE, business);
+
+  if (answer !== undefined) answer(server);
+  const before = batches(server).length;
+  await click(usable(panel, RETRY));
+  await passUntilSent(server, before);
+  await check(server, panel);
+  await waitFor(() => expectNothingStored());
+  const sent = batches(server).length;
+
+  moveClock(LATER);
+  await app.expire();
+  const since = server.log.length;
+  await app.loginWith(FIRST);
+  await ready(server, since);
+  await markerSettle();
+  expect(banners(), 'no prompt for a settled result').toEqual([]);
+  expect(noticeShown(), 'no prompt anywhere').toBe(false);
+  expectNothingStored();
+  expect(stepDialogs(), 'nothing asked for by itself').toEqual([]);
+  expect(batches(server), 'nothing is resent by itself').toHaveLength(sent);
+}
+
+it(
+  '[AC-F1-08ap-RELOGIN#2] 自动到账设置（真实登录外壳）：保存连接中断 → 结果未知、存标记；【原样重试】成功：标记随确定结果清除；会话结束后同一账号重新登录，不再出现「有一笔提交结果未知」提示、不自动重发',
+  { timeout: 240_000 },
+  async () => {
+    await settledByRetry(undefined, async (server, panel) => {
+      await shows(panel, NOTICE.saved);
+      expect(rowOf(server, KEY.maxAmount).value).toBe(30000);
+    });
+  },
+);
+
+it(
+  '[AC-F1-08ap-RELOGIN#3] 自动到账设置（真实登录外壳）：保存连接中断 → 结果未知、存标记；【原样重试】收到 20001 [max_amount_fen]（确定拒绝）：解锁并标出金额上限，标记随之清除；同一账号重新登录不再出现提示、不自动重发',
+  { timeout: 240_000 },
+  async () => {
+    await settledByRetry(
+      (server) => scriptBatch(server, () => failedWith(20001, { fields: [KEY.maxAmount] })),
+      async (server, panel) => {
+        await settled(server);
+        await waitFor(() => expect(markedInvalid(panel, LABEL.maxAmount)).toBe(true));
+        expect(rowOf(server, KEY.maxAmount).value, 'nothing was written').toBe(25050);
+      },
+    );
   },
 );

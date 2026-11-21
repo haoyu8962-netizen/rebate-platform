@@ -11,9 +11,11 @@ import {
   SUPER,
   VERSION,
   answerNormally,
+  changedElsewhere,
   dropped,
   failedWith,
   fenOfShown,
+  rowOf,
   scriptBatch,
   serverError,
   serverFor,
@@ -40,6 +42,7 @@ import {
   shows,
   typeInto,
   usable,
+  verifications,
 } from './helpers.ts';
 
 // F1-08ap (D10-1731 / D10-1739 / D10-2060 / D10-2061, as F1-08ce / F1-08am): a first save with no
@@ -142,5 +145,73 @@ it(
     await settled(server);
     await waitFor(() => expect(editable(panel).length, 'unlocked').toBeGreaterThan(0));
     expect(markedInvalid(panel, LABEL.maxAmount)).toBe(true);
+  },
+);
+
+it(
+  '[AC-F1-08ap-UNK#4] 首次保存连接中断且未落库；【原样重试】收到普通 10003（凭证失效）：重新要动态码后带新凭证原样再发（请求体与首次相同），成功后显示已保存、解除锁定，服务端为 300 元',
+  { timeout: FLOW_TIMEOUT },
+  async () => {
+    const server = serverFor();
+    const panel = await openSettings(server, SUPER);
+    scriptBatch(server, () => dropped());
+    scriptBatch(server, () => failedWith(10003, { tier: 'totp' }));
+    await typeInto(panel, LABEL.maxAmount, '300');
+    await save(server, panel);
+    await expectUnknown(server, panel);
+    await retry(server, panel);
+    await passUntilSent(server, 2);
+    const sent = batches(server);
+    expect(sent, 'the save, the refused retry and its resend').toHaveLength(3);
+    expect(sent[1]!.body, 'the retry is the same request').toStrictEqual(sent[0]!.body);
+    expect(sent[2]!.body, 'the resend is the same request').toStrictEqual(sent[0]!.body);
+    assertBatch(server, AMOUNT, 3, verifications(server).length);
+    expect(verifications(server).length, 'a new dynamic code was asked for').toBeGreaterThan(1);
+    expect(sent[2]!.headers.get('X-Step-Up-Token')).not.toBe(
+      sent[1]!.headers.get('X-Step-Up-Token'),
+    );
+    expect(rowOf(server, KEY.maxAmount)).toMatchObject({
+      value: 30000,
+      version: VERSION.maxAmount + 1,
+    });
+    await shows(panel, NOTICE.saved);
+    await waitFor(() => expect(editable(panel).length, 'unlocked').toBeGreaterThan(0));
+    expect(shownText(panel)).not.toMatch(NOTICE.unknown);
+  },
+);
+
+it(
+  '[AC-F1-08ap-UNK#5] 首次保存收到带统一外壳的 5xx 且未落库（服务端仍为 250.50 元，期间他人以同值另存一次、版本到 4）：【刷新核对】按服务端回填 250.50 元，不显示待核对请求里的 300 元；解锁后改 280 元保存带服务端版本 4',
+  { timeout: FLOW_TIMEOUT },
+  async () => {
+    const server = serverFor();
+    const panel = await openSettings(server, SUPER);
+    scriptBatch(server, () => serverError());
+    await typeInto(panel, LABEL.maxAmount, '300');
+    await save(server, panel);
+    await expectUnknown(server, panel);
+    changedElsewhere(server, KEY.maxAmount, 25050);
+    expect(rowOf(server, KEY.maxAmount)).toMatchObject({
+      value: 25050,
+      version: VERSION.maxAmount + 1,
+    });
+    const reads = itemReads(server).length;
+    await click(usable(panel, RECHECK));
+    await waitFor(() => expect(itemReads(server).length).toBeGreaterThan(reads));
+    await settled(server);
+    await waitFor(() => expect(editable(panel).length, 'unlocked').toBeGreaterThan(0));
+    await waitFor(() => expect(fenOfShown(input(panel, LABEL.maxAmount).value)).toBe(25050));
+    expect(shownText(panel)).not.toMatch(NOTICE.unknown);
+    expect(batches(server), 'refreshing sends nothing').toHaveLength(1);
+
+    await typeInto(panel, LABEL.maxAmount, '280');
+    await save(server, panel);
+    assertBatch(
+      server,
+      [{ key: KEY.maxAmount, value: 28000, expected_version: VERSION.maxAmount + 1 }],
+      2,
+      verifications(server).length,
+    );
+    await shows(panel, NOTICE.saved);
   },
 );

@@ -3,6 +3,7 @@ import { waitFor } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { card } from '../admin-payouts-readonly/helpers.ts';
 import {
+  BUSINESS_GRANTS,
   FLAG_NAME,
   GROUP,
   KEY,
@@ -11,19 +12,25 @@ import {
   SAMPLE,
   SUPER,
   VERSION,
+  accountOf,
   fenOfShown,
+  passOf,
+  registry,
   rowOf,
   serverFor,
   type BatchEntry,
+  type ConfigRow,
 } from './fixtures.ts';
 import {
   FLOW_TIMEOUT,
   assertBatch,
   batches,
   click,
+  editable,
   flagBox,
   input,
   openSettings,
+  passUntilSent,
   pick,
   save,
   saveRefused,
@@ -136,5 +143,124 @@ it(
     });
     expect(items.map((entry) => entry.key).sort()).toEqual([KEY.maxAmount, KEY.riskFlags].sort());
     await shows(panel, NOTICE.saved);
+  },
+);
+
+/** The registry with 首提限制 stored on (version 3) instead of the sample's off. */
+function withFirstLimitOn(): ConfigRow[] {
+  return registry().map((row) =>
+    row.key === KEY.firstLimit ? { ...row, value: true, version: 3 } : row,
+  );
+}
+
+it(
+  '[AC-F1-08ap-SAVE#5] 已存首提限制为开（版本 3）、同一收款账号每月为 4（版本 1）：关首提限制、每月改为 7 后保存恰送 first_withdrawal_limit_enabled=false（版本 3）与 payee_monthly_max_count=7（版本 1）、不动每日；再开首提限制保存送 true（版本 4）',
+  { timeout: FLOW_TIMEOUT },
+  async () => {
+    const server = serverFor({ items: withFirstLimitOn() });
+    const panel = await openSettings(server, SUPER);
+    expect(input(panel, LABEL.payeeMonthly).value).toBe(String(SAMPLE.payeeMonthly));
+    expect(input(panel, LABEL.payeeDaily).value).toBe(String(SAMPLE.payeeDaily));
+    await setFlag(panel, LABEL.firstLimit, false);
+    await typeInto(panel, LABEL.payeeMonthly, '7');
+    await save(server, panel);
+    assertBatch(
+      server,
+      [
+        { key: KEY.firstLimit, value: false, expected_version: 3 },
+        { key: KEY.payeeMonthly, value: 7, expected_version: 1 },
+      ],
+      1,
+      1,
+    );
+    await shows(panel, NOTICE.saved);
+    expect(rowOf(server, KEY.payeeDaily).value, 'the daily count is untouched').toBe(
+      SAMPLE.payeeDaily,
+    );
+    await waitFor(() => expect(input(panel, LABEL.payeeMonthly).value).toBe('7'));
+    expect(input(panel, LABEL.payeeDaily).value).toBe(String(SAMPLE.payeeDaily));
+
+    await setFlag(panel, LABEL.firstLimit, true);
+    await save(server, panel);
+    assertBatch(
+      server,
+      [{ key: KEY.firstLimit, value: true, expected_version: 4 }],
+      2,
+      verifications(server).length,
+    );
+    expect(rowOf(server, KEY.firstLimit)).toMatchObject({ value: true, version: 5 });
+  },
+);
+
+it(
+  '[AC-F1-08ap-SAVE#6] 金额带分：金额上限填 300.01 元、全平台当日上限填 1500.01 元后保存：恰送 30001 分（版本 3）与 150001 分（版本 0），不截掉小数',
+  { timeout: FLOW_TIMEOUT },
+  async () => {
+    const server = serverFor();
+    const panel = await openSettings(server, SUPER);
+    await typeInto(panel, LABEL.maxAmount, '300.01');
+    await typeInto(panel, LABEL.platformDaily, '1500.01');
+    await save(server, panel);
+    assertBatch(
+      server,
+      [
+        { key: KEY.maxAmount, value: 30001, expected_version: 3 },
+        { key: KEY.platformDaily, value: 150001, expected_version: 0 },
+      ],
+      1,
+      1,
+    );
+    await shows(panel, NOTICE.saved);
+    await waitFor(() => expect(fenOfShown(input(panel, LABEL.maxAmount).value)).toBe(30001));
+    expect(fenOfShown(input(panel, LABEL.platformDaily).value)).toBe(150001);
+  },
+);
+
+it(
+  '[AC-F1-08ap-SAVE#7] 持 config.business 的普通账号（非超管）连续两次保存都成功：第一次金额上限 300 元带凭证 1；凭证用过即失效，第二次同一会员每日改为 1 必须用新动态码凭证 2 送出并成功（若先带旧凭证被拒 10003，须重新要动态码后原样重发），不当作最终失败',
+  { timeout: FLOW_TIMEOUT },
+  async () => {
+    const server = serverFor({ permissions: BUSINESS_GRANTS });
+    const panel = await openSettings(server, accountOf(BUSINESS_GRANTS));
+    await typeInto(panel, LABEL.maxAmount, '300');
+    await save(server, panel);
+    assertBatch(
+      server,
+      [{ key: KEY.maxAmount, value: 30000, expected_version: VERSION.maxAmount }],
+      1,
+      1,
+    );
+    await shows(panel, NOTICE.saved);
+    expect(rowOf(server, KEY.maxAmount)).toMatchObject({
+      value: 30000,
+      version: VERSION.maxAmount + 1,
+    });
+
+    await typeInto(panel, LABEL.userDaily, '1');
+    const before = batches(server).length;
+    await save(server, panel);
+    const reused = (): boolean => {
+      const all = batches(server);
+      return all[all.length - 1]!.headers.get('X-Step-Up-Token') === passOf(1);
+    };
+    if (reused()) await passUntilSent(server, before + 1);
+    const sent = batches(server);
+    expect(reused(), 'the last save carries a new pass').toBe(false);
+    assertBatch(
+      server,
+      [{ key: KEY.userDaily, value: 1, expected_version: VERSION.userDaily }],
+      sent.length,
+      2,
+    );
+    const second = sent[sent.length - 1]!;
+    if (sent.length === before + 2)
+      expect(sent[before]!.body, 'resent as it was').toStrictEqual(second.body);
+    expect(rowOf(server, KEY.userDaily)).toMatchObject({
+      value: 1,
+      version: VERSION.userDaily + 1,
+    });
+    await waitFor(() => expect(input(panel, LABEL.userDaily).value).toBe('1'));
+    expect(fenOfShown(input(panel, LABEL.maxAmount).value)).toBe(30000);
+    expect(editable(panel).length, 'the form stays usable').toBeGreaterThan(0);
   },
 );

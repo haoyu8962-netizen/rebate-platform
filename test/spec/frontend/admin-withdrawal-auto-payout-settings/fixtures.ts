@@ -104,6 +104,9 @@ export const SUPER_GRANTS: Grants = [...ALL, 'switch.all', 'switch.payout', 'swi
 export const BUSINESS_GRANTS: Grants = ['withdraw.review', 'fund.view', 'config.business'];
 /** The same without config.business. */
 export const VIEW_GRANTS: Grants = ['withdraw.review', 'fund.view'];
+/** Another config point only (the list read allows it, the tab does not show for it). */
+export const GENERAL_GRANTS: Grants = ['withdraw.review', 'fund.view', 'config.general'];
+export const RISK_GRANTS: Grants = ['withdraw.review', 'fund.view', 'config.risk'];
 
 // ---- the configuration registry --------------------------------------------------------------
 
@@ -297,6 +300,8 @@ interface State {
   readonly batches: Reply[];
   /** Scripted answers of the next config-item list reads, in order. */
   readonly reads: Reply[];
+  /** Step-up passes a successful (unscripted) batch has used up: each pass is good for one save. */
+  readonly consumed: Set<string>;
 }
 const states = new WeakMap<PayoutServer, State>();
 
@@ -358,7 +363,8 @@ function batch(server: PayoutServer, state: State, request: RequestLog): Respons
   if (!signedIn(request)) return failedWith(10001, undefined, '未登录');
   if (!state.permissions.includes('config.business'))
     return failedWith(10403, { reason: 'admin_permission_denied' });
-  if (!issued(server).includes(request.headers.get('X-Step-Up-Token') ?? ''))
+  const pass = request.headers.get('X-Step-Up-Token') ?? '';
+  if (!issued(server).includes(pass) || state.consumed.has(pass))
     return failedWith(10003, { tier: 'totp' });
   const body = request.body;
   if (typeof body !== 'object' || body === null || Array.isArray(body))
@@ -438,6 +444,7 @@ export function serverFor(setup: Setup = {}): PayoutServer {
     permissions,
     batches: [],
     reads: [],
+    consumed: new Set(),
   };
   states.set(server, state);
   const holds = (point: string): boolean => (permissions as readonly string[]).includes(point);
@@ -461,7 +468,10 @@ export function serverFor(setup: Setup = {}): PayoutServer {
     server.onceWhere(postOf(BATCH), answerBatch);
     const scripted = state.batches.shift();
     if (scripted !== undefined) return scripted(request);
-    return batch(server, state, request);
+    const answer = batch(server, state, request);
+    // A pass that carried a save through is used up (the server refuses it again with 10003).
+    if (answer.status === 200) state.consumed.add(request.headers.get('X-Step-Up-Token') ?? '');
+    return answer;
   };
   server.onceWhere(getOf(ITEMS), answerItems);
   server.onceWhere(getOf(SWITCHES), answerSwitches);
@@ -604,4 +614,36 @@ export const FLAG_NAME = {
   blacklist_hit: '命中黑名单',
   payee_prev_other_user: '收款账号曾属他人',
   risk_calc_failed: '风险计算失败',
+  invalid_ratio_60d: '60 天失效占比高',
+  high_commission_ratio_60d: '60 天高佣占比高',
+  withdraw_vs_received: '30 天提现额与 60 天确认收货返利比例异常',
 } as const;
+
+/** ⑧ labels (whole label, an optional 「（%）」 and colon; spaces ignored by the regex). */
+function percentLabel(words: string): RegExp {
+  return new RegExp(`^(?:${words})(?:\\s*[（(][%％][)）])?[:：]?$`);
+}
+const DAYS_60 = '(?:60\\s*天内?\\s*)?';
+const DAYS_30 = '(?:30\\s*天内?\\s*)?';
+const RIGHTS = '(?:\\s*[（(]含维权失效[)）])?';
+export const WARN_LABEL = {
+  rate: percentLabel(`${DAYS_60}(?:订单)?高?佣金比例(?:阈值)?`),
+  orders: percentLabel(`${DAYS_60}高佣金?(?:比例)?订单占(?:总订单)?比?(?:例|阈值)?`),
+  invalid: percentLabel(`${DAYS_60}失效${RIGHTS}\\s*订单占比(?:阈值)?`),
+  received: percentLabel(`${DAYS_30}提现金额占\\s*${DAYS_60}确认收货佣金(?:比例)?`),
+} as const;
+
+/**
+ * Each item of BR-WDR-30 细则「开启前置检查」 with the words it must carry: BR-WDR-22 ② single and
+ * daily limits, ⑤ failure codes and query status, ⑧ the daily bill carrying out_biz_no, and the
+ * daily channel reconciliation (BR-WDR-23) run through for consecutive days.
+ */
+export const ENABLE_CHECK_ITEMS: readonly (readonly RegExp[])[] = [
+  [/单笔/, /单日/, /限额/],
+  [/失败码/, /查询状态/],
+  [/(?:按日|每日|日)账单/, /out_biz_no/],
+  [/(?:每日|按日)?通道对账|每日对账/, /连续/],
+];
+
+/** The title of the emergency switch page (texts/kill-switches.ts, frozen). */
+export const SWITCH_PAGE_TITLE = '紧急开关';

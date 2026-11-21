@@ -4,36 +4,50 @@ import { expect, it } from 'vitest';
 import { card } from '../admin-payouts-readonly/helpers.ts';
 import {
   BUSINESS_GRANTS,
+  ENABLE_CHECK_ITEMS,
   ENABLE_CHECK_TITLE,
   ENABLE_CHECK_WORDS,
   EXTRA_NOTE,
   FLAG_NAME,
   GROUP,
+  KEY,
   LABEL,
   MASTER_SHOWN,
   NO_AUTO,
   NO_PERMISSION_TO_VIEW,
   SAMPLE,
   SUPER,
+  SWITCHES,
   SWITCH_ENTRY,
+  SWITCH_PAGE_TITLE,
+  TAB,
   UNSET,
+  VERSION,
+  WARN_LABEL,
   accountOf,
   fenOfShown,
   serverFor,
+  type BatchEntry,
 } from './fixtures.ts';
 import {
   FLOW_TIMEOUT,
   MULTI_TIMEOUT,
+  batches,
   buttons,
+  click,
   disabled,
   flagBox,
   handlersWithoutRole,
   input,
   isShown,
+  main,
   openSettings,
+  save,
   settled,
   squash,
+  stepDialogs,
   switchReads,
+  tabsIn,
   textOf,
   values,
 } from './helpers.ts';
@@ -146,5 +160,176 @@ it(
     expect(master[0]).toMatch(NO_PERMISSION_TO_VIEW);
     expect(switchReads(business), 'no kill-switch read without a switch point').toEqual([]);
     expect(fenOfShown(input(shown, LABEL.maxAmount).value)).toBe(25050);
+  },
+);
+
+/** The first shown element of `root` whose own text is the label `label`. */
+function labelNode(root: HTMLElement, label: RegExp): HTMLElement {
+  const found = within(root)
+    .queryAllByText(label)
+    .filter((node) => isShown(node));
+  expect(found.length, `a label ${String(label)} in the group`).toBeGreaterThan(0);
+  return found[0]!;
+}
+function before(a: Node, b: Node): boolean {
+  return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+}
+/** ①–⑧ in rule order (inside one step the order is free). */
+const MAIN_STEPS: readonly (readonly [string, readonly RegExp[]])[] = [
+  ['①', [LABEL.master]],
+  ['②', [LABEL.maxAmount]],
+  ['③', [LABEL.windowLimit, LABEL.windowStart, LABEL.windowEnd]],
+  ['④', [LABEL.firstLimit]],
+  ['⑤', [LABEL.frozen]],
+  ['⑥', [LABEL.sameDay]],
+  ['⑦', [LABEL.payeeDaily, LABEL.payeeMonthly, LABEL.userDaily, LABEL.userMonthly]],
+  ['⑧', [WARN_LABEL.rate, WARN_LABEL.orders, WARN_LABEL.invalid, WARN_LABEL.received]],
+];
+
+it(
+  '[AC-F1-08ap-SHOW#5] 「自动到账设置」分组内按 ①–⑧ 顺序含总开关、金额上限、时段三项、首提限制（有开关控件）、冻结金额、当日提现、四项次数、四项预警；可编辑的全平台当日上限与阻断标签在「本系统附加」分组、不在主分组；附加分组不含 ①–⑧',
+  { timeout: FLOW_TIMEOUT },
+  async () => {
+    const server = serverFor();
+    const panel = await openSettings(server, SUPER);
+    const group = card(panel, GROUP.main);
+    const extra = card(panel, GROUP.extra);
+    expect(group.contains(extra), 'the 本系统附加 group is a group of its own').toBe(false);
+    const steps = MAIN_STEPS.map(([name, labels]) => ({
+      name,
+      nodes: labels.map((label) => labelNode(group, label)),
+    }));
+    for (let index = 1; index < steps.length; index += 1) {
+      const earlier = steps[index - 1]!;
+      const later = steps[index]!;
+      for (const a of earlier.nodes)
+        for (const b of later.nodes)
+          expect(before(a, b), `${earlier.name} comes before ${later.name}`).toBe(true);
+    }
+    const firstLimit = [
+      ...within(group).queryAllByRole('switch', { name: LABEL.firstLimit }),
+      ...within(group).queryAllByRole('checkbox', { name: LABEL.firstLimit }),
+      ...within(group).queryAllByRole('radiogroup', { name: LABEL.firstLimit }),
+      ...within(group).queryAllByRole('combobox', { name: LABEL.firstLimit }),
+    ].filter((node) => isShown(node));
+    expect(firstLimit, '④ has one control').toHaveLength(1);
+    expect(disabled(firstLimit[0]!), '④ can be changed').toBe(false);
+    for (const [name, labels] of MAIN_STEPS)
+      for (const label of labels)
+        expect(within(extra).queryAllByText(label), `${name} is not 本系统附加`).toEqual([]);
+    expect(within(extra).queryAllByLabelText(LABEL.platformDaily).length).toBeGreaterThan(0);
+    expect(within(group).queryAllByLabelText(LABEL.platformDaily), '⑨ not in ①–⑧').toEqual([]);
+    expect(disabled(flagBox(extra, FLAG_NAME.recon_diff))).toBe(false);
+    expect(within(group).queryAllByRole('checkbox', { name: FLAG_NAME.recon_diff })).toEqual([]);
+  },
+);
+
+it(
+  '[AC-F1-08ap-SHOW#6] 超管在总开关已开时按【去紧急开关页】：真正到达紧急开关页（标题「紧急开关」、提现审核页签不再显示、读了开关列表），按下本身不发任何写请求',
+  { timeout: FLOW_TIMEOUT },
+  async () => {
+    const server = serverFor({ master: true });
+    const panel = await openSettings(server, SUPER);
+    await waitFor(() => expect(values(panel, LABEL.master)).toEqual([MASTER_SHOWN.on]));
+    const since = server.log.length;
+    const entries = buttons(panel, SWITCH_ENTRY).filter(isShown);
+    expect(entries, `one entry ${SWITCH_ENTRY}`).toHaveLength(1);
+    await click(entries[0]!);
+    await waitFor(() =>
+      expect(
+        within(main()).queryAllByRole('heading', { name: SWITCH_PAGE_TITLE }).length,
+        'the emergency switch page',
+      ).toBeGreaterThan(0),
+    );
+    await settled(server);
+    expect(tabsIn(main(), TAB.review), 'left the withdrawals page').toEqual([]);
+    const after = server.log.slice(since);
+    expect(
+      after.some((request) => request.method === 'GET' && request.path === SWITCHES),
+      'the switch page read its list',
+    ).toBe(true);
+    expect(
+      server.log
+        .slice(since)
+        .filter((request) => request.method !== 'GET')
+        .map((request) => `${request.method} ${request.path}`),
+      'pressing the entry writes nothing',
+    ).toEqual([]);
+    expect(stepDialogs(), 'nothing asked for').toEqual([]);
+  },
+);
+
+it(
+  '[AC-F1-08ap-SHOW#7] 开启前置检查逐条列全：单笔与单日限额、失败码与查询状态、按日账单含 out_biz_no、每日通道对账连续跑通；只列条目不显示满足与否',
+  { timeout: FLOW_TIMEOUT },
+  async () => {
+    const server = serverFor({ master: false });
+    const panel = await openSettings(server, SUPER);
+    const text = squash(textOf(panel));
+    expect(text).toMatch(ENABLE_CHECK_TITLE);
+    for (const words of ENABLE_CHECK_ITEMS)
+      for (const word of words)
+        expect(text, `the check item carries ${String(word)}`).toMatch(word);
+    expect(text, 'the checks are listed, not judged').not.toMatch(
+      /未满足|已满足|未通过|已通过|不满足|满足要求|✓|✗|✔|✘/,
+    );
+  },
+);
+
+it(
+  '[AC-F1-08ap-SHOW#8] 阻断风险标签恰为 BR-WDR-29 全部 11 个标签各一个勾选框，除「命中黑名单」外都可勾；勾上此前未覆盖的「当日有入账」「60 天失效占比高」「60 天高佣占比高」「30 天提现额与 60 天确认收货返利比例异常」「收款账号曾属他人」「风险计算失败」后保存：risk_block_flags 恰为原集合加这六个 code（版本 4）',
+  { timeout: FLOW_TIMEOUT },
+  async () => {
+    const server = serverFor();
+    const panel = await openSettings(server, SUPER);
+    const extra = card(panel, GROUP.extra);
+    const names = Object.values(FLAG_NAME);
+    expect(names, 'every BR-WDR-29 label').toHaveLength(11);
+    for (const name of names) flagBox(extra, name);
+    expect(
+      within(extra)
+        .queryAllByRole('checkbox')
+        .filter((node) => isShown(node)).length,
+      'no other checkbox among the flags',
+    ).toBe(11);
+    for (const name of names.filter((one) => one !== FLAG_NAME.blacklist_hit))
+      expect(disabled(flagBox(extra, name)), `${name} can be ticked`).toBe(false);
+    const added = [
+      'credited_today',
+      'invalid_ratio_60d',
+      'high_commission_ratio_60d',
+      'withdraw_vs_received',
+      'payee_prev_other_user',
+      'risk_calc_failed',
+    ] as const;
+    for (const code of added) {
+      const box = flagBox(extra, FLAG_NAME[code]);
+      expect(box.checked, `${code} not stored yet`).toBe(false);
+      await click(box);
+      expect(flagBox(extra, FLAG_NAME[code]).checked, `${code} ticked`).toBe(true);
+    }
+    await save(server, panel);
+    const sent = batches(server);
+    expect(sent).toHaveLength(1);
+    const items = (sent[0]!.body as { items: BatchEntry[] }).items;
+    expect(
+      items.map((entry) => entry.key),
+      'only the flags',
+    ).toEqual([KEY.riskFlags]);
+    expect(items[0]!.expected_version).toBe(VERSION.flags);
+    const codes = (items[0]!.value as string[]).filter((code) => code !== 'blacklist_hit').sort();
+    expect(codes).toEqual(
+      [
+        'credited_today',
+        'had_negative',
+        'high_commission_ratio_60d',
+        'invalid_ratio_60d',
+        'payee_prev_other_user',
+        'recon_diff',
+        'risk_calc_failed',
+        'same_device_multi_account',
+        'withdraw_vs_received',
+      ].sort(),
+    );
   },
 );

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { expect, it } from 'vitest';
-import { KEY, SUPER, registry, serverFor, type ConfigRow } from './fixtures.ts';
+import { KEY, SUPER, WARN_LABEL, registry, serverFor, type ConfigRow } from './fixtures.ts';
 import {
   FLOW_TIMEOUT,
   assertBatch,
@@ -18,19 +18,8 @@ import {
 // so this tab's rule is: a percentage in 0–100 with at most two decimals, submitted as the integer
 // bp; anything else is refused before sending and marked. Expected values are integer literals.
 
-/** Field labels of ⑧ (whole label, an optional 「（%）」 and colon; spaces ignored by the regex). */
-function percentLabel(words: string): RegExp {
-  return new RegExp(`^(?:${words})(?:\\s*[（(][%％][)）])?[:：]?$`);
-}
-const DAYS_60 = '(?:60\\s*天内?\\s*)?';
-const DAYS_30 = '(?:30\\s*天内?\\s*)?';
-const RIGHTS = '(?:\\s*[（(]含维权失效[)）])?';
-const WARN = {
-  rate: percentLabel(`${DAYS_60}(?:订单)?高?佣金比例(?:阈值)?`),
-  orders: percentLabel(`${DAYS_60}高佣金?(?:比例)?订单占(?:总订单)?比?(?:例|阈值)?`),
-  invalid: percentLabel(`${DAYS_60}失效${RIGHTS}\\s*订单占比(?:阈值)?`),
-  received: percentLabel(`${DAYS_30}提现金额占\\s*${DAYS_60}确认收货佣金(?:比例)?`),
-} as const;
+/** Field labels of ⑧ (fixtures WARN_LABEL: whole label, an optional 「（%）」 and colon). */
+const WARN = WARN_LABEL;
 
 /** The bp a shown percentage stands for (integer arithmetic on the digits), or null. */
 function bpOfShown(text: string): number | null {
@@ -108,5 +97,42 @@ it(
     await typeInto(panel, WARN.invalid, '0.01');
     await save(server, panel);
     assertBatch(server, [{ key: KEY.warnInvalid, value: 1, expected_version: 1 }], 1, 1);
+  },
+);
+
+it(
+  '[AC-F1-08ap-WARN#4] ⑧ 四项预警逐项填 100.01、-1、12.345、abc（%）：每项每次保存都不发请求、不要动态码并标出该项（每项测完改回合法值）；最后四项依次为 50.5 / 60 / 0.01 / 7.25 后保存只送 5050 / 6000 / 1 / 725（bp）',
+  { timeout: 240_000 },
+  async () => {
+    const server = serverFor();
+    const panel = await openSettings(server, SUPER);
+    const fields = [
+      { label: WARN.rate, name: 'rate', valid: '50.5' },
+      { label: WARN.orders, name: 'orders', valid: '60' },
+      { label: WARN.invalid, name: 'invalid', valid: '0.01' },
+      { label: WARN.received, name: 'received', valid: '7.25' },
+    ];
+    for (const field of fields) {
+      for (const text of ['100.01', '-1', '12.345', 'abc']) {
+        await typeInto(panel, field.label, text);
+        await saveRefused(server, panel);
+        expect(markedInvalid(panel, field.label), `warn ${field.name} ${text} is marked`).toBe(
+          true,
+        );
+      }
+      await typeInto(panel, field.label, field.valid);
+    }
+    await save(server, panel);
+    assertBatch(
+      server,
+      [
+        { key: KEY.warnRate, value: 5050, expected_version: 1 },
+        { key: KEY.warnOrders, value: 6000, expected_version: 1 },
+        { key: KEY.warnInvalid, value: 1, expected_version: 1 },
+        { key: KEY.warnReceived, value: 725, expected_version: 1 },
+      ],
+      1,
+      1,
+    );
   },
 );
