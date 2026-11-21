@@ -5,6 +5,7 @@ type: impl
 # 2026-11-21 be 入账（编排 D10-2419；拆法见 couli-runs/B2-02ze/d2418-split.md）。B2-02ze 的两半按文件互不引用；令牌一半在 B2-02ze money r1–r3 中的 S1 均已关闭（提交后 57014 显示名前移并确认；事务内 57014 已回滚仍保留令牌按 D10-2396 认可为保守取舍），脱敏一半留在 B2-02ze 等负责人。
 # 范围：admin/application/permission-guard.ts createAdminStepUpGate——区分「已确认回滚」与「提交结果未知」：SQLSTATE 57P01 / 57P02 / 57P03 / 57014、08 类、无 SQLSTATE 的驱动断线与 outcome_unknown 不释放令牌（step-up-outcome.ts 分类器）；明文导出 create / retry 的显示名在提交前读、返回在事务内组装；后台账号写入提交后组装返回失败按结果未知。冻结用例 test/spec/admin/exports/create.int.test.ts [AC-B1-34f#4] 保持绿。
 # 规则测试取自 B2-02ze 写测 1–3 的 test/spec/admin/step-up-commit-unknown/（含编排准过的 kit 机械改 D10-2328 ①），实现取自 B2-02ze 3448859e0 的同名文件。
+# 2026-11-22 编排 D10-2437：money r2 S1——openapi.yaml adminStepUp 说明仍写「任何其他状态或服务端错误都释放令牌」，与 BR-ID-08「只能用于 1 次成功的业务请求」及本单行为不一致；只改这段 description（业务拒绝或已确认回滚：释放、可复用；提交结果未知：原令牌作废、重试 10003），不动形状与错误码表；生成物 openapi.gen.ts 内嵌说明文字，一并重生成。
 refs: [BR-ID-34]
 refs_hash:
   BR-ID-34: 6f4bb7f212cb
@@ -18,6 +19,8 @@ paths:
   - 'apps/api/src/modules/admin/application/admin-exports-commit.test.ts'
   - 'apps/api/src/modules/admin/application/admin-accounts-write.ts'
   - 'apps/api/src/modules/admin/application/admin-accounts-write.test.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/src/openapi.gen.ts'
 test_paths:
   - 'test/spec/admin/step-up-commit-unknown/**'
 impl: claude
