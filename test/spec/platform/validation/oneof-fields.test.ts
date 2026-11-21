@@ -182,7 +182,7 @@ it.each<RequestCase>([
   expectFields(contractRouteSchema(operation).body, body, expected, previous);
 });
 
-it('[AC-B1-01zzw#2] oneOf 打平时保留至少填一项的提示，空消息标记只报 body', () => {
+it('[AC-B1-01zzw#2] oneOf 打平且都只缺必填时报并集（产品池、空消息标记）', () => {
   // 产品池表单只缺二选一的入口，两个缺项都要保留。
   expectFields(
     contractRouteSchema('adminAddPoolItem').body,
@@ -211,11 +211,11 @@ it('[AC-B1-01zzw#2] oneOf 打平时保留至少填一项的提示，空消息标
     ['body'],
     ['body'],
   );
-  // 消息标记的两个封闭分支都无法从空体选出，组合位置已足以说明错误。
+  // 消息标记的两个分支打平且都只缺必填（二选一），同样报并集（口径甲细化，D10-2267 试跑 2）。
   expectFields(
     contractRouteSchema('markMessagesRead').body,
     {},
-    ['body'],
+    ['all', 'body', 'message_ids'],
     ['all', 'body', 'message_ids'],
   );
 });
