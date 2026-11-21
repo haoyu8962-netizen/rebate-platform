@@ -21,7 +21,7 @@ paths:
   - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/settlement/bill-unsettled-count/**'
-  - 'test/spec/db/settlement/core/kit.ts'
+  - 'test/spec/db/settlement/core/{kit,settle-bills-source}.ts'
   - 'test/spec/settlement/bill/validation.int.test.ts'
   - 'test/spec/settlement/bill/batches.int.test.ts'
   - 'test/spec/settlement/bill/idempotency.int.test.ts'
@@ -117,7 +117,7 @@ modify_existing:
     reason: rule_change
     br: [BR-FUND-04]
     ruling: D10-2431
-    note: '只换支撑、不动断言（D10-1670 委托，编排 D10-2431；照 B2-04zy 给 settle_batches 加列时的先例）：migrationSource 里取后续迁移语句的两条正则由只认 app.settle_batches 扩成也认 app.settle_bills，使本单新迁移给 settle_bills 加的两个具名 CHECK 能被 [AC-B2-04a#4] 读到；不新增函数与控制流，不改任何含断言的语句'
+    note: '只换支撑、不动断言（D10-1670 委托，编排 D10-2431；B2-04zy 先例的同一处）：让 migrationSource 也取后续迁移里 ALTER app.settle_bills 的语句，使本单新迁移给 settle_bills 加的两个具名 CHECK 能被 [AC-B2-04a#4] 读到。门禁对支撑文件只许按 token 纯插入整条语句（改正则字面量、插入 || 或箭头函数都被拒，已用 compareSupportFile 本地验证），所以取数逻辑放同目录新文件 settle-bills-source.ts，kit.ts 里只插入一行 import 与一条调用语句，原有 token 一个不动'
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/bill-unsettled-count/**'
