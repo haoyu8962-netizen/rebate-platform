@@ -16,6 +16,7 @@ deps: []
 paths:
   - 'contracts/**'
   - 'specs/client/home-sdui-vectors.json'
+  - 'specs/client/manifest.json'
   - 'packages/contracts-ts/**'
   - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
   - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
