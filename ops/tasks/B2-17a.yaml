@@ -1,0 +1,36 @@
+id: B2-17a
+repo: rebate-platform
+title: 'B2-17a：对外差错单方案 B——通道对账确有多付时系统预填 PAYOUT_RECOVERY 待批追回单、预填追回单的批准与驳回、同一差错单至多一张待批预填单'
+type: impl
+# 2026-11-21 funds 入账（规划/05 B2-17 行 ③；负责人 2026-11-21 方案 B，docs/changes/20261121-对外差错单方案B.md；编排 D10-2417 拆自 B2-17，依赖 B2-17 先落）。资金单：Claude 实现、独立方写测、Codex 全量 spec-test 与资金评审。
+# ① R2 登记通道对账差错单（payout/jobs/recon-job.ts，type channel_mismatch）时，属 BR-WDR-23 细则「确有多付」三种情形的，同一事务系统预填一张 PAYOUT_RECOVERY 待批调减单：用户取登记时匹配到的提现单，金额 = 多付额、预填时写定、批准页只读，关联该提现单与该差错单，对方科目按出款通道；现 recon-job 没有显式多付 / 少付分类，需新增判定。内部记已付而通道没付或少付、通道成功而无对应提现单、内部为 APPROVED 的都不预填，照旧登记、冻结、告警。
+# ② 同一差错单同时至多一张待批预填追回单（库约束兜底）；预填追回单的批准（短信档，同事务照 B2-17 的 CAS 置差错单 adjusted）与驳回（必填原因）——现批准 / 驳回入口与调账状态机的预填迁移只认 ACCOUNT_CLOSED，发起人为空的 CHECK 也只允许 ACCOUNT_CLOSED，都要放开到系统预填的 PAYOUT_RECOVERY（带迁移；land 前设冻结、测试机全量绿）。
+# ③ 契约：批准 / 驳回接口的说明与 20902 recon_diff、预填追回单的形状（发起人为空 = 系统预填）——占契约槽，紧接 B2-17。追回单被红冲或驳回后的再生成、差错单结案时待批预填单的处置仍待定（变更记录 §5-10 / §5-11），不在本单。
+# 受影响冻结用例（[AC-B2-12c#6]、[AC-B2-12a#10]、状态机 [AC-B2-12a#26 / #27 / #30]）是资金用例的期望改动，待负责人点头后以补丁补 modify_existing，补入前不写测。清单 couli-runs/B2-17/inventory.md。
+refs: [BR-FUND-24, BR-WDR-23, BR-WDR-05]
+refs_hash:
+  BR-FUND-24: efcdeeafa452
+  BR-WDR-23: 14059410a548
+  BR-WDR-05: 378fe8ee0fee
+deps: [B2-17]
+paths:
+  - 'apps/api/src/modules/ledger/**'
+  - 'apps/api/src/modules/payout/**'
+  - 'specs/state-machines/admin-adjustment.yaml'
+  - 'packages/domain/src/state-machines/admin-adjustment.gen.ts'
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/{validation/route-schemas,http/auth-routes,validation/signing-routes}.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/ledger/recon-plan-b-prefill/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/recon-plan-b-prefill/**'
+status: todo
