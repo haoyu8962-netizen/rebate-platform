@@ -190,6 +190,27 @@ it('[AC-B1-01zzw#2] oneOf 打平时保留至少填一项的提示，空消息标
     ['body', 'item_ref', 'link_text'],
     ['body', 'item_ref', 'link_text'],
   );
+  // 根层缺少 sort 时，二选一的缺项与根层的必填错误都要保留。
+  expectFields(
+    contractRouteSchema('adminAddPoolItem').body,
+    { start_at: null, end_at: null },
+    ['body', 'item_ref', 'link_text', 'sort'],
+    ['body', 'item_ref', 'link_text', 'sort'],
+  );
+  // step_up 分支缺少 action，根层对 provider 的枚举校验也失败。
+  expectFields(
+    contractRouteSchema('createOauthAttempt').body,
+    { provider: 'qq', purpose: 'step_up' },
+    ['action', 'body', 'provider'],
+    ['action', 'body', 'provider', 'purpose'],
+  );
+  // 两个分支都通过时，只有 oneOf 本身报错。
+  expectFields(
+    contractRouteSchema('adminAddPoolItem').body,
+    { link_text: 'x', item_ref: 'y', sort: 0, start_at: null, end_at: null },
+    ['body'],
+    ['body'],
+  );
   // 消息标记的两个封闭分支都无法从空体选出，组合位置已足以说明错误。
   expectFields(
     contractRouteSchema('markMessagesRead').body,
