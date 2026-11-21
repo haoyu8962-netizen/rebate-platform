@@ -2,9 +2,13 @@
 // 不补钱，决-06 实测前 A；因 PUNISH 作废 / 扣回的订单不自动复活，不告警、不生成差错单）：同一张订单此前已因
 // 冻结行记过 PUNISH 并 VOID / CLAWED_BACK，之后同一违规单变成解冻（或 0 / 1 以外的值）→ order_rights 那一行、
 // 订单返利状态与金额列、分录、账户余额（可用、冻结）都一字不变，recon_diffs 不多任何一行（特别是「已作废订单
-// 被平台恢复」platform_restore），只多一条待处理记录。CLAWED_BACK 夹具带归因用户、入账与扣回分录和余额；VOID
-// 夹具未入账。写入方是真实的 createRightsSyncWriter，settlement 的 rights.record 是只记调用的替身：解冻行不得
-// 走到它。用例全部是顶层 it。
+// 被平台恢复」platform_restore），只多一条待处理记录。夹具贴生产真实状态（任务书 13.2 第 1 条）：CLAWED_BACK
+// 按生产 R8 全额扣回后的样子种——booked_base_fen、booked_n_fen 都是 0（[AC-B2-04zze#17] 钉过），带归因用户，
+// 入账凭证（CREDIT / PLATFORM:CREDIT）、冲回凭证（CLAWBACK:PUNISH）与账户余额都经 ledger 模块的记账入口产生
+// （db-kit seedClawedBackLedger）；VOID 按 R6 的样子种（未入账，booked_* 为 null，原因码 PUNISH）。两种信号
+// （'1' 解冻、'2' 表外值）各自断言写入了待处理、其余数据逐列不变，状态历史与事件表也不多与该单有关的行。
+// 写入方是真实的 createRightsSyncWriter，settlement 的 rights.record 是只记调用的替身：解冻行不得走到它。
+// 用例全部是顶层 it。
 import { createTestDatabase, type TestDatabase } from '@couli/db/testing';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { handlePunishWindow } from '../../../../apps/api/src/modules/orders/jobs/rights-sync.ts';
@@ -21,6 +25,8 @@ import {
   seedOrder,
   seedPunishRow,
   seedUser,
+  stateOf,
+  trailOf,
   unfreezeRow,
   windowOf,
   type Harness,
@@ -46,14 +52,15 @@ const CLAWED = new Date('2026-11-01T04:00:00.000Z');
 
 const STATES = [
   [
-    'CLAWED_BACK（入账后 R8 扣回）',
+    'CLAWED_BACK（入账后 R8 全额扣回：booked_base_fen、booked_n_fen 清零）',
     {
       platform_status: 'SETTLED',
       rebate_status: 'CLAWED_BACK',
       reason: 'PUNISH',
+      reason_sub: 'PUNISH_ORDER',
       settle_commission_fen: 321n,
-      booked_base_fen: 300n,
-      booked_n_fen: 321n,
+      booked_base_fen: 0n,
+      booked_n_fen: 0n,
       credited_at: CREDITED,
       settled_at: CREDITED,
       updated_at: CLAWED,
@@ -61,11 +68,14 @@ const STATES = [
     },
   ],
   [
-    'VOID（入账前 R6 作废）',
+    'VOID（入账前 R6 作废：未入账，booked_* 为 null）',
     {
       platform_status: 'RECEIVED',
       rebate_status: 'VOID',
       reason: 'PUNISH',
+      reason_sub: 'PUNISH_ORDER',
+      booked_base_fen: null,
+      booked_n_fen: null,
       updated_at: CLAWED,
       row_version: 2,
     },
@@ -73,6 +83,8 @@ const STATES = [
 ] as const;
 
 type State = (typeof STATES)[number][1];
+
+const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
  * One order punished earlier (PUNISH row; CLAWED_BACK: attributed member, credit and clawback
@@ -89,7 +101,7 @@ async function punishedThenReported(
   const userId = credited ? await seedUser(h.db, appId) : null;
   const order = await seedOrder(h.db, appId, { ...state, user_id: userId });
   const row = unfreezeRow(order.sub_order_id, { punish_status: punishStatus });
-  await seedPunishRow(h.db, order, row.punishment_id);
+  const rightsId = await seedPunishRow(h.db, order, row.punishment_id);
   const ledger =
     userId === null
       ? null
@@ -98,16 +110,43 @@ async function punishedThenReported(
           base: 300n,
           credited: CREDITED,
           clawed: CLAWED,
+          rightsId,
         });
 
   const rightsBefore = await rightsOf(h.db, appId);
   const orderBefore = await orderRow(h.db, appId, order.order_id);
   const moneyBefore = await moneyOf(h.db, appId);
+  const trailBefore = await trailOf(h.db, appId, [order]);
   expect(rightsBefore).toHaveLength(1);
   expect(moneyBefore.diffs).toEqual([]);
+  // The seeded order is what production leaves (13.2 ①): R8 zeroes the booked pair, R6 never set it.
+  expect({
+    booked_base_fen: orderBefore.booked_base_fen,
+    booked_n_fen: orderBefore.booked_n_fen,
+  }).toEqual(
+    state.rebate_status === 'CLAWED_BACK'
+      ? { booked_base_fen: 0n, booked_n_fen: 0n }
+      : { booked_base_fen: null, booked_n_fen: null },
+  );
   if (ledger !== null) {
-    expect(moneyBefore.entries).toHaveLength(6);
-    expect(moneyBefore.balances).toHaveLength(1);
+    // Written by the ledger module: the other order's credit, the withdrawal freeze, this order's
+    // user / platform CREDIT and their PUNISH CLAWBACK — six vouchers of two lines each.
+    expect(moneyBefore.vouchers).toHaveLength(6);
+    expect(moneyBefore.entries).toHaveLength(12);
+    expect(
+      moneyBefore.vouchers
+        .filter((v) => v.order_key === `taobao:${order.sub_order_id}`)
+        .map((v) => v.uniq_key)
+        .sort(byText),
+    ).toEqual([...ledger.orderVoucherKeys].sort(byText));
+    expect(
+      moneyBefore.balances.map((b) => [b.account_id, b.available_fen, b.frozen_fen, b.version]),
+    ).toEqual([[ledger.userAccountId, ledger.availableFen, ledger.frozenFen, 4n]]);
+    expect([ledger.availableFen, ledger.frozenFen]).toEqual([1_234n, 56n]);
+  } else {
+    expect(moneyBefore.vouchers).toEqual([]);
+    expect(moneyBefore.entries).toEqual([]);
+    expect(moneyBefore.balances).toEqual([]);
   }
 
   const f = dbHandler(h.db, [[row]]);
@@ -152,9 +191,14 @@ async function punishedThenReported(
   if (ledger !== null) {
     expect(
       moneyAfter.balances.map((b) => [b.account_id, b.available_fen, b.frozen_fen, b.version]),
-    ).toEqual([[ledger.userAccountId, ledger.availableFen, ledger.frozenFen, 2n]]);
+    ).toEqual([[ledger.userAccountId, ledger.availableFen, ledger.frozenFen, 4n]]);
   }
   expect(await ledgerOf(h.db, appId)).toEqual(moneyBefore.entries);
+
+  // 13.2 ②: the order, its status history, its rights and events naming it stay as they were.
+  const trailAfter = await trailOf(h.db, appId, [order]);
+  expect(stateOf(trailAfter)).toEqual(stateOf(trailBefore));
+  expect(trailAfter).toEqual(trailBefore);
 
   const pending = await pendingOf(h.db, appId);
   expect(
@@ -190,6 +234,9 @@ it('[AC-B1-04zzab#20] 同页里的冻结行照旧走写入方，解冻行只进�
   const punished = await seedOrder(h.db, appId, {
     rebate_status: 'VOID',
     reason: 'PUNISH',
+    reason_sub: 'PUNISH_ORDER',
+    booked_base_fen: null,
+    booked_n_fen: null,
     updated_at: CLAWED,
     row_version: 2,
   });
@@ -198,6 +245,7 @@ it('[AC-B1-04zzab#20] 同页里的冻结行照旧走写入方，解冻行只进�
   await seedPunishRow(h.db, punished, unfreeze.punishment_id);
   const freeze = unfreezeRow(fresh.sub_order_id, { punish_status: '0' });
   const rightsBefore = await rightsOf(h.db, appId);
+  const trailBefore = await trailOf(h.db, appId, [punished]);
 
   const f = dbHandler(h.db, [[unfreeze, freeze]]);
   await handlePunishWindow(job(PUNISH_JOB, windowOf(appId)), f.deps);
@@ -211,6 +259,9 @@ it('[AC-B1-04zzab#20] 同页里的冻结行照旧走写入方，解冻行只进�
   });
   expect(await rightsOf(h.db, appId)).toEqual(rightsBefore);
   expect(await orderRow(h.db, appId, punished.order_id)).toEqual(punished);
+  const trailAfter = await trailOf(h.db, appId, [punished]);
+  expect(stateOf(trailAfter)).toEqual(stateOf(trailBefore));
+  expect(trailAfter).toEqual(trailBefore);
   expect((await pendingOf(h.db, appId)).map((p) => [p.sub_order_id, p.reason])).toEqual([
     [punished.sub_order_id, 'UNFREEZE_SIGNAL'],
   ]);

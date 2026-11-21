@@ -5,6 +5,8 @@
 // order_id 填它，没有时为 null（仍留证据）。去重键含原因：同一子订单的 UNFREEZE_SIGNAL 与 UNMAPPED_STATUS
 // 各自一条 open。并发用两个各自独立创建的记录器（各自的连接池）加库内屏障（另一事务先占住同键）确定性地造出
 // 「两边都以为没有」的时序。待处理写入失败即停、重投补上；detected_at 取注入时钟，不取窗口结束时刻。
+// 不改订单本身（任务书 13.2 第 2 条）：每条用例跑完都读回信号所涉的 WAITING 订单，platform_status、
+// rebate_status、hold、金额列与整行逐列同前，状态历史、order_rights、点名这些订单的事件都不多一行。
 // 用例全部是顶层 it。
 import { createTestDatabase, type TestDatabase } from '@couli/db/testing';
 import { sql } from 'kysely';
@@ -24,11 +26,14 @@ import {
   pendingOf,
   rightsOf,
   seedOrder,
+  stateOf,
+  trailOf,
   unfreezeRow,
   windowOf,
   type Harness,
   type Order,
   type PendingRow,
+  type Trail,
 } from './db-kit.ts';
 import { NOW, PUNISH_JOB, job } from './kit.ts';
 
@@ -60,6 +65,21 @@ function view(row: PendingRow) {
   };
 }
 
+/**
+ * 13.2 ②: the WAITING orders behind the signals are as they were — platform_status RECEIVED,
+ * rebate_status WAITING, no hold, same amounts and whole row — with no new status history,
+ * order_rights or event naming them.
+ */
+async function expectUntouched(appId: string, orders: readonly Order[], before: Trail) {
+  const after = await trailOf(h.db, appId, orders);
+  expect(stateOf(after)).toEqual(stateOf(before));
+  expect(after).toEqual(before);
+  expect(stateOf(after).map((o) => [o.platform_status, o.rebate_status, o.hold])).toEqual(
+    orders.map(() => ['RECEIVED', 'WAITING', false]),
+  );
+  expect([after.history, after.rights, after.events]).toEqual([[], [], []]);
+}
+
 it.each([
   ['UNFREEZE_SIGNAL', '1'],
   ['UNMAPPED_STATUS', '2'],
@@ -68,6 +88,7 @@ it.each([
   async (reason, raw) => {
     const appId = newAppId();
     const order = await seedOrder(h.db, appId);
+    const trailBefore = await trailOf(h.db, appId, [order]);
     const recorder = createPunishPendingRecorder({ db: h.db });
     await recorder.record({
       app_id: appId,
@@ -77,6 +98,7 @@ it.each([
       raw_status: raw,
       detected_at: new Date(NOW),
     });
+    await expectUntouched(appId, [order], trailBefore);
     const rows = await pendingOf(h.db, appId);
     expect(rows.map(view)).toEqual([
       {
@@ -99,6 +121,7 @@ it('[AC-B1-04zzab#15] 我方没有这张订单（别家推广位）：照样留�
   const appId = newAppId();
   const elsewhere = newAppId();
   const theirs = await seedOrder(h.db, elsewhere);
+  const theirsBefore = await trailOf(h.db, elsewhere, [theirs]);
   const unknown = orderNo();
   const recorder = createPunishPendingRecorder({ db: h.db });
   for (const sub of [unknown, theirs.sub_order_id]) {
@@ -119,18 +142,21 @@ it('[AC-B1-04zzab#15] 我方没有这张订单（别家推广位）：照样留�
     [theirs.sub_order_id, null, 'UNFREEZE_SIGNAL', 'open'],
   ]);
   expect(await pendingOf(h.db, elsewhere)).toEqual([]);
+  await expectUntouched(elsewhere, [theirs], theirsBefore);
 });
 
 it('[AC-B1-04zzab#16] 同一解冻行反复拉取、任务重投：同键 open 只有一条，都不抛错，不交写入方', async () => {
   const appId = newAppId();
   const order = await seedOrder(h.db, appId);
   const row = unfreezeRow(order.sub_order_id);
+  const trailBefore = await trailOf(h.db, appId, [order]);
   const f = dbHandler(h.db, [[row]]);
   await handlePunishWindow(job(PUNISH_JOB, windowOf(appId)), f.deps);
   await handlePunishWindow(job(PUNISH_JOB, windowOf(appId)), f.deps);
   await expect(
     handlePunishWindow(job(PUNISH_JOB, windowOf(appId), 2), f.deps),
   ).resolves.toBeUndefined();
+  await expectUntouched(appId, [order], trailBefore);
 
   const rows = await pendingOf(h.db, appId);
   expect(rows.map((r) => [r.sub_order_id, r.order_id, r.reason, r.raw_status, r.status])).toEqual([
@@ -144,6 +170,7 @@ it('[AC-B1-04zzab#17] 两个窗口并发处理同一解冻行：仍只有一条 
   const appId = newAppId();
   const order = await seedOrder(h.db, appId);
   const row = unfreezeRow(order.sub_order_id);
+  const trailBefore = await trailOf(h.db, appId, [order]);
   const a = dbHandler(h.db, [[row]]);
   const b = dbHandler(h.db, [[row]]);
   const results = await Promise.allSettled([
@@ -168,6 +195,7 @@ it('[AC-B1-04zzab#17] 两个窗口并发处理同一解冻行：仍只有一条 
   });
   expect(a.rightsRecord).not.toHaveBeenCalled();
   expect(b.rightsRecord).not.toHaveBeenCalled();
+  await expectUntouched(appId, [order], trailBefore);
 });
 
 it.each(['resolved', 'dismissed'] as const)(
@@ -176,6 +204,7 @@ it.each(['resolved', 'dismissed'] as const)(
     const appId = newAppId();
     const order = await seedOrder(h.db, appId);
     const row = unfreezeRow(order.sub_order_id);
+    const trailBefore = await trailOf(h.db, appId, [order]);
     const f = dbHandler(h.db, [[row]]);
     await handlePunishWindow(job(PUNISH_JOB, windowOf(appId)), f.deps);
     const first = await pendingOf(h.db, appId);
@@ -198,6 +227,7 @@ it.each(['resolved', 'dismissed'] as const)(
       detected_at: new Date(NOW),
     });
     expect(f.rightsRecord).not.toHaveBeenCalled();
+    await expectUntouched(appId, [order], trailBefore);
   },
 );
 
@@ -243,6 +273,7 @@ it('[AC-B1-04zzab#26] 去重键含原因：同一 app、平台、子订单先表
   const appId = newAppId();
   const x = await seedOrder(h.db, appId);
   const y = await seedOrder(h.db, appId);
+  const trailBefore = await trailOf(h.db, appId, [x, y]);
   const recorder = createPunishPendingRecorder({ db: h.db });
   const sequence = [
     signalFor(appId, x.sub_order_id, 'UNMAPPED_STATUS', '2'),
@@ -257,12 +288,14 @@ it('[AC-B1-04zzab#26] 去重键含原因：同一 app、平台、子订单先表
   const rows = await pendingOf(h.db, appId);
   expect(rows).toHaveLength(4);
   expect(keyed(rows)).toEqual(bothReasons(x, y));
+  await expectUntouched(appId, [x, y], trailBefore);
 });
 
 it('[AC-B1-04zzab#27] 去重键含原因（经窗口）：一窗里子订单 X 回传 2、Y 回传 1，下一窗 X 回传 1、Y 回传 2：X、Y 各有两条 open（每种原因一条），都不交写入方', async () => {
   const appId = newAppId();
   const x = await seedOrder(h.db, appId);
   const y = await seedOrder(h.db, appId);
+  const trailBefore = await trailOf(h.db, appId, [x, y]);
   const first = dbHandler(h.db, [
     [
       unfreezeRow(x.sub_order_id, { punish_status: '2' }),
@@ -286,6 +319,7 @@ it('[AC-B1-04zzab#27] 去重键含原因（经窗口）：一窗里子订单 X �
   expect(first.rightsRecord).not.toHaveBeenCalled();
   expect(second.rightsRecord).not.toHaveBeenCalled();
   expect(await rightsOf(h.db, appId)).toEqual([]);
+  await expectUntouched(appId, [x, y], trailBefore);
 });
 
 /** Ungranted locks held by sessions of this test database, polled until `count` wait (or ~5 s). */
@@ -308,6 +342,7 @@ async function waitForWaiters(count: number): Promise<number> {
 it('[AC-B1-04zzab#29] 并发靠库约束：两个各自独立创建的记录器（各自的连接池，不共享进程内状态）在另一事务占住同键时同时写入，放行后两边都成功、都不抛错、只留一条 open', async () => {
   const appId = newAppId();
   const order = await seedOrder(h.db, appId);
+  const trailBefore = await trailOf(h.db, appId, [order]);
   const left = await open(database!);
   const right = await open(database!);
   try {
@@ -376,6 +411,7 @@ it('[AC-B1-04zzab#29] 并发靠库约束：两个各自独立创建的记录器�
         detected_at: new Date(NOW),
       },
     ]);
+    await expectUntouched(appId, [order], trailBefore);
   } finally {
     await left.close();
     await right.close();
@@ -397,6 +433,7 @@ it.each([
     const failingRow = unfreezeRow(failing.sub_order_id, { punish_status: failRaw });
     const afterRow = unfreezeRow(after.sub_order_id, { punish_status: '0' });
     const nextRow = unfreezeRow(next.sub_order_id, { punish_status: '0' });
+    const trailBefore = await trailOf(h.db, appId, [earlier, failing]);
     const broken = new Error('synthetic order_sync_pending failure');
     let failed = false;
     const f = dbHandler(h.db, [[earlierRow, failingRow, afterRow], [nextRow]], {
@@ -429,6 +466,7 @@ it.each([
     expect((await pendingOf(h.db, appId)).map(view)).toEqual([
       pendingRow(earlier, okReason, okRaw),
     ]);
+    await expectUntouched(appId, [earlier, failing], trailBefore);
 
     await expect(handlePunishWindow(job(PUNISH_JOB, win, 2), f.deps)).resolves.toBeUndefined();
     const rows = await pendingOf(h.db, appId);
@@ -449,5 +487,6 @@ it.each([
       [next.order_id, 'PUNISH', 'SUCCEEDED', nextRow.punishment_id, new Date(NOW)],
     ]);
     expect(await rightsOf(h.db, appId)).toEqual([]);
+    await expectUntouched(appId, [earlier, failing], trailBefore);
   },
 );

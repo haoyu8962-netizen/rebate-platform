@@ -3,7 +3,10 @@
 // （createRightsSyncWriter，settlement 的 rights.record 是只记调用的替身）和真实的待处理写入，实际消费两页
 // 数据——冻结（'0'）、解冻（'1'）、表外值（'2'）各一条。只有联盟适配器换成返回这两页的假实现（不联网）；处理器、
 // 分页包装、待处理写入一个都不替换。同一次任务里：解冻与表外值各写一条参数正确的 open 待处理、各发一条 warn，
-// 冻结那条交给了写入方，解冻与表外值没有交给写入方；日志不带订单号、违规单号与金额。
+// 冻结那条交给了写入方，解冻与表外值没有交给写入方；日志不带订单号、违规单号与金额。任务跑完读回解冻与表外值
+// 所涉的两张 RECEIVED / WAITING 订单（任务书 13.2 第 2 条）：platform_status、rebate_status、hold、金额列与
+// 整行逐列同前（不被当成平台失效改成 INVALID），状态历史、order_rights、点名它们的事件都不多一行，也没有点名
+// 它们的入队或发布。
 // 本文件的库里只有一个淘宝联盟账号（可查账号按全库唯一一行判定），所以只有一条用例。
 import { randomUUID } from 'node:crypto';
 import { createTestDatabase, type TestDatabase } from '@couli/db/testing';
@@ -29,6 +32,8 @@ import {
   pendingOf,
   rightsOf,
   seedOrder,
+  stateOf,
+  trailOf,
   unfreezeRow,
   windowOf,
   type Harness,
@@ -128,6 +133,8 @@ it('[AC-B1-04zzab#24] 生产 worker 注册的 punish.window 处理器实际消�
   const record = vi.fn<RightsCommandPort['record']>(async () => ({ kind: 'applied' }));
   const lines: string[] = [];
   const register = vi.fn<(queue: string, handler: JobHandler) => void>();
+  const publish = vi.fn();
+  const send = vi.fn(async () => 'synthetic');
   const deps: OrderSyncRuntimeDeps = {
     db: h.db,
     clock: new FixedClock(NOW),
@@ -141,11 +148,11 @@ it('[AC-B1-04zzab#24] 生产 worker 注册的 punish.window 处理器实际消�
     ),
     queue: {
       register,
-      send: vi.fn(async () => 'synthetic'),
+      send,
       start: vi.fn(async () => undefined),
       stop: vi.fn(async () => undefined),
     },
-    events: { publish: vi.fn() },
+    events: { publish },
     endpoints: [taobaoEndpoint],
     registry: {
       registrations: () => [],
@@ -166,6 +173,10 @@ it('[AC-B1-04zzab#24] 生产 worker 注册的 punish.window 处理器实际消�
   expect(registrations).toHaveLength(1);
   const handler = registrations[0]![1];
   const rightsBefore = await rightsOf(h.db, appId);
+  const signalled = [unfrozenOrder, oddOrder];
+  const trailBefore = await trailOf(h.db, appId, signalled);
+  const sendsBefore = send.mock.calls.length;
+  const publishesBefore = publish.mock.calls.length;
 
   await expect(
     handler(job(PUNISH_JOB, { ...windowOf(appId), union_account_id: accountId })),
@@ -187,6 +198,37 @@ it('[AC-B1-04zzab#24] 生产 worker 注册的 punish.window 处理器实际消�
     [frozenOrder.order_id, 'PUNISH', 'SUCCEEDED', frozenRow.punishment_id, new Date(NOW)],
   ]);
   expect(await rightsOf(h.db, appId)).toEqual(rightsBefore);
+
+  // 13.2 ②: the WAITING orders behind the unfreeze and the unmapped row are not touched — no
+  // platform INVALID, no rebate move, no hold, same amounts — and no history, rights or event for
+  // them; nothing naming them was enqueued or published either.
+  const trailAfter = await trailOf(h.db, appId, signalled);
+  expect(
+    stateOf(trailAfter).map((o) => [
+      o.order_id,
+      o.platform_status,
+      o.rebate_status,
+      o.hold,
+      o.est_commission_fen,
+      o.booked_base_fen,
+      o.booked_n_fen,
+    ]),
+  ).toEqual(
+    [...signalled]
+      .sort((a, b) => (a.order_id < b.order_id ? -1 : 1))
+      .map((o) => [o.order_id, 'RECEIVED', 'WAITING', false, 321n, null, null]),
+  );
+  expect(stateOf(trailAfter)).toEqual(stateOf(trailBefore));
+  expect(trailAfter).toEqual(trailBefore);
+  expect(trailAfter.history).toEqual([]);
+  expect(trailAfter.rights).toEqual([]);
+  expect(trailAfter.events).toEqual([]);
+  const signalledMarkers = signalled.flatMap((o) => [o.order_id, o.sub_order_id]);
+  const names = (leaf: string) => signalledMarkers.some((m) => leaf.includes(m));
+  const naming = (calls: readonly (readonly unknown[])[]) =>
+    calls.filter((call) => leaves(call).some(names));
+  expect(naming(send.mock.calls.slice(sendsBefore))).toEqual([]);
+  expect(naming(publish.mock.calls.slice(publishesBefore))).toEqual([]);
 
   // One open record each, written by the production recorder.
   const pending = await pendingOf(h.db, appId);

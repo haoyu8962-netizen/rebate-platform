@@ -1,9 +1,17 @@
 // B1-04zzab 的连库夹具；只被本目录的 *.int.test.ts 引用，数据库生命周期在它们里管理（@couli/db/testing）。
-// 种入的订单、order_rights 行都是合成值；单号是全数字的合成串，每次调用唯一。
+// 种入的订单、order_rights 行都是合成值；单号是全数字的合成串，每次调用唯一。账务三张表（凭证、分录、余额）
+// 本文件一律不直写：入账、扣回、冻结都经 ledger 模块的记账入口（createLedger 的 openUserAccount / lockBalances /
+// post，与 test/spec/settlement/clawback/kit.ts 同一做法），凭证、分录与余额由记账函数产生（账本单一写者守卫）。
 import { randomUUID } from 'node:crypto';
 import { createDb, destroyDb, type DB } from '@couli/db';
 import type { Insertable, Kysely, Selectable } from 'kysely';
 import { vi } from 'vitest';
+import {
+  createLedger,
+  type PostingEntry,
+  type PostingVoucher,
+} from '../../../../apps/api/src/modules/ledger/index.ts';
+import { FixedClock } from '../../../../apps/api/src/modules/platform/index.ts';
 import {
   createPunishPendingRecorder,
   type PunishPendingPort,
@@ -103,12 +111,17 @@ export function orderRow(db: Kysely<DB>, appId: string, orderId: string): Promis
     .executeTakeFirstOrThrow();
 }
 
-/** The PUNISH / SUCCEEDED row an earlier frozen punishment left on `order`. */
-export async function seedPunishRow(db: Kysely<DB>, order: Order, punishmentNo: string) {
+/** The PUNISH / SUCCEEDED row an earlier frozen punishment left on `order`; returns its id. */
+export async function seedPunishRow(
+  db: Kysely<DB>,
+  order: Order,
+  punishmentNo: string,
+): Promise<string> {
+  const id = randomUUID();
   await db
     .insertInto('order_rights')
     .values({
-      id: randomUUID(),
+      id,
       app_id: order.app_id,
       order_id: order.order_id,
       source: 'API',
@@ -122,6 +135,7 @@ export async function seedPunishRow(db: Kysely<DB>, order: Order, punishmentNo: 
       updated_at: PUNISHED,
     })
     .execute();
+  return id;
 }
 
 export function rightsOf(db: Kysely<DB>, appId: string): Promise<RightsRow[]> {
@@ -242,23 +256,89 @@ export async function seedUser(db: Kysely<DB>, appId: string): Promise<string> {
   return id;
 }
 
-/** The China (+08:00) calendar date of an instant, for ledger_vouchers.accounting_date. */
-function chinaDate(at: Date): string {
-  return new Date(at.getTime() + 8 * 3_600_000).toISOString().slice(0, 10);
-}
-
 export interface ClawedBackLedger {
-  /** The member's USER_BALANCE account. */
+  /** The member's USER_BALANCE account (opened by the ledger's openUserAccount). */
   readonly userAccountId: string;
-  /** account_balances of that account after the clawback (other orders keep it non-zero). */
+  /** account_balances of that account after the clawback (other activity keeps it non-zero). */
   readonly availableFen: bigint;
   readonly frozenFen: bigint;
+  /** account_balances.version after the four postings that touch the member's account. */
+  readonly version: bigint;
+  /** uniq_keys of the order's own vouchers: user / platform CREDIT, user / platform CLAWBACK. */
+  readonly orderVoucherKeys: readonly string[];
+}
+
+/** Another credited order of the member (keeps available non-zero after the clawback). */
+const OTHER_CREDITED = new Date('2026-10-15T02:00:00.000Z');
+const OTHER_CREDIT_FEN = 1_290n;
+/** A withdrawal freeze of the member (keeps frozen non-zero). */
+const WITHDRAW_FROZEN = new Date('2026-10-16T02:00:00.000Z');
+const WITHDRAW_FROZEN_FEN = 56n;
+
+function userLine(
+  accountId: string,
+  amount: bigint,
+  ledgerType: string,
+  subType: string | null,
+  subAccount: 'available' | 'frozen' = 'available',
+): PostingEntry {
+  return {
+    account: { ownerType: 'user', accountId },
+    sub_account: subAccount,
+    amount_fen: amount,
+    ledger_type: ledgerType,
+    sub_type: subType,
+    income_type: null,
+  };
+}
+
+function platformLine(
+  subject: string,
+  amount: bigint,
+  ledgerType: string,
+  subType: string | null,
+): PostingEntry {
+  return {
+    account: { ownerType: 'platform', subject },
+    sub_account: 'available',
+    amount_fen: amount,
+    ledger_type: ledgerType,
+    sub_type: subType,
+    income_type: null,
+  };
 }
 
 /**
- * The ledger an earlier credit and its PUNISH clawback left for `order` (synthetic, debit
- * positive): the credit (UNION_RECEIVABLE debit `n`, USER_BALANCE credit `base`, COMMISSION_REVENUE
- * credit the rest), the clawback reversing it, and the member's balance row.
+ * Posts `vouchers` through the ledger module's posting entry, in one transaction at `at` (the
+ * ledger's Clock gives booked_at and accounting_date), with the member's balance locked first.
+ */
+async function postAt(
+  db: Kysely<DB>,
+  at: Date,
+  appId: string,
+  userId: string,
+  vouchers: (memberAccountId: string) => readonly PostingVoucher[],
+): Promise<void> {
+  const ledger = createLedger({ clock: new FixedClock(at) });
+  await db.transaction().execute(async (trx) => {
+    const [balance] = await ledger.lockBalances(trx, { appId, userIds: [userId] });
+    if (balance === undefined) throw new Error('db-kit: the member has no ledger account');
+    for (const voucher of vouchers(balance.account_id)) {
+      const result = await ledger.post(trx, voucher);
+      if (result.kind !== 'posted') throw new Error(`db-kit: ${voucher.uniqKey} not posted`);
+    }
+  });
+}
+
+/**
+ * The ledger an earlier credit (R5) and its full PUNISH clawback (R8) left for `order`, all
+ * written by the ledger module (createLedger().post), in the production template shapes (BR-FUND-05
+ * CREDIT:SELF / CREDIT:PLATFORM, BR-FUND-08 CLAWBACK:PUNISH:USER / :PLATFORM:DECREASE; debit
+ * positive): at `credited` the member's CREDIT (debit UNION_RECEIVABLE:{platform} `base`, credit
+ * USER_BALANCE.available `base`) and the PLATFORM:CREDIT (`n - base` to COMMISSION_REVENUE); at
+ * `clawed` the CLAWBACK of each (rights_event_id `R{order_rights.id}`). Before them the member had
+ * another credited order (1290) and a withdrawal freeze (56), so after the clawback the balance is
+ * available 1234, frozen 56 (version 4: four postings on the account).
  */
 export async function seedClawedBackLedger(
   db: Kysely<DB>,
@@ -269,94 +349,176 @@ export async function seedClawedBackLedger(
     readonly base: bigint;
     readonly credited: Date;
     readonly clawed: Date;
+    /** order_rights.id of the PUNISH row the clawback was for. */
+    readonly rightsId: string;
   },
 ): Promise<ClawedBackLedger> {
   const appId = order.app_id;
   const orderKey = `${order.platform}:${order.sub_order_id}`;
-  const account = async (ownerType: 'user' | 'platform', ownerId: string, subject: string) => {
-    const id = randomUUID();
-    await db
-      .insertInto('ledger_accounts')
-      .values({
-        id,
-        app_id: appId,
-        owner_type: ownerType,
-        owner_id: ownerId,
-        subject,
-        created_at: amounts.credited,
-      })
-      .execute();
-    return id;
+  const receivable = `UNION_RECEIVABLE:${order.platform}`;
+  const revenue = 'COMMISSION_REVENUE';
+  const platformFen = amounts.n - amounts.base;
+  const eventId = `R${amounts.rightsId}`;
+  const keys = {
+    userCredit: `${orderKey}:${userId}:self:CREDIT`,
+    platformCredit: `${orderKey}:PLATFORM:CREDIT`,
+    userClawback: `${orderKey}:${userId}:self:CLAWBACK:${eventId}`,
+    platformClawback: `${orderKey}:PLATFORM:CLAWBACK:${eventId}`,
   };
-  const member = await account('user', userId, 'USER_BALANCE');
-  const receivable = await account('platform', 'platform', `UNION_RECEIVABLE:${order.platform}`);
-  const revenue = await account('platform', 'platform', 'COMMISSION_REVENUE');
-  const voucher = async (
+  const orderVoucher = (
+    uniqKey: string,
     kind: 'CREDIT' | 'CLAWBACK',
-    ledgerType: 'REBATE_CREDIT' | 'CLAWBACK',
-    sign: 1n | -1n,
-    at: Date,
-  ) => {
-    const id = randomUUID();
-    await db
-      .insertInto('ledger_vouchers')
-      .values({
-        id,
-        app_id: appId,
-        biz_type: kind === 'CREDIT' ? 'ORDER_CREDIT' : 'ORDER_CLAWBACK',
-        biz_id: orderKey,
-        uniq_key: `${orderKey}:${userId}:self:${kind}`,
-        accounting_date: chinaDate(at),
-        operator: 'system',
-        memo: kind === 'CLAWBACK' ? 'reason=PUNISH' : null,
-        order_key: orderKey,
-        beneficiary_user_id: userId,
-        role: 'self',
-        voucher_kind: kind,
-        created_at: at,
-      })
-      .execute();
-    await db
-      .insertInto('ledger_entries')
-      .values(
-        [
-          { account_id: receivable, amount_fen: sign * amounts.n },
-          { account_id: member, amount_fen: -sign * amounts.base },
-          { account_id: revenue, amount_fen: -sign * (amounts.n - amounts.base) },
-        ].map((line) => ({
-          app_id: appId,
-          voucher_id: id,
-          account_id: line.account_id,
-          sub_account: 'available',
-          amount_fen: line.amount_fen,
-          ledger_type: ledgerType,
-          sub_type: kind === 'CLAWBACK' ? 'PUNISH' : null,
-          income_type: null,
-          balance_after_fen: null,
-          account_version: null,
-          booked_at: at,
-          created_at: at,
-        })),
-      )
-      .execute();
+    beneficiary: string | null,
+    entries: readonly PostingEntry[],
+  ): PostingVoucher => ({
+    appId,
+    uniqKey,
+    bizType: kind === 'CREDIT' ? 'ORDER_CREDIT' : 'ORDER_CLAWBACK',
+    bizId: orderKey,
+    operator: 'system',
+    memo: null,
+    orderKey,
+    beneficiaryUserId: beneficiary,
+    role: beneficiary === null ? null : 'self',
+    voucherKind: kind,
+    entries,
+  });
+
+  const opener = createLedger({ clock: new FixedClock(OTHER_CREDITED) });
+  const opened = await db
+    .transaction()
+    .execute((trx) => opener.openUserAccount(trx, { appId, userId }));
+  const otherKey = `${order.platform}:${orderNo()}`;
+  await postAt(db, OTHER_CREDITED, appId, userId, (member) => [
+    {
+      appId,
+      uniqKey: `${otherKey}:${userId}:self:CREDIT`,
+      bizType: 'ORDER_CREDIT',
+      bizId: otherKey,
+      operator: 'system',
+      memo: null,
+      orderKey: otherKey,
+      beneficiaryUserId: userId,
+      role: 'self',
+      voucherKind: 'CREDIT',
+      entries: [
+        platformLine(receivable, OTHER_CREDIT_FEN, 'REBATE_CREDIT', null),
+        userLine(member, -OTHER_CREDIT_FEN, 'REBATE_CREDIT', null),
+      ],
+    },
+  ]);
+  await postAt(db, WITHDRAW_FROZEN, appId, userId, (member) => [
+    {
+      appId,
+      uniqKey: `WDR:test:${randomUUID()}`,
+      bizType: 'WITHDRAW',
+      bizId: randomUUID(),
+      operator: 'system',
+      memo: null,
+      orderKey: null,
+      beneficiaryUserId: null,
+      role: null,
+      voucherKind: 'WITHDRAW_FREEZE',
+      entries: [
+        userLine(member, WITHDRAW_FROZEN_FEN, 'WITHDRAW_FREEZE', null, 'available'),
+        userLine(member, -WITHDRAW_FROZEN_FEN, 'WITHDRAW_FREEZE', null, 'frozen'),
+      ],
+    },
+  ]);
+  await postAt(db, amounts.credited, appId, userId, (member) => [
+    orderVoucher(keys.userCredit, 'CREDIT', userId, [
+      platformLine(receivable, amounts.base, 'REBATE_CREDIT', null),
+      userLine(member, -amounts.base, 'REBATE_CREDIT', null),
+    ]),
+    orderVoucher(keys.platformCredit, 'CREDIT', null, [
+      platformLine(receivable, platformFen, 'REBATE_CREDIT', null),
+      platformLine(revenue, -platformFen, 'REBATE_CREDIT', null),
+    ]),
+  ]);
+  await postAt(db, amounts.clawed, appId, userId, (member) => [
+    orderVoucher(keys.userClawback, 'CLAWBACK', userId, [
+      userLine(member, amounts.base, 'CLAWBACK', 'PUNISH'),
+      platformLine(receivable, -amounts.base, 'CLAWBACK', 'PUNISH'),
+    ]),
+    orderVoucher(keys.platformClawback, 'CLAWBACK', null, [
+      platformLine(revenue, platformFen, 'CLAWBACK', 'PUNISH'),
+      platformLine(receivable, -platformFen, 'CLAWBACK', 'PUNISH'),
+    ]),
+  ]);
+  return {
+    userAccountId: opened.account_id,
+    availableFen: OTHER_CREDIT_FEN - WITHDRAW_FROZEN_FEN,
+    frozenFen: WITHDRAW_FROZEN_FEN,
+    version: 4n,
+    orderVoucherKeys: [
+      keys.userCredit,
+      keys.platformCredit,
+      keys.userClawback,
+      keys.platformClawback,
+    ],
   };
-  await voucher('CREDIT', 'REBATE_CREDIT', 1n, amounts.credited);
-  await voucher('CLAWBACK', 'CLAWBACK', -1n, amounts.clawed);
-  const availableFen = 1_234n;
-  const frozenFen = 56n;
-  await db
-    .insertInto('account_balances')
-    .values({
-      app_id: appId,
-      account_id: member,
-      available_fen: availableFen,
-      frozen_fen: frozenFen,
-      negative_since: null,
-      version: 2n,
-      created_at: amounts.credited,
-    })
+}
+
+/**
+ * What a handled unfreeze / unmapped row must leave alone on its orders (B1-04zzab 13.2 ②): the
+ * order rows (platform_status, rebate_status, hold, amount columns, everything), their status
+ * history, their order_rights rows, and the app's event_log rows naming them (no order-invalid or
+ * other event published for them).
+ */
+export async function trailOf(db: Kysely<DB>, appId: string, orders: readonly Order[]) {
+  const ids = orders.map((o) => o.order_id);
+  const markers = [...ids, ...orders.map((o) => o.sub_order_id)];
+  const events = await db
+    .selectFrom('event_log')
+    .selectAll()
+    .where('app_id', '=', appId)
+    .orderBy('id')
     .execute();
-  return { userAccountId: member, availableFen, frozenFen };
+  return {
+    orders: await db
+      .selectFrom('orders')
+      .selectAll()
+      .where('app_id', '=', appId)
+      .where('order_id', 'in', ids)
+      .orderBy('order_id')
+      .execute(),
+    history: await db
+      .selectFrom('order_status_history')
+      .selectAll()
+      .where('app_id', '=', appId)
+      .where('order_id', 'in', ids)
+      .orderBy('id')
+      .execute(),
+    rights: await db
+      .selectFrom('order_rights')
+      .selectAll()
+      .where('app_id', '=', appId)
+      .where('order_id', 'in', ids)
+      .orderBy('id')
+      .execute(),
+    events: events.filter((e) => {
+      const text = `${e.name} ${JSON.stringify(e.payload)}`;
+      return markers.some((m) => text.includes(m));
+    }),
+  };
+}
+export type Trail = Awaited<ReturnType<typeof trailOf>>;
+
+/** The state columns of an order a wrong implementation might touch (13.2 ②), by order_id. */
+export function stateOf(trail: Trail) {
+  return trail.orders.map((o) => ({
+    order_id: o.order_id,
+    platform_status: o.platform_status,
+    rebate_status: o.rebate_status,
+    reason: o.reason,
+    hold: o.hold,
+    hold_reason: o.hold_reason,
+    est_commission_fen: o.est_commission_fen,
+    settle_commission_fen: o.settle_commission_fen,
+    booked_base_fen: o.booked_base_fen,
+    booked_n_fen: o.booked_n_fen,
+    row_version: o.row_version,
+  }));
 }
 
 /** Everything of `appId` a restore or a payout would write: ledger, balances, recon diffs. */
