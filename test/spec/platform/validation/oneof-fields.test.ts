@@ -59,7 +59,12 @@ const OAUTH_ATTEMPT_PREVIOUS_FIELDS = ['action', 'body', 'purpose'];
 type RequestCase = [
   title: string,
   operation:
-    'stepUp' | 'savePayoutAccount' | 'bindUnion' | 'createOauthAttempt' | 'adminCreateExport',
+    | 'stepUp'
+    | 'savePayoutAccount'
+    | 'bindUnion'
+    | 'createOauthAttempt'
+    | 'adminCreateExport'
+    | 'adminCreateAdjustment',
   body: object,
   expected: readonly string[],
   previous: readonly string[],
@@ -177,6 +182,19 @@ it.each<RequestCase>([
     { resource: 'users' },
     ['body', 'filters'],
     ['body', 'filters', 'resource'],
+  ],
+  [
+    'adminCreateAdjustment 新调账金额为零',
+    'adminCreateAdjustment',
+    {
+      user_id: '0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5c02',
+      direction: 'increase',
+      amount_fen: 0,
+      reason_code: 'OTHER',
+      note: '更正',
+    },
+    ['amount_fen', 'body'],
+    ['amount_fen', 'body', 'direction', 'reason_code', 'reverses_adjust_id', 'user_id'],
   ],
 ])('[AC-B1-01zzw#1] %s', (_title, operation, body, expected, previous) => {
   expectFields(contractRouteSchema(operation).body, body, expected, previous);
