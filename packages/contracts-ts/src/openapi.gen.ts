@@ -3155,10 +3155,15 @@ export interface paths {
          *     or voided SMS code is 20003.
          *     Token use (BR-ID-08 「只能用于 1 次成功的业务请求」 as the admin side follows it): a token
          *     is spent only by a business success of an operation that checks it (HTTP 2xx with
-         *     `code=0`); then it is void and a repeat with it is 10003. When that operation is rejected
-         *     or fails (any other status or code, or a server error) the token is released and stays
-         *     usable until `expire_at`, so the console may replay the request with the same token and
-         *     asks for a new code only when the answer is 10003. While one request holds the token,
+         *     `code=0`); then it is void and a repeat with it is 10003. When that operation is refused
+         *     by the business, or fails in a way that is known to have rolled back, the token is released
+         *     and stays usable until `expire_at`, so the console may replay the request with the same
+         *     token. When the outcome of its commit is unknown (a connection error of SQLSTATE class 08,
+         *     57P01 / 57P02 / 57P03, 57014 query canceled, a dropped connection without any SQLSTATE, or
+         *     `outcome_unknown`), the request may have succeeded, so the token is void: a replay with it
+         *     is 10003 and needs a new verification (the classification is
+         *     apps/api/src/modules/admin/application/step-up-outcome.ts). The console asks for a new
+         *     code only when the answer is 10003. While one request holds the token,
          *     another request with it is 10003. An operation that needs no step-up ignores a token sent
          *     with it. Not fixed by BR-ID-34 and left open here: whether wrong step-up codes count
          *     towards the login-failure lock, and the token lifetime (the response carries `expire_at`;
