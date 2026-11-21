@@ -11,7 +11,7 @@ type: impl
 refs: [BR-WDR-16, BR-WDR-05, BR-ID-34]
 refs_hash:
   BR-WDR-16: c5899cc85558
-  BR-WDR-05: 32894d40942c
+  BR-WDR-05: 378fe8ee0fee
   BR-ID-34: 6f4bb7f212cb
 deps: [F1-08ai]
 paths:

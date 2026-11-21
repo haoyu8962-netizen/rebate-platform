@@ -7,7 +7,7 @@ type: impl
 # payout_recon_runs 是 B2-07d「连续跑通天数」的来源：跑通 = 当天作业 succeeded（发现差错不打断），partial / failed 打断（D10-408）。
 refs: [BR-WDR-23]
 refs_hash:
-  BR-WDR-23: 98981fee10c7
+  BR-WDR-23: 14059410a548
 deps: [B2-06h]
 paths:
   - 'db/migrations/**'

@@ -9,7 +9,7 @@ type: impl
 refs: [BR-WDR-10, BR-WDR-05]
 refs_hash:
   BR-WDR-10: 1db6b508e224
-  BR-WDR-05: 32894d40942c
+  BR-WDR-05: 378fe8ee0fee
 deps: [B2-09k]
 paths:
   - 'apps/api/src/modules/payout/application/went-negative.ts'

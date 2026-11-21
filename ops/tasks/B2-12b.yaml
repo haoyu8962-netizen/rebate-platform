@@ -7,7 +7,7 @@ refs: [BR-FUND-10, BR-FUND-16, BR-FUND-24]
 refs_hash:
   BR-FUND-10: 3ed330a761d1
   BR-FUND-16: 077f6d412d5a
-  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-24: efcdeeafa452
 deps: []
 paths:
   - 'packages/domain/src/ledger/ledger.ts'

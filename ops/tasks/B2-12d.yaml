@@ -4,7 +4,7 @@ title: 注销调减单：ACCOUNT_CLOSED 预填、adminApproveAdjustment、adminR
 type: impl
 refs: [BR-FUND-24, BR-ID-28, BR-FUND-16]
 refs_hash:
-  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-24: efcdeeafa452
   BR-ID-28: 0723f447192c
   BR-FUND-16: 077f6d412d5a
 deps: [B2-12c, CT-26u]

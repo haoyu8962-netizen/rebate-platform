@@ -6,7 +6,7 @@ type: test-change
 # 编排点名 #2、#4；#1、#3 用同一个 waiting()，同样会偶发，一并登记，编排可删。证据记本机循环 ≥ 20 次全绿。
 refs: [BR-WDR-05]
 refs_hash:
-  BR-WDR-05: 32894d40942c
+  BR-WDR-05: 378fe8ee0fee
 deps: [B2-09r]
 paths:
   - 'test/spec/payout/went-negative-lock-order/recheck.int.test.ts'

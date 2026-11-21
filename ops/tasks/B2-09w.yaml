@@ -7,7 +7,7 @@ type: impl
 # RV2。规则测试 Codex，新鲜 Claude 评，Codex money。不动冻结测试，实跑若要动按 D10-327 先报。
 refs: [BR-WDR-15]
 refs_hash:
-  BR-WDR-15: 862cdb2e711a
+  BR-WDR-15: 81861ee42c9b
 deps: [CT-24zt]
 paths:
   - 'apps/api/src/modules/payout/application/admin-unknown-payouts.ts'

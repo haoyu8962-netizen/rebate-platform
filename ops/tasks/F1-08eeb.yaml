@@ -16,7 +16,7 @@ type: test-change
 # tester claude-independent（本单调用数从零算），spec-test 由 Codex 做全量，评审 Codex。
 refs: [BR-FUND-24, BR-FUND-19]
 refs_hash:
-  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-24: efcdeeafa452
   BR-FUND-19: ab824a70d47c
 deps: [F1-08ee]
 paths:

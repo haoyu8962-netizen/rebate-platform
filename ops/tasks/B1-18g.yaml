@@ -6,7 +6,7 @@ type: impl
 # 完成 2026-11-12（#3199，头 158379d884e3）：补差候选只在换版本时按 seq + 差额判重，批准不因版本作废；冻结四条原地改写、#9 按 D10-1262 删除；前置收紧 B1-18gk（#3192）；money r1 pass（S2 → FU-ADJUST-LATEST-SET-TIEBREAK）。
 refs: [BR-FUND-09, BR-CALC-23]
 refs_hash:
-  BR-FUND-09: bbb8b69cddee
+  BR-FUND-09: d6b5a66ad5a9
   BR-CALC-23: 617aabea160e
 deps: []
 paths:

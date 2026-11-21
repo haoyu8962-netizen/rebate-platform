@@ -7,7 +7,7 @@ type: test-change
 # 完成 2026-11-11（#3192，头 1e34ad3012bd）：[AC-B1-18gk#1] 同版本状态变化保留候选、#2 两单并发批准同一受益人（受益人行锁处交错）；主干 3 次绿、两条变异各红；Codex money 只读复核 pass。
 refs: [BR-FUND-09]
 refs_hash:
-  BR-FUND-09: bbb8b69cddee
+  BR-FUND-09: d6b5a66ad5a9
 deps: []
 paths:
   - 'test/spec/settlement/settle-adjust-keep/**'

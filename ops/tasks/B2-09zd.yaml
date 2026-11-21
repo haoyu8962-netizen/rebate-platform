@@ -7,7 +7,7 @@ type: test-change
 # 分工：新鲜独立 Claude 写（Codex 可用时优先），另一位新鲜独立 Claude / Codex 复审（D10-775）；非 task 分支、不带证据文件，标签由编排核对后加（先例 B3-03s / B3-04j）。RV2。
 refs: [BR-WDR-15]
 refs_hash:
-  BR-WDR-15: 862cdb2e711a
+  BR-WDR-15: 81861ee42c9b
 deps: [B2-09x]
 paths:
   - 'test/spec/payout/w10-voucher-crosscheck-pool/**'

@@ -8,9 +8,9 @@ type: impl
 # 防竞态：常规查询遇明确失败准备 W6 前，若能只读到本笔「账单成功」的对账证据（现有表与授权内，recon_channel 对 couli_payout 只读），同样改走 needs_manual，读不到则记 FU-RECON-RACE 进 HANDOFF。不改授权、不加迁移。
 refs: [BR-WDR-23, BR-WDR-15, BR-FUND-24]
 refs_hash:
-  BR-WDR-23: 98981fee10c7
-  BR-WDR-15: 862cdb2e711a
-  BR-FUND-24: 0f1a6ecb3334
+  BR-WDR-23: 14059410a548
+  BR-WDR-15: 81861ee42c9b
+  BR-FUND-24: efcdeeafa452
 deps: [B2-07a, B2-07b, B2-06h]
 paths:
   - 'apps/api/src/modules/payout/jobs/recon-*.ts'

@@ -9,7 +9,7 @@ type: impl
 # 冻结测试（D10-327，只加列、不删断言，新鲜独立 Claude 改、另一位复审）：settle-runs-schema/{kit,shape,access}、db/settlement/core/{kit,schema}；同文件未改用例按需 red_exempt。Codex money，funds 只读复核。RV2。
 refs: [BR-FUND-04, BR-TEXT-09]
 refs_hash:
-  BR-FUND-04: 497806f6f068
+  BR-FUND-04: 1c403c23b8bb
   BR-TEXT-09: f6ccbeb61808
 deps: [B2-04zt]
 paths:

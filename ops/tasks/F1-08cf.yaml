@@ -8,7 +8,7 @@ type: test-change
 # 资金页（RV2）：规则测试由全新独立 Claude 写、另一全新独立 Claude 做 spec-test（approvals 第 36 条；Codex 额度到 11-20）；第 3 轮 spec-test 仍 fail 即停报编排（D10-1734）。排位：F1-08ce 合并后、F1-08cc / cd 之前（D10-1840）。
 refs: [BR-FUND-24, BR-ID-34, BR-ID-10]
 refs_hash:
-  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-24: efcdeeafa452
   BR-ID-34: 6f4bb7f212cb
   BR-ID-10: 7bc8a1bfa5f1
 deps: [F1-08ce]

@@ -7,7 +7,7 @@ type: impl
 # 资金页面（RV2）：Codex 额度用尽（D10-1604），规则测试独立 Claude 写、另一独立 Claude 审（approvals 第 36 条）；实现 Claude Opus；代码评审 money（独立 Claude）。测试写作第 3 轮 spec-test 仍 fail 即停下报编排（D10-1734）。测试机不可用期间按 D10-1693 本机推进。
 refs: [BR-FUND-24, BR-ID-34, BR-ID-10]
 refs_hash:
-  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-24: efcdeeafa452
   BR-ID-34: 6f4bb7f212cb
   BR-ID-10: 7bc8a1bfa5f1
 deps: [F1-08cb]

@@ -18,9 +18,9 @@ type: test-change
 # F1-08ee 才 land，本单随后变基 land；新块在实现上为绿，标题定稿后台账补丁登 red_exempt（带探针）。tester claude-independent（本单调用数从零算），spec-test 由 Codex 做全量。
 refs: [BR-FUND-24, BR-FUND-19, BR-WDR-23, BR-ID-34]
 refs_hash:
-  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-24: efcdeeafa452
   BR-FUND-19: ab824a70d47c
-  BR-WDR-23: 98981fee10c7
+  BR-WDR-23: 14059410a548
   BR-ID-34: 6f4bb7f212cb
 deps: [F1-08ee]
 paths:

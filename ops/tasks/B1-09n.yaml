@@ -9,7 +9,7 @@ refs_hash:
   BR-FUND-01: 71daaebae9bd
   BR-FUND-02: 382c4075d2cb
   BR-FUND-03: 07f194a70033
-  BR-FUND-04: 497806f6f068
+  BR-FUND-04: 1c403c23b8bb
   BR-FUND-06: f903ec00076a
   BR-FUND-07: b61cfed0a77b
 # 2026-11-01 D10-551 更正 D10-550：createRebatePort 要 estimates（commission 估值写口，B2-03q）与事务内 system 审计适配器（B1-34p），现在装不上，两者落地前不开工。B1-10n 标题里的「与 risk blocklist」归本任务，B1-10n 不做。

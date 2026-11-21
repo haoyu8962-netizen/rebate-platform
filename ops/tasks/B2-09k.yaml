@@ -8,7 +8,7 @@ type: impl
 refs: [BR-WDR-10, BR-WDR-05, BR-WDR-17]
 refs_hash:
   BR-WDR-10: 1db6b508e224
-  BR-WDR-05: 32894d40942c
+  BR-WDR-05: 378fe8ee0fee
   BR-WDR-17: f6119a685e00
 deps: [CT-24zp]
 paths:

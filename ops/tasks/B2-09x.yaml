@@ -7,7 +7,7 @@ type: impl
 # 2026-11-06 补 paths：2xxxx 拒绝时幂等整体回滚，拒绝审计要另开事务落库，写依赖要在 payout.module.ts 注入 db（编排 16:00）。
 refs: [BR-WDR-15, BR-TEXT-14]
 refs_hash:
-  BR-WDR-15: 862cdb2e711a
+  BR-WDR-15: 81861ee42c9b
   BR-TEXT-14: dd8fad131e0d
 deps: [CT-24zu, B2-09w]
 paths:

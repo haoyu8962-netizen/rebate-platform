@@ -7,7 +7,7 @@ type: impl
 # 状态备注：可开。端口由 ledger 声明、payout 实现并在组装时注入（依赖方向 payout → ledger）；ledger 不直接写 withdrawals；不用异步事件（BR-WDR-05 (a) 要求同一记账事务内清理）。挂点合并后 withdraw 线另开小任务把清理接到端口并补端到端规则测试。与 B2-04k 的 account.went_negative（≥0 → <0）对称。
 refs: [BR-WDR-05, BR-FUND-10]
 refs_hash:
-  BR-WDR-05: 32894d40942c
+  BR-WDR-05: 378fe8ee0fee
   BR-FUND-10: 3ed330a761d1
 deps: [B2-04k]
 paths:

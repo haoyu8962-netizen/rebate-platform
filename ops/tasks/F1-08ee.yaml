@@ -8,7 +8,7 @@ type: impl
 # 写测与评审：Codex 额度用尽（D10-2003），规则测试与首轮评审由无上下文的独立 Claude（claude-run.sh），证据如实记 claude-independent。写测时发现冻结用例（入口清单、只读断言、TODO 对应的「不出现」断言）受影响，先报编排再补 modify_existing（D10-1712 / D10-1899）。写操作一律照 F1-08ce 结果未知处理（D10-1731）。
 refs: [BR-FUND-24, BR-FUND-19, BR-ID-34]
 refs_hash:
-  BR-FUND-24: 0f1a6ecb3334
+  BR-FUND-24: efcdeeafa452
   BR-FUND-19: ab824a70d47c
   BR-ID-34: 6f4bb7f212cb
 deps: [F1-08cb]
