@@ -33,6 +33,7 @@ import {
 // （逐单校验、差错单经 ledger registerReconDiff、DRAFT 只经 settle-batch transition()、补记项只进
 // 其订单平台的批次），kind = supplement，单独确认。step-up、HTTP 与审计归 B2-09。
 // 补充批次不是账单生成：不等资产快照（③ 属账单日任务）。
+// 应结未结（missing_settlement）不登记差错单（2026-11-21 起）；补充轮不写 settle_bills 的任何计数列。
 
 /**
  * 与账单日任务同一组端口（不含资产快照读口）。logger 供任务键顺延时打一行 warn；
@@ -543,17 +544,9 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
             ),
           );
         }
-      } else if (preliminary === 'missing_settlement' && order !== null) {
-        const snapshot = await deps.readSnapshot(trx, {
-          appId,
-          orderId: order.orderId,
-          commissionVersion: order.commissionVersion,
-        });
-        await deps.registerDiff(
-          trx,
-          diffInput(appId, billId, 'settle_missing', row.orderKey, snapshot?.baseFen ?? 0n, 0n),
-          { clock: deps.clock },
-        );
+      } else if (preliminary === 'missing_settlement') {
+        // BR-FUND-04 ④（2026-11-21）：仍无联盟结算数据的只是「应结未结」，不登记差错单；补充轮也不改
+        // 账单的 unsettled_count（那是出账当时的数，与 error_count 同一性质）。逐单结果照旧记录。
       } else if (preliminary === 'unexpected_settlement' && chosen !== null) {
         // BR-FUND-09：联盟有结算而我方 ESTIMATED / VOID / CLAWED_BACK 或无单，登记联盟差错。
         await deps.registerDiff(
@@ -678,7 +671,7 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
     }
 
     // 补充轮不回写 settle_bills 的分平台子订单数、联盟结算佣金合计、受益人份额 / 平台留存合计与
-    // 差错单数 / 暂缓数（编排裁定 D10-280 ③）：它们只反映账单日任务；补充轮的子订单数在各补充批次的
+    // 差错单数 / 暂缓数 / 应结未结数（编排裁定 D10-280 ③）：它们只反映账单日任务；补充轮的子订单数在各补充批次的
     // order_count、差错单在 recon_diffs，金额判断与对账只按明细行算。不影响入账金额。
     await completeSettleJob(trx, jobId, now, validations.length, heldCount);
     return { outcome: 'generated', billId, platform, batchIds };
