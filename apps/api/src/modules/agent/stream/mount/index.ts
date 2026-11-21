@@ -396,7 +396,8 @@ export function createAgentStreamRuntime(
     scheduler: seams?.schedule ?? unrefScheduler(),
     logger,
   });
-  const trace = createRunTraceRecorder({ queue: traceQueue });
+  // B3-08t (BR-AI-19 细则「运行级字段」): run-level fields too, timed on the runtime's Clock.
+  const trace = createRunTraceRecorder({ queue: traceQueue, runFields: { clock } });
   const pg = createPgRunPorts({
     db,
     clock,
@@ -420,7 +421,18 @@ export function createAgentStreamRuntime(
             if (receipt?.kind === 'list') await keptList(receipt.resultSetId);
           },
         }),
-    admission: pg.admission,
+    // B3-08t: the terminal transaction also writes the run's intent, input_passed and model use.
+    admission: {
+      admit: (request, currentLimits) => pg.admission.admit(request, currentLimits),
+      settle: (ticket, outcome, currentLimits, reply) =>
+        pg.admission.settle(
+          ticket,
+          outcome,
+          currentLimits,
+          reply,
+          trace.settleFields(ticket.runId),
+        ),
+    },
     registry: pg.registry,
     clock,
     scheduler,

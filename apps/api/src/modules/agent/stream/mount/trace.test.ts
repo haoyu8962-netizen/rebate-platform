@@ -4,7 +4,13 @@ import type { OrchestratorTrace } from '../../orchestrator/core/ports.ts';
 import type { RunBodyResult, RunContext } from '../run/index.ts';
 import type { CardInput } from '../writer/index.ts';
 import { storedCard } from '../pg/reply.ts';
-import { createRunTraceRecorder, initiatedCalls, toolCallRecords } from './trace.ts';
+import type { IntentTrace } from '../../orchestrator/intents/index.ts';
+import {
+  createRunTraceRecorder,
+  initiatedCalls,
+  recordIntentVerdict,
+  toolCallRecords,
+} from './trace.ts';
 import type { TraceRedoQueue } from './trace-retry.ts';
 
 const APP = 'synthetic-app';
@@ -232,4 +238,189 @@ it('[AC-B3-08q#1][AC-B3-08zc#1][BR-AI-19] storedCard（随终态写库）：earn
   expect(storedCard(earnings).data).toEqual({ as_of: '2026-10-01T00:00:00+08:00', actions: [] });
   const notice = card('c2');
   expect(storedCard(notice)).toBe(notice);
+});
+
+it('[AC-B3-08t#5][AC-B3-08t#10] 记录器（runFields）：终态取意图与输入通过，留痕带耗时、用量与过滤（不含模型两列）', async () => {
+  const q = queue();
+  let now = 1_000;
+  const clock = { now: () => new Date(now) };
+  const recorder = createRunTraceRecorder({ queue: q, runFields: { clock } as never });
+  const texts: string[] = [];
+  const ctx = { ...context(), text: (delta: string) => texts.push(delta) } as unknown as RunContext;
+  const body = recorder.body(input(), async (inner) => {
+    recorder.inputPassed(RUN);
+    now += 137;
+    inner.text('合成');
+    now += 284;
+    recorder.sink.record(RUN, {
+      ...trace([{ name: 'search_products', args: { q: '合成' }, status: 'ok' }], 'synthetic-plus'),
+      usage: { input_tokens: 32, output_tokens: 18 },
+      filter_hits: ['url', 'amount', 'url'],
+      output_filtered: true,
+      output_truncated: true,
+    });
+    return DONE;
+  });
+  expect(await body(ctx)).toEqual(DONE);
+  expect(texts).toEqual(['合成']);
+  expect(recorder.settleFields(RUN)).toEqual({ intent: 'search', inputPassed: true });
+  // Taken once: a second settle gets nothing.
+  expect(recorder.settleFields(RUN)).toBeUndefined();
+  await flushed();
+  expect(q.persist.mock.calls[0]?.[0].runFields).toEqual({
+    input_tokens: 32,
+    output_tokens: 18,
+    ttft_ms: 137,
+    latency_ms: 421,
+    filter_hits: ['url', 'amount'],
+    output_truncated: true,
+    page_guide_reject_reason: null,
+  });
+});
+
+it('[AC-B3-08t#5] 记录器（runFields）：核心未留痕时终态只取输入通过，意图留空', async () => {
+  const q = queue();
+  const clock = { now: () => new Date(0) };
+  const recorder = createRunTraceRecorder({
+    queue: q,
+    runFields: { clock } as never,
+  });
+  let release!: () => void;
+  const pending = recorder.body(
+    input(),
+    () => new Promise((resolve) => (release = () => resolve(DONE))),
+  );
+  const running = pending({ ...context(), text: () => undefined } as unknown as RunContext);
+  recorder.inputPassed(RUN);
+  expect(recorder.settleFields(RUN)).toEqual({ intent: null, inputPassed: true });
+  release();
+  await running;
+});
+
+it('[AC-B3-08t#5][AC-B3-08t#10] 记录器（runFields）：无模型分流的页面引导拒绝原因随留痕写入', async () => {
+  const q = queue();
+  const recorder = createRunTraceRecorder({
+    queue: q,
+    runFields: { clock: { now: () => new Date(0) } } as never,
+  });
+  const body = recorder.body(input(), async () => {
+    recorder.inputPassed(RUN);
+    recorder.sink.record(RUN, {
+      ...trace([], null),
+      intent: 'page_guide',
+      intent_ruled: true,
+      page_guide_reject_reason: 'disabled',
+    });
+    return DONE;
+  });
+  await body({ ...context(), text: () => undefined } as unknown as RunContext);
+  expect(recorder.settleFields(RUN)).toEqual({ intent: 'page_guide', inputPassed: true });
+  await flushed();
+  expect(q.persist.mock.calls[0]?.[0].runFields).toMatchObject({
+    page_guide_reject_reason: 'disabled',
+  });
+});
+
+it('[AC-B3-08t#3] 记录器（runFields）：商品情境入口的意图优先于后续文字处理，引导拒绝原因照写', async () => {
+  const q = queue();
+  const recorder = createRunTraceRecorder({
+    queue: q,
+    runFields: { clock: { now: () => new Date(0) } } as never,
+  });
+  const body = recorder.body(input(), async (inner) => {
+    recorder.inputPassed(RUN);
+    // The intent port's verdict on the entry run's text (钱包在哪 with the guide disabled).
+    recordIntentVerdict(APP, RUN, {
+      intent: 'page_guide',
+      page_guide_reject_reason: 'disabled',
+    } as IntentTrace);
+    inner.text('合成');
+    recorder.sink.record(RUN, {
+      ...trace([{ name: 'get_rebate_quote', args: null, status: 'ok' }]),
+      intent: 'page_guide',
+      entry_intent: 'find_by_link',
+    });
+    return DONE;
+  });
+  await body({ ...context(), text: () => undefined } as unknown as RunContext);
+  expect(recorder.settleFields(RUN)).toEqual({ intent: 'find_by_link', inputPassed: true });
+  await flushed();
+  expect(q.persist.mock.calls[0]?.[0].runFields?.page_guide_reject_reason).toBe('disabled');
+});
+
+// B3-08t 统一原则 (D10-2368: 只落核对过的，没核对过就留空): the exit points settleFields (sync,
+// finalize.ts F5) and runFieldsOf (async) of this recorder, one test each.
+
+function fieldsRecorder() {
+  const q = queue();
+  const recorder = createRunTraceRecorder({
+    queue: q,
+    runFields: { clock: { now: () => new Date(0) } } as never,
+  });
+  const ctx = { ...context(), text: () => undefined } as unknown as RunContext;
+  return {
+    q,
+    recorder,
+    async ran(core: OrchestratorTrace, verdict?: IntentTrace) {
+      const body = recorder.body(input(), async () => {
+        recorder.inputPassed(RUN);
+        if (verdict !== undefined) recordIntentVerdict(APP, RUN, verdict);
+        recorder.sink.record(RUN, core);
+        return DONE;
+      });
+      await body(ctx);
+    },
+  };
+}
+
+it('[AC-B3-08t#1][AC-B3-08t#2] exit settleFields/intent: a template run (model label, no verdict) is not stored, the first tool decides', async () => {
+  const x = fieldsRecorder();
+  await x.ran({
+    ...trace([{ name: 'list_my_orders', args: null, status: 'ok' }]),
+    intent: 'earnings_query',
+  });
+  expect(x.recorder.settleFields(RUN)?.intent).toBe('order_query');
+});
+
+it('[AC-B3-08t#1][AC-B3-08t#7] exit settleFields/intent (money r2 S1-2): stopped before the port recorded → the model label is not stored, null', async () => {
+  const x = fieldsRecorder();
+  await x.ran({ ...trace([]), intent: 'earnings_query' });
+  expect(x.recorder.settleFields(RUN)?.intent).toBeNull();
+});
+
+it('[AC-B3-08t#1] exit settleFields/intent: the port verdict recorded is stored over the model label', async () => {
+  const x = fieldsRecorder();
+  await x.ran(
+    { ...trace([]), intent: 'earnings_query' },
+    {
+      intent: 'order_query',
+      text_replaced_by_template: true,
+      page_guide_reject_reason: null,
+    },
+  );
+  expect(x.recorder.settleFields(RUN)?.intent).toBe('order_query');
+});
+
+it('[AC-B3-08t#3] exit settleFields/intent: a rule (intent_ruled) is stored; a no-model path that served nothing is not', async () => {
+  const ruled = fieldsRecorder();
+  await ruled.ran({ ...trace([], null), intent: 'find_by_link', intent_ruled: true });
+  expect(ruled.recorder.settleFields(RUN)?.intent).toBe('find_by_link');
+  const unserved = fieldsRecorder();
+  await unserved.ran({
+    ...trace([], null),
+    intent: 'search',
+    intent_ruled: true,
+    degraded_unserved: true,
+  });
+  expect(unserved.recorder.settleFields(RUN)?.intent).toBeNull();
+});
+
+it('[AC-B3-08t#4] exit settleFields/intent (money r2 S2): U-7 withheld → null even after a tool', async () => {
+  const x = fieldsRecorder();
+  await x.ran({
+    ...trace([{ name: 'search_products', args: null, status: 'ok' }]),
+    intent: 'earnings_query',
+    intent_withheld: true,
+  });
+  expect(x.recorder.settleFields(RUN)?.intent).toBeNull();
 });

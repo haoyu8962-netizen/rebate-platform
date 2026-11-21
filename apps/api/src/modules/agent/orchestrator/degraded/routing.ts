@@ -1,3 +1,4 @@
+import type { PageGuideRejectReason } from '@couli/contracts-ts';
 import type { CatalogConfigReader } from '../../../catalog/index.ts';
 import type { Clock } from '../../../platform/index.ts';
 import { degradeFinishReason } from '../../model-gateway/degraded/index.ts';
@@ -10,7 +11,7 @@ import type {
   ToolOutcome,
 } from '../core/ports.ts';
 import { openCardCall, type CardCall } from '../core/card-references.ts';
-import { routeDegradedIntent } from '../core/degraded-intent.ts';
+import { markDegradedGuideRejected, routeDegradedIntent } from '../core/degraded-intent.ts';
 import { ReplyTemplateCalls, isReplyTemplateTool } from '../core/reply-templates.ts';
 import type { IntentDeps } from '../intents/index.ts';
 import {
@@ -254,26 +255,34 @@ class RoutedRun {
 
   // ---- ① page guide --------------------------------------------------------------------------
 
-  /** BR-AI-01 细则「页面引导」: source → switch → contract ∩ configuration. */
-  private async guideAllowed(route: GuideRoute): Promise<boolean> {
+  /**
+   * BR-AI-01 细则「页面引导」: source → switch → contract ∩ configuration. Null: allowed; otherwise
+   * the rejection reason (B3-08t, the same reasons and order as the intent port's).
+   */
+  private async guideRejection(route: GuideRoute): Promise<PageGuideRejectReason | null> {
     const proceed = this.request.proceed;
-    if (proceed.untrustedInput || proceed.paramsRequested) return false;
+    if (proceed.untrustedInput) return 'untrusted_input';
+    if (proceed.paramsRequested) return 'params_requested';
     if ((await configValue(this.deps.config, this.appId, PAGE_GUIDE_ENABLED)) !== true) {
-      return false;
+      return 'disabled';
     }
     const contract = this.deps.routes.contract();
-    if (!Object.hasOwn(contract, route) || contract[route]?.agent_guide !== true) return false;
+    if (!Object.hasOwn(contract, route) || contract[route]?.agent_guide !== true) {
+      return 'not_allowed';
+    }
     try {
-      return (await this.deps.routes.configured(this.appId)).includes(route);
+      return (await this.deps.routes.configured(this.appId)).includes(route) ? null : 'not_allowed';
     } catch {
-      return false;
+      return 'not_allowed';
     }
   }
 
   private async guide(route: GuideRoute): Promise<RunBodyResult> {
-    const allowed = await this.guideAllowed(route);
+    const rejected = await this.guideRejection(route);
     if (this.aborted) return stopped();
-    if (!allowed) {
+    if (rejected !== null) {
+      // B3-08t · BR-AI-19 细则「运行级字段」: the reason goes to the run's trace.
+      markDegradedGuideRejected(this.ctx, rejected);
       const text = await this.deps.texts.text(this.appId, GUIDE_UNAVAILABLE);
       if (this.aborted) return stopped();
       this.ctx.text(text);

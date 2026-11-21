@@ -52,6 +52,11 @@
 //     first attempts in flight), all bounded by boundMs on deps.scheduler; whatever is still
 //     unwritten then is lost (reason 'shutdown'). Resolves within boundMs; after it the writer is
 //     never called again by a timer. With nothing queued or in flight it resolves at once.
+// B3-08t (BR-AI-19 细则「运行级字段」): a record may carry the run's run-level columns (runFields); they
+//   are a third half, written through writer.recordRunFields when the writer has it (a writer
+//   without it: the half counts as written). That write sets every column by value, so writing it
+//   again after a lost acknowledgement leaves the same values (no token is counted twice). The
+//   lost line keeps its {cards, tool_calls} counts.
 // The writer: createPgAgentTraceWriter (agent/store/results) locks the run's session row
 //   (FOR SHARE, exclusive with the deletion purge's FOR NO KEY UPDATE) in the write's transaction;
 //   a session detached from its user (user_id NULL with user_hash set) makes the write resolve
@@ -60,6 +65,7 @@ import type { Clock, RootLogger, Scheduler } from '../../../platform/index.ts';
 import {
   AgentTraceRejected,
   isTraceSkipped,
+  type RunFieldsRecord,
   type ToolCallRecord,
 } from '../../store/results/index.ts';
 import type { CardInput } from '../writer/index.ts';
@@ -82,6 +88,12 @@ export interface RedoTraceWriter {
     runId: string,
     calls: readonly ToolCallRecord[],
   ): Promise<TraceWriteOutcome>;
+  /** B3-08t: the run-level columns; optional (absent: they are not written). */
+  recordRunFields?(
+    appId: string,
+    runId: string,
+    fields: RunFieldsRecord,
+  ): Promise<TraceWriteOutcome>;
 }
 
 export interface TraceRedoParams {
@@ -102,6 +114,8 @@ export interface RunTraceRecord {
   readonly runId: string;
   readonly cards: readonly CardInput[];
   readonly toolCalls: readonly ToolCallRecord[];
+  /** B3-08t: the run's run-level columns (absent: none to write). */
+  readonly runFields?: RunFieldsRecord;
 }
 
 export interface TraceRedoQueueDeps {
@@ -155,6 +169,8 @@ interface RedoEntry {
   /** The half still to be written. */
   cardsLeft: boolean;
   toolsLeft: boolean;
+  /** B3-08t: the run-level columns are still to be written. */
+  runLeft: boolean;
   /** Failed attempts so far. */
   failures: number;
   /** clock ms from which no attempt is made (first failure + windowMs; equal is expired). */
@@ -286,7 +302,7 @@ export function createTraceRedoQueue(deps: TraceRedoQueueDeps): TraceRedoQueue {
 
   function settle(
     entry: RedoEntry,
-    results: readonly (readonly ['cards' | 'tools', HalfResult])[],
+    results: readonly (readonly ['cards' | 'tools' | 'run', HalfResult])[],
   ) {
     if (entry.phase === 'over') {
       // Lost already (deadline, overflow or shutdown): the late result is dropped.
@@ -299,7 +315,8 @@ export function createTraceRedoQueue(deps: TraceRedoQueueDeps): TraceRedoQueue {
     for (const [which, result] of results) {
       if (result.ok) {
         if (which === 'cards') entry.cardsLeft = false;
-        else entry.toolsLeft = false;
+        else if (which === 'tools') entry.toolsLeft = false;
+        else entry.runLeft = false;
         skipped ||= result.skipped;
       } else {
         failure ??= { error: result.error };
@@ -333,8 +350,8 @@ export function createTraceRedoQueue(deps: TraceRedoQueueDeps): TraceRedoQueue {
 
   /** One attempt of the halves still left; never rejects. */
   function write(entry: RedoEntry): Promise<void> {
-    const { appId, sessionId, runId, cards, toolCalls } = entry.record;
-    const halves: Promise<readonly ['cards' | 'tools', HalfResult]>[] = [];
+    const { appId, sessionId, runId, cards, toolCalls, runFields } = entry.record;
+    const halves: Promise<readonly ['cards' | 'tools' | 'run', HalfResult]>[] = [];
     if (entry.toolsLeft) {
       halves.push(
         half(() => deps.writer.recordToolCalls(appId, runId, toolCalls)).then((result) => {
@@ -351,6 +368,19 @@ export function createTraceRedoQueue(deps: TraceRedoQueueDeps): TraceRedoQueue {
         }),
       );
     }
+    if (entry.runLeft && runFields !== undefined) {
+      halves.push(
+        half(async () => {
+          // Read at call time: a writer without the method writes no run-level columns.
+          const writer = deps.writer;
+          if (typeof writer.recordRunFields !== 'function') return undefined;
+          return writer.recordRunFields(appId, runId, runFields);
+        }).then((result) => {
+          if (!result.ok) failedHalf(entry);
+          return ['run', result] as const;
+        }),
+      );
+    }
     const attempt = Promise.all(halves)
       .then((results) => settle(entry, results))
       .catch(() => undefined)
@@ -363,11 +393,14 @@ export function createTraceRedoQueue(deps: TraceRedoQueueDeps): TraceRedoQueue {
 
   return {
     async persist(record) {
-      if (record.cards.length === 0 && record.toolCalls.length === 0) return;
+      const runLeft =
+        record.runFields !== undefined && typeof deps.writer.recordRunFields === 'function';
+      if (record.cards.length === 0 && record.toolCalls.length === 0 && !runLeft) return;
       const entry: RedoEntry = {
         record,
         cardsLeft: record.cards.length > 0,
         toolsLeft: record.toolCalls.length > 0,
+        runLeft,
         failures: 0,
         deadline: undefined,
         phase: 'first',
