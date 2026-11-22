@@ -14,10 +14,11 @@
 //   D10-2060 / 2061）。这条对每个决定一致生效，包括不验证的写法（驳回）。
 // - 带外壳的结果未定（5xx、40901）：提示失败，下次提交沿用原键；其余确定的回答（成功、20001、20901、
 //   20902、10403 等）后下次提交换新键。任何失败都不自动重发。
-// 一次打开（抽屉或对话框）一个写操作一个实例；卸载后迟到的回答被丢弃。
+// 一次打开（抽屉或对话框）一个写操作一个实例；卸载后迟到的回答不再更新表单，但照常作用于结果未知标记（F1-08atb）。
 // F1-08at（D10-2075）：进入「结果未知」时为本页（adjustments）与登录账号存一个不含业务数据的标记，
 // 带外壳的 5xx / 40901（保留原键、未落定）同样存标记；拿到确定的回答（成功或确定的拒绝）时清掉；
 // 10001（会话失效）不算确定的回答，标记留给重新登录后的提示。
+// F1-08atb（D10-2508）：标记按提交持有；页顶提示【关闭】时仍在途的写，之后结果未知或收到 10001 时重新登记。
 import { useDataProvider, type BaseRecord } from '@refinedev/core';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
@@ -223,6 +224,8 @@ export function useAdjustmentWrite<
   };
 
   const write = async (body: B, key: string, stepUpToken: string | undefined) => {
+    // F1-08atb: the marker follows every answer whether or not the dialog is still shown (left
+    // while the write was under way); only the form and the callbacks wait for `alive`.
     try {
       const response = await customOf()<R>({
         url,
@@ -233,34 +236,40 @@ export function useAdjustmentWrite<
             ? { idempotencyKey: key }
             : { stepUpToken, idempotencyKey: key },
       });
-      if (!alive.current) return;
       // A settled answer (the idempotent replay or the first time): the submission's marker goes.
       marker.clear();
+      if (!alive.current) return;
       keyRef.current = undefined;
       setUnknown(false);
       setPhase('idle');
       onDone(response.data);
     } catch (cause) {
-      if (!alive.current) return;
       if (unknownRef.current && refusedBeforeReplay(cause)) {
         // Judged before the idempotent replay and changing with the account's state (D10-2060):
         // the first submission may still have taken effect. Key, body and lock stay; no resend.
+        marker.mark();
+        if (!alive.current) return;
         setPhase('idle');
         onFailed(cause, true);
         return;
       }
       if (isPhoneMissing(cause)) {
+        if (!alive.current) return;
         markMissing();
         return;
       }
       if (needsStepUp && cause instanceof AdminApiError && cause.code === STEP_UP_REFUSED) {
-        // The verification was not accepted: verify again and replay the same body and key.
+        // The verification was not accepted: verify again and replay the same body and key. An
+        // earlier unknown submission stays unknown.
+        if (unknownRef.current) marker.mark();
+        if (!alive.current) return;
         void requestCode();
         return;
       }
       if (noEnvelope(cause)) {
         // It may have taken effect: keep the key and the body, lock, no failure prompt.
         marker.mark();
+        if (!alive.current) return;
         setUnknown(true);
         setPhase('idle');
         onUnknown?.();
@@ -270,10 +279,12 @@ export function useAdjustmentWrite<
         // An enveloped 5xx / 40901: the key is kept, the write may have taken effect, so it is
         // result-unknown for the marker too (D10-2075 / D10-1731).
         marker.mark();
+        if (!alive.current) return;
       } else {
         // A settled refusal settles the submission; an ended session (10001) settles nothing.
-        if (endsSession(cause)) marker.leave();
+        if (endsSession(cause)) marker.sessionEnded();
         else marker.clear();
+        if (!alive.current) return;
         keyRef.current = undefined;
         setUnknown(false);
       }

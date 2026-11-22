@@ -3,9 +3,13 @@
 // marker of one page for it. A write enters the result-unknown state with mark() and leaves it
 // with clear() once a settled answer came (success or a settled refusal); a 10001 (the session
 // ended) settles nothing, so the marker stays for the prompt after signing in again.
-// One marker per page and account: a later unknown submission keeps the earlier moment, and a
-// settled answer drops the marker only when no other submission it stands for is still unknown
-// (holdUnknown / releaseUnknown); 【关闭】 on the prompt drops it whatever holds it.
+// F1-08atb (FU-UNKNOWN-MARKER-MULTI-SUBMIT, D10-2508): the marker is held per submission. Every
+// submission of an instance is its own holder; a settled answer releases only that holder, and
+// the marker goes when no holder is left (the earlier moment of a joined marker is kept). 【关闭】
+// on the prompt drops the marker and the holders it stood for (marker.ts clearUnknown); a
+// submission still under way then holds it afresh, at the clock's now, when its answer leaves the
+// result unknown or ends the session (mark() / sessionEnded()), and a settled answer of it leaves
+// nothing. The pages call these for every answer, also after they were left (unmounted).
 import { useActiveAuthProvider } from '@refinedev/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminApiError } from '../../providers/data/index.ts';
@@ -56,21 +60,31 @@ export interface UnknownMarkerControl {
   /** The page and the signed-in account. */
   readonly scope: MarkerScope;
   /**
-   * This submission entered the result-unknown state (now, by the clock); an existing marker of
-   * the page keeps its moment. Again while still unknown: nothing changes.
+   * This submission's result is unknown (now, by the clock): it holds the marker; an existing
+   * marker of the page keeps its earlier moment and this submission joins it. Again while it
+   * still holds: nothing changes. Dropped meanwhile by 【关闭】: held afresh at now.
    */
   mark(): void;
   /**
-   * This submission got a settled answer: the marker goes unless another submission it stands
-   * for is still unknown. Without an earlier mark() of this instance: nothing changes.
+   * This submission got a settled answer: it releases only its own holding; the marker goes
+   * when no other submission holds it. Without a mark() of this submission: nothing changes.
+   * The next mark() is a new submission.
    */
   clear(): void;
   /**
-   * The submission is given up while its result is still unknown — the session ended (10001), or
-   * the dialog was closed by 【去列表核对】 / 【核对】 (its key is dropped): its marker stays until
-   * 【关闭】, and no later answer of this instance drops it; the next submission starts afresh.
+   * The submission is given up while its result is still unknown — the dialog was closed by
+   * 【去列表核对】 / 【核对】 (its key is dropped): a marker it holds stays until 【关闭】, and no later
+   * answer of this instance drops it; the next submission starts afresh. Not an answer: a
+   * marker already dropped by 【关闭】 is not written again.
    */
   leave(): void;
+  /**
+   * An answer of this submission ended the session (10001), which settles nothing: when this
+   * submission had marked its result unknown (or kept the marker before sending), it holds the
+   * marker — afresh at now if 【关闭】 dropped it meanwhile — and is given up as with leave();
+   * otherwise nothing is kept.
+   */
+  sessionEnded(): void;
 }
 
 /**
@@ -87,8 +101,9 @@ export function useUnknownMarker(page: string, clock: MarkerClock): UnknownMarke
    * `held`: still this instance's submission (false once left).
    */
   const pendingRef = useRef<{ at: number; holder: object; held: boolean } | undefined>(undefined);
-  /** This instance's submission as a holder of the marker, and the scope it holds it under. */
+  /** The current submission of this instance as a holder of the marker. */
   const holderRef = useRef<object>({});
+  /** The scope the current submission marked under (undefined: it has not marked). */
   const heldRef = useRef<MarkerScope | undefined>(undefined);
   useEffect(() => {
     scopeRef.current = scope;
@@ -103,38 +118,48 @@ export function useUnknownMarker(page: string, clock: MarkerClock): UnknownMarke
     if (pending.held) heldRef.current = scope;
   }, [scope]);
 
-  return useMemo<UnknownMarkerControl>(
-    () => ({
+  return useMemo<UnknownMarkerControl>(() => {
+    const mark = () => {
+      if (pendingRef.current?.held === true) return;
+      // The scope the submission first marked under (the account that made it), else the current.
+      const target = heldRef.current ?? scopeRef.current;
+      if (target.account === undefined) {
+        pendingRef.current = {
+          at: clockRef.current.now(),
+          holder: holderRef.current,
+          held: true,
+        };
+        return;
+      }
+      // Idempotent while this holder holds the stored marker; held afresh once 【关闭】 dropped it.
+      holdUnknown(target, clockRef.current, holderRef.current);
+      heldRef.current = target;
+    };
+    const leave = () => {
+      // The old holder stays among the marker's holders for good; the next mark() is new.
+      const pending = pendingRef.current;
+      if (pending !== undefined) pendingRef.current = { ...pending, held: false };
+      heldRef.current = undefined;
+      holderRef.current = {};
+    };
+    return {
       scope,
-      mark() {
-        if (heldRef.current !== undefined || pendingRef.current?.held === true) return;
-        const current = scopeRef.current;
-        if (current.account === undefined) {
-          pendingRef.current = {
-            at: clockRef.current.now(),
-            holder: holderRef.current,
-            held: true,
-          };
-          return;
-        }
-        holdUnknown(current, clockRef.current, holderRef.current);
-        heldRef.current = current;
-      },
+      mark,
       clear() {
         const pending = pendingRef.current;
         if (pending?.held === true) pendingRef.current = undefined;
         const held = heldRef.current;
+        const holder = holderRef.current;
         heldRef.current = undefined;
-        if (held !== undefined) releaseUnknown(held, holderRef.current);
-      },
-      leave() {
-        // The old holder stays among the marker's submissions for good; the next mark() is new.
-        const pending = pendingRef.current;
-        if (pending !== undefined) pendingRef.current = { ...pending, held: false };
-        heldRef.current = undefined;
+        // Each submission is its own holder: the next one never shares this holding.
         holderRef.current = {};
+        if (held !== undefined) releaseUnknown(held, holder);
       },
-    }),
-    [scope],
-  );
+      leave,
+      sessionEnded() {
+        if (heldRef.current !== undefined || pendingRef.current?.held === true) mark();
+        leave();
+      },
+    };
+  }, [scope]);
 }

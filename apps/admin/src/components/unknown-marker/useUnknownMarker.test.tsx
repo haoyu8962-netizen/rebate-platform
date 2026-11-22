@@ -4,9 +4,11 @@ import { clearUnknown, readUnknown } from './marker.ts';
 import { useUnknownMarker } from './useUnknownMarker.ts';
 
 // F1-08at: the hook as one long-lived dialog instance uses it (ManualPaid on 提现审核, the detail's
-// 【执行打款】 / 【手动成功】): mark() on the first unknown answer, leave() on 【去列表核对】 / 【核对】 or a
-// 10001, clear() on every settled answer (also when this submission never marked). The login
-// guard's identity is admin-1; `identity` lets a test hold it back.
+// 【执行打款】 / 【手动成功】): mark() on every answer that leaves the result unknown, leave() on
+// 【去列表核对】 / 【核对】, sessionEnded() on a 10001, clear() on every settled answer (also when this
+// submission never marked). F1-08atb: each submission holds the marker on its own; 【关闭】
+// (clearUnknown) while one is under way does not write it back, its later unknown answer does.
+// The login guard's identity is admin-1; `identity` lets a test hold it back.
 let identity: Promise<unknown> = Promise.resolve({ admin_id: 'admin-1' });
 const getIdentity = () => identity;
 vi.mock('@refinedev/core', () => ({
@@ -95,4 +97,79 @@ it('[AC-F1-08at-UNIT#17] the moment is the injected clock, never the time read b
   } finally {
     spy.mockRestore();
   }
+});
+
+const T3 = T1 + 180_000;
+
+it('[AC-F1-08atb-UNIT#1] 【关闭】 while a submission is under way: nothing written back until its answer; an unknown answer holds it afresh at that moment, a settled one leaves nothing', async () => {
+  // The prompt of an earlier submission (left at T1).
+  const earlier = await mounted();
+  act(() => earlier.result.current.mark());
+  act(() => earlier.result.current.leave());
+  // Under way at 【关闭】: one kept the marker before sending (自动到账设置), one never marked.
+  const kept = await mounted();
+  const plain = await mounted();
+  act(() => kept.result.current.mark());
+  expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:05:06.000Z');
+  now = T2;
+  act(() => clearUnknown(SCOPE));
+  expect(readUnknown(SCOPE), 'closed: nothing written back before an answer').toBeUndefined();
+  // The plain one's answer leaves the result unknown at T3: held afresh at T3.
+  now = T3;
+  act(() => plain.result.current.mark());
+  expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:08:06.000Z');
+  // The kept one's unknown answer joins it; the earlier moment of the joined marker stays.
+  now = T3 + 60_000;
+  act(() => kept.result.current.mark());
+  expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:08:06.000Z');
+  act(() => plain.result.current.clear());
+  expect(readUnknown(SCOPE)?.at, 'the kept one still holds it').toBe('2001-02-03T04:08:06.000Z');
+  act(() => kept.result.current.clear());
+  expect(readUnknown(SCOPE)).toBeUndefined();
+
+  // Under way at 【关闭】 and then settled: nothing is left.
+  now = T1;
+  act(() => kept.result.current.mark());
+  act(() => clearUnknown(SCOPE));
+  act(() => kept.result.current.clear());
+  expect(readUnknown(SCOPE)).toBeUndefined();
+});
+
+it('[AC-F1-08atb-UNIT#2] two submissions each release only their own holding; the marker goes with the last', async () => {
+  const first = await mounted();
+  const second = await mounted();
+  act(() => first.result.current.mark());
+  now = T2;
+  act(() => second.result.current.mark());
+  expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:05:06.000Z');
+  act(() => first.result.current.clear());
+  expect(readUnknown(SCOPE)?.at, 'the second still holds it').toBe('2001-02-03T04:05:06.000Z');
+  // A settled answer of the first instance's next submission (never marked) changes nothing.
+  act(() => first.result.current.clear());
+  expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:05:06.000Z');
+  act(() => second.result.current.clear());
+  expect(readUnknown(SCOPE)).toBeUndefined();
+});
+
+it('[AC-F1-08atb-UNIT#3] a 10001 after 【关闭】 holds the marker afresh only for a submission that had marked; 【去列表核对】 after 【关闭】 writes nothing', async () => {
+  const marked = await mounted();
+  const never = await mounted();
+  act(() => marked.result.current.mark());
+  act(() => clearUnknown(SCOPE));
+  // 【去列表核对】 is no answer: the marker 【关闭】 dropped is not written again.
+  const left = await mounted();
+  act(() => left.result.current.mark());
+  act(() => clearUnknown(SCOPE));
+  act(() => left.result.current.leave());
+  expect(readUnknown(SCOPE)).toBeUndefined();
+  // A first send answered 10001 that never marked keeps nothing.
+  now = T2;
+  act(() => never.result.current.sessionEnded());
+  expect(readUnknown(SCOPE)).toBeUndefined();
+  // The marked one answered 10001 at T3: held afresh at T3 and given up (its next clear keeps it).
+  now = T3;
+  act(() => marked.result.current.sessionEnded());
+  expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:08:06.000Z');
+  act(() => marked.result.current.clear());
+  expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:08:06.000Z');
 });

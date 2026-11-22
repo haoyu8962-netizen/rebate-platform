@@ -15,7 +15,8 @@
 // 20902、42901 等仍结果未知、请求体不变；普通 10003 重验后原样重发。unknown-marker（page=withdrawals）在
 // 请求发出前就记下、按回答的分类增删，与页面是否还在无关（离开页面时在途的保存留着标记）；拿到确定结果或
 // 【刷新核对】后清本实例那一份（D10-2075）。标记的写、读、清不按账号角色分支（D10-2470）。
-// 本实例的提交在途或结果未知期间，标记被别处清掉（如重登后旧提示的【关闭】）就按当前时刻重写（money r2 S1-b）。
+// F1-08atb（D10-2508）：标记按提交持有。旧提示的【关闭】只清它代表的；关闭时在途的保存不立即补写，之后结果未知
+// 或收到 10001 时才按那一刻重新登记，拿到确定结果则不留；确定结果只释放本次保存，同页别的未知提交的标记留着。
 // 【刷新核对】（D10-2493 ①）：读到所送任一键的版本已不是 expected_version → 以读到的为准、解锁、清标记；仍是
 // 原版本 → 结果仍未知（原请求可能仍在等锁），保留状态、请求体与标记，提示稍后再核对，并给【放弃这次提交】
 // （二次确认后解锁、清标记）；不自动轮询、不倒计时解锁。【刷新】【刷新核对】的读取超过 READ_DEADLINE_MS 按读取失败。
@@ -45,12 +46,7 @@ import {
 import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
-import {
-  endsSession,
-  readUnknown,
-  useUnknownMarker,
-} from '../../components/unknown-marker/index.ts';
-import { subscribeMarkers } from '../../components/unknown-marker/marker.ts';
+import { endsSession, useUnknownMarker } from '../../components/unknown-marker/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { stepUpTexts } from '../../texts/step-up.ts';
 import { withdrawalsTexts } from '../../texts/withdrawals.ts';
@@ -403,36 +399,15 @@ export function AutoPayoutSettings({
   const [mayAbandon, setMayAbandon] = useState(false);
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   const checkedRef = useRef<readonly AutoPayoutItem[] | undefined>(undefined);
-  /**
-   * This instance's submission is under way or its result unknown: its marker must stay. Set
-   * before the request leaves; false before a settled answer (or giving up) drops the marker.
-   */
-  const keepRef = useRef(false);
   const markerRef = useRef(marker);
   useEffect(() => {
     markerRef.current = marker;
   }, [marker]);
 
-  /**
-   * money r2 S1-b: while keepRef holds, the marker of this account is there — dropped elsewhere
-   * meanwhile (【关闭】 on the prompt of an earlier submission drops it whatever holds it), it is
-   * written again at the clock's now. The same path for every account (D10-2470).
-   */
-  const keepMarked = () => {
-    const control = markerRef.current;
-    if (!keepRef.current || control.scope.account === undefined) return;
-    if (readUnknown(control.scope) !== undefined) return;
-    // This instance's holding went with it: hold the marker afresh.
-    control.clear();
-    control.mark();
-  };
-
   useEffect(() => {
     alive.current = true;
-    const stop = subscribeMarkers(keepMarked);
     return () => {
       alive.current = false;
-      stop();
       clearTimeout(coolTimer.current);
     };
   }, []);
@@ -663,25 +638,24 @@ export function AutoPayoutSettings({
     setConfirmAbandon(false);
   };
 
-  /** The submission is settled or given up: its marker goes (keepRef first, so it stays gone). */
+  /** The submission is settled or given up: only its own holding of the marker goes. */
   const dropMarker = () => {
-    keepRef.current = false;
     markerRef.current.clear();
   };
 
   /**
    * The marker follows what the send settled, whether or not the page is still shown (it was
-   * kept before the request left): stored or settled refused → dropped; a plain 10003 → dropped
-   * unless an earlier send of the body is unknown; 10001 → given up while unknown (stays for the
-   * prompt after signing in again), dropped otherwise; no settled answer → kept, and written
-   * again if it was dropped meanwhile (money r2 S1-b).
+   * kept before the request left): stored or settled refused → this save's holding released; a
+   * plain 10003 → released unless an earlier send of the body is unknown; 10001 → given up while
+   * held (stays for the prompt after signing in again); no settled answer → held. Dropped
+   * meanwhile by 【关闭】 on the prompt, it is held afresh only now, at the moment of this answer
+   * (F1-08atb), never at the moment of 【关闭】.
    */
   const markerAfter = (outcome: SaveOutcome, uncertain: boolean) => {
-    if (outcome.kind === 'unknown') keepMarked();
-    else if (outcome.kind === 'ended' && uncertain) {
-      keepMarked();
-      markerRef.current.leave();
-    } else if (outcome.kind === 'again' && uncertain) keepMarked();
+    const control = markerRef.current;
+    if (outcome.kind === 'unknown') control.mark();
+    else if (outcome.kind === 'ended') control.sessionEnded();
+    else if (outcome.kind === 'again' && uncertain) control.mark();
     else dropMarker();
   };
 
@@ -689,7 +663,6 @@ export function AutoPayoutSettings({
     const uncertain = uncertainRef.current;
     // Kept before the request leaves: leaving the page (or the session ending) while it is
     // under way keeps the marker; only a settled answer drops it.
-    keepRef.current = true;
     markerRef.current.mark();
     let answer:
       | { readonly ok: true; readonly data: unknown }
@@ -794,17 +767,22 @@ export function AutoPayoutSettings({
       keys.set(entry.key, Math.max(keys.get(entry.key) ?? 0, entry.expected_version));
     withDeadline((signal) => readItems({ keys, unset: true }, signal), READ_DEADLINE_MS).then(
       (next) => {
-        if (!alive.current || seq !== readSeq.current) return;
+        // A later read or save began: this answer is not used, not even for the marker.
+        if (seq !== readSeq.current) return;
         const body = bodyRef.current;
         if (body !== undefined && !versionMoved(next, body)) {
+          // Still unknown: the marker stays as it is; the form only while the page is shown.
+          if (!alive.current) return;
           checkedRef.current = next;
           setUnknownNote(t.recheckPending);
           setMayAbandon(true);
           setPhase('unknown');
           return;
         }
-        settled();
+        // Settled by the read (F1-08atb): the marker follows it also after the page was left.
         dropMarker();
+        if (!alive.current) return;
+        settled();
         show(next);
         setStale(false);
         setNotice(undefined);

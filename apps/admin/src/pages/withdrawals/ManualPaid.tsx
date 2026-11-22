@@ -335,6 +335,8 @@ export function ManualPaid({
   };
 
   const send = async (body: Payload, key: string, stepUpToken: string): Promise<void> => {
+    // F1-08atb: the marker follows every answer (first send and 【重试】) whether or not the page is
+    // still shown; only the dialog waits for `alive`.
     try {
       const response = await customOf()<Answer>({
         url: MANUAL_PAID_URL,
@@ -342,24 +344,26 @@ export function ManualPaid({
         payload: body,
         meta: { stepUpToken, idempotencyKey: key },
       });
-      if (!alive.current) return;
       const items: unknown = (response.data as { items?: unknown } | undefined)?.items;
       if (!Array.isArray(items)) {
         // An answer that does not say what happened is no answer: stay locked.
-        if (!uncertainRef.current) marker.mark();
+        marker.mark();
+        if (!alive.current) return;
         uncertainRef.current = true;
         setPhase('unknown');
         return;
       }
-      if (uncertainRef.current) marker.clear();
+      marker.clear();
+      if (!alive.current) return;
       forget();
       setResults(new Map((items as ResultItem[]).map((item) => [item.withdrawal_id, item])));
       setPhase('done');
       onFinished();
     } catch (cause) {
-      if (!alive.current) return;
       if (cause instanceof AdminApiError && cause.code === STEP_UP_REFUSED) {
-        // 凭证未被接受：重新验证后以新凭证、原幂等键与原请求体再发。
+        // 凭证未被接受：重新验证后以新凭证、原幂等键与原请求体再发。先前未知的仍未知。
+        if (uncertainRef.current) marker.mark();
+        if (!alive.current) return;
         setAgain(true);
         setPhase('verify');
         return;
@@ -371,21 +375,25 @@ export function ManualPaid({
         cause.code === FORBIDDEN
       ) {
         // 结果未知后的重试被先于幂等回放判的 10403 拒绝：第一次提交仍可能已生效，保持结果未知、原键原体。
+        marker.mark();
+        if (!alive.current) return;
         setFailure(failureNotice(cause));
         setPhase('unknown');
         return;
       }
       if (isSettledRejection(cause)) {
         // 服务端确定拒绝（10403、20001 等）：解锁，提示全文；下次提交换新键。会话失效（10001）不算确定的回答，标记留着。
-        if (endsSession(cause)) marker.leave();
+        if (endsSession(cause)) marker.sessionEnded();
         else marker.clear();
+        if (!alive.current) return;
         forget();
         setFailure(failureNotice(cause));
         setPhase('edit');
         return;
       }
       // 网络错误、无法解析、40901（同键仍在处理）、5xx（已录入的保留）：结果未知，锁定。
-      if (!uncertainRef.current) marker.mark();
+      marker.mark();
+      if (!alive.current) return;
       uncertainRef.current = true;
       setPhase('unknown');
     }

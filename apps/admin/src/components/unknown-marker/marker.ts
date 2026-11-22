@@ -94,7 +94,12 @@ export function markUnknown(scope: MarkerScope, clock: MarkerClock): void {
   changed();
 }
 
-/** Drops the marker of `scope` whatever holds it (the prompt's 【关闭】 by hand). */
+/**
+ * The prompt's 【关闭】 by hand: drops the marker of `scope` and every holder it stood for (unknown,
+ * given up, or left before a reload). F1-08atb: a submission still under way at that moment is
+ * not written back here; it holds the marker afresh (holdUnknown) only when its own answer leaves
+ * the result unknown or ends the session, at that answer's moment.
+ */
 export function clearUnknown(scope: MarkerScope): void {
   const key = keyOf(scope);
   const area = storage();
