@@ -1,0 +1,21 @@
+# Container health push (B1-25c): one run of container-health.ts, started by
+# couli-container-health.timer every 60 s. Runs on the host (docker inspect is read-only); no
+# container gets docker.sock. Needs Node 24 on the host (type stripping of the .ts file).
+# Installed to /etc/systemd/system/ from /opt/couli/alerting/scripts/.
+[Unit]
+Description=couli: push health of the five couli-staging containers to the couli vmagent
+After=docker.service couli-vmagent.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/node /opt/couli/alerting/scripts/container-health.ts
+# docker inspect talks to the Docker daemon socket, readable by the docker group only.
+DynamicUser=yes
+SupplementaryGroups=docker
+Environment=HOME=/tmp
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectHome=yes
+MemoryMax=96M
+TimeoutStartSec=50s

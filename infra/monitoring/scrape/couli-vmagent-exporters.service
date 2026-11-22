@@ -1,0 +1,24 @@
+# Second couli vmagent (B1-25c; D10-2622): scrapes pg_exporter / redis_exporter (exporters.yml) and
+# writes to the node VictoriaMetrics. Arguments come from vmagent-exporters.args (one -flag=value per
+# line, no spaces or quoting, so plain word splitting is exact). Installed to /etc/systemd/system/.
+# StateDirectory creates /var/lib/couli-vmagent-exporters (-remoteWrite.tmpDataPath), separate from
+# the couli vmagent's /var/lib/couli-vmagent.
+[Unit]
+Description=couli: vmagent for pg_exporter and redis_exporter (127.0.0.1:8430)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c 'exec /usr/bin/vmagent $$(grep -v ^# /opt/couli/alerting/scrape/vmagent-exporters.args)'
+DynamicUser=yes
+StateDirectory=couli-vmagent-exporters
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+Restart=on-failure
+RestartSec=5s
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+# Every 60 s (B1-25c): run couli-container-health.service once.
+[Unit]
+Description=couli: container health push every minute
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=60s
+AccuracySec=1s
+Unit=couli-container-health.service
+
+[Install]
+WantedBy=timers.target

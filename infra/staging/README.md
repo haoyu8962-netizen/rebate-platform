@@ -584,10 +584,60 @@ api / stream / worker 三个进程把 OpenTelemetry 链路以 OTLP/HTTP 导出�
 - 查一条链路：请求的响应头 `X-Trace-Id`（也是日志行的 `reqId`、错误信封的 `trace_id`）就是链路 id 的 UUID 写法；在 VictoriaTraces / Grafana 里按去掉连字符的 32 位十六进制查即可看到 api → pg → 外部 HTTP 的 span（server span 另带 `couli.trace_id` 属性为原 UUID）。span 只带方法、路径、状态码，不带请求体、查询参数值、鉴权头或数据库口令。
 - 验收（B1-31）：部署后发一条真实请求，按其 `X-Trace-Id` 在 VictoriaTraces 查到 api → pg → 外部依赖的 span，且日志行 `reqId` 一致。VictoriaTraces 是否已开、接收地址是什么，待负责人 / ops 确认后填入 env 文件。
 
-## 9. 业务告警（B1-25a / B1-25b）
+## 9. 业务告警（B1-25a / B1-25b / B1-25c）
 
-- 数据库与主机的告警仍走 Pigsty 自带的一套（vmalert、Alertmanager :9059、/infra/rules），本节不动它。
-- 业务指标：api / worker / admin 各开内部 /metrics（compose 的 METRICS_PORT 9461 / 9462 / 9463，只发布到 127.0.0.1）。couli 专用 vmagent 照 `infra/monitoring/scrape/couli.yml` 抓取，参数见 `infra/monitoring/scrape/vmagent.args`，只写入节点现有的 VictoriaMetrics（127.0.0.1:8428）。
-- 规则求值：couli 专用 vmalert 只加载 `infra/monitoring/rules/couli.yaml` 与 `couli-fund.yaml`，参数见 `infra/monitoring/vmalert/couli.args`，只通知 couli Alertmanager（127.0.0.1:9093，配置 `infra/monitoring/alertmanager/alertmanager.yml`）。
-- 节点上的位置：/opt/couli/alerting/（配置与规则的副本），各进程是 systemd 单元 couli-alertmanager、couli-vmagent、couli-vmalert；接收端占位是容器 couli-alert-sink（`log-sink.mjs`，127.0.0.1:9096，只记日志）。部署与演练脚本在 ops 的私有目录，结果记在私有运维手册。
-- 接收渠道（企业微信 / 飞书 / 短信等）与接收人由负责人定；定之前两组都只到日志占位。
+新 staging 是 Pigsty slim 单节点，节点上已由 ops 装好 VictoriaMetrics 单机、vmagent、vmalert、couli 专用 Alertmanager、pg_exporter 与 redis_exporter（都只听 127.0.0.1）。数据库与主机的告警仍走 Pigsty 自带的一套（vmalert、Alertmanager :9059、/infra/rules），本节不动它。
+
+### 9.1 组件与端口
+
+| 组件 | systemd 单元 | 监听 | 仓库里的配置 |
+| --- | --- | --- | --- |
+| VictoriaMetrics 单机（节点已有） | — | 127.0.0.1:8428 | — |
+| couli vmagent：抓 api / worker / admin 的 /metrics（METRICS_PORT 9461 / 9462 / 9463），并接收容器健康推送 | couli-vmagent | 127.0.0.1:8429 | `infra/monitoring/scrape/vmagent.args`、`couli.yml` |
+| 第二个 vmagent：只抓 pg_exporter（127.0.0.1:9630）与 redis_exporter（127.0.0.1:9121） | couli-vmagent-exporters | 127.0.0.1:8430 | `infra/monitoring/scrape/vmagent-exporters.args`、`exporters.yml`、`couli-vmagent-exporters.service` |
+| couli vmalert：业务规则 `couli.yaml` 与资金规则 `couli-fund.yaml` | couli-vmalert | 127.0.0.1:8881 | `infra/monitoring/vmalert/couli.args` |
+| 第二个 vmalert：宕机规则 `outage.yaml` | couli-vmalert-outage | 127.0.0.1:8882 | `infra/monitoring/vmalert/outage.args`、`couli-vmalert-outage.service` |
+| couli Alertmanager：分流 finance / oncall、夜间静默、30 分钟合并 | couli-alertmanager | 127.0.0.1:9093 | `infra/monitoring/alertmanager/alertmanager.yml` |
+| 群机器人转发器：Alertmanager webhook → 企业微信群机器人 markdown | couli-alert-forwarder | 127.0.0.1:9097 | `infra/monitoring/forwarder/webhook.ts`、`couli-alert-forwarder.service` |
+| 容器健康推送：每 60 秒 `docker inspect` 五个 couli-staging-* 容器，推 `couli_container_healthy{name}` 到 couli vmagent | couli-container-health.timer / .service | 不监听 | `infra/monitoring/scripts/container-health.ts`、`couli-container-health.timer`、`couli-container-health.service` |
+| 本地兜底：只记日志的接收端（可不跑） | 容器 couli-alert-sink | 127.0.0.1:9096 | `infra/monitoring/alertmanager/log-sink.mjs` |
+
+- 两个 vmagent 写同一个 VictoriaMetrics，两个 vmalert 读同一个 VictoriaMetrics、通知同一个 couli Alertmanager；第二个 vmagent 的持久队列目录是 `/var/lib/couli-vmagent-exporters`，不和 couli vmagent 的 `/var/lib/couli-vmagent` 共用。
+- 新加的四个单元都设了 MemoryMax（转发器 128M、第二个 vmagent 256M、第二个 vmalert 128M、容器健康推送 96M），都以 systemd 动态用户运行。转发器与容器健康推送用节点上的 Node 24 直接跑 `.ts` 文件（`/usr/bin/node`）；节点没有 Node 24 时要先由 ops 装好。
+- 容器健康推送在节点上跑，不在任何容器里，也不给容器挂 docker.sock；它只读 `docker inspect`，运行时属 docker 组。容器在跑且健康检查是 healthy 记 1，其余（停止、启动中、unhealthy、不存在）记 0；推送被 vmagent 拒收时这次运行以非零退出（`systemctl status couli-container-health.service` 可见）。
+
+### 9.2 文件位置
+
+- 配置、规则、脚本的副本放 `/opt/couli/alerting/`，目录结构与仓库 `infra/monitoring/` 相同（`alertmanager/`、`forwarder/`、`rules/`、`scrape/`、`scripts/`、`vmalert/`）。
+- 各 `.service` / `.timer` 复制到 `/etc/systemd/system/` 后 `systemctl daemon-reload`，再 `systemctl enable --now couli-alert-forwarder couli-vmagent-exporters couli-vmalert-outage couli-container-health.timer`；改了 `alertmanager.yml` 要重启 couli-alertmanager，改了规则或参数要重启对应的 vmalert / vmagent。
+- 部署与演练脚本在 ops 的私有目录，结果记在私有运维手册。
+
+### 9.3 Webhook 文件（群机器人地址）
+
+- 两个群各建一个群机器人（企业微信群 → 添加群机器人），把它给出的 Webhook 地址各放进一个节点文件，文件里只放这一行：
+
+| 节点路径 | 内容 | 属主与权限 |
+| --- | --- | --- |
+| `/etc/couli-alerting/` | 目录 | root，目录 700 |
+| `/etc/couli-alerting/wecom-finance-webhook` | 财务群机器人的 Webhook 地址（资金类告警） | root，文件 600 |
+| `/etc/couli-alerting/wecom-oncall-webhook` | 值班群机器人的 Webhook 地址（全部告警） | root，文件 600 |
+
+- 地址里带着群机器人的 key，谁拿到都能往群里发消息：不进仓库、不写进本文档、不出现在命令行里；用编辑器打开文件粘贴后保存，不用 `echo` / `printf` 写入。
+- 转发器每收到一次告警都重新读这两个文件（systemd 的 LoadCredential 在启动时把副本交给进程），换机器人后 `systemctl restart couli-alert-forwarder` 即生效。
+- 地址与 key 不会出现在转发器的日志、群消息正文、报错与退出信息里，推送失败时也一样；日志只记接收组、尝试次数与固定的失败原因码（如 `http_503`、`errcode_45009`、`timeout`）。
+
+### 9.4 告警怎么走
+
+- 路由不变：资金告警（规则带 `fund: 'true'`）任何时间都发 finance 组和 oncall 组；其余是运维告警，只发 oncall 组，22:00–08:00（+08:00）静默，08:00 后汇总发出。同一告警 30 分钟内合并。
+- 转发器把 `/finance` 发到财务群、`/oncall` 发到值班群；群消息只带告警名、级别、firing / resolved、开始与恢复时间（+08:00）和 summary；summary 里的链接、手机号、证件号、卡号、收款账号、token 一律去掉（与应用日志同一口径），不截留部分号码。
+- 每次推送 5 秒超时；失败（网络、超时、HTTP 错误，或 HTTP 200 但 errcode 不为 0）最多重试 3 次（间隔 1、2、4 秒）；仍失败时回 502，Alertmanager 稍后会再投一次。
+- 宕机规则（`outage.yaml`）：api / worker / admin 抓取失败（`up == 0`）持续 2 分钟；PostgreSQL 连不上（`pg_up == 0`）持续 2 分钟；五个容器任一不健康（`couli_container_healthy == 0`）持续 2 分钟；任一容器 5 分钟没有新的健康样本（推送定时器停了）。Redis 连不上仍只有 `couli.yaml` 的 CouliRedisDown 一条。宕机告警都是运维告警，夜里静默。
+- 淘宝订单同步水位落后（CouliSyncWatermarkLag）不带 `fund` 标签，是运维告警：只发 oncall 组，22:00–08:00（+08:00）同样静默；夜里持续到 08:00 仍未恢复的，在静默结束后的下一个分组周期（30 分钟内）发到值班群。正文写明平台，并提示「若淘宝授权已过期，属预期，到后台重新授权即恢复」。
+
+### 9.5 怎么证明它是好的
+
+1. 单元都在跑：`systemctl is-active couli-alertmanager couli-vmagent couli-vmagent-exporters couli-vmalert couli-vmalert-outage couli-alert-forwarder`，六行都是 `active`；`systemctl list-timers couli-container-health.timer` 能看到下次运行时间。
+2. 数据进来了：`curl -s 'http://127.0.0.1:8428/api/v1/query?query=up'` 里有 couli-api / couli-worker / couli-admin / couli-pg / couli-redis 五个 job 且值为 1；`query=couli_container_healthy` 有五个容器、正常时都是 1；`query=pg_up` 与 `query=redis_up` 为 1。
+3. 规则加载了：`curl -s http://127.0.0.1:8882/api/v1/rules` 里有 couli-outage 组的四条规则，`http://127.0.0.1:8881/api/v1/rules` 里仍是原有两份规则。
+4. 群里收得到：在节点上对 Alertmanager 发一条演练告警（ops 私有手册里的演练脚本，告警名带「演练」），值班群应在约 30 秒内收到 firing，演练结束后收到 resolved；带 `fund="true"` 的演练告警财务群和值班群都收到。`journalctl -u couli-alert-forwarder --since 10min` 里对应行是 `"status":200`，且整段日志里没有 Webhook 地址。
+5. 宕机能报出来：停一个容器（如 `docker stop couli-staging-admin-1`）约 2 分钟后值班群收到 CouliContainerUnhealthy 与 CouliProcessDown（夜间静默时段内则次日 08:00 后汇总），`docker start` 后收到 resolved。演练结果记在私有运维手册。

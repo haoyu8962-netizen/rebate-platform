@@ -52,7 +52,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: 'Order sync watermark of {{ $labels.platform }} lags more than 30 minutes'
+          summary: 'Order sync watermark of {{ $labels.platform }} lags more than 30 minutes。若淘宝授权已过期，属预期，到后台重新授权即恢复'
           description: 'now minus the oldest sync cursor of the platform, in seconds.'
       - alert: CouliPddServiceFeeMissing
         expr: 'increase(couli_pdd_service_fee_missing_total[1h]) > 0'

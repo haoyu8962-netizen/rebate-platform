@@ -1,0 +1,11 @@
+# Arguments of the second couli vmalert (B1-25c; D10-2622), one -flag=value per line. It evaluates
+# only rules/outage.yaml, reads the same node VictoriaMetrics and notifies the same couli
+# Alertmanager as the couli vmalert (couli.args); its own listener (8881 is the couli vmalert's).
+# 30s is below every for: of outage.yaml (1m / 2m).
+-rule=/opt/couli/alerting/rules/outage.yaml
+-datasource.url=http://127.0.0.1:8428
+-remoteRead.url=http://127.0.0.1:8428
+-remoteWrite.url=http://127.0.0.1:8428
+-notifier.url=http://127.0.0.1:9093
+-evaluationInterval=30s
+-httpListenAddr=127.0.0.1:8882

@@ -1,0 +1,110 @@
+{
+  "risk_note": "RV2 by path (infra/monitoring, infra/staging). Alerting to WeCom group robots (BR-WDR-24; D10-2605 / D10-2612 / D10-2622): Node-built-in forwarder infra/monitoring/forwarder/webhook.ts (127.0.0.1:9097, /finance and /oncall to markdown, redaction like app logs, 5 s timeout, up to 3 retries 1/2/4 s, 502 on final failure, Webhook URL read only from a node file and never written to any log, body, error or exit output); alertmanager.yml finance / oncall receivers point at it (routes and night mute unchanged, log-sink kept as local fallback); outage rules only in the third file infra/monitoring/rules/outage.yaml loaded by a second vmalert (infra/monitoring/vmalert/outage.args, 127.0.0.1:8882); pg / redis exporter scrape only in infra/monitoring/scrape/exporters.yml loaded by a second vmagent (own tmpDataPath); container health pushed by a systemd timer via read-only docker inspect (no docker.sock in containers); MemoryMax on every new unit. couli.yaml changes only CouliSyncWatermarkLag's summary sentence (D10-2614); couli-fund.yaml, couli.args, couli.yml, vmagent.args unchanged (frozen B1-25b / B1-01zzo / B1-01zzi cases). README §9 rewritten. No business code, compose or migration changed; no secret values.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money r1 (full) fail: S1 webhook.ts:269 a push delivered but answered after 5 s is retried, so the finance group may get the same alert twice within 30 minutes; S2 README:635 claimed CouliSyncWatermarkLag is not muted at night. Orchestrator D10-2639 ②: the S1 conflicts with the ledger (5 s timeout, up to 3 retries) and the frozen rule test [AC-B1-25c#5] (retry after a timeout), the robot API has no idempotency key and no money moves — ruled by scope, logged FU-B1-25C-WECOM-TIMEOUT-DUP; S2 fixed in implementation r2 (c21e1bf17). r2 (incremental) pass, no findings (couli-runs/B1-25c/review-codex-money-r1.json, review-codex-money-r2.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex. Attempt 1 voided by the position assertion (the orchestrator rebased a non-task branch during the run; output discarded unexecuted). Attempt 2: 14 cases, red 14 / 14; spec-test r1 (fresh Claude) fail with four S1, all conflicts of the ledger's original layout with frozen cases ([AC-B1-25b#1/#2/#5/#7/#8], [AC-B1-01zzo#10], [AC-B1-01zzi#4]). Orchestrator D10-2622 chose a third rule file + second vmalert / vmagent (ledger patch #575). Attempt 3: 20 cases, red 20 / 20; spec-test r2 (fresh Claude, incremental) pass, r1's four S1 closed, two S2 (success-path logging, second vmagent tmpDataPath) handled in the implementation brief and logged FU-B1-25C-SPEC-R2. After implementation r1 tsc rejected one fixture parameter type in forwarder.test.ts (TS2345); the orchestrator corrected only that parameter's type (2b6acc53a749, no assertion or expected value changed; D10-2639 ① / D10-2640, precedents D10-2309 / D10-2328 / D10-2542)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/platform/alerting-wecom/container-health.test.ts > [AC-B1-25c#11] 推送五个 staging 容器的健康值",
+    "test/spec/platform/alerting-wecom/container-health.test.ts > [AC-B1-25c#12] vmagent 拒收探测指标时推送任务报失败",
+    "test/spec/platform/alerting-wecom/container-health.test.ts > [AC-B1-25c#13] systemd 每分钟启动健康推送",
+    "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#1] finance 告警送到对应群机器人",
+    "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#1] oncall 告警送到对应群机器人",
+    "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#2] Markdown 保留触发和恢复告警并去除敏感信息",
+    "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#3] HTTP 200 的业务失败也要退避重试",
+    "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#4] 持续推送失败最多重试三次并返回失败",
+    "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#5] 每次推送独立计五秒超时",
+    "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#17] HTTP 503 时所有输出均不含 Webhook 地址或 key",
+    "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#17] 超时 时所有输出均不含 Webhook 地址或 key",
+    "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#17] HTTP 200 业务错误 时所有输出均不含 Webhook 地址或 key",
+    "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#6] vmagent 以独立的回环任务抓取 PG 与 Redis exporter",
+    "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#7] 宕机组按抓取失败覆盖 api、worker、admin 三个应用任务",
+    "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#8] PG 和 Redis 按连接状态告警，Redis 规则只保留一条",
+    "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#9] 容器健康值持续为零两分钟才告警，覆盖五个容器",
+    "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#10] 单个容器五分钟无新样本也能告警",
+    "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#14] 第二个 vmagent 抓取 exporter 并写入同一数据源",
+    "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#15] 第二个 vmalert 独立加载宕机规则并检查 for 时长",
+    "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#16] 宕机告警的每个指标均来自抓取任务或节点推送"
+  ],
+  "task": "B1-25c",
+  "spec_commit": "916e924e55c89d1b0f8c27f4824be65172df6b06",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "916e924e55c89d1b0f8c27f4824be65172df6b06",
+      "tree": "3051ccc9640538411ab5b1cfa75278fb2e5b721f",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-22T13:51:41Z",
+      "finished_at": "2026-11-22T13:51:46Z",
+      "red_tests": [
+        "test/spec/platform/alerting-wecom/container-health.test.ts > [AC-B1-25c#11] 推送五个 staging 容器的健康值",
+        "test/spec/platform/alerting-wecom/container-health.test.ts > [AC-B1-25c#12] vmagent 拒收探测指标时推送任务报失败",
+        "test/spec/platform/alerting-wecom/container-health.test.ts > [AC-B1-25c#13] systemd 每分钟启动健康推送",
+        "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#1] finance 告警送到对应群机器人",
+        "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#1] oncall 告警送到对应群机器人",
+        "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#2] Markdown 保留触发和恢复告警并去除敏感信息",
+        "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#3] HTTP 200 的业务失败也要退避重试",
+        "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#4] 持续推送失败最多重试三次并返回失败",
+        "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#5] 每次推送独立计五秒超时",
+        "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#17] HTTP 503 时所有输出均不含 Webhook 地址或 key",
+        "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#17] 超时 时所有输出均不含 Webhook 地址或 key",
+        "test/spec/platform/alerting-wecom/forwarder.test.ts > [AC-B1-25c#17] HTTP 200 业务错误 时所有输出均不含 Webhook 地址或 key",
+        "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#6] vmagent 以独立的回环任务抓取 PG 与 Redis exporter",
+        "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#7] 宕机组按抓取失败覆盖 api、worker、admin 三个应用任务",
+        "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#8] PG 和 Redis 按连接状态告警，Redis 规则只保留一条",
+        "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#9] 容器健康值持续为零两分钟才告警，覆盖五个容器",
+        "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#10] 单个容器五分钟无新样本也能告警",
+        "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#14] 第二个 vmagent 抓取 exporter 并写入同一数据源",
+        "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#15] 第二个 vmalert 独立加载宕机规则并检查 for 时长",
+        "test/spec/platform/alerting-wecom/monitoring.test.ts > [AC-B1-25c#16] 宕机告警的每个指标均来自抓取任务或节点推送"
+      ],
+      "expected": [
+        "test/spec/platform/alerting-wecom/container-health.test.ts",
+        "test/spec/platform/alerting-wecom/forwarder.test.ts",
+        "test/spec/platform/alerting-wecom/monitoring.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "f22d074f86c18ea0b54053c9a07d546525b80b8a224cb715ea374b7dd3c961ec"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "4f50313bc0bca82e209af9aca818686ab09a3941",
+    "specs": "b51a9ab39a98d66fd7a68dae3670b0658b1efa0e"
+  }
+}
