@@ -1,0 +1,29 @@
+id: CT-24ha
+repo: rebate-platform
+title: 'CT-24ha：后台联盟账号列表每行加 auth_refreshable（本次授权能否自动续期：true / false / null），字段可缺省'
+type: contract
+# 2026-11-22 be 入账（CT-24h 后续；FU-TAOBAO-TOKEN-REFRESH 第一步之 ①，编排 D10-2585 / D10-2587；事实页 couli-runs/OPS-lane/taobao-token-refresh-facts.md）。
+# 淘宝只有订购类服务商应用、且授权返回 re_expires_in > 0 时 refresh_token 才能用；现在库里不存 re_expires_in，后台看不出能否自动续期。
+# 只改 contracts/openapi.yaml 的 adminListUnionAccounts：行 schema 加 auth_refreshable（boolean 或 null），说明段同步；不改别的操作、错误码、枚举。
+# 取值：true = 当前凭据来自一次返回 re_expires_in > 0 的联盟授权；false = 返回了 re_expires_in = 0（或平台写明不可刷新）；null = 不知道（手工录入、none 平台、开始记录之前的授权）。
+# 字段**可缺省（不进 required）**：服务端记录这几个数值的单（③）等 BR-ID-24 规划回写后才入账（D10-2587），在那之前主干响应不带它，缺省与 null 同义。
+# 只给能否续期的结论，不返回 re_expires_in 等原始时长，也不返回任何 token（D10-2587 ① 各时长秒数为可选，取最小）。
+# 不依赖 BR 取值（D10-2587），refs 空；后台页显示归 fe，契约合并后另入账。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/union-auth-refreshable/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/contracts/union-auth-refreshable/**'
+status: todo
