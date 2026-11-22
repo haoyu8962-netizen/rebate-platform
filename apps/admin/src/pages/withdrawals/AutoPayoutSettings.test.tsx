@@ -14,6 +14,7 @@ import {
   SaveDeadline,
   answeredItems,
   outcomeOf,
+  verifiedItems,
   versionMoved,
   withDeadline,
   type BatchRequest,
@@ -112,6 +113,7 @@ const batchCalls = (calls: readonly Call[]) =>
 async function openTab(
   account: Account,
   route: Route = () => undefined,
+  waitForm = true,
 ): Promise<{ readonly panel: HTMLElement; readonly calls: Call[] }> {
   identity = {
     admin_id: account.adminId,
@@ -171,6 +173,7 @@ async function openTab(
   await act(async () => {
     fireEvent.click(tab);
   });
+  if (!waitForm) return { panel: document.body, calls };
   const amount = await screen.findByLabelText(t.labels.maxAmount, { exact: true });
   await waitFor(() => expect((amount as HTMLInputElement).value).toBe('500.00'));
   const panel = amount.closest<HTMLElement>('[role="tabpanel"]');
@@ -758,4 +761,177 @@ it('[F1-08ap-UNIT-MONEY#11] a batch answer item missing a member the form relies
   expect(buttonOf(panel, t.unknownRetry).disabled, '【原样重试】 offered').toBe(false);
   expect(readUnknown({ page: MARKER_PAGE, account: SUPER.adminId })).toEqual(EXPECTED_MARKER);
   expect(batchCalls(calls)).toHaveLength(1);
+});
+
+// ---- 资金评审 r3（F1-08ap 实现第 6 轮，D10-2508）：读回的配置项先经 verifiedItems -------------------
+
+/** ② at `patch` without the member `name` (an answer short of a required member). */
+const withoutMember = (row: object, name: string) =>
+  Object.fromEntries(Object.entries(row).filter(([key]) => key !== name));
+const READ_NEEDS = { keys: new Map([[AUTO_KEY.maxAmount, 3]]), unset: true } as const;
+
+it('[F1-08ap-UNIT-MONEY#12] 【刷新核对】 reading ② at version 4, 300 yuan but without admin_editable (or another required member) is a failed read: still unknown, locked, body and marker kept, nothing filled; a complete read then unlocks', async () => {
+  // Pure: a read row of a tab key needs every member of AdminConfigItem and a valid value.
+  const moved = { ...MAX_AMOUNT, value: 30_000, version: 4 };
+  expect(verifiedItems([moved], READ_NEEDS)).toEqual([moved]);
+  expect(
+    verifiedItems([{ ...MAX_AMOUNT, value: null, version: 0 }], { keys: new Map(), unset: true }),
+  ).toHaveLength(1);
+  for (const name of [
+    'key',
+    'value',
+    'value_type',
+    'options',
+    'permission',
+    'admin_editable',
+    'version',
+    'updated_by',
+    'updated_at',
+  ])
+    expect(verifiedItems([withoutMember(moved, name)], READ_NEEDS), `without ${name}`).toBe(
+      undefined,
+    );
+  for (const patch of [
+    { admin_editable: 'true' },
+    { value: -1 },
+    { value: '30000' },
+    { version: 2 },
+    { version: -1 },
+    { version: 4.5 },
+    { value_type: 'decimal' },
+    { options: [1] },
+  ])
+    expect(verifiedItems([{ ...moved, ...patch }], READ_NEEDS), JSON.stringify(patch)).toBe(
+      undefined,
+    );
+  expect(verifiedItems([], READ_NEEDS), 'a key the form relies on missing').toBeUndefined();
+  expect(verifiedItems([moved, moved], READ_NEEDS), 'a key twice').toBeUndefined();
+  expect(verifiedItems({ items: [moved] }, READ_NEEDS), 'not a list').toBeUndefined();
+  // Rows of other config groups are left out (not checked as the tab's).
+  expect(verifiedItems([{ key: 'payout.daily_cap_fen', value: 'x' }, moved], READ_NEEDS)).toEqual([
+    moved,
+  ]);
+
+  // Through the page: the connection drops; 【刷新核对】 reads ② without admin_editable.
+  let armed = false;
+  let complete = false;
+  const { panel, calls } = await openTab(SUPER, (method, path) => {
+    if (!armed || method !== 'GET' || path !== CONFIG_ITEMS_URL) return undefined;
+    return Promise.resolve(pageOf(complete ? moved : withoutMember(moved, 'admin_editable')));
+  });
+  await saveAmount(panel);
+  await waitFor(() => expect(within(panel).getAllByText(t.unknownTitle).length).toBe(1));
+  const scope = { page: MARKER_PAGE, account: SUPER.adminId };
+  await waitFor(() => expect(readUnknown(scope)).toEqual(EXPECTED_MARKER));
+  armed = true;
+  const reads = itemReads(calls);
+  await act(async () => {
+    fireEvent.click(buttonOf(panel, t.unknownRecheck));
+  });
+  await waitFor(() => expect(within(panel).getByText(t.recheckFailed)).toBeTruthy());
+  expect(itemReads(calls), 'one read').toBe(reads + 1);
+  expect(within(panel).getAllByText(t.unknownTitle), 'still unknown').toHaveLength(1);
+  expect(amountOf(panel).disabled, 'not unlocked').toBe(true);
+  expect(amountOf(panel).value, 'the body kept, nothing filled from the read').toBe('300');
+  expect(buttonOf(panel, t.save).disabled, '【保存】 not offered').toBe(true);
+  expect(buttonOf(panel, t.unknownRetry).disabled, '【原样重试】 still offered').toBe(false);
+  expect(buttonOf(panel, t.unknownRecheck).disabled, '【刷新核对】 still offered').toBe(false);
+  expect(
+    within(panel).queryByRole('button', { name: t.abandon }),
+    'no 【放弃这次提交】',
+  ).toBeNull();
+  expect(readUnknown(scope), 'the marker is kept').toEqual(EXPECTED_MARKER);
+
+  // A complete read of the moved version then settles it.
+  complete = true;
+  await act(async () => {
+    fireEvent.click(buttonOf(panel, t.unknownRecheck));
+  });
+  await waitFor(() => expect(amountOf(panel).disabled, 'unlocked').toBe(false));
+  expect(amountOf(panel).value).toBe('300.00');
+  expect(within(panel).queryByText(t.unknownTitle)).toBeNull();
+  expect(readUnknown(scope), 'the marker is dropped').toBeUndefined();
+  // The unlocked form can save ② again (admin_editable known): 320 yuan at version 4.
+  await act(async () => {
+    fireEvent.change(amountOf(panel), { target: { value: '320' } });
+  });
+  expect(buttonOf(panel, t.save).disabled, '【保存】 usable').toBe(false);
+  expect(batchCalls(calls), 'nothing resent').toHaveLength(1);
+});
+
+it('[F1-08ap-UNIT-MONEY#13] 【刷新】 after a 20902 reading ② without admin_editable, or below the version shown, is a failed read: read-failed notice, the form as it was, 【刷新】 offered; a complete read then fills it', async () => {
+  let armed = false;
+  const answers = [
+    pageOf(withoutMember({ ...MAX_AMOUNT, value: 26_000, version: 5 }, 'admin_editable')),
+    pageOf({ ...MAX_AMOUNT, value: 26_000, version: 2 }),
+    ok({ items: [{ ...MAX_AMOUNT, value: 26_000, version: 5 }], page: 1, total: 1 }),
+    pageOf({ ...MAX_AMOUNT, value: 26_000, version: 5 }),
+  ];
+  const { panel, calls } = await openTab(SUPER, (method, path) => {
+    if (method === 'POST' && path === CONFIG_BATCH_URL)
+      return Promise.resolve(failed(20902, 409, { resource: 'config_item' }));
+    if (armed && method === 'GET' && path === CONFIG_ITEMS_URL)
+      return Promise.resolve(answers.shift()!);
+    return undefined;
+  });
+  await saveAmount(panel);
+  await waitFor(() => expect(within(panel).getByText(t.conflict)).toBeTruthy());
+  armed = true;
+  // 【刷新】 is found by its text: antd's loading spinner may stay in jsdom (see #10).
+  const refreshButton = () => {
+    const matching = within(panel)
+      .getAllByRole('button')
+      .filter((button) => button.textContent === t.refresh);
+    expect(matching, 'exactly one 【刷新】').toHaveLength(1);
+    return matching[0] as HTMLButtonElement;
+  };
+  for (const why of ['without admin_editable', 'below the version shown', 'no page_size']) {
+    const reads = itemReads(calls);
+    const button = await waitFor(() => {
+      const found = refreshButton();
+      expect(found.disabled, `【刷新】 offered (${why})`).toBe(false);
+      return found;
+    });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(itemReads(calls), why).toBe(reads + 1);
+    // The read is over once the form is editable again; its notice is the read-failed one.
+    await waitFor(() => expect(amountOf(panel).disabled, `editable (${why})`).toBe(false));
+    expect(within(panel).getByText(t.refreshFailed)).toBeTruthy();
+    expect(amountOf(panel).value, `nothing filled (${why})`).toBe('300');
+  }
+  const button = await waitFor(() => {
+    const found = refreshButton();
+    expect(found.disabled).toBe(false);
+    return found;
+  });
+  await act(async () => {
+    fireEvent.click(button);
+  });
+  await waitFor(() => expect(amountOf(panel).value).toBe('260.00'));
+  expect(amountOf(panel).disabled).toBe(false);
+  expect(within(panel).queryByText(t.refreshFailed)).toBeNull();
+  expect(batchCalls(calls), 'nothing resent').toHaveLength(1);
+});
+
+it('[F1-08ap-UNIT-MONEY#14] the first read of the tab giving ② without admin_editable is a failed read: no form, the read-failed page with 【重试】', async () => {
+  await openTab(
+    SUPER,
+    (method, path) =>
+      method === 'GET' && path === CONFIG_ITEMS_URL
+        ? Promise.resolve(pageOf(withoutMember(MAX_AMOUNT, 'admin_editable')))
+        : undefined,
+    false,
+  );
+  const title = await screen.findByText(t.loadFailedTitle);
+  const panel = title.closest<HTMLElement>('[role="tabpanel"]');
+  expect(panel, 'the tab panel of 「自动到账设置」').not.toBeNull();
+  expect(screen.queryByLabelText(t.labels.maxAmount, { exact: true }), 'no form').toBeNull();
+  expect(within(panel!).queryByRole('button', { name: t.save })).toBeNull();
+  // antd puts a space between two Chinese characters of a button (「重 试」): matched by text.
+  const retries = within(panel!)
+    .getAllByRole('button')
+    .filter((button) => (button.textContent ?? '').replace(/\s/g, '') === t.retry);
+  expect(retries, '【重试】 offered').toHaveLength(1);
 });

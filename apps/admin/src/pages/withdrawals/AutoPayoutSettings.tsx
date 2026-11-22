@@ -20,6 +20,10 @@
 // 原版本 → 结果仍未知（原请求可能仍在等锁），保留状态、请求体与标记，提示稍后再核对，并给【放弃这次提交】
 // （二次确认后解锁、清标记）；不自动轮询、不倒计时解锁。【刷新】【刷新核对】的读取超过 READ_DEADLINE_MS 按读取失败。
 // 成功回答须逐项给出所送的键与表单依赖的字段（契约 AdminConfigItem）及有效值，否则按结果未知（money r2 S2）。
+// 拿服务端回答解锁或回填表单的入口（首次读取与【重试】、【刷新】、【刷新核对】及其后的【放弃这次提交】、保存与
+// 【原样重试】的成功回答）一律经 verifiedItems 校验（money r3 S2）：每项契约 AdminConfigItem 的成员齐全、取值有效、
+// 每键一次，表单与所送的键都在且版本不低于已知版本；读取不过按读取失败（结果未知时仍未知、请求体与标记不变），
+// 保存回答不过按结果未知。
 // 资金评审（D10-2050）：没有无交互角色却带点击 / 按键处理的元素（时段用原生下拉、标签用原生勾选框），
 // 也没有任何把金额、默认值或当前时间填进输入框的入口。
 import type { Schema } from '@couli/contracts-ts';
@@ -61,7 +65,6 @@ import {
   MASTER_KEY,
   OPTIONAL_FLAGS,
   SWITCHES_ROUTE,
-  autoPayoutItems,
   checkDraft,
   draftOf,
   isAutoPayoutKey,
@@ -196,12 +199,15 @@ export function withDeadline<T>(
 
 const VALUE_TYPES: readonly string[] = ['boolean', 'enum', 'object', 'number', 'string'];
 
+const nullableText = (value: unknown): boolean => value === null || typeof value === 'string';
+
 /**
- * Whether `item` carries every member the form relies on (contract AdminConfigItem: key, value,
- * value_type, options, permission, admin_editable, version) with usable values, and a stored
- * value valid for its key. A value of null (never written) is not an answer to a save.
+ * Whether `item` carries every member of contract AdminConfigItem (key, value, value_type,
+ * options, permission, admin_editable, version, updated_by, updated_at) with usable values, and a
+ * stored value valid for its key. `unset`: a value of null (never written) is acceptable — true
+ * for a read of the settings, false for the answer to a save (a key just stored has a value).
  */
-function completeItem(item: unknown): item is AutoPayoutItem {
+function completeItem(item: unknown, unset: boolean): item is AutoPayoutItem {
   if (typeof item !== 'object' || item === null || Array.isArray(item)) return false;
   const row = item as Record<string, unknown>;
   const { key, value, value_type: type, options, permission, admin_editable: editable } = row;
@@ -214,34 +220,82 @@ function completeItem(item: unknown): item is AutoPayoutItem {
     return false;
   if (typeof permission !== 'string' || permission === '') return false;
   if (typeof editable !== 'boolean') return false;
-  if (typeof row['version'] !== 'number' || !Number.isSafeInteger(row['version'])) return false;
-  return value !== null && isValidStored(key, value, options as readonly string[] | null);
+  const version = row['version'];
+  if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0) return false;
+  if (!nullableText(row['updated_by']) || !nullableText(row['updated_at'])) return false;
+  if (value === null) return unset;
+  return isValidStored(key, value, options as readonly string[] | null);
+}
+
+/** What a use of the server's config items requires of them (verifiedItems). */
+export interface ItemNeeds {
+  /**
+   * Keys that must each be there, with the lowest version acceptable (versions never go back:
+   * an item below the version the page already holds or sent is not the server's current one).
+   */
+  readonly keys: ReadonlyMap<string, number>;
+  /** A null value (never written) is acceptable: reads yes, a save's answer no. */
+  readonly unset: boolean;
 }
 
 /**
+ * money r3 S2 — the one check of every server answer this tab unlocks with or fills the form from
+ * (the first read, 【刷新】 after a 20902, 【刷新核对】 and so 【放弃这次提交】, the answer to a save or
+ * to 【原样重试】): `rows` is a list; every row of a tab key is complete (completeItem: each member
+ * of AdminConfigItem, valid values) and there once; each key of `needs.keys` is there at its
+ * lowest version or later. Rows of other config groups are left out; a row whose key cannot be
+ * read at all fails the whole answer. Gives the tab's items in their order, or undefined when the
+ * answer cannot be used as it is — the caller takes the read-failed branch (a read) or keeps the
+ * result unknown (a save), never unlocking or filling the form from it.
+ */
+export function verifiedItems(rows: unknown, needs: ItemNeeds): AutoPayoutItem[] | undefined {
+  if (!Array.isArray(rows)) return undefined;
+  const found = new Map<string, AutoPayoutItem>();
+  for (const row of rows as unknown[]) {
+    if (typeof row !== 'object' || row === null || Array.isArray(row)) return undefined;
+    const key = (row as { key?: unknown }).key;
+    if (typeof key !== 'string') return undefined;
+    if (!isAutoPayoutKey(key)) continue;
+    if (found.has(key) || !completeItem(row, needs.unset)) return undefined;
+    found.set(key, row);
+  }
+  for (const [key, lowest] of needs.keys) {
+    const item = found.get(key);
+    if (item === undefined || item.version < lowest) return undefined;
+  }
+  return [...found.values()];
+}
+
+/** The settings read could not be used (verifiedItems): handled as a failed read. */
+export class UnreadableItems extends Error {
+  constructor() {
+    super('The config items read are incomplete or invalid');
+    this.name = 'UnreadableItems';
+  }
+}
+
+/** The keys of `items` at their versions (the form's keys: a read must give them all again). */
+const versionsOf = (items: readonly { readonly key: string; readonly version: number }[]) =>
+  new Map<string, number>(items.map((item) => [item.key, item.version]));
+
+/**
  * The items of a batch answer: exactly one per key of `body` (no key missing, none extra or
- * twice), each complete (completeItem) and at a version past the one sent — every key of a
- * stored batch moves on (adminBatchUpdateConfigItems: each changed key gets its version plus 1).
+ * twice), each complete and at a version past the one sent — every key of a stored batch moves on
+ * (adminBatchUpdateConfigItems: each changed key gets its version plus 1) — through verifiedItems.
  * Undefined when the answer does not say in full what is stored now for every key sent — an
  * answer that settles nothing.
  */
 export function answeredItems(data: unknown, body: BatchRequest): AutoPayoutItem[] | undefined {
   if (typeof data !== 'object' || data === null) return undefined;
-  const items = (data as { items?: unknown }).items;
-  if (!Array.isArray(items) || items.length !== body.items.length) return undefined;
-  const expected = new Map<string, number>(
-    body.items.map((entry) => [entry.key, entry.expected_version]),
+  const rows = (data as { items?: unknown }).items;
+  if (!Array.isArray(rows) || rows.length !== body.items.length) return undefined;
+  const keys = new Map<string, number>(
+    body.items.map((entry) => [entry.key, entry.expected_version + 1]),
   );
-  const seen = new Set<string>();
-  for (const item of items as unknown[]) {
-    if (!completeItem(item)) return undefined;
-    const { key, version } = item;
-    if (seen.has(key)) return undefined;
-    const sentVersion = expected.get(key);
-    if (sentVersion === undefined || version <= sentVersion) return undefined;
-    seen.add(key);
-  }
-  return seen.size === expected.size ? (items as AutoPayoutItem[]) : undefined;
+  if (keys.size !== body.items.length) return undefined;
+  const items = verifiedItems(rows, { keys, unset: false });
+  // Same count as sent, every key sent once: nothing extra (a row of another key fails too).
+  return items !== undefined && items.length === rows.length ? items : undefined;
 }
 
 /**
@@ -411,9 +465,15 @@ export function AutoPayoutSettings({
     return custom;
   };
 
-  /** Every config item of the registry (page by page), only the tab's keys kept. */
-  const readItems = async (signal?: AbortSignal): Promise<AutoPayoutItem[]> => {
-    const all: AutoPayoutItem[] = [];
+  /**
+   * Every config item of the registry (page by page), only the tab's keys kept, checked through
+   * verifiedItems against `needs` (money r3 S2): a page that is not a list page, a list not read
+   * to its end, or items that fail the check reject with UnreadableItems — the read-failed branch
+   * of the caller, nothing shown or unlocked from it.
+   */
+  const readItems = async (needs: ItemNeeds, signal?: AbortSignal): Promise<AutoPayoutItem[]> => {
+    const all: unknown[] = [];
+    let complete = false;
     for (let page = 1; page <= MAX_PAGES; page += 1) {
       const response = await customOf()<ConfigPage>({
         url: CONFIG_ITEMS_URL,
@@ -421,11 +481,28 @@ export function AutoPayoutSettings({
         query: { page, page_size: CONFIG_PAGE_SIZE },
         ...(signal === undefined ? {} : { meta: { signal } }),
       });
-      const { items: rows, total, page_size: size } = response.data;
-      all.push(...(rows as unknown as AutoPayoutItem[]));
-      if (rows.length === 0 || page * size >= total) break;
+      const data: unknown = response.data;
+      if (typeof data !== 'object' || data === null) throw new UnreadableItems();
+      const { items: rows, total, page_size: size } = data as Record<string, unknown>;
+      if (
+        !Array.isArray(rows) ||
+        typeof total !== 'number' ||
+        !Number.isSafeInteger(total) ||
+        total < 0 ||
+        typeof size !== 'number' ||
+        !Number.isSafeInteger(size) ||
+        size < 1
+      )
+        throw new UnreadableItems();
+      all.push(...(rows as unknown[]));
+      if (rows.length === 0 || page * size >= total) {
+        complete = true;
+        break;
+      }
     }
-    return autoPayoutItems(all);
+    const items = complete ? verifiedItems(all, needs) : undefined;
+    if (items === undefined) throw new UnreadableItems();
+    return items;
   };
 
   /** The form shows exactly `next` as the server holds it (nothing typed is kept). */
@@ -439,7 +516,8 @@ export function AutoPayoutSettings({
   useEffect(() => {
     let current = true;
     const seq = nextRead();
-    readItems().then(
+    // The first read (and 【重试】): every tab row complete; no key or version to hold to yet.
+    readItems({ keys: new Map(), unset: true }).then(
       (next) => {
         if (!current || seq !== readSeq.current) return;
         show(next);
@@ -707,7 +785,14 @@ export function AutoPayoutSettings({
     setMayAbandon(false);
     setPhase('rechecking');
     const seq = nextRead();
-    withDeadline((signal) => readItems(signal), READ_DEADLINE_MS).then(
+    // money r3 S2: the read must give every key of the form and every key sent, each complete
+    // and at no lower version than the form holds or the body sent; otherwise it is a failed
+    // read — still unknown, the body and the marker kept, nothing unlocked or filled from it.
+    const sentBody = bodyRef.current;
+    const keys = versionsOf(items);
+    for (const entry of sentBody?.items ?? [])
+      keys.set(entry.key, Math.max(keys.get(entry.key) ?? 0, entry.expected_version));
+    withDeadline((signal) => readItems({ keys, unset: true }, signal), READ_DEADLINE_MS).then(
       (next) => {
         if (!alive.current || seq !== readSeq.current) return;
         const body = bodyRef.current;
@@ -760,7 +845,10 @@ export function AutoPayoutSettings({
     if (phaseRef.current !== 'edit') return;
     setPhase('refreshing');
     const seq = nextRead();
-    withDeadline((signal) => readItems(signal), READ_DEADLINE_MS).then(
+    // money r3 S2: every key of the form again, complete, at no lower version than shown;
+    // otherwise the read-failed branch (the form as it was, 【刷新】 offered again).
+    const keys = versionsOf(items);
+    withDeadline((signal) => readItems({ keys, unset: true }, signal), READ_DEADLINE_MS).then(
       (next) => {
         if (!alive.current || seq !== readSeq.current) return;
         show(next);
