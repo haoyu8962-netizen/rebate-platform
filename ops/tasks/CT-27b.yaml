@@ -1,0 +1,24 @@
+id: CT-27b
+repo: rebate-platform
+title: 'CT-27b：运营位批 1 契约伴随规则测试（FU-CT-27-SPEC-R3-GAPS）——D10-2401 六条必满足项在规则测试层补牙：search 置顶位至多一张、more_services 上限按整个 items、徽标只在 icon_grid、product_scroll more_action 站内白名单、图标摘要与 image 绑定、搜索配置写接口无可错配的 key'
+type: test-change
+# 2026-11-22 be 入账（编排 D10-2401：CT-27 spec-test r3 后 6 条仍未关，列为契约必满足项、CT-27 合并后紧接本伴随单，D10-2264 的路）。CT-27 已由 #521 合并（1fd85be9a2ac）。
+# 全是新文件（test/spec/contracts/operation-slots-gaps/），不动 CT-27 已冻结的 test/spec/contracts/operation-slots/** 与其 kit。新块在主干契约上为绿，每条配「错误契约」探针（D10-2401 六条各取 spec-test r3 原文的错误实现）证明有牙，探针实测结果写进证据；台账补丁登 red_exempt（带探针，D10-1812）。
+# 六条（D10-2401 原样）：① search 置顶位至多一张，不论卡的类型，候选是否「启用」不取决于可选 / 必填 props 是否齐全；② more_services 条目总数上限对整个 items 数组算，不按列举的路由计；③ 徽标只允许出现在 icon_grid 条目上，banner 任何一项都不得带；④ product_scroll 的「更多」跳转（契约定稿为 props.more_action）用与静态条目同一套站内跳转白名单，search 上外链拒收；⑤ 图标摘要字段与实际显示的 image 在同一对象里绑定（me：icon {url, sha256}）；⑥ 搜索配置的写操作不得有可错配的 key（契约定稿为每个配置项一个封闭请求体的独立 PUT，D10-2410）。
+# tester claude-independent，spec-test 由 Codex 全量，结论 pass 后 land（red_exempt 需 spec-test pass）。
+refs: [BR-TEXT-28, BR-TEXT-29, BR-TEXT-30]
+refs_hash:
+  BR-TEXT-28: b63875b517fd
+  BR-TEXT-29: e67c8270e5e0
+  BR-TEXT-30: babc5180aaa0
+deps: [CT-27]
+paths:
+  - 'test/spec/contracts/operation-slots-gaps/**'
+test_paths:
+  - 'test/spec/contracts/operation-slots-gaps/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/contracts/operation-slots-gaps/**'
+status: todo
