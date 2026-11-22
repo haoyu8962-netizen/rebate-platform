@@ -117,6 +117,24 @@ const JD_ROW: Obj = {
   alert_phones_configured: false,
   reauth_mode: 'manual',
 };
+/** 主干必填字段给齐的拼多多 none 行（无续期方式，auth_expires_at 为 null），不带 auth_refreshable。 */
+const PDD_NONE_ROW: Obj = {
+  union_account_id: '0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f6a03',
+  platform: 'pdd',
+  account_name: '凑狸拼多多联盟',
+  status: 'active',
+  sync_start_at: null,
+  auth_expires_at: null,
+  auth_expires_estimated: false,
+  auth_status: 'active',
+  auth_renewed_at: null,
+  auth_renewed_by: null,
+  last_probe_at: null,
+  last_probe_ok: null,
+  last_probe_error: null,
+  alert_phones_configured: true,
+  reauth_mode: 'none',
+};
 const TRACE_ID = '0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b';
 
 // ---------------------------------------------------------------------------------------------
@@ -323,7 +341,7 @@ function explains(paragraph: string, named: boolean): boolean {
 // ---------------------------------------------------------------------------------------------
 // 用例
 
-it('[AC-CT-24ha#1] 联盟账号行的 auth_refreshable：true / false / null 三种取值整行都过 AdminUnionAccount 与 AdminUnionAccountListResponse（list 两行，含一行带一行不带）；不带它的行照过（不进 required）；值为字符串、数字 0 / 1、对象、数组都拒；行仍封闭，多出 refreshable 等别的属性被拒；带 re_expires_in 等原始时长或 access_token / refresh_token / token 的行一律被拒', () => {
+it('[AC-CT-24ha#1] 联盟账号行的 auth_refreshable：true / false / null 三种取值整行都过 AdminUnionAccount 与 AdminUnionAccountListResponse（list 两行，含一行带一行不带）；不带它的行照过（不进 required）；值为字符串、数字 0 / 1、对象、数组都拒；行仍封闭，多出 refreshable 等别的属性被拒；带 re_expires_in 等原始时长或 access_token / refresh_token / token 的行一律被拒（true / false 配 re_expires_in=0 也拒）；reauth_mode=none 的拼多多行 null 与缺省都过；列表逐行校验，一条合法行加一条 "true" 行不论顺序都拒', () => {
   // 台账注释：行 schema 加 auth_refreshable（boolean 或 null）；字段可缺省，缺省与 null 同义；只给能否续期的结论，
   // 不返回 re_expires_in 等原始时长，也不返回任何 token（D10-2587）。be 补充第 1～5 条。
   // ② 可缺省：主干必填字段给齐、不带 auth_refreshable 的行照过。
@@ -345,9 +363,31 @@ it('[AC-CT-24ha#1] 联盟账号行的 auth_refreshable：true / false / null 三
   const pair = [first, { ...clone(JD_ROW), [FIELD]: null }];
   listVerdict(pair, true, `两行 ${FIELD} 分别为 true、null`);
 
+  // ①' reauth_mode = none 的拼多多行（auth_expires_at 为 null）：显式 null 与不带都过单行，
+  // 与另一条合法行同放进列表（两种顺序）时列表组件与 200 响应都过。
+  const pddNull = { ...clone(PDD_NONE_ROW), [FIELD]: null };
+  const pddAbsent = clone(PDD_NONE_ROW);
+  rowVerdict(pddNull, true, `拼多多 none 行 ${FIELD}=null`);
+  rowVerdict(pddAbsent, true, `拼多多 none 行不带 ${FIELD}`);
+  const taobaoTrue = { ...clone(TAOBAO_ROW), [FIELD]: true };
+  const jdFalse = { ...clone(JD_ROW), [FIELD]: false };
+  listVerdict([pddNull, taobaoTrue], true, `拼多多 none 行 ${FIELD}=null、淘宝行 true`);
+  listVerdict([taobaoTrue, pddNull], true, `淘宝行 true、拼多多 none 行 ${FIELD}=null`);
+  listVerdict([pddAbsent, jdFalse], true, `拼多多 none 行不带、京东行 ${FIELD}=false`);
+  listVerdict([jdFalse, pddAbsent], true, `京东行 ${FIELD}=false、拼多多 none 行不带`);
+
   // ③ 类型错的拒。
   for (const value of BAD_VALUES) {
     verdict({ [FIELD]: value }, false, `${FIELD}=${JSON.stringify(value)}`);
+  }
+
+  // ③' 列表逐行校验（防 items 误写成 contains）：一条合法行加一条 auth_refreshable="true" 的非法行，
+  // 两种顺序列表组件与 200 响应都拒。
+  const badRow = { ...clone(JD_ROW), [FIELD]: 'true' };
+  for (const goodRow of [taobaoTrue, clone(TAOBAO_ROW), pddNull]) {
+    const good = Object.hasOwn(goodRow, FIELD) ? JSON.stringify(goodRow[FIELD]) : '不带';
+    listVerdict([goodRow, badRow], false, `合法行（${good}）在前、"true" 行在后`);
+    listVerdict([badRow, goodRow], false, `"true" 行在前、合法行（${good}）在后`);
   }
 
   // ④ 行仍然封闭：别的属性（单带或与合法的 auth_refreshable 同带）都被拒。
@@ -370,8 +410,10 @@ it('[AC-CT-24ha#1] 联盟账号行的 auth_refreshable：true / false / null 三
       verdict({ [FIELD]: good, [key]: value }, false, label);
     }
   }
+  // true / false 都不能配原始时长 0（false 的结论只给布尔，不附 re_expires_in = 0）：单行与列表都拒。
   for (const key of RAW_DURATIONS) {
     verdict({ [FIELD]: true, [key]: 0 }, false, `${FIELD}=true 再带 ${key}=0`);
+    verdict({ [FIELD]: false, [key]: 0 }, false, `${FIELD}=false 再带 ${key}=0`);
   }
 });
 
