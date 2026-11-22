@@ -3,7 +3,7 @@
 // 金额不一致数的实现都要红）。账单日任务用冻结的 ../bill/kit.ts 手工组装（不注入重生成端口、只 import 不改）：
 // 金额不一致的单按 9.2 第 4 条算重生成失败，各计 1 进 amount_mismatch_count。屏障、语句观察与计数写入后故障照
 // ../bill-unsettled-count/kit.ts 的写法（只 import 不改）。等待都有界：屏障用 within（WAIT_MS），锁等待用
-// waitBlocked（服务端 pg_blocking_pids）。顶层 it()（规划/11 §4.3）。
+// 本目录 kit waitsOn（服务端 pg_blocking_pids，单次观察查询经 observe 可终止，第 5 次写测 §13.2）。顶层 it()（规划/11 §4.3）。
 import { createTestDatabase } from '@couli/db/testing';
 import { expect, it } from 'vitest';
 import {
@@ -23,9 +23,16 @@ import {
   failAfterCountWrite,
   pauseAtBillLock,
   tracing,
-  waitBlocked,
 } from '../bill-unsettled-count/kit.ts';
-import { TIMEOUT, databaseFixture, errorText, within } from './kit.ts';
+import {
+  OBSERVATION_MS,
+  TIMEOUT,
+  databaseFixture,
+  errorText,
+  observerOf,
+  waitsOn,
+  within,
+} from './kit.ts';
 
 const pools = databaseFixture(createTestDatabase);
 
@@ -95,7 +102,18 @@ it.each([
       // 先到的任务必须停在账单行锁上；没取锁就跑完的实现在这里红，不挂到超时。
       expect(paused.ok ? paused.value : errorText(paused.error)).toBe('paused');
       waiter = h.job.run(pools.right, input(h, second));
-      await waitBlocked(pools.control, rightPid, leftPid);
+      // 第 5 次写测（§13.2）：判据同 ../bill-unsettled-count/kit.ts waitBlocked（pg_blocking_pids(右) 含左；等不到
+      // 即失败，与它的 expect.fail 同义），但每次观察查询经 kit observe——服务端 statement_timeout 终止查询本身、
+      // 客户端到时从另一个池 pg_cancel_backend——整段观察另有明确时限 OBSERVATION_MS；屏障仍在 finally 里放行。
+      const observed = await within(
+        waitsOn(observerOf(pools), rightPid, leftPid),
+        'observing the second platform waiting on the bill row lock',
+        OBSERVATION_MS,
+      );
+      const seen = observed.ok
+        ? observed.value
+        : `observation failed: ${errorText(observed.error)}`;
+      expect(seen).toBe('blocked');
     } finally {
       barrier.release();
     }

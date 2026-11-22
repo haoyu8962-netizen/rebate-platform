@@ -29,7 +29,14 @@ import { fileURLToPath } from 'node:url';
 import { createDb, destroyDb, type DB } from '@couli/db';
 import { splitCommission, type CommissionBeneficiary } from '@couli/domain';
 import { addFen, subFen } from '@couli/money';
-import { PostgresQueryCompiler, sql, type Kysely, type QueryId, type Selectable } from 'kysely';
+import {
+  PostgresQueryCompiler,
+  sql,
+  type Kysely,
+  type QueryId,
+  type Selectable,
+  type Transaction,
+} from 'kysely';
 import { afterAll, beforeAll, expect } from 'vitest';
 import { createAdminTokens } from '../../../../apps/api/src/modules/admin/application/admin-tokens.ts';
 import {
@@ -1118,24 +1125,109 @@ export async function pidOf(db: Kysely<DB>): Promise<number> {
   return rows[0]?.pid ?? -1;
 }
 
+// 观察连接的有界查询（第 5 次写测，§13.2）：单次观察查询本身能被终止，观察连接卡住时用例也能收尾、连接池能关闭。
+
+/** 观察连接上单条观察查询的服务端上限：同一事务里 set_config('statement_timeout', …, true)，到时由 PostgreSQL 终止该查询。 */
+export const OBSERVE_STATEMENT_MS = 2_000;
+/** 服务端上限之外的客户端余量：到了还没落定，就从另一个池 pg_cancel_backend 观察连接的后端，再等它归还。 */
+const OBSERVE_GRACE_MS = 500;
+/** 一整段锁等待观察的明确时限：轮询上限 WAIT_MS，再加最后一次观察查询的最长收尾（远小于用例的 TIMEOUT）。 */
+export const OBSERVATION_MS = WAIT_MS + 5_000;
+
+/** 观察用的连接（pools.control）与取消它的另一个池（pools.db）。 */
+export interface Observer {
+  readonly db: Kysely<DB>;
+  readonly canceller: Kysely<DB>;
+}
+
+export function observerOf(pools: Pools): Observer {
+  return { db: pools.control, canceller: pools.db };
+}
+
+/**
+ * 在观察连接上跑一条观察查询，本身有界且可终止：一个事务里先取本后端 pid 并 SET LOCAL statement_timeout
+ * （OBSERVE_STATEMENT_MS，服务端到时终止查询、事务回滚、连接归还），外层再有客户端上限；外层到时查询还没落定，就从
+ * canceller 对那个 pid 发 pg_cancel_backend 取消查询本身，并有界地等它归还连接，然后抛出明确的观察错误。
+ */
+export async function observe<T>(
+  observer: Observer,
+  label: string,
+  query: (trx: Transaction<DB>) => Promise<T>,
+): Promise<T> {
+  const backend = { pid: -1 };
+  const pending = tracked(
+    observer.db.transaction().execute(async (trx) => {
+      const limit = String(OBSERVE_STATEMENT_MS);
+      const { rows } = await sql<{ pid: number }>`
+        SELECT pg_backend_pid() AS pid, set_config('statement_timeout', ${limit}, true) AS applied
+      `.execute(trx);
+      backend.pid = rows[0]?.pid ?? -1;
+      return query(trx);
+    }),
+  );
+  const settled = await within(pending.result, label, OBSERVE_STATEMENT_MS + OBSERVE_GRACE_MS);
+  if (settled.ok) {
+    const result = settled.value;
+    if (result.ok) return result.value;
+    throw new Error(`${label}: observation query failed: ${errorText(result.error)}`);
+  }
+  if (!pending.settled && backend.pid > 0) {
+    await within(
+      sql`SELECT pg_cancel_backend(${backend.pid}::int)`.execute(observer.canceller),
+      `${label}: cancelling the observer backend`,
+      OBSERVE_GRACE_MS,
+    );
+    await within(pending.result, `${label}: cancelled observation`, OBSERVE_GRACE_MS);
+  }
+  throw new Error(`${label}: ${errorText(settled.error)}`);
+}
+
 /**
  * 有界地等「有一个后端正被 holderPid 阻塞」（pg_blocking_pids，服务端观察，不靠全库锁等待计数）：
- * 'blocked' 观察到了；'done' 对方在被观察到阻塞之前就落定了；'timeout' 到了上限。
+ * 'blocked' 观察到了；'done' 对方在被观察到阻塞之前就落定了；'timeout' 到了上限。每次观察查询经 observe（§13.2）。
  */
 export async function blockedBy(
-  observer: Kysely<DB>,
+  observer: Observer,
   holderPid: number,
   done: () => boolean,
   limitMs = WAIT_MS,
 ): Promise<'blocked' | 'done' | 'timeout'> {
   const deadline = Date.now() + limitMs;
   while (Date.now() < deadline) {
-    const { rows } = await sql<{ n: number }>`
-      SELECT count(*)::int AS n FROM pg_stat_activity
-      WHERE datname = current_database() AND pid <> pg_backend_pid()
-        AND ${holderPid}::int = ANY(pg_blocking_pids(pid))`.execute(observer);
+    const rows = await observe(observer, 'observing pg_blocking_pids', async (trx) => {
+      const { rows: found } = await sql<{ n: number }>`
+        SELECT count(*)::int AS n FROM pg_stat_activity
+        WHERE datname = current_database() AND pid <> pg_backend_pid()
+          AND ${holderPid}::int = ANY(pg_blocking_pids(pid))
+      `.execute(trx);
+      return found;
+    });
     if ((rows[0]?.n ?? 0) >= 1) return 'blocked';
     if (done()) return 'done';
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  }
+  return 'timeout';
+}
+
+/**
+ * 有界地等「waiterPid 正等着 holderPid 的锁」（pg_blocking_pids(waiter) 含 holder；与 ../bill-unsettled-count/kit.ts
+ * waitBlocked 同一判据，只是每次观察查询经 observe、整体有上限）：'blocked' 观察到了，'timeout' 到了上限。
+ */
+export async function waitsOn(
+  observer: Observer,
+  waiterPid: number,
+  holderPid: number,
+  limitMs = WAIT_MS,
+): Promise<'blocked' | 'timeout'> {
+  const deadline = Date.now() + limitMs;
+  while (Date.now() < deadline) {
+    const rows = await observe(observer, 'observing the bill row lock wait', async (trx) => {
+      const { rows: found } = await sql<{ blocked: boolean }>`
+        SELECT ${holderPid}::int = ANY(pg_blocking_pids(${waiterPid}::int)) AS blocked
+      `.execute(trx);
+      return found;
+    });
+    if (rows[0]?.blocked === true) return 'blocked';
     await new Promise<void>((resolve) => setTimeout(resolve, 5));
   }
   return 'timeout';
@@ -1232,45 +1324,71 @@ export function regenerationAndItemWrites(
 }
 
 // ---------------------------------------------------------------------------------------------
-// 第 4 次写测追加（编排 D10-2544，任务书 §12）：只做搭建与取数，不 expect。
+// 第 4 次写测追加（编排 D10-2544，任务书 §12）；第 5 次写测（编排 D10-2567，§13.1）把「认出旧查询的那一种写法」
+// 改成白名单。只做搭建与取数，不 expect。
+
+const RECON_DIFFS_TABLE = /\brecon_diffs\b/gi;
+const RECON_DIFFS_INSERT_TARGET = /^\s*insert\s+into\s+(?:app\s*\.\s*)?recon_diffs\b/i;
+const DO_UPDATE = /\bdo\s+update\b/i;
 
 /**
- * 读「以联盟为准」旧结论的那条查询的识别条件（§12.1）。现有代码里这条查询只有一处：ledger
- * infra/recon-diffs-store.ts selectUnionConclusions（经 readUnionAuthoritativeOrderKeys，由 bill-source 的
- * readSource 调用），原生 SQL，形如 `SELECT latest.order_key, latest.expected_fen, latest.actual_fen FROM (SELECT
- * DISTINCT ON (...) ... d.resolution->>'outcome' AS outcome FROM app.recon_diffs AS d ... AND
- * d.resolution->>'outcome' IN ('union', 'ours') ...) AS latest WHERE latest.outcome = 'union'`。
- * 条件：语句以 SELECT 开头、读 recon_diffs、并取 resolution->>'outcome'——三条同时成立才算。登记差错单
- * （INSERT recon_diffs）、结案（UPDATE recon_diffs）、读别的表或读 recon_diffs 而不取结论的语句都不命中
- * （apps/api/src 里取 resolution->>'outcome' 的只有这一条）。
+ * 后台补充请求里允许读 recon_diffs 的语句（§13.1 允许清单）：**空——零读取**。核过的读取点（apps/api/src，第 5 次
+ * 写测时的代码；场景：一张 WAITING 单、快照 1234、联盟结算 1100、另有一张已结案且结论为以联盟为准的旧差错单，
+ * 重生成成功、不登记任何差错单）：
+ * - ledger infra/recon-diffs-store.ts selectUnionConclusions（readUnionAuthoritativeOrderKeys；settlement
+ *   bill/infra/bill-source.ts readSource 调用）：就是要消除的旧结论读取，不是必要读取。
+ * - 同文件 findReconDiffByDedupeKey / findReconDiffByBusinessKey / findReconDiffByMonthEnd /
+ *   findUnresolvedReconDiff（ledger application/recon-diffs.ts findExisting）：只在 registerReconDiff(Once) 的
+ *   INSERT … ON CONFLICT DO NOTHING 冲突后回读；补充只在登记差错单时调 registerDiff（bill/supplement/command.ts
+ *   的金额不一致与 union_mismatch 两处），本场景不登记 → 不该出现。
+ * - 同文件 selectReconDiffs（ledger getReconDiffs；payment pay-admin-reads.ts 的后台收款差错读取）：补充不调。
+ * - 同文件 countAdminReconDiffs / pageAdminReconDiffs / findAdminReconDiff / lockAdminReconDiff（后台差错单
+ *   列表、详情、结案、核销、恢复、余额重算与看板计数）：别的后台路由，补充不调。
+ * - ledger application/credit-postcheck-open-read.ts readCreditPostcheckOpen（entry.ts 的 worker gauge，抓取
+ *   /metrics 时才读）：补充请求不读。
+ * 没有一条是本场景必要的，所以清单为空；清单外任何对这张表的读都算违规。
  */
-const CONCLUSION_SELECT = /^\s*select\b/i;
-const CONCLUSION_TABLE = /\brecon_diffs\b/i;
-const CONCLUSION_OUTCOME = /\bresolution\s*->>\s*'outcome'/i;
+const RECON_DIFFS_READ_ALLOWLIST: readonly RegExp[] = [];
 
-/** 一条已编译的语句是不是读「以联盟为准」旧结论的那条（识别条件见上）。 */
-export function isUnionConclusionRead(compiledSql: string): boolean {
-  return (
-    CONCLUSION_SELECT.test(compiledSql) &&
-    CONCLUSION_TABLE.test(compiledSql) &&
-    CONCLUSION_OUTCOME.test(compiledSql)
-  );
+/**
+ * 判定一条已编译的语句是不是「读 recon_diffs」（§13.1，白名单；查询构造器与原生 SQL 都经执行器编译到这里）。
+ * 规则：去掉标识符的双引号后，语句文本里出现表名 recon_diffs（`\brecon_diffs\b`，大小写不论）就算读取——SELECT（含
+ * `SELECT *`、整列 resolution、子查询、EXISTS、CTE、JOIN、SELECT … FOR UPDATE）、INSERT … SELECT / UPDATE … FROM /
+ * DELETE … USING 里把它当数据来源的、以及以它为目标的 UPDATE / DELETE（按 WHERE 读行、可 RETURNING resolution）
+ * 都算；唯一的例外是纯写入：语句以 `INSERT INTO [app.]recon_diffs` 开头、全句只在这个目标处出现一次表名、且没有
+ * `DO UPDATE`（即 INSERT … VALUES、INSERT … ON CONFLICT [ON CONSTRAINT …] DO NOTHING [RETURNING]——returning 只回
+ * 本条刚插入的行，不回已有行）。约束与索引名（recon_diffs_business_key 等）不是表名，不命中。字符串字面量与注释
+ * 不剥：本场景的正确实现根本不碰这张表，从严。允许清单（RECON_DIFFS_READ_ALLOWLIST）里的形状不计——现为空。
+ */
+export function isReconDiffsRead(compiledSql: string): boolean {
+  const text = compiledSql.replace(/"/g, '');
+  const mentions = text.match(RECON_DIFFS_TABLE)?.length ?? 0;
+  if (mentions === 0) return false;
+  const pureInsert =
+    RECON_DIFFS_INSERT_TARGET.test(text) && mentions === 1 && !DO_UPDATE.test(text);
+  if (pureInsert) return false;
+  return !RECON_DIFFS_READ_ALLOWLIST.some((allowed) => allowed.test(text));
 }
 
+/** reconDiffsReadFault 注入的错误文字。 */
+export const INJECTED_READ = 'injected: recon_diffs must not be read';
+
 /**
- * 在这条执行器上观察并注入故障（§12.1）：凡是读「以联盟为准」旧结论的查询（isUnionConclusionRead），一执行就
- * 计数（executed）并在 PostgreSQL 返回后抛错（fired）；其余语句照常，只计总数（statements，用来证明观察确实
- * 装在请求所用的执行器上）。不替换任何端口。
+ * 在这条执行器上观察并注入故障（§13.1）：凡是读 recon_diffs 的语句（isReconDiffsRead），一执行就计数（executed）
+ * 并在 PostgreSQL 返回后抛错（fired，事务随之回滚）；其余语句照常，只计总数（statements，用来证明观察确实装在请求
+ * 所用的执行器上）。违规语句原文记在 violations。不替换任何端口。
  */
-export function unionConclusionReadFault(db: Kysely<DB>) {
+export function reconDiffsReadFault(db: Kysely<DB>) {
   const pending = new Set<QueryId>();
   const state = { executed: 0, fired: 0, statements: 0 };
+  const violations: string[] = [];
   const faulty = db.withPlugin({
     transformQuery(args) {
       state.statements += 1;
       const compiled = new PostgresQueryCompiler().compileQuery(args.node, args.queryId);
-      if (isUnionConclusionRead(compiled.sql)) {
+      if (isReconDiffsRead(compiled.sql)) {
         state.executed += 1;
+        violations.push(compiled.sql);
         pending.add(args.queryId);
       }
       return args.node;
@@ -1278,13 +1396,14 @@ export function unionConclusionReadFault(db: Kysely<DB>) {
     async transformResult(args) {
       if (pending.delete(args.queryId)) {
         state.fired += 1;
-        throw new Error('injected: the union conclusion read must not run');
+        throw new Error(INJECTED_READ);
       }
       return args.result;
     },
   });
   return {
     db: faulty,
+    violations,
     get executed() {
       return state.executed;
     },

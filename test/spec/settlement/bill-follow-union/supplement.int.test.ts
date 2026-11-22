@@ -6,7 +6,14 @@
 // withCommandsAdmin 同一生产装配，只把根 logger 换成收集日志的，冻结 kit 不改）；补充批次确认后经 worker 的生产
 // 处理器真实入账。顶层 it()（规划/11 §4.3）。
 import { expect, it } from 'vitest';
-import { readUnionAuthoritativeOrderKeys } from '../../../../apps/api/src/modules/ledger/index.ts';
+import {
+  countReconDiffOpen,
+  getReconDiffs,
+  lockReconDiffForRestore,
+  readCreditPostcheckOpen,
+  readReconDiffForRestore,
+  readUnionAuthoritativeOrderKeys,
+} from '../../../../apps/api/src/modules/ledger/index.ts';
 import {
   creditSwitch,
   everything,
@@ -21,6 +28,7 @@ import {
 } from '../admin-settle-commands/kit.ts';
 import {
   EXAMPLE_PEOPLE,
+  INJECTED_READ,
   TIMEOUT,
   admin,
   alertsFor,
@@ -38,6 +46,7 @@ import {
   expectAlertShape,
   failVersionWrite,
   idempotencyKey,
+  isReconDiffsRead,
   itemWriteFault,
   itemsFor,
   ledgerOf,
@@ -45,6 +54,7 @@ import {
   pendingOf,
   platformKey,
   platformLines,
+  reconDiffsReadFault,
   regenerationAndItemWrites,
   seedOrder,
   setConfig,
@@ -52,7 +62,6 @@ import {
   splitOf,
   syncEstimate,
   unionConclusion,
-  unionConclusionReadFault,
   userCreditLines,
   versionRows,
   versionsOf,
@@ -447,7 +456,7 @@ it(
 // 第 4 次写测（编排 D10-2544，任务书 §12）。断言都在用例体里；后台回调里只发请求与取数。
 
 it(
-  "[AC-B2-18#33] 后台补充（真实后台生产入口）不再读「以联盟为准」旧结论（D10-2415）：快照 1234、结算 1100 的 WAITING 单另有一张已结案、结论「以联盟为准」的旧差错单；在这次请求所用的数据库执行器上，凡是读旧结论的查询（以 SELECT 开头、读 recon_diffs、取 resolution->>'outcome'）一执行就抛错并计数 → 请求 200，这类查询执行 0 次；该单按 1100 重生成 v2（550 / 110）并入补充批次，明细恰好一份（b_settle 1100、settle_seq 1）；不告警、旧差错单原样不新增、账单行不回写",
+  '[AC-B2-18#33] 后台补充（真实后台生产入口）不读 recon_diffs（D10-2415；第 5 次写测改为白名单，编排 D10-2567）：快照 1234、结算 1100 的 WAITING 单另有一张已结案、结论「以联盟为准」的旧差错单；在这次请求所用的数据库执行器上，凡是把 recon_diffs 当读取对象的语句（任何 SELECT——含 SELECT *、整列 resolution、子查询、EXISTS、CTE、JOIN——以及 INSERT … SELECT / UPDATE … FROM 的数据来源；纯写入的 INSERT … VALUES / ON CONFLICT DO NOTHING 不算；允许清单为空）一执行就抛错并计数 → 请求 200，违规读取 0 次；探针自检：专用结论读口与 ledger 的通用读口（getReconDiffs 按单与按应用、恢复用的按 id 读与加锁读、未结计数、入账后核对 gauge）经同一执行器各调一次都被拦下；该单按 1100 重生成 v2（550 / 110）并入补充批次，明细恰好一份（b_settle 1100、settle_seq 1）；不告警、旧差错单原样不新增、账单行不回写',
   async () => {
     const base = fixture(s);
     const a = await appOf(base);
@@ -455,15 +464,62 @@ it(
     await unionConclusion(a, o, 1234n, 1100n);
     const diffsBefore = await diffsOf(a);
     const billsBefore = (await everything(base)).bills;
-    // 观察与故障装在后台入口所用的执行器上（dbHandles.db = f.db）；不替换任何端口、不改冻结 kit。
-    const fault = unionConclusionReadFault(base.db);
+    const diffId = diffsBefore[0]?.id ?? 'no recon diff seeded';
+    // 观察与故障装在后台入口所用的执行器上（dbHandles.db = f.db）；不替换任何端口、不改冻结 kit。判定规则与允许
+    // 清单（空，零读取）见 kit isReconDiffsRead / RECON_DIFFS_READ_ALLOWLIST 的注释。
+    const fault = reconDiffsReadFault(base.db);
     const f: Fixture = { ...base, db: fault.db };
 
-    // 识别条件确实命中现有代码里的那条旧查询（取数，断言在下面）：经同一执行器直接调一次 ledger 的结论读口。
-    const probe = await within(
-      readUnionAuthoritativeOrderKeys(fault.db, { appId: a.appId, orderKeys: [o.orderKey] }),
-      'union conclusion read probe',
-    );
+    // 判定规则的形状自检（纯函数，取数；断言在下面）：这些都是「读」，那些是纯写入或别的表。
+    const readShapes = [
+      'select * from "app"."recon_diffs" where "app_id" = $1 and "ref_id" = $2 and "status" = $3',
+      'select "resolution" from "app"."recon_diffs" where "id" = $1 for update',
+      'select exists (select 1 from app.recon_diffs as d where d.ref_id = $1) as concluded',
+      'with c as (select d.resolution from app.recon_diffs as d) select * from c',
+      'select o.order_id from app.orders as o inner join app.recon_diffs as d on d.ref_id = $1',
+      'insert into "app"."audit" ("ref") select "id" from "app"."recon_diffs" where "app_id" = $1',
+      'update "app"."orders" set "x" = d."y" from "app"."recon_diffs" as d where d."id" = $1',
+      'insert into "app"."recon_diffs" ("id") values ($1) on conflict ("id") do update set "id" = $1 returning *',
+      'update "app"."recon_diffs" set "updated_at" = $1 where "id" = $2 returning "resolution"',
+    ];
+    const writeShapes = [
+      'insert into "app"."recon_diffs" ("id", "app_id") values ($1, $2) on conflict do nothing returning *',
+      'insert into app.recon_diffs (id) values ($1)',
+      'insert into "app"."recon_diffs" ("id") values ($1) on conflict on constraint recon_diffs_business_key do nothing',
+      'select * from "app"."orders" where "app_id" = $1',
+    ];
+    const missedReads = readShapes.filter((q) => !isReconDiffsRead(q));
+    const flaggedWrites = writeShapes.filter((q) => isReconDiffsRead(q));
+
+    // 探针自检（取数；断言在下面）：经同一执行器直接调专用读口与 ledger 公开的、能读到已结案差错单（或这张表）的
+    // 每个读口各一次——每一次都必须被计为违规并抛错，证明白名单拦得住这些路径。
+    const conclusionKeys = { appId: a.appId, orderKeys: [o.orderKey] };
+    const closedOfOrder = { appId: a.appId, orderKey: o.orderKey, status: 'closed' as const };
+    const restoreRead = fault.db.transaction();
+    const restoreLock = fault.db.transaction();
+    const probes: [string, () => Promise<unknown>][] = [
+      [
+        'readUnionAuthoritativeOrderKeys',
+        () => readUnionAuthoritativeOrderKeys(fault.db, conclusionKeys),
+      ],
+      ['getReconDiffs by order, closed', () => getReconDiffs(fault.db, closedOfOrder)],
+      ['getReconDiffs of the app', () => getReconDiffs(fault.db, { appId: a.appId })],
+      [
+        'readReconDiffForRestore',
+        () => restoreRead.execute((trx) => readReconDiffForRestore(trx, a.appId, diffId)),
+      ],
+      [
+        'lockReconDiffForRestore',
+        () => restoreLock.execute((trx) => lockReconDiffForRestore(trx, a.appId, diffId)),
+      ],
+      ['countReconDiffOpen', () => countReconDiffOpen(fault.db, a.appId)],
+      ['readCreditPostcheckOpen', () => readCreditPostcheckOpen(fault.db)],
+    ];
+    const probeResults: [string, string][] = [];
+    for (const [name, read] of probes) {
+      const outcome = await within(read(), `probe: ${name}`);
+      probeResults.push([name, outcome.ok ? 'not rejected' : errorText(outcome.error)]);
+    }
     const probed = { executed: fault.executed, fired: fault.fired, statements: fault.statements };
     const seen: { status?: number; body?: string; lines: LogLine[] } = { lines: [] };
 
@@ -474,14 +530,15 @@ it(
       seen.lines = h.lines;
     });
 
-    expect(probe.ok).toBe(false);
-    expect(probe.ok ? '' : errorText(probe.error)).toContain(
-      'injected: the union conclusion read must not run',
-    );
-    expect(probed).toMatchObject({ executed: 1, fired: 1 });
+    expect(missedReads).toEqual([]);
+    expect(flaggedWrites).toEqual([]);
+    const rejected = probes.map(([name]) => [name, expect.stringContaining(INJECTED_READ)]);
+    expect(probeResults).toEqual(rejected);
+    expect(probed).toMatchObject({ executed: probes.length, fired: probes.length });
 
-    // 请求成功，且这次请求里读旧结论的查询一次都没执行（观察确实装在请求的执行器上：其间经过了别的语句）。
+    // 请求成功，且这次请求里对 recon_diffs 的读取一次都没执行（观察确实装在请求的执行器上：其间经过了别的语句）。
     expect(seen.status, seen.body).toBe(200);
+    expect(fault.violations.slice(probed.executed)).toEqual([]);
     expect(fault.executed - probed.executed).toBe(0);
     expect(fault.fired - probed.fired).toBe(0);
     expect(fault.statements).toBeGreaterThan(probed.statements);

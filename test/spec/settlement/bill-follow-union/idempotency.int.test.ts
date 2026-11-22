@@ -25,6 +25,7 @@ import {
   diffsOf,
   errorText,
   itemsFor,
+  observerOf,
   orderRow,
   pidOf,
   seedOrder,
@@ -268,13 +269,15 @@ it(
     // 出账确实在等这张订单的锁（'blocked'）；没等就跑完的（'done'）与到上限的（'timeout'）都不接受。
     // 第 4 次写测（§12.3）：观察有明确上限（OBSERVE_MS，单次查询卡住或观察连接断开也不越过），屏障在 finally
     // 里放行，观察失败时同步事务照样提交、出账照样收尾，失败落到下面 observed 的断言（带错误文字）。
+    // 第 5 次写测（§13.2）：每次观察查询经 kit observe——服务端 statement_timeout 终止查询本身，客户端到时再从
+    // 另一个池 pg_cancel_backend，观察连接卡住时连接也能归还、连接池能关闭。
     let watched: Outcome<'blocked' | 'done' | 'timeout'> = {
       ok: false,
       error: new Error('observation not run'),
     };
     try {
       watched = await within(
-        blockedBy(pools.control, syncPid, () => bill.settled),
+        blockedBy(observerOf(pools), syncPid, () => bill.settled),
         'observing the bill blocked by the order sync',
         OBSERVE_MS,
       );
@@ -436,13 +439,14 @@ it.each([
     );
     const bill = tracked(running);
     // 第 4 次写测（§12.3）：观察有明确上限（OBSERVE_MS），屏障在 finally 里放行；观察失败落到 observed 的断言。
+    // 第 5 次写测（§13.2）：每次观察查询经 kit observe（statement_timeout + 到时 pg_cancel_backend），同 #15。
     let watched: Outcome<'blocked' | 'done' | 'timeout'> = {
       ok: false,
       error: new Error('observation not run'),
     };
     try {
       watched = await within(
-        blockedBy(pools.control, syncPid, () => bill.settled),
+        blockedBy(observerOf(pools), syncPid, () => bill.settled),
         'observing the bill blocked by the order sync',
         OBSERVE_MS,
       );
