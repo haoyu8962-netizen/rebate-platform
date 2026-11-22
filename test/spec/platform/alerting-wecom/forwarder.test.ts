@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 import { expect, it, vi } from 'vitest';
 import { handleAlertmanagerWebhook } from '../../../../infra/monitoring/forwarder/webhook.ts';
 import { configuration, list, record, string } from '../alerting/kit.ts';
@@ -54,7 +55,7 @@ const ALERTS = [
   },
 ];
 
-function hookRequest(url: string, receiver: 'finance' | 'oncall'): Request {
+function hookRequest(url: string, receiver: 'finance' | 'oncall', alerts = ALERTS): Request {
   return new Request(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -62,7 +63,7 @@ function hookRequest(url: string, receiver: 'finance' | 'oncall'): Request {
       version: '4',
       receiver,
       status: 'firing',
-      alerts: ALERTS,
+      alerts,
       externalURL: OMIT.url,
     }),
   });
@@ -196,3 +197,106 @@ it('[AC-B1-25c#5] 每次推送独立计五秒超时', async () => {
   expect(signals.map((signal) => signal?.aborted)).toEqual([true, false]);
   expect(signals[0]).not.toBe(signals[1]);
 });
+
+async function captureOutput(run: () => Promise<Response>) {
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  const diagnostics: string[] = [];
+  const exitCode = process.exitCode;
+  const format = (value: unknown) =>
+    inspect(value, {
+      colors: false,
+      depth: null,
+      customInspect: false,
+      maxStringLength: null,
+      maxArrayLength: null,
+    });
+  const log = (...values: unknown[]) => {
+    diagnostics.push(values.map(format).join(' '));
+  };
+  const write =
+    (output: string[]) =>
+    (
+      chunk: string | Uint8Array,
+      encoding?: BufferEncoding | ((error?: Error | null) => void),
+      callback?: (error?: Error | null) => void,
+    ): boolean => {
+      output.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString());
+      const done = typeof encoding === 'function' ? encoding : callback;
+      done?.(null);
+      return true;
+    };
+  const globalConsole = console as unknown as Record<string, (...values: unknown[]) => void>;
+  const spies = Object.keys(globalConsole)
+    .filter((name) => typeof globalConsole[name] === 'function')
+    .map((name) => vi.spyOn(globalConsole, name).mockImplementation(log));
+  const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(write(stdout));
+  const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(write(stderr));
+  const warningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(log);
+  const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+    log('process.exit', code);
+    throw new Error('fixture intercepted process.exit');
+  });
+  let response: Response | undefined;
+  try {
+    response = await run();
+    log(response.statusText, Array.from(response.headers.entries()), await response.text());
+  } catch (error) {
+    log(error);
+  } finally {
+    // Capture logs queued for the next turn as well as synchronous output.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    log('process.exitCode', process.exitCode);
+    exitSpy.mockRestore();
+    process.exitCode = exitCode;
+    warningSpy.mockRestore();
+    stderrSpy.mockRestore();
+    stdoutSpy.mockRestore();
+    for (const spy of spies) spy.mockRestore();
+  }
+  return { response, output: [stdout.join(''), stderr.join(''), ...diagnostics].join('\n') };
+}
+
+const FAILED_PUSHES = ['HTTP 503', '超时', 'HTTP 200 业务错误'] as const;
+
+async function checkFailedOutput(failure: (typeof FAILED_PUSHES)[number]) {
+  const options = dependencies();
+  const url = ROBOTS.finance;
+  const key = new URL(url).searchParams.get('key')!;
+  const detail = `fixture upstream error: ${url}, key=${key}`;
+  const markdownBodies: string[] = [];
+  let controller: AbortController | undefined;
+  if (failure === '超时') {
+    options.timeoutSignal.mockImplementation(() => {
+      controller = new AbortController();
+      return controller.signal;
+    });
+  }
+  options.fetch.mockImplementation(async (input, init) => {
+    const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    const copy = input instanceof Request ? input.clone() : input;
+    markdownBodies.push(await new Request(copy, init).text());
+    if (failure === 'HTTP 503') return new Response(detail, { status: 503, statusText: detail });
+    if (failure === 'HTTP 200 业务错误') return Response.json({ errcode: 93000, errmsg: detail });
+    // A Request carries a signal that follows the original controller's signal.
+    controller?.abort(new DOMException(detail, 'TimeoutError'));
+    signal?.throwIfAborted();
+    return robotOk();
+  });
+  const alerts = ALERTS.map((alert) => ({
+    ...alert,
+    annotations: { ...alert.annotations, summary: `${alert.annotations.summary} ${url} ${key}` },
+  }));
+  const request = hookRequest('http://127.0.0.1/finance', 'finance', alerts);
+  const run = () => handleAlertmanagerWebhook(request, options);
+  const { response, output } = await captureOutput(run);
+  expect(options.fetch.mock.calls.length).toBeGreaterThan(1);
+  expect(markdownBodies).toHaveLength(options.fetch.mock.calls.length);
+  expect(response?.ok).not.toBe(true);
+  for (const emitted of [output, ...markdownBodies]) {
+    expect(emitted).not.toContain(url);
+    expect(emitted).not.toContain(key);
+  }
+}
+
+it.each(FAILED_PUSHES)('[AC-B1-25c#17] %s 时所有输出均不含 Webhook 地址或 key', checkFailedOutput);
