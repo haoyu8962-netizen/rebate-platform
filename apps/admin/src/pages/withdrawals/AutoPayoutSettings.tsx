@@ -15,6 +15,11 @@
 // 20902、42901 等仍结果未知、请求体不变；普通 10003 重验后原样重发。unknown-marker（page=withdrawals）在
 // 请求发出前就记下、按回答的分类增删，与页面是否还在无关（离开页面时在途的保存留着标记）；拿到确定结果或
 // 【刷新核对】后清本实例那一份（D10-2075）。标记的写、读、清不按账号角色分支（D10-2470）。
+// 本实例的提交在途或结果未知期间，标记被别处清掉（如重登后旧提示的【关闭】）就按当前时刻重写（money r2 S1-b）。
+// 【刷新核对】（D10-2493 ①）：读到所送任一键的版本已不是 expected_version → 以读到的为准、解锁、清标记；仍是
+// 原版本 → 结果仍未知（原请求可能仍在等锁），保留状态、请求体与标记，提示稍后再核对，并给【放弃这次提交】
+// （二次确认后解锁、清标记）；不自动轮询、不倒计时解锁。【刷新】【刷新核对】的读取超过 READ_DEADLINE_MS 按读取失败。
+// 成功回答须逐项给出所送的键与表单依赖的字段（契约 AdminConfigItem）及有效值，否则按结果未知（money r2 S2）。
 // 资金评审（D10-2050）：没有无交互角色却带点击 / 按键处理的元素（时段用原生下拉、标签用原生勾选框），
 // 也没有任何把金额、默认值或当前时间填进输入框的入口。
 import type { Schema } from '@couli/contracts-ts';
@@ -27,6 +32,7 @@ import {
   Flex,
   Form,
   Input,
+  Modal,
   Result,
   Switch,
   Typography,
@@ -35,7 +41,12 @@ import {
 import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
-import { endsSession, useUnknownMarker } from '../../components/unknown-marker/index.ts';
+import {
+  endsSession,
+  readUnknown,
+  useUnknownMarker,
+} from '../../components/unknown-marker/index.ts';
+import { subscribeMarkers } from '../../components/unknown-marker/marker.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { stepUpTexts } from '../../texts/step-up.ts';
 import { withdrawalsTexts } from '../../texts/withdrawals.ts';
@@ -53,6 +64,8 @@ import {
   autoPayoutItems,
   checkDraft,
   draftOf,
+  isAutoPayoutKey,
+  isValidStored,
   masterOf,
   type AutoPayoutDraft,
   type AutoPayoutEntry,
@@ -91,6 +104,12 @@ const DEFAULT_RETRY_AFTER_S = 5;
  * 【刷新核对】 remain, and a late answer is ignored.
  */
 export const SAVE_DEADLINE_MS = 30_000;
+/**
+ * How long 【刷新】 (after a 20902) and 【刷新核对】 wait for the settings (ms) before the read counts
+ * as failed. A read is safe to give up and repeat, so the same 30 s as a save: past it the read is
+ * aborted, the existing read-failed branch runs, and 【刷新】 / 【刷新核对】 are offered again.
+ */
+export const READ_DEADLINE_MS = 30_000;
 /** Upper bound of list pages read (the registry is far smaller). */
 const MAX_PAGES = 20;
 
@@ -175,10 +194,36 @@ export function withDeadline<T>(
   });
 }
 
+const VALUE_TYPES: readonly string[] = ['boolean', 'enum', 'object', 'number', 'string'];
+
+/**
+ * Whether `item` carries every member the form relies on (contract AdminConfigItem: key, value,
+ * value_type, options, permission, admin_editable, version) with usable values, and a stored
+ * value valid for its key. A value of null (never written) is not an answer to a save.
+ */
+function completeItem(item: unknown): item is AutoPayoutItem {
+  if (typeof item !== 'object' || item === null || Array.isArray(item)) return false;
+  const row = item as Record<string, unknown>;
+  const { key, value, value_type: type, options, permission, admin_editable: editable } = row;
+  if (typeof key !== 'string' || !isAutoPayoutKey(key) || !('value' in row)) return false;
+  if (typeof type !== 'string' || !VALUE_TYPES.includes(type)) return false;
+  if (
+    options !== null &&
+    !(Array.isArray(options) && options.every((one) => typeof one === 'string'))
+  )
+    return false;
+  if (typeof permission !== 'string' || permission === '') return false;
+  if (typeof editable !== 'boolean') return false;
+  if (typeof row['version'] !== 'number' || !Number.isSafeInteger(row['version'])) return false;
+  return value !== null && isValidStored(key, value, options as readonly string[] | null);
+}
+
 /**
  * The items of a batch answer: exactly one per key of `body` (no key missing, none extra or
- * twice), each with a value and a usable version. Undefined when the answer does not say what
- * is stored now for every key sent — an answer that settles nothing.
+ * twice), each complete (completeItem) and at a version past the one sent — every key of a
+ * stored batch moves on (adminBatchUpdateConfigItems: each changed key gets its version plus 1).
+ * Undefined when the answer does not say in full what is stored now for every key sent — an
+ * answer that settles nothing.
  */
 export function answeredItems(data: unknown, body: BatchRequest): AutoPayoutItem[] | undefined {
   if (typeof data !== 'object' || data === null) return undefined;
@@ -189,16 +234,33 @@ export function answeredItems(data: unknown, body: BatchRequest): AutoPayoutItem
   );
   const seen = new Set<string>();
   for (const item of items as unknown[]) {
-    if (typeof item !== 'object' || item === null || !('value' in item)) return undefined;
-    const { key, version } = item as { key?: unknown; version?: unknown };
-    if (typeof key !== 'string' || seen.has(key)) return undefined;
+    if (!completeItem(item)) return undefined;
+    const { key, version } = item;
+    if (seen.has(key)) return undefined;
     const sentVersion = expected.get(key);
-    if (sentVersion === undefined) return undefined;
-    if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < sentVersion)
-      return undefined;
+    if (sentVersion === undefined || version <= sentVersion) return undefined;
     seen.add(key);
   }
   return seen.size === expected.size ? (items as AutoPayoutItem[]) : undefined;
+}
+
+/**
+ * 【刷新核对】 (D10-2493 ①): whether `read` rules out that `body`'s request still takes effect
+ * later — some key it sends is at another version than its expected_version. The batch is all or
+ * nothing with a version check on every key (adminBatchUpdateConfigItems: any mismatch is 20902,
+ * nothing applied), so a moved version means the body was stored, or another write got in first
+ * and the body's late attempt can only be refused. False while every key sent is still at the
+ * version sent (or is missing, or unreadable): the request may still be waiting on the server.
+ */
+export function versionMoved(read: readonly AutoPayoutItem[], body: BatchRequest): boolean {
+  return body.items.some((entry) => {
+    const version: unknown = read.find((item) => item.key === entry.key)?.version;
+    return (
+      typeof version === 'number' &&
+      Number.isSafeInteger(version) &&
+      version !== entry.expected_version
+    );
+  });
 }
 
 /** What one send of the batch settled. */
@@ -280,11 +342,43 @@ export function AutoPayoutSettings({
   /** 42901: 【保存】 and 【原样重试】 wait for Retry-After. */
   const [cooling, setCooling] = useState(false);
   const coolTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  /**
+   * D10-2493 ①: 【刷新核对】 read every key sent still at the version sent — the result stays
+   * unknown and 【放弃这次提交】 is offered; `checkedRef` keeps that read for after giving up.
+   */
+  const [mayAbandon, setMayAbandon] = useState(false);
+  const [confirmAbandon, setConfirmAbandon] = useState(false);
+  const checkedRef = useRef<readonly AutoPayoutItem[] | undefined>(undefined);
+  /**
+   * This instance's submission is under way or its result unknown: its marker must stay. Set
+   * before the request leaves; false before a settled answer (or giving up) drops the marker.
+   */
+  const keepRef = useRef(false);
+  const markerRef = useRef(marker);
+  useEffect(() => {
+    markerRef.current = marker;
+  }, [marker]);
+
+  /**
+   * money r2 S1-b: while keepRef holds, the marker of this account is there — dropped elsewhere
+   * meanwhile (【关闭】 on the prompt of an earlier submission drops it whatever holds it), it is
+   * written again at the clock's now. The same path for every account (D10-2470).
+   */
+  const keepMarked = () => {
+    const control = markerRef.current;
+    if (!keepRef.current || control.scope.account === undefined) return;
+    if (readUnknown(control.scope) !== undefined) return;
+    // This instance's holding went with it: hold the marker afresh.
+    control.clear();
+    control.mark();
+  };
 
   useEffect(() => {
     alive.current = true;
+    const stop = subscribeMarkers(keepMarked);
     return () => {
       alive.current = false;
+      stop();
       clearTimeout(coolTimer.current);
     };
   }, []);
@@ -318,13 +412,14 @@ export function AutoPayoutSettings({
   };
 
   /** Every config item of the registry (page by page), only the tab's keys kept. */
-  const readItems = async (): Promise<AutoPayoutItem[]> => {
+  const readItems = async (signal?: AbortSignal): Promise<AutoPayoutItem[]> => {
     const all: AutoPayoutItem[] = [];
     for (let page = 1; page <= MAX_PAGES; page += 1) {
       const response = await customOf()<ConfigPage>({
         url: CONFIG_ITEMS_URL,
         method: 'get',
         query: { page, page_size: CONFIG_PAGE_SIZE },
+        ...(signal === undefined ? {} : { meta: { signal } }),
       });
       const { items: rows, total, page_size: size } = response.data;
       all.push(...(rows as unknown as AutoPayoutItem[]));
@@ -446,6 +541,8 @@ export function AutoPayoutSettings({
 
   const retry = () => {
     if (phaseRef.current !== 'unknown' || bodyRef.current === undefined || cooling) return;
+    // A new send: giving up waits for the next 【刷新核对】.
+    setMayAbandon(false);
     setAgain(false);
     setPhase('verify');
   };
@@ -482,27 +579,40 @@ export function AutoPayoutSettings({
   const settled = () => {
     uncertainRef.current = false;
     bodyRef.current = undefined;
+    checkedRef.current = undefined;
     setUnknownNote(undefined);
+    setMayAbandon(false);
+    setConfirmAbandon(false);
+  };
+
+  /** The submission is settled or given up: its marker goes (keepRef first, so it stays gone). */
+  const dropMarker = () => {
+    keepRef.current = false;
+    markerRef.current.clear();
   };
 
   /**
    * The marker follows what the send settled, whether or not the page is still shown (it was
    * kept before the request left): stored or settled refused → dropped; a plain 10003 → dropped
    * unless an earlier send of the body is unknown; 10001 → given up while unknown (stays for the
-   * prompt after signing in again), dropped otherwise; no settled answer → kept.
+   * prompt after signing in again), dropped otherwise; no settled answer → kept, and written
+   * again if it was dropped meanwhile (money r2 S1-b).
    */
   const markerAfter = (outcome: SaveOutcome, uncertain: boolean) => {
-    if (outcome.kind === 'unknown') return;
-    if (outcome.kind === 'ended' && uncertain) marker.leave();
-    else if (outcome.kind === 'again' && uncertain) return;
-    else marker.clear();
+    if (outcome.kind === 'unknown') keepMarked();
+    else if (outcome.kind === 'ended' && uncertain) {
+      keepMarked();
+      markerRef.current.leave();
+    } else if (outcome.kind === 'again' && uncertain) keepMarked();
+    else dropMarker();
   };
 
   const send = async (body: BatchRequest, stepUpToken: string): Promise<void> => {
     const uncertain = uncertainRef.current;
     // Kept before the request leaves: leaving the page (or the session ending) while it is
     // under way keeps the marker; only a settled answer drops it.
-    marker.mark();
+    keepRef.current = true;
+    markerRef.current.mark();
     let answer:
       | { readonly ok: true; readonly data: unknown }
       | { readonly ok: false; readonly cause: unknown };
@@ -586,16 +696,30 @@ export function AutoPayoutSettings({
     void send(body, stepUpToken);
   };
 
-  /** 【刷新核对】: read the settings again and show what the server holds; then unlock. */
+  /**
+   * 【刷新核对】: read the settings again (within READ_DEADLINE_MS). A version of a key sent moved
+   * (versionMoved) → show what the server holds, unlock, drop the marker. Every key still at the
+   * version sent → the request may still be waiting on the server (D10-2493 ①): still unknown,
+   * locked, body and marker kept; 【放弃这次提交】 is offered. No polling, no unlock by a timer.
+   */
   const recheck = () => {
     if (phaseRef.current !== 'unknown') return;
+    setMayAbandon(false);
     setPhase('rechecking');
     const seq = nextRead();
-    readItems().then(
+    withDeadline((signal) => readItems(signal), READ_DEADLINE_MS).then(
       (next) => {
         if (!alive.current || seq !== readSeq.current) return;
-        marker.clear();
+        const body = bodyRef.current;
+        if (body !== undefined && !versionMoved(next, body)) {
+          checkedRef.current = next;
+          setUnknownNote(t.recheckPending);
+          setMayAbandon(true);
+          setPhase('unknown');
+          return;
+        }
         settled();
+        dropMarker();
         show(next);
         setStale(false);
         setNotice(undefined);
@@ -610,14 +734,33 @@ export function AutoPayoutSettings({
   };
 
   /**
+   * 【放弃这次提交】, confirmed (D10-2493 ①): stop waiting for the unknown save. It may still take
+   * effect later; the form shows the settings of the last 【刷新核对】 with their versions, so a
+   * later save that would overwrite a late success is refused with 20902 (the batch's version
+   * check), never applied. Unlocks and drops the marker.
+   */
+  const abandon = () => {
+    if (phaseRef.current !== 'unknown') return;
+    const checkedItems = checkedRef.current;
+    settled();
+    dropMarker();
+    nextRead();
+    if (checkedItems !== undefined) show(checkedItems);
+    setStale(false);
+    setNotice(undefined);
+    setPhase('edit');
+  };
+
+  /**
    * 【刷新】 after 20902: read the settings again (what was typed is dropped). The form stays
-   * locked until the values and versions are back; a failed read keeps 【刷新】 offered.
+   * locked until the values and versions are back, at most READ_DEADLINE_MS (money r2 S1-c); a
+   * failed or timed-out read keeps 【刷新】 offered.
    */
   const refresh = () => {
     if (phaseRef.current !== 'edit') return;
     setPhase('refreshing');
     const seq = nextRead();
-    readItems().then(
+    withDeadline((signal) => readItems(signal), READ_DEADLINE_MS).then(
       (next) => {
         if (!alive.current || seq !== readSeq.current) return;
         show(next);
@@ -684,6 +827,18 @@ export function AutoPayoutSettings({
                 <Button autoInsertSpace={false} disabled={phase !== 'unknown'} onClick={recheck}>
                   {t.unknownRecheck}
                 </Button>
+                {mayAbandon ? (
+                  <Button
+                    autoInsertSpace={false}
+                    danger
+                    disabled={phase !== 'unknown'}
+                    onClick={() => {
+                      if (phaseRef.current === 'unknown') setConfirmAbandon(true);
+                    }}
+                  >
+                    {t.abandon}
+                  </Button>
+                ) : null}
               </Flex>
             </Flex>
           }
@@ -744,6 +899,25 @@ export function AutoPayoutSettings({
           </Flex>
         </Flex>
       </Form>
+      <Modal
+        open={confirmAbandon && phase === 'unknown'}
+        title={t.abandonTitle}
+        destroyOnHidden
+        maskClosable={false}
+        onCancel={() => setConfirmAbandon(false)}
+        footer={
+          <Flex justify="end" gap={8}>
+            <Button autoInsertSpace={false} onClick={() => setConfirmAbandon(false)}>
+              {t.abandonCancel}
+            </Button>
+            <Button autoInsertSpace={false} type="primary" danger onClick={abandon}>
+              {t.abandonOk}
+            </Button>
+          </Flex>
+        }
+      >
+        <Typography.Paragraph>{t.abandonConfirm}</Typography.Paragraph>
+      </Modal>
       <StepUpModal
         open={phase === 'verify'}
         tier="totp"

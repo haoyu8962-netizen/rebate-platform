@@ -212,6 +212,44 @@ function fieldOf(key: AutoPayoutKey, value: unknown): AutoPayoutField | undefine
   }
 }
 
+const intIn = (value: unknown, max: bigint): boolean =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && BigInt(value) <= max;
+
+/**
+ * Whether `value` is a usable stored value of `key` (the ranges of the save checks): integer fen
+ * within the key's range, a count, bp 0–10000, a boolean, a time out of `options` (the defaults
+ * without), BR-WDR-29 codes, or a fixed policy out of `options`. null (never written) is not.
+ */
+export function isValidStored(
+  key: AutoPayoutKey,
+  value: unknown,
+  options: readonly string[] | null,
+): boolean {
+  switch (KIND[key]) {
+    case 'yuan':
+      return intIn(value, key === AUTO_KEY.maxAmount ? MAX_AMOUNT_FEN : INT_MAX);
+    case 'count':
+      return intIn(value, INT_MAX);
+    case 'percent':
+      return intIn(value, 10_000n);
+    case 'flag':
+      return typeof value === 'boolean';
+    case 'time': {
+      const allowed = options ?? (key === AUTO_KEY.windowStart ? DEFAULT_STARTS : DEFAULT_ENDS);
+      return typeof value === 'string' && allowed.includes(value);
+    }
+    case 'flags':
+      return (
+        Array.isArray(value) &&
+        value.every(
+          (code) => typeof code === 'string' && (RISK_FLAGS as readonly string[]).includes(code),
+        )
+      );
+    case 'fixed':
+      return typeof value === 'string' && (options === null || options.includes(value));
+  }
+}
+
 /** The form's starting draft of `items` (a null value: an empty field, never a default). */
 export function draftOf(items: readonly AutoPayoutItem[]): AutoPayoutDraft {
   const draft: Partial<Record<AutoPayoutKey, AutoPayoutField>> = {};

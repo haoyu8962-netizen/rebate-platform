@@ -864,6 +864,13 @@ export const withdrawalsTexts = {
     retryConflict:
       '重试被拒：服务端设置的版本已变化（可能正是上次保存已生效），请【刷新核对】读取实际设置。',
     retryUnsettled: '这次重试没有得到确定的回应，上次保存的结果仍未知。',
+    /** D10-2493 ①：【刷新核对】读到所送的设置仍是提交时的版本。 */
+    recheckPending: '上次提交可能仍在处理，稍后再刷新核对',
+    abandon: '放弃这次提交',
+    abandonTitle: '放弃这次提交？',
+    abandonConfirm: '放弃只是不再等待，这次提交仍可能在稍后生效；继续编辑前请以刷新后的值为准',
+    abandonOk: '确认放弃',
+    abandonCancel: '继续等待',
   },
   /**
    * F1-08at（D10-2075）：结果未知期间会话过期、重新登录后页面顶部的提示（components/unknown-marker，
