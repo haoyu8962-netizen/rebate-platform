@@ -1,7 +1,7 @@
 // CT-06zzzzzzzb (FU-VERIFY-FAST-PROFILE, D10-2503 / D10-2504): `pnpm run verify:fast` cut into the
-// parts CI runs it as, read from .github/workflows/ci.yml and the root package.json themselves (no
-// second list), for tools/ops/verify-container.sh --fast-part / --fast and
-// tools/ops/verify-sharded-summary.ts.
+// parts CI runs it as, read from .github/workflows/ci.yml and the root package.json themselves (the
+// run: steps of those jobs are only checked against the trusted list below), for
+// tools/ops/verify-container.sh --fast-part / --fast and tools/ops/verify-sharded-summary.ts.
 //
 //   node tools/ci/fast-parts.ts [--workflow <path>] [--package-json <path>]
 //     (defaults: .github/workflows/ci.yml and package.json of this checkout)
@@ -17,9 +17,15 @@
 // `turbo run test` over the whole workspace (at most `--env-mode=<mode>`, no filter) and the
 // verify-unit command is `pnpm exec <root test script>` plus one `--filter='!<P>'` and nothing
 // else; (3) every spec command is `pnpm --filter <P> run test --shard=<i>/<N>` with that same <P>,
-// one per i in 1..N, one N, the job named after its i; (4) each of those commands is a one-line
-// `run:` value (a block scalar or a value continued on further lines is folded by CI into one
-// command this reading would not see whole). Anything else throws (exit 2 on the command line).
+// one per i in 1..N, one N, the job named after its i; (4) every `run:` step of verify-unit and
+// verify-spec-<i> is, as written, one of the trusted list below (TESTED_BLOCK, INSTALL_RUN,
+// UNIT_RUNS, the spec command with its i): any other block scalar, a continued line, a backslash, `;`, `&&`,
+// an env prefix or any step not in the list throws, naming the job and the step (D10-2548). Anything
+// else throws too (exit 2 on the command line).
+//
+// WHEN THE run: STEPS OF verify-unit OR verify-spec-<i> IN ci.yml CHANGE, CHANGE THE TRUSTED LIST
+// HERE IN THE SAME COMMIT. Until then fast-parts exits 2 (and --fast-part / --fast refuse to run):
+// that is on purpose, the list is the gate, not a copy of ci.yml.
 //
 // Node built-in modules only; the line-based YAML reading is that of tools/ci/int-shards.ts.
 import { readFileSync } from 'node:fs';
@@ -83,18 +89,15 @@ function isBlankOrComment(line: string): boolean {
   return t === '' || t.startsWith('#');
 }
 
-/** Removes a trailing ` # comment` and surrounding quotes from a scalar value. */
-function scalar(value: string): string {
-  const withoutComment = value.replace(/\s+#.*$/, '').trim();
-  const single = /^'(.*)'$/.exec(withoutComment);
-  if (single) return (single[1] ?? '').replace(/''/g, "'");
-  const double = /^"(.*)"$/.exec(withoutComment);
-  return double ? (double[1] ?? '') : withoutComment;
-}
-
 type Job = { id: string; lines: string[] };
 
-/** The jobs under `jobs:`, in file order (a repeated id stays repeated). */
+const JOB_HEAD = /^ {2}(?:"([A-Za-z0-9_-]+)"|'([A-Za-z0-9_-]+)'|([A-Za-z0-9_-]+))\s*:\s*(#.*)?$/;
+
+/**
+ * The jobs under `jobs:`, in file order (a repeated id stays repeated). A job keeps every line
+ * after its head, blank and comment lines included (they may belong to a block scalar). A line at
+ * job level that is not a plain `<id>:` head throws.
+ */
 function jobsOf(text: string): Job[] {
   const lines = text.split(/\r?\n/);
   const at = lines.findIndex((l) => /^jobs:\s*(#.*)?$/.test(l));
@@ -102,13 +105,17 @@ function jobsOf(text: string): Job[] {
   const jobs: Job[] = [];
   let current: Job | null = null;
   for (const line of lines.slice(at + 1)) {
-    if (isBlankOrComment(line)) continue;
+    if (isBlankOrComment(line)) {
+      current?.lines.push(line);
+      continue;
+    }
     if (indentOf(line) === 0) break;
-    const head = /^ {2}([A-Za-z0-9_-]+):\s*(#.*)?$/.exec(line);
-    if (head) {
-      current = { id: head[1] ?? '', lines: [] };
+    if (indentOf(line) <= 2) {
+      const head = JOB_HEAD.exec(line);
+      if (!head) throw new Error(`a line at job level is not a job head: ${line.trim()}`);
+      current = { id: head[1] ?? head[2] ?? head[3] ?? '', lines: [] };
       jobs.push(current);
-    } else if (current && indentOf(line) > 2) {
+    } else if (current) {
       current.lines.push(line);
     }
   }
@@ -116,72 +123,124 @@ function jobsOf(text: string): Job[] {
 }
 
 /**
- * A step's `run:` value. `single` only for a one-line plain or quoted scalar; a block scalar
- * (`|`, `>`, with any indicator) or a value that goes on over further lines is not single, and its
- * `text` is all its lines joined by blanks (enough to see whether it holds a test command).
+ * One `run:` step as written: `header` is the text after `run:` with surrounding blanks removed
+ * (nothing else: quotes, comments and backslashes stay); `body` is, for a value that goes on over
+ * further lines (a block scalar or a continued scalar), those lines with their common indentation
+ * removed, joined by newlines (trailing empty lines dropped), else null.
  */
-type RunValue = { text: string; single: boolean };
+type RunStep = { header: string; body: string | null };
+
+/** `key: value` with a plain or quoted key, after optional `- ` sequence entries. */
+const KEYED = /^(\s*(?:-\s+)*)(?:"([^"]*)"|'([^']*)'|([A-Za-z0-9_<-]+))\s*:(?:\s+(.*))?$/;
 
 /**
- * The `run:` values of a job's steps. A more indented line after `key: value` continues that
- * value (a multi-line plain or quoted scalar), and the lines of a `key: |` / `key: >` block belong
- * to it; the same text under any other key is not a command.
+ * The `run:` steps of a job (any `run` key that is not inside another key's multi-line value).
+ * Syntax this line reading could misplace a step under throws instead: flow mappings, anchors,
+ * aliases, merge and explicit keys, tags, and a quoted value not closed on its line.
  */
-function runValues(lines: string[]): RunValue[] {
-  const out: RunValue[] = [];
-  let open: { column: number; value: RunValue | null } | null = null;
-  for (const line of lines) {
+function runSteps(job: Job): RunStep[] {
+  const out: RunStep[] = [];
+  let open: { column: number; block: boolean; lines: string[]; step: RunStep | null } | null = null;
+  const close = () => {
+    const lines = [...(open?.lines ?? [])];
+    while (lines.length > 0 && (lines[lines.length - 1] ?? '').trim() === '') lines.pop();
+    if (open?.step && lines.length > 0) {
+      const first = lines.find((l) => l.trim() !== '') ?? '';
+      const indent = indentOf(first);
+      for (const l of lines) {
+        if (l.trim() !== '' && indentOf(l) < indent) {
+          throw new Error(`job ${job.id}: a \`run:\` block line is less indented than its first`);
+        }
+      }
+      open.step.body = lines.map((l) => (l.trim() === '' ? '' : l.slice(indent))).join('\n');
+    }
+    open = null;
+  };
+  for (const line of job.lines) {
+    if (open !== null && (line.trim() === '' || indentOf(line) > open.column)) {
+      // In a block scalar a `#` line is text; after a plain or quoted value it is a comment.
+      if (!open.block && line.trim().startsWith('#')) continue;
+      open.lines.push(line);
+      continue;
+    }
+    close();
     if (isBlankOrComment(line)) continue;
-    if (open !== null && indentOf(line) > open.column) {
-      if (open.value !== null) {
-        open.value.single = false;
-        open.value.text = `${open.value.text} ${line.trim()}`.trim();
+    const keyed = KEYED.exec(line);
+    const lead = line.trim().replace(/^(?:-\s+)+/, '');
+    if (!keyed) {
+      if (/^[{[&*!?|>"']/.test(lead)) {
+        throw new Error(`job ${job.id}: unsupported YAML syntax: ${line.trim()}`);
       }
       continue;
     }
-    open = null;
-    const keyed = /^(\s*(?:-\s+)?)([A-Za-z0-9_-]+):(?:\s+(.*))?$/.exec(line);
-    if (!keyed) continue;
-    const column = (keyed[1] ?? '').length;
-    const value = (keyed[3] ?? '').replace(/\s+#.*$/, '').trim();
-    const isRun = keyed[2] === 'run';
-    if (/^[|>][0-9+-]*$/.test(value)) {
-      const block: RunValue = { text: '', single: false };
-      if (isRun) out.push(block);
-      open = { column, value: isRun ? block : null };
-      continue;
+    const key = keyed[2] ?? keyed[3] ?? keyed[4] ?? '';
+    const value = (keyed[5] ?? '').trim();
+    if (
+      key === '<<' ||
+      /^[{&*!]/.test(value) ||
+      (/^\[/.test(value) && !/^\[[^"'{}[\]]*\]$/.test(value))
+    ) {
+      throw new Error(`job ${job.id}: unsupported YAML syntax: ${line.trim()}`);
     }
-    const entry: RunValue = { text: scalar(value), single: isRun && isSingleScalar(value) };
-    if (isRun) out.push(entry);
-    // An empty value with deeper lines is a nested mapping for other keys; for run it is a
-    // plain scalar that starts on the next line.
-    open = value === '' && !isRun ? null : { column, value: isRun ? entry : null };
+    if (/^["']/.test(value) && !isClosedQuoted(value.replace(/\s+#.*$/, ''))) {
+      throw new Error(`job ${job.id}: a quoted value not closed on its line: ${line.trim()}`);
+    }
+    const step: RunStep | null = key === 'run' ? { header: value, body: null } : null;
+    if (step) out.push(step);
+    // Deeper lines continue this value (block scalar, continued scalar) or, under any key other
+    // than run with an empty value, are a nested mapping read on its own.
+    if (step || value !== '')
+      open = { column: (keyed[1] ?? '').length, block: /^[|>]/.test(value), lines: [], step };
   }
+  close();
   return out;
 }
 
-/** A one-line plain scalar, or one closed single- / double-quoted scalar. */
-function isSingleScalar(value: string): boolean {
-  if (value === '') return false;
-  if (value.startsWith("'")) return /^'(?:[^']|'')*'$/.test(value);
-  if (value.startsWith('"')) return /^"(?:[^"\\]|\\.)*"$/.test(value);
-  return !/^[-?:,[\]{}#&*!|>%@`]/.test(value); // no indicator: a plain scalar
+/** One single- or double-quoted scalar closed on its line. */
+function isClosedQuoted(value: string): boolean {
+  return value.startsWith("'") ? /^'(?:[^']|'')*'$/.test(value) : /^"(?:[^"\\]|\\.)*"$/.test(value);
 }
 
 /**
- * The commands a job runs that match `pattern`; throws, naming the job, when such a command is
- * not a one-line scalar (CI would run the whole folded or multi-line value, not its first line).
+ * The trusted list (D10-2548, approvals 152): every `run:` step of the jobs verify-unit and
+ * verify-spec-<i> in .github/workflows/ci.yml, verbatim. `run:` values are compared as written
+ * (see RunStep): no unquoting, no joining of continued lines, no removal of backslashes or blanks.
  */
-function commandsOf(job: Job, pattern: RegExp): string[] {
+const TESTED_BLOCK = [
+  "tree=$(git rev-parse 'HEAD^{tree}')",
+  'echo "tree=$tree" >> "$GITHUB_OUTPUT"',
+  'echo "$tree" > "$RUNNER_TEMP/verified-tree.txt"',
+].join('\n');
+const INSTALL_RUN = 'pnpm install --frozen-lockfile';
+const UNIT_TEST_RUN = "pnpm exec turbo run test --env-mode=loose --filter='!@couli/spec-tests'";
+const UNIT_RUNS = ['pnpm build', UNIT_TEST_RUN, 'pnpm --filter @couli/api run smoke:entries'];
+const SPEC_RUN_PREFIX = (i: number) =>
+  `pnpm --filter @couli/spec-tests run test --shard=${String(i)}/`;
+
+/** Whether a step is in the trusted list for the job (verify-unit, or verify-spec-<specIndex>). */
+function isTrusted(step: RunStep, specIndex: number | null): boolean {
+  if (step.header === '|' && step.body === TESTED_BLOCK) return true;
+  if (step.body !== null) return false;
+  if (step.header === INSTALL_RUN) return true;
+  if (specIndex === null) return UNIT_RUNS.includes(step.header);
+  const prefix = SPEC_RUN_PREFIX(specIndex);
+  return step.header.startsWith(prefix) && /^[1-9][0-9]*$/.test(step.header.slice(prefix.length));
+}
+
+/**
+ * The one-line `run:` commands of a job, after checking every `run:` step against the trusted
+ * list; throws, naming the job and the step as written, at the first step not in it.
+ */
+function trustedCommandsOf(job: Job, specIndex: number | null): string[] {
   const out: string[] = [];
-  for (const v of runValues(job.lines)) {
-    if (!pattern.test(v.text)) continue;
-    if (!v.single) {
+  for (const step of runSteps(job)) {
+    if (!isTrusted(step, specIndex)) {
+      const written = step.body === null ? step.header : `${step.header}\n${step.body}`;
       throw new Error(
-        `job ${job.id}: the test command must be a one-line \`run:\` value (no block scalar or continued lines): ${v.text}`,
+        `job ${job.id}: a \`run:\` step not in the trusted list of tools/ci/fast-parts.ts: ${JSON.stringify(written)}`,
       );
     }
-    out.push(v.text);
+    if (step.body === null) out.push(step.header);
   }
   return out;
 }
@@ -216,7 +275,7 @@ export function readFastParts(workflowText: string, packageJsonText: string): Fa
     throw new Error(`expected one job verify-unit, found ${String(unitJobs.length)}`);
   }
   const unitJob = unitJobs[0] as Job;
-  const unitCommands = commandsOf(unitJob, TURBO_TEST);
+  const unitCommands = trustedCommandsOf(unitJob, null).filter((c) => TURBO_TEST.test(c));
   if (unitCommands.length !== 1) {
     throw new Error(
       `the job verify-unit must have exactly one turbo test command, found ${String(unitCommands.length)}`,
@@ -239,7 +298,7 @@ export function readFastParts(workflowText: string, packageJsonText: string): Fa
     if (!m) continue;
     const index = Number(m[1]);
     if (numbered.has(index)) throw new Error(`job ${job.id} appears twice`);
-    const own = commandsOf(job, PACKAGE_TEST);
+    const own = trustedCommandsOf(job, index).filter((c) => PACKAGE_TEST.test(c));
     if (own.length !== 1) {
       throw new Error(
         `job ${job.id} must have exactly one shard command, found ${String(own.length)}`,
