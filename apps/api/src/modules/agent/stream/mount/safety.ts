@@ -171,6 +171,8 @@ export async function readBudget(
  * (scheduler.now()) once agent.safety.timeout_ms of `appId` was read: that value minus the wait
  * for the read. UNREADABLE when the read failed, hung or outlived `signal`; 0 when nothing is left
  * (a read slower than its own value). Either way the review is unavailable now (fail-close).
+ * B3-06c (D10-2498): a caller that did other work since its review started passes that start;
+ * the default is "now", taken before any read is started.
  */
 export async function remainingBudget(
   config: StreamReviewConfigReader,
@@ -178,8 +180,8 @@ export async function remainingBudget(
   appId: string,
   signal: AbortSignal,
   fallback: number,
+  startedAt: number = scheduler.now(),
 ): Promise<number | typeof UNREADABLE> {
-  const startedAt = scheduler.now();
   const budget = await readBudget(config, scheduler, appId, signal, fallback);
   if (budget === UNREADABLE) return UNREADABLE;
   const left = budget - Math.max(0, scheduler.now() - startedAt);
@@ -211,10 +213,12 @@ export type ReviewSettings =
 /**
  * B3-06c · BR-AI-18: agent.safety.timeout_ms and the block level of `side` for one app, read now
  * for this one review (never cached; the level travels in the result, never in shared state).
- * Both reads start together at the start of the review; the timeout_ms read is bounded as in
- * remainingBudget, and the wait for the level counts toward the same deadline (D10-2489): a level
- * read that fails, or does not settle before the deadline, is unreadable (review unavailable, like
- * a timeout); a level read but missing or invalid is low (D10-2484).
+ * Both reads start together at the start of the review, and the deadline is that start plus
+ * timeout_ms (D10-2498: the start is taken before any read, never once timeout_ms is known); the
+ * timeout_ms read is bounded as in readBudget, and the wait for the level counts toward the same
+ * deadline (D10-2489): a level read that fails, or does not settle before the deadline, is
+ * unreadable (review unavailable, like a timeout); a level read but missing or invalid is low
+ * (D10-2484).
  */
 export async function reviewSettings(
   config: StreamReviewConfigReader,
@@ -224,6 +228,9 @@ export async function reviewSettings(
   signal: AbortSignal,
   fallback: number,
 ): Promise<ReviewSettings> {
+  // D10-2498: the review's one deadline starts here, before any read is started; a stall between
+  // starting the reads and learning timeout_ms never moves it (deadline = startedAt + timeout_ms).
+  const startedAt = scheduler.now();
   if (signal.aborted) return { kind: 'expired' };
   const levelKey = BLOCK_LEVEL_KEYS[side];
   // Started first (and synchronously) so the timeout_ms read stays the last read of the review.
@@ -236,13 +243,13 @@ export async function reviewSettings(
   } catch {
     levelRead = Promise.resolve(UNREADABLE);
   }
-  const left = await remainingBudget(config, scheduler, appId, signal, fallback);
-  if (left === UNREADABLE) {
+  const budget = await readBudget(config, scheduler, appId, signal, fallback);
+  if (budget === UNREADABLE) {
     return signal.aborted ? { kind: 'expired' } : { kind: 'unreadable', key: TIMEOUT_KEY };
   }
+  const deadlineAt = startedAt + budget;
+  const left = deadlineAt - scheduler.now();
   if (left <= 0) return { kind: 'expired' };
-  // The review's one deadline (from its start), fixed once timeout_ms is known.
-  const deadlineAt = scheduler.now() + left;
 
   const timer = new AbortController();
   const stop = (): void => {
