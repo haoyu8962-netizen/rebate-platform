@@ -6,6 +6,8 @@ import { createDb, destroyDb, type DB } from '@couli/db';
 import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, expect } from 'vitest';
 
+import { appendSettleBillsStatements } from './settle-bills-source.ts';
+
 export type Row = Record<string, unknown>;
 export const TABLES = [
   'settle_jobs',
@@ -79,6 +81,7 @@ export function migrationSource(): string {
     .filter((source) => alters.test(source))
     .flatMap((source) => source.split(';').filter((statement) => touches.test(statement)))
     .map((statement) => `${statement.trim()};`);
+  appendSettleBillsStatements(later, all, core, strip);
   return [strip(core), ...later].join('\n');
 }
 

@@ -2043,6 +2043,7 @@ export interface SettleBatchItems {
 }
 
 export interface SettleBills {
+  amount_mismatch_count: number | null;
   app_id: string;
   beneficiary_total_fen: ColumnType<bigint, bigint, bigint> | null;
   bill_id: string;
@@ -2054,6 +2055,7 @@ export interface SettleBills {
   platform_order_counts: Json | null;
   platform_retained_fen: ColumnType<bigint, bigint, bigint> | null;
   platform_settle_commission_totals: Json | null;
+  unsettled_count: number | null;
 }
 
 export interface SettleJobs {

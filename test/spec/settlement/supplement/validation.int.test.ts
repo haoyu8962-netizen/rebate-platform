@@ -76,16 +76,14 @@ it(
 );
 
 it(
-  '[AC-B2-04r#2] 账单日应结未结、联盟结算数据后到的订单进入补充批次，原差错单不重复登记',
+  '[AC-B2-04r#2] 账单日应结未结（只计数、不登记差错单，B2-18a）、联盟结算数据后到的订单进入补充批次',
   async () => {
     const h = fixture(database.db);
     const late = await order(h);
     await settlement(h, late, { created_at: new Date(LATER) });
     await main(h);
     const before = await state(h);
-    expect(before.diffs).toEqual([
-      expect.objectContaining({ type: 'settle_missing', ref_id: late.key, period: MONTH }),
-    ]);
+    expect(before.diffs).toEqual([]);
     expect(before.batches).toEqual([]);
 
     await h.launch();
@@ -135,13 +133,13 @@ it(
     await settlement(h, fresh, { created_at: new Date(LATER), settle_commission_fen: 9000n });
     await main(h);
     const before = await state(h);
-    expect(before.diffs).toHaveLength(2);
+    expect(before.diffs).toHaveLength(1);
 
     await h.launch();
     const s = await state(h);
     expect(s.batches).toEqual([]);
     expect(s.items).toEqual([]);
-    expect(s.diffs).toHaveLength(3);
+    expect(s.diffs).toHaveLength(2);
     expect(s.diffs).toEqual(expect.arrayContaining(before.diffs));
     expect(s.diffs).toContainEqual(
       expect.objectContaining({
@@ -222,9 +220,7 @@ it(
     );
     const s = await state(h);
     expect(s.items.map((i) => i.order_id).sort()).toEqual([atCutoff.id, afterRequest.id].sort());
-    expect(s.diffs).toEqual([
-      expect.objectContaining({ type: 'settle_missing', ref_id: tooLate.key, period: MONTH }),
-    ]);
+    expect(s.diffs).toEqual([]);
     expect(await validations(h)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ orderKey: atCutoff.key, result: 'candidate' }),
@@ -265,9 +261,7 @@ it(
     const s = await state(h);
     expect(supplements(s).map((b) => b.bill_id)).toEqual([MONTH]);
     expect(s.items.map((i) => i.order_id).sort()).toEqual([current.id, older.id].sort());
-    expect(s.diffs).toEqual([
-      expect.objectContaining({ type: 'settle_missing', ref_id: missing.key, period: MONTH }),
-    ]);
+    expect(s.diffs).toEqual([]);
     const seen = (await validations(h)).map((v) => [v.orderKey, v.result]).sort();
     expect(seen).toEqual(
       [

@@ -145,9 +145,13 @@ it(
           { billId: BILL_MONTH, generatedAt: DAY_AFTER_NOW, counts: { [TAOBAO]: 0 } },
         ];
         expect(await billsOf(db, APP)).toStrictEqual(generated);
+        // B2-18a：无结算数据的单只计入应结未结数，补出账的 bill 不再登记 settle_missing。
         expect(
           calls.diffs.map((diff) => ({ type: diff.type, period: diff.period, refId: diff.refId })),
-        ).toStrictEqual([{ type: 'settle_missing', period: BILL_MONTH, refId: order.key }]);
+        ).not.toContainEqual({ type: 'settle_missing', period: BILL_MONTH, refId: order.key });
+        expect(
+          calls.diffs.map((diff) => ({ type: diff.type, period: diff.period, refId: diff.refId })),
+        ).toStrictEqual([]);
 
         // Generated: the same day, the next day and the last day of the period send nothing.
         const sentBefore = queue.sent.length;
@@ -165,7 +169,7 @@ it(
         });
         expect(await billRunsOf(db, APP)).toStrictEqual([DONE_RUN]);
         expect(await billsOf(db, APP)).toStrictEqual(generated);
-        expect(calls.diffs).toHaveLength(1);
+        expect(calls.diffs).toHaveLength(0);
 
         // The next bill day: the 2032-07 period is the one looked back at.
         clock.set('2032-08-24T02:00:00.000Z');

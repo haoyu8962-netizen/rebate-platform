@@ -160,6 +160,10 @@ export interface BillJob {
 
 // ---------------------------------------------------------------------------
 // 实现（BR-FUND-04 ③④⑤⑨⑫、BR-FUND-18）。
+// ④ 的分类结果：金额不一致登记 settle_amount_mismatch、联盟有结算而我方状态不符登记 union_mismatch，
+// 两者计 error_count；hold / 维权中计 held_count；应结未结（missing_settlement）只累加进
+// settle_bills.unsettled_count，不登记差错单（2026-11-21 起）。三个计数都在账单行锁内与出账同一事务写入。
+// 注意：本改动只是不再为无结算数据的单开差错单；没有结算记录写入路径的平台仍入不了账（D10-2402）。
 // 调度在 worker/schedule.ts；orders 事实、淘礼金扣减、快照读口与差错登记都经依赖注入。
 // settle_jobs.status 只经 ./settle-job.ts（生成的 settle-job transition()，按旧状态 CAS）。
 
@@ -214,6 +218,7 @@ interface Totals {
   readonly retainedFen: bigint;
   readonly errorCount: number;
   readonly heldCount: number;
+  readonly unsettledCount: number;
 }
 
 function positiveInteger(value: unknown, name: string): number | null {
@@ -432,6 +437,8 @@ export function createBillJob(dependencies: BillJobDependencies): BillJob {
     const credited: CreditedFacts[] = [];
     let errorCount = 0;
     let heldCount = 0;
+    // 应结未结（BR-FUND-04 ④，2026-11-21）：只计数，不登记差错单、不计 error_count。
+    let unsettledCount = 0;
 
     for (const row of rows) {
       // 两个数不是同一条记录（B2-04zp，BR-FUND-09）：金额、来源、取得时间看决定金额的 chosen；settle_seq 看
@@ -534,17 +541,10 @@ export function createBillJob(dependencies: BillJobDependencies): BillJob {
           );
         }
       } else if (preliminary === 'missing_settlement' && order !== null) {
-        errorCount += 1;
-        const snapshot = await deps.readSnapshot(trx, {
-          appId,
-          orderId: order.orderId,
-          commissionVersion: order.commissionVersion,
-        });
-        await deps.registerDiff(
-          trx,
-          diffInput(appId, billId, 'settle_missing', row.orderKey, snapshot?.baseFen ?? 0n, 0n),
-          { clock: deps.clock },
-        );
+        // BR-FUND-04 ④（2026-11-21）：settle_period = 账单月、未 hold、未维权而截至生成开始仍无联盟结算
+        // 数据的，只计入账单的「应结未结」数，不生成差错单（settle_missing 取值保留、不再生成），不计
+        // error_count；订单行不动（仍 WAITING、settle_period 不变），结算数据到达后进补充批次或下一期账单。
+        unsettledCount += 1;
       } else if (preliminary === 'unexpected_settlement' && chosen !== null) {
         // BR-FUND-09：联盟有结算而我方 ESTIMATED / VOID / CLAWED_BACK 或无单，登记联盟差错。
         errorCount += 1;
@@ -580,6 +580,7 @@ export function createBillJob(dependencies: BillJobDependencies): BillJob {
       retainedFen: 0n,
       errorCount,
       heldCount,
+      unsettledCount,
     };
 
     if (config.creditEnabled) {
@@ -695,6 +696,10 @@ export function createBillJob(dependencies: BillJobDependencies): BillJob {
         platform_retained_fen: addFen(bill.platform_retained_fen ?? 0n, totals.retainedFen),
         error_count: (bill.error_count ?? 0) + totals.errorCount,
         held_count: (bill.held_count ?? 0) + totals.heldCount,
+        // 与 error_count、held_count 同一条 UPDATE、同一事务、同一把账单行锁内读出的旧值累加；
+        // 迁移前的行为 NULL，按 0 起加；出过主批次就落具体数（没有应结未结时为 0）。
+        // amount_mismatch_count 归 B2-18，本任务不写。
+        unsettled_count: (bill.unsettled_count ?? 0) + totals.unsettledCount,
       })
       .where('app_id', '=', appId)
       .where('bill_id', '=', billId)

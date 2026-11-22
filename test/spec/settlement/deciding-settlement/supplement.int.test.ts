@@ -44,7 +44,7 @@ it(
       expect(await w.items(app)).toMatchObject([
         { item_type: 'order', order_id: order.order_id, settle_seq: 3, b_settle_fen: 900n },
       ]);
-      expect((await reconDiffs(db, app)).map((diff) => diff.type)).toEqual(['settle_missing']);
+      expect((await reconDiffs(db, app)).map((diff) => diff.type)).toEqual([]);
 
       await w.confirmAndExecute(app);
       expect(await w.items(app)).toMatchObject([{ result: 'credited', skip_reason: null }]);
@@ -85,7 +85,7 @@ it(
         (diff) => diff.type === 'settle_amount_mismatch',
       );
       expect(mismatches).toEqual([]);
-      expect((await reconDiffs(db, app)).map((diff) => diff.type)).toEqual(['settle_missing']);
+      expect((await reconDiffs(db, app)).map((diff) => diff.type)).toEqual([]);
 
       await w.confirmAndExecute(app);
       expect(await w.items(app)).toMatchObject([{ result: 'credited', skip_reason: null }]);
