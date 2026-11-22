@@ -19,6 +19,7 @@ import type {
 export interface DeterministicPathDeps {
   readonly quotes: LinkQuoteRunner;
   readonly texts: AgentRunTexts;
+  readonly logger?: { error(obj: Record<string, unknown>, msg: string): void };
   /** Optional receiver of each successful link's trace fragment (link_registrations), handed
    * over unchanged as DegradedPathDeps.onTrace does. Best effort: it never changes the result. */
   readonly onTrace?: (fragment: ToolTraceFragment) => void;

@@ -111,6 +111,7 @@ it('[AC-B3-05e#2] 三链接按出现顺序串行取数出卡，身份只取 call
 it.each([30131, 30132, 30141, 50301] as const)(
   '[AC-B3-05e#3] 中间链接解析错误 %s 只出对应 notice，前后报价照常',
   async (errorCode) => {
+    const key = errorCode === 50301 ? 'agent.notice.quote_failed' : `error.${errorCode}`;
     const out = context();
     const runner = quotes([
       success(1),
@@ -131,8 +132,8 @@ it.each([30131, 30132, 30141, 50301] as const)(
         kind: 'card',
         card: expect.objectContaining({
           type: 'notice',
-          data: expect.objectContaining({ text_key: `error.${errorCode}` }),
-          fallback_text: `固定文案:error.${errorCode}`,
+          data: expect.objectContaining({ text_key: key }),
+          fallback_text: `固定文案:${key}`,
         }),
       },
       { kind: 'card', card: success(3).cards[0] },
@@ -160,6 +161,7 @@ it.each([30131, 30132, 30141, 50301] as const)(
 it.each(['price_unavailable', 'no_card', 'exception'] as const)(
   '[AC-B3-05e#4][AC-B3-05e#5] %s 仅出依赖不可用提示，不补金额且继续后续链接',
   async (kind) => {
+    const key = kind === 'exception' ? 'agent.notice.quote_failed' : 'error.50301';
     const out = context();
     const runner = quotes([
       success(1),
@@ -181,8 +183,8 @@ it.each(['price_unavailable', 'no_card', 'exception'] as const)(
         kind: 'card',
         card: expect.objectContaining({
           type: 'notice',
-          data: expect.objectContaining({ text_key: 'error.50301' }),
-          fallback_text: '固定文案:error.50301',
+          data: expect.objectContaining({ text_key: key }),
+          fallback_text: `固定文案:${key}`,
         }),
       },
       { kind: 'card', card: success(3).cards[0] },
@@ -214,7 +216,7 @@ it('[AC-B3-05e#6] 全部失败逐个提示，结束为 stop 而非 fallback 或�
   ).toEqual(stopped);
   expect(runner.run).toHaveBeenCalledTimes(3);
   expect(out.content()).toEqual(
-    ['error.30141', 'error.50301', 'error.50301'].map((text_key) => ({
+    ['error.30141', 'error.50301', 'agent.notice.quote_failed'].map((text_key) => ({
       kind: 'card',
       card: expect.objectContaining({
         type: 'notice',

@@ -69,7 +69,9 @@ export type LinkQuoteOutcome =
       readonly cards: readonly [];
     }
   | { readonly kind: 'price_unavailable'; readonly cards: readonly [] }
-  | { readonly kind: 'no_card'; readonly cards: readonly [] };
+  | { readonly kind: 'no_card'; readonly cards: readonly [] }
+  | { readonly kind: 'no_rebate'; readonly cards: readonly [] }
+  | { readonly kind: 'server_failed'; readonly cards: readonly [] };
 
 export interface LinkQuoteRunner {
   /** Internal URL/token runner; deterministic token wiring is a separate task. */
