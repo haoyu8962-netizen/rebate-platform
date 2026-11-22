@@ -408,6 +408,28 @@ chmod 500 /etc/couli-staging-test
 - 增减号码：改 `staging.env` 里的 `STAGING_TEST_PHONES` 后重新部署（第 3 节）。
 - 停用：从 `staging.env` 删掉两个变量后重新部署；节点目录可以留着，也可以删。
 
+### 1.11a 实名测试身份（只在 staging）
+
+依据负责人 2026-11-22 同意（编排 D10-2636 ②，B1-13n）。二要素核验供应商开通前，staging 的会员实名提交一律 50301；名单里的测试账号（user_id）提交实名时，核验器直接判一致，实名记录的 provider 记为 `staging-test-identity`。其余规则照旧：格式、校验位、年龄线、证件号被他人占用（30405）、每日次数都不放宽；名单外用户仍 50301、不计次；后台实名更正不走测试身份（仍 50301）。**只在 `APP_ENV=staging` 生效**：其他环境设了这个变量即拒绝启动。名单只在节点配置里，不写进本仓库。
+
+#### 变量
+
+在 `/etc/couli/staging.env` 里设（compose 用 `env_file` 把整个文件交给各入口，不必改 `compose.yaml`；只有 api 的会员侧实名用它）：
+
+| 变量 | 取值 |
+| --- | --- |
+| `STAGING_TEST_REALNAME_USER_IDS` | 测试账号的 user_id（`app.users.id`，小写标准 UUID），英文逗号分隔，1 到 10 个，不重复、不留空项 |
+
+不设或留空：与原来一样（staging 实名 50301）。名单不合格（空项、不是小写 UUID、超过 10 个、重复）时 api 拒绝启动，报错只写变量名与原因，不带取值。具体 user_id 见私有仓库的说明，不写在这里。
+
+启用时 api 启动打一条 warn `staging_test_realname_enabled`，只带个数（`count`）。每次名单内用户核验通过，api 写一条审计日志 `staging_test_realname_verified`（字段只有 event、app_id、user_id、provider），不带姓名和证件号。测试账号提交的姓名与证件号只用虚构值（证件号用不存在的地区码，如 99 开头），不用真人信息。
+
+#### 轮换与停用
+
+- 增减或换账号：改 `staging.env` 里的 `STAGING_TEST_REALNAME_USER_IDS` 后重新部署（第 3 节），或 `docker compose -f infra/staging/compose.yaml --env-file /etc/couli/staging.env up -d api`；api 只在启动时读一次。
+- 换下来的账号已经写下的实名记录不会撤销；要重测同一账号，先按正常流程处理该账号的实名记录。
+- 停用：从 `staging.env` 删掉这个变量后重新部署。
+
 ### 1.12 配置签名私钥（bridge_origins 签名白名单）
 
 依据编排裁定 D10-608 / D10-610 / D10-612（F1-02zzzb）。`/v1/config` 的 `bridge_origins` 是 api 用 ES256 签过名的白名单（契约 `ConfigBridgeOrigins`），App 用包里带的公钥验签，验不过就不用。签名私钥只给 api，和访问令牌私钥（1.4）**分开**，不要复用同一把。**api 在 staging 没有这把私钥就拒绝启动**，所以合入这项改动之后的第一次部署之前，要先把下面的文件和变量准备好。

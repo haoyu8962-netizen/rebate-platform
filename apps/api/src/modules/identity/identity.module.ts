@@ -89,7 +89,10 @@ import {
   registerLaborAgreementConfigReader,
   type LaborAgreementConfigReader,
 } from './ports/labor-agreement.ts';
-import { createRealnameVerifier } from './infra/fake-realname-verifier.ts';
+import {
+  createRealnameVerifier,
+  createStagingTestRealnameVerifier,
+} from './infra/fake-realname-verifier.ts';
 import { createBankCardVerifier, createCardBin } from './infra/fake-bank-card-verifier.ts';
 import { createRealnameReader } from './infra/realname-reader.ts';
 import {
@@ -1532,10 +1535,20 @@ export class IdentityModule {
         },
         {
           // BR-ID-25: the fake two-element verifier in local / test; staging / prod have no vendor
-          // yet (null → 50301), announced once while the entry starts.
+          // yet (null → 50301), announced once while the entry starts. B1-13n (D10-2636 ②): a
+          // staging node that lists test user_ids gets the staging test identity verifier on this
+          // member-side submission only (the admin correction keeps createRealnameVerifier).
           provide: REALNAME_VERIFIER,
           inject: [APP_CONFIG, ROOT_LOGGER],
           useFactory: (config: AppConfig, logger: RootLogger): RealnameVerifierPort | null => {
+            const testIds = config.stagingTestRealnameUserIds ?? null;
+            if (config.appEnv === 'staging' && testIds !== null && testIds.length > 0) {
+              return createStagingTestRealnameVerifier({
+                appEnv: config.appEnv,
+                userIds: testIds,
+                logger,
+              });
+            }
             const verifier = createRealnameVerifier(config.appEnv);
             if (verifier === null) logger.warn({}, 'realname_verifier_unconfigured');
             return verifier;

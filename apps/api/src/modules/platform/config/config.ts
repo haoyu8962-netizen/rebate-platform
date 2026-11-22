@@ -32,6 +32,7 @@ import { readPayChannelsConfig, type PayChannelsConfig } from './pay-channels.ts
 import { readQueueConcurrencyConfig } from './queue-concurrency.ts';
 import { readSmsConfig, type SmsConfig } from './sms.ts';
 import { readStagingTestPhoneConfig, type StagingTestPhoneConfig } from './staging-test-phones.ts';
+import { readStagingTestRealnameConfig } from './staging-test-realname.ts';
 import { readTaobaoConfig, type TaobaoAppConfig } from './taobao.ts';
 import { readTaobaoOAuthConfig } from './taobao-oauth.ts';
 import { readTaobaoSourceConfig } from './taobao-sources.ts';
@@ -275,6 +276,12 @@ export interface AppConfig {
    */
   readonly stagingTestPhones?: StagingTestPhoneConfig | null;
   /**
+   * STAGING_TEST_REALNAME_USER_IDS (./staging-test-realname.ts, B1-13n, D10-2636 ②): staging only;
+   * the user_ids whose member-side real-name submission the staging test identity verifies. Absent
+   * or null: no test identity. A hand-built config without it counts as null.
+   */
+  readonly stagingTestRealnameUserIds?: readonly string[] | null;
+  /**
    * AGENT_USER_HASH_KEY (./agent-user-hash.ts, B3-09j; BR-AI-22): HMAC key of agent's deletion
    * purge. loadConfig fills it (null when unset outside prod; prod refuses to start without it).
    * A hand-built config without it counts as null: the agent cleanup port stays unavailable.
@@ -427,6 +434,9 @@ export function loadConfig(
       problems.push(...readUnionEndpointOverrideConfig(appEnv.data, env).problems);
     if (appEnv.success) problems.push(...readAgentUserHashConfig(appEnv.data, env).problems);
     if (appEnv.success) problems.push(...readStagingTestPhoneConfig(appEnv.data, env).problems);
+    if (appEnv.success) {
+      problems.push(...readStagingTestRealnameConfig(appEnv.data, env).problems);
+    }
     problems.push(...readQueueConcurrencyConfig(env).problems);
     problems.push(...readConfigSignKeyConfig(env).problems);
     if (appEnv.success && entry !== undefined) {
@@ -502,6 +512,9 @@ export function loadConfig(
     env,
   );
   violations.push(...stagingTestPhoneProblems);
+  const { stagingTestRealnameUserIds, problems: stagingTestRealnameProblems } =
+    readStagingTestRealnameConfig(values.APP_ENV, env);
+  violations.push(...stagingTestRealnameProblems);
   const { queueLimits, problems: queueProblems } = readQueueConcurrencyConfig(env);
   violations.push(...queueProblems);
   const { configSignKey, problems: configSignKeyProblems } = readConfigSignKeyConfig(env);
@@ -555,6 +568,9 @@ export function loadConfig(
     // Only present when configured (staging only, B1-02zza), so the documented shape of an
     // unconfigured result is unchanged.
     ...(stagingTestPhones === null ? {} : { stagingTestPhones }),
+    // Only present when configured (staging only, B1-13n), so the documented shape of an
+    // unconfigured result is unchanged.
+    ...(stagingTestRealnameUserIds === null ? {} : { stagingTestRealnameUserIds }),
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.
     ...(values.METRICS_PORT === undefined
       ? {}

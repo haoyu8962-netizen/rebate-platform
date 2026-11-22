@@ -20,7 +20,11 @@
 // Also compiled by the `test` project: erasable syntax only, `import type` for types, `.ts`
 // relative imports, no decorators.
 import type { RootLogger } from '../../platform/index.ts';
-import type { RealnameVerifierPort } from '../ports/realname-verifier.ts';
+import type {
+  RealnameVerificationInput,
+  RealnameVerificationResult,
+  RealnameVerifierPort,
+} from '../ports/realname-verifier.ts';
 
 /** B1-13n: what the staging test identity verifier is built from. */
 export interface StagingTestRealnameVerifierOptions {
@@ -34,6 +38,11 @@ export interface StagingTestRealnameVerifierOptions {
 
 /** realname.provider of the rows the fake verifies. */
 export const FAKE_REALNAME_PROVIDER = 'fake-two-elements';
+/** B1-13n: realname.provider of the rows a staging test identity verifies. */
+export const STAGING_TEST_REALNAME_PROVIDER = 'staging-test-identity';
+/** B1-13n: the `event` field (and the fixed message) of the audit line of a test identity match. */
+export const STAGING_TEST_REALNAME_AUDIT_EVENT = 'staging_test_realname_verified';
+const STAGING = 'staging';
 
 function isFakeEnvironment(appEnv: string): boolean {
   return appEnv === 'local' || appEnv === 'test';
@@ -64,6 +73,37 @@ export function createRealnameVerifier(appEnv: string): RealnameVerifierPort | n
 export function createStagingTestRealnameVerifier(
   options: StagingTestRealnameVerifierOptions,
 ): RealnameVerifierPort | null {
-  void options;
-  throw new Error('NotImplemented: createStagingTestRealnameVerifier');
+  const listed = new Set(options.userIds ?? []);
+  if (listed.size === 0) return null;
+  if (options.appEnv !== STAGING) {
+    // Never names the list, the environment value or anything submitted.
+    throw new Error(
+      'identity: the staging test identity verifier runs only when APP_ENV is staging',
+    );
+  }
+  const { logger } = options;
+  // Fixed message; the only field is the number of listed user_ids (never a user_id).
+  logger.warn({ count: listed.size }, 'staging_test_realname_enabled');
+  return Object.freeze({
+    verify: (input: RealnameVerificationInput): Promise<RealnameVerificationResult> => {
+      // Judged again on every call: outside staging nothing is ever a test identity.
+      if (options.appEnv !== STAGING || !listed.has(input.user_id)) {
+        return Promise.resolve({ outcome: 'unavailable' } as const);
+      }
+      // Fixed message; app_id, user_id and provider only — never the name or the ID number.
+      logger.info(
+        {
+          event: STAGING_TEST_REALNAME_AUDIT_EVENT,
+          app_id: input.app_id,
+          user_id: input.user_id,
+          provider: STAGING_TEST_REALNAME_PROVIDER,
+        },
+        STAGING_TEST_REALNAME_AUDIT_EVENT,
+      );
+      return Promise.resolve({
+        outcome: 'match',
+        provider: STAGING_TEST_REALNAME_PROVIDER,
+      } as const);
+    },
+  });
 }

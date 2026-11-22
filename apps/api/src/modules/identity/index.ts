@@ -342,7 +342,10 @@ export type {
 // The process SMS sender and its Nest token (the admin entry's sms step-up tier, F1-06l).
 export { createSmsSender, smsSenderToken } from './infra/fake-sms.ts';
 export { createThirdPartyIdentity } from './infra/fake-third-party-identity.ts';
-export { createRealnameVerifier } from './infra/fake-realname-verifier.ts';
+export {
+  createRealnameVerifier,
+  createStagingTestRealnameVerifier,
+} from './infra/fake-realname-verifier.ts';
 export type {
   RealnameVerifierPort,
   RealnameVerificationInput,
