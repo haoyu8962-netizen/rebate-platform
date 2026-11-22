@@ -5,19 +5,34 @@
 // est_commission_fen 同一取法：promotion_amount − duo_id_service_fee；报文没给服务费时按 union.pdd.service_fee_bp
 // 兜底（ceil）；都没有 → null，绝不按 0。2（确认收货）、3（审核成功）仍只写预估（E-24）。
 // 报文全部合成（字段名按 pdd.ddk.order.list.increment.get 文档），不是录制。金额都是整数分。
+// 真实同步入口：合成传输（不联网）喂给生产的 PddUnionAdapter，走列表 listOrders（increment / pay_time，
+// ctx.rowErrors = collect）与按单号详情 getPddOrderDetail，见 pddAdapter / listedByAdapter / detailByAdapter。
 // 本文件不导入 @couli/db/testing：要真库的测试把库传进来。
-import type { UnionOrder } from '../../../../apps/api/src/modules/union/index.ts';
+import { FixedClock } from '../../../../apps/api/src/modules/platform/index.ts';
+import type {
+  CallCtx,
+  OrderPage,
+  TimeWindow,
+  UnionEndpoint,
+  UnionOrder,
+  UnionTransportResponse,
+} from '../../../../apps/api/src/modules/union/index.ts';
 import {
   mapPddOrder,
+  PDD_ORDER_DETAIL,
   type PddOrderPage,
 } from '../../../../apps/api/src/modules/union/infra/pdd/orders.ts';
+import { PddUnionAdapter } from '../../../../apps/api/src/modules/union/infra/pdd/pdd-adapter.ts';
 import { at } from '../wiring/db-kit.ts';
 
-/** 报文里的拼多多状态码（整数）。 */
+/** 报文里的拼多多状态码（整数）：0 已支付、1 已成团、2 确认收货、3 审核成功、4 审核失败、5 已结算、10 已处罚。 */
 export const PDD_PAID_STATUS = 0;
+export const PDD_GROUPED_STATUS = 1;
 export const PDD_RECEIVED_STATUS = 2;
 export const PDD_APPROVED_STATUS = 3;
+export const PDD_REJECTED_STATUS = 4;
 export const PDD_SETTLED_STATUS = 5;
+export const PDD_PUNISHED_STATUS = 10;
 
 /** 合成的毛额与报文服务费：净额 900 分（手算）。 */
 export const PROMOTION_AMOUNT = 1000;
@@ -42,8 +57,72 @@ export function pageWithFeeBp(serviceFeeBp: unknown): PddOrderPage {
 
 /** 合法的 union.pdd.service_fee_bp：1000 bp（10%），已核实（不告警）。 */
 export const FEE_BP_1000 = { '*': { bp: 1000, source: 'synthetic-b2-19', verified: true } };
+/** 合法的 union.pdd.service_fee_bp：600 bp（6%），已核实。1001 分 → 服务费 ceil(60.06)=61 → 940（手算）。 */
+export const FEE_BP_600 = { '*': { bp: 600, source: 'synthetic-b2-19', verified: true } };
 /** 形状不合法的配置（bp 超过 10000）：整份当作没有。 */
 export const FEE_BP_INVALID = { '*': { bp: 20_000, source: 'synthetic-b2-19', verified: true } };
+
+/** 合成适配器的注入时钟：列表时间窗（24 小时、90 天内）以它为终点。只作适配器的时钟，不进断言。 */
+const ADAPTER_NOW = '2026-10-22T03:00:00.000Z';
+/** listOrders 的时间窗：increment 跨度恰 24 小时；pay_time 同窗。 */
+export const LIST_WINDOW: TimeWindow = { from: '2026-10-21T03:00:00.000Z', to: ADAPTER_NOW };
+
+const ENDPOINT: UnionEndpoint = {
+  platform: 'pdd',
+  mode: 'live',
+  baseUrl: 'https://pdd-b2-19.invalid/router',
+  quotaKey: 'synthetic-b2-19-account',
+};
+
+/** 订单同步的调用上下文：rowErrors = collect（被映射拒绝的行进 rejected，不整页报错）。 */
+export const COLLECT_CTX: CallCtx = {
+  appId: 'synthetic-b2-19-app',
+  requestId: 'synthetic-b2-19-request',
+  purpose: 'order_sync',
+  rowErrors: 'collect',
+};
+
+/**
+ * 生产的拼多多适配器，传输是合成的：详情请求恒答 order_detail_response = input，列表请求恒答
+ * 只含 input 一行的 order_list（last_order_id 为空，单页结束）。serviceFeeBp 读取恒给 `serviceFeeBp`。
+ */
+export function pddAdapter(
+  input: Record<string, unknown>,
+  serviceFeeBp: unknown = null,
+): PddUnionAdapter {
+  return new PddUnionAdapter({
+    clock: new FixedClock(ADAPTER_NOW),
+    credentials: async () => ({ clientId: 'synthetic-b2-19', clientSecret: 'fake-pass!' }),
+    transport: async (request): Promise<UnionTransportResponse> => {
+      const sent: unknown = JSON.parse(request.body ?? '{}');
+      const method = typeof sent === 'object' && sent !== null ? Reflect.get(sent, 'type') : null;
+      const body =
+        method === PDD_ORDER_DETAIL
+          ? { order_detail_response: input }
+          : { order_list_get_response: { order_list: [input], last_order_id: '' } };
+      return { status: 200, headers: {}, body: JSON.stringify(body) };
+    },
+    endpoint: ENDPOINT,
+    serviceFeeBp: async () => serviceFeeBp,
+  });
+}
+
+/** 列表入口（rowErrors = collect）取回的一页。 */
+export function listedByAdapter(
+  input: Record<string, unknown>,
+  queryMode: 'increment' | 'pay_time',
+  serviceFeeBp: unknown = null,
+): Promise<OrderPage> {
+  return pddAdapter(input, serviceFeeBp).listOrders(LIST_WINDOW, { queryMode }, COLLECT_CTX);
+}
+
+/** 按单号详情入口取回的一单。 */
+export function detailByAdapter(
+  input: Record<string, unknown>,
+  serviceFeeBp: unknown = null,
+): Promise<UnionOrder> {
+  return pddAdapter(input, serviceFeeBp).getPddOrderDetail(String(input.order_sn), COLLECT_CTX);
+}
 
 /** Date → 拼多多报文的秒级时间戳。 */
 export function seconds(instant: Date): number {
