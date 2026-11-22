@@ -3,6 +3,7 @@
 // --int-shard segments of the same tree.
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
+import type { FastPart } from '../ci/fast-parts.ts';
 import type { IntShards } from '../ci/int-shards.ts';
 import { CLI_TIMEOUT, removeDir, runCli, scratchDir, writeFiles } from './test-helpers.ts';
 import { notCoveredSteps, summarize } from './verify-sharded-summary.ts';
@@ -33,7 +34,11 @@ beforeEach(() => {
 });
 afterEach(() => removeDir(base));
 
-function put(kind: 'verify-fast' | 'int-shard' | 'browser', run: number, doc: unknown): void {
+function put(
+  kind: 'verify-fast' | 'int-shard' | 'browser' | 'fast-part',
+  run: number,
+  doc: unknown,
+): void {
   writeFiles(runs, {
     [`${TASK}/${kind}/${String(run)}/result.json`]:
       typeof doc === 'string' ? doc : JSON.stringify(doc),
@@ -49,6 +54,7 @@ const seg = (run: number, segment: string, extra: object = {}) =>
   put('int-shard', run, {
     script: 'int-shard',
     segment,
+    command: SHARDS.segments.find((s) => s.id === segment)?.command ?? 'none',
     tree: TREE,
     exit_code: 0,
     files: 2,
@@ -66,7 +72,7 @@ it('[CT-06zzzzzzza] green: fast and every segment exit 0, totals agree and add u
     task: TASK,
     tree: TREE,
     status: 'green',
-    fast: { run: 1, exit_code: 0, ...times },
+    fast: { mode: 'whole', run: 1, exit_code: 0, ...times, parts: [] },
     segments: [
       { segment: '1', run: 1, exit_code: 0, files: 2, tests: 7, duration_s: 90 },
       { segment: 'rest', run: 2, exit_code: 0, files: 2, tests: 3, duration_s: 90 },
@@ -281,3 +287,232 @@ it(
   },
   CLI_TIMEOUT,
 );
+
+// --- CT-06zzzzzzzb (FU-VERIFY-FAST-PROFILE, D10-2503 / D10-2504): verify:fast in parts ----------
+
+const PARTS: FastPart[] = [
+  { id: 'base', commands: ['pnpm run typecheck', 'pnpm exec turbo run test'] },
+  { id: 'spec-1', commands: ['pnpm --filter p run test --shard=1/2'] },
+  { id: 'spec-2', commands: ['pnpm --filter p run test --shard=2/2'] },
+];
+const part = (run: number, name: string, extra: object = {}) =>
+  put('fast-part', run, {
+    script: 'fast-part',
+    fast_part: { part: name, commands: PARTS.find((p) => p.id === name)?.commands ?? ['x'] },
+    tree: TREE,
+    exit_code: 0,
+    ...times,
+    ...extra,
+  });
+const at = (minute: number) => `2026-11-22T00:${String(minute).padStart(2, '0')}:00Z`;
+
+it('[CT-06zzzzzzzb] a complete group of parts stands for verify-fast: mode parts, times span the parts', () => {
+  seg(1, '1');
+  seg(2, 'rest');
+  part(1, 'base', { started_at: at(1), finished_at: at(5) });
+  part(2, 'spec-1', { started_at: at(2), finished_at: at(9) });
+  part(3, 'spec-2', { started_at: at(3), finished_at: at(7) });
+  part(4, 'spec-3', { exit_code: 1 }); // not a part of this workflow
+  const s = summarize(TASK, TREE, runs, SHARDS, {
+    notCovered: [],
+    browser: false,
+    fastParts: PARTS,
+  });
+  expect(s.status).toBe('green');
+  expect(s.fast).toEqual({
+    mode: 'parts',
+    run: null,
+    exit_code: 0,
+    started_at: at(1),
+    finished_at: at(9),
+    parts: [
+      { part: 'base', run: 1, exit_code: 0, started_at: at(1), finished_at: at(5) },
+      { part: 'spec-1', run: 2, exit_code: 0, started_at: at(2), finished_at: at(9) },
+      { part: 'spec-2', run: 3, exit_code: 0, started_at: at(3), finished_at: at(7) },
+    ],
+  });
+  // Without the part list (or with a reason instead) the parts never count.
+  for (const fastParts of [undefined, 'no verify-unit job']) {
+    const only = summarize(TASK, TREE, runs, SHARDS, {
+      notCovered: [],
+      browser: false,
+      ...(fastParts === undefined ? {} : { fastParts }),
+    });
+    expect(only.fast).toBeNull();
+    expect(only.problems).toContain('missing verify-fast result for this tree');
+    if (fastParts !== undefined) {
+      expect(only.problems).toContain(
+        'the parts of verify:fast cannot be read (no verify-unit job)',
+      );
+    }
+  }
+});
+
+it('[CT-06zzzzzzzb] a failed part of the chosen group is a problem; a malformed part result is reported', () => {
+  seg(1, '1');
+  seg(2, 'rest');
+  fast(1, { finished_at: at(4) });
+  part(1, 'base', { finished_at: at(5) });
+  part(2, 'spec-1', { finished_at: at(6), exit_code: 1 });
+  part(3, 'spec-2', { finished_at: at(5) });
+  put('fast-part', 4, { tree: TREE, fast_part: { part: 'base' }, exit_code: 0 });
+  const s = summarize(TASK, TREE, runs, SHARDS, {
+    notCovered: [],
+    browser: false,
+    fastParts: PARTS,
+  });
+  expect(s.status).toBe('red');
+  expect(s.fast).toMatchObject({ mode: 'parts', exit_code: 1 });
+  expect(s.problems).toEqual([
+    'fast-part run 4: result.json of this tree is malformed',
+    'fast-part spec-1 (run 2) exit 1',
+  ]);
+});
+
+it(
+  '[CT-06zzzzzzzb] CLI: the parts come from --workflow and --package-json; a workflow without them leaves only the whole run',
+  () => {
+    const unit = "pnpm exec turbo run test --env-mode=loose --filter='!@couli/spec-tests'";
+    const spec = (i: number) => `pnpm --filter @couli/spec-tests run test --shard=${String(i)}/2`;
+    writeFiles(base, {
+      'full.yml': `${WORKFLOW}  verify-unit:
+    steps:
+      - run: ${unit}
+  verify-spec-1:
+    steps:
+      - run: ${spec(1)}
+  verify-spec-2:
+    steps:
+      - run: ${spec(2)}
+`,
+      'package.json': JSON.stringify({
+        scripts: {
+          test: 'turbo run test --env-mode=loose',
+          'verify:fast': 'pnpm run typecheck && pnpm run test',
+          verify: ROOT_VERIFY,
+        },
+      }),
+    });
+    seg(1, '1');
+    seg(2, 'rest');
+    // The parts of full.yml / package.json below (not those of PARTS).
+    put('fast-part', 1, {
+      script: 'fast-part',
+      fast_part: { part: 'base', commands: ['pnpm run typecheck', unit] },
+      tree: TREE,
+      exit_code: 0,
+      ...times,
+    });
+    [1, 2].forEach((i) =>
+      put('fast-part', i + 1, {
+        script: 'fast-part',
+        fast_part: { part: `spec-${String(i)}`, commands: [spec(i)] },
+        tree: TREE,
+        exit_code: 0,
+        ...times,
+      }),
+    );
+    const args = (workflow: string) => [
+      TASK,
+      '--tree',
+      TREE,
+      '--runs',
+      runs,
+      '--workflow',
+      join(base, workflow),
+      '--package-json',
+      join(base, 'package.json'),
+    ];
+    const green = runCli('verify-sharded-summary.ts', args('full.yml'));
+    expect(green.status, green.stderr).toBe(0);
+    expect(JSON.parse(green.stdout)).toMatchObject({ status: 'green', fast: { mode: 'parts' } });
+    const partial = runCli('verify-sharded-summary.ts', args('ci.yml'));
+    expect(partial.status).toBe(1);
+    expect(JSON.parse(partial.stdout)).toMatchObject({ status: 'red', fast: null });
+    expect(partial.stderr).toContain('the parts of verify:fast cannot be read');
+  },
+  CLI_TIMEOUT,
+);
+
+it('[CT-06zzzzzzzb] money r1 ③: a part whose recorded commands differ from the current table is set aside as missing', () => {
+  seg(1, '1');
+  seg(2, 'rest');
+  const scope = { notCovered: [], browser: false, fastParts: PARTS };
+  part(1, 'base', { finished_at: at(5) });
+  part(2, 'spec-1', { finished_at: at(5) });
+  // An older three-shard table: same part name, other command; never borrowed for spec-2.
+  part(3, 'spec-2', {
+    finished_at: at(6),
+    fast_part: { part: 'spec-2', commands: ['pnpm --filter p run test --shard=2/3'] },
+  });
+  // No commands, extra commands and a non-array are set aside too.
+  part(4, 'spec-2', { finished_at: at(7), fast_part: { part: 'spec-2' } });
+  part(5, 'spec-2', {
+    finished_at: at(8),
+    fast_part: { part: 'spec-2', commands: [...(PARTS[2]?.commands ?? []), 'x'] },
+  });
+  part(6, 'spec-2', { finished_at: at(9), fast_part: { part: 'spec-2', commands: 'x' } });
+  const red = summarize(TASK, TREE, runs, SHARDS, scope);
+  expect(red.status).toBe('red');
+  expect(red.fast).toBeNull();
+  expect(red.problems).toEqual([
+    'missing fast-part spec-2 result for this tree (' +
+      [3, 4, 5, 6]
+        .map(
+          (r) =>
+            `run ${String(r)}: the commands of fast-part spec-2 differ from the current part table`,
+        )
+        .join('; ') +
+      ')',
+    'missing verify-fast result for this tree',
+  ]);
+  // An older matching result still counts, and the newer stale one does not hide it.
+  part(7, 'spec-2', { finished_at: at(4) });
+  const green = summarize(TASK, TREE, runs, SHARDS, scope);
+  expect(green.status).toBe('green');
+  expect(green.fast?.parts.map((p) => [p.part, p.run])).toEqual([
+    ['base', 1],
+    ['spec-1', 2],
+    ['spec-2', 7],
+  ]);
+  // With a whole run, set-aside parts are not a problem of their own.
+  fast(1, { finished_at: at(1) });
+  const whole = summarize(TASK, TREE, runs, SHARDS, scope);
+  expect(whole.fast).toMatchObject({ mode: 'parts' });
+});
+
+it("[CT-06zzzzzzzb] D10-2529: an int-shard result counts only with its segment's current command", () => {
+  fast(1);
+  seg(1, '1');
+  // Same segment name, another workflow's command (an older N); and an old result without one.
+  seg(2, 'rest', { command: "pnpm test:int --filter='!@couli/other'" });
+  put('int-shard', 3, {
+    script: 'int-shard',
+    segment: 'rest',
+    tree: TREE,
+    exit_code: 0,
+    files: 2,
+    tests: 7,
+    int_files_total: 4,
+    ...times,
+  });
+  const red = summarize(TASK, TREE, runs, SHARDS);
+  expect(red.status).toBe('red');
+  expect(red.segments.map((x) => x.segment)).toEqual(['1']);
+  expect(red.problems).toEqual([
+    'missing segment rest (run 2: the command of segment rest differs from the current workflow; ' +
+      'run 3: no command recorded)',
+  ]);
+  // Segment 1 with a stale command is set aside even though its name and counts fit.
+  seg(4, '1', {
+    command: 'pnpm test:int --filter=@couli/spec-tests -- --shard=1/2',
+    finished_at: at(9),
+  });
+  seg(5, 'rest');
+  const green = summarize(TASK, TREE, runs, SHARDS);
+  expect(green.status).toBe('green');
+  expect(green.segments.map((x) => [x.segment, x.run])).toEqual([
+    ['1', 1],
+    ['rest', 5],
+  ]);
+});

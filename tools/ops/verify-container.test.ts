@@ -14,6 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
+import { readFastParts, verifyFastSteps } from '../ci/fast-parts.ts';
 import { readIntShards } from '../ci/int-shards.ts';
 import { repoRoot } from '../lib/paths.ts';
 import {
@@ -569,12 +570,11 @@ it(
       expect(res.status, `${extra.join(' ')}: ${res.stderr}`).toBe(0);
       const plan = JSON.parse(res.stdout) as Record<string, unknown>;
       // CT-06zzzzu added memory to every dry-run plan; test_guard stays --red only.
-      expect(Object.keys(plan).sort(), extra.join(' ')).toEqual([
-        'commit',
-        'memory',
-        'script',
-        'tree',
-      ]);
+      // CT-06zzzzzzzb (补充 C): the --fast plan also names its steps; the other modes are unchanged.
+      const keys = ['commit', 'memory', 'script', 'tree'];
+      expect(Object.keys(plan).sort(), extra.join(' ')).toEqual(
+        extra[0] === '--fast' ? [...keys, 'steps'].sort() : keys,
+      );
       expect(res.stderr, extra.join(' ')).not.toContain('test-guard');
     }
     expect(existsSync(join(runs, 'B1-02b'))).toBe(false);
@@ -2105,6 +2105,183 @@ it(
     expect(linked.status, linked.stderr).toBe(2);
     expect(result(4)).toMatchObject({ exit_code: 2, files: 0, tests: 0 });
     expect(String(result(4)['error'])).toMatch(/rejected/);
+  },
+  JUDGE_TIMEOUT * 2,
+);
+
+// --- CT-06zzzzzzzb (FU-VERIFY-FAST-PROFILE, D10-2503 / D10-2504): --fast-part and --fast steps ----
+// The parts and the steps come from the trusted root's ci.yml and package.json
+// (tools/ci/fast-parts.ts), never from the worktree.
+
+it(
+  '[CT-06zzzzzzzb] --fast-part --dry-run prints the part and its trusted commands; --fast --dry-run its steps',
+  () => {
+    const repo = committedFixture('fast-part-dry');
+    const parts = readFastParts(
+      readFileSync(join(repoRoot(), '.github', 'workflows', 'ci.yml'), 'utf8'),
+      readFileSync(join(repoRoot(), 'package.json'), 'utf8'),
+    );
+    expect(parts.parts.map((p) => p.id)).toEqual([
+      'base',
+      ...Array.from({ length: parts.n }, (_, i) => `spec-${String(i + 1)}`),
+    ]);
+    for (const part of parts.parts) {
+      const res = run(['V1-13', '--worktree', repo, '--fast-part', part.id, '--dry-run']);
+      expect(res.status, res.stderr).toBe(0);
+      expect(planWithoutMemory(res.stdout)).toMatchObject({
+        script: 'fast-part',
+        fast_part: { part: part.id, commands: part.commands },
+      });
+    }
+    const fast = run(['V1-13', '--worktree', repo, '--fast', '--dry-run']);
+    expect(fast.status, fast.stderr).toBe(0);
+    expect(planWithoutMemory(fast.stdout)).toMatchObject({
+      script: 'verify:fast',
+      steps: verifyFastSteps(readFileSync(join(repoRoot(), 'package.json'), 'utf8')),
+    });
+    expect(existsSync(join(runs, 'V1-13'))).toBe(false);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzzzzb] --fast-part: no part, a part not in the trusted ci.yml, another mode or --base → exit 2 naming --fast-part',
+  () => {
+    const repo = committedFixture('fast-part-usage');
+    const dry = (...args: string[]) => run(['V1-13', '--worktree', repo, ...args, '--dry-run']);
+    for (const bad of [[], ['unknown'], ['spec-0'], ['spec-1x'], ['--fast']]) {
+      const res = dry('--fast-part', ...bad);
+      expect(res.status, bad.join(' ')).toBe(2);
+      expect(res.stderr, bad.join(' ')).toContain('--fast-part needs a part');
+    }
+    const n = readFastParts(
+      readFileSync(join(repoRoot(), '.github', 'workflows', 'ci.yml'), 'utf8'),
+      readFileSync(join(repoRoot(), 'package.json'), 'utf8'),
+    ).n;
+    const beyond = dry('--fast-part', `spec-${String(n + 1)}`);
+    expect(beyond.status).toBe(2);
+    expect(beyond.stderr).toContain('is not a part of');
+    for (const other of [
+      ['--fast'],
+      ['--red'],
+      ['--related'],
+      ['--browser'],
+      ['--tests', 'test'],
+      ['--int-shard', '1'],
+      ['--base', 'main'],
+      ['--fast-part', 'spec-1'],
+    ]) {
+      for (const args of [
+        ['--fast-part', 'base', ...other],
+        [...other, '--fast-part', 'base'],
+      ]) {
+        const res = dry(...args);
+        expect(res.status, args.join(' ')).toBe(2);
+        expect(res.stderr, args.join(' ')).toContain('--fast-part');
+      }
+    }
+    expect(existsSync(join(runs, 'V1-13'))).toBe(false);
+  },
+  CLI_TIMEOUT,
+);
+
+// --- CT-06zzzzzzzb r3: the exit code of --fast-part is the container's ---------------------------
+// The steps record (out/steps.tsv) only fills `steps`; it never turns a failed container into 0,
+// and after an exit 0 a missing or unsound record makes the run exit 2 with `error`.
+
+function fastPartWorkspace(name: string): string {
+  const root = JSON.parse(readFileSync(join(repoRoot(), 'package.json'), 'utf8')) as {
+    packageManager: string;
+  };
+  const ws = join(base, name);
+  writeFiles(ws, {
+    'package.json': `${JSON.stringify(
+      { name, private: true, packageManager: root.packageManager, scripts: {} },
+      null,
+      2,
+    )}\n`,
+    'pnpm-workspace.yaml': 'packages: []\n',
+    'pnpm-lock.yaml': "lockfileVersion: '9.0'\n",
+  });
+  return ws;
+}
+
+it(
+  '[CT-06zzzzzzzb] --fast-part: the container exits 3 → script and result.json 3; exit 0 without a steps record → 2 with error; a sound record → 0 with steps',
+  async () => {
+    const ws = fastPartWorkspace('fast-part-exit');
+    const runsDir = join(base, 'fp-exit');
+    const result = (n: number) =>
+      readJson(join(runsDir, 'V1-14', 'fast-part', String(n), 'result.json'));
+    const part = readFastParts(
+      readFileSync(join(repoRoot(), '.github', 'workflows', 'ci.yml'), 'utf8'),
+      readFileSync(join(repoRoot(), 'package.json'), 'utf8'),
+    ).parts.find((p) => p.id === 'base');
+    expect(part).toBeDefined();
+    const commands = part?.commands ?? [];
+    const args = ['V1-14', '--worktree', ws, '--fast-part', 'base'];
+
+    // Failed container, no record: its own exit code, never 0.
+    const failed = await runStubbed(args, runsDir, { exit: 3, files: {} });
+    expect(failed.timedOut).toBe(false);
+    expect(failed.status, failed.stderr).toBe(3);
+    const container = testContainer(failed.calls);
+    expect(container).toBeDefined();
+    expect(container?.args.slice(-commands.length - 1)).toEqual(['couli-fast-steps', ...commands]);
+    expect(result(1)).toMatchObject({
+      script: 'fast-part',
+      exit_code: 3,
+      fast_part: { part: 'base', commands },
+      steps: [],
+    });
+
+    // Failed container whose record says every step passed: still 3.
+    const t = '2026-11-22T00:00:00Z';
+    const allPassed = commands.map((_, i) => `${String(i + 1)}\t${t}\t${t}\t0\n`).join('');
+    const lying = await runStubbed(args, runsDir, {
+      exit: 3,
+      files: { 'steps.tsv': { text: allPassed } },
+    });
+    expect(lying.status, lying.stderr).toBe(3);
+    expect(result(2)).toMatchObject({ exit_code: 3 });
+
+    // Exit 0 without a record: 2 and error.
+    const missing = await runStubbed(args, runsDir, { exit: 0, files: {} });
+    expect(missing.status, missing.stderr).toBe(2);
+    expect(result(3)).toMatchObject({ exit_code: 2, steps: [] });
+    expect(String(result(3)['error'])).toMatch(/steps record/);
+
+    // Exit 0 with a record that is a link, or that names a failed step: 2 and error.
+    const linked = await runStubbed(args, runsDir, {
+      exit: 0,
+      files: { 'steps.tsv': { symlink: '/etc/hosts' } },
+    });
+    expect(linked.status, linked.stderr).toBe(2);
+    expect(result(4)).toMatchObject({ exit_code: 2, steps: [] });
+    expect(String(result(4)['error'])).toMatch(/not a regular file/);
+    const failedStep = await runStubbed(args, runsDir, {
+      exit: 0,
+      files: { 'steps.tsv': { text: `1\t${t}\t${t}\t1\n` } },
+    });
+    expect(failedStep.status, failedStep.stderr).toBe(2);
+    expect(result(5)).toMatchObject({ exit_code: 2, steps: [] });
+
+    // Exit 0 with every step recorded as passed: 0, steps from the record, no error.
+    const ok = await runStubbed(args, runsDir, {
+      exit: 0,
+      files: { 'steps.tsv': { text: allPassed } },
+    });
+    expect(ok.status, ok.stderr).toBe(0);
+    expect(result(6)).toMatchObject({
+      exit_code: 0,
+      steps: commands.map((command) => ({
+        command,
+        started_at: t,
+        finished_at: t,
+        exit_code: 0,
+      })),
+    });
+    expect(result(6)).not.toHaveProperty('error');
   },
   JUDGE_TIMEOUT * 2,
 );

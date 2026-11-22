@@ -9,7 +9,8 @@
 // those whose `tree` is --tree (results of another tree never count: D10-2443 ②) and, per kind and
 // segment, the one that finished last (finished_at; the higher run number on a tie). The segments
 // are those of tools/ci/int-shards.ts on --workflow (default the trusted root's
-// .github/workflows/ci.yml). Green when, and only when, there is a verify-fast with exit 0, every
+// .github/workflows/ci.yml); a result counts for its segment only when the command it recorded is
+// that segment's command there (else, or with no command recorded, it is set aside: D10-2529). Green when, and only when, there is a verify-fast with exit 0, every
 // segment has a result with exit 0, every segment reports the same int_files_total and that total
 // equals the sum of the segments' files. Otherwise red, each reason in `problems`.
 //
@@ -22,27 +23,61 @@
 // --browser, the latest <runs>/<id>/browser/*/result.json of the tree is read too: exit 0 takes
 // test:browser out of not_covered (scope "fast+test:int+test:browser"). Neither changes `status`.
 //
+// verify:fast in parts (CT-06zzzzzzzb, D10-2503 / D10-2504): verify-container.sh --fast-part runs
+// one part of verify:fast (base, spec-1 … spec-N: tools/ci/fast-parts.ts on --workflow and
+// --package-json; together exactly the tests of verify:fast). <runs>/<id>/fast-part/*/result.json
+// of the tree are read too, per part the one that finished last among those whose recorded
+// fast_part.commands are the part's commands in that table (others are set aside as if the part
+// had not run, money r1 ③). The fast evidence is the latest whole verify-fast or the group of
+// parts — only when every part has a result — whichever finished later (a group finishes with
+// its last part; on a tie the whole run). The whole run is green with exit 0, the group when
+// every part exited 0 (each other part is a problem). With neither a whole
+// run nor every part, each missing part is a problem besides the missing verify-fast. `fast` adds
+// mode ("whole" | "parts") and parts [{ part, run, exit_code, started_at, finished_at }] ([] for
+// a whole run); with no evidence at all it stays null. When the parts cannot be read from the two
+// files, only a whole run counts (the reason is a problem when there is none).
+//
 // Output: one JSON document on stdout (with or without --json, which is accepted for the callers
 // that name the format); the problems also go to stderr, one per line:
-//   { task, tree, status, fast: { run, exit_code, started_at, finished_at } | null,
+//   { task, tree, status,
+//     fast: { mode, run, exit_code, started_at, finished_at, parts: [...] } | null (run null for
+//       parts; exit_code then the first non-zero part's, else 0; the times span the parts),
 //     segments: [{ segment, run, exit_code, files, tests, duration_s }],
 //     totals: { files, tests, int_files_total }, problems: [],
 //     scope, not_covered: [...], browser: { run, exit_code, started_at, finished_at } | null }
 // Exit codes: 0 green, 1 red, 2 usage, or the workflow cannot be read or has not CI's shape.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { readFastParts, type FastPart } from '../ci/fast-parts.ts';
 import { readIntShards, type IntShards } from '../ci/int-shards.ts';
 import { runsDir, trustedRoot } from '../lib/paths.ts';
 import { runMain, TASK_ID, UsageError } from './cli.ts';
 
 type Run = { run: number; started_at: string; finished_at: string; exit_code: number };
 type ShardRun = Run & { segment: string; files: number; tests: number; int_files_total: number };
+type PartRun = Run & { part: string };
+
+export type FastPartEntry = {
+  part: string;
+  run: number;
+  exit_code: number;
+  started_at: string;
+  finished_at: string;
+};
+export type FastEvidence = {
+  mode: 'whole' | 'parts';
+  run: number | null;
+  exit_code: number;
+  started_at: string;
+  finished_at: string;
+  parts: FastPartEntry[];
+};
 
 export type ShardedSummary = {
   task: string;
   tree: string;
   status: 'green' | 'red';
-  fast: Run | null;
+  fast: FastEvidence | null;
   segments: {
     segment: string;
     run: number;
@@ -66,6 +101,13 @@ export type SummaryScope = {
   notCovered: string[];
   /** Read <runs>/<id>/browser/ as well. */
   browser: boolean;
+  /**
+   * The parts of verify:fast (tools/ci/fast-parts.ts, in order, with their commands) whose
+   * fast-part results may stand for a whole verify-fast — a result counts only when the
+   * fast_part.commands it recorded are those of its part here; a string is why they could not be
+   * read (only a whole run counts). Absent: only a whole run counts.
+   */
+  fastParts?: FastPart[] | string;
 };
 
 const TEST_BROWSER = 'test:browser';
@@ -145,7 +187,20 @@ function results(dir: string): { run: number; doc: unknown }[] {
     }
     out.push({ run: Number(name), doc });
   }
-  return out;
+  return out.sort((a, b) => a.run - b.run); // problems in run order, whatever readdir gives
+}
+
+function sameCommands(recorded: unknown, expected: string[]): boolean {
+  return (
+    Array.isArray(recorded) &&
+    recorded.length === expected.length &&
+    recorded.every((c, i) => c === expected[i])
+  );
+}
+
+/** Why the results set aside for an entry did not count, for its "missing …" problem. */
+function setAsideNote(notes: string[] | undefined): string {
+  return notes === undefined || notes.length === 0 ? '' : ` (${notes.join('; ')})`;
 }
 
 function later<T extends Run>(a: T | undefined, b: T): T {
@@ -154,6 +209,102 @@ function later<T extends Run>(a: T | undefined, b: T): T {
   const tb = Date.parse(b.finished_at);
   if (tb !== ta) return tb > ta ? b : a;
   return b.run > a.run ? b : a;
+}
+
+/**
+ * The fast evidence of the tree (see the header): the latest whole verify-fast or the complete
+ * group of fast-part results, whichever finished later; its problems go to `problems`.
+ */
+function fastEvidence(
+  base: string,
+  tree: string,
+  whole: Run | undefined,
+  fastParts: FastPart[] | string | undefined,
+  problems: string[],
+): FastEvidence | null {
+  const table = Array.isArray(fastParts) ? fastParts : [];
+  const ids = table.map((p) => p.id);
+  const byPart = new Map<string, PartRun>();
+  const setAside = new Map<string, string[]>();
+  for (const { run, doc } of results(join(base, 'fast-part'))) {
+    if (!isRecord(doc) || doc['tree'] !== tree) continue;
+    const { fast_part, exit_code, started_at, finished_at } = doc;
+    const part = isRecord(fast_part) ? fast_part['part'] : undefined;
+    if (
+      typeof part !== 'string' ||
+      !Number.isInteger(exit_code) ||
+      !isTime(started_at) ||
+      !isTime(finished_at)
+    ) {
+      problems.push(`fast-part run ${String(run)}: result.json of this tree is malformed`);
+      continue;
+    }
+    const expected = table.find((p) => p.id === part);
+    if (expected === undefined) continue; // not a part of this workflow
+    // A result of another part table (an older ci.yml / package.json) never stands for this part
+    // (money r1 ③): it is set aside, as if that part had not run.
+    if (!sameCommands(isRecord(fast_part) ? fast_part['commands'] : undefined, expected.commands)) {
+      const notes = setAside.get(part) ?? [];
+      notes.push(
+        `run ${String(run)}: the commands of fast-part ${part} differ from the current part table`,
+      );
+      setAside.set(part, notes);
+      continue;
+    }
+    const entry: PartRun = { run, part, exit_code: exit_code as number, started_at, finished_at };
+    byPart.set(part, later(byPart.get(part), entry));
+  }
+  const group = ids.length > 0 && ids.every((id) => byPart.has(id)) ? ids : null;
+  const parts: FastPartEntry[] = (group ?? []).map((id) => {
+    const p = byPart.get(id) as PartRun;
+    return {
+      part: id,
+      run: p.run,
+      exit_code: p.exit_code,
+      started_at: p.started_at,
+      finished_at: p.finished_at,
+    };
+  });
+  const groupEnd = Math.max(...parts.map((p) => Date.parse(p.finished_at)));
+  const useWhole =
+    whole !== undefined && (group === null || Date.parse(whole.finished_at) >= groupEnd);
+
+  if (whole !== undefined && useWhole) {
+    if (whole.exit_code !== 0) {
+      problems.push(`verify-fast run ${String(whole.run)} exit ${String(whole.exit_code)}`);
+    }
+    return { mode: 'whole', ...whole, parts: [] };
+  }
+  if (group !== null) {
+    for (const p of parts) {
+      if (p.exit_code !== 0) {
+        problems.push(`fast-part ${p.part} (run ${String(p.run)}) exit ${String(p.exit_code)}`);
+      }
+    }
+    const first = Math.min(...parts.map((p) => Date.parse(p.started_at)));
+    const startedAt = parts.find((p) => Date.parse(p.started_at) === first)?.started_at ?? '';
+    const finishedAt = parts.find((p) => Date.parse(p.finished_at) === groupEnd)?.finished_at ?? '';
+    return {
+      mode: 'parts',
+      run: null,
+      exit_code: parts.find((p) => p.exit_code !== 0)?.exit_code ?? 0,
+      started_at: startedAt,
+      finished_at: finishedAt,
+      parts,
+    };
+  }
+  for (const id of ids) {
+    if (!byPart.has(id)) {
+      problems.push(
+        `missing fast-part ${id} result for this tree${setAsideNote(setAside.get(id))}`,
+      );
+    }
+  }
+  if (typeof fastParts === 'string') {
+    problems.push(`the parts of verify:fast cannot be read (${fastParts})`);
+  }
+  problems.push(`missing verify-fast result for this tree`);
+  return null;
 }
 
 /** The verdict for `tree` from the runs of task `task` under `runs`. */
@@ -167,13 +318,16 @@ export function summarize(
   const problems: string[] = [];
   const base = join(runs, task);
 
-  const fast = latestRun(join(base, 'verify-fast'), tree, 'verify-fast', problems);
+  const whole = latestRun(join(base, 'verify-fast'), tree, 'verify-fast', problems);
+  const fast = fastEvidence(base, tree, whole, scope.fastParts, problems);
 
   const ids = shards.segments.map((s) => s.id);
   const bySegment = new Map<string, ShardRun>();
+  const setAside = new Map<string, string[]>();
   for (const { run, doc } of results(join(base, 'int-shard'))) {
     if (!isRecord(doc) || doc['tree'] !== tree) continue;
-    const { segment, exit_code, files, tests, int_files_total, started_at, finished_at } = doc;
+    const { segment, command, exit_code, files, tests, int_files_total, started_at, finished_at } =
+      doc;
     if (
       typeof segment !== 'string' ||
       !Number.isInteger(exit_code) ||
@@ -186,7 +340,20 @@ export function summarize(
       problems.push(`int-shard run ${String(run)}: result.json of this tree is malformed`);
       continue;
     }
-    if (!ids.includes(segment)) continue; // not a segment of this workflow
+    const expected = shards.segments.find((s) => s.id === segment);
+    if (expected === undefined) continue; // not a segment of this workflow
+    // Only a result of this segment's current command counts (D10-2529, as for the fast parts): a
+    // result of another workflow's segment, or one that recorded no command, is set aside.
+    if (command !== expected.command) {
+      const notes = setAside.get(segment) ?? [];
+      notes.push(
+        typeof command === 'string'
+          ? `run ${String(run)}: the command of segment ${segment} differs from the current workflow`
+          : `run ${String(run)}: no command recorded`,
+      );
+      setAside.set(segment, notes);
+      continue;
+    }
     const entry: ShardRun = {
       run,
       segment,
@@ -200,17 +367,12 @@ export function summarize(
     bySegment.set(segment, later(bySegment.get(segment), entry));
   }
 
-  if (fast === undefined) problems.push(`missing verify-fast result for this tree`);
-  else if (fast.exit_code !== 0) {
-    problems.push(`verify-fast run ${String(fast.run)} exit ${String(fast.exit_code)}`);
-  }
-
   const segments: ShardedSummary['segments'] = [];
   const present: ShardRun[] = [];
   for (const id of ids) {
     const s = bySegment.get(id);
     if (s === undefined) {
-      problems.push(`missing segment ${id}`);
+      problems.push(`missing segment ${id}${setAsideNote(setAside.get(id))}`);
       continue;
     }
     present.push(s);
@@ -254,7 +416,7 @@ export function summarize(
     task,
     tree,
     status: problems.length === 0 ? 'green' : 'red',
-    fast: fast ?? null,
+    fast,
     segments,
     totals: { files, tests, int_files_total: intTotal },
     problems,
@@ -326,7 +488,19 @@ function main(argv: string[]): number {
       `cannot read the verify steps of ${pkgPath}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  const summary = summarize(task, tree, runs ?? runsDir(), shards, { notCovered, browser });
+  // CT-06zzzzzzzb: the parts of verify:fast from the same two files; when they cannot be read,
+  // only a whole verify-fast counts (the reason is reported when there is none).
+  let fastParts: FastPart[] | string;
+  try {
+    fastParts = readFastParts(readFileSync(path, 'utf8'), readFileSync(pkgPath, 'utf8')).parts;
+  } catch (err) {
+    fastParts = err instanceof Error ? err.message : String(err);
+  }
+  const summary = summarize(task, tree, runs ?? runsDir(), shards, {
+    notCovered,
+    browser,
+    fastParts,
+  });
   process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
   for (const p of summary.problems) process.stderr.write(`verify-sharded-summary: ${p}\n`);
   return summary.status === 'green' ? 0 : 1;
