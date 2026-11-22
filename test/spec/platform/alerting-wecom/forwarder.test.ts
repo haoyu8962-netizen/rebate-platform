@@ -55,7 +55,11 @@ const ALERTS = [
   },
 ];
 
-function hookRequest(url: string, receiver: 'finance' | 'oncall', alerts = ALERTS): Request {
+function hookRequest(
+  url: string,
+  receiver: 'finance' | 'oncall',
+  alerts: readonly unknown[] = ALERTS,
+): Request {
   return new Request(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
