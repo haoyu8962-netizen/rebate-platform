@@ -375,11 +375,11 @@ it(
     const order = regenerationAndItemWrites(seen.failedQueries, o.orderId);
     expect(order.totals, 'v2 written in the supplement transaction').toBeGreaterThan(-1);
     expect(order.items).toBeGreaterThan(order.totals);
-    // 自购 1234 × 5000 / 10000 = 617：仍按 v1。
-    expect(before.pending).toBe(617n);
+    // 1100 × 5000 / 10000 = 550：结算佣金非空时待入账只取结算收入（BR-CALC-02 取值阶段），与快照版本无关；失败回滚后不变。
+    expect(before.pending).toBe(550n);
     expect(seen.afterFailure?.versions).toEqual(before.versions);
     expect(seen.afterFailure?.version).toBe(1);
-    expect(seen.afterFailure?.pending).toBe(617n);
+    expect(seen.afterFailure?.pending).toBe(550n);
     expect(seen.afterFailure?.all.bills).toEqual(before.all.bills);
     expect(seen.afterFailure?.all.batches).toEqual(before.all.batches);
     expect(seen.afterFailure?.all.items).toEqual(before.all.items);

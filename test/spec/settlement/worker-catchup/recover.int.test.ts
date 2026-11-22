@@ -189,14 +189,36 @@ it(
     await withDatabase(createTestDatabase, async (db) => {
       await seedOrder(db, APP, TAOBAO);
       const clock = new FixedClock(BILL_DAY_NOW);
-      const { ports, calls, switches } = recordingPorts({
+      const { ports, calls } = recordingPorts({
         snapshot: 'complete',
         config: new Map(),
       });
       const { logger } = memoryLogger();
-      await withAssembled(db, clock, ports, calls, async ({ handler, queue }) => {
+      // B2-18: the union-authoritative read port is no longer on the bill path, so the fault moves
+      // to the read every bill run must make: the bill source's statement over the union settlement
+      // records (app.order_settlements, BR-FUND-04 ④; bill/infra/bill-source.ts). Only the handle
+      // given to the assembled module carries it; the catch-up, the daily seed and the job taking
+      // below keep the plain `db` (and none of them reads that table).
+      const fault = { settlements: false };
+      const reads = new Set<unknown>();
+      const faulty = db.withPlugin({
+        transformQuery(args) {
+          if (fault.settlements) {
+            const text = db.getExecutor().compileQuery(args.node, args.queryId).sql;
+            if (/\b(?:from|join)\s+(?:"?app"?\.)?"?order_settlements\b/i.test(text)) {
+              reads.add(args.queryId);
+            }
+          }
+          return args.node;
+        },
+        async transformResult(args) {
+          if (reads.delete(args.queryId)) throw new Error('synthetic union read failure');
+          return args.result;
+        },
+      });
+      await withAssembled(faulty, clock, ports, calls, async ({ handler, queue }) => {
         // The bill day: the daily seed sends the bill; it fails until it ends in settle.dead.
-        switches.failUnion = true;
+        fault.settlements = true;
         await seedSettleBills({
           db,
           clock,
@@ -222,7 +244,7 @@ it(
         expect(await billsOf(db, APP)).toStrictEqual([]);
 
         // Later that day the union read is back: the next catch-up generates 2032-06.
-        switches.failUnion = false;
+        fault.settlements = false;
         clock.set(DAY_AFTER_NOW);
         await catchUp(db, clock, queue, ports);
         const healed = await deliver(db, handler, billKey(APP, TAOBAO, BILL_DAY));
