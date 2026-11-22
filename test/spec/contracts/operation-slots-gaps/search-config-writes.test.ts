@@ -417,24 +417,30 @@ it('[AC-CT-27b#17] 列表请求体的条目只收本项的形状：hot_words 的
   // D10-2401 ⑥、D10-2410（热词体塞关键词路由列表会被拒，反之亦然）。spec-test r1 S1 第 6 条后半：错误契约让
   // hot_words.items 同时接受 HotWord 与 KeywordRoute、再要求非空列表至少有一个 HotWord，纯关键词列表仍被拒，
   // 但热词里混一条关键词路由会被接受。
+  // 写测 3（D10-2556 ②）：标题里「条目定义封闭、属性恰为…、没有 anyOf / oneOf / allOf / if 分支」不再读结构字面
+  // （把 hot_words.items 的现有 $ref 原样包进单分支 allOf 是合法等价重写），改由实际编译的请求体校验器判定：
+  // 每条合法条目单放收；删掉任一本项字段、另加另一项的字段或别的字段都拒收；再跑下面的混合列表反例。
   const doc = openapi();
   for (const list of LISTS) {
     const id = list.operationId;
     const schema = requestSchema(doc, operation(doc, id).op);
-    const array = resolve(doc, at(schema, 'properties')[list.prop]);
-    expect(array['type'], `${id} 的 ${list.prop} 是数组`).toBe('array');
-    const entry = resolve(doc, array['items']);
-    for (const key of ['anyOf', 'oneOf', 'allOf', 'if']) {
-      expect(entry[key], `${id} 的条目定义没有 ${key} 分支`).toBeUndefined();
-    }
-    expect(entry['additionalProperties'], `${id} 的条目定义封闭`).toBe(false);
-    const fields = Object.keys(at(entry, 'properties')).sort();
-    expect(fields, `${id} 的条目属性`).toEqual([...list.fields].sort());
     const validate = compileOpenapi(doc, schema);
     const body = (entries: Obj[]): Obj => ({ [list.prop]: clone(entries), [CAS_FIELD]: 0 });
     const first = list.good[0] as Obj;
     const second = list.good[1] as Obj;
     check(validate(body(list.good)), true, `${id} 的合法列表`);
+    for (const entry of list.good) {
+      const shown = JSON.stringify(entry);
+      check(validate(body([entry])), true, `${id} 只放 ${shown}`);
+      for (const field of list.fields) {
+        check(validate(body([without(entry, field)])), false, `${id} 的 ${shown} 删掉 ${field}`);
+      }
+      const extras: Obj = { ...list.foreign, configKey: 'search.keyword_routes', extra: 'x' };
+      for (const [field, value] of Object.entries(extras)) {
+        const widened = { ...entry, [field]: clone(value) };
+        check(validate(body([widened])), false, `${id} 的 ${shown} 另加 ${field}`);
+      }
+    }
     const mixes: [string, Obj[]][] = [
       ['第一条后混一条', [first, list.foreign]],
       ['末尾混一条', [...list.good, list.foreign]],

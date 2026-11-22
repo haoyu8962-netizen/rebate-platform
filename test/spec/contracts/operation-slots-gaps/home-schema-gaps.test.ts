@@ -619,9 +619,11 @@ it('[AC-CT-27b#8] more_services 条目的图片与摘要拆不开：另加不带
 });
 
 // ---------------------------------------------------------------------------------------------
-// 写测 2（spec-test r1 的 6 条 S1，每条是一个能骗过 #1～#8 的错误契约）：先断言契约里生效的定义本身，
-// 再用边界样例补。字段名按契约定稿（编排 D10-2547 ②）：me 的图标 icon: {url, sha256}、product_scroll 的
-// 「更多」props.more_action、核心入口 $defs/core_route。
+// 写测 2（spec-test r1 的 6 条 S1，每条是一个能骗过 #1～#8 的错误契约）。字段名按契约定稿（编排 D10-2547 ②）：
+// me 的图标 icon: {url, sha256}、product_scroll 的「更多」props.more_action、核心入口 $defs/core_route。
+// 写测 3（编排 D10-2556 ②）：#11 / #12 / #14 / #15 里「定义本身」的结论（数组上限、同一站内目标定义、icon 封闭
+// 且必填）一律改由整页与准入定义实际编译出的校验器跑正反样例判定，不读契约的结构字面；合法的等价重写（$ref
+// 原样包进单分支 allOf、maxItems 挪进带数组类型的 allOf、封闭对象包进单分支 allOf）不改变任何用例的结论。
 
 /** 契约线定稿的「我的 · 更多服务」条目数上限（slot_me_more_services 1–12 格，D10-2401 ②）。 */
 const ME_CAP = 12;
@@ -653,9 +655,6 @@ const CORE_ROUTES = [
   'LaborAgreement',
 ];
 
-/** 只作注解、不改校验结论的键。 */
-const ANNOTATIONS = ['$comment', 'description', 'title'];
-
 /** search 置顶卡另试的 section id（缺口原文与评审提到的）。 */
 const EXTRA_SEARCH_IDS = ['search_top', 'search_products', 'search_banner', 'search_top_2'];
 
@@ -684,22 +683,6 @@ function admissionName(pageKey: string): string {
   return defName(admissionRef(pageKey));
 }
 
-/** 顺着 $ref 走到最终的定义。 */
-function deref(node: unknown): Obj {
-  let current = node;
-  const seen = new Set<string>();
-  let ref = isObj(current) ? current['$ref'] : undefined;
-  while (typeof ref === 'string') {
-    const name = defName(ref);
-    expect(seen.has(name), `循环引用 $defs/${name}`).toBe(false);
-    seen.add(name);
-    current = def(name);
-    ref = (current as Obj)['$ref'];
-  }
-  expect(isObj(current), 'schema 节点是对象').toBe(true);
-  return current as Obj;
-}
-
 /** 从 $defs/<start> 出发、顺着本文件 $defs 内的 $ref（skip 里的定义不进）访问到的每个对象节点。 */
 function reachableNodes(start: string, skip: string[]): Obj[] {
   const out: Obj[] = [];
@@ -722,16 +705,6 @@ function reachableNodes(start: string, skip: string[]): Obj[] {
     for (const child of Object.values(node)) walk(child);
   };
   walk(def(start));
-  return out;
-}
-
-/** 访问到的节点里 properties.<key> 处的 schema。 */
-function propertyNodes(nodes: Obj[], key: string): Obj[] {
-  const out: Obj[] = [];
-  for (const node of nodes) {
-    const schema = getAt(node, ['properties', key]);
-    if (isObj(schema)) out.push(schema);
-  }
   return out;
 }
 
@@ -788,14 +761,14 @@ function inAppRoutes(bare: boolean): string[] {
   return out.sort();
 }
 
-/** 核心入口：CORE_ROUTES 并上契约 $defs/core_route 的枚举（契约的枚举必须包含 CORE_ROUTES）。 */
+/**
+ * 核心入口：CORE_ROUTES 并上契约 $defs/core_route 枚举里多列的（只取来扩充样例，不断言契约的结构；每个核心
+ * 入口是否被拒由样例判定）。
+ */
 function coreRoutes(): string[] {
-  const listed = def('core_route')['enum'];
-  expect(Array.isArray(listed), '$defs/core_route 是枚举').toBe(true);
-  const contract = (listed as unknown[]).filter((v): v is string => typeof v === 'string');
-  for (const route of CORE_ROUTES) {
-    expect(contract, `$defs/core_route 含 ${route}`).toContain(route);
-  }
+  const listed = defs()['core_route'];
+  const values = isObj(listed) && Array.isArray(listed['enum']) ? listed['enum'] : [];
+  const contract = values.filter((v): v is string => typeof v === 'string');
   return [...new Set([...CORE_ROUTES, ...contract])].sort();
 }
 
@@ -904,16 +877,64 @@ function omit(value: Obj, key: string): Obj {
   return next;
 }
 
+/** search 置顶商品池卡试的展示件数（golden 是 10；错误契约可以只在某个件数上放开 props 与 more_action）。 */
+const SCROLL_LIMITS = [1, 10, 20];
+
+/** search golden 的置顶商品池卡副本，展示件数改成 limit。 */
+function scrollWithLimit(limit: number): Obj {
+  const scroll = goldenSection(SEARCH, 'product_scroll');
+  scroll['data_source'] = { ...(scroll['data_source'] as Obj), limit };
+  return scroll;
+}
+
+/** search 置顶商品池卡的几种合法配置：每种展示件数各一张 golden 写法、一张不带标题的写法。 */
+function scrollConfigs(): Variant[] {
+  const out: Variant[] = [];
+  for (const limit of SCROLL_LIMITS) {
+    const scroll = scrollWithLimit(limit);
+    out.push({ name: `展示 ${limit} 件`, section: scroll });
+    const untitled = withProps(scroll, omit(propsOf(scroll), 'title'));
+    out.push({ name: `展示 ${limit} 件、不带标题`, section: untitled });
+  }
+  return out;
+}
+
+/** search 置顶商品池卡的 props 里另找键夹带外链的写法（#6 同款）。 */
+const PROP_LEAKS: Obj[] = [
+  { more: { label: '更多', action: EXTERNAL } },
+  { more_url: 'https://example.com/topic' },
+  { more_link: EXTERNAL },
+];
+
+/** 合法摘要 digest 的几种坏写法：空串、空格、63 / 65 位、含非十六进制字符、带前缀、尾随空格。 */
+function badDigests(digest: string): string[] {
+  return [
+    '',
+    ' ',
+    digest.slice(1),
+    `${digest}0`,
+    `${digest.slice(1)}g`,
+    `sha256:${digest}`,
+    `${digest.slice(1)} `,
+  ];
+}
+
+/** grid/ 规格只收 PNG 与 SVG（BR-TEXT-30 细则「图标」第 1 项），其他常见图片后缀都不收。 */
+const OTHER_SUFFIXES = ['webp', 'jpg', 'jpeg', 'gif', 'avif'];
+
 it('[AC-CT-27b#11] search 置顶位的上限对整个 sections 数组算：准入定义自身 maxItems 为 1；契约与 golden 里出现过的各个 section id（含 search_top、search_products）配上各种 props 写法的 banner 与商品池 product_scroll，凡单放能收的，任两张同放（不同 id、不同类型、商品卡标题填「本周热销」也算）一律拒收；单放时整页与准入定义结论一致', () => {
   // BR-TEXT-28 准入表 search 行「结果页置顶位 1 个」；D10-2401 ①。spec-test r1 S1 第 1 条：错误契约另许
   // product_scroll 用 search_products，并把数组上限换成只约束 id=search_top 的 maxContains 1，运营就能把
   // search_top 横幅和标题「本周热销」的 search_products 商品卡一并提交。
-  const admission = def(admissionName(SEARCH));
-  expect(admission['type'], 'search 准入定义是 sections 数组').toBe('array');
-  expect(admission['maxItems'], 'search 准入定义对整个 sections 数组限 1 项').toBe(1);
+  // 写测 3（D10-2556 ②）：标题里「准入定义自身 maxItems 为 1」不再读结构字面（maxItems 挪进带数组类型的 allOf
+  // 是合法等价重写），改由样例判定：空页收；每张单放能收的置顶卡（不同 id、类型、props 写法、商品池件数）
+  // 两两同放、三张同放，整页与准入定义都拒收。
+  verdict(SEARCH, [], true, 'search 不出置顶位（空页）');
   const bases: [string, Obj][] = [
     ['banner', goldenSection(SEARCH, 'banner')],
     ['product_scroll', goldenSection(SEARCH, 'product_scroll')],
+    ['product_scroll（展示 1 件）', scrollWithLimit(1)],
+    ['product_scroll（展示 20 件）', scrollWithLimit(20)],
   ];
   const singles: Variant[] = [];
   for (const id of searchIds()) {
@@ -935,17 +956,20 @@ it('[AC-CT-27b#11] search 置顶位的上限对整个 sections 数组算：准�
       verdict(SEARCH, [first.section, second.section], false, label);
     }
   }
+  for (const single of singles) {
+    const triple = [single.section, single.section, single.section];
+    verdict(SEARCH, triple, false, `置顶卡 ${single.name} 三张同放`);
+  }
 });
 
 it('[AC-CT-27b#12] more_services 的上限钉在 items 数组自身：准入定义里 data_source.items 的 maxItems 恰为 12，只放帮助入口试出的上限也是 12；routes.json 里 entry 含 in_app、单放能收的每个非核心路由（含「我的收藏」Favorites、商品详情 ProductDetail）接在 11 格帮助后收，接在 12 格帮助前或后都拒收，同一路由 13 格拒收；golden 条目轮流凑满 12 格收，再加一格 Favorites 拒收', () => {
   // BR-TEXT-28 准入表 me 行（条目数上限由契约线定稿）；D10-2401 ②。spec-test r1 S1 第 2 条：错误契约把 maxItems 12
   // 换成只统计 action.route 不是 Favorites 的 maxContains 12，12 格帮助入口再加一格「我的收藏」，13 格仍会通过。
-  const slot = deref(getAt(def(admissionName(ME)), ['items']));
-  const items = getAt(slot, ['properties', 'data_source', 'properties', 'items']);
-  expect(isObj(items), 'more_services 准入定义里 data_source.items 的定义').toBe(true);
-  expect((items as Obj)['type'], 'data_source.items 是数组').toBe('array');
-  expect((items as Obj)['maxItems'], 'items 数组自身的 maxItems').toBe(ME_CAP);
+  // 写测 3（D10-2556 ②）：标题里「items 的 maxItems 恰为 12」不再读结构字面（maxItems 挪进带数组类型的 allOf
+  // 是合法等价重写），改由样例判定：只放帮助入口试出的上限是 12（12 格收、13 格拒），再逐个路由试边界。
   expect(meCap(), '只放帮助入口时试出的上限').toBe(ME_CAP);
+  verdict(ME, [meWithTargets(helpTargets(ME_CAP))], true, `${ME_CAP} 格帮助`);
+  verdict(ME, [meWithTargets(helpTargets(ME_CAP + 1))], false, `${ME_CAP + 1} 格帮助`);
   const excluded = ['ExternalPage', 'WebPage', ...coreRoutes()];
   const bare = inAppRoutes(true).filter((route) => !excluded.includes(route));
   const candidates: [string, Obj][] = [
@@ -1015,47 +1039,34 @@ it('[AC-CT-27b#13] 徽标在 banner 的每个下标都不收、首页公告条�
 it('[AC-CT-27b#14] product_scroll 的 more_action 与静态条目引用同一个站内目标定义：search 准入定义里的 more_action、banner 条目 action 与 more_services 条目 action 都只是同一个 $ref；routes.json 的每个 in_app 路由、$defs/core_route 的全部核心入口、ExternalPage、WebPage（带与不带 params）放进三处与该定义本身，结论都相同；核心入口（含 WithdrawRecords）与外链在 more_action 处一律拒收', () => {
   // BR-TEXT-30 细则「跳转目标」、BR-TEXT-28 不可配清单；D10-2401 ④（D10-2383）。spec-test r1 S1 第 4 条：错误契约给
   // more_action 复制一份 in_app_target，只在副本的禁用路由里漏掉 WithdrawRecords，搜索置顶商品卡就收提现记录入口。
-  const searchNodes = reachableNodes(admissionName(SEARCH), ['section']);
-  const meNodes = reachableNodes(admissionName(ME), ['section']);
-  const groups: [string, Obj[]][] = [
-    ['search 置顶 product_scroll 的 more_action', propertyNodes(searchNodes, 'more_action')],
-    ['search 置顶 banner 条目的 action', propertyNodes(searchNodes, 'action')],
-    ['more_services 条目的 action', propertyNodes(meNodes, 'action')],
-  ];
-  const allowed = ['$ref', ...ANNOTATIONS];
-  const refs = new Set<string>();
-  for (const [name, nodes] of groups) {
-    expect(nodes.length, `${name} 的定义`).toBeGreaterThan(0);
-    for (const node of nodes) {
-      const extra = Object.keys(node).filter((key) => !allowed.includes(key));
-      expect(extra, `${name} 只引用共用定义，不另加约束`).toEqual([]);
-      expect(node['$ref'], `${name} 是 $ref`).toBeTypeOf('string');
-      refs.add(String(node['$ref']));
-    }
-  }
-  expect([...refs], 'more_action 与静态条目引用同一个站内目标定义').toHaveLength(1);
-  const { $schema, $defs } = homeSchema();
-  const target = compileStrict({ $schema, $defs, $ref: [...refs][0] as string });
+  // 写测 3（D10-2556 ②）：标题里「同一个 $ref」不再读结构字面（把现有 $ref 原样包进单分支 allOf 是合法等价重写），
+  // 改由样例判定「同一套白名单」：每种合法商品池配置（展示 1 / 10 / 20 件，带与不带标题）上，每个跳转放进
+  // more_action 的整页与准入定义结论，都与放进 search banner 条目、more_services 条目的结论相同；核心入口与
+  // 外链在每种配置的 more_action 处都拒收。
   const forbidden = ['ExternalPage', ...coreRoutes()];
-  const scroll = goldenSection(SEARCH, 'product_scroll');
   const banner = goldenSection(SEARCH, 'banner');
   const me = goldenSection(ME, 'icon_grid');
+  const configs = scrollConfigs();
+  for (const config of configs) {
+    verdict(SEARCH, [config.section], true, `search 置顶商品池卡（${config.name}）`);
+  }
   const routes = [...new Set([...forbidden, ...inAppRoutes(false), 'WebPage'])].sort();
-  for (const route of routes) {
-    const forms: Obj[] = [{ route }, { route, params: {} }];
-    if (route === 'ExternalPage') forms.push(EXTERNAL);
-    for (const form of forms) {
-      const shown = JSON.stringify(form);
-      const more = validPage(page(SEARCH, [withMoreAction(scroll, form)]));
-      const item = validPage(page(SEARCH, [withItemKey(banner, 0, 'action', form)]));
-      const meItem = validPage(page(ME, [withItemKey(me, 0, 'action', form)]));
-      expect(more, `${shown}：more_action 与共用定义同一结论`).toBe(target(clone(form)));
-      expect(more, `${shown}：more_action 与 search banner 条目同一结论`).toBe(item);
-      expect(more, `${shown}：more_action 与 more_services 条目同一结论`).toBe(meItem);
-      if (!forbidden.includes(route)) continue;
-      const admitted = admits(SEARCH, [withMoreAction(scroll, form)]);
-      check(more, false, `more_action=${shown}（整页）`);
-      check(admitted, false, `more_action=${shown}（准入定义）`);
+  const forms: Obj[] = [...GOOD_TARGETS, ...BAD_TARGETS];
+  for (const route of routes) forms.push({ route }, { route, params: {} });
+  for (const form of forms) {
+    const shown = JSON.stringify(form);
+    const route = String(form['route']);
+    const item = validPage(page(SEARCH, [withItemKey(banner, 0, 'action', form)]));
+    const meItem = validPage(page(ME, [withItemKey(me, 0, 'action', form)]));
+    expect(meItem, `${shown}：search banner 条目与 more_services 条目同一结论`).toBe(item);
+    if (forbidden.includes(route)) check(item, false, `search banner 条目 action=${shown}`);
+    for (const config of configs) {
+      const section = withMoreAction(config.section, form);
+      const where = `${config.name}的 more_action=${shown}`;
+      const more = validPage(page(SEARCH, [section]));
+      expect(admits(SEARCH, [section]), `${where}：准入定义与整页一致`).toBe(more);
+      expect(more, `${where}：与 search banner 条目同一结论`).toBe(item);
+      if (forbidden.includes(route)) check(more, false, where);
     }
   }
 });
@@ -1063,22 +1074,18 @@ it('[AC-CT-27b#14] product_scroll 的 more_action 与静态条目引用同一个
 it('[AC-CT-27b#15] more_services 图标的摘要不分文件格式都必填：准入定义里条目 icon 的定义（顺着引用）封闭、必填 url 与 sha256；条目全换成以摘要命名的 PNG 或 SVG 图标 {url, sha256} 都收；任一条目的 PNG 或 SVG 图标删掉 sha256、删掉 url、sha256 置 null、改成纯地址，都拒收', () => {
   // BR-TEXT-30 细则「图标」（grid/ 规格 PNG 或 SVG，下发带摘要）；D10-2401 ⑤（定稿 icon: {url, sha256}）。spec-test r1
   // S1 第 5 条：错误契约只在 PNG 分支要求 sha256、SVG 分支只要求 url，「签到说明」配 SVG 时客户端没有这张图的摘要。
-  const icons = propertyNodes(reachableNodes(admissionName(ME), ['section']), 'icon');
-  expect(icons.length, 'more_services 条目的 icon 定义').toBeGreaterThan(0);
-  for (const node of icons) {
-    const asset = deref(node);
-    expect(asset['additionalProperties'], 'icon 对象封闭').toBe(false);
-    const listed = asset['required'];
-    const required = Array.isArray(listed) ? listed : [];
-    expect(required, 'icon 必填图片地址').toContain('url');
-    expect(required, 'icon 必填摘要').toContain('sha256');
-  }
+  // 写测 3（D10-2556 ②）：标题里「icon 的定义封闭、必填 url 与 sha256」不再读结构字面（封闭对象原样包进单分支
+  // allOf 是合法等价重写），改由样例判定：PNG 与 SVG 图标各自删掉 url / sha256、sha256 置 null、改成纯地址、
+  // 图标对象里另加字段，整页与准入定义都拒收。
   const count = itemsOf(goldenSection(ME, 'icon_grid')).length;
   const edits: [string, (icon: Obj) => unknown][] = [
     ['删掉 sha256', (icon) => omit(icon, 'sha256')],
     ['删掉 url', (icon) => omit(icon, 'url')],
     ['sha256 置 null', (icon) => ({ ...icon, sha256: null })],
     ['改成纯地址', (icon) => icon['url']],
+    ['另加 fallback_url', (icon) => ({ ...icon, fallback_url: LOOSE_PICTURE })],
+    ['另加 image', (icon) => ({ ...icon, image: LOOSE_PICTURE })],
+    ['另加 width', (icon) => ({ ...icon, width: 120 })],
   ];
   for (const ext of ['png', 'svg']) {
     verdict(ME, [meIcons(ext, -1, (icon) => icon)], true, `条目全换成 .${ext} 图标`);
@@ -1088,5 +1095,63 @@ it('[AC-CT-27b#15] more_services 图标的摘要不分文件格式都必填：�
         verdict(ME, [meIcons(ext, index, edit)], false, label);
       }
     }
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// 写测 3（spec-test r2 的 2 条 S1；编排 D10-2556 ①）
+
+it('[AC-CT-27b#18] search 置顶商品池卡不论展示几件（1、10、20），props 封闭与 more_action 的站内白名单都生效：每种件数（带与不带标题）先收合法站内跳转（帮助、热销榜、https 站内 H5、搜索、商品详情、公告），再只把 more_action 改成 ExternalPage 或 $defs/core_route 的任一核心入口（含提现记录 WithdrawRecords），一律拒收；props 另找键夹带外链也拒收；整页与准入定义一致', () => {
+  // BR-TEXT-30 细则「跳转目标」、BR-TEXT-28 不可配清单；D10-2401 ④（D10-2383）。spec-test r2 S1 第 1 条：错误契约
+  // 对所有 search 商品滚动卡照查商品池数据源，却只在 data_source.limit 不等于 20 时套 props 的封闭定义与
+  // in_app_target，运营把置顶商品池从 10 件调到 20 件，再把「更多」指向外链或提现记录，整页和共享准入都放行。
+  const forbidden: Obj[] = [EXTERNAL, { route: 'ExternalPage' }];
+  for (const route of coreRoutes()) forbidden.push({ route }, { route, params: {} });
+  const configs = scrollConfigs();
+  const limits = configs.map((config) => getAt(config.section, ['data_source', 'limit']));
+  expect([...new Set(limits)], '试到的展示件数').toEqual(SCROLL_LIMITS);
+  for (const config of configs) {
+    verdict(SEARCH, [config.section], true, `置顶商品池卡（${config.name}）`);
+    for (const target of GOOD_TARGETS) {
+      const label = `${config.name}的 more_action=${JSON.stringify(target)}`;
+      verdict(SEARCH, [withMoreAction(config.section, target)], true, label);
+    }
+    for (const target of forbidden) {
+      const label = `${config.name}的 more_action=${JSON.stringify(target)}`;
+      verdict(SEARCH, [withMoreAction(config.section, target)], false, label);
+    }
+    for (const leak of PROP_LEAKS) {
+      const leaked = withProps(config.section, { ...propsOf(config.section), ...leak });
+      verdict(SEARCH, [leaked], false, `${config.name}的 props 加 ${JSON.stringify(leak)}`);
+    }
+  }
+});
+
+it('[AC-CT-27b#19] more_services 图标的摘要格式与文件格式不分 PNG / SVG 都钉死：条目全换成以摘要命名的 PNG 或 SVG 图标都收；任一条目的 PNG 或 SVG 图标只把 sha256 改成空串、空格、63 / 65 位、含非十六进制字符、带前缀或尾随空格的字符串，都拒收；只把图标地址的后缀改成 .webp（以及 .jpg、.jpeg、.gif、.avif）、摘要不动，也拒收；整页与准入定义一致', () => {
+  // BR-TEXT-30 细则「图标」第 1 项（grid/ 规格：PNG 120×120 或 SVG）、第 3 项（下发带摘要）；D10-2401 ⑤（定稿
+  // icon: {url, sha256}）。spec-test r2 S1 第 2 条：错误契约只对 PNG 校验 64 位十六进制摘要、SVG 的 sha256 只要求
+  // 字符串，SVG 素材填空串摘要的「签到说明」仍通过；另一个错误契约在图标地址后缀里多收 .webp。
+  const count = itemsOf(goldenSection(ME, 'icon_grid')).length;
+  expect(count, 'me golden 的条目').toBeGreaterThan(0);
+  for (const ext of ['png', 'svg']) {
+    verdict(ME, [meIcons(ext, -1, (icon) => icon)], true, `条目全换成 .${ext} 图标`);
+    for (let index = 0; index < count; index += 1) {
+      for (const bad of badDigests(iconAsset(index, ext)['sha256'] as string)) {
+        const edited = meIcons(ext, index, (icon) => ({ ...icon, sha256: bad }));
+        const label = `第 ${index} 个条目的 .${ext} 图标 sha256=${JSON.stringify(bad)}`;
+        verdict(ME, [edited], false, label);
+      }
+      for (const suffix of OTHER_SUFFIXES) {
+        const edited = meIcons(ext, index, (icon) => ({
+          ...icon,
+          url: String(icon['url']).replace(/\.(png|svg)$/, `.${suffix}`),
+        }));
+        verdict(ME, [edited], false, `第 ${index} 个条目的 .${ext} 图标地址后缀改成 .${suffix}`);
+      }
+    }
+  }
+  for (const suffix of OTHER_SUFFIXES) {
+    const all = meIcons(suffix, -1, (icon) => icon);
+    verdict(ME, [all], false, `条目全换成以摘要命名的 .${suffix} 图标`);
   }
 });
