@@ -36,5 +36,5 @@ accept:
   - 'pnpm verify'
   - 'test/spec/identity/agent-privacy-min-version/**'
   - 'test/spec/identity/privacy-min-version/**'
-status: todo
-pr: null
+status: done
+pr: 544
