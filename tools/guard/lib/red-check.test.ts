@@ -5138,3 +5138,54 @@ it.each([
     expect(valid.exempt?.filter((e) => e.modified).map((e) => e.test)).toEqual([wbAlpha, wbBeta]);
   },
 );
+
+it('[CT-06zzzzzzzc] money-codex r1 S1-2: a whole-block entry that is not rule_change exempts none of its rows (wholeBlockEntryProblem names it): its green rows are judged as any changed test', () => {
+  const tight: ModifyExistingDeclaration[] = [
+    { file: WB, test: WB_TEMPLATE, reason: 'tighten_only', ruling: 'D10-2559', note: WB_NOTE },
+  ];
+  const result = checkRedReports(
+    [
+      redReport(WB, [
+        [wbAlpha, 'passed'],
+        [wbBeta, 'passed'],
+        [WB_OTHER, 'passed'],
+        [WB_NEW, 'failed', WB_ASSERTION],
+      ]),
+    ],
+    [WB],
+    ROOT,
+    ruleTestBaselines(
+      [WB],
+      [{ path: WB, status: 'M' }],
+      ['test/spec/z/**'],
+      reader({ [WB]: wbFile(1, 0, WB_OTHER) }, { [WB]: wbFile(2, 0, WB_OTHER, true) }),
+      [],
+      [],
+      [],
+      [],
+      tight,
+    ),
+    [],
+    [],
+    tight,
+  );
+  expect(result.ok).toBe(false);
+  expect(result.problems).toContainEqual({
+    file: WB,
+    test: WB_TEMPLATE,
+    reason: expect.stringMatching(/rule_change only, not tighten_only/),
+  });
+  expect(result.problems.find((p) => p.test === WB_TEMPLATE)?.reason).toContain(
+    `"${WB} > ${WB_TEMPLATE}"`,
+  );
+  expect(result.exempt?.filter((e) => e.modified) ?? []).toEqual([]);
+  // The control: the same entry as rule_change exempts both green rows.
+  const valid = wbJudge(wbFile(1, 0, WB_OTHER), wbFile(2, 0, WB_OTHER, true), [
+    [wbAlpha, 'passed'],
+    [wbBeta, 'passed'],
+    [WB_OTHER, 'passed'],
+    [WB_NEW, 'failed', WB_ASSERTION],
+  ]);
+  expect(valid.ok).toBe(true);
+  expect(valid.exempt?.filter((e) => e.modified).map((e) => e.test)).toEqual([wbAlpha, wbBeta]);
+});

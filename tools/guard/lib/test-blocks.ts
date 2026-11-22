@@ -2821,7 +2821,11 @@ export type ModifiedBlock =
        * an .each / .for table the base cannot expand): whether a full name of the head's report
        * is one this block produces and no other block of the head may produce (red-check).
        */
-      whole?: { produces: (name: string) => boolean };
+      whole?: {
+        produces: (name: string) => boolean;
+        /** The index of its block among the head's test blocks (compareSupportFile `located`). */
+        head: number;
+      };
     }
   | { test: string; found: false; reason: string };
 
@@ -2943,6 +2947,10 @@ export function namesWholeBlock(
  * literals ]` (`as const` or not) is expanded row by row, the base from the base's kit, the head
  * from the head's (as compareOutsideChanged reads it, CT-06zzzzi); another directory, a re-export,
  * a `let`, a call, a non-literal row or a kit missing on a side still cannot be expanded.
+ * With `wholeAt` (CT-06zzzzzzzc, money-codex r1 S1-1), entry k is whole (true) or not (false) as the
+ * merge base ruled it (namesWholeBlock), not as `base` would: a range that does not start at the
+ * merge base (spec_commit → head) locates a whole entry's block at both ends by its template, and
+ * any other entry by its pattern only.
  */
 export function compareModifiedBlocks(
   base: string,
@@ -2950,6 +2958,7 @@ export function compareModifiedBlocks(
   names: readonly string[],
   headNames?: readonly (string | undefined)[],
   modules?: ImportedModules,
+  wholeAt?: readonly boolean[],
 ): ModifiedComparison {
   let before: ReturnType<typeof blockViews>;
   let after: ReturnType<typeof blockViews>;
@@ -2974,17 +2983,21 @@ export function compareModifiedBlocks(
     return { ok: false, reason: `the file cannot be read as tests (${String(err)})` };
   }
   type Located = { index: number; row: number | null; whole?: true } | { reason: string };
+  // CT-06zzzzzzzc (D10-2559 A): how a name is located on a side. 'judge' (the base, no ruling given):
+  // a name equal, character for character, to the title template of an .each / .for block names
+  // the whole block when this side cannot expand its table. 'whole' (the head of a whole entry, or
+  // a side the merge base already ruled whole, money-codex r1 S1-1): the same template locates the
+  // one block, whatever its table has become. 'plain' (the head of any other entry, claude r1 S2-1;
+  // a side the merge base ruled not whole): by its pattern only, as before the change.
+  type Mode = 'judge' | 'whole' | 'plain';
   const locate = (
     side: ReturnType<typeof blockViews>,
     name: string,
     where: string,
-    wholeAtBase = false,
+    mode: Mode,
   ): Located => {
-    // CT-06zzzzzzzc (D10-2559 A): a name equal, character for character, to the title template of
-    // an .each / .for block names the whole block when the base cannot expand its table; the head
-    // follows the base (the same template, whatever its table has become).
-    const tpl = templateBlocks(side, name);
-    if (wholeAtBase) {
+    const tpl = mode === 'plain' ? [] : templateBlocks(side, name);
+    if (mode === 'whole') {
       if (tpl.length > 1) {
         return { reason: `${tpl.length} test blocks of the ${where} have this title template` };
       }
@@ -3096,9 +3109,15 @@ export function compareModifiedBlocks(
         changed: r.changed,
       };
     }
-    const b = locate(before, test, 'base');
+    const ruled = wholeAt?.[at];
+    const b = locate(
+      before,
+      test,
+      'base',
+      ruled === undefined ? 'judge' : ruled ? 'whole' : 'plain',
+    );
     if (!('index' in b)) return { test, found: false, reason: b.reason };
-    const h = locate(after, headTest, 'head', b.whole === true);
+    const h = locate(after, headTest, 'head', b.whole === true ? 'whole' : 'plain');
     if (!('index' in h)) {
       if (renamed) {
         return {
@@ -3183,6 +3202,7 @@ export function compareModifiedBlocks(
               whole: {
                 produces: (name: string): boolean =>
                   after.blocks.every((v, i) => v.pattern.test(name) === (i === own)),
+                head: own,
               },
             }
           : {}),
@@ -3290,7 +3310,8 @@ export function compareModifiedBlocks(
 // - `blocks`: what is wrong with the blocks — a block added or removed, a block moved (its
 //   describes, the depth of brackets around it or the token right before it differ: into or out
 //   of a describe, function, loop or branch, `if (…) it(…)`), or a block that is not declared by
-//   a block entry (`names`, `headNames` as compareModifiedBlocks takes them) and whose text
+//   a block entry (`names`, `headNames` as compareModifiedBlocks takes them; a whole-block entry
+//   by the head index it was located at, `located`, CT-06zzzzzzzc) and whose text
 //   differs from the base. The support entry never lets a changed block through; its block entry
 //   does (compareModifiedBlocks judges it). Blocks are compared by their describes and text, not
 //   by their anchor in the shared rest (that moves with every change of the code before them).
@@ -3773,6 +3794,7 @@ export function compareSupportFile(
   head: string,
   names: readonly string[] = [],
   headNames?: readonly (string | undefined)[],
+  located?: readonly (number | null | undefined)[],
 ): SupportComparison {
   let before: SupportView;
   let after: SupportView;
@@ -3800,9 +3822,14 @@ export function compareSupportFile(
         );
         return;
       }
-      const declared = names.some(
-        (name, k) => x.pattern.test(name) && y.pattern.test(headNames?.[k] ?? name),
-      );
+      // CT-06zzzzzzzc (money-codex r1 S1-3): a whole-block entry declares the one head block
+      // compareModifiedBlocks located for it (`located[k]`, its index), never a block its template
+      // name merely matches; the other entries are matched by pattern as before.
+      const declared = names.some((name, k) => {
+        const at = located?.[k];
+        if (at !== undefined && at !== null) return at === i;
+        return x.pattern.test(name) && y.pattern.test(headNames?.[k] ?? name);
+      });
       if (!declared && x.text !== y.text) {
         blocks.push(
           `test block ${i + 1} ("${y.title}") is not declared and differs from the base (a file-level support entry never covers a changed block: declare it with a block entry)`,

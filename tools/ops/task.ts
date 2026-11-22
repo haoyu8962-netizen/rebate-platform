@@ -589,8 +589,16 @@ export function checkTask(id: string, opts: CheckOptions = {}): string[] {
       }
     }
     // CT-06zzzzzzzc (D10-2559 B): a block entry named by the title template of an .each / .for
-    // table the base (the trusted root) cannot expand is a whole-block entry: rule_change only,
-    // note required (wholeBlockEntryProblem, as evidence-check says it).
+    // table that cannot be expanded is a whole-block entry: rule_change only, note required
+    // (wholeBlockEntryProblem, as evidence-check says it). The file is read from `root`, the
+    // checkout this check runs in: on main and on a ledger-only pull request that is the base, the
+    // same content evidence-check rules by; on an implementation pull request CI checks out the
+    // head, and the merge base is not at hand here (claude r1 S2-2), so there evidence-check (and
+    // red-check), which rule at the merge base, are authoritative for whole-block entries. The two
+    // can then differ only one way: this check never refuses an entry they accept (a template the
+    // head names whole is whole at the merge base too, or they refuse the entry: the head locates
+    // a whole entry by its template only when the merge base ruled it whole), and it may let pass
+    // one they refuse (the base whole, the head's table made expandable).
     for (const d of blockEntries(task.modify_existing)) {
       const path = join(root, d.file);
       if (!RULE_TEST_FILE.test(d.file) || !regularFile(path)) continue;

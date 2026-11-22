@@ -273,7 +273,12 @@
 // kit of each side, as compareOutsideChanged reads it (compareModifiedBlocks' `modules`).
 import { matchesAny } from '../../lib/glob.ts';
 import type { Change } from '../../lib/git.ts';
-import { RED_EXEMPT_REASON_MIN, blockEntries, supportEntries } from '../../lib/task-file.ts';
+import {
+  RED_EXEMPT_REASON_MIN,
+  blockEntries,
+  supportEntries,
+  wholeBlockEntryProblem,
+} from '../../lib/task-file.ts';
 import type {
   ExpectedValueDeclaration,
   ModifyExistingBlockDeclaration,
@@ -888,7 +893,14 @@ export function mixedOnlyFiles(
     if (declaredBlocks.some((b) => !b.changed)) continue;
     // No test added, removed or moved, and no undeclared block changed (the block part of
     // compareSupportFile; its token rules are evidence-check's, for support entries).
-    const blocksOf = compareSupportFile(before, after, names, retitles);
+    // CT-06zzzzzzzc (money-codex r1 S1-3): a whole-block entry declares the block it was located at.
+    const blocksOf = compareSupportFile(
+      before,
+      after,
+      names,
+      retitles,
+      compared.blocks.map((b) => (b.found ? b.whole?.head : undefined)),
+    );
     if (!blocksOf.ok || blocksOf.blocks.length > 0) continue;
     // Every other test unchanged (a block none of whose names is declared, the base's) and the
     // file's red_exempt declarations exactly those names, each with a reason.
@@ -1939,7 +1951,16 @@ export function checkRedReports(
             });
           } else {
             // CT-06zzzzr (D10-1278 ②): the report runs the head, so a renamed test has its new name.
-            if (b.whole !== undefined) wholeBlocks.push({ d, produces: b.whole.produces });
+            // CT-06zzzzzzzc (money-codex r1 S1-2): a whole-block entry is checked (rule_change
+            // only, note required) before its rows may pass green; a bad one exempts nothing.
+            const bad = b.whole === undefined ? null : wholeBlockEntryProblem(d);
+            if (bad !== null) {
+              problems.push({
+                file,
+                test: d.test,
+                reason: `declared in modify_existing, but the declaration does not apply: ${bad}`,
+              });
+            } else if (b.whole !== undefined) wholeBlocks.push({ d, produces: b.whole.produces });
             else modifiable.set(d.retitle_to ?? d.test, d);
           }
         });

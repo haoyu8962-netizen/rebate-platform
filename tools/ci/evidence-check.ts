@@ -226,6 +226,7 @@ import type {
 import {
   compareModifiedBlocks,
   compareSupportFile,
+  namesWholeBlock,
   supportLinesText,
   supportTokensText,
 } from '../guard/lib/test-blocks.ts';
@@ -619,7 +620,57 @@ function modifiedHitProblem(
   if (modifyApprovalProblem(modify, head) !== null) {
     return 'declared in modify_existing, but without the owner approval label';
   }
-  return declaredHitProblem(prDir, from, head, hit, declared, support);
+  // CT-06zzzzzzzc (money-codex r1 S1-1): which entries are whole blocks is ruled once, at the merge
+  // base (as the record check rules it), and spec_commit → head follows that ruling.
+  return declaredHitProblem(
+    prDir,
+    from,
+    head,
+    hit,
+    declared,
+    support,
+    wholeAtMergeBase(prDir, modify.base, hit.path, declared),
+  );
+}
+
+/**
+ * CT-06zzzzzzzc (money-codex r1 S1-1): for each block entry of `file`, whether it names a whole
+ * block at the merge base `base` (namesWholeBlock, the base's kit for an imported table); false when
+ * the file is absent there or cannot be read as tests (the record check says so).
+ */
+function wholeAtMergeBase(
+  prDir: string,
+  base: string,
+  file: string,
+  declared: readonly ModifyExistingBlockDeclaration[],
+): boolean[] {
+  if (declared.length === 0) return [];
+  const text = showOrNull(prDir, base, file);
+  return declared.map((e) => {
+    if (text === null) return false;
+    try {
+      return namesWholeBlock(text, e.test, { file, read: (p) => showOrNull(prDir, base, p) });
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * CT-06zzzzzzzc (money-codex r1 S1-2): why the located whole-block entries among `declared` are
+ * refused (wholeBlockEntryProblem: rule_change only, note required), each named; null when none.
+ */
+function wholeEntriesProblem(
+  compared: Extract<ModifiedComparison, { ok: true }>,
+  declared: readonly ModifyExistingBlockDeclaration[],
+): string | null {
+  const why = compared.blocks.flatMap((b, k) => {
+    const d = declared[k];
+    if (!b.found || b.whole === undefined || d === undefined) return [];
+    const bad = wholeBlockEntryProblem(d);
+    return bad === null ? [] : [bad];
+  });
+  return why.length === 0 ? null : `declared in modify_existing, but ${why.join('; ')}`;
 }
 
 /**
@@ -635,6 +686,7 @@ function declaredHitProblem(
   hit: { path: string; status: string },
   declared: readonly ModifyExistingBlockDeclaration[],
   support: ModifyExistingSupportDeclaration | undefined,
+  wholeAt?: readonly boolean[],
 ): string | null {
   const names = declared.map((e) => e.test);
   if (hit.status !== 'M') return 'declared in modify_existing, but removed or renamed';
@@ -644,7 +696,7 @@ function declaredHitProblem(
   // CT-06zzzzzr (D10-2125 (B), money-codex r1 S2): a table imported from a same-directory kit
   // is read from that side's kit, spec_commit's and the head's (as red-check reads them).
   const modules = sideModules(prDir, from, head, hit.path);
-  if (support !== undefined) return supportHitProblem(before, after, declared, modules);
+  if (support !== undefined) return supportHitProblem(before, after, declared, modules, wholeAt);
   // CT-06zzzzr (D10-1278 ②): a renamed entry's block is its retitle_to at the head.
   const compared = compareModifiedBlocks(
     before,
@@ -652,12 +704,15 @@ function declaredHitProblem(
     names,
     declared.map((e) => e.retitle_to),
     modules,
+    wholeAt,
   );
   if (!compared.ok) return `declared in modify_existing, but ${compared.reason}`;
   const missing = compared.blocks.find((b) => !b.found);
   if (missing !== undefined && !missing.found) {
     return `declared in modify_existing, but "${missing.test}": ${missing.reason}`;
   }
+  const whole = wholeEntriesProblem(compared, declared);
+  if (whole !== null) return whole;
   if (compared.outside !== null) {
     return `declared in modify_existing, but changed outside the declared blocks: ${compared.outside}`;
   }
@@ -679,18 +734,24 @@ function supportHitProblem(
   after: string,
   declared: readonly ModifyExistingBlockDeclaration[],
   modules?: ImportedModules,
+  wholeAt?: readonly boolean[],
 ): string | null {
   const names = declared.map((e) => e.test);
   const retitles = declared.map((e) => e.retitle_to);
+  // CT-06zzzzzzzc (money-codex r1 S1-3): the head index of each whole-block entry's located block.
+  let located: (number | undefined)[] = [];
   if (names.length > 0) {
-    const compared = compareModifiedBlocks(before, after, names, retitles, modules);
+    const compared = compareModifiedBlocks(before, after, names, retitles, modules, wholeAt);
     if (!compared.ok) return `declared in modify_existing, but ${compared.reason}`;
     const missing = compared.blocks.find((b) => !b.found);
     if (missing !== undefined && !missing.found) {
       return `declared in modify_existing, but "${missing.test}": ${missing.reason}`;
     }
+    const whole = wholeEntriesProblem(compared, declared);
+    if (whole !== null) return whole;
+    located = compared.blocks.map((b) => (b.found ? b.whole?.head : undefined));
   }
-  const support = compareSupportFile(before, after, names, retitles);
+  const support = compareSupportFile(before, after, names, retitles, located);
   if (!support.ok) return `declared in modify_existing (scope: support), but ${support.reason}`;
   const why = [...support.blocks];
   if (support.assertions.length > 0) {
