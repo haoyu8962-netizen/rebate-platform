@@ -8,6 +8,7 @@ import type {
   AliyunCredentials,
   AliyunReviewDeps,
   AliyunReviewFetch,
+  ReviewBlockLevel,
 } from '../../guard/review/index.ts';
 import { createAliyunAcs3Signer } from '../../guard/review/sign.ts';
 import type { AgentRunTexts } from '../../orchestrator/index.ts';
@@ -170,6 +171,8 @@ export async function readBudget(
  * (scheduler.now()) once agent.safety.timeout_ms of `appId` was read: that value minus the wait
  * for the read. UNREADABLE when the read failed, hung or outlived `signal`; 0 when nothing is left
  * (a read slower than its own value). Either way the review is unavailable now (fail-close).
+ * B3-06c (D10-2498): a caller that did other work since its review started passes that start;
+ * the default is "now", taken before any read is started.
  */
 export async function remainingBudget(
   config: StreamReviewConfigReader,
@@ -177,10 +180,106 @@ export async function remainingBudget(
   appId: string,
   signal: AbortSignal,
   fallback: number,
+  startedAt: number = scheduler.now(),
 ): Promise<number | typeof UNREADABLE> {
-  const startedAt = scheduler.now();
   const budget = await readBudget(config, scheduler, appId, signal, fallback);
   if (budget === UNREADABLE) return UNREADABLE;
   const left = budget - Math.max(0, scheduler.now() - startedAt);
   return left > 0 ? left : 0;
+}
+
+/** B3-06c · BR-AI-18 细则：输入 / 输出审核各自的起拦等级配置键。 */
+export const BLOCK_LEVEL_KEYS = {
+  input: 'agent.safety.block_level.input',
+  output: 'agent.safety.block_level.output',
+} as const;
+
+/** BR-AI-18 默认起拦等级（与 B3-06b 现实现相同：low / medium / high 都算命中）。 */
+export const DEFAULT_BLOCK_LEVEL: ReviewBlockLevel = 'low';
+
+/** D10-2484：读到了但缺失或不是 low / medium / high（大小写、空白、类型都不放宽）按 low。 */
+export function validBlockLevel(value: unknown): ReviewBlockLevel {
+  return value === 'low' || value === 'medium' || value === 'high' ? value : DEFAULT_BLOCK_LEVEL;
+}
+
+/** One review's settings: what is left of its deadline and its block level. */
+export type ReviewSettings =
+  | { readonly kind: 'ready'; readonly left: number; readonly level: ReviewBlockLevel }
+  /** timeout_ms or the block level could not be read in time (fail-close, logged). */
+  | { readonly kind: 'unreadable'; readonly key: string }
+  /** Nothing of the deadline is left, or `signal` aborted (fail-close). */
+  | { readonly kind: 'expired' };
+
+/**
+ * B3-06c · BR-AI-18: agent.safety.timeout_ms and the block level of `side` for one app, read now
+ * for this one review (never cached; the level travels in the result, never in shared state).
+ * Both reads start together at the start of the review, and the deadline is that start plus
+ * timeout_ms (D10-2498: the start is taken before any read, never once timeout_ms is known); the
+ * timeout_ms read is bounded as in readBudget, and the wait for the level counts toward the same
+ * deadline (D10-2489): a level read that fails, or does not settle before the deadline, is
+ * unreadable (review unavailable, like a timeout); a level read but missing or invalid is low
+ * (D10-2484).
+ */
+export async function reviewSettings(
+  config: StreamReviewConfigReader,
+  scheduler: Scheduler,
+  appId: string,
+  side: 'input' | 'output',
+  signal: AbortSignal,
+  fallback: number,
+): Promise<ReviewSettings> {
+  // D10-2498: the review's one deadline starts here, before any read is started; a stall between
+  // starting the reads and learning timeout_ms never moves it (deadline = startedAt + timeout_ms).
+  const startedAt = scheduler.now();
+  if (signal.aborted) return { kind: 'expired' };
+  const levelKey = BLOCK_LEVEL_KEYS[side];
+  // Started first (and synchronously) so the timeout_ms read stays the last read of the review.
+  let levelRead: Promise<ReviewBlockLevel | typeof UNREADABLE>;
+  try {
+    levelRead = Promise.resolve(config.configValue(appId, levelKey)).then(
+      (entry) => validBlockLevel(entry?.value),
+      (): typeof UNREADABLE => UNREADABLE,
+    );
+  } catch {
+    levelRead = Promise.resolve(UNREADABLE);
+  }
+  const budget = await readBudget(config, scheduler, appId, signal, fallback);
+  if (budget === UNREADABLE) {
+    return signal.aborted ? { kind: 'expired' } : { kind: 'unreadable', key: TIMEOUT_KEY };
+  }
+  const deadlineAt = startedAt + budget;
+  const left = deadlineAt - scheduler.now();
+  if (left <= 0) return { kind: 'expired' };
+
+  const timer = new AbortController();
+  const stop = (): void => {
+    timer.abort();
+  };
+  signal.addEventListener('abort', stop, { once: true });
+  try {
+    const deadline = scheduler.sleep(left, timer.signal).then(
+      (): typeof UNREADABLE => UNREADABLE,
+      (): typeof UNREADABLE => UNREADABLE,
+    );
+    const level = await Promise.race([levelRead, deadline]);
+    if (signal.aborted) return { kind: 'expired' };
+    if (level === UNREADABLE) return { kind: 'unreadable', key: levelKey };
+    const rest = deadlineAt - scheduler.now();
+    return rest > 0 ? { kind: 'ready', left: rest, level } : { kind: 'expired' };
+  } finally {
+    timer.abort();
+    signal.removeEventListener('abort', stop);
+  }
+}
+
+/** The fail-close log of a configuration read that failed or hung (flat fields, no text). */
+export function logUnreadable(
+  deps: { readonly logger: RootLogger },
+  appId: string,
+  key: string,
+): void {
+  deps.logger.warn(
+    { app_id: appId },
+    key === TIMEOUT_KEY ? 'agent_safety_timeout_unreadable' : 'agent_safety_block_level_unreadable',
+  );
 }

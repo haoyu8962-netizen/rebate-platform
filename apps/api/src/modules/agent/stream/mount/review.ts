@@ -11,8 +11,17 @@
 // app, read per request (createStreamReview below); the sentence review keeps options.timeoutMs.
 // B3-03p: the read's wait counts toward that budget; with deps.config the ports also carry the
 // per-app output review (./output-review.ts), which the stream entry hands to the core.
+// B3-06c: with deps.config the input check also reads agent.safety.block_level.input of the
+// request's app, inside the same deadline (./safety.ts reviewSettings), and the Aliyun verdict is
+// judged against it; the level is passed along this one check, never stored. Without deps.config
+// the adapter's default mapping stays (low / medium / high all block).
 import type { SentenceReviewPort } from '../../guard/index.ts';
-import { createAliyunInputReview, createAliyunOutputReview } from '../../guard/review/index.ts';
+import {
+  createAliyunGradedReview,
+  createAliyunInputReview,
+  createAliyunOutputReview,
+  type ReviewBlockLevel,
+} from '../../guard/review/index.ts';
 import { failClosedInputCheck, type InputCheckPort } from '../../orchestrator/index.ts';
 import type { RunSentenceReviewPort } from '../../orchestrator/core/ports.ts';
 import { createInputCheck } from '../../preprocess/input/index.ts';
@@ -20,9 +29,9 @@ import { createStreamOutputReview } from './output-review.ts';
 import {
   aliyunDepsFactory,
   budgetOf,
+  logUnreadable,
   liveSettings,
-  remainingBudget,
-  UNREADABLE,
+  reviewSettings,
   type StreamReviewDeps,
 } from './safety.ts';
 
@@ -67,20 +76,35 @@ export function createStreamReview(deps: StreamReviewDeps): StreamReviewPorts {
   if (config === undefined) return { inputCheck: inputFor(fixed), review };
 
   const unavailable = failClosedInputCheck();
+  // One check built per request: its budget and block level are this request's own.
+  const gradedFor = (budget: number, level: ReviewBlockLevel): InputCheckPort => {
+    const graded = createAliyunGradedReview(aliyunFor(budget), 'input');
+    return createInputCheck({
+      review: { review: (text) => graded.review(text, level) },
+      scheduler: deps.scheduler,
+      timeoutMs: () => budget,
+      texts: deps.texts,
+    });
+  };
   return {
     inputCheck: {
       async check(input, signal) {
         // B3-03p: the wait for the value counts toward the same deadline; the check gets what is
         // left of it, bound when the check is built (concurrent requests never share a budget).
         const appId = input.caller.appId;
-        const left = await remainingBudget(config, deps.scheduler, appId, signal, fixed);
-        if (left === UNREADABLE || left <= 0) {
-          if (left === UNREADABLE && !signal.aborted) {
-            deps.logger.warn({ app_id: appId }, 'agent_safety_timeout_unreadable');
-          }
+        const settings = await reviewSettings(
+          config,
+          deps.scheduler,
+          appId,
+          'input',
+          signal,
+          fixed,
+        );
+        if (settings.kind !== 'ready') {
+          if (settings.kind === 'unreadable') logUnreadable(deps, appId, settings.key);
           return unavailable.check(input, signal);
         }
-        return inputFor(left).check(input, signal);
+        return gradedFor(settings.left, settings.level).check(input, signal);
       },
     },
     review,

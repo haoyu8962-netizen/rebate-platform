@@ -89,6 +89,37 @@ export function createAliyunOutputReview(deps: AliyunReviewDeps): SentenceReview
   return createAliyunReview(deps, 'output');
 }
 
+/** B3-06c · BR-AI-18 细则：审核起拦等级（agent.safety.block_level.input / .output）。 */
+export type ReviewBlockLevel = 'low' | 'medium' | 'high';
+
+/** 有风险的等级按 low < medium < high 排序；差异表里不在此表的命中取值按等级不认识处理。 */
+const LEVEL_RANK: Readonly<Record<ReviewBlockLevel, number>> = { low: 1, medium: 2, high: 3 };
+
+function rankOf(value: string): number | undefined {
+  return value === 'low' || value === 'medium' || value === 'high' ? LEVEL_RANK[value] : undefined;
+}
+
+/**
+ * B3-06c：按调用方给出的起拦等级判定的审核口。passValues 通过；blockValues 中风险等级 ≥ 起拦等级
+ * 才算 block，低于起拦等级算 pass；等级缺失或不认识一律 timeout（审核不可用，不当作命中）。
+ * 起拦等级只随这一次 review 调用传入，不存放在适配器里。默认的 review()（createAliyunInputReview /
+ * createAliyunOutputReview）不受影响，仍按差异表把 low / medium / high 全部当作命中。
+ */
+export interface GradedReviewPort {
+  review(text: string, blockLevel: ReviewBlockLevel): Promise<ReviewVerdict>;
+}
+
+export function createAliyunGradedReview(
+  deps: AliyunReviewDeps,
+  side: 'input' | 'output',
+): GradedReviewPort {
+  const differences = deps.differences ?? defaultAliyunReviewDifferences();
+  const service = side === 'input' ? differences.inputService : differences.outputService;
+  return {
+    review: (text, blockLevel) => runReview(deps, differences, service, side, text, blockLevel),
+  };
+}
+
 // ---------------------------------------------------------------------------------------------
 // 共用实现：两种场景只差 Service 参数；映射、时限、fail-close 完全相同。不跟随跳转、不重试。
 
@@ -118,17 +149,27 @@ function createAliyunReview(deps: AliyunReviewDeps, side: Side): SentenceReviewP
   const service = side === 'input' ? differences.inputService : differences.outputService;
 
   return {
-    async review(text: string): Promise<ReviewVerdict> {
-      let outcome: Outcome;
-      try {
-        outcome = await reviewWithDeadline(deps, differences, service, text);
-      } catch {
-        outcome = { verdict: 'timeout', reason: 'error' };
-      }
-      if (outcome.verdict === 'timeout') logUnavailable(deps, side, outcome);
-      return outcome.verdict;
-    },
+    review: (text: string) => runReview(deps, differences, service, side, text, undefined),
   };
+}
+
+/** blockLevel 为 undefined 时是默认映射（差异表原样）；否则按起拦等级判定。 */
+async function runReview(
+  deps: AliyunReviewDeps,
+  differences: AliyunReviewDifferences,
+  service: string,
+  side: Side,
+  text: string,
+  blockLevel: ReviewBlockLevel | undefined,
+): Promise<ReviewVerdict> {
+  let outcome: Outcome;
+  try {
+    outcome = await reviewWithDeadline(deps, differences, service, text, blockLevel);
+  } catch {
+    outcome = { verdict: 'timeout', reason: 'error' };
+  }
+  if (outcome.verdict === 'timeout') logUnavailable(deps, side, outcome);
+  return outcome.verdict;
 }
 
 /**
@@ -140,6 +181,7 @@ async function reviewWithDeadline(
   differences: AliyunReviewDifferences,
   service: string,
   text: string,
+  blockLevel: ReviewBlockLevel | undefined,
 ): Promise<Outcome> {
   let budget: unknown;
   try {
@@ -163,10 +205,12 @@ async function reviewWithDeadline(
       },
     );
   });
-  const work = attempt(deps, differences, service, text, request.signal).catch((): Outcome => ({
-    verdict: 'timeout',
-    reason: 'error',
-  }));
+  const work = attempt(deps, differences, service, text, blockLevel, request.signal).catch(
+    (): Outcome => ({
+      verdict: 'timeout',
+      reason: 'error',
+    }),
+  );
 
   const outcome = await Promise.race([work, expired]);
   // 到点：中止仍在进行的签名或请求；先结束：释放计时器。
@@ -180,6 +224,7 @@ async function attempt(
   differences: AliyunReviewDifferences,
   service: string,
   text: string,
+  blockLevel: ReviewBlockLevel | undefined,
   signal: AbortSignal,
 ): Promise<Outcome> {
   // 每次审核重新取凭据并签名，不缓存，Key 轮换即时生效。
@@ -218,7 +263,9 @@ async function attempt(
   } catch {
     return { verdict: 'timeout', reason: 'body_not_json' };
   }
-  return mapVerdict(parsed, differences);
+  return blockLevel === undefined
+    ? mapVerdict(parsed, differences)
+    : mapGradedVerdict(parsed, differences, blockLevel);
 }
 
 /** 只认差异表写明的字段与取值；其余（缺失、类型不符、大小写或空白不同）一律 timeout。 */
@@ -231,6 +278,27 @@ function mapVerdict(body: unknown, differences: AliyunReviewDifferences): Outcom
   if (typeof value !== 'string') return { verdict: 'timeout', reason: 'verdict_unknown' };
   // 同一取值同时出现在两张表时按命中处理，不放行。
   if (differences.blockValues.includes(value)) return { verdict: 'block' };
+  if (differences.passValues.includes(value)) return { verdict: 'pass' };
+  return { verdict: 'timeout', reason: 'verdict_unknown' };
+}
+
+/** B3-06c：与 mapVerdict 同样只认差异表的字段与取值，再按起拦等级判定命中。 */
+function mapGradedVerdict(
+  body: unknown,
+  differences: AliyunReviewDifferences,
+  blockLevel: ReviewBlockLevel,
+): Outcome {
+  const code = readPath(body, differences.codePath);
+  if (typeof code !== 'number' || code !== differences.successCode) {
+    return { verdict: 'timeout', reason: 'code_mismatch' };
+  }
+  const value = readPath(body, differences.verdictPath);
+  if (typeof value !== 'string') return { verdict: 'timeout', reason: 'verdict_unknown' };
+  if (differences.blockValues.includes(value)) {
+    const rank = rankOf(value);
+    if (rank === undefined) return { verdict: 'timeout', reason: 'verdict_unknown' };
+    return rank >= LEVEL_RANK[blockLevel] ? { verdict: 'block' } : { verdict: 'pass' };
+  }
   if (differences.passValues.includes(value)) return { verdict: 'pass' };
   return { verdict: 'timeout', reason: 'verdict_unknown' };
 }

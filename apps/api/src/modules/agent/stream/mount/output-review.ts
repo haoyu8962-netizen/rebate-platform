@@ -4,16 +4,19 @@
 // for every run, and lets the wait for that read count toward the same deadline as the review.
 // The stream entry hands it to the core as AgentRunBodyDeps.outputReview (createStreamReview's
 // ports carry it to the business assembly; production: createProductionStreamAssembly).
+// B3-06c: each review also reads agent.safety.block_level.output of the run's app inside the same
+// deadline (./safety.ts reviewSettings) and judges the Aliyun verdict against that level, passed
+// along this one review call (never kept in the run's closure or any shared field).
 import type { ReviewVerdict, SentenceReviewPort } from '../../guard/index.ts';
-import { createAliyunOutputReview } from '../../guard/review/index.ts';
+import { createAliyunGradedReview, createAliyunOutputReview } from '../../guard/review/index.ts';
 import type { RunSentenceReviewPort } from '../../orchestrator/core/ports.ts';
 import {
   aliyunDepsFactory,
   type StreamReviewDeps,
   budgetOf,
   liveSettings,
-  remainingBudget,
-  UNREADABLE,
+  logUnreadable,
+  reviewSettings,
 } from './safety.ts';
 
 const TIMED_OUT: SentenceReviewPort = { review: async () => 'timeout' };
@@ -67,16 +70,22 @@ export function createStreamOutputReview(deps: StreamReviewDeps): RunSentenceRev
       return {
         async review(text) {
           if (config === undefined) return untilAborted(fixed.review(text), signal);
-          const left = await remainingBudget(config, deps.scheduler, appId, signal, fallback);
-          if (left === UNREADABLE || left <= 0) {
-            if (left === UNREADABLE && !signal.aborted) {
-              deps.logger.warn({ app_id: appId }, 'agent_safety_timeout_unreadable');
-            }
+          const settings = await reviewSettings(
+            config,
+            deps.scheduler,
+            appId,
+            'output',
+            signal,
+            fallback,
+          );
+          if (settings.kind !== 'ready') {
+            if (settings.kind === 'unreadable') logUnreadable(deps, appId, settings.key);
             return 'timeout';
           }
-          // One adapter per review call: its deadline is what is left of this call's budget.
-          const review = createAliyunOutputReview(aliyunFor(left));
-          return untilAborted(review.review(text), signal);
+          // One adapter per review call: its deadline is what is left of this call's budget, and
+          // its block level is this call's own.
+          const review = createAliyunGradedReview(aliyunFor(settings.left), 'output');
+          return untilAborted(review.review(text, settings.level), signal);
         },
       };
     },
