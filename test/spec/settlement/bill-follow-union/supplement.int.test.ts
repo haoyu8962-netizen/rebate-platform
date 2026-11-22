@@ -6,6 +6,7 @@
 // withCommandsAdmin 同一生产装配，只把根 logger 换成收集日志的，冻结 kit 不改）；补充批次确认后经 worker 的生产
 // 处理器真实入账。顶层 it()（规划/11 §4.3）。
 import { expect, it } from 'vitest';
+import { readUnionAuthoritativeOrderKeys } from '../../../../apps/api/src/modules/ledger/index.ts';
 import {
   creditSwitch,
   everything,
@@ -24,6 +25,7 @@ import {
   admin,
   alertsFor,
   allAlerts,
+  amountsAt,
   app,
   availables,
   batchesOf,
@@ -46,8 +48,13 @@ import {
   regenerationAndItemWrites,
   seedOrder,
   setConfig,
+  settleLater,
+  splitOf,
+  syncEstimate,
   unionConclusion,
+  unionConclusionReadFault,
   userCreditLines,
+  versionRows,
   versionsOf,
   voucherLines,
   withSupplementAdmin,
@@ -432,6 +439,145 @@ it(
     expect(await itemsFor(a, near)).toEqual([expect.objectContaining({ b_settle_fen: 1100n })]);
     expect(await diffsOf(a)).toEqual([]);
     expect((await everything(f)).bills).toEqual(before.bills);
+  },
+  TIMEOUT,
+);
+
+// ---------------------------------------------------------------------------------------------
+// 第 4 次写测（编排 D10-2544，任务书 §12）。断言都在用例体里；后台回调里只发请求与取数。
+
+it(
+  "[AC-B2-18#33] 后台补充（真实后台生产入口）不再读「以联盟为准」旧结论（D10-2415）：快照 1234、结算 1100 的 WAITING 单另有一张已结案、结论「以联盟为准」的旧差错单；在这次请求所用的数据库执行器上，凡是读旧结论的查询（以 SELECT 开头、读 recon_diffs、取 resolution->>'outcome'）一执行就抛错并计数 → 请求 200，这类查询执行 0 次；该单按 1100 重生成 v2（550 / 110）并入补充批次，明细恰好一份（b_settle 1100、settle_seq 1）；不告警、旧差错单原样不新增、账单行不回写",
+  async () => {
+    const base = fixture(s);
+    const a = await appOf(base);
+    const o = await example2(a);
+    await unionConclusion(a, o, 1234n, 1100n);
+    const diffsBefore = await diffsOf(a);
+    const billsBefore = (await everything(base)).bills;
+    // 观察与故障装在后台入口所用的执行器上（dbHandles.db = f.db）；不替换任何端口、不改冻结 kit。
+    const fault = unionConclusionReadFault(base.db);
+    const f: Fixture = { ...base, db: fault.db };
+
+    // 识别条件确实命中现有代码里的那条旧查询（取数，断言在下面）：经同一执行器直接调一次 ledger 的结论读口。
+    const probe = await within(
+      readUnionAuthoritativeOrderKeys(fault.db, { appId: a.appId, orderKeys: [o.orderKey] }),
+      'union conclusion read probe',
+    );
+    const probed = { executed: fault.executed, fired: fault.fired, statements: fault.statements };
+    const seen: { status?: number; body?: string; lines: LogLine[] } = { lines: [] };
+
+    await withSupplementAdmin(f, async (h) => {
+      const sent = await h.supplement(BILL_ID, TAOBAO);
+      seen.status = sent.statusCode;
+      seen.body = sent.body;
+      seen.lines = h.lines;
+    });
+
+    expect(probe.ok).toBe(false);
+    expect(probe.ok ? '' : errorText(probe.error)).toContain(
+      'injected: the union conclusion read must not run',
+    );
+    expect(probed).toMatchObject({ executed: 1, fired: 1 });
+
+    // 请求成功，且这次请求里读旧结论的查询一次都没执行（观察确实装在请求的执行器上：其间经过了别的语句）。
+    expect(seen.status, seen.body).toBe(200);
+    expect(fault.executed - probed.executed).toBe(0);
+    expect(fault.fired - probed.fired).toBe(0);
+    expect(fault.statements).toBeGreaterThan(probed.statements);
+    expect(allAlerts(seen.lines)).toEqual([]);
+
+    // 按 9.2 第 1–3 条：重生成 v2（基数 = B_settle 1100，例 2 的 550 / 110）并入补充批次。
+    expect(await bases(a, o)).toEqual([
+      [1, 1234n],
+      [2, 1100n],
+    ]);
+    expect((await amountsAt(a, o, 2)).map((r) => [r.role, r.base_fen, r.amount_fen])).toEqual([
+      ['direct', 1100n, 110n],
+      ['self', 1100n, 550n],
+    ]);
+    expect(await orderRow(a, o)).toMatchObject({ rebate_status: 'WAITING', commission_version: 2 });
+    expect(await itemsFor(a, o)).toEqual([
+      expect.objectContaining({ item_type: 'order', settle_seq: 1, b_settle_fen: 1100n }),
+    ]);
+    expect((await batchesOf(a)).map((b) => [b.kind, b.status, b.order_count])).toEqual([
+      ['supplement', 'DRAFT', 1],
+    ]);
+    expect(await diffsOf(a)).toEqual(diffsBefore);
+    expect((await everything(base)).bills).toEqual(billsBefore);
+  },
+  TIMEOUT,
+);
+
+it.each([
+  {
+    label: '另有一张已结案、结论「以联盟为准」的旧差错单（金额 1234 / 1100，退款前结的案）',
+    concluded: true,
+  },
+  { label: '没有旧结论', concluded: false },
+])(
+  '[AC-B2-18#34] 新版本号 = 当前最大版本 + 1（BR-FUND-04 ④⑧、D10-2415；被删旧用例 monthly [AC-B2-09h#21] 的状态）——$label：v1 基数 1234，部分退款后订单同步把预估改为 600、commission 真实 refresh 写出 v2（基数 600），联盟结算 1100 后到；后台补充（真实后台入口）只追加一个 v3（基数 1100、550 / 110），orders.commission_version = 3，v1、v2 逐字不变；补充批次明细恰好一份（b_settle 1100）；不告警、不登记差错单、账单行不回写',
+  async ({ concluded }) => {
+    const f = fixture(s);
+    const a = await appOf(f);
+    // 例 2 的快照（预留 0）：v1 取 N 1234 → 基数 1234；先没有联盟结算数据（有结算佣金时预估变化不推版本）。
+    const o = await seedOrder(a, { snapshotN: 1234n, settleFen: null, people: EXAMPLE_PEOPLE });
+    if (concluded) await unionConclusion(a, o, 1234n, 1100n);
+    // 部分退款：联盟回传的新预估 600（预留 0 → 基数 600），经生产途径（orders 列计划 + rebate.onUpdated R7 →
+    // commission refresh）推进到 v2，不手写版本行。
+    await syncEstimate(a, o, 600n);
+    const refunded = {
+      bases: await bases(a, o),
+      version: (await orderRow(a, o)).commission_version,
+      versions: await versionsOf(a, o),
+    };
+    // 联盟结算后到：STATEMENT seq 1 结算 1100（预留 0 → B_settle 1100）。
+    await settleLater(a, o, { seq: 1, source: 'STATEMENT', fen: 1100n });
+    const diffsBefore = await diffsOf(a);
+    const billsBefore = (await everything(f)).bills;
+    // v3 的期望：splitCommission 对同一输入（N 1100、预留 0、自购 5000 / 直推 1000bp）——例 2 的 550 / 110。
+    const split = splitOf(o, 1100n);
+    const seen: { status?: number; body?: string; lines: LogLine[] } = { lines: [] };
+
+    await withSupplementAdmin(f, async (h) => {
+      const sent = await h.supplement(BILL_ID, TAOBAO);
+      seen.status = sent.statusCode;
+      seen.body = sent.body;
+      seen.lines = h.lines;
+    });
+
+    // 搭建结果：部分退款已把当前版本推进到 v2（基数 600）。
+    expect(refunded.bases).toEqual([
+      [1, 1234n],
+      [2, 600n],
+    ]);
+    expect(refunded.version).toBe(2);
+    expect(split.base).toBe(1100n);
+    expect(split.shares).toEqual([550n, 110n]);
+
+    expect(seen.status, seen.body).toBe(200);
+    expect(allAlerts(seen.lines)).toEqual([]);
+    // 只追加一个 v3（= 当前最大版本 2 + 1），基数 1100；固定写 v2 的错实现撞唯一约束、告警并留在 WAITING。
+    expect(await bases(a, o)).toEqual([
+      [1, 1234n],
+      [2, 600n],
+      [3, 1100n],
+    ]);
+    const after = await versionsOf(a, o);
+    expect(after.totals.filter((t) => t.commission_version <= 2)).toEqual(refunded.versions.totals);
+    expect(after.amounts.filter((r) => r.commission_version <= 2)).toEqual(
+      refunded.versions.amounts,
+    );
+    expect(await amountsAt(a, o, 3)).toEqual(byRole(versionRows(o, 3, split, f.clock.now())));
+    expect(await orderRow(a, o)).toMatchObject({ rebate_status: 'WAITING', commission_version: 3 });
+    expect(await itemsFor(a, o)).toEqual([
+      expect.objectContaining({ item_type: 'order', settle_seq: 1, b_settle_fen: 1100n }),
+    ]);
+    expect((await batchesOf(a)).map((b) => [b.kind, b.status, b.order_count])).toEqual([
+      ['supplement', 'DRAFT', 1],
+    ]);
+    expect(await diffsOf(a)).toEqual(diffsBefore);
+    expect((await everything(f)).bills).toEqual(billsBefore);
   },
   TIMEOUT,
 );

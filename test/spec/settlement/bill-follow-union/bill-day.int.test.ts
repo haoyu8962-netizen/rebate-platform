@@ -657,6 +657,8 @@ it(
     const a = await app(pools.db);
     await creditOn(a);
     // 自拟 v1：N 1177 → floor(1177 × 8500 / 10000) = floor(1000.45) = 1000，减淘礼金 100 → 旧基数 900。
+    // 第 4 次写测（§12.4）：这是直接预置的快照行（rebate_mode=normal、tlj_deduct_fen=100），不经淘礼金来源流水线；
+    // 本条验证的是出账读到已落库的扣减后按 BR-CALC-02 得 758。
     const o = await seedOrder(a, {
       snapshotN: 1177n,
       settleFen: 1010n,

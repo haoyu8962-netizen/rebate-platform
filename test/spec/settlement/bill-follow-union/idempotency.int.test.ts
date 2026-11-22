@@ -14,6 +14,7 @@ import { failAfterCountWrite } from '../bill-unsettled-count/kit.ts';
 import {
   EXAMPLE_PEOPLE,
   TIMEOUT,
+  WAIT_MS,
   alertsFor,
   app,
   batchesOf,
@@ -39,6 +40,12 @@ import {
 } from './kit.ts';
 
 const pools = databaseFixture(createTestDatabase);
+
+/**
+ * 「出账正被订单同步阻塞」那次观察的上限（§12.3）：blockedBy 自己的轮询上限 WAIT_MS，再给卡住的单次观察查询
+ * 留 5 秒；远小于用例的 TIMEOUT。
+ */
+const OBSERVE_MS = WAIT_MS + 5_000;
 
 function example2(a: App): Promise<Seeded> {
   return seedOrder(a, { snapshotN: 1234n, settleFen: 1100n, people: EXAMPLE_PEOPLE });
@@ -259,8 +266,22 @@ it(
     const bill = tracked(running);
     // 有界（评审第 3 条收紧）：服务端观察到某个后端正被订单同步的会话阻塞（pg_blocking_pids 含 syncPid）——
     // 出账确实在等这张订单的锁（'blocked'）；没等就跑完的（'done'）与到上限的（'timeout'）都不接受。
-    const observed = await blockedBy(pools.control, syncPid, () => bill.settled);
-    release();
+    // 第 4 次写测（§12.3）：观察有明确上限（OBSERVE_MS，单次查询卡住或观察连接断开也不越过），屏障在 finally
+    // 里放行，观察失败时同步事务照样提交、出账照样收尾，失败落到下面 observed 的断言（带错误文字）。
+    let watched: Outcome<'blocked' | 'done' | 'timeout'> = {
+      ok: false,
+      error: new Error('observation not run'),
+    };
+    try {
+      watched = await within(
+        blockedBy(pools.control, syncPid, () => bill.settled),
+        'observing the bill blocked by the order sync',
+        OBSERVE_MS,
+      );
+    } finally {
+      release();
+    }
+    const observed = watched.ok ? watched.value : `observation failed: ${errorText(watched.error)}`;
     const synced = await within(sync, 'order sync');
     const billed = await within(running, 'bill run');
 
@@ -414,8 +435,21 @@ it.each([
       { db: pools.workerRight },
     );
     const bill = tracked(running);
-    const observed = await blockedBy(pools.control, syncPid, () => bill.settled);
-    release();
+    // 第 4 次写测（§12.3）：观察有明确上限（OBSERVE_MS），屏障在 finally 里放行；观察失败落到 observed 的断言。
+    let watched: Outcome<'blocked' | 'done' | 'timeout'> = {
+      ok: false,
+      error: new Error('observation not run'),
+    };
+    try {
+      watched = await within(
+        blockedBy(pools.control, syncPid, () => bill.settled),
+        'observing the bill blocked by the order sync',
+        OBSERVE_MS,
+      );
+    } finally {
+      release();
+    }
+    const observed = watched.ok ? watched.value : `observation failed: ${errorText(watched.error)}`;
     const synced = await within(sync, 'order sync');
     const billed = await within(running, 'bill run');
 

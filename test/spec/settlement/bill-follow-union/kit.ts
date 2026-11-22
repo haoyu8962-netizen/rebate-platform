@@ -409,6 +409,9 @@ export async function seedOrder(a: App, spec: OrderSpec): Promise<Seeded> {
       rule_version_id: a.ruleVersionId,
       order_type: owner.role === 'share' ? 'share' : 'self',
       activity_type: null,
+      // 第 4 次写测（§12.4）：tljDeductFen 非 0 时（[AC-B2-18#18] 的 100）这是直接预置的快照行（rebate_mode=normal、
+      // tlj_deduct_fen=100），不经淘礼金来源流水线（活动类型为空、v1 红包面额记 0）；该条验证的是出账读到已落库
+      // 的扣减后按 BR-CALC-02 得 758。
       rebate_mode: tljDeductFen === 0n ? null : 'normal',
       paid_at: at,
       paid_at_source: 'platform',
@@ -1226,6 +1229,120 @@ export function regenerationAndItemWrites(
     totals: queries.findIndex((q) => TOTALS_INSERT.test(q.sql) && q.text.includes(orderId)),
     items: queries.findIndex((q) => ITEMS_INSERT.test(q.sql)),
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// 第 4 次写测追加（编排 D10-2544，任务书 §12）：只做搭建与取数，不 expect。
+
+/**
+ * 读「以联盟为准」旧结论的那条查询的识别条件（§12.1）。现有代码里这条查询只有一处：ledger
+ * infra/recon-diffs-store.ts selectUnionConclusions（经 readUnionAuthoritativeOrderKeys，由 bill-source 的
+ * readSource 调用），原生 SQL，形如 `SELECT latest.order_key, latest.expected_fen, latest.actual_fen FROM (SELECT
+ * DISTINCT ON (...) ... d.resolution->>'outcome' AS outcome FROM app.recon_diffs AS d ... AND
+ * d.resolution->>'outcome' IN ('union', 'ours') ...) AS latest WHERE latest.outcome = 'union'`。
+ * 条件：语句以 SELECT 开头、读 recon_diffs、并取 resolution->>'outcome'——三条同时成立才算。登记差错单
+ * （INSERT recon_diffs）、结案（UPDATE recon_diffs）、读别的表或读 recon_diffs 而不取结论的语句都不命中
+ * （apps/api/src 里取 resolution->>'outcome' 的只有这一条）。
+ */
+const CONCLUSION_SELECT = /^\s*select\b/i;
+const CONCLUSION_TABLE = /\brecon_diffs\b/i;
+const CONCLUSION_OUTCOME = /\bresolution\s*->>\s*'outcome'/i;
+
+/** 一条已编译的语句是不是读「以联盟为准」旧结论的那条（识别条件见上）。 */
+export function isUnionConclusionRead(compiledSql: string): boolean {
+  return (
+    CONCLUSION_SELECT.test(compiledSql) &&
+    CONCLUSION_TABLE.test(compiledSql) &&
+    CONCLUSION_OUTCOME.test(compiledSql)
+  );
+}
+
+/**
+ * 在这条执行器上观察并注入故障（§12.1）：凡是读「以联盟为准」旧结论的查询（isUnionConclusionRead），一执行就
+ * 计数（executed）并在 PostgreSQL 返回后抛错（fired）；其余语句照常，只计总数（statements，用来证明观察确实
+ * 装在请求所用的执行器上）。不替换任何端口。
+ */
+export function unionConclusionReadFault(db: Kysely<DB>) {
+  const pending = new Set<QueryId>();
+  const state = { executed: 0, fired: 0, statements: 0 };
+  const faulty = db.withPlugin({
+    transformQuery(args) {
+      state.statements += 1;
+      const compiled = new PostgresQueryCompiler().compileQuery(args.node, args.queryId);
+      if (isUnionConclusionRead(compiled.sql)) {
+        state.executed += 1;
+        pending.add(args.queryId);
+      }
+      return args.node;
+    },
+    async transformResult(args) {
+      if (pending.delete(args.queryId)) {
+        state.fired += 1;
+        throw new Error('injected: the union conclusion read must not run');
+      }
+      return args.result;
+    },
+  });
+  return {
+    db: faulty,
+    get executed() {
+      return state.executed;
+    },
+    get fired() {
+      return state.fired;
+    },
+    get statements() {
+      return state.statements;
+    },
+  };
+}
+
+/**
+ * 订单同步把预估改为 estAfter——部分退款后联盟回传的新预估（§12.2，被删旧用例 monthly [AC-B2-09h#21] 的
+ * 「基数 1234 → 600」）。走生产途径、不手写版本行：orders 的列计划（../../commission/estimate-port/kit.ts
+ * syncColumns：订单键锁、est_commission_fen、预估变了 commission_version + 1）与 settlement 的
+ * rebate.onUpdated（R7 COMMISSION_CHANGED → commission 真实的 createCommissionEstimates.refresh 按新预估写
+ * 新版本的合计与金额行），同一事务提交。只在该单还没有结算数据时调用：有结算佣金时有效基数取结算额，预估变化
+ * 只存档、不推版本（BR-FUND-09「结算额写入前的预估变化……只重算预估（迁移 R7）」）。estimate-port kit 在这里
+ * 按需加载，只 import 不改。
+ */
+export async function syncEstimate(a: App, o: Seeded, estAfter: bigint): Promise<void> {
+  const port = await import('../../commission/estimate-port/kit.ts');
+  const rebate = port.rebateOf(a.clock, port.estimatesOf(a.clock));
+  await a.db.transaction().execute(async (trx) => {
+    const { change, source } = await port.syncColumns(trx, o, { estAfter });
+    await rebate.onUpdated(trx, change, source);
+  });
+}
+
+/**
+ * 联盟结算数据后到（夹具写法同 seedOrder 的结算记录）：写一条 order_settlements（写在 a.at）并把订单行的
+ * settle_commission_fen 与 platform_status（SETTLED）跟上；不动版本。
+ */
+export async function settleLater(a: App, o: Seeded, s: SettlementSpec): Promise<void> {
+  await a.db
+    .insertInto('order_settlements')
+    .values({
+      app_id: a.appId,
+      order_id: o.orderId,
+      seq: s.seq,
+      source: s.source ?? 'STATEMENT',
+      settle_commission_fen: s.fen,
+      settled_at: a.at,
+      content_hash: randomUUID(),
+      created_at: a.at,
+    })
+    .execute();
+  await a.db
+    .updateTable('orders')
+    .set((eb) => ({
+      settle_commission_fen: s.fen,
+      platform_status: 'SETTLED',
+      row_version: eb('row_version', '+', 1),
+    }))
+    .where('app_id', '=', a.appId)
+    .where('order_id', '=', o.orderId)
+    .execute();
 }
 
 // ---------------------------------------------------------------------------------------------
