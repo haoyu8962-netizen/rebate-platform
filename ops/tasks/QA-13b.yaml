@@ -1,0 +1,33 @@
+id: QA-13b
+repo: rebate-platform
+title: '后端五个进程接崩溃上报（@sentry/node → GlitchTip）：DSN 未配置不初始化；上报前按白名单去掉个人信息与凭据；payout 只许内网上报地址'
+type: impl
+# 2026-11-22 be 入账（编排 D10-2599 ②，归 A 保命四件套；排在 CT-24ha 之后；依赖 QA-13a 装好 SDK）。依据 01 F-OBS-01、02「崩溃」行、10 AC-S1-134 的后端部分。
+# 范围：api / worker / admin / payout / stream 五个进程（都经 apps/api/src/entry.ts runEntry 启动）在启动时初始化一次，未处理异常与 logger.error 级的错误上报。
+# 配置：新增可选环境变量 CRASH_REPORT_DSN（照 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT 的写法：http(s)、有主机、不带凭据之外的形状校验按 DSN 规则）；未配置 → 完全不初始化、不报错。
+#   environment 取 appEnv，release 取构建已有的版本号（没有就不设）。DSN 只从环境变量读，不进日志（照现有 redaction）。
+# 白名单（F-OBS-01）：sendDefaultPii 关；不带请求体、响应体、请求头（含 authorization、cookie、签名头）与 URL 查询串；URL 只留路径模板；
+#   用户标识最多 user_id 的哈希，不设手机号、昵称；异常消息、extra、contexts、breadcrumbs 经 platform/logging/redaction.ts 同一套 SENSITIVE_KEYS / redactText 处理
+#   （手机号、证件号、卡号、收款账号、姓名、token、密钥等）；推广 URL、口令、推广位、渠道标识不进附加信息（02 §12.6）。breadcrumbs 关或只留白名单字段。
+# payout 进程没有公网出站：只在 DSN 主机为内网地址（私有网段 IPv4 或运维给定的内网主机名后缀）时初始化，否则不初始化并打一条 warn；任务书写明 payout 用内网上报地址。
+# 不动现有 OTEL 追踪：SDK 不接管 OpenTelemetry（skipOpenTelemetrySetup 一类开关），不开性能追踪、不开会话回放、不采集 profile。
+# 规则测试钉：① 未配置 DSN 不初始化；② 构造含手机号、证件号、卡号、支付宝登录号、token、authorization 头、请求体的异常与上下文，经 beforeSend 后事件序列化里没有这些明文；
+#   ③ payout 遇公网 DSN 不初始化；④ 初始化参数快照（F-OBS-01「CI 用快照测试锁住 SDK 初始化参数与过滤器」）。上报走假传输（transport 注入），测试不联网。
+# 受控异常在 staging 证明堆栈可读一步由 ops 在本单合并后做（D10-2599），不在本单验收里。
+refs: []
+refs_hash: {}
+deps: [QA-13a]
+paths:
+  - 'apps/api/src/modules/platform/crash-report/**'
+  - 'apps/api/src/modules/platform/config/config.ts'
+  - 'apps/api/src/modules/platform/config/config.test.ts'
+  - 'apps/api/src/modules/platform/index.ts'
+  - 'apps/api/src/entry.ts'
+test_paths:
+  - 'test/spec/platform/crash-report/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/crash-report/**'
+status: todo
