@@ -178,3 +178,48 @@ it('[AC-B3-05u#10] 部分链接失败时，下发的两条提示都是无占位�
     if (event.kind === 'card') expect(event.card.fallback_text).not.toMatch(/[{}]/u);
   }
 });
+
+it.each([
+  { ac: 1, outcome: { kind: 'no_card', cards: [] }, key: 'error.50301' },
+  { ac: 2, outcome: { kind: 'parse_error', error_code: 30131, cards: [] }, key: 'error.30131' },
+  { ac: 3, outcome: { kind: 'parse_error', error_code: 30141, cards: [] }, key: 'error.30141' },
+  { ac: 4, outcome: { kind: 'price_unavailable', cards: [] }, key: 'error.50301' },
+] as const)(
+  '[AC-B3-05u#11#$ac] $outcome.kind（$key）是唯一商品原因时仍正常结束并按序出提示',
+  async ({ outcome, key }) => {
+    const single = context();
+    const singlePath = createDeterministicPath({ quotes: quotes([outcome]), texts: texts() });
+    expect(await singlePath.run(request(), single.ctx)).toEqual(stopped);
+    expect(single.content()).toEqual([notice(key)]);
+
+    const mixed = context();
+    const mixedPath = createDeterministicPath({
+      quotes: quotes([upstreamFailure('timeout'), outcome]),
+      texts: texts(),
+    });
+    expect(await mixedPath.run(request([url(1), url(2)]), mixed.ctx)).toEqual(stopped);
+    expect(mixed.content()).toEqual([notice(QUOTE_FAILED), notice(key)]);
+  },
+);
+
+it.each([
+  { ac: 1, outcome: { kind: 'price_unavailable', cards: [] } },
+  { ac: 2, outcome: { kind: 'no_card', cards: [] } },
+  { ac: 3, outcome: { kind: 'parse_error', error_code: 30141, cards: [] } },
+] as const)(
+  '[AC-B3-05u#12#$ac] $outcome.kind 不记错误日志，同一 logger 记录随后发生的服务端失败',
+  async ({ outcome }) => {
+    const logger = { error: vi.fn<(obj: Record<string, unknown>, msg: string) => void>() };
+    const path = createDeterministicPath({
+      quotes: quotes([outcome, upstreamFailure('timeout')]),
+      texts: texts(),
+      logger,
+    });
+
+    await path.run(request(), context().ctx);
+    expect(logger.error).not.toHaveBeenCalled();
+
+    await path.run(request([url(2)]), context().ctx);
+    expect(logger.error).toHaveBeenCalledTimes(1);
+  },
+);
