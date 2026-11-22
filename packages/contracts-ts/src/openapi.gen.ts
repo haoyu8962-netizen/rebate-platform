@@ -20373,7 +20373,9 @@ export interface components {
              *     returned re_expires_in = 0 (or the platform documents it as not refreshable); null when
              *     unknown (manual entry, a `none` platform, or an authorization recorded before this was
              *     kept). The field may be omitted; omitted means the same as null. Only this conclusion is
-             *     returned: never re_expires_in or any other raw duration, nor any token.
+             *     returned: never re_expires_in or any other raw duration, nor any token. This row is shared
+             *     by adminListUnionAccounts and the adminPutUnionCredential response; a manually entered
+             *     credential is always null or omitted here.
              */
             auth_refreshable?: boolean | null;
         };
