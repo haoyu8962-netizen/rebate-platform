@@ -8,9 +8,29 @@
 //   test; in staging / prod null until a two-element vendor is chosen (the request then answers
 //   50301 and the attempt is not counted). No vendor answer is ever faked outside local / test.
 //
+// - createStagingTestRealnameVerifier (B1-13n; owner's consent 2026-11-22, D10-2636 ②): the
+//   member-side verifier of a staging node that lists test user_ids
+//   (STAGING_TEST_REALNAME_USER_IDS). Only APP_ENV=staging with a non-empty list builds it, and
+//   every call judges the environment again: a listed user_id is a match under the provider
+//   'staging-test-identity' with one pino audit line (event staging_test_realname_verified; app_id,
+//   user_id, provider only), any other user_id is unavailable (50301, not counted). Never the name
+//   or the ID number in a log, an audit line or an error; prod never gets a match. The admin
+//   real-name correction keeps createRealnameVerifier (no test identity there).
+//
 // Also compiled by the `test` project: erasable syntax only, `import type` for types, `.ts`
 // relative imports, no decorators.
+import type { RootLogger } from '../../platform/index.ts';
 import type { RealnameVerifierPort } from '../ports/realname-verifier.ts';
+
+/** B1-13n: what the staging test identity verifier is built from. */
+export interface StagingTestRealnameVerifierOptions {
+  /** APP_ENV of the process; only 'staging' honours the list. */
+  readonly appEnv: string;
+  /** STAGING_TEST_REALNAME_USER_IDS as loadConfig kept it; null or empty: none. */
+  readonly userIds: readonly string[] | null;
+  /** Where the enabling warn (the count only) and the audit lines go. */
+  readonly logger: Pick<RootLogger, 'info' | 'warn'>;
+}
 
 /** realname.provider of the rows the fake verifies. */
 export const FAKE_REALNAME_PROVIDER = 'fake-two-elements';
@@ -35,4 +55,15 @@ export function createFakeRealnameVerifier(appEnv: string): RealnameVerifierPort
 export function createRealnameVerifier(appEnv: string): RealnameVerifierPort | null {
   // TODO(规划/11 §7.1): 二要素核验供应商的真实适配器 — blocked on 负责人选型与开通（BR-ID-25 细则「供应商」）
   return isFakeEnvironment(appEnv) ? createFakeRealnameVerifier(appEnv) : null;
+}
+
+/**
+ * B1-13n: the staging test identity verifier, or null when the list is unset / empty (staging then
+ * answers 50301 as before). Outside APP_ENV=staging it never answers a match.
+ */
+export function createStagingTestRealnameVerifier(
+  options: StagingTestRealnameVerifierOptions,
+): RealnameVerifierPort | null {
+  void options;
+  throw new Error('NotImplemented: createStagingTestRealnameVerifier');
 }

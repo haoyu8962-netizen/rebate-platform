@@ -134,6 +134,9 @@ export type {
   StagingTestPhoneConfigResult,
   StagingTestPhones,
 } from './staging-test-phones.ts';
+// Staging test identities of the real-name check (B1-13n, D10-2636 ②): staging only.
+export { readStagingTestRealnameConfig } from './staging-test-realname.ts';
+export type { StagingTestRealnameConfigResult } from './staging-test-realname.ts';
 // Union endpoint override directory (B1-04y): staging reads the endpoints from a mounted directory.
 export {
   UNION_ENDPOINT_OVERRIDE_DIR_ENV,
