@@ -1,0 +1,30 @@
+id: B2-07i
+repo: rebate-platform
+title: 'B2-07i：payout 通道对账明细的存储底座——recon_channel 加提现单关联列与显式序号列；成功列示一经写入不可变、同日同业务单号不同通道单号另存一行、先后只看序号（FU-RECON-CHANNEL-SEQ 提前）'
+type: impl
+# 2026-11-22 funds 入账（编排 D10-2525；原 FU-RECON-CHANNEL-SEQ，提前做，上线前必须）。资金单：Claude 实现、独立方写测、Codex 全量 spec-test 与资金评审。
+# 来由：B2-07h（跨账单日重复打款漏报）两轮资金评审的 S0 都出在同一处——借 recon_channel「一个账单日一个业务单号一行」来表示一张提现单的多条流水与先后：
+#   占位行被后来的成功流水覆盖时继承旧先后（r1）；补跑账单换了一条成功流水把已存的那条盖掉（r2）。不再在 B2-07h 里打补丁，先把存储语义定死，B2-07h 的判定建在它上面。
+# 范围：① 迁移——app.recon_channel 加提现单关联列（可空）与显式序号列；存量回填：现有行按 created_at、id 排出序号，关联列能按业务单号对上提现单的回填、对不上的留空并在迁移说明里给出核对条数的查询。
+#   ② 存储语义三条（日跑写入处）：每个通道单号的成功列示一经写入不可变（不被别的通道单号覆盖、不被补跑改写）；同一账单日同一业务单号再来一条不同通道单号的流水另存一行；
+#   「先被对账到」只看序号，不再借 created_at。③ 写入时填提现单关联列，使同一张提现单的全部流水可以直接按关联列读出（含只按通道单号保存的行）。
+# 不改：差错单登记口径、哪条算重复的判定（B2-07h）、打款中的单出现第二条成功流水怎么办（等负责人，D10-2525 (一)）、告警时机（FU-RECON-ALERT-OUTBOX）。B2-07h 原定的「GRANT UPDATE (created_at)」迁移弃用。
+# 受影响的冻结用例（按列枚举 recon_channel 的库表用例与 kit、钉着「补跑改写明细」的用例、直接 INSERT 该表的夹具）先只读盘点，modify_existing 以补丁登记后再写测；金额期望值不动。
+refs: [BR-WDR-23]
+refs_hash:
+  BR-WDR-23: 14059410a548
+deps: []
+paths:
+  - 'apps/api/src/modules/payout/**'
+  - 'db/migrations/*_recon-channel-*.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/payout/recon-channel-seq/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/recon-channel-seq/**'
+status: todo
+pr: null
