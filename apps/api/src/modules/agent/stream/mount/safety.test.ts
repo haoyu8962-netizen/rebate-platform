@@ -97,3 +97,30 @@ it('[AC-B3-06c#u6][BR-AI-18] timeout_ms 本身读得比它的值还慢：开始�
   await config.release('agent.safety.timeout_ms', 300);
   await expect(settings).resolves.toEqual({ kind: 'expired' });
 });
+
+it('[AC-B3-06c#u7][BR-AI-18] 发起读等级的同步阶段本身耗时 50ms：截止仍从发起前的开始时刻起算，等级在两种起点之间读回按审核不可用', async () => {
+  const time = heldScheduler(1000);
+  const config = heldReader();
+  // Starting the level read stalls the caller for 50 ms before it hands back its pending answer.
+  const stalling: StreamReviewConfigReader = {
+    configValue: (appId, key) => {
+      if (key === 'agent.safety.block_level.input') time.clock.now += 50;
+      return config.reader.configValue(appId, key);
+    },
+  };
+  const settings = reviewSettings(
+    stalling,
+    time.scheduler,
+    'synthetic-app',
+    'input',
+    new AbortController().signal,
+    1000,
+  );
+  expect(time.clock.now).toBe(1050);
+  await config.release('agent.safety.timeout_ms', 300); // answers at once (still 1050)
+  // Deadline from the review's start: 1000 + 300 = 1300. Counted from after the stalled call it
+  // would be 1050 + 300 = 1350; the level answers in between.
+  time.clock.now = 1320;
+  await config.release('agent.safety.block_level.input', 'low');
+  await expect(settings).resolves.toEqual({ kind: 'expired' });
+});
