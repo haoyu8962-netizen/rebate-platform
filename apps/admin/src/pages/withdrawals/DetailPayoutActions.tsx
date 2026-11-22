@@ -294,6 +294,8 @@ function DetailExecute({ item, access, clock, onChanged }: DetailPayoutActionsPr
   ): Promise<void> => {
     // F1-08atb: the marker follows every answer whether or not the detail is still shown; only
     // the dialog waits for `alive`.
+    // F1-08atb money r1 S1-1: the request goes out — noted as this submission's (no marker yet).
+    marker.begin();
     try {
       const response = await customOf()<PayoutBatchResult>({
         url: PAYOUT_BATCHES_URL,
@@ -662,6 +664,8 @@ function DetailManualPaid({
   const send = async (body: ManualPayload, key: string, stepUpToken: string): Promise<void> => {
     // F1-08atb: the marker follows every answer whether or not the detail is still shown; only
     // the dialog waits for `alive`.
+    // F1-08atb money r1 S1-1: the request goes out — noted as this submission's (no marker yet).
+    marker.begin();
     try {
       const response = await customOf()<ManualAnswer>({
         url: MANUAL_PAID_URL,

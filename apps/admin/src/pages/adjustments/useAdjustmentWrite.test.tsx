@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { readUnknown } from '../../components/unknown-marker/index.ts';
+import { clearUnknown, markUnknown, readUnknown } from '../../components/unknown-marker/index.ts';
 import { AdminApiError, type AdminApiErrorDetails } from '../../providers/data/index.ts';
 import { useAdjustmentWrite } from './useAdjustmentWrite.tsx';
 
@@ -34,12 +34,40 @@ const NETWORK = fail({ code: -1, httpStatus: 0, kind: 'network' });
 const SETTLED = fail({ code: 20001, httpStatus: 409 });
 const SESSION_ENDED = fail({ code: 10001, httpStatus: 401 });
 const DONE = () => Promise.resolve({ data: { id: 'adj_1' } });
+const FORBIDDEN: Partial<AdminApiErrorDetails> = { code: 10403, httpStatus: 403 };
+const ENDED: Partial<AdminApiErrorDetails> = { code: 10001, httpStatus: 401 };
+
+/** An answer held back until `answer()` (the request is under way meanwhile). */
+function held(details: Partial<AdminApiErrorDetails>) {
+  let answer: () => void = () => {};
+  const reply = () =>
+    new Promise<unknown>((_, reject) => {
+      answer = () =>
+        reject(
+          new AdminApiError({
+            code: 0,
+            msg: '',
+            data: null,
+            httpStatus: 200,
+            kind: 'api',
+            ...details,
+          }),
+        );
+    });
+  return { reply, answer: () => answer() };
+}
+function keysSent(): string[] {
+  return custom.mock.calls.map(
+    (call) => (call as unknown as [{ meta: { idempotencyKey: string } }])[0].meta.idempotencyKey,
+  );
+}
 
 beforeEach(() => {
   now = AT;
 });
 afterEach(() => {
   cleanup();
+  clearUnknown(SCOPE);
   answers.length = 0;
   custom.mockClear();
   window.sessionStorage.clear();
@@ -123,4 +151,66 @@ it('[AC-F1-08at-UNIT#13] a second write entering unknown keeps the first moment;
     first.hook.result.current.retry();
   });
   expect(readUnknown(SCOPE)).toBeUndefined();
+});
+
+it('[AC-F1-08atb-UNIT#5] an enveloped 5xx, then the same key refused 10403 before the replay: still unknown, the key and the marker stay', async () => {
+  const { hook, failed } = await mounted();
+  answers.push(SERVER_ERROR, fail(FORBIDDEN));
+  await submit(hook);
+  now = AT + 60_000;
+  await submit(hook);
+  expect(failed).toHaveBeenCalledTimes(2);
+  expect(failed.mock.calls[1]?.[1], 'the earlier result under this key is still unknown').toBe(
+    true,
+  );
+  expect(readUnknown(SCOPE)?.at).toBe('2026-11-18T04:00:00.000Z');
+  // The next submission replays the same key; its settled success drops the marker.
+  answers.push(DONE);
+  await submit(hook);
+  const keys = keysSent();
+  expect(keys[1]).toBe(keys[0]);
+  expect(keys[2]).toBe(keys[0]);
+  expect(readUnknown(SCOPE)).toBeUndefined();
+});
+
+it('[AC-F1-08atb-UNIT#6] an enveloped 5xx, then the same key refused 10403 after the dialog was left: the marker stays', async () => {
+  const { hook, failed } = await mounted();
+  const refusal = held(FORBIDDEN);
+  answers.push(SERVER_ERROR, refusal.reply);
+  await submit(hook);
+  await submit(hook);
+  hook.unmount();
+  now = AT + 60_000;
+  await act(async () => {
+    refusal.answer();
+  });
+  const keys = keysSent();
+  expect(keys[1]).toBe(keys[0]);
+  expect(failed, 'the left dialog is not told').toHaveBeenCalledTimes(1);
+  expect(readUnknown(SCOPE)).toEqual({
+    page: 'adjustments',
+    unknown: true,
+    at: '2026-11-18T04:00:00.000Z',
+  });
+});
+
+it('[AC-F1-08atb-UNIT#7] a first send under way at 【关闭】 answered 10001: the marker is kept at the moment of the 10001', async () => {
+  // The prompt of an earlier submission (before this dialog opened).
+  markUnknown(SCOPE, { now: () => AT - 3_600_000 });
+  const { hook } = await mounted();
+  const ended = held(ENDED);
+  answers.push(ended.reply);
+  await submit(hook);
+  now = AT + 60_000;
+  act(() => clearUnknown(SCOPE));
+  expect(readUnknown(SCOPE), 'closed: nothing until the answer').toBeUndefined();
+  now = AT + 120_000;
+  await act(async () => {
+    ended.answer();
+  });
+  expect(readUnknown(SCOPE)).toEqual({
+    page: 'adjustments',
+    unknown: true,
+    at: '2026-11-18T04:02:00.000Z',
+  });
 });

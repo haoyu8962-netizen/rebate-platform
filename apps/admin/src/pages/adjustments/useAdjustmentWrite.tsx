@@ -19,6 +19,9 @@
 // 带外壳的 5xx / 40901（保留原键、未落定）同样存标记；拿到确定的回答（成功或确定的拒绝）时清掉；
 // 10001（会话失效）不算确定的回答，标记留给重新登录后的提示。
 // F1-08atb（D10-2508）：标记按提交持有；页顶提示【关闭】时仍在途的写，之后结果未知或收到 10001 时重新登记。
+// F1-08atb 资金评审 r1：每次发写（首次与【重试】）先登记为在途（begin，不写标记）；另记「当前幂等键是否收到过
+// 未定的回答」（无外壳、带外壳的 5xx / 40901），先于幂等回放判的拒绝（10403、10003 verify_phone_missing）
+// 按它判定：收到过就仍未知、标记留着、原键保留，不论表单是否锁定、是否已卸载。
 import { useDataProvider, type BaseRecord } from '@refinedev/core';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
@@ -56,8 +59,9 @@ export interface AdjustmentWriteOptions<R extends BaseRecord = Executed> {
   readonly verify?: boolean;
   readonly onDone: (result: R) => void;
   /**
-   * A failed submission; `stillUnknown`: the earlier result is still unknown (a refusal judged
-   * before the idempotent replay after an unknown outcome): the key, the body and the lock stay.
+   * A failed submission; `stillUnknown`: the earlier result under this key is still unknown (a
+   * refusal judged before the idempotent replay after an undetermined answer): the key and the
+   * body stay, and the lock while `unknown` is true.
    */
   readonly onFailed: (cause: unknown, stillUnknown: boolean) => void;
   /** The write got no reply in the unified envelope (`unknown` is now true). */
@@ -120,6 +124,13 @@ export function useAdjustmentWrite<
   const bodyRef = useRef<B | undefined>(undefined);
   /** The Idempotency-Key of the submission whose outcome is still open; undefined: take a new one. */
   const keyRef = useRef<string | undefined>(undefined);
+  /**
+   * A send under the current key got an undetermined answer (no envelope, or an enveloped 5xx /
+   * 40901): it may have taken effect, so a refusal judged before the replay settles nothing. Reset
+   * only with the key (a settled answer). Not tied to `unknown`: an enveloped 5xx leaves the form
+   * unlocked, and the answer may come after the dialog was left.
+   */
+  const uncertainRef = useRef(false);
   const alive = useRef(true);
 
   useEffect(() => {
@@ -226,6 +237,8 @@ export function useAdjustmentWrite<
   const write = async (body: B, key: string, stepUpToken: string | undefined) => {
     // F1-08atb: the marker follows every answer whether or not the dialog is still shown (left
     // while the write was under way); only the form and the callbacks wait for `alive`.
+    // Money r1 S1-1: the request goes out — noted as this submission's (no marker yet).
+    marker.begin();
     try {
       const response = await customOf()<R>({
         url,
@@ -238,8 +251,9 @@ export function useAdjustmentWrite<
       });
       // A settled answer (the idempotent replay or the first time): the submission's marker goes.
       marker.clear();
-      if (!alive.current) return;
       keyRef.current = undefined;
+      uncertainRef.current = false;
+      if (!alive.current) return;
       setUnknown(false);
       setPhase('idle');
       onDone(response.data);
@@ -254,14 +268,18 @@ export function useAdjustmentWrite<
         return;
       }
       if (isPhoneMissing(cause)) {
+        // After an undetermined answer under this key (an enveloped 5xx / 40901, form unlocked)
+        // it settles nothing: the marker stays (held afresh if 【关闭】 dropped it), the key too.
+        if (uncertainRef.current) marker.mark();
+        else marker.clear();
         if (!alive.current) return;
         markMissing();
         return;
       }
       if (needsStepUp && cause instanceof AdminApiError && cause.code === STEP_UP_REFUSED) {
         // The verification was not accepted: verify again and replay the same body and key. An
-        // earlier unknown submission stays unknown.
-        if (unknownRef.current) marker.mark();
+        // earlier undetermined submission under this key stays unknown.
+        if (uncertainRef.current) marker.mark();
         if (!alive.current) return;
         void requestCode();
         return;
@@ -269,27 +287,38 @@ export function useAdjustmentWrite<
       if (noEnvelope(cause)) {
         // It may have taken effect: keep the key and the body, lock, no failure prompt.
         marker.mark();
+        uncertainRef.current = true;
         if (!alive.current) return;
         setUnknown(true);
         setPhase('idle');
         onUnknown?.();
         return;
       }
+      let stillUnknown = unknownRef.current;
       if (outcomeUnknown(cause)) {
         // An enveloped 5xx / 40901: the key is kept, the write may have taken effect, so it is
         // result-unknown for the marker too (D10-2075 / D10-1731).
         marker.mark();
+        uncertainRef.current = true;
+        if (!alive.current) return;
+      } else if (uncertainRef.current && refusedBeforeReplay(cause)) {
+        // Money r1 S1-2: a 10403 judged before the replay, after an enveloped 5xx / 40901 under
+        // this key (the form unlocked): the earlier send may have taken effect. The marker and
+        // the key stay — also after the dialog was left; the form shows the refusal as before.
+        marker.mark();
+        stillUnknown = true;
         if (!alive.current) return;
       } else {
         // A settled refusal settles the submission; an ended session (10001) settles nothing.
         if (endsSession(cause)) marker.sessionEnded();
         else marker.clear();
-        if (!alive.current) return;
         keyRef.current = undefined;
+        uncertainRef.current = false;
+        if (!alive.current) return;
         setUnknown(false);
       }
       setPhase('idle');
-      onFailed(cause, unknownRef.current);
+      onFailed(cause, stillUnknown);
     }
   };
 

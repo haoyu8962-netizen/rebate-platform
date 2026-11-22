@@ -663,6 +663,7 @@ export function AutoPayoutSettings({
     const uncertain = uncertainRef.current;
     // Kept before the request leaves: leaving the page (or the session ending) while it is
     // under way keeps the marker; only a settled answer drops it.
+    markerRef.current.begin();
     markerRef.current.mark();
     let answer:
       | { readonly ok: true; readonly data: unknown }

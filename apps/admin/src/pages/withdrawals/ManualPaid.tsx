@@ -337,6 +337,8 @@ export function ManualPaid({
   const send = async (body: Payload, key: string, stepUpToken: string): Promise<void> => {
     // F1-08atb: the marker follows every answer (first send and 【重试】) whether or not the page is
     // still shown; only the dialog waits for `alive`.
+    // F1-08atb money r1 S1-1: the request goes out — noted as this submission's (no marker yet).
+    marker.begin();
     try {
       const response = await customOf()<Answer>({
         url: MANUAL_PAID_URL,

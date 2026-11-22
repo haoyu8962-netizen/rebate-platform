@@ -7,7 +7,8 @@ import { useUnknownMarker } from './useUnknownMarker.ts';
 // 【执行打款】 / 【手动成功】): mark() on every answer that leaves the result unknown, leave() on
 // 【去列表核对】 / 【核对】, sessionEnded() on a 10001, clear() on every settled answer (also when this
 // submission never marked). F1-08atb: each submission holds the marker on its own; 【关闭】
-// (clearUnknown) while one is under way does not write it back, its later unknown answer does.
+// (clearUnknown) while one is under way does not write it back, its later unknown answer does;
+// begin() notes a send going out, so a 10001 after 【关闭】 holds it even for a first send.
 // The login guard's identity is admin-1; `identity` lets a test hold it back.
 let identity: Promise<unknown> = Promise.resolve({ admin_id: 'admin-1' });
 const getIdentity = () => identity;
@@ -172,4 +173,38 @@ it('[AC-F1-08atb-UNIT#3] a 10001 after 【关闭】 holds the marker afresh only
   expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:08:06.000Z');
   act(() => marked.result.current.clear());
   expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:08:06.000Z');
+});
+
+it('[AC-F1-08atb-UNIT#4] a first send under way at 【关闭】 (begin, never marked) answered 10001: held at the moment of the 10001; without a 【关闭】 meanwhile, or settled, nothing is kept', async () => {
+  // The prompt of an earlier submission (left at T1).
+  const earlier = await mounted();
+  act(() => earlier.result.current.mark());
+  act(() => earlier.result.current.leave());
+  // A first send goes out (nothing stored by it), then the prompt is closed.
+  const first = await mounted();
+  act(() => first.result.current.begin());
+  expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:05:06.000Z');
+  now = T2;
+  act(() => clearUnknown(SCOPE));
+  expect(readUnknown(SCOPE), 'closed: nothing until the answer').toBeUndefined();
+  // Its answer is 10001 at T3: held at T3 and given up (a later clear keeps it).
+  now = T3;
+  act(() => first.result.current.sessionEnded());
+  expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:08:06.000Z');
+  act(() => first.result.current.clear());
+  expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:08:06.000Z');
+  act(() => clearUnknown(SCOPE));
+
+  // A first send with no 【关闭】 while under way: its 10001 keeps nothing.
+  const plain = await mounted();
+  act(() => plain.result.current.begin());
+  act(() => plain.result.current.sessionEnded());
+  expect(readUnknown(SCOPE)).toBeUndefined();
+  // Under way at 【关闭】 and then settled: nothing; its next send's 10001 without a 【关闭】 neither.
+  act(() => plain.result.current.begin());
+  act(() => clearUnknown(SCOPE));
+  act(() => plain.result.current.clear());
+  act(() => plain.result.current.begin());
+  act(() => plain.result.current.sessionEnded());
+  expect(readUnknown(SCOPE)).toBeUndefined();
 });

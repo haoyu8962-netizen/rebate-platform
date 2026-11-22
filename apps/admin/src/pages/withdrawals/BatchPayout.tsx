@@ -261,6 +261,8 @@ export function BatchPayout(props: BatchPayoutProps): ReactElement {
   ): Promise<void> => {
     // F1-08atb: the marker follows every answer whether or not the page is still shown; only the
     // dialog (state, callbacks) waits for `alive`.
+    // F1-08atb money r1 S1-1: the request goes out — noted as this submission's (no marker yet).
+    marker.begin();
     try {
       const response = await customOf()<PayoutBatchResult>({
         url: PAYOUT_BATCHES_URL,
