@@ -29,6 +29,7 @@ import {
   AgentModule,
   agentCallerReaderToken,
   agentConsentReaderToken,
+  agentPrivacyCheckToken,
   agentContentReaderToken,
   agentRuleArticlesToken,
   agentStreamPortsToken,
@@ -38,6 +39,7 @@ import {
   createPersonalDataCopyAgentReader,
   createProductionStreamAssembly,
   type AgentConsentReaderFactory,
+  type AgentPrivacyCheck,
   type AgentContentReader,
   type AgentStreamProvidedPorts,
   type RuleSyncArticles,
@@ -172,6 +174,7 @@ import {
   STEP_UP_CHECK,
   IDENTITY_LEVEL_CHECKS,
   PRIVACY_CONSENT_CHECKS,
+  AGENT_PRIVACY_CONSENT_CHECKS,
   DELETION_STAGE_CHECKS,
   createRealnameReader,
   createWithdrawPayeeSnapshotReader,
@@ -589,10 +592,25 @@ function requestChecks(options: PlatformOptions): Provider {
   return { provide: REQUEST_CHECKS, useValue: { checks: [] } satisfies RequestCheckPlan };
 }
 
-/** Identity services and checks without its /v1 routes, which belong to api. */
-function streamIdentityModule(): DynamicModule {
+/**
+ * Identity services and checks without its /v1 routes, which belong to api.
+ * B3-08zi: with stage ⑦'s configuration readers (as api's identityModule), for the /v1/agent/
+ * check (AGENT_PRIVACY_CONSENT_CHECKS) agentPrivacyCheck hands to agent; PRIVACY_CONSENT_CHECKS
+ * stays out of streamRiskModule's lists.
+ */
+function streamIdentityModule(contentReader: SharedContentReader): DynamicModule {
   return {
     ...IdentityModule.forRoot({
+      privacyConsentConfig: {
+        inject: [CLOCK, { token: DB, optional: true }],
+        useFactory: (clock: Clock, db?: Kysely<Database>): PrivacyConsentOptions['config'] =>
+          db === undefined
+            ? null
+            : {
+                pooled: contentReader(db, clock),
+                on: (handle) => createContentReader({ db: handle, clock }),
+              },
+      },
       // B1-02zj (D10-255 ①): stream only verifies access tokens (public key + kid, never signs).
       tokens: 'verify',
       config: {
@@ -3717,6 +3735,31 @@ function agentStreamPorts(union: DynamicModule, source: UnionQuotaSource): Dynam
 @Module({})
 class AgentReadersModule {}
 
+/**
+ * B3-08zi (BR-ID-01 ⑦ for /v1/agent/; rule tests test/spec/identity/agent-privacy-min-version/**):
+ * identity's AGENT_PRIVACY_CONSENT_CHECKS guard under agentPrivacyCheckToken(), stream entry
+ * only; agent's controller calls it after resolving the caller, before BR-AI-23 ①. Not a Fastify
+ * hook nor an APP_GUARD (those would run before ⑤ ⑥).
+ * ⑦ 放 agent 入口而不进 beforeRateLimit 清单，前提是 stream 入口不限流（noRateLimits）；若 stream 接了限流，⑦ 须移进清单并改 [AC-B1-15m#1]（D10-2509 / D10-2510）
+ */
+@Module({})
+class AgentPrivacyCheckModule {}
+
+function agentPrivacyCheck(identity: DynamicModule): DynamicModule {
+  const provider = {
+    provide: agentPrivacyCheckToken(),
+    inject: [AGENT_PRIVACY_CONSENT_CHECKS],
+    useFactory: (checks: PrivacyConsentChecks): AgentPrivacyCheck => checks.guard,
+  };
+  return {
+    module: AgentPrivacyCheckModule,
+    global: true,
+    imports: [identity],
+    providers: [provider],
+    exports: [provider.provide],
+  };
+}
+
 function agentReaders(
   entry: 'stream' | 'worker',
   contentReader: SharedContentReader,
@@ -4908,7 +4951,7 @@ export class AppModule {
       options.entry === 'api'
         ? identityModule(contentReader)
         : options.entry === 'stream'
-          ? streamIdentityModule()
+          ? streamIdentityModule(contentReader)
           : undefined;
     const risk =
       identity === undefined
@@ -4917,7 +4960,8 @@ export class AppModule {
           ? streamRiskModule(identity, contentReader)
           : riskModule(identity, contentReader);
     // Stage ⑦ (B1-02zh) is not assembled on stream: it judges only x-auth login / phone / realname
-    // routes, and every /v1/agent/ route is optional.
+    // routes, and every /v1/agent/ route is optional. B3-08zi: /v1/agent/'s own ⑦ is agent's
+    // controller calling identity's agent check (agentPrivacyCheck below), not risk's lists.
     // Stage ⑥ (B1-15m) is assembled on stream alone, in streamRiskModule's two lists.
     // One module object per import: Nest builds union and linking once. B1-22q: union reads
     // price.taobao.* (BR-PRICE-02) through content's configuration reader, per call. B1-04zzu
@@ -5664,6 +5708,8 @@ export class AppModule {
           ? [
               agentStreamPorts(union, unionQuotaSource),
               agentReaders('stream', contentReader),
+              // B3-08zi: ⑦ for /v1/agent/ (identity's check), called by agent's controller.
+              ...(identity === undefined ? [] : [agentPrivacyCheck(identity)]),
               AgentModule.forStream({
                 assembly: createProductionStreamAssembly,
                 safety: agentStreamSafety(options.config),

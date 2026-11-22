@@ -112,6 +112,10 @@ import {
   type PrivacyConsentOptions,
 } from './application/privacy-consent.ts';
 import {
+  AGENT_PRIVACY_CONSENT_CHECKS,
+  createAgentPrivacyConsentChecks,
+} from './application/agent-privacy-consent.ts';
+import {
   DELETION_STAGE_CHECKS,
   createDeletionStageChecks,
   deletionStageChecksWithoutDatabase,
@@ -1028,6 +1032,17 @@ export class IdentityModule {
           ) => createPrivacyConsentChecks({ db: db ?? null, config, logger }),
         },
         {
+          // Stage ⑦ for /v1/agent/ (B3-08zi): over the same configuration readers; app.module hands
+          // it to agent on the stream entry, whose controller calls it (not RiskModule's lists).
+          provide: AGENT_PRIVACY_CONSENT_CHECKS,
+          inject: [PRIVACY_CONSENT_CONFIG, ROOT_LOGGER, { token: DB, optional: true }],
+          useFactory: (
+            config: PrivacyConsentOptions['config'],
+            logger: RootLogger,
+            db?: Kysely<Database>,
+          ) => createAgentPrivacyConsentChecks({ db: db ?? null, config, logger }),
+        },
+        {
           provide: STEP_UP_CHECK,
           inject: [TOKEN_KEYS, CLOCK, ROOT_LOGGER, { token: REDIS, optional: true }],
           useFactory: (
@@ -1686,6 +1701,7 @@ export class IdentityModule {
         STEP_UP_CHECK,
         IDENTITY_LEVEL_CHECKS,
         PRIVACY_CONSENT_CHECKS,
+        AGENT_PRIVACY_CONSENT_CHECKS,
         DELETION_STAGE_CHECKS,
       ],
     };

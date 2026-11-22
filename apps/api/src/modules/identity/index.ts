@@ -49,6 +49,12 @@ export type {
   PrivacyConsentOptions,
   PrivacyConsentChecks,
 } from './application/privacy-consent.ts';
+// Stage ⑦ for /v1/agent/ (B3-08zi): app.module hands AGENT_PRIVACY_CONSENT_CHECKS to agent on the
+// stream entry; agent's controller calls its guard after resolving the caller.
+export {
+  AGENT_PRIVACY_CONSENT_CHECKS,
+  createAgentPrivacyConsentChecks,
+} from './application/agent-privacy-consent.ts';
 // Stage ⑥ (BR-ID-27 deletion cooling / processing 10007, B1-15e): app.module hands
 // DELETION_STAGE_CHECKS' guard and post-miss check to RiskModule ahead of ⑦.
 export {
