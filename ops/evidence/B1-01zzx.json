@@ -1,0 +1,89 @@
+{
+  "risk_note": "RV2 by path (infra/staging). README 1.3 gains one sub-section 1.3a (prior-identity second field keyring, B1-27e): node files /etc/couli-keys/prior-identity-master.key (its own master key, openssl rand under noclobber) and prior-identity-keyring.json (keyring-init.ts with that key), owner 1000 / files 400 / dir 500, the three PRIOR_IDENTITY_* lines in staging.env and staging-payout.env, all five entries refuse to start without them, contract allows sharing the master key file while staging uses its own (D10-336), keyring file must differ from FIELD_KEYRING_FILE, both master keys backed up offline, prod uses KMS, an interrupted run is left as it is and checked with ops / orchestrator (D10-2566). No code, compose, deploy.sh or existing sentence changed; no secret values.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 4,
+      "note": "Codex money r1 (full) fail: S1 re-running the block overwrote the master key → noclobber; r2 (incremental) fail: S1 an interrupted run could leave an empty master key → resume rules by keyring presence; r3 (incremental) fail: S1 a second session resuming while the first still runs races (suggested flock), S2 grep -x accepts a trailing blank line. Orchestrator D10-2566 (approvals 154): drop the hand-written resume paragraph, replace it by one sentence (do not resume or delete anything, keep the state, confirm the first session has ended, ask ops / orchestrator); r4 (incremental, approvals 154) pass, no findings (couli-runs/B1-01zzx/review-codex-money-r{1,2,3}.json and review-codex.json). Implementation round 4 and review round 4 ran under approvals 154 outside the 3 / 3 counters (state.ts refused the bump as exhausted). One half-sentence of the round-3 text prescribed by the orchestrator ('rename' for keyring-init's hard link) was corrected mechanically by the orchestrator, recorded in commit 0996364f6; that paragraph was later removed."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude",
+    "engine": "claude",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "fail",
+    "note": "Rule tests by Codex (attempts 1 and 2: readme.test.ts, readme-wording.test.ts; red 5 / 5 then 10 / 10 on the LAN test machine). Spec-test review by fresh Claude subagents (README §11): r1 fail (S1 x2: negations of the sharing sentence passed; the staging-uses-own-master sentence was not asserted; S2 x2), closed by attempt 2; r2 fail with one new S1 (#7 only checks the comma clause that names staging, so a self-contradicting staging sentence passes) and two S2. Orchestrator D10-2536 chose not to add a third round: logged FU-B1-01ZZX-SPEC-STAGING-CLAUSE (couli-runs/B1-01zzx/out-of-scope.md), the implementation brief forbade any allowance wording in staging sentences and the Codex review read the paragraph sentence by sentence; future documentation-only tasks default to tester none (FU-DOC-TASKS-NO-WORDING-TESTS). The ledger declares no red_exempt / rows / renames / expected_values (D10-2289 / D10-2290)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/infra/staging-prior-identity/readme-wording.test.ts > [AC-B1-01zzx#6] 契约允许旧身份和主密钥环共用主密钥文件",
+    "test/spec/infra/staging-prior-identity/readme-wording.test.ts > [AC-B1-01zzx#7] staging 明确使用独立主密钥，步骤不允许沿用主密钥环的主密钥文件",
+    "test/spec/infra/staging-prior-identity/readme-wording.test.ts > [AC-B1-01zzx#8] 两把主密钥都要离线备份",
+    "test/spec/infra/staging-prior-identity/readme-wording.test.ts > [AC-B1-01zzx#9] 缺少这组配置时五个入口均拒绝启动",
+    "test/spec/infra/staging-prior-identity/readme-wording.test.ts > [AC-B1-01zzx#10] 生产环境使用 KMS",
+    "test/spec/infra/staging-prior-identity/readme.test.ts > [AC-B1-01zzx#1] 在 1.3 与 1.4 之间说明旧身份隔离存储的密钥环，沿用节点到容器的只读挂载",
+    "test/spec/infra/staging-prior-identity/readme.test.ts > [AC-B1-01zzx#2] 节点先生成独立主密钥，再用镜像内 keyring-init.ts 接收文件路径并生成第二套密钥环",
+    "test/spec/infra/staging-prior-identity/readme.test.ts > [AC-B1-01zzx#3] 两个新文件归 uid 1000 并设为 400，密钥目录为 500",
+    "test/spec/infra/staging-prior-identity/readme.test.ts > [AC-B1-01zzx#4] 两份应用 env 都给出同样三行容器内配置，缺这组时五个入口启动失败",
+    "test/spec/infra/staging-prior-identity/readme.test.ts > [AC-B1-01zzx#5] 区分主密钥和数据密钥，禁止复用密钥环，两把主密钥离线备份，生产用 KMS"
+  ],
+  "task": "B1-01zzx",
+  "spec_commit": "b5e3a87d250b7822b99b8bfcaa99c8ce9e6bf3d8",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b5e3a87d250b7822b99b8bfcaa99c8ce9e6bf3d8",
+      "tree": "d4504dd214633a90d4b6485e42216217e0975e77",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-22T09:53:53Z",
+      "finished_at": "2026-11-22T09:53:56Z",
+      "red_tests": [
+        "test/spec/infra/staging-prior-identity/readme-wording.test.ts > [AC-B1-01zzx#6] 契约允许旧身份和主密钥环共用主密钥文件",
+        "test/spec/infra/staging-prior-identity/readme-wording.test.ts > [AC-B1-01zzx#7] staging 明确使用独立主密钥，步骤不允许沿用主密钥环的主密钥文件",
+        "test/spec/infra/staging-prior-identity/readme-wording.test.ts > [AC-B1-01zzx#8] 两把主密钥都要离线备份",
+        "test/spec/infra/staging-prior-identity/readme-wording.test.ts > [AC-B1-01zzx#9] 缺少这组配置时五个入口均拒绝启动",
+        "test/spec/infra/staging-prior-identity/readme-wording.test.ts > [AC-B1-01zzx#10] 生产环境使用 KMS",
+        "test/spec/infra/staging-prior-identity/readme.test.ts > [AC-B1-01zzx#1] 在 1.3 与 1.4 之间说明旧身份隔离存储的密钥环，沿用节点到容器的只读挂载",
+        "test/spec/infra/staging-prior-identity/readme.test.ts > [AC-B1-01zzx#2] 节点先生成独立主密钥，再用镜像内 keyring-init.ts 接收文件路径并生成第二套密钥环",
+        "test/spec/infra/staging-prior-identity/readme.test.ts > [AC-B1-01zzx#3] 两个新文件归 uid 1000 并设为 400，密钥目录为 500",
+        "test/spec/infra/staging-prior-identity/readme.test.ts > [AC-B1-01zzx#4] 两份应用 env 都给出同样三行容器内配置，缺这组时五个入口启动失败",
+        "test/spec/infra/staging-prior-identity/readme.test.ts > [AC-B1-01zzx#5] 区分主密钥和数据密钥，禁止复用密钥环，两把主密钥离线备份，生产用 KMS"
+      ],
+      "expected": [
+        "test/spec/infra/staging-prior-identity/readme-wording.test.ts",
+        "test/spec/infra/staging-prior-identity/readme.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "0a3ec6e788ca29caa0368081671b15e09f117fe7a67f3135938485f086394694"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "eea9162be5638e6e13a73b50d0b3bdd1b2e70d74",
+    "specs": "b51a9ab39a98d66fd7a68dae3670b0658b1efa0e"
+  }
+}
