@@ -422,6 +422,12 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   // reads them.
   spec('ledger.auto_correct.enabled', 'boolean', 'config.business'),
   businessInteger('ledger.auto_correct.max_accounts', 0, 1000),
+  // B1-36a（B1-36 前置；BR-TEXT-28 分批「热词与默认词」、契约 CT-27 /admin/v1/search/default-word）:
+  // the search box default word (01 F-PROD-16), config.business, editable, a string of 1–20
+  // characters. No seed row: unset = no default word (GET /v1/search/hot-words gives
+  // default_word absent / null and the client shows text key search.placeholder). Registration
+  // only; B1-36 writes it through /admin/v1/search/default-word and reads it.
+  spec('search.default_word', 'string', 'config.business'),
   // B1-22y（Agent A10，D10-1287 / D10-1306 / D10-1307）
   // The Agent keys the agent module (and /v1/config) already reads, plus the ones 08 / 04 give
   // without a reader yet, all editable, in this order: admission, quota and safety items

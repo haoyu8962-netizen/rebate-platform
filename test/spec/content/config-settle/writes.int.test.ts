@@ -230,6 +230,7 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
   // B1-18c (D10-1250 ①, BR-CALC-25): then union.taobao / jd / pdd.subsidy_itemized, in this order.
   // B1-18e (D10-1250 ②, BR-CALC-03): then union.taobao / pdd.service_fee_bp, in this order.
   // B2-02zda (B2-02zd prerequisite, BR-FUND-19, D10-2299): then ledger.auto_correct.enabled / max_accounts, in this order.
+  // B1-36a (B1-36 prerequisite, BR-TEXT-28): then search.default_word.
   // B1-22y (Agent A10, D10-1306 / D10-1307): then the 26 Agent keys, in this order.
   const keys = items.map((item) => item.key);
   const tail = [
@@ -335,6 +336,7 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
     'union.pdd.service_fee_bp',
     'ledger.auto_correct.enabled',
     'ledger.auto_correct.max_accounts',
+    'search.default_word',
     'agent.member_daily_quota',
     'agent.guest_daily_quota',
     'agent.guest_ip_daily_quota',

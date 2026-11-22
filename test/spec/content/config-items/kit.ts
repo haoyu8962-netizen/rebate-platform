@@ -538,6 +538,13 @@ export const AUTO_CORRECT_UNSEEDED: readonly string[] = [
   'ledger.auto_correct.enabled',
   'ledger.auto_correct.max_accounts',
 ];
+// B1-36a (B1-36 prerequisite, BR-TEXT-28): then search.default_word, an editable config.business string right after
+// AUTO_CORRECT, options null. Not part of expectedNow() either.
+export const DEFAULT_WORD: readonly Expected[] = [
+  row('search.default_word', 'string', 'config.business'),
+];
+/** B1-36a: unset = no search box default word (the client shows search.placeholder), hence no seed row. */
+export const DEFAULT_WORD_UNSEEDED: readonly string[] = ['search.default_word'];
 // B1-22y (Agent A10, D10-1287 / D10-1306 / D10-1307): then the 26 Agent keys, in this order;
 // all editable, options null except the three config.risk enums. Admission, quota and safety
 // items config.risk (agent.require_phone too, though listed with the texts), the BR-AI-16 budget
@@ -619,6 +626,7 @@ export const expectedOf = (key: string): Expected => {
     ...SUBSIDY_ITEMIZED,
     ...SERVICE_FEE_BP,
     ...AUTO_CORRECT,
+    ...DEFAULT_WORD,
     ...AGENT_A10,
   ].find((entry) => entry.key === key);
   expect(found, key).toBeDefined();
