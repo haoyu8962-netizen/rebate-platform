@@ -1,0 +1,30 @@
+id: B1-07d
+repo: rebate-platform
+title: 平台链接形态表首批真实规则：specs/link-patterns.yaml 按有出处的域名与路径形态填入淘宝 / 天猫、京东、拼多多的 union_host、product、promo 规则，version 递增并重新生成 platform/specs/link-patterns.gen.ts（/v1/config.link_patterns 与服务端 parse 共用，D10-2619 ③ / D10-2626 ④）
+type: impl
+# 2026-11-22 ops 入账（编排 D10-2626 ④：link_patterns 照 ops 查到的来源补，非资金）。现状：specs/link-patterns.yaml 自 #31（CT-15g）起 version '0'、rules: []，
+#   /v1/config.link_patterns.rules 为空，服务端 POST /v1/inputs/parse 判平台也读这张表（parsing/domain/link-patterns.ts），粘贴链接查返利两端都失效；旧 staging 同样为空。
+# 只填有出处的条目（不臆造，文件头 TODO 的约束）。候选表与出处见 couli-runs/B1-07d/candidates.md（rebate-private docs-mirror 官方 / 第三方文档快照与本仓库适配器常量，逐条 file:line）：
+#   淘宝：union_host taobao.com、tmall.com、alimama.com；product item.taobao.com /item.htm、detail.tmall.com /item.htm；promo s.click.taobao.com（整路径）、uland.taobao.com /coupon/**、/quan/**。
+#   京东：union_host jd.com；product item.jd.com /*.html；promo union-click.jd.com /jdc**。
+#   拼多多：union_host pinduoduo.com、yangkeduo.com；product mobile.yangkeduo.com /goods.html（出处只有本仓库 link-open-conversion.ts 的拼装，候选表标明）；promo 暂无出处，不填（列 FU）。
+# 结构与写法照文件头（hosts 小写、product 主机须落在同平台 union_host 域内、union_host 的 path_patterns 为空、模式不含 ? # % 空白），过 pnpm contracts:check；
+#   生成物只经 platform/specs/scripts/generate-link-patterns.ts 生成，不手改。不改文件头的语法说明、不改判定向量 specs/external-navigation.vectors.json。
+# 受影响已有用例：依赖空表的冻结断言若有，开工前只读盘点；需改冻结用例则停下报编排，不登记 modify_existing。
+# 规则测试（test_paths）钉：每条有出处的真实样本 URL（取自候选表）在 /v1/config.link_patterns 与服务端判定中命中对应平台与类别；非平台域名、用户信息、http 与相似域名（如 taobao.com.evil.invalid）不命中。
+# 依据：BR-ATTR-29 细则「平台链接形态表」、BR-PROD-03、04 §10.1；由编排者摘入任务书。
+refs: []
+refs_hash: {}
+deps: [CT-15m, B1-07a]
+paths:
+  - 'specs/link-patterns.yaml'
+  - 'apps/api/src/modules/platform/specs/link-patterns.gen.ts'
+  - 'ops/tasks/B1-07d.yaml'
+test_paths:
+  - 'test/spec/parsing/link-patterns-real/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/parsing/link-patterns-real/**'
+status: todo
