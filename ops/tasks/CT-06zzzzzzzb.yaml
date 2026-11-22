@@ -1,0 +1,39 @@
+id: CT-06zzzzzzzb
+repo: rebate-platform
+title: CT-06zzzzzzzb（FU-VERIFY-FAST-PROFILE）：verify-container 加 --fast-part，把 verify:fast 按 CI 同源拆成 base / spec-1 / spec-2 三段分开跑，--fast 与各段记分步时间戳；汇总认「三段同树全绿」为 fast 绿（D10-2502 / D10-2503）
+type: guard-change
+# 2026-11-22 w1 入账（D10-2503）。起因：测试机单跑 verify:fast 约 41 分，其中 test 步 33 分，@couli/spec-tests 单测一包 1987 秒；
+# CI 已把它切成 verify-spec-1/2（--shard=i/2），其余由 verify-unit（turbo test --filter='!@couli/spec-tests'）与 verify-static 跑。
+# ① tools/ci/fast-parts.ts：从受信根 ci.yml 读 verify-unit 的 test 命令与 verify-spec-1..N 的分片命令（解析法同 int-shards.ts，不另写清单），
+#    从受信根 package.json 读 verify:fast（只认 ` && ` 连接的普通命令）；出段表 [base, spec-1 … spec-N]：base = verify:fast 各步，
+#    其中 `pnpm run test` 换成 verify-unit 的命令；spec-i = verify-spec-i 的命令。形状不符（缺 test 步、分片缺漏重复、命令除 i 外不同、
+#    出现 shell 语法）报错退 2。
+# ② verify-container.sh --fast-part <base | spec-i>：命令取自 ①，在与 --fast 相同的容器、离线安装、内存与 3600 秒上限下只跑该段；
+#    与 --fast 等单跑（同 --int-shard 的互斥写法）；槽与 --int-shard 同规则；产物 <runs>/<id>/fast-part/<n>/{log.txt,result.json}
+#    （不写进 verify-fast/，免得被当成整份 fast），result 记 fast_part { part, commands }、exit_code、commit、tree；--dry-run 打印命令。
+# ③ 分步时间戳：--fast 与 --fast-part 逐步执行（--fast 的步骤 = 受信根 verify:fast 按 ` && ` 拆开，遇非 0 即停，与 && 等价），
+#    日志每步前后各一行带 UTC 时间、耗时与退出码；result.json 加 steps [{ command, started_at, finished_at, exit_code }]。
+#    test 步内各包耗时不要求拆。
+# ④ verify-sharded-summary.ts：fast 证据取同 tree 的「整份 verify-fast」或「fast-part 段齐全（与 ① 段表一致，各段取最近一次）」中
+#    完成时间较晚的一份（段组以最晚一段的完成时间计）；它 exit 0（段组则每段 0）才算 fast 绿；只有部分段、没有整份 fast → red 并逐段报缺。
+#    输出 fast 加 mode（whole | parts）与 parts 明细；scope / not_covered 口径不变。
+# ⑤ tools/ops/README.md 与 tools/agent/README.md 写明 --fast-part 用法与「三段全绿 = fast 绿」的口径。
+# 运维脚本 couli-runs/scripts/verify-sharded.sh 的排段由 w1 另改，不在本单。门禁改动，按 approvals 16 由编排核后加 owner 标签。
+refs: []
+refs_hash: {}
+deps: [CT-06zzzzzzza]
+paths:
+  - 'tools/ci/fast-parts{,.test}.ts'
+  - 'tools/ops/verify-container{.sh,.test.ts,.selftest.sh}'
+  - 'tools/ops/verify-sharded-summary{,.test}.ts'
+  - 'tools/ops/README.md'
+  - 'tools/agent/README.md'
+  - 'ops/tasks/CT-06zzzzzzzb.yaml'
+test_paths:
+  - 'test/spec/ci/verify-fast-parts/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/verify-fast-parts/**'
+status: todo
