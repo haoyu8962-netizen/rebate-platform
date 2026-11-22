@@ -1,0 +1,69 @@
+{
+  "risk_note": "CT-24ha (contract; D10-2585 / D10-2587, FU-TAOBAO-TOKEN-REFRESH step 1 ①). adminListUnionAccounts: each AdminUnionAccount row gains an optional auth_refreshable (boolean or null; not in required; omitted means the same as null) — true when the current credential came from a union authorization that returned re_expires_in > 0, false when it returned 0 or the platform documents it as not refreshable, null when unknown. Only the conclusion is exposed: no raw duration (re_expires_in etc.) and no token; the row stays additionalProperties false. The server does not emit it yet (the union writer task waits for the BR-ID-24 planning write-back, D10-2587). Generated: packages/contracts-ts/src/openapi.gen.ts only; the route-schema / signing / auth / min-version generators produce no change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "contract r1 (full) fail 2 S1, both scope rulings by the orchestrator D10-2629: S1-2 the AdminUnionAccount row is shared by adminListUnionAccounts and the adminPutUnionCredential response (accepted; description says manual entry is null or omitted; ledger patch #578); S1-1 contracts first, planning 04 §6.6 to be written back via the pending-merge list. r2 incremental pass (couli-runs/CT-24ha/review-contract-r2-codex.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by independent Claude (claude-run.sh, approvals 36), 2 attempts. Spec-test r1 Codex full: 3 S1 test-strength gaps (none row explicit null; list must validate every row, not contains; false with re_expires_in 0 refused), fixed by attempt 2 (e3359b9a0); r2 Codex incremental pass, no findings. Out of scope: wording semantics of the description match (ruling D10-2615: loose match only)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/contracts/union-auth-refreshable/admin-union-accounts.test.ts > [AC-CT-24ha#1] 联盟账号行的 auth_refreshable：true / false / null 三种取值整行都过 AdminUnionAccount 与 AdminUnionAccountListResponse（list 两行，含一行带一行不带）；不带它的行照过（不进 required）；值为字符串、数字 0 / 1、对象、数组都拒；行仍封闭，多出 refreshable 等别的属性被拒；带 re_expires_in 等原始时长或 access_token / refresh_token / token 的行一律被拒（true / false 配 re_expires_in=0 也拒）；reauth_mode=none 的拼多多行 null 与缺省都过；列表逐行校验，一条合法行加一条 \"true\" 行不论顺序都拒",
+    "test/spec/contracts/union-auth-refreshable/admin-union-accounts.test.ts > [AC-CT-24ha#2] 说明写清楚：adminListUnionAccounts 的 description、行 schema 的 description 或行里 auth_refreshable 的 description 至少一段同时点名 auth_refreshable、提到 null，并说明缺省（omitted / absent / missing）与 null 同义"
+  ],
+  "task": "CT-24ha",
+  "spec_commit": "8e16ffdfae80b2dc8e9120569673956cd7af5cb9",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "8e16ffdfae80b2dc8e9120569673956cd7af5cb9",
+      "tree": "d31cba045d20b1f0d9445d518df26bc791124c17",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-22T12:45:21Z",
+      "finished_at": "2026-11-22T12:45:24Z",
+      "red_tests": [
+        "test/spec/contracts/union-auth-refreshable/admin-union-accounts.test.ts > [AC-CT-24ha#1] 联盟账号行的 auth_refreshable：true / false / null 三种取值整行都过 AdminUnionAccount 与 AdminUnionAccountListResponse（list 两行，含一行带一行不带）；不带它的行照过（不进 required）；值为字符串、数字 0 / 1、对象、数组都拒；行仍封闭，多出 refreshable 等别的属性被拒；带 re_expires_in 等原始时长或 access_token / refresh_token / token 的行一律被拒（true / false 配 re_expires_in=0 也拒）；reauth_mode=none 的拼多多行 null 与缺省都过；列表逐行校验，一条合法行加一条 \"true\" 行不论顺序都拒",
+        "test/spec/contracts/union-auth-refreshable/admin-union-accounts.test.ts > [AC-CT-24ha#2] 说明写清楚：adminListUnionAccounts 的 description、行 schema 的 description 或行里 auth_refreshable 的 description 至少一段同时点名 auth_refreshable、提到 null，并说明缺省（omitted / absent / missing）与 null 同义"
+      ],
+      "expected": ["test/spec/contracts/union-auth-refreshable/admin-union-accounts.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "7523aee18567c90bd71d00b21bb0d98c55800977dae54266e81b157b4031d60f"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "702ac9ebcd201d3a558f6e01c5e907235ca63708",
+    "specs": "b51a9ab39a98d66fd7a68dae3670b0658b1efa0e"
+  }
+}

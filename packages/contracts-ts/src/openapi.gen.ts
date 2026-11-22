@@ -5734,6 +5734,9 @@ export interface paths {
          *     「none 与 manual 平台的到期、探测与提醒」, ruling D10-196). For `none`, `auth_expires_at` is null. `auth_renewed_by` is null for an
          *     automatic refresh (BR-ID-24 细则「后台联盟账号列表」). The reminder stage
          *     (union_accounts.alert_stage) and every credential (tokens, keys) are never returned.
+         *     `auth_refreshable` (optional; true / false / null, omitted means the same as null) says
+         *     whether the current authorization can be renewed automatically; raw durations such as
+         *     re_expires_in are never returned (CT-24ha).
          *     `status` is union_accounts.status as stored; its values are registered with B1-22 and
          *     are not an enum here yet.
          */
@@ -20364,6 +20367,17 @@ export interface components {
             /** @description False when union.auth_alert_phones is empty (BR-ID-24 ②「未配置告警手机号」). */
             alert_phones_configured: boolean;
             reauth_mode: components["schemas"]["AdminUnionReauthMode"];
+            /**
+             * @description Whether the current authorization can be renewed automatically (CT-24ha): true when the
+             *     credential came from a union authorization that returned re_expires_in > 0; false when it
+             *     returned re_expires_in = 0 (or the platform documents it as not refreshable); null when
+             *     unknown (manual entry, a `none` platform, or an authorization recorded before this was
+             *     kept). The field may be omitted; omitted means the same as null. Only this conclusion is
+             *     returned: never re_expires_in or any other raw duration, nor any token. This row is shared
+             *     by adminListUnionAccounts and the adminPutUnionCredential response; a manually entered
+             *     credential is always null or omitted here.
+             */
+            auth_refreshable?: boolean | null;
         };
         AdminUnionAccountList: {
             items: components["schemas"]["AdminUnionAccount"][];
