@@ -681,8 +681,13 @@ it('[F1-08ap-UNIT-MONEY#10] 【刷新】 after a 20902 whose read never complete
   await waitFor(() => expect(within(panel).getByText(t.refreshFailed)).toBeTruthy());
   expect(rereads, 'one read under way when given up').toBe(1);
   expect(amountOf(panel).disabled, 'editable again').toBe(false);
-  const again = buttonOf(panel, t.refresh);
-  expect(again.disabled, '【刷新】 offered again').toBe(false);
+  // antd's Button copies `loading` into its own state in an effect, so its spinner (and the
+  // accessible name 「loading刷新」) can outlast the commit that ended the read by one flush.
+  const again = await waitFor(() => {
+    const button = buttonOf(panel, t.refresh);
+    expect(button.disabled, '【刷新】 offered again').toBe(false);
+    return button;
+  });
   await act(async () => {
     fireEvent.click(again);
   });
