@@ -91,9 +91,10 @@ it(
 );
 
 it(
-  '[AC-F1-08ba-TABS#2] 只持 fund.view、只持 payout.execute、超管：都见三个页签且默认审核列表（只持 payout.execute 时审核列表显示无权限、不读提现单）；只持 withdraw.review 或只持 user.lookup：不见「打款队列」「结果待确认」；未进页签时都不请求 payout-overview 与 unknown-payouts',
+  '[AC-F1-08ba-TABS#2] 只持 fund.view、只持 payout.execute：都见三个页签，超管见四个页签（另有「自动到账设置」，F1-08ap），都默认审核列表（只持 payout.execute 时审核列表显示无权限、不读提现单）；只持 withdraw.review 或只持 user.lookup：不见「打款队列」「结果待确认」；未进页签时都不请求 payout-overview 与 unknown-payouts',
   { timeout: MULTI_TIMEOUT },
   async () => {
+    const PAGE_TABS_WITH_SETTINGS = [TAB.review, TAB.queue, TAB.unknown, '自动到账设置'];
     const seeing: readonly Account[] = [
       { name: 'fund.view', grants: VIEW, snapshot: everyGrant(VIEW) },
       { name: 'payout.execute', grants: EXECUTE, snapshot: everyGrant(EXECUTE) },
@@ -102,7 +103,8 @@ it(
     for (const account of seeing) {
       const server = createPayoutServer({ permissions: account.grants });
       await mount(server, account.snapshot);
-      await waitFor(() => expect(pageTabNames(), account.name).toEqual(PAGE_TABS));
+      const tabs = account.name === 'super' ? PAGE_TABS_WITH_SETTINGS : PAGE_TABS;
+      await waitFor(() => expect(pageTabNames(), account.name).toEqual(tabs));
       const review = tabsIn(main(), TAB.review)[0]!;
       const selected = review.getAttribute('aria-selected');
       expect(selected, `${account.name}: the review list is selected`).toBe('true');

@@ -1,0 +1,183 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/errors.test.ts > [AC-F1-08ap-ERR#1] 首次提交收到 20001 data.fields=[max_amount_fen]：金额上限标为错误、表单仍可编辑，只发一次",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/errors.test.ts > [AC-F1-08ap-ERR#2] 首次提交收到 20902 config_item：提示已被他人修改、需刷新，不自动重发",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/errors.test.ts > [AC-F1-08ap-ERR#3] 首次提交收到 10403：提示无权限，只发一次",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/errors.test.ts > [AC-F1-08ap-ERR#4] 首次提交收到普通 10003（凭证失效）：重新要动态码后原样再发一次（请求体相同、带新凭证），成功",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/relogin.test.ts > [AC-F1-08ap-RELOGIN#1] 自动到账设置：保存连接中断 → 结果未知，只存一项标记，整个值等于 {page: withdrawals, unknown: true, at: 发生时刻}（不含配置键、值、版本、动态码凭证、请求体）；【原样重试】收到 10001 走全局重新登录、标记仍在；同一账号重新登录回到提现审核页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻、只有一个【关闭】按钮；不自动重发；【关闭】后消失并清掉",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/relogin.test.ts > [AC-F1-08ap-RELOGIN#2] 自动到账设置（真实登录外壳）：保存连接中断 → 结果未知、存标记；【原样重试】成功：标记随确定结果清除；会话结束后同一账号重新登录，不再出现「有一笔提交结果未知」提示、不自动重发",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/relogin.test.ts > [AC-F1-08ap-RELOGIN#3] 自动到账设置（真实登录外壳）：保存连接中断 → 结果未知、存标记；【原样重试】收到 20001 [max_amount_fen]（确定拒绝）：解锁并标出金额上限，标记随之清除；同一账号重新登录不再出现提示、不自动重发",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#1] 未改动时【保存】不可用或按下不发请求、不要动态码",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#2] 改金额上限为 300 元、同一会员每日为 1、关时段限制后【保存】：动态码后一次 batch，恰含这三个键（30000 分 / 1 / false，expected_version 为显示时版本）；成功后以新版本刷新，再改金额为 280 元保存带新版本",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#3] 从未写过的键：同一会员每月填 5、全平台当日填 1500 元，结束时间选 21:59:59 后保存：两未写过的键 expected_version 为 0（5 / 150000 分），结束时间带版本 1",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#4] 勾选「首次提现」、取消「有对账差错」后保存：risk_block_flags 为原集合加 first_withdrawal 去 recon_diff（固定的 blacklist_hit 是否随值发送不限），带版本 4；金额上限填 10000 元（上限边界）同批送 1000000 分",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#5] 已存首提限制为开（版本 3）、同一收款账号每月为 4（版本 1）：关首提限制、每月改为 7 后保存恰送 first_withdrawal_limit_enabled=false（版本 3）与 payee_monthly_max_count=7（版本 1）、不动每日；再开首提限制保存送 true（版本 4）",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#6] 金额带分：金额上限填 300.01 元、全平台当日上限填 1500.01 元后保存：恰送 30001 分（版本 3）与 150001 分（版本 0），不截掉小数",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#7] 持 config.business 的普通账号（非超管）连续两次保存都成功：第一次金额上限 300 元带凭证 1；凭证用过即失效，第二次同一会员每日改为 1 必须用新动态码凭证 2 送出并成功（若先带旧凭证被拒 10003，须重新要动态码后原样重发），不当作最终失败",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#1] 超管进「自动到账设置」：金额上限显示 250.50 元、三项次数 2 / 4 / 3、开始 / 结束时间 10:00:00 / 20:59:59；从未写过的「同一会员每月」「全平台当日自动到账」输入框为空并标未设置；冻结金额、当日提现只读显示「不自动到账」",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#2] 分组与总开关：「本系统附加」分组注明「花卷云无此项」并含全平台当日上限、不含金额上限；总开关只读显示「已关闭」并有【去紧急开关页】、无开关控件；列出开启前置检查条目但不显示满足与否；无无交互角色的点击元素、无预填金额或时间的入口",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#3] 阻断风险标签：每个 BR-WDR-29 标签一个勾选框，已存的「同设备多账号」「曾负余额」「有对账差错」已勾、「首次提现」未勾；「命中黑名单」固定勾选且不可取消",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#4] 总开关已开时显示「已开启」；只持 config.business（无 switch.*）的账号总开关显示无权限查看、不请求 kill-switches，其余设置照常显示",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#5] 「自动到账设置」分组内按 ①–⑧ 顺序含总开关、金额上限、时段三项、首提限制（有开关控件）、冻结金额、当日提现、四项次数、四项预警；可编辑的全平台当日上限与阻断标签在「本系统附加」分组、不在主分组；附加分组不含 ①–⑧",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#6] 超管在总开关已开时按【去紧急开关页】：真正到达紧急开关页（标题「紧急开关」、提现审核页签不再显示、读了开关列表），按下本身不发任何写请求",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#7] 开启前置检查逐条列全且各为独立列表项：单笔与单日限额、失败码与查询状态、按日账单含 out_biz_no、每日通道对账连续跑通（每项的必备词都在同一条目内，末项须写明「每日」）；只列条目不显示满足与否",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#8] 阻断风险标签恰为 BR-WDR-29 全部 11 个标签各一个勾选框，除「命中黑名单」外都可勾；勾上此前未覆盖的「当日有入账」「60 天失效占比高」「60 天高佣占比高」「30 天提现额与 60 天确认收货返利比例异常」「收款账号曾属他人」「风险计算失败」后保存：risk_block_flags 恰为原集合加这六个 code（版本 4）；重新打开页签回读时恰这九个标签与「命中黑名单」勾选、「首次提现」未勾",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#9] 阻断风险标签逐个单独勾选（表驱动列全 BR-WDR-29 除「命中黑名单」外的 10 个标签，已存集合为空）：每次只勾一个、其余不勾，保存后 risk_block_flags 恰多出该标签的 code（「60 天失效占比高」→ invalid_ratio_60d、「60 天高佣占比高」→ high_commission_ratio_60d 等，版本 4）；每行保存后重新打开页签，回读时 11 个标签逐个比对、恰该标签与「命中黑名单」勾选；另两行已存集合只含 invalid_ratio_60d / 只含 high_commission_ratio_60d，进页签后恰「60 天失效占比高」/「60 天高佣占比高」勾选",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/tabs-frozen.test.ts > [AC-F1-08ap-TABS-FROZEN#1] 持 fund.view + payout.execute + config.business 进 /withdrawals：页签恰为「审核列表」「打款队列」「结果待确认」「自动到账设置」四个、默认选中审核列表；只持 fund.view + payout.execute：仍恰三个、不见「自动到账设置」；未进页签时都不请求 payout-overview 与 unknown-payouts",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/tabs.test.ts > [AC-F1-08ap-TAB#1] 超管进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」「自动到账设置」，默认审核列表；未进「自动到账设置」前不请求 config-items 与 kill-switches；进入后读 config-items（page_size ≤ 200，只带 page / page_size）与 kill-switches",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/tabs.test.ts > [AC-F1-08ap-TAB#2] 持 withdraw.review + fund.view + config.business：见四个页签、进入后可读设置；只持 withdraw.review + fund.view：页签栏照旧为三个、无「自动到账设置」，全程不请求 config-items 与 kill-switches",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/tabs.test.ts > [AC-F1-08ap-TAB#3] 对照：持 config.general + config.business 见四个页签；只持 config.general 或只持 config.risk（另持 withdraw.review + fund.view，不持 config.business）的审核员：页签栏照旧为三个、无「自动到账设置」，全程不请求 config-items 与 kill-switches",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts > [AC-F1-08ap-UNK#1] 首次保存连接中断：显示结果未知、输入锁定、只给【原样重试】【刷新核对】、不自动重发；【原样重试】送出与首次相同的请求体，成功后解除锁定",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts > [AC-F1-08ap-UNK#2] 首次保存实际已生效但收到带统一外壳的 5xx：结果未知；【原样重试】收到 20902 仍为结果未知、仍锁定；【刷新核对】重读设置后解锁并显示 300 元",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts > [AC-F1-08ap-UNK#3] 结果未知后【原样重试】收到 10403：仍为结果未知、仍锁定、请求体不变；再【原样重试】收到 20001 [max_amount_fen]：解锁并标出金额上限",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts > [AC-F1-08ap-UNK#4] 首次保存连接中断且未落库；【原样重试】收到普通 10003（凭证失效）：重新要动态码后带新凭证原样再发（请求体与首次相同），成功后显示已保存、解除锁定，服务端为 300 元",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts > [AC-F1-08ap-UNK#5] 首次保存收到带统一外壳的 5xx 且未落库（服务端仍为 250.50 元，期间他人以同值另存一次、版本到 4）：【刷新核对】按服务端回填 250.50 元，不显示待核对请求里的 300 元；解锁后改 280 元保存带服务端版本 4",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts > [AC-F1-08ap-UNK#6] 首次保存（250.50 → 300 元）收到带统一外壳的 5xx 且未落库，期间另一名财务把金额上限改为 270 元（版本到 4）：【刷新核对】按服务端回填 270 元，不显示提交前的 250.50 元或待核对的 300 元；解锁后改 280 元保存带服务端版本 4",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/validation.test.ts > [AC-F1-08ap-VAL#1] 开始时间选 22:00:00（结束时间仍为 20:59:59）后保存：不发请求、不要动态码并标出错误；开始时间改为 20:00:00 后保存：只送 window_start=20:00:00",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/validation.test.ts > [AC-F1-08ap-VAL#2] 金额上限填 10000.01、1.234、-1、abc，次数填 1.5、-1：每次保存都不发请求并标出该项；金额上限填 0、次数填 0 时可保存（0 / 0）",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/validation.test.ts > [AC-F1-08ap-VAL#3] 开始时间可选恰为 09:00:00 至 22:00:00 的 14 个整点、结束时间恰为 09:59:59 至 22:59:59 的 14 个；选最早开始 09:00:00、最晚结束 22:59:59 后保存：恰送这两个键（版本 1 / 1）",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/validation.test.ts > [AC-F1-08ap-VAL#4] 同一收款账号每月、同一会员每日、同一会员每月逐项填 -1、1.5，全平台当日上限填 -0.01、-1、abc：每次保存都不发请求、不要动态码并标出该项（每项测完改回合法值）；全平台当日上限填 0 可保存（0 分，版本 0），三项次数同批为 6 / 2 / 3",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/validation.test.ts > [AC-F1-08ap-VAL#5] ⑦ 四项次数均允许 0（表驱动列全：同一收款账号每日 2、每月 4，同一会员每日 3、每月 5）：逐项只把该项改为 0 后保存，批量恰含该键、值为整数 0、expected_version 为显示时的版本",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/warn-percent.test.ts > [AC-F1-08ap-WARN#1] ⑧ 四项预警以百分比显示：存 10000 / 1 / 1234 / 0（bp）分别显示为 100% / 0.01% / 12.34% / 0%（不显示原始 bp 数）",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/warn-percent.test.ts > [AC-F1-08ap-WARN#2] ⑧ 四项预警填 12.34 / 100 / 0.5 / 0（%）后保存：一次批量只送这四项，值为 1234 / 10000 / 50 / 0（bp），expected_version 为显示时的版本",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/warn-percent.test.ts > [AC-F1-08ap-WARN#3] ⑧ 预警填 100.01、-1、12.345、abc（%）：每次保存都不发请求、不要动态码并标出该项；改为 0.01 后保存只送 1（bp）",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/warn-percent.test.ts > [AC-F1-08ap-WARN#4] ⑧ 四项预警逐项填 100.01、-1、12.345、abc（%）：每项每次保存都不发请求、不要动态码并标出该项（每项测完改回合法值）；最后四项依次为 50.5 / 60 / 0.01 / 7.25 后保存只送 5050 / 6000 / 1 / 725（bp）",
+    "test/spec/frontend/admin-withdrawal-auto-payout-settings/warn-percent.test.ts > [AC-F1-08ap-WARN#5] ⑧ 四项预警两端点均可保存（表驱动列全四项 × 0% / 100%，已存 9000 / 8000 / 7000 / 500 bp）：逐项只把该项填 0 或 100 后保存，批量只送该键、值为 0 或 10000（bp）、expected_version 为 1"
+  ],
+  "risk_note": "F1-08ap. apps/admin only (pages/withdrawals, texts/withdrawals.ts). Adds the 自动到账设置 tab: reads config-items / kill-switches only after the tab opens, saves changed withdraw.auto_payout.* keys in one config-items batch with expected_version after a one-shot totp step-up; master switch read-only. Result-unknown: 30 s deadline, marker written before sending, retry same body only, 刷新核对 unlocks only when a submitted key's version changed, otherwise stays unknown with a confirmed 放弃这次提交; every server answer used to unlock or refill goes through one item validator. No contract or db change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 4,
+      "note": "Codex money r1–r3 fail (5 → 3 → 1 S1), fixed in implementation rounds 4–6 (approvals 148 / 149); r4 is the increment that takes the conclusion under range rulings D10-2470 / D10-2493 / D10-2508 (r3 S1 out_of_scope → FU-UNKNOWN-MARKER-MULTI-SUBMIT). Pass with two S2 (non-contract read answers) recorded as FU-F1-08AP-READ-EDGE. couli-runs/F1-08ap/review-money-r4.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 6,
+    "last_verdict": "pass",
+    "note": "rule tests by an independent Claude context (claude-run.sh), 5 rounds (approvals 132 / 134 for rounds 4–5), plus two mechanical fixture changes by the lane checked by the orchestrator (D10-2452 relogin account snapshots; D10-2454 moving [AC-F1-08ap-TABS-FROZEN#1] out of the frozen tabs.test.ts); Codex spec-test r1 full (13 S1) → r2–r6 increments, r6 pass with the three red_exempt entries confirmed (豁免全部确认（沿用）); r5 S1 ruled out_of_scope by D10-2470 and moved to an implementation must-hold item with a unit test",
+    "model": "gpt-6.2-sol",
+    "red_exempt_confirmed": true
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-payouts-readonly/tabs.test.ts",
+      "test": "[AC-F1-08ba-TABS#2] 只持 fund.view、只持 payout.execute、超管：都见三个页签且默认审核列表（只持 payout.execute 时审核列表显示无权限、不读提现单）；只持 withdraw.review 或只持 user.lookup：不见「打款队列」「结果待确认」；未进页签时都不请求 payout-overview 与 unknown-payouts",
+      "retitle_to": "[AC-F1-08ba-TABS#2] 只持 fund.view、只持 payout.execute：都见三个页签，超管见四个页签（另有「自动到账设置」，F1-08ap），都默认审核列表（只持 payout.execute 时审核列表显示无权限、不读提现单）；只持 withdraw.review 或只持 user.lookup：不见「打款队列」「结果待确认」；未进页签时都不请求 payout-overview 与 unknown-payouts",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08ba-TABS#2] 只持 fund.view、只持 payout.execute、超管：都见三个页签且默认审核列表（只持 payout.execute 时审核列表显示无权限、不读提现单）；只持 withdraw.review 或只持 user.lookup：不见「打款队列」「结果待确认」；未进页签时都不请求 payout-overview 与 unknown-payouts',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    const seeing: readonly Account[] = [\n      { name: 'fund.view', grants: VIEW, snapshot: everyGrant(VIEW) },\n      { name: 'payout.execute', grants: EXECUTE, snapshot: everyGrant(EXECUTE) },\n      { name: 'super', grants: VIEW_EXECUTE, snapshot: SUPER },\n    ];\n    for (const account of seeing) {\n      const server = createPayoutServer({ permissions: account.grants });\n      await mount(server, account.snapshot);\n      await waitFor(() => expect(pageTabNames(), account.name).toEqual(PAGE_TABS));\n      const review = tabsIn(main(), TAB.review)[0]!;\n      const selected = review.getAttribute('aria-selected');\n      expect(selected, `${account.name}: the review list is selected`).toBe('true');\n      const panel = await panelOf(review);\n      if (account.grants === EXECUTE) {\n        await waitFor(() => expect(textOf(panel), account.name).toMatch(FORBIDDEN));\n        await settled(server);\n        expect(server.listReads(), `${account.name}: no withdrawal read`).toEqual([]);\n      } else {\n        await listed(panel, REVIEW_ROWS);\n        await settled(server);\n      }\n      expect(server.overviewReads(), `${account.name}: no overview read`).toEqual([]);\n      expect(server.unknownReads(), `${account.name}: no unknown read`).toEqual([]);\n      cleanup();\n    }\n\n    const hidden: readonly Account[] = [\n      { name: 'withdraw.review', grants: REVIEW, snapshot: everyGrant(REVIEW) },\n      { name: 'user.lookup', grants: LOOKUP, snapshot: everyGrant(LOOKUP) },\n    ];\n    for (const account of hidden) {\n      const server = createPayoutServer({ permissions: account.grants });\n      await mount(server, account.snapshot);\n      await settled(server);\n      expect(tabsIn(main(), TAB.queue), `${account.name}: no queue tab`).toEqual([]);\n      expect(tabsIn(main(), TAB.unknown), `${account.name}: no unknown tab`).toEqual([]);\n      expect(server.overviewReads(), `${account.name}: no overview read`).toEqual([]);\n      expect(server.unknownReads(), `${account.name}: no unknown read`).toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "after": "it(\n  '[AC-F1-08ba-TABS#2] 只持 fund.view、只持 payout.execute：都见三个页签，超管见四个页签（另有「自动到账设置」，F1-08ap），都默认审核列表（只持 payout.execute 时审核列表显示无权限、不读提现单）；只持 withdraw.review 或只持 user.lookup：不见「打款队列」「结果待确认」；未进页签时都不请求 payout-overview 与 unknown-payouts',\n  { timeout: MULTI_TIMEOUT },\n  async () => {\n    const PAGE_TABS_WITH_SETTINGS = [TAB.review, TAB.queue, TAB.unknown, '自动到账设置'];\n    const seeing: readonly Account[] = [\n      { name: 'fund.view', grants: VIEW, snapshot: everyGrant(VIEW) },\n      { name: 'payout.execute', grants: EXECUTE, snapshot: everyGrant(EXECUTE) },\n      { name: 'super', grants: VIEW_EXECUTE, snapshot: SUPER },\n    ];\n    for (const account of seeing) {\n      const server = createPayoutServer({ permissions: account.grants });\n      await mount(server, account.snapshot);\n      const tabs = account.name === 'super' ? PAGE_TABS_WITH_SETTINGS : PAGE_TABS;\n      await waitFor(() => expect(pageTabNames(), account.name).toEqual(tabs));\n      const review = tabsIn(main(), TAB.review)[0]!;\n      const selected = review.getAttribute('aria-selected');\n      expect(selected, `${account.name}: the review list is selected`).toBe('true');\n      const panel = await panelOf(review);\n      if (account.grants === EXECUTE) {\n        await waitFor(() => expect(textOf(panel), account.name).toMatch(FORBIDDEN));\n        await settled(server);\n        expect(server.listReads(), `${account.name}: no withdrawal read`).toEqual([]);\n      } else {\n        await listed(panel, REVIEW_ROWS);\n        await settled(server);\n      }\n      expect(server.overviewReads(), `${account.name}: no overview read`).toEqual([]);\n      expect(server.unknownReads(), `${account.name}: no unknown read`).toEqual([]);\n      cleanup();\n    }\n\n    const hidden: readonly Account[] = [\n      { name: 'withdraw.review', grants: REVIEW, snapshot: everyGrant(REVIEW) },\n      { name: 'user.lookup', grants: LOOKUP, snapshot: everyGrant(LOOKUP) },\n    ];\n    for (const account of hidden) {\n      const server = createPayoutServer({ permissions: account.grants });\n      await mount(server, account.snapshot);\n      await settled(server);\n      expect(tabsIn(main(), TAB.queue), `${account.name}: no queue tab`).toEqual([]);\n      expect(tabsIn(main(), TAB.unknown), `${account.name}: no unknown tab`).toEqual([]);\n      expect(server.overviewReads(), `${account.name}: no overview read`).toEqual([]);\n      expect(server.unknownReads(), `${account.name}: no unknown read`).toEqual([]);\n      cleanup();\n    }\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现：提现审核页没有「自动到账设置」页签，超管只见三个页签），即本单正式先红的基线；couli-runs/F1-08ap/red/7（规则测试提交 44c75df26，tabs.test.ts 当时按整份判定）中本条列在 red 清单里、判 red for a valid reason——这就是反向验证本身，不是另跑的探针；该块自 1f6f1d1c7 起未再改动，最终规则测试提交 7f73a96d5（变基后）中逐字相同",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-30"]
+    }
+  ],
+  "task": "F1-08ap",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "spec_commit": "38a248bfb0493ce1be6d1189001077675dd175c3",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "38a248bfb0493ce1be6d1189001077675dd175c3",
+      "tree": "4b8824329ad0e5fea01eeabb7c7910fcf4a7f715",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-22T07:40:13Z",
+      "finished_at": "2026-11-22T07:44:14Z",
+      "red_tests": [
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/errors.test.ts > [AC-F1-08ap-ERR#1] 首次提交收到 20001 data.fields=[max_amount_fen]：金额上限标为错误、表单仍可编辑，只发一次",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/errors.test.ts > [AC-F1-08ap-ERR#2] 首次提交收到 20902 config_item：提示已被他人修改、需刷新，不自动重发",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/errors.test.ts > [AC-F1-08ap-ERR#3] 首次提交收到 10403：提示无权限，只发一次",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/errors.test.ts > [AC-F1-08ap-ERR#4] 首次提交收到普通 10003（凭证失效）：重新要动态码后原样再发一次（请求体相同、带新凭证），成功",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/relogin.test.ts > [AC-F1-08ap-RELOGIN#1] 自动到账设置：保存连接中断 → 结果未知，只存一项标记，整个值等于 {page: withdrawals, unknown: true, at: 发生时刻}（不含配置键、值、版本、动态码凭证、请求体）；【原样重试】收到 10001 走全局重新登录、标记仍在；同一账号重新登录回到提现审核页，页面顶部提示「有一笔提交结果未知，请先到列表核对」与发生时刻、只有一个【关闭】按钮；不自动重发；【关闭】后消失并清掉",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/relogin.test.ts > [AC-F1-08ap-RELOGIN#2] 自动到账设置（真实登录外壳）：保存连接中断 → 结果未知、存标记；【原样重试】成功：标记随确定结果清除；会话结束后同一账号重新登录，不再出现「有一笔提交结果未知」提示、不自动重发",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/relogin.test.ts > [AC-F1-08ap-RELOGIN#3] 自动到账设置（真实登录外壳）：保存连接中断 → 结果未知、存标记；【原样重试】收到 20001 [max_amount_fen]（确定拒绝）：解锁并标出金额上限，标记随之清除；同一账号重新登录不再出现提示、不自动重发",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#1] 未改动时【保存】不可用或按下不发请求、不要动态码",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#2] 改金额上限为 300 元、同一会员每日为 1、关时段限制后【保存】：动态码后一次 batch，恰含这三个键（30000 分 / 1 / false，expected_version 为显示时版本）；成功后以新版本刷新，再改金额为 280 元保存带新版本",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#3] 从未写过的键：同一会员每月填 5、全平台当日填 1500 元，结束时间选 21:59:59 后保存：两未写过的键 expected_version 为 0（5 / 150000 分），结束时间带版本 1",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#4] 勾选「首次提现」、取消「有对账差错」后保存：risk_block_flags 为原集合加 first_withdrawal 去 recon_diff（固定的 blacklist_hit 是否随值发送不限），带版本 4；金额上限填 10000 元（上限边界）同批送 1000000 分",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#5] 已存首提限制为开（版本 3）、同一收款账号每月为 4（版本 1）：关首提限制、每月改为 7 后保存恰送 first_withdrawal_limit_enabled=false（版本 3）与 payee_monthly_max_count=7（版本 1）、不动每日；再开首提限制保存送 true（版本 4）",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#6] 金额带分：金额上限填 300.01 元、全平台当日上限填 1500.01 元后保存：恰送 30001 分（版本 3）与 150001 分（版本 0），不截掉小数",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts > [AC-F1-08ap-SAVE#7] 持 config.business 的普通账号（非超管）连续两次保存都成功：第一次金额上限 300 元带凭证 1；凭证用过即失效，第二次同一会员每日改为 1 必须用新动态码凭证 2 送出并成功（若先带旧凭证被拒 10003，须重新要动态码后原样重发），不当作最终失败",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#1] 超管进「自动到账设置」：金额上限显示 250.50 元、三项次数 2 / 4 / 3、开始 / 结束时间 10:00:00 / 20:59:59；从未写过的「同一会员每月」「全平台当日自动到账」输入框为空并标未设置；冻结金额、当日提现只读显示「不自动到账」",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#2] 分组与总开关：「本系统附加」分组注明「花卷云无此项」并含全平台当日上限、不含金额上限；总开关只读显示「已关闭」并有【去紧急开关页】、无开关控件；列出开启前置检查条目但不显示满足与否；无无交互角色的点击元素、无预填金额或时间的入口",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#3] 阻断风险标签：每个 BR-WDR-29 标签一个勾选框，已存的「同设备多账号」「曾负余额」「有对账差错」已勾、「首次提现」未勾；「命中黑名单」固定勾选且不可取消",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#4] 总开关已开时显示「已开启」；只持 config.business（无 switch.*）的账号总开关显示无权限查看、不请求 kill-switches，其余设置照常显示",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#5] 「自动到账设置」分组内按 ①–⑧ 顺序含总开关、金额上限、时段三项、首提限制（有开关控件）、冻结金额、当日提现、四项次数、四项预警；可编辑的全平台当日上限与阻断标签在「本系统附加」分组、不在主分组；附加分组不含 ①–⑧",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#6] 超管在总开关已开时按【去紧急开关页】：真正到达紧急开关页（标题「紧急开关」、提现审核页签不再显示、读了开关列表），按下本身不发任何写请求",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#7] 开启前置检查逐条列全且各为独立列表项：单笔与单日限额、失败码与查询状态、按日账单含 out_biz_no、每日通道对账连续跑通（每项的必备词都在同一条目内，末项须写明「每日」）；只列条目不显示满足与否",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#8] 阻断风险标签恰为 BR-WDR-29 全部 11 个标签各一个勾选框，除「命中黑名单」外都可勾；勾上此前未覆盖的「当日有入账」「60 天失效占比高」「60 天高佣占比高」「30 天提现额与 60 天确认收货返利比例异常」「收款账号曾属他人」「风险计算失败」后保存：risk_block_flags 恰为原集合加这六个 code（版本 4）；重新打开页签回读时恰这九个标签与「命中黑名单」勾选、「首次提现」未勾",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts > [AC-F1-08ap-SHOW#9] 阻断风险标签逐个单独勾选（表驱动列全 BR-WDR-29 除「命中黑名单」外的 10 个标签，已存集合为空）：每次只勾一个、其余不勾，保存后 risk_block_flags 恰多出该标签的 code（「60 天失效占比高」→ invalid_ratio_60d、「60 天高佣占比高」→ high_commission_ratio_60d 等，版本 4）；每行保存后重新打开页签，回读时 11 个标签逐个比对、恰该标签与「命中黑名单」勾选；另两行已存集合只含 invalid_ratio_60d / 只含 high_commission_ratio_60d，进页签后恰「60 天失效占比高」/「60 天高佣占比高」勾选",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/tabs-frozen.test.ts > [AC-F1-08ap-TABS-FROZEN#1] 持 fund.view + payout.execute + config.business 进 /withdrawals：页签恰为「审核列表」「打款队列」「结果待确认」「自动到账设置」四个、默认选中审核列表；只持 fund.view + payout.execute：仍恰三个、不见「自动到账设置」；未进页签时都不请求 payout-overview 与 unknown-payouts",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/tabs.test.ts > [AC-F1-08ap-TAB#1] 超管进 /withdrawals：页签依次为「审核列表」「打款队列」「结果待确认」「自动到账设置」，默认审核列表；未进「自动到账设置」前不请求 config-items 与 kill-switches；进入后读 config-items（page_size ≤ 200，只带 page / page_size）与 kill-switches",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/tabs.test.ts > [AC-F1-08ap-TAB#2] 持 withdraw.review + fund.view + config.business：见四个页签、进入后可读设置；只持 withdraw.review + fund.view：页签栏照旧为三个、无「自动到账设置」，全程不请求 config-items 与 kill-switches",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/tabs.test.ts > [AC-F1-08ap-TAB#3] 对照：持 config.general + config.business 见四个页签；只持 config.general 或只持 config.risk（另持 withdraw.review + fund.view，不持 config.business）的审核员：页签栏照旧为三个、无「自动到账设置」，全程不请求 config-items 与 kill-switches",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts > [AC-F1-08ap-UNK#1] 首次保存连接中断：显示结果未知、输入锁定、只给【原样重试】【刷新核对】、不自动重发；【原样重试】送出与首次相同的请求体，成功后解除锁定",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts > [AC-F1-08ap-UNK#2] 首次保存实际已生效但收到带统一外壳的 5xx：结果未知；【原样重试】收到 20902 仍为结果未知、仍锁定；【刷新核对】重读设置后解锁并显示 300 元",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts > [AC-F1-08ap-UNK#3] 结果未知后【原样重试】收到 10403：仍为结果未知、仍锁定、请求体不变；再【原样重试】收到 20001 [max_amount_fen]：解锁并标出金额上限",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts > [AC-F1-08ap-UNK#4] 首次保存连接中断且未落库；【原样重试】收到普通 10003（凭证失效）：重新要动态码后带新凭证原样再发（请求体与首次相同），成功后显示已保存、解除锁定，服务端为 300 元",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts > [AC-F1-08ap-UNK#5] 首次保存收到带统一外壳的 5xx 且未落库（服务端仍为 250.50 元，期间他人以同值另存一次、版本到 4）：【刷新核对】按服务端回填 250.50 元，不显示待核对请求里的 300 元；解锁后改 280 元保存带服务端版本 4",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts > [AC-F1-08ap-UNK#6] 首次保存（250.50 → 300 元）收到带统一外壳的 5xx 且未落库，期间另一名财务把金额上限改为 270 元（版本到 4）：【刷新核对】按服务端回填 270 元，不显示提交前的 250.50 元或待核对的 300 元；解锁后改 280 元保存带服务端版本 4",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/validation.test.ts > [AC-F1-08ap-VAL#1] 开始时间选 22:00:00（结束时间仍为 20:59:59）后保存：不发请求、不要动态码并标出错误；开始时间改为 20:00:00 后保存：只送 window_start=20:00:00",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/validation.test.ts > [AC-F1-08ap-VAL#2] 金额上限填 10000.01、1.234、-1、abc，次数填 1.5、-1：每次保存都不发请求并标出该项；金额上限填 0、次数填 0 时可保存（0 / 0）",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/validation.test.ts > [AC-F1-08ap-VAL#3] 开始时间可选恰为 09:00:00 至 22:00:00 的 14 个整点、结束时间恰为 09:59:59 至 22:59:59 的 14 个；选最早开始 09:00:00、最晚结束 22:59:59 后保存：恰送这两个键（版本 1 / 1）",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/validation.test.ts > [AC-F1-08ap-VAL#4] 同一收款账号每月、同一会员每日、同一会员每月逐项填 -1、1.5，全平台当日上限填 -0.01、-1、abc：每次保存都不发请求、不要动态码并标出该项（每项测完改回合法值）；全平台当日上限填 0 可保存（0 分，版本 0），三项次数同批为 6 / 2 / 3",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/validation.test.ts > [AC-F1-08ap-VAL#5] ⑦ 四项次数均允许 0（表驱动列全：同一收款账号每日 2、每月 4，同一会员每日 3、每月 5）：逐项只把该项改为 0 后保存，批量恰含该键、值为整数 0、expected_version 为显示时的版本",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/warn-percent.test.ts > [AC-F1-08ap-WARN#1] ⑧ 四项预警以百分比显示：存 10000 / 1 / 1234 / 0（bp）分别显示为 100% / 0.01% / 12.34% / 0%（不显示原始 bp 数）",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/warn-percent.test.ts > [AC-F1-08ap-WARN#2] ⑧ 四项预警填 12.34 / 100 / 0.5 / 0（%）后保存：一次批量只送这四项，值为 1234 / 10000 / 50 / 0（bp），expected_version 为显示时的版本",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/warn-percent.test.ts > [AC-F1-08ap-WARN#3] ⑧ 预警填 100.01、-1、12.345、abc（%）：每次保存都不发请求、不要动态码并标出该项；改为 0.01 后保存只送 1（bp）",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/warn-percent.test.ts > [AC-F1-08ap-WARN#4] ⑧ 四项预警逐项填 100.01、-1、12.345、abc（%）：每项每次保存都不发请求、不要动态码并标出该项（每项测完改回合法值）；最后四项依次为 50.5 / 60 / 0.01 / 7.25 后保存只送 5050 / 6000 / 1 / 725（bp）",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/warn-percent.test.ts > [AC-F1-08ap-WARN#5] ⑧ 四项预警两端点均可保存（表驱动列全四项 × 0% / 100%，已存 9000 / 8000 / 7000 / 500 bp）：逐项只把该项填 0 或 100 后保存，批量只送该键、值为 0 或 10000（bp）、expected_version 为 1"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/errors.test.ts",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/relogin.test.ts",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/save.test.ts",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/show.test.ts",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/tabs-frozen.test.ts",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/tabs.test.ts",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/unknown.test.ts",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/validation.test.ts",
+        "test/spec/frontend/admin-withdrawal-auto-payout-settings/warn-percent.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "1406cdb5b4e849ced0bbe56ce4f463fc93ac70afd1e3dae30aa22ed1dedf2d5e"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c5bb870a22ece8b59b93c4b4bf5e508ae7f5dfc9",
+    "specs": "b51a9ab39a98d66fd7a68dae3670b0658b1efa0e"
+  }
+}
