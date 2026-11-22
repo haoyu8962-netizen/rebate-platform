@@ -1,6 +1,7 @@
 // B3-03n unit tests (implementer's own): the per-app agent.safety.timeout_ms read of the input
 // review fails closed when the configuration read itself fails or hangs, and a missing key falls
 // back to options.timeoutMs. Synthetic transport and scheduler only; no network, no database.
+// B3-06c: the agent.safety.block_level.input read and the graded verdict of the input review.
 import { expect, it, vi } from 'vitest';
 import type { RunBodyInput } from '../../http/index.ts';
 import type { RedactedText } from '../admission/index.ts';
@@ -73,7 +74,8 @@ function manualScheduler() {
   return { scheduler, advance };
 }
 
-function setup(configValue: StreamReviewConfigReader['configValue'], timeoutMs?: number) {
+function setup(read: StreamReviewConfigReader['configValue'], timeoutMs?: number) {
+  const configValue = vi.fn(read);
   const time = manualScheduler();
   const fetch = vi.fn<AliyunReviewFetch>(() => new Promise(() => undefined));
   const warn = vi.fn();
@@ -92,7 +94,7 @@ function setup(configValue: StreamReviewConfigReader['configValue'], timeoutMs?:
     texts: { text: async (_appId, key) => `固定文案:${key}` },
     config: { configValue },
   });
-  return { ports, fetch, warn, time };
+  return { ports, fetch, warn, time, configValue };
 }
 
 function settled(check: Promise<unknown>) {
@@ -128,7 +130,14 @@ it('[AC-B3-03n#u2][BR-AI-18] 配置读取挂起：到默认 1000ms 按审核不�
 
 it('[AC-B3-03n#u3][BR-AI-18] 未配置 agent.safety.timeout_ms 时取组合根的 options.timeoutMs；已配置的合法值优先', async () => {
   const values: unknown[] = [null, { value: 600 }];
-  const s = setup(async () => (values.shift() ?? null) as { value: unknown } | null, 250);
+  // B3-06c: the check also reads agent.safety.block_level.input; only timeout_ms reads take a value.
+  const s = setup(
+    async (_appId, key) =>
+      (key === 'agent.safety.timeout_ms' ? (values.shift() ?? null) : null) as {
+        value: unknown;
+      } | null,
+    250,
+  );
   const first = settled(s.ports.inputCheck.check(input(), new AbortController().signal));
   // The configuration read settles first; the review deadline then starts at this instant.
   await s.time.advance(0);
@@ -152,4 +161,55 @@ it('[AC-B3-03n#u4][BR-AI-18] 运行已取消时不读配置结果、不记不可
   expect(await s.ports.inputCheck.check(input(), controller.signal)).toEqual(UNAVAILABLE);
   expect(s.fetch).not.toHaveBeenCalled();
   expect(s.warn).not.toHaveBeenCalled();
+});
+
+function answering(riskLevel: string): AliyunReviewFetch {
+  return async () => ({
+    status: 200,
+    text: async () => JSON.stringify({ Code: 200, Data: { RiskLevel: riskLevel } }),
+  });
+}
+
+it('[AC-B3-06c#u1][BR-AI-18] 起拦等级读取失败：按审核不可用、不调审核，记等级不可读告警', async () => {
+  const s = setup(async (_appId, key) => {
+    if (key === 'agent.safety.block_level.input') throw new Error('synthetic read failure');
+    return null;
+  });
+  expect(await s.ports.inputCheck.check(input(), new AbortController().signal)).toEqual(
+    UNAVAILABLE,
+  );
+  expect(s.fetch).not.toHaveBeenCalled();
+  expect(s.warn).toHaveBeenCalledWith(
+    { app_id: 'synthetic-app' },
+    'agent_safety_block_level_unreadable',
+  );
+});
+
+it('[AC-B3-06c#u2][BR-AI-18] 起拦等级 medium：low 风险放行、medium 风险拦截；只读输入侧的键', async () => {
+  const s = setup(async (_appId, key) =>
+    key === 'agent.safety.block_level.input' ? { value: 'medium' } : null,
+  );
+  s.fetch.mockImplementationOnce(answering('low')).mockImplementationOnce(answering('medium'));
+  const passed = await s.ports.inputCheck.check(input(), new AbortController().signal);
+  expect(passed).toMatchObject({ kind: 'proceed' });
+  const blocked = await s.ports.inputCheck.check(input(), new AbortController().signal);
+  expect(blocked).toEqual({
+    kind: 'refuse',
+    textKey: 'agent.refuse.unsafe',
+    finishReason: 'safety',
+  });
+  const keys = new Set(s.configValue.mock.calls.map(([, key]) => key));
+  expect(keys).toEqual(new Set(['agent.safety.block_level.input', 'agent.safety.timeout_ms']));
+});
+
+it('[AC-B3-06c#u3][BR-AI-18] 起拦等级读取挂起：按本次审核的截止时间（默认 1000ms）返回不可用', async () => {
+  const s = setup(async (_appId, key) =>
+    key === 'agent.safety.block_level.input' ? new Promise(() => undefined) : null,
+  );
+  const box = settled(s.ports.inputCheck.check(input(), new AbortController().signal));
+  await s.time.advance(999);
+  expect(box.value).toBe(undefined);
+  await s.time.advance(1000);
+  expect(box.value).toEqual(UNAVAILABLE);
+  expect(s.fetch).not.toHaveBeenCalled();
 });
