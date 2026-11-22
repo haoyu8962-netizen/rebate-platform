@@ -24,6 +24,7 @@ import type { AccountRefusal, AdminAccountWrites } from '../infra/admin-account-
 import type { AdminDirectoryRow } from '../infra/admin-directory.ts';
 import { toAccountView, type AdminAccountView } from './admin-accounts-read.ts';
 import { hashAdminPassword } from './bootstrap.ts';
+import { AdminOutcomeUnknownError } from './step-up-outcome.ts';
 
 /** admin_users.display_name: 1–32 characters after trimming (contract AdminDisplayName). */
 export const ADMIN_DISPLAY_NAME_MAX = 32;
@@ -108,8 +109,21 @@ export function createAdminAccountsWriter(deps: {
   const hash = deps.hashPassword ?? hashAdminPassword;
   const generate = deps.generatePassword ?? generateAdminInitialPassword;
 
-  const view = (row: AdminDirectoryRow): AdminAccountView =>
-    toAccountView(row, clock.now(), crypto);
+  /**
+   * The written row as the answer shows it; runs after the write's COMMIT. Its only fallible step
+   * (decrypting the verify phone for its mask) then must not pass for a roll-back: the step-up gate
+   * would give the token back and a retry would repeat a committed write (a second initial
+   * password, B2-02ze money r1 S1), so a failure here is the agreed outcome-unknown error.
+   */
+  const view = (row: AdminDirectoryRow): AdminAccountView => {
+    try {
+      return toAccountView(row, clock.now(), crypto);
+    } catch (error) {
+      throw new AdminOutcomeUnknownError('admin: account written, its view failed', {
+        cause: error,
+      });
+    }
+  };
 
   const answer = (result: Awaited<ReturnType<AdminAccountWrites['enable']>>): AccountAnswer =>
     result.kind === 'written'

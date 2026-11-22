@@ -190,3 +190,87 @@ it('[AC-F1-06l#28] an operation without step-up runs and leaves the token alone'
     ),
   ).toEqual(SUCCESS);
 });
+
+it('[AC-B2-02ze-UNIT#1] a thrown error whose outcome is unknown keeps the claim: the token is void, a retry with it is 10003 and the business does not run again', async () => {
+  const lost = [
+    Object.assign(new Error('Connection terminated unexpectedly'), { code: '08006' }),
+    new Error('Connection terminated unexpectedly'),
+    Object.assign(new Error('terminating connection due to administrator command'), {
+      code: '57P01',
+    }),
+    Object.assign(new Error('the transaction outcome is unknown'), { code: 'outcome_unknown' }),
+  ];
+  for (const failure of lost) {
+    const s = setup();
+    const grant = await s.tokens.issue({ ...s.principal, tier: 'sms' });
+    const request = {
+      principal: s.principal,
+      permission: 'fund.adjust',
+      headers: { 'x-step-up-token': grant.step_up_token },
+    };
+    await expect(s.guard.run(request, () => Promise.reject(failure))).rejects.toBe(failure);
+    const business = vi.fn(async () => SUCCESS);
+    const retry = await rejection(s.guard.run(request, business));
+    expect(retry.body).toMatchObject({ code: 10003, data: { tier: 'sms' } });
+    expect(business).not.toHaveBeenCalled();
+  }
+});
+
+/** Runs one guarded operation that throws `failure`, then retries with the same token. */
+async function retryAfter(failure: unknown) {
+  const s = setup();
+  const grant = await s.tokens.issue({ ...s.principal, tier: 'sms' });
+  const request = {
+    principal: s.principal,
+    permission: 'fund.adjust',
+    headers: { 'x-step-up-token': grant.step_up_token },
+  };
+  await expect(s.guard.run(request, () => Promise.reject(failure))).rejects.toBe(failure);
+  const business = vi.fn(async () => SUCCESS);
+  const retry = await s.guard.run(request, business).then(
+    (result) => ({ result, thrown: undefined as unknown }),
+    (thrown: unknown) => ({ result: undefined, thrown }),
+  );
+  return { business, retry };
+}
+
+/** SQLSTATE errors as node-postgres throws them (messages that name no dropped connection). */
+const sqlstate = (code: string): Error =>
+  Object.assign(new Error(`synthetic server error ${code}`), { code });
+
+it('[AC-B2-02ze-R3#4] money r1 第 4 条：业务抛语句超时 57014（可能在提交途中或提交后）不释放令牌，同一令牌重试是 10003、业务不再执行', async () => {
+  const { business, retry } = await retryAfter(
+    Object.assign(new Error('canceling statement due to statement timeout'), { code: '57014' }),
+  );
+  expect(retry.thrown).toBeInstanceOf(HttpException);
+  expect((retry.thrown as HttpException).getResponse()).toMatchObject({
+    code: 10003,
+    data: { tier: 'sms' },
+  });
+  expect(business).not.toHaveBeenCalled();
+});
+
+for (const code of ['57P01', '57P02', '57P03']) {
+  it(`[AC-B2-02ze-MUST#4] 第④条 正例：提交时 SQLSTATE ${code} 按结果未知，不释放令牌，同一令牌重试是 10003、业务不再执行`, async () => {
+    const { business, retry } = await retryAfter(sqlstate(code));
+    expect(retry.thrown).toBeInstanceOf(HttpException);
+    expect((retry.thrown as HttpException).getResponse()).toMatchObject({
+      code: 10003,
+      data: { tier: 'sms' },
+    });
+    expect(business).not.toHaveBeenCalled();
+  });
+}
+
+it('[AC-B2-02ze-MUST#4] 第④条 反例：普通业务错误（以及唯一约束、序列化失败）已确认回滚，释放令牌，同一令牌重试照常执行', async () => {
+  for (const failure of [
+    new Error('synthetic business failure'),
+    sqlstate('23505'),
+    sqlstate('40001'),
+  ]) {
+    const { business, retry } = await retryAfter(failure);
+    expect(retry.thrown, String(failure)).toBeUndefined();
+    expect(retry.result).toBe(SUCCESS);
+    expect(business).toHaveBeenCalledTimes(1);
+  }
+});

@@ -1,0 +1,76 @@
+{
+  "risk_note": "B2-02zeb (BR-ID-34 / BR-ID-08; split out of B2-02ze, 编排 D10-2419): the admin step-up gate keeps the token reserved when the commit outcome is unknown — SQLSTATE class 08, 57P01 / 57P02 / 57P03, 57014, a driver disconnect without SQLSTATE and outcome_unknown (step-up-outcome.ts) — and releases it only on a business refusal or a confirmed rollback; the plain export create / retry reads the creator's display name before commit and builds its answer inside the transaction; admin account writes that fail while building the answer after commit report outcome unknown. adminStepUp's description in contracts/openapi.yaml states the caller's minimal promise (D10-2437 / D10-2447 / D10-2459). Frozen [AC-B1-34f#4] stays green.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 5,
+      "note": "Codex money r1 fail 2 S1 → (a) payout batch review partial commits out_of_scope, FU-PAYOUT-BATCH-STEPUP-PARTIAL to funds; (b) export retry 08006 retained, accepted (D10-2433 ②) → r2 fail 1 S1 (contract text promised release; description synced, D10-2437) → r3 fail 1 S1 (unconditional reuse promise vs release failure) → r4 under approvals 138 fail 1 S1 (console AppVersionEditor, out_of_scope, FU-ADMIN-APPVERSION-STEPUP-REASK to fe, D10-2459) → r5 under approvals 145 pass, no findings (couli-runs/B2-02zeb/review-money-r5-codex.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 2,
+    "last_verdict": "fail",
+    "note": "Rule tests test/spec/admin/step-up-commit-unknown/ taken unchanged from B2-02ze attempts 1–3 (fresh independent Claude, approvals 36; kit mechanical change D10-2328 ①); B2-02ze Codex spec-test results carried over (D10-2318 照走). The ledger declares no red_exempt / rows / renames / expected_values, so evidence-check does not require a pass here."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/admin/step-up-commit-unknown/balance-recalc.int.test.ts > [AC-B2-02ze#8] 短信档（余额重算，无幂等键）：业务提交时连接中断、结果未知 → 应答为错误，用同一令牌重试 → 10003，重算没有第二次执行（余额行只改一次、审计只有一条）；对照：事务回调内失败已回滚 → 同一令牌重试照常成功、成功后该令牌再用 → 10003；业务正常返回拒绝（20001）→ 令牌照旧可用",
+    "test/spec/admin/step-up-commit-unknown/balance-recalc.int.test.ts > [AC-B2-02ze#10] 短信档（余额重算）：连接在 COMMIT 抵达数据库之前断开（库里没有提交），调用方同样只见连接中断 → 应答为错误，重算没有生效、没有审计；结果未知就不释放（不能以「错误后查得到审计行」判定）：用同一令牌重试 → 10003，库里仍没有重算、没有审计；对照：重新验证拿到的新令牌照常完成重算",
+    "test/spec/admin/step-up-commit-unknown/balance-recalc.int.test.ts > [AC-B2-02ze#11] 短信档（余额重算）：COMMIT 已执行、等待确认时驱动抛出不带 SQLSTATE 的 Error(「Connection terminated unexpectedly」) → 应答为错误；用同一令牌重试 → 10003，重算只执行一次（余额行只改一次）、审计只有一条",
+    "test/spec/admin/step-up-commit-unknown/write-off.int.test.ts > [AC-B2-02ze#9] 动态码档（差错核销，带幂等键）：业务提交时连接中断、结果未知 → 应答为错误，用同一令牌、同一幂等键重试 → 10003，核销没有第二次执行（审计只有一条）；对照：事务回调内失败已回滚 → 同一令牌、同一幂等键重试照常成功、成功后该令牌再用 → 10003；业务正常返回拒绝（20001）→ 令牌照旧可用"
+  ],
+  "task": "B2-02zeb",
+  "spec_commit": "9da629d8e33fd892866b5168048a15cd4ae55a89",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "9da629d8e33fd892866b5168048a15cd4ae55a89",
+      "tree": "d69c0ee29f9bc5e6af6eab276774d10aa06c1b8c",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-22T03:35:29Z",
+      "finished_at": "2026-11-22T03:35:43Z",
+      "red_tests": [
+        "test/spec/admin/step-up-commit-unknown/balance-recalc.int.test.ts > [AC-B2-02ze#8] 短信档（余额重算，无幂等键）：业务提交时连接中断、结果未知 → 应答为错误，用同一令牌重试 → 10003，重算没有第二次执行（余额行只改一次、审计只有一条）；对照：事务回调内失败已回滚 → 同一令牌重试照常成功、成功后该令牌再用 → 10003；业务正常返回拒绝（20001）→ 令牌照旧可用",
+        "test/spec/admin/step-up-commit-unknown/balance-recalc.int.test.ts > [AC-B2-02ze#10] 短信档（余额重算）：连接在 COMMIT 抵达数据库之前断开（库里没有提交），调用方同样只见连接中断 → 应答为错误，重算没有生效、没有审计；结果未知就不释放（不能以「错误后查得到审计行」判定）：用同一令牌重试 → 10003，库里仍没有重算、没有审计；对照：重新验证拿到的新令牌照常完成重算",
+        "test/spec/admin/step-up-commit-unknown/balance-recalc.int.test.ts > [AC-B2-02ze#11] 短信档（余额重算）：COMMIT 已执行、等待确认时驱动抛出不带 SQLSTATE 的 Error(「Connection terminated unexpectedly」) → 应答为错误；用同一令牌重试 → 10003，重算只执行一次（余额行只改一次）、审计只有一条",
+        "test/spec/admin/step-up-commit-unknown/write-off.int.test.ts > [AC-B2-02ze#9] 动态码档（差错核销，带幂等键）：业务提交时连接中断、结果未知 → 应答为错误，用同一令牌、同一幂等键重试 → 10003，核销没有第二次执行（审计只有一条）；对照：事务回调内失败已回滚 → 同一令牌、同一幂等键重试照常成功、成功后该令牌再用 → 10003；业务正常返回拒绝（20001）→ 令牌照旧可用"
+      ],
+      "expected": [
+        "test/spec/admin/step-up-commit-unknown/balance-recalc.int.test.ts",
+        "test/spec/admin/step-up-commit-unknown/write-off.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "4d3964e7530ee7859132dd1c00b511697525c41e51776ce4b50df05882e20cf4"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "9e5e5c3282250ff083aee684ba31713a1ec689ed",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}

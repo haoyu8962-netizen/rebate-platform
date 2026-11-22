@@ -8387,11 +8387,15 @@ paths:
         and `data.reason=verify_phone_missing`. A wrong code is 20002 without a reason; an expired
         or voided SMS code is 20003.
         Token use (BR-ID-08 「只能用于 1 次成功的业务请求」 as the admin side follows it): a token
-        is spent only by a business success of an operation that checks it (HTTP 2xx with
-        `code=0`); then it is void and a repeat with it is 10003. When that operation is rejected
-        or fails (any other status or code, or a server error) the token is released and stays
-        usable until `expire_at`, so the console may replay the request with the same token and
-        asks for a new code only when the answer is 10003. While one request holds the token,
+        is spent only by one business success of an operation that checks it (HTTP 2xx with
+        `code=0`); after that a request with it is 10003. When such a request is refused or fails,
+        the server may release the token, and the token may then be reused until `expire_at`, but
+        this is not guaranteed: for example, it cannot be reused when the outcome of the commit is
+        unknown or when the release could not be recorded. The caller may replay the request with
+        the same token; after an answer of 10003 it must obtain a new token before submitting
+        again, through a new verification, and the caller decides whether to ask again at once or
+        to let the administrator start the operation again; it must not assume that the token can
+        still be used. While one request holds the token,
         another request with it is 10003. An operation that needs no step-up ignores a token sent
         with it. Not fixed by BR-ID-34 and left open here: whether wrong step-up codes count
         towards the login-failure lock, and the token lifetime (the response carries `expire_at`;

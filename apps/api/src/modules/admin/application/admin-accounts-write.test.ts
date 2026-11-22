@@ -8,6 +8,7 @@ import {
   permissionsOk,
   reasonOk,
 } from './admin-accounts-write.ts';
+import { isOutcomeUnknown } from './step-up-outcome.ts';
 
 const APP = 'couli';
 const ACTOR = { appId: APP, adminId: '0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5b00', ip: '127.0.0.1' };
@@ -170,4 +171,29 @@ it('[AC-B1-34k] savePermissions hands the set and the CAS value to the write and
     kind: 'fields',
     fields: ['admin_id'],
   });
+});
+
+it('[AC-B2-02ze-R3#4] money r1 第 4 条：写入已提交后组装视图（解密验证手机）失败，抛约定的结果未知错误（守卫保留令牌），不当作已回滚', async () => {
+  const cipherRow = row({ verifyPhoneCipher: Buffer.from('cipher', 'utf8') });
+  const regenerate = vi.fn(async () => ({ kind: 'written' as const, row: cipherRow }));
+  const writer = createAdminAccountsWriter({
+    clock: new FixedClock('2026-10-09T02:00:00.000Z'),
+    writes: { ...setup().writes, regenerate },
+    crypto: {
+      decrypt: () => {
+        throw new Error('synthetic decrypt failure');
+      },
+    },
+    hashPassword: async () => 'hash',
+    generatePassword: () => 'Generated2Password',
+  });
+  const thrown = await writer.regenerate(ACTOR, TARGET).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  expect(regenerate).toHaveBeenCalledTimes(1);
+  expect(isOutcomeUnknown(thrown)).toBe(true);
+  // 反例：视图组装成功时照常作答。
+  const { writer: ok } = setup();
+  expect(await ok.regenerate(ACTOR, TARGET)).toMatchObject({ kind: 'ok' });
 });
