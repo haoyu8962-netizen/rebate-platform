@@ -14,6 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
+import { readFastParts, verifyFastSteps } from '../ci/fast-parts.ts';
 import { readIntShards } from '../ci/int-shards.ts';
 import { repoRoot } from '../lib/paths.ts';
 import {
@@ -1685,7 +1686,7 @@ it(
 );
 
 it(
-  '[CT-06zzzzv] --fast keeps its docker run: no /out mount, VERIFY_SCRIPT=verify:fast, offline',
+  '[CT-06zzzzv] --fast keeps its docker run offline; CT-06zzzzzzzb: out/ mounted for the steps record, the trusted verify:fast steps one by one',
   async () => {
     const root = JSON.parse(readFileSync(join(repoRoot(), 'package.json'), 'utf8')) as {
       packageManager: string;
@@ -1710,10 +1711,16 @@ it(
     const container = testContainer(res.calls);
     expect(container).toBeDefined();
     const args = container?.args ?? [];
-    expect(args.some((a) => a.endsWith(':/out'))).toBe(false);
+    expect(args.some((a) => a.endsWith(':/out'))).toBe(true);
     expect(args[args.indexOf('--network') + 1]).toBe('none');
-    expect(container?.env['VERIFY_SCRIPT']).toBe('verify:fast');
-    expect(args.slice(-2)).toEqual(['couli-verify-entrypoint', 'verify']);
+    // CT-06zzzzzzzb: the trusted root's verify:fast steps after the inline step runner.
+    const steps = verifyFastSteps(readFileSync(join(repoRoot(), 'package.json'), 'utf8'));
+    expect(args.slice(-steps.length - 1)).toEqual(['couli-fast-steps', ...steps]);
+    expect(args.at(-steps.length - 3)).toBe('bash');
+    // The stub wrote no steps record: steps stay empty, the error says so, the exit code is kept.
+    const result = readJson(join(base, 'rj-fast', 'V1-11', 'verify-fast', '1', 'result.json'));
+    expect(result).toMatchObject({ script: 'verify:fast', exit_code: 0, steps: [] });
+    expect(String(result['error'])).toMatch(/steps record/);
   },
   JUDGE_TIMEOUT,
 );
@@ -2107,4 +2114,80 @@ it(
     expect(String(result(4)['error'])).toMatch(/rejected/);
   },
   JUDGE_TIMEOUT * 2,
+);
+
+// --- CT-06zzzzzzzb (FU-VERIFY-FAST-PROFILE, D10-2503 / D10-2504): --fast-part and --fast steps ----
+// The parts and the steps come from the trusted root's ci.yml and package.json
+// (tools/ci/fast-parts.ts), never from the worktree.
+
+it(
+  '[CT-06zzzzzzzb] --fast-part --dry-run prints the part and its trusted commands; --fast --dry-run its steps',
+  () => {
+    const repo = committedFixture('fast-part-dry');
+    const parts = readFastParts(
+      readFileSync(join(repoRoot(), '.github', 'workflows', 'ci.yml'), 'utf8'),
+      readFileSync(join(repoRoot(), 'package.json'), 'utf8'),
+    );
+    expect(parts.parts.map((p) => p.id)).toEqual([
+      'base',
+      ...Array.from({ length: parts.n }, (_, i) => `spec-${String(i + 1)}`),
+    ]);
+    for (const part of parts.parts) {
+      const res = run(['V1-13', '--worktree', repo, '--fast-part', part.id, '--dry-run']);
+      expect(res.status, res.stderr).toBe(0);
+      expect(planWithoutMemory(res.stdout)).toMatchObject({
+        script: 'fast-part',
+        fast_part: { part: part.id, commands: part.commands },
+      });
+    }
+    const fast = run(['V1-13', '--worktree', repo, '--fast', '--dry-run']);
+    expect(fast.status, fast.stderr).toBe(0);
+    expect(planWithoutMemory(fast.stdout)).toMatchObject({
+      script: 'verify:fast',
+      steps: verifyFastSteps(readFileSync(join(repoRoot(), 'package.json'), 'utf8')),
+    });
+    expect(existsSync(join(runs, 'V1-13'))).toBe(false);
+  },
+  CLI_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzzzzb] --fast-part: no part, a part not in the trusted ci.yml, another mode or --base → exit 2 naming --fast-part',
+  () => {
+    const repo = committedFixture('fast-part-usage');
+    const dry = (...args: string[]) => run(['V1-13', '--worktree', repo, ...args, '--dry-run']);
+    for (const bad of [[], ['unknown'], ['spec-0'], ['spec-1x'], ['--fast']]) {
+      const res = dry('--fast-part', ...bad);
+      expect(res.status, bad.join(' ')).toBe(2);
+      expect(res.stderr, bad.join(' ')).toContain('--fast-part needs a part');
+    }
+    const n = readFastParts(
+      readFileSync(join(repoRoot(), '.github', 'workflows', 'ci.yml'), 'utf8'),
+      readFileSync(join(repoRoot(), 'package.json'), 'utf8'),
+    ).n;
+    const beyond = dry('--fast-part', `spec-${String(n + 1)}`);
+    expect(beyond.status).toBe(2);
+    expect(beyond.stderr).toContain('is not a part of');
+    for (const other of [
+      ['--fast'],
+      ['--red'],
+      ['--related'],
+      ['--browser'],
+      ['--tests', 'test'],
+      ['--int-shard', '1'],
+      ['--base', 'main'],
+      ['--fast-part', 'spec-1'],
+    ]) {
+      for (const args of [
+        ['--fast-part', 'base', ...other],
+        [...other, '--fast-part', 'base'],
+      ]) {
+        const res = dry(...args);
+        expect(res.status, args.join(' ')).toBe(2);
+        expect(res.stderr, args.join(' ')).toContain('--fast-part');
+      }
+    }
+    expect(existsSync(join(runs, 'V1-13'))).toBe(false);
+  },
+  CLI_TIMEOUT,
 );

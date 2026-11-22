@@ -33,7 +33,11 @@ beforeEach(() => {
 });
 afterEach(() => removeDir(base));
 
-function put(kind: 'verify-fast' | 'int-shard' | 'browser', run: number, doc: unknown): void {
+function put(
+  kind: 'verify-fast' | 'int-shard' | 'browser' | 'fast-part',
+  run: number,
+  doc: unknown,
+): void {
   writeFiles(runs, {
     [`${TASK}/${kind}/${String(run)}/result.json`]:
       typeof doc === 'string' ? doc : JSON.stringify(doc),
@@ -66,7 +70,7 @@ it('[CT-06zzzzzzza] green: fast and every segment exit 0, totals agree and add u
     task: TASK,
     tree: TREE,
     status: 'green',
-    fast: { run: 1, exit_code: 0, ...times },
+    fast: { mode: 'whole', run: 1, exit_code: 0, ...times, parts: [] },
     segments: [
       { segment: '1', run: 1, exit_code: 0, files: 2, tests: 7, duration_s: 90 },
       { segment: 'rest', run: 2, exit_code: 0, files: 2, tests: 3, duration_s: 90 },
@@ -278,6 +282,128 @@ it(
       expect(res.status, pkg).toBe(2);
       expect(res.stdout, pkg).toBe('');
     }
+  },
+  CLI_TIMEOUT,
+);
+
+// --- CT-06zzzzzzzb (FU-VERIFY-FAST-PROFILE, D10-2503 / D10-2504): verify:fast in parts ----------
+
+const PARTS = ['base', 'spec-1', 'spec-2'];
+const part = (run: number, name: string, extra: object = {}) =>
+  put('fast-part', run, {
+    script: 'fast-part',
+    fast_part: { part: name, commands: ['x'] },
+    tree: TREE,
+    exit_code: 0,
+    ...times,
+    ...extra,
+  });
+const at = (minute: number) => `2026-11-22T00:${String(minute).padStart(2, '0')}:00Z`;
+
+it('[CT-06zzzzzzzb] a complete group of parts stands for verify-fast: mode parts, times span the parts', () => {
+  seg(1, '1');
+  seg(2, 'rest');
+  part(1, 'base', { started_at: at(1), finished_at: at(5) });
+  part(2, 'spec-1', { started_at: at(2), finished_at: at(9) });
+  part(3, 'spec-2', { started_at: at(3), finished_at: at(7) });
+  part(4, 'spec-3', { exit_code: 1 }); // not a part of this workflow
+  const s = summarize(TASK, TREE, runs, SHARDS, {
+    notCovered: [],
+    browser: false,
+    fastParts: PARTS,
+  });
+  expect(s.status).toBe('green');
+  expect(s.fast).toEqual({
+    mode: 'parts',
+    run: null,
+    exit_code: 0,
+    started_at: at(1),
+    finished_at: at(9),
+    parts: [
+      { part: 'base', run: 1, exit_code: 0, started_at: at(1), finished_at: at(5) },
+      { part: 'spec-1', run: 2, exit_code: 0, started_at: at(2), finished_at: at(9) },
+      { part: 'spec-2', run: 3, exit_code: 0, started_at: at(3), finished_at: at(7) },
+    ],
+  });
+  // Without the part list (or with a reason instead) the parts never count.
+  for (const fastParts of [undefined, 'no verify-unit job']) {
+    const only = summarize(TASK, TREE, runs, SHARDS, { notCovered: [], browser: false, fastParts });
+    expect(only.fast).toBeNull();
+    expect(only.problems).toContain('missing verify-fast result for this tree');
+    if (fastParts !== undefined) {
+      expect(only.problems).toContain(
+        'the parts of verify:fast cannot be read (no verify-unit job)',
+      );
+    }
+  }
+});
+
+it('[CT-06zzzzzzzb] a failed part of the chosen group is a problem; a malformed part result is reported', () => {
+  seg(1, '1');
+  seg(2, 'rest');
+  fast(1, { finished_at: at(4) });
+  part(1, 'base', { finished_at: at(5) });
+  part(2, 'spec-1', { finished_at: at(6), exit_code: 1 });
+  part(3, 'spec-2', { finished_at: at(5) });
+  put('fast-part', 4, { tree: TREE, fast_part: { part: 'base' }, exit_code: 0 });
+  const s = summarize(TASK, TREE, runs, SHARDS, {
+    notCovered: [],
+    browser: false,
+    fastParts: PARTS,
+  });
+  expect(s.status).toBe('red');
+  expect(s.fast).toMatchObject({ mode: 'parts', exit_code: 1 });
+  expect(s.problems).toEqual([
+    'fast-part run 4: result.json of this tree is malformed',
+    'fast-part spec-1 (run 2) exit 1',
+  ]);
+});
+
+it(
+  '[CT-06zzzzzzzb] CLI: the parts come from --workflow and --package-json; a workflow without them leaves only the whole run',
+  () => {
+    const unit = "pnpm exec turbo run test --env-mode=loose --filter='!@couli/spec-tests'";
+    const spec = (i: number) => `pnpm --filter @couli/spec-tests run test --shard=${String(i)}/2`;
+    writeFiles(base, {
+      'full.yml': `${WORKFLOW}  verify-unit:
+    steps:
+      - run: ${unit}
+  verify-spec-1:
+    steps:
+      - run: ${spec(1)}
+  verify-spec-2:
+    steps:
+      - run: ${spec(2)}
+`,
+      'package.json': JSON.stringify({
+        scripts: {
+          test: 'turbo run test --env-mode=loose',
+          'verify:fast': 'pnpm run typecheck && pnpm run test',
+          verify: ROOT_VERIFY,
+        },
+      }),
+    });
+    seg(1, '1');
+    seg(2, 'rest');
+    PARTS.forEach((name, i) => part(i + 1, name));
+    const args = (workflow: string) => [
+      TASK,
+      '--tree',
+      TREE,
+      '--runs',
+      runs,
+      '--workflow',
+      join(base, workflow),
+      '--package-json',
+      join(base, 'package.json'),
+    ];
+    const green = runCli('verify-sharded-summary.ts', args('full.yml'));
+    expect(green.status, green.stderr).toBe(0);
+    expect(JSON.parse(green.stdout)).toMatchObject({ status: 'green', fast: { mode: 'parts' } });
+    const partial = runCli('verify-sharded-summary.ts', args('ci.yml'));
+    expect(partial.status).toBe(1);
+    expect(JSON.parse(partial.stdout)).toMatchObject({ status: 'red', fast: null });
+    expect(partial.stderr).toContain('the parts of verify:fast cannot be read');
   },
   CLI_TIMEOUT,
 );
