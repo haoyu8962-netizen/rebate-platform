@@ -9,13 +9,11 @@ type: impl
 refs: [BR-WDR-23]
 refs_hash:
   BR-WDR-23: 14059410a548
-deps: []
+deps: [B2-07i]
 # 2026-11-22 台账补丁（编排 D10-2494）：Codex money r1 的 S0（缺单占位行被后来的成功流水覆盖时继承更早的写入先后）要在冲突更新里重给 recon_channel.created_at，而 couli_app 没有这一列的 UPDATE 授权——paths 加一条只含列级授权 GRANT UPDATE (created_at) 的迁移与两份生成物；迁移不带数据修改，号落地时按主干现取，落地设主干冻结；FU-RECON-CHANNEL-SEQ（加序号列与提现单关联列，上线前必须）做时收回这条授权。
+# 2026-11-22 台账补丁 2（编排 D10-2525）：换路——存储底座先由 B2-07i 做（recon_channel 加提现单关联列与序号列），本单在它合并后按新底座重写取数与写入；上一条补丁加的授权迁移弃用（未落地），paths 撤回迁移与生成物，deps 加 B2-07i。纯函数与已评过的规则测试保留。
 paths:
   - 'apps/api/src/modules/payout/**'
-  - 'db/migrations/*_recon-channel-created-at-grant.sql'
-  - 'db/schema.sql'
-  - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/payout/recon-cross-day-duplicate/**'
 impl: claude
