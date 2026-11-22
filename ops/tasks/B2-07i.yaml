@@ -10,6 +10,10 @@ type: impl
 #   「先被对账到」只看序号，不再借 created_at。③ 写入时填提现单关联列，使同一张提现单的全部流水可以直接按关联列读出（含只按通道单号保存的行）。
 # 不改：差错单登记口径、哪条算重复的判定（B2-07h）、打款中的单出现第二条成功流水怎么办（等负责人，D10-2525 (一)）、告警时机（FU-RECON-ALERT-OUTBOX）。B2-07h 原定的「GRANT UPDATE (created_at)」迁移弃用。
 # 受影响的冻结用例（按列枚举 recon_channel 的库表用例与 kit、钉着「补跑改写明细」的用例、直接 INSERT 该表的夹具）先只读盘点，modify_existing 以补丁登记后再写测；金额期望值不动。
+# 补丁 1（2026-11-22，编排 D10-2531 / D10-2533 / D10-2534；只读盘点与测试机迁移门禁探针之后）形状定稿：关联列 withdrawal_id（uuid 可空，复合外键 (app_id, withdrawal_id) 指向 withdrawals(app_id, id)，先 NOT VALID、下一条迁移 VALIDATE）；
+#   序号列 seq（bigint，默认值取序列 app.recon_channel_seq_seq，唯一索引；非空检查先 NOT VALID、下一条迁移 VALIDATE 后设非空——给现有资金表直接加 identity 列被 squawk adding-field-with-default 拒）；共两条迁移。
+#   现有两个唯一索引与列级授权不动、不加触发器；另存的那行业务单号留空、带通道单号与关联列（原文可从它的差错单账单行取回）；不可变只管通道侧三列、两个单号、账单日、序号、关联列；读取处本单不改。
+#   日跑写入串行：对账事务第一句取按应用的事务级咨询锁（等锁上限 5 秒、取到后恢复原值，超时走现有失败分支交重试）；应用写入路径不得显式给序号。冻结用例只登一个支撑文件（列清单补两列），其余冻结用例不改 test/。
 refs: [BR-WDR-23]
 refs_hash:
   BR-WDR-23: 14059410a548
@@ -21,8 +25,16 @@ paths:
   - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/payout/recon-channel-seq/**'
+  - 'test/spec/payout/recon-channel-schema/kit.ts'
 impl: claude
 tester: claude-independent
+modify_existing:
+  - file: 'test/spec/payout/recon-channel-schema/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-WDR-23]
+    ruling: D10-2531
+    note: '只补业务信息、不动断言（D10-1670 委托，编排 D10-2531）：SHAPES.recon_channel 末尾追加本单新增两列 withdrawal_id、seq 的类型 / 可空 / 默认值三元组，使按列枚举的两条库表用例（列名类型逐一匹配；couli_app 可读可插入）在新列存在时成立；MUTABLE 与其余不动，不涉及金额期望值'
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/recon-channel-seq/**'
