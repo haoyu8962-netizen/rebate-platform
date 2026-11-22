@@ -1,0 +1,26 @@
+id: B1-36a
+repo: rebate-platform
+title: test-change（B1-36 前置）：config-registry 登记 search.default_word（string、config.business、可编辑，无种子行，未设置即无默认词），冻结注册表用例只追加、计数 +1
+type: test-change
+# 2026-11-22 be 入账（台账 B1-36「默认词新配置键由本单登记，冻结注册表用例照 B2-04zo / B2-02ta 先例另开前置 test-change」；先例 B2-02zda）。
+# 键 search.default_word：搜索框默认词（01 F-PROD-16），契约 CT-27 /admin/v1/search/default-word 写它、GET /v1/search/hot-words 读它（1–20 字，null 清除）。
+# 无种子行：未设置 = 无默认词，客户端显示文案键 search.placeholder。插在 ledger.auto_correct.max_accounts 之后、B1-22y Agent 段之前，不动别的键。
+# 探针（主干 b4e98f609 + 该键，测试机 522 文件 9555 例，couli-runs/B1-36a/tests/1）红 12 例，正是先例那批：content 单测 2 份 + 冻结注册表用例 7 份（kit.ts 追加 *_UNSEEDED 一段）。
+# 各用例只追加这一个键、计数 +1，不动别的键与断言。非 task 分支，编排核 diff 后挂标签。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'test/spec/content/config-items/**'
+  - 'test/spec/content/config-settle/**'
+  - 'test/spec/content/invite-reward-config/**'
+  - 'test/spec/content/invite-reward-eligibility/**'
+  - 'ops/tasks/B1-36a.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
