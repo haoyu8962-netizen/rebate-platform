@@ -1,0 +1,26 @@
+id: CT-26zq
+repo: rebate-platform
+title: 契约（D10-2666，接 FU-AGENT-NOTICE-50301-PLACEHOLDER）：contracts/texts.default.json 新增无变量 notice 文案键 agent.notice.price_unavailable「暂时查不到这件商品的价格，请稍后再试。」，specs/fund-term-keys.yaml 逐键归普通，生成物同步
+type: contract
+# 2026-11-22 w1 入账（编排 D10-2666；agent 22:40 草案）。用途：agent 确定性路径与情境入口里 price_unavailable、no_card 两个商品原因分支，
+#   替换现在带 {platform_name} 的 error.50301；本单只动契约文案与生成物，不改 agent 代码（契约合并后 agent 另开单改两处代码 + modify_existing）。
+# 文案出处：catalog/application/card-entry.ts:48 的 TODO「暂时查不到该商品价格」+ 按钮「稍后再试」（不是凭空代拟）；不带变量、不含承诺。
+# 归类：与同组 agent.notice.quote_failed 一样逐键列入 ordinary（默认文案不含 BR-TEXT-12 资金关键词，不进 exempt）。BR-TEXT-22 的登记由编排列进待并入清单，本单不改 couli。
+# 规则测试钉：键存在且默认文案逐字相等、无 {变量}；fund-term-keys 归 ordinary、不在 fund_terms、不在 exempt；生成物与源一致由已有 contracts:check / 生成一致性用例覆盖。
+refs: [BR-TEXT-12]
+refs_hash:
+  BR-TEXT-12: 91963de1d27b
+deps: []
+paths:
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'ops/tasks/CT-26zq.yaml'
+test_paths:
+  - 'test/spec/contracts/agent-notice-price-unavailable/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/contracts/agent-notice-price-unavailable/**'
+status: todo
