@@ -1,0 +1,109 @@
+{
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "spec_commit": "fc88f830873f46d1234b83b249784d2035132a63",
+  "red_tests": [
+    "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#7][BR-AI-18] input 审核 synthetic-app-a 挂起、synthetic-app-b 先完成，两次审核各用各的起拦等级",
+    "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#7][BR-AI-18] input 审核 synthetic-app-b 挂起、synthetic-app-a 先完成，两次审核各用各的起拦等级",
+    "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#8][BR-AI-18] output 审核 synthetic-app-a 挂起、synthetic-app-b 先完成，两次审核各用各的起拦等级",
+    "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#8][BR-AI-18] output 审核 synthetic-app-b 挂起、synthetic-app-a 先完成，两次审核各用各的起拦等级",
+    "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#9][BR-AI-18] input 审核起拦等级读取拒绝时按审核不可用，读到非法值时按 low 拦截",
+    "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#10][BR-AI-18] output 审核起拦等级读取拒绝时按审核不可用，读到非法值时按 low 拦截",
+    "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#9][BR-AI-18] input 审核 等级读取一直不回，按本次审核的原截止时间返回不可用",
+    "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#9][BR-AI-18] input 审核 等级延迟读回，审核应答一直不回，按本次审核的原截止时间返回不可用",
+    "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#10][BR-AI-18] output 审核 等级读取一直不回，按本次审核的原截止时间返回不可用",
+    "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#10][BR-AI-18] output 审核 等级延迟读回，审核应答一直不回，按本次审核的原截止时间返回不可用",
+    "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#1][BR-AI-18] input 审核的三档起拦等级与四种风险等级逐格判定",
+    "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#2][BR-AI-18] output 审核的三档起拦等级与四种风险等级逐格判定",
+    "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#3][BR-AI-18] input 审核起拦配置缺失或非法时，low 风险也会被拦截",
+    "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#3][BR-AI-18] output 审核起拦配置缺失或非法时，low 风险也会被拦截",
+    "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#4][BR-AI-18] input 审核应答缺少等级或等级不认识时，按审核超时处置",
+    "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#4][BR-AI-18] output 审核应答缺少等级或等级不认识时，按审核超时处置",
+    "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#5][BR-AI-18] input 审核逐请求读取本 app 的本侧配置，改值立即生效",
+    "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#5][BR-AI-18] output 审核逐请求读取本 app 的本侧配置，改值立即生效",
+    "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#6][BR-AI-18] input 审核无配置读口时按 low 拦截全部已知风险等级",
+    "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#6][BR-AI-18] output 审核无配置读口时按 low 拦截全部已知风险等级"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "fc88f830873f46d1234b83b249784d2035132a63",
+      "tree": "8d43b3a062a61348fc00ec5b41ba572b9e9436a6",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-22T02:47:47Z",
+      "finished_at": "2026-11-22T02:47:56Z",
+      "red_tests": [
+        "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#7][BR-AI-18] input 审核 synthetic-app-a 挂起、synthetic-app-b 先完成，两次审核各用各的起拦等级",
+        "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#7][BR-AI-18] input 审核 synthetic-app-b 挂起、synthetic-app-a 先完成，两次审核各用各的起拦等级",
+        "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#8][BR-AI-18] output 审核 synthetic-app-a 挂起、synthetic-app-b 先完成，两次审核各用各的起拦等级",
+        "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#8][BR-AI-18] output 审核 synthetic-app-b 挂起、synthetic-app-a 先完成，两次审核各用各的起拦等级",
+        "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#9][BR-AI-18] input 审核起拦等级读取拒绝时按审核不可用，读到非法值时按 low 拦截",
+        "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#10][BR-AI-18] output 审核起拦等级读取拒绝时按审核不可用，读到非法值时按 low 拦截",
+        "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#9][BR-AI-18] input 审核 等级读取一直不回，按本次审核的原截止时间返回不可用",
+        "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#9][BR-AI-18] input 审核 等级延迟读回，审核应答一直不回，按本次审核的原截止时间返回不可用",
+        "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#10][BR-AI-18] output 审核 等级读取一直不回，按本次审核的原截止时间返回不可用",
+        "test/spec/agent/review-block-level/concurrent.test.ts > [AC-B3-06c#10][BR-AI-18] output 审核 等级延迟读回，审核应答一直不回，按本次审核的原截止时间返回不可用",
+        "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#1][BR-AI-18] input 审核的三档起拦等级与四种风险等级逐格判定",
+        "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#2][BR-AI-18] output 审核的三档起拦等级与四种风险等级逐格判定",
+        "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#3][BR-AI-18] input 审核起拦配置缺失或非法时，low 风险也会被拦截",
+        "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#3][BR-AI-18] output 审核起拦配置缺失或非法时，low 风险也会被拦截",
+        "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#4][BR-AI-18] input 审核应答缺少等级或等级不认识时，按审核超时处置",
+        "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#4][BR-AI-18] output 审核应答缺少等级或等级不认识时，按审核超时处置",
+        "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#5][BR-AI-18] input 审核逐请求读取本 app 的本侧配置，改值立即生效",
+        "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#5][BR-AI-18] output 审核逐请求读取本 app 的本侧配置，改值立即生效",
+        "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#6][BR-AI-18] input 审核无配置读口时按 low 拦截全部已知风险等级",
+        "test/spec/agent/review-block-level/review.test.ts > [AC-B3-06c#6][BR-AI-18] output 审核无配置读口时按 low 拦截全部已知风险等级"
+      ],
+      "expected": [
+        "test/spec/agent/review-block-level/concurrent.test.ts",
+        "test/spec/agent/review-block-level/review.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "440534dd07452893e3ba9fbe7c9cdd134a3c9640df527168c684a1f46bd2a5cd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "6c9d3ebc41db30ac642d5c7f2e3d2b44db1fa1ef",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B3-06c",
+  "risk_note": "RV1 (agent guard/review + stream/mount). 规划 11-12 A8 前一半 (docs/changes/20261112 §2.8): input / output review judge a hit by the app's agent.safety.block_level.input / .output (default low = unchanged behaviour; missing or invalid value → low, D10-2484; read failure or not read back by the deadline → review unavailable, fail-close, the wait counts toward the one review deadline, D10-2489). Per-request read through the configuration port, level passed down the call (no shared variable). The adapter default difference table and review() return values are unchanged (B3-06b frozen mapping.test.ts). The ContentReader 60 s cache is out of scope (D10-2498, FU-CONFIG-SAFETY-CACHE-INVALIDATE). No migration, no contract change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 3,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "Codex general r1 fail (2 S1): ② deadline start after the synchronous read → impl r2 (start recorded before any read, deadline = start + timeout_ms); ① ContentReader 60 s cache ruled out of scope (D10-2498, FU-CONFIG-SAFETY-CACHE-INVALIDATE). r2 incremental pass with 2 S2: ① logged FU-B3-06C-REVIEW-S2; ② the unit tests could not tell the old algorithm from the new → impl r3 changed only safety.test.ts ([AC-B3-06c#u7], D10-2500). Reverse check in a one-off worktree with safety.ts of e6042ba5ad91: #u7 red by assertion (got {kind:'ready',left:30}, expected {kind:'expired'}), the other 3 green (tests/3). r3 incremental pass, no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Fresh independent Claude via tools/agent/claude-run.sh (Codex wrote the tests). r1 fail (1 S1: two-app interleaving; 1 S2 out of scope → rule D10-2489) → Codex appended concurrent.test.ts → r2 incremental pass. Codex test attempt 1 returned an empty file (FU-CODEX-EMPTY-TESTFILE); that round was given back by D10-2489."
+  }
+}
