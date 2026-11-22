@@ -1,0 +1,24 @@
+id: F1-10gd
+repo: rebate-platform
+title: 后台联盟账号页显示「能否自动续期」——/unions 账号页签每行按 auth_refreshable 显示能 / 不能 / 未知（true / false / null，字段缺省同 null 显示未知）；到期时间与「估算」标记照旧；只读显示，不加按钮、不发新请求、不显示原始时长与凭据
+type: impl
+# 2026-11-22 入账（前端线 f1-frontend-7；编排 D10-2587 ④ / D10-2595 ①：负责人每天手动授权淘宝，页面要看得到何时到期、能否续期，做最小显示）。
+# 契约 CT-24ha 已合并（#582）：AdminUnionAccount 行加可缺省 auth_refreshable（boolean | null，缺省同 null），列表与手工凭据保存响应共用，手工录入恒为 null 或缺省。
+# 服务端记录数值的单（D10-2587 ③）等 BR-ID-24 规划回写后才做，在那之前主干响应不带该字段——页面须按缺省 = 未知显示，不报错、不臆造。
+# 到期时间（auth_expires_at）与「估算」标记 F1-10ga 已显示，本单不改；契约不返回 re_expires_in 等原始时长，本单不显示时长。
+# 手工凭据保存后用响应行刷新本行时同样按该字段显示（共用行模型）。不改 contracts/**，不占契约槽。refs 空（不依赖 BR 取值，同 CT-24ha）。
+# 风险级按 risk-map：apps/admin/**（非 withdrawals / adjustments）为 RV1，评审 general。
+refs: []
+refs_hash: {}
+deps: [CT-24ha, F1-10ga]
+paths:
+  - 'apps/admin/src/pages/unions/**'
+  - 'apps/admin/src/texts/unions.ts'
+test_paths:
+  - 'test/spec/frontend/admin-union-auth-refreshable/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-union-auth-refreshable/**'
+status: todo
