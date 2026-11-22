@@ -341,3 +341,119 @@ it('[AC-CT-27b#10] 搜索配置写接口的请求体与配置项绑死：各自�
     }
   }
 });
+
+// ---------------------------------------------------------------------------------------------
+// 写测 2（spec-test r1 S1 第 6 条的两个错误契约）：先钉请求体与列表条目的定义本身，再补边界样例。
+
+/** 三个请求体共有的顶层字段：必填的 CAS 版本与可选的修改原因（D10-2410 定稿）。 */
+const CAS_FIELD = 'expected_version';
+const REASON_FIELD = 'reason';
+
+/** 往请求体里另加的字段名（含评审原文的 configKey；正则 KEY_LIKE 认不出的也在内）。 */
+const EXTRA_FIELDS = ['configKey', 'targetKey', 'target_key', 'itemKey', 'scope', 'name', 'id'];
+
+interface ListBody {
+  operationId: string;
+  prop: string;
+  /** 列表条目定义的全部属性。 */
+  fields: string[];
+  /** 本项的两条合法条目。 */
+  good: Obj[];
+  /** 另一项的一条合法条目。 */
+  foreign: Obj;
+}
+
+const LISTS: ListBody[] = [
+  {
+    operationId: 'adminUpdateSearchHotWords',
+    prop: 'hot_words',
+    fields: ['text'],
+    good: [{ text: '洗衣液' }, { text: '蓝牙耳机' }],
+    foreign: { keyword: '签到', target: { route: 'Help' } },
+  },
+  {
+    operationId: 'adminUpdateSearchKeywordRoutes',
+    prop: 'keyword_routes',
+    fields: ['keyword', 'target'],
+    good: [
+      { keyword: '签到', target: SIGN_IN },
+      { keyword: '热销榜', target: { route: 'HotRankList', params: {} } },
+    ],
+    foreign: { text: '洗衣液' },
+  },
+];
+
+it('[AC-CT-27b#16] 三个搜索配置写操作的请求体顶层字段钉死：显式属性恰为 {本项的值, expected_version, reason}，组合分支里也不另开字段，没有 patternProperties，必填恰为 {本项的值, expected_version}；只带必填项、再带 reason 都收；另加 configKey、targetKey 等任何别的顶层字段（值是任一配置项的键）都拒收', () => {
+  // D10-2401 ⑥、D10-2410。spec-test r1 S1 第 6 条前半：错误契约在热词 PUT 的显式 properties 加可选 configKey、仍保留
+  // additionalProperties false，{hot_words:[{text:'洗衣液'}],expected_version:0,configKey:'search.keyword_routes'}
+  // 就能过请求体校验。
+  const doc = openapi();
+  for (const item of ITEMS) {
+    const id = item.operationId;
+    const schema = requestSchema(doc, operation(doc, id).op);
+    const allowed = [item.prop, CAS_FIELD, REASON_FIELD].sort();
+    const declared = Object.keys(at(schema, 'properties')).sort();
+    expect(declared, `${id} 显式属性`).toEqual(allowed);
+    expect(topProps(doc, schema), `${id} 顶层能出现的属性`).toEqual(allowed);
+    expect(schema['patternProperties'], `${id} 没有 patternProperties`).toBeUndefined();
+    expect(schema['additionalProperties'], `${id} 请求体封闭`).toBe(false);
+    const listed = schema['required'];
+    const required = Array.isArray(listed) ? listed.map(String).sort() : [];
+    expect(required, `${id} 必填`).toEqual([item.prop, CAS_FIELD].sort());
+    const validate = compileOpenapi(doc, schema);
+    const minimal = { [item.prop]: clone(item.value), [CAS_FIELD]: 0 };
+    check(validate(minimal), true, `${id} 只带必填项`);
+    check(validate({ ...minimal, [REASON_FIELD]: '双十一' }), true, `${id} 再带 reason`);
+    for (const field of EXTRA_FIELDS) {
+      for (const configKey of CONFIG_KEYS) {
+        const body = { ...minimal, [field]: configKey };
+        check(validate(body), false, `${id} 加 ${field}=${configKey}`);
+      }
+    }
+  }
+});
+
+it('[AC-CT-27b#17] 列表请求体的条目只收本项的形状：hot_words 的条目定义（顺着引用）封闭、属性恰为 text，keyword_routes 的恰为 keyword 与 target，都没有 anyOf / oneOf / allOf / if 分支；本项的合法列表收，混进一条另一项的条目（前、中、后，含评审原文的 {hot_words:[{text:洗衣液},{keyword:签到,target:{route:Help}}]}）、只放另一项的条目、两种条目合成一个对象都拒收；默认词不收列表与对象', () => {
+  // D10-2401 ⑥、D10-2410（热词体塞关键词路由列表会被拒，反之亦然）。spec-test r1 S1 第 6 条后半：错误契约让
+  // hot_words.items 同时接受 HotWord 与 KeywordRoute、再要求非空列表至少有一个 HotWord，纯关键词列表仍被拒，
+  // 但热词里混一条关键词路由会被接受。
+  const doc = openapi();
+  for (const list of LISTS) {
+    const id = list.operationId;
+    const schema = requestSchema(doc, operation(doc, id).op);
+    const array = resolve(doc, at(schema, 'properties')[list.prop]);
+    expect(array['type'], `${id} 的 ${list.prop} 是数组`).toBe('array');
+    const entry = resolve(doc, array['items']);
+    for (const key of ['anyOf', 'oneOf', 'allOf', 'if']) {
+      expect(entry[key], `${id} 的条目定义没有 ${key} 分支`).toBeUndefined();
+    }
+    expect(entry['additionalProperties'], `${id} 的条目定义封闭`).toBe(false);
+    const fields = Object.keys(at(entry, 'properties')).sort();
+    expect(fields, `${id} 的条目属性`).toEqual([...list.fields].sort());
+    const validate = compileOpenapi(doc, schema);
+    const body = (entries: Obj[]): Obj => ({ [list.prop]: clone(entries), [CAS_FIELD]: 0 });
+    const first = list.good[0] as Obj;
+    const second = list.good[1] as Obj;
+    check(validate(body(list.good)), true, `${id} 的合法列表`);
+    const mixes: [string, Obj[]][] = [
+      ['第一条后混一条', [first, list.foreign]],
+      ['末尾混一条', [...list.good, list.foreign]],
+      ['开头混一条', [list.foreign, ...list.good]],
+      ['中间混一条', [first, list.foreign, second]],
+      ['只放一条', [list.foreign]],
+      ['合成一个对象', [{ ...first, ...list.foreign }]],
+    ];
+    for (const [name, entries] of mixes) {
+      check(validate(body(entries)), false, `${id} ${name}另一项的条目`);
+    }
+  }
+  const { op } = operation(doc, 'adminUpdateSearchDefaultWord');
+  const validate = compileOpenapi(doc, requestSchema(doc, op));
+  check(validate({ default_word: DEFAULT_WORD, [CAS_FIELD]: 0 }), true, '默认词');
+  check(validate({ default_word: null, [CAS_FIELD]: 0 }), true, '清空默认词');
+  const wrong: unknown[] = [[DEFAULT_WORD], { text: DEFAULT_WORD }, HOT_LIST, ROUTE_LIST];
+  for (const value of wrong) {
+    const shown = JSON.stringify(value);
+    check(validate({ default_word: clone(value), [CAS_FIELD]: 0 }), false, `默认词=${shown}`);
+  }
+});
