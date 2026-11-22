@@ -188,3 +188,83 @@ it('[AC-B1-08p#U1] 店铺 ID：mall_id 原始文本与数值按十进制正整�
     expect(dto.order_id).toBe('unit-sn');
   }
 });
+
+const feeBp = (bp: number) => ({
+  rawPayloadId: null,
+  like: meta.like,
+  serviceFeeBp: { '*': { bp, source: 'unit', verified: true } },
+});
+
+it('[AC-B2-19-UNIT#1] 状态 5 结算额与预估同值；2、3 等其余状态只写预估；预估算不出时结算也为 null', () => {
+  const row = { ...base, order_amount: 5000, promotion_amount: 1600, duo_id_service_fee: 160 };
+  for (const source of ['increment', 'range', 'detail'] as const) {
+    const settled = mapPddOrder({ ...row, order_status: 5 }, source, meta);
+    expect(settled.est_commission_fen).toBe(1440n);
+    expect(settled.settle_commission_fen).toBe(1440n);
+    for (const order_status of [0, 1, 2, 3, 4, 10, undefined]) {
+      const dto = mapPddOrder({ ...row, order_status }, source, meta);
+      expect(dto.est_commission_fen).toBe(1440n);
+      expect(dto.settle_commission_fen).toBeNull();
+    }
+    // 无服务费字段、无配置：预估与结算都为 null，绝不按 0。
+    for (const page of [meta, { ...meta, serviceFeeBp: null }]) {
+      const noFee = { ...row, duo_id_service_fee: undefined, order_status: 5 };
+      const missing = mapPddOrder(noFee, source, page);
+      expect(missing.est_commission_fen).toBeNull();
+      expect(missing.settle_commission_fen).toBeNull();
+    }
+    // 净额为负时结算额照样取同一个负值（不截成 0）。
+    const negative = mapPddOrder(
+      { ...row, promotion_amount: 10, duo_id_service_fee: 30, order_status: 5 },
+      source,
+      meta,
+    );
+    expect(negative.settle_commission_fen).toBe(-20n);
+  }
+});
+
+it('[AC-B2-19-UNIT#2] 状态 5：毛额 1001 分、报文显式服务费 0、配置 600 bp → 结算额 1001 分（显式 0 不走费率兜底）', () => {
+  const dto = mapPddOrder(
+    { ...base, promotion_amount: 1001, duo_id_service_fee: 0, order_status: 5 },
+    'increment',
+    feeBp(600),
+  );
+  expect(dto.service_fee_fen).toBe(0n);
+  expect(dto.est_commission_fen).toBe(1001n);
+  expect(dto.settle_commission_fen).toBe(1001n);
+});
+
+it('[AC-B2-19-UNIT#3] 状态 5：毛额 1600 分、报文缺服务费、配置 1000 bp → 结算额 1440 分（恰好整除不加 1）', () => {
+  for (const duo_id_service_fee of [undefined, null]) {
+    const dto = mapPddOrder(
+      { ...base, promotion_amount: 1600, duo_id_service_fee, order_status: 5 },
+      'range',
+      feeBp(1000),
+    );
+    expect(dto.service_fee_fen).toBe(160n);
+    expect(dto.est_commission_fen).toBe(1440n);
+    expect(dto.settle_commission_fen).toBe(1440n);
+  }
+  // 对照：不整除时向上取整（1605 × 10% = 160.5 → 161）。
+  const ceil = mapPddOrder(
+    { ...base, promotion_amount: 1605, order_status: 5 },
+    'range',
+    feeBp(1000),
+  );
+  expect(ceil.settle_commission_fen).toBe(1444n);
+});
+
+it('[AC-B2-19-UNIT#4] 列表 rowErrors=collect 分支返回的状态 5 行仍带结算额', async () => {
+  const row = { ...base, promotion_amount: 1600, duo_id_service_fee: 160, order_status: 5 };
+  const { adapter } = setup(() => ({
+    order_list_get_response: { order_list: [row, { order_sn: '' }], last_order_id: '' },
+  }));
+  const page = await adapter.listOrders(
+    { from: '2026-10-14T00:00:00Z', to: '2026-10-14T12:00:00Z' },
+    { queryMode: 'pay_time' },
+    { ...ctx, rowErrors: 'collect' },
+  );
+  expect(page.items).toHaveLength(1);
+  expect(page.items[0]).toMatchObject({ settle_commission_fen: 1440n, est_commission_fen: 1440n });
+  expect(page.rejected).toHaveLength(1);
+});

@@ -419,11 +419,13 @@ export function pddRowIdentity(input: unknown): OrderRowIdentity {
  * subsidy_* 单列透传，不并入任何金额。return_status 只读详情接口。
  * B1-08e：另填平台无关字段（sub_order_id = order_sn，promotion_slot = pid，attr_params 只填原样的
  * custom_parameters，raw_status = String(order_status)，五个时刻由秒转 Date，
- * settle = null）；raw_payload_id 由调用方给出该页报文的归档行 id，没有为 null。
+ * settle_commission_fen 见下）；raw_payload_id 由调用方给出该页报文的归档行 id，没有为 null。
  * B1-08p：shop_id = mall_id 的十进制字符串（缺失或不合格为 null，见 shopId）。
  * B1-18e（BR-CALC-03）：duo_id_service_fee 没有值（缺失 / JSON null）时取配置 union.pdd.service_fee_bp
  * （page.serviceFeeBp，只用键 "*"；拼多多报文没有服务费率字段）：服务费 = ceil(promotion_amount × bp / 10000)，
  * est = promotion_amount − 服务费，service_fee_fen 写这个服务费；没有配置仍为 null，见 configuredServiceFee。
+ * B2-19（BR-FUND-02 细则第 2 点，D10-2408 ①）：order_status 5 时 settle_commission_fen = est_commission_fen
+ * （同一个值，不另算）；其余状态 null。列表（含 collect 分支）与详情都经本函数，字段一致。
  */
 export function mapPddOrder(
   input: unknown,
@@ -459,6 +461,7 @@ export function mapPddOrder(
   // B1-18e（BR-CALC-03）：报文没有服务费金额才按配置费率扣（向上取整）；都没有仍为 null，绝不按 0。
   const serviceFeeFen =
     reportedFeeFen ?? configuredServiceFee(base.commission_fen, page.serviceFeeBp, page.logger);
+  const estFen = serviceFeeFen === null ? null : subFen(base.commission_fen, serviceFeeFen);
   const failReason = f.text('fail_reason');
   const order = Object.freeze({
     ...base,
@@ -502,9 +505,10 @@ export function mapPddOrder(
     received_at: instant(receiveTime, page.like),
     settled_at: instant(settleTime, page.like),
     modified_at: instant(modifyAt, page.like),
-    est_commission_fen: serviceFeeFen === null ? null : subFen(base.commission_fen, serviceFeeFen),
-    // TODO(规划/11 §4.5): 拼多多结算佣金 — blocked on CAP-PDD-07（现有映射没有单独字段，不臆造）
-    settle_commission_fen: null,
+    est_commission_fen: estFen,
+    // B2-19（BR-FUND-02 细则「京东、拼多多已结算时的结算佣金」第 2 点）：只有 order_status 5 写结算佣金，
+    // 与 est 同一个值（同一字段、同一扣法）；2、3 等其余状态为 null。est 算不出（null）时也为 null，绝不按 0。
+    settle_commission_fen: orderStatus === SETTLED_ORDER_STATUS ? estFen : null,
     raw_payload_id: page.rawPayloadId,
     // B1-08p：拼多多订单总带店铺键（缺失 / 不合格为 null）；淘宝、京东映射不加此键（见 UnionOrder.shop_id）。
     shop_id: shopId(f.raw('mall_id')),
@@ -541,6 +545,9 @@ function configuredServiceFee(
   }
   return mulDivCeil(grossFen, choice.bp, 10_000n);
 }
+
+/** B2-19（BR-FUND-02）：specs/order-status-map/pdd.csv 里唯一的已结算码 5（3 审核成功实测前不算）。 */
+const SETTLED_ORDER_STATUS = 5;
 
 /** B1-04zgc（D10-1069）：specs/order-status-map/pdd.csv 里按失效处理的 4（审核失败）、10（已处罚）。 */
 const INVALID_ORDER_STATUSES: ReadonlySet<number> = new Set([4, 10]);

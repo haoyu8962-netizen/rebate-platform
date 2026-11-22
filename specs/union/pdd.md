@@ -45,7 +45,7 @@
 | `commission_fen` | `promotion_amount` | 必需，非负整数分；毛额，含软件服务费，不入库 |
 | `service_fee_fen` | `duo_id_service_fee` | 按本次报文原样；缺失为 null |
 | `est_commission_fen` | `promotion_amount` − `duo_id_service_fee` | 净额，见「金额」 |
-| `settle_commission_fen` | 无 | 恒为 null，见「金额」 |
+| `settle_commission_fen` | `promotion_amount` − `duo_id_service_fee` | 只在 `order_status` 5 时写，与 `est_commission_fen` 同一个值；其余状态恒为 null，见「金额」 |
 | `subsidy_commission_fen` | 无 | 不给（不加此键）：报文未单列补贴类佣金（BR-CALC-18）；未单列的处理按 BR-CALC-25 走配置 union.pdd.subsidy_itemized |
 | `goods_price_fen` | `goods_price` | 非负整数分 |
 | `platform_discount_fen` | `platform_discount` | 非负整数分 |
@@ -84,7 +84,7 @@
 
 - `est_commission_fen` = `promotion_amount` − `duo_id_service_fee`：净额，可为负；缺服务费为 null，绝不按 0。
 - `commission_fen` = `promotion_amount`：毛额，含软件服务费，不入库，不是可分配基数。
-- `settle_commission_fen` 恒为 null：适配器不写，现有映射没有单独的结算佣金字段（待 CAP-PDD-07）。
+- `settle_commission_fen`：`order_status` 不是 5 时恒为 null（2、3 等只写预估）；5（已经结算）时写，与同一行 `est_commission_fen` 同一个值（同一字段、同一扣法，含报文缺服务费时按配置费率兜底）；est 为 null 时也为 null，绝不按 0（BR-CALC-03；BR-FUND-02 细则「京东、拼多多已结算时的结算佣金」第 2 点，B2-19，D10-2408 ①）。结算后再变由订单同步按同一取法重算、内容不同即追加结算记录（BR-FUND-09）。
 - **新单缺服务费**：est 为 null，待处理 `SERVICE_FEE_RATE_MISSING`，版本留 0。
 - **已有 est 的单后续缺服务费**：est 不覆盖，版本不前进，不进待处理；计数 `couli_pdd_service_fee_missing_total`，warning 告警 `CouliPddServiceFeeMissing`。
 - 不回填：未上线；staging 已有的单下次同步时 est 变净额。
@@ -93,7 +93,7 @@
 ## 上线前要实测
 
 - **CAP-PDD-04，奖励佣金**：`duo_id_service_fee` 是基础佣金及奖励佣金之和对应的费，这里只从基础佣金扣（负责人 2026-10-02 定的公式）。有等级奖励（`subsidy_duo_amount_level`）时 N 偏小，偏保守。文档没给费率，拆不开。未实测。
-- **CAP-PDD-07，结算额（`credit.enabled.pdd` 开启前置）**：结算额按已扣服务费处理。实测若是毛额，要在结算写入处换算。未实测。
+- **CAP-PDD-07 / CAP-PDD-08，结算额（`credit.enabled.pdd` 开启前置，V-50）**：状态 5 的结算额与预估同一扣法（`promotion_amount` − `duo_id_service_fee`）。待实测：状态 5 与 `order_settle_time` 是否即联盟结算时点、部分退款与结算后退款时 `promotion_amount` 是否更新。未实测。
 - 状态映射 `specs/order-status-map/pdd.csv` 各行 verified=false；3（审核成功）实测前不算已结算（BR-FUND-02）。
 
 # 拼多多商品映射（B1-04u）
