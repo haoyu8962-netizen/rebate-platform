@@ -1,0 +1,22 @@
+# Second couli vmalert (B1-25c; D10-2622): evaluates rules/outage.yaml against the node
+# VictoriaMetrics and notifies the couli Alertmanager. Arguments come from outage.args (one
+# -flag=value per line, no spaces or quoting, so plain word splitting is exact).
+# Installed to /etc/systemd/system/.
+[Unit]
+Description=couli: vmalert for the outage rules (127.0.0.1:8882)
+After=network-online.target couli-alertmanager.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c 'exec /usr/bin/vmalert $$(grep -v ^# /opt/couli/alerting/vmalert/outage.args)'
+DynamicUser=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+Restart=on-failure
+RestartSec=5s
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

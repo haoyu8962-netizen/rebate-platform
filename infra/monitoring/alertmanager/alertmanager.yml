@@ -9,8 +9,12 @@
 #   firing when the mute ends is sent at the next group interval (02 §13: summarised after 08:00).
 # - Same alert within 30 minutes is merged (BR-WDR-24 细则): group_by alertname and app_id,
 #   group_interval 30m. group_wait 30s and repeat_interval 4h are agent defaults.
-# Receivers are placeholders: the log-only sink (log-sink.mjs) on 127.0.0.1; no external service and
-# no real contact until the owner names the channels and the people.
+# Receivers (B1-25c; D10-2605 / D10-2612): both point to the WeCom group robot forwarder
+# (infra/monitoring/forwarder/webhook.ts) on 127.0.0.1:9097, which sends /finance to the finance
+# group robot and /oncall to the on-call group robot. The robot addresses live only in node files
+# (paths given to the forwarder at start), never in this file. Routing and the night mute are
+# unchanged. log-sink.mjs (127.0.0.1:9096) stays as a local fallback: point both URLs back to 9096
+# to log alerts only, e.g. while a robot is being replaced.
 global:
   resolve_timeout: '5m'
 route:
@@ -39,9 +43,9 @@ time_intervals:
 receivers:
   - name: 'finance'
     webhook_configs:
-      - url: 'http://127.0.0.1:9096/finance'
+      - url: 'http://127.0.0.1:9097/finance'
         send_resolved: true
   - name: 'oncall'
     webhook_configs:
-      - url: 'http://127.0.0.1:9096/oncall'
+      - url: 'http://127.0.0.1:9097/oncall'
         send_resolved: true

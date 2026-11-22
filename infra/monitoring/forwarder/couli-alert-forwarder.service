@@ -1,0 +1,27 @@
+# WeCom group robot forwarder of the couli Alertmanager (B1-25c). Installed to /etc/systemd/system/
+# from /opt/couli/alerting/forwarder/; needs Node 24 on the host (type stripping of the .ts file).
+# The two robot address files stay root-only on the node (/etc/couli-alerting/, mode 0600); systemd
+# hands a private copy to the process (LoadCredential, read under %d), so the dynamic service user
+# never reads /etc directly. The addresses are not in this file, the command line or the journal.
+[Unit]
+Description=couli: Alertmanager webhook to WeCom group robots (127.0.0.1:9097)
+After=network-online.target
+Wants=network-online.target
+Before=couli-alertmanager.service
+
+[Service]
+Type=simple
+LoadCredential=finance-webhook:/etc/couli-alerting/wecom-finance-webhook
+LoadCredential=oncall-webhook:/etc/couli-alerting/wecom-oncall-webhook
+ExecStart=/usr/bin/node /opt/couli/alerting/forwarder/webhook.ts --listen=127.0.0.1:9097 --finance-file=%d/finance-webhook --oncall-file=%d/oncall-webhook
+DynamicUser=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+Restart=on-failure
+RestartSec=5s
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,48 @@
+# Outage rules of couli (B1-25c; 规划/02 §13; D10-2605 / D10-2612 / D10-2622). Loaded only by the
+# second couli vmalert (infra/monitoring/vmalert/outage.args), not by the couli one (couli.args).
+# Same strict YAML subset as couli.yaml (tools/lib/yaml-lite): every string single-quoted.
+# Sources of the metrics:
+# - up{job="couli-api|couli-worker|couli-admin"}: written by the couli vmagent for each scrape of
+#   infra/monitoring/scrape/couli.yml (0 when the process or its /metrics listener is down).
+# - pg_up{job="couli-pg"}: pg_exporter, scraped by the second vmagent (scrape/exporters.yml); the
+#   job selector keeps Pigsty's own pg_exporter series out of this rule.
+# - couli_container_healthy{name}: pushed every 60 s by scripts/container-health.ts (systemd timer
+#   couli-container-health.timer) into the couli vmagent.
+# Redis down stays the single CouliRedisDown rule of couli.yaml (redis_up == 0); not repeated here.
+# No fund label: these are operations alerts (oncall receiver, night mute, alertmanager.yml).
+# Every for is at least the evaluation interval (30s, outage.args).
+groups:
+  - name: couli-outage
+    rules:
+      - alert: CouliProcessDown
+        expr: 'up{job=~"couli-api|couli-worker|couli-admin"} == 0'
+        for: '2m'
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.job }} 的指标抓取失败超过 2 分钟：进程没在跑或 /metrics 端口不通'
+          description: 'up == 0 for the scrape job; check docker compose ps and the process log.'
+      - alert: CouliPostgresDown
+        expr: 'pg_up{job="couli-pg"} == 0'
+        for: '2m'
+        labels:
+          severity: critical
+        annotations:
+          summary: 'PostgreSQL 连不上超过 2 分钟（pg_exporter 报 pg_up = 0）'
+          description: 'pg_exporter on the node cannot connect to PostgreSQL.'
+      - alert: CouliContainerUnhealthy
+        expr: 'couli_container_healthy == 0'
+        for: '2m'
+        labels:
+          severity: critical
+        annotations:
+          summary: '容器 {{ $labels.name }} 不健康超过 2 分钟（已停止、启动中或健康检查失败）'
+          description: 'couli_container_healthy == 0: not running or docker health is not healthy.'
+      - alert: CouliContainerHealthStale
+        expr: 'absent_over_time(couli_container_healthy{name="couli-staging-api-1"}[5m]) or absent_over_time(couli_container_healthy{name="couli-staging-stream-1"}[5m]) or absent_over_time(couli_container_healthy{name="couli-staging-worker-1"}[5m]) or absent_over_time(couli_container_healthy{name="couli-staging-admin-1"}[5m]) or absent_over_time(couli_container_healthy{name="couli-staging-payout-1"}[5m])'
+        for: '1m'
+        labels:
+          severity: critical
+        annotations:
+          summary: '容器 {{ $labels.name }} 的健康值 5 分钟没有新样本：节点上的健康推送定时器可能停了'
+          description: 'No couli_container_healthy sample for 5 minutes; check couli-container-health.timer.'

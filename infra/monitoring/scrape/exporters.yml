@@ -1,0 +1,14 @@
+# Scrape configuration of the second couli vmagent (B1-25c; D10-2612 / D10-2622): only the node's
+# pg_exporter and redis_exporter, both listening on 127.0.0.1 (Pigsty default ports 9630 / 9121).
+# Loaded by scrape/vmagent-exporters.args; the couli vmagent (vmagent.args, couli.yml) is not touched.
+# No credentials, proxy, discovery or relabelling: the exporters hold their own connection settings.
+global:
+  scrape_interval: '30s'
+  scrape_timeout: '10s'
+scrape_configs:
+  - job_name: 'couli-pg'
+    static_configs:
+      - targets: ['127.0.0.1:9630']
+  - job_name: 'couli-redis'
+    static_configs:
+      - targets: ['127.0.0.1:9121']

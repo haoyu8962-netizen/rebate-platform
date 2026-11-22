@@ -1,0 +1,8 @@
+# Arguments of the second couli vmagent (B1-25c; D10-2622), one -flag=value per line. Deployed under
+# /opt/couli/alerting/; it scrapes exporters.yml and writes to the same node VictoriaMetrics as the
+# couli vmagent (vmagent.args). Its own persistent queue directory and listener: two vmagents on one
+# -remoteWrite.tmpDataPath fight over the directory lock, and 8429 belongs to the couli vmagent.
+-promscrape.config=/opt/couli/alerting/scrape/exporters.yml
+-remoteWrite.url=http://127.0.0.1:8428/api/v1/write
+-remoteWrite.tmpDataPath=/var/lib/couli-vmagent-exporters
+-httpListenAddr=127.0.0.1:8430
