@@ -1,4 +1,4 @@
-import type { Schema } from '@couli/contracts-ts';
+import type { Schema } from '../../../../packages/contracts-ts/src/index.ts';
 import { createTestDatabase } from '@couli/db/testing';
 import { expect, it } from 'vitest';
 import { setConfig, usePgEach } from '../../agent/stream-mount/kit.ts';
