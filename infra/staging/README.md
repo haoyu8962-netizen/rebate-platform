@@ -72,6 +72,52 @@ chmod 500 /etc/couli-keys
 
 容器以 `node` 用户（uid 1000）运行，所以目录和文件属主是 1000，目录 500、文件 400。主密钥丢失后已加密的字段无法解开，生成后另行离线备份。
 
+#### 1.3a 旧身份隔离存储的第二套字段密钥环（B1-27e）
+
+实名更正时，旧身份放在隔离存储里，用独立的数据密钥加密（B1-27e，`keyring-prior-identity.ts`）。这需要第二套密钥环，和 1.3 的密钥环分开。
+
+节点上再放两个文件：`/etc/couli-keys/prior-identity-master.key`（另一把主密钥）与 `/etc/couli-keys/prior-identity-keyring.json`（第二套密钥环，由镜像内的 `keyring-init.ts` 用这把主密钥生成）。
+两个文件与 1.3 放在同一节点目录 `/etc/couli-keys`，随五个服务现有的只读挂载出现在容器内 `/run/couli-keys`，`compose.yaml` 不用改。
+
+两份应用环境文件（`staging.env` 与 `staging-payout.env`）都要写下面同样三行，每个变量单独一行、行首就是变量名：
+
+```text
+PRIOR_IDENTITY_KEY_PROVIDER=local
+PRIOR_IDENTITY_KEYRING_FILE=/run/couli-keys/prior-identity-keyring.json
+PRIOR_IDENTITY_MASTER_KEY_FILE=/run/couli-keys/prior-identity-master.key
+```
+
+缺这组变量时，五个入口（api、stream、worker、admin、payout）启动即失败（`keyring-prior-identity.ts` §2）。
+
+首次生成（在 1.3 做完之后，节点上以 root 执行一次）。1.3 结束时目录已是 500，下面先临时改成 700，写完再改回 500：
+
+```sh
+chmod 700 /etc/couli-keys
+(umask 077 && openssl rand -hex 32 > /etc/couli-keys/prior-identity-master.key)
+docker run --rm --pull never --network none --user 0 \
+  --volume /etc/couli-keys:/keys couli-api:<标签> \
+  node apps/api/scripts/keyring-init.ts /keys/prior-identity-master.key /keys/prior-identity-keyring.json
+chown 1000:1000 /etc/couli-keys/prior-identity-master.key
+chown 1000:1000 /etc/couli-keys/prior-identity-keyring.json
+chmod 400 /etc/couli-keys/prior-identity-master.key
+chmod 400 /etc/couli-keys/prior-identity-keyring.json
+chmod 500 /etc/couli-keys
+```
+
+做完后目录属主仍是 1000、权限 500，两个新文件属主 1000、权限 400，与 1.3 相同。
+
+契约允许旧身份主密钥文件与 FIELD_MASTER_KEY_FILE 共用（`keyring-prior-identity.ts` §1、§4 g），只要求两套密钥环的数据密钥不同（否则 `shares_main_data_key` 拒绝启动）。
+
+staging 照编排 D10-336 用独立主密钥 `prior-identity-master.key`。
+
+PRIOR_IDENTITY_KEYRING_FILE 不得与 FIELD_KEYRING_FILE 相同。不要复制 `keyring.json` 充当第二套密钥环：复制出来的数据密钥和主密钥环相同，启动会被拒绝。
+
+主密钥只经文件路径交给程序，不经命令行参数或环境变量传（理由同 1.3）。
+
+两把主密钥（`/etc/couli-keys/master.key` 与 `/etc/couli-keys/prior-identity-master.key`）都要另行离线备份；丢了任何一把，对应的字段就无法解开。
+
+prod 走 KMS，不照此做。
+
 ### 1.4 访问令牌密钥（api 签名私钥、stream 验签公钥）
 
 api 在 staging 必须有 ES256 签名私钥（P-256，PKCS#8 PEM）和 kid，否则启动即退出。私钥不放环境文件（`format: raw` 的环境文件放不了多行值，规则测试也只允许每个服务一个环境文件），而是放在节点目录 `/etc/couli-jwt`，只读挂给 api（容器内 `/run/couli-jwt`）。api 启动时由 `boot.mjs` 把两个文件读进本进程的环境变量 JWT_PRIVATE_KEY_PEM 与 JWT_KEY_ID：私钥不进命令行、不进 `docker inspect`、不打印；读不到就报错（只报路径与错误码）并退出。
