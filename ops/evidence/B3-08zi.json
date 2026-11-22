@@ -1,0 +1,141 @@
+{
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "spec_commit": "9e01f55ba64b9b5d086d48f8092ef94a086d12a0",
+  "red_tests": [
+    "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#11] 同一 app 只读调用者的隐私同意，即使另一用户的记录更新",
+    "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#11] 调用者更新的 agreement 撤回不影响隐私同意",
+    "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#11] server_at 相同的用户级隐私记录按最大 id 判定",
+    "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#12] 最低版本为 0，Agent 与 API 都返回 50001",
+    "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#12] 最低版本为 1.5，Agent 与 API 都返回 50001",
+    "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#12] 最低版本超出 int32，Agent 与 API 都返回 50001",
+    "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#12] 最低版本合法但缺少数据库，Agent 与 API 都返回 50001",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] POST /v1/agent/sessions 隐私版本过低",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] GET /v1/agent/sessions/current 隐私版本过低",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] GET /v1/agent/sessions/:id/messages 隐私版本过低",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] POST /v1/agent/sessions/:id/messages 隐私版本过低",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] POST /v1/agent/runs/:run_id/cancel 隐私版本过低",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] POST /v1/agent/messages/:message_id/feedback 隐私版本过低",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] POST /v1/agent/messages/:message_id/report 隐私版本过低",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#2] 最新用户级隐私记录为撤回，即使版本达标也返回 10004 privacy",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#3] 最新用户级隐私同意恰好达到最低版本，随后设备级撤回仍放行",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#4] 游客无令牌，调用 Agent 放行且不读库和配置",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#5] 无用户级记录 与 API 同结果",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#5] 最低版本缺失 与 API 同结果",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#5] 最低版本不合法 与 API 同结果",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#5] 读取配置失败 与 API 同结果",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#5] 读取同意记录失败 与 API 同结果",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#6] 非 Agent 路由 GET /v1/me 放行且不读库和配置",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#6] 非 Agent 路由 GET /v1/config 放行且不读库和配置",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#6] 非 Agent 路由 GET /v1/agent-other/sessions 放行且不读库和配置",
+    "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#7] 隐私同意只在记录所属 app 生效",
+    "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#9] stream 先判封禁和注销冷静期，再判隐私最低版本",
+    "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 POST /v1/agent/sessions 返回隐私版本拒绝信封",
+    "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 GET /v1/agent/sessions/current 返回隐私版本拒绝信封",
+    "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 POST /v1/agent/sessions/0199a3b4-5c6d-7e8f-9… 返回隐私版本拒绝信封",
+    "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 GET /v1/agent/sessions/0199a3b4-5c6d-7e8f-9… 返回隐私版本拒绝信封",
+    "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 POST /v1/agent/runs/0199a3b4-5c6d-7e8f-9a0b-… 返回隐私版本拒绝信封",
+    "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 POST /v1/agent/messages/0199a3b4-5c6d-7e8f-9… 返回隐私版本拒绝信封",
+    "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 POST /v1/agent/messages/0199a3b4-5c6d-7e8f-9… 返回隐私版本拒绝信封",
+    "test/spec/identity/agent-privacy-min-version/stream.int.test.ts > [AC-B3-08zi#8] 真实 stream 入口在开关关闭时先判隐私，达标后再返回 30501"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "9e01f55ba64b9b5d086d48f8092ef94a086d12a0",
+      "tree": "1d2cef8cb7d97845448367bbb2b280e30e163f3e",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-22T06:10:58Z",
+      "finished_at": "2026-11-22T06:11:23Z",
+      "red_tests": [
+        "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#11] 同一 app 只读调用者的隐私同意，即使另一用户的记录更新",
+        "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#11] 调用者更新的 agreement 撤回不影响隐私同意",
+        "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#11] server_at 相同的用户级隐私记录按最大 id 判定",
+        "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#12] 最低版本为 0，Agent 与 API 都返回 50001",
+        "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#12] 最低版本为 1.5，Agent 与 API 都返回 50001",
+        "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#12] 最低版本超出 int32，Agent 与 API 都返回 50001",
+        "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts > [AC-B3-08zi#12] 最低版本合法但缺少数据库，Agent 与 API 都返回 50001",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] POST /v1/agent/sessions 隐私版本过低",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] GET /v1/agent/sessions/current 隐私版本过低",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] GET /v1/agent/sessions/:id/messages 隐私版本过低",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] POST /v1/agent/sessions/:id/messages 隐私版本过低",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] POST /v1/agent/runs/:run_id/cancel 隐私版本过低",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] POST /v1/agent/messages/:message_id/feedback 隐私版本过低",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#1] POST /v1/agent/messages/:message_id/report 隐私版本过低",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#2] 最新用户级隐私记录为撤回，即使版本达标也返回 10004 privacy",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#3] 最新用户级隐私同意恰好达到最低版本，随后设备级撤回仍放行",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#4] 游客无令牌，调用 Agent 放行且不读库和配置",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#5] 无用户级记录 与 API 同结果",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#5] 最低版本缺失 与 API 同结果",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#5] 最低版本不合法 与 API 同结果",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#5] 读取配置失败 与 API 同结果",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#5] 读取同意记录失败 与 API 同结果",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#6] 非 Agent 路由 GET /v1/me 放行且不读库和配置",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#6] 非 Agent 路由 GET /v1/config 放行且不读库和配置",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#6] 非 Agent 路由 GET /v1/agent-other/sessions 放行且不读库和配置",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts > [AC-B3-08zi#7] 隐私同意只在记录所属 app 生效",
+        "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#9] stream 先判封禁和注销冷静期，再判隐私最低版本",
+        "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 POST /v1/agent/sessions 返回隐私版本拒绝信封",
+        "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 GET /v1/agent/sessions/current 返回隐私版本拒绝信封",
+        "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 POST /v1/agent/sessions/0199a3b4-5c6d-7e8f-9… 返回隐私版本拒绝信封",
+        "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 GET /v1/agent/sessions/0199a3b4-5c6d-7e8f-9… 返回隐私版本拒绝信封",
+        "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 POST /v1/agent/runs/0199a3b4-5c6d-7e8f-9a0b-… 返回隐私版本拒绝信封",
+        "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 POST /v1/agent/messages/0199a3b4-5c6d-7e8f-9… 返回隐私版本拒绝信封",
+        "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts > [AC-B3-08zi#10] 真实 stream 入口 POST /v1/agent/messages/0199a3b4-5c6d-7e8f-9… 返回隐私版本拒绝信封",
+        "test/spec/identity/agent-privacy-min-version/stream.int.test.ts > [AC-B3-08zi#8] 真实 stream 入口在开关关闭时先判隐私，达标后再返回 30501"
+      ],
+      "expected": [
+        "test/spec/identity/agent-privacy-min-version/checks-more.int.test.ts",
+        "test/spec/identity/agent-privacy-min-version/checks.int.test.ts",
+        "test/spec/identity/agent-privacy-min-version/stream-more.int.test.ts",
+        "test/spec/identity/agent-privacy-min-version/stream.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "eccc120286e0e5644061c0dc693b8c34268de070ff8d68a0a6cac071074a96fd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ac90905180b4a1822ed056e5e45d6e97c48e9939",
+    "specs": "b51a9ab39a98d66fd7a68dae3670b0658b1efa0e"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B3-08zi",
+  "risk_note": "RV2 (identity privacy-consent + agent stream entry + app.module). 规划 11-12 A8 后一半, BR-ID-01 ⑦: /v1/agent/* now pass stage ⑦ before BR-AI-23 — a logged-in caller whose newest user-level privacy row is below legal.privacy.min_version (or accepted=false) gets 10004 consent_type=privacy before 30501; guests are not judged (BR-ID-13); no row / missing / invalid min_version / read failure behave exactly as the api guard (D10-2488). Placement 甲′ (D10-2509): the stream RiskModule lists stay ⑥-only (frozen [AC-B1-15m#1]); ⑦ runs in agent/stream/mount/controller.ts #handle (all 7 routes), after ④a→⑤→⑥→⑬ and before BR-AI-23 ①, calling the same judgement as createPrivacyConsentChecks (privacy-consent.ts only gained the shared export; api behaviour unchanged, frozen privacy-min-version tests green). Premise unit test apps/api/src/app.module.stream.test.ts pins that the stream ⑬ has no rules (noRateLimits); reverse check in a one-off worktree (groupFor → a group) turned it red (D10-2510 / D10-2511). Test machine, same tree a8cf9076216d (head 4ea15589e4d8): ① fast exit 0; ② test:int 7 segments via verify-sharded.sh, all exit 0, 2194 files / 19921 tests (scope fast+test:int); ③④ --browser (incl. build-smoke) exit 0; ⑤ db:check not run on the test machine (no db/ or migration change, no entry) — left to CI. RunGuard and the contract are out of scope (FU-AGENT-PRIVACY-ORDER-DOC).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "money",
+      "checklist_complete": true,
+      "note": "RV2 → money review (codex-run refuses general for RV2; D10-2537). No money arithmetic in scope; the checklist was filled with 不适用 where it does not apply, app_id and concurrency checked. r1 pass, no findings. Must-check D10-2488 ⑤: api entry behaviour for login-level routes unchanged."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Fresh independent Claude via tools/agent/claude-run.sh (Codex wrote the tests). r1 fail (3 S1 + 1 S2: ⑤⑥ before ⑦, all 7 routes, same read as the api guard, parity rows) → Codex attempt 2 appended two files → r2 incremental pass. A one-line type-import fix of stream-more.int.test.ts (@couli/contracts-ts → relative path, tsc TS2307) was made mechanically by a fresh independent Claude, not counted (D10-2522)."
+  }
+}
