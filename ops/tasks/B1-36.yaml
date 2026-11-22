@@ -8,8 +8,8 @@ type: impl
 # 规则测试覆盖准入、到期过滤、新增运营位的外链拒收与首页原有类型外链照旧；me 页为空时返回空数组。
 # 2026-11-22 补丁 1（be）：配置键 search.default_word 由前置 B1-36a 登记（deps 加）；四个 /admin/v1/search/* 操作现为 x-implementation: planned，
 # 本单只去掉这四处标记并重生成（照 B2-02x / B2-02u 先例，paths 加契约一行与生成物）；「me 为空」以契约为准：无已发布版本 30701，已发布空版本 sections: []。
-# 2026-11-22 补丁 2（be，先红 1 实测）：app.pages / app.page_versions 的 page_key 检查约束（0039）只收 home|custom:*，存 me / search 库报错；本单加一条迁移把两条约束放宽到契约同一正则
-# ^(home|me|search|custom:[a-z0-9_-]{1,57})$（NOT VALID + VALIDATE），不动别的列；冻结库测试 [AC-F1-09a#6] 无效清单不含 me / search，不用改。迁移号 land 时现取，schema.sql 与 db.gen.ts 由 db:snapshot 生成。
+# 2026-11-22 补丁 2（be，先红 1 实测）：app.pages / app.page_versions 的 page_key 检查约束（0039）只收 home|custom:*，存 me / search 库报错；本单加一条迁移把两条约束放宽到契约同一正则 ^(home|me|search|custom:[a-z0-9_-]{1,57})$（NOT VALID + VALIDATE），不动别的列；冻结库测试 [AC-F1-09a#6] 无效清单不含 me / search，不用改。迁移号 land 时现取，schema.sql 与 db.gen.ts 由 db:snapshot 生成。
+# 补丁 3（2026-11-22，be，实现 r1 测试机实测）：冻结的 [AC-CT-27#15] 断言四个 /admin/v1/search/* 仍是 planned，与本单去 planned（D10-2526）冲突，登 modify_existing（只反转 planned 两行期望），test_paths 加该文件。
 refs: [BR-TEXT-28, BR-TEXT-29, BR-TEXT-30]
 refs_hash:
   BR-TEXT-28: b63875b517fd
@@ -31,6 +31,15 @@ paths:
   - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/content/operation-slots/**'
+  - 'test/spec/contracts/operation-slots/openapi.test.ts'
+modify_existing:
+  - file: 'test/spec/contracts/operation-slots/openapi.test.ts'
+    test: '[AC-CT-27#15] 新的热词与直达后台接口登记为 planned（由 B1-36 实现），并进了生成的 planned 清单；用户侧 getSearchHotWords 不变'
+    retitle_to: '[AC-CT-27#15] 热词与直达后台接口已由 B1-36 实现：不再登记为 planned，也不在生成的 planned 清单；用户侧 getSearchHotWords 不变'
+    reason: rule_change
+    br: [BR-TEXT-28]
+    ruling: D10-2526
+    note: 'CT-27 把四个操作登记为 planned、注明由 B1-36 实现；本单实现后去 planned（补丁 1、D10-2526）。只改两行期望：x-implementation 由 planned 改为不存在、planned 清单由含改为不含；找操作、getSearchHotWords 免登录与不在 planned 清单的断言一字不动。'
 impl: claude
 tester: claude-independent
 accept:
