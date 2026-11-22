@@ -632,7 +632,7 @@ api / stream / worker 三个进程把 OpenTelemetry 链路以 OTLP/HTTP 导出�
 - 转发器把 `/finance` 发到财务群、`/oncall` 发到值班群；群消息只带告警名、级别、firing / resolved、开始与恢复时间（+08:00）和 summary；summary 里的链接、手机号、证件号、卡号、收款账号、token 一律去掉（与应用日志同一口径），不截留部分号码。
 - 每次推送 5 秒超时；失败（网络、超时、HTTP 错误，或 HTTP 200 但 errcode 不为 0）最多重试 3 次（间隔 1、2、4 秒）；仍失败时回 502，Alertmanager 稍后会再投一次。
 - 宕机规则（`outage.yaml`）：api / worker / admin 抓取失败（`up == 0`）持续 2 分钟；PostgreSQL 连不上（`pg_up == 0`）持续 2 分钟；五个容器任一不健康（`couli_container_healthy == 0`）持续 2 分钟；任一容器 5 分钟没有新的健康样本（推送定时器停了）。Redis 连不上仍只有 `couli.yaml` 的 CouliRedisDown 一条。宕机告警都是运维告警，夜里静默。
-- 淘宝订单同步水位落后（CouliSyncWatermarkLag）不静默；正文写明平台，并提示「若淘宝授权已过期，属预期，到后台重新授权即恢复」。
+- 淘宝订单同步水位落后（CouliSyncWatermarkLag）不带 `fund` 标签，是运维告警：只发 oncall 组，22:00–08:00（+08:00）同样静默；夜里持续到 08:00 仍未恢复的，在静默结束后的下一个分组周期（30 分钟内）发到值班群。正文写明平台，并提示「若淘宝授权已过期，属预期，到后台重新授权即恢复」。
 
 ### 9.5 怎么证明它是好的
 
