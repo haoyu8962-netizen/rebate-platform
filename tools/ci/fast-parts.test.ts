@@ -159,6 +159,66 @@ it(
   CLI_TIMEOUT,
 );
 
+it('the two test steps are templates: the package and the shard count come from ci.yml (r6)', () => {
+  const unitOf = (p: string) => `pnpm exec turbo run test --env-mode=loose --filter='!${p}'`;
+  const specOf = (i: number, n: number, p: string) =>
+    `pnpm --filter ${p} run test --shard=${String(i)}/${String(n)}`;
+  const ciFor = (p: string, n: number) =>
+    workflow(
+      job('verify-unit', ...TESTED, run('pnpm install --frozen-lockfile'), run(unitOf(p))),
+      ...Array.from({ length: n }, (_, k) =>
+        job(`verify-spec-${String(k + 1)}`, run(specOf(k + 1, n, p))),
+      ),
+    );
+  // A fixture package name and 3 shards pass, the parts follow them.
+  for (const p of ['@fixture/rules', 'rules', 'a.b_c-d']) {
+    expect(readFastParts(ciFor(p, 3), pkg(FAST)), p).toEqual({
+      n: 3,
+      parts: [
+        { id: 'base', commands: ['pnpm run typecheck', unitOf(p), 'pnpm run guard:static'] },
+        { id: 'spec-1', commands: [specOf(1, 3, p)] },
+        { id: 'spec-2', commands: [specOf(2, 3, p)] },
+        { id: 'spec-3', commands: [specOf(3, 3, p)] },
+      ],
+    });
+  }
+  // A package name with a blank, a quote, `;`, a backslash or `&` is not in the list.
+  for (const p of [
+    '@fixture/ru les',
+    "@fixture/ru'les",
+    '@fixture/ru"les',
+    '@fixture/ru;les',
+    '@fixture/ru\\les',
+    '@fixture/ru&les',
+    '@Fixture/rules',
+    '@fixture/rules/extra',
+  ]) {
+    const good = ciFor('@fixture/rules', 3);
+    const unitBad = good.replace(unitOf('@fixture/rules'), unitOf(p));
+    expect(() => readFastParts(unitBad, pkg(FAST)), p).toThrow(/^job verify-unit: /);
+    const specBad = good.replace(specOf(2, 3, '@fixture/rules'), specOf(2, 3, p));
+    expect(() => readFastParts(specBad, pkg(FAST)), p).toThrow(/^job verify-spec-2: /);
+  }
+  // Shard numbers: positive, no leading 0, and i the job's own.
+  const good = ciFor('@fixture/rules', 3);
+  for (const shard of ['02/3', '2/03', '0/3', '2/0', '1/3', '2/3/4', '2/ 3', '+2/3']) {
+    const bad = good.replace('--shard=2/3', `--shard=${shard}`);
+    expect(() => readFastParts(bad, pkg(FAST)), shard).toThrow(/^job verify-spec-2: /);
+  }
+  // Holes do not let the fixed text change around them.
+  for (const [from, to] of [
+    ["--filter='!", "--filter= '!"],
+    ['--env-mode=loose', '--env-mode=strict'],
+    ["'!@fixture/rules'", "'!@fixture/rules' --affected"],
+  ] as const) {
+    const bad = good.replace(from, to);
+    expect(() => readFastParts(bad, pkg(FAST)), to).toThrow(/^job verify-unit: /);
+  }
+  // Both templates pass, but the packages differ: the set check refuses it (D10-2504).
+  const mixed = good.replace(specOf(2, 3, '@fixture/rules'), specOf(2, 3, '@fixture/other'));
+  expect(() => readFastParts(mixed, pkg(FAST))).toThrow(/verify-unit leaves out @fixture\/rules/);
+});
+
 it('rejects a mismatched quote, an empty shard count and a workflow without jobs', () => {
   const bad = [
     CI.replace(UNIT, `pnpm exec turbo run test --env-mode=loose --filter='!@couli/spec-tests"`),

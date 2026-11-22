@@ -19,7 +19,8 @@
 // else; (3) every spec command is `pnpm --filter <P> run test --shard=<i>/<N>` with that same <P>,
 // one per i in 1..N, one N, the job named after its i; (4) every `run:` step of verify-unit and
 // verify-spec-<i> is, as written, one of the trusted list below (TESTED_BLOCK, INSTALL_RUN,
-// UNIT_RUNS, the spec command with its i): any other block scalar, a continued line, a backslash, `;`, `&&`,
+// UNIT_RUNS verbatim; the two test templates whole, holes <P> / <i> / <N> only of their strict
+// shapes, r6): any other block scalar, a continued line, a backslash, `;`, `&&`,
 // an env prefix or any step not in the list throws, naming the job and the step (D10-2548). Anything
 // else throws too (exit 2 on the command line).
 //
@@ -203,7 +204,8 @@ function isClosedQuoted(value: string): boolean {
 
 /**
  * The trusted list (D10-2548, approvals 152): every `run:` step of the jobs verify-unit and
- * verify-spec-<i> in .github/workflows/ci.yml, verbatim. `run:` values are compared as written
+ * verify-spec-<i> in .github/workflows/ci.yml, verbatim except for the holes of the two test
+ * templates below. `run:` values are compared as written
  * (see RunStep): no unquoting, no joining of continued lines, no removal of backslashes or blanks.
  */
 const TESTED_BLOCK = [
@@ -212,19 +214,45 @@ const TESTED_BLOCK = [
   'echo "$tree" > "$RUNNER_TEMP/verified-tree.txt"',
 ].join('\n');
 const INSTALL_RUN = 'pnpm install --frozen-lockfile';
-const UNIT_TEST_RUN = "pnpm exec turbo run test --env-mode=loose --filter='!@couli/spec-tests'";
-const UNIT_RUNS = ['pnpm build', UNIT_TEST_RUN, 'pnpm --filter @couli/api run smoke:entries'];
-const SPEC_RUN_PREFIX = (i: number) =>
-  `pnpm --filter @couli/spec-tests run test --shard=${String(i)}/`;
+const UNIT_RUNS = ['pnpm build', 'pnpm --filter @couli/api run smoke:entries'];
+
+/**
+ * The two test commands are templates with holes (r6, D10-2572): `<P>` a package name of the
+ * strict shape below (no blanks, quotes, `;`, backslashes, `&` or other shell syntax), `<i>` and
+ * `<N>` positive integers without a leading 0. Everything else is fixed text, escaped literally;
+ * a step must match a whole template, as written. Which <P> and N the parts use is then derived
+ * and cross-checked in readFastParts (D10-2504).
+ */
+const PACKAGE_HOLE = '@?[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?';
+const COUNT_HOLE = '[1-9][0-9]*';
+const UNIT_TEST_TEMPLATE = "pnpm exec turbo run test --env-mode=loose --filter='!<P>'";
+const SPEC_TEST_TEMPLATE = 'pnpm --filter <P> run test --shard=<i>/<N>';
+
+/** An anchored regex for a template: fixed text escaped, each hole one capture group. */
+function templateRegex(template: string): RegExp {
+  const source = template
+    .split(/(<P>|<i>|<N>)/)
+    .map((piece) => {
+      if (piece === '<P>') return `(${PACKAGE_HOLE})`;
+      if (piece === '<i>' || piece === '<N>') return `(${COUNT_HOLE})`;
+      return piece.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&');
+    })
+    .join('');
+  return new RegExp(`^${source}$`);
+}
+const UNIT_TEST_RUN = templateRegex(UNIT_TEST_TEMPLATE);
+const SPEC_TEST_RUN = templateRegex(SPEC_TEST_TEMPLATE);
 
 /** Whether a step is in the trusted list for the job (verify-unit, or verify-spec-<specIndex>). */
 function isTrusted(step: RunStep, specIndex: number | null): boolean {
   if (step.header === '|' && step.body === TESTED_BLOCK) return true;
   if (step.body !== null) return false;
   if (step.header === INSTALL_RUN) return true;
-  if (specIndex === null) return UNIT_RUNS.includes(step.header);
-  const prefix = SPEC_RUN_PREFIX(specIndex);
-  return step.header.startsWith(prefix) && /^[1-9][0-9]*$/.test(step.header.slice(prefix.length));
+  if (specIndex === null) {
+    return UNIT_RUNS.includes(step.header) || UNIT_TEST_RUN.test(step.header);
+  }
+  const m = SPEC_TEST_RUN.exec(step.header);
+  return m !== null && m[2] === String(specIndex);
 }
 
 /**
