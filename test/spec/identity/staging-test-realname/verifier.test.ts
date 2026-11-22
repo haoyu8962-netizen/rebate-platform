@@ -11,8 +11,8 @@ import {
   PROVIDER,
   ROOT,
   auditLines,
-  countWarnings,
   expectAudit,
+  expectCountWarning,
   expectHardOff,
   expectNoLeak,
   memoryLogger,
@@ -135,7 +135,7 @@ it('[AC-B1-13n#2] 会员侧核验器装配：staging 配了名单 → 名单内�
   const listed = userIds(3) as [string, string, string];
   const verifier = await build({ appEnv: 'staging', stagingTestRealnameUserIds: listed }, logger);
   expect(verifier).not.toBeNull();
-  expect(countWarnings(lines, listed.length).length).toBeGreaterThan(0);
+  expectCountWarning(lines, listed.length);
   expectNoLeak(lines.join('\n'), listed);
   expect(await verifier!.verify(verification(APP, listed[2], ID))).toEqual({
     outcome: 'match',

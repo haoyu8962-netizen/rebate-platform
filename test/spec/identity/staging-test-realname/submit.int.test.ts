@@ -21,10 +21,12 @@ import {
   OTHER_NAME,
   PROVIDER,
   auditLines,
-  countWarnings,
   expectAudit,
+  expectCountWarning,
   expectNoLeak,
+  listOf,
   residentId,
+  stagingApiConfig,
   userId,
   userIds,
   wrongCheckDigit,
@@ -36,11 +38,15 @@ const LISTED = [HIT, CHECKS, NO_CONSENT];
 
 let database: TestDatabase;
 let server: TestRedis;
+let staged: Readonly<Record<string, unknown>>;
 let kit: Kit;
 beforeAll(async () => {
   database = await createTestDatabase();
   server = await acquireTestRedis();
-  kit = await open(database, server, LISTED);
+  // What the real api entry reads on a staging node with the list (bootstrap.ts: loadConfig(env,
+  // 'api')); the member-side verifier is assembled from this result, not from a hand-made list.
+  staged = stagingApiConfig(LISTED) as unknown as Readonly<Record<string, unknown>>;
+  kit = await open(database, server, staged);
 }, 180_000);
 afterAll(async () => {
   try {
@@ -75,7 +81,11 @@ it('[AC-B1-13n#3] staging 装配下会员实名提交：名单内 user_id 走完
   const hit = await fixture(kit, HIT);
   const appId = hit.appId;
 
-  // 1. A listed user_id: verified under the staging test identity, one audit line.
+  // 1. The api entry's loadConfig kept the list it was given, and that list was assembled.
+  expect(staged['appEnv']).toBe('staging');
+  expect([...(listOf(staged) ?? [])].sort()).toEqual([...LISTED].sort());
+
+  // A listed user_id: verified under the staging test identity, one audit line.
   const verified = await hit.submit({ name: NAME, id_no: hitId });
   responses.push(verified);
   const data = envelope(kit, verified, 0).data;
@@ -92,7 +102,7 @@ it('[AC-B1-13n#3] staging 装配下会员实名提交：名单内 user_id 走完
   expectAudit(auditLines(kit.lines)[0], appId, HIT);
 
   // Enabled at startup: a warn with the count only.
-  expect(countWarnings(kit.startup, LISTED.length).length).toBeGreaterThan(0);
+  expectCountWarning(kit.startup, LISTED.length);
   expectNoLeak(kit.startup.join('\n'), LISTED);
 
   // 2. A user_id outside the list: 50301 as before, never counted (no 30410), nothing stored.

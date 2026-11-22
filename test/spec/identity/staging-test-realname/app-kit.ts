@@ -1,7 +1,8 @@
 // B1-13n end-to-end kit: the real AppModule over the test database and Redis (as B1-13d's realname
-// kit), with one difference: identity's member-side REALNAME_VERIFIER provider is handed the
-// configuration of a staging node (APP_ENV=staging, STAGING_TEST_REALNAME_USER_IDS = `listed`).
-// Nothing replaces the verifier itself. The rest of the AppModule stays APP_ENV=test: a whole
+// kit), with one difference: identity's member-side REALNAME_VERIFIER provider is handed what
+// loadConfig(env, 'api') of a staging node returned (`staged`: its appEnv and its list of
+// STAGING_TEST_REALNAME_USER_IDS, as the real api entry would have them). Nothing replaces the
+// verifier itself. The rest of the AppModule stays APP_ENV=test: a whole
 // staging AppModule needs KMS and node files that the test machine does not have.
 // @couli/db/testing is imported only by the integration test, never by this kit.
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
@@ -79,11 +80,14 @@ function tokenOf(token: unknown): unknown {
   return token;
 }
 
-/** The provider with its APP_CONFIG argument replaced by a staging node's configuration. */
+/**
+ * The provider with its APP_CONFIG argument given the appEnv and the list of `staged` (the
+ * configuration loadConfig(env, 'api') returned for a staging node).
+ */
 function stagedProvider(
   provider: ProviderShape,
   configToken: unknown,
-  listed: readonly string[],
+  staged: Readonly<Record<string, unknown>>,
 ): ProviderShape {
   const at = (provider.inject ?? []).findIndex((token) => tokenOf(token) === configToken);
   expect(at, 'REALNAME_VERIFIER reads APP_CONFIG').toBeGreaterThanOrEqual(0);
@@ -91,18 +95,22 @@ function stagedProvider(
   return {
     ...provider,
     useFactory: (...args: unknown[]) => {
-      const staged = [...args];
-      staged[at] = {
+      const replaced = [...args];
+      replaced[at] = {
         ...(args[at] as Record<string, unknown>),
-        appEnv: 'staging',
-        stagingTestRealnameUserIds: [...listed],
+        appEnv: staged['appEnv'],
+        stagingTestRealnameUserIds: staged['stagingTestRealnameUserIds'],
       };
-      return factory(...staged);
+      return factory(...replaced);
     },
   };
 }
 
-export async function open(database: TestDatabase, server: TestRedis, listed: readonly string[]) {
+export async function open(
+  database: TestDatabase,
+  server: TestRedis,
+  staged: Readonly<Record<string, unknown>>,
+) {
   const platform = (await import(
     new URL('apps/api/src/modules/platform/index.ts', ROOT).href
   )) as typeof Platform;
@@ -139,7 +147,7 @@ export async function open(database: TestDatabase, server: TestRedis, listed: re
   );
   function stage(provider: unknown): unknown {
     if (!isProvider(provider, tokens.REALNAME_VERIFIER)) return provider;
-    return stagedProvider(provider, platform.APP_CONFIG, listed);
+    return stagedProvider(provider, platform.APP_CONFIG, staged);
   }
   const original = IdentityModule.forRoot.bind(IdentityModule);
   const wiring = vi.spyOn(IdentityModule, 'forRoot').mockImplementation((options) => {

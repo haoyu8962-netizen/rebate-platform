@@ -5,6 +5,7 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import { expect } from 'vitest';
 import { createRootLogger } from '../../../../apps/api/src/modules/platform/logging/logger.ts';
+import { loadConfig } from '../../../../apps/api/src/modules/platform/config/index.ts';
 import type {
   RealnameVerificationInput,
   RealnameVerificationResult,
@@ -32,8 +33,44 @@ export const NOT_STAGING = [
   'staging ',
   '',
 ] as const;
-/** pino fields that are not the line's own (a count is looked for among the others). */
-const BASE_FIELDS = new Set(['level', 'time', 'pid']);
+/**
+ * Fields every pino line carries whatever was logged: pino's own (level, time, pid, hostname, msg,
+ * v), the root logger's base (entry, env, deployVersion) and the `module` binding of a child logger.
+ * The rest of a line are its business fields.
+ */
+const PINO_META = new Set([
+  'level',
+  'time',
+  'pid',
+  'hostname',
+  'msg',
+  'v',
+  'entry',
+  'env',
+  'deployVersion',
+  'module',
+]);
+/** A staging node that loadConfig accepts (B1-01zd: local field keyring by absolute paths). */
+export const STAGING_NODE: Readonly<Record<string, string>> = {
+  APP_ENV: 'staging',
+  FIELD_KEY_PROVIDER: 'local',
+  FIELD_KEYRING_FILE: '/srv/couli/keys/keyring.json',
+  FIELD_MASTER_KEY_FILE: '/srv/couli/keys/master.hex',
+  PRIOR_IDENTITY_KEY_PROVIDER: 'local',
+  PRIOR_IDENTITY_KEYRING_FILE: '/srv/couli/keys/prior-identity-keyring.json',
+  PRIOR_IDENTITY_MASTER_KEY_FILE: '/srv/couli/keys/prior-identity-master.hex',
+};
+
+/** The list an AppConfig keeps (null when absent). */
+export function listOf(config: unknown): readonly string[] | null {
+  const value = (config as Record<string, unknown> | undefined)?.['stagingTestRealnameUserIds'];
+  return (value ?? null) as readonly string[] | null;
+}
+
+/** The staging node with `listed` as the api entry reads it (bootstrap.ts: loadConfig(env, 'api')). */
+export function stagingApiConfig(listed: readonly string[]) {
+  return loadConfig({ ...STAGING_NODE, [USER_IDS_ENV]: listed.join(',') }, 'api');
+}
 
 /** A synthetic lowercase UUID of version 7 (valid for any reading of «a user_id»). */
 export function userId(): string {
@@ -91,29 +128,46 @@ export function otherLines(lines: readonly string[]): string {
   return JSON.stringify(entries(lines).filter((entry) => entry['event'] !== AUDIT_EVENT));
 }
 
-function holds(entry: Record<string, unknown>, count: number): boolean {
-  return Object.entries(entry).some(([key, value]) => !BASE_FIELDS.has(key) && value === count);
+/** The business fields of a pino line (every field but PINO_META). */
+export function businessFields(entry: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(entry).filter(([key]) => !PINO_META.has(key)));
 }
 
-/** The warn lines whose own fields hold `count` (the number of listed user_ids). */
-export function countWarnings(lines: readonly string[], count: number): Record<string, unknown>[] {
+function holds(entry: Record<string, unknown>, count: number): boolean {
+  return Object.values(businessFields(entry)).some((value) => value === count);
+}
+
+/** The warn lines whose business fields hold `count` (the number of listed user_ids). */
+function countWarnings(lines: readonly string[], count: number): Record<string, unknown>[] {
   return entries(lines).filter((entry) => entry['level'] === 40 && holds(entry, count));
 }
 
-/** One audit line of a match: event, app_id, user_id and provider; nothing of the submission. */
+/**
+ * Enabled: a warn whose business fields are exactly one, the number of listed user_ids (`count`);
+ * no warn carrying the count has anything else.
+ */
+export function expectCountWarning(lines: readonly string[], count: number): void {
+  const warnings = countWarnings(lines, count);
+  expect(warnings.length, 'a warn with the number of listed user_ids').toBeGreaterThan(0);
+  for (const warning of warnings) {
+    const fields = businessFields(warning);
+    expect(Object.values(fields), JSON.stringify(Object.keys(fields))).toEqual([count]);
+  }
+}
+
+/** One audit line of a match: exactly event, app_id, user_id and provider as business fields. */
 export function expectAudit(
   entry: Record<string, unknown> | undefined,
   appId: string,
   uid: string,
 ): void {
-  expect(entry).toMatchObject({
+  expect(entry).toBeDefined();
+  expect(businessFields(entry!)).toEqual({
     event: AUDIT_EVENT,
     app_id: appId,
     user_id: uid,
     provider: PROVIDER,
   });
-  expect(entry).not.toHaveProperty('name');
-  expect(entry).not.toHaveProperty('id_no');
 }
 
 /** None of `secrets` is in `text`. */
