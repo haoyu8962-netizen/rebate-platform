@@ -1,0 +1,31 @@
+id: B1-25c
+repo: rebate-platform
+title: 告警送到企业微信群 + 宕机类规则：infra/monitoring 加群机器人转发器（Alertmanager webhook → 群机器人 markdown）、finance / oncall 接收端改指它；补宕机规则组（进程、PG、Redis、五个容器健康）与 exporter 抓取；容器健康由节点 systemd 定时器推指标（D10-2605 / D10-2612）
+type: impl
+# 2026-11-22 ops 入账（编排 D10-2605 取甲、D10-2612 范围同意；保命四件套 a)）。新 staging 是 Pigsty slim，节点已由 ops 装好 VictoriaMetrics 单机 / vmagent / vmalert / couli Alertmanager / pg_exporter / redis_exporter（只听 127.0.0.1）。
+# ① 转发器 infra/monitoring/forwarder/：只用 Node 内置模块；收 Alertmanager webhook（127.0.0.1），按 finance / oncall 转成群机器人 markdown；Webhook 地址只从节点文件读（路径由启动参数给，内容不进仓库、不打印）；
+#   每次推送超时 5 秒、失败最多重试 3 次（退避）；正文只带告警名、级别、firing / resolved、时间、summary，按 platform/logging/redaction 同口径去手机号、证件号、卡号、收款账号、token。
+# ② alertmanager.yml：finance / oncall 两个接收端改指转发器，路由与夜间静默不变；log-sink 保留作本地兜底或删去由实现定。
+# ③ rules 新增宕机组：api / worker / admin 抓取 up == 0、pg_up == 0、redis_up == 0（已有 CouliRedisDown 不重复）、couli_container_healthy == 0 持续 2 分钟、该指标 5 分钟无新样本；scrape 加 pg / redis exporter 两个 127.0.0.1 目标。
+# ④ infra/monitoring/scripts/：容器健康推送脚本 + systemd service / timer（每 60 秒，docker inspect 只读五个 couli-staging-* 容器的健康状态，推 couli_container_healthy{name} 到 vmagent 推送入口；容器里不挂 docker.sock）。
+# ⑤ infra/staging/README.md §9 照新节点改写（组件、端口、文件位置、Webhook 文件、怎么证明它是好的）。不改业务代码、compose 与已有规则。
+refs: [BR-WDR-24]
+refs_hash:
+  BR-WDR-24: 356b5d012a5d
+deps: []
+paths:
+  - 'infra/monitoring/forwarder/**'
+  - 'infra/monitoring/alertmanager/**'
+  - 'infra/monitoring/rules/**'
+  - 'infra/monitoring/scrape/**'
+  - 'infra/monitoring/scripts/**'
+  - 'infra/staging/README.md'
+  - 'ops/tasks/B1-25c.yaml'
+test_paths:
+  - 'test/spec/platform/alerting-wecom/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/platform/alerting-wecom/**'
+status: todo
