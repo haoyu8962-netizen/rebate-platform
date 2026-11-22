@@ -6,16 +6,24 @@ type: impl
 # content：page-config-admin.ts 保存 / 发布校验（准入表、起止时刻、徽标、跳转白名单，违者 20001）；page-reader.ts 支持 page_key me、search，按起止时刻过滤下发；me 页为空时返回空数组。
 # catalog / content：热词与关键词直达的后台增改接口（仍写 search.hot_words、search.keyword_routes 两个配置项）；默认词下发（新配置键由本单登记，冻结注册表用例照 B2-04zo / B2-02ta 先例另开前置 test-change，入账后探针定文件清单）。
 # 规则测试覆盖准入、到期过滤、新增运营位的外链拒收与首页原有类型外链照旧；me 页为空时返回空数组。
+# 2026-11-22 补丁 1（be）：配置键 search.default_word 由前置 B1-36a 登记（deps 加）；四个 /admin/v1/search/* 操作现为 x-implementation: planned，
+# 本单只去掉这四处标记并重生成（照 B2-02x / B2-02u 先例，paths 加契约一行与生成物）；「me 为空」以契约为准：无已发布版本 30701，已发布空版本 sections: []。
 refs: [BR-TEXT-28, BR-TEXT-29, BR-TEXT-30]
 refs_hash:
   BR-TEXT-28: b63875b517fd
   BR-TEXT-29: e67c8270e5e0
   BR-TEXT-30: babc5180aaa0
-deps: [CT-27]
+deps: [CT-27, B1-36a]
 paths:
   - 'apps/api/src/modules/content/**'
   - 'apps/api/src/modules/catalog/**'
   - 'apps/api/src/app.module.ts'
+  - 'contracts/openapi.yaml' # 只去掉 adminGetSearchSettings / adminUpdateSearchHotWords / adminUpdateSearchKeywordRoutes / adminUpdateSearchDefaultWord 的 x-implementation: planned
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
 test_paths:
   - 'test/spec/content/operation-slots/**'
 impl: claude
