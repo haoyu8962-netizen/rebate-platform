@@ -57,6 +57,8 @@
 //   handler routes 'rights.window' / 'punish.window' to jobs/rights-sync.ts (writes only through
 //   that port), and start() also arms the refund / punishment loops (application/rights-sync.ts)
 //   when some governed adapter has listRefunds / listPunishments. Absent or undefined → neither.
+//   B1-04zzab: the punish handler also gets the real pending writer (application/punish-pending.ts
+//   over app.order_sync_pending) for unfrozen / unmapped punish_status rows; assembly reads nothing.
 // - B1-04zzb: the increment scheduler gets orderSources(platform) from the governed adapters
 //   (UnionAdapter.orderSources, else listOrders' presence): a platform without an order source
 //   (taobao without the 大淘客 order source or the slot reader) dispatches nothing that round.
@@ -142,6 +144,7 @@ import { RIGHTS_IMPORT_JOB } from './application/rights-imports.ts';
 import type { RightsCommandPort } from './application/rights-ports.ts';
 import { handleRightsImport } from './jobs/rights-import.ts';
 import { handlePunishWindow, handleRightsWindow } from './jobs/rights-sync.ts';
+import { createPunishPendingRecorder } from './application/punish-pending.ts';
 import { handleManualSyncJob, isManualSyncJob } from './jobs/manual-sync.ts';
 import { createOrderSyncRequestProgress } from './infra/order-sync-requests.ts';
 
@@ -504,6 +507,8 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
           registry: rightsRegistry,
           writer: createRightsSyncWriter({ db, clock, rights: rightsPort }),
           logger,
+          // B1-04zzab (BR-FUND-22 决-06 实测前 A): punish.window's unfrozen / unmapped rows go here.
+          pending: createPunishPendingRecorder({ db }),
         };
   const rightsSync =
     rightsPort === undefined

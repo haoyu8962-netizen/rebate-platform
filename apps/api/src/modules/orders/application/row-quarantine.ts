@@ -41,8 +41,8 @@ export const ROW_INVALID_SETTLED_BY: ReadonlySet<OrderPipelineResult['kind']> = 
   'unchanged',
 ]);
 
-/** 判定与取锁同源：lockOrderKey 用的键文本算得出来才算能作订单键，不另写一份规则。 */
-function isOrderKeyable(platform: string, subOrderId: string): boolean {
+/** 判定与取锁同源：lockOrderKey 用的键文本算得出来才算能作订单键，不另写一份规则（B1-04zzab 的待处理写入同用）。 */
+export function isOrderKeyable(platform: string, subOrderId: string): boolean {
   try {
     orderLockKeyText(platform, subOrderId);
     return true;

@@ -150,6 +150,8 @@ export async function bumpCounter(
 /** order_sync_pending.reason 本模块写的取值（db/schema.sql 的 CHECK；快照相关四个为 B1-08k）。 */
 export type PendingReason =
   | 'UNMAPPED_STATUS'
+  // B1-04zzab: a Taobao punish row reported unfrozen (punish_status '1'; BR-FUND-22 决-06 实测前 A).
+  | 'UNFREEZE_SIGNAL'
   | 'ILLEGAL_TRANSITION'
   | 'NO_RECEIVED_AT'
   | 'SERVICE_FEE_RATE_MISSING'

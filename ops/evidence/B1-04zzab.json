@@ -1,0 +1,168 @@
+{
+  "risk_note": "RV2 orders (B1-04zzab; 08 BR-FUND-22 决-06 实测前 A, BR-FUND-02; 规划/12 §1.3 处罚表; orchestrator D10-2335 (c3), D10-2402, D10-2412, D10-2449). punish.window now branches on punish_status: 0 and a missing field go to the writer as before (the missing ones counted apart); 1 (unfrozen) and any other value are never given to the writer — no order_rights row, no R6 / R8, no ledger entry, no order column touched, an earlier clawback stays — and become an UNFREEZE_SIGNAL / UNMAPPED_STATUS record in app.order_sync_pending with one warn per window and kind. The pending write is the window's own single INSERT … ON CONFLICT on order_sync_pending_open_key behind the sub-order advisory lock (one open record per key; an existing record keeps raw_status, gets this signal's mark appended to detail, order_id filled when it was null, detected_at the later one; the order lookup carries app_id). A window that stops part way warns for the kinds it recorded or failed to record and rethrows the error. Production wiring injects the real recorder; without it these rows still never reach the writer. No amount is computed anywhere on this path; no migration; the order sync's shared writePending is unchanged. One frozen test follows the rule ([AC-B1-04zza#32], owner agreed 2026-11-21, D10-2425; record below). Known limits, ruled out of this task: the reverse order of two evidence sources on one key and the order sync's repeat judgement on a record that carries a punish mark (FU-PENDING-MERGE-ORDER-SYNC-SIDE, D10-2468); mark values cut at 64 code points and detail capped at 2000 characters; the monitoring rule for the two warns (FU-B1-04ZZAB-UNFREEZE-ALERT-RULE); the PAID / ESTIMATED rule-test gap of spec-test r3 (FU-B1-04ZZAB-SPEC-R3-GAP, right after this merge; checked in code by the money review). Test machine on the rebased head ffee7f0c72e4 (tree a7d3457ebae6): verify-sharded-summary green with scope fast+test:int+test:browser (verify:fast exit 0 on its second run — the first hit the 3600 s limit while sharing the machine with this lane's other segments, no failing output; test:int segments 1-6 and rest all exit 0, 2193 files / 19904 tests = int_files_total; --browser exit 0 incl. build-smoke), not_covered test:smoke and db:check (not run on the test machine; this task has no migration). The required CI checks are the full verification.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Codex via tools/agent/codex-run.sh. r1 full: fail (3 S1 + 2 S2, all on evidence keeping and warns of the pending record; the no-clawback core confirmed) -> implementation r2; r2: fail (1 S1: no warn when the first pending write of a kind fails; 2 S2 kept as known limits / FU-PENDING-MERGE-ORDER-SYNC-SIDE) -> implementation r3 (that one condition); r3: pass, no findings, checklist ok / n/a (couli-runs/B1-04zzab/review-money-r1..r3-codex.json). The reviewed tree f400e665 is the committed implementation."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6.2-sol",
+    "rounds": 4,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": false,
+    "note": "Rule tests by a fresh independent Claude (claude-opus-5-5 via tools/agent/claude-run.sh, ledger tester claude-independent), three rounds. Codex spec-test r1 fail (7 S1) -> round 2; r2 fail (2 S1) -> round 3; r3 (one-off increment, approvals 135) fail (1 S1: PAID / ESTIMATED orders not covered by the worker test); r4 (one-off, approvals 140, D10-2449) pass with no findings: that gap is out_of_scope, carried as an implementation requirement and by FU-B1-04ZZAB-SPEC-R3-GAP (couli-runs/B1-04zzab/review-spec-test-r1..r4-codex.json). No red_exempt."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/orders/taobao-rights-sync/handler.test.ts",
+      "test": "[AC-B1-04zza#32] punish.window 取完全部页：每条记 PUNISH / SUCCEEDED，违规单号作去重号，发生时间取同步时刻，不推水位",
+      "retitle_to": "[AC-B1-04zza#32] punish.window 取完全部页：冻结（punish_status 0）的每条记 PUNISH / SUCCEEDED，违规单号作去重号，发生时间取同步时刻，不推水位；解冻（punish_status 1）的不交给写入方（B1-04zzab）",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-04zza#32] punish.window 取完全部页：每条记 PUNISH / SUCCEEDED，违规单号作去重号，发生时间取同步时刻，不推水位', async () => {\n  const first = punishment(1);\n  const second = punishment(2, { punish_status: '1' });\n  const third = punishment(3);\n  const f = fixture({ punishPages: [[first, second], [third]] });\n  const payload = punishWindow();\n  await handlePunishWindow(job(PUNISH_JOB, payload), f.handler);\n\n  expect(f.listPunishments).toHaveBeenCalledTimes(2);\n  const [win, ctx, opt] = f.listPunishments.mock.calls[0]!;\n  expect(win).toEqual({ from: payload.window_start, to: payload.window_end });\n  expect(ctx).toMatchObject({ appId: APP, purpose: 'order_sync' });\n  expect(opt?.cursor).toBeUndefined();\n  expect(f.listPunishments.mock.calls[1]![2]).toMatchObject({ cursor: 'page-1' });\n\n  const item = (p: typeof first) => ({\n    target: targetOf(p),\n    item: {\n      type: 'PUNISH',\n      status: 'SUCCEEDED',\n      amount_fen: null,\n      deduction_commission_fen: null,\n      occurred_at: new Date(NOW),\n      platform_rights_no: p.punishment_id,\n    },\n  });\n  expect(f.writes()).toEqual([item(first), item(second), item(third)]);\n  expect(f.advance).not.toHaveBeenCalled();\n  expect(f.listRefunds).not.toHaveBeenCalled();\n});",
+      "after": "it('[AC-B1-04zza#32] punish.window 取完全部页：冻结（punish_status 0）的每条记 PUNISH / SUCCEEDED，违规单号作去重号，发生时间取同步时刻，不推水位；解冻（punish_status 1）的不交给写入方（B1-04zzab）', async () => {\n  const first = punishment(1);\n  const second = punishment(2, { punish_status: '1' });\n  const third = punishment(3);\n  const f = fixture({ punishPages: [[first, second], [third]] });\n  const payload = punishWindow();\n  await handlePunishWindow(job(PUNISH_JOB, payload), f.handler);\n\n  expect(f.listPunishments).toHaveBeenCalledTimes(2);\n  const [win, ctx, opt] = f.listPunishments.mock.calls[0]!;\n  expect(win).toEqual({ from: payload.window_start, to: payload.window_end });\n  expect(ctx).toMatchObject({ appId: APP, purpose: 'order_sync' });\n  expect(opt?.cursor).toBeUndefined();\n  expect(f.listPunishments.mock.calls[1]![2]).toMatchObject({ cursor: 'page-1' });\n\n  const item = (p: typeof first) => ({\n    target: targetOf(p),\n    item: {\n      type: 'PUNISH',\n      status: 'SUCCEEDED',\n      amount_fen: null,\n      deduction_commission_fen: null,\n      occurred_at: new Date(NOW),\n      platform_rights_no: p.punishment_id,\n    },\n  });\n  expect(f.writes()).toEqual([item(first), item(third)]);\n  expect(f.advance).not.toHaveBeenCalled();\n  expect(f.listRefunds).not.toHaveBeenCalled();\n});",
+      "mutation": [
+        {
+          "mutant": "实现放回旧规则——即本单规则测试提交本身（任务分支上的 test(spec) 提交 2015a47e8，只有改过的冻结用例、新规则测试与 NotImplemented 骨架，punish.window 仍把窗口里每一行都按处罚交给写入方）。测试机在该提交上跑这个冻结文件（couli-runs/B1-04zzab/tests/4，树 51f9189cd647，24 条）：只红本条、其余 23 条绿；实现落地后的树上该文件全绿（分段全量）。",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-FUND-22"]
+    }
+  ],
+  "task": "B1-04zzab",
+  "spec_commit": "0dfb7afbf1c05c66a70363ed8d183b8394eb1922",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "red_tests": [
+    "test/spec/orders/taobao-punish-unfreeze/clawback.int.test.ts > [AC-B1-04zzab#19] 已因冻结记过 PUNISH 并 CLAWED_BACK（入账后 R8 全额扣回：booked_base_fen、booked_n_fen 清零） 的订单，同一违规单变成解冻：order_rights、订单返利状态与金额列、分录、账户余额逐列不变，不多任何差错单，只多一条待处理",
+    "test/spec/orders/taobao-punish-unfreeze/clawback.int.test.ts > [AC-B1-04zzab#19] 已因冻结记过 PUNISH 并 VOID（入账前 R6 作废：未入账，booked_* 为 null） 的订单，同一违规单变成解冻：order_rights、订单返利状态与金额列、分录、账户余额逐列不变，不多任何差错单，只多一条待处理",
+    "test/spec/orders/taobao-punish-unfreeze/clawback.int.test.ts > [AC-B1-04zzab#20] 同页里的冻结行照旧走写入方，解冻行只进待处理：两张订单互不影响",
+    "test/spec/orders/taobao-punish-unfreeze/clawback.int.test.ts > [AC-B1-04zzab#25] 已因冻结记过 PUNISH 并 CLAWED_BACK（入账后 R8 全额扣回：booked_base_fen、booked_n_fen 清零） 的订单，同一违规单回传 0 / 1 以外的值（2）：同样不补钱、不出差错单，order_rights、订单、分录、余额逐列不变，只多一条 UNMAPPED_STATUS 待处理",
+    "test/spec/orders/taobao-punish-unfreeze/clawback.int.test.ts > [AC-B1-04zzab#25] 已因冻结记过 PUNISH 并 VOID（入账前 R6 作废：未入账，booked_* 为 null） 的订单，同一违规单回传 0 / 1 以外的值（2）：同样不补钱、不出差错单，order_rights、订单、分录、余额逐列不变，只多一条 UNMAPPED_STATUS 待处理",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#1] 冻结（punish_status 0）照旧：交写入方 PUNISH / SUCCEEDED，违规单号作去重号、发生时间取同步时刻、violation_type 原样进 extras；不写待处理",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#2] 解冻（punish_status 1）：不交写入方，交待处理一条 UNFREEZE_SIGNAL（平台、订单号、raw_status 1、detected_at 取注入时钟）",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#3] 解冻告警：一条 warn 级日志带本窗解冻条数，窗口结束日志单独计数，不混进 applied / not_found / unknown_status；日志不带订单号、违规单号、金额",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#4] 装配没注入待处理端口：解冻行仍不交写入方（宁可只留日志，不退回成扣回），告警与计数照旧，不抛错",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#5] 同一页冻结与解冻混排：各走各的；解冻不影响其余行的写入与计数；取页、游标、不推水位、不读维权照旧",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#6] 待处理写入失败：错误外抛（队列重试），不吞掉；重投同一窗口照样交同一条信号、仍不交写入方",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#7] 同一解冻行反复出现（违规接口每 30 分钟回看 30 天）：每次都交待处理端口、都不交写入方，不抛错（同键 open 只一条由库表唯一索引保证）",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#8] punish_status 是 0 / 1 以外的值（\"2\"）：不交写入方（不扣回），待处理 UNMAPPED_STATUS、raw_status 原值，warn 并单独计数",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#8] punish_status 是 0 / 1 以外的值（\"-1\"）：不交写入方（不扣回），待处理 UNMAPPED_STATUS、raw_status 原值，warn 并单独计数",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#9] 0 / 1 以外的值且装配没注入待处理端口：同样不交写入方，告警照旧",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#10] punish_status 缺失（适配器归一后的 null）：照现状按处罚交写入方，窗口结束日志单独计数缺字段条数；带 0 的行不计入",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#11] 解冻、未知值、缺字段、冻结同窗：计数各归各的，写入方只收到冻结与缺字段的行",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#21] 窗口结束时刻 ≠ 注入时钟（03:48 结束的窗 04:00 才执行）：解冻与表外值的 detected_at、冻结与缺字段行的 occurred_at 都取注入时钟",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#22] 待处理写入失败（解冻 行）即停：错误原样外抛，同页其后的冻结行不交写入方、不取下一页；重投后失败前写过的再交一次、没写成的补上，冻结行各交一次",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#22] 待处理写入失败（表外值 行）即停：错误原样外抛，同页其后的冻结行不交写入方、不取下一页；重投后失败前写过的再交一次、没写成的补上，冻结行各交一次",
+    "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#23] 两条 warn 与窗口结束日志不泄露单号：订单号转 Number 打印与原串相同的也查；全部字段值（递归、字符串化与数值化后）不含订单号、违规单号与金额，也没有金额字段",
+    "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#14] 待处理写入（UNFREEZE_SIGNAL）：一条 open 记录，平台、订单号、raw_status 原值、detected_at 取信号时刻；我方有这张订单时 order_id 填它",
+    "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#14] 待处理写入（UNMAPPED_STATUS）：一条 open 记录，平台、订单号、raw_status 原值、detected_at 取信号时刻；我方有这张订单时 order_id 填它",
+    "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#15] 我方没有这张订单（别家推广位）：照样留一条 open 记录，order_id 为 null，不抛错",
+    "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#16] 同一解冻行反复拉取、任务重投：同键 open 只有一条，都不抛错，不交写入方",
+    "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#17] 两个窗口并发处理同一解冻行：仍只有一条 open 记录，两个都不抛错",
+    "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#18] open 记录被处置（resolved）后解冻行再出现：新开一条 open，处置过的那条不动",
+    "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#18] open 记录被处置（dismissed）后解冻行再出现：新开一条 open，处置过的那条不动",
+    "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#26] 去重键含原因：同一 app、平台、子订单先表外值后解冻、先解冻后表外值，两种原因各留一条 open；同一原因重复仍只一条",
+    "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#27] 去重键含原因（经窗口）：一窗里子订单 X 回传 2、Y 回传 1，下一窗 X 回传 1、Y 回传 2：X、Y 各有两条 open（每种原因一条），都不交写入方",
+    "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#29] 并发靠库约束：两个各自独立创建的记录器（各自的连接池，不共享进程内状态）在另一事务占住同键时同时写入，放行后两边都成功、都不抛错、只留一条 open",
+    "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#30] 真实库表：待处理写入失败（解冻 行）即停，其后的冻结行与下一页不动；重投后失败前写过的仍只一条、没写成的补上；窗口结束时刻 ≠ 注入时钟，detected_at 与冻结行 occurred_at 取注入时钟",
+    "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#30] 真实库表：待处理写入失败（表外值 行）即停，其后的冻结行与下一页不动；重投后失败前写过的仍只一条、没写成的补上；窗口结束时刻 ≠ 注入时钟，detected_at 与冻结行 occurred_at 取注入时钟",
+    "test/spec/orders/taobao-punish-unfreeze/wiring.test.ts > [AC-B1-04zzab#12] 生产装配：注入 rightsSync 后 punish.window 的处理器依赖带待处理写入端口",
+    "test/spec/orders/taobao-punish-unfreeze/wiring.test.ts > [AC-B1-04zzab#13] 生产装配的待处理写入是真实的：一条解冻信号写进 app.order_sync_pending（同键 open 冲突由唯一索引处理），装配本身不读库",
+    "test/spec/orders/taobao-punish-unfreeze/wiring.test.ts > [AC-B1-04zzab#28] 生产装配的待处理写入靠库约束去重：INSERT 的冲突目标是完整的 open 键 (app_id, platform, sub_order_id, reason) 且带 status = open 条件；写入前不另查 order_sync_pending（解冻与表外值都看）",
+    "test/spec/orders/taobao-punish-unfreeze/worker.int.test.ts > [AC-B1-04zzab#24] 生产 worker 注册的 punish.window 处理器实际消费两页（冻结、解冻、表外值）：同一次任务里解冻与表外值各写一条参数正确的 open 待处理、各发一条 warn，冻结交给写入方，解冻与表外值不交"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "0dfb7afbf1c05c66a70363ed8d183b8394eb1922",
+      "tree": "9bdc69340041cf475100934ade050e136cd79c66",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-22T03:44:47Z",
+      "finished_at": "2026-11-22T03:45:01Z",
+      "red_tests": [
+        "test/spec/orders/taobao-punish-unfreeze/clawback.int.test.ts > [AC-B1-04zzab#19] 已因冻结记过 PUNISH 并 CLAWED_BACK（入账后 R8 全额扣回：booked_base_fen、booked_n_fen 清零） 的订单，同一违规单变成解冻：order_rights、订单返利状态与金额列、分录、账户余额逐列不变，不多任何差错单，只多一条待处理",
+        "test/spec/orders/taobao-punish-unfreeze/clawback.int.test.ts > [AC-B1-04zzab#19] 已因冻结记过 PUNISH 并 VOID（入账前 R6 作废：未入账，booked_* 为 null） 的订单，同一违规单变成解冻：order_rights、订单返利状态与金额列、分录、账户余额逐列不变，不多任何差错单，只多一条待处理",
+        "test/spec/orders/taobao-punish-unfreeze/clawback.int.test.ts > [AC-B1-04zzab#20] 同页里的冻结行照旧走写入方，解冻行只进待处理：两张订单互不影响",
+        "test/spec/orders/taobao-punish-unfreeze/clawback.int.test.ts > [AC-B1-04zzab#25] 已因冻结记过 PUNISH 并 CLAWED_BACK（入账后 R8 全额扣回：booked_base_fen、booked_n_fen 清零） 的订单，同一违规单回传 0 / 1 以外的值（2）：同样不补钱、不出差错单，order_rights、订单、分录、余额逐列不变，只多一条 UNMAPPED_STATUS 待处理",
+        "test/spec/orders/taobao-punish-unfreeze/clawback.int.test.ts > [AC-B1-04zzab#25] 已因冻结记过 PUNISH 并 VOID（入账前 R6 作废：未入账，booked_* 为 null） 的订单，同一违规单回传 0 / 1 以外的值（2）：同样不补钱、不出差错单，order_rights、订单、分录、余额逐列不变，只多一条 UNMAPPED_STATUS 待处理",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#1] 冻结（punish_status 0）照旧：交写入方 PUNISH / SUCCEEDED，违规单号作去重号、发生时间取同步时刻、violation_type 原样进 extras；不写待处理",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#2] 解冻（punish_status 1）：不交写入方，交待处理一条 UNFREEZE_SIGNAL（平台、订单号、raw_status 1、detected_at 取注入时钟）",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#3] 解冻告警：一条 warn 级日志带本窗解冻条数，窗口结束日志单独计数，不混进 applied / not_found / unknown_status；日志不带订单号、违规单号、金额",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#4] 装配没注入待处理端口：解冻行仍不交写入方（宁可只留日志，不退回成扣回），告警与计数照旧，不抛错",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#5] 同一页冻结与解冻混排：各走各的；解冻不影响其余行的写入与计数；取页、游标、不推水位、不读维权照旧",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#6] 待处理写入失败：错误外抛（队列重试），不吞掉；重投同一窗口照样交同一条信号、仍不交写入方",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#7] 同一解冻行反复出现（违规接口每 30 分钟回看 30 天）：每次都交待处理端口、都不交写入方，不抛错（同键 open 只一条由库表唯一索引保证）",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#8] punish_status 是 0 / 1 以外的值（\"2\"）：不交写入方（不扣回），待处理 UNMAPPED_STATUS、raw_status 原值，warn 并单独计数",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#8] punish_status 是 0 / 1 以外的值（\"-1\"）：不交写入方（不扣回），待处理 UNMAPPED_STATUS、raw_status 原值，warn 并单独计数",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#9] 0 / 1 以外的值且装配没注入待处理端口：同样不交写入方，告警照旧",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#10] punish_status 缺失（适配器归一后的 null）：照现状按处罚交写入方，窗口结束日志单独计数缺字段条数；带 0 的行不计入",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#11] 解冻、未知值、缺字段、冻结同窗：计数各归各的，写入方只收到冻结与缺字段的行",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#21] 窗口结束时刻 ≠ 注入时钟（03:48 结束的窗 04:00 才执行）：解冻与表外值的 detected_at、冻结与缺字段行的 occurred_at 都取注入时钟",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#22] 待处理写入失败（解冻 行）即停：错误原样外抛，同页其后的冻结行不交写入方、不取下一页；重投后失败前写过的再交一次、没写成的补上，冻结行各交一次",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#22] 待处理写入失败（表外值 行）即停：错误原样外抛，同页其后的冻结行不交写入方、不取下一页；重投后失败前写过的再交一次、没写成的补上，冻结行各交一次",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts > [AC-B1-04zzab#23] 两条 warn 与窗口结束日志不泄露单号：订单号转 Number 打印与原串相同的也查；全部字段值（递归、字符串化与数值化后）不含订单号、违规单号与金额，也没有金额字段",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#14] 待处理写入（UNFREEZE_SIGNAL）：一条 open 记录，平台、订单号、raw_status 原值、detected_at 取信号时刻；我方有这张订单时 order_id 填它",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#14] 待处理写入（UNMAPPED_STATUS）：一条 open 记录，平台、订单号、raw_status 原值、detected_at 取信号时刻；我方有这张订单时 order_id 填它",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#15] 我方没有这张订单（别家推广位）：照样留一条 open 记录，order_id 为 null，不抛错",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#16] 同一解冻行反复拉取、任务重投：同键 open 只有一条，都不抛错，不交写入方",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#17] 两个窗口并发处理同一解冻行：仍只有一条 open 记录，两个都不抛错",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#18] open 记录被处置（resolved）后解冻行再出现：新开一条 open，处置过的那条不动",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#18] open 记录被处置（dismissed）后解冻行再出现：新开一条 open，处置过的那条不动",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#26] 去重键含原因：同一 app、平台、子订单先表外值后解冻、先解冻后表外值，两种原因各留一条 open；同一原因重复仍只一条",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#27] 去重键含原因（经窗口）：一窗里子订单 X 回传 2、Y 回传 1，下一窗 X 回传 1、Y 回传 2：X、Y 各有两条 open（每种原因一条），都不交写入方",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#29] 并发靠库约束：两个各自独立创建的记录器（各自的连接池，不共享进程内状态）在另一事务占住同键时同时写入，放行后两边都成功、都不抛错、只留一条 open",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#30] 真实库表：待处理写入失败（解冻 行）即停，其后的冻结行与下一页不动；重投后失败前写过的仍只一条、没写成的补上；窗口结束时刻 ≠ 注入时钟，detected_at 与冻结行 occurred_at 取注入时钟",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts > [AC-B1-04zzab#30] 真实库表：待处理写入失败（表外值 行）即停，其后的冻结行与下一页不动；重投后失败前写过的仍只一条、没写成的补上；窗口结束时刻 ≠ 注入时钟，detected_at 与冻结行 occurred_at 取注入时钟",
+        "test/spec/orders/taobao-punish-unfreeze/wiring.test.ts > [AC-B1-04zzab#12] 生产装配：注入 rightsSync 后 punish.window 的处理器依赖带待处理写入端口",
+        "test/spec/orders/taobao-punish-unfreeze/wiring.test.ts > [AC-B1-04zzab#13] 生产装配的待处理写入是真实的：一条解冻信号写进 app.order_sync_pending（同键 open 冲突由唯一索引处理），装配本身不读库",
+        "test/spec/orders/taobao-punish-unfreeze/wiring.test.ts > [AC-B1-04zzab#28] 生产装配的待处理写入靠库约束去重：INSERT 的冲突目标是完整的 open 键 (app_id, platform, sub_order_id, reason) 且带 status = open 条件；写入前不另查 order_sync_pending（解冻与表外值都看）",
+        "test/spec/orders/taobao-punish-unfreeze/worker.int.test.ts > [AC-B1-04zzab#24] 生产 worker 注册的 punish.window 处理器实际消费两页（冻结、解冻、表外值）：同一次任务里解冻与表外值各写一条参数正确的 open 待处理、各发一条 warn，冻结交给写入方，解冻与表外值不交"
+      ],
+      "expected": [
+        "test/spec/orders/taobao-punish-unfreeze/clawback.int.test.ts",
+        "test/spec/orders/taobao-punish-unfreeze/handler.test.ts",
+        "test/spec/orders/taobao-punish-unfreeze/pending.int.test.ts",
+        "test/spec/orders/taobao-punish-unfreeze/wiring.test.ts",
+        "test/spec/orders/taobao-punish-unfreeze/worker.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "79c72ca25fe05808bc5e9580e4ae722c49d1e681074729ba0684f26d6cb8df21"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "4551ee1b7c01ebff0b8451ca4ba16981bf1aeaaf04fbd765c57146f78c34b54a"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "73c7edbc162285dde81eff2a9556c124d40ec596",
+    "specs": "caee78dd14b9d64880200a837625dde8e17e0141"
+  }
+}
