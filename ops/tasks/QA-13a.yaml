@@ -1,0 +1,21 @@
+id: QA-13a
+repo: rebate-platform
+title: 依赖：apps/api 加崩溃上报 SDK @sentry/node 11.12.0（精确版本），只改 dependencies 与锁文件
+type: deps
+# 2026-11-22 be 入账（编排 D10-2599 ②：保命四件套之崩溃上报，归 A；排在 CT-24ha 之后）。05 QA-13 行「再验后端 Node SDK 事件接入」的依赖部分。
+# 服务端 GlitchTip 由 ops 装在 staging（D10-2599 ①），兼容 Sentry 协议；后端 SDK 用 @sentry/node（01 F-OBS-01「后端 Sentry（境内自建）」）。
+# 版本：11.12.0（2026-11-10 发布，满足 pnpm-workspace minimumReleaseAge 7 天；11.13.0 起不足 7 天）；MIT。
+# 只改 apps/api/package.json 的 dependencies 段与 pnpm-lock.yaml（保护路径第二类，锁文件只有 deps 任务可改）；不改 scripts。由编排者在沙箱外执行 pnpm install。
+# 传递依赖的许可证由编排者装后核（approvals #3）；有无许可证或不合规的，停下报编排换版本，不开例外。
+# 标签按 approvals 24 由编排核后加。实现接入另见 QA-13b。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/package.json'
+  - 'pnpm-lock.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
