@@ -915,3 +915,9 @@ approvals:
     granted: true
     date: '2026-11-22'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-2508，先例第 129、148 条，同类范围裁定 D10-2380、D10-2470。原因：money r1 → r2 → r3 的 S1 由 5 → 3 → 1 条收敛；r3 唯一 S1 的根子在 components/unknown-marker「账号 + 页面只存一条、【关闭】整份清除」（F1-08at 的组件，不在本单 paths），本页单独绕开会与其他页不一致，记 out_of_scope，FU-UNKNOWN-MARKER-MULTI-SUBMIT 进上线前必须、排在 F1-08ap 合并之后、F1-08ao 之前；S2 与 r2 的 S2 同类，本单修。止损：增量再出不在本裁定内的新 S0 / S1 即停报编排，不再开条目。'
+  - id: 150
+    row: 4
+    title: 'CT-06zzzzzzzb 任务专属一次性追加：Opus 实现第 4 轮 + Codex money 增量 1 轮（r2）——范围写死为 money r1（couli-runs/CT-06zzzzzzzb/review-money-codex-r1.json）的 3 条 S1 与 1 条同类：① tools/ci/fast-parts.ts 读到的 run 为块标量（| / >）或多行时拒收退 2；② 根 package.json 的 test 脚本须恰为无 filter 的 turbo run test 命令，否则拒收退 2；③ verify-sharded-summary 逐段比对 fast-part 结果里记录的 fast_part.commands 与当前受信段表，不符按缺段；④（③ 的同类，D10-2529 要求顺带核）int-shard 段只按段名认、仅靠文件数合计兜底，新旧分片混用时可能凑巧相等——同样逐段比对结果里记录的段命令与当前受信段表，不符按缺段。每条配单测，规则测试与其余一字不动'
+    granted: true
+    date: '2026-11-22'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（实现 / 评审轮次属门禁流程小改动），D10-2529，先例第 129、148 条。原因：CT-06zzzzzzzb 实现 3 轮已用满（r1 / r2 修单测与类型、r3 按 w1 备案收窄 --fast 实跑恢复主干），tests3 与 fast3 均绿；money r1 三条 S1 都是解析或判定放过与 CI 不同的东西仍退 0、会让汇总假绿，门禁工具里必须关。止损：money r2 再出不在本条内的新 S0 / S1 即停报编排，不再开条目。'
