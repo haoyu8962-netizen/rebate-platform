@@ -12,6 +12,7 @@ type: impl
 # 必满足（D10-2553 ②）：a) 取消（signal aborted）不归服务端原因，照旧 stop 且之后不写帧；b) 我方故障按服务端原因处理时必须留工程可见的错误日志（pino，不含原文与金额）或走现有告警，不得静默。
 # 验收（§2.12 / §2.13）：服务端原因与商品原因逐类区分；部分链接成功；全部服务端失败 → 50401 且退还、业务结果照常计数；崩溃后由别的请求收尾结果相同（BR-AI-23 细则）；生产文案断言下发文字不含花括号。
 # 冻结用例（D10-2553 ①甲）：只许把下面 5 处的期望键由 error.50301 改为 agent.notice.quote_failed，别的断言一字不动；先红 / --related 若列出别的冻结用例要改，先报编排补登，不得顺手改。标签由编排按 approvals 第 24 条核后加。
+# 补丁 1（D10-2557 / D10-2558 甲″）：path.test.ts 的 modify_existing 由模板名改为 Vitest 展开全名逐行登（工具只认展开名；删行被 evidence-check --early 拒，原话 couli-runs/B3-05u/probe-early{1,2,3}.json）；tpwd [AC-B3-04g#3] 基线表展不开，登法待 w1 判，暂按原条目留着。
 # 风险级：agent 模块（白名单 RV1）；涉及扣次数 / 退还，门禁若判 RV2 以门禁为准。spec-test 任务书原样附 D10-2317 ①；本机只跑单文件，重活上测试机（D10-2262）。
 refs: [BR-AI-15, BR-PRICE-08, BR-TEXT-22]
 refs_hash:
@@ -37,23 +38,53 @@ accept:
   - 'test/spec/agent/tools-quote/**'
 modify_existing:
   - file: 'test/spec/agent/orchestrator-deterministic/path.test.ts'
-    test: '[AC-B3-05e#3] 中间链接解析错误 %s 只出对应 notice，前后报价照常'
+    test: '[AC-B3-05e#3] 中间链接解析错误 30131 只出对应 notice，前后报价照常'
     reason: rule_change
     br: [BR-AI-15, BR-TEXT-22]
-    ruling: D10-2553
-    note: '规划 change 20261112 §2.13：服务端原因的提示改用 agent.notice.quote_failed。只改 50301 一例（:111–134）的期望键 error.50301 → agent.notice.quote_failed（text_key 与 fallback_text），30131 / 30132 / 30141 三例及其余断言不变'
+    ruling: D10-2558
+    note: '规划 change 20261112 §2.13（D10-2553 / D10-2558 甲″）：块内改为按 errorCode 选键，本行（30131，商品本身原因）期望仍为 error.30131，按设计新旧实现下都绿；只 50301 一行换键，其余断言不变'
   - file: 'test/spec/agent/orchestrator-deterministic/path.test.ts'
-    test: '[AC-B3-05e#4][AC-B3-05e#5] %s 仅出依赖不可用提示，不补金额且继续后续链接'
+    test: '[AC-B3-05e#3] 中间链接解析错误 30132 只出对应 notice，前后报价照常'
     reason: rule_change
     br: [BR-AI-15, BR-TEXT-22]
-    ruling: D10-2553
-    note: '规划 change 20261112 §2.13：只改 exception 一例（:160–185）的期望键 error.50301 → agent.notice.quote_failed；price_unavailable、no_card 两例仍为 error.50301，其余断言不变'
+    ruling: D10-2558
+    note: '规划 change 20261112 §2.13（D10-2553 / D10-2558 甲″）：块内改为按 errorCode 选键，本行（30132，商品本身原因）期望仍为 error.30132，按设计新旧实现下都绿；只 50301 一行换键，其余断言不变'
+  - file: 'test/spec/agent/orchestrator-deterministic/path.test.ts'
+    test: '[AC-B3-05e#3] 中间链接解析错误 30141 只出对应 notice，前后报价照常'
+    reason: rule_change
+    br: [BR-AI-15, BR-TEXT-22]
+    ruling: D10-2558
+    note: '规划 change 20261112 §2.13（D10-2553 / D10-2558 甲″）：块内改为按 errorCode 选键，本行（30141，商品本身原因）期望仍为 error.30141，按设计新旧实现下都绿；只 50301 一行换键，其余断言不变'
+  - file: 'test/spec/agent/orchestrator-deterministic/path.test.ts'
+    test: '[AC-B3-05e#3] 中间链接解析错误 50301 只出对应 notice，前后报价照常'
+    reason: rule_change
+    br: [BR-AI-15, BR-TEXT-22]
+    ruling: D10-2558
+    note: '规划 change 20261112 §2.13（D10-2553 / D10-2558 甲″）：本行（50301，服务端原因）期望键 error.50301 → agent.notice.quote_failed（text_key 与 fallback_text）；块内按 errorCode 选键，其余断言不变'
+  - file: 'test/spec/agent/orchestrator-deterministic/path.test.ts'
+    test: '[AC-B3-05e#4][AC-B3-05e#5] price_unavailable 仅出依赖不可用提示，不补金额且继续后续链接'
+    reason: rule_change
+    br: [BR-AI-15, BR-TEXT-22]
+    ruling: D10-2558
+    note: '规划 change 20261112 §2.13（D10-2553 / D10-2558 甲″）：块内改为按 kind 选键，本行（price_unavailable，商品本身原因）期望仍为 error.50301，按设计新旧实现下都绿；只 exception 一行换键，其余断言不变'
+  - file: 'test/spec/agent/orchestrator-deterministic/path.test.ts'
+    test: '[AC-B3-05e#4][AC-B3-05e#5] no_card 仅出依赖不可用提示，不补金额且继续后续链接'
+    reason: rule_change
+    br: [BR-AI-15, BR-TEXT-22]
+    ruling: D10-2558
+    note: '规划 change 20261112 §2.13（D10-2553 / D10-2558 甲″）：块内改为按 kind 选键，本行（no_card，商品本身原因）期望仍为 error.50301，按设计新旧实现下都绿；只 exception 一行换键，其余断言不变'
+  - file: 'test/spec/agent/orchestrator-deterministic/path.test.ts'
+    test: '[AC-B3-05e#4][AC-B3-05e#5] exception 仅出依赖不可用提示，不补金额且继续后续链接'
+    reason: rule_change
+    br: [BR-AI-15, BR-TEXT-22]
+    ruling: D10-2558
+    note: '规划 change 20261112 §2.13（D10-2553 / D10-2558 甲″）：本行（runner 抛错，服务端原因）期望键 error.50301 → agent.notice.quote_failed；块内按 kind 选键，其余断言不变'
   - file: 'test/spec/agent/orchestrator-deterministic/path.test.ts'
     test: '[AC-B3-05e#6] 全部失败逐个提示，结束为 stop 而非 fallback 或错误终帧'
     reason: rule_change
     br: [BR-AI-15, BR-TEXT-22]
     ruling: D10-2553
-    note: '规划 change 20261112 §2.13：只把第三个链接（runner 抛错）的期望键 error.50301（:217）改为 agent.notice.quote_failed；stop 结束不变（同组有 30141 商品原因，BR-AI-15 细则），其余断言不变'
+    note: '规划 change 20261112 §2.13（D10-2553）：只把第三个链接（runner 抛错）的期望键 error.50301 改为 agent.notice.quote_failed；stop 结束不变（同组有 30141 商品原因，BR-AI-15 细则），其余断言不变'
   - file: 'test/spec/agent/orchestrator-deterministic-tpwd/path.test.ts'
     test: '[AC-B3-04g#3] 中间口令 $label 只产生一次对应 notice 和 failed，前后 URL 照常'
     reason: rule_change
