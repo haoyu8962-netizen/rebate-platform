@@ -93,7 +93,7 @@ PRIOR_IDENTITY_MASTER_KEY_FILE=/run/couli-keys/prior-identity-master.key
 
 ```sh
 chmod 700 /etc/couli-keys
-(umask 077 && openssl rand -hex 32 > /etc/couli-keys/prior-identity-master.key)
+(umask 077 && set -o noclobber && openssl rand -hex 32 > /etc/couli-keys/prior-identity-master.key)
 docker run --rm --pull never --network none --user 0 \
   --volume /etc/couli-keys:/keys couli-api:<标签> \
   node apps/api/scripts/keyring-init.ts /keys/prior-identity-master.key /keys/prior-identity-keyring.json
@@ -105,6 +105,8 @@ chmod 500 /etc/couli-keys
 ```
 
 做完后目录属主仍是 1000、权限 500，两个新文件属主 1000、权限 400，与 1.3 相同。
+
+中途断开后续做：`prior-identity-master.key` 已存在就不要删、不要重新生成（生成主密钥那一步因 `noclobber` 报错退出、不会覆盖它），直接从下一步继续；`prior-identity-keyring.json` 也已存在就跳过 `keyring-init.ts` 那一步，只补做 `chown` / `chmod`。两个文件都不要删除重来：主密钥一旦丢失，用它加密的内容就无法解开。确需从头重做（例如已确认没有任何数据用过它）是另外的决定，不在本节流程里。
 
 契约允许旧身份主密钥文件与 FIELD_MASTER_KEY_FILE 共用（`keyring-prior-identity.ts` §1、§4 g），只要求两套密钥环的数据密钥不同（否则 `shares_main_data_key` 拒绝启动）。
 
