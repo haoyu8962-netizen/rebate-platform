@@ -1,7 +1,6 @@
 import { type Fields, block, ledger } from '../modify-existing-support/kit.ts';
 
 export const FILE = 'test/spec/demo/step-up.test.ts';
-export const SUITE = 'step-up';
 export const TITLE = '[AC-DEMO-01#1] keeps $label response';
 export const OUTSIDE = '[AC-DEMO-01#2] keeps summary response';
 export const NOTE = 'alpha now uses the new response and beta already meets the new expectation';
@@ -15,20 +14,18 @@ export const LITERAL_ROWS = "[{ label: 'alpha', value: 1 }, { label: 'beta', val
 export function eachBlock(expected: number, rows = 'rows', title = TITLE): string {
   return [
     `it.each(${rows})(${JSON.stringify(title)}, ({ value }) => {`,
-    `    expect(value).toBe(${expected});`,
-    '  });',
+    `  expect(value).toBe(${expected});`,
+    '});',
   ].join('\n');
 }
 
 export function source(blocks: readonly string[], summaryMinimum = 0): string {
   return [
-    "import { describe, expect, it } from 'vitest';",
+    "import { expect, it } from 'vitest';",
     `const rows = ${RUNTIME_ROWS};`,
-    `describe('${SUITE}', () => {`,
-    ...blocks.map((test) => `  ${test}`),
-    `  it('${OUTSIDE}', () => {`,
-    `    expect(1).toBeGreaterThanOrEqual(${summaryMinimum});`,
-    '  });',
+    ...blocks,
+    `it('${OUTSIDE}', () => {`,
+    `  expect(1).toBeGreaterThanOrEqual(${summaryMinimum});`,
     '});',
     '',
   ].join('\n');

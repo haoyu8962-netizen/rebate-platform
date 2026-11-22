@@ -16,7 +16,6 @@ import {
   FILE,
   LITERAL_ROWS,
   OUTSIDE,
-  SUITE,
   TITLE,
   eachBlock,
   entry,
@@ -35,10 +34,10 @@ const forTitle = '[AC-DEMO-01#1] keeps %s response';
 const forBlock = (expected: number): string =>
   [
     "it.for([...(['alpha', 'beta'] as const).map((label, i) => [label, i + 1] as const)])(",
-    `    '${forTitle}', ([, value]) => {`,
-    `      expect(value).toBe(${expected});`,
-    '    },',
-    '  );',
+    `  '${forTitle}', ([, value]) => {`,
+    `    expect(value).toBe(${expected});`,
+    '  },',
+    ');',
   ].join('\n');
 
 it.each([
@@ -83,7 +82,7 @@ it.each([
   },
   {
     label: '展不开的表尝试只登记某一行',
-    test: `${SUITE} > ${TITLE.replace('$label', 'alpha')}`,
+    test: TITLE.replace('$label', 'alpha'),
     before: base,
     after: head,
   },
@@ -138,7 +137,7 @@ it('[AC-CT-06zzzzzzzc#3] 以基线认定整块登记，头提交把表改成字�
 it('[AC-CT-06zzzzzzzc#4] 可展开的表仍可按 Vitest 展开全名登记每行', () => {
   const before = source([eachBlock(1, LITERAL_ROWS)]);
   const after = source([eachBlock(2, LITERAL_ROWS)]);
-  const rows = ['alpha', 'beta'].map((label) => `${SUITE} > ${TITLE.replace('$label', label)}`);
+  const rows = ['alpha', 'beta'].map((label) => TITLE.replace('$label', label));
   const individual = compareModifiedBlocks(before, after, rows);
   const whole = compareModifiedBlocks(before, after, [TITLE]);
   expect({ individual, whole }).toMatchObject({

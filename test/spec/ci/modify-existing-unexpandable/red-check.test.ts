@@ -6,7 +6,7 @@ import {
   ruleTestsLeftOut,
 } from '../../../../tools/guard/lib/red-check.ts';
 import { ROOT, type RedTest, parse, redReport } from '../modify-existing-support/kit.ts';
-import { FILE, NOTE, OUTSIDE, SUITE, TITLE, eachBlock, entry, source, taskLedger } from './kit.ts';
+import { FILE, NOTE, OUTSIDE, TITLE, eachBlock, entry, source, taskLedger } from './kit.ts';
 
 const task = parse(taskLedger(entry()));
 const base = source([eachBlock(1)]);
@@ -39,9 +39,9 @@ it('[AC-CT-06zzzzzzzc#9] 先红与证据检查对整块改动使用同一份应�
   });
 });
 
-const alpha = `${SUITE} > ${TITLE.replace('$label', 'alpha')}`;
-const beta = `${SUITE} > ${TITLE.replace('$label', 'beta')}`;
-const summary = `${SUITE} > ${OUTSIDE}`;
+const alpha = TITLE.replace('$label', 'alpha');
+const beta = TITLE.replace('$label', 'beta');
+const summary = OUTSIDE;
 const assertion = 'AssertionError: expected 1 to be 2';
 
 const outcomes: { label: string; outside: RedTest; ok: boolean }[] = [
