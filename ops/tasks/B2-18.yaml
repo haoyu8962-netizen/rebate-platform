@@ -11,6 +11,7 @@ type: impl
 # 补丁 2（funds，D10-2425）：负责人 2026-11-21 同意；登记 11 条现断言「登记 settle_amount_mismatch」或依赖「以联盟为准」结论入批的冻结用例（金额期望值不动）。recon-outcome/monthly.int.test.ts 的 19 条整份删除另走 test-change 单（门禁不认任务分支上删冻结文件），先于本单合并。
 # 补丁 3（funds，编排 D10-2521）：[AC-B2-04n#9] 六行全登记（共用回调被改）；[AC-B2-04n#12]、[AC-B2-04r#3] 先拿掉登记（等负责人回话，落地前必须有结论）；[AC-B2-09f#29] 改为只换夹具；B2-18a 留下的 23 行冻结用例（钉着 amount_mismatch_count 为 NULL，其中 #2 / #4 / #19 另钉登记 settle_amount_mismatch）按「两列同口径、没有时落 0」登记，ruling 待负责人确认、单独成提交。
 # 补丁 4（funds，编排 D10-2600：负责人 2026-11-22 对话确认冻结资金用例改动）：[AC-B2-04n#12]、[AC-B2-04r#3] 重新登记（改名 + 不再靠旧结论入批）；B2-18a 留下的 23 行（NULL 改具体数）由「待负责人确认」改为已确认。金额期望值都不动。
+# 补丁 5（funds，编排 D10-2618 / D10-2646：负责人 2026-11-22 对话确认）：登记三条要求旧结论读口「被调用」的冻结用例——[AC-B2-04zd#6]、[AC-B2-04ze#25] 改为不再调用；[AC-B2-04zg#10] 只把故障注入点换到出账必经的现行读取上、容灾断言不改。金额期望值都不动。
 refs: [BR-FUND-04, BR-FUND-09]
 refs_hash:
   BR-FUND-04: 1c403c23b8bb
@@ -27,6 +28,9 @@ test_paths:
   - 'test/spec/settlement/supplement/{validation,idempotency,switch}.int.test.ts'
   - 'test/spec/settlement/admin-settle-commands/supplement.int.test.ts'
   - 'test/spec/settlement/bill-unsettled-count/{assembly,bill-job,concurrency,idempotency,supplement}.int.test.ts'
+  - 'test/spec/settlement/bill-ports/source.int.test.ts'
+  - 'test/spec/settlement/worker/module.int.test.ts'
+  - 'test/spec/settlement/worker-catchup/recover.int.test.ts'
 impl: claude
 tester: claude-independent
 modify_existing:
@@ -136,6 +140,26 @@ modify_existing:
     br: [BR-FUND-04]
     ruling: D10-2600
     note: '负责人 2026-11-22 对话确认（D10-2600）。「结论以联盟为准后进补充批次」的路径取消——夹具不注入重生成端口，该单按重生成失败处理、补充发起仍不入批、不登记差错单；按联盟结算额换算入批的断言由本单新目录用生产装配的用例接替（[AC-B2-18#16]、[#21]、[#34]）'
+  - file: 'test/spec/settlement/bill-ports/source.int.test.ts'
+    test: '[AC-B2-04zd#6] unionAuthoritative 只取差错结论读口（同一事务、本 app、本单键）；closed 差错单不冒充以联盟为准'
+    retitle_to: '[AC-B2-04zd#6] 来源读口不再调用差错结论读口（B2-18）：unionAuthoritative 恒为 false，closed 差错单也不冒充以联盟为准'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2646
+    note: '负责人 2026-11-22 对话确认（D10-2646）。月结与补充不再读「以联盟为准」结论（D10-2415 ③）：来源读口不再调用差错结论读口——断言由「据结论标 true、读口被调用」改为「恒 false、读口不被调用」；不涉及金额期望值'
+  - file: 'test/spec/settlement/worker/module.int.test.ts'
+    test: '[AC-B2-04ze#25] 装配的处理器：账单日快照已完成时 bill 经生产 readSource（联盟为准读口取本平台订单键）生成账单，应结未结只计数、不登记差错单（B2-18a），settle_jobs 记 (bill, 平台, D 00:00 +08:00) done；credit.enabled 未设（缺省 off）不生成批次、不读归属'
+    retitle_to: '[AC-B2-04ze#25] 装配的处理器：账单日快照已完成时 bill 经生产 readSource（不再调用联盟为准读口，B2-18）生成账单，应结未结只计数、不登记差错单（B2-18a），settle_jobs 记 (bill, 平台, D 00:00 +08:00) done；credit.enabled 未设（缺省 off）不生成批次、不读归属'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2646
+    note: '负责人 2026-11-22 对话确认（D10-2646）。装配的出账处理器不再调用联盟为准读口：该读口的调用清单由恰一次改为空；账单、计数、settle_jobs 等其余断言不动；不涉及金额期望值'
+  - file: 'test/spec/settlement/worker-catchup/recover.int.test.ts'
+    test: '[AC-B2-04zg#10] 账单日 bill 全失败（进死信、settle_jobs failed，CouliSettleBillJobFailed 计 1）→ 次日补出账再投同一期；补跑仍失败照旧是同一行 failed（告警计数仍 1）、不生成账单；之后补跑成功生成 2032-06，failed 清零，不再补送'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2646
+    note: '负责人 2026-11-22 对话确认（D10-2646）：这条容灾用例不得削弱，只换故障注入点。原来靠「联盟为准读口抛错」让出账失败，该读口已不在出账路径上；改为让出账来源读口读取联盟结算记录（order_settlements）的那次读取失败——每次出账都要先读范围内订单的联盟结算记录才能判候选与应结未结（BR-FUND-04 ④），是出账必经的现行读取，补出账的调度本身不读它。「全失败进死信 → 次日补跑仍失败 → 之后补跑成功」的全部断言一字不改'
   - file: 'test/spec/settlement/bill-unsettled-count/assembly.int.test.ts'
     test: '[AC-B2-18a#17] 生产装配的 bill（credit.enabled 未设（缺省 off））：两单应结未结 → settle_bills.unsettled_count 2、error_count 只含 VOID 对上联盟结算的 1 单，registerDiff 只以 union_mismatch 调用一次、从不以 settle_missing 调用；订单行一字不动'
     reason: rule_change
