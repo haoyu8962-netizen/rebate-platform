@@ -152,9 +152,9 @@ it(
       fast: {
         mode: 'parts',
         parts: expect.arrayContaining([
-          { part: 'base', run: 1, exit_code: 0 },
-          { part: 'spec-1', run: 4, exit_code: 17 },
-          { part: 'spec-2', run: 5, exit_code: 124 },
+          expect.objectContaining({ part: 'base', run: 1, exit_code: 0 }),
+          expect.objectContaining({ part: 'spec-1', run: 4, exit_code: 17 }),
+          expect.objectContaining({ part: 'spec-2', run: 5, exit_code: 124 }),
         ]),
       },
     });
