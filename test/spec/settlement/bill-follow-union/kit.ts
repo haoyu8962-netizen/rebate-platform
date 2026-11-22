@@ -19,24 +19,47 @@
 //   order_key 与受益人 user_id；
 // - 新版本：版本号 = 当前最大版本 + 1，orders.commission_version 指向它；基数 = B_settle；受益人、角色与 v1
 //   逐项相同；旧版本行不改不删；created_at 取注入的 Clock。
-import { randomUUID } from 'node:crypto';
+// - 第 3 次写测：直接组装的账单日任务经依赖里的 logger（与 SupplementDependencies.logger 同名、可选）告警；
+//   重生成前对该单加锁（订单键锁 / 订单行锁），与持锁的订单同步串行，锁后以重读到的结算记录与版本为准；
+//   出账与补充都不再调用「以联盟为准」结论读口（端口保留）。
+import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createDb, destroyDb, type DB } from '@couli/db';
 import { splitCommission, type CommissionBeneficiary } from '@couli/domain';
 import { addFen, subFen } from '@couli/money';
 import { PostgresQueryCompiler, sql, type Kysely, type QueryId, type Selectable } from 'kysely';
 import { afterAll, beforeAll, expect } from 'vitest';
+import { createAdminTokens } from '../../../../apps/api/src/modules/admin/application/admin-tokens.ts';
+import {
+  ADMIN_STEP_UP_NAMESPACE,
+  createAdminStepUpTokens,
+} from '../../../../apps/api/src/modules/admin/application/permission-guard.ts';
+import { createAdminSessions } from '../../../../apps/api/src/modules/admin/infra/admin-sessions.ts';
 import { createLedger } from '../../../../apps/api/src/modules/ledger/index.ts';
 import {
+  createWrappedKeyring,
+  LocalKeyProvider,
+} from '../../../../apps/api/src/modules/platform/crypto/index.ts';
+import {
   FixedClock,
+  REDIS,
   createRootLogger,
+  loadConfig,
+  loadConnectionConfig,
+  type DbHandles,
   type EventBus,
   type JobHandler,
+  type RedisHandle,
   type RootLogger,
 } from '../../../../apps/api/src/modules/platform/index.ts';
+import type { AdminSent, Fixture as AdminFixture } from '../admin-settle-commands/kit.ts';
 import {
   createPendingEarningsSource,
   type PendingEarningsDependencies,
 } from '../../../../apps/api/src/modules/settlement/reads/pending-earnings.ts';
+import type { SettlementWorkerPorts } from '../../../../apps/api/src/modules/settlement/worker/index.ts';
 import {
   BEFORE,
   NOW,
@@ -281,6 +304,10 @@ export interface OrderSpec {
   /** 改写结算记录（优先于 settleFen）。 */
   readonly settlements?: readonly SettlementSpec[];
   readonly reserveBp?: number;
+  /**
+   * 快照的淘礼金扣减（commission_splits.tlj_deduct_fen；非 0 时 rebate_mode = normal，BR-CALC-02 / 19）；缺省 0。
+   */
+  readonly tljDeductFen?: bigint;
   readonly people?: readonly PersonSpec[];
   readonly hold?: boolean;
   readonly rightsPending?: boolean;
@@ -291,6 +318,8 @@ export interface OrderSpec {
 export interface Seeded extends SeededOrder {
   readonly appId: string;
   readonly reserveBp: number;
+  /** 快照的淘礼金扣减（缺省 0）。 */
+  readonly tljDeductFen: bigint;
   /** v1 的基数与各受益人金额（夹具值）。 */
   readonly snapshotBase: bigint;
 }
@@ -312,6 +341,7 @@ export async function seedOrder(a: App, spec: OrderSpec): Promise<Seeded> {
   const platform = spec.platform ?? TAOBAO;
   const subOrderId = spec.subOrderId ?? `bfu-sub-${randomUUID()}`;
   const reserveBp = spec.reserveBp ?? 0;
+  const tljDeductFen = spec.tljDeductFen ?? 0n;
   const settlements: readonly SettlementSpec[] =
     spec.settlements ??
     (spec.settleFen === null ? [] : [{ seq: 1, source: 'STATEMENT', fen: spec.settleFen }]);
@@ -326,7 +356,7 @@ export async function seedOrder(a: App, spec: OrderSpec): Promise<Seeded> {
     });
   }
   const owner = people.find((p) => p.role === 'self' || p.role === 'share') ?? people[0]!;
-  const { base, reserve } = baseOf(spec.snapshotN, reserveBp);
+  const { base, reserve } = baseOf(spec.snapshotN, reserveBp, tljDeductFen);
   const amounts = people.map((p) => shareOf(base, p.ratioBp));
   const userTotal = amounts.reduce((sum, x) => addFen(sum, x), 0n);
   const at = a.at;
@@ -379,14 +409,14 @@ export async function seedOrder(a: App, spec: OrderSpec): Promise<Seeded> {
       rule_version_id: a.ruleVersionId,
       order_type: owner.role === 'share' ? 'share' : 'self',
       activity_type: null,
-      rebate_mode: null,
+      rebate_mode: tljDeductFen === 0n ? null : 'normal',
       paid_at: at,
       paid_at_source: 'platform',
       raw_n_fen: spec.snapshotN,
       subsidy_commission_fen: 0n,
       reserve_bp: reserveBp,
       reserve_fen: reserve,
-      tlj_deduct_fen: 0n,
+      tlj_deduct_fen: tljDeductFen,
       base_fen: base,
       platform_retain_fen: subFen(base, userTotal),
       beneficiaries: JSON.stringify(
@@ -473,6 +503,7 @@ export async function seedOrder(a: App, spec: OrderSpec): Promise<Seeded> {
     settleFen: settled ?? 0n,
     people,
     reserveBp,
+    tljDeductFen,
     snapshotBase: base,
     user(role) {
       const found = people.find((p) => p.role === role);
@@ -594,7 +625,7 @@ export interface Split {
   readonly retain: bigint;
 }
 
-/** 联盟结算佣金 n 在 o 的快照条款下的拆分（预留 o.reserveBp、淘礼金 0、全部受益人 active）。 */
+/** 联盟结算佣金 n 在 o 的快照条款下的拆分（预留 o.reserveBp、淘礼金 o.tljDeductFen、全部受益人 active）。 */
 export function splitOf(o: Seeded, n: bigint): Split {
   const person = (role: Role): CommissionBeneficiary | null => {
     const p = o.people.find((x) => x.role === role);
@@ -607,7 +638,7 @@ export function splitOf(o: Seeded, n: bigint): Split {
   const result = splitCommission({
     n_base_fen: n,
     reserve_bp: BigInt(o.reserveBp),
-    tlj_deduct_fen: 0n,
+    tlj_deduct_fen: o.tljDeductFen,
     order_type: o.people.some((p) => p.role === 'share') ? 'share' : 'self',
     indirect_enabled: o.people.some((p) => p.role === 'indirect'),
     owner,
@@ -817,10 +848,13 @@ export async function confirmDrafts(a: App, adminId: string): Promise<void> {
 
 export type LogLine = Record<string, unknown>;
 
-export function capturingLogger(): { readonly logger: RootLogger; readonly lines: LogLine[] } {
+export function capturingLogger(entry = 'worker'): {
+  readonly logger: RootLogger;
+  readonly lines: LogLine[];
+} {
   const lines: LogLine[] = [];
   const logger = createRootLogger(
-    { level: 'info', entry: 'worker', appEnv: 'test' },
+    { level: 'info', entry, appEnv: 'test' },
     {
       write(line: string) {
         lines.push(JSON.parse(line) as LogLine);
@@ -899,6 +933,11 @@ export interface Worker {
 export interface WorkerOptions {
   /** worker 的数据库句柄（缺省 a.db；注入故障时给包了插件的句柄）。 */
   readonly db?: Kysely<DB>;
+  /**
+   * 换掉 app.module 交给 forWorker 的个别端口（其余照捕获的原样）；用于把一个本单起不该再调用的读口
+   * 换成「一调用就抛错并计数」的替身。
+   */
+  readonly ports?: (captured: SettlementWorkerPorts) => SettlementWorkerPorts;
 }
 
 /**
@@ -919,7 +958,8 @@ export async function withWorker(
   const SettlementModule = await settlementModule();
   const queue = fakeQueue();
   const { logger, lines } = capturingLogger();
-  const context = await workerContext(SettlementModule.forWorker(ports), {
+  const assembled = options.ports === undefined ? ports : options.ports(ports);
+  const context = await workerContext(SettlementModule.forWorker(assembled), {
     clock: a.clock,
     logger,
     db: options.db ?? a.db,
@@ -1064,4 +1104,290 @@ export function tracked<T>(promise: Promise<T>) {
       return state.settled;
     },
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// 第 3 次写测追加（评审 9 条 S1）：只做搭建与取数，不 expect（断言都在用例体里）。
+
+/** 单连接池当前那条连接的后端 pid（取不到时为 -1，由用例断言）。 */
+export async function pidOf(db: Kysely<DB>): Promise<number> {
+  const { rows } = await sql<{ pid: number }>`SELECT pg_backend_pid() AS pid`.execute(db);
+  return rows[0]?.pid ?? -1;
+}
+
+/**
+ * 有界地等「有一个后端正被 holderPid 阻塞」（pg_blocking_pids，服务端观察，不靠全库锁等待计数）：
+ * 'blocked' 观察到了；'done' 对方在被观察到阻塞之前就落定了；'timeout' 到了上限。
+ */
+export async function blockedBy(
+  observer: Kysely<DB>,
+  holderPid: number,
+  done: () => boolean,
+  limitMs = WAIT_MS,
+): Promise<'blocked' | 'done' | 'timeout'> {
+  const deadline = Date.now() + limitMs;
+  while (Date.now() < deadline) {
+    const { rows } = await sql<{ n: number }>`
+      SELECT count(*)::int AS n FROM pg_stat_activity
+      WHERE datname = current_database() AND pid <> pg_backend_pid()
+        AND ${holderPid}::int = ANY(pg_blocking_pids(pid))`.execute(observer);
+    if ((rows[0]?.n ?? 0) >= 1) return 'blocked';
+    if (done()) return 'done';
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  }
+  return 'timeout';
+}
+
+/** 一单在账上的痕迹：uniq_key 以 `{order_key}:` 开头的凭证键（排序）与它们的分录行数。 */
+export async function ledgerOf(
+  a: App,
+  o: Pick<Seeded, 'orderKey'>,
+): Promise<{ keys: string[]; entries: number }> {
+  const vouchers = await a.db
+    .selectFrom('ledger_vouchers')
+    .select(['id', 'uniq_key'])
+    .where('app_id', '=', a.appId)
+    .execute();
+  const mine = vouchers.filter((v) => v.uniq_key.startsWith(`${o.orderKey}:`));
+  const ids = mine.map((v) => v.id);
+  const entries =
+    ids.length === 0
+      ? []
+      : await a.db
+          .selectFrom('ledger_entries')
+          .select('voucher_id')
+          .where('app_id', '=', a.appId)
+          .where('voucher_id', 'in', ids)
+          .execute();
+  return { keys: mine.map((v) => v.uniq_key).sort(), entries: entries.length };
+}
+
+/** 这些会员的可提现余额（没有钱包账户为 null），按入参顺序。 */
+export async function availables(a: App, userIds: readonly string[]): Promise<(bigint | null)[]> {
+  const out: (bigint | null)[] = [];
+  for (const id of userIds) out.push(await availableOf(a, id));
+  return out;
+}
+
+const ITEMS_INSERT = /insert\s+into\s+(?:"?app"?\s*\.\s*)?"?settle_batch_items"?/i;
+
+export interface TracedQuery {
+  readonly sql: string;
+  /** 参数（JSON）+ SQL：用来判断语句是否针对某单。 */
+  readonly text: string;
+}
+
+/**
+ * 写批次明细（INSERT settle_batch_items）的语句在 PostgreSQL 执行之后抛错，直到 disarm()；同时记下经
+ * 返回的 db 执行的每条语句（查询构造器与原生 SQL 都经同一执行器）。重生成端口不被替换：故障只落在
+ * 「写明细」这一步。
+ */
+export function itemWriteFault(db: Kysely<DB>) {
+  const pending = new Set<QueryId>();
+  const state = { armed: true, fired: 0 };
+  const queries: TracedQuery[] = [];
+  const faulty = db.withPlugin({
+    transformQuery(args) {
+      const compiled = new PostgresQueryCompiler().compileQuery(args.node, args.queryId);
+      const text = `${parametersText(compiled.parameters)} ${compiled.sql}`;
+      queries.push({ sql: compiled.sql, text });
+      if (state.armed && ITEMS_INSERT.test(compiled.sql)) pending.add(args.queryId);
+      return args.node;
+    },
+    async transformResult(args) {
+      if (pending.delete(args.queryId)) {
+        state.fired += 1;
+        throw new Error('injected supplement item write failure');
+      }
+      return args.result;
+    },
+  });
+  return {
+    db: faulty,
+    queries,
+    disarm() {
+      state.armed = false;
+    },
+    get fired() {
+      return state.fired;
+    },
+  };
+}
+
+/**
+ * 这些语句里：为 orderId 写金额版本合计行（INSERT commission_split_totals）的第一条的下标，与第一条
+ * 写批次明细的下标（没有为 -1）。
+ */
+export function regenerationAndItemWrites(
+  queries: readonly TracedQuery[],
+  orderId: string,
+): { totals: number; items: number } {
+  return {
+    totals: queries.findIndex((q) => TOTALS_INSERT.test(q.sql) && q.text.includes(orderId)),
+    items: queries.findIndex((q) => ITEMS_INSERT.test(q.sql)),
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// 后台入口的生产装配（createHttpApp('admin')），日志收进 lines。与 ../admin-settle-commands/kit.ts
+// withCommandsAdmin 同一做法，只是那里的根 logger 是 silent、不可换（冻结 kit 不改），这里换成收集日志的。
+
+const REPO = new URL('../../../../', import.meta.url);
+
+interface AdminHttpApp {
+  init(): Promise<unknown>;
+  close(): Promise<unknown>;
+  get<T>(token: unknown): T;
+  inject(input: {
+    method: 'GET' | 'POST';
+    url: string;
+    headers: Record<string, string>;
+    payload?: string;
+    remoteAddress: string;
+  }): Promise<{ statusCode: number; body: string }>;
+}
+
+export interface SupplementAdmin {
+  /** 后台入口根 logger 写出的每一行（JSON）。 */
+  readonly lines: LogLine[];
+  /** POST /admin/v1/settle-bills/{bill_id}/supplement-batches（settle.bill 账号、totp step-up）。 */
+  supplement(
+    billId: string,
+    body: unknown,
+    options?: { readonly key?: string },
+  ): Promise<AdminSent>;
+}
+
+/** 契约格式的 Idempotency-Key（8–64 位 [A-Za-z0-9_-]）。 */
+export function idempotencyKey(): string {
+  return `bfu_${randomBytes(12).toString('hex')}`;
+}
+
+/** 在夹具的库（f.db，可带故障插件）、Clock 与 Redis 上起后台入口，根 logger 收日志。 */
+export async function withSupplementAdmin(
+  f: AdminFixture,
+  run: (h: SupplementAdmin) => Promise<void>,
+): Promise<void> {
+  const { createHttpApp } = (await import(new URL('apps/api/src/bootstrap.ts', REPO).href)) as {
+    createHttpApp(
+      entry: 'admin',
+      options: {
+        config: ReturnType<typeof loadConfig>;
+        clock: FixedClock;
+        logger: RootLogger;
+        dbHandles: DbHandles;
+        redisUrl: ReturnType<typeof loadConnectionConfig>['redisUrl'];
+      },
+    ): Promise<AdminHttpApp>;
+  };
+  const base = fileURLToPath(new URL('.tmp/', REPO));
+  mkdirSync(base, { recursive: true });
+  const dir = mkdtempSync(join(base, 'b2-18-'));
+  const master = randomBytes(32);
+  const keyring = await createWrappedKeyring(new LocalKeyProvider(master));
+  writeFileSync(join(dir, 'master.hex'), master.toString('hex'), { mode: 0o600 });
+  writeFileSync(join(dir, 'keyring.json'), JSON.stringify(keyring), { mode: 0o600 });
+  const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const tokenKey = randomBytes(32);
+  const { logger, lines } = capturingLogger('admin');
+  let server: AdminHttpApp | undefined;
+  try {
+    server = await createHttpApp('admin', {
+      config: loadConfig({
+        APP_ENV: 'test',
+        FIELD_KEY_PROVIDER: 'local',
+        FIELD_MASTER_KEY_FILE: join(dir, 'master.hex'),
+        FIELD_KEYRING_FILE: join(dir, 'keyring.json'),
+        ADMIN_TOKEN_SIGNING_KEY: tokenKey.toString('base64url'),
+        ADMIN_IP_ALLOWLIST: '127.0.0.1,::1',
+        ADMIN_CORS_ORIGIN: 'https://admin.example.invalid',
+        JWT_KEY_ID: 'b2_18_test',
+        JWT_PRIVATE_KEY_PEM: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      }),
+      clock: f.clock,
+      logger,
+      dbHandles: { db: f.db, dbRead: null, close: async () => undefined },
+      redisUrl: loadConnectionConfig('admin', {
+        DATABASE_URL: 'postgres://couli_app@127.0.0.1:1/unused',
+        DATABASE_READ_URL: 'postgres://couli_app@127.0.0.1:1/unused',
+        REDIS_URL: f.s.redisUrl(),
+      }).redisUrl,
+    });
+    await server.init();
+    const app = server;
+    const redis = app.get<RedisHandle>(REDIS);
+    const adminId = randomUUID();
+    await f.db
+      .insertInto('admin_users')
+      .values({
+        id: adminId,
+        app_id: f.appId,
+        login_name: `bfu_${adminId}`,
+        password_hash: 'unused-test-login',
+        is_super: false,
+        status: 'active',
+        password_must_change: false,
+        totp_bound_at: f.clock.now(),
+        created_at: f.clock.now(),
+        updated_at: f.clock.now(),
+      })
+      .execute();
+    await f.db
+      .insertInto('admin_permissions')
+      .values({
+        app_id: f.appId,
+        admin_id: adminId,
+        permission_key: 'settle.bill',
+        granted_by: adminId,
+        granted_at: f.clock.now(),
+      })
+      .execute();
+    const { token, claims } = await createAdminTokens({ key: tokenKey, clock: f.clock }).issue({
+      adminId,
+      appId: f.appId,
+    });
+    await createAdminSessions({ redis: redis.namespace('admin-auth'), clock: f.clock }).create(
+      claims.sessionId,
+      {
+        adminId,
+        appId: f.appId,
+        expiresAtMs: claims.expiresAt * 1000,
+        lastSeenMs: f.clock.now().getTime(),
+      },
+    );
+    await run({
+      lines,
+      async supplement(billId, body, options = {}) {
+        const grant = await createAdminStepUpTokens({
+          clock: f.clock,
+          redis: redis.namespace(ADMIN_STEP_UP_NAMESPACE),
+        }).issue({ appId: f.appId, adminId, sessionId: claims.sessionId, tier: 'totp' });
+        const response = await app.inject({
+          method: 'POST',
+          url: `/admin/v1/settle-bills/${encodeURIComponent(billId)}/supplement-batches`,
+          headers: {
+            'content-type': 'application/json',
+            'x-trace-id': randomUUID(),
+            authorization: `Bearer ${token}`,
+            'idempotency-key': options.key ?? idempotencyKey(),
+            'x-step-up-token': grant.step_up_token,
+          },
+          payload: JSON.stringify(body),
+          remoteAddress: '127.0.0.1',
+        });
+        return {
+          op: 'supplement',
+          statusCode: response.statusCode,
+          body: response.body,
+          json: () => JSON.parse(response.body) as ReturnType<AdminSent['json']>,
+        };
+      },
+    });
+  } finally {
+    try {
+      await server?.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
 }

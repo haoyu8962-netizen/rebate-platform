@@ -3,7 +3,10 @@
 // 重复版本号、不丢订单同步的更新、批次明细不以旧快照入批。顶层 it()（规划/11 §4.3）。
 //
 // 写法（第 2 次写测）：worker 回调里只投递与取数，断言都在用例体里；并发与屏障的等待一律有界（kit within /
-// lockWaitOrDone，WAIT_MS），等不到时落到断言失败，不跑满用例超时。运行器跑在多连接池上（kit Pools 的注释）。
+// blockedBy，WAIT_MS），等不到时落到断言失败，不跑满用例超时。运行器跑在多连接池上（kit Pools 的注释）。
+// 第 3 次写测：与订单同步的并发改为在服务端确认出账会话正被同步会话阻塞（pg_blocking_pids），不再接受出账在
+// 同步解锁前自行跑完；放行后要求以锁后重读的结算记录与版本恰好入批一次。
+import { randomUUID } from 'node:crypto';
 import { createTestDatabase } from '@couli/db/testing';
 import { expect, it } from 'vitest';
 import { lockOrderKey } from '../../../../apps/api/src/modules/orders/index.ts';
@@ -14,14 +17,15 @@ import {
   alertsFor,
   app,
   batchesOf,
+  blockedBy,
   countsOf,
   creditOn,
   databaseFixture,
   diffsOf,
   errorText,
   itemsFor,
-  lockWaitOrDone,
   orderRow,
+  pidOf,
   seedOrder,
   settleJobsOf,
   tracked,
@@ -180,6 +184,8 @@ it(
     const locked = new Promise<void>((resolve) => {
       onLocked = resolve;
     });
+    // 订单同步跑在单连接池 left 上：这条连接的后端 pid 就是持锁会话。
+    const syncPid = await pidOf(pools.left);
 
     // 库层屏障：订单同步的事务拿到订单键锁与订单行锁、写完 v2 后停在 gate 上（未提交）。
     const sync = pools.left.transaction().execute(async (trx) => {
@@ -251,16 +257,33 @@ it(
       { db: pools.workerRight },
     );
     const bill = tracked(running);
-    // 有界：出账在订单同步的锁上等（'lock'），或没等就跑完了（'done'）；都没有的到上限（'timeout'）。
-    const observed = await lockWaitOrDone(pools.control, 1, () => bill.settled);
+    // 有界（评审第 3 条收紧）：服务端观察到某个后端正被订单同步的会话阻塞（pg_blocking_pids 含 syncPid）——
+    // 出账确实在等这张订单的锁（'blocked'）；没等就跑完的（'done'）与到上限的（'timeout'）都不接受。
+    const observed = await blockedBy(pools.control, syncPid, () => bill.settled);
     release();
     const synced = await within(sync, 'order sync');
     const billed = await within(running, 'bill run');
 
+    expect(syncPid).toBeGreaterThan(0);
     expect(shown(ready)).toBe('ok');
     expect(shown(synced)).toBe('ok');
     expect(observed).not.toBe('timeout');
+    expect(observed).toBe('blocked');
     expect(shown(billed)).toBe('ok');
+
+    // 放行后：同步已把基数修成 1100（v2），出账锁后重读到一致——恰好入批一次（明细一行，b_settle 是 v2 的
+    // 1100），订单指向 v2、没有 v3，不告警、不计金额不一致。
+    expect(await bases(a, o)).toEqual([
+      [1, 1234n],
+      [2, 1100n],
+    ]);
+    expect((await orderRow(a, o)).commission_version).toBe(2);
+    expect(await itemsFor(a, o)).toEqual([
+      expect.objectContaining({ item_type: 'order', settle_seq: 1, b_settle_fen: 1100n }),
+    ]);
+    expect(await batchesOf(a)).toHaveLength(1);
+    expect(alertsFor(lines, o)).toEqual([]);
+    expect((await countsOf(a)).amount_mismatch_count).toBe(0);
 
     expect(await diffsOf(a)).toEqual([]);
     const versions = (await bases(a, o)).map(([v]) => v);
@@ -282,6 +305,151 @@ it(
       expect(alertsFor(lines, o)).toHaveLength(1);
     }
     expect(counts.error_count).toBe(0);
+    expect((await settleJobsOf(a)).map((j) => j.status)).toEqual(['done']);
+  },
+  TIMEOUT,
+);
+
+it.each([
+  { label: '同步同时按新结算额写好了 v2（基数 1000）', writesVersion: true },
+  { label: '同步只写了结算记录、没动版本（锁后仍不一致，由出账重生成）', writesVersion: false },
+])(
+  '[AC-B2-18#22] 出账在订单锁上等待期间订单同步写入了不同的结算额与更大的 seq（STATEMENT seq 2 结算 1000）——$label：放行后出账以锁后重读的结算记录与版本为准：明细 settle_seq 2、b_settle 1000，订单指向 v2（基数 1000、500 / 100），没有 v3、不告警、不登记差错单；不以等待前读到的 seq 1 / 1100 / v1 入批',
+  async ({ writesVersion }) => {
+    const a = await app(pools.db);
+    await creditOn(a);
+    const o = await example2(a);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let onLocked!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      onLocked = resolve;
+    });
+    const syncPid = await pidOf(pools.left);
+
+    // 库层屏障：订单同步持订单键锁与订单行锁，写入 seq 2（STATEMENT 1000）与订单行的结算额（按变体再写 v2），
+    // 停在 gate 上未提交。出账此时读到的是 seq 1 / 1100 / v1（基数 1234），判金额不一致后要锁该单。
+    const sync = pools.left.transaction().execute(async (trx) => {
+      await lockOrderKey(trx, o.platform, o.subOrderId);
+      const row = await trx
+        .selectFrom('orders')
+        .selectAll()
+        .where('app_id', '=', a.appId)
+        .where('order_id', '=', o.orderId)
+        .forUpdate()
+        .executeTakeFirstOrThrow();
+      await trx
+        .insertInto('order_settlements')
+        .values({
+          app_id: a.appId,
+          order_id: o.orderId,
+          seq: 2,
+          source: 'STATEMENT',
+          settle_commission_fen: 1000n,
+          settled_at: a.at,
+          content_hash: randomUUID(),
+          created_at: a.at,
+        })
+        .execute();
+      const version = writesVersion ? row.commission_version + 1 : row.commission_version;
+      await trx
+        .updateTable('orders')
+        .set({
+          settle_commission_fen: 1000n,
+          commission_version: version,
+          row_version: row.row_version + 1,
+          updated_at: a.clock.now(),
+        })
+        .where('app_id', '=', a.appId)
+        .where('order_id', '=', o.orderId)
+        .execute();
+      if (writesVersion) {
+        // 自拟：N 1000、预留 0 → 基数 1000；自购 1000 × 5000 / 10000 = 500，直推 × 1000 / 10000 = 100。
+        await trx
+          .insertInto('commission_split_amounts')
+          .values(
+            o.people.map((p) => ({
+              app_id: a.appId,
+              order_id: o.orderId,
+              commission_version: version,
+              user_id: p.userId,
+              role: p.role,
+              base_fen: 1000n,
+              amount_fen: p.role === 'self' ? 500n : 100n,
+              created_at: a.clock.now(),
+            })),
+          )
+          .execute();
+        await trx
+          .insertInto('commission_split_totals')
+          .values({
+            app_id: a.appId,
+            order_id: o.orderId,
+            commission_version: version,
+            n_total_fen: 1000n,
+            pre_base_deduct_fen: 0n,
+            base_fen: 1000n,
+            user_share_total_fen: 600n,
+            tlj_redpacket_fen: 0n,
+            platform_est_profit_fen: 400n,
+            subsidy_commission_fen: 0n,
+            created_at: a.clock.now(),
+          })
+          .execute();
+      }
+      onLocked();
+      await gate;
+    });
+    const ready = await within(Promise.race([locked, sync]), 'order sync holding its locks');
+
+    let lines: LogLine[] = [];
+    const running = withWorker(
+      a,
+      async (w) => {
+        lines = w.lines;
+        await w.bill();
+      },
+      { db: pools.workerRight },
+    );
+    const bill = tracked(running);
+    const observed = await blockedBy(pools.control, syncPid, () => bill.settled);
+    release();
+    const synced = await within(sync, 'order sync');
+    const billed = await within(running, 'bill run');
+
+    expect(syncPid).toBeGreaterThan(0);
+    expect(shown(ready)).toBe('ok');
+    expect(shown(synced)).toBe('ok');
+    expect(observed).toBe('blocked');
+    expect(shown(billed)).toBe('ok');
+
+    expect(await bases(a, o)).toEqual([
+      [1, 1234n],
+      [2, 1000n],
+    ]);
+    expect(
+      (await versionsOf(a, o)).amounts
+        .filter((r) => r.commission_version === 2)
+        .map((r) => [r.role, r.base_fen, r.amount_fen]),
+    ).toEqual([
+      ['direct', 1000n, 100n],
+      ['self', 1000n, 500n],
+    ]);
+    expect((await orderRow(a, o)).commission_version).toBe(2);
+    expect(await itemsFor(a, o)).toEqual([
+      expect.objectContaining({ item_type: 'order', settle_seq: 2, b_settle_fen: 1000n }),
+    ]);
+    expect(await batchesOf(a)).toHaveLength(1);
+    expect(alertsFor(lines, o)).toEqual([]);
+    expect(await countsOf(a)).toEqual({
+      error_count: 0,
+      held_count: 0,
+      unsettled_count: 0,
+      amount_mismatch_count: 0,
+    });
+    expect(await diffsOf(a)).toEqual([]);
     expect((await settleJobsOf(a)).map((j) => j.status)).toEqual(['done']);
   },
   TIMEOUT,
