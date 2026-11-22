@@ -27,4 +27,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/contracts/union-auth-refreshable/**'
-status: todo
+status: done
+pr: 582
