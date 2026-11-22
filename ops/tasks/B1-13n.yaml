@@ -1,0 +1,34 @@
+id: B1-13n
+repo: rebate-platform
+title: 'staging 测试身份（负责人 2026-11-22 同意，D10-2636 ②）——只在 APP_ENV=staging：登记的测试 user_id 提交实名时核验器判一致、provider 记 staging-test-identity 并写审计；其余用户与其他环境照旧，prod 硬关'
+type: impl
+# 2026-11-22 be 入账（编排 D10-2634 / D10-2635 / D10-2636；负责人 20:34「2 同意」）。staging 的二要素核验没有供应商（identity/infra/fake-realname-verifier.ts createRealnameVerifier 在 staging / prod 返回 null → 50301），绑支付宝又要先实名（30304），提现链路无法联调。
+# 这改了 BR-ID-25「local / test 以外不伪造供应商答复」的既定口径，编排写进规划待并入；refs 空，按本条与 D10-2636 写测。真实供应商（阿里云实名认证）另开接入单，不在本单。
+# 做法照 B1-02zza（staging 测试手机号，approvals 48）：配置 STAGING_TEST_REALNAME_USER_IDS（逗号分隔，≤10，每项是合法 user_id），只能在 APP_ENV=staging 设，其他环境设了就拒绝启动；启用时 warn 只带个数。
+#   名单放节点环境文件（与测试手机号同处），由 ops 只登测试号的 user_id、不登任何真实用户；轮换方式写进 infra/staging/README.md。编排原话「由 ops 在 staging 后台配」，本单按 B1-02zza 先例改走节点配置（不碰配置注册表冻结清单），如需后台配另开补丁。
+# 核验器（RealnameVerifierPort，入参已带 user_id）：staging 下名单内 user_id → { outcome: 'match', provider: 'staging-test-identity' }；名单外 → 'unavailable'（照旧 50301、不计次）；每次调用都再判 appEnv === 'staging'。
+#   名单为空或未设 → 与现状完全一致（null）。local / test 的假实现不变；prod 无论配置如何都不得返回 match（硬关，规则测试钉住）。
+# 其余实名校验全部照旧：格式与校验位、年龄线、占用（30405）、次数与预留、写入与审计；不放宽任何规则。admin 的实名更正核验不走测试身份（只改会员侧提交）。
+# 审计：命中时 pino 一条 event=staging_test_realname_verified，字段 app_id、user_id、provider；姓名与证件号不进任何日志、审计与报错（BR-ID-33）。
+# 测试用的姓名与证件号由 ops 用明显虚构的组合（姓名以「测试」开头），不进本仓库；不得使用任何真实身份信息。RV2。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/modules/platform/config/**'
+  - 'apps/api/src/modules/identity/infra/fake-realname-verifier.ts'
+  - 'apps/api/src/modules/identity/infra/fake-realname-verifier.test.ts'
+  - 'apps/api/src/modules/identity/identity.module.ts'
+  - 'apps/api/src/modules/identity/index.ts'
+  - 'infra/staging/compose.yaml'
+  - 'infra/staging/README.md'
+  - '.env.example'
+  - 'test/spec/identity/staging-test-realname/**'
+test_paths:
+  - 'test/spec/identity/staging-test-realname/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/identity/staging-test-realname/**'
+status: todo
