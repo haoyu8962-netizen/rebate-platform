@@ -67,6 +67,18 @@ export function endsSession(cause: unknown): boolean {
   return cause instanceof AdminApiError && cause.code === NOT_SIGNED_IN;
 }
 
+const KEY_CONFLICT = 20901;
+
+/**
+ * Whether an answer to a write is 20901 (the same Idempotency-Key with another body). F1-08atb
+ * money r2 S1: it says nothing about the submission stored under that key, so after an
+ * undetermined answer under the key the earlier submission stays unknown — its marker is kept
+ * (mark(), then leave() as the key is dropped), never released by this answer.
+ */
+export function keyConflict(cause: unknown): boolean {
+  return cause instanceof AdminApiError && cause.kind === 'api' && cause.code === KEY_CONFLICT;
+}
+
 export interface UnknownMarkerControl {
   /** The page and the signed-in account. */
   readonly scope: MarkerScope;

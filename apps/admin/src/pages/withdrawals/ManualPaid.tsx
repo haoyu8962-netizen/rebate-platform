@@ -29,7 +29,11 @@ import {
 } from 'antd';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
-import { endsSession, useUnknownMarker } from '../../components/unknown-marker/index.ts';
+import {
+  endsSession,
+  keyConflict,
+  useUnknownMarker,
+} from '../../components/unknown-marker/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { withdrawalsTexts } from '../../texts/withdrawals.ts';
 import {
@@ -385,8 +389,12 @@ export function ManualPaid({
       }
       if (isSettledRejection(cause)) {
         // 服务端确定拒绝（10403、20001 等）：解锁，提示全文；下次提交换新键。会话失效（10001）不算确定的回答，标记留着。
+        // F1-08atb 资金评审 r2 S1：结果未知之后同键收到 20901（同键不同请求体）不说明原提交的结果：标记留着，随键放弃。
         if (endsSession(cause)) marker.sessionEnded();
-        else marker.clear();
+        else if (uncertainRef.current && keyConflict(cause)) {
+          marker.mark();
+          marker.leave();
+        } else marker.clear();
         if (!alive.current) return;
         forget();
         setFailure(failureNotice(cause));

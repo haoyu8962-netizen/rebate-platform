@@ -18,7 +18,11 @@ import { useDataProvider } from '@refinedev/core';
 import { Alert, Button, Flex, Modal, Table, Typography, theme, type TableColumnsType } from 'antd';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
-import { endsSession, useUnknownMarker } from '../../components/unknown-marker/index.ts';
+import {
+  endsSession,
+  keyConflict,
+  useUnknownMarker,
+} from '../../components/unknown-marker/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { withdrawalsTexts } from '../../texts/withdrawals.ts';
 import { executeFailure, keepsUnknown, verifyAgain } from './DetailPayoutActions.tsx';
@@ -318,8 +322,13 @@ export function BatchPayout(props: BatchPayoutProps): ReactElement {
       }
       if (isSettledRejection(cause)) {
         // A settled refusal settles an unknown submission; an ended session (10001) settles nothing.
+        // F1-08atb money r2 S1: a 20901 (this key with another body) after an undetermined answer
+        // under the key settles nothing about it: the marker stays, given up with the key.
         if (endsSession(cause)) marker.sessionEnded();
-        else marker.clear();
+        else if (uncertainRef.current && keyConflict(cause)) {
+          marker.mark();
+          marker.leave();
+        } else marker.clear();
         if (!alive.current) return;
         forget();
         setNotice(executeFailure(cause));

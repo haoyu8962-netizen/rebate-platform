@@ -22,11 +22,15 @@
 // F1-08atb 资金评审 r1：每次发写（首次与【重试】）先登记为在途（begin，不写标记）；另记「当前幂等键是否收到过
 // 未定的回答」（无外壳、带外壳的 5xx / 40901），先于幂等回放判的拒绝（10403、10003 verify_phone_missing）
 // 按它判定：收到过就仍未知、标记留着、原键保留，不论表单是否锁定、是否已卸载。
+// F1-08atb 资金评审 r2 S1：未定的回答之后（带外壳的 5xx / 40901，表单未锁）改了请求体再提交，仍沿用原键，但那已是
+// 另一笔提交：原提交就此放弃（leave，标记留到【关闭】），改过的请求体是独立的持有者，它的回答（20901 同键不同请求体、
+// 成功、确定的拒绝）只作用于它自己，不释放原提交的标记。同一请求体在未定的回答之后收到 20901 也不算确定：标记留着。
 import { useDataProvider, type BaseRecord } from '@refinedev/core';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
 import {
   endsSession,
+  keyConflict,
   useUnknownMarker,
   type MarkerClock,
 } from '../../components/unknown-marker/index.ts';
@@ -131,6 +135,13 @@ export function useAdjustmentWrite<
    * unlocked, and the answer may come after the dialog was left.
    */
   const uncertainRef = useRef(false);
+  /**
+   * Money r2 S1: the body (as sent) of the current submission that got an undetermined answer
+   * under the current key; undefined: the current submission got none (a new one, or a body
+   * edited after it, which is another submission holding the marker on its own). Only the answers
+   * of this submission decide its marker; `uncertainRef` keeps deciding the key and the form.
+   */
+  const uncertainBodyRef = useRef<string | undefined>(undefined);
   const alive = useRef(true);
 
   useEffect(() => {
@@ -200,6 +211,14 @@ export function useAdjustmentWrite<
 
   const submit = (body: B) => {
     if (phaseRef.current !== 'idle' || missingRef.current || unknownRef.current) return;
+    const uncertainBody = uncertainBodyRef.current;
+    if (uncertainBody !== undefined && uncertainBody !== JSON.stringify(body)) {
+      // Money r2 S1: edited after an undetermined answer (the key stays, as before): the earlier
+      // submission is given up and keeps its marker until 【关闭】; no answer to this body (a
+      // 20901 under the same key, a success, a settled refusal) can release it.
+      marker.leave();
+      uncertainBodyRef.current = undefined;
+    }
     bodyRef.current = body;
     keyRef.current ??= newRequestKey();
     start(body, keyRef.current);
@@ -253,6 +272,7 @@ export function useAdjustmentWrite<
       marker.clear();
       keyRef.current = undefined;
       uncertainRef.current = false;
+      uncertainBodyRef.current = undefined;
       if (!alive.current) return;
       setUnknown(false);
       setPhase('idle');
@@ -268,9 +288,10 @@ export function useAdjustmentWrite<
         return;
       }
       if (isPhoneMissing(cause)) {
-        // After an undetermined answer under this key (an enveloped 5xx / 40901, form unlocked)
-        // it settles nothing: the marker stays (held afresh if 【关闭】 dropped it), the key too.
-        if (uncertainRef.current) marker.mark();
+        // After an undetermined answer of this submission (an enveloped 5xx / 40901, form
+        // unlocked) it settles nothing: the marker stays (held afresh if 【关闭】 dropped it), the
+        // key too.
+        if (uncertainBodyRef.current !== undefined) marker.mark();
         else marker.clear();
         if (!alive.current) return;
         markMissing();
@@ -278,8 +299,8 @@ export function useAdjustmentWrite<
       }
       if (needsStepUp && cause instanceof AdminApiError && cause.code === STEP_UP_REFUSED) {
         // The verification was not accepted: verify again and replay the same body and key. An
-        // earlier undetermined submission under this key stays unknown.
-        if (uncertainRef.current) marker.mark();
+        // earlier undetermined send of this submission stays unknown.
+        if (uncertainBodyRef.current !== undefined) marker.mark();
         if (!alive.current) return;
         void requestCode();
         return;
@@ -288,6 +309,7 @@ export function useAdjustmentWrite<
         // It may have taken effect: keep the key and the body, lock, no failure prompt.
         marker.mark();
         uncertainRef.current = true;
+        uncertainBodyRef.current = JSON.stringify(body);
         if (!alive.current) return;
         setUnknown(true);
         setPhase('idle');
@@ -300,20 +322,30 @@ export function useAdjustmentWrite<
         // result-unknown for the marker too (D10-2075 / D10-1731).
         marker.mark();
         uncertainRef.current = true;
+        uncertainBodyRef.current = JSON.stringify(body);
         if (!alive.current) return;
       } else if (uncertainRef.current && refusedBeforeReplay(cause)) {
         // Money r1 S1-2: a 10403 judged before the replay, after an enveloped 5xx / 40901 under
         // this key (the form unlocked): the earlier send may have taken effect. The marker and
         // the key stay — also after the dialog was left; the form shows the refusal as before.
-        marker.mark();
+        // Money r2 S1: an edited body under the key is its own submission, which never marked:
+        // the refusal settles it (the earlier one was given up and keeps its marker).
+        if (uncertainBodyRef.current !== undefined) marker.mark();
+        else marker.clear();
         stillUnknown = true;
         if (!alive.current) return;
       } else {
         // A settled refusal settles the submission; an ended session (10001) settles nothing.
+        // Money r2 S1: a 20901 (this key with another body) after an undetermined answer of this
+        // submission settles nothing about it: its marker stays and it is given up with the key.
         if (endsSession(cause)) marker.sessionEnded();
-        else marker.clear();
+        else if (keyConflict(cause) && uncertainBodyRef.current !== undefined) {
+          marker.mark();
+          marker.leave();
+        } else marker.clear();
         keyRef.current = undefined;
         uncertainRef.current = false;
+        uncertainBodyRef.current = undefined;
         if (!alive.current) return;
         setUnknown(false);
       }

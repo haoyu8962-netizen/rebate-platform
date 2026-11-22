@@ -36,6 +36,7 @@ const SESSION_ENDED = fail({ code: 10001, httpStatus: 401 });
 const DONE = () => Promise.resolve({ data: { id: 'adj_1' } });
 const FORBIDDEN: Partial<AdminApiErrorDetails> = { code: 10403, httpStatus: 403 };
 const ENDED: Partial<AdminApiErrorDetails> = { code: 10001, httpStatus: 401 };
+const KEY_CONFLICT: Partial<AdminApiErrorDetails> = { code: 20901, httpStatus: 409 };
 
 /** An answer held back until `answer()` (the request is under way meanwhile). */
 function held(details: Partial<AdminApiErrorDetails>) {
@@ -90,10 +91,16 @@ async function mounted() {
   return { hook, failed };
 }
 
-async function submit(hook: { result: { current: { submit: (b: { reason: string }) => void } } }) {
+async function submit(
+  hook: { result: { current: { submit: (b: { reason: string }) => void } } },
+  reason = 'r',
+) {
   await act(async () => {
-    hook.result.current.submit({ reason: 'r' });
+    hook.result.current.submit({ reason });
   });
+}
+function bodiesSent(): unknown[] {
+  return custom.mock.calls.map((call) => (call as unknown as [{ payload: unknown }])[0].payload);
 }
 
 it('[AC-F1-08at-UNIT#11] an enveloped 5xx keeps the key and the marker; the settled replay drops it', async () => {
@@ -213,4 +220,80 @@ it('[AC-F1-08atb-UNIT#7] a first send under way at 【关闭】 answered 10001: 
     unknown: true,
     at: '2026-11-18T04:02:00.000Z',
   });
+});
+
+it('[AC-F1-08atb-UNIT#8] an enveloped 5xx, then the body edited and sent under the same key, refused 20901 after the dialog was left: the marker stays at the moment of the 5xx', async () => {
+  const { hook, failed } = await mounted();
+  const conflict = held(KEY_CONFLICT);
+  answers.push(SERVER_ERROR, conflict.reply);
+  await submit(hook);
+  now = AT + 60_000;
+  await submit(hook, 'edited');
+  hook.unmount();
+  now = AT + 120_000;
+  await act(async () => {
+    conflict.answer();
+  });
+  const keys = keysSent();
+  expect(keys[1], 'the edited body went out under the key of the 5xx').toBe(keys[0]);
+  expect(bodiesSent()).toEqual([{ reason: 'r' }, { reason: 'edited' }]);
+  expect(failed, 'the left dialog is not told').toHaveBeenCalledTimes(1);
+  expect(readUnknown(SCOPE)).toEqual({
+    page: 'adjustments',
+    unknown: true,
+    at: '2026-11-18T04:00:00.000Z',
+  });
+});
+
+it('[AC-F1-08atb-UNIT#9] after the edited body was refused 20901 the next submission takes a new key and holds on its own: its success keeps the marker of the 5xx, 【关闭】 drops it', async () => {
+  const { hook, failed } = await mounted();
+  answers.push(SERVER_ERROR, fail(KEY_CONFLICT), DONE);
+  await submit(hook);
+  now = AT + 60_000;
+  await submit(hook, 'edited');
+  expect(failed).toHaveBeenCalledTimes(2);
+  expect(readUnknown(SCOPE)?.at).toBe('2026-11-18T04:00:00.000Z');
+  now = AT + 120_000;
+  await submit(hook, 'edited');
+  const keys = keysSent();
+  expect(keys[1]).toBe(keys[0]);
+  expect(keys[2], '20901: the next submission takes a new key').not.toBe(keys[0]);
+  expect(readUnknown(SCOPE)).toEqual({
+    page: 'adjustments',
+    unknown: true,
+    at: '2026-11-18T04:00:00.000Z',
+  });
+  act(() => clearUnknown(SCOPE));
+  expect(readUnknown(SCOPE)).toBeUndefined();
+});
+
+it('[AC-F1-08atb-UNIT#10] an enveloped 5xx, then the body edited under the same key and a settled refusal or a success: none of them drops the marker of the 5xx', async () => {
+  const { hook } = await mounted();
+  answers.push(SERVER_ERROR, SETTLED, DONE);
+  await submit(hook);
+  now = AT + 60_000;
+  await submit(hook, 'edited');
+  expect(readUnknown(SCOPE)?.at, 'a settled refusal of the edited body').toBe(
+    '2026-11-18T04:00:00.000Z',
+  );
+  await submit(hook, 'edited again');
+  expect(readUnknown(SCOPE)?.at, 'a success of a later body').toBe('2026-11-18T04:00:00.000Z');
+});
+
+it('[AC-F1-08atb-UNIT#11] an enveloped 5xx, then the same body under the same key answered 20901: not settled, the marker stays; an unedited replay of a 5xx still settles it', async () => {
+  const first = await mounted();
+  answers.push(SERVER_ERROR, fail(KEY_CONFLICT));
+  await submit(first.hook);
+  now = AT + 60_000;
+  await submit(first.hook);
+  expect(readUnknown(SCOPE)?.at).toBe('2026-11-18T04:00:00.000Z');
+  first.hook.unmount();
+  act(() => clearUnknown(SCOPE));
+  // Control: the same body replayed after a 5xx and settled drops the marker (as before).
+  const second = await mounted();
+  answers.push(SERVER_ERROR, DONE);
+  await submit(second.hook);
+  expect(readUnknown(SCOPE)?.at).toBe('2026-11-18T04:01:00.000Z');
+  await submit(second.hook);
+  expect(readUnknown(SCOPE)).toBeUndefined();
 });
