@@ -102,15 +102,25 @@ function isLabel(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/u.test(value);
 }
 
-/** Error class name, or the code of a UnionError / GovernanceError; never the message. */
+/**
+ * Error class name, or the code of a UnionError / GovernanceError; never the message. Reading an
+ * oddly shaped error (constructor nulled, throwing getters, proxies) never throws: 'unknown'.
+ */
 function causeOf(error: unknown): string {
-  if (!(error instanceof Error)) return 'unknown';
-  const code: unknown = (error as { readonly code?: unknown }).code;
-  if ((error.name === 'UnionError' || error.name === 'GovernanceError') && isLabel(code)) {
-    return code;
+  try {
+    if (!(error instanceof Error)) return 'unknown';
+    const name: unknown = error.name;
+    if (name === 'UnionError' || name === 'GovernanceError') {
+      const code: unknown = (error as { readonly code?: unknown }).code;
+      if (isLabel(code)) return code;
+    }
+    const ctor: unknown = (error as { readonly constructor?: unknown }).constructor;
+    if (typeof ctor !== 'function') return 'unknown';
+    const ctorName: unknown = (ctor as { readonly name?: unknown }).name;
+    return isLabel(ctorName) ? ctorName : 'unknown';
+  } catch {
+    return 'unknown';
   }
-  const name = error.constructor.name;
-  return isLabel(name) ? name : 'unknown';
 }
 
 /** Identity only from the authenticated caller; never from the message text or context. */
