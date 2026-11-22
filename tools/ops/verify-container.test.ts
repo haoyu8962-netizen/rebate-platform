@@ -570,12 +570,11 @@ it(
       expect(res.status, `${extra.join(' ')}: ${res.stderr}`).toBe(0);
       const plan = JSON.parse(res.stdout) as Record<string, unknown>;
       // CT-06zzzzu added memory to every dry-run plan; test_guard stays --red only.
-      expect(Object.keys(plan).sort(), extra.join(' ')).toEqual([
-        'commit',
-        'memory',
-        'script',
-        'tree',
-      ]);
+      // CT-06zzzzzzzb (补充 C): the --fast plan also names its steps; the other modes are unchanged.
+      const keys = ['commit', 'memory', 'script', 'tree'];
+      expect(Object.keys(plan).sort(), extra.join(' ')).toEqual(
+        extra[0] === '--fast' ? [...keys, 'steps'].sort() : keys,
+      );
       expect(res.stderr, extra.join(' ')).not.toContain('test-guard');
     }
     expect(existsSync(join(runs, 'B1-02b'))).toBe(false);
@@ -1716,7 +1715,9 @@ it(
     // CT-06zzzzzzzb: the trusted root's verify:fast steps after the inline step runner.
     const steps = verifyFastSteps(readFileSync(join(repoRoot(), 'package.json'), 'utf8'));
     expect(args.slice(-steps.length - 1)).toEqual(['couli-fast-steps', ...steps]);
-    expect(args.at(-steps.length - 3)).toBe('bash');
+    // [..., IMAGE, 'bash', '-c', <step runner>, 'couli-fast-steps', ...steps]
+    expect(args.at(-steps.length - 3)).toBe('-c');
+    expect(args.at(-steps.length - 4)).toBe('bash');
     // The stub wrote no steps record: steps stay empty, the error says so, the exit code is kept.
     const result = readJson(join(base, 'rj-fast', 'V1-11', 'verify-fast', '1', 'result.json'));
     expect(result).toMatchObject({ script: 'verify:fast', exit_code: 0, steps: [] });

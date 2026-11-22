@@ -327,7 +327,11 @@ it('[CT-06zzzzzzzb] a complete group of parts stands for verify-fast: mode parts
   });
   // Without the part list (or with a reason instead) the parts never count.
   for (const fastParts of [undefined, 'no verify-unit job']) {
-    const only = summarize(TASK, TREE, runs, SHARDS, { notCovered: [], browser: false, fastParts });
+    const only = summarize(TASK, TREE, runs, SHARDS, {
+      notCovered: [],
+      browser: false,
+      ...(fastParts === undefined ? {} : { fastParts }),
+    });
     expect(only.fast).toBeNull();
     expect(only.problems).toContain('missing verify-fast result for this tree');
     if (fastParts !== undefined) {
