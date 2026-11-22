@@ -40,19 +40,19 @@ modify_existing:
     reason: rule_change
     br: [BR-FUND-04]
     ruling: D10-2521
-    note: '同上，期望不变'
+    note: '期望不变；与「一致」那一行同理——六行共用的回调被改，整张表登记（D10-2521 ④）'
   - file: 'test/spec/settlement/bill/validation.int.test.ts'
     test: '[AC-B2-04n#9] 金额一致性：正差恰等容差'
     reason: rule_change
     br: [BR-FUND-04]
     ruling: D10-2521
-    note: '同上，期望不变'
+    note: '期望不变；与「一致」那一行同理——六行共用的回调被改，整张表登记（D10-2521 ④）'
   - file: 'test/spec/settlement/bill/validation.int.test.ts'
     test: '[AC-B2-04n#9] 金额一致性：负差恰等容差'
     reason: rule_change
     br: [BR-FUND-04]
     ruling: D10-2521
-    note: '同上，期望不变'
+    note: '期望不变；与「一致」那一行同理——六行共用的回调被改，整张表登记（D10-2521 ④）'
   - file: 'test/spec/settlement/bill/validation.int.test.ts'
     test: '[AC-B2-04n#9] 金额一致性：正差超过容差一分'
     reason: rule_change
@@ -64,7 +64,7 @@ modify_existing:
     reason: rule_change
     br: [BR-FUND-04]
     ruling: D10-2425
-    note: '同上一行'
+    note: '负责人 2026-11-21 同意。与「正差超过容差一分」那一行同样改：不再登记 settle_amount_mismatch，diffs 由 1 张改为 0 张、registerDiff 不被调用'
   - file: 'test/spec/settlement/bill/validation.int.test.ts'
     test: '[AC-B2-04n#10] 使用最大分佣版本，结算零佣金是有数据而非应结未结'
     reason: rule_change
