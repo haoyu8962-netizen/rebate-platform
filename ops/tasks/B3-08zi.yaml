@@ -13,6 +13,7 @@ type: impl
 #   游客（没有 user_id）不判、不读同意记录（BR-ID-13）；已登录但没有用户级记录、min_version 缺失 / 不合法、读失败——都照现有守卫的既有规则，与 api 入口同一结果；
 #   隐私满足 → 往下照常走 BR-AI-23，结果与现在相同。覆盖 /v1/agent/* 的 POST 与 GET 接口。
 # 不在本单：RunGuard（进行中的 run 不重判隐私同意，D10-2488 ③）；契约（openapi 里那几句顺序说明登 FU-AGENT-PRIVACY-ORDER-DOC，D10-2488 ④）；三端对 10004 privacy 的处理（各端自核）。
+# 补丁 1（D10-2509，取甲′）：冻结的 [AC-B1-15m#1]（test/spec/identity/deletion-guard-stream/assembly.test.ts:6）钉住 stream 的 RiskModule 两份清单只装 ⑥，所以 ⑦ 不进 beforeRateLimit / beforeRateLimitGuards；改放在 agent 模块入口：stream/mount/controller.ts 的 7 个 /v1/agent/* 路由处理之前（BR-AI-23 ① 之前），调用同一个 createAgentPrivacyConsentChecks，identity 经 agent.module / app.module 接线交给 agent。判法依据（agent 线已核）：risk.module.ts:580–600 的全局守卫链是 ④a → ⑤ → beforeRateLimitGuards（⑥）→ ⑬，其后才进控制器；stream 的 ⑬ 用写死的 noRateLimits（app.module.ts:663–666、:688–694，分组恒 null、规则恒空），永不拒绝；全仓只有 RiskModule 注册 APP_GUARD。所以 ⑥ 与 agent 入口之间没有会拒绝请求的环节，⑦ 放在 agent 入口与放进清单的可观察先后相同，不需要「限流与 ⑦ 的先后」用例。
 # 风险级：含 app.module.ts → RV2，用户授权边界；评审照 approvals 27 由 Codex general 做，另加必核：api 入口对 login 级路由的行为逐字不变（D10-2488 ⑤）。
 # spec-test 任务书原样附 D10-2317 ①；本机不跑 vitest，单文件也走测试机（D10-2478）；探针放一次性工作树（D10-2481）。
 refs: [BR-ID-01]
@@ -25,6 +26,8 @@ paths:
   - 'apps/api/src/modules/identity/identity.module.ts'
   - 'apps/api/src/modules/identity/index.ts'
   - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/agent/agent.module.ts'
 test_paths:
   - 'test/spec/identity/agent-privacy-min-version/**'
 impl: claude
