@@ -15,12 +15,14 @@ type: guard-change
 # ④ tools/README.md 一行写明用法与限制；合并前由编排按 approvals 24 逐行核整块 diff。
 # 单测至少：模板原文命中展不开表 → 通过；模板原文不等 → 拒收；表可展开时用模板原文 → 拒收；非 rule_change 或缺 note → 拒收；与 red-check 对账。
 # 门禁改动（放宽一处登记形状），完整 guard-change 流程、两家评审；owner 标签由编排按 approvals 24 核后加，事后报负责人。
+# 补丁 1（spec-test r1 OOS，w1 自定）：归属逻辑在 tools/guard/lib/red-check.ts、note / reason 检查在 tools/lib/task-file.ts，补进 paths。
 refs: []
 refs_hash: {}
 deps: [CT-06zzzzzzzb]
 paths:
   - 'tools/guard/lib/test-blocks{,.test}.ts'
-  - 'tools/guard/red-check{,.test}.ts'
+  - 'tools/guard/{,lib/}red-check{,.test}.ts'
+  - 'tools/lib/task-file{,.test}.ts'
   - 'tools/ci/evidence-check{,.test}.ts'
   - 'tools/ops/task{,.test}.ts'
   - 'tools/README.md'
