@@ -681,10 +681,16 @@ it('[F1-08ap-UNIT-MONEY#10] 【刷新】 after a 20902 whose read never complete
   await waitFor(() => expect(within(panel).getByText(t.refreshFailed)).toBeTruthy());
   expect(rereads, 'one read under way when given up').toBe(1);
   expect(amountOf(panel).disabled, 'editable again').toBe(false);
-  // antd's Button copies `loading` into its own state in an effect, so its spinner (and the
-  // accessible name 「loading刷新」) can outlast the commit that ended the read by one flush.
+  // antd's Button hides its spinner through an rc-motion leave transition; jsdom never fires
+  // transitionend / animationend, so the spinner (role img 「loading」) stays in the button and its
+  // accessible name stays 「loading刷新」 after the read has ended. 【刷新】 is therefore found by its
+  // text content (the spinner holds no text), which must be exactly 「刷新」 on exactly one button.
   const again = await waitFor(() => {
-    const button = buttonOf(panel, t.refresh);
+    const matching = within(panel)
+      .getAllByRole('button')
+      .filter((button) => button.textContent === t.refresh);
+    expect(matching, 'exactly one 【刷新】').toHaveLength(1);
+    const button = matching[0] as HTMLButtonElement;
     expect(button.disabled, '【刷新】 offered again').toBe(false);
     return button;
   });
