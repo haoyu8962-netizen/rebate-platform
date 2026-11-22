@@ -5,21 +5,19 @@ type: impl
 # 2026-11-22 funds 入账（规划/05 B2-19 行，SPEC_REF 693f6a6698d6；负责人 2026-11-21「京东有返回订单状态。以 API 为准」「联盟是多少就是多少」，编排 D10-2408 ① / D10-2425；docs/changes/20261121-京东拼多多结算以联盟API为准.md）。上线前必修（D10-2402：现两平台订单进不了月结入账）。资金单：Claude 实现、独立方写测、Codex 全量 spec-test 与资金评审。
 # ① 拼多多 order_status 5：按 BR-FUND-02 细则「京东、拼多多已结算时的结算佣金」写 settle_commission_fen 与 order_settlements（source=API），去掉适配器里结算佣金恒为空的待办；2、3 仍只写预估。② 京东 validCode 17 且 payMonth 已过：映射为结算事件（P4 / P12），以 actualFee 写结算佣金与结算记录；配置 union.jd.settle_by_pay_month.enabled 登记进配置注册表，关掉时回到只认结算明细上传。
 # ③ 已结算之后结算佣金再变化照常追加结算记录（seq+1），入账前 R7、入账后按 R9 / R10 / R8 分路，不新增迁移。④ 配置注册表里 orders.jd.refunded_quantity_r9_enabled 默认值改为开。⑤ specs/order-status-map/jd.csv、pdd.csv 标出已结算判定，specs/union/jd.md、pdd.md 金额一节同改。取值、判定边界与默认值只读 08，不在台账复述。
+# 补丁 1（2026-11-22 be 接手，编排 D10-2624 / D10-2628；盘点 couli-runs/B2-19/inventory.md）：本单收窄为**拼多多 ①**（order_status 5 时适配器写结算佣金，与预估同一字段同一扣法，算不出就 null、绝不按 0）+ ③ 的规则测试（已结算后再变照常追加结算记录，现有通用逻辑，不改 settlement）+ specs/order-status-map/pdd.csv、specs/union/pdd.md。
+#   ② 京东 17 + payMonth 与补拉移到 B2-19a；④ 京东退货扣回默认开移到 B2-19b。标题照旧（不改已入账标题）。pdd.csv 已把 5 映射为已结算，orders 只在已结算时采用报文结算额，本单不动 orders。
 # paths 按任务行先列全，开工前先只读盘点（代码落点、种子与默认值落点、受影响冻结用例），再以补丁收窄或补登 modify_existing；是否拆单同时定。两平台各用一笔真实已结算订单实测（09 V-49、V-50）是上线前事项，不在本单验收内。验收指向 10 AC-S2-115。
-refs: [BR-FUND-02, BR-FUND-03, BR-FUND-09, BR-CALC-03]
+refs: [BR-FUND-02, BR-FUND-09, BR-CALC-03]
 refs_hash:
   BR-FUND-02: f287247d4d07
-  BR-FUND-03: 79c4dd948e09
   BR-FUND-09: d6b5a66ad5a9
   BR-CALC-03: 64770116e2de
 deps: []
 paths:
-  - 'apps/api/src/modules/union/**'
-  - 'apps/api/src/modules/orders/**'
-  - 'apps/api/src/modules/content/domain/config-registry*.ts'
-  - 'specs/order-status-map/{jd,pdd}.csv'
-  - 'specs/union/{jd,pdd}.md'
-  - 'apps/api/src/app.module.ts'
+  - 'apps/api/src/modules/union/infra/pdd/**'
+  - 'specs/order-status-map/pdd.csv'
+  - 'specs/union/pdd.md'
 test_paths:
   - 'test/spec/orders/jd-pdd-settle-commission/**'
 impl: claude

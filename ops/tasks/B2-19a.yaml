@@ -1,0 +1,31 @@
+id: B2-19a
+repo: rebate-platform
+title: 'B2-19a：京东 validCode 17 且 payMonth 已过按已结算写结算佣金（开关 union.jd.settle_by_pay_month.enabled），payMonth 过后京东不再更新的订单由本地日跑重映射补上'
+type: impl
+# 2026-11-22 be 入账（从 B2-19 拆出，编排 D10-2624 / D10-2628；盘点 couli-runs/B2-19/inventory.md；口径 BR-FUND-02 细则「京东、拼多多已结算时的结算佣金」）。资金单：Claude 实现、独立方写测、Codex 全量 spec-test 与资金评审。排在京东接口权限开通之后（D10-2580）。
+# ① 适配器：开关开、validCode 17、payMonth 已过（按注入时钟的北京时间日期；payMonth 为 0、空串、非法 → 未过）时给出已结算信号与 settle_commission_fen = actualFee（元转分照现有写法，算不出就 null、绝不按 0）；开关读口照 serviceFeeBp / productKeyMode 的写法注入，不读系统时间。
+# ② orders：jd.csv 不加已结算行（冻结 [AC-B1-04zg#1 / #4 / #21]），在 orders 侧加「京东 17 + 已结算信号 → 按已结算迁移（P5；首次入库 P12）」；settled_at 取 payMonth 当日 00:00（+08:00，细则第 1 点），不取当前时间（结算记录去重按金额与 settled_at）；payMonth 已判已结算后又变回未来日期按 P10 倒退处理（细则第 3 点）。
+# ③ 补拉：payMonth 过后京东通常不再更新、按更新时间的增量与 30 天回扫拉不到（D10-2603）。每日任务挑京东 RECEIVED、尚无结算记录的单，经 raw_payload_id 取已归档报文、按 sub_order_id 找行、用当时时钟重映射后走 update-step；报文已过保留期的记告警、不臆造。不加迁移。
+# ④ 配置注册表登记 union.jd.settle_by_pay_month.enabled（默认 on，BR-FUND-02 细则第 4 点；注册表无默认字段，读口须「未配 = 开」，off 时京东不写结算佣金）。注册表冻结清单用例只追加（D10-1670 类，D10-2628 编排放行），写测前逐条登 modify_existing。
+# 落在 paths 之外的（specs/attribution.md 京东一段的过时说明）另记 FU。两平台真实订单核对（09 V-50）是上线前事项，不在本单验收内。
+refs: [BR-FUND-02, BR-FUND-09, BR-CALC-03]
+refs_hash:
+  BR-FUND-02: f287247d4d07
+  BR-FUND-09: d6b5a66ad5a9
+  BR-CALC-03: 64770116e2de
+deps: [B2-19]
+paths:
+  - 'apps/api/src/modules/union/**'
+  - 'apps/api/src/modules/orders/**'
+  - 'apps/api/src/modules/content/domain/config-registry*.ts'
+  - 'specs/order-status-map/jd.csv'
+  - 'specs/union/jd.md'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/orders/jd-settle-pay-month/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/jd-settle-pay-month/**'
+status: todo
