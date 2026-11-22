@@ -11,12 +11,7 @@
 #   --fast     `pnpm run verify:fast` — the entry the Claude Opus implementation subagent uses for
 #              its own test runs (default split of 2026-10-05, ops/approvals.yaml id 19). No
 #              PostgreSQL, no Redis, `--network none`. verify-fast/<n>/; never evidence of
-#              verification. CT-06zzzzzzzb (D10-2503): the steps are those of the trusted root's
-#              verify:fast split on ` && ` (tools/ci/fast-parts.ts --steps), run one by one inside
-#              (FAST_STEPS_SH): the first non-zero exit ends the run with that code (as ` && `),
-#              124 past the time limit; the log has a `[step]` line before and after each step
-#              (UTC time, command, seconds, exit code) and result.json adds steps [{ command,
-#              started_at, finished_at, exit_code }] (the steps that started).
+#              verification.
 #   --red      the isolated red run of the rule tests Codex wrote (规划/11 §2.3 step 3; CR-12):
 #              only the task's new rule-test files (inside its trusted test_paths, changed
 #              against --base, default the branch point with origin/main), each run by the
@@ -122,13 +117,19 @@
 #              worktree's; the parts together run exactly the tests of verify:fast. A part not in
 #              that list stops the run (exit 2). Runs alone (not with --fast, --red, --related,
 #              --browser, --tests, --int-shard or --base). Same container, offline install, memory
-#              and time limit as --fast, step by step as --fast (steps in the log and result.json),
-#              and the verify slot as --int-shard. Output fast-part/<n>/ (never verify-fast/);
-#              result.json adds fast_part { part, commands } and steps. Several parts of one tree
-#              count as verify:fast only through tools/ops/verify-sharded-summary.ts.
+#              and time limit as --fast, and the verify slot as --int-shard. Its commands run one by
+#              one (FAST_STEPS_SH): the first non-zero exit ends the part (as ` && `), the log has a
+#              `[step]` line before and after each step (UTC time, command, seconds, exit code).
+#              Output fast-part/<n>/ (never verify-fast/); result.json adds fast_part { part,
+#              commands } and steps [{ command, started_at, finished_at, exit_code }]. Exit code =
+#              the container's (124 = time limit); the steps record only fills `steps`: after an exit
+#              0 a record missing, not a regular file, of another shape, short or with a non-zero
+#              step gives `error` and exit 2. Several parts of one tree count as verify:fast only
+#              through tools/ops/verify-sharded-summary.ts.
 #   --dry-run  prints what would run (script, commit, tree, red files, test_guard counts; --related:
 #              base and sources; --tests: files and plan; --int-shard: int_shard { segment, command };
-#              --fast: steps; --fast-part: fast_part { part, commands })
+#              --fast: steps, the trusted verify:fast split on ` && ` — shown only: the real --fast
+#              run is `pnpm run verify:fast` as one command; --fast-part: fast_part { part, commands })
 #              as one JSON line and starts nothing; no run directory is created.
 #
 # There is no host fallback (CR-01; 规划/11 §4.1, §8): every test or task file runs only in this
@@ -473,16 +474,16 @@ if [ "$SCRIPT" = int-shard ]; then
   [[ "$INT_SHARD_CMD" =~ $INT_CMD_RE ]] || die "unexpected test:int command for segment $INT_SHARD: $INT_SHARD_CMD"
 fi
 
-# --fast and --fast-part (CT-06zzzzzzzb, D10-2503 / D10-2504): the steps run one by one in the
-# container (FAST_STEPS_SH), from the trusted root only (never the worktree's files): --fast the
-# trusted package.json's verify:fast split on && (tools/ci/fast-parts.ts --steps), --fast-part the
-# commands of that part of the trusted ci.yml and package.json (tools/ci/fast-parts.ts). A part not
-# in its list stops the run; every command must be plain words (the quotes and ! of a negated
-# filter aside), checked again inside the container.
+# --fast-part (CT-06zzzzzzzb, D10-2503 / D10-2504): the commands of that part of the trusted ci.yml
+# and package.json (tools/ci/fast-parts.ts), run one by one in the container (FAST_STEPS_SH), from
+# the trusted root only (never the worktree's files). A part not in its list stops the run; every
+# command must be plain words (the quotes and ! of a negated filter aside), checked again inside
+# the container. --fast --dry-run only shows the trusted package.json's verify:fast split on &&
+# (tools/ci/fast-parts.ts --steps); the real --fast run is the entrypoint's `pnpm run verify:fast`.
 FAST_CMD_RE="^[A-Za-z0-9_./@=:,+%'!-]+( [A-Za-z0-9_./@=:,+%'!-]+)*\$"
 STEP_CMDS=()
 STEP_LINES=''
-if [ "$SCRIPT" = 'verify:fast' ] || [ "$SCRIPT" = fast-part ]; then
+if { [ "$SCRIPT" = 'verify:fast' ] && [ "$DRY_RUN" = 1 ]; } || [ "$SCRIPT" = fast-part ]; then
   if [ "$SCRIPT" = fast-part ]; then
     fast_doc="$(cd "$TRUSTED" && node tools/ci/fast-parts.ts --workflow "$TRUSTED/.github/workflows/ci.yml" --package-json "$TRUSTED/package.json")" ||
       die "cannot read the verify:fast parts of $TRUSTED/.github/workflows/ci.yml and $TRUSTED/package.json (tools/ci/fast-parts.ts)"
@@ -883,7 +884,7 @@ if [ "$DRY_RUN" = 1 ]; then
       // CT-06zzzzzzza: the segment and the trusted CI command it runs (passed in the environment).
       out.int_shard = { segment: process.env.INT_SHARD_SEGMENT, command: process.env.INT_SHARD_COMMAND };
     }
-    // CT-06zzzzzzzb: the trusted steps --fast runs one by one, and the part with its commands.
+    // CT-06zzzzzzzb: the trusted verify:fast steps (shown only), and the part with its commands.
     const stepLines = (process.env.FAST_STEP_LINES ?? "").split("\n").filter((l) => l !== "");
     if (script === "verify:fast") out.steps = stepLines;
     if (script === "fast-part") out.fast_part = { part: process.env.FAST_PART_NAME, commands: stepLines };
@@ -1351,21 +1352,25 @@ write_result() {
     ' "$tmp" "$VDIR/red-check.json" "$VDIR/out" || die "cannot record the red run in result.json"
   fi
   if [ "$SCRIPT" = int-shard ]; then int_shard_record "$tmp" "$1"; fi
-  if [ "$SCRIPT" = 'verify:fast' ] || [ "$SCRIPT" = fast-part ]; then fast_steps_record "$tmp" "$1"; fi
+  if [ "$SCRIPT" = fast-part ]; then fast_steps_record "$tmp" "$1"; fi
   mv "$tmp" "$RESULT"
 }
 
-# --fast and --fast-part (CT-06zzzzzzzb), from write_result: <result file> <exit code>. The steps
-# that started, from the record FAST_STEPS_SH wrote to out/steps.tsv (one line per step: index,
-# UTC start, UTC end, exit code; out/ is writable by the tests' code too, so it is read as
+# --fast-part (CT-06zzzzzzzb), from write_result: <result file> <exit code>. The steps that
+# started, from the record FAST_STEPS_SH wrote to out/steps.tsv (one line per step: index, UTC
+# start, UTC end, exit code; out/ is writable by the tests' code too, so it is read as
 # int-shards.ts reads a report: a regular file, no link, at most 1 MiB, every line of that shape,
-# indexes 1, 2, … within the steps, only the last one non-zero). The commands are this script's
-# own (STEP_CMDS), never the record's. A record that cannot be read or does not match the exit
-# code gives `steps: []` and `error`; the exit code stays the run's. --fast-part adds fast_part.
+# indexes 1, 2, … within the steps). The commands are this script's own (STEP_CMDS), never the
+# record's. The record only fills `steps`, it never turns an exit code into 0: a container that
+# exited non-zero keeps its exit code (124 = time limit; a record that cannot be read then gives
+# `steps: []` and `error`); after an exit 0 a record that is missing, not a regular file, of
+# another shape, short of the part's steps or with a non-zero step gives `steps: []`, `error` and
+# exit 2. Sets FAST_PART_RC, the exit code finish ends with.
+FAST_PART_RC=''
 fast_steps_record() {
-  FAST_PART_NAME="$FAST_PART" FAST_STEP_LINES="$STEP_LINES" node -e '
+  FAST_PART_RC="$(FAST_PART_NAME="$FAST_PART" FAST_STEP_LINES="$STEP_LINES" node -e '
     const fs = require("node:fs");
-    const [file, record, script, rc] = process.argv.slice(1);
+    const [file, record, rc] = process.argv.slice(1);
     const commands = (process.env.FAST_STEP_LINES ?? "").split("\n").filter((l) => l !== "");
     const result = JSON.parse(fs.readFileSync(file, "utf8"));
     const time = "(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z)";
@@ -1394,22 +1399,30 @@ fast_steps_record() {
         if (k < lines.length - 1 && m[4] !== "0") throw new Error(`a step after the failed step ${k + 1}`);
         steps.push({ command: commands[k], started_at: m[2], finished_at: m[3], exit_code: Number(m[4]) });
       });
-      const last = steps.at(-1);
-      if (Number(rc) === 0 && (steps.length !== commands.length || (last !== undefined && last.exit_code !== 0))) {
-        throw new Error(`exit 0 but ${steps.length} of ${commands.length} step(s) recorded as passed`);
-      }
-      if (Number(rc) !== 0 && last !== undefined && last.exit_code !== 0 && last.exit_code !== Number(rc)) {
-        throw new Error(`exit ${rc} but the last step recorded exit ${last.exit_code}`);
+      if (Number(rc) === 0) {
+        const failed = steps.find((s) => s.exit_code !== 0);
+        if (failed !== undefined) throw new Error(`exit 0 but step "${failed.command}" recorded exit ${failed.exit_code}`);
+        if (steps.length !== commands.length) {
+          throw new Error(`exit 0 but ${steps.length} of ${commands.length} step(s) recorded`);
+        }
       }
     } catch (err) {
       steps = [];
       error = `steps record ${record}: ${err instanceof Error ? err.message : String(err)}`;
     }
-    if (script === "fast-part") result.fast_part = { part: process.env.FAST_PART_NAME, commands };
+    // The container exit code stands; only a run that exited 0 without a sound record becomes 2.
+    const exit = Number(rc) === 0 && error !== "" ? 2 : Number(rc);
+    result.exit_code = exit;
+    result.fast_part = { part: process.env.FAST_PART_NAME, commands };
     result.steps = steps;
     if (error !== "") result.error = error;
     fs.writeFileSync(file, JSON.stringify(result, null, 2) + "\n");
-  ' "$1" "$VDIR/out/steps.tsv" "$SCRIPT" "$2" || die "cannot record the steps in result.json"
+    process.stdout.write(String(exit));
+  ' "$1" "$VDIR/out/steps.tsv" "$2")" || die "cannot record the steps in result.json"
+  [[ "$FAST_PART_RC" =~ ^[0-9]+$ ]] || die "cannot record the steps in result.json"
+  if [ "$FAST_PART_RC" != "$2" ]; then
+    step "the part exited $2 but its steps record is not sound (error in result.json): exit $FAST_PART_RC"
+  fi
 }
 
 # --int-shard (CT-06zzzzzzza), from write_result (after the host services are gone and the password
@@ -1503,6 +1516,8 @@ finish() {
   write_result "$1"
   # --int-shard: the recorded exit code (2 when a run that exited 0 left a report missing).
   if [ -n "$INT_SHARD_RC" ]; then set -- "$INT_SHARD_RC"; fi
+  # --fast-part: the recorded exit code (2 when a run that exited 0 left no sound steps record).
+  if [ -n "$FAST_PART_RC" ]; then set -- "$FAST_PART_RC"; fi
   # The snapshot is identified by `tree` in result.json; the copy itself is not kept.
   rm -rf "$SRC"
   log "verify-container: $ID run $N ($MODE, $SCRIPT) exit $1${RUN_NOTE:+ ($RUN_NOTE)}; log: $LOG"
@@ -2662,14 +2677,15 @@ echo "$elapsed" >/out/vitest.seconds
 echo "[related] vitest related exited ${rc} after ${elapsed}s (the report decides red or green)"
 SH
 
-# --fast and --fast-part inside the --fast container (CT-06zzzzzzzb, D10-2503): the commands ($@,
+# --fast-part inside the --fast container (CT-06zzzzzzzb, D10-2503): the commands ($@,
 # the trusted steps, checked again here) one by one after the same copy and offline install as
 # the entrypoint's prepare_repo, under one VERIFY_TIMEOUT_SECS for all of them (as the entrypoint's
 # limit on `pnpm run verify:fast`). The first step that exits non-zero ends the run with its exit
 # code and no later step starts (the same as ` && `); past the limit the exit code is 124. Each
 # step gets a line before and after it in the log ("[step] <UTC> start <i>/<n>: <command>",
 # "[step] <UTC> end <i>/<n>: exit <code> after <s>s: <command>") and a line in /out/steps.tsv
-# (index, UTC start, UTC end, exit code) that the host reads back (fast_steps_record).
+# (index, UTC start, UTC end, exit code) that the host reads back (fast_steps_record); the exit
+# code of the part stays the container's.
 IFS= read -r -d '' FAST_STEPS_SH <<'SH' || true
 set -euo pipefail
 limit="${VERIFY_TIMEOUT_SECS:?VERIFY_TIMEOUT_SECS is required}"
@@ -2727,8 +2743,8 @@ SH
 if [ "$SCRIPT" = 'verify:fast' ] || [ "$SCRIPT" = related ] || [ "$SCRIPT" = fast-part ]; then
   # verify:fast connects to no database and no network (规划/11 §4.1): no PostgreSQL, no
   # Redis, no network at all. --related runs in the same container (CT-06zzzzv), with its output
-  # directory and its own command instead of the entrypoint. --fast and --fast-part
-  # (CT-06zzzzzzzb) run FAST_STEPS_SH, which records the steps in out/.
+  # directory and its own command instead of the entrypoint. --fast-part (CT-06zzzzzzzb) runs
+  # FAST_STEPS_SH, which records the steps in out/.
   FAST_ENV=("${NODE_HEAP[@]}" "${VITEST_ENV[@]}" -e "PROP_SEED=$PROP_SEED_VALUE" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS")
   FAST_OUT=()
   if [ "$SCRIPT" = related ]; then
@@ -2740,16 +2756,16 @@ if [ "$SCRIPT" = 'verify:fast' ] || [ "$SCRIPT" = related ] || [ "$SCRIPT" = fas
     FAST_CMD=(bash -c "$RELATED_SH" couli-related)
     while IFS= read -r f; do FAST_CMD+=("$f"); done <<<"$RELATED_SOURCES"
     step "running vitest related (test/vitest.config.ts) on $(printf '%s\n' "$RELATED_SOURCES" | grep -c '') source file(s) against $BASE_ARG in $IMAGE (no network, limit ${TIMEOUT_SECS}s)"
-  else
+  elif [ "$SCRIPT" = fast-part ]; then
     mkdir -p "$VDIR/out"
     chmod 1733 "$VDIR/out"
     FAST_OUT=(-v "$VDIR/out:/out")
     FAST_CMD=(bash -c "$FAST_STEPS_SH" couli-fast-steps "${STEP_CMDS[@]}")
-    if [ "$SCRIPT" = fast-part ]; then
-      step "running verify:fast part $FAST_PART (${#STEP_CMDS[@]} step(s) of the trusted ci.yml) in $IMAGE (no network, limit ${TIMEOUT_SECS}s)"
-    else
-      step "running pnpm run verify:fast step by step (${#STEP_CMDS[@]} step(s) of the trusted package.json) in $IMAGE (no network, limit ${TIMEOUT_SECS}s)"
-    fi
+    step "running verify:fast part $FAST_PART (${#STEP_CMDS[@]} step(s) of the trusted ci.yml) in $IMAGE (no network, limit ${TIMEOUT_SECS}s)"
+  else
+    FAST_ENV+=(-e "VERIFY_SCRIPT=verify:fast")
+    FAST_CMD=(couli-verify-entrypoint verify)
+    step "running pnpm run verify:fast in $IMAGE (no network, limit ${TIMEOUT_SECS}s)"
   fi
   [ -z "${PROP_RUNS:-}" ] || FAST_ENV+=(-e "PROP_RUNS=$PROP_RUNS")
   slot_check 'the verify container'

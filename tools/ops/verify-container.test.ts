@@ -1685,7 +1685,7 @@ it(
 );
 
 it(
-  '[CT-06zzzzv] --fast keeps its docker run offline; CT-06zzzzzzzb: out/ mounted for the steps record, the trusted verify:fast steps one by one',
+  '[CT-06zzzzv] --fast keeps its docker run: no /out mount, VERIFY_SCRIPT=verify:fast, offline',
   async () => {
     const root = JSON.parse(readFileSync(join(repoRoot(), 'package.json'), 'utf8')) as {
       packageManager: string;
@@ -1710,18 +1710,10 @@ it(
     const container = testContainer(res.calls);
     expect(container).toBeDefined();
     const args = container?.args ?? [];
-    expect(args.some((a) => a.endsWith(':/out'))).toBe(true);
+    expect(args.some((a) => a.endsWith(':/out'))).toBe(false);
     expect(args[args.indexOf('--network') + 1]).toBe('none');
-    // CT-06zzzzzzzb: the trusted root's verify:fast steps after the inline step runner.
-    const steps = verifyFastSteps(readFileSync(join(repoRoot(), 'package.json'), 'utf8'));
-    expect(args.slice(-steps.length - 1)).toEqual(['couli-fast-steps', ...steps]);
-    // [..., IMAGE, 'bash', '-c', <step runner>, 'couli-fast-steps', ...steps]
-    expect(args.at(-steps.length - 3)).toBe('-c');
-    expect(args.at(-steps.length - 4)).toBe('bash');
-    // The stub wrote no steps record: steps stay empty, the error says so, the exit code is kept.
-    const result = readJson(join(base, 'rj-fast', 'V1-11', 'verify-fast', '1', 'result.json'));
-    expect(result).toMatchObject({ script: 'verify:fast', exit_code: 0, steps: [] });
-    expect(String(result['error'])).toMatch(/steps record/);
+    expect(container?.env['VERIFY_SCRIPT']).toBe('verify:fast');
+    expect(args.slice(-2)).toEqual(['couli-verify-entrypoint', 'verify']);
   },
   JUDGE_TIMEOUT,
 );
@@ -2191,4 +2183,105 @@ it(
     expect(existsSync(join(runs, 'V1-13'))).toBe(false);
   },
   CLI_TIMEOUT,
+);
+
+// --- CT-06zzzzzzzb r3: the exit code of --fast-part is the container's ---------------------------
+// The steps record (out/steps.tsv) only fills `steps`; it never turns a failed container into 0,
+// and after an exit 0 a missing or unsound record makes the run exit 2 with `error`.
+
+function fastPartWorkspace(name: string): string {
+  const root = JSON.parse(readFileSync(join(repoRoot(), 'package.json'), 'utf8')) as {
+    packageManager: string;
+  };
+  const ws = join(base, name);
+  writeFiles(ws, {
+    'package.json': `${JSON.stringify(
+      { name, private: true, packageManager: root.packageManager, scripts: {} },
+      null,
+      2,
+    )}\n`,
+    'pnpm-workspace.yaml': 'packages: []\n',
+    'pnpm-lock.yaml': "lockfileVersion: '9.0'\n",
+  });
+  return ws;
+}
+
+it(
+  '[CT-06zzzzzzzb] --fast-part: the container exits 3 → script and result.json 3; exit 0 without a steps record → 2 with error; a sound record → 0 with steps',
+  async () => {
+    const ws = fastPartWorkspace('fast-part-exit');
+    const runsDir = join(base, 'fp-exit');
+    const result = (n: number) =>
+      readJson(join(runsDir, 'V1-14', 'fast-part', String(n), 'result.json'));
+    const part = readFastParts(
+      readFileSync(join(repoRoot(), '.github', 'workflows', 'ci.yml'), 'utf8'),
+      readFileSync(join(repoRoot(), 'package.json'), 'utf8'),
+    ).parts.find((p) => p.id === 'base');
+    expect(part).toBeDefined();
+    const commands = part?.commands ?? [];
+    const args = ['V1-14', '--worktree', ws, '--fast-part', 'base'];
+
+    // Failed container, no record: its own exit code, never 0.
+    const failed = await runStubbed(args, runsDir, { exit: 3, files: {} });
+    expect(failed.timedOut).toBe(false);
+    expect(failed.status, failed.stderr).toBe(3);
+    const container = testContainer(failed.calls);
+    expect(container).toBeDefined();
+    expect(container?.args.slice(-commands.length - 1)).toEqual(['couli-fast-steps', ...commands]);
+    expect(result(1)).toMatchObject({
+      script: 'fast-part',
+      exit_code: 3,
+      fast_part: { part: 'base', commands },
+      steps: [],
+    });
+
+    // Failed container whose record says every step passed: still 3.
+    const t = '2026-11-22T00:00:00Z';
+    const allPassed = commands.map((_, i) => `${String(i + 1)}\t${t}\t${t}\t0\n`).join('');
+    const lying = await runStubbed(args, runsDir, {
+      exit: 3,
+      files: { 'steps.tsv': { text: allPassed } },
+    });
+    expect(lying.status, lying.stderr).toBe(3);
+    expect(result(2)).toMatchObject({ exit_code: 3 });
+
+    // Exit 0 without a record: 2 and error.
+    const missing = await runStubbed(args, runsDir, { exit: 0, files: {} });
+    expect(missing.status, missing.stderr).toBe(2);
+    expect(result(3)).toMatchObject({ exit_code: 2, steps: [] });
+    expect(String(result(3)['error'])).toMatch(/steps record/);
+
+    // Exit 0 with a record that is a link, or that names a failed step: 2 and error.
+    const linked = await runStubbed(args, runsDir, {
+      exit: 0,
+      files: { 'steps.tsv': { symlink: '/etc/hosts' } },
+    });
+    expect(linked.status, linked.stderr).toBe(2);
+    expect(result(4)).toMatchObject({ exit_code: 2, steps: [] });
+    expect(String(result(4)['error'])).toMatch(/not a regular file/);
+    const failedStep = await runStubbed(args, runsDir, {
+      exit: 0,
+      files: { 'steps.tsv': { text: `1\t${t}\t${t}\t1\n` } },
+    });
+    expect(failedStep.status, failedStep.stderr).toBe(2);
+    expect(result(5)).toMatchObject({ exit_code: 2, steps: [] });
+
+    // Exit 0 with every step recorded as passed: 0, steps from the record, no error.
+    const ok = await runStubbed(args, runsDir, {
+      exit: 0,
+      files: { 'steps.tsv': { text: allPassed } },
+    });
+    expect(ok.status, ok.stderr).toBe(0);
+    expect(result(6)).toMatchObject({
+      exit_code: 0,
+      steps: commands.map((command) => ({
+        command,
+        started_at: t,
+        finished_at: t,
+        exit_code: 0,
+      })),
+    });
+    expect(result(6)).not.toHaveProperty('error');
+  },
+  JUDGE_TIMEOUT * 2,
 );
