@@ -33,4 +33,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/admin/step-up-commit-unknown/**'
-status: todo
+status: done
+pr: 527
