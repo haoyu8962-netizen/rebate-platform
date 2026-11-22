@@ -21,7 +21,52 @@
 #   域名内才交识别，BR-ATTR-29 ②(a)）。
 # 判定共用测试向量：specs/external-navigation.vectors.json（合成规则表，不依赖本文件的真实域名）。
 #
-# TODO(规划/05 B1-07): 各平台的注册域、商品页与推广链接形态 — blocked on 真实样本（B1-07 按样本整理，
-#   MVP 的 union_host 至少覆盖淘宝 / 天猫、京东、拼多多；本任务只建结构、不臆造域名）。
-version: '0'
-rules: []
+# TODO(规划/05 B1-07): 首批（B1-07d，D10-2627 / D10-2630）已按有出处的样本填入；手机分享短链与淘口令、手机商品页、
+#   京东 / 拼多多 App 分享链与推广链、拼多多商品页仍缺真实样本（见缺样本清单） — blocked on 负责人提供样本。
+version: '1'
+rules:
+  # 出处：dataoke gz-58.md；staging 真实联盟返回
+  - platform: taobao
+    category: union_host
+    hosts: [taobao.com, tmall.com, alimama.com]
+    path_patterns: []
+  # 出处：dataoke api-27.md
+  - platform: taobao
+    category: product
+    hosts: [item.taobao.com]
+    path_patterns: ['/item.htm']
+  # 出处：taobao.tbk.sc.order.details.get.md
+  - platform: taobao
+    category: product
+    hosts: [detail.tmall.com]
+    path_patterns: ['/item.htm']
+  # 出处：dataoke api-10.md
+  - platform: taobao
+    category: promo
+    hosts: [s.click.taobao.com]
+    path_patterns: ['/**']
+  # 出处：dataoke api-7.md、api-9.md；staging 真实联盟返回
+  - platform: taobao
+    category: promo
+    hosts: [uland.taobao.com]
+    path_patterns: ['/coupon/**', '/quan/**', '/item/**']
+  # 出处：jd.union.open.promotion.common.get.md
+  - platform: jd
+    category: union_host
+    hosts: [jd.com]
+    path_patterns: []
+  # 出处：jd.union.open.goods.query.md
+  - platform: jd
+    category: product
+    hosts: [item.jd.com]
+    path_patterns: ['/*.html']
+  # 出处：jd.union.open.promotion.common.get.md
+  - platform: jd
+    category: promo
+    hosts: [union-click.jd.com]
+    path_patterns: ['/jdc']
+  # 出处：dataoke gz-91.md；staging 真实联盟返回
+  - platform: pdd
+    category: union_host
+    hosts: [pinduoduo.com, yangkeduo.com]
+    path_patterns: []

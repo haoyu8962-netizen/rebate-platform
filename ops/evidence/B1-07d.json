@@ -1,0 +1,131 @@
+{
+  "task": "B1-07d",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "spec_commit": "001fbdaf1de87bd525db0622679fb310ddaea7eb",
+  "red_tests": [
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://pub.alimama.com/ 命中 taobao 的 union_host",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://item.taobao.com/item.htm?id=43907626661 命中 taobao 的 product",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://detail.tmall.com/item.htm?id=561427522238 命中 taobao 的 product",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://s.click.taobao.com/Ys3TNlu 命中 taobao 的 promo",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://uland.taobao.com/coupon/edetail?e=x 命中 taobao 的 promo",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://uland.taobao.com/quan/detail?sellerId=1 命中 taobao 的 promo",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://uland.taobao.com/item/edetail?e=x 命中 taobao 的 promo",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://union.jd.com/account_son 命中 jd 的 union_host",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://item.jd.com/26898778009.html 命中 jd 的 product",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://union-click.jd.com/jdc?e=x 命中 jd 的 promo",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://jinbao.pinduoduo.com/ 命中 pdd 的 union_host",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://mobile.yangkeduo.com/duo_coupon_landing.html 命中 pdd 的 union_host",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#2] 注册域 taobao.com 命中 taobao 的联盟域名",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#2] 注册域 tmall.com 命中 taobao 的联盟域名",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#2] 注册域 alimama.com 命中 taobao 的联盟域名",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#2] 注册域 jd.com 命中 jd 的联盟域名",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#2] 注册域 pinduoduo.com 命中 pdd 的联盟域名",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#2] 注册域 yangkeduo.com 命中 pdd 的联盟域名",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#3] 路径不符时 https://item.taobao.com/other 回落到 taobao 的联盟域名",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#3] 路径不符时 https://item.jd.com/a/b.html 回落到 jd 的联盟域名",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#3] 路径不符时 https://union-click.jd.com/jdc/other 回落到 jd 的联盟域名",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 https://www.example.com/item.htm 且命中对照",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 https://taobao.com.evil.invalid/item.htm 且命中对照",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 https://eviltaobao.com/ 且命中对照",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 https://jd.com.evil.invalid/ 且命中对照",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 http://item.taobao.com/item.htm?id=1 且命中对照",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 https://user@item.jd.com/1.html 且命中对照",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 https://item.jd.com@evil.invalid/1.html 且命中对照",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#5] 首批规则发布时递增表版本",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#6] taobao 有联盟域名规则",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#6] jd 有联盟域名规则",
+    "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#6] pdd 有联盟域名规则"
+  ],
+  "risk_note": "Data-only change to the platform link pattern table (D10-2627 / D10-2630 / D10-2633). specs/link-patterns.yaml gets its first real rules, version '0' -> '1': taobao union_host taobao.com / tmall.com / alimama.com, product item.taobao.com and detail.tmall.com /item.htm, promo s.click.taobao.com /** and uland.taobao.com /coupon/** /quan/** /item/**; jd union_host jd.com, product item.jd.com /*.html, promo union-click.jd.com /jdc; pdd union_host pinduoduo.com / yangkeduo.com (no pdd product or promo: no sourced sample yet). Every rule has a source (docs-mirror official / dataoke document line, or a real staging union response); shapes we assemble ourselves were not counted. Mobile share short links, taobao tokens, mobile product pages and jd / pdd app share links are listed as missing samples for a second batch. link-patterns.gen.ts regenerated by its script. The table feeds GET /v1/config link_patterns, server-side POST /v1/inputs/parse classification, and the admin save checks (union_host refusal); matching code is unchanged. No money, ledger, attribution or order code touched.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "001fbdaf1de87bd525db0622679fb310ddaea7eb",
+      "tree": "aa14f014a174fde7e20ffc79eb35141f144cb4ab",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-22T13:31:07Z",
+      "finished_at": "2026-11-22T13:31:18Z",
+      "red_tests": [
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://pub.alimama.com/ 命中 taobao 的 union_host",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://item.taobao.com/item.htm?id=43907626661 命中 taobao 的 product",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://detail.tmall.com/item.htm?id=561427522238 命中 taobao 的 product",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://s.click.taobao.com/Ys3TNlu 命中 taobao 的 promo",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://uland.taobao.com/coupon/edetail?e=x 命中 taobao 的 promo",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://uland.taobao.com/quan/detail?sellerId=1 命中 taobao 的 promo",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://uland.taobao.com/item/edetail?e=x 命中 taobao 的 promo",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://union.jd.com/account_son 命中 jd 的 union_host",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://item.jd.com/26898778009.html 命中 jd 的 product",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://union-click.jd.com/jdc?e=x 命中 jd 的 promo",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://jinbao.pinduoduo.com/ 命中 pdd 的 union_host",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#1] 样例链接 https://mobile.yangkeduo.com/duo_coupon_landing.html 命中 pdd 的 union_host",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#2] 注册域 taobao.com 命中 taobao 的联盟域名",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#2] 注册域 tmall.com 命中 taobao 的联盟域名",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#2] 注册域 alimama.com 命中 taobao 的联盟域名",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#2] 注册域 jd.com 命中 jd 的联盟域名",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#2] 注册域 pinduoduo.com 命中 pdd 的联盟域名",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#2] 注册域 yangkeduo.com 命中 pdd 的联盟域名",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#3] 路径不符时 https://item.taobao.com/other 回落到 taobao 的联盟域名",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#3] 路径不符时 https://item.jd.com/a/b.html 回落到 jd 的联盟域名",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#3] 路径不符时 https://union-click.jd.com/jdc/other 回落到 jd 的联盟域名",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 https://www.example.com/item.htm 且命中对照",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 https://taobao.com.evil.invalid/item.htm 且命中对照",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 https://eviltaobao.com/ 且命中对照",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 https://jd.com.evil.invalid/ 且命中对照",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 http://item.taobao.com/item.htm?id=1 且命中对照",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 https://user@item.jd.com/1.html 且命中对照",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#4] 拒绝 https://item.jd.com@evil.invalid/1.html 且命中对照",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#5] 首批规则发布时递增表版本",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#6] taobao 有联盟域名规则",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#6] jd 有联盟域名规则",
+        "test/spec/parsing/link-patterns-real/patterns.test.ts > [AC-B1-07d#6] pdd 有联盟域名规则"
+      ],
+      "expected": ["test/spec/parsing/link-patterns-real/patterns.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "dc0bc91964dcb7e0c8a8dd59d659babc7316200681daccb910859d5b4f3caff9"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27; specs/** is RV2 by default). r1 pass, no findings, no out-of-scope items; checklist all n/a (classification is read-only metadata, no amounts, writes, clock or app_id). couli-runs/B1-07d/review-money-codex-r1.json. Test machine on the implementation tree: --tests test/spec/parsing, test/spec/platform/specs, test/spec/content/config-nickname green (22 files, 280 tests), verify:fast exit 0."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (gpt-6.2-sol, ledger tester codex, attempt 1), so the spec-test review went to a fresh independent Claude (approvals 19). refs are empty; checked against the orchestrator supplement of the brief. r1 pass with one out-of-scope S2: off-shape paths on detail.tmall.com and uland.taobao.com are not pinned to fall back to union_host; made an implementation requirement (exact path patterns, no /**), verified by hand by the implementer."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "61febdff49067eb98cf9a2044fdcc5b34bb70159",
+    "specs": "489fe4589f767716b4d54b417d2c60a50922c23e"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
