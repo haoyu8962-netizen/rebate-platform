@@ -11,11 +11,14 @@ type: impl
 # 其余实名校验全部照旧：格式与校验位、年龄线、占用（30405）、次数与预留、写入与审计；不放宽任何规则。admin 的实名更正核验不走测试身份（只改会员侧提交）。
 # 审计：命中时 pino 一条 event=staging_test_realname_verified，字段 app_id、user_id、provider；姓名与证件号不进任何日志、审计与报错（BR-ID-33）。
 # 测试用的姓名与证件号由 ops 用明显虚构的组合（姓名以「测试」开头），不进本仓库；不得使用任何真实身份信息。RV2。
+# 补丁 1（2026-11-23 be，money r1 S1）：幂等重放（identity/application/realname.ts 的 reservation recorded 分支）会跳过核验器，名单移除后仍可能首次写入 provider=staging-test-identity 的实名行；重放这一 provider 的结果并写库前要按当前环境与名单再判，paths 补 realname.ts 与其单测。
 refs: []
 refs_hash: {}
 deps: []
 paths:
   - 'apps/api/src/modules/platform/config/**'
+  - 'apps/api/src/modules/identity/application/realname.ts'
+  - 'apps/api/src/modules/identity/application/realname.test.ts'
   - 'apps/api/src/modules/identity/infra/fake-realname-verifier.ts'
   - 'apps/api/src/modules/identity/infra/fake-realname-verifier.test.ts'
   - 'apps/api/src/modules/identity/identity.module.ts'
