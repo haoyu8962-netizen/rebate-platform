@@ -154,9 +154,26 @@ function judgedRoute(request: MinimumVersionRequest): string | undefined {
   return PRIVACY_EXEMPT.has(route) ? undefined : route;
 }
 
-/** Contract-driven ⑦; app.module supplies both parts to risk's ordered lists. */
-export function createPrivacyConsentChecks(options: PrivacyConsentOptions): PrivacyConsentChecks {
-  const { db, config, logger } = options;
+/**
+ * The judgement of ⑦ over one request with a verified token: legal.privacy.min_version through
+ * `reader`, then the caller's newest user-level privacy row on `handle`. Throws the refusal
+ * (10004 envelope, or 50001); resolves when let through.
+ */
+export type PrivacyConsentJudge = (
+  request: MinimumVersionRequest,
+  handle: Kysely<DB> | undefined | null,
+  reader: () => PrivacyConsentConfigReader,
+) => Promise<void>;
+
+/**
+ * The one judgement of ⑦, shared by the api entry's checks below and the stream entry's
+ * /v1/agent/ checks (./agent-privacy-consent.ts, B3-08zi). The missing-key warning is written once
+ * per judge, i.e. once per assembled checks.
+ */
+export function createPrivacyConsentJudge(
+  options: Pick<PrivacyConsentOptions, 'logger'>,
+): PrivacyConsentJudge {
+  const { logger } = options;
   let missingWarned = false;
 
   async function minVersionOf(
@@ -202,11 +219,7 @@ export function createPrivacyConsentChecks(options: PrivacyConsentOptions): Priv
     }
   }
 
-  async function judge(
-    request: MinimumVersionRequest,
-    handle: Kysely<DB> | undefined | null,
-    reader: () => PrivacyConsentConfigReader,
-  ): Promise<void> {
+  return async function judge(request, handle, reader) {
     // Stage ② has verified a token on every login-level route; none here fails closed.
     const principal = tokenPrincipal(request);
     if (principal === undefined) throw unavailable();
@@ -219,7 +232,13 @@ export function createPrivacyConsentChecks(options: PrivacyConsentOptions): Priv
     if (privacyConsentRefusal({ minVersion, current }) === 10004) {
       throw privacyRequired(request.id);
     }
-  }
+  };
+}
+
+/** Contract-driven ⑦; app.module supplies both parts to risk's ordered lists. */
+export function createPrivacyConsentChecks(options: PrivacyConsentOptions): PrivacyConsentChecks {
+  const { db, config, logger } = options;
+  const judge = createPrivacyConsentJudge({ logger });
 
   return {
     guard: {

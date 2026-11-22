@@ -100,6 +100,10 @@ import {
 export { agentDefaultTexts } from './stream/mount/texts.ts';
 export { agentContentReaderToken } from './stream/mount/config.ts';
 export { agentCallerReaderToken } from './stream/mount/caller.ts';
+// B3-08zi: BR-ID-01 ⑦ for /v1/agent/, provided by app.module (identity's check) on stream; the
+// stream controller injects it optionally.
+export { agentPrivacyCheckToken } from './stream/mount/privacy.ts';
+export type { AgentPrivacyCheck, AgentPrivacyRequest } from './stream/mount/privacy.ts';
 import {
   createSweeper,
   sweeperDefaults,
