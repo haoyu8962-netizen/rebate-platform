@@ -100,25 +100,26 @@ it(
 );
 
 it(
-  '[AC-B2-04r#3] 金额不一致经差错结论「以联盟为准」后进入补充批次，B_settle 取联盟结算额换算',
+  '[AC-B2-04r#3] 金额不一致不登记差错单；差错结论「以联盟为准」不再使其进入补充批次（B2-18）',
   async () => {
     const h = fixture(database.db);
     const o = await order(h);
     await settlement(h, o, { settle_commission_fen: 2000n });
     await main(h);
     const before = await state(h);
-    expect(before.diffs).toEqual([
-      expect.objectContaining({ type: 'settle_amount_mismatch', ref_id: o.key, period: MONTH }),
-    ]);
+    // B2-18：结论不再读；本夹具不注入重生成端口，按重生成失败处理。
+    expect(before.diffs).toHaveLength(0);
     o.fact.order.unionAuthoritative = true;
 
     await h.launch();
     const s = await state(h);
-    // 联盟结算佣金 2000，预留 1500bp：B_settle = 1700，不取快照基数 850。
-    expect(itemsOf(s, supplements(s))).toEqual([
-      expect.objectContaining({ item_type: 'order', order_id: o.id, b_settle_fen: 1700n }),
-    ]);
+    expect(itemsOf(s, supplements(s))).toEqual([]);
     expect(s.diffs).toEqual(before.diffs);
+    expect(await validations(h)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ orderKey: o.key, result: 'amount_mismatch' }),
+      ]),
+    );
   },
   TIMEOUT,
 );

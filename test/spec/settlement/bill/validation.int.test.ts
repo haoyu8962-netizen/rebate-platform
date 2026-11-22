@@ -216,7 +216,7 @@ it.each([
 );
 
 it(
-  '[AC-B2-04n#12] 以联盟为准只豁免金额差异，不能越过 hold 或缺结算数据',
+  '[AC-B2-04n#12] 以联盟为准的结论不再豁免金额差异（B2-18），也不能越过 hold 或缺结算数据',
   async () => {
     const h = fixture(database.db);
     await snapshot(h);
@@ -225,12 +225,11 @@ it(
     const missing = await order(h, { unionAuthoritative: true });
     for (const o of [accepted, held]) await settlement(h, o, { settle_commission_fen: 2000n });
     await h.run();
-    expect((await state(h)).items).toEqual([
-      expect.objectContaining({ order_id: accepted.id, b_settle_fen: 1700n }),
-    ]);
+    // B2-18：结论不再读；本夹具不注入重生成端口，按重生成失败处理。
+    expect((await state(h)).items).toEqual([]);
     expect(await validations(h)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ orderKey: accepted.key, result: 'candidate' }),
+        expect.objectContaining({ orderKey: accepted.key, result: 'amount_mismatch' }),
         expect.objectContaining({ orderKey: held.key, result: 'deferred' }),
         expect.objectContaining({ orderKey: missing.key, result: 'missing_settlement' }),
       ]),
