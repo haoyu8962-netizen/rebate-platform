@@ -426,7 +426,7 @@ chmod 500 /etc/couli-staging-test
 
 #### 轮换与停用
 
-- 增减或换账号：改 `staging.env` 里的 `STAGING_TEST_REALNAME_USER_IDS` 后重新部署（第 3 节），或 `docker compose -f infra/staging/compose.yaml --env-file /etc/couli/staging.env up -d api`；api 只在启动时读一次。
+- 增减或换账号：改 `staging.env` 里的 `STAGING_TEST_REALNAME_USER_IDS` 后重新部署（第 3 节）；api 只在启动时读一次。要手工只重建 api，先按第 5 节导出当前镜像标签（`export COULI_API_TAG=$(cat /var/lib/couli/staging-api.tag)`，新开的 shell 里没有这个变量，compose 会报缺变量、api 仍用旧名单），再执行 `docker compose -f infra/staging/compose.yaml --env-file /etc/couli/staging.env up -d api`。
 - 换下来的账号已经写下的实名记录不会撤销；要重测同一账号，先按正常流程处理该账号的实名记录。
 - 停用：从 `staging.env` 删掉这个变量后重新部署。
 

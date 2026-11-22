@@ -92,6 +92,7 @@ import {
 import {
   createRealnameVerifier,
   createStagingTestRealnameVerifier,
+  stagingTestIdentityJudge,
 } from './infra/fake-realname-verifier.ts';
 import { createBankCardVerifier, createCardBin } from './infra/fake-bank-card-verifier.ts';
 import { createRealnameReader } from './infra/realname-reader.ts';
@@ -1561,6 +1562,7 @@ export class IdentityModule {
             ROOT_LOGGER,
             REALNAME_VERIFIER,
             IDENTITY_CONFIG,
+            APP_CONFIG,
             { token: DB, optional: true },
             { token: FIELD_CRYPTO, optional: true },
             { token: REDIS, optional: true },
@@ -1571,6 +1573,7 @@ export class IdentityModule {
             verifier: RealnameVerifierPort | null,
             // BR-ID-26: minor.min_realname_age through content's reader (its own connection).
             config: SmsConfigReader | null,
+            appConfig: AppConfig,
             db?: Kysely<Database>,
             crypto?: FieldCrypto,
             redis?: RedisHandle,
@@ -1586,6 +1589,12 @@ export class IdentityModule {
                   logger,
                   reverify: createReverifyGate({ clock }),
                   config,
+                  // B1-13n: the verifier's own judgement from the same configuration, so a kept
+                  // test identity match is replayed only while the user is still listed.
+                  stagingTestIdentity: stagingTestIdentityJudge({
+                    appEnv: appConfig.appEnv,
+                    userIds: appConfig.stagingTestRealnameUserIds ?? null,
+                  }),
                 }),
         },
         {

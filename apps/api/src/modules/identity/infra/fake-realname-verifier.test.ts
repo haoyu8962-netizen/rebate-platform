@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createRootLogger } from '../../platform/index.ts';
+import { createRootLogger, type LogLevel } from '../../platform/index.ts';
 import { maskName } from '../domain/mask-name.ts';
 import {
   FAKE_REALNAME_PROVIDER,
@@ -39,10 +39,10 @@ const TEST_APP = 'b1-13n-unit-app';
 /** Fields every pino line carries whatever was logged (pino's own and the root logger's base). */
 const META = new Set(['level', 'time', 'pid', 'hostname', 'msg', 'v', 'entry', 'env']);
 
-function memoryLogger() {
+function memoryLogger(level: LogLevel = 'trace') {
   const lines: Record<string, unknown>[] = [];
   const logger = createRootLogger(
-    { level: 'trace', entry: 'api', appEnv: 'test' },
+    { level, entry: 'api', appEnv: 'test' },
     { write: (line: string) => void lines.push(JSON.parse(line) as Record<string, unknown>) },
   );
   return { logger, lines };
@@ -86,8 +86,9 @@ it('[AC-B1-13n#u4] 启用告警与审计的消息正文是固定文本、不附�
   expect(lines).toHaveLength(2);
 
   // Neither message carries a listed user_id, the name, any 4-character piece of the ID number or
-  // the app_id; the whole output never has the name or the ID number pieces.
-  const text = JSON.stringify(lines);
+  // the app_id; the message and business fields of the whole output never have the name or the ID
+  // number pieces (pino's metadata — pid, time, … — is left out: it may hold any digits).
+  const text = JSON.stringify(lines.map((line) => [line['msg'], fieldsOf(line)]));
   const pieces = Array.from({ length: TEST_ID_NO.length - 3 }, (_, i) =>
     TEST_ID_NO.slice(i, i + 4),
   );
@@ -132,4 +133,33 @@ it('[AC-B1-13n#u5] 名单为空时为 null；staging 以外带名单构造即抛
   expect(lines.filter((line) => line['event'] === STAGING_TEST_REALNAME_AUDIT_EVENT)).toHaveLength(
     0,
   );
+});
+
+it('[AC-B1-13n#u7] 根 logger 级别高于 info（LOG_LEVEL=warn / error / silent）时，命中仍输出审计行，级别、正文与字段不变', async () => {
+  for (const level of ['warn', 'error', 'silent'] as const) {
+    const { logger, lines } = memoryLogger(level);
+    const verifier = createStagingTestRealnameVerifier({
+      appEnv: 'staging',
+      userIds: LISTED,
+      logger,
+    });
+    // The root logger's own lines still follow LOG_LEVEL.
+    logger.info({}, 'unit_root_info');
+    await expect(verifier!.verify(input(LISTED[0]!))).resolves.toEqual({
+      outcome: 'match',
+      provider: STAGING_TEST_REALNAME_PROVIDER,
+    });
+    await expect(verifier!.verify(input(OUTSIDER))).resolves.toEqual({ outcome: 'unavailable' });
+    const audits = lines.filter((line) => line['event'] === STAGING_TEST_REALNAME_AUDIT_EVENT);
+    expect(audits, level).toHaveLength(1);
+    expect(audits[0]!['level']).toBe(30);
+    expect(audits[0]!['msg']).toBe('staging_test_realname_verified');
+    expect(fieldsOf(audits[0]!)).toEqual({
+      event: STAGING_TEST_REALNAME_AUDIT_EVENT,
+      app_id: TEST_APP,
+      user_id: LISTED[0],
+      provider: 'staging-test-identity',
+    });
+    expect(lines.some((line) => line['msg'] === 'unit_root_info')).toBe(false);
+  }
 });
