@@ -121,4 +121,5 @@ modify_existing:
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/bill-unsettled-count/**'
-status: todo
+status: done
+pr: 524

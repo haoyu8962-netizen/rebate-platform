@@ -1,0 +1,28 @@
+id: B2-18aa
+repo: rebate-platform
+title: 'test-change（FU-B2-18A-SPEC-R2-GAPS）：B2-18a 规则测试评审剩的三处缺口补到规则测试层——首个平台的应结未结计数与出账同事务、迁移不回填旧账单行、后到结算进下一期主批次时订单行 settle_period 不变'
+type: test-change
+# 2026-11-22 funds 线入账（编排 D10-2449 (一)：B2-18a spec-test r2 剩的 3 条记 out_of_scope、列实现必满足项，伴随测试单合并后紧接着补；B2-18a 已合并 #524）。走 D10-2264：非 task 分支的 test-change PR + 探针清单。
+# 来由（couli-runs/B2-18a/review-spec-test-r2-codex.json、r3 的 out_of_scope）：① 出账前没有账单行（本账单第一个平台的任务）时，应结未结计数若挪到出账事务提交之后单独初始化，
+#   连接中断会留下 NULL、原键重投返回 duplicate——现有 [AC-B2-18a#22] 注入故障时已有账单行、[#9] 在明细写入时注入，都盖不到首次初始化；② 迁移若用 DO 块或带引号的表名回填旧账单行，
+#   静态检查 [AC-B2-18a#24] 拦不住——要有「迁移前已存在的账单行升级后两列仍为 NULL」的实测；③ 6 月的 WAITING 单 8 月才有结算数据、进 7 月主批次时，实现若同时改了订单行的 settle_period，
+#   [AC-B2-18a#20] 仍会过（它读的是内存事实）——要用真实订单行并从库里重读 settle_period。
+# 做法：只新增 test/spec/settlement/bill-unsettled-count/companion/ 下的文件（现有 kit 与辅助文件只读引用，不改任何冻结文件，不改实现）；三处各至少一条，金额与计数写具体数。
+# 实现已在主干（#524），新用例在主干上应为绿；有牙由探针清单证明（D10-2264）：P1 把计数的写入挪到出账事务之外、P2 在迁移之后追加一条回填语句、P3 进批时改写订单行 settle_period，
+#   每个探针杀到哪几条写进 PR 正文与证据。不登 red_exempt。spec-test 由 Codex 做；本机不跑 vitest，走测试机 --tests（D10-2404）。
+refs: [BR-FUND-04, BR-FUND-09]
+refs_hash:
+  BR-FUND-04: 1c403c23b8bb
+  BR-FUND-09: d6b5a66ad5a9
+deps: [B2-18a]
+paths:
+  - 'test/spec/settlement/bill-unsettled-count/companion/**'
+test_paths:
+  - 'test/spec/settlement/bill-unsettled-count/companion/**' # 新目录
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/bill-unsettled-count/**'
+status: todo
+pr: null
