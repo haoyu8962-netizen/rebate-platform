@@ -1,0 +1,25 @@
+id: B1-01zzx
+repo: rebate-platform
+title: infra/staging README 1 节补「旧身份隔离存储的第二套字段密钥环」首次准备（PRIOR_IDENTITY_KEY_PROVIDER / _KEYRING_FILE / _MASTER_KEY_FILE，B1-27e）：节点文件、生成命令、两份应用 env 的三行、离线备份（FU-STAGING-README-PRIOR-IDENTITY，D10-2519）
+type: impl
+# 2026-11-22 ops 入账（编排 D10-2519 ②）。新 staging 47.114.99.11 首次部署时五个入口都因缺 PRIOR_IDENTITY_KEY_PROVIDER 拒绝启动：B1-27e（#1544）起 staging / prod 必配，README 第 1 节一直没写。
+# 只改 infra/staging/README.md：在 1.3 之后加一小节，内容照现行契约与先例，不改 compose、deploy.sh、代码与已有句子：
+#   ① 节点文件 /etc/couli-keys/prior-identity-master.key（另一把，openssl rand -hex 32）与 prior-identity-keyring.json（镜像内 keyring-init.ts 用这把主密钥生成），属主 1000、文件 400、目录 500，与 1.3 同目录同挂载（容器内 /run/couli-keys）；
+#   ② staging.env 与 staging-payout.env 都写 PRIOR_IDENTITY_KEY_PROVIDER=local、PRIOR_IDENTITY_KEYRING_FILE=/run/couli-keys/prior-identity-keyring.json、PRIOR_IDENTITY_MASTER_KEY_FILE=/run/couli-keys/prior-identity-master.key；缺这组时五个入口启动即失败（keyring-prior-identity.ts §2）；
+#   ③ 契约允许主密钥与 FIELD_MASTER_KEY_FILE 共用（§1、§4 g），只要求数据密钥不同（shares_main_data_key）；staging 照编排 D10-336（2026-10-24 旧节点做法）用独立主密钥；KEYRING_FILE 不得与 FIELD_KEYRING_FILE 相同；不得复制 keyring.json 充当；
+#   ④ 两把主密钥都要离线备份；主密钥不经命令行参数或环境变量（同 1.3）；prod 走 KMS，不照此做。
+# 出处：apps/api/src/modules/platform/config/keyring-prior-identity.ts §1–§4；ops/tasks/B1-27e.yaml；notices D10-336。RV2（按路径）。规则测试只核 README 文字（同 staging-readme-wording 的做法）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'infra/staging/README.md'
+  - 'ops/tasks/B1-01zzx.yaml'
+test_paths:
+  - 'test/spec/infra/staging-prior-identity/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/infra/staging-prior-identity/**'
+status: todo
