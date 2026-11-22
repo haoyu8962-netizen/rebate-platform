@@ -13,10 +13,13 @@
 //     one JSON line { steps: [...] }: the steps of verify:fast (verifyFastSteps).
 //
 // Set equality (D10-2504): base + spec-1 … spec-N run exactly the tests of verify:fast. That holds
-// only when (1) verify:fast has exactly one step `pnpm run test`; (2) the verify-unit command is
-// `pnpm exec <root test script>` plus one `--filter='!<P>'` and nothing else; (3) every spec
-// command is `pnpm --filter <P> run test --shard=<i>/<N>` with that same <P>, one per i in 1..N,
-// one N, the job named after its i. Anything else throws (exit 2 on the command line).
+// only when (1) verify:fast has exactly one step `pnpm run test`; (2) the root `test` script is
+// `turbo run test` over the whole workspace (at most `--env-mode=<mode>`, no filter) and the
+// verify-unit command is `pnpm exec <root test script>` plus one `--filter='!<P>'` and nothing
+// else; (3) every spec command is `pnpm --filter <P> run test --shard=<i>/<N>` with that same <P>,
+// one per i in 1..N, one N, the job named after its i; (4) each of those commands is a one-line
+// `run:` value (a block scalar or a value continued on further lines is folded by CI into one
+// command this reading would not see whole). Anything else throws (exit 2 on the command line).
 //
 // Node built-in modules only; the line-based YAML reading is that of tools/ci/int-shards.ts.
 import { readFileSync } from 'node:fs';
@@ -26,6 +29,8 @@ export type FastPart = { id: string; commands: string[] };
 export type FastParts = { n: number; parts: FastPart[] };
 
 const ROOT_TEST_STEP = 'pnpm run test';
+/** The root `test` script: every package of the workspace, no filter or other package selection. */
+const ROOT_TEST_SCRIPT = /^turbo run test(?: --env-mode=(?:loose|strict|infer))?$/;
 /** One word of a plain verify:fast step: no quotes, no shell syntax of any kind. */
 const PLAIN_STEP = /^[A-Za-z0-9@%:/._=,+-]+(?: +[A-Za-z0-9@%:/._=,+-]+)*$/;
 const UNIT_FILTER = /^--filter=(['"]?)!([A-Za-z0-9@/._-]+)\1$/;
@@ -111,29 +116,72 @@ function jobsOf(text: string): Job[] {
 }
 
 /**
- * The commands of a job's step `run:` values: the scalar after `run:`, and each line of a
- * `run: |` / `run: >` block. The same text under any other key is not a command.
+ * A step's `run:` value. `single` only for a one-line plain or quoted scalar; a block scalar
+ * (`|`, `>`, with any indicator) or a value that goes on over further lines is not single, and its
+ * `text` is all its lines joined by blanks (enough to see whether it holds a test command).
  */
-function runCommands(lines: string[]): string[] {
-  const out: string[] = [];
-  let block: { column: number; run: boolean } | null = null;
+type RunValue = { text: string; single: boolean };
+
+/**
+ * The `run:` values of a job's steps. A more indented line after `key: value` continues that
+ * value (a multi-line plain or quoted scalar), and the lines of a `key: |` / `key: >` block belong
+ * to it; the same text under any other key is not a command.
+ */
+function runValues(lines: string[]): RunValue[] {
+  const out: RunValue[] = [];
+  let open: { column: number; value: RunValue | null } | null = null;
   for (const line of lines) {
     if (isBlankOrComment(line)) continue;
-    if (block !== null && indentOf(line) > block.column) {
-      if (block.run) out.push(line.trim());
+    if (open !== null && indentOf(line) > open.column) {
+      if (open.value !== null) {
+        open.value.single = false;
+        open.value.text = `${open.value.text} ${line.trim()}`.trim();
+      }
       continue;
     }
-    block = null;
+    open = null;
     const keyed = /^(\s*(?:-\s+)?)([A-Za-z0-9_-]+):(?:\s+(.*))?$/.exec(line);
     if (!keyed) continue;
     const column = (keyed[1] ?? '').length;
     const value = (keyed[3] ?? '').replace(/\s+#.*$/, '').trim();
     const isRun = keyed[2] === 'run';
     if (/^[|>][0-9+-]*$/.test(value)) {
-      block = { column, run: isRun };
+      const block: RunValue = { text: '', single: false };
+      if (isRun) out.push(block);
+      open = { column, value: isRun ? block : null };
       continue;
     }
-    if (isRun) out.push(scalar(value));
+    const entry: RunValue = { text: scalar(value), single: isRun && isSingleScalar(value) };
+    if (isRun) out.push(entry);
+    // An empty value with deeper lines is a nested mapping for other keys; for run it is a
+    // plain scalar that starts on the next line.
+    open = value === '' && !isRun ? null : { column, value: isRun ? entry : null };
+  }
+  return out;
+}
+
+/** A one-line plain scalar, or one closed single- / double-quoted scalar. */
+function isSingleScalar(value: string): boolean {
+  if (value === '') return false;
+  if (value.startsWith("'")) return /^'(?:[^']|'')*'$/.test(value);
+  if (value.startsWith('"')) return /^"(?:[^"\\]|\\.)*"$/.test(value);
+  return !/^[-?:,[\]{}#&*!|>%@`]/.test(value); // no indicator: a plain scalar
+}
+
+/**
+ * The commands a job runs that match `pattern`; throws, naming the job, when such a command is
+ * not a one-line scalar (CI would run the whole folded or multi-line value, not its first line).
+ */
+function commandsOf(job: Job, pattern: RegExp): string[] {
+  const out: string[] = [];
+  for (const v of runValues(job.lines)) {
+    if (!pattern.test(v.text)) continue;
+    if (!v.single) {
+      throw new Error(
+        `job ${job.id}: the test command must be a one-line \`run:\` value (no block scalar or continued lines): ${v.text}`,
+      );
+    }
+    out.push(v.text);
   }
   return out;
 }
@@ -154,13 +202,21 @@ export function readFastParts(workflowText: string, packageJsonText: string): Fa
   if (typeof rootTest !== 'string' || rootTest.trim() === '') {
     throw new Error('package.json has no `test` script');
   }
+  // The whole workspace: a filter (or any other argument that changes the set of packages) in the
+  // root test script would make verify:fast run fewer tests than base + spec-1 … spec-N.
+  if (!ROOT_TEST_SCRIPT.test(rootTest.trim())) {
+    throw new Error(
+      `the root \`test\` script must be \`turbo run test\` with at most \`--env-mode=<mode>\` (no filter): ${rootTest}`,
+    );
+  }
 
   const jobs = jobsOf(workflowText);
   const unitJobs = jobs.filter((j) => j.id === 'verify-unit');
   if (unitJobs.length !== 1) {
     throw new Error(`expected one job verify-unit, found ${String(unitJobs.length)}`);
   }
-  const unitCommands = runCommands(unitJobs[0]?.lines ?? []).filter((c) => TURBO_TEST.test(c));
+  const unitJob = unitJobs[0] as Job;
+  const unitCommands = commandsOf(unitJob, TURBO_TEST);
   if (unitCommands.length !== 1) {
     throw new Error(
       `the job verify-unit must have exactly one turbo test command, found ${String(unitCommands.length)}`,
@@ -183,7 +239,7 @@ export function readFastParts(workflowText: string, packageJsonText: string): Fa
     if (!m) continue;
     const index = Number(m[1]);
     if (numbered.has(index)) throw new Error(`job ${job.id} appears twice`);
-    const own = runCommands(job.lines).filter((c) => PACKAGE_TEST.test(c));
+    const own = commandsOf(job, PACKAGE_TEST);
     if (own.length !== 1) {
       throw new Error(
         `job ${job.id} must have exactly one shard command, found ${String(own.length)}`,

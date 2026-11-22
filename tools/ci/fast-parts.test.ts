@@ -79,6 +79,73 @@ it('rejects a mismatched quote, an empty shard count and a workflow without jobs
   for (const ci of bad) expect(() => readFastParts(ci, pkg(FAST))).toThrow();
 });
 
+it(
+  'rejects a test command in a block scalar or continued on further lines, naming the job (money r1 ①)',
+  () => {
+    const blocks = [
+      // A folded block: CI runs `… --shard=1/2 --project=unit` as one command.
+      [
+        'verify-spec-1',
+        CI.replace(
+          run(spec(1, 2)),
+          `      - run: >-\n          ${spec(1, 2)}\n          --project=unit`,
+        ),
+      ],
+      ['verify-spec-1', CI.replace(run(spec(1, 2)), `      - run: |\n          ${spec(1, 2)}`)],
+      ['verify-spec-2', CI.replace(run(spec(2, 2)), `      - run: >+2\n            ${spec(2, 2)}`)],
+      ['verify-unit', CI.replace(run(UNIT), `      - run: |-\n          ${UNIT}`)],
+      // A plain scalar continued on the next, deeper line.
+      [
+        'verify-spec-2',
+        CI.replace(run(spec(2, 2)), `${run(spec(2, 2))}\n          --project=unit`),
+      ],
+      ['verify-unit', CI.replace(run(UNIT), `${run(UNIT)}\n          --filter=@couli/api`)],
+      // A value that starts on the line after `run:`, and a double-quoted value over two lines.
+      ['verify-spec-1', CI.replace(run(spec(1, 2)), `      - run:\n          ${spec(1, 2)}`)],
+      [
+        'verify-spec-1',
+        CI.replace(run(spec(1, 2)), `      - run: "${spec(1, 2)}\n          --project=unit"`),
+      ],
+    ] as const;
+    for (const [id, ci] of blocks) {
+      expect(() => readFastParts(ci, pkg(FAST)), ci).toThrow(new RegExp(`job ${id}: .*one-line`));
+    }
+    // Blocks without a test command (the `tested` step) and a sibling `env:` stay accepted.
+    expect(readFastParts(CI, pkg(FAST)).n).toBe(2);
+    // The CLI exits 2 and names the job.
+    writeFiles(base, { 'block.yml': blocks[0][1], 'package.json': pkg(FAST) });
+    const cli = spawnSync(
+      process.execPath,
+      [CLI, '--workflow', join(base, 'block.yml'), '--package-json', join(base, 'package.json')],
+      { encoding: 'utf8' },
+    );
+    expect(cli.status).toBe(2);
+    expect(cli.stderr).toMatch(/^fast-parts: job verify-spec-1: /);
+    expect(cli.stdout).toBe('');
+  },
+  CLI_TIMEOUT,
+);
+
+it('requires a root test script over the whole workspace before matching verify-unit (money r1 ②)', () => {
+  const filtered = "turbo run test --env-mode=loose --filter='!@couli/spec-tests'";
+  for (const test of [
+    filtered,
+    'turbo run test --env-mode=loose --filter=@couli/api',
+    'turbo run test --env-mode=loose --affected',
+    'turbo run test --env-mode=loose --concurrency=1',
+    'turbo run lint',
+    'vitest run',
+  ]) {
+    // verify-unit follows the root script, so only the root check can refuse it.
+    const ci = CI.replace(UNIT, `pnpm exec ${test} --filter='!@couli/spec-tests'`);
+    expect(() => readFastParts(ci, pkg(FAST, test)), test).toThrow(/root `test` script/);
+  }
+  for (const test of ['turbo run test', 'turbo run test --env-mode=strict']) {
+    const ci = CI.replace(UNIT, `pnpm exec ${test} --filter='!@couli/spec-tests'`);
+    expect(readFastParts(ci, pkg(FAST, ` ${test} `)).n, test).toBe(2);
+  }
+});
+
 it('verifyFastSteps splits on && and refuses quotes, a single & and an empty step', () => {
   expect(verifyFastSteps(pkg(' a  &&b && c '))).toEqual(['a', 'b', 'c']);
   for (const fast of ["pnpm run 'x'", 'pnpm run a & pnpm run b', 'a && && b', 'a &&', '  ']) {

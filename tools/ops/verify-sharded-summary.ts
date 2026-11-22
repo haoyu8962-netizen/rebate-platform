@@ -9,7 +9,8 @@
 // those whose `tree` is --tree (results of another tree never count: D10-2443 ②) and, per kind and
 // segment, the one that finished last (finished_at; the higher run number on a tie). The segments
 // are those of tools/ci/int-shards.ts on --workflow (default the trusted root's
-// .github/workflows/ci.yml). Green when, and only when, there is a verify-fast with exit 0, every
+// .github/workflows/ci.yml); a result counts for its segment only when the command it recorded is
+// that segment's command there (else, or with no command recorded, it is set aside: D10-2529). Green when, and only when, there is a verify-fast with exit 0, every
 // segment has a result with exit 0, every segment reports the same int_files_total and that total
 // equals the sum of the segments' files. Otherwise red, each reason in `problems`.
 //
@@ -25,10 +26,12 @@
 // verify:fast in parts (CT-06zzzzzzzb, D10-2503 / D10-2504): verify-container.sh --fast-part runs
 // one part of verify:fast (base, spec-1 … spec-N: tools/ci/fast-parts.ts on --workflow and
 // --package-json; together exactly the tests of verify:fast). <runs>/<id>/fast-part/*/result.json
-// of the tree are read too, per part the one that finished last. The fast evidence is the latest
-// whole verify-fast or the group of parts — only when every part has a result — whichever finished
-// later (a group finishes with its last part; on a tie the whole run). The whole run is green with
-// exit 0, the group when every part exited 0 (each other part is a problem). With neither a whole
+// of the tree are read too, per part the one that finished last among those whose recorded
+// fast_part.commands are the part's commands in that table (others are set aside as if the part
+// had not run, money r1 ③). The fast evidence is the latest whole verify-fast or the group of
+// parts — only when every part has a result — whichever finished later (a group finishes with
+// its last part; on a tie the whole run). The whole run is green with exit 0, the group when
+// every part exited 0 (each other part is a problem). With neither a whole
 // run nor every part, each missing part is a problem besides the missing verify-fast. `fast` adds
 // mode ("whole" | "parts") and parts [{ part, run, exit_code, started_at, finished_at }] ([] for
 // a whole run); with no evidence at all it stays null. When the parts cannot be read from the two
@@ -45,7 +48,7 @@
 // Exit codes: 0 green, 1 red, 2 usage, or the workflow cannot be read or has not CI's shape.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { readFastParts } from '../ci/fast-parts.ts';
+import { readFastParts, type FastPart } from '../ci/fast-parts.ts';
 import { readIntShards, type IntShards } from '../ci/int-shards.ts';
 import { runsDir, trustedRoot } from '../lib/paths.ts';
 import { runMain, TASK_ID, UsageError } from './cli.ts';
@@ -99,11 +102,12 @@ export type SummaryScope = {
   /** Read <runs>/<id>/browser/ as well. */
   browser: boolean;
   /**
-   * The parts of verify:fast (tools/ci/fast-parts.ts ids, in order) whose fast-part results may
-   * stand for a whole verify-fast; a string is why they could not be read (only a whole run
-   * counts). Absent: only a whole run counts.
+   * The parts of verify:fast (tools/ci/fast-parts.ts, in order, with their commands) whose
+   * fast-part results may stand for a whole verify-fast — a result counts only when the
+   * fast_part.commands it recorded are those of its part here; a string is why they could not be
+   * read (only a whole run counts). Absent: only a whole run counts.
    */
-  fastParts?: string[] | string;
+  fastParts?: FastPart[] | string;
 };
 
 const TEST_BROWSER = 'test:browser';
@@ -183,7 +187,20 @@ function results(dir: string): { run: number; doc: unknown }[] {
     }
     out.push({ run: Number(name), doc });
   }
-  return out;
+  return out.sort((a, b) => a.run - b.run); // problems in run order, whatever readdir gives
+}
+
+function sameCommands(recorded: unknown, expected: string[]): boolean {
+  return (
+    Array.isArray(recorded) &&
+    recorded.length === expected.length &&
+    recorded.every((c, i) => c === expected[i])
+  );
+}
+
+/** Why the results set aside for an entry did not count, for its "missing …" problem. */
+function setAsideNote(notes: string[] | undefined): string {
+  return notes === undefined || notes.length === 0 ? '' : ` (${notes.join('; ')})`;
 }
 
 function later<T extends Run>(a: T | undefined, b: T): T {
@@ -202,11 +219,13 @@ function fastEvidence(
   base: string,
   tree: string,
   whole: Run | undefined,
-  fastParts: string[] | string | undefined,
+  fastParts: FastPart[] | string | undefined,
   problems: string[],
 ): FastEvidence | null {
-  const ids = Array.isArray(fastParts) ? fastParts : [];
+  const table = Array.isArray(fastParts) ? fastParts : [];
+  const ids = table.map((p) => p.id);
   const byPart = new Map<string, PartRun>();
+  const setAside = new Map<string, string[]>();
   for (const { run, doc } of results(join(base, 'fast-part'))) {
     if (!isRecord(doc) || doc['tree'] !== tree) continue;
     const { fast_part, exit_code, started_at, finished_at } = doc;
@@ -220,7 +239,18 @@ function fastEvidence(
       problems.push(`fast-part run ${String(run)}: result.json of this tree is malformed`);
       continue;
     }
-    if (!ids.includes(part)) continue; // not a part of this workflow
+    const expected = table.find((p) => p.id === part);
+    if (expected === undefined) continue; // not a part of this workflow
+    // A result of another part table (an older ci.yml / package.json) never stands for this part
+    // (money r1 ③): it is set aside, as if that part had not run.
+    if (!sameCommands(isRecord(fast_part) ? fast_part['commands'] : undefined, expected.commands)) {
+      const notes = setAside.get(part) ?? [];
+      notes.push(
+        `run ${String(run)}: the commands of fast-part ${part} differ from the current part table`,
+      );
+      setAside.set(part, notes);
+      continue;
+    }
     const entry: PartRun = { run, part, exit_code: exit_code as number, started_at, finished_at };
     byPart.set(part, later(byPart.get(part), entry));
   }
@@ -264,7 +294,11 @@ function fastEvidence(
     };
   }
   for (const id of ids) {
-    if (!byPart.has(id)) problems.push(`missing fast-part ${id} result for this tree`);
+    if (!byPart.has(id)) {
+      problems.push(
+        `missing fast-part ${id} result for this tree${setAsideNote(setAside.get(id))}`,
+      );
+    }
   }
   if (typeof fastParts === 'string') {
     problems.push(`the parts of verify:fast cannot be read (${fastParts})`);
@@ -289,9 +323,11 @@ export function summarize(
 
   const ids = shards.segments.map((s) => s.id);
   const bySegment = new Map<string, ShardRun>();
+  const setAside = new Map<string, string[]>();
   for (const { run, doc } of results(join(base, 'int-shard'))) {
     if (!isRecord(doc) || doc['tree'] !== tree) continue;
-    const { segment, exit_code, files, tests, int_files_total, started_at, finished_at } = doc;
+    const { segment, command, exit_code, files, tests, int_files_total, started_at, finished_at } =
+      doc;
     if (
       typeof segment !== 'string' ||
       !Number.isInteger(exit_code) ||
@@ -304,7 +340,20 @@ export function summarize(
       problems.push(`int-shard run ${String(run)}: result.json of this tree is malformed`);
       continue;
     }
-    if (!ids.includes(segment)) continue; // not a segment of this workflow
+    const expected = shards.segments.find((s) => s.id === segment);
+    if (expected === undefined) continue; // not a segment of this workflow
+    // Only a result of this segment's current command counts (D10-2529, as for the fast parts): a
+    // result of another workflow's segment, or one that recorded no command, is set aside.
+    if (command !== expected.command) {
+      const notes = setAside.get(segment) ?? [];
+      notes.push(
+        typeof command === 'string'
+          ? `run ${String(run)}: the command of segment ${segment} differs from the current workflow`
+          : `run ${String(run)}: no command recorded`,
+      );
+      setAside.set(segment, notes);
+      continue;
+    }
     const entry: ShardRun = {
       run,
       segment,
@@ -323,7 +372,7 @@ export function summarize(
   for (const id of ids) {
     const s = bySegment.get(id);
     if (s === undefined) {
-      problems.push(`missing segment ${id}`);
+      problems.push(`missing segment ${id}${setAsideNote(setAside.get(id))}`);
       continue;
     }
     present.push(s);
@@ -441,11 +490,9 @@ function main(argv: string[]): number {
   }
   // CT-06zzzzzzzb: the parts of verify:fast from the same two files; when they cannot be read,
   // only a whole verify-fast counts (the reason is reported when there is none).
-  let fastParts: string[] | string;
+  let fastParts: FastPart[] | string;
   try {
-    fastParts = readFastParts(readFileSync(path, 'utf8'), readFileSync(pkgPath, 'utf8')).parts.map(
-      (p) => p.id,
-    );
+    fastParts = readFastParts(readFileSync(path, 'utf8'), readFileSync(pkgPath, 'utf8')).parts;
   } catch (err) {
     fastParts = err instanceof Error ? err.message : String(err);
   }
