@@ -11,6 +11,15 @@ export type {
   BillSourceSettlement,
   BillValidation,
 } from './job.ts';
+// B2-18: the regeneration port of a bill / supplement amount mismatch (BR-FUND-04 ④, R7).
+export { createBillSnapshotRegeneration } from './regenerate.ts';
+export type {
+  BillSnapshotRegeneration,
+  BillSnapshotRegenerationDependencies,
+  BillSnapshotRegenerationInput,
+  BillSnapshotRegenerationOrderRef,
+  BillSnapshotRegenerationResult,
+} from './regenerate.ts';
 export { createBillSourceReader } from './infra/bill-source.ts';
 export type { BillSourceDependencies } from './infra/bill-source.ts';
 export { saveBillValidations } from './infra/bill-validations.ts';

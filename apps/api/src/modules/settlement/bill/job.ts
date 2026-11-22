@@ -17,6 +17,7 @@ import type { Kysely, Transaction, Selectable } from 'kysely';
 import { newUuidV7, type Clock, type JobPayload } from '../../platform/index.ts';
 import { lockCreditGateExclusive } from '../batch/credit-gate.ts';
 import { decidingSettlement, latestSeqWithin } from '../settlements/index.ts';
+import type { BillSnapshotRegeneration } from './regenerate.ts';
 import {
   claimSettleJob,
   completeSettleJob,
@@ -147,6 +148,13 @@ export interface BillJobDependencies {
    * when the bill run is done). Absent: nothing.
    */
   onGenerated?(trx: Transaction<DB>, input: BillJobInput): Promise<void>;
+  /**
+   * B2-18 (BR-FUND-04 ④, BR-FUND-01 R7): re-values the commission snapshot on the union's
+   * settlement when B_settle and the current base differ beyond the tolerance, in the generating
+   * transaction. Optional: absent, the order is handled as a failed regeneration (engineering alert,
+   * stays WAITING, no difference registered).
+   */
+  readonly regenerateSnapshot?: BillSnapshotRegeneration;
 }
 
 export interface BillJobResult {
