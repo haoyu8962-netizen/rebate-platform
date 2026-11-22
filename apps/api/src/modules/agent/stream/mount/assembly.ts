@@ -73,6 +73,7 @@ import {
 } from '../../tools/search/index.ts';
 import type { AgentEarningsProvidedPorts } from './earnings.ts';
 import { createScenarioEntryReaders } from './entry.ts';
+import { agentDefaultTexts } from './texts.ts';
 import type { ScenarioEntryReaders } from '../../orchestrator/entry/index.ts';
 import type { DailyCounter } from './orders.ts';
 import { recordIntentVerdict } from './trace.ts';
@@ -256,10 +257,18 @@ function productView(tools: OrchestratorTools): OrchestratorTools {
  * parsing.parseToken inside it); since B3-04g the deterministic path hands each candidate over
  * unchanged, so the runner is passed as is.
  */
-function linkPath(runner: LinkQuoteRunner, texts: AgentRunTexts): DeterministicPath {
+function linkPath(
+  runner: LinkQuoteRunner,
+  texts: AgentRunTexts,
+  logger: RootLogger,
+): DeterministicPath {
   return createDeterministicPath({
     quotes: runner,
     texts,
+    // B3-05u: one redacted error line per link that failed for a server reason; the 50401
+    // frame's message is the placeholder-free copy the core's error frames use.
+    logger: { error: (obj, msg) => logger.error(obj, msg) },
+    errorMsg: async (_appId, code) => agentDefaultTexts().errorMsg(code),
     // B3-08q: no onTrace. The run trace (./trace.ts) stores the cards this path wrote as their
     // frames (the registered link ids inside the card data, agent_cards.link_id) and the core's
     // get_rebate_quote calls; the fragment's link_registrations have no column of their own.
@@ -479,7 +488,7 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
   });
   return {
     tools: productView(results),
-    deterministic: linkPath(createLinkQuoteRunner(runnerDeps), texts),
+    deterministic: linkPath(createLinkQuoteRunner(runnerDeps), texts, deps.logger),
     intents,
     results: receipts,
     texts,

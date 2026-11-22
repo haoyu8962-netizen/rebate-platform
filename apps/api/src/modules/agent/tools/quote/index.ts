@@ -69,7 +69,9 @@ export type LinkQuoteOutcome =
       readonly cards: readonly [];
     }
   | { readonly kind: 'price_unavailable'; readonly cards: readonly [] }
-  | { readonly kind: 'no_card'; readonly cards: readonly [] };
+  | { readonly kind: 'no_card'; readonly cards: readonly [] }
+  | { readonly kind: 'no_rebate'; readonly cards: readonly [] }
+  | { readonly kind: 'server_failed'; readonly cards: readonly [] };
 
 export interface LinkQuoteRunner {
   /** Internal URL/token runner; deterministic token wiring is a separate task. */
@@ -79,7 +81,8 @@ export interface LinkQuoteRunner {
 type QuoteResult =
   | Extract<ToolOutcome, { readonly kind: 'ok' }>
   | { readonly kind: 'price_unavailable' }
-  | { readonly kind: 'no_card' };
+  | { readonly kind: 'no_card' }
+  | { readonly kind: 'no_rebate' };
 
 type AgentBasis = 'normal' | 'price_compare_risk' | 'amount_unknown' | 'login_required';
 
@@ -295,6 +298,7 @@ function modelView(
  * Shared by both entries: one fetched snapshot → one prepared card (active_query, deferred link)
  * → required-field filter → register_links (commit: one links row with the quote snapshot, no
  * conversion) → rebate_quote card. A registration failure rejects; no half card, no link_id.
+ * no_rebate is reported apart (the model tool still treats it as no_card).
  */
 async function quoteProduct(
   deps: RebateQuoteDeps,
@@ -312,9 +316,19 @@ async function quoteProduct(
   const result = await deps.catalog.cards(ctx).assemble(input);
   if (result.kind === 'price_unavailable') return { kind: 'price_unavailable' };
   if (result.kind !== 'prepared') return { kind: 'no_card' };
+  // BR-PRICE-08: checked on the prepared card, before commit, so it never gets a link row.
+  if (result.card['rebate_basis'] === 'no_rebate') return { kind: 'no_rebate' };
   if (!isDeliverable(result.card)) return { kind: 'no_card' };
-  const card = await result.commit();
-  if (!isDeliverable(card) || !isText(card.link_id)) return { kind: 'no_card' };
+  return deliver(deps, await result.commit(), ctx);
+}
+
+/** Committed card → rebate_quote card; a card that lost a required field or its link is no_card. */
+function deliver(
+  deps: RebateQuoteDeps,
+  card: ProductCard,
+  ctx: ToolCallContext,
+): Extract<LinkQuoteOutcome, { readonly kind: 'ok' | 'no_card' }> {
+  if (!isDeliverable(card) || !isText(card.link_id)) return { kind: 'no_card', cards: [] };
   const productKey = card.product_key as string;
   const wire: UnnumberedCard = {
     type: 'rebate_quote',
@@ -360,7 +374,7 @@ export function createRebateQuoteHandler(deps: RebateQuoteDeps): ToolHandler {
       const product = await deps.catalog.readProduct(productKey, ctx);
       const outcome = await quoteProduct(deps, product, ctx);
       if (outcome.kind === 'ok') return outcome;
-      return failed(outcome.kind);
+      return failed(outcome.kind === 'no_rebate' ? 'no_card' : outcome.kind);
     } catch {
       // Includes a failed fresh lookup or link registration: never fall back to an earlier card.
       return failed('tool_failed');
@@ -401,15 +415,44 @@ async function parseCandidate(
 
 type ParseFailure = Extract<LinkQuoteOutcome, { readonly kind: 'parse_error' }>;
 
+/**
+ * A normalized dependency fault (union UnionError; platform GovernanceError: timeout, circuit
+ * open): a server reason. Recognized by name because the agent module may import union types only.
+ */
+function isDependencyFault(error: unknown): boolean {
+  return (
+    error instanceof Error && (error.name === 'UnionError' || error.name === 'GovernanceError')
+  );
+}
+
+/**
+ * B3-05u: no_rebate (BR-PRICE-08) is its own outcome and registers no link. A normalized
+ * dependency fault while parsing, and any failure of the quote (catalog.assemble) or the link
+ * registration (commit), is server_failed instead of a rejection. ParsingError stays parse_error
+ * with its code. Any other parse failure still rejects unchanged (B3-04f), and so does anything
+ * after the run was cancelled; the deterministic path counts a rejection as a server reason
+ * unless the run was cancelled.
+ */
 export function createLinkQuoteRunner(deps: RebateQuoteDeps): LinkQuoteRunner {
   return {
     async run(candidate, ctx) {
-      const parsed = await parseCandidate(deps, candidate, ctx);
+      let parsed: Awaited<ReturnType<typeof parseCandidate>>;
+      try {
+        parsed = await parseCandidate(deps, candidate, ctx);
+      } catch (error) {
+        if (ctx.signal.aborted || !isDependencyFault(error)) throw error;
+        return { kind: 'server_failed', cards: [] };
+      }
       if (parsed.kind === 'parse_error') return parsed;
-      // Same flow as a URL: the card is built from this one parsed snapshot (BR-AI-04).
-      const outcome = await quoteProduct(deps, parsed.product, ctx);
-      if (outcome.kind === 'ok') return outcome;
-      return { kind: outcome.kind, cards: [] };
+      try {
+        // Same flow as a URL: the card is built from this one parsed snapshot (BR-AI-04).
+        const outcome = await quoteProduct(deps, parsed.product, ctx);
+        if (outcome.kind === 'ok') return outcome;
+        return { kind: outcome.kind, cards: [] };
+      } catch (error) {
+        if (ctx.signal.aborted) throw error;
+        return { kind: 'server_failed', cards: [] };
+      }
     },
   };
 }

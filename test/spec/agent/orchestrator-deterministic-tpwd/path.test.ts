@@ -120,7 +120,12 @@ const failures: readonly { label: string; outcome: LinkQuoteOutcome | Error; cod
 
 it.each(failures)(
   '[AC-B3-04g#3] 中间口令 $label 只产生一次对应 notice 和 failed，前后 URL 照常',
-  async ({ outcome, code }) => {
+  async ({ label, outcome, code }) => {
+    const expected = notice(code);
+    const key =
+      label === 'parse_error 50301' || label === 'runner 抛错'
+        ? 'agent.notice.quote_failed'
+        : `error.${code}`;
     const out = context();
     const links = [url(1), token, url(3)];
     const runner = runnerFor([
@@ -139,12 +144,19 @@ it.each(failures)(
       { kind: 'card', card: success(1).cards[0] },
       status('start'),
       status('failed'),
-      { kind: 'card', card: notice(code) },
+      {
+        kind: 'card',
+        card: {
+          ...expected,
+          data: { ...expected.data, text_key: key },
+          fallback_text: `固定文案:${key}`,
+        },
+      },
       status('start'),
       status('end'),
       { kind: 'card', card: success(3).cards[0] },
     ]);
-    expect(copy.text).toHaveBeenCalledExactlyOnceWith('synthetic-app', `error.${code}`);
+    expect(copy.text).toHaveBeenCalledExactlyOnceWith('synthetic-app', key);
     expect(JSON.stringify(out.events)).not.toContain('synthetic-private-detail');
   },
 );
