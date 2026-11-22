@@ -29,4 +29,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/contracts/operation-slots/**'
-status: todo
+status: done
+pr: 521
