@@ -1,0 +1,37 @@
+id: F1-08atb
+repo: rebate-platform
+title: F1-08atb：结果未知标记按提交实例持有——页顶旧提示的【关闭】只清它代表的那几笔，不清关闭时仍在途的提交；在途提交之后进入结果未知要重新登记标记，别的提交拿到确定结果不得把它清掉（FU-UNKNOWN-MARKER-MULTI-SUBMIT）
+type: impl
+# 2026-11-22 入账（前端线 fe，编排 D10-2508：F1-08ap money r3 的 S1 记范围外、登 FU-UNKNOWN-MARKER-MULTI-SUBMIT，进上线前必须；排在 F1-08ap 合并之后、F1-08ao 之前）。共享组件 components/unknown-marker 是 F1-08at 的，本单是它的后继，故取号 F1-08atb。
+# 来由（F1-08ap review-money-r3.json 的 S1 原文要点）：管理员在自动到账设置提交 A，等响应时离开提现审核页；回来后页顶显示 A 的待核对提示；进设置页签提交 B，B 响应前点旧提示的【关闭】——clearUnknown 把该账号该页的整份持有（A 与 B）一起清掉，当前实例只为 B 补写标记；随后 A 断网进入结果未知，已卸载的 A 实例看到标记还在（是 B 的）就直接返回、没有重新登记；B 成功后清掉唯一的标记，重新登录后看不到 A 仍需核对的提示。根子在组件「账号 + 页面只存一条、【关闭】整份清除」的设计。
+# 要的行为（D10-2508：标记按提交实例持有，【关闭】不清在途提交的持有；存储内容仍只有 F1-08at 的三项 {page, unknown, at}，不加单号、金额、键、请求体，不按角色分支，D10-2075 / D10-2470）：
+#   ① 每一笔提交（一个写入实例的一次 mark）是独立的持有者；拿到确定结果（成功或确定拒绝）只释放它自己的持有，还有别的持有者时标记留着。
+#   ② 【关闭】清掉提示当时代表的那几笔（已进入结果未知、已放弃、或前一次运行留下的标记），提示随之消失；关闭时仍在途（请求已发出、还没收到回答）的提交不因关闭失去持有：它之后进入结果未知（断网、超时、5xx、20902 等仍未知的回答）或因 10001 放弃时，重新写回标记（时刻取它进入结果未知的那一刻，注入 Clock），即使同账号同页已有别的提交写的标记也要登记为持有者；它之后拿到确定结果则不留标记。
+#   ③ 离页（实例卸载）后，在途提交的回答照常按 ① ② 作用于标记；别的提交拿到确定结果、或另一实例的释放，都不得清掉仍由别的提交持有的标记。
+#   ④ 不改提示文案、时刻格式、换号不显示、存储三项与刷新后行为（F1-08at 冻结用例照旧成立）；提示关闭后在本页本次显示内不因 ② 的在途提交立刻重新弹出，除非该提交之后真的进入结果未知。
+# 覆盖面：核所有用该组件的页并逐个确认走组件、不各自绕（grep -rl useUnknownMarker apps/admin/src）：提现审核 BatchPayout、ManualPaid、AutoPayoutSettings（F1-08ap 页内的 keepRef 补写可改由组件承担，行为不变）、提现详情 DetailPayoutActions 两处、调账与核销 useAdjustmentWrite（新建、红冲、批准、驳回、核销）。清单写进证据。
+# 规则测试新目录 test/spec/frontend/admin-unknown-marker-multi-submit/**：至少 ① F1-08ap 原场景（A 在途离页 → 回来见提示 → 提交 B → B 在途时【关闭】 → A 断网 → B 成功 → 存储里仍有该账号该页的标记、时刻为 A 进入未知的时刻；重新登录后见提示）；② 同场景 A 拿到成功 → 不留标记；③ 两笔都在途时【关闭】、两笔先后未知 → 标记在、先后释放后才清；④ 调账页与一个提现写入页各一条，确认不是只修了 F1-08ap 那一页。存储值一律 toEqual 三项整值。
+# 冻结用例（admin-unknown-relogin-marker、admin-withdrawal-auto-payout-settings 等）若有与 ② 冲突的断言，先报编排再补 modify_existing（D10-1712 / D10-1733），不在实现里迁就。
+# 资金页（RV2）：money 评审；规则测试由 Codex 写（D10-1872，Codex 不可用时按 approvals 第 36 条改独立 Claude 并先打台账补丁），spec-test 至少一轮 Codex 全量（D10-2199）。资金评审必查项（D10-2050）照带；写操作的结果未知处理照 F1-08ce / D10-1731（锁定、原键原体）不变。
+refs: [BR-WDR-16, BR-FUND-24, BR-WDR-30, BR-ID-34]
+refs_hash:
+  BR-WDR-16: c5899cc85558
+  BR-FUND-24: efcdeeafa452
+  BR-WDR-30: ec74379ec48c
+  BR-ID-34: 6f4bb7f212cb
+deps: [F1-08at, F1-08ap]
+paths:
+  - 'apps/admin/src/components/unknown-marker/**'
+  - 'apps/admin/src/pages/withdrawals/**'
+  - 'apps/admin/src/texts/withdrawals.ts'
+  - 'apps/admin/src/pages/adjustments/**'
+  - 'apps/admin/src/texts/adjustments.ts'
+test_paths:
+  - 'test/spec/frontend/admin-unknown-marker-multi-submit/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-unknown-marker-multi-submit/**'
+status: todo
+pr: null
