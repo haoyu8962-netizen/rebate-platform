@@ -988,6 +988,26 @@ export const CONTRACT_AUTH_ROUTES = [
   },
   {
     "method": "GET",
+    "path": "/admin/v1/search/settings",
+    "auth": "admin"
+  },
+  {
+    "method": "PUT",
+    "path": "/admin/v1/search/hot-words",
+    "auth": "admin"
+  },
+  {
+    "method": "PUT",
+    "path": "/admin/v1/search/keyword-routes",
+    "auth": "admin"
+  },
+  {
+    "method": "PUT",
+    "path": "/admin/v1/search/default-word",
+    "auth": "admin"
+  },
+  {
+    "method": "GET",
     "path": "/admin/v1/agreements",
     "auth": "admin"
   },

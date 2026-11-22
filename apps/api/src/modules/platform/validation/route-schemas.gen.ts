@@ -3244,7 +3244,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "pattern": "^(home|custom:[a-z0-9_-]{1,57})$"
+          "pattern": "^(home|me|search|custom:[a-z0-9_-]{1,57})$"
         }
       },
       "required": [
@@ -3403,7 +3403,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "pattern": "^(home|custom:[a-z0-9_-]{1,57})$"
+          "pattern": "^(home|me|search|custom:[a-z0-9_-]{1,57})$"
         },
         "section_id": {
           "type": "string",
@@ -13744,7 +13744,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "pattern": "^(home|custom:[a-z0-9_-]{1,57})$"
+          "pattern": "^(home|me|search|custom:[a-z0-9_-]{1,57})$"
         }
       },
       "required": [
@@ -13774,7 +13774,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "pattern": "^(home|custom:[a-z0-9_-]{1,57})$"
+          "pattern": "^(home|me|search|custom:[a-z0-9_-]{1,57})$"
         }
       },
       "required": [
@@ -13824,7 +13824,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "pattern": "^(home|custom:[a-z0-9_-]{1,57})$"
+          "pattern": "^(home|me|search|custom:[a-z0-9_-]{1,57})$"
         }
       },
       "required": [
@@ -13878,7 +13878,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "pattern": "^(home|custom:[a-z0-9_-]{1,57})$"
+          "pattern": "^(home|me|search|custom:[a-z0-9_-]{1,57})$"
         },
         "version": {
           "type": "integer",
@@ -13914,7 +13914,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "pattern": "^(home|custom:[a-z0-9_-]{1,57})$"
+          "pattern": "^(home|me|search|custom:[a-z0-9_-]{1,57})$"
         }
       },
       "required": [
@@ -13979,7 +13979,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "pattern": "^(home|custom:[a-z0-9_-]{1,57})$"
+          "pattern": "^(home|me|search|custom:[a-z0-9_-]{1,57})$"
         }
       },
       "required": [
@@ -14023,7 +14023,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "pattern": "^(home|custom:[a-z0-9_-]{1,57})$"
+          "pattern": "^(home|me|search|custom:[a-z0-9_-]{1,57})$"
         }
       },
       "required": [
@@ -14076,7 +14076,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "pattern": "^(home|custom:[a-z0-9_-]{1,57})$"
+          "pattern": "^(home|me|search|custom:[a-z0-9_-]{1,57})$"
         }
       },
       "required": [
@@ -14128,7 +14128,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "pattern": "^(home|custom:[a-z0-9_-]{1,57})$"
+          "pattern": "^(home|me|search|custom:[a-z0-9_-]{1,57})$"
         }
       },
       "required": [

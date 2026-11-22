@@ -1,0 +1,32 @@
+{
+  "page_key": "home",
+  "version": 1,
+  "ttl_sec": 300,
+  "sections": [
+    {
+      "id": "banner_main",
+      "type": "banner",
+      "version": 1,
+      "data_source": {
+        "kind": "static",
+        "items": [
+          {
+            "image": "https://example.com/img/banner-1.png",
+            "action": {
+              "route": "Help"
+            }
+          },
+          {
+            "image": "https://example.com/img/banner-2.png",
+            "action": {
+              "route": "Rules"
+            },
+            "badge": {
+              "kind": "dot"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

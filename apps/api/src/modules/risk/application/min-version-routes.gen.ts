@@ -1995,6 +1995,46 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": false
   },
   {
+    "operationId": "adminGetSearchSettings",
+    "method": "GET",
+    "path": "/admin/v1/search/settings",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
+    "operationId": "adminUpdateSearchHotWords",
+    "method": "PUT",
+    "path": "/admin/v1/search/hot-words",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
+    "operationId": "adminUpdateSearchKeywordRoutes",
+    "method": "PUT",
+    "path": "/admin/v1/search/keyword-routes",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
+    "operationId": "adminUpdateSearchDefaultWord",
+    "method": "PUT",
+    "path": "/admin/v1/search/default-word",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
     "operationId": "adminListAgreements",
     "method": "GET",
     "path": "/admin/v1/agreements",

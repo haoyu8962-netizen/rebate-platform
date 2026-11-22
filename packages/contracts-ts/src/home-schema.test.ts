@@ -1,5 +1,5 @@
 // CT-07a: contracts/home-schema.json (03 §6.1–§6.3, 04 §6.2 NoticeItem, 04 §10.1 jump targets)
-// and its golden fixtures. The schema compiles under the API workspace's strict Ajv2020 (same
+// and its golden fixtures (operation-slot fixtures CT-27: operation-slots.test.ts). The schema compiles under the API workspace's strict Ajv2020 (same
 // loader as admin-auth.test.ts); every golden page passes, every invalid/ page is rejected; the
 // golden jump targets name routes of routes.json and pass that route's params schema; shared
 // shapes match openapi.yaml and enums/.
@@ -55,20 +55,34 @@ const GOLDEN = [
   'conditions.json',
   'external-page.json',
   'home-full.json',
+  'me-more-services.json',
   'min-app-version.json',
   'notice-bar-api.json',
   'notice-bar-static.json',
   'popup-lottie.json',
+  'popup-scheduled.json',
   'popup-static.json',
+  'search-top-banner.json',
+  'search-top-products.json',
   'union-material.json',
   'unknown-type.json',
 ];
 const INVALID = [
   'ad-label-not-banner.json',
   'api-with-path.json',
+  'banner-item-badge.json',
   'condition-null.json',
   'condition-true.json',
   'condition-unknown-key.json',
+  'me-badge-overlong.json',
+  'me-external-page.json',
+  'me-icon-and-image.json',
+  'me-icon-digest-unbound.json',
+  'me-invite-share.json',
+  'me-item-end-at-utc.json',
+  'me-items-over-limit.json',
+  'me-labor-agreement.json',
+  'me-unlisted-type.json',
   'min-app-version-bad.json',
   'notice-bar-api-with-items.json',
   'notice-bar-api-wrong-type.json',
@@ -82,6 +96,9 @@ const INVALID = [
   'popup-lottie-sha256-63.json',
   'popup-lottie-sha256-uppercase.json',
   'product-grid-columns-3.json',
+  'search-more-external.json',
+  'search-two-top-slots.json',
+  'search-unlisted-type.json',
   'two-popups.json',
   'union-material-empty-channels.json',
   'union-material-platforms.json',

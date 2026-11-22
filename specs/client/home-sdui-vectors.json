@@ -1030,7 +1030,7 @@
               {
                 "icon": "https://img.example.com/icon-a.png",
                 "title": "测试入口甲",
-                "badge": "测试",
+                "badge": { "kind": "text", "text": "测试" },
                 "action": { "route": "Search", "params": { "q": "测试入口甲" } }
               },
               {

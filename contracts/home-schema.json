@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "Home SDUI page contract (CT-07a). Shape: 规划/03 §6.1; client handling: 03 §6.2; card registry: 03 §6.3; jump targets and per-platform min_app_version: 04 §10.1; NoticeItem: 04 §6.2; ad_label: BR-TEXT-17. The root is one delivered page (GET /v1/pages/{page_key}, preview, and the sections the console saves and reads back use $defs/section). The 8 registered section types are validated strictly by type; any other type is an unknown card: only the section envelope is checked and the client skips it silently (03 §6.2). Jump targets are {route, params} (RouteTarget of openapi.yaml): route names are not enumerated here, a server may send a route newer than the client (03 §4.4). Props whose keys the plan only describes (icon_grid, activity_entry, notice_bar display, popup close button, product_scroll) stay open until the plan names them. popup may carry an optional Lottie animation {url, sha256} (image is then the static fallback) and an optional screen-reader name alt (04 §6.2, BR-TEXT-26). union_material carries channels [{platform, channel_id}] chosen from the channel whitelist (BR-TEXT-17 细则); the platforms list of the 03 §6.1 example is derived from channels and not accepted here. At most one popup per page; section ids unique per page (checked by the contracts-ts unit test and on save, not expressible here). Fixtures: contracts/fixtures/home-golden/*.json (invalid/ holds counter-examples).",
+  "$comment": "Home SDUI page contract (CT-07a; operation slots CT-27). Shape: 规划/03 §6.1; client handling: 03 §6.2; card registry: 03 §6.3; jump targets and per-platform min_app_version: 04 §10.1; NoticeItem: 04 §6.2; ad_label: BR-TEXT-17; operation slots (运营位): 04 §6.2「运营位」, BR-TEXT-28～30. The root is one delivered page (GET /v1/pages/{page_key}, preview, and the sections the console saves and reads back use $defs/section). page_key is home, me, search or custom:<slug>. Each of home, me and search has an admission definition ($defs/admission_home, admission_me, admission_search: the JSON Schema of that page's sections array, BR-TEXT-28 准入表), which the server's save / publish check and the console form read; the root applies admission_me and admission_search by page_key, custom:* keeps the checks it had. On home the 8 registered section types are validated strictly by type and any other type is an unknown card: only the section envelope is checked and the client skips it silently (03 §6.2; saving an unregistered type is refused by the server); me and search admit only their listed types. Every section and every static data source item may carry start_at / end_at (ISO 8601 with +08:00, BR-TEXT-11 / BR-TEXT-29; absent = not limited); the server sends only what is inside its range and the client filters again by its own clock. Jump targets are {route, params} (RouteTarget of openapi.yaml): route names are not enumerated here, a server may send a route newer than the client (03 §4.4); on me and search every jump target is an in-app target ($defs/in_app_target, BR-TEXT-30), the original home types keep RouteTarget. Badges ($defs/badge) exist only on icon_grid items. Props whose keys the plan only describes (activity_entry, notice_bar display, popup close button) stay open until the plan names them. popup may carry an optional Lottie animation {url, sha256} (image is then the static fallback) and an optional screen-reader name alt (04 §6.2, BR-TEXT-26). union_material carries channels [{platform, channel_id}] chosen from the channel whitelist (BR-TEXT-17 细则); the platforms list of the 03 §6.1 example is derived from channels and not accepted here. At most one popup per page; section ids unique per page (checked by the contracts-ts unit test and on save, not expressible here). Fixtures: contracts/fixtures/home-golden/*.json (invalid/ holds counter-examples).",
   "title": "Page",
   "type": "object",
   "additionalProperties": false,
@@ -8,7 +8,7 @@
   "properties": {
     "page_key": {
       "type": "string",
-      "pattern": "^(home|custom:[a-z0-9_-]{1,57})$"
+      "pattern": "^(home|me|search|custom:[a-z0-9_-]{1,57})$"
     },
     "version": {
       "type": "integer",
@@ -39,6 +39,76 @@
       "maxContains": 1
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "required": ["page_key"],
+        "properties": {
+          "page_key": {
+            "type": "string",
+            "const": "home"
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "sections": {
+            "type": "array",
+            "items": {
+              "$comment": "A delivered home page: a section of a registered type ($defs/home_registered_section, the same definition admission_home uses) is checked strictly by $defs/section; any other type is an unknown card, only its envelope is checked and the client skips it silently (03 §6.2). Saving such a section is refused by admission_home.",
+              "if": {
+                "$ref": "#/$defs/home_registered_section"
+              },
+              "then": true,
+              "else": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["page_key"],
+        "properties": {
+          "page_key": {
+            "type": "string",
+            "const": "me"
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "sections": {
+            "$ref": "#/$defs/admission_me"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["page_key"],
+        "properties": {
+          "page_key": {
+            "type": "string",
+            "const": "search"
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "sections": {
+            "$ref": "#/$defs/admission_search"
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "app_version": {
       "type": "string",
@@ -189,7 +259,7 @@
     },
     "static_item": {
       "type": "object",
-      "$comment": "One entry of a static data source; keys other than action and image are left to each card until the plan names them.",
+      "$comment": "One entry of a static data source; keys other than action, image, start_at and end_at are left to each card until the plan names them. No badge: badges exist only on icon_grid items (BR-TEXT-29).",
       "additionalProperties": true,
       "properties": {
         "action": {
@@ -198,7 +268,14 @@
         "image": {
           "type": "string",
           "minLength": 1
-        }
+        },
+        "start_at": {
+          "$ref": "#/$defs/instant"
+        },
+        "end_at": {
+          "$ref": "#/$defs/instant"
+        },
+        "badge": false
       }
     },
     "data_source_static": {
@@ -317,9 +394,208 @@
       "type": "string",
       "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
     },
+    "instant": {
+      "type": "string",
+      "$comment": "A moment in ISO 8601 with the +08:00 offset (BR-TEXT-11), as written by the console; Z or another offset is refused.",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?\\+08:00$"
+    },
+    "core_route": {
+      "type": "string",
+      "$comment": "Core entries no operation slot may show (BR-TEXT-28 不可配清单): orders (OrderList, OrderDetail, FindOrder), wallet and earnings (Wallet, Earnings, Ledger), withdrawal and its steps (Withdraw, WithdrawRecords, PayoutAccount, RealName, Reverify), the fixed 推广与邀请 group (ShareHub, InviteShare; Earnings above), settings (Settings), privacy and authorization (PrivacyCenter, DeleteAccount, DataCopy, AuthManage) and agreements (Agreement, LaborAgreement), whatever their params (empty params included). The server checks the same list again when saving.",
+      "enum": [
+        "OrderList",
+        "OrderDetail",
+        "FindOrder",
+        "Wallet",
+        "Earnings",
+        "Ledger",
+        "Withdraw",
+        "WithdrawRecords",
+        "PayoutAccount",
+        "RealName",
+        "Reverify",
+        "ShareHub",
+        "InviteShare",
+        "Settings",
+        "PrivacyCenter",
+        "DeleteAccount",
+        "DataCopy",
+        "AuthManage",
+        "Agreement",
+        "LaborAgreement"
+      ]
+    },
+    "in_app_target": {
+      "type": "object",
+      "description": "Jump target allowed on the operation slots of me and search (BR-TEXT-30): a RouteTarget whose route is not ExternalPage and not a core entry (BR-TEXT-28); WebPage only with an https url (the server also checks the host against bridge_origins). The server checks route and params against contracts/routes.json (registered, entry includes in_app) when saving; an invalid target is 20001 with data.fields pointing at the jump field.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/route_target"
+        }
+      ],
+      "properties": {
+        "route": {
+          "type": "string",
+          "not": {
+            "anyOf": [
+              {
+                "const": "ExternalPage"
+              },
+              {
+                "$ref": "#/$defs/core_route"
+              }
+            ]
+          }
+        }
+      },
+      "if": {
+        "type": "object",
+        "required": ["route"],
+        "properties": {
+          "route": {
+            "type": "string",
+            "const": "WebPage"
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": ["params"],
+        "properties": {
+          "params": {
+            "type": "object",
+            "required": ["url"],
+            "properties": {
+              "url": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^https://[^\\s/?#]+"
+              }
+            }
+          }
+        }
+      }
+    },
+    "badge": {
+      "type": "object",
+      "$comment": "Badge of an icon_grid item (BR-TEXT-29 徽标): kind none, dot (red dot) or text; text only with kind text, 1–2 characters counted as Unicode code points (the server also runs the BR-TEXT-13 banned-word check). expire_at is optional: from that moment the client hides the badge and keeps the item. Number badges come only from business data and cannot be configured.",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["none", "dot", "text"]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2
+        },
+        "expire_at": {
+          "$ref": "#/$defs/instant"
+        }
+      },
+      "if": {
+        "type": "object",
+        "required": ["kind"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "text"
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "text": false
+        }
+      }
+    },
+    "icon_asset": {
+      "type": "object",
+      "$comment": "A delivered icon picture with its digest, bound in one object (BR-TEXT-30 图标; same as the platform icons of BR-TEXT-24 and the popup lottie of BR-TEXT-26): url is the https address of the picture under the OSS media domain, its file named by the content digest (<sha256>.png or .svg, design/icons/README.md grid/), sha256 the lowercase hex SHA-256 of that file, which the client checks after download; the server checks on save that the file name equals sha256. The client shows only url, never another picture field.",
+      "additionalProperties": false,
+      "required": ["url", "sha256"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://[^\\s/?#]+/([^\\s?#]*/)?[0-9a-f]{64}\\.(png|svg)$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "icon_grid_item": {
+      "type": "object",
+      "$comment": "One icon_grid entry of home (金刚区, 03 §6.3; 01 F-HOME-10). The shape the existing home drafts and the client vectors use is kept (CT-07a; specs/client/home-sdui-vectors.json goldenPages.icon_grid): keys other than those below stay open, the picture is image or icon, and icon may be a plain picture address as before or an {url, sha256} object. The digest binding of BR-TEXT-30 applies to me only ($defs/me_item, admission_me). badge is $defs/badge, the only badge shape of BR-TEXT-29 (none / dot / text up to 2 characters, optional expiry), on home as on me; badges exist only on icon_grid items.",
+      "additionalProperties": true,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/route_target"
+        },
+        "image": {
+          "type": "string",
+          "minLength": 1
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "$ref": "#/$defs/icon_asset"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "badge": {
+          "$ref": "#/$defs/badge"
+        },
+        "start_at": {
+          "$ref": "#/$defs/instant"
+        },
+        "end_at": {
+          "$ref": "#/$defs/instant"
+        }
+      }
+    },
+    "data_source_static_icon_grid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "items"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["static"]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/icon_grid_item"
+          }
+        }
+      }
+    },
     "section": {
       "type": "object",
-      "$comment": "Envelope checked for every type; registered types add their props and data_source below. min_app_version, props, data_source and condition are optional (missing = not filtered / everyone) and never null.",
+      "$comment": "Envelope checked for every type; registered types add their props and data_source below. min_app_version, props, data_source, condition, start_at and end_at are optional (missing = not filtered / everyone / not limited) and never null. An item's range must lie within its section's range and start_at must be before end_at (checked on save, 20001; not expressible here).",
       "additionalProperties": false,
       "required": ["id", "type", "version"],
       "properties": {
@@ -356,6 +632,12 @@
         },
         "condition": {
           "$ref": "#/$defs/condition"
+        },
+        "start_at": {
+          "$ref": "#/$defs/instant"
+        },
+        "end_at": {
+          "$ref": "#/$defs/instant"
         },
         "ad_label": {
           "type": ["string", "null"],
@@ -519,21 +801,34 @@
     },
     "section_icon_grid": {
       "type": "object",
-      "$comment": "Icon grid (03 §6.3): columns 4 / 5, rows, badges; key names not given by the plan yet, props stay open. static.",
+      "$comment": "Icon grid (03 §6.3): home 金刚区 and me more_services. props are final: columns 4 or 5, rows 1–4 (the client pages further items). Items are icon_grid_item (badges only here). static.",
       "required": ["data_source"],
       "properties": {
         "props": {
           "type": "object",
-          "additionalProperties": true
+          "additionalProperties": false,
+          "properties": {
+            "columns": {
+              "type": "integer",
+              "format": "int32",
+              "enum": [4, 5]
+            },
+            "rows": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 1,
+              "maximum": 4
+            }
+          }
         },
         "data_source": {
-          "$ref": "#/$defs/data_source_static"
+          "$ref": "#/$defs/data_source_static_icon_grid"
         }
       }
     },
     "section_product_scroll": {
       "type": "object",
-      "$comment": "Horizontal product strip (03 §6.3): title, more button action; key names not given by the plan yet, props stay open. product_pool / union_material.",
+      "$comment": "Horizontal product strip (03 §6.3): title and the 「更多」 button target more_action (a RouteTarget; the key of the first client version, specs/client/home-sdui-vectors.json goldenPages.product_scroll). On home props stay open as before (CT-07a; the client drops a more_action it cannot route, 03 §4.4) and more_action may be any RouteTarget like home's static items; on search props are closed to title and more_action, and more_action is an in-app target (admission_search, BR-TEXT-30, D10-2401 ④). product_pool / union_material.",
       "required": ["data_source"],
       "properties": {
         "props": {
@@ -715,6 +1010,233 @@
         "data_source": {
           "$ref": "#/$defs/data_source_static"
         }
+      }
+    },
+    "slot_me_more_services": {
+      "type": "object",
+      "$comment": "The one section of me (BR-TEXT-28 准入表 me row): icon_grid with id more_services, static only, 4 columns (03 §10.2 EntryGrid), 1–12 items counted over the whole items array whatever their targets (D10-2401 ②). Each item has a name (title), an icon {url, sha256} and an in-app target, no plain image field.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/section"
+        }
+      ],
+      "required": ["id", "type", "data_source"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "const": "more_services"
+        },
+        "type": {
+          "type": "string",
+          "const": "icon_grid"
+        },
+        "props": {
+          "type": "object",
+          "properties": {
+            "columns": {
+              "type": "integer",
+              "const": 4
+            }
+          }
+        },
+        "data_source": {
+          "type": "object",
+          "required": ["kind", "items"],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "static"
+            },
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 12,
+              "items": {
+                "$ref": "#/$defs/me_item"
+              }
+            }
+          }
+        }
+      }
+    },
+    "me_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "icon", "action"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 6
+        },
+        "icon": {
+          "$ref": "#/$defs/icon_asset"
+        },
+        "action": {
+          "$ref": "#/$defs/in_app_target"
+        },
+        "badge": {
+          "$ref": "#/$defs/badge"
+        },
+        "start_at": {
+          "$ref": "#/$defs/instant"
+        },
+        "end_at": {
+          "$ref": "#/$defs/instant"
+        }
+      },
+      "$comment": "One entry of me more_services (BR-TEXT-28 / 30): name 1–6 characters, icon {url, sha256} (the picture shown and its digest bound in one object, no other picture field), an in-app target, an optional badge and range. Closed."
+    },
+    "slot_search_top": {
+      "type": "object",
+      "$comment": "The one section of search (BR-TEXT-28 准入表 search row): the result-page top slot, id search_top, either a banner or a product_scroll on a product pool; which of the two is used and whether optional props are filled does not change the limit of one (D10-2401 ①). Every jump target in it (banner items, the product_scroll 「更多」 button more_action) is an in-app target; product_scroll props are closed.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/section"
+        },
+        {
+          "if": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "banner"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "data_source": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "$ref": "#/$defs/in_app_target"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "product_scroll"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "props": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20
+                  },
+                  "more_action": {
+                    "$ref": "#/$defs/in_app_target"
+                  }
+                }
+              },
+              "data_source": {
+                "$ref": "#/$defs/data_source_product_pool"
+              }
+            }
+          }
+        }
+      ],
+      "required": ["id", "type", "data_source"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "const": "search_top"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["banner", "product_scroll"]
+        },
+        "data_source": {
+          "type": "object"
+        }
+      }
+    },
+    "home_registered_section": {
+      "type": "object",
+      "$comment": "The registered section types of home (03 §6.3, CT-07a): exactly the types $defs/section checks strictly by type (its allOf branches). Shared by the delivered page (root, page_key home: these are strict, anything else is an unknown card the client skips) and admission_home (only these are saved). Batch 2 types (float_button, splash) and custom types are not in this list.",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "banner",
+            "icon_grid",
+            "product_scroll",
+            "product_grid",
+            "activity_entry",
+            "notice_bar",
+            "feed_infinite",
+            "popup"
+          ]
+        }
+      }
+    },
+    "admission_home": {
+      "type": "array",
+      "$comment": "Admission of home (BR-TEXT-28 准入表 home row), the check of the server's save / publish and of the console form: every section must be of a registered home type ($defs/home_registered_section, the same list the delivered page checks strictly) and pass $defs/section; popup at most one. Unregistered types, including the batch 2 types float_button and splash, are refused here (20001). The delivered page (root) still tolerates an unknown card and the client skips it (03 §6.2); that tolerance is for pages of newer servers, not something the console can save.",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/section"
+          },
+          {
+            "$ref": "#/$defs/home_registered_section"
+          }
+        ]
+      },
+      "contains": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["popup"]
+          }
+        }
+      },
+      "minContains": 0,
+      "maxContains": 1
+    },
+    "admission_me": {
+      "type": "array",
+      "$comment": "Admission of me (BR-TEXT-28 准入表 me row): at most one section, the icon_grid more_services; an empty page is the fall-back to the client's built-in grid.",
+      "maxItems": 1,
+      "items": {
+        "$ref": "#/$defs/slot_me_more_services"
+      }
+    },
+    "admission_search": {
+      "type": "array",
+      "$comment": "Admission of search (BR-TEXT-28 准入表 search row): at most one section, the top slot search_top (banner or product_scroll on a product pool).",
+      "maxItems": 1,
+      "items": {
+        "$ref": "#/$defs/slot_search_top"
       }
     }
   }

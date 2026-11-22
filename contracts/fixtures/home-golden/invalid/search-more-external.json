@@ -1,0 +1,26 @@
+{
+  "page_key": "search",
+  "version": 1,
+  "ttl_sec": 300,
+  "sections": [
+    {
+      "id": "search_top",
+      "type": "product_scroll",
+      "version": 1,
+      "props": {
+        "title": "今日好价",
+        "more_action": {
+          "route": "ExternalPage",
+          "params": {
+            "url": "https://example.com/activity/autumn"
+          }
+        }
+      },
+      "data_source": {
+        "kind": "product_pool",
+        "pool_id": "pool_demo_hot",
+        "limit": 10
+      }
+    }
+  ]
+}
