@@ -1,0 +1,28 @@
+id: B1-04zzac
+repo: rebate-platform
+title: 'test-change（FU-B1-04ZZAB-SPEC-R3-GAP）：B1-04zzab 规则测试评审剩的缺口与资金评审修出来的行为补到规则测试层——已付款未收货订单遇解冻或表外值状态不变、待处理记录的证据合并与订单关联补齐、窗口中途失败照样告警'
+type: test-change
+# 2026-11-22 funds 线入账（编排 D10-2449 (一)：B1-04zzab spec-test r3 剩的 1 条记 out_of_scope、列实现必满足项，伴随测试单合并后紧接着补；B1-04zzab 已合并 #528）。走 D10-2264：非 task 分支的 test-change PR + 探针清单。
+# 来由：① spec-test r3 / r4（couli-runs/B1-04zzab/review-spec-test-r3-codex.json、r4 的 out_of_scope）：真实 worker 用例只覆盖已收货待入账与终态订单，已付款未收货（PAID / ESTIMATED）的订单
+#   遇 punish_status 为 1 或表外值时若被改成 INVALID 之类，现有规则测试抓不到；② 资金评审 r1 / r2（review-money-r1 / r2-codex.json）修出来的行为只有实现方单测：同键已有别的来源的
+#   open 记录时保留原值并把违规信号的标记并进说明、重复信号不重复追加；订单后入库时补齐 order_id、不改已有关联；并发两个窗口时检测时间不回退；窗口中途失败（含第一条待处理写入就失败）
+#   对已落库或写入失败的信号照样各发一条告警、原错误外抛。
+# 做法：只新增 test/spec/orders/taobao-punish-unfreeze/companion/ 下的文件（现有 kit 与辅助文件只读引用，不改任何冻结文件，不改实现）；状态与条数写具体值，不涉及金额。
+# 实现已在主干（#528），新用例在主干上应为绿；有牙由探针清单证明（D10-2264）：P1 解冻行对 ESTIMATED 订单改 platform_status、P2 冲突更新不并标记、P3 冲突更新不补 order_id、
+#   P4 失败路径只在已落库数大于 0 时告警；每个探针杀到哪几条写进 PR 正文与证据。不登 red_exempt。spec-test 由 Codex 做；本机不跑 vitest，走测试机 --tests（D10-2404）。
+refs: [BR-FUND-22, BR-FUND-02]
+refs_hash:
+  BR-FUND-22: c9930aaf2459
+  BR-FUND-02: f287247d4d07
+deps: [B1-04zzab]
+paths:
+  - 'test/spec/orders/taobao-punish-unfreeze/companion/**'
+test_paths:
+  - 'test/spec/orders/taobao-punish-unfreeze/companion/**' # 新目录
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/taobao-punish-unfreeze/**'
+status: todo
+pr: null
