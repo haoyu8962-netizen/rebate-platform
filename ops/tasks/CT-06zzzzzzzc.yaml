@@ -1,0 +1,35 @@
+id: CT-06zzzzzzzc
+repo: rebate-platform
+title: CT-06zzzzzzzc（FU-EACH-UNEXPANDABLE-WHOLE-BLOCK）：基线 .each / .for 表展不开时，modify_existing 可按标题模板原文整块登记（只许 rule_change、note 必填），可展开的表仍须按展开名登（D10-2558 / D10-2559）
+type: guard-change
+# 2026-11-22 w1 入账（D10-2559）。起因：B3-05u 要改冻结用例 [AC-B3-04g#3]（test/spec/agent/orchestrator-deterministic-tpwd/path.test.ts）
+# 的 it.each 回调体，表本身不动；但基线表混有 `...([…] as const).map(…)` 生成的行与 `new Error(…)`，test-blocks.ts locate()
+# 在表展不开时只回「rows cannot be expanded for certain」，modify_existing 无任何登法（couli-runs/B3-05u/probe-early{1,2,3}.json）。
+# ① tools/guard/lib/test-blocks.ts locate()：ledger 条目的 test 与基线该块标题模板原文逐字相等、且该块是展不开的 .each / .for 表时，
+#    按整块定位（row = null，整块比较、整块算 changed）；表能展开时，模板原文登记照旧拒收并提示改用展开名（不给可展开的表开后门）；
+#    模板原文不等、或同一模板命中多块，照旧拒收。
+# ② 整块条目只许 reason: rule_change，note 必填（写明哪些行变、哪些行按设计不变）；别的 reason 或缺 note 拒收
+#    （台账检查 task.ts 与 evidence-check 同口径，报错点名条目）。
+# ③ red-check：整块条目下，报告里由该块产生的每条展开名都归到这一条目，按 rule_change 现行规则判（按设计可绿，red-check.ts 36–39 行），
+#    与 evidence-check 的记录对账；该块之外的用例照旧。
+# ④ tools/README.md 一行写明用法与限制；合并前由编排按 approvals 24 逐行核整块 diff。
+# 单测至少：模板原文命中展不开表 → 通过；模板原文不等 → 拒收；表可展开时用模板原文 → 拒收；非 rule_change 或缺 note → 拒收；与 red-check 对账。
+# 门禁改动（放宽一处登记形状），完整 guard-change 流程、两家评审；owner 标签由编排按 approvals 24 核后加，事后报负责人。
+refs: []
+refs_hash: {}
+deps: [CT-06zzzzzzzb]
+paths:
+  - 'tools/guard/lib/test-blocks{,.test}.ts'
+  - 'tools/guard/red-check{,.test}.ts'
+  - 'tools/ci/evidence-check{,.test}.ts'
+  - 'tools/ops/task{,.test}.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzzzzc.yaml'
+test_paths:
+  - 'test/spec/ci/modify-existing-unexpandable/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/modify-existing-unexpandable/**'
+status: todo
