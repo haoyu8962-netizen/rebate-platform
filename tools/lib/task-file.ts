@@ -345,6 +345,24 @@ export function isSupportEntry(
   return 'scope' in d && d.scope === 'support';
 }
 
+/**
+ * Why a whole-block entry is refused (CT-06zzzzzzzc, D10-2559 B), or null: an entry whose `test`
+ * is the title template of an .each / .for table the base cannot expand (test-blocks.ts
+ * namesWholeBlock, judged by the caller on the base) takes reason rule_change only (its br and
+ * ruling as any rule_change entry's) and a note that is not blank. One message for the ledger
+ * check (tools/ops/task.ts) and evidence-check, naming the entry by file and test.
+ */
+export function wholeBlockEntryProblem(d: ModifyExistingBlockDeclaration): string | null {
+  const name = `"${d.file} > ${d.test}"`;
+  if (d.reason !== 'rule_change') {
+    return `${name} is declared by the title template of an .each / .for table whose rows cannot be expanded (a whole-block entry, CT-06zzzzzzzc / D10-2559): it takes reason rule_change only, not ${d.reason}`;
+  }
+  if (typeof d.note !== 'string' || d.note.trim() === '') {
+    return `${name} is a whole-block entry (CT-06zzzzzzzc / D10-2559): its note is required (which rows change and which stay unchanged by design)`;
+  }
+  return null;
+}
+
 /** The block entries of a modify_existing list, in ledger order (CT-06zzzzzi). */
 export function blockEntries(
   list: readonly ModifyExistingDeclaration[],
@@ -822,8 +840,13 @@ function modifyExistingList(
       ok = false;
     }
     if (typeof note !== 'string' || note.trim().length < RED_EXEMPT_REASON_MIN) {
+      // CT-06zzzzzzzc (D10-2559 B): the entry is named by file and test, as the whole-block check is.
+      const named =
+        !support && typeof file === 'string' && typeof test === 'string'
+          ? ` ("${file} > ${test}")`
+          : '';
       problems.push(
-        `${at}.note: must say why the test is changed (at least ${RED_EXEMPT_REASON_MIN} characters)`,
+        `${at}.note: must say why the test is changed (at least ${RED_EXEMPT_REASON_MIN} characters)${named}`,
       );
       ok = false;
     }

@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { matchesAny } from '../lib/glob.ts';
 import { RULE_TEST_FILE } from '../guard/lib/red-check.ts';
+import { namesWholeBlock } from '../guard/lib/test-blocks.ts';
 import {
   isCodexFirst,
   loadCodexImplForbidden,
@@ -16,7 +17,13 @@ import {
 } from '../lib/codex-impl-tasks.ts';
 import { loadLegacyTasks, needsTestPaths } from '../lib/legacy-tasks.ts';
 import { repoRoot } from '../lib/paths.ts';
-import { isSupportEntry, listTaskIds, parseTaskFile } from '../lib/task-file.ts';
+import {
+  blockEntries,
+  isSupportEntry,
+  listTaskIds,
+  parseTaskFile,
+  wholeBlockEntryProblem,
+} from '../lib/task-file.ts';
 import type { TaskFile } from '../lib/task-file.ts';
 import { assertTaskId, CheckError, runGuard, runMain, TASK_ID, UsageError } from './cli.ts';
 import { globsMayOverlap, literalPrefix } from './overlap.ts';
@@ -580,6 +587,25 @@ export function checkTask(id: string, opts: CheckOptions = {}): string[] {
           `modify_existing: "${file}" does not exist at the base (the trusted root): only a frozen test of a rule-test file that existed before the task can be changed`,
         );
       }
+    }
+    // CT-06zzzzzzzc (D10-2559 B): a block entry named by the title template of an .each / .for
+    // table the base (the trusted root) cannot expand is a whole-block entry: rule_change only,
+    // note required (wholeBlockEntryProblem, as evidence-check says it).
+    for (const d of blockEntries(task.modify_existing)) {
+      const path = join(root, d.file);
+      if (!RULE_TEST_FILE.test(d.file) || !regularFile(path)) continue;
+      let whole = false;
+      try {
+        whole = namesWholeBlock(readFileSync(path, 'utf8'), d.test, {
+          file: d.file,
+          read: (p: string) =>
+            regularFile(join(root, p)) ? readFileSync(join(root, p), 'utf8') : null,
+        });
+      } catch {
+        continue; // unreadable as tests: red-check and evidence-check say so
+      }
+      const why = whole ? wholeBlockEntryProblem(d) : null;
+      if (why !== null) problems.push(`modify_existing: ${why}`);
     }
     // CT-06zzzzw (D10-1299 ③): a rule_change entry follows BRs of the task itself. Since
     // CT-06zzzzzb (D10-1356 ②) parseTaskFile refuses a br id that is not in the ledger's refs, so

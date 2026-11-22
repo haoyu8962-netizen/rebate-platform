@@ -213,6 +213,7 @@ import {
   isSupportEntry,
   parseTaskFile,
   supportEntries,
+  wholeBlockEntryProblem,
 } from '../lib/task-file.ts';
 import type {
   ExpectedValueDeclaration,
@@ -977,6 +978,9 @@ function modifyRecordProblems(
     } else if (!block.changed) {
       at(where, "the declared block is the merge base's: the entry is redundant");
     } else {
+      // CT-06zzzzzzzc (D10-2559 B): a whole-block entry takes rule_change only, its note required.
+      const whole = block.whole === undefined ? null : wholeBlockEntryProblem(entry);
+      if (whole !== null) at(where, whole);
       if (record['before'] !== block.before) {
         at(
           `${where}.before`,
@@ -1774,6 +1778,19 @@ function readTrustedLedger(input: EvidenceInput, task: string): TaskFile | null 
   }
 }
 
+/** Why the trusted root's ledger cannot be parsed (CT-06zzzzzzzc); null when it can or is absent. */
+function trustedLedgerError(input: EvidenceInput, task: string): string | null {
+  const rel = `ops/tasks/${task}.yaml`;
+  const file = join(input.trusted, rel);
+  if (!existsSync(file)) return null;
+  try {
+    parseTaskFile(readFileSync(file, 'utf8'), rel);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
 /** The task ledger from the trusted root, or from the head when the PR adds it; null if unreadable. */
 function readLedger(input: EvidenceInput, task: string): TaskFile | null {
   const rel = `ops/tasks/${task}.yaml`;
@@ -2015,6 +2032,16 @@ export function checkEvidence(input: EvidenceInput): EvidenceReport {
   // CT-06zzzg (D10-701): the trusted ledger's modify_existing (never the head's).
   const trustedLedger = task === null ? null : readTrustedLedger(input, task);
   const modifyEntries = trustedLedger?.modify_existing ?? [];
+  // CT-06zzzzzzzc (D10-2559 B): a trusted ledger that cannot be read for its modify_existing (a
+  // whole-block entry without a note among them) is said, its entries named, not passed over.
+  if (task !== null && trustedLedger === null) {
+    const why = trustedLedgerError(input, task);
+    if (why !== null && why.includes('modify_existing[')) {
+      problems.push(
+        `ops/tasks/${task}.yaml (trusted root): its modify_existing cannot be read, no entry applies: ${why}`,
+      );
+    }
+  }
   const modify: ModifyRequirement | undefined =
     modifyEntries.length === 0
       ? undefined

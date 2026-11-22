@@ -1906,6 +1906,11 @@ export function checkRedReports(
     // CT-06zzzg (D10-701): the declared changed frozen tests that may pass green here.
     const modifiable = new Map<string, ModifyExistingBlockDeclaration>();
     const modifiedMatched = new Set<ModifyExistingBlockDeclaration>();
+    // CT-06zzzzzzzc (D10-2559 C): whole-block entries (an .each / .for table the base cannot
+    // expand, declared by its title template) and which report names they take: a name only their
+    // block of the head may produce (no other block's pattern matches it; when unsure, none).
+    const wholeBlocks: { d: ModifyExistingBlockDeclaration; produces: (n: string) => boolean }[] =
+      [];
     if (compared !== null && modifiedHere.length > 0) {
       const result = baseline?.modified;
       if (result === undefined) {
@@ -1934,7 +1939,8 @@ export function checkRedReports(
             });
           } else {
             // CT-06zzzzr (D10-1278 ②): the report runs the head, so a renamed test has its new name.
-            modifiable.set(d.retitle_to ?? d.test, d);
+            if (b.whole !== undefined) wholeBlocks.push({ d, produces: b.whole.produces });
+            else modifiable.set(d.retitle_to ?? d.test, d);
           }
         });
       }
@@ -1980,7 +1986,7 @@ export function checkRedReports(
       // CT-06zzzg (D10-701): a declared changed frozen test (its block located and changed).
       let modifiedEntry: ModifyExistingBlockDeclaration | null = null;
       if (!unchanged && fullName !== '') {
-        const d = modifiable.get(fullName);
+        const d = modifiable.get(fullName) ?? wholeBlocks.find((w) => w.produces(fullName))?.d;
         if (d !== undefined) {
           modifiedMatched.add(d);
           modifiedEntry = d;
@@ -2083,6 +2089,13 @@ export function checkRedReports(
       if (compared !== null && !rowsMatched.has(d)) {
         notes.push(
           `${file}: the declared kept row (red_exempt_rows) "${d.test}" matches no test of the report that must otherwise be red (the full name must be exactly the red reporter's)`,
+        );
+      }
+    }
+    for (const { d } of wholeBlocks) {
+      if (!modifiedMatched.has(d)) {
+        notes.push(
+          `${file}: the declared whole-block change of a frozen test (modify_existing) "${d.test}" matches no test of the report (no full name only its block produces)`,
         );
       }
     }
