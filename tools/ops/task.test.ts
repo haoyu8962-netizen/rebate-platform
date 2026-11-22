@@ -1584,3 +1584,39 @@ it('[CT-06zzzzzi] task check: a support entry of a fixture that exists at the ba
     `modify_existing: "test/spec/other/kit.ts" is not inside the task's paths (tester: none)`,
   );
 });
+
+it('[CT-06zzzzzzzc] r2 S2-2: check rules a whole-block entry on the file of its own root (the base on main and ledger-only pull requests): an unexpandable table refuses a tighten_only entry by name; a table the root can expand is no whole block here (evidence-check, at the merge base, is authoritative on implementation pull requests)', () => {
+  const RULES = 'test/spec/demo/rules.test.ts';
+  const TPL = '[AC-1] keeps $label';
+  const file = (rows: string): string =>
+    `import { expect, it } from 'vitest';\nit.each(${rows})('${TPL}', ({ label }) => {\n  expect(label).toBeTruthy();\n});\n`;
+  const ledger = good({
+    id: 'X1-02wb',
+    type: 'test-change',
+    impl: 'claude',
+    tester: 'none',
+    paths: `\n  - '${RULES}'`,
+    modify_existing: `\n  - file: '${RULES}'\n    test: '${TPL}'\n    reason: tighten_only\n    ruling: D10-2559\n    note: row a tightens, row b is unchanged by design`,
+  });
+  writeFiles(root, {
+    'tools/guard/protected-paths.json': JSON.stringify({
+      class1_add_only: ['test/spec/**'],
+      class2_verify_config: [],
+      class3_gates: [],
+    }),
+    [RULES]: file("[...(['a', 'b'] as const).map((label) => ({ label }))]"),
+    'ops/tasks/X1-02wb.yaml': ledger,
+  });
+  try {
+    expect(checkTask('X1-02wb', opts('RV1'))).toEqual([
+      expect.stringMatching(
+        /^modify_existing: "test\/spec\/demo\/rules\.test\.ts > \[AC-1\] keeps \$label" .*rule_change only, not tighten_only/u,
+      ),
+    ]);
+    writeFiles(root, { [RULES]: file("[{ label: 'a' }, { label: 'b' }]") });
+    expect(checkTask('X1-02wb', opts('RV1'))).toEqual([]);
+  } finally {
+    removeDir(`${root}/ops/tasks/X1-02wb.yaml`);
+    removeDir(`${root}/test`);
+  }
+});

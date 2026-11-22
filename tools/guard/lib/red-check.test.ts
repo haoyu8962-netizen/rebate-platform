@@ -5018,3 +5018,174 @@ it('[CT-06zzzzzv] spec-test r2 S2 ②: for…in under a title of field interpola
   const control = foJudge(foFile(FO_ROWS), foFile(FO_HEAD_ROWS, { added: true }), l, names);
   expect(control.result.problems).toEqual([]);
 });
+
+// CT-06zzzzzzzc (FU-EACH-UNEXPANDABLE-WHOLE-BLOCK, D10-2559 C): a whole-block entry (the title
+// template of an .each table the base cannot expand) takes the report names only its block of the
+// head may produce, and each of them is judged as any declared rule_change test (spec-test r1 S2 /
+// out_of_scope S1).
+const WB = 'test/spec/z/whole-block.test.ts';
+const WB_TEMPLATE = '[AC-W#1] keeps $label response';
+/** A neighbour the whole block's title pattern also matches (same tag, text around $label). */
+const WB_CLASH = '[AC-W#1] keeps summary response';
+const WB_OTHER = '[AC-W#3] keeps summary';
+const WB_NEW = '[AC-W#2] new';
+const WB_NOTE = 'alpha follows the new rule, beta already meets it by design';
+const wbFile = (value: number, neighbour: number, title: string, added = false): string =>
+  [
+    "import { expect, it } from 'vitest';",
+    "const rows = [...(['alpha', 'beta'] as const).map((label, i) => ({ label, value: i + 1 }))];",
+    `it.each(rows)('${WB_TEMPLATE}', ({ value }) => {`,
+    `  expect(value).toBe(${value});`,
+    '});',
+    `it('${title}', () => {`,
+    `  expect(1).toBeGreaterThanOrEqual(${neighbour});`,
+    '});',
+    ...(added ? [`it('${WB_NEW}', () => {`, '  expect(1).toBe(2);', '});'] : []),
+    '',
+  ].join('\n');
+const wbDeclared: ModifyExistingDeclaration[] = [
+  {
+    file: WB,
+    test: WB_TEMPLATE,
+    reason: 'rule_change',
+    ruling: 'D10-2559',
+    note: WB_NOTE,
+    br: ['BR-DEMO-01'],
+  },
+];
+const wbJudge = (base: string, head: string, tests: RedTest[]) =>
+  checkRedReports(
+    [redReport(WB, tests)],
+    [WB],
+    ROOT,
+    ruleTestBaselines(
+      [WB],
+      [{ path: WB, status: 'M' }],
+      ['test/spec/z/**'],
+      reader({ [WB]: base }, { [WB]: head }),
+      [],
+      [],
+      [],
+      [],
+      wbDeclared,
+    ),
+    [],
+    [],
+    wbDeclared,
+  );
+const wbAlpha = WB_TEMPLATE.replace('$label', 'alpha');
+const wbBeta = WB_TEMPLATE.replace('$label', 'beta');
+const WB_ASSERTION = 'AssertionError: expected 1 to be 2';
+
+it('[CT-06zzzzzzzc] a report name another block of the head may produce too is not taken by the whole-block entry: that test is judged as before (changed and green: a problem); a neighbour the pattern cannot match is not taken either', () => {
+  const clash = wbJudge(wbFile(1, 0, WB_CLASH), wbFile(2, 1, WB_CLASH, true), [
+    [wbAlpha, 'failed', WB_ASSERTION],
+    [wbBeta, 'passed'],
+    [WB_CLASH, 'passed'],
+    [WB_NEW, 'failed', WB_ASSERTION],
+  ]);
+  expect(clash.ok).toBe(false);
+  expect(clash.problems).toEqual([
+    { file: WB, test: WB_CLASH, reason: expect.stringMatching(/green/) },
+  ]);
+  expect(clash.exempt?.filter((e) => e.modified).map((e) => e.test)).toEqual([wbAlpha, wbBeta]);
+  // Red for a valid reason, the clashing neighbour counts as red, still not as the entry's.
+  const red = wbJudge(wbFile(1, 0, WB_CLASH), wbFile(2, 1, WB_CLASH), [
+    [wbAlpha, 'passed'],
+    [wbBeta, 'passed'],
+    [WB_CLASH, 'failed', WB_ASSERTION],
+  ]);
+  expect(red.problems).toEqual([]);
+  expect(red.red).toEqual([`${WB} > ${WB_CLASH}`]);
+  expect(red.exempt?.filter((e) => e.modified).map((e) => e.test)).toEqual([wbAlpha, wbBeta]);
+  // The control: a neighbour whose title the pattern cannot match, changed and green.
+  const other = wbJudge(wbFile(1, 0, WB_OTHER), wbFile(2, 1, WB_OTHER, true), [
+    [wbAlpha, 'passed'],
+    [wbBeta, 'passed'],
+    [WB_OTHER, 'passed'],
+    [WB_NEW, 'failed', WB_ASSERTION],
+  ]);
+  expect(other.problems).toEqual([
+    { file: WB, test: WB_OTHER, reason: expect.stringMatching(/green/) },
+  ]);
+});
+
+it.each([
+  ['TypeError: applyInput is not a function'],
+  ["Error: Cannot find module '../src/step-up.ts'"],
+])(
+  '[CT-06zzzzzzzc] a row of a whole-block entry that is red for an invalid reason is a problem (%s): the entry does not skip the red-reason check',
+  (cause) => {
+    const result = wbJudge(wbFile(1, 0, WB_OTHER), wbFile(2, 0, WB_OTHER, true), [
+      [wbAlpha, 'failed', cause],
+      [wbBeta, 'passed'],
+      [WB_OTHER, 'passed'],
+      [WB_NEW, 'failed', WB_ASSERTION],
+    ]);
+    expect(result.ok).toBe(false);
+    expect(result.problems).toEqual([{ file: WB, test: wbAlpha, reason: expect.any(String) }]);
+    expect(result.red).toEqual([`${WB} > ${WB_NEW}`]);
+    expect(result.exempt?.filter((e) => e.modified).map((e) => e.test)).toEqual([wbBeta]);
+    // The control: the same row red by assertion is the entry's and red.
+    const valid = wbJudge(wbFile(1, 0, WB_OTHER), wbFile(2, 0, WB_OTHER, true), [
+      [wbAlpha, 'failed', WB_ASSERTION],
+      [wbBeta, 'passed'],
+      [WB_OTHER, 'passed'],
+      [WB_NEW, 'failed', WB_ASSERTION],
+    ]);
+    expect(valid.problems).toEqual([]);
+    expect(valid.ok).toBe(true);
+    expect(valid.exempt?.filter((e) => e.modified).map((e) => e.test)).toEqual([wbAlpha, wbBeta]);
+  },
+);
+
+it('[CT-06zzzzzzzc] money-codex r1 S1-2: a whole-block entry that is not rule_change exempts none of its rows (wholeBlockEntryProblem names it): its green rows are judged as any changed test', () => {
+  const tight: ModifyExistingDeclaration[] = [
+    { file: WB, test: WB_TEMPLATE, reason: 'tighten_only', ruling: 'D10-2559', note: WB_NOTE },
+  ];
+  const result = checkRedReports(
+    [
+      redReport(WB, [
+        [wbAlpha, 'passed'],
+        [wbBeta, 'passed'],
+        [WB_OTHER, 'passed'],
+        [WB_NEW, 'failed', WB_ASSERTION],
+      ]),
+    ],
+    [WB],
+    ROOT,
+    ruleTestBaselines(
+      [WB],
+      [{ path: WB, status: 'M' }],
+      ['test/spec/z/**'],
+      reader({ [WB]: wbFile(1, 0, WB_OTHER) }, { [WB]: wbFile(2, 0, WB_OTHER, true) }),
+      [],
+      [],
+      [],
+      [],
+      tight,
+    ),
+    [],
+    [],
+    tight,
+  );
+  expect(result.ok).toBe(false);
+  expect(result.problems).toContainEqual({
+    file: WB,
+    test: WB_TEMPLATE,
+    reason: expect.stringMatching(/rule_change only, not tighten_only/),
+  });
+  expect(result.problems.find((p) => p.test === WB_TEMPLATE)?.reason).toContain(
+    `"${WB} > ${WB_TEMPLATE}"`,
+  );
+  expect(result.exempt?.filter((e) => e.modified) ?? []).toEqual([]);
+  // The control: the same entry as rule_change exempts both green rows.
+  const valid = wbJudge(wbFile(1, 0, WB_OTHER), wbFile(2, 0, WB_OTHER, true), [
+    [wbAlpha, 'passed'],
+    [wbBeta, 'passed'],
+    [WB_OTHER, 'passed'],
+    [WB_NEW, 'failed', WB_ASSERTION],
+  ]);
+  expect(valid.ok).toBe(true);
+  expect(valid.exempt?.filter((e) => e.modified).map((e) => e.test)).toEqual([wbAlpha, wbBeta]);
+});

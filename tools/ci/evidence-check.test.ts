@@ -4070,3 +4070,115 @@ it('[CT-06zzzzzz] checkEarly judges a rename by its original path: a unit test m
   expect(cli.status, cli.stderr).toBe(0);
   expect(JSON.parse(cli.stdout)).toMatchObject({ problems: [] });
 });
+
+// CT-06zzzzzzzc r2 (money-codex r1 S1-1 / S1-2): whole-block entries, an .each table the merge
+// base cannot expand declared by its title template.
+const WHOLE_TPL = '[AC-B2-09t#35] keeps $label';
+const WHOLE_UNEXPANDABLE = "[...(['a', 'b'] as const).map((label) => ({ label }))]";
+const wholeSource = (rows: string, value: number): string =>
+  [
+    "import { expect, it } from 'vitest';",
+    `it.each(${rows})('${WHOLE_TPL}', ({ label }) => {`,
+    `  expect(label.length).toBe(${value});`,
+    '});',
+    '',
+  ].join('\n');
+
+/** A repository: the merge base, then a rule-test commit and a head on top of it, as given. */
+function wholeRepo(name: string, base: string, spec: string, head: string) {
+  const dir = join(SCRATCH, `whole-${name}`);
+  mkdirSync(dir, { recursive: true });
+  git(dir, ['init', '-q', '-b', 'main']);
+  write(dir, { SPEC_REF: `${SPEC_REF}\n`, [MOD_FILE]: base });
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '-q', '-m', 'base']);
+  const mergeBase = git(dir, ['rev-parse', 'HEAD']);
+  git(dir, ['checkout', '-q', '-b', 'task/B2-09v']);
+  write(dir, { [MOD_FILE]: spec });
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '-q', '-m', 'rule tests']);
+  const specSha = git(dir, ['rev-parse', 'HEAD']);
+  write(dir, { [MOD_FILE]: head });
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '-q', '-m', 'impl']);
+  const tree = git(dir, ['rev-parse', 'HEAD:test/spec']);
+  write(dir, {
+    'ops/evidence/B2-09v.json': `${JSON.stringify(
+      { ...modEvidence([rwRecord({ test: WHOLE_TPL })])(tree), spec_commit: specSha },
+      null,
+      2,
+    )}\n`,
+  });
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '-q', '-m', 'evidence']);
+  return { dir, mergeBase, spec: specSha, head: git(dir, ['rev-parse', 'HEAD']) };
+}
+
+it('[CT-06zzzzzzzc] r2 S1-1: whether an entry is a whole block is ruled at the merge base: the rule-test commit making the table literal does not refuse a change inside the block after spec_commit', () => {
+  const trusted = modTrusted('trusted-whole', 'tighten_only');
+  write(trusted, {
+    'ops/tasks/B2-09v.yaml': rwLedger().replace(`test: '${MOD_TEST}'`, `test: '${WHOLE_TPL}'`),
+  });
+  const literal = "[{ label: 'a' }, { label: 'b' }]";
+  const r = wholeRepo(
+    's1-1',
+    wholeSource(WHOLE_UNEXPANDABLE, 1),
+    wholeSource(literal, 1),
+    wholeSource(literal, 2),
+  );
+  const report = checkEvidence({
+    prDir: r.dir,
+    base: r.mergeBase,
+    head: r.head,
+    headRef: 'task/B2-09v',
+    trusted,
+    approval: approved(r.head),
+  });
+  expect(report.problems.filter((p) => p.includes('spec_commit'))).toEqual([]);
+  // The control: a change outside the block after spec_commit is still refused.
+  const outside = wholeRepo(
+    's1-1-outside',
+    wholeSource(WHOLE_UNEXPANDABLE, 1),
+    wholeSource(literal, 1),
+    `${wholeSource(literal, 2)}const extra = 1;\n`,
+  );
+  const refused = checkEvidence({
+    prDir: outside.dir,
+    base: outside.mergeBase,
+    head: outside.head,
+    headRef: 'task/B2-09v',
+    trusted,
+    approval: approved(outside.head),
+  });
+  expect(refused.problems.join('\n')).toMatch(
+    /spec_commit: rule tests changed after the rule-test commit: .*changed outside the declared blocks/u,
+  );
+});
+
+it('[CT-06zzzzzzzc] r2 S1-2: checkEarly refuses a whole-block entry that is not rule_change and names it (wholeBlockEntryProblem)', () => {
+  const dir = join(SCRATCH, 'early-whole');
+  mkdirSync(dir, { recursive: true });
+  git(dir, ['init', '-q', '-b', 'main']);
+  write(dir, { [EARLY_FROZEN]: wholeSource(WHOLE_UNEXPANDABLE, 1) });
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '-q', '-m', 'base']);
+  git(dir, ['checkout', '-q', '-b', 'task/X1-07']);
+  const entry = [
+    `  - file: '${EARLY_FROZEN}'`,
+    `    test: '${WHOLE_TPL}'`,
+    '    reason: tighten_only',
+    '    ruling: D10-2559',
+    '    note: row a tightens, row b is unchanged by design',
+  ].join('\n');
+  write(dir, {
+    [EARLY_FROZEN]: wholeSource(WHOLE_UNEXPANDABLE, 2),
+    'ops/tasks/X1-07.yaml': earlyLedger(entry),
+  });
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '-q', '-m', 'rule tests']);
+  const spec = git(dir, ['rev-parse', 'HEAD']);
+  const report = checkEarly({ prDir: dir, task: 'X1-07', base: 'main', spec, trusted: REPO });
+  expect(report.problems).toHaveLength(1);
+  expect(report.problems[0]).toContain(`"${EARLY_FROZEN} > ${WHOLE_TPL}"`);
+  expect(report.problems[0]).toContain('rule_change only, not tighten_only');
+});

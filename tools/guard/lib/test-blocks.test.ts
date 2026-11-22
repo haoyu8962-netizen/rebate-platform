@@ -4774,3 +4774,91 @@ it('[CT-06zzzzzv] forOfRowBlocks takes the rows by the report names in report or
   expect(fewer).toHaveLength(3);
   expect(unchangedTest(names[3] as string, fewer)).toBe(false);
 });
+
+// CT-06zzzzzzzc r2 (money-codex r1 S1-1 / S1-3, claude r1 S2-1): whole-block entries.
+const UNEXPANDABLE = "[...(['a', 'b'] as const).map((label) => ({ label }))]";
+const wholeFile = (rows: string, value: number, other = 1): string =>
+  [
+    "import { expect, it } from 'vitest';",
+    `it.each(${rows})('验证 $label', ({ label }) => {`,
+    `  expect(label.length).toBe(${value});`,
+    '});',
+    `it.each(${UNEXPANDABLE})('验证 %s', (row) => {`,
+    `  expect(row).toBeTruthy();`,
+    `  expect(${other}).toBe(${other});`,
+    '});',
+    '',
+  ].join('\n');
+
+it('[CT-06zzzzzzzc] r2 S1-1: with the merge base ruling (wholeAt), a range that does not start at the merge base locates a whole entry by its template at both ends, though its start table can be expanded; without it the template is refused there as before', () => {
+  // The rule-test commit made the table literal; the head changes only the block's assertion.
+  const literal = "[{ label: 'a' }, { label: 'b' }]";
+  const spec = wholeFile(literal, 1);
+  const head = wholeFile(literal, 2);
+  const ruled = compareModifiedBlocks(spec, head, ['验证 $label'], undefined, undefined, [true]);
+  expect(ruled.ok).toBe(true);
+  if (!ruled.ok) return;
+  expect(ruled.outside).toBeNull();
+  expect(ruled.blocks[0]).toMatchObject({ found: true, changed: true });
+  expect(ruled.blocks[0]?.found === true && ruled.blocks[0].whole?.head).toBe(0);
+  const judged = compareModifiedBlocks(spec, head, ['验证 $label']);
+  expect(judged.ok && judged.blocks[0]).toMatchObject({
+    found: false,
+    reason: expect.stringContaining('can be expanded'),
+  });
+  // Ruled not whole at the merge base: the template is no whole block on either side.
+  const base = wholeFile(UNEXPANDABLE, 1);
+  const notWhole = compareModifiedBlocks(
+    base,
+    wholeFile(UNEXPANDABLE, 2),
+    ['验证 $label'],
+    undefined,
+    undefined,
+    [false],
+  );
+  expect(notWhole.ok && notWhole.blocks[0]).toMatchObject({ found: false });
+  expect(notWhole.ok && notWhole.blocks[0]?.found === true && notWhole.blocks[0].whole).toBe(false);
+});
+
+it('[CT-06zzzzzzzc] r2 S2-1: a plain frozen test the head rewrites into an .each table that cannot be expanded under the same title is refused at the head as before (the template path is taken at the head only for a whole entry of the base)', () => {
+  const name = '[AC-X#1] 费率 $x';
+  const base = [
+    "import { expect, it } from 'vitest';",
+    `it('${name}', () => {`,
+    '  expect(1).toBe(1);',
+    '});',
+    '',
+  ].join('\n');
+  const head = [
+    "import { expect, it } from 'vitest';",
+    `it.each([...(['a', 'b'] as const).map((x) => ({ x }))])('${name}', ({ x }) => {`,
+    '  expect(x).toBeTruthy();',
+    '});',
+    '',
+  ].join('\n');
+  const got = compareModifiedBlocks(base, head, [name]);
+  expect(got.ok).toBe(true);
+  expect(got.ok && got.blocks[0]).toMatchObject({
+    found: false,
+    reason: expect.stringContaining('cannot be expanded for certain'),
+  });
+});
+
+it('[CT-06zzzzzzzc] r2 S1-3: next to a whole-block entry the support check takes the block it was located at, by index: a changed block its template name merely matches (验证 %s) is not declared', () => {
+  const base = wholeFile(UNEXPANDABLE, 1, 1);
+  const head = wholeFile(UNEXPANDABLE, 2, 3);
+  const names = ['验证 $label'];
+  const compared = compareModifiedBlocks(base, head, names);
+  expect(compared.ok).toBe(true);
+  if (!compared.ok) return;
+  const located = compared.blocks.map((b) => (b.found ? b.whole?.head : undefined));
+  expect(located).toEqual([0]);
+  const support = compareSupportFile(base, head, names, undefined, located);
+  expect(support.ok).toBe(true);
+  expect(support.ok && support.blocks).toEqual([
+    expect.stringContaining('test block 2 ("验证 *") is not declared and differs from the base'),
+  ]);
+  // Only the whole block changed: nothing is refused.
+  const own = compareSupportFile(base, wholeFile(UNEXPANDABLE, 2, 1), names, undefined, located);
+  expect(own.ok && own.blocks).toEqual([]);
+});

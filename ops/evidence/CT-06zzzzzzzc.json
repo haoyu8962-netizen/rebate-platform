@@ -1,0 +1,132 @@
+{
+  "task": "CT-06zzzzzzzc",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "spec_commit": "a2ba01f66afe282c4789e2c17a59a2e43fa88287",
+  "red_tests": [
+    "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#1] .each 接受基线标题原文以及整块前后源码",
+    "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#1] .for 接受基线标题原文以及整块前后源码",
+    "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#2] 拒绝登记 模板占位符差一个字",
+    "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#2] 拒绝登记 展不开的表尝试只登记某一行",
+    "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#2] 拒绝登记 两个块的标题模板原文相同",
+    "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#2] 拒绝登记 基线的表能展开",
+    "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#2] 拒绝登记 头提交的标题模板已改",
+    "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#3] 以基线认定整块登记，头提交把表改成字面量仍按整块比较",
+    "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#4] 可展开的表仍可按 Vitest 展开全名登记每行",
+    "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#5] 整块登记之外的改动仍被拒绝 相邻用例也被修改",
+    "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#5] 整块登记之外的改动仍被拒绝 顶层表定义也被修改",
+    "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#6] 证据只写回调内的片段会被拒绝",
+    "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#7] 台账检查拒绝 flake_fix 并点名整块登记",
+    "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#7] 台账检查拒绝 tighten_only 并点名整块登记",
+    "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#7] 台账检查拒绝 ruling_correction 并点名整块登记",
+    "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#7] 台账检查拒绝 缺 note 并点名整块登记",
+    "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#7] 台账检查拒绝 note 只有空格 并点名整块登记",
+    "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#8] 证据检查拒绝 flake_fix 并点名整块登记",
+    "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#8] 证据检查拒绝 tighten_only 并点名整块登记",
+    "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#8] 证据检查拒绝 ruling_correction 并点名整块登记",
+    "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#8] 证据检查拒绝 缺 note 并点名整块登记",
+    "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#8] 证据检查拒绝 note 只有空格 并点名整块登记",
+    "test/spec/ci/modify-existing-unexpandable/red-check.test.ts > [AC-CT-06zzzzzzzc#9] 先红与证据检查对整块改动使用同一份应跑清单",
+    "test/spec/ci/modify-existing-unexpandable/red-check.test.ts > [AC-CT-06zzzzzzzc#10] 红绿行归到整块登记 相邻改动为有效红",
+    "test/spec/ci/modify-existing-unexpandable/red-check.test.ts > [AC-CT-06zzzzzzzc#10] 红绿行归到整块登记 相邻改动未登记且为绿"
+  ],
+  "risk_note": "Gate tooling only (FU-EACH-UNEXPANDABLE-WHOLE-BLOCK, D10-2558 / D10-2559). A modify_existing entry may name a frozen .each / .for block by its title template text, exactly as written at the merge base, only when that base table cannot be expanded for certain; the block is then compared whole and counts as changed. A table that can be expanded still needs the Vitest-expanded names (the template is refused with a hint); a template that differs or matches several blocks is refused. A whole-block entry must be reason rule_change with a note (task.ts check, red-check before exempting, evidence-check --early and the final record all apply the same wholeBlockEntryProblem). Whole-block eligibility is decided once at the merge base and carried to the spec_commit-to-head check; the head side takes the template path only when the base side is whole. red-check attributes a reported name to the whole-block entry only when no other block of the head can produce it, and still judges its red reason (TypeError / missing module stay problems). The support check of a file-level support entry decides block authorisation by the located block index, not by re-matching the title. A trusted ledger that fails to parse is now a problem instead of an empty modify_existing (stricter only). All other entry shapes (static titles, expanded names, for...of rows, retitle_to, support) unchanged. No money, ledger or attribution code touched.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a2ba01f66afe282c4789e2c17a59a2e43fa88287",
+      "tree": "7004c0c9ef94f583ec9b2e1018cd66df2529568f",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-22T11:09:34Z",
+      "finished_at": "2026-11-22T11:09:38Z",
+      "red_tests": [
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#1] .each 接受基线标题原文以及整块前后源码",
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#1] .for 接受基线标题原文以及整块前后源码",
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#2] 拒绝登记 模板占位符差一个字",
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#2] 拒绝登记 展不开的表尝试只登记某一行",
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#2] 拒绝登记 两个块的标题模板原文相同",
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#2] 拒绝登记 基线的表能展开",
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#2] 拒绝登记 头提交的标题模板已改",
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#3] 以基线认定整块登记，头提交把表改成字面量仍按整块比较",
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#4] 可展开的表仍可按 Vitest 展开全名登记每行",
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#5] 整块登记之外的改动仍被拒绝 相邻用例也被修改",
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#5] 整块登记之外的改动仍被拒绝 顶层表定义也被修改",
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts > [AC-CT-06zzzzzzzc#6] 证据只写回调内的片段会被拒绝",
+        "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#7] 台账检查拒绝 flake_fix 并点名整块登记",
+        "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#7] 台账检查拒绝 tighten_only 并点名整块登记",
+        "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#7] 台账检查拒绝 ruling_correction 并点名整块登记",
+        "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#7] 台账检查拒绝 缺 note 并点名整块登记",
+        "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#7] 台账检查拒绝 note 只有空格 并点名整块登记",
+        "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#8] 证据检查拒绝 flake_fix 并点名整块登记",
+        "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#8] 证据检查拒绝 tighten_only 并点名整块登记",
+        "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#8] 证据检查拒绝 ruling_correction 并点名整块登记",
+        "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#8] 证据检查拒绝 缺 note 并点名整块登记",
+        "test/spec/ci/modify-existing-unexpandable/ledger.test.ts > [AC-CT-06zzzzzzzc#8] 证据检查拒绝 note 只有空格 并点名整块登记",
+        "test/spec/ci/modify-existing-unexpandable/red-check.test.ts > [AC-CT-06zzzzzzzc#9] 先红与证据检查对整块改动使用同一份应跑清单",
+        "test/spec/ci/modify-existing-unexpandable/red-check.test.ts > [AC-CT-06zzzzzzzc#10] 红绿行归到整块登记 相邻改动为有效红",
+        "test/spec/ci/modify-existing-unexpandable/red-check.test.ts > [AC-CT-06zzzzzzzc#10] 红绿行归到整块登记 相邻改动未登记且为绿"
+      ],
+      "expected": [
+        "test/spec/ci/modify-existing-unexpandable/evidence.test.ts",
+        "test/spec/ci/modify-existing-unexpandable/ledger.test.ts",
+        "test/spec/ci/modify-existing-unexpandable/red-check.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "7cb69993bd65e1ee6d413dc7ec80044e1cad3ec32bc8f9f3e0aa31d93c9cf58b"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27; tools/** is RV2). r1 fail, 3 S1 (whole-block eligibility re-decided on the spec-to-head range would refuse an approved entry; red-check exempted a whole-block entry before checking its reason; with a file-level support entry the support check re-matched titles and let an unregistered sibling block through), all fixed in implementation attempt 2 together with the two S2 of the Claude review. r2 (incremental) confirmed the three fixed and raised 2 S1, both only when a whole-block entry and a file-level support entry are used together: two whole-block-registered blocks swapping places are accepted (a position check loosened, both blocks' content changes registered and reviewed), and a whole block whose base table the rule tests turned into literal rows is left on the red list (a false refusal). Neither is S0; under the review stop rule of D10-2592 the orchestrator ruled in D10-2616 to take the conclusion as pass with FU-WHOLE-BLOCK-SUPPORT-COMBO and not to spend the remaining implementation attempt. couli-runs/CT-06zzzzzzzc/review-money-codex-r{1,2}.json. Test machine on the final tree: --tests (rule tests, tools/guard, evidence-check, task-file) green, verify:fast exit 0."
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Second reviewer requested by D10-2559 (two reviewers for this gate change), a fresh independent Claude via tools/agent/claude-run.sh. r1 pass with 2 S2, both fixed in implementation attempt 2 (the head side now takes the template path only when the base side is whole; task.ts check decides whole-block from the trusted / merge-base content). An independent Claude r2 on the attempt-2 increment did not run: the review counter was exhausted (3 of 3, bump refused); recorded as a gap, the increment was reviewed by Codex r2 only (D10-2616)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (gpt-6.2-sol, ledger tester codex, attempts 1-2: attempt 1 wrote describe( inside a fixture source string, refused by the trusted test-guard [rule-tests-top-level-it] before any red run; attempt 2's first try was idle-killed with no output and rerun uncounted, D10-2117), so the spec-test review went to a fresh independent Claude (approvals 19). r1 pass with 1 S2 and 2 out-of-scope items (ledger paths missing tools/guard/lib/red-check.ts and tools/lib/task-file.ts - ledger patch 1, #559; a whole-block row red for an invalid reason must still be a problem); the S2 and that item were made implementation requirements with unit tests."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f5a356529a3372257984591d2127a4e5be9d530c",
+    "specs": "b51a9ab39a98d66fd7a68dae3670b0658b1efa0e"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
