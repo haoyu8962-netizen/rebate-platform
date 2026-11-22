@@ -46,11 +46,12 @@ it(
     expect(h.registerDiff).not.toHaveBeenCalled();
     const s = await state(h);
     expect(s.diffs).toEqual([]);
+    // B2-18（D10-2521 ①）：amount_mismatch_count 与 unsettled_count 同一口径，出账后落具体数（无则 0）。
     expect(await billCounts(h.db, h.appId)).toEqual({
       error_count: 0,
       held_count: 0,
       unsettled_count: 2,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
     expect(h.saveValidations).toHaveBeenCalledTimes(1);
     const saved = h.saveValidations.mock.calls[0]![2];
@@ -99,28 +100,16 @@ it(
     const result = await h.run();
     expect(result).toMatchObject({ outcome: 'generated', billId: MONTH, status: '已出账' });
 
+    // B2-18（D10-2521 ①）：金额不一致的 bad 单不再登记 settle_amount_mismatch、不计 error_count；本 kit
+    // 手工组装、没有重生成端口，按重生成失败计入 amount_mismatch_count（1）。
     expect(await billCounts(h.db, h.appId)).toEqual({
-      error_count: 2,
+      error_count: 1,
       held_count: 2,
       unsettled_count: 1,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 1,
     });
     const s = await state(h);
-    expect(storedDiffs(s)).toEqual(
-      [
-        ['settle_amount_mismatch', bad.key],
-        ['union_mismatch', voided.key],
-      ].sort(),
-    );
-    expect(s.diffs).toContainEqual(
-      expect.objectContaining({
-        type: 'settle_amount_mismatch',
-        ref_id: bad.key,
-        period: MONTH,
-        expected_fen: 850n,
-        actual_fen: 7650n,
-      }),
-    );
+    expect(storedDiffs(s)).toEqual([['union_mismatch', voided.key]]);
     expect(s.diffs).toContainEqual(
       expect.objectContaining({
         type: 'union_mismatch',
@@ -130,7 +119,7 @@ it(
         actual_fen: 1000n,
       }),
     );
-    expect(diffTypes(h)).toEqual(['settle_amount_mismatch', 'union_mismatch']);
+    expect(diffTypes(h)).toEqual(['union_mismatch']);
     expect(s.batches).toEqual([
       expect.objectContaining({
         platform: 'taobao',
@@ -149,7 +138,7 @@ it(
         platform_settle_commission_totals: { taobao: '1000' },
         beneficiary_total_fen: 552n,
         platform_retained_fen: 298n,
-        error_count: 2,
+        error_count: 1,
         held_count: 2,
       }),
     ]);
@@ -182,19 +171,20 @@ it(
     await order(h, {}, 'jd');
     await order(h, {}, 'jd');
 
+    // B2-18（D10-2521 ①）：入账开关关着也出账，amount_mismatch_count 同 unsettled_count 落具体数（无则 0）。
     expect((await h.run('taobao')).outcome).toBe('generated');
     expect(await billCounts(h.db, h.appId)).toEqual({
       error_count: 0,
       held_count: 0,
       unsettled_count: 1,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
     expect((await h.run('jd')).outcome).toBe('generated');
     expect(await billCounts(h.db, h.appId)).toEqual({
       error_count: 0,
       held_count: 0,
       unsettled_count: 3,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
     const s = await state(h);
     expect(s.bills).toEqual([
@@ -220,15 +210,17 @@ it(
 
     const results = await Promise.all([h.run('taobao'), h.run('jd')]);
     expect(results.map((r) => r.outcome)).toEqual(['generated', 'generated']);
+    // B2-18（D10-2521 ①）：京东金额不一致的 jdBad 不再登记 settle_amount_mismatch、不计 error_count；本 kit
+    // 没有重生成端口，按重生成失败计入 amount_mismatch_count（1）。
     expect(await billCounts(h.db, h.appId)).toEqual({
-      error_count: 1,
+      error_count: 0,
       held_count: 0,
       unsettled_count: 3,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 1,
     });
     const s = await state(h);
-    expect(storedDiffs(s)).toEqual([['settle_amount_mismatch', jdBad.key]]);
-    expect(diffTypes(h)).toEqual(['settle_amount_mismatch']);
+    expect(storedDiffs(s)).toEqual([]);
+    expect(diffTypes(h)).toEqual([]);
   },
   TIMEOUT,
 );
@@ -255,11 +247,12 @@ it(
     const held = await order(h, { hold: true });
 
     expect((await h.run('taobao')).outcome).toBe('generated');
+    // B2-18（D10-2521 ①）：amount_mismatch_count 同 unsettled_count，NULL 按 0 起加、落具体数（无则 0）。
     expect(await billCounts(h.db, h.appId)).toEqual({
       error_count: 3,
       held_count: 2,
       unsettled_count: 2,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
     expect((await state(h)).bills).toEqual([
       expect.objectContaining({ platform_order_counts: { jd: 0, taobao: 0 } }),
@@ -286,11 +279,12 @@ it(
 
     await h.run();
 
+    // B2-18（D10-2521 ①）：amount_mismatch_count 同 unsettled_count 落具体数（无则 0）。
     expect(await billCounts(h.db, h.appId)).toEqual({
       error_count: 0,
       held_count: 0,
       unsettled_count: 2,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
     const seen = (await validations(h)).map((v) => [v.orderKey, v.result, v.settleSeq]).sort();
     expect(seen).toEqual(
@@ -388,11 +382,12 @@ it.each(ZERO_CASES)(
 
     expect(await h.run()).toMatchObject({ outcome: 'generated', billId: MONTH });
 
+    // B2-18（D10-2521 ①）：amount_mismatch_count 与 unsettled_count 同一口径，出过主批次落 0（不是 NULL）。
     expect(await billCounts(h.db, h.appId)).toEqual({
       error_count: 0,
       held_count: c.held,
       unsettled_count: 0,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
     const s = await state(h);
     expect(s.bills).toEqual([

@@ -24,14 +24,16 @@ it.each([
     const pddVoided = await order(h, { rebateStatus: 'VOID' }, 'pdd');
     await settlement(h, pddVoided);
     expect((await h.run('pdd')).outcome).toBe('generated');
+    // B2-18（D10-2521 ①）：amount_mismatch_count 与 unsettled_count 同一口径，出账后落具体数（无则 0）。
     expect(await billCounts(h.db, h.appId)).toEqual({
       error_count: 1,
       held_count: 1,
       unsettled_count: 2,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
 
-    // 淘宝：1 单候选、1 单应结未结、1 单金额不一致、1 单维权中 → error 1、held 1、unsettled 1。
+    // 淘宝：1 单候选、1 单应结未结、1 单金额不一致、1 单维权中 → held 1、unsettled 1；B2-18：金额不一致不再
+    // 登记差错单、不计 error_count，本 kit 没有重生成端口，按重生成失败计 amount_mismatch 1。
     const taobaoGood = await order(h);
     await settlement(h, taobaoGood);
     await order(h);
@@ -72,11 +74,12 @@ it.each([
       await waiter?.catch(() => undefined);
     }
 
+    // B2-18：error_count 1（pdd）+ 0（taobao）+ 1（jd）= 2；amount_mismatch_count 0 + 1（taobao）+ 0 = 1。
     expect(await billCounts(h.db, h.appId)).toEqual({
-      error_count: 3,
+      error_count: 2,
       held_count: 4,
       unsettled_count: 6,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 1,
     });
     const s = await state(h);
     expect(s.bills).toEqual([
@@ -85,7 +88,7 @@ it.each([
         platform_settle_commission_totals: { pdd: '0', taobao: '1000', jd: '1000' },
         beneficiary_total_fen: 1104n,
         platform_retained_fen: 596n,
-        error_count: 3,
+        error_count: 2,
         held_count: 4,
       }),
     ]);
@@ -96,7 +99,6 @@ it.each([
     expect(s.items.map((i) => i.order_id).sort()).toEqual([jdGood.id, taobaoGood.id].sort());
     expect(s.diffs.map((d) => [d.type, d.ref_id]).sort()).toEqual(
       [
-        ['settle_amount_mismatch', taobaoBad.key],
         ['union_mismatch', jdVoided.key],
         ['union_mismatch', pddVoided.key],
       ].sort(),

@@ -39,11 +39,12 @@ it(
     await order(h);
     await order(h);
     expect((await h.run()).outcome).toBe('generated');
+    // B2-18（D10-2521 ①）：amount_mismatch_count 与 unsettled_count 同一口径，出账后落具体数（无则 0）。
     const counts = {
       error_count: 0,
       held_count: 0,
       unsettled_count: 2,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     };
     expect(await billCounts(h.db, h.appId)).toEqual(counts);
     const first = await state(h);
@@ -85,11 +86,12 @@ it(
       expect.objectContaining({ type: 'union_mismatch', ref_id: voided.key, period: '2032-06' }),
     ]);
     expect(s.validations).toHaveLength(3);
+    // B2-18（D10-2521 ①）：amount_mismatch_count 同 unsettled_count 只累加一次、落具体数（无则 0）。
     expect(await billCounts(h.db, h.appId)).toEqual({
       error_count: 1,
       held_count: 0,
       unsettled_count: 1,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
     const types = h.registerDiff.mock.calls.map((call) => call[1].type);
     expect(types).not.toContain('settle_missing');
@@ -122,11 +124,12 @@ it(
       expect.objectContaining({ type: 'union_mismatch', ref_id: voided.key, period: '2032-06' }),
     ]);
     expect(recovered.validations).toHaveLength(3);
+    // B2-18（D10-2521 ①）：amount_mismatch_count 与 unsettled_count 同一口径，出账后落具体数（无则 0）。
     expect(await billCounts(h.db, h.appId)).toEqual({
       error_count: 1,
       held_count: 0,
       unsettled_count: 1,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
 
     // 再重放一次：duplicate，计数与差错单都不变。
@@ -136,7 +139,7 @@ it(
       error_count: 1,
       held_count: 0,
       unsettled_count: 1,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
   },
   TIMEOUT,
@@ -153,11 +156,12 @@ it(
     const jdVoided = await order(h, { rebateStatus: 'VOID' }, 'jd');
     await settlement(h, jdVoided);
     expect((await h.run('jd')).outcome).toBe('generated');
+    // B2-18（D10-2521 ①）：amount_mismatch_count 与 unsettled_count 同一口径，出账后落具体数（无则 0）。
     const jdOnly = {
       error_count: 1,
       held_count: 1,
       unsettled_count: 1,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     };
     expect(await billCounts(h.db, h.appId)).toEqual(jdOnly);
     // 淘宝：1 单候选、1 单 VOID 对上联盟结算、1 单应结未结、1 单维权中。
@@ -191,7 +195,7 @@ it(
       error_count: 2,
       held_count: 2,
       unsettled_count: 2,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
     const recovered = await state(h);
     expect(recovered.bills).toEqual([

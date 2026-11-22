@@ -64,7 +64,7 @@ it(
       error_count: 0,
       held_count: 0,
       unsettled_count: 1,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     };
     expect(await billCounts(h.db, h.appId)).toEqual(counts);
     // 账单日之后新同步进来、同属账单月、同样没有结算数据的单。
@@ -104,7 +104,7 @@ it(
       error_count: 0,
       held_count: 0,
       unsettled_count: 2,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     };
     expect(await billCounts(h.db, h.appId)).toEqual(counts);
     const before = await state(h);
@@ -150,7 +150,7 @@ it(
       error_count: 0,
       held_count: 0,
       unsettled_count: 2,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     };
     expect(await billCounts(h.db, h.appId, MONTH)).toEqual(atBillDay);
     const before = await state(h);
@@ -165,7 +165,7 @@ it(
       error_count: 0,
       held_count: 0,
       unsettled_count: 1,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
     const next = mainsOf(s, NEXT_MONTH);
     expect(next).toEqual([
@@ -208,7 +208,7 @@ it(
       error_count: 0,
       held_count: 0,
       unsettled_count: 1,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     };
     expect(await billCounts(h.db, h.appId, MONTH)).toEqual(atBillDay);
 
@@ -228,7 +228,7 @@ it(
       error_count: 0,
       held_count: 0,
       unsettled_count: 0,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     });
     expect(itemsOf(s, mainsOf(s, NEXT_MONTH))).toEqual([]);
     expect(s.items.filter((i) => i.order_id === late.id && i.item_type === 'order')).toEqual(
@@ -256,7 +256,7 @@ it(
       error_count: 0,
       held_count: 1,
       unsettled_count: 2,
-      amount_mismatch_count: null,
+      amount_mismatch_count: 0,
     };
     expect(await billCounts(h.db, h.appId)).toEqual(counts);
     const before = await state(h);
