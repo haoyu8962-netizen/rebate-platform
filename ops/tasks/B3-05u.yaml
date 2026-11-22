@@ -1,0 +1,64 @@
+id: B3-05u
+repo: rebate-platform
+title: 'A7（规划 11-12 §2.12、§2.13）：链接消息确定性路径的失败提示与退还——无返利出 no_rebate.notice，服务端原因出 agent.notice.quote_failed，每个链接都因服务端原因没出成报价卡时不出逐条提示、以 error 50401（retryable false）结束并按现规则退还'
+type: impl
+# 2026-11-22 agent 线入账（D10-2327 顺序 A7；编排 D10-2553 两件都取甲；入账前说明 couli-runs/AGENT-lane/b3-05u-prep.md）。
+# 现状（主干 66422ffff）：orchestrator/deterministic/index.ts 不论部分还是全部失败都 done stop；parse_error 出 error.<码>，price_unavailable / no_card / runner 抛错一律 error.50301；
+#   tools/quote/index.ts 的 isDeliverable 把无返利卡（rebate_basis=no_rebate）归成 no_card（不登记 link）。情境入口已有 serverFailure()（50401、retryable false），stream/run/manager.ts 退还判定已不把 notice 算卡。
+# 做法：① runner 结果分三类——出卡（ok）；商品本身原因（parse_error 30131 / 30132 / 30141、price_unavailable、no_card、新增 no_rebate：仍不出卡、不登记）；
+#   服务端原因（新增 server_failed：ParsingError 50301、parse 或报价 / 登记阶段抛出的任何非业务错误，含我方库写失败与未归类异常，D10-2553 ②甲）。
+#   ② 每链接 notice：no_rebate → no_rebate.notice；服务端原因 → agent.notice.quote_failed；其余商品原因照旧 error.<码> / error.50301（price_unavailable、no_card 不动）。
+#   ③ 全部链接都是服务端原因 → 不出逐条 notice（tool.status failed 照出），以 error 50401 retryable false 结束（msg 取 error.50401 文案，同 entry.serverFailure）；只要有一个出卡或有一个商品原因 → stop，各链接按各自原因各出一条 notice。
+# 必满足（D10-2553 ②）：a) 取消（signal aborted）不归服务端原因，照旧 stop 且之后不写帧；b) 我方故障按服务端原因处理时必须留工程可见的错误日志（pino，不含原文与金额）或走现有告警，不得静默。
+# 验收（§2.12 / §2.13）：服务端原因与商品原因逐类区分；部分链接成功；全部服务端失败 → 50401 且退还、业务结果照常计数；崩溃后由别的请求收尾结果相同（BR-AI-23 细则）；生产文案断言下发文字不含花括号。
+# 冻结用例（D10-2553 ①甲）：只许把下面 5 处的期望键由 error.50301 改为 agent.notice.quote_failed，别的断言一字不动；先红 / --related 若列出别的冻结用例要改，先报编排补登，不得顺手改。标签由编排按 approvals 第 24 条核后加。
+# 风险级：agent 模块（白名单 RV1）；涉及扣次数 / 退还，门禁若判 RV2 以门禁为准。spec-test 任务书原样附 D10-2317 ①；本机只跑单文件，重活上测试机（D10-2262）。
+refs: [BR-AI-15, BR-PRICE-08, BR-TEXT-22]
+refs_hash:
+  BR-AI-15: d3070a739c03
+  BR-PRICE-08: 55f8cc6de6a2
+  BR-TEXT-22: 8a3aa03c38b2
+deps: [B3-05e, B3-04g, CT-26zl]
+paths:
+  - 'apps/api/src/modules/agent/orchestrator/deterministic/**'
+  - 'apps/api/src/modules/agent/tools/quote/**'
+  - 'apps/api/src/modules/agent/stream/mount/assembly.ts'
+test_paths:
+  - 'test/spec/agent/deterministic-failures/**'
+  - 'test/spec/agent/orchestrator-deterministic/path.test.ts'
+  - 'test/spec/agent/orchestrator-deterministic-tpwd/path.test.ts'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/deterministic-failures/**'
+  - 'test/spec/agent/orchestrator-deterministic/**'
+  - 'test/spec/agent/orchestrator-deterministic-tpwd/**'
+  - 'test/spec/agent/tools-quote/**'
+modify_existing:
+  - file: 'test/spec/agent/orchestrator-deterministic/path.test.ts'
+    test: '[AC-B3-05e#3] 中间链接解析错误 %s 只出对应 notice，前后报价照常'
+    reason: rule_change
+    br: [BR-AI-15, BR-TEXT-22]
+    ruling: D10-2553
+    note: '规划 change 20261112 §2.13：服务端原因的提示改用 agent.notice.quote_failed。只改 50301 一例（:111–134）的期望键 error.50301 → agent.notice.quote_failed（text_key 与 fallback_text），30131 / 30132 / 30141 三例及其余断言不变'
+  - file: 'test/spec/agent/orchestrator-deterministic/path.test.ts'
+    test: '[AC-B3-05e#4][AC-B3-05e#5] %s 仅出依赖不可用提示，不补金额且继续后续链接'
+    reason: rule_change
+    br: [BR-AI-15, BR-TEXT-22]
+    ruling: D10-2553
+    note: '规划 change 20261112 §2.13：只改 exception 一例（:160–185）的期望键 error.50301 → agent.notice.quote_failed；price_unavailable、no_card 两例仍为 error.50301，其余断言不变'
+  - file: 'test/spec/agent/orchestrator-deterministic/path.test.ts'
+    test: '[AC-B3-05e#6] 全部失败逐个提示，结束为 stop 而非 fallback 或错误终帧'
+    reason: rule_change
+    br: [BR-AI-15, BR-TEXT-22]
+    ruling: D10-2553
+    note: '规划 change 20261112 §2.13：只把第三个链接（runner 抛错）的期望键 error.50301（:217）改为 agent.notice.quote_failed；stop 结束不变（同组有 30141 商品原因，BR-AI-15 细则），其余断言不变'
+  - file: 'test/spec/agent/orchestrator-deterministic-tpwd/path.test.ts'
+    test: '[AC-B3-04g#3] 中间口令 $label 只产生一次对应 notice 和 failed，前后 URL 照常'
+    reason: rule_change
+    br: [BR-AI-15, BR-TEXT-22]
+    ruling: D10-2553
+    note: '规划 change 20261112 §2.13：只改「parse_error 50301」与「runner 抛错」两例的期望键（notice 的 text_key / fallback_text 与 copy.text 的键）error.50301 → agent.notice.quote_failed；改动限在本用例块内（按 label 选键，不改块外的 failures 表与 notice() 助手），price_unavailable、no_card 与其余码不变'
+status: todo
+pr: null
