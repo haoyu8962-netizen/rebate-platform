@@ -73,6 +73,7 @@
     "agent.notice.no_result": "没有找到符合条件的商品。",
     "agent.notice.ordinal_default": "已按第 1 个商品处理。",
     "agent.notice.platform_unrecognized": "未识别平台条件，已按全部平台查找。",
+    "agent.notice.price_unavailable": "暂时查不到这件商品的价格，请稍后再试。",
     "agent.notice.price_unrecognized": "未识别价格条件，已按其他条件查找。",
     "agent.notice.quote_failed": "这件商品暂时查不到，请稍后再试。",
     "agent.notice.relaxed_price": "已放宽价格条件。",
