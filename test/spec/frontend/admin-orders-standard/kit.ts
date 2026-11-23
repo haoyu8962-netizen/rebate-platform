@@ -146,9 +146,15 @@ export const BENEFICIARIES = [
   },
 ] satisfies Split['beneficiaries'];
 
+export const BENEFICIARIES_WITHOUT_INDIRECT = BENEFICIARIES.filter(
+  ({ role }) => role !== 'indirect',
+);
 export const SPLIT_BASE_FEN = 3_270_000;
 
-export function splitDetail(rebateStatus: 'CREDITED' | 'ESTIMATED' | 'WAITING'): Detail {
+export function splitDetail(
+  rebateStatus: 'CREDITED' | 'ESTIMATED' | 'WAITING',
+  beneficiaries: Split['beneficiaries'] = BENEFICIARIES,
+): Detail {
   return detail({
     rebate_status: rebateStatus,
     display_status: rebateStatus === 'ESTIMATED' ? 'PAID' : rebateStatus,
@@ -156,7 +162,7 @@ export function splitDetail(rebateStatus: 'CREDITED' | 'ESTIMATED' | 'WAITING'):
     commission_split: {
       ...detail().commission_split!,
       base_fen: SPLIT_BASE_FEN,
-      beneficiaries: BENEFICIARIES,
+      beneficiaries,
     },
   });
 }
