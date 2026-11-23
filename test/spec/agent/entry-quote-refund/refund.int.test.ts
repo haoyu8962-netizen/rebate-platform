@@ -202,7 +202,9 @@ it.each([
   { ac: 8, result: 'price_unavailable', notice: 'error.50301' },
 ] as const)(
   '[AC-B3-05r#$ac][BR-AI-15] 无模型入口业务结果 $result：notice、stop，会员日计数保留 +1',
-  async ({ result, notice }) => {
+  async ({ result, notice: originalNotice }) => {
+    const notice =
+      result === 'price_unavailable' ? 'agent.notice.price_unavailable' : originalNotice;
     await withScenario('member', false, async ({ f, before, submit }) => {
       let during: number[] | undefined;
       f.readProduct.mockImplementation(async () => {

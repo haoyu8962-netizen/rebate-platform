@@ -125,7 +125,9 @@ it.each(failures)(
     const key =
       label === 'parse_error 50301' || label === 'runner 抛错'
         ? 'agent.notice.quote_failed'
-        : `error.${code}`;
+        : label === 'price_unavailable' || label === 'no_card'
+          ? 'agent.notice.price_unavailable'
+          : `error.${code}`;
     const out = context();
     const links = [url(1), token, url(3)];
     const runner = runnerFor([

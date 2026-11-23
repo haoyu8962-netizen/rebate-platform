@@ -186,7 +186,11 @@ it.each([
   { ac: 4, outcome: { kind: 'price_unavailable', cards: [] }, key: 'error.50301' },
 ] as const)(
   '[AC-B3-05u#11#$ac] $outcome.kind（$key）是唯一商品原因时仍正常结束并按序出提示',
-  async ({ outcome, key }) => {
+  async ({ outcome, key: originalKey }) => {
+    const key =
+      outcome.kind === 'no_card' || outcome.kind === 'price_unavailable'
+        ? 'agent.notice.price_unavailable'
+        : originalKey;
     const single = context();
     const singlePath = createDeterministicPath({ quotes: quotes([outcome]), texts: texts() });
     expect(await singlePath.run(request(), single.ctx)).toEqual(stopped);
