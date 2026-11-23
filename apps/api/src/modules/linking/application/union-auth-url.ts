@@ -299,12 +299,8 @@ export function createUnionAuthUrl(options: UnionAuthUrlOptions): UnionAuthUrlSe
     const state = newAuthState();
     const authUrl =
       pddLink?.webUrl ??
-      taobaoAuthUrl(
-        taobaoPlan === null || taobaoPlan.kind === 'unavailable'
-          ? { kind: 'synthetic' }
-          : taobaoPlan,
-        state,
-      );
+      // 'unavailable' already returned above; no Taobao plan → the synthetic address.
+      taobaoAuthUrl(taobaoPlan ?? { kind: 'synthetic' }, state);
     const authJump =
       methods === null && pddLink !== null
         ? pddAuthJump(
