@@ -266,5 +266,16 @@ export function mapTaobaoDetail(
       ? { category_l1_name: categoryName }
       : {}),
     ...images,
+    ...shopTypeField(field(basic, 'user_type')),
   });
+}
+
+/**
+ * B1-04zzzzk（BR-PROD-10，D10-2695）：item_basic_info.user_type「卖家类型，0 集市，1 商城」（docs-mirror
+ * taobao.tbk.item.info.upgrade.get）。只认 number 1 / 0；字符串、其他数字、缺失都不出该字段。
+ */
+function shopTypeField(value: unknown): Pick<UnionItemDetail, 'shop_type'> {
+  if (value === 1) return { shop_type: 'tmall' };
+  if (value === 0) return { shop_type: 'taobao' };
+  return {};
 }

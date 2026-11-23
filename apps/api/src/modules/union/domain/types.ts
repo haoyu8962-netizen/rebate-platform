@@ -339,6 +339,12 @@ export interface UnionItemDetail extends UnionItem {
    * unchanged. Pinduoduo desc_txt / serv_txt / lgst_txt; jd only shopInfo.shopLevel as `level`.
    */
   readonly shop_scores?: readonly UnionShopScore[];
+  /**
+   * B1-04zzzzk (BR-PROD-10, D10-2695): shop type as the union stated it. Taobao only, from the
+   * detail row's numeric user_type (1 → tmall, 0 → taobao); absent for any other value and for
+   * jd / pdd. Tmall stays platform taobao.
+   */
+  readonly shop_type?: 'taobao' | 'tmall';
 }
 
 /** B1-04zzm: key of one shop score (contracts ProductShopScore.key). */

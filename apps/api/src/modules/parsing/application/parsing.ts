@@ -311,7 +311,8 @@ function createResolver(options: ParsingOptions) {
       canonicalUrl: null,
       title: item.title,
       shopId: null,
-      shopType: null,
+      // B1-04zzzzk (BR-PROD-10): the shop type the union detail stated (Taobao only); else null.
+      shopType: item.shop_type ?? null,
       source: 'parse',
     };
     return { ok: true, value: { item, ref } };
