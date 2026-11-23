@@ -11,6 +11,7 @@ type: impl
 # 规则测试至少钉：① staging 测试号 bind 发码不调发送器、按已受理；② staging 测试号 bind 用固定码验码成功并消费当前码；③ staging 名单外号码 bind 照常调发送器、固定码无效；
 #   ④ prod（及 local / test）下名单号码 bind 照常调发送器、固定码无效；⑤ login / step_up 原有行为不变。
 # infra/staging/README.md 测试号一节改写用途说明（login、step_up、bind）。不动契约、不动 admin、不动落地页。RV2（identity、infra 路径）。
+# 补丁 1（D10-2691）：README 测试号一节另写两点——① 默认拦截号段是 +86170 / 171 / 162 / 165 / 167（sms-limits.ts:38-44），199 不在内；② 管理后台的短信二次验证与「登记验证手机号」不走 sms-codes.ts（admin-step-up.ts 经 SmsSender 端口直发、admin-verify-phone.ts:235），不认 STAGING_TEST_PHONES，staging 后台不要把 199 测试号登记成管理员验证手机号（负责人自己的号可以）。只改 README 文字，admin 代码不动。
 refs: []
 refs_hash: {}
 deps: [B1-02zza]
