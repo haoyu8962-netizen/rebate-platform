@@ -10,9 +10,11 @@ type: contract
 # 不做（写死，D10-2673）：店铺模糊查找、列表补店铺名与标签（库里无列）；不出 effective_* 或任何「有效订单」口径；不出预估利润 / 实际计算佣金；不在 08 新立条。
 # 两个新操作与 orders 导出由 D2 后端单实现，本单把新操作标 x-implementation: planned（后台按 F1-06zu 清单显示「功能开发中」）；adminListOrders 新参数与行字段可缺省，D2 落地前服务端不认也不报错的口径写进说明。导出沿用现有生命周期、脱敏（BR-ID-33）与留存（BR-ID-30），不改它们的取值。
 # order_tail 字符集定稿前按 09 逐平台核子单号字符集。
+# 补丁 2（2026-11-23，D10-2710 甲）：契约加 orders 导出后冻结用例 [AC-F1-08fd-SOURCE#1] 的来源下拉全集多出 orders（页面照「无名显示编码」显示），属规则变化；只在该块内把期望改为 SOURCE_OPTIONS 末尾加 'orders'（夹具不动：块外白名单不收数组元素追加），断言逻辑不变，由写测方（Codex）做；refs 加 BR-ID-33（orders 导出始终脱敏），供 rule_change 的 br。上线前必须 FU-ADMIN-EXPORT-ORDERS-OPTION：D3 给 orders 中文名并接通，赶不上则上线前藏起该选项。
 # 补丁 1（2026-11-23，fe 自定）：export_resource 加 orders 后，后端 exports.controller.ts 的 commandOf 类型收窄不再成立（tsc 5 处，测试机 verify:fast run 1）。D2 落地前该控制器对 resource=orders 回 20001（data.fields=[resource]），只加这一处守卫与对应单测，不改别的导出行为；契约 adminCreateExport 说明同步写明。
-refs: []
-refs_hash: {}
+refs: [BR-ID-33]
+refs_hash:
+  BR-ID-33: 01b25f773b29
 deps: []
 paths:
   - 'contracts/openapi.yaml'
@@ -26,6 +28,14 @@ paths:
   - 'apps/api/src/modules/admin/http/admin/exports.controller.test.ts'
 test_paths:
   - 'test/spec/contracts/admin-orders-query/**'
+  - 'test/spec/frontend/admin-exports-filters/source.test.ts'
+modify_existing:
+  - file: 'test/spec/frontend/admin-exports-filters/source.test.ts'
+    test: '[AC-F1-08fd-SOURCE#1] 来源页面列全部 export_resource（中文名取 resource 表、无名显示编码）外加全部，选定后按【查询】才带 resource，选全部不带；任何状态的行都没有【重新导出】'
+    reason: rule_change
+    br: [BR-ID-33]
+    ruling: D10-2710
+    note: 'CT-24x 契约 export_resource 加 orders：来源下拉全集期望改为 SOURCE_OPTIONS 末尾加 orders（页面照本用例「无名显示编码」显示编码），断言逻辑不变'
 impl: claude
 tester: codex
 accept:
