@@ -141,24 +141,18 @@ it('[AC-B1-02zza#13] staging 名单外号码照常调发送器，提交固定码
   );
 });
 
-it('[AC-B1-02zza#14] 名单内号码发 bind 码照常调发送器，固定码不能核销 bind 码；随后 login 不调发送器', async () => {
+it('[AC-B1-02zza#14] 名单内号码发 bind 码不调发送器，固定码可核销 bind 码；随后 login 也不调发送器', async () => {
   expect(server).toBeDefined();
   const phone = testPhone();
   await withFixture(
     server!,
     async (f) => {
       success(await f.send('bind', phone));
-      expect(f.sender.outbox()).toEqual([
-        expect.objectContaining({ app_id: 'couli', phone, purpose: 'bind' }),
-      ]);
-      const sent = f.lastCode();
-      if (sent !== FIXED) {
-        expect(await f.verify(FIXED, 'bind', phone)).toEqual({ code: 20002 });
-      }
-      expect((await f.verify(sent, 'bind', phone)).code).toBe(0);
+      expect(f.sender.outbox()).toEqual([]);
+      expect((await f.verify(FIXED, 'bind', phone)).code).toBe(0);
       f.clock.advanceMs(60_000);
       success(await f.send('login', phone));
-      expect(f.sender.outbox()).toHaveLength(1);
+      expect(f.sender.outbox()).toEqual([]);
     },
     staging([phone]),
   );
