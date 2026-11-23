@@ -681,13 +681,17 @@ async function startUnionRegistry(
       );
     }
     // B1-04zzzzm: bindPublisher's user OAuth redirect URI and inviter code ride on the credentials
-    // (read from the config here, null when unset: the filing then fails with a flat warning).
-    const userOAuth = {
-      redirectUri: config.taobaoUserOAuthRedirectUri ?? null,
-      inviterCode: config.taobaoInviterCode ?? null,
-    };
+    // (read from the config here). Neither set → no userOAuth field at all, so the credentials stay
+    // exactly { appKey, appSecret }; the filing then fails with a flat warning.
+    const redirectUri = config.taobaoUserOAuthRedirectUri ?? null;
+    const inviterCode = config.taobaoInviterCode ?? null;
+    const userOAuth =
+      redirectUri === null && inviterCode === null ? undefined : { redirectUri, inviterCode };
     taobaoLive = {
-      credentials: async () => ({ ...(await credentials()), userOAuth }),
+      credentials:
+        userOAuth === undefined
+          ? credentials
+          : async () => ({ ...(await credentials()), userOAuth }),
       transport: archivedTransport(createUnionHttpTransport(), source, clock, logger),
       warn: (warning: TaobaoWarning) => logTaobaoWarning(logger, warning),
       // B1-04zzzzg: detail / official search price warnings, their own event (not `warn`).
