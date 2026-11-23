@@ -1,0 +1,34 @@
+id: F1-07ec
+repo: rebate-platform
+title: 后台通用列表组件（订单管理标准化 A 段）——apps/admin/src/components 新增 data-table、filter-bar、status-tabs、stat-cards、copy-text、money-text、status-tag、help-tip、product-cell、member-cell、detail-drawer 十一个组件与单测；只新增组件，不接入、不改任何已有页面行为
+type: impl
+# 2026-11-23 入账（前端线 f1-frontend-7；编排 D10-2669 ①，任务书 couli-runs/briefs/ADMIN-ORDERS-STANDARD-20261122.md §2；负责人 2026-11-22 要求后台订单页定一套标准、九个平台共用、组件化）。
+# 只做 A 段：组件 + 单测 + 规则测试。不做（写死）：不改 pages/** 下任何文件、不改 App.tsx / 路由 / 菜单 / shell / providers；订单页接入、平台页签、平台配置 platforms.ts 是 B 段（F1-07ed）；暂扣 / 指派入口是 C 段；新筛选、角标数量、汇总接口、导出是 D 段（要契约）。
+# 不改 contracts/**、不加依赖（antd 5 + refine 已有；金额只用 @couli/money，颜色取 @couli/ui-tokens）；不在组件里发请求（数据全由调用方传入）。
+# 各组件要点（任务书 §2）：data-table 包 antd Table——服务端分页、页大小 20 / 50 / 100、固定表头、加载 / 空 / 出错三态、列显示开关与顺序按调用方给的页面 key 存 localStorage（读写 try/catch，读不到或内容不合法用默认列）、可选行勾选；filter-bar 用配置描述筛选项（精确文本、模糊文本、下拉、日期范围、数值区间），条件与 URL query 双向同步，「更多条件」折叠；status-tabs 页签可带数量角标，没给数量不显示角标、不显示 0；stat-cards 一行指标卡、可展开、点卡片回调调用方给的筛选；copy-text 文本 + 复制、成功轻提示、长 ID 中间省略悬停全称；money-text 整数分转元只用 @couli/money、等宽数字；status-tag 枚举 → 文案 + 颜色集中映射，未知值显示原值、灰色；help-tip 问号悬停说明；product-cell 主图、平台图标（图标地址由调用方传入）、标题一行省略悬停全称、标签行、金额 / 比例 / 预估佣金、店铺、付款时间，缺的字段整行不显示；member-cell 昵称、UID（copy-text）、点开详情回调；detail-drawer 右侧抽屉分组字段表、关闭回原位、支持由调用方用深链参数控制打开。
+# 组件文案集中在 texts/components.ts；源码字符串字面量不得恰为 CSS 颜色名（admin-shell SOURCE 守卫）。比例是万分之一整数，显示换算只在组件里做展示、不参与任何金额计算。
+# 别的页面逐步换用（任务书 §2 末）不在本单，碰到时另登 FU。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/admin/src/components/data-table/**'
+  - 'apps/admin/src/components/filter-bar/**'
+  - 'apps/admin/src/components/status-tabs/**'
+  - 'apps/admin/src/components/stat-cards/**'
+  - 'apps/admin/src/components/copy-text/**'
+  - 'apps/admin/src/components/money-text/**'
+  - 'apps/admin/src/components/status-tag/**'
+  - 'apps/admin/src/components/help-tip/**'
+  - 'apps/admin/src/components/product-cell/**'
+  - 'apps/admin/src/components/member-cell/**'
+  - 'apps/admin/src/components/detail-drawer/**'
+  - 'apps/admin/src/texts/components.ts'
+test_paths:
+  - 'test/spec/frontend/admin-list-components/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-list-components/**'
+status: todo
