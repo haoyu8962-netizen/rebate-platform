@@ -44,10 +44,10 @@ function errorKey(code: number): string {
   return `error.${code}`;
 }
 
-/** Default for price_unavailable / no_card: dependency unavailable. No substitute card and no
- * filled-in number (BR-AI-04 required fields). */
-function unavailableCode(): 50301 {
-  return 50301;
+/** BR-TEXT-22 (B3-05v): price_unavailable / no_card get this variable-free notice. No substitute
+ * card and no filled-in number (BR-AI-04 required fields). */
+function priceUnavailableKey(): string {
+  return 'agent.notice.price_unavailable';
 }
 
 /** BR-AI-15 细则 (B3-05u): parse_error with this code is a server reason, not the product's. */
@@ -94,7 +94,7 @@ function classify(outcome: LinkQuoteOutcome): Verdict {
         : { kind: 'product', key: errorKey(outcome.error_code) };
     case 'price_unavailable':
     case 'no_card':
-      return { kind: 'product', key: errorKey(unavailableCode()) };
+      return { kind: 'product', key: priceUnavailableKey() };
   }
 }
 
@@ -166,7 +166,7 @@ function reportServerFailure(deps: DeterministicPathDeps, linkIndex: number, cau
  * url and tpwd alike: tool.status start → runner → end + its cards, or failed + one notice. The
  * candidate object is handed over unchanged (a token is never rewritten as a URL).
  * Notice keys: no_rebate → no_rebate.notice; parse_error uses its own error code (30131 / 30132 /
- * 30141); price_unavailable and no_card use error.50301; a server reason (server_failed,
+ * 30141); price_unavailable and no_card use agent.notice.price_unavailable; a server reason (server_failed,
  * parse_error 50301, any thrown error) uses agent.notice.quote_failed. A thrown error's message
  * never reaches a frame or the log. proceed.notices are emitted by the core only and never
  * repeated here. No text.delta is written (no model, no fixed explanation text).
