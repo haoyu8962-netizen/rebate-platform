@@ -465,6 +465,29 @@ interface LinkOpenParts {
   readonly authApps: UnionAuthApps | undefined;
 }
 
+/**
+ * B1-04zzzzm (D10-2713): the auth apps every Taobao authorization of this process issues with. In
+ * staging / prod the user-level Taobao OAuth (the Taobao app key, TAOBAO_USER_OAUTH_REDIRECT_URI) is
+ * always attached, so GET auth-url and the open's / shop open's / share's 30101 / 30102 hand out the
+ * same real address, and an incomplete configuration answers auth_unavailable instead of a
+ * synthetic address. local / test keep the synthetic one. A provided port that already carries
+ * taobaoUserOAuth is used as is.
+ */
+function authAppsFor(authApps: UnionAuthApps | undefined, appConfig: AppConfig): UnionAuthApps {
+  const base = authApps ?? createDemoUnionAuthApps();
+  if (appConfig.appEnv !== 'staging' && appConfig.appEnv !== 'prod') return base;
+  if (base.taobaoUserOAuth !== undefined) return base;
+  const appKey = appConfig.taobao?.appKey ?? null;
+  return {
+    taobaoUserOAuth: {
+      appKey: appKey === '' ? null : appKey,
+      redirectUri: appConfig.taobaoUserOAuthRedirectUri ?? null,
+    },
+    resolve: (appId, environment, client, method) =>
+      base.resolve(appId, environment, client, method),
+  };
+}
+
 /** The open's options (B1-06w / B1-06f), shared by the convert (B1-06i). */
 function openOptions(parts: LinkOpenParts): TaobaoLinkOpenOptions {
   const { db, idempotency, ports, process, appConfig, clock, logger } = parts;
@@ -516,7 +539,7 @@ function openOptions(parts: LinkOpenParts): TaobaoLinkOpenOptions {
       verifiedPaths: ports.verifiedPaths,
     },
     appEnv: appConfig.appEnv,
-    authApps: authApps ?? createDemoUnionAuthApps(),
+    authApps: authAppsFor(authApps, appConfig),
   };
 }
 
@@ -665,7 +688,7 @@ export class LinkingModule {
               idempotency: parts.idempotency,
               logger,
               appEnv: appConfig.appEnv,
-              authApps: parts.authApps ?? createDemoUnionAuthApps(),
+              authApps: authAppsFor(parts.authApps, appConfig),
             });
           },
         },
@@ -736,7 +759,7 @@ export class LinkingModule {
                 callerContext,
                 config,
                 appEnv,
-                authApps: parts.authApps ?? createDemoUnionAuthApps(),
+                authApps: authAppsFor(parts.authApps, appConfig),
                 pids,
                 jumpEnvironment: { appEnv, apps: ports.apps, verifiedPaths: ports.verifiedPaths },
                 logger,
@@ -879,7 +902,7 @@ export class LinkingModule {
                   callerContext,
                   config,
                   appEnv: appConfig.appEnv,
-                  authApps: authApps ?? createDemoUnionAuthApps(),
+                  authApps: authAppsFor(authApps, appConfig),
                   pids,
                   attrCodes,
                   // The pdd auth_jump uses the open's jump environment (apps.json, verified paths);

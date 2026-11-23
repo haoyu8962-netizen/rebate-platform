@@ -63,6 +63,9 @@
 // → adapter_unimplemented，不取大淘客凭据、不发请求、不告警）。开时顺序为「官方淘宝口令解析 → 不可用 / 无权限
 // 才降级大淘客 parse-content」；官方淘宝口令解析尚未实现，恒视为不可用。商品页 item.htm 官方直查不读开关。
 // 生产装配尚未注入开关读取器，故生产恒关；启用单负责接线（FU，见 review-spec-test-r4 范围外 S2）。
+// B1-04zzzzm（D10-2713 / D10-2716）：bindPublisher = 用户授权码换用户令牌（user-oauth.ts）→
+// publisher.info.save → relation_id，重复备案经 publisher.info.get 取回（publisher.ts）；邀请码或用户
+// 回调缺失、两路都拿不到编号 → 平铺告警 + upstream_misconfigured。这几条请求都不归档。
 import { systemScheduler, type Clock, type Scheduler } from '../../../platform/index.ts';
 import type {
   TaobaoPriceOptions,
@@ -226,8 +229,19 @@ import {
   type ThirdPartyParseConfig,
 } from './parse-content.ts';
 import { parseTaobaoItemLink } from './resolve-link.ts';
+import {
+  queriedRelationId,
+  savedRelationId,
+  TAOBAO_PUBLISHER_GET,
+  TAOBAO_PUBLISHER_GET_ENVELOPE,
+  TAOBAO_PUBLISHER_INFO_TYPE,
+  TAOBAO_PUBLISHER_RELATION_APP,
+  TAOBAO_PUBLISHER_SAVE,
+  TAOBAO_PUBLISHER_SAVE_ENVELOPE,
+} from './publisher.ts';
 import { unwrapTaobaoResponse, type TaobaoSubCodeMap, type TaobaoWarning } from './response.ts';
 import type { TaobaoSearchCounter, TaobaoSearchMetricSource } from './search-counter.ts';
+import { exchangeTaobaoUserCode } from './user-oauth.ts';
 import {
   dataokeFailureReason,
   officialFailureReason,
@@ -268,6 +282,11 @@ export type { TaobaoPunishWarning, TaobaoPunishWarningEvent } from './punishment
 export interface TaobaoCredentials {
   readonly appKey: string;
   readonly appSecret: string;
+  /**
+   * B1-04zzzzm: what bindPublisher needs besides the app pair — TAOBAO_USER_OAUTH_REDIRECT_URI and
+   * TAOBAO_INVITER_CODE (server settings, not secrets, but never logged). Absent or null → the
+   * filing fails with a flat warning and nothing is sent.
+   */
   readonly userOAuth?: {
     readonly redirectUri: string | null;
     readonly inviterCode: string | null;
@@ -528,10 +547,92 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     this.#ownOrders = options.ownOrders;
   }
 
+  /**
+   * B1-04zzzzm (D10-2713 / D10-2716; BR-ID-17 web_code): the user's channel filing. The inviter code
+   * and the user OAuth redirect URI come from the credentials (userOAuth); either missing → a flat
+   * warning and upstream_misconfigured, nothing sent. Then ① the authorization code is exchanged
+   * for the user's access token (user-oauth.ts; refused → invalid_identity), ② publisher.info.save
+   * with session = that token, inviter_code, info_type=1 gives data.relation_id; ③ without one
+   * (duplicate filing) publisher.info.get with the same session gives the one common-scene id;
+   * ④ neither → a flat warning and upstream_misconfigured (no made-up relation id). The token lives
+   * only in this call: no archive context on any of these requests, never logged, returned or
+   * thrown; personal fields of the answers (taobao_user_nick, account_name, …) are not read.
+   */
   async bindPublisher(req: BindReq, ctx: CallCtx): Promise<BindResult> {
-    void req;
-    void ctx;
-    throw new Error('NotImplemented: bindPublisher');
+    const app = await this.#credentials();
+    const inviterCode = app.userOAuth?.inviterCode?.trim() ?? '';
+    if (inviterCode === '') {
+      throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'inviter_code_missing');
+    }
+    const redirectUri = app.userOAuth?.redirectUri ?? '';
+    if (redirectUri === '') {
+      throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'user_oauth_redirect_uri_missing');
+    }
+    const code = req.authorizationCode;
+    if (typeof code !== 'string' || code === '') {
+      throw new UnionError(
+        'invalid_identity',
+        'taobao bindPublisher: no authorization code',
+        'taobao',
+      );
+    }
+    const session = await exchangeTaobaoUserCode({
+      appKey: app.appKey,
+      appSecret: app.appSecret,
+      redirectUri,
+      code,
+      transport: this.#transport,
+      clock: this.#clock,
+    });
+    const signal = ctx.signal;
+    const saved = await this.#publisherCall(
+      TAOBAO_PUBLISHER_SAVE,
+      TAOBAO_PUBLISHER_SAVE_ENVELOPE,
+      { session, inviter_code: inviterCode, info_type: TAOBAO_PUBLISHER_INFO_TYPE },
+      signal,
+    );
+    const savedId = savedRelationId(saved.body);
+    if (savedId !== null) return { relationId: savedId };
+    const queried = await this.#publisherCall(
+      TAOBAO_PUBLISHER_GET,
+      TAOBAO_PUBLISHER_GET_ENVELOPE,
+      {
+        session,
+        info_type: TAOBAO_PUBLISHER_INFO_TYPE,
+        relation_app: TAOBAO_PUBLISHER_RELATION_APP,
+      },
+      signal,
+    );
+    const found = queriedRelationId(queried.body);
+    if (found.kind === 'found') return { relationId: found.relationId };
+    throw this.#bindMisconfigured(
+      TAOBAO_PUBLISHER_GET,
+      found.kind === 'ambiguous' ? 'relation_id_ambiguous' : 'relation_id_missing',
+    );
+  }
+
+  /** One flat warning (method + fixed code only) and the refusal of a filing that cannot finish. */
+  #bindMisconfigured(method: string, code: string): UnionError {
+    this.#warn?.({ method, code });
+    return new UnionError('upstream_misconfigured', `taobao bindPublisher: ${code}`, 'taobao');
+  }
+
+  /**
+   * A publisher request carrying the user's session: never archived (no archive context), errors
+   * classified by unwrapTaobaoResponse; the raw answer is returned for the lossless relation_id.
+   */
+  async #publisherCall(
+    method: string,
+    envelope: string,
+    parameters: TaobaoParameters,
+    signal: AbortSignal | undefined,
+  ): Promise<UnionTransportResponse> {
+    const response = await this.#send(method, parameters, {
+      envelope,
+      ...(signal === undefined ? {} : { signal }),
+    });
+    unwrapTaobaoResponse(method, envelope, response, this.#warn);
+    return response;
   }
 
   /** Internal request foundation; returns the inner object of `options.envelope`. */

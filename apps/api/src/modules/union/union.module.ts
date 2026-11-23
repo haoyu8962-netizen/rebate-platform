@@ -247,6 +247,16 @@ const TAOBAO_PRICE_CODES: ReadonlySet<string> = new Set([
 ]);
 /** B1-04zzzzg: the row validation codes on the Taobao warn hook (大淘客 search warnOf). */
 const TAOBAO_ROW_CODES: ReadonlySet<string> = new Set(['invalid_item', 'invalid_commission']);
+/**
+ * B1-04zzzzm: the channel filing refusals of TaobaoUnionAdapter.bindPublisher (missing inviter code
+ * or user OAuth redirect URI, no or no single relation_id); logged with method and code only.
+ */
+const TAOBAO_PUBLISHER_CODES: ReadonlySet<string> = new Set([
+  'inviter_code_missing',
+  'user_oauth_redirect_uri_missing',
+  'relation_id_missing',
+  'relation_id_ambiguous',
+]);
 /** B1-04j: the TOP code of an API permission refusal (response.ts). */
 const TAOBAO_PERMISSION_CODE = '11';
 
@@ -298,7 +308,9 @@ export function logTaobaoWarning(logger: RootLogger, warning: TaobaoWarning): vo
       ? ['TAOBAO_PRICE_WARNING', 'taobao price warning']
       : TAOBAO_ROW_CODES.has(warning.code)
         ? ['TAOBAO_SEARCH_ROW_INVALID', 'taobao search row invalid']
-        : ['TAOBAO_WARNING_UNKNOWN', 'unknown taobao warning'];
+        : TAOBAO_PUBLISHER_CODES.has(warning.code)
+          ? ['TAOBAO_PUBLISHER_BIND_FAILED', 'taobao channel filing failed']
+          : ['TAOBAO_WARNING_UNKNOWN', 'unknown taobao warning'];
     logger.warn({ event, method: warning.method, code: warning.code }, message);
     return;
   }
@@ -668,8 +680,14 @@ async function startUnionRegistry(
         'taobao',
       );
     }
+    // B1-04zzzzm: bindPublisher's user OAuth redirect URI and inviter code ride on the credentials
+    // (read from the config here, null when unset: the filing then fails with a flat warning).
+    const userOAuth = {
+      redirectUri: config.taobaoUserOAuthRedirectUri ?? null,
+      inviterCode: config.taobaoInviterCode ?? null,
+    };
     taobaoLive = {
-      credentials,
+      credentials: async () => ({ ...(await credentials()), userOAuth }),
       transport: archivedTransport(createUnionHttpTransport(), source, clock, logger),
       warn: (warning: TaobaoWarning) => logTaobaoWarning(logger, warning),
       // B1-04zzzzg: detail / official search price warnings, their own event (not `warn`).

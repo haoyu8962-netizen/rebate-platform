@@ -5,10 +5,13 @@
 // this call: it is never stored, logged or echoed.
 //
 // The Nest class token is injectable (linking.module.ts provides the default below; rule tests
-// replace it). The default forwards to the union demo adapter's bindPublisher (authorizationCode =
-// the code or the access token), which synthesizes a relation id per app and credential.
-// TODO(规划/11 §4.5): real channel filing (淘宝 publisher.save) with the per-method union
-// application and the credential-invalid answer of the platform — blocked on 推广位 / siteId 与联盟应用.
+// replace it). The default forwards to the governed Taobao adapter's bindPublisher (authorizationCode =
+// the code or the access token): the demo adapter outside staging / prod synthesizes a relation id;
+// the live TaobaoUnionAdapter (B1-04zzzzm) exchanges the web_code for the user's token and files the
+// channel (publisher.info.save, duplicate → publisher.info.get). A refused code comes back as
+// invalid_identity → credential_invalid.
+// TODO(规划/11 §4.5): the live adapter's sdk_token path (an SDK access token used as the session
+// directly) — blocked on 淘宝客户端 SDK 接入（本单不动 sdk_token 路径）.
 import { UnionError, type BindReq, type BindResult, type CallCtx } from '../../union/index.ts';
 
 export interface UnionBindingExchangeInput {

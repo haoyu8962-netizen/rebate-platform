@@ -22,7 +22,9 @@
 // auth_url and the h5 / universal-link steps carry the web address (mobile_short_url → url); the
 // scheme step is the upstream schema_url as is (built from the web address only when there is
 // none); the state is only in union_auth_sessions, never in the link. No slot or attr_code → 50301 maintenance; the port missing or failing → 50303; neither
-// leaves a state. Taobao keeps its synthetic address (syntheticAuthUrl).
+// leaves a state. B1-04zzzzm: Taobao's address is the real user OAuth one when the wiring passes
+// taobaoUserOAuth (taobaoAuthUrlPlan / taobaoAuthUrl, shared with the open's 30101 / 30102); staging /
+// prod with it incomplete answer auth_unavailable without a state; no port keeps the synthetic one.
 import type { components } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
@@ -50,7 +52,8 @@ import {
   deviceClientOf,
   insertAuthSession,
   newAuthState,
-  syntheticAuthUrl,
+  taobaoAuthUrl,
+  taobaoAuthUrlPlan,
   type UnionAuthAppsPort,
 } from './union-auth-state.ts';
 
@@ -242,6 +245,14 @@ export function createUnionAuthUrl(options: UnionAuthUrlOptions): UnionAuthUrlSe
       });
     }
 
+    // B1-04zzzzm: no issuable Taobao address in staging / prod → the same answer as above, no state.
+    const taobaoPlan = platform === 'taobao' ? taobaoAuthUrlPlan(authApps, appEnv) : null;
+    if (taobaoPlan?.kind === 'unavailable') {
+      return fail(status === 'invalid' ? 30102 : 30101, input.traceId, {
+        reason: 'auth_unavailable',
+      });
+    }
+
     const methods = platform === 'taobao' ? await reads.configuredMethods(appId, client) : null;
     let pddLink: PddAuthorityLink | null = null;
     if (platform === 'pdd') {
@@ -286,7 +297,14 @@ export function createUnionAuthUrl(options: UnionAuthUrlOptions): UnionAuthUrlSe
     const expireAt = clock.now();
     expireAt.setTime(now.getTime() + AUTH_STATE_TTL_MS);
     const state = newAuthState();
-    const authUrl = pddLink?.webUrl ?? syntheticAuthUrl('taobao', state);
+    const authUrl =
+      pddLink?.webUrl ??
+      taobaoAuthUrl(
+        taobaoPlan === null || taobaoPlan.kind === 'unavailable'
+          ? { kind: 'synthetic' }
+          : taobaoPlan,
+        state,
+      );
     const authJump =
       methods === null && pddLink !== null
         ? pddAuthJump(

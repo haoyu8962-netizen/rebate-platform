@@ -82,7 +82,8 @@ import {
   deviceClientOf,
   insertAuthSession,
   newAuthState,
-  syntheticAuthUrl,
+  taobaoAuthUrl,
+  taobaoAuthUrlPlan,
 } from './union-auth-state.ts';
 import type { UnionAuthUrlOptions } from './union-auth-url.ts';
 
@@ -284,6 +285,12 @@ export async function issueTaobaoAuthState(
   if (caller.deviceId === null || caller.userId !== userId) {
     return { kind: 'refused', code: 10001 };
   }
+  // B1-04zzzzm: staging / prod without the user OAuth app key or redirect URI issue no state and
+  // no synthetic address (the same answer as an unavailable site authorization).
+  const plan = taobaoAuthUrlPlan(authApps, appEnv);
+  if (plan.kind === 'unavailable') {
+    return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
+  }
   let client: AuthClient | 'missing';
   try {
     client = await deviceClientOf(executor, appId, caller.deviceId);
@@ -317,7 +324,7 @@ export async function issueTaobaoAuthState(
   return {
     kind: 'refused',
     code,
-    data: { auth_url: syntheticAuthUrl(PLATFORM, state), state, auth_methods: [...methods] },
+    data: { auth_url: taobaoAuthUrl(plan, state), state, auth_methods: [...methods] },
   };
 }
 

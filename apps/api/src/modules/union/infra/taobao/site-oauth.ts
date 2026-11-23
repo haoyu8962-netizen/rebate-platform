@@ -49,11 +49,17 @@ const SAFE_ERROR_CODE = /^[A-Za-z0-9_.-]{1,64}$/;
 /**
  * A refused token exchange. The message holds a fixed text, the HTTP status or the upstream
  * `error` code at most; never the code, a token, the secret or the answer; no `cause`.
+ * B1-04zzzzm: `kind` tells an answer refusing the code ('refused': an `error` field or a 4xx) from
+ * a failure to get an answer ('unavailable': transport error, timeout, 5xx, unreadable answer), so
+ * the user-level exchange (user-oauth.ts) can tell an invalid credential from a dependency fault.
  */
 export class TaobaoSiteOAuthError extends Error {
-  constructor(reason: string) {
+  readonly kind: 'refused' | 'unavailable';
+
+  constructor(reason: string, kind: 'refused' | 'unavailable') {
     super(`taobao site oauth: ${reason}`);
     this.name = 'TaobaoSiteOAuthError';
+    this.kind = kind;
   }
 }
 
@@ -77,7 +83,7 @@ async function withTimeout<T>(
   const expired = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
       controller.abort();
-      reject(new TaobaoSiteOAuthError('token request timed out'));
+      reject(new TaobaoSiteOAuthError('token request timed out', 'unavailable'));
     }, timeoutMs);
   });
   // A late rejection of `expired` after `send` won the race is not left unhandled.
@@ -104,12 +110,19 @@ function parseAnswer(response: UnionTransportResponse): Record<string, unknown> 
   if (isRecord(body) && body['error'] !== undefined && body['error'] !== null) {
     const code = body['error'];
     const quoted = typeof code === 'string' && SAFE_ERROR_CODE.test(code) ? code : 'unknown';
-    throw new TaobaoSiteOAuthError(`token request refused (status ${status}, error ${quoted})`);
+    throw new TaobaoSiteOAuthError(
+      `token request refused (status ${status}, error ${quoted})`,
+      'refused',
+    );
   }
   if (!Number.isInteger(status) || status < 200 || status > 299) {
-    throw new TaobaoSiteOAuthError(`token request refused (status ${status})`);
+    const kind =
+      Number.isInteger(status) && status >= 400 && status <= 499 ? 'refused' : 'unavailable';
+    throw new TaobaoSiteOAuthError(`token request refused (status ${status})`, kind);
   }
-  if (!isRecord(body)) throw new TaobaoSiteOAuthError('token answer is not a JSON object');
+  if (!isRecord(body)) {
+    throw new TaobaoSiteOAuthError('token answer is not a JSON object', 'unavailable');
+  }
   return body;
 }
 
@@ -157,12 +170,12 @@ export function createTaobaoSiteOAuth(options: TaobaoSiteOAuthOptions): SiteOAut
       } catch (error) {
         if (error instanceof TaobaoSiteOAuthError) throw error;
         // The transport's error may quote the request: only a fixed text, no cause.
-        throw new TaobaoSiteOAuthError('token request failed');
+        throw new TaobaoSiteOAuthError('token request failed', 'unavailable');
       }
       const answer = parseAnswer(response);
       const accessToken = answer['access_token'];
       if (typeof accessToken !== 'string' || accessToken === '') {
-        throw new TaobaoSiteOAuthError('token answer has no access_token');
+        throw new TaobaoSiteOAuthError('token answer has no access_token', 'unavailable');
       }
       const refresh = answer['refresh_token'];
       const expiresIn = answer['expires_in'];
