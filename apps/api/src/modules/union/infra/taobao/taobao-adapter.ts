@@ -3,8 +3,8 @@
 // 经注入的 UnionTransport 发表单 POST 到 endpoint.baseUrl（参数含 sign 全在请求体，URL 不带查询串，
 // Content-Type application/x-www-form-urlencoded;charset=utf-8）、按调用方给出的外层键解包。
 // 业务参数与公共参数同名 → invalid_dto，不发请求。传输抛错 → upstream_unavailable（不带原文）。
-// 调用方的 AbortSignal 与归档上下文原样挂在传输请求上。searchItems / resolveLink /
-// listOrders（与未打开大淘客转链时的 convert）仍是 adapter_unimplemented，不取凭据、不发请求。不读 process.env、不读文件；
+// 调用方的 AbortSignal 与归档上下文原样挂在传输请求上。searchItems / listOrders（与未打开大淘客转链时的
+// convert）缺各自的来源时仍是 adapter_unimplemented，不取凭据、不发请求。不读 process.env、不读文件；
 // app_secret 只在内存参与签名。
 //
 // B1-04l（② 段）：
@@ -45,6 +45,12 @@
 // B1-04zzt（S-17 S17-u2，D10-806）：有 orderSource 时声明 shopConvertSources = ['dataoke']，convertShop 经它
 // GET /api/dels/shop/convert（v1.0.0，见 shop-convert.ts），归档 kind = convert；没有 → 不声明，
 // convertShop 为 adapter_unimplemented（不取凭据、不发请求）。
+// B1-04zzzzk（D10-2674 ②）：resolveLink 部分实现，只认淘宝 / 天猫商品页 item.htm?id=<数字>（形态见
+// resolve-link.ts）：以该 id 发一次 item.info.upgrade.get（与 getItem 同一请求与错误归类），取本次返回第一条的
+// item_id 原串（BR-PROD-05；不读写商品 id 缓存）；空结果、15/50001、返回行缺 item_id 或不是非空字符串 →
+// link_unrecognized，其余上游错误原样抛。归档 kind = query。不认的链接（推广链、淘口令、m.tb.cn、手机页等）
+// 照旧 adapter_unimplemented，不取凭据、不发请求、不告警；推广链 / 淘口令 / m.tb.cn 由下一单走大淘客
+// parse-content（D10-2683）。
 import { systemScheduler, type Clock, type Scheduler } from '../../../platform/index.ts';
 import type {
   TaobaoPriceOptions,
@@ -193,6 +199,7 @@ import {
   type TaobaoOwnOrderReader,
   type TaobaoRefundWarning,
 } from './refunds.ts';
+import { parseTaobaoItemLink } from './resolve-link.ts';
 import { unwrapTaobaoResponse, type TaobaoSubCodeMap, type TaobaoWarning } from './response.ts';
 import type { TaobaoSearchCounter, TaobaoSearchMetricSource } from './search-counter.ts';
 import {
@@ -562,7 +569,8 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     }
   }
 
-  // 端口方法：resolveLink 仍 adapter_unimplemented，不取凭据、不发请求
+  // 端口方法：resolveLink 只认商品页 item.htm?id=（B1-04zzzzk），其余仍 adapter_unimplemented，不取凭据、
+  // 不发请求；推广链、淘口令、m.tb.cn 下一单走大淘客 parse-content（D10-2683）
   // （convert 见 B1-04d，searchItems 见 B1-04zh / B1-04zx，listOrders 见 B1-04f）。
 
   /**
@@ -963,10 +971,29 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     return this.#priceSettings === undefined ? undefined : this.#priceSettings.read(ctx.appId);
   }
 
+  /**
+   * B1-04zzzzk (D10-2674 ②): a 淘宝 / 天猫 item page (see resolve-link.ts) → one item.info.upgrade.get
+   * with its numeric id; the item_id is this response's first row as returned (BR-PROD-05), never
+   * from #itemIdCache. Anything else: unimplemented before credentials or transport (frozen
+   * [AC-B1-04j#30]).
+   */
   async resolveLink(raw: string, ctx: CallCtx): Promise<ResolvedLink> {
-    void raw;
-    void ctx;
-    throw unimplemented('resolveLink');
+    const linkId = parseTaobaoItemLink(raw);
+    if (linkId === null) throw unimplemented('resolveLink');
+    const rows = await this.#topItemRows([linkId], ctx);
+    const first: unknown = rows === null ? undefined : rows[0];
+    const itemId =
+      typeof first === 'object' && first !== null
+        ? (first as Readonly<Record<string, unknown>>)['item_id']
+        : undefined;
+    if (typeof itemId !== 'string' || itemId === '') {
+      throw new UnionError(
+        'link_unrecognized',
+        'taobao resolveLink: no item for this item page',
+        'taobao',
+      );
+    }
+    return { item: { platform: 'taobao', item_id: itemId } };
   }
 
   /** B1-04d: 大淘客 get-privilege-link when switched on (see the header); otherwise unimplemented. */

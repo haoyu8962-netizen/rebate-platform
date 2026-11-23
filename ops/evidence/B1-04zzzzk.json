@@ -1,0 +1,104 @@
+{
+  "task": "B1-04zzzzk",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "spec_commit": "5750ed8a0b4332a161a07fadb894296b64ebbe2c",
+  "red_tests": [
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#1] [AC-B1-04zzzzk#4] 淘宝商品页取联盟返回的原串，其余链接维持 adapter_unimplemented",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#1] 天猫商品页带其他参数和片段时，仍返回淘宝商品标识",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#1] 大淘客搜索填入缓存后，连续两次解析同一商品页各取当次详情返回的原串",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#2] https://ITEM.taobao.com./item.htm?id=1 原样传递商品页数字 ID",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#2] https://item.taobao.com/item.htm?id=12345678901234567890 原样传递商品页数字 ID",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#3] 详情商品数组为空 时返回 link_unrecognized",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#3] 详情业务码 15/50001 表示无该商品 时返回 link_unrecognized",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#3] 详情商品缺少 item_id 时返回 link_unrecognized",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#3] 详情商品 item_id 为空串 时返回 link_unrecognized",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#3] 详情商品 item_id 为数字 时返回 link_unrecognized",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#5] 请求被拒绝 时沿用详情错误分类",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#5] 接口限流 时沿用详情错误分类",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#5] HTTP 503 时沿用详情错误分类",
+    "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#5] 权限错误 时沿用详情错误分类",
+    "test/spec/union/taobao-resolve-link/shop-type.test.ts > [AC-B1-04zzzzk#6] 淘宝详情只将数字 user_type 1 和 0 映射为天猫和淘宝",
+    "test/spec/union/taobao-resolve-link/shop-type.test.ts > [AC-B1-04zzzzk#7] parseUrl 返回的 ProductRef 使用详情给出的店铺类型，缺省时为 null",
+    "test/spec/union/taobao-resolve-link/shop-type.test.ts > [AC-B1-04zzzzk#8] parseInput 登记卡片时传入详情给出的店铺类型，缺省时为 null"
+  ],
+  "risk_note": "Taobao resolveLink, first step, plus the Taobao shop type (D10-2674 ②, D10-2683, D10-2695). resolveLink now recognises only https item.taobao.com / detail.tmall.com /item.htm with a 1-20 digit id (host lowercased without trailing dot, no port, no user info, path exact); it sends one taobao.tbk.item.info.upgrade.get and returns the item_id of this answer (never the id cache that dataoke search fills, BR-PROD-05); an empty answer, 15/50001 or a row without a non-empty string item_id is link_unrecognized; other upstream errors keep their class. Every other input (promotion links, m.tb.cn, mobile pages, tokens) still throws adapter_unimplemented before credentials or transport ([AC-B1-04j#30] stays green). The Taobao detail mapping reads user_type (0 -> taobao, 1 -> tmall, anything else -> absent; docs-mirror taobao.tbk.item.info.upgrade.get.md:125) into an optional shop_type on the item detail, and parsing's ProductRef.shopType takes it (null when absent; jd / pdd unchanged). No conversion, order, contract or money code touched.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "5750ed8a0b4332a161a07fadb894296b64ebbe2c",
+      "tree": "e6324f3af315ab121c02b2ec7df2b22bb4842e57",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-23T07:52:02Z",
+      "finished_at": "2026-11-23T07:52:07Z",
+      "red_tests": [
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#1] [AC-B1-04zzzzk#4] 淘宝商品页取联盟返回的原串，其余链接维持 adapter_unimplemented",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#1] 天猫商品页带其他参数和片段时，仍返回淘宝商品标识",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#1] 大淘客搜索填入缓存后，连续两次解析同一商品页各取当次详情返回的原串",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#2] https://ITEM.taobao.com./item.htm?id=1 原样传递商品页数字 ID",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#2] https://item.taobao.com/item.htm?id=12345678901234567890 原样传递商品页数字 ID",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#3] 详情商品数组为空 时返回 link_unrecognized",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#3] 详情业务码 15/50001 表示无该商品 时返回 link_unrecognized",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#3] 详情商品缺少 item_id 时返回 link_unrecognized",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#3] 详情商品 item_id 为空串 时返回 link_unrecognized",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#3] 详情商品 item_id 为数字 时返回 link_unrecognized",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#5] 请求被拒绝 时沿用详情错误分类",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#5] 接口限流 时沿用详情错误分类",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#5] HTTP 503 时沿用详情错误分类",
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts > [AC-B1-04zzzzk#5] 权限错误 时沿用详情错误分类",
+        "test/spec/union/taobao-resolve-link/shop-type.test.ts > [AC-B1-04zzzzk#6] 淘宝详情只将数字 user_type 1 和 0 映射为天猫和淘宝",
+        "test/spec/union/taobao-resolve-link/shop-type.test.ts > [AC-B1-04zzzzk#7] parseUrl 返回的 ProductRef 使用详情给出的店铺类型，缺省时为 null",
+        "test/spec/union/taobao-resolve-link/shop-type.test.ts > [AC-B1-04zzzzk#8] parseInput 登记卡片时传入详情给出的店铺类型，缺省时为 null"
+      ],
+      "expected": [
+        "test/spec/union/taobao-resolve-link/resolve-link.test.ts",
+        "test/spec/union/taobao-resolve-link/shop-type.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "ac4e1c8a60f2ff88807f5d4809c9297ee09a7326f3e54071cc2466a212304649"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27). r1 fail: S1 tmall shop_type null (parsing hard-coded null; UnionItemDetail had no shop type), S1 texts key missing (stale base, gone after rebase), S2 explicit :443 (accepted, BR-ATTR-29 drops 443). r2 fail: the same shop_type S1 plus an S1 for a scope note in the brief that told the reviewer what to rule (my mistake, removed). D10-2695 folded the shop type into this task (ledger patch 1, #616; rule tests attempt 3; implementation attempt 2). r3 pass, one out-of-scope S2: the product detail entry in catalog still builds shopType null - FU-CATALOG-SHOP-TYPE. couli-runs/B1-04zzzzk/review-money-codex-r{1,2,3}.json. Test machine on the implementation tree: --tests test/spec/union, test/spec/parsing, test/spec/catalog, union module unit tests green (630 files, 9027 tests), verify:fast exit 0."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (gpt-6.2-sol, ledger tester codex, attempts 1-3; three earlier dispatches failed before Codex started on a local bash locale / node PATH problem and their rounds were released, D10-2117), reviewed by a fresh independent Claude (approvals 19). r1 fail (S1: an implementation reading the 30-minute id cache passed every test; 2 S2: loose host / path / port / id checks, rows without a string item_id) -> attempt 2 added them -> r2 pass. Attempt 3 (D10-2695) added shop-type.test.ts; the spec-test counter was spent (2 of 2), so round 3 ran as the one-off in ops/approvals.yaml id 165 (D10-2705), scope only that file: pass, one out-of-scope S2 (same as FU-CATALOG-SHOP-TYPE). Its first try hit an account capacity stop with no output and was rerun uncounted (D10-2117)."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "17b1bbf204098fba3126818cccab4f1f3a706174",
+    "specs": "5b1b075156cc136909d767c3d039cc8783e124ec"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
