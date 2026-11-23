@@ -106,6 +106,19 @@ export function taobaoAuthUrl(
 }
 
 /**
+ * B1-04zzzzm 补丁 2 (D10-2755; BR-ID-17 细则「授权方式」): the configured methods a Taobao state may
+ * carry under this plan. The real user OAuth ('oauth') only completes web_code: the live adapter
+ * cannot file with an SDK access token yet, so sdk_token is never handed out with it (the configured
+ * order of what remains is kept). Empty → the caller answers auth_unavailable and issues no state.
+ */
+export function issuableTaobaoMethods(
+  plan: TaobaoAuthUrlPlan,
+  methods: readonly UnionAuthMethod[],
+): readonly UnionAuthMethod[] {
+  return plan.kind === 'oauth' ? methods.filter((method) => method === 'web_code') : methods;
+}
+
+/**
  * The client of the device record: 'missing' when the device is unknown or revoked (the caller
  * answers 10001); a record without a supported client is a configuration fault.
  */

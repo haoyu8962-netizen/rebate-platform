@@ -81,6 +81,7 @@ import {
   authAppRefs,
   deviceClientOf,
   insertAuthSession,
+  issuableTaobaoMethods,
   newAuthState,
   taobaoAuthUrl,
   taobaoAuthUrlPlan,
@@ -301,7 +302,11 @@ export async function issueTaobaoAuthState(
   }
   if (client === 'missing') return { kind: 'refused', code: 10001 };
   const reads = createUnionAuthReads({ db: executor, config, appEnv, pids, clock });
-  const methods = await reads.configuredMethods(appId, client);
+  // 补丁 2: under the real user OAuth only web_code is handed out; nothing left → auth_unavailable.
+  const methods = issuableTaobaoMethods(plan, await reads.configuredMethods(appId, client));
+  if (methods.length === 0) {
+    return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
+  }
   const refs = await authAppRefs(authApps, appEnv, appId, client, methods);
   const now = clock.now();
   // A second reading of the injected clock, moved by the TTL (no `new Date` outside the clock).

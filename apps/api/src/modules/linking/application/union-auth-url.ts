@@ -51,6 +51,7 @@ import {
   authAppRefs,
   deviceClientOf,
   insertAuthSession,
+  issuableTaobaoMethods,
   newAuthState,
   taobaoAuthUrl,
   taobaoAuthUrlPlan,
@@ -253,7 +254,20 @@ export function createUnionAuthUrl(options: UnionAuthUrlOptions): UnionAuthUrlSe
       });
     }
 
-    const methods = platform === 'taobao' ? await reads.configuredMethods(appId, client) : null;
+    // 补丁 2: under the real user OAuth only web_code is handed out (issuableTaobaoMethods); a
+    // configuration left with no method answers auth_unavailable without a state.
+    const methods =
+      platform === 'taobao'
+        ? issuableTaobaoMethods(
+            taobaoPlan ?? { kind: 'synthetic' },
+            await reads.configuredMethods(appId, client),
+          )
+        : null;
+    if (methods !== null && methods.length === 0) {
+      return fail(status === 'invalid' ? 30102 : 30101, input.traceId, {
+        reason: 'auth_unavailable',
+      });
+    }
     let pddLink: PddAuthorityLink | null = null;
     if (platform === 'pdd') {
       // The identity the conversion and the filing query use (no state exists yet).

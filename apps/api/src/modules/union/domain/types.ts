@@ -815,7 +815,20 @@ export interface ShopConvertResult {
 export type ShopConvertSources = readonly ['dataoke'];
 
 export interface BindReq {
+  /** The credential (web_code: the authorization code; sdk_token: the SDK access token). */
   readonly authorizationCode: string;
+  /**
+   * B1-04zzzzm 补丁 2 (D10-2755; BR-ATTR-05 / BR-ID-17): what the bindings use case passes besides the
+   * credential. `unionAccountId` is the server-selected union account the binding will be written
+   * under (the adapter files only when its inviter code belongs to that account); `credentialType`
+   * keeps the credential's kind so an SDK token is never exchanged as an authorization code (absent:
+   * an authorization code, the legacy callers); `oauthApp` is the OAuth application the state was
+   * issued with (app key + redirect URI, resolved from the state's reference), used instead of the
+   * instance's current configuration.
+   */
+  readonly unionAccountId?: string;
+  readonly credentialType?: 'authorization_code' | 'sdk_token';
+  readonly oauthApp?: { readonly appKey: string; readonly redirectUri: string };
 }
 export interface BindResult {
   readonly relationId: string;

@@ -49,6 +49,11 @@ export function readTaobaoOAuthConfig(env: Readonly<Record<string, string | unde
 
 export const TAOBAO_USER_OAUTH_REDIRECT_URI_ENV = 'TAOBAO_USER_OAUTH_REDIRECT_URI';
 export const TAOBAO_INVITER_CODE_ENV = 'TAOBAO_INVITER_CODE';
+/**
+ * B1-04zzzzm 补丁 2（D10-2755，BR-ATTR-05）：生成 TAOBAO_INVITER_CODE 的联盟账号 id（union_accounts.id）。
+ * 渠道备案只在绑定所用账号与它一致时进行；未设或空白 → null，备案一律拒绝（fail-closed）。
+ */
+export const TAOBAO_INVITER_ACCOUNT_ID_ENV = 'TAOBAO_INVITER_ACCOUNT_ID';
 
 const USER_PROBLEM = `${TAOBAO_USER_OAUTH_REDIRECT_URI_ENV}: must be an absolute https URL with a host (no credentials, fragment or whitespace)`;
 
@@ -76,4 +81,18 @@ export function readTaobaoInviterCode(env: Readonly<Record<string, string | unde
   if (raw === undefined) return { set: false, taobaoInviterCode: null };
   const trimmed = raw.trim();
   return { set: true, taobaoInviterCode: trimmed === '' ? null : trimmed };
+}
+
+/**
+ * The union account id that generated the inviter code, trimmed; null when blank. `set` tells
+ * whether the variable was given at all (absent leaves the config shape unchanged).
+ */
+export function readTaobaoInviterAccountId(env: Readonly<Record<string, string | undefined>>): {
+  readonly set: boolean;
+  readonly taobaoInviterAccountId: string | null;
+} {
+  const raw = env[TAOBAO_INVITER_ACCOUNT_ID_ENV];
+  if (raw === undefined) return { set: false, taobaoInviterAccountId: null };
+  const trimmed = raw.trim();
+  return { set: true, taobaoInviterAccountId: trimmed === '' ? null : trimmed };
 }

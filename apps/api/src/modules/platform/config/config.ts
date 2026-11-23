@@ -35,6 +35,7 @@ import { readStagingTestPhoneConfig, type StagingTestPhoneConfig } from './stagi
 import { readStagingTestRealnameConfig } from './staging-test-realname.ts';
 import { readTaobaoConfig, type TaobaoAppConfig } from './taobao.ts';
 import {
+  readTaobaoInviterAccountId,
   readTaobaoInviterCode,
   readTaobaoOAuthConfig,
   readTaobaoUserOAuthConfig,
@@ -231,6 +232,12 @@ export interface AppConfig {
    * trimmed; null when blank, absent when not given. Without it channel filing fails and warns.
    */
   readonly taobaoInviterCode?: string | null;
+  /**
+   * TAOBAO_INVITER_ACCOUNT_ID (B1-04zzzzm 补丁 2, D10-2755; BR-ATTR-05): the union account id that
+   * generated TAOBAO_INVITER_CODE, trimmed; null when blank, absent when not given. Channel filing
+   * runs only for a binding on that very account; without it every filing is refused.
+   */
+  readonly taobaoInviterAccountId?: string | null;
   /**
    * DATAOKE_APP_KEY / DATAOKE_APP_SECRET_FILE (./dataoke.ts, B1-04e): staging only, both or neither;
    * the 大淘客 order source of the live Taobao adapter. The secret file is read once by the union
@@ -515,6 +522,7 @@ export function loadConfig(
     readTaobaoUserOAuthConfig(env);
   violations.push(...taobaoUserOAuthProblems);
   const inviter = readTaobaoInviterCode(env);
+  const inviterAccount = readTaobaoInviterAccountId(env);
   const { unionEndpointOverrideDir, problems: overrideProblems } = readUnionEndpointOverrideConfig(
     values.APP_ENV,
     env,
@@ -575,6 +583,9 @@ export function loadConfig(
     ...(taobaoUserOAuthRedirectUri === null ? {} : { taobaoUserOAuthRedirectUri }),
     // B1-04zzzzm: present when the variable is given (blank → null), absent when not given.
     ...(inviter.set ? { taobaoInviterCode: inviter.taobaoInviterCode } : {}),
+    ...(inviterAccount.set
+      ? { taobaoInviterAccountId: inviterAccount.taobaoInviterAccountId }
+      : {}),
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.
     ...(dataoke === null ? {} : { dataoke }),
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.

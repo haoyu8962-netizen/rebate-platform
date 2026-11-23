@@ -249,10 +249,16 @@ const TAOBAO_PRICE_CODES: ReadonlySet<string> = new Set([
 const TAOBAO_ROW_CODES: ReadonlySet<string> = new Set(['invalid_item', 'invalid_commission']);
 /**
  * B1-04zzzzm: the channel filing refusals of TaobaoUnionAdapter.bindPublisher (missing inviter code
- * or user OAuth redirect URI, no or no single relation_id); logged with method and code only.
+ * or user OAuth redirect URI, the inviter code's account missing or not the binding's (补丁 2), the
+ * state's OAuth app not this adapter's, an SDK token, no or no single relation_id); logged with
+ * method and code only.
  */
 const TAOBAO_PUBLISHER_CODES: ReadonlySet<string> = new Set([
   'inviter_code_missing',
+  'inviter_account_missing',
+  'inviter_account_mismatch',
+  'oauth_app_mismatch',
+  'sdk_token_unsupported',
   'user_oauth_redirect_uri_missing',
   'relation_id_missing',
   'relation_id_ambiguous',
@@ -680,13 +686,19 @@ async function startUnionRegistry(
         'taobao',
       );
     }
-    // B1-04zzzzm: bindPublisher's user OAuth redirect URI and inviter code ride on the credentials
-    // (read from the config here). Neither set → no userOAuth field at all, so the credentials stay
-    // exactly { appKey, appSecret }; the filing then fails with a flat warning.
+    // B1-04zzzzm: bindPublisher's user OAuth redirect URI, inviter code and the union account that
+    // generated the code (补丁 2, TAOBAO_INVITER_ACCOUNT_ID) ride on the credentials (read from the
+    // config here). None set → no userOAuth field at all, so the credentials stay exactly
+    // { appKey, appSecret }; the filing then fails with a flat warning. Whenever userOAuth is
+    // attached it carries inviterAccountId (null when unset), so the adapter always checks the
+    // inviter code's account against the binding's and refuses without it.
     const redirectUri = config.taobaoUserOAuthRedirectUri ?? null;
     const inviterCode = config.taobaoInviterCode ?? null;
+    const inviterAccountId = config.taobaoInviterAccountId ?? null;
     const userOAuth =
-      redirectUri === null && inviterCode === null ? undefined : { redirectUri, inviterCode };
+      redirectUri === null && inviterCode === null && inviterAccountId === null
+        ? undefined
+        : { redirectUri, inviterCode, inviterAccountId };
     taobaoLive = {
       credentials:
         userOAuth === undefined

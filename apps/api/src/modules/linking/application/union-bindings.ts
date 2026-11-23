@@ -101,13 +101,79 @@ import {
   type UnionAuthMethod,
   type UnionAuthReads,
 } from './union-auth-reads.ts';
-import type {
-  UnionBindingExchangeInput,
-  UnionBindingExchanger,
+import { UnionError } from '../../union/index.ts';
+import {
+  UnionBindingExchangeRefusal,
+  type UnionBindingExchangeInput,
+  type UnionBindingExchanger,
 } from './union-binding-exchanger.ts';
 import { BIND_RETRY_AFTER_SEC, getBindingAdmission } from './upstream-limits.ts';
 
 type BindUnionRequest = components['schemas']['BindUnionRequest'];
+
+// B1-04zzzzm 补丁 2 (D10-2755; BR-ID-17 细则「凭证无效」): every failed credential exchange / channel
+// filing is counted here, where the device record's client and the auth_method are still known, by
+// client × method × a fixed failure class, and warned once with those labels only (never the
+// credential, an upstream answer or anything personal). Process-local, like union's
+// couli_taobao_search_total counter (search-counter.ts); no table, no contract change.
+// TODO(规划/11 §4.5): export the snapshot on /metrics (entry.ts → createMetricsRegistry) — blocked on
+// 本单 paths 不含 entry.ts 与 platform/metrics.
+
+/** The fixed failure classes of a binding's exchange / filing. */
+export type UnionBindFailure =
+  | 'credential_invalid'
+  | 'oauth_app_unresolved'
+  | 'method_unsupported'
+  | 'filing_refused'
+  | 'upstream_unavailable'
+  | 'no_relation_id'
+  | 'exchange_failed';
+
+export interface UnionBindFailureSample {
+  readonly client: AuthClient;
+  readonly method: UnionAuthMethod;
+  readonly failure: UnionBindFailure;
+  readonly value: number;
+}
+
+export interface UnionBindFailureCounter {
+  record(client: AuthClient, method: UnionAuthMethod, failure: UnionBindFailure): number;
+  snapshot(): readonly UnionBindFailureSample[];
+}
+
+/** A new counter with nothing counted. */
+export function createUnionBindFailureCounter(): UnionBindFailureCounter {
+  const series = new Map<string, UnionBindFailureSample>();
+  return {
+    record(client, method, failure) {
+      const key = `${client}/${method}/${failure}`;
+      const value = (series.get(key)?.value ?? 0) + 1;
+      series.set(key, { client, method, failure, value });
+      return value;
+    },
+    snapshot: () => [...series.values()],
+  };
+}
+
+const PROCESS_BIND_FAILURES = createUnionBindFailureCounter();
+
+/** The process's counter (what a metrics exporter would read). */
+export function unionBindFailureCounter(): UnionBindFailureCounter {
+  return PROCESS_BIND_FAILURES;
+}
+
+/** The fixed class of an exchange that threw (never its message). */
+function bindFailureOf(error: unknown): UnionBindFailure {
+  if (error instanceof UnionBindingExchangeRefusal) return error.reason;
+  if (error instanceof UnionError) {
+    if (error.code === 'adapter_unimplemented') return 'method_unsupported';
+    if (error.code === 'upstream_unavailable' || error.code === 'rate_limited') {
+      return 'upstream_unavailable';
+    }
+    return 'filing_refused';
+  }
+  return 'exchange_failed';
+}
 type BindingRow = Selectable<DB['union_bindings']>;
 
 export interface UnionBindInput {
@@ -140,6 +206,8 @@ export interface UnionBindingsOptions {
   readonly idempotency: Pick<Idempotency, 'executeInTransaction'>;
   readonly exchanger: Pick<UnionBindingExchanger, 'exchange'>;
   readonly logger: Pick<RootLogger, 'warn'>;
+  /** 补丁 2: the failure counter; absent → the process's (unionBindFailureCounter()). */
+  readonly failures?: UnionBindFailureCounter;
 }
 
 const CLIENTS: ReadonlySet<string> = new Set<AuthClient>(['ios', 'android', 'harmony']);
@@ -239,6 +307,31 @@ async function userRows(
 
 export function createUnionBindings(options: UnionBindingsOptions): UnionBindingsService {
   const { db, clock, callerContext, reads, idempotency, exchanger, logger } = options;
+  const failures = options.failures ?? PROCESS_BIND_FAILURES;
+
+  /** One failed exchange / filing: counted and warned with fixed labels only. */
+  function bindFailed(
+    appId: string,
+    client: AuthClient,
+    method: UnionAuthMethod,
+    failure: UnionBindFailure,
+    traceId: string,
+  ): void {
+    const count = failures.record(client, method, failure);
+    logger.warn(
+      {
+        event: 'linking.bindings.exchange_failed',
+        app_id: appId,
+        platform: 'taobao',
+        client,
+        auth_method: method,
+        failure,
+        count,
+        trace_id: traceId,
+      },
+      'linking: union binding credential exchange or channel filing failed',
+    );
+  }
 
   /** BR-ID-19 on relation id R of account A, read once; writes are conditional. */
   async function decide(
@@ -501,17 +594,28 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     if (consumed.numUpdatedRows !== 1n) return result(30104, traceId);
 
     // ④ with the application the state recorded for this method.
-    const exchanged = await exchanger.exchange({
-      appId,
-      method,
-      credential: credentialOf(body),
-      appRef,
-      traceId,
-    });
+    // 补丁 2: with the account the binding is written under (the filing checks its inviter code
+    // belongs to it, BR-ATTR-05); a failure is counted by client × method × fixed class.
+    let exchanged: Awaited<ReturnType<UnionBindingExchanger['exchange']>>;
+    try {
+      exchanged = await exchanger.exchange({
+        appId,
+        method,
+        credential: credentialOf(body),
+        appRef,
+        traceId,
+        unionAccountId: accountId,
+      });
+    } catch (error) {
+      bindFailed(appId, client, method, bindFailureOf(error), traceId);
+      throw error;
+    }
     if (exchanged.kind === 'credential_invalid') {
+      bindFailed(appId, client, method, 'credential_invalid', traceId);
       return result(30104, traceId, { reason: 'credential_invalid' });
     }
     if (typeof exchanged.relationId !== 'string' || exchanged.relationId === '') {
+      bindFailed(appId, client, method, 'no_relation_id', traceId);
       throw new AuthConfigError('linking: the credential exchange returned no relation id');
     }
 

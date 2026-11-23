@@ -66,6 +66,8 @@
 // B1-04zzzzm（D10-2713 / D10-2716）：bindPublisher = 用户授权码换用户令牌（user-oauth.ts）→
 // publisher.info.save → relation_id，重复备案经 publisher.info.get 取回（publisher.ts）；邀请码或用户
 // 回调缺失、两路都拿不到编号 → 平铺告警 + upstream_misconfigured。这几条请求都不归档。
+// 补丁 2（D10-2755）：邀请码所属联盟账号（TAOBAO_INVITER_ACCOUNT_ID）须等于绑定所用账号，缺省或不一致
+// 即拒绝、不发请求；state 签发时的 OAuth 应用（appKey + redirect_uri）优先于实例当前配置；sdk_token 不发。
 import { systemScheduler, type Clock, type Scheduler } from '../../../platform/index.ts';
 import type {
   TaobaoPriceOptions,
@@ -290,6 +292,12 @@ export interface TaobaoCredentials {
   readonly userOAuth?: {
     readonly redirectUri: string | null;
     readonly inviterCode: string | null;
+    /**
+     * B1-04zzzzm 补丁 2 (BR-ATTR-05): TAOBAO_INVITER_ACCOUNT_ID, the union account that generated
+     * the inviter code. The production wiring always sets the key (null when unset); whenever it is
+     * set, or the request names the binding's account, the filing runs only when the two agree.
+     */
+    readonly inviterAccountId?: string | null;
   };
 }
 
@@ -559,12 +567,37 @@ export class TaobaoUnionAdapter implements UnionAdapter {
    * thrown; personal fields of the answers (taobao_user_nick, account_name, …) are not read.
    */
   async bindPublisher(req: BindReq, ctx: CallCtx): Promise<BindResult> {
+    // 补丁 2 (D10-2755): an SDK access token is never exchanged as an authorization code; the live
+    // adapter has no SDK path yet (TODO in union-binding-exchanger.ts), so it is refused unsent.
+    if (req.credentialType !== undefined && req.credentialType !== 'authorization_code') {
+      throw this.#bindRefused('adapter_unimplemented', 'sdk_token_unsupported');
+    }
     const app = await this.#credentials();
     const inviterCode = app.userOAuth?.inviterCode?.trim() ?? '';
     if (inviterCode === '') {
       throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'inviter_code_missing');
     }
-    const redirectUri = app.userOAuth?.redirectUri ?? '';
+    // 补丁 2 (BR-ATTR-05 / BR-ID-17): the relation id belongs to the account whose inviter code
+    // files it, so the filing runs only for a binding on that account. Checked whenever the request
+    // names the binding's account or the credentials carry the setting (the production wiring always
+    // does); a missing setting or another account → refused before any upstream request.
+    const expectedAccount = app.userOAuth?.inviterAccountId;
+    if (req.unionAccountId !== undefined || expectedAccount !== undefined) {
+      if (typeof expectedAccount !== 'string' || expectedAccount.trim() === '') {
+        throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'inviter_account_missing');
+      }
+      if (req.unionAccountId !== expectedAccount.trim()) {
+        throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'inviter_account_mismatch');
+      }
+    }
+    // 补丁 2: the OAuth application the state was issued with, when the caller resolved one; its
+    // app key must be this adapter's (the secret is only known for it), its redirect URI is used as
+    // issued instead of the instance's current setting.
+    const issued = req.oauthApp;
+    if (issued !== undefined && issued.appKey !== app.appKey) {
+      throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'oauth_app_mismatch');
+    }
+    const redirectUri = issued?.redirectUri ?? app.userOAuth?.redirectUri ?? '';
     if (redirectUri === '') {
       throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'user_oauth_redirect_uri_missing');
     }
@@ -617,6 +650,12 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     return new UnionError('upstream_misconfigured', `taobao bindPublisher: ${code}`, 'taobao');
   }
 
+  /** A filing refused before anything is sent: one flat warning and the given refusal code. */
+  #bindRefused(errorCode: 'adapter_unimplemented', code: string): UnionError {
+    this.#warn?.({ method: TAOBAO_PUBLISHER_SAVE, code });
+    return new UnionError(errorCode, `taobao bindPublisher: ${code}`, 'taobao');
+  }
+
   /**
    * A publisher request carrying the user's session: never archived (no archive context), errors
    * classified by unwrapTaobaoResponse; the raw answer is returned for the lossless relation_id.
@@ -627,10 +666,19 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     parameters: TaobaoParameters,
     signal: AbortSignal | undefined,
   ): Promise<UnionTransportResponse> {
-    const response = await this.#send(method, parameters, {
-      envelope,
-      ...(signal === undefined ? {} : { signal }),
-    });
+    let response: UnionTransportResponse;
+    try {
+      response = await this.#send(method, parameters, {
+        envelope,
+        ...(signal === undefined ? {} : { signal }),
+      });
+    } catch (error) {
+      // 补丁 2 ⑥: a transport failure is answered with its code and a fixed text only (a transport's
+      // own UnionError message may quote the request or the answer: the user's session, Taobao
+      // user id or nick); no cause is kept.
+      const code = error instanceof UnionError ? error.code : 'upstream_unavailable';
+      throw new UnionError(code, `taobao ${method}: transport failed`, 'taobao');
+    }
     unwrapTaobaoResponse(method, envelope, response, this.#warn);
     return response;
   }
