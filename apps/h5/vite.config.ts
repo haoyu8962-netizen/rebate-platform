@@ -6,7 +6,7 @@ import { trimTextsPlugin } from './build/trim-texts-plugin.ts';
 
 // One build per entry (规划/03 §8.2): `vite build --mode <entry>` builds
 // src/entries/<entry>/index.html into dist/web/<entry>/ (dist/tsc holds the `tsc -b` output).
-const ENTRIES = ['app', 'landing', 'conformance'];
+const ENTRIES = ['app', 'landing', 'conformance', 'auth-callback'];
 
 // Deployment target: the same variable and values as apps/api (local / test / staging / prod).
 // The conformance page never ships to production, so its build fails closed unless APP_ENV
