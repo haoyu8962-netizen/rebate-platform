@@ -889,8 +889,10 @@ const TEST_PHONE = '19900000099';
 const TEST_CODE = '864213';
 const TEST_PHONES: StagingTestPhones = { phones: [TEST_PHONE], code: TEST_CODE };
 
-it('[AC-B1-02zza#u1] staging: a listed number’s app login / step_up code runs every store step but never reaches the sender', async () => {
-  for (const purpose of ['login', 'step_up'] as const) {
+it('[AC-B1-02zza#u1] staging: a listed number’s app login / step_up / bind code runs every store step but never reaches the sender', async () => {
+  // B1-02zzzd (D10-2688): bind joins login and step_up; leaving it out of TEST_PHONE_PURPOSES
+  // turns this red on the bind round (the sender gets the message).
+  for (const purpose of ['login', 'step_up', 'bind'] as const) {
     const f = setup({ appEnv: 'staging', stagingTestPhones: TEST_PHONES });
     const result = await f.service.send({
       app_id: 'couli',
@@ -909,7 +911,7 @@ it('[AC-B1-02zza#u1] staging: a listed number’s app login / step_up code runs 
   }
 });
 
-it('[AC-B1-02zza#u2] staging: bind, the landing route and unlisted numbers still go to the sender', async () => {
+it('[AC-B1-02zza#u2] staging: the landing route and unlisted numbers (bind included) still go to the sender', async () => {
   const f = setup({
     appEnv: 'staging',
     stagingTestPhones: TEST_PHONES,
@@ -920,9 +922,7 @@ it('[AC-B1-02zza#u2] staging: bind, the landing route and unlisted numbers still
       }),
     },
   });
-  expect((await f.service.send({ app_id: 'couli', phone: TEST_PHONE, purpose: 'bind' })).code).toBe(
-    0,
-  );
+  expect((await f.service.send({ app_id: 'couli', phone: NUMBER, purpose: 'bind' })).code).toBe(0);
   expect(
     (
       await f.service.send({
@@ -935,13 +935,13 @@ it('[AC-B1-02zza#u2] staging: bind, the landing route and unlisted numbers still
   ).toBe(0);
   expect((await f.send(NUMBER)).code).toBe(0);
   expect(f.messages.map((message) => [message.phone, message.purpose])).toEqual([
-    [TEST_PHONE, 'bind'],
+    [NUMBER, 'bind'],
     [TEST_PHONE, 'login'],
     [NUMBER, 'login'],
   ]);
 });
 
-it('[AC-B1-02zza#u3] verify: the fixed code of a listed login / step_up consumes the current code; anything else is the ordinary check', async () => {
+it('[AC-B1-02zza#u3] verify: the fixed code of a listed login / step_up / bind consumes the current code; anything else is the ordinary check', async () => {
   const f = setup({ appEnv: 'staging', stagingTestPhones: TEST_PHONES });
   const verify = (
     code: string,
@@ -954,10 +954,15 @@ it('[AC-B1-02zza#u3] verify: the fixed code of a listed login / step_up consumes
   expect(f.calls.at(-1)!.options.keys[0]!.startsWith('c:couli:login:')).toBe(true);
   expect(await verify(TEST_CODE, 'step_up')).toEqual({ code: 0, staging_test_phone: true });
   expect(f.calls.at(-1)!.options.keys[0]!.startsWith('c:couli:step_up:')).toBe(true);
+  // B1-02zzzd (D10-2688): bind too. Without bind in TEST_PHONE_PURPOSES this answers 20003.
+  expect(await verify(TEST_CODE, 'bind')).toEqual({ code: 0, staging_test_phone: true });
+  expect(f.calls.at(-1)!.kind).toBe('consume');
+  expect(f.calls.at(-1)!.options.keys[0]!.startsWith('c:couli:bind:')).toBe(true);
   const consumes = f.calls.filter((call) => call.kind === 'consume').length;
-  // Wrong code, bind, unlisted, landing (stagingTestCode false): the verify script, never consume.
+  // Wrong code, unlisted (bind included), landing (stagingTestCode false): the verify script,
+  // never consume.
   expect(await verify('000000')).toEqual({ code: 20003 });
-  expect(await verify(TEST_CODE, 'bind')).toEqual({ code: 20003 });
+  expect(await verify(TEST_CODE, 'bind', NUMBER)).toEqual({ code: 20003 });
   expect(await verify(TEST_CODE, 'login', NUMBER)).toEqual({ code: 20003 });
   expect(await verify(TEST_CODE, 'login', TEST_PHONE, { stagingTestCode: false })).toEqual({
     code: 20003,
@@ -1001,6 +1006,38 @@ it('[AC-B1-02zza#u5] construction: test phones outside staging (or without appEn
     expect(() =>
       setup({ appEnv: 'staging', stagingTestPhones: { phones: [TEST_PHONE], code } }),
     ).toThrow(/6 ASCII digits/);
+  }
+});
+
+it('[AC-B1-02zzzd#u1] outside staging a bind code of the listed number goes to the sender and the fixed code is the ordinary check', async () => {
+  // Red if bind were honoured without APP_ENV=staging (the sender would stay empty, or the fixed
+  // code would consume instead of running the verify script).
+  for (const appEnv of ['local', 'test', 'prod'] as const) {
+    const f = setup({ appEnv });
+    expect(
+      (
+        await f.service.send({
+          app_id: 'couli',
+          phone: TEST_PHONE,
+          purpose: 'bind',
+          device_id: 'd1',
+          client_ip: '203.0.113.7',
+        })
+      ).code,
+    ).toBe(0);
+    expect(f.messages.map((message) => [message.phone, message.purpose])).toEqual([
+      [TEST_PHONE, 'bind'],
+    ]);
+    expect(
+      await f.service.verifyAndConsume({
+        app_id: 'couli',
+        phone: TEST_PHONE,
+        purpose: 'bind',
+        code: TEST_CODE,
+      }),
+    ).toEqual({ code: 20003 });
+    expect(f.calls.at(-1)!.kind).toBe('verify');
+    expect(f.calls.some((call) => call.kind === 'consume')).toBe(false);
   }
 });
 

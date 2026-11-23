@@ -52,8 +52,8 @@
 //
 // Staging test phones (B1-02zza, FU-STAGING-TEST-PHONE; approvals #48, ruling D10-611): only with
 // appEnv 'staging' (re-checked on every call, and the service refuses to be built with test phones
-// in any other environment), for a listed number and purpose login or step_up on the app route
-// (not bind, not the landing page): send() runs every step above unchanged — the random code is
+// in any other environment), for a listed number and purpose login, step_up or bind (B1-02zzzd,
+// D10-2688) on the app route (not the landing page): send() runs every step above unchanged — the random code is
 // drawn, stored as an HMAC and counted — and only step 6 does not call the sender: the delivery
 // is taken as accepted. verifyAndConsume() also takes the node's fixed code for such a number
 // (timingSafeEqual): equal → the current code of (app, phone, purpose) is consumed under the same
@@ -231,7 +231,7 @@ export interface SmsVerifyResult {
 /**
  * Options of one verifyAndConsume call. `stagingTestCode: false` turns the staging fixed code off
  * for that call (identity.module passes it for the landing page registration, which is outside
- * D10-611's scope); absent → on (still only staging, a listed number, login / step_up).
+ * D10-611's scope); absent → on (still only staging, a listed number, login / step_up / bind).
  */
 export interface SmsVerifyOptions {
   readonly stagingTestCode?: boolean;
@@ -260,8 +260,12 @@ export const SMS_CODE_DRAWS = 8;
 const ATTEMPTS = 2;
 
 const CODE_FORMAT = /^[0-9]{6}$/;
-/** Purposes a staging test phone covers (D10-611: app login and step_up; never bind). */
-const TEST_PHONE_PURPOSES: ReadonlySet<SmsPurpose> = new Set<SmsPurpose>(['login', 'step_up']);
+/** Purposes a staging test phone covers (D10-611: app login and step_up; B1-02zzzd D10-2688: bind). */
+const TEST_PHONE_PURPOSES: ReadonlySet<SmsPurpose> = new Set<SmsPurpose>([
+  'login',
+  'step_up',
+  'bind',
+]);
 const CODE_SPACE = 10 ** SMS_CODE_DIGITS;
 const DELIVERIES: ReadonlySet<unknown> = new Set(['accepted', 'rejected', 'unknown']);
 const TIMED_OUT = Symbol('timed out');
