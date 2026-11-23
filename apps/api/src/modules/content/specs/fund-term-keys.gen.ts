@@ -281,6 +281,7 @@ export const FUND_TERM_KEYS = {
       "agent.notice.no_result",
       "agent.notice.ordinal_default",
       "agent.notice.platform_unrecognized",
+      "agent.notice.price_unavailable",
       "agent.notice.price_unrecognized",
       "agent.notice.quote_failed",
       "agent.notice.relaxed_price",
