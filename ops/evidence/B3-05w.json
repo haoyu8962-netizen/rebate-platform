@@ -1,0 +1,79 @@
+{
+  "spec_ref": "be7464c7e672bb41a03eb6b0d13606918401760b",
+  "spec_commit": "84d0bdf731b3f0962fb6f829ae99af58d4e8cf37",
+  "red_tests": [
+    "test/spec/agent/entry-no-rebate/notice.test.ts > [AC-B3-05w#1][BR-PRICE-08][BR-AI-15][BR-TEXT-22] 无模型的商品情境入口与粘贴同一商品链接都只提示暂无返利，模型工具仍返回 no_card",
+    "test/spec/agent/entry-no-rebate/notice.test.ts > [AC-B3-05w#2][BR-PRICE-08][BR-TEXT-22] 有模型的商品情境入口先提示暂无返利，再答复用户输入并以 stop 结束",
+    "test/spec/agent/entry-no-rebate/quota.int.test.ts > [AC-B3-05w#3][BR-AI-15] 无模型的商品情境入口仅出无返利提示，正常结束并计一条，不登记链接"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "84d0bdf731b3f0962fb6f829ae99af58d4e8cf37",
+      "tree": "b4f55db2268eb3ca52be235946ddeb1c5c4c0003",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-23T12:03:21Z",
+      "finished_at": "2026-11-23T12:03:38Z",
+      "red_tests": [
+        "test/spec/agent/entry-no-rebate/notice.test.ts > [AC-B3-05w#1][BR-PRICE-08][BR-AI-15][BR-TEXT-22] 无模型的商品情境入口与粘贴同一商品链接都只提示暂无返利，模型工具仍返回 no_card",
+        "test/spec/agent/entry-no-rebate/notice.test.ts > [AC-B3-05w#2][BR-PRICE-08][BR-TEXT-22] 有模型的商品情境入口先提示暂无返利，再答复用户输入并以 stop 结束",
+        "test/spec/agent/entry-no-rebate/quota.int.test.ts > [AC-B3-05w#3][BR-AI-15] 无模型的商品情境入口仅出无返利提示，正常结束并计一条，不登记链接"
+      ],
+      "expected": [
+        "test/spec/agent/entry-no-rebate/notice.test.ts",
+        "test/spec/agent/entry-no-rebate/quota.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "842ae03b7fc9208576a3e97ed51ad6e10a6d052add5e4a7016e1f08c1ec8dbc7"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "de9dfb1ef9d5b5425e6ac17861aa3bb05a63c141ee728e2eb09e0efe28893f20"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b7558563c95a0c16036d3d3f8017a5e73b63d83d",
+    "specs": "5b1b075156cc136909d767c3d039cc8783e124ec"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B3-05w",
+  "risk_note": "RV1（agent 模块：orchestrator/entry、stream/mount/entry.ts、tools/quote 只加导出）。FU-B3-05V-ENTRY-NO-REBATE（D10-2737）：商品情境入口报价结果是无返利时出 no_rebate.notice（与粘贴链接一致，BR-PRICE-08、BR-AI-15 细则无返利归商品本身照常计数），不再被模型工具折成 no_card 出 agent.notice.price_unavailable；入口改用新增的 createProductQuoteRunner，createRebateQuoteHandler 对模型的输出不变。无冻结用例改动。先红 red/1 PASS（3 条 2 文件）、evidence shape 0。测试机：--tests 74 文件 758 条、--fast 绿。未改 db/ 与迁移、非 RV2。",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 1,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "r1 pass，0 条；out_of_scope 2 条：无返利旁【搜相似商品】（契约，FU-B3-05U-NO-REBATE-SIMILAR）、fallback_text 写死测不出（S2，已由实现方单测覆盖，FU-B3-05W-SPEC-S2）。"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex（gpt-6.2-sol）写测 1 次，独立 Claude（tools/agent/claude-run.sh）评审 r1 pass；2 条 S2 out_of_scope（fallback_text 取文口、notice level / actions 对照）登 FU-B3-05W-SPEC-S2 并写进实现书作实现方必满足单测；任务书原样附 D10-2317 ①。"
+  }
+}
