@@ -1,0 +1,31 @@
+id: B1-04zzzzk
+repo: rebate-platform
+title: 淘宝 resolveLink 首段：item.taobao.com / detail.tmall.com 的 /item.htm?id= 直接取商品 id，经 taobao.tbk.item.info.upgrade.get 换成凑狸口径 item_id；其余链接照旧不识别（D10-2674 ②）
+type: impl
+# 2026-11-23 w1 入账（编排 D10-2674 ②；ops 11-23 00:55 staging 实测：粘贴淘宝商品页在 resolveLink 桩处得 30132）。现状 taobao-adapter.ts:966 resolveLink 直接 throw unimplemented，不取凭据不发请求。
+# 依据：规划/02 §6.1 淘宝 resolveLink 顺序（链接内 item id → 口令解析 → 分享链接 click.extract → 30132）；本单只做第一步。BR-PROD-03 / 05（item_id 原串、stable_id）、BR-PROD-10（天猫归 taobao）。
+# 做：主机为 item.taobao.com 或 detail.tmall.com（含子域写法按 B1-07d 规范化：只认 https、小写、去末尾点）、路径 /item.htm、查询参数 id 为 1–20 位纯数字时，
+#   以该 id 调 taobao.tbk.item.info.upgrade.get（docs-mirror 该接口 item_id 入参示例为纯数字，详情实录 B1-04zzzw），取返回 item_id 作 ResolvedLink.item（platform taobao）；
+#   返回空 / 无该商品 → link_unrecognized；上游拒绝 / 不可用照现有 UnionError 归类（parsing 已有映射，不改 parsing）。只在 resolveLink 内用现有详情请求与凭据通路，不新增接口与供应商。
+# 不做（写进实现说明与 FU）：s.click.taobao.com / uland.taobao.com 推广链解析——官方 taobao.tbk.item.click.extract 属「链接类接口下线权限保留包」（docs-mirror 该文档；02 §6.1 亦注大概率拿不到），
+#   大淘客 /api/tb-service/parse-content 可解析链接但不在 02 §6.1 顺序里，要用须编排定；淘口令（taobao.tbk.tpwd.parse 待权限确认）、m.tb.cn 与手机页（缺样本，B1-07d 第二批）。不动转链、订单、parsing、catalog。
+# 不认的链接（推广链与其他形态）照旧抛 adapter_unimplemented、不取凭据不发请求——冻结用例 test/spec/union/taobao-core/ports.test.ts [AC-B1-04j#30] 的 resolveLink 行（example.invalid）保持绿，不登 modify_existing；parsing 两者都收 30132。
+refs: [BR-PROD-03, BR-PROD-05, BR-PROD-10]
+refs_hash:
+  BR-PROD-03: 7769390bcd28
+  BR-PROD-05: 692dcc678e1e
+  BR-PROD-10: 2a77fcf983e8
+deps: [B1-07d]
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/taobao-adapter.ts'
+  - 'apps/api/src/modules/union/infra/taobao/resolve-link.ts'
+  - 'apps/api/src/modules/union/infra/taobao/resolve-link.test.ts'
+  - 'ops/tasks/B1-04zzzzk.yaml'
+test_paths:
+  - 'test/spec/union/taobao-resolve-link/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/union/taobao-resolve-link/**'
+status: todo
