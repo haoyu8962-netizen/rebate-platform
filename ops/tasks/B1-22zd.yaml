@@ -16,7 +16,7 @@ type: impl
 # 冻结用例盘点（be 11-23 只读，couli-runs/FU-TAOBAO-TOKEN-REFRESH/prep.md 末节）：现有规则测试的账户种子 auth_renewed_at 大多为空、置了值的总时长都远大于 14 天，跳过规则不触及；alert_stage 列不动；凭据列用例只禁 token / secret 明文列名。按 ③ 的写法预计不需 modify_existing；实现中如撞冻结用例，停下以补丁补登，不改测试。
 refs: [BR-ID-24]
 refs_hash:
-  BR-ID-24: 4cba1bd5dd15
+  BR-ID-24: 4d9f9642f621
 deps: [CT-24ha]
 paths:
   - 'apps/api/src/modules/union/auth-expiry/**'

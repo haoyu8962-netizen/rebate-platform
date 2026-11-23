@@ -7,7 +7,7 @@ type: impl
 # 规则测试放新目录（B2-05q 的 withdraw-blocklist-hits/ 已冻结，不改）：经 worker 实际装配取日志，命中时恰一条该消息、字段恰为上列；全部日志行不含手机号摘要、值摘要、设备哈希；不命中与停用时没有该消息。
 refs: [BR-WDR-29, BR-ID-33]
 refs_hash:
-  BR-WDR-29: c576e429b058
+  BR-WDR-29: 3f0cf42a584e
   BR-ID-33: 01b25f773b29
 deps: [B2-05q]
 paths:

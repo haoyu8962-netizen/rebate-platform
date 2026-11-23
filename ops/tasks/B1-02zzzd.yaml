@@ -15,7 +15,7 @@ type: impl
 # 补丁 2（2026-11-23 be，编排 D10-2699）：冻结用例 [AC-B1-02zza#14] 钉着旧规则（名单内 bind 照常发送、固定码不能核销），登 modify_existing（rule_change、br BR-ID-05、ruling D10-2688、retitle_to）；refs 补 BR-ID-05（B1-02zza 的依据）。approvals 第 48 条同一用意，不另补（D10-2699）。
 refs: [BR-ID-05]
 refs_hash:
-  BR-ID-05: 0737ee3b67e2
+  BR-ID-05: 3aed9928d039
 deps: [B1-02zza]
 paths:
   - 'apps/api/src/modules/identity/application/sms-codes.ts'

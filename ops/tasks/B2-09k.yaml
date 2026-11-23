@@ -7,9 +7,9 @@ type: impl
 # 驳回要加 withdrawal-commands.ts 现在没有的守卫（CT-24zp 评审 S0）：payer_side_after_transfer 的单，开关 on 时最近查询须为订单不存在或明确失败，否则重复打款（BR-WDR-08 W3、BR-WDR-17）。
 refs: [BR-WDR-10, BR-WDR-05, BR-WDR-17]
 refs_hash:
-  BR-WDR-10: 1db6b508e224
-  BR-WDR-05: 378fe8ee0fee
-  BR-WDR-17: f6119a685e00
+  BR-WDR-10: cc2b291be1fd
+  BR-WDR-05: 775e11ed8bd8
+  BR-WDR-17: 25dba2f638b0
 deps: [CT-24zp]
 paths:
   - 'apps/api/src/modules/payout/application/**'

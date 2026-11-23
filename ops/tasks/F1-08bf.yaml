@@ -7,7 +7,7 @@ type: test-change
 # 这两条用例所在文件属打款页（资金页面），本单不碰任何实现文件；reason 沿用 bc / bd 原条目的 rule_change（br 与 ruling 同原条目），只是补上当时漏的 retitle_to。
 refs: [BR-WDR-17, BR-WDR-18]
 refs_hash:
-  BR-WDR-17: f6119a685e00
+  BR-WDR-17: 25dba2f638b0
   BR-WDR-18: 9247640dde57
 deps: [F1-08bc, F1-08bd]
 paths:

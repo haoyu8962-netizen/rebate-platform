@@ -7,7 +7,7 @@ type: impl
 # 本线技术取舍（由编排者摘进任务书第 9 节）：不加迁移（verify_phone_cipher / hmac / set_at 已有）；待核验的新号与验证码放 Redis（短时、按账号单条，覆盖前一次；只存新号的 HMAC 或 FieldCrypto 密文与验证码哈希，不存明文，提交时用请求里的 phone 规范化后算 HMAC 比对，BR-ID-33）；换号不吊销会话（契约）；去掉 planned 时顺手把契约描述里「BR-ID-34 细则「验证手机号的登记与更换」」改指 BR-ID-45；与 B1-34h 串行，通过才在事务内写 admin_users 并审计；发码复用现有短信端口与后台 step-up 的限频口径（非生产只用假适配器）；新号与其他账号的验证手机号是否允许重复由契约 CT-24o 定。
 refs: [BR-ID-45, BR-ID-33]
 refs_hash:
-  BR-ID-45: 0b4839cbc54b
+  BR-ID-45: a2c0f48ff147
   BR-ID-33: 01b25f773b29
 deps: [CT-24o, B1-34h]
 paths:

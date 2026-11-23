@@ -8,8 +8,8 @@ type: impl
 # 2026-11-04 补 paths：contracts/oasdiff-accepted.txt。枚举加 system:payout 被 oasdiff 判 response-property-enum-value-added，#2346 contracts-check 红；D10-557 允许 /admin/v1/** 登记（后台与服务端同发）。
 refs: [BR-WDR-10, BR-WDR-05]
 refs_hash:
-  BR-WDR-10: 1db6b508e224
-  BR-WDR-05: 378fe8ee0fee
+  BR-WDR-10: cc2b291be1fd
+  BR-WDR-05: 775e11ed8bd8
 deps: [B2-09k]
 paths:
   - 'apps/api/src/modules/payout/application/went-negative.ts'

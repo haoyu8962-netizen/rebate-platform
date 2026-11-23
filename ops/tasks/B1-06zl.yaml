@@ -9,8 +9,8 @@ type: impl
 # RV2（linking）。新鲜独立 Claude 写规则测试（钉未开放平台 → not_launched、不弹维护 Toast 的依据），Opus 实现，money Codex medium（D10-1121 brief 带可引用行号）。
 refs: [BR-PROD-10, BR-TEXT-14]
 refs_hash:
-  BR-PROD-10: 2a77fcf983e8
-  BR-TEXT-14: dd8fad131e0d
+  BR-PROD-10: 619f14ca3641
+  BR-TEXT-14: 478953c7e441
 deps: []
 paths:
   - 'apps/api/src/modules/linking/application/**'

@@ -8,7 +8,7 @@ type: test-change
 refs: [BR-CALC-10, BR-FUND-22]
 refs_hash:
   BR-CALC-10: 93337079f138
-  BR-FUND-22: c9930aaf2459
+  BR-FUND-22: 71f9d1a05a10
 deps: [B2-09gd]
 paths:
   - 'test/spec/settlement/order-appeal-restore-tighten/**'

@@ -8,7 +8,7 @@ type: impl
 refs: [BR-FUND-18, BR-FUND-20]
 refs_hash:
   BR-FUND-18: c7ebd23ee75e
-  BR-FUND-20: 768e4fe2668e
+  BR-FUND-20: c29dae35777c
 deps: [B2-04w]
 paths:
   - 'apps/api/src/modules/platform/events/**'

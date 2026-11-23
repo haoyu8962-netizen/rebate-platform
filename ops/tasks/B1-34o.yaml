@@ -6,7 +6,7 @@ type: impl
 # 修法：待核验记录带 route / sender（self | super_admin + 超管 id），提交时比对不符按契约既有错误处理（不新增错误码则复用 20002 code 错误口径，需契约确认）。
 refs: [BR-ID-45]
 refs_hash:
-  BR-ID-45: 0b4839cbc54b
+  BR-ID-45: a2c0f48ff147
 deps: [B1-34i]
 paths:
   - 'apps/api/src/modules/admin/**'

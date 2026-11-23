@@ -8,7 +8,7 @@ type: impl
 # ③ 第一次下载在请求行锁下判 ready：CSPRNG 生成口令、解开服务端加密文件并用口令重新加密到新对象键，口令只在本次响应、不落库，同事务记 delivered；之后 password=null；regenerate 换新文件与口令、作废原文件，due_at / expires_at 不变。 ④ 用户侧：列表只给本人 in_app_sms、ready / delivered、未过期的（copy_id、status、generated_at、expires_at）；下载不满足任一条件一律 30701；进入 processing 后不可用，封禁、冷静期、版本过低的受限会话照常可用。 TODO(规划/11 §2.3): 封禁说明页的副本入口 — blocked on 设计画板与前端任务。
 refs: [BR-ID-40]
 refs_hash:
-  BR-ID-40: 994eb7b30461
+  BR-ID-40: 032e568e1173
 deps: [B1-27c, B1-27h]
 paths:
   - 'apps/api/src/modules/identity/application/admin-data-copy-download*.ts'

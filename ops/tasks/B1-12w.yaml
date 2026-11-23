@@ -10,7 +10,7 @@ type: impl
 # identity 的 fake-sms.ts 与 SmsSender 端口不动（冻结测试按路径监视 createSmsSender；以 B1-02zm #1475 合并后的版本为准）。真实发送验证等合并后编排部署 staging、负责人手机取码，不挡合并。不碰迁移、不占迁移槽。规则测试按 approvals #36 由独立 Claude 写。
 refs: [BR-ID-05]
 refs_hash:
-  BR-ID-05: 0737ee3b67e2
+  BR-ID-05: 3aed9928d039
 deps: [B1-14c, B3-03m, B1-02zm]
 paths:
   - 'apps/api/src/modules/platform/aliyun/**'

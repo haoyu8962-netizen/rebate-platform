@@ -7,8 +7,8 @@ type: impl
 # 不许回退、draft 不可撤销（草稿修改 = 新草稿）。守卫只写成文字（生成器不求值），服务层 B2-03k 落实。Codex 写规则测试，Claude 过审，Opus 实现，Codex money 评审。
 refs: [BR-CALC-11, BR-CALC-22]
 refs_hash:
-  BR-CALC-11: 0bdd7a33eb83
-  BR-CALC-22: 02766d307e18
+  BR-CALC-11: 32a4bb92195a
+  BR-CALC-22: 2655002e85fb
 deps: []
 paths:
   - 'specs/state-machines/commission-rule-version.yaml'

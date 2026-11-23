@@ -12,7 +12,7 @@ refs: [BR-WDR-12, BR-WDR-14, BR-WDR-17]
 refs_hash:
   BR-WDR-12: 3a822658ab35
   BR-WDR-14: 6328f3cda2e6
-  BR-WDR-17: f6119a685e00
+  BR-WDR-17: 25dba2f638b0
 contract_sections: ['11.1']
 deps: []
 paths:

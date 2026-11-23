@@ -6,7 +6,7 @@ type: impl
 # HTTP（reauthorize、会话结果、回调路由、manual 录入）等契约 CT-24h，归 B1-22d。各平台 OAuth 地址、换码接口与有效期以 09 CAP-*-12 为准，未实测的只做端口与假实现。审计经 admin 模块现有审计写入端口。
 refs: [BR-ID-24]
 refs_hash:
-  BR-ID-24: 4cba1bd5dd15
+  BR-ID-24: 4d9f9642f621
 deps: [B1-22a]
 paths:
   - 'apps/api/src/modules/union/**'

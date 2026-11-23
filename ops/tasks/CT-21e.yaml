@@ -6,7 +6,7 @@ type: contract
 # 全部 x-implementation: planned，由 B2-15e / B2-15f / B2-15j 实现时去 planned。退款请求的幂等 subject 待编排裁定（notices 21:3x ②）。契约槽：排在 CT-21c 之后。
 refs: [BR-PAY-05, BR-PAY-06, BR-PAY-07]
 refs_hash:
-  BR-PAY-05: cc6a654d316e
+  BR-PAY-05: 43e231b2c187
   BR-PAY-06: 102e1fb8839f
   BR-PAY-07: a98350f4412a
 contract_sections: ['6.6', '11.2']

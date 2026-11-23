@@ -7,8 +7,8 @@ type: impl
 # 规则测试要钉：重算后 risk_flags 原值不变、新结果可读回；提现状态与 auto_decision 不变；app 隔离；无权限 10403。
 refs: [BR-WDR-29, BR-ID-34]
 refs_hash:
-  BR-WDR-29: c576e429b058
-  BR-ID-34: 6f4bb7f212cb
+  BR-WDR-29: 3f0cf42a584e
+  BR-ID-34: 8bd50e43d350
 deps: [CT-24zzq]
 paths:
   - 'apps/api/src/modules/payout/application/admin-risk-flags-recalc*.ts'

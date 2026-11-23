@@ -7,7 +7,7 @@ type: impl
 # 2026-10-23 编排裁定 D10-231 修正 D10-221：唯一口径改为同一 app × platform × union_account_id × pid_scene 至多一条 active（跨账号各一条可以，B1-19d「按绑定账号取推广位」保留）；标题沿用旧写法（台账标题不可改），以本行为准：索引 (app_id, platform, union_account_id, pid_scene) WHERE status='active'，服务 / 命令行只拒同账号同场景第二条。Codex 用量至 10-30 不可用，测试改由独立 Claude（approvals #36）。
 refs: [BR-ATTR-02]
 refs_hash:
-  BR-ATTR-02: f8cda78b8778
+  BR-ATTR-02: c496154f5bcf
 deps: [B1-19d]
 paths:
   - 'db/migrations/**'

@@ -11,8 +11,8 @@ type: contract
 # 后台写操作用 X-Step-Up-Token 头：新建后台专用参数组件（required: false：只有档位不为空的权限点要求令牌，缺令牌由守卫答 10003 data.tier，不由路由校验拒绝；台账评审 S2-3），不复用用户侧 StepUpToken（packages/contracts-ts/scripts/conformance.ts 限定其只在用户侧 x-step-up 操作）。error-codes.yaml 20902 的 data.resource 补 config_item、kill_switch。不改 /v1/config（F1-02c）。
 refs: [BR-WDR-17, BR-INV-21]
 refs_hash:
-  BR-WDR-17: f6119a685e00
-  BR-INV-21: e78518b0b251
+  BR-WDR-17: 25dba2f638b0
+  BR-INV-21: 4f7038350f5b
 contract_sections: ['10.2', '11.2']
 deps: []
 paths:

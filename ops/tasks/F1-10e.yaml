@@ -8,7 +8,7 @@ type: impl
 # 要点：配置键注册表（键 → config.general / config.risk / config.business 与值类型）放 content/domain，与 F1-10b 的开关注册表互斥（开关键不出现在配置中心，裁定 1、5）；注册表外的键不能改（20001 [key]）；整批只允许同一权限点的键（混入别的点 20001 fields=[items]，守卫按该点判权限与档位；台账评审 S1-2），任一项的键或值校验失败 20001 fields 列出失败键、任一项 expected_version 不匹配 20902 resource=config_item，两者都整批回滚、什么都不写；先做全部键与值校验（有失败即 20001），都通过后才比版本（20902，data 只带 resource，与既有 20902 一致）（裁定 8；GitHub Codex 评审 P1，台账评审 r5 S2）；当前版本没有历史行（种子 db/seeds 写入的行）时改值、回滚与列历史照常（历史为空或从当前版本起）；回滚 version+1、审计 config_item_rollback；资金术语键与表 D 的键不登记（05 F1-10）；agent.page_guide.routes（候选集校验）与 external_hosts（union_host 校验）登记为配置项但标「后台暂不可改」，校验另行入账（台账评审 r3 S2）。依赖 F1-10d 以免两任务同改 content 后台模块冲突。
 refs: [BR-INV-21]
 refs_hash:
-  BR-INV-21: e78518b0b251
+  BR-INV-21: 4f7038350f5b
 deps: [CT-02i, CT-02m, F1-10a, F1-10c, F1-10d]
 paths:
   - 'apps/api/src/modules/content/**'

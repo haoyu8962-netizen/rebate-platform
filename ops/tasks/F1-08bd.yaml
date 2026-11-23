@@ -8,9 +8,9 @@ type: impl
 # 2026-11-15 补丁 1（fe，编排 D10-1712）：F1-08ba [AC-F1-08ba-READONLY#1] 与 F1-08bb 超管用例的写入口清单随本单落地再改一次——加入【暂停队列】【解除暂停】【解除通道暂停】（契约 adminUpdateKillSwitch 允许本页写 payout.queue_paused 与 payout.channel_paused.<channel>；严格相等，恰为已落地入口），另补反向用例（无 switch.payout / switch.all 的角色看不到解除入口）；两文件先列进 test_paths。modify_existing（rule_change，br BR-WDR-17，ruling D10-1712）等两文件随 F1-08ba / bb 进主干后另开补丁登记。
 refs: [BR-WDR-17, BR-WDR-33, BR-ID-34]
 refs_hash:
-  BR-WDR-17: f6119a685e00
-  BR-WDR-33: '7886471e9297'
-  BR-ID-34: 6f4bb7f212cb
+  BR-WDR-17: 25dba2f638b0
+  BR-WDR-33: '543d57be5414'
+  BR-ID-34: 8bd50e43d350
 deps: [F1-08bc]
 paths:
   - 'apps/admin/src/pages/withdrawals/**'

@@ -8,7 +8,7 @@ type: impl
 # 2026-11-03 改派 pay（D10-564 先例，D10-589，方案 couli-runs/B3-lane/union-receipts-plan-20261103.md）：占迁移 0122；只读角色给 SELECT（认可）；lint-migrations.test.ts 只加 union_receipts（同 #2026，PR 时编排核标签）。后续 B2-04zr、B2-04zs；admin 的 B2-12a 占 0123，deps 本单。
 refs: [BR-FUND-20, BR-FUND-16]
 refs_hash:
-  BR-FUND-20: 768e4fe2668e
+  BR-FUND-20: c29dae35777c
   BR-FUND-16: 077f6d412d5a
 deps: [B2-04zfa]
 paths:

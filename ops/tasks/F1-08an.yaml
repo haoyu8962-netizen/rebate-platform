@@ -15,8 +15,8 @@ type: impl
 refs: [BR-WDR-12, BR-WDR-11, BR-ID-34]
 refs_hash:
   BR-WDR-12: 3a822658ab35
-  BR-WDR-11: 9193f1c7ed27
-  BR-ID-34: 6f4bb7f212cb
+  BR-WDR-11: c831cbcd3fd0
+  BR-ID-34: 8bd50e43d350
 deps: [F1-08al]
 paths:
   - 'apps/admin/src/pages/withdrawals/**'

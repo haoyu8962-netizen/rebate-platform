@@ -9,7 +9,7 @@ refs_hash:
   BR-TEXT-21: 52b1125604db
   BR-FUND-18: c7ebd23ee75e
   BR-CALC-02: 0ffe8a4d0b65
-  BR-FUND-01: 71daaebae9bd
+  BR-FUND-01: 521dbf5aee39
 deps: [B1-34a]
 paths:
   - 'db/migrations/0141_admin-dashboard-days.sql'

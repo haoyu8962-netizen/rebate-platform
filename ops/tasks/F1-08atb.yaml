@@ -15,10 +15,10 @@ type: impl
 # 资金页（RV2）：money 评审；规则测试由 Codex 写（D10-1872，Codex 不可用时按 approvals 第 36 条改独立 Claude 并先打台账补丁），spec-test 至少一轮 Codex 全量（D10-2199）。资金评审必查项（D10-2050）照带；写操作的结果未知处理照 F1-08ce / D10-1731（锁定、原键原体）不变。
 refs: [BR-WDR-16, BR-FUND-24, BR-WDR-30, BR-ID-34]
 refs_hash:
-  BR-WDR-16: c5899cc85558
-  BR-FUND-24: efcdeeafa452
+  BR-WDR-16: c0ec2e5d1d93
+  BR-FUND-24: 7cca08c02491
   BR-WDR-30: ec74379ec48c
-  BR-ID-34: 6f4bb7f212cb
+  BR-ID-34: 8bd50e43d350
 deps: [F1-08at, F1-08ap]
 paths:
   - 'apps/admin/src/components/unknown-marker/**'

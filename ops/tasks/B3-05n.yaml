@@ -10,7 +10,7 @@ refs_hash:
   BR-AI-08: e932a052720f
   BR-AI-09: b0aaba683658
   BR-AI-01: 654d69df14f4
-  BR-AI-18: 81915a2d5a19
+  BR-AI-18: e91b63b54cf3
 deps: []
 paths:
   - 'apps/api/src/modules/agent/orchestrator/degraded/**'

@@ -5,7 +5,7 @@ type: contract
 # 2026-10-23 入账（union 线，编排裁定 D10-243：不放宽 adminListUnionAccounts 的 union.account_auth，另开最小权限只读选项接口）。依据 04 §6.6 union-pids / union-accounts、§11.2 union.pid / union.account_auth，08 BR-ATTR-02 细则「后台登记与启停」。契约槽排队；fe（F1-10gb）合并后接。后端在 B1-22o。
 refs: [BR-ATTR-02]
 refs_hash:
-  BR-ATTR-02: f8cda78b8778
+  BR-ATTR-02: c496154f5bcf
 contract_sections: ['11.2']
 deps: [CT-24h]
 paths:

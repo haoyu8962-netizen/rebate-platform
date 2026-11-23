@@ -8,8 +8,8 @@ type: impl
 # hasInFlight（D10-97）：PENDING_REVIEW / APPROVED / PAYING 且用户没有生效的 withdraw_holds(reason=manual)（封禁人工冻结的单由财务在冷静期处理，不计在途）；hasNonTerminal：任一非终态单。替换后删除 app.module 的 TODO blocked on B2-05（funds followup 已记）。
 refs: [BR-WDR-08, BR-WDR-05, BR-WDR-09]
 refs_hash:
-  BR-WDR-08: 8c55a3ce6b57
-  BR-WDR-05: 378fe8ee0fee
+  BR-WDR-08: 91b013262446
+  BR-WDR-05: 775e11ed8bd8
   BR-WDR-09: 68225c9af85f
 deps: [B2-05b, B2-04k, B1-15d, B1-15f]
 paths:

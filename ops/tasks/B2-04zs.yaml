@@ -7,7 +7,7 @@ type: impl
 # 2026-11-03 补 paths：水位读取器要多给 entered_by，W < 1.5P 的判断与 2 小时过期放 payout domain，不在 ledger 重写。
 refs: [BR-FUND-20, BR-WDR-18]
 refs_hash:
-  BR-FUND-20: 768e4fe2668e
+  BR-FUND-20: c29dae35777c
   BR-WDR-18: 9247640dde57
 deps: [B2-04zr]
 paths:

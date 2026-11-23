@@ -6,7 +6,7 @@ type: impl
 # 修法候选：enable 与首次 bindTotp（重置后）也写作废时间点（此刻之前签发的作废）；或会话记签发时的 row_version 并在 admin-check 比对（需评估改显示名 / 存权限点不吊销会话的契约口径）。
 refs: [BR-ID-43]
 refs_hash:
-  BR-ID-43: aabc9139136d
+  BR-ID-43: d8bbf2cae2bb
 deps: [B1-34h]
 paths:
   - 'apps/api/src/modules/admin/**'

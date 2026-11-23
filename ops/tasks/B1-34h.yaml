@@ -8,7 +8,7 @@ type: impl
 # 本线技术取舍（由编排者摘进任务书第 9 节）：不加迁移（admin_users 已有 password_must_change / totp_* / status / display_name / row_version，admin_permissions 已有；如列级授权缺 UPDATE 再开迁移任务）；初始密码用 CSPRNG 生成、只存哈希、只在创建响应里出现一次，不进日志 / 审计；停用经 B1-34e 的 cancelByCreator 端口取消导出，会话作废复用现有 admin 会话存储；新建请求只收 login_name 与 display_name（不带权限点，契约 ①）；所有写在同一事务内写 audit_logs。
 refs: [BR-ID-43]
 refs_hash:
-  BR-ID-43: aabc9139136d
+  BR-ID-43: d8bbf2cae2bb
 deps: [CT-24o]
 paths:
   - 'apps/api/src/modules/admin/**'

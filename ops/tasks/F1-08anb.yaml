@@ -18,7 +18,7 @@ type: test-change
 refs: [BR-WDR-12, BR-WDR-11]
 refs_hash:
   BR-WDR-12: 3a822658ab35
-  BR-WDR-11: 9193f1c7ed27
+  BR-WDR-11: c831cbcd3fd0
 deps: [F1-08an]
 paths:
   - 'test/spec/frontend/admin-withdrawal-batch-payout/anb/**'

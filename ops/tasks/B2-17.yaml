@@ -12,9 +12,9 @@ type: impl
 # 2026-11-21 补丁 1（funds，编排 D10-2417）：拆两张，本单收窄为 ①②④⑤（ledger：执行时 CAS、（差错单，用户）唯一、红冲退回 processing、拒人工关联对外差错单；契约只给创建 / 批准登记 20902 recon_diff），③ 与预填单的批准 / 驳回归 B2-17a。涉及用户名单在登记差错单时写进差错单，名单为空或存量差错单按只涉及正在调账的这一个用户；红冲时差错单不存在或不在 adjusted 就不动；差错单状态沿用带条件的更新（FU-RECON-DIFF-STATE-MACHINE）。8 条冻结用例对同一张差错单连续执行多张调账，改为每张各种一张差错单、期望值不改（modify_existing，D10-1670 委托）；[AC-B2-12c#6] 的期望改动待负责人点头后另补。标题按门禁保留原文。
 refs: [BR-FUND-24, BR-WDR-23, BR-WDR-05]
 refs_hash:
-  BR-FUND-24: efcdeeafa452
-  BR-WDR-23: 14059410a548
-  BR-WDR-05: 378fe8ee0fee
+  BR-FUND-24: 7cca08c02491
+  BR-WDR-23: 92950f49116f
+  BR-WDR-05: 775e11ed8bd8
 deps: []
 paths:
   - 'apps/api/src/modules/ledger/**'

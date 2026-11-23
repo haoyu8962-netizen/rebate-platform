@@ -7,8 +7,8 @@ type: impl
 # 资金页面（RV2）。D10-1872 起新入账：规则测试与评审优先 Codex（codex-run.sh），Codex 不可用时改独立 Claude 并如实记。
 refs: [BR-FUND-24, BR-ID-34]
 refs_hash:
-  BR-FUND-24: efcdeeafa452
-  BR-ID-34: 6f4bb7f212cb
+  BR-FUND-24: 7cca08c02491
+  BR-ID-34: 8bd50e43d350
 deps: [F1-08cc]
 paths:
   - 'apps/admin/src/pages/adjustments/**'

@@ -12,7 +12,7 @@ type: test-change
 #   P4 失败路径只在已落库数大于 0 时告警；每个探针杀到哪几条写进 PR 正文与证据。不登 red_exempt。spec-test 由 Codex 做；本机不跑 vitest，走测试机 --tests（D10-2404）。
 refs: [BR-FUND-22, BR-FUND-02]
 refs_hash:
-  BR-FUND-22: c9930aaf2459
+  BR-FUND-22: 71f9d1a05a10
   BR-FUND-02: f287247d4d07
 deps: [B1-04zzab]
 paths:

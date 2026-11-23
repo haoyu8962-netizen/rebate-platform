@@ -14,7 +14,7 @@ type: contract
 refs: [BR-ATTR-18, BR-ATTR-20]
 refs_hash:
   BR-ATTR-18: 84c119d737eb
-  BR-ATTR-20: 0d6dcf3ad887
+  BR-ATTR-20: 0f939f3aa5c1
 contract_sections: ['5']
 deps: [CT-24d]
 paths:

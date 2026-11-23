@@ -9,7 +9,7 @@ type: impl
 # 计数走部分索引 withdrawals_open_idx（app_id, user_id）WHERE status IN (PENDING_REVIEW, APPROVED, PAYING)，按 app_id 前缀扫。资金模块，RV2，money 评审 Codex medium。
 refs: [BR-WDR-08]
 refs_hash:
-  BR-WDR-08: 8c55a3ce6b57
+  BR-WDR-08: 91b013262446
 deps: [B2-09c]
 paths:
   - 'apps/api/src/modules/payout/infra/admin-withdrawals-store.ts'

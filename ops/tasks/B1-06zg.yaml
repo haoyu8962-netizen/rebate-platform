@@ -7,7 +7,7 @@ type: impl
 # D10-929：任务书上限 24 KB，refs 只留 BR-PRICE-21；BR-ATTR-05（身份构造）/ BR-ATTR-08（进店例外）/ BR-ID-18（进店 AuthSheet 例外）为一跳引用——任务书摘录逐字照抄进店相关句子并标出处，规则测试仍钉身份复用与授权例外入口，money 评审输入带摘录、清单核归属与授权两处；这三条以后改动时编排人工核本单。
 refs: [BR-PRICE-21]
 refs_hash:
-  BR-PRICE-21: 877056f01e26
+  BR-PRICE-21: 53b243cbba07
 deps: [B1-05zm]
 paths:
   - 'apps/api/src/modules/linking/application/shop-open.ts'

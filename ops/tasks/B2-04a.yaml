@@ -7,9 +7,9 @@ type: migration
 # 2026-10-21 paths 加 tools/ci/lint-migrations.test.ts：「db/schema.sql 每张资金表都在清单里」的测试要随本迁移新建的 8 张 settle_* / beneficiary_credits / recon_union 表只增同步（B2-04b #1006 先例；第三类保护路径，编排按 #24 加标签）。
 refs: [BR-CALC-23, BR-FUND-04, BR-FUND-09]
 refs_hash:
-  BR-CALC-23: 617aabea160e
-  BR-FUND-04: 1c403c23b8bb
-  BR-FUND-09: d6b5a66ad5a9
+  BR-CALC-23: c5b3de41bcd6
+  BR-FUND-04: 27c6704ac9af
+  BR-FUND-09: 891062fdd62b
 deps: [B2-04b, B2-04c]
 paths:
   - 'db/migrations/**'

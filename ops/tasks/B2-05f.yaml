@@ -9,7 +9,7 @@ refs: [BR-TEXT-06, BR-WDR-25, BR-WDR-08]
 refs_hash:
   BR-TEXT-06: e03024b45543
   BR-WDR-25: 7e1d047a6c2a
-  BR-WDR-08: 8c55a3ce6b57
+  BR-WDR-08: 91b013262446
 deps: [B2-05b]
 paths:
   - 'apps/api/src/modules/payout/**'

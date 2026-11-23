@@ -10,9 +10,9 @@ type: impl
 # 2026-11-18 台账补丁 1：写测试第 1 轮由 Codex 写（规则测试提交 5d1aaee69）；第 2 轮调用 Codex 回报 usage limit（原文「usage limit, try again at Nov 23rd, 2026 9:57 PM」），按 approvals 第 36 条、D10-1872 与 D10-2003 改由无上下文的独立 Claude（claude-run.sh）续写，tester 改为 claude-independent；证据如实记两家各写哪一轮。
 refs: [BR-WDR-16, BR-WDR-05, BR-ID-34]
 refs_hash:
-  BR-WDR-16: c5899cc85558
-  BR-WDR-05: 378fe8ee0fee
-  BR-ID-34: 6f4bb7f212cb
+  BR-WDR-16: c0ec2e5d1d93
+  BR-WDR-05: 775e11ed8bd8
+  BR-ID-34: 8bd50e43d350
 deps: [F1-08ai]
 paths:
   - 'apps/admin/src/pages/withdrawals/**'

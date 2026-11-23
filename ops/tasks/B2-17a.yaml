@@ -10,9 +10,9 @@ type: impl
 # 补丁 1（funds，D10-2425）：负责人 2026-11-21 同意；登记 [AC-B2-12a#10]（参数表去掉 PAYOUT_RECOVERY 一行）。状态机冻结用例 [AC-B2-12a#26 / #27 / #30] 核过不钉 AA1 的 guard 全文（只要求含注销相关词），guard 文字放开到系统预填的 PAYOUT_RECOVERY 不会使其变红，不登记；[AC-B2-12c#6] 登在 B2-17。
 refs: [BR-FUND-24, BR-WDR-23, BR-WDR-05]
 refs_hash:
-  BR-FUND-24: efcdeeafa452
-  BR-WDR-23: 14059410a548
-  BR-WDR-05: 378fe8ee0fee
+  BR-FUND-24: 7cca08c02491
+  BR-WDR-23: 92950f49116f
+  BR-WDR-05: 775e11ed8bd8
 deps: [B2-17]
 paths:
   - 'apps/api/src/modules/ledger/**'
