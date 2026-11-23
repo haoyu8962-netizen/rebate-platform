@@ -6,7 +6,7 @@
 
 接口 `pdd.ddk.order.list.increment.get`（按更新时间）、`pdd.ddk.order.list.range.get`（按支付时间）、`pdd.ddk.order.detail.get`（按单号查一单）。参数与映射在 `apps/api/src/modules/union/infra/pdd/orders.ts`，请求流程在 `pdd-adapter.ts` 的 `listOrders`、`getPddOrderDetail`。
 
-映射只读各接口登记过的字段（三张字段表：共有字段，另加 increment 的 `order_id`、`p_id`、`fail_reason`、`order_receive_time`、`order_verify_time`、`order_settle_time`；range 的 `p_id`、`fail_reason`、`order_settle_time`；detail 的 `pid`、`url_last_generate_time`、`return_status`）。某接口没登记的字段即使出现在报文里也不读、不校验、不进 DTO；从不 spread 整份报文。
+映射只读各接口登记过的字段（三张字段表：共有字段，另加 increment 的 `order_id`、`p_id`、`fail_reason`、`order_receive_time`、`order_verify_time`、`order_settle_time`；range 的 `p_id`、`fail_reason`、`order_settle_time`；detail 的 `pid`、`url_last_generate_time`、`return_status`、`order_receive_time`、`order_verify_time`、`order_settle_time`）。某接口没登记的字段即使出现在报文里也不读、不校验、不进 DTO；从不 spread 整份报文。
 
 ## 请求
 
@@ -55,9 +55,9 @@
 | `order_create_time` | `order_create_time` | Unix 秒原样 |
 | `order_pay_time` | `order_pay_time` | Unix 秒原样 |
 | `order_group_success_time` | `order_group_success_time` | Unix 秒原样 |
-| `order_receive_time` | `order_receive_time` | Unix 秒原样；只有 increment 登记 |
-| `order_verify_time` | `order_verify_time` | Unix 秒原样；只有 increment 登记 |
-| `order_settle_time` | `order_settle_time` | Unix 秒原样；increment、range 登记 |
+| `order_receive_time` | `order_receive_time` | Unix 秒原样；increment、detail 登记 |
+| `order_verify_time` | `order_verify_time` | Unix 秒原样；increment、detail 登记 |
+| `order_settle_time` | `order_settle_time` | Unix 秒原样；三个接口都登记（详情自 B2-19 起，与列表同一取法） |
 | `order_modify_at` | `order_modify_at` | Unix 秒原样 |
 | `url_last_generate_time` | `url_last_generate_time` | Unix 秒原样；只有详情登记 |
 | `deposit_paid_at` | 无 | 恒为 null |

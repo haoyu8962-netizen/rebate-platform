@@ -85,7 +85,19 @@ const FIELDS: Readonly<Record<PddOrderSource, ReadonlySet<string>>> = {
     'order_settle_time',
   ]),
   range: new Set([...COMMON_FIELDS, 'p_id', 'fail_reason', 'order_settle_time']),
-  detail: new Set([...COMMON_FIELDS, 'pid', 'url_last_generate_time', 'return_status']),
+  // B2-19（money r1 S1，D10-2677 ②）：详情接口 pdd.ddk.order.detail.get 的 order_detail_response 列有
+  // order_receive_time、order_verify_time、order_settle_time（LONG，Unix 秒），与列表同一取法读入，
+  // 详情行的 received_at / settled_at 才与同一笔列表行一致。fail_reason 文档也有，但既有规则测试
+  // （AC-B1-04zgc#6/#10/#11、AC-B2-10c#2）钉住详情不读，暂不登记。order_id、p_id 详情文档没有。
+  detail: new Set([
+    ...COMMON_FIELDS,
+    'pid',
+    'url_last_generate_time',
+    'return_status',
+    'order_receive_time',
+    'order_verify_time',
+    'order_settle_time',
+  ]),
 };
 
 function invalid(message: string): UnionError {
