@@ -10,6 +10,7 @@ type: impl
 #   desc 为重复绑定且无 relation_id 时，以同一用户 session 调 taobao.tbk.sc.publisher.info.get（info_type=1）取回；仍拿不到 → 失败（不写假 relation_id）并打平铺告警。用户 token 只在本次调用内存中使用，不落库、不进日志（BR-ID-17）。
 #   inviter_code 读新环境配置 TAOBAO_INVITER_CODE（ops 用站长 session 调 invitecode.get 生成后设置，不进仓库）；缺省 → 失败告警。权限包 14474 已授权（DM taobao/DEV-NOTES.md:4）。
 # 规则测试（假传输）钉：真实 auth_url 形态与 state 原样；token 请求参数；publisher.info.save 入参与取 relation_id；重复备案取回；两路都拿不到失败且不写 binding；token 不出现在日志 / 持久化；缺配置不下发合成地址。
+# 补丁 1（D10-2717）：TAOBAO_USER_OAUTH_REDIRECT_URI 取值 staging https://l-stg.couliapp.cn/auth/taobao/callback、prod https://l.couliapp.cn/auth/taobao/callback；auth_url 入口 oauth.taobao.com + view=wap（不用 oauth.m.taobao.com、不用沙箱 tbsandbox）；staging 淘宝适配器用 live；code 仍下发客户端，不改契约。
 refs: [BR-ID-17, BR-ATTR-05]
 refs_hash:
   BR-ID-17: ba4ebcc6279a

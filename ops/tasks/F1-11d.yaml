@@ -6,6 +6,8 @@ type: impl
 # 行为：读 location.search 的 code、state（各自须匹配 [A-Za-z0-9_-]、长度 1–256，否则不跳转，只显示提示）；error / error_description 存在时不带 code，只带 state 与 error=1 跳回让 App 提示授权未完成；
 #   跳转用 location.replace('couli://auth/taobao?code=…&state=…')（encodeURIComponent），其余参数一律丢弃；先 history.replaceState 清掉地址栏查询串；页面不调任何接口、不写 storage / cookie、不打日志、不加埋点脚本。
 # 深链 scheme couli 已在 contracts/apps.json inbound 登记；不改契约。vite.config.ts 的 ENTRIES 加 auth-callback。
+# 补丁 1（D10-2717，安卓 design §12 A 由 w1 定）：部署 staging https://l-stg.couliapp.cn/auth/taobao/callback、prod https://l.couliapp.cn/auth/taobao/callback（同一淘宝应用、同一顶级域名 couliapp.cn）；深链 couli://auth/taobao，参数只 code / state / error（error 恒为 1，不区分拒绝与失败，不带 error_description）；
+#   页面 index.html 加 <meta name="referrer" content="no-referrer">；响应头 Cache-Control: no-store、Referrer-Policy: no-referrer 与访问日志不记查询串由 ops 在网关配置；不提供 intent:// 形式。
 refs: []
 refs_hash: {}
 deps: []
