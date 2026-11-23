@@ -1,0 +1,115 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-orders-standard/cells.test.ts > [AC-F1-07ed-CELLS#1] 每笔订单的复制按钮写入自己的子订单号全文",
+    "test/spec/frontend/admin-orders-standard/cells.test.ts > [AC-F1-07ed-CELLS#2] 已归因用户可复制完整 UID 并显示脱敏手机号，未归因用户没有复制按钮",
+    "test/spec/frontend/admin-orders-standard/cells.test.ts > [AC-F1-07ed-CELLS#3] 商品列的 title 属性提供全名，只渲染已有的商品图",
+    "test/spec/frontend/admin-orders-standard/columns.test.ts > [AC-F1-07ed-COLUMNS#1] 默认展示十一列，隐藏联盟佣金后在同一地址重新打开仍隐藏",
+    "test/spec/frontend/admin-orders-standard/columns.test.ts > [AC-F1-07ed-COLUMNS#2] 写坏真实的本地列设置后恢复默认十一列，订单正常显示",
+    "test/spec/frontend/admin-orders-standard/page-size.test.ts > [AC-F1-07ed-PAGE-SIZE#1] 分页器默认每页二十条且只提供 20、50、100 三种选择",
+    "test/spec/frontend/admin-orders-standard/page-size.test.ts > [AC-F1-07ed-PAGE-SIZE#2] 第二页改为每页五十条后回到第一页，再翻页仍按五十条查询",
+    "test/spec/frontend/admin-orders-standard/platforms.test.ts > [AC-F1-07ed-PLATFORMS#1] 九个平台按契约排序，显示名唯一",
+    "test/spec/frontend/admin-orders-standard/platforms.test.ts > [AC-F1-07ed-PLATFORMS#2] 平台配置遵守契约，页面无写死的平台分支",
+    "test/spec/frontend/admin-orders-standard/split.test.ts > [AC-F1-07ed-SPLIT#1] 整页详情保留快照，明细按角色归组并逐行显示同格式比例、已结算和北京入账时间",
+    "test/spec/frontend/admin-orders-standard/split.test.ts > [AC-F1-07ed-SPLIT#2] ESTIMATED 订单的受益人逐行显示未结算，没收标记独立显示",
+    "test/spec/frontend/admin-orders-standard/split.test.ts > [AC-F1-07ed-SPLIT#3] WAITING 受益人逐行显示未结算和各自的没收标记，未出现的角色没有分组",
+    "test/spec/frontend/admin-orders-standard/split.test.ts > [AC-F1-07ed-SPLIT#4] 分佣快照为空时明细展示暂无分佣明细",
+    "test/spec/frontend/admin-orders-standard/tabs.test.ts > [AC-F1-07ed-TABS#1] 列表上方两组页签没有数量角标，干净地址默认选中全部且不请求同步接口",
+    "test/spec/frontend/admin-orders-standard/tabs.test.ts > [AC-F1-07ed-TABS#2] 在第二页点拼多多只提交一次回到第一页并更新平台下拉，点全部去掉平台参数",
+    "test/spec/frontend/admin-orders-standard/tabs.test.ts > [AC-F1-07ed-TABS#3] 点返利状态页签只提交一次并更新返利下拉，点全部去掉返利状态参数",
+    "test/spec/frontend/admin-orders-standard/url.test.ts > [AC-F1-07ed-URL#1] 已提交的筛选写入地址，重开完整地址的第一笔请求及控件都还原",
+    "test/spec/frontend/admin-orders-standard/url.test.ts > [AC-F1-07ed-URL#2] 非法平台、返利状态和页大小被忽略，同地址的合法订单号仍用于首笔请求",
+    "test/spec/frontend/admin-orders-standard/url.test.ts > [AC-F1-07ed-URL#3] 从带筛选的第 2 页进入整页详情再返回，地址与列表请求均保留筛选、页码和页大小"
+  ],
+  "risk_note": "F1-07ed (D10-2669). apps/admin orders pages only (apps/admin/src/pages/orders/** + texts/orders.ts): list switched to the F1-07ec components with platform / rebate-status tabs, column settings, page sizes, URL-synced filters and copy buttons; full-page detail gains a per-role 分佣明细 block that shows no amounts. Same two list/detail requests as before, no new request kinds, no contract / route / dependency changes, no money calculation. RV2 because the PR carries rule tests under test/**.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money r1 fail: 1 S1 (reset kept the old back-navigation state, a refresh revived platform=pdd) + 2 S2 (pager hidden on an out-of-range page; URL dates checked by shape only), fixed in implementation round 2; r2 pass with 2 S2 (pager on an out-of-range page ignores a click on page 1; URL years below 100 read as 19xx by Date.UTC) logged as FU for F1-07edb. couli-runs/F1-07ed/review-money-r1.json, review-money-r2.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "rule tests and NotImplemented skeleton written by Codex (codex-run.sh impl --phase test, 2 attempts); spec-test by an independent Claude context (claude-run.sh, fresh session; tester codex): r1 fail (sync status bar cases missing — the bar was moved out of this ticket to F1-07edb, D10-2748; per-role grouping not pinned), r2 pass with one S2 (a false-red risk if the block showed the split base; the implementation shows no amounts in the block)",
+    "model": "claude-opus-5-5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-07ed",
+  "spec_ref": "be7464c7e672bb41a03eb6b0d13606918401760b",
+  "spec_commit": "4d0aad8513759e7b206a5aaf5d32592f36e1d23b",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "4d0aad8513759e7b206a5aaf5d32592f36e1d23b",
+      "tree": "94c5ee71cfa645ef61f6f9df2896368dc2196035",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-23T12:34:07Z",
+      "finished_at": "2026-11-23T12:34:25Z",
+      "red_tests": [
+        "test/spec/frontend/admin-orders-standard/cells.test.ts > [AC-F1-07ed-CELLS#1] 每笔订单的复制按钮写入自己的子订单号全文",
+        "test/spec/frontend/admin-orders-standard/cells.test.ts > [AC-F1-07ed-CELLS#2] 已归因用户可复制完整 UID 并显示脱敏手机号，未归因用户没有复制按钮",
+        "test/spec/frontend/admin-orders-standard/cells.test.ts > [AC-F1-07ed-CELLS#3] 商品列的 title 属性提供全名，只渲染已有的商品图",
+        "test/spec/frontend/admin-orders-standard/columns.test.ts > [AC-F1-07ed-COLUMNS#1] 默认展示十一列，隐藏联盟佣金后在同一地址重新打开仍隐藏",
+        "test/spec/frontend/admin-orders-standard/columns.test.ts > [AC-F1-07ed-COLUMNS#2] 写坏真实的本地列设置后恢复默认十一列，订单正常显示",
+        "test/spec/frontend/admin-orders-standard/page-size.test.ts > [AC-F1-07ed-PAGE-SIZE#1] 分页器默认每页二十条且只提供 20、50、100 三种选择",
+        "test/spec/frontend/admin-orders-standard/page-size.test.ts > [AC-F1-07ed-PAGE-SIZE#2] 第二页改为每页五十条后回到第一页，再翻页仍按五十条查询",
+        "test/spec/frontend/admin-orders-standard/platforms.test.ts > [AC-F1-07ed-PLATFORMS#1] 九个平台按契约排序，显示名唯一",
+        "test/spec/frontend/admin-orders-standard/platforms.test.ts > [AC-F1-07ed-PLATFORMS#2] 平台配置遵守契约，页面无写死的平台分支",
+        "test/spec/frontend/admin-orders-standard/split.test.ts > [AC-F1-07ed-SPLIT#1] 整页详情保留快照，明细按角色归组并逐行显示同格式比例、已结算和北京入账时间",
+        "test/spec/frontend/admin-orders-standard/split.test.ts > [AC-F1-07ed-SPLIT#2] ESTIMATED 订单的受益人逐行显示未结算，没收标记独立显示",
+        "test/spec/frontend/admin-orders-standard/split.test.ts > [AC-F1-07ed-SPLIT#3] WAITING 受益人逐行显示未结算和各自的没收标记，未出现的角色没有分组",
+        "test/spec/frontend/admin-orders-standard/split.test.ts > [AC-F1-07ed-SPLIT#4] 分佣快照为空时明细展示暂无分佣明细",
+        "test/spec/frontend/admin-orders-standard/tabs.test.ts > [AC-F1-07ed-TABS#1] 列表上方两组页签没有数量角标，干净地址默认选中全部且不请求同步接口",
+        "test/spec/frontend/admin-orders-standard/tabs.test.ts > [AC-F1-07ed-TABS#2] 在第二页点拼多多只提交一次回到第一页并更新平台下拉，点全部去掉平台参数",
+        "test/spec/frontend/admin-orders-standard/tabs.test.ts > [AC-F1-07ed-TABS#3] 点返利状态页签只提交一次并更新返利下拉，点全部去掉返利状态参数",
+        "test/spec/frontend/admin-orders-standard/url.test.ts > [AC-F1-07ed-URL#1] 已提交的筛选写入地址，重开完整地址的第一笔请求及控件都还原",
+        "test/spec/frontend/admin-orders-standard/url.test.ts > [AC-F1-07ed-URL#2] 非法平台、返利状态和页大小被忽略，同地址的合法订单号仍用于首笔请求",
+        "test/spec/frontend/admin-orders-standard/url.test.ts > [AC-F1-07ed-URL#3] 从带筛选的第 2 页进入整页详情再返回，地址与列表请求均保留筛选、页码和页大小"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-orders-standard/cells.test.ts",
+        "test/spec/frontend/admin-orders-standard/columns.test.ts",
+        "test/spec/frontend/admin-orders-standard/page-size.test.ts",
+        "test/spec/frontend/admin-orders-standard/platforms.test.ts",
+        "test/spec/frontend/admin-orders-standard/split.test.ts",
+        "test/spec/frontend/admin-orders-standard/tabs.test.ts",
+        "test/spec/frontend/admin-orders-standard/url.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "62370ea23cb419d0de2a640b60f6328bdccd99155213c8a7a99169f24b459c8d"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "28f00ce258e5f37fee190a7d065f2c1e8ba47607",
+    "specs": "5b1b075156cc136909d767c3d039cc8783e124ec"
+  }
+}
