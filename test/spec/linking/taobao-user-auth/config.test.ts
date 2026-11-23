@@ -34,3 +34,11 @@ it.each([
   expect(load).toThrow(REDIRECT_ENV);
   expect(load).not.toThrow(redirect);
 });
+
+it.each([
+  ['空串', ''],
+  ['纯空白', '  '],
+])('[AC-B1-04zzzzm#2] 备案邀请码为%s时按缺省读取', (_, inviterCode) => {
+  const config = loadConfig({ ...environment('staging'), TAOBAO_INVITER_CODE: inviterCode });
+  expect(config.taobaoInviterCode).toBeNull();
+});
