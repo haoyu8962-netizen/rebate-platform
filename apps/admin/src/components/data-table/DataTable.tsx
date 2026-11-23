@@ -16,7 +16,7 @@ import {
   Typography,
   type TableColumnsType,
 } from 'antd';
-import { useState, type ReactElement, type ReactNode } from 'react';
+import { useState, type Key, type ReactElement, type ReactNode } from 'react';
 import { delayedLoading, useLoadingClock } from '../../motion.ts';
 import { componentsTexts } from '../../texts/components.ts';
 import {
@@ -203,15 +203,15 @@ export function DataTable<Row>({
         pagination={false}
         loading={delayedLoading(loading, loadingClock)}
         locale={{ emptyText: error ? failure : t.empty }}
-        rowSelection={
-          selection === undefined
-            ? undefined
-            : {
+        {...(selection === undefined
+          ? {}
+          : {
+              rowSelection: {
                 selectedRowKeys: [...selection.selectedKeys],
                 preserveSelectedRowKeys: true,
-                onChange: (keys) => selection.onChange(keys.filter(isRowKey)),
-              }
-        }
+                onChange: (keys: Key[]) => selection.onChange(keys.filter(isRowKey)),
+              },
+            })}
       />
       <Flex justify="flex-end">
         <Pagination

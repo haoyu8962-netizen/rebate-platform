@@ -99,7 +99,7 @@ export function StatCards({
               size="small"
               hoverable={clickable}
               style={{ minWidth: token.controlHeightLG * 4 }}
-              styles={clickable ? { body: { padding: token.paddingXXS } } : undefined}
+              {...(clickable ? { styles: { body: { padding: token.paddingXXS } } } : {})}
             >
               {clickable ? (
                 <button type="button" style={buttonStyle} onClick={select}>
