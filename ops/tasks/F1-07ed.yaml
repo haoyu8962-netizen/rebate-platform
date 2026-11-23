@@ -1,0 +1,22 @@
+id: F1-07ed
+repo: rebate-platform
+title: 后台订单页按标准改造（订单管理标准化 B 段第一张，不动冻结用例）——订单列表换用 F1-07ec 组件：平台页签与返利状态页签（无数量角标）、平台配置 platforms.ts、商品列 ProductCell、用户列 MemberCell（UID 可复制）、订单号可复制、列配置（默认仍显示现有全部列，平台额外列默认隐藏）、页大小 20 / 50 / 100、筛选条件同步 URL、同步状态条；详情页（整页，路由不变）加「分佣明细」区块
+type: impl
+# 2026-11-23 入账（前端线 f1-frontend-7；编排 D10-2669 ①：A 之后 B，入账写死只做哪段；任务书 couli-runs/briefs/ADMIN-ORDERS-STANDARD-20261122.md §1 / §2 / §3 / §4 B）。
+# 只做（写死）：列表页换用 apps/admin/src/components 的 data-table / filter-bar / status-tabs / copy-text / money-text / status-tag / help-tip / product-cell / member-cell；平台页签（九个 PlatformCode 由 platforms.ts 配置驱动，页面不写 if (platform === ...)）与返利状态页签（不显示数量，数量待 D3）；列配置按页面 key 存本地，默认显示现有 11 列，platforms.ts 里的平台额外列默认隐藏、可在列配置打开；页大小 20 / 50 / 100；筛选与页签写进 URL，返回 / 刷新不丢；同步状态条只用现有同步记录接口（不新增请求种类）；按单号同步支持与否改由 platforms.ts 判断、行为不变（F1-07eb 的 20001 提示不变）；详情页保持整页路由 /orders/<id>，新增按角色分组的「分佣明细」区块（只用现有分佣快照字段与订单 rebate_status / credited_at，不新造口径）。
+# 不做（写死）：默认列缩减、详情改抽屉（改冻结用例 [AC-F1-07e-LIST#*] / [AC-F1-07e-DETAIL#*]，另开 test-change 单 F1-07edb 等编排裁定）；暂扣 / 解除暂扣 / 指派（C 段）；新筛选、页签角标、汇总卡、导出（D3，要 CT-24x / D2）；改归属、重新分佣、手动锁定、总代类列、批量暂扣（D10-2669 ③）。
+# 不改 contracts/**、不加依赖、不改 App.tsx 路由；platforms.ts 只引用契约已有字段名，09 未验证的字段不进配置。冻结测试 admin-orders、admin-orders-sync、admin-planned、admin-search、admin-small-links、admin-responsive、admin-antd 全部保持绿；admin-orders/source.test.ts 会扫 pages/orders 下新增文件（antd 用法与文案集中）。
+refs: []
+refs_hash: {}
+deps: [F1-07ec, F1-07e, F1-07eb]
+paths:
+  - 'apps/admin/src/pages/orders/**'
+  - 'apps/admin/src/texts/orders.ts'
+test_paths:
+  - 'test/spec/frontend/admin-orders-standard/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-orders-standard/**'
+status: todo
