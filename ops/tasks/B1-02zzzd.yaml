@@ -1,0 +1,29 @@
+id: B1-02zzzd
+repo: rebate-platform
+title: staging 测试号固定验证码扩到「绑定 / 更换手机」（purpose bind）：只 APP_ENV=staging、只 STAGING_TEST_PHONES 内号码，发码不调发送器、验码认固定码；prod 与名单外号码不变（D10-2688 甲）
+type: impl
+# 2026-11-23 ops 入账，交 be 做（编排 D10-2688 取甲，排在 B2-19 之后）。起因：D10-2687 ③ 核频率限制时发现，B1-02zza 的测试号固定码只覆盖 purpose ∈ {login, step_up}
+#   （identity/application/sms-codes.ts:264 TEST_PHONE_PURPOSES），bind 不在内；staging 接上阿里云短信凭据（approvals 163）后，测试号 1990000000x 走绑定 / 更换手机会真发、计费，
+#   而 199 号段不在默认拦截前缀里（sms-limits.ts:38）。不选「拦截前缀」：那是风控参数，且会让测试号的绑定流程整个测不了。
+# 做法：同一处判定——TEST_PHONE_PURPOSES 加上 bind；发码 deliver()（sms-codes.ts:330-336）与验码 verifyAndConsume 的 isTestPhone(phone, purpose) 共用它，所以两头一起生效。
+#   其余照 B1-02zza：随机码照常生成只存 HMAC、黑名单 / 设备 / 号码四项限额 / IP 与日预算全部照旧；每次调用都再判 appEnv==='staging'；落地页注册仍关固定码（landingSmsCodes 的
+#   stagingTestCode: false 不动）；审计照旧（sms_staging_test_phone_not_sent 带 purpose）。
+# 规则测试至少钉：① staging 测试号 bind 发码不调发送器、按已受理；② staging 测试号 bind 用固定码验码成功并消费当前码；③ staging 名单外号码 bind 照常调发送器、固定码无效；
+#   ④ prod（及 local / test）下名单号码 bind 照常调发送器、固定码无效；⑤ login / step_up 原有行为不变。
+# infra/staging/README.md 测试号一节改写用途说明（login、step_up、bind）。不动契约、不动 admin、不动落地页。RV2（identity、infra 路径）。
+refs: []
+refs_hash: {}
+deps: [B1-02zza]
+paths:
+  - 'apps/api/src/modules/identity/application/sms-codes.ts'
+  - 'apps/api/src/modules/identity/application/sms-codes.test.ts'
+  - 'infra/staging/README.md'
+  - 'ops/tasks/B1-02zzzd.yaml'
+test_paths:
+  - 'test/spec/identity/staging-test-phone-bind/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/identity/staging-test-phone-bind/**'
+status: todo
