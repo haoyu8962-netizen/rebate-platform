@@ -8,12 +8,14 @@ type: impl
 # 验收钉住负责人点的场景：补充读完来源之后、旧批次先提交入账 → 同一轮补充生成受益人补记项、不生成首次入账草稿；执行这批不重复入账。另钉：锁序（升序、与入账环节同一把锁）、无并发时现有补充行为不变（test/spec/settlement/supplement/** 等冻结用例不改、保持通过；红了就停下报编排，不改 test/）。
 # 不在本单：D10-2679 ③ 后半句「规则测试接只读库、断言补充路径不读旧差错结论」——主干上补充的生产来源读口仍按设计读「以联盟为准」结论（bill/infra/bill-source.ts 的 readUnionAuthoritative），去掉它是 B2-18 的改动，那条断言在主干上不成立，要落在 B2-18 的规则测试里（FU-B2-18-SPEC-R4-GAPS，本线已另报编排）。
 # 之后（D10-2679 ④）：本单合并后 B2-18 变基到新主干再过一轮资金评审。
+# 2026-11-23 补丁 1（funds）：paths 加 `apps/api/src/modules/settlement/bill/unsettled-count.test.ts`——这条既有单元测试（[AC-B2-18a-UNIT#6]，补充发起遇应结未结）的脚本化假驱动对没写进脚本的语句一律拒绝，本单让候选先取订单键锁后多出一条取锁语句；只给假驱动加「认得取锁语句」的分支，断言一条不改。单元测试不属冻结的规则测试，但文件在本单原 paths 之外，实现方照约束没有动、报回本线。
 refs: [BR-FUND-04]
 refs_hash:
   BR-FUND-04: 1c403c23b8bb
 deps: []
 paths:
   - 'apps/api/src/modules/settlement/bill/supplement/**'
+  - 'apps/api/src/modules/settlement/bill/unsettled-count.test.ts'
 test_paths:
   - 'test/spec/settlement/supplement-locked-recheck/**'
 impl: claude
