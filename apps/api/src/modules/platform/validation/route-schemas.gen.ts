@@ -10610,20 +10610,18 @@ export const CONTRACT_ROUTE_SCHEMAS = {
                 },
                 "item_id": {
                   "type": "string",
-                  "minLength": 1,
-                  "maxLength": 64,
-                  "description": "The product id stored on the order, exact."
+                  "pattern": "^\\s*\\S(?:[\\s\\S]{0,62}\\S)?\\s*$",
+                  "description": "The product id stored on the order; trimmed of surrounding whitespace, then 1–64\ncharacters, matched exactly. Same rule as the list's item_id.\n"
                 },
                 "order_tail": {
                   "type": "string",
                   "pattern": "^[A-Za-z0-9]{6}$",
-                  "description": "The last 6 characters of sub_order_id, letters and digits only, exact."
+                  "description": "6 letters or digits, matching the last 6 characters of sub_order_id, or of\nparent_order_id when it is not null. Same rule as the list's order_tail.\n"
                 },
                 "title_kw": {
                   "type": "string",
-                  "minLength": 2,
-                  "maxLength": 32,
-                  "description": "A substring of the title."
+                  "pattern": "^\\s*\\S[\\s\\S]{0,30}\\S\\s*$",
+                  "description": "Trimmed of surrounding whitespace, then 2–32 characters; a case-insensitive substring\nof the title. Same rule as the list's title_kw.\n"
                 },
                 "rate_bp_min": {
                   "type": "integer",
@@ -11971,8 +11969,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
         },
         "item_id": {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 64
+          "pattern": "^\\s*\\S(?:[\\s\\S]{0,62}\\S)?\\s*$"
         },
         "order_tail": {
           "type": "string",
@@ -11980,8 +11977,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
         },
         "title_kw": {
           "type": "string",
-          "minLength": 2,
-          "maxLength": 32
+          "pattern": "^\\s*\\S[\\s\\S]{0,30}\\S\\s*$"
         },
         "rate_bp_min": {
           "type": "integer",
