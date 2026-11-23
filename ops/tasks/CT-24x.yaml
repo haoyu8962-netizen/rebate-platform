@@ -10,6 +10,7 @@ type: contract
 # 不做（写死，D10-2673）：店铺模糊查找、列表补店铺名与标签（库里无列）；不出 effective_* 或任何「有效订单」口径；不出预估利润 / 实际计算佣金；不在 08 新立条。
 # 两个新操作与 orders 导出由 D2 后端单实现，本单把新操作标 x-implementation: planned（后台按 F1-06zu 清单显示「功能开发中」）；adminListOrders 新参数与行字段可缺省，D2 落地前服务端不认也不报错的口径写进说明。导出沿用现有生命周期、脱敏（BR-ID-33）与留存（BR-ID-30），不改它们的取值。
 # order_tail 字符集定稿前按 09 逐平台核子单号字符集。
+# 补丁 1（2026-11-23，fe 自定）：export_resource 加 orders 后，后端 exports.controller.ts 的 commandOf 类型收窄不再成立（tsc 5 处，测试机 verify:fast run 1）。D2 落地前该控制器对 resource=orders 回 20001（data.fields=[resource]），只加这一处守卫与对应单测，不改别的导出行为；契约 adminCreateExport 说明同步写明。
 refs: []
 refs_hash: {}
 deps: []
@@ -21,6 +22,8 @@ paths:
   - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
   - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/api/src/modules/admin/http/admin/exports.controller.ts'
+  - 'apps/api/src/modules/admin/http/admin/exports.controller.test.ts'
 test_paths:
   - 'test/spec/contracts/admin-orders-query/**'
 impl: claude
