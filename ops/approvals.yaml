@@ -993,3 +993,9 @@ approvals:
     granted: true
     date: '2026-11-22'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（实现 / 评审轮次属门禁流程小改动），D10-2660 / D10-2661，先例第 150、152 条。原因：B2-18 实现 3 / 3、资金评审 3 / 3 都已用满；资金评审 r3（couli-runs/B2-18/review-money-r3-codex.json）无 S0、剩 2 条 S1，都出在 r2 / r3 为「不在待执行批次脚下改快照」加的「先排除 + 复查释放」上（释放的单沿用旧订单状态；释放的单后取订单锁、与月结取锁顺序相反）。负责人止损线（D10-2592）的本意是不为非 S0 无休止加轮；但证据门禁（tools/ci/evidence-check.ts）要求资金评审结论为 pass、未关闭 S0 / S1 为 0，任务分支不豁免，带着 fail 合并不了。回退到资金评审 r1 已看过的顺序是唯一不动门禁的落地办法，是减代码、不是再修一轮。做完且评审通过则 FU-B2-18-SUPPLEMENT-RECHECK 关闭。'
+  - id: 163
+    row: 4
+    title: 'staging 阿里云短信凭据（验证码真发，B1-12w）：ops 脚本可在进程内读 ~/.couli/sms.env，只取 SMS_ACCESS_KEY_ID、SMS_ACCESS_KEY_SECRET、SMS_SIGN_NAME、SMS_TEMPLATE_VERIFY_CODE 四个键，经 ssh 标准输入写进 staging 节点 /etc/couli/staging.env（先备份、旧备份只留最近一份，已有同名行则替换）；全程不显示、不转录、不写日志与对话，值不进任何仓库；写完只重建会发短信的 api、admin、worker 三个进程；STAGING_TEST_PHONES 里的测试号仍走固定验证码、不真发；不改发送频率限制；只在 staging，生产不适用；其余 ~/.couli/ 文件不在本条范围'
+    granted: true
+    date: '2026-11-23'
+    note: '负责人 2026-11-22 上午对新 staging 原话「key 那些直接复制本地的到服务器吧」（未限定哪几家），2026-11-23 负责人把阿里云短信凭据放进本机 ~/.couli/sms.env（RAM 子账号只挂自定义策略 couli-sms-send-only，只允许 dysms:SendSms，编排 13:22 按负责人要求在控制台建），编排 D10-2687 派 ops 推送并核测试号不真发、频率限制照常；真发验证由负责人本人用自己的手机号做；本条所在的 PR 按第 24 条由编排会话核对头提交后加标签'
