@@ -1005,3 +1005,9 @@ approvals:
     granted: true
     date: '2026-11-23'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测轮次属门禁流程小改动），D10-2690，先例第 151、155、158、160、161 条。原因：B2-04rd 实现 r1 在测试机上实跑后，负责人点名场景的用例 [AC-B2-04rd#1] 只剩一处失败（expected 2 to be 1）——kit 的计数数的是「返利状态变为已入账」的历史行，而生产的受益人补记按设计写一条已入账到已入账的自迁移历史（settlement/credit/beneficiary/beneficiary-credit.ts R5a self-step，编排已核主干原文），首次入账一条加补记一条为 2，是测试自己写错了口径，与实现无关；写测方与 Codex 两轮静态评审都未发现。该用例此前的全部断言已通过；「同轮出补记项、无首次入账草稿、不重复入账」由凭证清单、分录行数、三方余额与重放不变钉住，不受影响。拆开计数比原断言更严，不放宽。写规则测试计数已满（3 / 3）。'
+  - id: 165
+    row: 4
+    title: 'B1-04zzzzk 任务专属一次性追加：规则测试评审第 3 轮（独立 Claude，spec-test）——范围写死为写测第 3 次新增的 test/spec/union/taobao-resolve-link/shop-type.test.ts 这一个文件（[AC-B1-04zzzzk#6]–#8：淘宝详情 user_type → shop_type、parseUrl / parseInput 的 ProductRef.shopType、京东 / 拼多多不变），不重评已评过的 resolve-link.test.ts；只此一轮，不另开第 4 轮。'
+    granted: true
+    date: '2026-11-23'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（评审轮次属门禁流程小改动），D10-2705，先例第 151、155、158、160 条。原因：D10-2695 把 FU-PARSE-SHOP-TYPE 并入 B1-04zzzzk（台账补丁 1，#616），写测第 3 次（Codex）新增 shop-type.test.ts，先红 red/3 exit 0；规则测试评审计数已满（2 / 2，r1 fail → 写测 2 补齐 → r2 pass），新文件无人评；Codex 是写测作者，按第 19 条不能评，由 Codex 资金评审顺带覆盖等于作者自评，故开本条由独立 Claude 评这一增量。'
