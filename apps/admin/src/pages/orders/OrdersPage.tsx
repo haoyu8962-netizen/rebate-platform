@@ -4,9 +4,12 @@
 // (paid_at descending) and server-side pages. Everything is read through the data provider
 // (GET /admin/v1/orders). The title row has 【同步记录】 and 【手动同步】 (F1-07eb, CT-24n; their
 // reads start only when pressed); rights import and export come with a later contract and are not
-// rendered. The applied conditions
-// live in this component (not the address); they travel to the detail subpage in router state,
-// so 【返回】 restores them.
+// rendered. F1-07ed: platform and rebate-status tabs (no counts) mirror those two filters; the
+// applied conditions, page and page size (20 / 50 / 100) are written to the address under the
+// request parameter names, so a reload, a remount or 【返回】 from the detail restores them (invalid
+// values in the address are ignored). 「列设置」 hides / shows columns, kept per page in
+// localStorage (components/data-table/columns.ts); platform extra columns (./platforms.ts) start
+// hidden. Order numbers and UIDs have copy buttons; the product cell is ProductCell.
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -22,6 +25,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   ConfigProvider,
   DatePicker,
   Empty,
@@ -36,7 +40,6 @@ import {
   Typography,
   theme,
   type TableColumnsType,
-  type TablePaginationConfig,
   type ThemeConfig,
 } from 'antd';
 import dayjs from 'dayjs';
@@ -44,7 +47,17 @@ import { useEffect, useId, useState, type CSSProperties, type ReactElement } fro
 import { useLocation, useNavigate } from 'react-router';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { PlannedPage, usePlanned } from '../../components/planned/index.ts';
+import { CopyText } from '../../components/copy-text/index.ts';
+import { ProductCell } from '../../components/product-cell/index.ts';
+import {
+  defaultSettings,
+  readSettings,
+  reconcile,
+  writeSettings,
+  type ColumnSettings,
+} from '../../components/data-table/columns.ts';
 import { ordersTexts as t } from '../../texts/orders.ts';
+import { platformExtraColumns } from './platforms.ts';
 import { FlagTags, StatusTag } from './parts.tsx';
 import { SyncDialog } from './SyncDialog.tsx';
 import { SyncRecords } from './SyncRecords.tsx';
@@ -54,6 +67,7 @@ import {
   FLAGS,
   ORDERS_URL,
   PAGE_SIZE,
+  PAGE_SIZES,
   PLATFORMS,
   PLATFORM_STATUSES,
   QUERY_MAX,
@@ -61,12 +75,15 @@ import {
   backQueryOf,
   beijingClock,
   beijingDate,
+  cleanQ,
   codeLabel,
   failureOf,
   hasConditions,
   money,
   platformLabel,
+  queryFromSearch,
   requestQuery,
+  searchOf,
   type OrderFlag,
   type OrderPage,
   type OrderQuery,
@@ -94,6 +111,48 @@ interface Draft {
 
 const ALL = 'all';
 const DAY_FORMAT = 'YYYY-MM-DD';
+/** localStorage key of this list's column settings. */
+const COLUMNS_KEY = 'admin.orders.list.columns';
+/** Order numbers and UIDs are shown whole (an order number is at most QUERY_MAX characters). */
+const WHOLE = QUERY_MAX;
+
+/** A list column: the antd column plus whether it starts visible (platform extras do not). */
+type ListColumn = TableColumnsType<OrderRow>[number] & {
+  readonly key: string;
+  readonly title: string;
+  readonly defaultVisible?: boolean;
+};
+
+/** The columns 「列设置」 offers, in display order; 「操作」 is not among them. */
+const configurable: readonly { readonly key: string; readonly defaultVisible?: boolean }[] = [
+  ...[
+    'orderNo',
+    'platform',
+    'product',
+    'user',
+    'paidAt',
+    'payAmount',
+    'commission',
+    'platformStatus',
+    'rebateStatus',
+    'flags',
+  ].map((key) => ({ key })),
+  ...platformExtraColumns().map((field) => ({ key: `extra:${field}`, defaultVisible: false })),
+];
+
+/** The first conditions: the address, else the router state of an older 【返回】, else page 1. */
+function initialQuery(search: string, state: unknown): OrderQuery {
+  if (search !== '' && search !== '?') return queryFromSearch(search);
+  return backQueryOf(state) ?? FIRST_PAGE;
+}
+
+/** Writes the conditions to the address in place (no navigation, so the page is not remounted). */
+function writeAddress(query: OrderQuery): void {
+  const search = searchOf(query);
+  if (window.location.search === search) return;
+  const { pathname, hash } = window.location;
+  window.history.replaceState(window.history.state, '', `${pathname}${search}${hash}`);
+}
 
 // Filter card (AdmOrders): 36 high controls, small labels above them, four per line.
 const FILTER_THEME: ThemeConfig = {
@@ -175,7 +234,11 @@ function OrdersList(): ReactElement {
     from: useId(),
     to: useId(),
   };
-  const [query, setQuery] = useState<OrderQuery>(() => backQueryOf(location.state) ?? FIRST_PAGE);
+  // The browser address is this page's only when the router shows it (not a memory router).
+  const [addressed] = useState(() => window.location.pathname === location.pathname);
+  const [query, setQuery] = useState<OrderQuery>(() =>
+    initialQuery(addressed ? window.location.search : location.search, location.state),
+  );
   const [draft, setDraft] = useState<Draft>(() => draftOf(query));
   const [rangeError, setRangeError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -185,6 +248,14 @@ function OrdersList(): ReactElement {
   const [syncOpen, setSyncOpen] = useState(false);
   const [recordsOpen, setRecordsOpen] = useState(false);
   const [notice, setNotice] = useState<SyncNotice>();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [saved, setSaved] = useState<ColumnSettings | undefined>(() =>
+    readSettings(COLUMNS_KEY, configurable),
+  );
+
+  useEffect(() => {
+    if (addressed) writeAddress(query);
+  }, [addressed, query]);
 
   useEffect(() => {
     let current = true;
@@ -234,11 +305,12 @@ function OrdersList(): ReactElement {
     // A fresh query object: 【查询】 reads again even when nothing changed.
     load({
       page: 1,
+      pageSize: query.pageSize,
       platform: PLATFORMS.find((code) => code === draft.platform),
       platformStatus: PLATFORM_STATUSES.find((code) => code === draft.platformStatus),
       rebateStatus: REBATE_STATUSES.find((code) => code === draft.rebateStatus),
       flag: FLAGS.find((code) => code === draft.flag),
-      q: blank(draft.q)?.replace(/\s/g, ''),
+      q: cleanQ(draft.q),
       userId: blank(draft.userId),
       paidFrom: draft.paidFrom,
       paidTo: draft.paidTo,
@@ -248,12 +320,31 @@ function OrdersList(): ReactElement {
   const reset = () => {
     setDraft(draftOf(FIRST_PAGE));
     setRangeError(false);
-    load({ page: 1 });
+    load({ page: 1, pageSize: query.pageSize });
   };
 
-  const changePage = (pagination: TablePaginationConfig) => {
-    if (pagination.current === undefined || pagination.current === query.page) return;
-    load({ ...query, page: pagination.current });
+  const changePage = (page: number, size: number) => {
+    const pageSize = PAGE_SIZES.find((value) => value === size);
+    if (pageSize === undefined) return;
+    // A new page size starts again from the first page.
+    if (pageSize !== (query.pageSize ?? PAGE_SIZE)) {
+      load({ ...query, page: 1, pageSize });
+      return;
+    }
+    if (page === query.page) return;
+    load({ ...query, page });
+  };
+
+  // A tab applies that one filter at once (page 1) and keeps the filter form in step with it.
+  const choosePlatform = (key: string) => {
+    const platform = PLATFORMS.find((code) => code === key);
+    setDraft({ ...draft, platform });
+    load({ ...query, page: 1, platform });
+  };
+  const chooseRebate = (key: string) => {
+    const rebateStatus = REBATE_STATUSES.find((code) => code === key);
+    setDraft({ ...draft, rebateStatus });
+    load({ ...query, page: 1, rebateStatus });
   };
 
   const open = (orderId: string) => {
@@ -265,12 +356,14 @@ function OrdersList(): ReactElement {
   const secondary = { color: token.colorTextSecondary, fontSize: token.fontSizeSM } as const;
   const nowrap = { whiteSpace: 'nowrap' } as const;
 
-  const columns: TableColumnsType<OrderRow> = [
+  const columns: ListColumn[] = [
     {
       key: 'orderNo',
       title: t.columns.orderNo,
       render: (_, row) => (
-        <span style={{ ...code, ...nowrap, color: token.colorPrimary }}>{row.sub_order_id}</span>
+        <span style={{ ...code, ...nowrap, color: token.colorPrimary }}>
+          <CopyText text={row.sub_order_id} maxLength={WHOLE} />
+        </span>
       ),
     },
     {
@@ -285,17 +378,20 @@ function OrdersList(): ReactElement {
     {
       key: 'product',
       title: t.columns.product,
-      width: 200,
-      render: (_, row) => (
-        <Typography.Text ellipsis={{ tooltip: row.title ?? undefined }} style={{ maxWidth: 200 }}>
-          {row.title ?? t.dash}
-        </Typography.Text>
-      ),
+      width: 220,
+      render: (_, row) =>
+        row.title === null && row.image_url === null ? (
+          t.dash
+        ) : (
+          <div style={{ maxWidth: 220 }}>
+            <ProductCell title={row.title} imageUrl={row.image_url} />
+          </div>
+        ),
     },
     {
       key: 'user',
       title: t.columns.user,
-      width: 150,
+      width: 180,
       render: (_, row) =>
         row.user === null ? (
           <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
@@ -304,7 +400,7 @@ function OrdersList(): ReactElement {
         ) : (
           <Flex vertical gap={2}>
             <span style={{ ...code, fontSize: token.fontSizeSM, wordBreak: 'break-all' }}>
-              {row.user.user_id}
+              <CopyText text={row.user.user_id} maxLength={WHOLE} />
             </span>
             <span style={{ ...code, ...secondary }}>{row.user.phone_masked ?? t.dash}</span>
           </Flex>
@@ -357,6 +453,15 @@ function OrdersList(): ReactElement {
       title: t.columns.flags,
       render: (_, row) => <FlagTags flags={row.flags} holdReason={row.hold_reason} />,
     },
+    ...platformExtraColumns().map((field): ListColumn => ({
+      key: `extra:${field}`,
+      title: field,
+      defaultVisible: false,
+      render: (_, row) => {
+        const value: unknown = row[field];
+        return typeof value === 'string' || typeof value === 'number' ? String(value) : t.dash;
+      },
+    })),
     {
       key: 'actions',
       title: t.columns.actions,
@@ -374,6 +479,50 @@ function OrdersList(): ReactElement {
       ),
     },
   ];
+
+  // 「操作」 always shows (fixed at the right); every other column can be hidden.
+  const settings = reconcile(saved ?? defaultSettings(configurable), configurable);
+  const shownKeys = new Set(settings.filter((one) => one.visible).map((one) => one.key));
+  const visibleColumns = columns.filter(
+    (column) => !configurable.some((one) => one.key === column.key) || shownKeys.has(column.key),
+  );
+  const toggleColumn = (key: string) => {
+    const next = settings.map((one) => (one.key === key ? { key, visible: !one.visible } : one));
+    // Only a setting the storage accepted is shown, so the table never differs from what is kept.
+    if (writeSettings(COLUMNS_KEY, next)) setSaved(next);
+  };
+
+  // 「列设置」 belongs to the table: shown with rows only.
+  const columnSettings =
+    status === 'ready' && data !== undefined && data.items.length > 0 ? (
+      <Flex vertical gap={8}>
+        <Flex justify="flex-end">
+          <Button aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}>
+            {t.columnSettings}
+          </Button>
+        </Flex>
+        {settingsOpen ? (
+          <Card size="small">
+            <Flex wrap gap={16}>
+              {settings.map((one) => {
+                const column = columns.find((candidate) => candidate.key === one.key);
+                if (column === undefined) return null;
+                return (
+                  <Checkbox
+                    key={one.key}
+                    checked={one.visible}
+                    disabled={one.visible && shownKeys.size <= 1}
+                    onChange={() => toggleColumn(one.key)}
+                  >
+                    {column.title}
+                  </Checkbox>
+                );
+              })}
+            </Flex>
+          </Card>
+        ) : null}
+      </Flex>
+    ) : null;
 
   const labels = t.conditionLabels;
   const paidText =
@@ -495,17 +644,18 @@ function OrdersList(): ReactElement {
       <Table<OrderRow>
         rowKey="order_id"
         size="middle"
-        columns={columns}
+        columns={visibleColumns}
         dataSource={data.items}
         scroll={{ x: 'max-content' }}
         pagination={{
           current: query.page,
-          pageSize: PAGE_SIZE,
+          pageSize: query.pageSize ?? PAGE_SIZE,
           total: data.total,
-          showSizeChanger: false,
+          showSizeChanger: true,
+          pageSizeOptions: [...PAGE_SIZES],
           showTotal: (total) => t.total(total),
+          onChange: changePage,
         }}
-        onChange={changePage}
       />
     );
   }
@@ -707,11 +857,64 @@ function OrdersList(): ReactElement {
       ) : (
         <Card>
           <Flex vertical gap={12}>
+            <ListTabs
+              name={t.tabs.platformName}
+              items={PLATFORMS.map((value) => ({ key: value, label: platformLabel(value) }))}
+              active={query.platform}
+              onChoose={choosePlatform}
+            />
+            <ListTabs
+              name={t.tabs.rebateName}
+              items={REBATE_STATUSES.map((value) => ({
+                key: value,
+                label: codeLabel('rebate_status', value),
+              }))}
+              active={query.rebateStatus}
+              onChoose={chooseRebate}
+            />
             {applied}
+            {columnSettings}
             {body}
           </Flex>
         </Card>
       )}
+    </Flex>
+  );
+}
+
+/**
+ * One row of filter tabs (「全部」 first, no counts). A tab list that wraps onto more lines instead of
+ * scrolling its overflow out of view, so every tab stays reachable at narrow widths; each tab is an
+ * antd Button with the tab role and its selected state.
+ */
+function ListTabs(props: {
+  readonly name: string;
+  readonly items: readonly { readonly key: string; readonly label: string }[];
+  readonly active: string | undefined;
+  readonly onChoose: (key: string) => void;
+}): ReactElement {
+  const { name, items, active, onChoose } = props;
+  const all = [{ key: ALL, label: t.tabs.all }, ...items];
+  const current = active ?? ALL;
+  return (
+    <Flex role="tablist" aria-label={name} wrap gap={4}>
+      {all.map((item) => {
+        const selected = item.key === current;
+        return (
+          <Button
+            key={item.key}
+            role="tab"
+            aria-selected={selected}
+            type={selected ? 'primary' : 'text'}
+            autoInsertSpace={false}
+            onClick={() => {
+              if (!selected) onChoose(item.key);
+            }}
+          >
+            {item.label}
+          </Button>
+        );
+      })}
     </Flex>
   );
 }
