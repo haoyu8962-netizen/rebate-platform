@@ -384,6 +384,38 @@ export function createRebateQuoteHandler(deps: RebateQuoteDeps): ToolHandler {
   return { name: toolName(), definition: definition(), audience: 'all', run };
 }
 
+/** B3-05w: the scenario entry's quote of one product_key, with no_rebate kept apart. */
+export type ProductQuoteOutcome =
+  | Extract<
+      LinkQuoteOutcome,
+      { readonly kind: 'ok' | 'price_unavailable' | 'no_card' | 'no_rebate' }
+    >
+  | { readonly kind: 'rejected' };
+
+export interface ProductQuoteRunner {
+  /** Fresh lookup + get_rebate_quote's card flow; a thrown lookup or registration propagates. */
+  run(productKey: string, context: ToolCallContext): Promise<ProductQuoteOutcome>;
+}
+
+/**
+ * B3-05w (BR-PRICE-08): the scenario entry's own runner over get_rebate_quote's flow
+ * (readProduct → quoteProduct), so the entry gets no_rebate (no commit, no link row) instead of
+ * the model tool's no_card. A malformed product_key is rejected before any lookup; anything the
+ * lookup, the card entry or the registration throws reaches the caller, which tells the
+ * upstream's answer apart from a server-side failure. createRebateQuoteHandler is unchanged.
+ */
+export function createProductQuoteRunner(deps: RebateQuoteDeps): ProductQuoteRunner {
+  return {
+    async run(productKey, ctx) {
+      if (!isProductKeyFormat(productKey)) return { kind: 'rejected' };
+      const product = await deps.catalog.readProduct(productKey, ctx);
+      const outcome = await quoteProduct(deps, product, ctx);
+      if (outcome.kind === 'ok') return outcome;
+      return { kind: outcome.kind, cards: [] };
+    },
+  };
+}
+
 /**
  * Resolves one candidate to a single product snapshot. URL candidates go only to parseUrl, token
  * candidates only to the injected TokenParser; without that port token parsing is unavailable and
