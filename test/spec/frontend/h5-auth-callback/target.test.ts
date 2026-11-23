@@ -49,6 +49,11 @@ it.each([
   'a%2Fb',
   'a%26b%3D1',
   'a%23b',
+  'a%5Bb',
+  'a%5Cb',
+  'a%5Db',
+  'a%5Eb',
+  'a%60b',
   '%E5%87%91',
   'a%00b',
   '%ZZ',
@@ -71,4 +76,9 @@ it('[AC-F1-11d#6] 两种回调都丢弃额外参数和错误详情', () => {
   const extra = '&token=private&redirect_uri=https%3A%2F%2Fexample.test&error_description=why';
   expect(callbackTarget(`?code=C&state=S${extra}`)).toBe(`${DEEP_LINK}?code=C&state=S`);
   expect(callbackTarget(`?error=denied&state=S${extra}`)).toBe(`${DEEP_LINK}?state=S&error=1`);
+});
+
+it('[AC-F1-11d#10] code 和 state 只解码一次，仍含百分号时不跳转', () => {
+  expect(callbackTarget('?code=%2541&state=s')).toBeNull();
+  expect(callbackTarget('?code=Code&state=%2541')).toBeNull();
 });

@@ -2,7 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 
 const H5 = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../apps/h5');
 const ENTRY = '../../../../apps/h5/src/entries/auth-callback';
@@ -20,10 +20,14 @@ afterEach(() => {
   history.replaceState(null, '', '/');
 });
 
-async function openEntry(): Promise<void> {
+function readEntryPage(): Document {
   const index = join(H5, 'src/entries/auth-callback/index.html');
   expect(existsSync(index), 'auth-callback/index.html').toBe(true);
-  const page = new DOMParser().parseFromString(readFileSync(index, 'utf8'), 'text/html');
+  return new DOMParser().parseFromString(readFileSync(index, 'utf8'), 'text/html');
+}
+
+async function openEntry(): Promise<void> {
+  const page = readEntryPage();
   const scripts = page.querySelectorAll('script');
   expect(scripts).toHaveLength(1);
   const script = scripts[0]!;
@@ -32,9 +36,23 @@ async function openEntry(): Promise<void> {
   const load = ENTRY_MODULES[`${ENTRY}/${source}`];
   expect(load, 'index.html 引用 auth-callback 的 main 模块').toBeDefined();
 
-  document.body.innerHTML = page.body.innerHTML;
-  vi.resetModules();
-  await load!();
+  const originalHead = Array.from(document.head.childNodes);
+  try {
+    document.head.innerHTML = page.head.innerHTML;
+    document.body.innerHTML = page.body.innerHTML;
+    const entryScript = document.querySelector('script');
+    vi.resetModules();
+    await load!();
+
+    const loadedScripts = document.querySelectorAll('script');
+    expect(loadedScripts).toHaveLength(1);
+    expect(loadedScripts[0]).toBe(entryScript);
+    expect(
+      document.querySelectorAll('img, iframe, link[rel~="preload" i], link[rel~="prefetch" i]'),
+    ).toHaveLength(0);
+  } finally {
+    document.head.replaceChildren(...originalHead);
+  }
 }
 
 function observeBrowser(search: string) {
@@ -60,10 +78,19 @@ function observeBrowser(search: string) {
 
   const fetch = vi.fn();
   vi.stubGlobal('fetch', fetch);
+  const sendBeacon = vi.fn(() => true);
+  const browser = window.navigator;
+  const originalSendBeacon = Object.getOwnPropertyDescriptor(browser, 'sendBeacon');
+  Object.defineProperty(browser, 'sendBeacon', { configurable: true, value: sendBeacon });
+  onTestFinished(() => {
+    if (originalSendBeacon) Object.defineProperty(browser, 'sendBeacon', originalSendBeacon);
+    else Reflect.deleteProperty(browser, 'sendBeacon');
+  });
   const xhr = vi.spyOn(XMLHttpRequest.prototype, 'send').mockImplementation(() => {});
   const forbidden = {
     fetch,
     xhr,
+    sendBeacon,
     localStorage: vi.spyOn(window, 'localStorage', 'get'),
     sessionStorage: vi.spyOn(window, 'sessionStorage', 'get'),
     cookieRead: vi.spyOn(document, 'cookie', 'get'),
@@ -106,4 +133,15 @@ it.each([
   expect(JSON.stringify(history.state) ?? '').not.toMatch(/Fixture(?:Code|State|Detail|\/Code)/);
   for (const [name, call] of Object.entries(forbidden)) expect(call, name).not.toHaveBeenCalled();
   for (const log of logs) expect(log).not.toHaveBeenCalled();
+});
+
+it('[AC-F1-11d#9] 页面在模块脚本前设置 no-referrer', () => {
+  const page = readEntryPage();
+  const referrer = page.head.querySelector('meta[name="referrer" i]');
+  const script = page.querySelector('script[type="module"]');
+  expect(referrer?.getAttribute('content')).toBe('no-referrer');
+  expect(script).not.toBeNull();
+  expect(referrer!.compareDocumentPosition(script!) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
 });
