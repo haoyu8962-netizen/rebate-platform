@@ -1,0 +1,24 @@
+id: B2-04rd
+repo: rebate-platform
+title: 'B2-04rd：settlement 后台补充入批——金额相符的候选也先按订单键升序取订单锁、锁后重读订单状态与截点内结算记录再定类别；锁后已入账的转受益人补记项，不再生成无效的首次入账草稿（BR-FUND-04 ④⑧⑫；主干既有并发缺口，B2-18 的前置小单）'
+type: impl
+# 2026-11-23 funds 入账（编排 D10-2679；负责人 2026-11-23 12:06 对话选「拆小，先修主干上的补充批次并发缺口」）。来源：B2-18 资金评审 r4（Codex）剩余的 1 条 S1，本线对照主干原文核过是主干既有行为、不是 B2-18 带入（FU-SUPPLEMENT-LOCKED-RECHECK）。资金单（RV2）：Claude 实现、独立方写规则测试、Codex 全量资金评审。基于主干，不叠在 B2-18 上。
+# 现状（主干）：补充发起后用来源读到的订单状态逐单分类，候选不取订单锁、不重读；全部校验完才查仍在未执行批次里的单。旧批次若在补充读完来源之后才把某张单入账（并为冻结的受益人开立补记义务），补充仍按「待入账」给它生成首次入账草稿、漏掉本该生成的受益人补记项；执行时入账环节以订单不在待入账而跳过（不重复入账），财务须再发起一轮补充。
+# 范围（写死）：只改 settlement/bill/supplement 的补充入批——候选快路径（金额相符）也按订单键升序先取订单锁（与入账环节同一把 orders 的订单键锁），锁后重读该单的订单状态与截点内的联盟结算记录，按重读结果重新定类别：仍是候选照常入批；已入账的走现有的受益人补记项分支；其余类别走各自现有分支。不碰月结账单任务、入账执行、来源读口与别的路径；不改金额口径、容差与任何取值（只读 08）。
+# 验收钉住负责人点的场景：补充读完来源之后、旧批次先提交入账 → 同一轮补充生成受益人补记项、不生成首次入账草稿；执行这批不重复入账。另钉：锁序（升序、与入账环节同一把锁）、无并发时现有补充行为不变（test/spec/settlement/supplement/** 等冻结用例不改、保持通过；红了就停下报编排，不改 test/）。
+# 不在本单：D10-2679 ③ 后半句「规则测试接只读库、断言补充路径不读旧差错结论」——主干上补充的生产来源读口仍按设计读「以联盟为准」结论（bill/infra/bill-source.ts 的 readUnionAuthoritative），去掉它是 B2-18 的改动，那条断言在主干上不成立，要落在 B2-18 的规则测试里（FU-B2-18-SPEC-R4-GAPS，本线已另报编排）。
+# 之后（D10-2679 ④）：本单合并后 B2-18 变基到新主干再过一轮资金评审。
+refs: [BR-FUND-04]
+refs_hash:
+  BR-FUND-04: 1c403c23b8bb
+deps: []
+paths:
+  - 'apps/api/src/modules/settlement/bill/supplement/**'
+test_paths:
+  - 'test/spec/settlement/supplement-locked-recheck/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/supplement-locked-recheck/**'
+status: todo
