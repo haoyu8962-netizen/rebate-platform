@@ -3888,7 +3888,9 @@ export interface paths {
          *     list's columns; the attributed user's phone number is masked 3 + 4 (BR-ID-33), never the
          *     full number. An orders task is always masked (`masked=true`) and the request takes
          *     neither `unmasked` nor `reason` (either one is 20001). Lifecycle and retention as for
-         *     every export (below).
+         *     every export (below). Until the D2 back end merges, the server answers every
+         *     `resource=orders` create with 20001 (`data.fields=[resource]`) before any permission
+         *     check: no task, no audit.
          *     Quarterly tax export (`resource=tax_withdrawals`, BR-WDR-21): `filters.quarter` selects the
          *     natural quarter by `paid_at` (+08:00).
          *     Masked version: `export` and `fund.view`, no step-up, no `reason` (`reason` without
