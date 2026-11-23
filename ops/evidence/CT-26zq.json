@@ -1,0 +1,73 @@
+{
+  "task": "CT-26zq",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "spec_commit": "71c30bdf6def5da08b3481a53a7bc4790ace9284",
+  "red_tests": [
+    "test/spec/contracts/agent-notice-price-unavailable/notice.test.ts > [AC-CT-26zq#1] 默认价格查询提示文案逐字匹配且没有变量",
+    "test/spec/contracts/agent-notice-price-unavailable/notice.test.ts > [AC-CT-26zq#2] 资金术语清单逐键将价格查询提示归入普通文案",
+    "test/spec/contracts/agent-notice-price-unavailable/notice.test.ts > [AC-CT-26zq#3] 运行时生成清单逐键收录价格查询提示，分类结果为普通文案"
+  ],
+  "risk_note": "Contract text only (D10-2666, FU-AGENT-NOTICE-50301-PLACEHOLDER). contracts/texts.default.json gains one key without variables, agent.notice.price_unavailable = 「暂时查不到这件商品的价格，请稍后再试。」 (source: the TODO at apps/api/src/modules/catalog/application/card-entry.ts:48 and its 稍后再试 button; no promise, no {platform_name}); specs/fund-term-keys.yaml lists it under ordinary.keys like agent.notice.quote_failed (no fund keyword, not in exempt), fund-term-keys.gen.ts regenerated. texts version unchanged (precedent B3-13a). No agent, money, ledger or attribution code touched; agent switches its price_unavailable / no_card branches to this key in a later task. Registering the key in BR-TEXT-22 is on the orchestrator's merge-back list (D10-2666 ②).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "71c30bdf6def5da08b3481a53a7bc4790ace9284",
+      "tree": "b01a8767f5633f8ad266c2c4c971420e90dd48c5",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-23T04:37:07Z",
+      "finished_at": "2026-11-23T04:37:10Z",
+      "red_tests": [
+        "test/spec/contracts/agent-notice-price-unavailable/notice.test.ts > [AC-CT-26zq#1] 默认价格查询提示文案逐字匹配且没有变量",
+        "test/spec/contracts/agent-notice-price-unavailable/notice.test.ts > [AC-CT-26zq#2] 资金术语清单逐键将价格查询提示归入普通文案",
+        "test/spec/contracts/agent-notice-price-unavailable/notice.test.ts > [AC-CT-26zq#3] 运行时生成清单逐键收录价格查询提示，分类结果为普通文案"
+      ],
+      "expected": ["test/spec/contracts/agent-notice-price-unavailable/notice.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "88547412bce6bd5e8862baadb130c2a9d271b9ab4a63d316639b3999ab27750b"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex contract review via tools/agent/codex-run.sh (implementation by Opus, approvals 27). r1 pass; one out-of-scope S2: the key is not yet in the BR-TEXT-22 fixed-phrase table at the locked SPEC_REF - planning merge-back owned by the orchestrator (D10-2666 ②), not in this task. couli-runs/CT-26zq/review-contract-codex-r1.json. Test machine on the implementation tree: --tests test/spec/contracts, test/spec/content, packages/contracts-ts green (303 files, 7072 tests), verify:fast exit 0."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (gpt-6.2-sol, ledger tester codex, attempt 1), so the spec-test review went to a fresh independent Claude (approvals 19). r1 pass, no findings, no out-of-scope items."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "3f83c2d82c0f6802f5ff1bca0f5a51ad0f37d809",
+    "specs": "5b1b075156cc136909d767c3d039cc8783e124ec"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
