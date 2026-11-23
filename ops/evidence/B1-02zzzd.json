@@ -1,0 +1,95 @@
+{
+  "risk_note": "B1-02zzzd (ruling D10-2688 option A, D10-2691, D10-2699): the staging test-phone fixed code (B1-02zza, approvals 48) now also covers purpose bind. One set (sms-codes.ts TEST_PHONE_PURPOSES) gains 'bind'; send() and verifyAndConsume() read the same set, so a listed number's bind code is drawn, stored as an HMAC and rate-limited as before but not handed to the sender, and the node's fixed code consumes it. Only with APP_ENV=staging (re-checked on every call; the service still refuses test phones in any other environment), only for listed numbers; unlisted numbers, prod / local / test and the landing page registration are unchanged. Frozen [AC-B1-02zza#14] (which pinned bind as always sent) is rewritten through modify_existing rule_change (BR-ID-05, ruling D10-2688). infra/staging/README.md 1.11 updated (purposes; default blocked prefixes do not include 199; the admin SMS step-up and admin verify-phone do not read STAGING_TEST_PHONES). Approvals 48 covers bind by the orchestrator's ruling D10-2699.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "money r1 (full, --base 608e1c3de) pass with no findings (couli-runs/B1-02zzzd/review-money-r1-codex.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests written by Codex (1 attempt); spec-test r1 by an independent Claude context (claude-run.sh, approvals 36) pass with no findings."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts > [AC-B1-02zzzd#1] staging 名单内号码发 bind 码正常受理且不调发送器，59 秒后再次发码返回 42901",
+    "test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts > [AC-B1-02zzzd#2] 固定码核销当前 bind 码后两种码均返回 20003，login 与 step_up 仍不发短信且可用固定码核销",
+    "test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts > [AC-B1-02zzzd#3] staging 名单外号码的 bind 码照常发送并可核销，固定码只对名单内号码有效",
+    "test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts > [AC-B1-02zzzd#4] prod 环境不启用 bind 固定码，同一号码只在 staging 可用固定码核销",
+    "test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts > [AC-B1-02zzzd#4] local 环境不启用 bind 固定码，同一号码只在 staging 可用固定码核销",
+    "test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts > [AC-B1-02zzzd#4] test 环境不启用 bind 固定码，同一号码只在 staging 可用固定码核销"
+  ],
+  "modify_existing": [
+    {
+      "file": "test/spec/identity/staging-test-phone/sms-codes.int.test.ts",
+      "test": "[AC-B1-02zza#14] 名单内号码发 bind 码照常调发送器，固定码不能核销 bind 码；随后 login 不调发送器",
+      "retitle_to": "[AC-B1-02zza#14] 名单内号码发 bind 码不调发送器，固定码可核销 bind 码；随后 login 也不调发送器",
+      "reason": "rule_change",
+      "br": ["BR-ID-05"],
+      "before": "it('[AC-B1-02zza#14] 名单内号码发 bind 码照常调发送器，固定码不能核销 bind 码；随后 login 不调发送器', async () => {\n  expect(server).toBeDefined();\n  const phone = testPhone();\n  await withFixture(\n    server!,\n    async (f) => {\n      success(await f.send('bind', phone));\n      expect(f.sender.outbox()).toEqual([\n        expect.objectContaining({ app_id: 'couli', phone, purpose: 'bind' }),\n      ]);\n      const sent = f.lastCode();\n      if (sent !== FIXED) {\n        expect(await f.verify(FIXED, 'bind', phone)).toEqual({ code: 20002 });\n      }\n      expect((await f.verify(sent, 'bind', phone)).code).toBe(0);\n      f.clock.advanceMs(60_000);\n      success(await f.send('login', phone));\n      expect(f.sender.outbox()).toHaveLength(1);\n    },\n    staging([phone]),\n  );\n});",
+      "after": "it('[AC-B1-02zza#14] 名单内号码发 bind 码不调发送器，固定码可核销 bind 码；随后 login 也不调发送器', async () => {\n  expect(server).toBeDefined();\n  const phone = testPhone();\n  await withFixture(\n    server!,\n    async (f) => {\n      success(await f.send('bind', phone));\n      expect(f.sender.outbox()).toEqual([]);\n      expect((await f.verify(FIXED, 'bind', phone)).code).toBe(0);\n      f.clock.advanceMs(60_000);\n      success(await f.send('login', phone));\n      expect(f.sender.outbox()).toEqual([]);\n    },\n    staging([phone]),\n  );\n});",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/identity/application/sms-codes.ts TEST_PHONE_PURPOSES without bind (main before this task): a listed staging number's bind send calls the sender and the fixed code answers 20002, so the changed block fails (outbox not empty / verify not 0)",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "task": "B1-02zzzd",
+  "spec_commit": "330e10816bdec781b8ede101168d11f94bb5a288",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "330e10816bdec781b8ede101168d11f94bb5a288",
+      "tree": "43a3af02afba988bb8a293a784fe7d55ea071e12",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-23T07:49:12Z",
+      "finished_at": "2026-11-23T07:49:17Z",
+      "red_tests": [
+        "test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts > [AC-B1-02zzzd#1] staging 名单内号码发 bind 码正常受理且不调发送器，59 秒后再次发码返回 42901",
+        "test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts > [AC-B1-02zzzd#2] 固定码核销当前 bind 码后两种码均返回 20003，login 与 step_up 仍不发短信且可用固定码核销",
+        "test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts > [AC-B1-02zzzd#3] staging 名单外号码的 bind 码照常发送并可核销，固定码只对名单内号码有效",
+        "test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts > [AC-B1-02zzzd#4] prod 环境不启用 bind 固定码，同一号码只在 staging 可用固定码核销",
+        "test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts > [AC-B1-02zzzd#4] local 环境不启用 bind 固定码，同一号码只在 staging 可用固定码核销",
+        "test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts > [AC-B1-02zzzd#4] test 环境不启用 bind 固定码，同一号码只在 staging 可用固定码核销"
+      ],
+      "expected": ["test/spec/identity/staging-test-phone-bind/sms-codes.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "d39449149698390ee3284e4f06f9966e42b24b1f735e23ab687e3af6c8d467dd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ca8ef4bec79a489affccf5c28061e9fbc0b40eb3",
+    "specs": "5b1b075156cc136909d767c3d039cc8783e124ec"
+  }
+}
