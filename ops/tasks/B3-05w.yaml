@@ -1,0 +1,38 @@
+id: B3-05w
+repo: rebate-platform
+title: 'FU-B3-05V-ENTRY-NO-REBATE：商品情境入口报价结果是无返利时出「这件商品暂无返利」（no_rebate.notice，与粘贴链接一致），不再被模型工具折成 no_card 出「暂时查不到这件商品的价格」；模型工具对模型的输出不变'
+type: impl
+# 2026-11-23 agent 线入账（D10-2737：B3-05v general r1 S1 记 out_of_scope，本单落地后紧接着做；原文 couli-runs/B3-05v/review-general-1-codex.json）。
+# 现状（主干，B3-05v #632 之后）：stream/mount/entry.ts 的 createScenarioEntryReaders().quote 借 tools/quote 的 createRebateQuoteHandler（模型工具）跑报价；
+#   该 handler 在 tools/quote/index.ts:377 把 quoteProduct 的 no_rebate 折成 failed('no_card')（模型只看到 no_card，这是对模型的口径，要保留），
+#   entry.ts:93 再映射成入口的 no_card → orchestrator/entry/index.ts 出 agent.notice.price_unavailable。粘贴同一商品链接走 createLinkQuoteRunner，已区分 no_rebate → no_rebate.notice（B3-05u）。
+# 只做：① tools/quote 新增一个入口专用的导出（照 createLinkQuoteRunner / quoteProduct 的口径，返回 ok / price_unavailable / no_card / no_rebate，no_rebate 不登记 link），
+#   或等价的不改 handler 对模型输出的区分口；createRebateQuoteHandler 的行为与 modelView 一字不变。② stream/mount/entry.ts 用它把 no_rebate 原样交给入口（EntryQuoteOutcome 已含 no_rebate）。
+#   ③ orchestrator/entry/index.ts 对 no_rebate 出 no_rebate.notice（与链接路径 noRebateKey 一致；stop、照常计数，BR-AI-15 细则：无返利归商品本身）；有模型时同样出这条 notice 再接着处理文字。
+# 不改：price_unavailable / no_card → agent.notice.price_unavailable（B3-05v）；parse_error 各码、服务端原因（server_failed → 50401 / quote_failed）；模型工具对模型的 no_card；无返利旁【搜相似商品】（FU-B3-05U-NO-REBATE-SIMILAR，契约）不做。
+# 验收：入口无返利（无模型 / 有模型各一）出 no_rebate.notice、文字不含花括号、不出报价卡、不登记 link、stop；与粘贴同一商品链接出同一张 notice；模型工具对同一商品仍回 no_card；计数照常（不退还）。
+# 冻结用例：预计不用改（主干冻结测试里没有钉入口无返利的期望）；先红 / --related 若列出要改的，先报编排补登。风险级：agent 模块（白名单 RV1）；动 tools/quote 只加导出。spec-test 任务书原样附 D10-2317 ①；本机只跑单文件，重活上测试机（D10-2262）。
+refs: [BR-PRICE-08, BR-AI-15, BR-TEXT-22]
+refs_hash:
+  BR-PRICE-08: 55f8cc6de6a2
+  BR-AI-15: d3070a739c03
+  BR-TEXT-22: 8a3aa03c38b2
+deps: [B3-05v]
+paths:
+  - 'apps/api/src/modules/agent/orchestrator/entry/**'
+  - 'apps/api/src/modules/agent/stream/mount/entry.ts'
+  - 'apps/api/src/modules/agent/stream/mount/entry.test.ts'
+  - 'apps/api/src/modules/agent/tools/quote/**'
+test_paths:
+  - 'test/spec/agent/entry-no-rebate/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/entry-no-rebate/**'
+  - 'test/spec/agent/scenario-entry/**'
+  - 'test/spec/agent/entry-quote-refund/**'
+  - 'test/spec/agent/tools-quote/**'
+  - 'test/spec/agent/deterministic-failures/**'
+status: todo
+pr: null
