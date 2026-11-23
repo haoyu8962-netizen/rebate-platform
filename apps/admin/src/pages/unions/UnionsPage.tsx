@@ -205,6 +205,27 @@ function AccountsTab({ clock }: { readonly clock: AuthClock }): ReactElement {
       ),
     },
     {
+      // F1-10gd：只读显示能否自动续期；字段缺省（旧版响应）与 null 一样显示「未知」，不读行里其它字段。
+      key: 'refreshable',
+      title: t.columns.refreshable,
+      width: 112,
+      render: (_, row) => {
+        const refreshable = row.auth_refreshable ?? null;
+        return (
+          <Tag
+            color={refreshable === null ? 'default' : refreshable ? 'success' : 'error'}
+            style={{ marginInlineEnd: 0 }}
+          >
+            {refreshable === null
+              ? t.refreshable.unknown
+              : refreshable
+                ? t.refreshable.yes
+                : t.refreshable.no}
+          </Tag>
+        );
+      },
+    },
+    {
       key: 'renewed',
       title: t.columns.renewed,
       width: 200,

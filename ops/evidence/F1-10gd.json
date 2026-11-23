@@ -1,0 +1,74 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-union-auth-refreshable/refreshable.test.ts > [AC-F1-10gd-LIST#1] 账号行按续期字段显示，保留到期时间与估算标记",
+    "test/spec/frontend/admin-union-auth-refreshable/refreshable.test.ts > [AC-F1-10gd-MANUAL#1] 保存响应的续期字段为 null 时将该行从能更新为未知",
+    "test/spec/frontend/admin-union-auth-refreshable/refreshable.test.ts > [AC-F1-10gd-MANUAL#2] 保存响应缺省续期字段时将该行从能更新为未知"
+  ],
+  "risk_note": "F1-10gd. apps/admin only (pages/unions/UnionsPage.tsx, texts/unions.ts): read-only column on the union accounts tab showing auth_refreshable (true / false / null; omitted treated as null) as 能 / 不能 / 未知. No new requests, no writes, no amounts, no durations or credentials displayed; expiry column unchanged. RV2 only because the PR carries rule tests under test/**.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 full review (codex-run.sh, fresh read-only session), pass with 0 findings; general was refused by codex-run because the task is RV2 (rule tests under test/**). couli-runs/F1-10gd/review-money-r1.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests written by Codex (codex-run.sh impl --phase test, 1 attempt); spec-test review by an independent Claude context (claude-run.sh, fresh session; tester codex so Codex cannot review its own tests), r1 pass with one out-of-scope S2 (derived duration text not pinned) carried into the implementation brief as requirement 5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-10gd",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "spec_commit": "2913a0b52babb668719b049e4e41acc1840a3d83",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "2913a0b52babb668719b049e4e41acc1840a3d83",
+      "tree": "886247d7b490e974fb09c78a7cdf3d9e656114fd",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-22T17:35:23Z",
+      "finished_at": "2026-11-22T17:35:32Z",
+      "red_tests": [
+        "test/spec/frontend/admin-union-auth-refreshable/refreshable.test.ts > [AC-F1-10gd-LIST#1] 账号行按续期字段显示，保留到期时间与估算标记",
+        "test/spec/frontend/admin-union-auth-refreshable/refreshable.test.ts > [AC-F1-10gd-MANUAL#1] 保存响应的续期字段为 null 时将该行从能更新为未知",
+        "test/spec/frontend/admin-union-auth-refreshable/refreshable.test.ts > [AC-F1-10gd-MANUAL#2] 保存响应缺省续期字段时将该行从能更新为未知"
+      ],
+      "expected": ["test/spec/frontend/admin-union-auth-refreshable/refreshable.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "ea0362657a6639bfde3431ca6dff44560fc81cb45f509faaa5b107f329513579"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c6070ceada88853d4795321936b2fdde7cec8cdc",
+    "specs": "489fe4589f767716b4d54b417d2c60a50922c23e"
+  }
+}

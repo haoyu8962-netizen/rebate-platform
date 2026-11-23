@@ -28,11 +28,18 @@ export const unionsTexts = {
     account: '账号名',
     authStatus: '授权状态',
     expiresAt: '到期时间（北京时间）',
+    refreshable: '能否自动续期',
     renewed: '最近更新',
     probe: '最近探测',
     actions: '操作',
   },
   estimated: '估算',
+  // F1-10gd（CT-24ha）：auth_refreshable 只显示三种文案之一；字段缺省与 null 同义，显示「未知」。
+  refreshable: {
+    yes: '能',
+    no: '不能',
+    unknown: '未知',
+  },
   estimatedHint: '联盟未返回到期时间，按授权时间推算',
   autoRenewed: '自动刷新',
   neverProbed: '未探测',
