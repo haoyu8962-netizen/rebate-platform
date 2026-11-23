@@ -12,8 +12,10 @@ type: impl
 #   ④ prod（及 local / test）下名单号码 bind 照常调发送器、固定码无效；⑤ login / step_up 原有行为不变。
 # infra/staging/README.md 测试号一节改写用途说明（login、step_up、bind）。不动契约、不动 admin、不动落地页。RV2（identity、infra 路径）。
 # 补丁 1（D10-2691）：README 测试号一节另写两点——① 默认拦截号段是 +86170 / 171 / 162 / 165 / 167（sms-limits.ts:38-44），199 不在内；② 管理后台的短信二次验证与「登记验证手机号」不走 sms-codes.ts（admin-step-up.ts 经 SmsSender 端口直发、admin-verify-phone.ts:235），不认 STAGING_TEST_PHONES，staging 后台不要把 199 测试号登记成管理员验证手机号（负责人自己的号可以）。只改 README 文字，admin 代码不动。
-refs: []
-refs_hash: {}
+# 补丁 2（2026-11-23 be，编排 D10-2699）：冻结用例 [AC-B1-02zza#14] 钉着旧规则（名单内 bind 照常发送、固定码不能核销），登 modify_existing（rule_change、br BR-ID-05、ruling D10-2688、retitle_to）；refs 补 BR-ID-05（B1-02zza 的依据）。approvals 第 48 条同一用意，不另补（D10-2699）。
+refs: [BR-ID-05]
+refs_hash:
+  BR-ID-05: 0737ee3b67e2
 deps: [B1-02zza]
 paths:
   - 'apps/api/src/modules/identity/application/sms-codes.ts'
@@ -22,6 +24,15 @@ paths:
   - 'ops/tasks/B1-02zzzd.yaml'
 test_paths:
   - 'test/spec/identity/staging-test-phone-bind/**'
+  - 'test/spec/identity/staging-test-phone/sms-codes.int.test.ts'
+modify_existing:
+  - file: 'test/spec/identity/staging-test-phone/sms-codes.int.test.ts'
+    test: '[AC-B1-02zza#14] 名单内号码发 bind 码照常调发送器，固定码不能核销 bind 码；随后 login 不调发送器'
+    retitle_to: '[AC-B1-02zza#14] 名单内号码发 bind 码不调发送器，固定码可核销 bind 码；随后 login 也不调发送器'
+    reason: rule_change
+    br: [BR-ID-05]
+    ruling: D10-2688
+    note: '只把 bind 从照常发送改为与 login / step_up 同一处理，只 staging、只名单内号码'
 impl: claude
 tester: codex
 accept:
