@@ -14,7 +14,7 @@ type: impl
 # 风险级：agent 模块 RV1；spec-test 任务书原样附 D10-2317 ①；本机不跑 vitest，单文件也走测试机 --tests（D10-2478）；探针放一次性工作树（D10-2481）。
 refs: [BR-AI-18]
 refs_hash:
-  BR-AI-18: 81915a2d5a19
+  BR-AI-18: e91b63b54cf3
 deps: [B3-06b]
 paths:
   - 'apps/api/src/modules/agent/guard/review/**'

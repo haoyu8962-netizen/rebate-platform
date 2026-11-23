@@ -11,8 +11,8 @@ type: impl
 # 补丁 2（funds，D10-2431）：参数化用例 [AC-B2-04n#18] 改按展开后的两行标题登记（门禁按行认）；补登 [AC-B2-04r#4] 的应结未结部分（D10-2425 (a) 范围内）；db/settlement/core/kit.ts 文件级 support 条目（取迁移源的范围扩到 settle_bills）。
 refs: [BR-FUND-04, BR-FUND-09]
 refs_hash:
-  BR-FUND-04: 1c403c23b8bb
-  BR-FUND-09: d6b5a66ad5a9
+  BR-FUND-04: 27c6704ac9af
+  BR-FUND-09: 891062fdd62b
 deps: []
 paths:
   - 'apps/api/src/modules/settlement/**'

@@ -6,9 +6,9 @@ type: impl
 # 状态备注：可先开。
 refs: [BR-CALC-23, BR-FUND-04, BR-FUND-09]
 refs_hash:
-  BR-CALC-23: 617aabea160e
-  BR-FUND-04: 1c403c23b8bb
-  BR-FUND-09: d6b5a66ad5a9
+  BR-CALC-23: c5b3de41bcd6
+  BR-FUND-04: 27c6704ac9af
+  BR-FUND-09: 891062fdd62b
 deps: []
 paths:
   - 'specs/state-machines/settle-batch.yaml'

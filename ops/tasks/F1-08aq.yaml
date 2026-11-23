@@ -8,7 +8,7 @@ type: test-change
 # 资金页（RV2）用例：规则测试由无上下文的独立 Claude 写、另一独立 Claude 做 spec-test（D10-2003，Codex 额度用尽）；证据如实记 claude-independent。
 refs: [BR-WDR-16]
 refs_hash:
-  BR-WDR-16: c5899cc85558
+  BR-WDR-16: c0ec2e5d1d93
 deps: [F1-08al]
 paths:
   - 'test/spec/frontend/admin-withdrawal-manual-paid-controls/**'

@@ -6,8 +6,8 @@ type: contract
 # 本线技术取舍（由编排者摘进任务书第 9 节）：照 04 原文写形状；拒绝码与 data.reason 新值优先复用已登记码，确需新码先请规划在 08 §13.11 登记（04 已写「由契约线按 §13.11 分配」，本任务先列清单交规划回写，再落 error-codes.yaml）；delivery / status 两组枚举进 contracts/enums/identity.yaml；本任务**不含**旧身份查看接口与其权限点（单列、不复用 user.realname_fix / pii.reveal_*，编排 01:4x）——权限点新增属 specs/permissions.yaml 与冻结测试，另立规划回写 + test-change + 契约任务；新增 App 路由 DataCopy 登记进 contracts/routes.json；新码：契约起草时列出不受理与拒绝所需的码，先请规划在 08 §13.11 登记、提升 SPEC_REF 后才写 error-codes.yaml 并落地（同 CT-24o 先例），在此之前任务停在评审后不落地；contract_sections 只填 11.1，编排者把 04 §6.1 me/data-copies 行、§6.6 两段、§3.2 personal_data_copies 与旧身份两行、§11.2 user.realname_fix / user.data_export 两行逐字摘进第 9 节，并点名 x-session-scopes [full, deletion_only] 与 10006 白名单；user.realname_corrected 事件登记 EVENT_NAMES 冻结测试同样另开 test-change（编排已提醒契约线）。
 refs: [BR-ID-25, BR-ID-40, BR-ID-30, BR-ID-33, BR-ID-01, BR-ID-31]
 refs_hash:
-  BR-ID-25: dcab91fa0ccc
-  BR-ID-40: 994eb7b30461
+  BR-ID-25: e6c03645af46
+  BR-ID-40: 032e568e1173
   BR-ID-30: 8ea92988c8cd
   BR-ID-33: 01b25f773b29
   BR-ID-01: fa91c30c2e54

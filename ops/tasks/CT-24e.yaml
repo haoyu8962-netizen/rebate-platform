@@ -8,8 +8,8 @@ type: contract
 # 写操作只出形状：幂等、乐观锁（row_version / expected 值）与错误码按 04 / 08 与已合并后台写接口先例（CT-24l 子项审核）；改上级的环与深度等判定按 BR-INV-10 原文，不在契约里另定。
 refs: [BR-INV-10, BR-INV-14]
 refs_hash:
-  BR-INV-10: 409e844448ec
-  BR-INV-14: 7990610d6b60
+  BR-INV-10: 530afe1648f3
+  BR-INV-14: b0c33aba1ae3
 contract_sections: ['11.2']
 deps: []
 paths:

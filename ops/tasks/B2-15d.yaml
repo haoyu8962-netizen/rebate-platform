@@ -7,7 +7,7 @@ type: impl
 # 2026-10-23 编排 10:27：Codex 不可用至 10-30，规则测试与评审改由独立 Claude（tools/agent/claude-run.sh，approvals #36），tester 改为 claude-independent。
 refs: [BR-PAY-05, BR-PAY-02, BR-PAY-03]
 refs_hash:
-  BR-PAY-05: cc6a654d316e
+  BR-PAY-05: 43e231b2c187
   BR-PAY-02: 7bccee0eeb26
   BR-PAY-03: ce78552d8b5d
 deps: [B2-15c]

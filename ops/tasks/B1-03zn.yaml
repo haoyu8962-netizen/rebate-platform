@@ -12,7 +12,7 @@ type: impl
 # 账户、被拦请求申诉的计次与锁不变；用户端行为不变。
 refs: [BR-ID-36]
 refs_hash:
-  BR-ID-36: 307e5d74ad54
+  BR-ID-36: 1518efdd5860
 deps: [B1-03ze, B1-03zl]
 paths:
   - 'apps/api/src/modules/risk/application/admin-appeals-write.ts'

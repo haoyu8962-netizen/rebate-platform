@@ -11,7 +11,7 @@ type: impl
 # 2026-11-23 补丁 1（funds）：paths 加 `apps/api/src/modules/settlement/bill/unsettled-count.test.ts`——这条既有单元测试（[AC-B2-18a-UNIT#6]，补充发起遇应结未结）的脚本化假驱动对没写进脚本的语句一律拒绝，本单让候选先取订单键锁后多出一条取锁语句；只给假驱动加「认得取锁语句」的分支，断言一条不改。单元测试不属冻结的规则测试，但文件在本单原 paths 之外，实现方照约束没有动、报回本线。
 refs: [BR-FUND-04]
 refs_hash:
-  BR-FUND-04: 1c403c23b8bb
+  BR-FUND-04: 27c6704ac9af
 deps: []
 paths:
   - 'apps/api/src/modules/settlement/bill/supplement/**'

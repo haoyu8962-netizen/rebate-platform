@@ -9,7 +9,7 @@ type: impl
 # 要点：注册表放 content/domain（纯数据 + 查询函数，按通配写法如 convert.enabled.<platform> 匹配）；CachedContentReader.configValue 对开关键用 ≤5 秒 TTL（注入 Clock，可测），非开关键保持 CONTENT_CACHE_TTL_MS；不引入 Redis（裁定 2）；暂缓项见裁定 9；权限点按 04 §11.2 的清单逐键登记、不按前缀推（台账评审 r3 S1：withdraw.enabled 属 switch.payout）；需额外校验而本组不做的开关键 agent.whitelist_only 仍登记为开关（照样 ≤5 秒缓存、10 秒生效），但标记「后台暂不可改」（台账评审 r2 S2；agent.whitelist_only 改 off 需核对登记编号 BR-AI-12、agent.page_guide.routes 与 external_hosts 是配置项、不是开关，不进开关注册表，由 F1-10e 的配置注册表登记并标「后台暂不可改」（台账评审 r3 S2）；台账评审 S2-1），留给做校验的任务。与 content-client 线 F1-02c～f 同改 content/**，后落地者变基（台账评审 S2-5）。
 refs: [BR-INV-21]
 refs_hash:
-  BR-INV-21: e78518b0b251
+  BR-INV-21: 4f7038350f5b
 deps: []
 paths:
   - 'apps/api/src/modules/content/**'

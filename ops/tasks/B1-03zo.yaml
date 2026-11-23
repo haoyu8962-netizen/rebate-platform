@@ -8,7 +8,7 @@ type: impl
 # 不改列表页行为与契约。计数走部分索引 appeals_processing_deadline_idx（app_id, deadline_at）WHERE status='processing'。
 refs: [BR-ID-36]
 refs_hash:
-  BR-ID-36: 307e5d74ad54
+  BR-ID-36: 1518efdd5860
 deps: [B1-03zd]
 paths:
   - 'apps/api/src/modules/risk/application/admin-appeals-read.ts'

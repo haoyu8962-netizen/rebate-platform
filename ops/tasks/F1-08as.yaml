@@ -10,9 +10,9 @@ type: impl
 # 资金页（RV2）：money 评审；规则测试与首轮评审由无上下文的独立 Claude（D10-2003）。
 refs: [BR-WDR-16, BR-FUND-24, BR-ID-34]
 refs_hash:
-  BR-WDR-16: c5899cc85558
-  BR-FUND-24: efcdeeafa452
-  BR-ID-34: 6f4bb7f212cb
+  BR-WDR-16: c0ec2e5d1d93
+  BR-FUND-24: 7cca08c02491
+  BR-ID-34: 8bd50e43d350
 deps: [F1-08al]
 paths:
   - 'apps/admin/src/pages/withdrawals/**'

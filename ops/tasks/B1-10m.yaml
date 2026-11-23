@@ -8,7 +8,7 @@ type: impl
 # 动钱：找回通过、指定归属都写归属并改订单状态；不改用例逻辑，只接线。契约只去 planned，占契约槽。
 refs: [BR-ATTR-31]
 refs_hash:
-  BR-ATTR-31: 372b06f03b05
+  BR-ATTR-31: 853082f204ef
 deps: []
 paths:
   - 'apps/api/src/modules/orders/orders-admin.module.ts'

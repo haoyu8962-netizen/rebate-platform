@@ -6,7 +6,7 @@ type: impl
 # 2026-11-09 台账补丁（先例 B2-02u）：实现时去掉 blacklistClawbackAdminReconDiff 的 x-implementation: planned，paths 加 openapi.yaml 与生成物；ref_id 以契约为准（{order_key}#BLACKLIST#{维度}，CT-24zzf r2）。
 refs: [BR-ATTR-26, BR-FUND-08]
 refs_hash:
-  BR-ATTR-26: d115d750e3a5
+  BR-ATTR-26: 2764b31ac92d
   BR-FUND-08: 4135d1b47230
 deps: [CT-24zzf, B2-04zzlt]
 paths:

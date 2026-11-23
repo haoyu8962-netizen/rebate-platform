@@ -7,8 +7,8 @@ type: contract
 # 新码按 08 §13.11 分配（20902 data.resource 新增 union_pid / union_account，同场景已有 active 的拒绝等）。联盟账号与推广位无页面规格，本契约只出接口形状。
 refs: [BR-ID-24, BR-ATTR-02]
 refs_hash:
-  BR-ID-24: 4cba1bd5dd15
-  BR-ATTR-02: f8cda78b8778
+  BR-ID-24: 4d9f9642f621
+  BR-ATTR-02: c496154f5bcf
 contract_sections: ['11.2']
 deps: []
 paths:

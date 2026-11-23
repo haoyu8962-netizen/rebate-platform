@@ -9,8 +9,8 @@ type: test-change
 # 新鲜独立 Claude 写、另一位只读复审；PR 正文附一次手工变异证据（把 run_done 发布挪到事务外 → 新例红）。RV2（test/**）。
 refs: [BR-FUND-04, BR-TEXT-09]
 refs_hash:
-  BR-FUND-04: 1c403c23b8bb
-  BR-TEXT-09: f6ccbeb61808
+  BR-FUND-04: 27c6704ac9af
+  BR-TEXT-09: 00b5038b8224
 deps: [B2-04zf, B2-04zfa]
 paths:
   - 'test/spec/settlement/run-done-same-tx/**'

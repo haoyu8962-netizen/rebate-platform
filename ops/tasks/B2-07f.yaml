@@ -7,9 +7,9 @@ type: impl
 # 开关 payout.proven_success_writeoff.enabled 现为默认关（content 注册表），生产不触发；本任务合并前不得打开。
 refs: [BR-WDR-23, BR-WDR-08, BR-WDR-21]
 refs_hash:
-  BR-WDR-23: 14059410a548
-  BR-WDR-08: 8c55a3ce6b57
-  BR-WDR-21: 89dfa119b6d1
+  BR-WDR-23: 92950f49116f
+  BR-WDR-08: 91b013262446
+  BR-WDR-21: d6ca3849b4f3
 deps: [B2-07e]
 paths:
   - 'apps/api/src/modules/payout/application/withdrawal-proven-success.ts'

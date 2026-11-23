@@ -10,7 +10,7 @@ refs_hash:
   BR-CALC-02: 0ffe8a4d0b65
   BR-CALC-27: 45de21c98df0
   BR-FUND-03: 79c4dd948e09
-  BR-CALC-23: 617aabea160e
+  BR-CALC-23: c5b3de41bcd6
 deps: [B1-08zh, B2-04zj]
 paths:
   - 'apps/api/src/modules/orders/domain/update-plan.ts'

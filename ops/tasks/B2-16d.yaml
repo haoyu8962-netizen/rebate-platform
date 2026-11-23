@@ -8,7 +8,7 @@ type: impl
 # budget 不受筛选影响，「今日」按 +08:00 日历日（packages/domain 的日历函数）。路由放 growth 的 http/admin，装配在 app.module。
 refs: [BR-INV-24, BR-ID-33]
 refs_hash:
-  BR-INV-24: 8c11043a392c
+  BR-INV-24: f37c80461c35
   BR-ID-33: 01b25f773b29
 deps: [CT-25a, CT-25b, CT-25e, B2-16c, B1-10j]
 paths:

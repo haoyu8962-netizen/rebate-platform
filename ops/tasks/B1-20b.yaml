@@ -10,9 +10,9 @@ type: impl
 # 补丁 1（D10-2215 / D10-2216）：新号规范化后等于当前号 → 20001 [phone]（规范化后、核码前；不核码不核令牌不写库不吊销）。换号成功同事务写 1 行 audit_logs：system_actor=system:self_service（中文名「用户本人（自助）」），action user_phone_change，target users:<uid>，before / after 只含 phone_masked（3+4，同 admin-profile-edit）；经 admin 已有的 createSystemAuditWriter.appendAction 在 app.module 装配，不改 AuditPort。system actor 是契约枚举 audit_system_actor（enums/admin.yaml 与 openapi AdminAuditSystemActor），追加一个值要改契约、重生 contracts-ts、补 audit-log-view.ts 的中文名表，故加上述 paths，占契约槽。
 refs: [BR-ID-05, BR-ID-06, BR-ID-08]
 refs_hash:
-  BR-ID-05: 0737ee3b67e2
+  BR-ID-05: 3aed9928d039
   BR-ID-06: c7cd53a04cae
-  BR-ID-08: a2e69361dbee
+  BR-ID-08: 771953f2804d
 deps: [B1-20a, B1-02zzzc]
 paths:
   - 'apps/api/src/modules/identity/**'

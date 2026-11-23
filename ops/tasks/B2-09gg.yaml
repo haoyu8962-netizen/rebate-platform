@@ -9,8 +9,8 @@ type: impl
 # 规则测试要钉：净额与 B{id} 凭证的关系、处理时再核（D10-1134）、二次申诉去重。RV2，规则测试新鲜独立 Claude，money Codex medium。
 refs: [BR-FUND-22, BR-ID-36]
 refs_hash:
-  BR-FUND-22: c9930aaf2459
-  BR-ID-36: 307e5d74ad54
+  BR-FUND-22: 71f9d1a05a10
+  BR-ID-36: 1518efdd5860
 deps: [CT-24zzh, B2-09gd]
 paths:
   - 'apps/api/src/app.module.ts'

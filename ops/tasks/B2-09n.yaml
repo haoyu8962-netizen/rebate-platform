@@ -7,7 +7,7 @@ type: impl
 # 冻结用例（D10-327，#24 报核，已实跑）：[AC-B2-09l#13、15、16、23、24、27、31] 和 [AC-B2-06c#3] 四条混通道，只改 batch_id、row_version、updated_at 的期望，只改这些，由新鲜独立 Claude 在规则测试作者提交里改。
 refs: [BR-WDR-11, BR-WDR-12]
 refs_hash:
-  BR-WDR-11: 9193f1c7ed27
+  BR-WDR-11: c831cbcd3fd0
   BR-WDR-12: 3a822658ab35
 deps: [B2-09m]
 paths:

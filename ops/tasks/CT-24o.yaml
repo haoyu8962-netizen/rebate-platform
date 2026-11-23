@@ -11,8 +11,8 @@ type: contract
 #   contract_sections 只填 11.1（04 §11 引言「勾选、撤销与账号增停只限超管，需 step-up 并写审计」不在小节内、§11 全节 17KB 带上超限）：编排者把 §11 引言与 §6.6 admins 一行逐字摘进第 9 节；refs 列 BR-ID-43（初始密码 / 重新生成 / 重置验证器 / 停用）、BR-ID-34（账号安全与验证手机号）、BR-ID-33（手机号加密与脱敏）、BR-ID-42（停用即取消导出），契约任务书只列编号与标题。
 refs: [BR-ID-43, BR-ID-34, BR-ID-33, BR-ID-42]
 refs_hash:
-  BR-ID-43: aabc9139136d
-  BR-ID-34: 6f4bb7f212cb
+  BR-ID-43: d8bbf2cae2bb
+  BR-ID-34: 8bd50e43d350
   BR-ID-33: 01b25f773b29
   BR-ID-42: 2f9cd1710ed3
 contract_sections: ['11.1']

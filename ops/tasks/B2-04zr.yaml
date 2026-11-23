@@ -7,7 +7,7 @@ type: impl
 # 补录历史回款：敞口从录入日起下降，不回改历史快照（D10-589 ②）。method 本单只写 ADMIN_ENTRY，R1_RECON 写入口归后续对账（D10-538 ③）。CASH_BANK 判据 payout.channel_enabled.bank_card。
 refs: [BR-FUND-20, BR-FUND-16]
 refs_hash:
-  BR-FUND-20: 768e4fe2668e
+  BR-FUND-20: c29dae35777c
   BR-FUND-16: 077f6d412d5a
 deps: [B2-04zh]
 paths:

@@ -8,7 +8,7 @@ type: impl
 refs: [BR-TEXT-08, BR-WDR-33]
 refs_hash:
   BR-TEXT-08: b3178ff2da40
-  BR-WDR-33: '7886471e9297'
+  BR-WDR-33: '543d57be5414'
 deps: [CT-26zo]
 paths:
   - 'contracts/texts.default.json'

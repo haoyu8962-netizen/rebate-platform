@@ -8,8 +8,8 @@ type: impl
 # 状态备注：等 B2-05e 合并（驳回原因码写法在它里面）；be B1-12u 入账后在 deps 对齐。
 refs: [BR-WDR-10, BR-TEXT-09]
 refs_hash:
-  BR-WDR-10: 1db6b508e224
-  BR-TEXT-09: f6ccbeb61808
+  BR-WDR-10: cc2b291be1fd
+  BR-TEXT-09: 00b5038b8224
 deps: [B2-05e]
 paths:
   - 'apps/api/src/modules/payout/**'

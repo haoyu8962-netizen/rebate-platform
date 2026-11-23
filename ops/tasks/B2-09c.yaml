@@ -7,7 +7,7 @@ type: impl
 # 不含写操作（审核、驳回、批量通过、手动打款、批次执行、自动到账设置、撤销微信转账）与风险标记重算，后续另入账。
 refs: [BR-WDR-10]
 refs_hash:
-  BR-WDR-10: 1db6b508e224
+  BR-WDR-10: cc2b291be1fd
 deps: [CT-24y]
 paths:
   - 'apps/api/src/modules/payout/application/admin-withdrawals*.ts'

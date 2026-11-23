@@ -12,7 +12,7 @@ type: impl
 # 去掉 planned 后到 B1-27i 落地前，企业微信路径的请求只能停在 ready、24 小时后 expired（可重新登记，due_at 沿用）。
 refs: [BR-ID-40]
 refs_hash:
-  BR-ID-40: 994eb7b30461
+  BR-ID-40: 032e568e1173
 deps: [CT-24q, B1-27d, B1-27h]
 paths:
   - 'apps/api/src/modules/identity/application/admin-data-copies*.ts'

@@ -8,7 +8,7 @@ type: impl
 # 现在无生产影响（京东结算明细导入未做、邀请奖励总开关默认关），属收紧。B1-08zi 合并后开工。RV2（邀请奖励发放 / 作废，资金）。
 refs: [BR-INV-24, BR-FUND-03]
 refs_hash:
-  BR-INV-24: 8c11043a392c
+  BR-INV-24: f37c80461c35
   BR-FUND-03: 79c4dd948e09
 deps: [B1-08zi]
 paths:

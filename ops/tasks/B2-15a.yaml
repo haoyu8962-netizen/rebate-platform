@@ -13,7 +13,7 @@ refs: [BR-PAY-02, BR-PAY-04, BR-PAY-05, BR-PAY-06]
 refs_hash:
   BR-PAY-02: 7bccee0eeb26
   BR-PAY-04: 6763ec22c098
-  BR-PAY-05: cc6a654d316e
+  BR-PAY-05: 43e231b2c187
   BR-PAY-06: 102e1fb8839f
 deps: [B2-15g]
 paths:

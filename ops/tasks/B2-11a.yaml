@@ -8,7 +8,7 @@ type: impl
 # 状态备注：等 B2-05d 合并；与 B2-05 / B2-06 同改 payout/**，串行。
 refs: [BR-WDR-29, BR-WDR-03, BR-WDR-02]
 refs_hash:
-  BR-WDR-29: c576e429b058
+  BR-WDR-29: 3f0cf42a584e
   BR-WDR-03: c1b5f37a0dd1
   BR-WDR-02: b8ce66617ed9
 deps: [B2-05d, B1-03k, B1-03n, B2-11z]

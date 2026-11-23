@@ -8,7 +8,7 @@ type: impl
 # 2026-11-21 补丁 1（funds，D10-2402）：冻结用例 [AC-B1-04zza#32] 的第二条处罚带 punish_status '1'，现断言它也记 PUNISH / SUCCEEDED，与规划/12 §1.3 处罚表「解冻」行、BR-FUND-22 相反，本单落地必红：handler.test.ts 列进 test_paths，块级 modify_existing 只把写入方收到的期望由三条改为第一、三条，其余断言不动。
 refs: [BR-FUND-22, BR-FUND-02]
 refs_hash:
-  BR-FUND-22: c9930aaf2459
+  BR-FUND-22: 71f9d1a05a10
   BR-FUND-02: f287247d4d07
 deps: []
 paths:

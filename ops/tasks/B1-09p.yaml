@@ -7,14 +7,14 @@ type: impl
 # 可先于 B1-09n 落地；app.module 相邻处后落地者两边都留。生产验收（同步订单走到用户接口金额非 null）放 B1-09n 的 rebate-wiring 规则测试。
 refs: [BR-FUND-04, BR-FUND-08, BR-FUND-17, BR-FUND-18, BR-CALC-02, BR-CALC-13, BR-TEXT-02, BR-ID-36]
 refs_hash:
-  BR-FUND-04: 1c403c23b8bb
+  BR-FUND-04: 27c6704ac9af
   BR-FUND-08: 4135d1b47230
   BR-FUND-17: 02ee5b1ae349
   BR-FUND-18: c7ebd23ee75e
   BR-CALC-02: 0ffe8a4d0b65
-  BR-CALC-13: 54c06125032c
+  BR-CALC-13: 194c980d806d
   BR-TEXT-02: 6a9e76de47ef
-  BR-ID-36: 307e5d74ad54
+  BR-ID-36: 1518efdd5860
 deps: []
 paths:
   - 'apps/api/src/app.module.ts'

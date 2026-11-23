@@ -8,7 +8,7 @@ type: contract
 # 分工（approvals 34、19、27）：Claude Opus 实现，Codex 写一致性 / 转写规则测试（先红）并对抗评审；packages/domain 属资金区 RV2。不改 contracts/，不占契约槽。
 refs: [BR-WDR-08]
 refs_hash:
-  BR-WDR-08: 8c55a3ce6b57
+  BR-WDR-08: 91b013262446
 deps: [CT-04a]
 paths:
   - 'specs/state-machines/withdrawal.yaml'

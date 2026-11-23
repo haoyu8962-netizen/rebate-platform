@@ -7,10 +7,10 @@ type: impl
 # 范围：队列表勾选（只能勾可执行的 APPROVED 单）、批量栏、执行确认对话框（本地预览将执行清单与执行前检查：开关、队列暂停、W 时效、可用额度、限额，均取 overview 不写死；服务端再查）、StepUpModal、只发一次 POST /admin/v1/payout-batches；整批拒绝的原因与逐单结果按响应显示；暂停态【执行所选】隐藏或说明原因（按测试）；幂等键规则同 F1-08ai（结果未定的失败沿用原键）。
 refs: [BR-WDR-11, BR-WDR-12, BR-WDR-13, BR-ID-34]
 refs_hash:
-  BR-WDR-11: 9193f1c7ed27
+  BR-WDR-11: c831cbcd3fd0
   BR-WDR-12: 3a822658ab35
   BR-WDR-13: 11b5c3e1a9b3
-  BR-ID-34: 6f4bb7f212cb
+  BR-ID-34: 8bd50e43d350
 deps: [F1-08ba]
 paths:
   - 'apps/admin/src/pages/withdrawals/**'

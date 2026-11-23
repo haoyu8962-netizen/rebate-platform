@@ -8,10 +8,10 @@ type: impl
 # 风险 RV2（packages/domain）。Codex 写规则测试，Claude 过审，Opus 实现，Codex 资金评审。与 B2-03a 同改 packages/domain/src，串行。
 refs: [BR-CALC-05, BR-CALC-06, BR-CALC-07, BR-CALC-11]
 refs_hash:
-  BR-CALC-05: 14f3b5bfa113
+  BR-CALC-05: a79620a3b077
   BR-CALC-06: 8cc9b9a9afc7
   BR-CALC-07: dabd48fba586
-  BR-CALC-11: 0bdd7a33eb83
+  BR-CALC-11: 32a4bb92195a
 deps: [B2-03a]
 paths:
   - 'packages/domain/src/**'

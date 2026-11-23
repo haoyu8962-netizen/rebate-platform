@@ -7,7 +7,7 @@ type: impl
 refs: [BR-PAY-07, BR-PAY-05]
 refs_hash:
   BR-PAY-07: a98350f4412a
-  BR-PAY-05: cc6a654d316e
+  BR-PAY-05: 43e231b2c187
 deps: [B2-15j]
 paths:
   - 'apps/api/src/modules/payment/**'

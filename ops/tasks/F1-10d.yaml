@@ -9,7 +9,7 @@ type: impl
 # 要点：按键传「任一」权限点数组（按注册表逐键登记的权限点：04 §11.2 switch.payout 所列的键（withdraw.enabled、payout.enabled、payout.queue_paused、payout.channel_enabled.<channel>、payout.channel_paused.<channel>；payout.proven_success_writeoff.enabled 等是 config.business 配置项、不是开关）为 [switch.all, switch.payout]，switch.pay 所列的键（pay.enabled、pay.channel_enabled.<pay_channel>）为 [switch.all, switch.pay]，其余（含 withdraw.auto_payout.enabled）为 [switch.all]；04 §11.2，台账评审 r2 S1）；只能改注册表里标为后台可改的开关键（其余 20001 [key]，裁定 5）；值按注册表类型校验（20001 [value]）；一个事务里 UPDATE config_items … WHERE version = expected 并 INSERT config_item_versions，不匹配 20902 resource=kill_switch（裁定 4）；审计 kill_switch_change（带 key、from/to version、前后值、reason）与 warn 日志 config_change_alert（裁定 7）；规则测试含「改后 10 秒内读取方看到新值」（注入时钟推进）；当前版本没有历史行（种子写入）时照常改值。payout.queue_paused / payout.channel_paused.* 以后由打款线系统置位：系统写入也须走同一套 version 比较并更新与历史行（在注册表注释里写明，台账评审 S2-4）。
 refs: [BR-INV-21]
 refs_hash:
-  BR-INV-21: e78518b0b251
+  BR-INV-21: 4f7038350f5b
 deps: [CT-02i, CT-02m, F1-10a, F1-10b, F1-10c]
 paths:
   - 'apps/api/src/modules/content/**'

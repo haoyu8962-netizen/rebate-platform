@@ -7,8 +7,8 @@ type: impl
 # 只读，不写库、不改 blocklist。规则测试钉：撤销后原值不再作废（WAITING / ESTIMATED）、已入账不再发 after_credit、结案后新增的名单值照常命中、别的订单照常、upheld 不豁免、没有申诉不豁免。须先于或同时于 B2-09gd 合并。RV2，规则测试新鲜独立 Claude，money 评审 Codex medium。
 refs: [BR-ATTR-26, BR-ID-36]
 refs_hash:
-  BR-ATTR-26: d115d750e3a5
-  BR-ID-36: 307e5d74ad54
+  BR-ATTR-26: 2764b31ac92d
+  BR-ID-36: 1518efdd5860
 deps: []
 paths:
   - 'apps/api/src/modules/risk/application/order-blocklist*.ts'

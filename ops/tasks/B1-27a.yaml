@@ -10,7 +10,7 @@ type: impl
 # ⑤ EVENT_NAMES 按 02 §11 位置登记 user.realname_corrected（载荷只含新旧 id_no_hmac 等），同事务入队；每次提交（含被拒）一条审计 user_realname_correct，被拒的在独立短事务写，明文不进日志与审计。
 refs: [BR-ID-25]
 refs_hash:
-  BR-ID-25: dcab91fa0ccc
+  BR-ID-25: e6c03645af46
 deps: [CT-24q, B1-27d, B1-27e, B1-27j]
 paths:
   - 'apps/api/src/modules/identity/application/admin-realname-correction*.ts'

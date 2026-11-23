@@ -10,7 +10,7 @@ refs_hash:
   BR-FUND-06: f903ec00076a
   BR-FUND-07: b61cfed0a77b
   BR-FUND-08: 4135d1b47230
-  BR-ATTR-26: d115d750e3a5
+  BR-ATTR-26: 2764b31ac92d
 deps: [B2-04lb, B2-03q, B1-10m, B1-09n]
 paths:
   - 'apps/api/src/modules/orders/orders-admin.module.ts'

@@ -14,8 +14,8 @@ type: impl
 # 补丁 5（funds，编排 D10-2618 / D10-2646：负责人 2026-11-22 对话确认）：登记三条要求旧结论读口「被调用」的冻结用例——[AC-B2-04zd#6]、[AC-B2-04ze#25] 改为不再调用；[AC-B2-04zg#10] 只把故障注入点换到出账必经的现行读取上、容灾断言不改。金额期望值都不动。
 refs: [BR-FUND-04, BR-FUND-09]
 refs_hash:
-  BR-FUND-04: 1c403c23b8bb
-  BR-FUND-09: d6b5a66ad5a9
+  BR-FUND-04: 27c6704ac9af
+  BR-FUND-09: 891062fdd62b
 deps: []
 paths:
   - 'apps/api/src/modules/settlement/**'

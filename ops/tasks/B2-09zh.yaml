@@ -6,7 +6,7 @@ type: impl
 # RV2（payout 路径）；规则测试新鲜独立 Claude，money 评审 Codex（D10-823，档位 medium）。
 refs: [BR-WDR-16]
 refs_hash:
-  BR-WDR-16: c5899cc85558
+  BR-WDR-16: c0ec2e5d1d93
 deps: [B2-09m]
 paths:
   - 'apps/api/src/modules/payout/application/admin-manual-paid.ts'

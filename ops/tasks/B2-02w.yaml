@@ -8,7 +8,7 @@ type: impl
 # 不改列表行为与契约。RV2 ledger，规则测试新鲜独立 Claude，money Codex medium。
 refs: [BR-FUND-22]
 refs_hash:
-  BR-FUND-22: c9930aaf2459
+  BR-FUND-22: 71f9d1a05a10
 deps: []
 paths:
   - 'apps/api/src/modules/ledger/application/admin-recon-diffs*.ts'

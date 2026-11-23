@@ -6,7 +6,7 @@ type: impl
 # 2026-10-24 CT-24s（#1476）已合并：排序以契约为准（platform、account_name、union_account_id），标题里的「created_at、id」以契约更正；paths 补 planned-operations.gen.ts（去 planned 后 codegen 会改它）。
 refs: [BR-ATTR-02]
 refs_hash:
-  BR-ATTR-02: f8cda78b8778
+  BR-ATTR-02: c496154f5bcf
 deps: [CT-24s, B1-22h]
 paths:
   - 'apps/api/src/modules/union/**'

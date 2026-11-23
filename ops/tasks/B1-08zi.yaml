@@ -9,7 +9,7 @@ refs_hash:
   BR-FUND-03: 79c4dd948e09
   BR-FUND-07: b61cfed0a77b
   BR-CALC-15: dec05fa8363f
-  BR-FUND-01: 71daaebae9bd
+  BR-FUND-01: 521dbf5aee39
   BR-FUND-05: 972b05594c07
 deps: [B2-04zi, B1-08zit]
 paths:

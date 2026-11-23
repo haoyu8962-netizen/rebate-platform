@@ -6,7 +6,7 @@ type: contract
 # 2026-10-30 paths 补 contracts/error-codes.yaml：30155 的 meaning 也是旧口径（同 app × platform × pid_scene），同改为同联盟账号；error-codes.gen.ts 已在 packages/contracts-ts/** 内。
 refs: [BR-ATTR-02]
 refs_hash:
-  BR-ATTR-02: f8cda78b8778
+  BR-ATTR-02: c496154f5bcf
 contract_sections: ['6.6']
 deps: [CT-24h]
 paths:

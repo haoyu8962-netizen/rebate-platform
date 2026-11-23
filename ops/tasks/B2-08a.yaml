@@ -7,7 +7,7 @@ type: impl
 refs: [BR-WDR-20, BR-ID-25]
 refs_hash:
   BR-WDR-20: 3127fc4b4b65
-  BR-ID-25: dcab91fa0ccc
+  BR-ID-25: e6c03645af46
 deps: [B2-07f]
 paths:
   - 'db/migrations/**'

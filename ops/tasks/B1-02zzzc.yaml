@@ -6,7 +6,7 @@ type: impl
 # 2026-11-20 台账补丁 3（w1）：冻结用例登记——test_paths 加冻结文件（补丁 4 后 12 个）（花括号合写）；modify_existing 块级（甲 D10-1702 负责人放行五种、乙 D10-1705、丙 D10-1706）与文件级 support；被整份重判文件里未改的绿用例登 red_exempt、risk-state 块外一行登 red_exempt_outside（D10-1984 / D10-1986 先例）；核对表 couli-runs/B1-02zzzc/frozen-cand/table.md，丙类清单 couli-runs/W1-search-linking/rewrite-1780/c-special-and-b-scope.md。 2026-11-20 台账补丁 4（w1）：证据探针 R 实测这 12 块的主干原文在新实现下仍绿、改动非必需（换样例 / 去多余令牌 / 只改标题），块体恢复主干原文、撤掉对应 modify_existing 条目；deletion-request/scope、payout-bank-card/submit、staging-test-phone/audit 三文件回到主干原样、移出 test_paths；reverify-gates/kit.ts 只有一段头注释、撤回后反向检查无红，注释撤回、support 条目与 test_paths 一并撤。冻结改动只减不增。 台账补丁 5：risk-state 的 support 条目撤掉——65 行在 for…of 路由表里，已由 [AC-B1-03h#17] step-up 行按改后全名的块级条目覆盖（CT-06zzzzzv），support 只许 token 插入、这里是替换，evidence-check 拒。 台账补丁 6：补回 staging-test-phone/audit [AC-B1-02zza#25] 与 step-up/sms [AC-B1-02f#29] 两条——补丁 4 把它们恢复主干原文后 CI 类型检查红（TS2322 / TS2345：withdraw 已不是 StepUpAction），改写是契约变化逼出来的，块体照补丁 3 改写。 台账补丁 7：冻结用例第二批——B1-02zzzb 新冻结文件 step-up-digest/issue.int.test.ts：[AC-B1-02zzzb#1] 6 行按 D10-2205 方案甲移到新 .each 块（red_exempt_outside + 未动 7 例 red_exempt）、#8 块（withdraw 两处）登 modify_existing，期望码与不签发不变、data.fields 改为实测精确字段集；负责人 2026-11-20 选 A（D10-2193），另开 FU-20001-ONEOF-FIELDS-NOISE 整理字段后再改一次。
 refs: [BR-ID-08, BR-WDR-01, BR-WDR-03, BR-WDR-07]
 refs_hash:
-  BR-ID-08: a2e69361dbee
+  BR-ID-08: 771953f2804d
   BR-WDR-01: 3116933082da
   BR-WDR-03: c1b5f37a0dd1
   BR-WDR-07: 3eaedce150d8

@@ -9,8 +9,8 @@ type: contract
 # 写明：重算结果不进 auto_decision、不参与 BR-WDR-30 ⑫ 判定（自动判定只读申请时快照），不改提现状态。
 refs: [BR-WDR-29, BR-ID-34]
 refs_hash:
-  BR-WDR-29: c576e429b058
-  BR-ID-34: 6f4bb7f212cb
+  BR-WDR-29: 3f0cf42a584e
+  BR-ID-34: 8bd50e43d350
 contract_sections: ['11.1']
 deps: []
 paths:

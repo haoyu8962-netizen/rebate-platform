@@ -13,7 +13,7 @@ type: impl
 # TODO(规划/11 §2.3): 站内信与短信的文案 — blocked on 08 BR-TEXT 登记（契约：模板代码随实现定，文案待 BR-TEXT）；真实 OSS 存放 — blocked on B1-30，此前 staging / prod 生成按 ExportStoreUnavailableError 失败。
 refs: [BR-ID-40]
 refs_hash:
-  BR-ID-40: 994eb7b30461
+  BR-ID-40: 032e568e1173
 deps: [B1-27d, B1-27f, B1-34h]
 paths:
   - 'apps/api/src/modules/identity/application/data-copy-worker*.ts'

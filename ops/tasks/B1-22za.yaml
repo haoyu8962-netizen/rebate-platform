@@ -7,7 +7,7 @@ type: impl
 # 完成 2026-11-12（#3273，头 fef9f5d60ebe）：db/seeds/0007_agent-master-switches.sql 照 0003–0006 只 INSERT … ON CONFLICT (app_id, key) DO NOTHING，couli 两键 true、updated_by seed；规则测试独立 Claude 写（含已有 false 行时种子不覆盖的混合情形），先红后绿。
 refs: [BR-AI-12]
 refs_hash:
-  BR-AI-12: d45a7ac17d5a
+  BR-AI-12: e14696942da7
 deps: []
 paths:
   - 'db/seeds/0007_agent-master-switches.sql'
