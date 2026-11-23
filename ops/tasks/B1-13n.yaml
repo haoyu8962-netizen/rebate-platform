@@ -34,4 +34,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/identity/staging-test-realname/**'
-status: todo
+status: done
+pr: 599
