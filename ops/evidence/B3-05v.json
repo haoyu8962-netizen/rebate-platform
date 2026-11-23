@@ -1,0 +1,224 @@
+{
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "spec_commit": "8607a9f13bae84e62799bda0b78034d4cce32c21",
+  "red_tests": [
+    "test/spec/agent/deterministic-failures/price-notice.test.ts > [AC-B3-05v#1] 单链接 price_unavailable 下发无占位符的价格提示并正常结束",
+    "test/spec/agent/deterministic-failures/price-notice.test.ts > [AC-B3-05v#2] 单链接 no_card 下发无占位符的价格提示并正常结束",
+    "test/spec/agent/deterministic-failures/price-notice.test.ts > [AC-B3-05v#3] price_unavailable 与解析失败、服务端失败及成功链接混排时各自下发对应提示或报价",
+    "test/spec/agent/deterministic-failures/price-notice.test.ts > [AC-B3-05v#4] no_card 与解析失败、服务端失败及成功链接混排时各自下发对应提示或报价",
+    "test/spec/agent/deterministic-failures/price-notice.test.ts > [AC-B3-05v#5] 无模型商品情境入口 price_unavailable 下发无占位符的价格提示并正常结束",
+    "test/spec/agent/deterministic-failures/price-notice.test.ts > [AC-B3-05v#6] 无模型商品情境入口 no_card 下发无占位符的价格提示并正常结束"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "8607a9f13bae84e62799bda0b78034d4cce32c21",
+      "tree": "793c3bf55f440c1a1c69f79b78f5fa05508423d4",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-23T09:08:17Z",
+      "finished_at": "2026-11-23T09:08:24Z",
+      "red_tests": [
+        "test/spec/agent/deterministic-failures/price-notice.test.ts > [AC-B3-05v#1] 单链接 price_unavailable 下发无占位符的价格提示并正常结束",
+        "test/spec/agent/deterministic-failures/price-notice.test.ts > [AC-B3-05v#2] 单链接 no_card 下发无占位符的价格提示并正常结束",
+        "test/spec/agent/deterministic-failures/price-notice.test.ts > [AC-B3-05v#3] price_unavailable 与解析失败、服务端失败及成功链接混排时各自下发对应提示或报价",
+        "test/spec/agent/deterministic-failures/price-notice.test.ts > [AC-B3-05v#4] no_card 与解析失败、服务端失败及成功链接混排时各自下发对应提示或报价",
+        "test/spec/agent/deterministic-failures/price-notice.test.ts > [AC-B3-05v#5] 无模型商品情境入口 price_unavailable 下发无占位符的价格提示并正常结束",
+        "test/spec/agent/deterministic-failures/price-notice.test.ts > [AC-B3-05v#6] 无模型商品情境入口 no_card 下发无占位符的价格提示并正常结束"
+      ],
+      "expected": ["test/spec/agent/deterministic-failures/price-notice.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "136b736a30d69a8920031a872b428142e34d43dbc308e32d28ce33fbd24ee49d"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "46faa7d536f2bb7aa6db6f1f2b58fbbe3760e508",
+    "specs": "5b1b075156cc136909d767c3d039cc8783e124ec"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "note": "not re-run for this task: it changes nothing under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B3-05v",
+  "risk_note": "RV1（agent 模块：orchestrator/deterministic、orchestrator/entry）。FU-AGENT-NOTICE-50301-PLACEHOLDER（D10-2586 上线前必须；D10-2666 键名与文案，契约 CT-26zq #604）：链接消息确定性路径与商品情境入口遇 price_unavailable / no_card 时提示改用无变量键 agent.notice.price_unavailable，不再下发带 {platform_name} 的 error.50301；parse_error 各码、服务端原因、无返利、结束原因、计数与退还不变。冻结用例 8 条按 modify_existing rule_change 只在块内换期望键（补丁 1 #618 按工具改登法）。先红 red/2 PASS（6 条 1 文件）、evidence shape 0。测试机：--tests 61 文件 700 条、--fast 绿。未改 db/ 与迁移、非 RV2。",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "round": 2,
+      "review_type": "general",
+      "checklist_complete": true,
+      "note": "r1 fail（1 S1：商品情境入口报价无返利时，入口复用的模型工具把 no_rebate 折成 no_card，入口出「查不到价格」——B3-05u 起主干既有、本单 paths 外、非金额）→ D10-2737 记 out_of_scope，登 FU-B3-05V-ENTRY-NO-REBATE（本单落地后紧接着做）；r2 pass，0 条。"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Codex（gpt-6.2-sol）写测 1 次，独立 Claude（tools/agent/claude-run.sh）评审 r1 pass、0 条、无 out_of_scope；任务书原样附 D10-2317 ①。"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/agent/deterministic-failures/path.test.ts",
+      "test": "[AC-B3-05u#11#$ac] $outcome.kind（$key）是唯一商品原因时仍正常结束并按序出提示",
+      "reason": "rule_change",
+      "before": "it.each([\n  { ac: 1, outcome: { kind: 'no_card', cards: [] }, key: 'error.50301' },\n  { ac: 2, outcome: { kind: 'parse_error', error_code: 30131, cards: [] }, key: 'error.30131' },\n  { ac: 3, outcome: { kind: 'parse_error', error_code: 30141, cards: [] }, key: 'error.30141' },\n  { ac: 4, outcome: { kind: 'price_unavailable', cards: [] }, key: 'error.50301' },\n] as const)(\n  '[AC-B3-05u#11#$ac] $outcome.kind（$key）是唯一商品原因时仍正常结束并按序出提示',\n  async ({ outcome, key }) => {\n    const single = context();\n    const singlePath = createDeterministicPath({ quotes: quotes([outcome]), texts: texts() });\n    expect(await singlePath.run(request(), single.ctx)).toEqual(stopped);\n    expect(single.content()).toEqual([notice(key)]);\n\n    const mixed = context();\n    const mixedPath = createDeterministicPath({\n      quotes: quotes([upstreamFailure('timeout'), outcome]),\n      texts: texts(),\n    });\n    expect(await mixedPath.run(request([url(1), url(2)]), mixed.ctx)).toEqual(stopped);\n    expect(mixed.content()).toEqual([notice(QUOTE_FAILED), notice(key)]);\n  },\n);",
+      "after": "it.each([\n  { ac: 1, outcome: { kind: 'no_card', cards: [] }, key: 'error.50301' },\n  { ac: 2, outcome: { kind: 'parse_error', error_code: 30131, cards: [] }, key: 'error.30131' },\n  { ac: 3, outcome: { kind: 'parse_error', error_code: 30141, cards: [] }, key: 'error.30141' },\n  { ac: 4, outcome: { kind: 'price_unavailable', cards: [] }, key: 'error.50301' },\n] as const)(\n  '[AC-B3-05u#11#$ac] $outcome.kind（$key）是唯一商品原因时仍正常结束并按序出提示',\n  async ({ outcome, key: originalKey }) => {\n    const key =\n      outcome.kind === 'no_card' || outcome.kind === 'price_unavailable'\n        ? 'agent.notice.price_unavailable'\n        : originalKey;\n    const single = context();\n    const singlePath = createDeterministicPath({ quotes: quotes([outcome]), texts: texts() });\n    expect(await singlePath.run(request(), single.ctx)).toEqual(stopped);\n    expect(single.content()).toEqual([notice(key)]);\n\n    const mixed = context();\n    const mixedPath = createDeterministicPath({\n      quotes: quotes([upstreamFailure('timeout'), outcome]),\n      texts: texts(),\n    });\n    expect(await mixedPath.run(request([url(1), url(2)]), mixed.ctx)).toEqual(stopped);\n    expect(mixed.content()).toEqual([notice(QUOTE_FAILED), notice(key)]);\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "旧实现：orchestrator/deterministic/index.ts 与 orchestrator/entry/index.ts 换回合并基线 d7bb72075245 的版本（price_unavailable / no_card 仍出 error.50301）",
+          "result": "killed"
+        },
+        {
+          "mutant": "解析错误（商品本身原因 30131 / 30132 / 30141 等）在两条路径上都误出 agent.notice.price_unavailable",
+          "result": "killed"
+        },
+        {
+          "mutant": "服务端原因的提示键误改为 agent.notice.price_unavailable（应为 agent.notice.quote_failed）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-AI-15", "BR-TEXT-22"],
+      "note": "反向验证在任务头 aeee0f97ba8d 的一次性 detached 工作树里跑（测试机 --tests 4 个冻结文件；M0 未变异全绿），结果 couli-runs/B3-05v/mutation/。"
+    },
+    {
+      "file": "test/spec/agent/orchestrator-deterministic/path.test.ts",
+      "test": "[AC-B3-05e#4][AC-B3-05e#5] price_unavailable 仅出依赖不可用提示，不补金额且继续后续链接",
+      "reason": "rule_change",
+      "before": "it.each(['price_unavailable', 'no_card', 'exception'] as const)(\n  '[AC-B3-05e#4][AC-B3-05e#5] %s 仅出依赖不可用提示，不补金额且继续后续链接',\n  async (kind) => {\n    const key = kind === 'exception' ? 'agent.notice.quote_failed' : 'error.50301';\n    const out = context();\n    const runner = quotes([\n      success(1),\n      kind === 'exception'\n        ? new Error('sensitive adapter detail 100元 https://secret.invalid')\n        : { kind, cards: [] },\n      success(3),\n    ]);\n    expect(\n      await createDeterministicPath({ quotes: runner, texts: texts() }).run(\n        request([url(1), url(2), url(3)]),\n        out.ctx,\n      ),\n    ).toEqual(stopped);\n    expect(runner.run).toHaveBeenCalledTimes(3);\n    expect(out.content()).toEqual([\n      { kind: 'card', card: success(1).cards[0] },\n      {\n        kind: 'card',\n        card: expect.objectContaining({\n          type: 'notice',\n          data: expect.objectContaining({ text_key: key }),\n          fallback_text: `固定文案:${key}`,\n        }),\n      },\n      { kind: 'card', card: success(3).cards[0] },\n    ]);\n    expect(out.events.filter((e) => e.kind === 'status').map((e) => e.phase)).toEqual([\n      'start',\n      'end',\n      'start',\n      'failed',\n      'start',\n      'end',\n    ]);\n    expect(JSON.stringify(out.events)).not.toContain('sensitive adapter detail');\n  },\n);\n// .each row 1 of 3: 'price_unavailable'",
+      "after": "it.each(['price_unavailable', 'no_card', 'exception'] as const)(\n  '[AC-B3-05e#4][AC-B3-05e#5] %s 仅出依赖不可用提示，不补金额且继续后续链接',\n  async (kind) => {\n    const key =\n      kind === 'exception' ? 'agent.notice.quote_failed' : 'agent.notice.price_unavailable';\n    const out = context();\n    const runner = quotes([\n      success(1),\n      kind === 'exception'\n        ? new Error('sensitive adapter detail 100元 https://secret.invalid')\n        : { kind, cards: [] },\n      success(3),\n    ]);\n    expect(\n      await createDeterministicPath({ quotes: runner, texts: texts() }).run(\n        request([url(1), url(2), url(3)]),\n        out.ctx,\n      ),\n    ).toEqual(stopped);\n    expect(runner.run).toHaveBeenCalledTimes(3);\n    expect(out.content()).toEqual([\n      { kind: 'card', card: success(1).cards[0] },\n      {\n        kind: 'card',\n        card: expect.objectContaining({\n          type: 'notice',\n          data: expect.objectContaining({ text_key: key }),\n          fallback_text: `固定文案:${key}`,\n        }),\n      },\n      { kind: 'card', card: success(3).cards[0] },\n    ]);\n    expect(out.events.filter((e) => e.kind === 'status').map((e) => e.phase)).toEqual([\n      'start',\n      'end',\n      'start',\n      'failed',\n      'start',\n      'end',\n    ]);\n    expect(JSON.stringify(out.events)).not.toContain('sensitive adapter detail');\n  },\n);\n// .each row 1 of 3: 'price_unavailable'",
+      "mutation": [
+        {
+          "mutant": "旧实现：orchestrator/deterministic/index.ts 与 orchestrator/entry/index.ts 换回合并基线 d7bb72075245 的版本（price_unavailable / no_card 仍出 error.50301）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-AI-15", "BR-TEXT-22"],
+      "note": "反向验证在任务头 aeee0f97ba8d 的一次性 detached 工作树里跑（测试机 --tests 4 个冻结文件；M0 未变异全绿），结果 couli-runs/B3-05v/mutation/。"
+    },
+    {
+      "file": "test/spec/agent/orchestrator-deterministic/path.test.ts",
+      "test": "[AC-B3-05e#4][AC-B3-05e#5] no_card 仅出依赖不可用提示，不补金额且继续后续链接",
+      "reason": "rule_change",
+      "before": "it.each(['price_unavailable', 'no_card', 'exception'] as const)(\n  '[AC-B3-05e#4][AC-B3-05e#5] %s 仅出依赖不可用提示，不补金额且继续后续链接',\n  async (kind) => {\n    const key = kind === 'exception' ? 'agent.notice.quote_failed' : 'error.50301';\n    const out = context();\n    const runner = quotes([\n      success(1),\n      kind === 'exception'\n        ? new Error('sensitive adapter detail 100元 https://secret.invalid')\n        : { kind, cards: [] },\n      success(3),\n    ]);\n    expect(\n      await createDeterministicPath({ quotes: runner, texts: texts() }).run(\n        request([url(1), url(2), url(3)]),\n        out.ctx,\n      ),\n    ).toEqual(stopped);\n    expect(runner.run).toHaveBeenCalledTimes(3);\n    expect(out.content()).toEqual([\n      { kind: 'card', card: success(1).cards[0] },\n      {\n        kind: 'card',\n        card: expect.objectContaining({\n          type: 'notice',\n          data: expect.objectContaining({ text_key: key }),\n          fallback_text: `固定文案:${key}`,\n        }),\n      },\n      { kind: 'card', card: success(3).cards[0] },\n    ]);\n    expect(out.events.filter((e) => e.kind === 'status').map((e) => e.phase)).toEqual([\n      'start',\n      'end',\n      'start',\n      'failed',\n      'start',\n      'end',\n    ]);\n    expect(JSON.stringify(out.events)).not.toContain('sensitive adapter detail');\n  },\n);\n// .each row 2 of 3: 'no_card'",
+      "after": "it.each(['price_unavailable', 'no_card', 'exception'] as const)(\n  '[AC-B3-05e#4][AC-B3-05e#5] %s 仅出依赖不可用提示，不补金额且继续后续链接',\n  async (kind) => {\n    const key =\n      kind === 'exception' ? 'agent.notice.quote_failed' : 'agent.notice.price_unavailable';\n    const out = context();\n    const runner = quotes([\n      success(1),\n      kind === 'exception'\n        ? new Error('sensitive adapter detail 100元 https://secret.invalid')\n        : { kind, cards: [] },\n      success(3),\n    ]);\n    expect(\n      await createDeterministicPath({ quotes: runner, texts: texts() }).run(\n        request([url(1), url(2), url(3)]),\n        out.ctx,\n      ),\n    ).toEqual(stopped);\n    expect(runner.run).toHaveBeenCalledTimes(3);\n    expect(out.content()).toEqual([\n      { kind: 'card', card: success(1).cards[0] },\n      {\n        kind: 'card',\n        card: expect.objectContaining({\n          type: 'notice',\n          data: expect.objectContaining({ text_key: key }),\n          fallback_text: `固定文案:${key}`,\n        }),\n      },\n      { kind: 'card', card: success(3).cards[0] },\n    ]);\n    expect(out.events.filter((e) => e.kind === 'status').map((e) => e.phase)).toEqual([\n      'start',\n      'end',\n      'start',\n      'failed',\n      'start',\n      'end',\n    ]);\n    expect(JSON.stringify(out.events)).not.toContain('sensitive adapter detail');\n  },\n);\n// .each row 2 of 3: 'no_card'",
+      "mutation": [
+        {
+          "mutant": "旧实现：orchestrator/deterministic/index.ts 与 orchestrator/entry/index.ts 换回合并基线 d7bb72075245 的版本（price_unavailable / no_card 仍出 error.50301）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-AI-15", "BR-TEXT-22"],
+      "note": "反向验证在任务头 aeee0f97ba8d 的一次性 detached 工作树里跑（测试机 --tests 4 个冻结文件；M0 未变异全绿），结果 couli-runs/B3-05v/mutation/。"
+    },
+    {
+      "file": "test/spec/agent/orchestrator-deterministic/path.test.ts",
+      "test": "[AC-B3-05e#4][AC-B3-05e#5] exception 仅出依赖不可用提示，不补金额且继续后续链接",
+      "reason": "rule_change",
+      "before": "it.each(['price_unavailable', 'no_card', 'exception'] as const)(\n  '[AC-B3-05e#4][AC-B3-05e#5] %s 仅出依赖不可用提示，不补金额且继续后续链接',\n  async (kind) => {\n    const key = kind === 'exception' ? 'agent.notice.quote_failed' : 'error.50301';\n    const out = context();\n    const runner = quotes([\n      success(1),\n      kind === 'exception'\n        ? new Error('sensitive adapter detail 100元 https://secret.invalid')\n        : { kind, cards: [] },\n      success(3),\n    ]);\n    expect(\n      await createDeterministicPath({ quotes: runner, texts: texts() }).run(\n        request([url(1), url(2), url(3)]),\n        out.ctx,\n      ),\n    ).toEqual(stopped);\n    expect(runner.run).toHaveBeenCalledTimes(3);\n    expect(out.content()).toEqual([\n      { kind: 'card', card: success(1).cards[0] },\n      {\n        kind: 'card',\n        card: expect.objectContaining({\n          type: 'notice',\n          data: expect.objectContaining({ text_key: key }),\n          fallback_text: `固定文案:${key}`,\n        }),\n      },\n      { kind: 'card', card: success(3).cards[0] },\n    ]);\n    expect(out.events.filter((e) => e.kind === 'status').map((e) => e.phase)).toEqual([\n      'start',\n      'end',\n      'start',\n      'failed',\n      'start',\n      'end',\n    ]);\n    expect(JSON.stringify(out.events)).not.toContain('sensitive adapter detail');\n  },\n);\n// .each row 3 of 3: 'exception'",
+      "after": "it.each(['price_unavailable', 'no_card', 'exception'] as const)(\n  '[AC-B3-05e#4][AC-B3-05e#5] %s 仅出依赖不可用提示，不补金额且继续后续链接',\n  async (kind) => {\n    const key =\n      kind === 'exception' ? 'agent.notice.quote_failed' : 'agent.notice.price_unavailable';\n    const out = context();\n    const runner = quotes([\n      success(1),\n      kind === 'exception'\n        ? new Error('sensitive adapter detail 100元 https://secret.invalid')\n        : { kind, cards: [] },\n      success(3),\n    ]);\n    expect(\n      await createDeterministicPath({ quotes: runner, texts: texts() }).run(\n        request([url(1), url(2), url(3)]),\n        out.ctx,\n      ),\n    ).toEqual(stopped);\n    expect(runner.run).toHaveBeenCalledTimes(3);\n    expect(out.content()).toEqual([\n      { kind: 'card', card: success(1).cards[0] },\n      {\n        kind: 'card',\n        card: expect.objectContaining({\n          type: 'notice',\n          data: expect.objectContaining({ text_key: key }),\n          fallback_text: `固定文案:${key}`,\n        }),\n      },\n      { kind: 'card', card: success(3).cards[0] },\n    ]);\n    expect(out.events.filter((e) => e.kind === 'status').map((e) => e.phase)).toEqual([\n      'start',\n      'end',\n      'start',\n      'failed',\n      'start',\n      'end',\n    ]);\n    expect(JSON.stringify(out.events)).not.toContain('sensitive adapter detail');\n  },\n);\n// .each row 3 of 3: 'exception'",
+      "mutation": [
+        {
+          "mutant": "服务端原因的提示键误改为 agent.notice.price_unavailable（应为 agent.notice.quote_failed）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-AI-15", "BR-TEXT-22"],
+      "note": "反向验证在任务头 aeee0f97ba8d 的一次性 detached 工作树里跑（测试机 --tests 4 个冻结文件；M0 未变异全绿），结果 couli-runs/B3-05v/mutation/。本行按设计新旧实现下都绿（只换了同块其他行的键），旧实现杀不了它，另配误归类的变异体（B3-05u 先例）。"
+    },
+    {
+      "file": "test/spec/agent/orchestrator-deterministic/path.test.ts",
+      "test": "[AC-B3-05e#6] 全部失败逐个提示，结束为 stop 而非 fallback 或错误终帧",
+      "reason": "rule_change",
+      "before": "it('[AC-B3-05e#6] 全部失败逐个提示，结束为 stop 而非 fallback 或错误终帧', async () => {\n  const out = context();\n  const runner = quotes([\n    { kind: 'parse_error', error_code: 30141, cards: [] },\n    { kind: 'no_card', cards: [] },\n    new Error('synthetic failure'),\n  ]);\n  expect(\n    await createDeterministicPath({ quotes: runner, texts: texts() }).run(\n      request([url(1), url(2), url(3)]),\n      out.ctx,\n    ),\n  ).toEqual(stopped);\n  expect(runner.run).toHaveBeenCalledTimes(3);\n  expect(out.content()).toEqual(\n    ['error.30141', 'error.50301', 'agent.notice.quote_failed'].map((text_key) => ({\n      kind: 'card',\n      card: expect.objectContaining({\n        type: 'notice',\n        data: expect.objectContaining({ text_key }),\n      }),\n    })),\n  );\n});",
+      "after": "it('[AC-B3-05e#6] 全部失败逐个提示，结束为 stop 而非 fallback 或错误终帧', async () => {\n  const out = context();\n  const runner = quotes([\n    { kind: 'parse_error', error_code: 30141, cards: [] },\n    { kind: 'no_card', cards: [] },\n    new Error('synthetic failure'),\n  ]);\n  expect(\n    await createDeterministicPath({ quotes: runner, texts: texts() }).run(\n      request([url(1), url(2), url(3)]),\n      out.ctx,\n    ),\n  ).toEqual(stopped);\n  expect(runner.run).toHaveBeenCalledTimes(3);\n  const priceNotice = 'agent.notice.price_unavailable';\n  expect(out.content()).toEqual(\n    ['error.30141', priceNotice, 'agent.notice.quote_failed'].map((text_key) => ({\n      kind: 'card',\n      card: expect.objectContaining({\n        type: 'notice',\n        data: expect.objectContaining({ text_key }),\n      }),\n    })),\n  );\n});",
+      "mutation": [
+        {
+          "mutant": "旧实现：orchestrator/deterministic/index.ts 与 orchestrator/entry/index.ts 换回合并基线 d7bb72075245 的版本（price_unavailable / no_card 仍出 error.50301）",
+          "result": "killed"
+        },
+        {
+          "mutant": "解析错误（商品本身原因 30131 / 30132 / 30141 等）在两条路径上都误出 agent.notice.price_unavailable",
+          "result": "killed"
+        },
+        {
+          "mutant": "服务端原因的提示键误改为 agent.notice.price_unavailable（应为 agent.notice.quote_failed）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-AI-15", "BR-TEXT-22"],
+      "note": "反向验证在任务头 aeee0f97ba8d 的一次性 detached 工作树里跑（测试机 --tests 4 个冻结文件；M0 未变异全绿），结果 couli-runs/B3-05v/mutation/。"
+    },
+    {
+      "file": "test/spec/agent/orchestrator-deterministic-tpwd/path.test.ts",
+      "test": "[AC-B3-04g#3] 中间口令 $label 只产生一次对应 notice 和 failed，前后 URL 照常",
+      "reason": "rule_change",
+      "before": "it.each(failures)(\n  '[AC-B3-04g#3] 中间口令 $label 只产生一次对应 notice 和 failed，前后 URL 照常',\n  async ({ label, outcome, code }) => {\n    const expected = notice(code);\n    const key =\n      label === 'parse_error 50301' || label === 'runner 抛错'\n        ? 'agent.notice.quote_failed'\n        : `error.${code}`;\n    const out = context();\n    const links = [url(1), token, url(3)];\n    const runner = runnerFor([\n      [links[0]!, success(1)],\n      [token, outcome],\n      [links[2]!, success(3)],\n    ]);\n    const copy = texts();\n    expect(\n      await createDeterministicPath({ quotes: runner, texts: copy }).run(request(links), out.ctx),\n    ).toEqual(stopped);\n    expect(runner.run.mock.calls.map(([candidate]) => candidate)).toEqual(links);\n    expect(out.events).toEqual([\n      status('start'),\n      status('end'),\n      { kind: 'card', card: success(1).cards[0] },\n      status('start'),\n      status('failed'),\n      {\n        kind: 'card',\n        card: {\n          ...expected,\n          data: { ...expected.data, text_key: key },\n          fallback_text: `固定文案:${key}`,\n        },\n      },\n      status('start'),\n      status('end'),\n      { kind: 'card', card: success(3).cards[0] },\n    ]);\n    expect(copy.text).toHaveBeenCalledExactlyOnceWith('synthetic-app', key);\n    expect(JSON.stringify(out.events)).not.toContain('synthetic-private-detail');\n  },\n);",
+      "after": "it.each(failures)(\n  '[AC-B3-04g#3] 中间口令 $label 只产生一次对应 notice 和 failed，前后 URL 照常',\n  async ({ label, outcome, code }) => {\n    const expected = notice(code);\n    const key =\n      label === 'parse_error 50301' || label === 'runner 抛错'\n        ? 'agent.notice.quote_failed'\n        : label === 'price_unavailable' || label === 'no_card'\n          ? 'agent.notice.price_unavailable'\n          : `error.${code}`;\n    const out = context();\n    const links = [url(1), token, url(3)];\n    const runner = runnerFor([\n      [links[0]!, success(1)],\n      [token, outcome],\n      [links[2]!, success(3)],\n    ]);\n    const copy = texts();\n    expect(\n      await createDeterministicPath({ quotes: runner, texts: copy }).run(request(links), out.ctx),\n    ).toEqual(stopped);\n    expect(runner.run.mock.calls.map(([candidate]) => candidate)).toEqual(links);\n    expect(out.events).toEqual([\n      status('start'),\n      status('end'),\n      { kind: 'card', card: success(1).cards[0] },\n      status('start'),\n      status('failed'),\n      {\n        kind: 'card',\n        card: {\n          ...expected,\n          data: { ...expected.data, text_key: key },\n          fallback_text: `固定文案:${key}`,\n        },\n      },\n      status('start'),\n      status('end'),\n      { kind: 'card', card: success(3).cards[0] },\n    ]);\n    expect(copy.text).toHaveBeenCalledExactlyOnceWith('synthetic-app', key);\n    expect(JSON.stringify(out.events)).not.toContain('synthetic-private-detail');\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "旧实现：orchestrator/deterministic/index.ts 与 orchestrator/entry/index.ts 换回合并基线 d7bb72075245 的版本（price_unavailable / no_card 仍出 error.50301）",
+          "result": "killed"
+        },
+        {
+          "mutant": "解析错误（商品本身原因 30131 / 30132 / 30141 等）在两条路径上都误出 agent.notice.price_unavailable",
+          "result": "killed"
+        },
+        {
+          "mutant": "服务端原因的提示键误改为 agent.notice.price_unavailable（应为 agent.notice.quote_failed）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-AI-15", "BR-TEXT-22"],
+      "note": "反向验证在任务头 aeee0f97ba8d 的一次性 detached 工作树里跑（测试机 --tests 4 个冻结文件；M0 未变异全绿），结果 couli-runs/B3-05v/mutation/。"
+    },
+    {
+      "file": "test/spec/agent/entry-quote-refund/refund.int.test.ts",
+      "test": "[AC-B3-05r#7][BR-AI-15] 无模型入口业务结果 off_shelf：notice、stop，会员日计数保留 +1",
+      "reason": "rule_change",
+      "before": "it.each([\n  { ac: 7, result: 'off_shelf', notice: `error.${String(OFF_SHELF)}` },\n  { ac: 8, result: 'price_unavailable', notice: 'error.50301' },\n] as const)(\n  '[AC-B3-05r#$ac][BR-AI-15] 无模型入口业务结果 $result：notice、stop，会员日计数保留 +1',\n  async ({ result, notice }) => {\n    await withScenario('member', false, async ({ f, before, submit }) => {\n      let during: number[] | undefined;\n      f.readProduct.mockImplementation(async () => {\n        during = await usage(f);\n        if (result === 'off_shelf') throw new ParsingError(OFF_SHELF, 'synthetic delisted item');\n        return f.state.row;\n      });\n      if (result === 'price_unavailable') {\n        // Real catalog card entry answers price_unavailable for a normalized anomalous price.\n        f.state.row = { ...f.state.row, item: { ...f.state.row.item, price_status: 'anomaly' } };\n      }\n      const frames = await submit();\n      expect(during).toEqual(before.map((n) => n + 1));\n      expect(f.readProduct.mock.calls.map(([key]) => key)).toEqual([ENTRY_KEY]);\n      expect(cards(frames)).toHaveLength(1);\n      expect(cards(frames)[0]?.data).toMatchObject({ type: 'notice', data: { text_key: notice } });\n      expect(terminal(frames)).toMatchObject({\n        event: 'done',\n        data: { finish_reason: 'stop', quota_left: 28 },\n      });\n      await persisted(f, frames, false);\n      expect(await usage(f)).toEqual(before.map((n) => n + 1));\n      expect(f.searchProducts).not.toHaveBeenCalled();\n    });\n  },\n  120_000,\n);\n// .each row 1 of 2: { ac: 7, result: 'off_shelf', notice: `error.${String(OFF_SHELF)}` }",
+      "after": "it.each([\n  { ac: 7, result: 'off_shelf', notice: `error.${String(OFF_SHELF)}` },\n  { ac: 8, result: 'price_unavailable', notice: 'error.50301' },\n] as const)(\n  '[AC-B3-05r#$ac][BR-AI-15] 无模型入口业务结果 $result：notice、stop，会员日计数保留 +1',\n  async ({ result, notice: originalNotice }) => {\n    const notice =\n      result === 'price_unavailable' ? 'agent.notice.price_unavailable' : originalNotice;\n    await withScenario('member', false, async ({ f, before, submit }) => {\n      let during: number[] | undefined;\n      f.readProduct.mockImplementation(async () => {\n        during = await usage(f);\n        if (result === 'off_shelf') throw new ParsingError(OFF_SHELF, 'synthetic delisted item');\n        return f.state.row;\n      });\n      if (result === 'price_unavailable') {\n        // Real catalog card entry answers price_unavailable for a normalized anomalous price.\n        f.state.row = { ...f.state.row, item: { ...f.state.row.item, price_status: 'anomaly' } };\n      }\n      const frames = await submit();\n      expect(during).toEqual(before.map((n) => n + 1));\n      expect(f.readProduct.mock.calls.map(([key]) => key)).toEqual([ENTRY_KEY]);\n      expect(cards(frames)).toHaveLength(1);\n      expect(cards(frames)[0]?.data).toMatchObject({ type: 'notice', data: { text_key: notice } });\n      expect(terminal(frames)).toMatchObject({\n        event: 'done',\n        data: { finish_reason: 'stop', quota_left: 28 },\n      });\n      await persisted(f, frames, false);\n      expect(await usage(f)).toEqual(before.map((n) => n + 1));\n      expect(f.searchProducts).not.toHaveBeenCalled();\n    });\n  },\n  120_000,\n);\n// .each row 1 of 2: { ac: 7, result: 'off_shelf', notice: `error.${String(OFF_SHELF)}` }",
+      "mutation": [
+        {
+          "mutant": "解析错误（商品本身原因 30131 / 30132 / 30141 等）在两条路径上都误出 agent.notice.price_unavailable",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-AI-15", "BR-TEXT-22"],
+      "note": "反向验证在任务头 aeee0f97ba8d 的一次性 detached 工作树里跑（测试机 --tests 4 个冻结文件；M0 未变异全绿），结果 couli-runs/B3-05v/mutation/。本行按设计新旧实现下都绿（只换了同块其他行的键），旧实现杀不了它，另配误归类的变异体（B3-05u 先例）。"
+    },
+    {
+      "file": "test/spec/agent/entry-quote-refund/refund.int.test.ts",
+      "test": "[AC-B3-05r#8][BR-AI-15] 无模型入口业务结果 price_unavailable：notice、stop，会员日计数保留 +1",
+      "reason": "rule_change",
+      "before": "it.each([\n  { ac: 7, result: 'off_shelf', notice: `error.${String(OFF_SHELF)}` },\n  { ac: 8, result: 'price_unavailable', notice: 'error.50301' },\n] as const)(\n  '[AC-B3-05r#$ac][BR-AI-15] 无模型入口业务结果 $result：notice、stop，会员日计数保留 +1',\n  async ({ result, notice }) => {\n    await withScenario('member', false, async ({ f, before, submit }) => {\n      let during: number[] | undefined;\n      f.readProduct.mockImplementation(async () => {\n        during = await usage(f);\n        if (result === 'off_shelf') throw new ParsingError(OFF_SHELF, 'synthetic delisted item');\n        return f.state.row;\n      });\n      if (result === 'price_unavailable') {\n        // Real catalog card entry answers price_unavailable for a normalized anomalous price.\n        f.state.row = { ...f.state.row, item: { ...f.state.row.item, price_status: 'anomaly' } };\n      }\n      const frames = await submit();\n      expect(during).toEqual(before.map((n) => n + 1));\n      expect(f.readProduct.mock.calls.map(([key]) => key)).toEqual([ENTRY_KEY]);\n      expect(cards(frames)).toHaveLength(1);\n      expect(cards(frames)[0]?.data).toMatchObject({ type: 'notice', data: { text_key: notice } });\n      expect(terminal(frames)).toMatchObject({\n        event: 'done',\n        data: { finish_reason: 'stop', quota_left: 28 },\n      });\n      await persisted(f, frames, false);\n      expect(await usage(f)).toEqual(before.map((n) => n + 1));\n      expect(f.searchProducts).not.toHaveBeenCalled();\n    });\n  },\n  120_000,\n);\n// .each row 2 of 2: { ac: 8, result: 'price_unavailable', notice: 'error.50301' }",
+      "after": "it.each([\n  { ac: 7, result: 'off_shelf', notice: `error.${String(OFF_SHELF)}` },\n  { ac: 8, result: 'price_unavailable', notice: 'error.50301' },\n] as const)(\n  '[AC-B3-05r#$ac][BR-AI-15] 无模型入口业务结果 $result：notice、stop，会员日计数保留 +1',\n  async ({ result, notice: originalNotice }) => {\n    const notice =\n      result === 'price_unavailable' ? 'agent.notice.price_unavailable' : originalNotice;\n    await withScenario('member', false, async ({ f, before, submit }) => {\n      let during: number[] | undefined;\n      f.readProduct.mockImplementation(async () => {\n        during = await usage(f);\n        if (result === 'off_shelf') throw new ParsingError(OFF_SHELF, 'synthetic delisted item');\n        return f.state.row;\n      });\n      if (result === 'price_unavailable') {\n        // Real catalog card entry answers price_unavailable for a normalized anomalous price.\n        f.state.row = { ...f.state.row, item: { ...f.state.row.item, price_status: 'anomaly' } };\n      }\n      const frames = await submit();\n      expect(during).toEqual(before.map((n) => n + 1));\n      expect(f.readProduct.mock.calls.map(([key]) => key)).toEqual([ENTRY_KEY]);\n      expect(cards(frames)).toHaveLength(1);\n      expect(cards(frames)[0]?.data).toMatchObject({ type: 'notice', data: { text_key: notice } });\n      expect(terminal(frames)).toMatchObject({\n        event: 'done',\n        data: { finish_reason: 'stop', quota_left: 28 },\n      });\n      await persisted(f, frames, false);\n      expect(await usage(f)).toEqual(before.map((n) => n + 1));\n      expect(f.searchProducts).not.toHaveBeenCalled();\n    });\n  },\n  120_000,\n);\n// .each row 2 of 2: { ac: 8, result: 'price_unavailable', notice: 'error.50301' }",
+      "mutation": [
+        {
+          "mutant": "旧实现：orchestrator/deterministic/index.ts 与 orchestrator/entry/index.ts 换回合并基线 d7bb72075245 的版本（price_unavailable / no_card 仍出 error.50301）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-AI-15", "BR-TEXT-22"],
+      "note": "反向验证在任务头 aeee0f97ba8d 的一次性 detached 工作树里跑（测试机 --tests 4 个冻结文件；M0 未变异全绿），结果 couli-runs/B3-05v/mutation/。"
+    }
+  ]
+}
