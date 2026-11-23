@@ -1,0 +1,36 @@
+id: B1-04zzzzm
+repo: rebate-platform
+title: 淘宝用户授权服务端真实闭环：用户级 auth_url 换成真实淘宝 OAuth（view=wap、新配置回调地址），淘宝适配器实现 bindPublisher（code 换用户 token → publisher.info.save 得 relation_id，重复备案经 publisher.info.get 取回，拿不到即失败告警），token 用完即弃（D10-2713 / D10-2716）
+type: impl
+# 2026-11-23 w1 入账（编排 D10-2716 ①，P0，与 B1-04zzzzk 并行；方案 couli-runs/W1-search-linking/taobao-auth-plan.md）。现状：auth_url 为合成地址（union-auth-state.ts:35–42、union-auth-url.ts:245 / :289），
+#   真实淘宝适配器无 bindPublisher（union-binding-exchanger.ts:10–11，只有 demo 实现）。转链已在 binding active 时带 channelId = relation_id（privilege-link.ts:84–86），本单不动转链、订单、契约。
+# ① auth_url：https://oauth.taobao.com/authorize?response_type=code&client_id=<appKey>&redirect_uri=<TAOBAO_USER_OAUTH_REDIRECT_URI>&state=<现有一次性 state>&view=wap（DM taobao/guides/105590.md:62–84；拼法复用 site-oauth.ts）；
+#   新环境配置 TAOBAO_USER_OAUTH_REDIRECT_URI（与 TAOBAO_OAUTH_REDIRECT_URI 同规则：https 绝对地址、有 host、无凭据无片段，不合格拒绝启动）。staging / prod 缺回调地址或 appKey 时按现有 auth_unavailable 走，不再下发合成地址；local / test 仍可用假实现。
+# ② bindPublisher（淘宝适配器）：POST oauth.taobao.com/token（grant_type=authorization_code、code、redirect_uri 同上，复用 site-oauth.ts exchange）→ 用户 session 调 taobao.tbk.sc.publisher.info.save（inviter_code、info_type=1）→ data.relation_id；
+#   desc 为重复绑定且无 relation_id 时，以同一用户 session 调 taobao.tbk.sc.publisher.info.get（info_type=1）取回；仍拿不到 → 失败（不写假 relation_id）并打平铺告警。用户 token 只在本次调用内存中使用，不落库、不进日志（BR-ID-17）。
+#   inviter_code 读新环境配置 TAOBAO_INVITER_CODE（ops 用站长 session 调 invitecode.get 生成后设置，不进仓库）；缺省 → 失败告警。权限包 14474 已授权（DM taobao/DEV-NOTES.md:4）。
+# 规则测试（假传输）钉：真实 auth_url 形态与 state 原样；token 请求参数；publisher.info.save 入参与取 relation_id；重复备案取回；两路都拿不到失败且不写 binding；token 不出现在日志 / 持久化；缺配置不下发合成地址。
+refs: [BR-ID-17, BR-ATTR-05]
+refs_hash:
+  BR-ID-17: ba4ebcc6279a
+  BR-ATTR-05: 655fe77b6d9b
+deps: []
+paths:
+  - 'apps/api/src/modules/linking/application/union-auth-state.ts'
+  - 'apps/api/src/modules/linking/application/union-auth-url.ts'
+  - 'apps/api/src/modules/linking/application/link-open-taobao.ts'
+  - 'apps/api/src/modules/linking/application/union-binding-exchanger.ts'
+  - 'apps/api/src/modules/linking/linking.module.ts'
+  - 'apps/api/src/modules/union/{union.module.ts,domain/types.ts,application/governed-adapter.ts}'
+  - 'apps/api/src/modules/union/infra/taobao/{taobao-adapter.ts,site-oauth.ts,user-oauth.ts,user-oauth.test.ts,publisher.ts,publisher.test.ts}'
+  - 'apps/api/src/modules/platform/config/{taobao-oauth.ts,taobao-oauth.test.ts,config.ts,index.ts}'
+  - '.env.example'
+  - 'ops/tasks/B1-04zzzzm.yaml'
+test_paths:
+  - 'test/spec/linking/taobao-user-auth/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/linking/taobao-user-auth/**'
+status: todo

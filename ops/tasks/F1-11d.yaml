@@ -1,0 +1,23 @@
+id: F1-11d
+repo: rebate-platform
+title: H5 淘宝授权回调中转页：apps/h5 新入口 auth-callback，只把 code / state 透传到 couli://auth/taobao（字符集与长度白名单、其余参数丢弃），不存不打日志不埋点；拉不起 App 时只提示回到 App（D10-2716 ②）
+type: impl
+# 2026-11-23 w1 入账（编排 D10-2716 ②，归本线，与 B1-04zzzzm 并行；方案 couli-runs/W1-search-linking/taobao-auth-plan.md §1 第 3 步）。部署在 couliapp.cn 下 H5 域名的 /auth/taobao/callback（ops 部署，与开放平台登记回调同顶级域名，DM taobao/guides/118.md:112）。
+# 行为：读 location.search 的 code、state（各自须匹配 [A-Za-z0-9_-]、长度 1–256，否则不跳转，只显示提示）；error / error_description 存在时不带 code，只带 state 与 error=1 跳回让 App 提示授权未完成；
+#   跳转用 location.replace('couli://auth/taobao?code=…&state=…')（encodeURIComponent），其余参数一律丢弃；先 history.replaceState 清掉地址栏查询串；页面不调任何接口、不写 storage / cookie、不打日志、不加埋点脚本。
+# 深链 scheme couli 已在 contracts/apps.json inbound 登记；不改契约。vite.config.ts 的 ENTRIES 加 auth-callback。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/h5/src/entries/auth-callback/**'
+  - 'apps/h5/vite.config.ts'
+  - 'ops/tasks/F1-11d.yaml'
+test_paths:
+  - 'test/spec/frontend/h5-auth-callback/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/frontend/h5-auth-callback/**'
+status: todo
