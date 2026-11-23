@@ -7,6 +7,7 @@ type: impl
 # ③ 已结算之后结算佣金再变化照常追加结算记录（seq+1），入账前 R7、入账后按 R9 / R10 / R8 分路，不新增迁移。④ 配置注册表里 orders.jd.refunded_quantity_r9_enabled 默认值改为开。⑤ specs/order-status-map/jd.csv、pdd.csv 标出已结算判定，specs/union/jd.md、pdd.md 金额一节同改。取值、判定边界与默认值只读 08，不在台账复述。
 # 补丁 1（2026-11-22 be 接手，编排 D10-2624 / D10-2628；盘点 couli-runs/B2-19/inventory.md）：本单收窄为**拼多多 ①**（order_status 5 时适配器写结算佣金，与预估同一字段同一扣法，算不出就 null、绝不按 0）+ ③ 的规则测试（已结算后再变照常追加结算记录，现有通用逻辑，不改 settlement）+ specs/order-status-map/pdd.csv、specs/union/pdd.md。
 #   ② 京东 17 + payMonth 与补拉移到 B2-19a；④ 京东退货扣回默认开移到 B2-19b。标题照旧（不改已入账标题）。pdd.csv 已把 5 映射为已结算，orders 只在已结算时采用报文结算额，本单不动 orders。
+# 补丁 2（2026-11-23，编排 D10-2684）：money r1 S1 真因是详情字段集漏读（D10-2677），详情照官方文档补读 order_receive_time / order_settle_time 后，冻结用例 [AC-B1-08e-TIME#2] 详情时间 0 的原秒字段期望由 null 改为 0（与列表同一取法），登 modify_existing；fail_reason 不读的事登 FU-PDD-DETAIL-FAIL-REASON，不在本单。
 # paths 按任务行先列全，开工前先只读盘点（代码落点、种子与默认值落点、受影响冻结用例），再以补丁收窄或补登 modify_existing；是否拆单同时定。两平台各用一笔真实已结算订单实测（09 V-49、V-50）是上线前事项，不在本单验收内。验收指向 10 AC-S2-115。
 refs: [BR-FUND-02, BR-FUND-09, BR-CALC-03]
 refs_hash:
@@ -20,6 +21,14 @@ paths:
   - 'specs/union/pdd.md'
 test_paths:
   - 'test/spec/orders/jd-pdd-settle-commission/**'
+  - 'test/spec/union/orders-shape/pdd-times.test.ts'
+modify_existing:
+  - file: 'test/spec/union/orders-shape/pdd-times.test.ts'
+    test: '[AC-B1-08e-TIME#2] detail 时间 0 统一为 null，保留原秒字段含义'
+    reason: rule_change
+    br: [BR-FUND-02]
+    ruling: D10-2684
+    note: '详情补读官方文档列明的两个时间字段，与列表同一取法'
 impl: claude
 tester: claude-independent
 accept:
