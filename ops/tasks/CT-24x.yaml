@@ -1,0 +1,31 @@
+id: CT-24x
+repo: rebate-platform
+title: 契约（订单查询增强 D1，D10-2669 / D10-2673 / D10-2686）：adminListOrders 加筛选 item_id、order_tail、title_kw、rate_bp_min/max、est_fen_min/max、received_from/to，行补可缺省 item_id、commission_rate_bp、received_at；新增 adminCountOrdersByStatus 与 adminSummarizeOrders（只对已存字段求和计数，均 planned）；export_resource 加 orders（filters 同订单列表，可带 order_ids）
+type: contract
+# 2026-11-23 入账（前端线 f1-frontend-7；编排 D10-2686：CT-26zq 合并后契约槽给本单，用完即还）。草案 couli-runs/F1-07ec/D1-CT-24x-draft.md（按 D10-2673 改定）。
+# 依据：任务书 couli-runs/briefs/ADMIN-ORDERS-STANDARD-20261122.md §4 D1；规划 01 F-ADM-25（负责人 2026-11-22 要求照标准实现，视为前移确认，规划回写另行）。
+# 现有字段：app.orders 已存 raw_item_id（商品 ID）、commission_rate_bp、received_at；分佣快照 commission_splits.platform_retain_fen。
+# 新筛选全部可选、与现有条件 AND；非法值 20001 并在 data.fields 点名参数；区间 min > max 为 20001 点名两端；值为空的行不匹配区间。
+# 新接口权限、user.lookup 规则与 adminListOrders 相同，筛选同一套（不另设时间口径）；状态计数按 rebate_status 分组且不收 rebate_status 参数；汇总只给 sub_order_count、pay_amount_fen、est_commission_fen、platform_retain_fen、buyer_count（各字段口径写在字段说明里，空值不计）。
+# 不做（写死，D10-2673）：店铺模糊查找、列表补店铺名与标签（库里无列）；不出 effective_* 或任何「有效订单」口径；不出预估利润 / 实际计算佣金；不在 08 新立条。
+# 两个新操作与 orders 导出由 D2 后端单实现，本单把新操作标 x-implementation: planned（后台按 F1-06zu 清单显示「功能开发中」）；adminListOrders 新参数与行字段可缺省，D2 落地前服务端不认也不报错的口径写进说明。导出沿用现有生命周期、脱敏（BR-ID-33）与留存（BR-ID-30），不改它们的取值。
+# order_tail 字符集定稿前按 09 逐平台核子单号字符集。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/enums/admin.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/admin-orders-query/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/contracts/admin-orders-query/**'
+status: todo
