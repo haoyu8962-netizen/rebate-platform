@@ -216,6 +216,8 @@ export interface AppConfig {
    * null when unset; a hand-built config without it counts as unset.
    */
   readonly taobaoOAuthRedirectUri?: string | null;
+  readonly taobaoUserOAuthRedirectUri?: string | null;
+  readonly taobaoInviterCode?: string | null;
   /**
    * DATAOKE_APP_KEY / DATAOKE_APP_SECRET_FILE (./dataoke.ts, B1-04e): staging only, both or neither;
    * the 大淘客 order source of the live Taobao adapter. The secret file is read once by the union

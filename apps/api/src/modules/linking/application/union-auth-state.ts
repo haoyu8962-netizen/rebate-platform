@@ -16,6 +16,10 @@ const CLIENTS: ReadonlySet<string> = new Set<AuthClient>(['ios', 'android', 'har
 
 /** Server-owned application configuration references, scoped to the issuing environment. */
 export interface UnionAuthAppsPort {
+  readonly taobaoUserOAuth?: {
+    readonly appKey: string | null;
+    readonly redirectUri: string | null;
+  };
   resolve(
     appId: string,
     environment: AppEnv,

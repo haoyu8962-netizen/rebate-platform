@@ -71,6 +71,8 @@ import type {
 } from '../../domain/taobao-price.ts';
 import {
   UnionError,
+  type BindReq,
+  type BindResult,
   type CallCtx,
   type ConvertReq,
   type ConvertResult,
@@ -266,6 +268,10 @@ export type { TaobaoPunishWarning, TaobaoPunishWarningEvent } from './punishment
 export interface TaobaoCredentials {
   readonly appKey: string;
   readonly appSecret: string;
+  readonly userOAuth?: {
+    readonly redirectUri: string | null;
+    readonly inviterCode: string | null;
+  };
 }
 
 export interface TaobaoAdapterOptions {
@@ -520,6 +526,12 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     this.#refundWarn = options.refundWarn;
     this.#punishWarn = options.punishWarn;
     this.#ownOrders = options.ownOrders;
+  }
+
+  async bindPublisher(req: BindReq, ctx: CallCtx): Promise<BindResult> {
+    void req;
+    void ctx;
+    throw new Error('NotImplemented: bindPublisher');
   }
 
   /** Internal request foundation; returns the inner object of `options.envelope`. */
