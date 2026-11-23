@@ -753,6 +753,16 @@ export const CONTRACT_SIGNING_ROUTES = [
   },
   {
     "method": "GET",
+    "path": "/admin/v1/orders/status-counts",
+    "signed": false
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/orders/summary",
+    "signed": false
+  },
+  {
+    "method": "GET",
     "path": "/admin/v1/orders/:order_id",
     "signed": false
   },

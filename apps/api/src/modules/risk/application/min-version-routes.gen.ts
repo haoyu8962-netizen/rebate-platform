@@ -1525,6 +1525,26 @@ export const CONTRACT_MIN_VERSION_ROUTES = [
     "idempotent": false
   },
   {
+    "operationId": "adminCountOrdersByStatus",
+    "method": "GET",
+    "path": "/admin/v1/orders/status-counts",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
+    "operationId": "adminSummarizeOrders",
+    "method": "GET",
+    "path": "/admin/v1/orders/summary",
+    "gate": null,
+    "sessionScopes": [
+      "full"
+    ],
+    "idempotent": false
+  },
+  {
     "operationId": "adminGetOrder",
     "method": "GET",
     "path": "/admin/v1/orders/:order_id",
