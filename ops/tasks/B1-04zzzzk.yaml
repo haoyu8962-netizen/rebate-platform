@@ -33,4 +33,5 @@ tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/union/taobao-resolve-link/**'
-status: todo
+status: done
+pr: 626
