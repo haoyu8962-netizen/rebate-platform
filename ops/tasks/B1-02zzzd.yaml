@@ -38,4 +38,5 @@ tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/identity/staging-test-phone-bind/**'
-status: todo
+status: done
+pr: 625
