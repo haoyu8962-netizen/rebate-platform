@@ -32,6 +32,7 @@ import {
   Flex,
   Form,
   Input,
+  Pagination,
   Result,
   Select,
   Skeleton,
@@ -84,6 +85,8 @@ import {
   queryFromSearch,
   requestQuery,
   searchOf,
+  showsPager,
+  withoutBackState,
   type OrderFlag,
   type OrderPage,
   type OrderQuery,
@@ -140,18 +143,26 @@ const configurable: readonly { readonly key: string; readonly defaultVisible?: b
   ...platformExtraColumns().map((field) => ({ key: `extra:${field}`, defaultVisible: false })),
 ];
 
-/** The first conditions: the address, else the router state of an older 【返回】, else page 1. */
+/**
+ * The first conditions: the address; with an empty search, the router state an arrival carries
+ * (e.g. a ledger link), which writeAddress then moves into the address and drops; else page 1.
+ */
 function initialQuery(search: string, state: unknown): OrderQuery {
   if (search !== '' && search !== '?') return queryFromSearch(search);
   return backQueryOf(state) ?? FIRST_PAGE;
 }
 
-/** Writes the conditions to the address in place (no navigation, so the page is not remounted). */
+/**
+ * Writes the conditions to the address in place (no navigation, so the page is not remounted) and
+ * drops the router state of an older 【返回】: from here on the address is the only source.
+ */
 function writeAddress(query: OrderQuery): void {
   const search = searchOf(query);
-  if (window.location.search === search) return;
+  const state: unknown = window.history.state;
+  const next = withoutBackState(state);
+  if (window.location.search === search && next === state) return;
   const { pathname, hash } = window.location;
-  window.history.replaceState(window.history.state, '', `${pathname}${search}${hash}`);
+  window.history.replaceState(next, '', `${pathname}${search}${hash}`);
 }
 
 // Filter card (AdmOrders): 36 high controls, small labels above them, four per line.
@@ -334,6 +345,17 @@ function OrdersList(): ReactElement {
     if (page === query.page) return;
     load({ ...query, page });
   };
+
+  // The pager of the list, also shown under the empty state of a page past the last one.
+  const pagination = (total: number) => ({
+    current: query.page,
+    pageSize: query.pageSize ?? PAGE_SIZE,
+    total,
+    showSizeChanger: true,
+    pageSizeOptions: [...PAGE_SIZES],
+    showTotal: (count: number) => t.total(count),
+    onChange: changePage,
+  });
 
   // A tab applies that one filter at once (page 1) and keeps the filter form in step with it.
   const choosePlatform = (key: string) => {
@@ -637,6 +659,12 @@ function OrdersList(): ReactElement {
         >
           {hasConditions(query) ? <Button onClick={reset}>{t.resetConditions}</Button> : null}
         </Empty>
+        {/* A page past the last one (total > 0): the pager stays, to go back or change the size. */}
+        {showsPager(data) ? (
+          <Flex justify="flex-end" style={{ marginTop: token.marginLG }}>
+            <Pagination {...pagination(data.total)} />
+          </Flex>
+        ) : null}
       </div>
     );
   } else {
@@ -647,15 +675,7 @@ function OrdersList(): ReactElement {
         columns={visibleColumns}
         dataSource={data.items}
         scroll={{ x: 'max-content' }}
-        pagination={{
-          current: query.page,
-          pageSize: query.pageSize ?? PAGE_SIZE,
-          total: data.total,
-          showSizeChanger: true,
-          pageSizeOptions: [...PAGE_SIZES],
-          showTotal: (total) => t.total(total),
-          onChange: changePage,
-        }}
+        pagination={pagination(data.total)}
       />
     );
   }

@@ -133,8 +133,30 @@ function textOf(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
-function dayOf(value: unknown): string | undefined {
-  return typeof value === 'string' && DAY.test(value) ? value : undefined;
+/** A real calendar day YYYY-MM-DD (year ≥ 1, month 1–12, day within that month), else undefined. */
+export function dayOf(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const found = DAY.exec(value);
+  if (found === null) return undefined;
+  const [year, month, day] = [Number(found[1]), Number(found[2]), Number(found[3])];
+  if (year < 1 || month < 1 || month > 12 || day < 1) return undefined;
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const lengths = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= (lengths[month - 1] ?? 0) ? value : undefined;
+}
+
+/**
+ * The browser history state without the conditions of an older 【返回】 (F1-07ed): once the list
+ * has written its conditions to the address, the address is their only source, so a refresh with
+ * an empty search must not bring the old router state back. Other entries are kept as they are.
+ */
+export function withoutBackState(historyState: unknown): unknown {
+  if (typeof historyState !== 'object' || historyState === null) return historyState;
+  const { usr } = historyState as { readonly usr?: unknown };
+  if (typeof usr !== 'object' || usr === null || !('ordersQuery' in usr)) return historyState;
+  const rest: Record<string, unknown> = { ...usr };
+  delete rest['ordersQuery'];
+  return { ...historyState, usr: Object.keys(rest).length === 0 ? undefined : rest };
 }
 
 /** The conditions carried by router state (only well-formed values survive), else undefined. */
@@ -191,6 +213,14 @@ export function queryFromSearch(search: string): OrderQuery {
     paidFrom: dayOf(params.get('paid_from')),
     paidTo: dayOf(params.get('paid_to')),
   };
+}
+
+/**
+ * Whether the pager is shown with an answer (F1-07ed): whenever orders match, also when the asked
+ * page is past the last one (no rows, total > 0), so the user can go back or change the page size.
+ */
+export function showsPager(answer: Pick<OrderPage, 'total'>): boolean {
+  return answer.total > 0;
 }
 
 /** The address search (with 「?」, or empty) of the list conditions; defaults are left out. */

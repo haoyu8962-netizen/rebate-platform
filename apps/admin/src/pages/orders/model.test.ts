@@ -6,9 +6,13 @@ import {
   beijingTime,
   dayEnd,
   dayStart,
+  dayOf,
   money,
   percent,
+  queryFromSearch,
   requestQuery,
+  showsPager,
+  withoutBackState,
 } from './model.ts';
 
 it('[AC-F1-07e-UNIT#1] 付款日期按北京时间：起始日零点含，结束日次日零点不含，跨月跨年', () => {
@@ -59,4 +63,46 @@ it('[AC-F1-07e-UNIT#4] 返回时的路由状态只恢复合法条件', () => {
     paidFrom: undefined,
     paidTo: undefined,
   });
+});
+
+it('[AC-F1-07ed-UNIT#1] 写地址时去掉旧返回 state，其余历史状态原样保留', () => {
+  const back = { usr: { ordersQuery: { page: 2, platform: 'pdd' } }, key: 'k1', idx: 3 };
+  expect(withoutBackState(back)).toEqual({ usr: undefined, key: 'k1', idx: 3 });
+  expect(withoutBackState({ usr: { ordersQuery: { page: 1 }, other: 1 }, key: 'k2' })).toEqual({
+    usr: { other: 1 },
+    key: 'k2',
+  });
+  const plain = { usr: { other: 1 }, key: 'k3' };
+  expect(withoutBackState(plain)).toBe(plain);
+  expect(withoutBackState(null)).toBeNull();
+});
+
+it('[AC-F1-07ed-UNIT#2] 页码超出最后一页（无行但 total>0）时仍显示分页器；没有匹配订单时不显示', () => {
+  expect(showsPager({ total: 18 })).toBe(true);
+  expect(showsPager({ total: 1 })).toBe(true);
+  expect(showsPager({ total: 0 })).toBe(false);
+});
+
+it('[AC-F1-07ed-UNIT#3] 地址里的日期只认真实日历日，非法日期忽略、不进请求，其余条件保留', () => {
+  expect(dayOf('2026-02-28')).toBe('2026-02-28');
+  expect(dayOf('2028-02-29')).toBe('2028-02-29');
+  expect(dayOf('2000-02-29')).toBe('2000-02-29');
+  expect(dayOf('2026-12-31')).toBe('2026-12-31');
+  for (const bad of [
+    '2026-13-01',
+    '2026-00-10',
+    '2026-02-29',
+    '1900-02-29',
+    '2026-04-31',
+    '2026-01-00',
+    '2026-01-32',
+    '0000-01-01',
+    '2026-1-01',
+  ])
+    expect(dayOf(bad)).toBeUndefined();
+  const query = queryFromSearch('?platform=pdd&paid_from=2026-13-01&paid_to=2026-02-30');
+  expect(query.platform).toBe('pdd');
+  expect(query.paidFrom).toBeUndefined();
+  expect(query.paidTo).toBeUndefined();
+  expect(requestQuery(query)).toEqual({ page: 1, page_size: 20, platform: 'pdd' });
 });
