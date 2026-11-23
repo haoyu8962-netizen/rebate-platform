@@ -1,0 +1,27 @@
+id: CT-26zr
+repo: rebate-platform
+title: '契约文案：contracts/texts.default.json 补 50301 实名与银行卡核验两键（error.50301.realname_vendor、error.50301.bank_vendor）与登录限流等待文案键，specs/fund-term-keys.yaml 逐键归类，生成物同步'
+type: contract
+# 2026-11-23 be 入账（编排 D10-2774 / D10-2767 / D10-2775：两批文案键同一张契约单、一次占槽，排在 B1-22zd 之后）。只动契约文案与生成物，不改服务端与三端代码。
+# ① 50301 两键：中文逐字照 08 BR-TEXT-14 表（12_TEXT:1063 realname_vendor「实名核验服务暂时不可用，请稍后再试」、:1064 bank_vendor「银行卡核验服务暂时不可用，请稍后再试」），不带变量；是场景子键、不是 data.reason（服务端 50301 实名 / 银行卡核验不带 data）。
+#    App 实名页与后台实名更正对话框都用 realname_vendor，若 texts.default.json 的后台段（fallbacks 或后台键组）也要有，照 BR-TEXT-14 的「用在哪」列定，不另造。
+# ② 限流等待键：本次入账**不含**（D10-2775）；等编排的规划小 PR 回写 08 BR-TEXT-14 并合并、SPEC_REF 同步后，以本单补丁补进 paths / 规则测试要钉的键，键名与原文以 08 为准。
+# 归类：逐键列入 fund-term-keys 的 ordinary（不含 BR-TEXT-12 资金关键词）。三端「有键就用、没有退回 50001」的跟进与收款页错显维护中（FU-AND-PAYOUT-50301 等）不在本单。
+# 规则测试钉：各键存在且默认文案与 08 逐字相等、占位符集合与 08 一致；fund-term-keys 归 ordinary；现有 error.50301 / .maintenance / .not_launched 不变。
+refs: [BR-TEXT-14]
+refs_hash:
+  BR-TEXT-14: 478953c7e441
+deps: []
+paths:
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+test_paths:
+  - 'test/spec/contracts/text-keys-50301-rate-limit/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/contracts/text-keys-50301-rate-limit/**'
+status: todo
