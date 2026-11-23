@@ -82,5 +82,5 @@ modify_existing:
     br: [BR-AI-15, BR-TEXT-22]
     ruling: D10-2666
     note: 'FU-AGENT-NOTICE-50301-PLACEHOLDER：块内按 result 选键，price_unavailable 的期望 notice error.50301 → agent.notice.price_unavailable；it.each 表与标题不改，计数与 stop 断言不变'
-status: todo
-pr: null
+status: done
+pr: 632
