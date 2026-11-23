@@ -251,8 +251,8 @@ it('[B3-05q][BR-AI-04][BR-AI-15] 商品入口：出卡 quoted（带帧编号）�
 
   for (const [outcome, key] of [
     [{ kind: 'parse_error', error_code: 30141, cards: [] }, 'error.30141'],
-    [{ kind: 'price_unavailable', cards: [] }, 'error.50301'],
-    [{ kind: 'no_card', cards: [] }, 'error.50301'],
+    [{ kind: 'price_unavailable', cards: [] }, 'agent.notice.price_unavailable'],
+    [{ kind: 'no_card', cards: [] }, 'agent.notice.price_unavailable'],
   ] as const) {
     const r = rig({ quote: async () => outcome });
     expect(await r.path.product(request(), 'tb:synthetic-entry', r.ctx, r.report)).toEqual({

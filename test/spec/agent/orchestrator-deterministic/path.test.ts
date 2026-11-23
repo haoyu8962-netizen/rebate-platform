@@ -161,7 +161,8 @@ it.each([30131, 30132, 30141, 50301] as const)(
 it.each(['price_unavailable', 'no_card', 'exception'] as const)(
   '[AC-B3-05e#4][AC-B3-05e#5] %s 仅出依赖不可用提示，不补金额且继续后续链接',
   async (kind) => {
-    const key = kind === 'exception' ? 'agent.notice.quote_failed' : 'error.50301';
+    const key =
+      kind === 'exception' ? 'agent.notice.quote_failed' : 'agent.notice.price_unavailable';
     const out = context();
     const runner = quotes([
       success(1),
@@ -215,8 +216,9 @@ it('[AC-B3-05e#6] 全部失败逐个提示，结束为 stop 而非 fallback 或�
     ),
   ).toEqual(stopped);
   expect(runner.run).toHaveBeenCalledTimes(3);
+  const priceNotice = 'agent.notice.price_unavailable';
   expect(out.content()).toEqual(
-    ['error.30141', 'error.50301', 'agent.notice.quote_failed'].map((text_key) => ({
+    ['error.30141', priceNotice, 'agent.notice.quote_failed'].map((text_key) => ({
       kind: 'card',
       card: expect.objectContaining({
         type: 'notice',
