@@ -20,6 +20,7 @@ import {
   type RedisHandle,
   type RedisScriptOptions,
 } from '../../platform/index.ts';
+import { STAGING_TEST_REALNAME_PROVIDER } from '../infra/fake-realname-verifier.ts';
 import type { RealnameVerificationResult } from '../ports/realname-verifier.ts';
 import {
   MARK_LIFETIME_MS,
@@ -172,7 +173,7 @@ const crypto: FieldCrypto = {
   blindIndex: (value, context) => createHash('sha256').update(`${context}|${value}`).digest('hex'),
 };
 
-function setup(config?: SmsConfigReader | null) {
+function setup(config?: SmsConfigReader | null, stagingTestIdentity?: (userId: string) => boolean) {
   const state: { row: Row | undefined; failWrites: number } = { row: undefined, failWrites: 0 };
   const redis = scriptedRedis();
   const verify = vi.fn<() => Promise<RealnameVerificationResult>>();
@@ -191,6 +192,7 @@ function setup(config?: SmsConfigReader | null) {
     } as Parameters<typeof createRealnameService>[0]['logger'],
     reverify: { check: gate },
     ...(config === undefined ? {} : { config }),
+    ...(stagingTestIdentity === undefined ? {} : { stagingTestIdentity }),
   });
   const submit = (idempotencyKey: string, name: string = BODY.name, idNo: string = BODY.idNo) =>
     service.submit({
@@ -223,6 +225,76 @@ it('[AC-B1-13d][BR-ID-25] a retry after a failed verified write replays the matc
   expect(t.redis.store.get(COUNT_KEY)).toBe('1');
   expect(t.verify).toHaveBeenCalledTimes(1);
   expectNoPlainData(t.redis.store, 'key-aaaaaaaa');
+});
+
+// B1-13n (money review r1 S1): a kept staging test identity match is replayed only while the
+// identity is still honoured. Synthetic ID number of region 990101 (does not exist).
+const TEST_IDENTITY_ID_NO = '990101199001010115';
+
+/** A first attempt whose test identity match is kept but whose verified write failed. */
+async function keptTestIdentityMatch(listed: { has: boolean }) {
+  const t = setup(undefined, (userId) => listed.has && userId === USER);
+  t.verify.mockResolvedValue({ outcome: 'match', provider: STAGING_TEST_REALNAME_PROVIDER });
+  t.state.failWrites = 1;
+  await expect(t.submit('key-sssssss1', BODY.name, TEST_IDENTITY_ID_NO)).rejects.toThrow(
+    'connection terminated',
+  );
+  expect(t.redis.store.get(COUNT_KEY)).toBe('1');
+  expect(t.state.row).toBeUndefined();
+  return t;
+}
+
+it('[AC-B1-13n#u6] 名单移除后带原幂等键重试：不重放测试身份的一致、不写库，回 50301，次数与标记不变', async () => {
+  const listed = { has: true };
+  const t = await keptTestIdentityMatch(listed);
+  const marks = () => [...t.redis.store.entries()].filter(([key]) => key.startsWith('seen:'));
+  const kept = marks();
+  listed.has = false;
+  for (let i = 0; i < 2; i++) {
+    await expect(t.submit('key-sssssss1', BODY.name, TEST_IDENTITY_ID_NO)).resolves.toEqual({
+      code: 50301,
+    });
+  }
+  expect(t.state.row).toBeUndefined();
+  expect(t.redis.store.get(COUNT_KEY)).toBe('1');
+  expect(marks()).toEqual(kept);
+  expect(t.verify).toHaveBeenCalledTimes(1);
+  expect(t.redis.calls.map((c) => c.script)).not.toContain(RELEASE_SCRIPT);
+  expect(t.logs.filter((l) => l.msg === 'identity_realname_verified')).toEqual([]);
+});
+
+it('[AC-B1-13n#u6] 名单仍在：带原幂等键重试照旧重放一致并落库，不调核验器、不计次', async () => {
+  const t = await keptTestIdentityMatch({ has: true });
+  await expect(t.submit('key-sssssss1', BODY.name, TEST_IDENTITY_ID_NO)).resolves.toEqual({
+    code: 0,
+    data: { realname_status: 'verified', masked_name: '***名' },
+  });
+  expect(t.state.row?.status).toBe('verified');
+  expect(t.redis.store.get(COUNT_KEY)).toBe('1');
+  expect(t.verify).toHaveBeenCalledTimes(1);
+});
+
+it('[AC-B1-13n#u6] 未装配判定（非 staging 的装配）：存着的测试身份一致不重放，回 50301；其他 provider 的一致照旧重放', async () => {
+  const t = setup();
+  t.verify.mockResolvedValue({ outcome: 'match', provider: STAGING_TEST_REALNAME_PROVIDER });
+  t.state.failWrites = 1;
+  await expect(t.submit('key-sssssss2', BODY.name, TEST_IDENTITY_ID_NO)).rejects.toThrow(
+    'connection terminated',
+  );
+  await expect(t.submit('key-sssssss2', BODY.name, TEST_IDENTITY_ID_NO)).resolves.toEqual({
+    code: 50301,
+  });
+  expect(t.state.row).toBeUndefined();
+  t.verify.mockResolvedValue({ outcome: 'match', provider: 'unit' });
+  t.state.failWrites = 1;
+  await expect(t.submit('key-sssssss3', BODY.name, TEST_IDENTITY_ID_NO)).rejects.toThrow(
+    'connection terminated',
+  );
+  await expect(t.submit('key-sssssss3', BODY.name, TEST_IDENTITY_ID_NO)).resolves.toMatchObject({
+    code: 0,
+  });
+  expect(t.state.row?.status).toBe('verified');
+  expect(t.redis.store.get(COUNT_KEY)).toBe('2');
 });
 
 it('[AC-B1-13d][BR-ID-25] a retry after a failed failed-row write replays the mismatch within the limit', async () => {

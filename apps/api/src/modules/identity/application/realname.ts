@@ -23,9 +23,13 @@
 //      mark has no date; a reservation counts on the day it was made); a retry whose earlier
 //      attempt ended before its outcome was kept (mark pending; after its lease, terminal expired)
 //      is 50401 and changes nothing (no vendor call, nothing given back). The
-//      limit is judged only for requests without a mark. Invariant: vendor calls with a definite
-//      answer ≤ the day's count ≤ 3 (timeouts / unavailability are given back by rule). Redis
-//      unavailable → 50001 (fail closed, nothing called).
+//      limit is judged only for requests without a mark. A kept match of the staging test identity
+//      (B1-13n) is replayed only while that identity is still honoured for the user (the
+//      `stagingTestIdentity` judgement, built with the verifier from the same configuration);
+//      otherwise the retry is answered as an unlisted user (50301), writes nothing and leaves the
+//      count and the mark as they are (a retry never touches a count). Invariant: vendor calls
+//      with a definite answer ≤ the day's count ≤ 3 (timeouts / unavailability are given back by
+//      rule). Redis unavailable → 50001 (fail closed, nothing called).
 //   6. 30405 — the blind index of the normalised ID number is verified on another user of this
 //      app (the occupant is never revealed). Counts one attempt (no vendor call).
 //   7. vendor: none assembled or an answer that is not definite (unavailable / malformed /
@@ -66,6 +70,7 @@ import {
   type Reservation,
 } from './realname-attempts.ts';
 import { REALNAME_CONTEXT } from '../infra/realname-reader.ts';
+import { STAGING_TEST_REALNAME_PROVIDER } from '../infra/fake-realname-verifier.ts';
 import type {
   RealnameVerificationResult,
   RealnameVerifierPort,
@@ -131,6 +136,12 @@ export interface RealnameServiceOptions {
    * null (no database): the line is MIN_REALNAME_AGE.
    */
   readonly config?: SmsConfigReader | null;
+  /**
+   * B1-13n: whether the staging test identity is honoured for a user right now (APP_ENV=staging
+   * and the user_id listed), built by identity.module from the same configuration as the verifier.
+   * Absent or null: never — a kept staging test identity match is then never replayed.
+   */
+  readonly stagingTestIdentity?: ((userId: string) => boolean) | null;
 }
 
 /**
@@ -445,7 +456,21 @@ export function createRealnameService(options: RealnameServiceOptions): Realname
       if (reservation.kind === 'full') return { code: 30410 };
       if (reservation.kind === 'recorded') {
         // A retry of a request whose definite outcome is kept: no vendor call, no count.
-        return settle(command, values, reservation.outcome);
+        const kept = reservation.outcome;
+        if (
+          kept.kind !== 'occupied' &&
+          kept.provider === STAGING_TEST_REALNAME_PROVIDER &&
+          options.stagingTestIdentity?.(command.userId) !== true
+        ) {
+          // B1-13n: the test identity is no longer honoured (unlisted, or not staging): answered
+          // as an unlisted user — 50301, nothing written, the count and the mark untouched.
+          logger.warn(
+            { app_id: command.appId, user_id: command.userId, outcome: 'unavailable' },
+            'identity_realname_vendor_failed',
+          );
+          return { code: 50301 };
+        }
+        return settle(command, values, kept);
       }
       if (reservation.kind === 'pending' || reservation.kind === 'expired') {
         // The earlier attempt of this request ended before its outcome was kept, which does not
