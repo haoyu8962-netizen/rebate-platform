@@ -10,6 +10,8 @@ type: impl
 # 不做（写进实现说明与 FU）：s.click.taobao.com / uland.taobao.com 推广链解析——官方 taobao.tbk.item.click.extract 属「链接类接口下线权限保留包」（docs-mirror 该文档；02 §6.1 亦注大概率拿不到），
 #   大淘客 /api/tb-service/parse-content 可解析链接但不在 02 §6.1 顺序里，要用须编排定；淘口令（taobao.tbk.tpwd.parse 待权限确认）、m.tb.cn 与手机页（缺样本，B1-07d 第二批）。不动转链、订单、parsing、catalog。
 # 不认的链接（推广链与其他形态）照旧抛 adapter_unimplemented、不取凭据不发请求——冻结用例 test/spec/union/taobao-core/ports.test.ts [AC-B1-04j#30] 的 resolveLink 行（example.invalid）保持绿，不登 modify_existing；parsing 两者都收 30132。
+# 补丁 1（D10-2695，并入 FU-PARSE-SHOP-TYPE）：只做淘宝——taobao.tbk.item.info.upgrade.get 的 user_type（docs-mirror 该接口文档:125「卖家类型，0 集市，1 商城」）映射为 shop_type：0 → taobao、1 → tmall、其他或缺省 → null，
+#   经 getItem 带到 parsing 的 ProductRef.shopType；union 领域类型只加一个可选字段，京东 / 拼多多映射不动，不改契约形状。
 refs: [BR-PROD-03, BR-PROD-05, BR-PROD-10]
 refs_hash:
   BR-PROD-03: 7769390bcd28
@@ -20,6 +22,9 @@ paths:
   - 'apps/api/src/modules/union/infra/taobao/taobao-adapter.ts'
   - 'apps/api/src/modules/union/infra/taobao/resolve-link.ts'
   - 'apps/api/src/modules/union/infra/taobao/resolve-link.test.ts'
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/union/infra/taobao/goods.ts'
+  - 'apps/api/src/modules/parsing/application/parsing.ts'
   - 'ops/tasks/B1-04zzzzk.yaml'
 test_paths:
   - 'test/spec/union/taobao-resolve-link/**'
