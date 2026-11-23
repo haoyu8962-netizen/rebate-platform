@@ -1011,3 +1011,9 @@ approvals:
     granted: true
     date: '2026-11-23'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（评审轮次属门禁流程小改动），D10-2705，先例第 151、155、158、160 条。原因：D10-2695 把 FU-PARSE-SHOP-TYPE 并入 B1-04zzzzk（台账补丁 1，#616），写测第 3 次（Codex）新增 shop-type.test.ts，先红 red/3 exit 0；规则测试评审计数已满（2 / 2，r1 fail → 写测 2 补齐 → r2 pass），新文件无人评；Codex 是写测作者，按第 19 条不能评，由 Codex 资金评审顺带覆盖等于作者自评，故开本条由独立 Claude 评这一增量。'
+  - id: 166
+    row: 4
+    title: "CT-24x 任务专属一次性追加：实现完成后写规则测试第 2 次（Codex）+ 规则测试评审增量 1 轮——范围写死为一处：冻结用例 [AC-F1-08fd-SOURCE#1]（test/spec/frontend/admin-exports-filters/source.test.ts）的来源下拉全集期望改为 SOURCE_OPTIONS 末尾加 'orders'（块内改，夹具不动），断言逻辑不变；不新增、不改其他用例"
+    granted: true
+    date: '2026-11-23'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测轮次属门禁流程小改动），D10-2710。原因：CT-24x 契约 export_resource 加 orders 后，实现 r3 在测试机全量 31903 条里只红这一条冻结用例（导出记录页来源下拉照该用例「无名显示编码」多出 orders），属规则变化（台账补丁 2：modify_existing rule_change，br BR-ID-33）。非资金用例，land 时编排照第 24 条加标签。'
