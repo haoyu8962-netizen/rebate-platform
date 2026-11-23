@@ -44,7 +44,7 @@ it(
     await rowsAre(ids(TASKS));
 
     expect(sourceShown()).toBe('全部');
-    expect(await sourceOptions()).toEqual(SOURCE_OPTIONS);
+    expect(await sourceOptions()).toEqual([...SOURCE_OPTIONS, 'orders']);
 
     // Picking alone sends nothing and keeps the rows.
     await chooseSource('余额流水');
