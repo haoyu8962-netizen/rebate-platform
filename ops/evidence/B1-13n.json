@@ -1,0 +1,85 @@
+{
+  "risk_note": "B1-13n (owner's consent 2026-11-22, ruling D10-2636 ②; precedent B1-02zza): staging test identity for the two-element real-name check. Only with APP_ENV=staging and STAGING_TEST_REALNAME_USER_IDS (comma-separated, 1-10 lowercase UUIDs, refused at startup when malformed or when set outside staging) does the member-side verifier answer match for a listed user_id, with provider staging-test-identity and one audit line (event staging_test_realname_verified; app_id, user_id, provider; fixed message, emitted by an info-level child logger so LOG_LEVEL cannot filter it). Unlisted users and every other environment answer as before (50301, not counted); every pre-check (consent, format, check digit, age line, occupancy 30405) is unchanged; the admin real-name correction keeps createRealnameVerifier. An idempotent replay of a kept staging-test-identity match is re-judged against the current environment and list (no longer honoured: 50301, nothing written, count and mark untouched). Name and ID number never reach a log, an audit line or an error. This changes BR-ID-25 'no vendor answer is faked outside local / test' by the owner's consent; the planning write-back is on the orchestrator's pending list.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "money r1 (full) fail 2 S1 + 2 S2 (replay bypassed the list; audit filtered by LOG_LEVEL; unit-test false red on pino pid; README rotation command), all fixed in 15f1776bb (ledger patch 1 #596 adds realname.ts to paths). r2 incremental pass; one S2 left (the optional manual compose command in README 1.11a uses a repository-relative path) filed as FU-B1-13N-README-ROTATION (couli-runs/B1-13n/review-money-r2-codex.json)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 2,
+    "last_verdict": "fail",
+    "note": "Rule tests by independent Claude (claude-run.sh, approvals 36), 2 attempts. Spec-test Codex r1 fail 3 S1 -> attempt 2; r2 (last round) fail 2 S1, both test strength (the loadConfig branch with a valid staging keyring not covered; audit / warn message bodies not asserted). Per the stop-loss line (rulings D10-2590 / D10-2592) filed as FU-B1-13N-SPEC-R2-GAPS and made must-have implementation unit tests ([AC-B1-13n#u1] [#u2] [#u4]), all green."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/identity/staging-test-realname/config.test.ts > [AC-B1-13n#4] local / test / prod 设了 STAGING_TEST_REALNAME_USER_IDS 即拒绝启动（含 api 入口的 loadConfig），问题项不回显取值",
+    "test/spec/identity/staging-test-realname/config.test.ts > [AC-B1-13n#5] staging 名单有非法 user_id、空项或超过 10 项（含 11 个合法项里有一项重复）时，解析器与 api 入口的 loadConfig 都拒绝启动",
+    "test/spec/identity/staging-test-realname/config.test.ts > [AC-B1-13n#6] 未设或为空串时任何环境都是 null、没有问题项；staging 合法名单（1 到 10 项）原样保留并进 AppConfig（含 api 入口的 loadConfig）",
+    "test/spec/identity/staging-test-realname/submit.int.test.ts > [AC-B1-13n#3] staging 装配下会员实名提交：名单内 user_id 走完前置校验后判一致，实名记录 provider 为 staging-test-identity，写一条审计（app_id / user_id / provider）；启用时 warn 只带个数；名单外照旧 50301 不计次；名单内用户的同意、格式、校验位、年龄线、占用（30405）结果与名单外完全相同；姓名与证件号不进日志、审计与响应",
+    "test/spec/identity/staging-test-realname/verifier.test.ts > [AC-B1-13n#1] staging 名单内 user_id：核验器判一致、provider 为 staging-test-identity、写一条只带 app_id / user_id / provider 的审计；名单外 unavailable；local / test 假实现与 staging / prod 的 createRealnameVerifier（admin 更正用）不变；绕过配置把名单传进工厂，非 staging 也不得判一致",
+    "test/spec/identity/staging-test-realname/verifier.test.ts > [AC-B1-13n#2] 会员侧核验器装配：staging 配了名单 → 名单内判一致并审计、名单外 unavailable、启用 warn 只带个数；未设 / 空名单仍为 null；local / test 仍是假实现；prod 等非 staging 带名单不得判一致；admin 用的 createRealnameVerifier 在 staging 仍为 null"
+  ],
+  "task": "B1-13n",
+  "spec_commit": "80c2d85ac93b6ba977c1ecab4044574dacfc5e0d",
+  "spec_ref": "693f6a6698d643f1103505cc0488fd7dcd4c1b95",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "80c2d85ac93b6ba977c1ecab4044574dacfc5e0d",
+      "tree": "0b2b36b198a1a0e58e0ef231480ae176310df703",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-23T03:46:06Z",
+      "finished_at": "2026-11-23T03:46:21Z",
+      "red_tests": [
+        "test/spec/identity/staging-test-realname/config.test.ts > [AC-B1-13n#4] local / test / prod 设了 STAGING_TEST_REALNAME_USER_IDS 即拒绝启动（含 api 入口的 loadConfig），问题项不回显取值",
+        "test/spec/identity/staging-test-realname/config.test.ts > [AC-B1-13n#5] staging 名单有非法 user_id、空项或超过 10 项（含 11 个合法项里有一项重复）时，解析器与 api 入口的 loadConfig 都拒绝启动",
+        "test/spec/identity/staging-test-realname/config.test.ts > [AC-B1-13n#6] 未设或为空串时任何环境都是 null、没有问题项；staging 合法名单（1 到 10 项）原样保留并进 AppConfig（含 api 入口的 loadConfig）",
+        "test/spec/identity/staging-test-realname/submit.int.test.ts > [AC-B1-13n#3] staging 装配下会员实名提交：名单内 user_id 走完前置校验后判一致，实名记录 provider 为 staging-test-identity，写一条审计（app_id / user_id / provider）；启用时 warn 只带个数；名单外照旧 50301 不计次；名单内用户的同意、格式、校验位、年龄线、占用（30405）结果与名单外完全相同；姓名与证件号不进日志、审计与响应",
+        "test/spec/identity/staging-test-realname/verifier.test.ts > [AC-B1-13n#1] staging 名单内 user_id：核验器判一致、provider 为 staging-test-identity、写一条只带 app_id / user_id / provider 的审计；名单外 unavailable；local / test 假实现与 staging / prod 的 createRealnameVerifier（admin 更正用）不变；绕过配置把名单传进工厂，非 staging 也不得判一致",
+        "test/spec/identity/staging-test-realname/verifier.test.ts > [AC-B1-13n#2] 会员侧核验器装配：staging 配了名单 → 名单内判一致并审计、名单外 unavailable、启用 warn 只带个数；未设 / 空名单仍为 null；local / test 仍是假实现；prod 等非 staging 带名单不得判一致；admin 用的 createRealnameVerifier 在 staging 仍为 null"
+      ],
+      "expected": [
+        "test/spec/identity/staging-test-realname/config.test.ts",
+        "test/spec/identity/staging-test-realname/submit.int.test.ts",
+        "test/spec/identity/staging-test-realname/verifier.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "195e4d39bb5e58ad097af2780dc402556d1733cd783e54622bd76f6c7e5b2f7c"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "b7a91bef40b88a0873849961aa698afd2962d43a068f64098360c73bbe048bbc"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2aa377d891f2d6e61628818b37927f184e5e4325",
+    "specs": "489fe4589f767716b4d54b417d2c60a50922c23e"
+  }
+}
