@@ -107,7 +107,13 @@ it('[CT-24k] enums export_status and export_resource match the contract schemas'
     'expired',
     'cancelled',
   ]);
-  expect(enums.export_resource).toEqual(['users', 'audit_logs', 'tax_withdrawals', 'ledger']);
+  expect(enums.export_resource).toEqual([
+    'users',
+    'audit_logs',
+    'tax_withdrawals',
+    'ledger',
+    'orders',
+  ]);
   expect(contract.components.schemas['AdminExportStatus']!.enum).toEqual(enums.export_status);
   expect(contract.components.schemas['AdminExportResource']!.enum).toEqual(enums.export_resource);
 });
@@ -143,7 +149,8 @@ it('[CT-24k] create answers 202 with a pending task; its body is one branch per 
   expect(validBody({ resource: 'audit_logs', filters: { risk_state: 'banned' } })).toBe(false);
   expect(validBody({ resource: 'audit_logs', filters: {}, unmasked: true })).toBe(false);
   expect(validBody({ resource: 'audit_logs', filters: {}, reason: '理由' })).toBe(false);
-  expect(validBody({ resource: 'orders', filters: {} })).toBe(false);
+  expect(validBody({ resource: 'orders', filters: {} })).toBe(true);
+  expect(validBody({ resource: 'orders', filters: {}, unmasked: true })).toBe(false);
   expect(validBody({ resource: 'users' })).toBe(false);
   expect(validBody({ resource: 'users', filters: {}, unmasked: true, reason: '' })).toBe(false);
   expect(
