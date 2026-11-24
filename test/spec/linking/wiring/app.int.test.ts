@@ -662,10 +662,12 @@ it.each(['synthetic-pdd-a', 'synthetic-pdd-b'])(
       apps: modified,
       verifiedPaths: { pdd: { ios: ['scheme', 'h5'] } },
     });
+    const mobileUrl = 'https://example.test/synthetic-pdd-purchase';
+    const schemaUrl = `${scheme}://synthetic/landing?token=a%2fb`;
+    f.convert.mockResolvedValue({ kind: 'url', url: mobileUrl, schema_url: schemaUrl });
     const jump = jumpOf(await f.open());
-    expect(jump.primary.type).toBe('scheme');
-    expect(jump.primary.value.startsWith(`${scheme}://`)).toBe(true);
-    expect(jump.fallbacks.map((step) => step.type)).toEqual(['h5']);
+    expect(jump.primary).toEqual({ type: 'scheme', value: schemaUrl });
+    expect(jump.fallbacks).toEqual([{ type: 'h5', value: mobileUrl }]);
   },
   30_000,
 );

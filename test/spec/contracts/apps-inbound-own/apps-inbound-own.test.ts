@@ -88,7 +88,17 @@ it('[AC-CT-17h#1] couli 只作为三端自有入站 scheme 登记，字段闭合
   expect(String(entry['purpose']).trim().length).toBeGreaterThan(0);
   expect(Array.isArray(entry['platforms'])).toBe(true);
   expect([...(entry['platforms'] as unknown[])].sort()).toEqual(['android', 'harmony', 'ios']);
-  expect(doc['apps']).toEqual(EXISTING_APPS);
+  expect(doc['apps']).toEqual({
+    ...EXISTING_APPS,
+    pdd: {
+      ...EXISTING_APPS.pdd,
+      status: 'verified',
+      source:
+        '规划/09 CAP-PDD-11（A54、P0-1122/D10-2795、D10-2811：小米安卓真机验证转链回包的 pinduoduo scheme 可拉起拼多多；iOS 未经真机实测，鸿蒙待真机核验，D10-2820）',
+      ios: { query_schemes: ['pinduoduo'] },
+      android: { packages: ['com.xunmeng.pinduoduo'] },
+    },
+  });
   expect(doc['sdk_queries']).toEqual([]);
 });
 
