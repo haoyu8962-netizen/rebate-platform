@@ -23,6 +23,7 @@ paths:
   - 'apps/api/src/modules/agent/stream/mount/**'
   - 'apps/api/src/modules/agent/model-gateway/routing/**'
   - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
   - 'packages/money/src/**'
   - 'db/migrations/*_agent-budget-day*.sql'
   - 'db/schema.sql'
