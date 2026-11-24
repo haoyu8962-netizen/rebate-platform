@@ -1,0 +1,102 @@
+{
+  "risk_note": "B2-19 (funds; D10-2624 / D10-2628 / D10-2677 / D10-2684; patches 1-3). Pinduoduo order_status 5 writes settle_commission_fen with the same value and deduction as the estimate on the same row (null when it cannot be computed, never 0), and the settlement record follows the generic path (re-settlement appends a new seq). The detail field set now reads order_receive_time / order_verify_time / order_settle_time per the official doc (the money r1 S1 root cause: settle time was missing from the detail mapping). One frozen test changes by modify_existing rule_change (BR-FUND-02, D10-2684): [AC-B1-08e-TIME#2] in test/spec/union/orders-shape/pdd-times.test.ts, declared whole by its template text (CT-06zzzzzzzd, #658): detail raw seconds 0 is kept as 0 like the list. specs/order-status-map/pdd.csv and specs/union/pdd.md updated. JD (B2-19a) and the JD refund default (B2-19b) are not in this task.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "money r1 (full) fail 1 S1 (detail without order_settle_time re-appended seq with the sync time); fixed by implementation r3 (detail field set per the official doc, D10-2677). r2 incremental pass with 1 S2 (order_settle_time beyond the Date range) registered FU-PDD-UNIX-SECONDS-RANGE."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "rounds": 2,
+    "last_verdict": "fail",
+    "note": "Rule tests by independent Claude (claude-run.sh, approvals 36), 2 attempts. Spec-test Codex r1 fail -> attempt 2; r2 (last round) fail 1 S1 (test strength). Per the stop-loss line (rulings D10-2590 / D10-2592) the remaining gap is registered FU-B2-19-SPEC-R2-GAPS (before launch), recorded truthfully as fail."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/orders/jd-pdd-settle-commission/pdd-mapping.test.ts > [AC-B2-19#1] 拼多多状态 5：settle_commission_fen = promotion_amount − duo_id_service_fee（1000 − 100 = 900），与 est 同值；状态 2、3 的 settle 仍为 null、est 照写；0、1 与带正佣金的 4、10 的 settle 也为 null",
+    "test/spec/orders/jd-pdd-settle-commission/pdd-mapping.test.ts > [AC-B2-19#2] 拼多多状态 5、任意毛额与服务费：settle 恰为 promotion_amount − duo_id_service_fee（bigint，可为负），与 est 相等；同额状态 3 的 settle 为 null",
+    "test/spec/orders/jd-pdd-settle-commission/pdd-mapping.test.ts > [AC-B2-19#3] 拼多多状态 5 报文没给服务费：increment、range、详情三个入口都按 union.pdd.service_fee_bp 兜底，与 est 同一取法（1001、600 bp → 服务费 ceil(60.06)=61 → 940；1605、1000 bp → 161 → 1444）；显式给 100 → 901（报文金额优先，不看配置）；没有配置或配置不合法时 settle 为 null、不是 0",
+    "test/spec/orders/jd-pdd-settle-commission/pdd-mapping.test.ts > [AC-B2-19#3] 真实同步入口：合成传输经生产适配器的列表 listOrders（increment、pay_time，rowErrors=collect）与按单号详情 getPddOrderDetail，状态 5 的结算值与 est 同一取法：没给服务费按配置 600 bp → 940，显式 100 → 901；同一报文状态 3 的 settle 为 null",
+    "test/spec/orders/jd-pdd-settle-commission/pdd-sync.int.test.ts > [AC-B2-19#4] 拼多多单经订单同步由状态 3 变 5：3 时不写结算佣金与结算记录；5 之后 orders.settle_commission_fen = 900，order_settlements 一条 source=API、seq=1、金额 900、settled_at = order_settle_time",
+    "test/spec/orders/jd-pdd-settle-commission/pdd-sync.int.test.ts > [AC-B2-19#5] 已结算后再变：同一单状态仍 5、promotion_amount 变了 → 追加 seq=2（1080），seq=1 原样不改、列随之更新；金额与 settled_at 都不变的重复同步不追加",
+    "test/spec/orders/jd-pdd-settle-commission/pdd-sync.int.test.ts > [AC-B2-19#4] 真实列表入口：合成传输经生产适配器 listOrders（increment，rowErrors=collect）取回的 DTO 原样交给落库夹具，0 → 3 → 5：3 时不写结算佣金与结算记录；5 之后 orders.settle_commission_fen = 900，order_settlements 一条 source=API、seq=1、金额 900、settled_at = order_settle_time"
+  ],
+  "modify_existing": [
+    {
+      "file": "test/spec/union/orders-shape/pdd-times.test.ts",
+      "test": "[AC-B1-08e-TIME#2] ${source} 时间 %s 统一为 null，保留原秒字段含义",
+      "reason": "rule_change",
+      "br": ["BR-FUND-02"],
+      "before": "it.each([0, undefined, null])(\n    `[AC-B1-08e-TIME#2] ${source} 时间 %s 统一为 null，保留原秒字段含义`,\n    async (absent) => {\n      const input = sourceRow(source);\n      for (const key of [\n        'order_pay_time',\n        'order_receive_time',\n        'order_settle_time',\n        'order_modify_at',\n      ]) {\n        if (absent === undefined) delete input[key];\n        else input[key] = absent;\n      }\n      const dto = await one(source, input);\n      expect(dto).toMatchObject({\n        deposit_paid_at: null,\n        paid_at: null,\n        received_at: null,\n        settled_at: null,\n        modified_at: null,\n        order_pay_time: absent === 0 ? 0 : null,\n        order_modify_at: absent === 0 ? 0 : null,\n        order_receive_time: source === 'increment' && absent === 0 ? 0 : null,\n        order_settle_time: source !== 'detail' && absent === 0 ? 0 : null,\n      });\n    },\n  );",
+      "after": "it.each([0, undefined, null])(\n    `[AC-B1-08e-TIME#2] ${source} 时间 %s 统一为 null，保留原秒字段含义`,\n    async (absent) => {\n      const input = sourceRow(source);\n      for (const key of [\n        'order_pay_time',\n        'order_receive_time',\n        'order_settle_time',\n        'order_modify_at',\n      ]) {\n        if (absent === undefined) delete input[key];\n        else input[key] = absent;\n      }\n      const dto = await one(source, input);\n      expect(dto).toMatchObject({\n        deposit_paid_at: null,\n        paid_at: null,\n        received_at: null,\n        settled_at: null,\n        modified_at: null,\n        order_pay_time: absent === 0 ? 0 : null,\n        order_modify_at: absent === 0 ? 0 : null,\n        order_receive_time: source !== 'pay_time' && absent === 0 ? 0 : null,\n        order_settle_time: absent === 0 ? 0 : null,\n      });\n    },\n  );",
+      "mutation": [
+        {
+          "mutant": "apps/api/src/modules/union/infra/pdd/orders.ts FIELDS.detail without order_receive_time / order_settle_time (main before this task): the changed detail expectation (raw seconds 0) gets null and fails; on the testing machine the old expectation failed against the new field set (B2-19 tests/2, D10-2684), and the land red step runs the changed block against main",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "task": "B2-19",
+  "spec_commit": "8326640c419b36b3e5c4f5963d404df0cc643039",
+  "spec_ref": "081b17766395bc9b55b28eb9f8b9fdae4459b99e",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "8326640c419b36b3e5c4f5963d404df0cc643039",
+      "tree": "9da55b06c49eaa98aad48a0b09c4220912458960",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-24T13:34:40Z",
+      "finished_at": "2026-11-24T13:34:54Z",
+      "red_tests": [
+        "test/spec/orders/jd-pdd-settle-commission/pdd-mapping.test.ts > [AC-B2-19#1] 拼多多状态 5：settle_commission_fen = promotion_amount − duo_id_service_fee（1000 − 100 = 900），与 est 同值；状态 2、3 的 settle 仍为 null、est 照写；0、1 与带正佣金的 4、10 的 settle 也为 null",
+        "test/spec/orders/jd-pdd-settle-commission/pdd-mapping.test.ts > [AC-B2-19#2] 拼多多状态 5、任意毛额与服务费：settle 恰为 promotion_amount − duo_id_service_fee（bigint，可为负），与 est 相等；同额状态 3 的 settle 为 null",
+        "test/spec/orders/jd-pdd-settle-commission/pdd-mapping.test.ts > [AC-B2-19#3] 拼多多状态 5 报文没给服务费：increment、range、详情三个入口都按 union.pdd.service_fee_bp 兜底，与 est 同一取法（1001、600 bp → 服务费 ceil(60.06)=61 → 940；1605、1000 bp → 161 → 1444）；显式给 100 → 901（报文金额优先，不看配置）；没有配置或配置不合法时 settle 为 null、不是 0",
+        "test/spec/orders/jd-pdd-settle-commission/pdd-mapping.test.ts > [AC-B2-19#3] 真实同步入口：合成传输经生产适配器的列表 listOrders（increment、pay_time，rowErrors=collect）与按单号详情 getPddOrderDetail，状态 5 的结算值与 est 同一取法：没给服务费按配置 600 bp → 940，显式 100 → 901；同一报文状态 3 的 settle 为 null",
+        "test/spec/orders/jd-pdd-settle-commission/pdd-sync.int.test.ts > [AC-B2-19#4] 拼多多单经订单同步由状态 3 变 5：3 时不写结算佣金与结算记录；5 之后 orders.settle_commission_fen = 900，order_settlements 一条 source=API、seq=1、金额 900、settled_at = order_settle_time",
+        "test/spec/orders/jd-pdd-settle-commission/pdd-sync.int.test.ts > [AC-B2-19#5] 已结算后再变：同一单状态仍 5、promotion_amount 变了 → 追加 seq=2（1080），seq=1 原样不改、列随之更新；金额与 settled_at 都不变的重复同步不追加",
+        "test/spec/orders/jd-pdd-settle-commission/pdd-sync.int.test.ts > [AC-B2-19#4] 真实列表入口：合成传输经生产适配器 listOrders（increment，rowErrors=collect）取回的 DTO 原样交给落库夹具，0 → 3 → 5：3 时不写结算佣金与结算记录；5 之后 orders.settle_commission_fen = 900，order_settlements 一条 source=API、seq=1、金额 900、settled_at = order_settle_time"
+      ],
+      "expected": [
+        "test/spec/orders/jd-pdd-settle-commission/pdd-mapping.test.ts",
+        "test/spec/orders/jd-pdd-settle-commission/pdd-sync.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "2544a196b18a6cc05d7f712aea22e8f1b4fb13861ff88ca405b1ed627c0a98db"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "29dc10526022abd4e1c5a59e00f0e3b4674e9134e306c749926c7e282c1a01ac"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "8256f8afaa1fa22a03acb42bb424f4237b3828e1",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}

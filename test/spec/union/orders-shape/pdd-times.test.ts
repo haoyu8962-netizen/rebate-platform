@@ -40,8 +40,8 @@ for (const source of sources) {
         modified_at: null,
         order_pay_time: absent === 0 ? 0 : null,
         order_modify_at: absent === 0 ? 0 : null,
-        order_receive_time: source === 'increment' && absent === 0 ? 0 : null,
-        order_settle_time: source !== 'detail' && absent === 0 ? 0 : null,
+        order_receive_time: source !== 'pay_time' && absent === 0 ? 0 : null,
+        order_settle_time: absent === 0 ? 0 : null,
       });
     },
   );
