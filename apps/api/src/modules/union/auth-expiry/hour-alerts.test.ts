@@ -3,6 +3,8 @@
 // 同一轮重复发送同一 key、payload 里写到期时刻的 ISO 串（会被当成 expiry_due 任务），任一都会让下面断言红。
 // r2（Codex money r1）：补排不补「已到点但没处理」的节点（丢任务后只剩跳过）、补了更大的已到节点、
 // 不看 hour_alert_key 照样重补、超过队列最大延迟（30 天）的节点照排（send 会被拒），任一都会让后两条红。
+// r3（Codex money r2）：键只按「等于本节点」判断（已处理 h1 后改配置为 [6] 仍补 h6）、把别的到期时刻
+// 或格式不对的键当成已处理、节点 7 与 h1 前缀相同被误认，任一都会让最后一条红。
 import { expect, it } from 'vitest';
 import type { JobQueue } from '../../platform/index.ts';
 import {
@@ -11,6 +13,7 @@ import {
   UNION_AUTH_QUEUE,
   hourAlertKey,
   hourAlertMark,
+  hourNodeHandled,
   sendHourAlerts,
 } from './hour-alerts.ts';
 
@@ -140,4 +143,42 @@ it('[B1-22zd][BR-ID-24] 超过队列最大延迟的节点不排（留给每日�
   expect(calls.every(([, , , o]) => (o.delaySeconds ?? 0) <= HOUR_JOB_MAX_DELAY_SECONDS)).toBe(
     true,
   );
+});
+
+it('[B1-22zd][BR-ID-24] hour_alert_key：同一到期时刻下已处理节点 ≤ 候选节点即不再补发；别的到期时刻或坏格式不算', async () => {
+  const expiresMs = NOW + 24 * HOUR;
+  const h1 = hourAlertMark(expiresMs, 1);
+  expect(hourNodeHandled(h1, expiresMs, 1)).toBe(true);
+  expect(hourNodeHandled(h1, expiresMs, 6)).toBe(true);
+  expect(hourNodeHandled(hourAlertMark(expiresMs, 6), expiresMs, 1)).toBe(false);
+  expect(hourNodeHandled(hourAlertMark(expiresMs, 6), expiresMs, 6)).toBe(true);
+  expect(hourNodeHandled(hourAlertMark(expiresMs, 12), expiresMs, 7)).toBe(false);
+  expect(hourNodeHandled(hourAlertMark(expiresMs, 7), expiresMs, 12)).toBe(true);
+  expect(hourNodeHandled(null, expiresMs, 6)).toBe(false);
+  expect(hourNodeHandled(hourAlertMark(expiresMs - HOUR, 1), expiresMs, 6)).toBe(false);
+  expect(hourNodeHandled(`${expiresMs}:hx`, expiresMs, 6)).toBe(false);
+  expect(hourNodeHandled(`${expiresMs}0:h1`, expiresMs, 6)).toBe(false);
+
+  // 补排：h1 已处理后配置改为 [6]，6 小时内（h6 已到）不补 h6。
+  const t = target(24);
+  const later = NOW + 23 * HOUR + 600_000;
+  const changed = recorder();
+  await sendHourAlerts(changed.queue, {
+    trx: null,
+    target: t,
+    hours: [6],
+    nowMs: later,
+    catchUp: { doneMark: h1 },
+  });
+  expect(changed.calls).toEqual([]);
+  // 上一次授权的键不挡这一次。
+  const stale = recorder();
+  await sendHourAlerts(stale.queue, {
+    trx: null,
+    target: t,
+    hours: [6],
+    nowMs: later,
+    catchUp: { doneMark: hourAlertMark(expiresMs - HOUR, 1) },
+  });
+  expect(stale.calls.map(([, , p, o]) => [p['hours'], o.delaySeconds])).toEqual([[6, undefined]]);
 });

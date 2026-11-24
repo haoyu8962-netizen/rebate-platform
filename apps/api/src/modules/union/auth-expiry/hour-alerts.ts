@@ -8,7 +8,7 @@
 // (../application/admin-accounts.ts) and a successful refresh, each after its commit and best
 // effort; then as a backfill by each daily check and each heal (every five minutes) for the nodes
 // falling before the next check, plus the smallest node already due whose job was lost (the
-// account's hour_alert_key does not carry it yet), sent at once.
+// account's hour_alert_key shows neither it nor a smaller node handled), sent at once.
 //
 // The job is tied to one authorization: its payload carries the expiry and the renewal instant as
 // epoch milliseconds (never an ISO string: the expiry_due job is told apart by its ISO expiry) and
@@ -59,11 +59,27 @@ export function hourAlertMark(expiresMs: number, hours: number): string {
 }
 
 /**
+ * Whether the account's hour_alert_key says the node `hours` of the authorization expiring at
+ * `expiresMs` needs no more sending: a node of that authorization with the same or a smaller lead
+ * was handled (once a smaller node went out, a larger one is never sent late, even when the
+ * configured nodes changed meanwhile). A mark of another expiry, or not of this format, says nothing.
+ */
+export function hourNodeHandled(mark: string | null, expiresMs: number, hours: number): boolean {
+  if (mark === null) return false;
+  const prefix = `${expiresMs}:h`;
+  if (!mark.startsWith(prefix)) return false;
+  const rest = mark.slice(prefix.length);
+  if (!/^[1-9]\d*$/.test(rest)) return false;
+  return Number(rest) <= hours;
+}
+
+/**
  * Sends the hour jobs of the live nodes whose instant is after `nowMs` (and at or before `untilMs`
  * when given, and within the queue's largest delay: a later node is left to the daily backfill),
  * skipping keys already in `sent` (one run never sends a key twice). With `catchUp` (the daily
- * backfill and heal) the smallest live node already due before the expiry is sent at once when the
- * account's hour_alert_key is not that node's mark (its job was lost); larger due nodes never are.
+ * backfill and heal) the smallest live node already due before the expiry is sent at once unless
+ * the account's hour_alert_key shows it or a smaller node handled (hourNodeHandled); larger due
+ * nodes never are.
  */
 export async function sendHourAlerts(
   queue: Pick<JobQueue, 'send'>,
@@ -104,7 +120,7 @@ export async function sendHourAlerts(
     const due = live.filter((node) => hourNodeAt(expiresMs, node) <= input.nowMs);
     if (due.length > 0) {
       const node = Math.min(...due);
-      if (hourAlertMark(expiresMs, node) !== input.catchUp.doneMark) await send(node, null);
+      if (!hourNodeHandled(input.catchUp.doneMark, expiresMs, node)) await send(node, null);
     }
   }
   for (const node of live) {

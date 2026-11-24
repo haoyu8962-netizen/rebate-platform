@@ -51,8 +51,11 @@
 //   at or after the expiry → expired at once (EXPIRED only).
 // - Repeat of an hour job: union_accounts.hour_alert_key ('<expiry ms>:h<N>', written only by the
 //   hour job, on the locked row, together with its alert and status) marks the node handled; a
-//   repeat or a late job of the same node finds it and does nothing, phones configured or not. The
-//   notify_logs dedupe key still keeps the reminder itself from being planned twice.
+//   repeat or a late job of the same node, or of a larger node of the same authorization, finds it
+//   and does nothing, phones configured or not (hourNodeHandled). The notify_logs dedupe key still
+//   keeps the reminder itself from being planned twice. Without phones the backend alert line is
+//   written inside the transaction, before the mark commits: at least once, never lost to a commit
+//   whose result did not come back.
 import { createHash } from 'node:crypto';
 import type { DB } from '@couli/db';
 import { sql, type Kysely, type Transaction, type Updateable } from 'kysely';
@@ -91,6 +94,7 @@ import {
   UNION_AUTH_QUEUE,
   alertHoursOf,
   hourAlertMark,
+  hourNodeHandled,
   sendHourAlerts,
 } from './hour-alerts.ts';
 import { normalizeAlertPhone } from './phone.ts';
@@ -664,13 +668,23 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
       if (nowMs < dueMs) return;
       // A smaller node is already due: the larger one is never sent late.
       if (live.some((other) => other < node && hourNodeAt(expiresMs, other) <= nowMs)) return;
-      // Handled already (a repeat or a late job of this node): the mark, written below in this same
-      // transaction on the locked row, is the only dedupe the backend alert line needs.
-      const mark = hourAlertMark(expiresMs, node);
-      if (row.hour_alert_key === mark) return;
-      patch.hour_alert_key = mark;
+      // Handled already (a repeat or a late job of this node, or a smaller node of this
+      // authorization went out, configured nodes changed or not): the mark, written below in this
+      // same transaction on the locked row, is the only dedupe the backend alert line needs.
+      if (hourNodeHandled(row.hour_alert_key, expiresMs, node)) return;
+      patch.hour_alert_key = hourAlertMark(expiresMs, node);
       if (row.auth_status !== 'expiring') patch.auth_status = 'expiring';
-      await alert(trx, ctx, row, `h${node}`, expires, null, effects, now, true);
+      const lines: Effect[] = [];
+      await alert(trx, ctx, row, `h${node}`, expires, null, lines, now, true);
+      if (ctx.phones.length === 0) {
+        // No phones: the alert line is the whole reminder and nothing else records it, so it is
+        // written before the mark commits (key committed ⇒ line written; a failed or lost commit
+        // retries and may write it twice, never zero times).
+        for (const line of lines) line();
+      } else {
+        // Phones: the planned notify_logs rows and the deliver job commit with the mark.
+        effects.push(...lines);
+      }
     });
   }
 

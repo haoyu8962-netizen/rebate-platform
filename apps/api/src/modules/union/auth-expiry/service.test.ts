@@ -7,6 +7,10 @@
 //   必须记告警并写 hour_alert_key；键等于本节点时不得再写、不得再记；h6 之后的 h1 必须照记。
 // - 5 分钟自愈不补小时任务、或不补「已到点未处理」的最小节点、或连更大的已到节点一起补：第二条红。
 // - 续期成功后在续期事务里排小时任务（入队失败整笔回滚）、或排超过队列最大延迟的节点：第三条红。
+// r3（Codex money r2）：
+// - 无手机号时告警行仍在提交之后才记（提交成功但结果没回来就丢，重投又因键已写跳过）：第四条里
+//   提交抛错后没有告警行、或告警行排在提交之后，红。
+// - hour_alert_key 只按「等于本节点」判断：第五条里已处理 h1 后改配置为 [6]，h6 任务或自愈仍补发 h6，红。
 import type { DB } from '@couli/db';
 import {
   Kysely,
@@ -25,7 +29,7 @@ import {
   type JobQueue,
   type RootLogger,
 } from '../../platform/index.ts';
-import { JOB_HOUR_ALERT, hourAlertMark } from './hour-alerts.ts';
+import { JOB_HOUR_ALERT, KEY_ALERT_HOURS, hourAlertMark } from './hour-alerts.ts';
 import { createSiteAuthMonitor } from './service.ts';
 
 const APP = 'unit-app';
@@ -63,7 +67,19 @@ function seedRow(overrides: Partial<Row> = {}): Row {
   };
 }
 
-function setup(row: Row, at: number, options: { appIds?: boolean; failHourSend?: boolean } = {}) {
+function setup(
+  row: Row,
+  at: number,
+  options: {
+    appIds?: boolean;
+    failHourSend?: boolean;
+    /** The commit reaches the database but its result never comes back (the call throws). */
+    failCommit?: boolean;
+    hours?: number[];
+  } = {},
+) {
+  /** Commits and log lines in the order they happened. */
+  const order: string[] = [];
   const updates: { sql: string; params: readonly unknown[] }[] = [];
   const ends = { commit: 0, rollback: 0 };
   const result = <R>(rows: unknown[], affected?: bigint): QueryResult<R> =>
@@ -93,6 +109,8 @@ function setup(row: Row, at: number, options: { appIds?: boolean; failHourSend?:
     beginTransaction: async () => undefined,
     commitTransaction: async () => {
       ends.commit += 1;
+      order.push('commit');
+      if (options.failCommit === true) throw new Error('connection_lost');
     },
     rollbackTransaction: async () => {
       ends.rollback += 1;
@@ -124,6 +142,7 @@ function setup(row: Row, at: number, options: { appIds?: boolean; failHourSend?:
     (level: string) =>
     (_fields: unknown, message: string): void => {
       lines.push([level, message]);
+      order.push(message);
     };
   const logger = {
     info: log('info'),
@@ -139,7 +158,12 @@ function setup(row: Row, at: number, options: { appIds?: boolean; failHourSend?:
     queue,
     logger,
     crypto: {} as FieldCrypto,
-    config: { configValue: async () => null },
+    config: {
+      configValue: async (_appId: string, key: string) =>
+        key === KEY_ALERT_HOURS && options.hours !== undefined
+          ? { value: options.hours, version: 1 }
+          : null,
+    },
     probe: { probe: async () => ({ kind: 'unsupported' }) },
     refresher: {
       refresh: async () =>
@@ -155,6 +179,7 @@ function setup(row: Row, at: number, options: { appIds?: boolean; failHourSend?:
     ends,
     sends,
     lines,
+    order,
     refreshTo: (ms: number) => {
       refreshed = ms;
     },
@@ -269,4 +294,45 @@ it('[B1-22zd][BR-ID-24] 续期成功后小时任务在提交后尽力排：入�
   expect(long.lines).toContainEqual(['info', 'union_auth_refreshed']);
   expect(long.lines).not.toContainEqual(['warn', 'union_auth_hour_schedule_failed']);
   expect(hourSends(long.sends)).toEqual([]);
+});
+
+it('[B1-22zd][BR-ID-24] 无手机号：小时节点的后台告警行在写键的事务提交之前记——提交结果丢了也不丢告警；重投因键已写而跳过', async () => {
+  const at = EXPIRES - 6 * HOUR + 60_000;
+  const lost = setup(seedRow(), at, { failCommit: true });
+  await expect(lost.monitor.handle(hourJob(6))).rejects.toThrow('connection_lost');
+  // The mark went into the committed update …
+  expect(lost.updates).toHaveLength(1);
+  expect(lost.updates[0]!.params).toContain(hourAlertMark(EXPIRES, 6));
+  // … and the alert line was already written, before the commit.
+  expect(lost.lines).toContainEqual(['warn', 'union_auth_expiring']);
+  expect(lost.order.indexOf('union_auth_expiring')).toBeGreaterThanOrEqual(0);
+  expect(lost.order.indexOf('union_auth_expiring')).toBeLessThan(lost.order.indexOf('commit'));
+
+  // The redelivered job finds the committed mark: nothing more (the one line above is the alert).
+  const again = setup(seedRow({ hour_alert_key: hourAlertMark(EXPIRES, 6) }), at + 60_000);
+  await again.monitor.handle(hourJob(6));
+  expect(again.updates).toEqual([]);
+  expect(again.lines).not.toContainEqual(['warn', 'union_auth_expiring']);
+});
+
+it('[B1-22zd][BR-ID-24] 已处理更小节点后不补发更大的：h1 已发、配置改为 [6]，h6 任务不记不写、自愈不补 h6；别的到期时刻的键不算', async () => {
+  const at = EXPIRES - HOUR + 300_000;
+  const handledH1 = seedRow({ hour_alert_key: hourAlertMark(EXPIRES, 1) });
+
+  const job = setup(handledH1, at, { hours: [6] });
+  await job.monitor.handle(hourJob(6));
+  expect(job.updates).toEqual([]);
+  expect(job.lines).not.toContainEqual(['warn', 'union_auth_expiring']);
+
+  const heal = setup(handledH1, at, { hours: [6] });
+  await heal.monitor.heal();
+  expect(hourSends(heal.sends)).toEqual([]);
+
+  // A key of the previous authorization says nothing about this one: h6 goes out.
+  const stale = seedRow({ hour_alert_key: hourAlertMark(EXPIRES - DAY, 1) });
+  const fresh = setup(stale, at, { hours: [6] });
+  await fresh.monitor.handle(hourJob(6));
+  expect(fresh.updates).toHaveLength(1);
+  expect(fresh.updates[0]!.params).toContain(hourAlertMark(EXPIRES, 6));
+  expect(fresh.lines).toContainEqual(['warn', 'union_auth_expiring']);
 });
