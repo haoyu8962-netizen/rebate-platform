@@ -118,7 +118,7 @@ async function fixture() {
     scheduler: systemScheduler(),
     quota: { bucketKey: endpoint.quotaKey, tryAcquire: () => true },
   });
-  const publisher = vi.spyOn(governed, 'bindPublisher');
+  const publisher = vi.fn(governed.bindPublisher?.bind(governed));
   let ready = true;
   // The carried-over implementation takes these options. The red baseline predates them.
   const exchanger: UnionBindingExchanger = Reflect.construct(UnionBindingExchanger, [
