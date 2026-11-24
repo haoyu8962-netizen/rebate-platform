@@ -2206,9 +2206,17 @@ export interface UnionCredentials {
   expires_at: Timestamp | null;
   id: string;
   is_current: boolean;
+  r1_expires_in_s: number | null;
+  r2_expires_in_s: number | null;
+  /**
+   * BR-ID-24: Taobao re_expires_in seconds of this authorization (> 0 renewable); NULL unknown
+   */
+  re_expires_in_s: number | null;
   refresh_token_cipher: Buffer | null;
   union_account_id: string;
   updated_at: Generated<Timestamp>;
+  w1_expires_in_s: number | null;
+  w2_expires_in_s: number | null;
 }
 
 export interface UnionFilingAttempts {

@@ -2380,35 +2380,6 @@ $$;
 
 
 --
--- Name: reject_union_filing_attempt_rewrite(); Type: FUNCTION; Schema: app; Owner: -
---
-
-CREATE FUNCTION app.reject_union_filing_attempt_rewrite() RETURNS trigger
-    LANGUAGE plpgsql
-    SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$
-BEGIN
-  IF TG_OP = 'DELETE' THEN
-    RAISE EXCEPTION 'union_filing_attempts rows are never deleted'
-      USING ERRCODE = 'restrict_violation';
-  END IF;
-  IF ROW(NEW.id, NEW.app_id, NEW.user_id, NEW.platform, NEW.union_account_id, NEW.state,
-         NEW.started_at)
-      IS DISTINCT FROM
-      ROW(OLD.id, OLD.app_id, OLD.user_id, OLD.platform, OLD.union_account_id, OLD.state,
-          OLD.started_at)
-    OR OLD.outcome IS NOT NULL
-    OR OLD.finished_at IS NOT NULL
-  THEN
-    RAISE EXCEPTION 'union_filing_attempts are immutable and the outcome is written once'
-      USING ERRCODE = 'restrict_violation';
-  END IF;
-  RETURN NEW;
-END
-$$;
-
-
---
 -- Name: reject_update_delete(); Type: FUNCTION; Schema: app; Owner: -
 --
 
@@ -6825,28 +6796,25 @@ CREATE TABLE app.union_credentials (
     expires_at timestamp with time zone,
     is_current boolean NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    re_expires_in_s integer,
+    r1_expires_in_s integer,
+    r2_expires_in_s integer,
+    w1_expires_in_s integer,
+    w2_expires_in_s integer,
+    CONSTRAINT union_credentials_r1_expires_in_s_check CHECK ((r1_expires_in_s >= 0)),
+    CONSTRAINT union_credentials_r2_expires_in_s_check CHECK ((r2_expires_in_s >= 0)),
+    CONSTRAINT union_credentials_re_expires_in_s_check CHECK ((re_expires_in_s >= 0)),
+    CONSTRAINT union_credentials_w1_expires_in_s_check CHECK ((w1_expires_in_s >= 0)),
+    CONSTRAINT union_credentials_w2_expires_in_s_check CHECK ((w2_expires_in_s >= 0))
 );
 
 
 --
--- Name: union_filing_attempts; Type: TABLE; Schema: app; Owner: -
+-- Name: COLUMN union_credentials.re_expires_in_s; Type: COMMENT; Schema: app; Owner: -
 --
 
-CREATE TABLE app.union_filing_attempts (
-    id uuid NOT NULL,
-    app_id text NOT NULL,
-    user_id uuid NOT NULL,
-    platform text NOT NULL,
-    union_account_id uuid NOT NULL,
-    state text NOT NULL,
-    started_at timestamp with time zone NOT NULL,
-    outcome text,
-    finished_at timestamp with time zone,
-    CONSTRAINT union_filing_attempts_finished_check CHECK (((outcome IS NULL) = (finished_at IS NULL))),
-    CONSTRAINT union_filing_attempts_finished_order_check CHECK (((finished_at IS NULL) OR (finished_at >= started_at))),
-    CONSTRAINT union_filing_attempts_outcome_check CHECK (((outcome IS NULL) OR (outcome = ANY (ARRAY['saved'::text, 'rejected'::text, 'duplicate'::text]))))
-);
+COMMENT ON COLUMN app.union_credentials.re_expires_in_s IS 'BR-ID-24: Taobao re_expires_in seconds of this authorization (> 0 renewable); NULL unknown';
 
 
 --
@@ -9332,22 +9300,6 @@ ALTER TABLE ONLY app.union_credentials
 
 
 --
--- Name: union_filing_attempts union_filing_attempts_pkey; Type: CONSTRAINT; Schema: app; Owner: -
---
-
-ALTER TABLE ONLY app.union_filing_attempts
-    ADD CONSTRAINT union_filing_attempts_pkey PRIMARY KEY (id);
-
-
---
--- Name: union_filing_attempts union_filing_attempts_state_key; Type: CONSTRAINT; Schema: app; Owner: -
---
-
-ALTER TABLE ONLY app.union_filing_attempts
-    ADD CONSTRAINT union_filing_attempts_state_key UNIQUE (state);
-
-
---
 -- Name: union_pdd_pid_filings union_pdd_pid_filings_pkey; Type: CONSTRAINT; Schema: app; Owner: -
 --
 
@@ -11103,13 +11055,6 @@ CREATE UNIQUE INDEX union_credentials_current_key ON app.union_credentials USING
 
 
 --
--- Name: union_filing_attempts_lookup_idx; Type: INDEX; Schema: app; Owner: -
---
-
-CREATE INDEX union_filing_attempts_lookup_idx ON app.union_filing_attempts USING btree (app_id, user_id, platform, union_account_id, started_at);
-
-
---
 -- Name: union_pids_account_idx; Type: INDEX; Schema: app; Owner: -
 --
 
@@ -11765,13 +11710,6 @@ CREATE TRIGGER union_binding_conflicts_no_delete BEFORE DELETE ON app.union_bind
 --
 
 CREATE TRIGGER union_binding_conflicts_no_rewrite BEFORE UPDATE ON app.union_binding_conflicts FOR EACH ROW EXECUTE FUNCTION app.reject_union_binding_conflict_rewrite();
-
-
---
--- Name: union_filing_attempts union_filing_attempts_no_rewrite; Type: TRIGGER; Schema: app; Owner: -
---
-
-CREATE TRIGGER union_filing_attempts_no_rewrite BEFORE DELETE OR UPDATE ON app.union_filing_attempts FOR EACH ROW EXECUTE FUNCTION app.reject_union_filing_attempt_rewrite();
 
 
 --
@@ -13236,30 +13174,6 @@ ALTER TABLE ONLY app.union_credentials
 
 
 --
--- Name: union_filing_attempts union_filing_attempts_account_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
---
-
-ALTER TABLE ONLY app.union_filing_attempts
-    ADD CONSTRAINT union_filing_attempts_account_fkey FOREIGN KEY (app_id, platform, union_account_id) REFERENCES app.union_accounts(app_id, platform, id);
-
-
---
--- Name: union_filing_attempts union_filing_attempts_state_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
---
-
-ALTER TABLE ONLY app.union_filing_attempts
-    ADD CONSTRAINT union_filing_attempts_state_fkey FOREIGN KEY (state) REFERENCES app.union_auth_sessions(state);
-
-
---
--- Name: union_filing_attempts union_filing_attempts_user_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
---
-
-ALTER TABLE ONLY app.union_filing_attempts
-    ADD CONSTRAINT union_filing_attempts_user_fkey FOREIGN KEY (app_id, user_id) REFERENCES app.users(app_id, id);
-
-
---
 -- Name: union_pdd_pid_filings union_pdd_pid_filings_account_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
 --
 
@@ -13758,13 +13672,6 @@ REVOKE ALL ON FUNCTION app.reject_union_auth_session_rewrite() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION app.reject_union_binding_conflict_rewrite() FROM PUBLIC;
-
-
---
--- Name: FUNCTION reject_union_filing_attempt_rewrite(); Type: ACL; Schema: app; Owner: -
---
-
-REVOKE ALL ON FUNCTION app.reject_union_filing_attempt_rewrite() FROM PUBLIC;
 
 
 --
@@ -18671,25 +18578,38 @@ GRANT SELECT(updated_at) ON TABLE app.union_credentials TO couli_readonly;
 
 
 --
--- Name: TABLE union_filing_attempts; Type: ACL; Schema: app; Owner: -
+-- Name: COLUMN union_credentials.re_expires_in_s; Type: ACL; Schema: app; Owner: -
 --
 
-GRANT SELECT,INSERT ON TABLE app.union_filing_attempts TO couli_app;
-GRANT SELECT ON TABLE app.union_filing_attempts TO couli_readonly;
-
-
---
--- Name: COLUMN union_filing_attempts.outcome; Type: ACL; Schema: app; Owner: -
---
-
-GRANT UPDATE(outcome) ON TABLE app.union_filing_attempts TO couli_app;
+GRANT SELECT(re_expires_in_s) ON TABLE app.union_credentials TO couli_readonly;
 
 
 --
--- Name: COLUMN union_filing_attempts.finished_at; Type: ACL; Schema: app; Owner: -
+-- Name: COLUMN union_credentials.r1_expires_in_s; Type: ACL; Schema: app; Owner: -
 --
 
-GRANT UPDATE(finished_at) ON TABLE app.union_filing_attempts TO couli_app;
+GRANT SELECT(r1_expires_in_s) ON TABLE app.union_credentials TO couli_readonly;
+
+
+--
+-- Name: COLUMN union_credentials.r2_expires_in_s; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT(r2_expires_in_s) ON TABLE app.union_credentials TO couli_readonly;
+
+
+--
+-- Name: COLUMN union_credentials.w1_expires_in_s; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT(w1_expires_in_s) ON TABLE app.union_credentials TO couli_readonly;
+
+
+--
+-- Name: COLUMN union_credentials.w2_expires_in_s; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT(w2_expires_in_s) ON TABLE app.union_credentials TO couli_readonly;
 
 
 --
