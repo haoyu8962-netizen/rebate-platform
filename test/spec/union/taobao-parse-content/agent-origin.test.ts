@@ -16,6 +16,15 @@ it.each([
   const taobao = detailSetup([{ item_id: itemId }], { orderSource: dataoke.client });
   const agentContext = { ...ctx, origin: 'agent' } as const;
 
+  // 主干会拒绝普通来源的推广链，让失败落在请求次数断言上。
+  await taobao.adapter.resolveLink(raw, ctx).catch(() => undefined);
+  expect(dataoke.transport).toHaveBeenCalledTimes(1);
+
+  dataoke.credentials.mockClear();
+  dataoke.transport.mockClear();
+  taobao.credentials.mockClear();
+  taobao.transport.mockClear();
+
   await unionFailure(() => taobao.adapter.resolveLink(raw, agentContext), 'adapter_unimplemented');
   expect(dataoke.credentials).not.toHaveBeenCalled();
   expect(dataoke.transport).not.toHaveBeenCalled();

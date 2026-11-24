@@ -64,7 +64,10 @@ it('[AC-B1-04zzzzo#8] 淘口令解析成功归档移除请求原文和应答推�
   const data = { goodsId, ...promotionFields, echoedContent: content };
   const harness = setup(response({ code: 0, msg: content, data }));
 
-  await expect(harness.taobao.adapter.resolveLink(content, ctx)).resolves.toStrictEqual({
+  const result = await harness.taobao.adapter
+    .resolveLink(content, ctx)
+    .catch((error: unknown) => error);
+  expect(result).toStrictEqual({
     item: { platform: 'taobao', item_id: itemId },
   });
 
