@@ -1095,3 +1095,9 @@ approvals:
     granted: true
     date: '2026-11-25'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审 / 实现轮次属门禁流程小改动），D10-2900，先例第 166、173、177 条。原因：CT-24zzv 写测与规则测试评审额度已用满（第 177 条的增量也已用），实现 2 / 3；Codex 资金评审 r1 fail 五条 S1（review-codex.json，被评审提交 35ce65a65），均不涉及金额、分录、状态机：②③ 为契约说明未跟上 BR-ID-34 现文，④ 为本单过渡适配与契约不符，①⑤ 经编排裁定（① 取「首次使用即绑定、签发时不指定操作」，⑤ 只加「只作展示」说明）。五条须在实现 3 一次改完并各有用例钉住。实现增量 1 次为备用：只在写测增量之后规则测试又暴露实现问题、实现 3 已用掉时启用；money r2 仍 fail 照止损线停，备用的那次不因此自动启用。规则测试评审增量仍判 S1 即停、报编排。非资金用例，不放宽任何资金或归属断言。'
+  - id: 180
+    row: 4
+    title: 'B1-04zzzzo 任务专属一次性追加（D10-2924 / D10-2925）：写规则测试补修 1 次（Codex，只修先红 red/3 的 5 个问题，不计次）+ 规则测试评审增量 1 轮（独立 Claude，claude-run.sh）——范围写死为写测第 3 次新增的 4 个文件：test/spec/union/taobao-parse-content/{archive,classification,agent-origin}.test.ts 与 test/spec/agent/no-third-party-parse/origin.test.ts（[AC-B1-04zzzzo#8–12]：归档脱敏、成功码 data 缺失或 null → link_unrecognized、origin=agent 不调大淘客 parse-content、Agent 链路解析淘口令时大淘客零调用）。其余规则测试文件不在本轮评审范围。'
+    granted: true
+    date: '2026-11-25'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（评审轮次属门禁流程小改动），D10-2924，先例第 167、169、175 条。原因：B1-04zzzzo 的规则测试评审计数已用满（2 / 2，tools/ops/state.ts 上限 2）；写测第 3 次（D10-2917：money r1 两条 S1 与 BR-AI-04 并入本单，台账补丁 1 #701）新增的规则测试需要一轮评审。写测作者为 Codex，按第 19 条由独立 Claude 评审。D10-2925：先红 red/3 有 5 个问题都在这 4 个文件里（[AC-B1-04zzzzo#11] 四行在主干天然绿、[#8] 红因为 UnionError），写测计数已满（3 / 3），准一次只修这 5 个问题的补修（断言语义不变、不加用例）。'
