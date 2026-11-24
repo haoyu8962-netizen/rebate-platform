@@ -120,24 +120,23 @@ it('[CT-24f] the list is read only under config.risk, without step-up, not paged
   expect(raw.tags.map((t) => t.name)).toContain('admin-risk');
 });
 
-it('[CT-24f] enable and disable need config.risk with a totp step-up, CAS and an optional reason', () => {
+it('[CT-24f] enable and disable need config.risk without step-up (BR-ID-34: none), CAS and an optional reason', () => {
   for (const [o, id, target] of writes()) {
     expect(o.operationId).toBe(id);
     expect(o['x-auth']).toBe('admin');
     expect(o.security).toEqual([{ adminBearerAuth: [] }]);
     expect(o.tags).toEqual(['admin-risk']);
-    expect(o['x-error-codes']).toEqual([10001, 10003, 10403, 20001, 20902]);
+    expect(o['x-error-codes']).toEqual([10001, 10403, 20001, 20902]);
+    expect(o['x-step-up']).toBeUndefined();
     expect(o['x-idempotent']).toBeUndefined();
     expect((o.parameters ?? []).map((p) => [p.name, p.in, p.required ?? false])).toEqual([
       ['X-Trace-Id', 'header', false],
       ['rule_id', 'path', true],
-      ['X-Step-Up-Token', 'header', false],
     ]);
     expect(o.requestBody?.required).toBe(true);
     const text = flat(o.description);
     expect(text).toContain('Permission point `config.risk`');
-    expect(text).toContain('totp tier on every call');
-    expect(text).toContain('10003 with `data.tier=totp`');
+    expect(text).not.toMatch(/step-up|X-Step-Up-Token|10003|data\.tier/i);
     expect(text).toContain('20001 with `data.fields=[rule_id]`');
     expect(text).toContain('20902 with `data.resource=risk_rule`');
     expect(text).toContain(`sets \`status\` to ${target} and adds 1`);
@@ -189,7 +188,7 @@ it('[CT-24f] thresholds stay under config-items: only their keys are listed and 
     'adminUpdateConfigItem',
   );
   expect(flat(contract.paths['/admin/v1/config-items/{key}']!.put!.description)).toContain(
-    'totp tier for `config.risk`',
+    'Every other key needs no step-up (BR-ID-34: none)',
   );
 });
 
@@ -199,7 +198,7 @@ it('[CT-24f] 20902 has the risk_rule resource and the conflict example uses it',
     const errors = o.responses['4XX']!.content!['application/json']!.examples!;
     expect((errors['conflict']!.value as { data: Row }).data).toEqual({ resource: 'risk_rule' });
     expect((errors['unknownRule']!.value as { data: Row }).data).toEqual({ fields: ['rule_id'] });
-    expect((errors['stepUpRequired']!.value as { data: Row }).data).toEqual({ tier: 'totp' });
+    expect(errors['stepUpRequired']).toBeUndefined();
   }
 });
 

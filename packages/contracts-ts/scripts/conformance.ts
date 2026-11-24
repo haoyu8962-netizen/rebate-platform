@@ -457,6 +457,39 @@ function checkSensitive(op: Obj, where: string, sensitive: boolean, problems: st
   }
 }
 
+/** Admin `x-step-up` values (04 §5 「后台二次验证档位」; BR-ID-34 二次验证分三档; none is not marked). */
+export const ADMIN_STEP_UP_TIERS: readonly string[] = ['sudo', 'strict'];
+
+/**
+ * Admin `x-step-up` (BR-ID-34): sudo or strict; such an operation lists the AdminStepUpToken
+ * parameter and the code 10003. Without `x-step-up` an admin operation does not list the
+ * parameter.
+ */
+function checkAdminStepUp(op: Obj, where: string, problems: string[]): void {
+  const value = op['x-step-up'];
+  const params = Array.isArray(op['parameters'])
+    ? op['parameters'].map((p) => refName(p, 'parameters'))
+    : [];
+  const listed = Array.isArray(op['x-error-codes']) ? op['x-error-codes'] : [];
+  if (value === undefined) {
+    if (params.includes('AdminStepUpToken')) {
+      problems.push(`${where}: X-Step-Up-Token is listed only on x-step-up operations`);
+    }
+    return;
+  }
+  if (typeof value !== 'string' || !ADMIN_STEP_UP_TIERS.includes(value)) {
+    problems.push(`${where}: admin x-step-up must be one of ${ADMIN_STEP_UP_TIERS.join(', ')}`);
+  }
+  if (!params.includes('AdminStepUpToken')) {
+    problems.push(`${where}: x-step-up operations list the X-Step-Up-Token parameter`);
+  }
+  for (const code of STEP_UP_CODES) {
+    if (!listed.includes(code)) {
+      problems.push(`${where}: x-step-up operations list ${code} in x-error-codes`);
+    }
+  }
+}
+
 /**
  * `x-step-up` (04 §5 step-up row): the value is a StepUpAction and is the one the table maps
  * this operation to; the operation is idempotent, lists the X-Step-Up-Token parameter and the
@@ -848,7 +881,8 @@ export function checkConformance(
       if (impl !== undefined && impl !== 'planned') {
         problems.push(`${where}: x-implementation may only be "planned"`);
       }
-      checkStepUp(op, where, stepUpActions, stepUpByOperation.get(where), problems);
+      if (admin) checkAdminStepUp(op, where, problems);
+      else checkStepUp(op, where, stepUpActions, stepUpByOperation.get(where), problems);
       checkSensitive(op, where, sensitiveOperations.has(where), problems);
       checkStream(doc, op, where, problems);
       if (admin) {

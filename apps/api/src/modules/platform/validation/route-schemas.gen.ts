@@ -9401,7 +9401,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
         },
         "code": {
           "type": "string",
-          "description": "Current 6-digit code of the authenticator, or of the SMS for the sms tier.",
+          "description": "Current 6-digit code of the authenticator, or of the SMS for the sms method.",
           "pattern": "^[0-9]{6}$"
         }
       }
@@ -9437,7 +9437,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
         },
         "code": {
           "type": "string",
-          "description": "Current 6-digit code of the authenticator, or of the SMS for the sms tier.",
+          "description": "Current 6-digit code of the authenticator, or of the SMS for the sms method.",
           "pattern": "^[0-9]{6}$"
         }
       }
@@ -9490,14 +9490,22 @@ export const CONTRACT_ROUTE_SCHEMAS = {
     "body": {
       "type": "object",
       "additionalProperties": false,
+      "description": "One of `method` or its legacy name `tier` is required (neither → 20001 [method]). `tier` is the legacy name of `method` (the second-factor method), still accepted.",
       "required": [
-        "tier",
         "code"
       ],
       "properties": {
         "tier": {
           "type": "string",
-          "description": "Admin step-up tier (enum admin_step_up_tier, BR-ID-34).",
+          "description": "Second-factor method of an admin step-up (enum admin_step_up_method, BR-ID-34 第二因子):\ntotp = authenticator code, sms = SMS code to the registered verify phone. The step_up_token\ndoes not depend on it: any token of the session serves a sudo or strict operation.\n",
+          "enum": [
+            "totp",
+            "sms"
+          ]
+        },
+        "method": {
+          "type": "string",
+          "description": "Second-factor method of an admin step-up (enum admin_step_up_method, BR-ID-34 第二因子):\ntotp = authenticator code, sms = SMS code to the registered verify phone. The step_up_token\ndoes not depend on it: any token of the session serves a sudo or strict operation.\n",
           "enum": [
             "totp",
             "sms"
@@ -9505,7 +9513,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
         },
         "code": {
           "type": "string",
-          "description": "Current 6-digit code of the authenticator, or of the SMS for the sms tier.",
+          "description": "Current 6-digit code of the authenticator, or of the SMS for the sms method.",
           "pattern": "^[0-9]{6}$"
         }
       }
@@ -9536,11 +9544,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -9587,7 +9590,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
         },
         "code": {
           "type": "string",
-          "description": "Current 6-digit code of the authenticator, or of the SMS for the sms tier.",
+          "description": "Current 6-digit code of the authenticator, or of the SMS for the sms method.",
           "pattern": "^[0-9]{6}$"
         }
       }
@@ -9653,11 +9656,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -9725,11 +9723,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -9760,11 +9753,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -9810,11 +9798,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -9909,11 +9892,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -10004,11 +9982,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -10086,7 +10059,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
         },
         "code": {
           "type": "string",
-          "description": "Current 6-digit code of the authenticator, or of the SMS for the sms tier.",
+          "description": "Current 6-digit code of the authenticator, or of the SMS for the sms method.",
           "pattern": "^[0-9]{6}$"
         },
         "reason": {
@@ -10744,7 +10717,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
     },
     "body": {
       "type": "object",
-      "description": "Empty for a masked task. For an unmasked task (masked false) reason is required, with a\nnew totp-tier X-Step-Up-Token; for a masked task reason is 20001.\n",
+      "description": "Empty for a masked task. For an unmasked task (masked false) reason is required, with a\nsudo step-up (X-Step-Up-Token outside the 180-minute window); for a masked task reason is 20001.\n",
       "additionalProperties": false,
       "properties": {
         "reason": {
@@ -11205,11 +11178,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -11283,11 +11251,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -11361,11 +11324,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -11594,11 +11552,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -11652,11 +11605,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -11766,11 +11714,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -11827,11 +11770,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -12270,11 +12208,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -12524,11 +12457,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -13064,11 +12992,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -13118,11 +13041,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -14404,11 +14322,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -15481,11 +15394,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -15594,11 +15502,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -15685,11 +15588,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -15754,11 +15652,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -15918,11 +15811,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -15999,11 +15887,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -16131,11 +16014,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -16201,7 +16079,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
               "type": "null"
             }
           ],
-          "description": "Null = no minimum. Saving a higher one than before (none before counts) needs the totp tier."
+          "description": "Null = no minimum. Saving a higher one than before needs no step-up (BR-ID-34, none)."
         },
         "recommended_version": {
           "anyOf": [
@@ -16312,11 +16190,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -16369,11 +16242,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -16845,11 +16713,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -17364,6 +17227,11 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 8,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "x-step-up-token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
         }
       },
       "required": [
@@ -17420,11 +17288,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         },
         "idempotency-key": {
           "type": "string",
@@ -17488,11 +17351,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
         },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
-        },
         "idempotency-key": {
           "type": "string",
           "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
@@ -17545,11 +17403,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
         },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
-        },
         "idempotency-key": {
           "type": "string",
           "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
@@ -17601,11 +17454,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -18164,11 +18012,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
         },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
-        },
         "idempotency-key": {
           "type": "string",
           "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
@@ -18213,11 +18056,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         },
         "idempotency-key": {
           "type": "string",
@@ -18272,11 +18110,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         },
         "idempotency-key": {
           "type": "string",
@@ -18566,11 +18399,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
         },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
-        },
         "idempotency-key": {
           "type": "string",
           "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
@@ -18681,11 +18509,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
         },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
-        },
         "idempotency-key": {
           "type": "string",
           "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
@@ -18730,11 +18553,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         },
         "idempotency-key": {
           "type": "string",
@@ -18969,11 +18787,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -19059,11 +18872,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         },
         "idempotency-key": {
           "type": "string",
@@ -19195,11 +19003,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -19246,11 +19049,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -19304,11 +19102,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         }
       },
       "required": []
@@ -19457,11 +19250,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
         },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
-        },
         "idempotency-key": {
           "type": "string",
           "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
@@ -19539,11 +19327,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
         },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
-        },
         "idempotency-key": {
           "type": "string",
           "description": "Value of the Idempotency-Key header (04 §5「幂等」).",
@@ -19598,11 +19381,6 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9_-]+$"
-        },
-        "x-step-up-token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2048
         },
         "idempotency-key": {
           "type": "string",

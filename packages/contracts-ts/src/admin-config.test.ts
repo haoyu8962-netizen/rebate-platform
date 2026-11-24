@@ -117,7 +117,8 @@ describe('configuration center and emergency switch operations (04 §10.2, §11.
       expect(op.security).toEqual([{ adminBearerAuth: [] }]);
       expect(op.tags).toEqual(['admin-config']);
       expect(op['x-error-codes']).toEqual([...codes]);
-      expect(op['x-step-up']).toBeUndefined();
+      // BR-ID-34 strict list「改自动到账开关与上限」: the writes are marked strict (by key, see below).
+      expect(op['x-step-up']).toBe(method === 'get' ? undefined : 'strict');
       expect(op['x-idempotent']).toBeUndefined();
       const names = (op.parameters ?? []).map((p) => p.name.toLowerCase());
       expect(names).not.toContain('idempotency-key');
@@ -146,20 +147,24 @@ describe('configuration center and emergency switch operations (04 §10.2, §11.
       '`pay.enabled` and `pay.channel_enabled.<pay_channel>` need `switch.all` or `switch.pay`',
     );
     expect(description).toContain('`withdraw.auto_payout.enabled` included, needs `switch.all`');
-    expect(description).toContain('totp tier for every key');
+    expect(description).toContain('only `withdraw.auto_payout.enabled` is strict');
+    expect(description).toContain('`data.tier=strict`');
+    expect(description).toContain('needs no step-up (BR-ID-34: none)');
     expect(description).toContain('within 10 seconds');
   });
 
-  it('[CT-02i] config writes need totp for config.risk and config.business, none for config.general', () => {
+  it('[CT-02i] config writes are strict for the auto-payout and payout caps, none for every other key', () => {
     for (const [method, path] of [
       ['put', `${CI}/{key}`],
       ['post', `${CI}/batch`],
       ['post', `${CI}/{key}/rollback`],
     ] as const) {
       const description = operation(method, path).description.replace(/\s+/g, ' ');
-      expect(description, path).toMatch(/none for `config\.general`/);
-      expect(description, path).toContain('`config.risk` and `config.business`');
-      expect(description, path).toContain('`data.tier=totp`');
+      expect(description, path).toContain('`config.general`, `config.risk` or `config.business`');
+      expect(description, path).toContain('BR-ID-34 strict list「改自动到账开关与上限」');
+      expect(description, path).toContain('`payout.single_cap_fen`');
+      expect(description, path).toContain('`data.tier=strict`');
+      expect(description, path).toMatch(/no step-up \(BR-ID-34: none\)|none for every other key/);
     }
   });
 
@@ -230,10 +235,10 @@ describe('examples', () => {
     }
   });
 
-  it('[CT-02i] every write shows the 10003 totp example', () => {
+  it('[CT-02i] every write shows the 10003 strict example', () => {
     for (const [method, path] of WRITES) {
       const stepUp = errorExamples(operation(method, path)).filter((e) => e.code === 10003);
-      expect(stepUp, path).toEqual([expect.objectContaining({ data: { tier: 'totp' } })]);
+      expect(stepUp, path).toEqual([expect.objectContaining({ data: { tier: 'strict' } })]);
     }
   });
 

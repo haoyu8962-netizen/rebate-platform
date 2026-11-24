@@ -99,8 +99,23 @@ const OPERATIONS = [
   ],
   ['put', `${A}/{union_account_id}/credential`, 'adminPutUnionCredential', WRITE, ACCOUNT, true],
   ['get', `${A}/alert-phones`, 'adminListUnionAlertPhones', READ, ACCOUNT, false],
-  ['post', `${A}/alert-phones`, 'adminAddUnionAlertPhone', [...WRITE, 20902], ACCOUNT, true],
-  ['delete', `${A}/alert-phones`, 'adminRemoveUnionAlertPhone', [...WRITE, 20902], ACCOUNT, true],
+  // BR-ID-34: the alert phones are none (no step-up token, no 10003).
+  [
+    'post',
+    `${A}/alert-phones`,
+    'adminAddUnionAlertPhone',
+    [10001, 10403, 20001, 20902],
+    ACCOUNT,
+    false,
+  ],
+  [
+    'delete',
+    `${A}/alert-phones`,
+    'adminRemoveUnionAlertPhone',
+    [10001, 10403, 20001, 20902],
+    ACCOUNT,
+    false,
+  ],
   ['get', P, 'adminListUnionPids', READ, PID, false],
   ['post', P, 'adminCreateUnionPid', WRITE, PID, true],
   ['patch', `${P}/{pid_id}`, 'adminUpdateUnionPid', [...WRITE, 20902], PID, true],
@@ -154,7 +169,8 @@ it.each(OPERATIONS)(
     expect(op.security).toEqual([{ adminBearerAuth: [] }]);
     expect(op.tags).toEqual(['admin-unions']);
     expect(op['x-error-codes']).toEqual([...codes]);
-    expect(op['x-step-up']).toBeUndefined();
+    // BR-ID-34 sudo list「换绑或重置联盟账号」「改推广位 PID」: the writes with a token are sudo.
+    expect(op['x-step-up']).toBe(stepUp ? 'sudo' : undefined);
     expect(op['x-idempotent']).toBeUndefined();
     const names = (op.parameters ?? []).map((p) => p.name.toLowerCase());
     expect(names).not.toContain('idempotency-key');
@@ -168,16 +184,16 @@ it.each(OPERATIONS)(
   },
 );
 
-it('[CT-24h] every write with step-up needs the totp tier and shows the 10003 totp example', () => {
+it('[CT-24h] every write with step-up needs the sudo tier and shows the 10003 sudo example', () => {
   for (const [method, path, , , , stepUp] of OPERATIONS) {
     if (!stepUp) continue;
     const op = operation(method, path);
-    expect(flat(op.description), path).toContain('totp tier');
-    expect(flat(op.description), path).toContain('`data.tier=totp`');
+    expect(flat(op.description), path).toContain('Step-up: sudo');
+    expect(flat(op.description), path).toContain('`data.tier=sudo`');
     expect(
       errorExamples(op).filter((e) => e.code === 10003),
       path,
-    ).toEqual([expect.objectContaining({ data: { tier: 'totp' } })]);
+    ).toEqual([expect.objectContaining({ data: { tier: 'sudo' } })]);
   }
 });
 

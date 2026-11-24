@@ -70,14 +70,26 @@ export const admin_permission = [
 export type AdminPermission = (typeof admin_permission)[number];
 
 /**
- * 后台 step-up 的档位；step_up_token 记档位，动态码档的 token 不能用于短信档操作；10003 的 data.tier 取本枚举
- * Source: 规划/08 BR-ID-34（二次验证分两档）；规划/04 §6.6 auth、§11 step-up 列（CT-02f） (contracts/enums/admin.yaml).
+ * 后台二次验证的档位（none 不验证、不列入本枚举）；验证方式（动态码或短信）不由档位决定；10003 的 data.tier 取本枚举；totp、sms 为过渡期旧值
+ * Source: 规划/08 BR-ID-34（二次验证分三档）；规划/04 §6.6 auth、§11 step-up 列（CT-02f） (contracts/enums/admin.yaml).
  */
 export const admin_step_up_tier = [
-  "totp", // 动态码档（身份验证器 TOTP）
-  "sms", // 短信档（向账号登记的验证手机号发验证码）
+  "totp", // 旧值，过渡期保留（服务端与前端改造落地后另开契约单删除）；原动态码档（身份验证器 TOTP）
+  "sms", // 旧值，过渡期保留（服务端与前端改造落地后另开契约单删除）；原短信档（向账号登记的验证手机号发验证码）
+  "sudo", // 中高危；本次后台会话最近一次第二因子验证通过起 180 分钟内不重问
+  "strict", // 极高危、不可逆；每次操作都重新验证，不受 sudo 窗口豁免
 ] as const;
 export type AdminStepUpTier = (typeof admin_step_up_tier)[number];
+
+/**
+ * 后台二次验证（step-up）所用的第二因子方式；签发的 step_up_token 不分档，本会话任一未用过的令牌都可用于 sudo 或 strict 操作
+ * Source: 规划/08 BR-ID-34（第二因子、二次验证分三档）；规划/04 §6.6 auth (contracts/enums/admin.yaml).
+ */
+export const admin_step_up_method = [
+  "totp", // 验证器动态码（TOTP）
+  "sms", // 短信验证码（发到本人登记的验证手机号）
+] as const;
+export type AdminStepUpMethod = (typeof admin_step_up_method)[number];
 
 /**
  * 后台登录第一步通过后的下一步，凭中间凭证 login_ticket 完成；两步都完成才签发 admin_token
@@ -2207,6 +2219,7 @@ export type TljKind = (typeof tlj_kind)[number];
 export const enums = {
   admin_permission,
   admin_step_up_tier,
+  admin_step_up_method,
   admin_login_step,
   admin_account_status,
   admin_auth_level,

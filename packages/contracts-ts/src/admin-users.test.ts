@@ -56,6 +56,14 @@ const U = '/admin/v1/users';
 const B = `${U}/{user_id}/union-bindings/{platform}`;
 const READ = [10001, 10403, 20001];
 const BINDING = [10001, 10003, 10403, 20001, 20902, 30154];
+/** Disable and enable are none (BR-ID-34): no step-up token, no 10003. */
+const BINDING_NONE = [10001, 10403, 20001, 20902, 30154];
+/** BR-ID-34 sudo list: reveal, unfreeze (risk-state) and the binding reset. */
+const SUDO = new Set([
+  'adminRevealUserField',
+  'adminUpdateUserRiskState',
+  'adminResetUserUnionBinding',
+]);
 /** The eight operations of CT-02j (task §9.2): codes and the permission points named. */
 const OPERATIONS = [
   ['get', U, 'adminListUsers', READ, ['user.list']],
@@ -76,10 +84,11 @@ const OPERATIONS = [
     ['risk.ban', 'risk.freeze'],
   ],
   ['post', `${B}/reset`, 'adminResetUserUnionBinding', BINDING, ['union.binding_reset']],
-  ['post', `${B}/disable`, 'adminDisableUserUnionBinding', BINDING, ['union.binding_disable']],
-  ['post', `${B}/enable`, 'adminEnableUserUnionBinding', BINDING, ['union.binding_disable']],
+  ['post', `${B}/disable`, 'adminDisableUserUnionBinding', BINDING_NONE, ['union.binding_disable']],
+  ['post', `${B}/enable`, 'adminEnableUserUnionBinding', BINDING_NONE, ['union.binding_disable']],
 ] as const;
 const WRITES = OPERATIONS.filter(([method]) => method !== 'get');
+const SUDO_WRITES = WRITES.filter(([, , operationId]) => SUDO.has(operationId));
 const ADMIN_COMMON = [10403, 20001, 42901, 50001];
 
 let contract: Document;
@@ -130,13 +139,13 @@ describe('user operations (04 §11.1, §11.2)', () => {
       expect(op.security).toEqual([{ adminBearerAuth: [] }]);
       expect(op.tags).toEqual(['admin-users']);
       expect(op['x-error-codes']).toEqual([...codes]);
-      expect(op['x-step-up']).toBeUndefined();
+      expect(op['x-step-up']).toBe(SUDO.has(operationId) ? 'sudo' : undefined);
       expect(op['x-idempotent']).toBeUndefined();
       const names = (op.parameters ?? []).map((p) => p.name.toLowerCase());
       expect(names).not.toContain('idempotency-key');
       const header = (op.parameters ?? []).find((p) => p.name.toLowerCase() === 'x-step-up-token');
-      if (method === 'get') expect(header).toBeUndefined();
-      else expect(header).toMatchObject({ in: 'header', required: false });
+      if (SUDO.has(operationId)) expect(header).toMatchObject({ in: 'header', required: false });
+      else expect(header).toBeUndefined();
       for (const point of points) {
         expect(enums.admin_permission).toContain(point);
         expect(op.description, point).toContain(`\`${point}\``);
@@ -153,13 +162,20 @@ describe('user operations (04 §11.1, §11.2)', () => {
     );
   });
 
-  it('[CT-02j] every write needs the totp tier and shows the 10003 totp example', () => {
-    for (const [method, path] of WRITES) {
+  it('[CT-02j] every sudo write needs the sudo tier and shows the 10003 sudo example; the others none', () => {
+    for (const [method, path] of SUDO_WRITES) {
       const op = operation(method, path);
-      expect(flat(op.description), path).toContain('totp tier');
-      expect(flat(op.description), path).toContain('`data.tier=totp`');
+      expect(flat(op.description), path).toMatch(/Step-up(?: only for `unfreeze`)?: sudo/);
+      expect(flat(op.description), path).toContain('`data.tier=sudo`');
       const stepUp = errorExamples(op).filter((e) => e.code === 10003);
-      expect(stepUp, path).toEqual([expect.objectContaining({ data: { tier: 'totp' } })]);
+      expect(stepUp, path).toEqual([expect.objectContaining({ data: { tier: 'sudo' } })]);
+    }
+    for (const [method, path, operationId] of WRITES) {
+      if (SUDO.has(operationId)) continue;
+      const op = operation(method, path);
+      const stepUp = errorExamples(op).filter((e) => e.code === 10003);
+      expect(stepUp, path).toEqual([]);
+      expect(flat(op.description), path).not.toMatch(/X-Step-Up-Token|data\.tier|10003/);
     }
   });
 
