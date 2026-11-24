@@ -5,12 +5,13 @@ type: contract
 # 2026-11-23 be 入账（编排 D10-2774 / D10-2767 / D10-2775：两批文案键同一张契约单、一次占槽，排在 B1-22zd 之后）。只动契约文案与生成物，不改服务端与三端代码。
 # ① 50301 两键：中文逐字照 08 BR-TEXT-14 表（12_TEXT:1063 realname_vendor「实名核验服务暂时不可用，请稍后再试」、:1064 bank_vendor「银行卡核验服务暂时不可用，请稍后再试」），不带变量；是场景子键、不是 data.reason（服务端 50301 实名 / 银行卡核验不带 data）。
 #    App 实名页与后台实名更正对话框都用 realname_vendor，若 texts.default.json 的后台段（fallbacks 或后台键组）也要有，照 BR-TEXT-14 的「用在哪」列定，不另造。
-# ② 限流等待键：本次入账**不含**（D10-2775）；等编排的规划小 PR 回写 08 BR-TEXT-14 并合并、SPEC_REF 同步后，以本单补丁补进 paths / 规则测试要钉的键，键名与原文以 08 为准。
-# 归类：逐键列入 fund-term-keys 的 ordinary（不含 BR-TEXT-12 资金关键词）。三端「有键就用、没有退回 50001」的跟进与收款页错显维护中（FU-AND-PAYOUT-50301 等）不在本单。
+# ② 限流等待 6 键（编排 D10-2777，规划 couli#27 已回写 08 BR-TEXT-14 表 C）：login.get_code.wait「{n} 秒后可获取验证码」、.wait_min「{m} 分钟后可获取验证码」、.wait_hour「{h} 小时后可获取验证码」、login.code.countdown_min「{m} 分钟后可重新获取」、.countdown_hour「{h} 小时后可重新获取」、login.code.can_resend「可以重新获取验证码」；中文与占位符逐字照 08，未进入账前随本 PR 一并补（D10-2775 原定补丁，入账前直接并入）。
+# 归类：8 个新键逐键列入 fund-term-keys 的 ordinary（BR-TEXT-12 细则「资金术语键」已把 6 个限流键归普通；50301 两键不含资金关键词）。三端「有键就用、没有退回 50001」的跟进与收款页错显维护中（FU-AND-PAYOUT-50301 等）不在本单。
 # 规则测试钉：各键存在且默认文案与 08 逐字相等、占位符集合与 08 一致；fund-term-keys 归 ordinary；现有 error.50301 / .maintenance / .not_launched 不变。
-refs: [BR-TEXT-14]
+refs: [BR-TEXT-14, BR-TEXT-12]
 refs_hash:
-  BR-TEXT-14: 478953c7e441
+  BR-TEXT-14: 4ecb90ade57a
+  BR-TEXT-12: 1dca4781b3fa
 deps: []
 paths:
   - 'contracts/texts.default.json'
