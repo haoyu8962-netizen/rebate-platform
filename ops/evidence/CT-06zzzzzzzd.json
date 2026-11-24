@@ -1,0 +1,89 @@
+{
+  "risk_note": "Gate tooling only (CT-06zzzzzzzd, D10-2698 甲 / D10-2709; owner agreed 2026-11-23 14:49). A modify_existing whole-block entry may now name a frozen .each / .for block whose title is a template literal with ${…} (e.g. inside a for (const source of sources) loop) by its source text between the backticks, verbatim (placeholders, %s, escapes and blanks as written). A plain it / test with such a title is never a whole block; a placeholder spelt otherwise or expanded to a value names nothing; two blocks of one text are refused; templates without interpolation keep the cooked-value behaviour; whole-block entries still require rule_change and a note (tighten_only refused). Only tools/guard/lib/test-blocks.ts and its unit test change. Unblocks B2-19 (its frozen TIME#2 .each block in a for loop).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus; tools/** is RV2), --base f864dbec2: pass with 2 S2, both fail-closed (tagged-template it.each table not matched; a single-quoted title equal to an interpolated template's text now counts as a duplicate), no real frozen test uses either; registered FU-CT-06ZZZZZZZD-TEMPLATE-S2."
+    },
+    {
+      "reviewer": "claude-independent",
+      "engine": "claude-independent",
+      "model": "claude-opus-5-5",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Second reviewer for this gate change (precedent CT-06zzzzzzzc / D10-2559), a fresh independent Claude via tools/agent/claude-run.sh: r1 pass, no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (ledger tester codex, attempts 1-3). Spec-test r1 (independent Claude) fail: 1 S1 (a plain it with an interpolated title was not pinned) + 1 S2 (escape in a template without interpolation); attempt 2 added both, its red run found the new plain-it case already true on main (no teeth), attempt 3 folded it into a positive .each case red on main (D10-2538). Spec-test r2 pass, no findings."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "CT-06zzzzzzzd",
+  "spec_commit": "f767fc6d1cbe0c91166e65d8cec72cd72f64404f",
+  "spec_ref": "85256dfaf7cd55292a23ecff2d60e72fe7360467",
+  "red_tests": [
+    "test/spec/ci/modify-existing-template-interp/whole-block.test.ts > [AC-CT-06zzzzzzzd#1] .each 按插值模板原文比较整块",
+    "test/spec/ci/modify-existing-template-interp/whole-block.test.ts > [AC-CT-06zzzzzzzd#2] .for 逐字匹配插值模板原文",
+    "test/spec/ci/modify-existing-template-interp/whole-block.test.ts > [AC-CT-06zzzzzzzd#3] 普通标题与无插值模板沿用旧规则",
+    "test/spec/ci/modify-existing-template-interp/whole-block.test.ts > [AC-CT-06zzzzzzzd#4] 基线或头提交有同原文的两块时拒绝",
+    "test/spec/ci/modify-existing-template-interp/whole-block.test.ts > [AC-CT-06zzzzzzzd#5] 带插值的整块申报仍拒绝 tighten_only",
+    "test/spec/ci/modify-existing-template-interp/whole-block.test.ts > [AC-CT-06zzzzzzzd#6] 循环内的普通 it 拒绝按插值模板原文申报"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "f767fc6d1cbe0c91166e65d8cec72cd72f64404f",
+      "tree": "4b2370ae9cd8fa2e037974dacdfc0ff72e01629e",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-24T12:26:24Z",
+      "finished_at": "2026-11-24T12:26:28Z",
+      "red_tests": [
+        "test/spec/ci/modify-existing-template-interp/whole-block.test.ts > [AC-CT-06zzzzzzzd#1] .each 按插值模板原文比较整块",
+        "test/spec/ci/modify-existing-template-interp/whole-block.test.ts > [AC-CT-06zzzzzzzd#2] .for 逐字匹配插值模板原文",
+        "test/spec/ci/modify-existing-template-interp/whole-block.test.ts > [AC-CT-06zzzzzzzd#3] 普通标题与无插值模板沿用旧规则",
+        "test/spec/ci/modify-existing-template-interp/whole-block.test.ts > [AC-CT-06zzzzzzzd#4] 基线或头提交有同原文的两块时拒绝",
+        "test/spec/ci/modify-existing-template-interp/whole-block.test.ts > [AC-CT-06zzzzzzzd#5] 带插值的整块申报仍拒绝 tighten_only",
+        "test/spec/ci/modify-existing-template-interp/whole-block.test.ts > [AC-CT-06zzzzzzzd#6] 循环内的普通 it 拒绝按插值模板原文申报"
+      ],
+      "expected": ["test/spec/ci/modify-existing-template-interp/whole-block.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "a2e38332b040d2570bf2bbb5e8b004b2ebe45016fec5f3c55d6bb629cced3f02"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c9617bfcdd609fc6dda5ac371ceabcec26ad5cf2",
+    "specs": "4db60136986a6e439b95ebd1f88a43768d551600"
+  }
+}
