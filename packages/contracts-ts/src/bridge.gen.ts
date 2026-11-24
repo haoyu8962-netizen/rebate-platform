@@ -1893,9 +1893,11 @@ export const apps = {
   },
   "pdd": {
     "platform": "pdd",
-    "status": "candidate",
+    "status": "verified",
     "trade_only": true,
-    "ios_query_schemes": [],
+    "ios_query_schemes": [
+      "pinduoduo"
+    ],
     "harmony_query_schemes": []
   }
 } as const;

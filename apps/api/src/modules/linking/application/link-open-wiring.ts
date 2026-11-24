@@ -17,6 +17,7 @@ import type { LinkOpenReadPlan } from './link-open-reads.ts';
 import {
   appSchemeOf,
   createLinkOpenConversion,
+  planVariant,
   type JdPddConversionInput,
   type LinkConversionOptions,
   type LinkOpenApps,
@@ -69,11 +70,14 @@ function isClient(value: string | undefined): value is Client {
   return value !== undefined && (CLIENTS as readonly string[]).includes(value);
 }
 
-/** The plan variant of this entry: the client as sent, installed only where it is detectable. */
+/**
+ * The plan variant of this entry: the client as sent, installed only where it is detectable, and
+ * the jump-plan scheme (B1-06zp: for every installed value, so no earlier entry hits).
+ */
 function variantOf(input: Pick<JdPddConversionInput, 'client' | 'installed'>): string {
   const installed =
     input.client === 'h5' || input.client === 'web' ? 'unknown' : (input.installed ?? 'unknown');
-  return `${input.client}:${installed}`;
+  return planVariant(input.client, installed);
 }
 
 function clientOfVariant(variant: string | undefined): Client | null {

@@ -1,5 +1,5 @@
 {
-  "$comment": "Three kinds of entries (规划/04 §9「apps.json 的条目形状」, 规划/03 §4.5, CSB-11). apps: external target apps, the only targets of ext.openApp and of installed detection (BR-ATTR-27 ①); trade_only (required) is true for shopping platforms, and ext.openApp answers 90403 for them so H5 uses trade.convertAndOpen (BR-ATTR-29 细则). sdk_queries: query entries an SDK needs ({source_sdk, ios_scheme, android_package, harmony_scheme}, null where a platform has none). inbound: inbound callbacks, kind custom_scheme {scheme} or verified_link {host, path_prefix, verified: true}, both with purpose, source_sdk (null for our own) and platforms. iOS LSApplicationQueriesSchemes (apps + sdk_queries, ≤ 20), Android <queries>, Harmony querySchemes and every inbound declaration are generated from this file by CT-05; nothing is written by hand. Nothing here is verified yet: app values are candidates from 规划/09 CAP-TB-11, CAP-JD-11, CAP-PDD-11 and CAP-X-04; sdk_queries is still empty. inbound registers only our own custom scheme couli (规划/06 Q-A5, 已定 2026-10-06) for ios, android and harmony. Still pending and deliberately not registered: the deep-link host l.couliapp.com is decided (06 Q-A5) but its verified_link entry waits for the Apple Team ID and Associated Domains / system domain verification (06 Q-C9 / N-04), because the shape only allows verified: true and a path_prefix is not fixed yet; the Android package name (安卓包名) and the Harmony bundle name (鸿蒙 bundle) are not given yet; the WeChat universal link waits for 06 Q-C12; the Baichuan callback details wait for CAP-TB-11. Clients never build jump URLs from these values: the server sends primary / fallbacks.",
+  "$comment": "Three kinds of entries (规划/04 §9「apps.json 的条目形状」, 规划/03 §4.5, CSB-11). apps: external target apps, the only targets of ext.openApp and of installed detection (BR-ATTR-27 ①); trade_only (required) is true for shopping platforms, and ext.openApp answers 90403 for them so H5 uses trade.convertAndOpen (BR-ATTR-29 细则). sdk_queries: query entries an SDK needs ({source_sdk, ios_scheme, android_package, harmony_scheme}, null where a platform has none). inbound: inbound callbacks, kind custom_scheme {scheme} or verified_link {host, path_prefix, verified: true}, both with purpose, source_sdk (null for our own) and platforms. iOS LSApplicationQueriesSchemes (apps + sdk_queries, ≤ 20), Android <queries>, Harmony querySchemes and every inbound declaration are generated from this file by CT-05; nothing is written by hand. Verification: only the pdd entry is verified, and only on Android (规划/09 CAP-PDD-11, A54 / P0-1122 / D10-2795 / D10-2811: on a Xiaomi device the conversion's schema_url opened Pinduoduo); its iOS scheme pinduoduo is untested on a real device and its Harmony scheme is pending real-device verification (D10-2820). The taobao and jd values are still candidates from 规划/09 CAP-TB-11, CAP-JD-11 and CAP-X-04; sdk_queries is still empty. inbound registers only our own custom scheme couli (规划/06 Q-A5, 已定 2026-10-06) for ios, android and harmony. Still pending and deliberately not registered: the deep-link host l.couliapp.com is decided (06 Q-A5) but its verified_link entry waits for the Apple Team ID and Associated Domains / system domain verification (06 Q-C9 / N-04), because the shape only allows verified: true and a path_prefix is not fixed yet; the Android package name (安卓包名) and the Harmony bundle name (鸿蒙 bundle) are not given yet; the WeChat universal link waits for 06 Q-C12; the Baichuan callback details wait for CAP-TB-11. Clients never build jump URLs from these values: the server sends primary / fallbacks.",
   "version": 1,
   "apps": {
     "taobao": {
@@ -37,14 +37,14 @@
     "pdd": {
       "name": "拼多多",
       "platform": "pdd",
-      "status": "candidate",
+      "status": "verified",
       "trade_only": true,
-      "source": "规划/09 CAP-PDD-11（schema_url 由转链返回，三端须静态声明要检测的 scheme，取值待实测）",
+      "source": "规划/09 CAP-PDD-11（A54、P0-1122/D10-2795、D10-2811：小米安卓真机验证转链回包的 pinduoduo scheme 可拉起拼多多；iOS 未经真机实测，鸿蒙待真机核验，D10-2820）",
       "ios": {
-        "query_schemes": []
+        "query_schemes": ["pinduoduo"]
       },
       "android": {
-        "packages": []
+        "packages": ["com.xunmeng.pinduoduo"]
       },
       "harmony": {
         "query_schemes": []

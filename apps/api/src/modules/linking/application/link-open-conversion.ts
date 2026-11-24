@@ -216,9 +216,9 @@ export function appSchemeOf(apps: LinkOpenApps | undefined, platform: 'jd' | 'pd
 
 /**
  * Launch paths derived from the converted URL. The app scheme comes from contracts/apps.json
- * (candidates, unverified: CAP-JD-11 / CAP-PDD-11); production admission of each path is separate.
- * TODO(规划/11 §4.5): 拼多多以转链返回的 schema_url 为准 — blocked on CAP-PDD-11 实测。
- * Also the Pinduoduo auth-url's paths of its authorization page (B1-06g).
+ * (CAP-JD-11 / CAP-PDD-11); production admission of each path is separate. The jd purchase and
+ * the Pinduoduo auth-url's paths of its authorization page (B1-06g, D10-662) use it; the
+ * Pinduoduo purchase does not (pddPurchasePaths, B1-06zp).
  */
 export function pathsOf(platform: 'jd' | 'pdd', url: string, scheme: string | null): LinkJumpPaths {
   const encoded = encodeURIComponent(url);
@@ -234,6 +234,40 @@ export function pathsOf(platform: 'jd' | 'pdd', url: string, scheme: string | nu
     universalLink: url,
     h5: url,
   };
+}
+
+/**
+ * B1-06zp (BR-ATTR-27, D10-2819): the Pinduoduo purchase's paths. The scheme step is this
+ * conversion's schema_url exactly as returned, and only when it is a non-empty string under the
+ * scheme contracts/apps.json declares for pdd followed by `://`; otherwise there is no scheme step
+ * (the web page only) and no scheme is ever built here. The web page stays the mobile URL.
+ */
+export function pddPurchasePaths(
+  mobileUrl: string,
+  schemaUrl: unknown,
+  appScheme: string | null,
+): LinkJumpPaths {
+  const scheme =
+    appScheme !== null &&
+    typeof schemaUrl === 'string' &&
+    schemaUrl !== '' &&
+    schemaUrl.startsWith(`${appScheme}://`)
+      ? schemaUrl
+      : null;
+  return { scheme, universalLink: mobileUrl, h5: mobileUrl };
+}
+
+/**
+ * B1-06zp: the jump-plan scheme a cached jump was built under, part of every plan variant (for
+ * every client and installed value alike), so a jump cached before the Pinduoduo purchase took
+ * its scheme step from the conversion's schema_url never hits again and is converted afresh.
+ * Bump it whenever the jump plan built for an unchanged identity changes.
+ */
+export const JUMP_PLAN_SCHEME = 'p2';
+
+/** The plan variant: client × installed × jump-plan scheme. */
+export function planVariant(client: string, installed: string): string {
+  return `${client}:${installed}:${JUMP_PLAN_SCHEME}`;
 }
 
 /** The readers the conversion identity is built from (as LinkConversionOptions names them). */
@@ -471,7 +505,7 @@ export function createLinkOpenConversion(options: LinkConversionOptions): LinkCo
   function variant(input: Pick<JdPddConversionInput, 'client' | 'installed'>): string {
     const client = input.client === 'web' ? 'h5' : input.client;
     const installed = client === 'h5' ? 'unknown' : (input.installed ?? 'unknown');
-    return `${client}:${installed}`;
+    return planVariant(client, installed);
   }
 
   async function convert(input: JdPddConversionInput): Promise<LinkOpenJump> {
@@ -510,6 +544,7 @@ export function createLinkOpenConversion(options: LinkConversionOptions): LinkCo
       throw failedConversion('linking: link has no raw item id to convert');
     }
     let url: string;
+    let schemaUrl: unknown;
     try {
       const result = await registry
         .get(platform)
@@ -520,6 +555,7 @@ export function createLinkOpenConversion(options: LinkConversionOptions): LinkCo
         );
       if (result.kind !== 'url') throw new Error('linking: unexpected conversion result');
       url = result.url;
+      schemaUrl = result.schema_url;
     } catch {
       // No retry here: one adapter call per conversion (governance owns retries and circuits).
       throw failedConversion('linking: conversion failed');
@@ -528,7 +564,10 @@ export function createLinkOpenConversion(options: LinkConversionOptions): LinkCo
       platform,
       client: input.client,
       installed: input.installed ?? 'unknown',
-      paths: pathsOf(platform, url, appSchemeOf(options.apps, platform)),
+      paths:
+        platform === 'pdd'
+          ? pddPurchasePaths(url, schemaUrl, appSchemeOf(options.apps, platform))
+          : pathsOf(platform, url, appSchemeOf(options.apps, platform)),
       expireAt: await jumpExpiry(link.app_id),
     });
   }
