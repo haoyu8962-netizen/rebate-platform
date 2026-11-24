@@ -502,7 +502,7 @@ function authAppsFor(
     accountId !== null && taobaoFilingReady(appConfig, ports, accountId);
   const base = authAppsWithOAuth(authApps, appConfig);
   return {
-    taobaoUserOAuth: base.taobaoUserOAuth,
+    ...(base.taobaoUserOAuth === undefined ? {} : { taobaoUserOAuth: base.taobaoUserOAuth }),
     taobaoFilingReadyFor,
     resolve: (appId, environment, client, method) =>
       base.resolve(appId, environment, client, method),
