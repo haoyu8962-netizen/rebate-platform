@@ -19,6 +19,12 @@
 // OAuth application it was issued with, which the adapter uses instead of its current setting; a
 // reference that does not resolve, or a method the live path cannot complete (sdk_token), is
 // refused here before anything is exchanged (UnionBindingExchangeRefusal).
+// r4b (D10-2779): the exchange port's input stays the five fields the B1-06h rule tests pin. The
+// account is the bindings use case's own choice (reads.authAccountId, the account the binding is
+// written under), scoped around the call with withBindingUnionAccount and read here; without it
+// (a caller outside the bindings use case) the request names no account, and the live adapter,
+// whose credentials always carry TAOBAO_INVITER_ACCOUNT_ID, refuses the filing unsent.
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { UnionError, type BindReq, type BindResult, type CallCtx } from '../../union/index.ts';
 
 export interface UnionBindingExchangeInput {
@@ -28,8 +34,14 @@ export interface UnionBindingExchangeInput {
     { readonly code: string } | { readonly access_token: string; readonly expires_in: number };
   readonly appRef: string;
   readonly traceId: string;
-  /** 补丁 2: the union account the binding is written under (the bindings use case's choice). */
-  readonly unionAccountId?: string;
+}
+
+/** r4b: the union account the binding is written under, scoped by the bindings use case. */
+const bindingUnionAccount = new AsyncLocalStorage<string>();
+
+/** Runs `run` (the exchange) with the account the binding will be written under. */
+export function withBindingUnionAccount<T>(accountId: string, run: () => Promise<T>): Promise<T> {
+  return bindingUnionAccount.run(accountId, run);
 }
 
 /** The OAuth application a state's reference names (app key + redirect URI, no secret). */
@@ -84,6 +96,7 @@ export class UnionBindingExchanger {
   }
 
   async exchange(input: UnionBindingExchangeInput): Promise<UnionBindingExchangeResult> {
+    const unionAccountId = bindingUnionAccount.getStore();
     const bind = this.#bind?.() ?? null;
     if (bind === null) {
       throw new Error('linking: no union channel filing for the credential exchange');
@@ -100,12 +113,12 @@ export class UnionBindingExchanger {
       'code' in input.credential ? input.credential.code : input.credential.access_token;
     // Legacy callers (no account, no resolved app) send the credential alone, as before.
     const req: BindReq =
-      input.unionAccountId === undefined && oauthApp === undefined
+      unionAccountId === undefined && oauthApp === undefined
         ? { authorizationCode }
         : {
             authorizationCode,
             credentialType: input.method === 'web_code' ? 'authorization_code' : 'sdk_token',
-            ...(input.unionAccountId === undefined ? {} : { unionAccountId: input.unionAccountId }),
+            ...(unionAccountId === undefined ? {} : { unionAccountId }),
             ...(oauthApp === undefined ? {} : { oauthApp }),
           };
     try {

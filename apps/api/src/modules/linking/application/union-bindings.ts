@@ -104,6 +104,7 @@ import {
 import { UnionError } from '../../union/index.ts';
 import {
   UnionBindingExchangeRefusal,
+  withBindingUnionAccount,
   type UnionBindingExchangeInput,
   type UnionBindingExchanger,
 } from './union-binding-exchanger.ts';
@@ -598,14 +599,10 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     // belongs to it, BR-ATTR-05); a failure is counted by client × method × fixed class.
     let exchanged: Awaited<ReturnType<UnionBindingExchanger['exchange']>>;
     try {
-      exchanged = await exchanger.exchange({
-        appId,
-        method,
-        credential: credentialOf(body),
-        appRef,
-        traceId,
-        unionAccountId: accountId,
-      });
+      // r4b: the port's input is the five fields; the account is scoped around the call.
+      exchanged = await withBindingUnionAccount(accountId, () =>
+        exchanger.exchange({ appId, method, credential: credentialOf(body), appRef, traceId }),
+      );
     } catch (error) {
       bindFailed(appId, client, method, bindFailureOf(error), traceId);
       throw error;
