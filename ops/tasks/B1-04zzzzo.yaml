@@ -8,6 +8,8 @@ type: impl
 # ③ 返回里的 pid、commission*、转链 url、originInfo.activityId 一律不读、不进结果、不进日志（D10-2683）。code 25003 / 无 goodsId / upgrade.get 空结果 → link_unrecognized；其余大淘客错误照现有大淘客错误归类；归档 kind = query。
 # ④ 没配大淘客来源 → 维持 adapter_unimplemented，不取凭据、不发请求、不告警（冻结 [AC-B1-04j#30]、[AC-B1-04zzzzk#1/#4] 的 setup 都未配来源，探针：主干上调 resolveLink 的测试里配了 orderSource 的两处都是 vi.fn 桩，预计零冻结改动）。
 # 不改契约 / openapi（resolveLink 为内部端口，错误码沿用），不占契约槽；不改 parsing 模块。样本未到：FU-PARSE-CONTENT-SAMPLES。
+# 补丁 1（D10-2917，money r1 范围外 S1 → 本单修）：BR-AI-04「Agent 链路禁止调用爬虫和第三方口令解析服务」——CallCtx 加可选 origin（'agent'），Agent 装配（agent/stream/mount/assembly.ts 绑定 parseToken / parseUrl 处）带上；
+#   淘宝适配器见 origin=agent 不调 parse-content（按未配来源处理：adapter_unimplemented）。另修 money r1 两条 S1：归档请求摘要剔除 content、应答归档按白名单只留 goodsId 与错误分类字段；成功码下 data 缺失 / null → link_unrecognized。
 refs: [BR-PROD-03, BR-PROD-05, BR-PROD-10]
 refs_hash:
   BR-PROD-03: 7769390bcd28
@@ -16,12 +18,16 @@ refs_hash:
 deps: []
 paths:
   - 'apps/api/src/modules/union/infra/taobao/{taobao-adapter.ts,resolve-link.ts,resolve-link.test.ts,parse-content.ts,parse-content.test.ts}'
+  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/agent/stream/mount/assembly.ts'
   - 'ops/tasks/B1-04zzzzo.yaml'
 test_paths:
   - 'test/spec/union/taobao-parse-content/**'
+  - 'test/spec/agent/no-third-party-parse/**'
 impl: claude
 tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/union/taobao-parse-content/**'
+  - 'test/spec/agent/no-third-party-parse/**'
 status: todo
