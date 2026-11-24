@@ -105,29 +105,6 @@ it.each([
   expectRedacted(warn.mock.calls, MARKERS);
 });
 
-it('[AC-B1-04zzzzm#4] 重复备案时用同一用户令牌查回编号', async () => {
-  const { exchange, transport, warn } = publisher();
-  transport
-    .mockResolvedValueOnce(response(tokenAnswer()))
-    .mockResolvedValueOnce(duplicateSave())
-    .mockResolvedValueOnce(
-      response({
-        tbk_sc_publisher_info_get_response: {
-          data: {
-            total_count: 1,
-            inviter_list: { map_data: [{ relation_app: 'common', relation_id: 731082 }] },
-          },
-        },
-      }),
-    );
-
-  expect(await exchange()).toEqual({ kind: 'bound', relationId: '731082' });
-  expect(transport).toHaveBeenCalledTimes(3);
-  expectPublisherRequest(transport, 1, SAVE);
-  expectPublisherRequest(transport, 2, GET);
-  expectRedacted(warn.mock.calls, MARKERS);
-});
-
 it('[AC-B1-04zzzzm#4] 保存和查询均无编号时备案失败并告警', async () => {
   const { exchange, transport, warn } = publisher();
   transport
@@ -254,25 +231,241 @@ it('[AC-B1-04zzzzm#5] 保存备案成功时，个人信息不出现在返回值�
 });
 
 it.each([
-  ['大整数', '9007199254740993', '9007199254740993'],
-  ['前导零字符串', '"000811796"', '000811796'],
-])('[AC-B1-04zzzzm#4] 重复备案查询保留%s编号且隐藏个人信息', async (_, wireId, expectedId) => {
-  const { adapter, transport, warn } = publisher();
-  transport
-    .mockResolvedValueOnce(response(tokenAnswer(TOKEN_USER)))
-    .mockResolvedValueOnce(duplicateSaveWithAccount())
-    .mockResolvedValueOnce({
-      ...response({}),
-      body: `{"tbk_sc_publisher_info_get_response":{"data":{"total_count":1,"inviter_list":{"map_data":[{"relation_app":"common","relation_id":${wireId},"account_name":${JSON.stringify(GET_ACCOUNT_NAME)}}]}}}}`,
-    });
+  {
+    format: '普通数字',
+    wireId: '731082',
+    relationId: '731082',
+    unverified: [
+      { label: '没有历史绑定', owner: null },
+      {
+        label: '属于其他用户',
+        owner: { user_id: '0199a3b4-5c6d-7000-8000-000000000043' },
+      },
+      {
+        label: '属于其他联盟账号',
+        owner: { union_account_id: '0199a3b4-5c6d-7000-8000-0000000000a2' },
+      },
+      { label: '属于其他应用', owner: { app_id: 'other_synthetic_app' } },
+    ],
+  },
+  {
+    format: '大整数',
+    wireId: '9007199254740993',
+    relationId: '9007199254740993',
+    unverified: [{ label: '只有舍入后的编号', owner: { relation_id: '9007199254740992' } }],
+  },
+  {
+    format: '前导零字符串',
+    wireId: '"000811796"',
+    relationId: '000811796',
+    unverified: [{ label: '只有去掉前导零的编号', owner: { relation_id: '811796' } }],
+  },
+])(
+  '[AC-B1-04zzzzm#4] 重复备案用同一令牌查回$format 编号，校验历史归属并隐藏个人信息',
+  async ({ wireId, relationId, unverified }) => {
+    const { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler } =
+      await import('kysely');
+    const { createUnionBindings } =
+      await import('../../../../apps/api/src/modules/linking/application/union-bindings.ts');
+    const { resolveIssuedTaobaoOAuthApp, taobaoUserOAuthRef } =
+      await import('../../../../apps/api/src/modules/linking/infra/auth-apps.ts');
+    type Db = import('@couli/db').DB;
+    type Query = import('kysely').CompiledQuery;
+    type QueryResult<Row> = import('kysely').QueryResult<Row>;
 
-  const result = await adapter.bindPublisher({ authorizationCode: CODE }, ctx);
-  expect(result).toEqual({ relationId: expectedId });
-  expect(transport).toHaveBeenCalledTimes(3);
-  expectPublisherRequest(transport, 1, SAVE);
-  expectPublisherRequest(transport, 2, GET);
-  expectRedacted([result, warn.mock.calls], PRIVATE_MARKERS);
-});
+    const caller = {
+      appId: 'synthetic_app',
+      userId: '0199a3b4-5c6d-7000-8000-000000000041',
+      deviceId: '0199a3b4-5c6d-7000-8000-000000000042',
+    };
+    const account = '0199a3b4-5c6d-7000-8000-0000000000a1';
+    const state = 'synthetic-duplicate-state';
+    const device = { platform: 'ios', revoked_at: null };
+    const appRef = taobaoUserOAuthRef({ appKey: APP_KEY, redirectUri: USER_REDIRECT });
+    const owned = {
+      app_id: caller.appId,
+      user_id: caller.userId,
+      union_account_id: account,
+      relation_id: relationId,
+      platform: 'taobao',
+    };
+
+    async function submit(owner: Partial<typeof owned> | null) {
+      const { adapter, clock, transport, warn } = setup({
+        credentials: async () => ({
+          appKey: APP_KEY,
+          appSecret: SECRET,
+          userOAuth: {
+            redirectUri: USER_REDIRECT,
+            inviterCode: INVITER_CODE,
+            inviterAccountId: account,
+          },
+        }),
+      });
+      const queried = {
+        ...response({}),
+        body: `{"tbk_sc_publisher_info_get_response":{"data":{"total_count":1,"inviter_list":{"map_data":[{"relation_app":"common","relation_id":${wireId},"account_name":${JSON.stringify(GET_ACCOUNT_NAME)}}]}}}}`,
+      };
+      transport
+        .mockReset()
+        .mockResolvedValueOnce(response(tokenAnswer(TOKEN_USER)))
+        .mockResolvedValueOnce(duplicateSaveWithAccount())
+        .mockResolvedValueOnce(queried)
+        .mockRejectedValue(new Error('合成传输收到未预期的上游请求'));
+
+      const now = clock.now().getTime();
+      // 冷却已结束，匹配的历史记录可以证实归属，随后正常写入 active。
+      const rows =
+        owner === null
+          ? []
+          : [
+              {
+                ...owned,
+                ...owner,
+                id: '0199a3b4-5c6d-7000-8000-0000000000b1',
+                status: 'released',
+                released_at: new Date(now - 60_000),
+                cooldown_until: new Date(now - 1_000),
+                row_version: 1,
+              },
+            ];
+      const session = {
+        state,
+        app_id: caller.appId,
+        user_id: caller.userId,
+        device_id: caller.deviceId,
+        client: device.platform,
+        platform: 'taobao',
+        mode: 'bind',
+        used_at: null,
+        expire_at: new Date(now + 60_000),
+        auth_methods: ['web_code'],
+        auth_app_refs: { web_code: appRef },
+      };
+
+      const writes: Query[] = [];
+      const bindingWarnings: unknown[][] = [];
+      const driver = new DummyDriver();
+      const connection = await driver.acquireConnection();
+      const scope = /"(app_id|user_id|union_account_id|platform|relation_id)" (=|!=|<>) \$(\d+)/g;
+      function answer(query: Query): QueryResult<unknown> {
+        const { sql, parameters } = query;
+        if (sql.includes('from "devices"')) return { rows: [device] };
+        if (sql.includes('from "union_auth_sessions"')) return { rows: [session] };
+        if (sql.includes('from "users"')) {
+          return { rows: [{ id: caller.userId, status: 'active' }] };
+        }
+        if (/^(?:insert into|update|delete from) "union_bindings"/i.test(sql)) {
+          writes.push(query);
+          return { rows: [], numAffectedRows: 1n };
+        }
+        if (sql.startsWith('update "union_auth_sessions"')) {
+          return { rows: [], numAffectedRows: 1n };
+        }
+        if (sql.includes('from "union_bindings"')) {
+          const predicates = [...sql.matchAll(scope)];
+          return {
+            rows: rows.filter((row) =>
+              predicates.every(([, column, operator, position]) => {
+                const same = row[column as keyof typeof owned] === parameters[Number(position) - 1];
+                return operator === '=' ? same : !same;
+              }),
+            ),
+          };
+        }
+        return { rows: [] };
+      }
+      connection.executeQuery = async <Row>(query: Query) => answer(query) as QueryResult<Row>;
+      driver.acquireConnection = async () => connection;
+      const db = new Kysely<Db>({
+        dialect: {
+          createDriver: () => driver,
+          createAdapter: () => new PostgresAdapter(),
+          createIntrospector: (handle) => new PostgresIntrospector(handle),
+          createQueryCompiler: () => new PostgresQueryCompiler(),
+        },
+      });
+
+      try {
+        const bindings = createUnionBindings({
+          db,
+          clock,
+          callerContext: { current: async () => caller },
+          reads: {
+            binding: async () => ({ status: 'unbound', accountId: null }),
+            authAccountId: async () => account,
+            siteAuthAvailable: async () => true,
+            configuredMethods: async () => ['web_code'],
+            userBanned: async () => false,
+          },
+          idempotency: {
+            executeInTransaction: async (_request, handler) => {
+              const { status, envelope } = await db.transaction().execute(handler);
+              return { status, body: JSON.stringify(envelope), source: 'handler' };
+            },
+          },
+          exchanger: new UnionBindingExchanger(() => adapter.bindPublisher.bind(adapter), {
+            resolveApp: resolveIssuedTaobaoOAuthApp,
+          }),
+          logger: {
+            warn: (...args: unknown[]) => {
+              bindingWarnings.push(args);
+            },
+          },
+        });
+        const result = await bindings.bind({
+          platform: 'taobao',
+          body: { state, auth_method: 'web_code', code: CODE },
+          idempotencyKey: 'synthetic-duplicate-binding',
+          traceId: 'synthetic-duplicate-trace',
+        });
+        const warnings = [...warn.mock.calls, ...bindingWarnings];
+        expect(transport).toHaveBeenCalledTimes(3);
+        expectPublisherRequest(transport, 1, SAVE);
+        expectPublisherRequest(transport, 2, GET);
+        expectRedacted([result, writes, warnings], PRIVATE_MARKERS);
+        return { result, writes, warnings };
+      } finally {
+        await db.destroy();
+      }
+    }
+
+    const accepted = await submit(owned);
+    expect(accepted.result).toMatchObject({
+      status: 200,
+      envelope: { code: 0, data: { platform: 'taobao', status: 'active' } },
+    });
+    expect(accepted.writes).toEqual([
+      expect.objectContaining({
+        sql: expect.stringMatching(/^insert into "union_bindings"/),
+        parameters: expect.arrayContaining([
+          caller.appId,
+          caller.userId,
+          account,
+          relationId,
+          'active',
+        ]),
+      }),
+    ]);
+
+    for (const { label, owner } of unverified) {
+      const refused = await submit(owner);
+      expect(refused.result.status, label).toBeGreaterThanOrEqual(400);
+      expect(refused.result.envelope.code, label).not.toBe(0);
+      expect(refused.writes, label).toEqual([]);
+      const warning = refused.warnings
+        .map(([fields]) => fields as Record<string, unknown> | undefined)
+        .find((fields) =>
+          [fields?.reason, fields?.failure, fields?.code].includes('duplicate_unverified'),
+        );
+      expect(warning, label).toEqual(expect.any(Object));
+      for (const value of Object.values(warning ?? {})) {
+        const flat = value === null || ['string', 'number', 'boolean'].includes(typeof value);
+        expect(flat, label).toBe(true);
+      }
+    }
+  },
+);
 
 it.each([
   {
