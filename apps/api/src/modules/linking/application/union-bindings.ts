@@ -77,6 +77,10 @@
 // the binding's savepoint; ③ a duplicate answer's read-back id is accepted on matching binding
 // history or an earlier attempt of the same app, user, platform and account whose outcome is
 // unknown.
+// r2 (money review): the attempt's filing lock (union-filing-attempts.ts) is given back after the
+// key's transaction is over (requestEnded, in bind), so a later request of the same scope only
+// reads attempts of requests that have ended; an id from the save whose answer is not stored
+// (10001 after a ban, 50001) has its 'saved' written again on its own after the rollback.
 import type { components } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import { sql, type Kysely, type Selectable, type Transaction } from 'kysely';
@@ -118,7 +122,7 @@ import {
 import {
   createFilingRecorder,
   hasEarlierUnknownAttempt,
-  markFilingSaved,
+  type FilingRecorder,
 } from './union-filing-attempts.ts';
 import { BIND_RETRY_AFTER_SEC, getBindingAdmission } from './upstream-limits.ts';
 
@@ -545,6 +549,7 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     client: AuthClient,
     body: BindUnionRequest,
     traceId: string,
+    onFiling: (recorder: FilingRecorder) => void,
   ): Promise<HandlerResult> {
     const platform = 'taobao';
     const { status, accountId: bound } = await reads.binding(appId, userId, platform);
@@ -629,6 +634,7 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
       state: session.state,
       traceId,
     });
+    onFiling(filing);
     let exchanged: Awaited<ReturnType<UnionBindingExchanger['exchange']>>;
     try {
       // r4b: the port's input is the five fields; the account is scoped around the call.
@@ -656,11 +662,10 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     // status: the history proves the filing was ours); otherwise nothing is written or activated,
     // the failure is counted and warned as duplicate_unverified, and the answer is 50001.
     // B1-04zzzzn ②: an id from the save itself → saved, on trx before the binding's savepoint, so
-    // it commits with the binding and also with a refused binding's stored answer (30151 / 10001).
+    // it commits with the binding and also with a refused binding's stored answer (30151); r2: an
+    // answer that is not stored (10001, 50001) has it written again after the rollback (bind).
     const attempt = filing.current();
-    if (exchanged.fromDuplicateLookup !== true && attempt !== null) {
-      await markFilingSaved(trx, attempt, clock.now());
-    }
+    if (exchanged.fromDuplicateLookup !== true) await filing.markSaved(trx);
     // B1-04zzzzn ③ (D10-2851): or an earlier attempt of the same app, user, platform and account
     // whose outcome is unknown (its save may have gone through); this request's own attempt and
     // attempts with a known outcome never count.
@@ -732,6 +737,12 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     };
   }
 
+  /** Whether the key stores (commits) a handler's answer: code 0 or 30000–39999 (idempotency). */
+  function answerStored(answer: HandlerResult): boolean {
+    const code = answer.envelope.code;
+    return code === 0 || (code >= 30000 && code <= 39999);
+  }
+
   /** The handler's failures are server faults: logged without the request, answered 50001. */
   async function guarded(traceId: string, run: () => Promise<HandlerResult>) {
     try {
@@ -771,23 +782,39 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
       // Submissions of one process that may hold their transaction's connection at once (the api
       // pool has 10, POOL_SIZES.api.db): each needs a second connection for the consumption and
       // the shared reads, so the cap stays well below the pool size; the others wait without one.
-      const admitted = await getBindingAdmission().run(() =>
-        idempotency.executeInTransaction(
-          {
-            appId,
-            actor: { userId, deviceId, phoneHmac: null },
-            method: 'POST',
-            path: `/v1/unions/${input.platform}/bindings`,
-            key: input.idempotencyKey,
-            body: input.body,
-            traceId,
-          },
-          (trx) =>
-            guarded(traceId, () =>
-              handle(trx, appId, userId, deviceId, client, input.body, traceId),
-            ),
-        ),
-      );
+      // B1-04zzzzn r2: the filing lock's connection is that second one (held instead of the pool
+      // handle's while the filing runs).
+      const ran: { filing?: FilingRecorder; answer?: HandlerResult } = {};
+      const submit = () =>
+        getBindingAdmission().run(() =>
+          idempotency.executeInTransaction(
+            {
+              appId,
+              actor: { userId, deviceId, phoneHmac: null },
+              method: 'POST',
+              path: `/v1/unions/${input.platform}/bindings`,
+              key: input.idempotencyKey,
+              body: input.body,
+              traceId,
+            },
+            async (trx) => {
+              const answer = await guarded(traceId, () =>
+                handle(trx, appId, userId, deviceId, client, input.body, traceId, (recorder) => {
+                  ran.filing = recorder;
+                }),
+              );
+              ran.answer = answer;
+              return answer;
+            },
+          ),
+        );
+      let admitted: Awaited<ReturnType<typeof submit>>;
+      try {
+        admitted = await submit();
+      } finally {
+        // The key's transaction is over (committed or rolled back): the attempt's lock may go.
+        await ran.filing?.requestEnded(ran.answer !== undefined && answerStored(ran.answer));
+      }
       if (admitted.kind !== 'completed') {
         // Refused before the transaction: nothing consumed, called or stored (data: none).
         logger.warn(

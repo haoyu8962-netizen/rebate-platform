@@ -835,13 +835,19 @@ export interface BindReq {
    * and sends nothing unless it resolves; it calls `settled` with the filing's definite answer when
    * that answer carries no id (an explicit refusal, or "already filed"). A filing that gave an id is
    * reported by the result; a transport failure reports nothing (the outcome stays unknown).
+   * r2 (money review S0): `started` gets the call's signal and records nothing once it is aborted;
+   * the adapter checks the same signal after `started` and right before the save is sent, and an
+   * attempt recorded for a save that was then not sent is settled 'rejected' (not filed). `done`
+   * is called once the adapter's call is over, whatever its result (the caller holds the filing's
+   * lock until then).
    */
   readonly filing?: BindFilingRecorder;
 }
 /** B1-04zzzzn: see BindReq.filing. */
 export interface BindFilingRecorder {
-  started(): Promise<void>;
+  started(signal?: AbortSignal): Promise<void>;
   settled(outcome: 'rejected' | 'duplicate'): Promise<void>;
+  done(): void;
 }
 export interface BindResult {
   readonly relationId: string;

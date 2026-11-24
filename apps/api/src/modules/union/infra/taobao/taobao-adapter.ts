@@ -445,6 +445,14 @@ function unimplemented(name: string): UnionError {
   return new UnionError('adapter_unimplemented', `taobao ${name}: not implemented`, 'taobao');
 }
 
+/** B1-04zzzzn r2: the save's call was cancelled before the request was handed to the transport. */
+class SaveNotSent extends Error {
+  constructor() {
+    super('taobao publisher.info.save: not sent');
+    this.name = 'SaveNotSent';
+  }
+}
+
 export class TaobaoUnionAdapter implements UnionAdapter {
   readonly platform = 'taobao' as const;
   readonly #credentials: () => Promise<TaobaoCredentials>;
@@ -569,6 +577,15 @@ export class TaobaoUnionAdapter implements UnionAdapter {
    * thrown; personal fields of the answers (taobao_user_nick, account_name, …) are not read.
    */
   async bindPublisher(req: BindReq, ctx: CallCtx): Promise<BindResult> {
+    // B1-04zzzzn r2: the caller holds the filing's lock until the call is over, whatever its end.
+    try {
+      return await this.#bindPublisher(req, ctx);
+    } finally {
+      req.filing?.done();
+    }
+  }
+
+  async #bindPublisher(req: BindReq, ctx: CallCtx): Promise<BindResult> {
     // 补丁 2 (D10-2755): an SDK access token is never exchanged as an authorization code; the live
     // adapter has no SDK path yet (TODO in union-binding-exchanger.ts), so it is refused unsent.
     if (req.credentialType !== undefined && req.credentialType !== 'authorization_code') {
@@ -611,6 +628,8 @@ export class TaobaoUnionAdapter implements UnionAdapter {
         'taobao',
       );
     }
+    const signal = ctx.signal;
+    // B1-04zzzzn r2 (money review S0): the token exchange runs under the same signal as the save.
     const session = await exchangeTaobaoUserCode({
       appKey: app.appKey,
       appSecret: app.appSecret,
@@ -618,19 +637,28 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       code,
       transport: this.#transport,
       clock: this.#clock,
+      ...(signal === undefined ? {} : { signal }),
     });
-    const signal = ctx.signal;
     // B1-04zzzzn (D10-2850): the caller records the attempt (committed on its own) before the save
     // is sent; nothing is sent unless that resolves. A definite refusal and an answer without an id
     // are reported back; a transport failure or a gateway system error reports nothing (unknown).
+    // r2 (S0): a call cancelled before the attempt is recorded records nothing; one cancelled after
+    // it, up to the moment the save is handed to the transport, closes it 'rejected' (never sent).
     const filing = req.filing;
-    await filing?.started();
+    if (signal?.aborted === true) throw this.#bindCancelled();
+    await filing?.started(signal);
+    const unsent = async (): Promise<never> => {
+      await filing?.settled('rejected');
+      throw this.#bindCancelled();
+    };
+    if (signal?.aborted === true) return unsent();
     const saved = await this.#publisherCall(
       TAOBAO_PUBLISHER_SAVE,
       TAOBAO_PUBLISHER_SAVE_ENVELOPE,
       { session, inviter_code: inviterCode, info_type: TAOBAO_PUBLISHER_INFO_TYPE },
       signal,
       filing === undefined ? undefined : () => filing.settled('rejected'),
+      unsent,
     );
     const savedId = savedRelationId(saved.body);
     if (savedId !== null) return { relationId: savedId };
@@ -661,6 +689,15 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     return new UnionError('upstream_misconfigured', `taobao bindPublisher: ${code}`, 'taobao');
   }
 
+  /** B1-04zzzzn r2: a filing whose call was cancelled before the save was sent. */
+  #bindCancelled(): UnionError {
+    return new UnionError(
+      'upstream_unavailable',
+      'taobao bindPublisher: cancelled before the filing was sent',
+      'taobao',
+    );
+  }
+
   /** A filing refused before anything is sent: one flat warning and the given refusal code. */
   #bindRefused(errorCode: 'adapter_unimplemented', code: string): UnionError {
     this.#warn?.({ method: TAOBAO_PUBLISHER_SAVE, code });
@@ -670,7 +707,9 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   /**
    * A publisher request carrying the user's session: never archived (no archive context), errors
    * classified by unwrapTaobaoResponse; the raw answer is returned for the lossless relation_id.
-   * `refused` (the save, B1-04zzzzn) runs before a definite refusal is thrown.
+   * `refused` (the save, B1-04zzzzn) runs before a definite refusal is thrown. r2: with `unsent`
+   * (the save), the signal is checked once more right before the request is handed to the
+   * transport; aborted by then → `unsent` (nothing was sent).
    */
   async #publisherCall(
     method: string,
@@ -678,14 +717,22 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     parameters: TaobaoParameters,
     signal: AbortSignal | undefined,
     refused?: () => Promise<void>,
+    unsent?: () => Promise<never>,
   ): Promise<UnionTransportResponse> {
     let response: UnionTransportResponse;
     try {
-      response = await this.#send(method, parameters, {
-        envelope,
-        ...(signal === undefined ? {} : { signal }),
-      });
+      response = await this.#send(
+        method,
+        parameters,
+        { envelope, ...(signal === undefined ? {} : { signal }) },
+        unsent === undefined
+          ? undefined
+          : () => {
+              if (signal?.aborted === true) throw new SaveNotSent();
+            },
+      );
     } catch (error) {
+      if (error instanceof SaveNotSent && unsent !== undefined) return unsent();
       // 补丁 2 ⑥: a transport failure is answered with its code and a fixed text only (a transport's
       // own UnionError message may quote the request or the answer: the user's session, Taobao
       // user id or nick); no cause is kept.
@@ -721,6 +768,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     method: string,
     parameters: TaobaoParameters,
     { signal, archive }: TaobaoRequestOptions,
+    beforeSend?: () => void,
   ): Promise<UnionTransportResponse> {
     const url = this.#endpoint.baseUrl;
     if (url === null) {
@@ -746,6 +794,8 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     const form = new URLSearchParams(taobaoSignedEntries(unsigned));
     form.append('sign', signTaobaoParameters(unsigned, appSecret));
 
+    // B1-04zzzzn r2: the last check before the request leaves (no await in between).
+    beforeSend?.();
     try {
       return await this.#transport({
         platform: 'taobao',

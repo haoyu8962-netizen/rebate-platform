@@ -167,3 +167,34 @@ export function taobaoLiveFilingReady(
   }
   return typeof filing.bindPublisher === 'function' && filing.endpointMode === 'live';
 }
+
+/** B1-04zzzzn r2: the server settings one real Taobao channel filing needs (no secret). */
+export interface TaobaoFilingSettings {
+  /** TAOBAO_APP_KEY. */
+  readonly appKey: string | null | undefined;
+  /** TAOBAO_USER_OAUTH_REDIRECT_URI. */
+  readonly userRedirectUri: string | null | undefined;
+  /** TAOBAO_INVITER_CODE. */
+  readonly inviterCode: string | null | undefined;
+  /** TAOBAO_INVITER_ACCOUNT_ID. */
+  readonly inviterAccountId: string | null | undefined;
+}
+
+/**
+ * B1-04zzzzn r2 (money review S1; BR-ID-17): whether every setting the real filing needs is there
+ * — the user OAuth (app key, user redirect URI), the inviter code and the union account it belongs
+ * to. Only staging / prod are judged (local / test keep the demo exchange). Missing any one → not
+ * ready, read together with taobaoLiveFilingReady by issuance and by the submission alike, so no
+ * state is issued or consumed for a filing that would be refused for its configuration.
+ */
+export function taobaoFilingConfigured(appEnv: AppEnv, settings: TaobaoFilingSettings): boolean {
+  if (appEnv !== 'staging' && appEnv !== 'prod') return true;
+  const present = (value: string | null | undefined) =>
+    typeof value === 'string' && value.trim() !== '';
+  return (
+    present(settings.appKey) &&
+    present(settings.userRedirectUri) &&
+    present(settings.inviterCode) &&
+    present(settings.inviterAccountId)
+  );
+}

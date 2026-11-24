@@ -115,6 +115,7 @@ import {
   createDemoUnionAuthApps,
   createTaobaoUnionAuthApps,
   resolveIssuedTaobaoOAuthApp,
+  taobaoFilingConfigured,
   taobaoLiveFilingReady,
   type UnionAuthApps,
 } from './infra/auth-apps.ts';
@@ -510,11 +511,22 @@ function authAppsFor(
 /**
  * 补丁 3 ② (D10-2826): the one readiness of the real Taobao filing adapter, read by issuance
  * (authAppsFor) and by the exchange (UnionBindingExchanger's `ready`) alike.
+ * B1-04zzzzn r2 (money review S1): and the settings the filing needs (taobaoFilingConfigured: user
+ * OAuth app key and redirect URI, inviter code, the inviter code's union account), so an instance
+ * missing any of them neither issues a state nor consumes one (auth_unavailable).
  */
 function taobaoFilingReady(appConfig: AppConfig, ports: LinkOpenPorts | undefined): boolean {
-  return taobaoLiveFilingReady(
-    appConfig.appEnv,
-    ports === undefined ? undefined : () => ports.union.adapter('taobao'),
+  return (
+    taobaoLiveFilingReady(
+      appConfig.appEnv,
+      ports === undefined ? undefined : () => ports.union.adapter('taobao'),
+    ) &&
+    taobaoFilingConfigured(appConfig.appEnv, {
+      appKey: appConfig.taobao?.appKey,
+      userRedirectUri: appConfig.taobaoUserOAuthRedirectUri,
+      inviterCode: appConfig.taobaoInviterCode,
+      inviterAccountId: appConfig.taobaoInviterAccountId,
+    })
   );
 }
 

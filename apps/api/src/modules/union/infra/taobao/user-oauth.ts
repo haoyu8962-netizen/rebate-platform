@@ -6,6 +6,8 @@
 // 失败一律是不带原文、不带 cause 的 UnionError：淘宝拒绝这个授权码（error 字段或 4xx）→
 // invalid_identity（bindings 答 credential_invalid）；拿不到答复（传输失败、超时、5xx、答复不可读、
 // 没有 access_token）→ upstream_unavailable。
+// B1-04zzzzn r2（资金评审 S0）：换令牌与之后的 save 用同一个取消信号（调用方的 ctx.signal）：已取消
+// 不发；等待中被取消即按 upstream_unavailable 结束，不再等令牌回来（之后也就不会落备案尝试、不发 save）。
 import type { Clock } from '../../../platform/index.ts';
 import { UnionError } from '../../domain/types.ts';
 import type { UnionTransport } from '../replay.ts';
@@ -20,11 +22,52 @@ export interface TaobaoUserTokenInput {
   readonly code: string;
   readonly transport: UnionTransport;
   readonly clock: Clock;
+  /** B1-04zzzzn r2: the call's signal (the same one the save is sent under). */
+  readonly signal?: AbortSignal;
+}
+
+/** The exchange, given up as upstream_unavailable as soon as `signal` aborts. */
+function untilAborted<T>(pending: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (signal === undefined) return pending;
+  // A late settlement of `pending` after the abort is not left unhandled.
+  pending.catch(() => undefined);
+  return new Promise<T>((resolve, reject) => {
+    const cancel = () =>
+      reject(
+        new UnionError(
+          'upstream_unavailable',
+          'taobao bindPublisher: token exchange cancelled',
+          'taobao',
+        ),
+      );
+    if (signal.aborted) {
+      cancel();
+      return;
+    }
+    signal.addEventListener('abort', cancel, { once: true });
+    pending.then(
+      (value) => {
+        signal.removeEventListener('abort', cancel);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', cancel);
+        reject(error);
+      },
+    );
+  });
 }
 
 /** The user's access token for this one call (the session of publisher.info.save / get). */
 export async function exchangeTaobaoUserCode(input: TaobaoUserTokenInput): Promise<string> {
-  const { appKey, appSecret, redirectUri, code, transport, clock } = input;
+  const { appKey, appSecret, redirectUri, code, transport, clock, signal } = input;
+  if (signal?.aborted === true) {
+    throw new UnionError(
+      'upstream_unavailable',
+      'taobao bindPublisher: token exchange cancelled',
+      'taobao',
+    );
+  }
   const oauth = createTaobaoSiteOAuth({
     credentials: () => Promise.resolve({ appKey, appSecret }),
     transport,
@@ -33,7 +76,10 @@ export async function exchangeTaobaoUserCode(input: TaobaoUserTokenInput): Promi
   });
   try {
     // appId / unionAccountId are not used by the token request (site-oauth.ts exchange).
-    const { accessToken } = await oauth.exchange({ appId: '', unionAccountId: '', code });
+    const { accessToken } = await untilAborted(
+      oauth.exchange({ appId: '', unionAccountId: '', code }),
+      signal,
+    );
     return accessToken;
   } catch (error) {
     if (error instanceof TaobaoSiteOAuthError && error.kind === 'refused') {

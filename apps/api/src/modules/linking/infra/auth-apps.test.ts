@@ -7,6 +7,7 @@ import {
   createTaobaoUnionAuthApps,
   parseTaobaoUserOAuthRef,
   resolveIssuedTaobaoOAuthApp,
+  taobaoFilingConfigured,
   taobaoLiveFilingReady,
   taobaoUserOAuthRef,
 } from './auth-apps.ts';
@@ -106,5 +107,36 @@ describe('taobaoLiveFilingReady', () => {
     expect(taobaoLiveFilingReady('prod', undefined)).toBe(true);
     expect(taobaoLiveFilingReady('local', () => ({ endpointMode: 'demo' }))).toBe(true);
     expect(taobaoLiveFilingReady('test', undefined)).toBe(true);
+  });
+});
+
+describe('taobaoFilingConfigured', () => {
+  const complete = {
+    appKey: 'synthetic-app-key',
+    userRedirectUri: 'https://user-auth.example.test/callback',
+    inviterCode: 'synthetic-inviter',
+    inviterAccountId: '0199a3b4-5c6d-7000-8000-0000000000a1',
+  };
+
+  it('[AC-B1-04zzzzn#11] staging / prod 缺用户 OAuth、邀请码或其所属联盟账号任一项即不就绪', () => {
+    for (const env of ['staging', 'prod'] as const) {
+      expect(taobaoFilingConfigured(env, complete)).toBe(true);
+      for (const name of Object.keys(complete) as (keyof typeof complete)[]) {
+        for (const missing of [undefined, null, '', '  ']) {
+          expect(taobaoFilingConfigured(env, { ...complete, [name]: missing }), name).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('[AC-B1-04zzzzn#11] local / test 不判配置', () => {
+    const empty = {
+      appKey: null,
+      userRedirectUri: null,
+      inviterCode: null,
+      inviterAccountId: null,
+    };
+    expect(taobaoFilingConfigured('local', empty)).toBe(true);
+    expect(taobaoFilingConfigured('test', empty)).toBe(true);
   });
 });
