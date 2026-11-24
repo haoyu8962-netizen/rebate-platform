@@ -37,12 +37,15 @@ import {
   finish,
   fixture,
   gateGranted,
+  gateWaiter,
   generated,
+  grantedOrderKeyLocksOf,
   holdOrderLock,
   orderLockWaiter,
   platformKey,
   reachedBefore,
   track,
+  tryOrderLock,
   waitsOnGate,
   type OrderLockHolder,
   type SeededOrder,
@@ -118,6 +121,9 @@ it(
     let executorWaits = false;
     let sharedGranted = -1;
     let whileWaiting: unknown = null;
+    let gatePid: number | null = null;
+    let waiterOrderKeys = -1;
+    let itemKeyFree = false;
     let stuck: string[] = [];
     try {
       // 补充在途：第一块（O）已处理完，停在第二块 D 的订单键锁上，且已持有平台锁排他模式。
@@ -127,6 +133,10 @@ it(
       execution = track(f.execute(makeUpBatch));
       executorWaits = await waitsOnGate(p.left, f.appId, TAOBAO, SHARE, execution);
       sharedGranted = await gateGranted(p.left, f.appId, TAOBAO, SHARE);
+      // 第 3 次（r2 第 1 条）：等平台锁的补记明细事务此刻不持有任何订单键锁，O 的订单键别的连接能取到。
+      gatePid = await gateWaiter(p.left, f.appId, TAOBAO, SHARE);
+      waiterOrderKeys = await grantedOrderKeyLocksOf(p.left, gatePid ?? -1);
+      itemKeyFree = await tryOrderLock(p.right, o);
       whileWaiting = {
         obligations: (await f.obligationsOf(o)).map((row) => row.status),
         direct: await f.h.balance(o.user('direct')),
@@ -142,6 +152,9 @@ it(
     expect(supplementGate).toBe(1);
     expect(executorWaits).toBe(true);
     expect(sharedGranted).toBe(0);
+    expect(gatePid).not.toBeNull();
+    expect(waiterOrderKeys).toBe(0);
+    expect(itemKeyFree).toBe(true);
     // 等锁期间：义务仍未完成，直推没有入账、没有凭证，补记明细结果为空。
     expect(whileWaiting).toEqual({
       obligations: ['open'],
@@ -228,6 +241,9 @@ it(
     let executorWaits = false;
     let sharedGranted = -1;
     let whileWaiting: unknown = null;
+    let gatePid: number | null = null;
+    let waiterOrderKeys = -1;
+    let itemKeyFree = false;
     let stuck: string[] = [];
     try {
       reached = await reachedBefore(held.pause, execution);
@@ -246,6 +262,10 @@ it(
       held.pause.release();
       executorWaits = await waitsOnGate(p.left, f.appId, TAOBAO, SHARE, execution);
       sharedGranted = await gateGranted(p.left, f.appId, TAOBAO, SHARE);
+      // 第 3 次（r2 第 1 条）：等平台锁的 Y 明细事务此刻不持有任何订单键锁，Y 的订单键别的连接能取到。
+      gatePid = await gateWaiter(p.left, f.appId, TAOBAO, SHARE);
+      waiterOrderKeys = await grantedOrderKeyLocksOf(p.left, gatePid ?? -1);
+      itemKeyFree = await tryOrderLock(p.right, y);
       whileWaiting = {
         y: await f.rebateOf(y),
         yItem: (await f.itemOf(old, y)).result,
@@ -267,6 +287,9 @@ it(
     expect(supplementGate).toBe(1);
     expect(executorWaits).toBe(true);
     expect(sharedGranted).toBe(0);
+    expect(gatePid).not.toBeNull();
+    expect(waiterOrderKeys).toBe(0);
+    expect(itemKeyFree).toBe(true);
     expect(whileWaiting).toEqual({
       y: 'WAITING',
       yItem: null,
@@ -335,6 +358,9 @@ it(
     let executorWaits = false;
     let sharedGranted = -1;
     let whileWaiting: unknown = null;
+    let gatePid: number | null = null;
+    let waiterOrderKeys = -1;
+    let itemKeyFree = false;
     let stuck: string[] = [];
     try {
       // 京东补充在途：第一块（P）已处理完，停在 D 的订单键锁上，持有京东平台锁排他模式。
@@ -344,6 +370,10 @@ it(
       execution = track(f.execute(old.batchId));
       executorWaits = await waitsOnGate(p.left, f.appId, JD, SHARE, execution);
       sharedGranted = await gateGranted(p.left, f.appId, JD, SHARE);
+      // 第 3 次（r2 第 1 条）：等京东平台锁的 P 明细事务此刻不持有任何订单键锁，P 的订单键别的连接能取到。
+      gatePid = await gateWaiter(p.left, f.appId, JD, SHARE);
+      waiterOrderKeys = await grantedOrderKeyLocksOf(p.left, gatePid ?? -1);
+      itemKeyFree = await tryOrderLock(p.right, order);
       whileWaiting = {
         rebate: await f.rebateOf(order),
         item: (await f.itemOf(old, order)).result,
@@ -359,6 +389,9 @@ it(
     expect(taobaoGates).toBe(0);
     expect(executorWaits).toBe(true);
     expect(sharedGranted).toBe(0);
+    expect(gatePid).not.toBeNull();
+    expect(waiterOrderKeys).toBe(0);
+    expect(itemKeyFree).toBe(true);
     expect(whileWaiting).toEqual({
       rebate: 'WAITING',
       item: null,

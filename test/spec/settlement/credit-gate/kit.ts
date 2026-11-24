@@ -30,9 +30,17 @@
 // PLATFORM:CREDIT 850 − 552 + 150 = 448. A full credit: 4 vouchers, 8 entry lines; with a frozen
 // direct: 3 vouchers, 6 entry lines and one first_credit obligation of 85.
 import { randomUUID } from 'node:crypto';
-import type { DB } from '@couli/db';
+import { createRequire } from 'node:module';
+import { createDb, destroyDb, type DB } from '@couli/db';
 import { addFen } from '@couli/money';
-import { PostgresQueryCompiler, sql, type Kysely, type QueryId, type Transaction } from 'kysely';
+import {
+  PostgresQueryCompiler,
+  sql,
+  type Kysely,
+  type PostgresPool,
+  type QueryId,
+  type Transaction,
+} from 'kysely';
 import { expect, vi } from 'vitest';
 import { creditGateKey } from '../../../../apps/api/src/modules/settlement/batch/credit-gate.ts';
 import type { SettlementWorkerPorts } from '../../../../apps/api/src/modules/settlement/worker/index.ts';
@@ -693,6 +701,17 @@ export async function fixture(db: Kysely<DB>, options: FixtureOptions = {}) {
     };
   }
 
+  // ---- 第 3 次写测追加（任务书 §11.2）：只新增，以上成员不变 ---------------------------------------
+  /**
+   * The bill-day job of taobao at BILL_RUN_AT (bill MONTH) run on `via` (e.g. a single connection, or
+   * commitPausingDb's executor); `onGenerated`, when given, is the production hook on the generating
+   * transaction right before it commits.
+   */
+  function runBillVia(via: Kysely<DB>, onGenerated?: () => Promise<void>): Promise<BillJobResult> {
+    const job = onGenerated === undefined ? billJob : createBillJob({ ...billDeps, onGenerated });
+    return job.run(via, { appId, platform: TAOBAO, runAt: new Date(BILL_RUN_AT) });
+  }
+
   return {
     h,
     appId,
@@ -729,6 +748,7 @@ export async function fixture(db: Kysely<DB>, options: FixtureOptions = {}) {
     confirmDrafts,
     obligationsOf,
     creditHistoryCounts,
+    runBillVia,
   };
 }
 
@@ -853,8 +873,8 @@ export function pauseAfter(db: Kysely<DB>, match: (query: CompiledQuery) => bool
 export async function reachedBefore(pause: Pause, pending: Tracked<unknown>): Promise<boolean> {
   const met = await settlesBy(Promise.race([pause.reached, pending.outcome]), BOUND_MS);
   if (!met && pause.observer !== undefined) {
-    await cancelLockWaits(pause.observer);
-    await settlesBy(Promise.race([pause.reached, pending.outcome]), BOUND_MS);
+    // Round 3 (r2 S2): the cancel itself is bounded, and escalates (see unblock).
+    await unblock(pause.observer, () => Promise.race([pause.reached, pending.outcome]));
   }
   return pause.isReached();
 }
@@ -905,8 +925,8 @@ export async function finish(
 ): Promise<string[]> {
   const all = () => Promise.all(Object.values(runs).map((run) => run?.outcome));
   if (!(await settlesBy(all(), BOUND_MS))) {
-    await cancelLockWaits(observer);
-    await settlesBy(all(), BOUND_MS);
+    // Round 3 (r2 S2): the cancel itself is bounded, and escalates (see unblock).
+    await unblock(observer, all);
   }
   return Object.entries(runs)
     .filter(([, run]) => run !== undefined && !run.settled)
@@ -1091,4 +1111,205 @@ export async function settlesWithin(run: Tracked<unknown>): Promise<boolean> {
     await sleep();
   }
   return run.settled;
+}
+
+// ---- 第 3 次写测追加（任务书 §11.2，评审 r2）：只新增 -------------------------------------------------
+
+/**
+ * Bounded unblocking for reachedBefore / finish (r2 S2): cancels the lock waits of the test database
+ * through `observer`, the cancel itself bounded at BOUND_MS; when the cancel does not answer in time,
+ * or `ended` still has not settled within BOUND_MS after it, the open transactions of the test
+ * database (one database per test file, so they all belong to the running case) other than the
+ * observer's own are terminated — their connections close, PostgreSQL rolls them back — and their
+ * exit is confirmed by a bounded poll; then `ended` is awaited once more within the bound. A run that
+ * is stuck outside the database (JavaScript, a pool wait) is left to the caller's assertion.
+ */
+async function unblock(observer: Kysely<DB>, ended: () => Promise<unknown>): Promise<void> {
+  const cancelled = await settlesBy(cancelLockWaits(observer), BOUND_MS);
+  if (cancelled && (await settlesBy(ended(), BOUND_MS))) return;
+  await settlesBy(endOpenTransactions(observer), BOUND_MS);
+  await settlesBy(ended(), BOUND_MS);
+}
+
+/** Terminates the open transactions of the test database except the observer's; true once gone. */
+async function endOpenTransactions(observer: Kysely<DB>): Promise<boolean> {
+  await sql`
+    SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+    WHERE datname = current_database() AND pid <> pg_backend_pid()
+      AND xact_start IS NOT NULL`.execute(observer);
+  for (let attempt = 0; attempt < POLLS; attempt += 1) {
+    const result = await sql<{ n: number }>`
+      SELECT count(*)::int AS n FROM pg_stat_activity
+      WHERE datname = current_database() AND pid <> pg_backend_pid()
+        AND xact_start IS NOT NULL`.execute(observer);
+    if ((result.rows[0]?.n ?? 0) === 0) return true;
+    await sleep();
+  }
+  return false;
+}
+
+/** The backend pid of a single-connection executor (left / right / control). */
+export async function backendPid(conn: Kysely<DB>): Promise<number> {
+  const result = await sql<{ pid: number }>`SELECT pg_backend_pid() AS pid`.execute(conn);
+  const pid = result.rows[0]?.pid;
+  if (pid === undefined) throw new Error('credit-gate kit: no backend pid');
+  return pid;
+}
+
+/**
+ * The pid of a backend that waits (not granted) right now for the gate of (appId, platform) in
+ * `mode` (one look, no poll: the caller has already seen the wait through waitsOnGate); null if none.
+ */
+export async function gateWaiter(
+  observer: Kysely<DB>,
+  appId: string,
+  platform: string,
+  mode: GateMode,
+): Promise<number | null> {
+  const rows = await gateLocks(observer, appId, platform);
+  return rows.find((r) => !r.granted && r.mode === mode)?.pid ?? null;
+}
+
+/**
+ * The pid of the backend that sits idle inside a transaction whose last statement mentions `table`
+ * (a run held by pauseAfter right after that statement); null if none.
+ */
+export async function idleInTransactionOn(
+  observer: Kysely<DB>,
+  table: string,
+): Promise<number | null> {
+  const result = await sql<{ pid: number }>`
+    SELECT pid FROM pg_stat_activity
+    WHERE datname = current_database() AND pid <> pg_backend_pid()
+      AND state = 'idle in transaction' AND position(${table} in query) > 0
+    ORDER BY pid LIMIT 1`.execute(observer);
+  return result.rows[0]?.pid ?? null;
+}
+
+/**
+ * The gate of (appId, platform) in exclusive mode, held on `conn` by the case itself with the
+ * skeleton's exclusive statement (`select pg_advisory_xact_lock(hashtext($1), hashtext($2))`, keys
+ * from creditGateKey) in a transaction that stays open until release(), then rolls back. Resolves
+ * once the lock is held.
+ */
+export async function holdGateExclusive(
+  conn: Kysely<DB>,
+  appId: string,
+  platform: string,
+): Promise<OrderLockHolder> {
+  const gate = creditGateKey(appId, platform);
+  const locked = deferred();
+  const go = deferred();
+  const done = conn
+    .transaction()
+    .execute(async (trx) => {
+      await sql`
+        SELECT pg_advisory_xact_lock(hashtext(${gate.namespace}), hashtext(${gate.key}))
+      `.execute(trx);
+      locked.resolve();
+      await go.promise;
+      throw new Released();
+    })
+    .then(
+      () => undefined,
+      (error: unknown) => {
+        if (!(error instanceof Released)) throw error;
+      },
+    );
+  await Promise.race([locked.promise, done]);
+  return { release: () => go.resolve(), done };
+}
+
+interface PgClientLike {
+  query(text: unknown, params?: unknown): Promise<unknown>;
+}
+interface PgPoolLike {
+  connect(): Promise<PgClientLike>;
+  on(event: 'error', listener: (error: unknown) => void): unknown;
+}
+
+/** An executor whose next COMMIT, once armed, waits at a barrier before it is sent. */
+export interface CommitPausing {
+  readonly db: Kysely<DB>;
+  /** The next COMMIT sent through `db` waits at `pause` (pause.wait()), then goes to PostgreSQL. */
+  arm(pause: Barrier): void;
+  /** Closes the pool (bounded at BOUND_MS); true when it closed in time. */
+  close(): Promise<boolean>;
+}
+
+/**
+ * A Kysely executor on its own pg pool (createDb's poolFactory; `pg` resolved through packages/db,
+ * as test/spec/platform/idempotency/transaction-failures.int.test.ts does) whose client holds back
+ * the first `commit` sent after arm() until the armed barrier is released. Kysely ends every
+ * transaction with the raw statement `commit` on the transaction's client, so the barrier sits
+ * exactly between the last statement of the transaction (e.g. the bill job's onGenerated hook) and
+ * its COMMIT; meanwhile the transaction is open and its transaction-level locks are held.
+ */
+export function commitPausingDb(connectionString: string): CommitPausing {
+  const requireFromDb = createRequire(
+    new URL('../../../../packages/db/package.json', import.meta.url),
+  );
+  const pg = requireFromDb('pg') as { Pool: new (config: unknown) => PgPoolLike };
+  const state: { armed: Barrier | undefined } = { armed: undefined };
+  const wrapped = new WeakMap<PgClientLike, PgClientLike>();
+
+  function pausingClient(client: PgClientLike): PgClientLike {
+    return new Proxy(client, {
+      get(target, prop) {
+        if (prop === 'query') {
+          return async (text: unknown, params?: unknown) => {
+            const pause = state.armed;
+            if (
+              pause !== undefined &&
+              typeof text === 'string' &&
+              text.trim().toLowerCase() === 'commit'
+            ) {
+              state.armed = undefined;
+              await pause.wait();
+            }
+            return target.query(text, params);
+          };
+        }
+        const value: unknown = Reflect.get(target, prop, target);
+        return typeof value === 'function'
+          ? (value as (...a: unknown[]) => unknown).bind(target)
+          : value;
+      },
+    });
+  }
+
+  function pausingPool(config: unknown): PostgresPool {
+    const real = new pg.Pool(config);
+    real.on('error', () => undefined);
+    return new Proxy(real, {
+      get(target, prop) {
+        if (prop === 'connect') {
+          return async () => {
+            const client = await target.connect();
+            const known = wrapped.get(client);
+            if (known !== undefined) return known;
+            const proxy = pausingClient(client);
+            wrapped.set(client, proxy);
+            return proxy;
+          };
+        }
+        const value: unknown = Reflect.get(target, prop, target);
+        return typeof value === 'function'
+          ? (value as (...a: unknown[]) => unknown).bind(target)
+          : value;
+      },
+    }) as unknown as PostgresPool;
+  }
+
+  const db = createDb({
+    max: 2,
+    poolFactory: (config) => pausingPool({ ...config, connectionString }),
+  });
+  return {
+    db,
+    arm(pause) {
+      state.armed = pause;
+    },
+    close: () => settlesBy(destroyDb(db), BOUND_MS),
+  };
 }
