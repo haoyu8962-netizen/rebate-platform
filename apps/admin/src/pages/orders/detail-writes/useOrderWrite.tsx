@@ -21,9 +21,10 @@ import {
   withDeadline,
   writeFailureOf,
   type SentWrite,
+  type WritePhase,
 } from './model.ts';
 
-export type WritePhase = 'editing' | 'sending' | 'verifying' | 'unknown';
+export type { WritePhase };
 
 export interface WriteDone {
   readonly kind: 'saved' | 'conflict';

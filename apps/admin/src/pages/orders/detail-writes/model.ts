@@ -17,7 +17,6 @@ import { AdminApiError } from '../../../providers/data/index.ts';
 import { codePointLength } from '../../../text-length.ts';
 import { ordersTexts } from '../../../texts/orders.ts';
 import { PLATFORM_STATUSES, REBATE_STATUSES, orderUrl, type OrderDetail } from '../model.ts';
-import type { WritePhase } from './useOrderWrite.tsx';
 
 const r = ordersTexts.writes.result;
 
@@ -128,6 +127,9 @@ export function noteValid(note: string): boolean {
 export function assignReasonValid(reason: string): boolean {
   return lengthWithin(reason, ASSIGN_REASON_MIN, ASSIGN_REASON_LIMIT);
 }
+
+/** Phase of a write dialog: editing, request in flight, step-up verifying, or result unknown. */
+export type WritePhase = 'editing' | 'sending' | 'verifying' | 'unknown';
 
 /**
  * Whether a write dialog may be closed (【取消】, its close button, Esc): only while editing. Not
