@@ -6691,9 +6691,17 @@ CREATE TABLE app.union_accounts (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     auth_expires_estimated boolean DEFAULT false NOT NULL,
+    hour_alert_key text,
     CONSTRAINT union_accounts_alert_stage_check CHECK (((alert_stage = ANY (ARRAY['none'::text, 'expired'::text])) OR (alert_stage ~ '^d[1-9][0-9]{0,2}$'::text))),
     CONSTRAINT union_accounts_auth_status_check CHECK ((auth_status = ANY (ARRAY['active'::text, 'expiring'::text, 'expired'::text])))
 );
+
+
+--
+-- Name: COLUMN union_accounts.hour_alert_key; Type: COMMENT; Schema: app; Owner: -
+--
+
+COMMENT ON COLUMN app.union_accounts.hour_alert_key IS 'BR-ID-24: last hour alert node handled, <auth_expires_at epoch ms>:h<N>; written by the hour job only';
 
 
 --

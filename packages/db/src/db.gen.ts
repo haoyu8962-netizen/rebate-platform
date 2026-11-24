@@ -2140,6 +2140,10 @@ export interface UnionAccounts {
   auth_renewed_by: string | null;
   auth_status: string;
   created_at: Generated<Timestamp>;
+  /**
+   * BR-ID-24: last hour alert node handled, <auth_expires_at epoch ms>:h<N>; written by the hour job only
+   */
+  hour_alert_key: string | null;
   id: string;
   last_probe_at: Timestamp | null;
   last_probe_error: string | null;
