@@ -73,24 +73,24 @@ export function OrderDrawer({ orderId, onClose }: OrderDrawerProps): ReactElemen
   };
 
   const code = { fontFamily: token.fontFamilyCode } as const;
-  const state = (value: ReactNode): DetailDrawerProps['groups'] => [
+  const stateGroups = (value: ReactNode): DetailDrawerProps['groups'] => [
     { key: 'state', title: t.title, fields: [{ key: 'state', label: t.stateLabel, value }] },
   ];
 
   let groups: DetailDrawerProps['groups'];
   if (shown === undefined) {
-    groups = state(
+    groups = stateGroups(
       <Typography.Text type="secondary" role="status">
         {t.loading}
       </Typography.Text>,
     );
   } else if (shown.status === 'missing') {
-    groups = state(<Typography.Text type="secondary">{t.missing}</Typography.Text>);
+    groups = stateGroups(<Typography.Text type="secondary">{t.missing}</Typography.Text>);
   } else if (shown.status === 'forbidden') {
-    groups = state(<Typography.Text type="secondary">{t.forbidden}</Typography.Text>);
+    groups = stateGroups(<Typography.Text type="secondary">{t.forbidden}</Typography.Text>);
   } else if (shown.status !== 'ready') {
     // Only 'failed' is left here; the check is on 'ready' so the branch below narrows to it.
-    groups = state(
+    groups = stateGroups(
       <Flex vertical align="flex-start" gap={8}>
         <Typography.Text type="danger">{t.failed}</Typography.Text>
         <Button size="small" icon={<ReloadOutlined aria-hidden />} onClick={retry}>
