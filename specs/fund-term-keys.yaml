@@ -218,9 +218,17 @@ ordinary:
   # 清单以外的现有键（08「普通：清单以外的现有键与模板」），逐键列出。
   keys:
     - agreement.title
+    - error.50301.bank_vendor
+    - error.50301.realname_vendor
     - find_order.title
     - help.title
     - invite.title
+    - login.code.can_resend
+    - login.code.countdown_hour
+    - login.code.countdown_min
+    - login.get_code.wait
+    - login.get_code.wait_hour
+    - login.get_code.wait_min
     - messages.title
     - notice.title
     - rules.title

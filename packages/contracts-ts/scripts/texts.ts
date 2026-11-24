@@ -52,6 +52,9 @@ export const ERROR_SCENE_KEYS: Readonly<Record<string, string>> = {
   'error.30102.auth_unavailable.auth_manage': 'error.30102.auth_unavailable',
   'error.30151.auth_manage': 'error.30151',
   'error.30411.phone_change': 'error.30411',
+  // 08 BR-TEXT-14 表 A 50301 场景子键：实名 / 银行卡核验不可用；键不存在时退回「其他 5xxxx」（CT-26zr）。
+  'error.50301.bank_vendor': 'error.50001',
+  'error.50301.realname_vendor': 'error.50001',
 };
 
 type Obj = Record<string, unknown>;
