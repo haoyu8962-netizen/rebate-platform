@@ -37,4 +37,5 @@ accept:
   - 'pnpm verify'
   - 'test/spec/settlement/supplement-locked-recheck/**'
   - 'test/spec/settlement/credit-gate/**'
-status: todo
+status: done
+pr: 700
