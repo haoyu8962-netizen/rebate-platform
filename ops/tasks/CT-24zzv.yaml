@@ -4,7 +4,7 @@ title: 契约：后台二次验证三档——/admin/v1 显式标 x-step-up（su
 type: contract
 # 2026-11-24 二次验证线入账（D10-2821）。内容 = 探针第 4 轮的契约改动（couli-runs/STEPUP-1124c/contract-only.patch，入账稿 couli-runs/STEPUP-BE/entry-draft.md §2、§7）：sudo 15、strict 9 个操作标 x-step-up（按请求内容或键名分档的 9 个标最高档、条件写说明）；49 个 none 操作删令牌参数、10003、示例与说明句；新增 AdminStepUpMethod；10003 的 data 为 tier 与 reason 二者其一（D10-2792 ⑥）；conformance.ts 加后台分支；用户端 3 处 x-step-up 不动。
 # AdminStepUpTier 先加后删（D10-2792 ②）：本单四值并存，旧值等 B1-18l 与前端单落地后另开契约单删。服务端行为不在本单（B1-18l）；本单只带两处编译适配（D10-2821 a）：step-up.controller.ts 缺 tier 回 20001、AppVersionEditor.tsx 放宽一处类型。
-# 冻结用例：探针共 35 条。先登非资金、非归属目录的 12 条；补丁 1（同时把 [AC-B1-34h#1]、[AC-B1-34i#1] 两组 .each 改为按标题模板整块登记：写测 1 交回时门禁展不开其表，D10-2559；paths 加 contracts/error-codes.yaml，10003 的档位登记在那里）（D10-2826，负责人 2026-11-24「都同意」）再登其余 23 条（资金与归属目录 21 + 收款契约 2），只改二次验证那一处期望。.each 行不改名（D10-2154），标题里的「step-up 头」以块内断言为准。
+# 冻结用例：探针共 35 条。先登非资金、非归属目录的 12 条；补丁 1（同时把 [AC-B1-34h#1]、[AC-B1-34i#1] 两组 .each 改为按标题模板整块登记：写测 1 交回时门禁展不开其表，D10-2559；paths 加 contracts/error-codes.yaml，10003 的档位登记在那里）；补丁 2（D10-2838 甲类）补登 3 张 it.each 表的其余 7 行，期望值不变（D10-2826，负责人 2026-11-24「都同意」）再登其余 23 条（资金与归属目录 21 + 收款契约 2），只改二次验证那一处期望。.each 行不改名（D10-2154），标题里的「step-up 头」以块内断言为准。
 refs: [BR-ID-34]
 refs_hash:
   BR-ID-34: 8bd50e43d350
@@ -203,6 +203,48 @@ modify_existing:
     br: [BR-ID-34]
     ruling: D10-2826
     note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/orders/admin-mounts/contract.test.ts'
+    test: '[AC-B1-10m#1] adminApproveClaimItem 去掉 x-implementation: planned（生成的 planned 清单与路由校验同步），x-auth admin、x-error-codes 不变；admin 入口恰好挂一次并带契约的请求 schema，api、stream 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2838
+    note: '甲类（D10-2838）：与同表已登记的行共用一个 it.each 块体，块体改动门禁按每一行都变计，所以一并登记；本行期望值不变（去掉 10003 / 令牌头的改写对本行是空操作），写测不得改本行的期望'
+  - file: 'test/spec/orders/admin-mounts/contract.test.ts'
+    test: '[AC-B1-10m#1] adminRejectClaimItem 去掉 x-implementation: planned（生成的 planned 清单与路由校验同步），x-auth admin、x-error-codes 不变；admin 入口恰好挂一次并带契约的请求 schema，api、stream 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2838
+    note: '甲类（D10-2838）：与同表已登记的行共用一个 it.each 块体，块体改动门禁按每一行都变计，所以一并登记；本行期望值不变（去掉 10003 / 令牌头的改写对本行是空操作），写测不得改本行的期望'
+  - file: 'test/spec/orders/admin-mounts/contract.test.ts'
+    test: '[AC-B1-10m#1] adminHoldOrder 去掉 x-implementation: planned（生成的 planned 清单与路由校验同步），x-auth admin、x-error-codes 不变；admin 入口恰好挂一次并带契约的请求 schema，api、stream 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2838
+    note: '甲类（D10-2838）：与同表已登记的行共用一个 it.each 块体，块体改动门禁按每一行都变计，所以一并登记；本行期望值不变（去掉 10003 / 令牌头的改写对本行是空操作），写测不得改本行的期望'
+  - file: 'test/spec/orders/admin-mounts/contract.test.ts'
+    test: '[AC-B1-10m#1] adminUnholdOrder 去掉 x-implementation: planned（生成的 planned 清单与路由校验同步），x-auth admin、x-error-codes 不变；admin 入口恰好挂一次并带契约的请求 schema，api、stream 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2838
+    note: '甲类（D10-2838）：与同表已登记的行共用一个 it.each 块体，块体改动门禁按每一行都变计，所以一并登记；本行期望值不变（去掉 10003 / 令牌头的改写对本行是空操作），写测不得改本行的期望'
+  - file: 'test/spec/orders/rights-mounts/contract.test.ts'
+    test: '[AC-B1-10n#1] adminListRightsImports 去掉 x-implementation: planned（生成的 planned 清单与路由校验同步，route-schemas 有 id），x-auth admin、x-error-codes 不变；admin 入口恰好挂一次并带契约的请求 schema，api、stream 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2838
+    note: '甲类（D10-2838）：与同表已登记的行共用一个 it.each 块体，块体改动门禁按每一行都变计，所以一并登记；本行期望值不变（去掉 10003 / 令牌头的改写对本行是空操作），写测不得改本行的期望'
+  - file: 'test/spec/orders/rights-mounts/contract.test.ts'
+    test: '[AC-B1-10n#1] adminGetRightsImport 去掉 x-implementation: planned（生成的 planned 清单与路由校验同步，route-schemas 有 id），x-auth admin、x-error-codes 不变；admin 入口恰好挂一次并带契约的请求 schema，api、stream 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2838
+    note: '甲类（D10-2838）：与同表已登记的行共用一个 it.each 块体，块体改动门禁按每一行都变计，所以一并登记；本行期望值不变（去掉 10003 / 令牌头的改写对本行是空操作），写测不得改本行的期望'
+  - file: 'test/spec/union/admin-alert-phones/contract.test.ts'
+    test: '[B1-22g][BR-ID-24] get alert-phones (adminListUnionAlertPhones) 上线移除 planned；后台身份、无幂等键，只有增删要 step-up'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2838
+    note: '甲类（D10-2838）：与同表已登记的行共用一个 it.each 块体，块体改动门禁按每一行都变计，所以一并登记；本行期望值不变（去掉 10003 / 令牌头的改写对本行是空操作），写测不得改本行的期望'
 impl: claude
 tester: codex
 accept:
