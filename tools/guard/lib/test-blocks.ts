@@ -2802,6 +2802,11 @@ export function forOfRowBlocks(
 //   .each / .for block of the base whose table cannot be expanded names that block whole: located
 //   at the head by the same template, compared and counted changed as a plain block (`whole` set).
 //   An expandable table is refused by its template (its rows are declared by their full names).
+//   CT-06zzzzzzzd (D10-2698 甲 / D10-2709): the title template of an .each / .for block may be a
+//   template literal with `${…}` (e.g. inside a `for (const source of sources)` loop): it is then
+//   named by its source text between the backticks, verbatim (`${source}`, `%s`, escapes and blanks
+//   as written; a placeholder spelt otherwise or expanded to a value names nothing). A plain
+//   it / test with such a title is never a whole block; two blocks of one text are refused.
 
 /** One declared name and its block at the base and the head (compareModifiedBlocks). */
 export type ModifiedBlock =
@@ -2854,7 +2859,9 @@ type BlockView = {
   raw: string;
   /**
    * CT-06zzzzzzzc (D10-2559 A): the value of the title when it is one string literal (or a
-   * template without `${…}`), as written, placeholders not expanded; null otherwise.
+   * template without `${…}`), as written, placeholders not expanded; CT-06zzzzzzzd (D10-2698 甲):
+   * for an .each / .for call whose title is a template with `${…}`, its source text between the
+   * backticks, character for character; null otherwise.
    */
   template: string | null;
 };
@@ -2882,6 +2889,11 @@ function blockViews(
     const to = (last.start ?? 0) + last.text.length;
     const parts = b.key.split('\u0000');
     let eachCall = false;
+    for (let k = c.start; k < c.open; k += 1) {
+      const t = tokens[k] as Token;
+      if (t.kind === 'id' && (t.text === 'each' || t.text === 'for') && tokens[k - 1]?.text === '.')
+        eachCall = true;
+    }
     const lit = tokens[c.open + 1];
     const afterLit = tokens[c.open + 2]?.text;
     const template =
@@ -2891,12 +2903,12 @@ function blockViews(
           ? lit.value
           : lit?.kind === 'tpl' && lit.parts?.length === 1 && typeof lit.parts[0] === 'string'
             ? lit.parts[0]
-            : null;
-    for (let k = c.start; k < c.open; k += 1) {
-      const t = tokens[k] as Token;
-      if (t.kind === 'id' && (t.text === 'each' || t.text === 'for') && tokens[k - 1]?.text === '.')
-        eachCall = true;
-    }
+            : // CT-06zzzzzzzd (D10-2698 甲): a template with `${…}` of an .each / .for call, by
+              // its source text between the backticks, verbatim (placeholders, `%s` and escapes
+              // as written); a plain call's interpolated title stays null.
+              eachCall && lit?.kind === 'tpl' && (lit.parts?.length ?? 0) > 1
+              ? lit.text.slice(1, -1)
+              : null;
     return {
       pattern: b.pattern,
       title: b.title,

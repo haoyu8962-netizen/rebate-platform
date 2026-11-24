@@ -28,6 +28,7 @@ import {
   forOfRows,
   cook,
   listedDirectories,
+  namesWholeBlock,
   mayImportRuleTest,
   mayReadSupport,
   parseTestFile,
@@ -4861,4 +4862,93 @@ it('[CT-06zzzzzzzc] r2 S1-3: next to a whole-block entry the support check takes
   // Only the whole block changed: nothing is refused.
   const own = compareSupportFile(base, wholeFile(UNEXPANDABLE, 2, 1), names, undefined, located);
   expect(own.ok && own.blocks).toEqual([]);
+});
+
+// CT-06zzzzzzzd (D10-2698 甲 / D10-2709): a whole-block entry named by the source text of an
+// .each / .for title template with `${…}`.
+const interpFile = (title: string, value: number, method = 'each', loops = 1): string =>
+  [
+    "import { expect, it } from 'vitest';",
+    "const sources = ['a', 'b'] as const;",
+    ...Array.from({ length: loops }, () =>
+      [
+        'for (const source of sources) {',
+        `  it.${method}([0, 1])(\`${title}\`, (n) => {`,
+        `    expect(n).toBeGreaterThanOrEqual(${value});`,
+        '  });',
+        '}',
+      ].join('\n'),
+    ),
+    '',
+  ].join('\n');
+
+// Wrong implementation: titles with `${…}` kept null as before → namesWholeBlock false, not found.
+it('[CT-06zzzzzzzd] an .each / .for title template with ${…} names its block whole by its source text: found, changed as its block body', () => {
+  const title = '[AC-X#1] ${source} 值 %s';
+  for (const method of ['each', 'for']) {
+    const base = interpFile(title, -1, method);
+    expect(namesWholeBlock(base, title), method).toBe(true);
+    const changed = compareModifiedBlocks(base, interpFile(title, 0, method), [title]);
+    expect(changed.ok && changed.blocks[0], method).toMatchObject({ found: true, changed: true });
+    expect(changed.ok && changed.outside, method).toBeNull();
+    expect(changed.ok && changed.blocks[0]?.found === true && changed.blocks[0].whole?.head).toBe(
+      0,
+    );
+    const same = compareModifiedBlocks(base, base, [title]);
+    expect(same.ok && same.blocks[0], method).toMatchObject({ found: true, changed: false });
+  }
+});
+
+// Wrong implementation: matching the cooked static parts (escapes decoded) or the parts joined
+// with an expansion → the cooked / expanded names would be accepted; trimming or normalising
+// blanks → the doubled-blank name would be accepted.
+it('[CT-06zzzzzzzd] the source text is matched verbatim: an escape decoded, a placeholder spelt otherwise or expanded, other blanks name no block', () => {
+  const title = '[AC-X#2] ${ source } \\u0041 %s';
+  const base = interpFile(title, -1);
+  expect(namesWholeBlock(base, title)).toBe(true);
+  for (const wrong of [
+    '[AC-X#2] ${ source } A %s',
+    '[AC-X#2] ${source} \\u0041 %s',
+    '[AC-X#2] a \\u0041 %s',
+    '[AC-X#2]  ${ source } \\u0041 %s',
+    '[AC-X#2] ${ source } \\u0041 %s ',
+  ]) {
+    expect(namesWholeBlock(base, wrong), wrong).toBe(false);
+    const got = compareModifiedBlocks(base, interpFile(title, 0), [wrong]);
+    expect(got.ok && got.blocks[0], wrong).toMatchObject({ found: false });
+  }
+});
+
+// Wrong implementation: taking the first of several blocks of one text, or locating the head by
+// pattern when its template text changed → found where it must not be.
+it('[CT-06zzzzzzzd] two blocks of one template text are refused on either side, and a head whose template text changed loses the block', () => {
+  const title = '[AC-X#3] ${source} 值 %s';
+  const base = interpFile(title, -1);
+  const twice = interpFile(title, -1, 'each', 2);
+  expect(namesWholeBlock(twice, title)).toBe(false);
+  expect(compareModifiedBlocks(twice, base, [title])).toMatchObject({
+    ok: true,
+    blocks: [{ found: false }],
+  });
+  expect(compareModifiedBlocks(base, twice, [title])).toMatchObject({
+    ok: true,
+    blocks: [{ found: false }],
+  });
+  const respelt = interpFile('[AC-X#3] ${ source } 值 %s', 0);
+  expect(compareModifiedBlocks(base, respelt, [title])).toMatchObject({
+    ok: true,
+    blocks: [{ found: false }],
+  });
+  // A plain it with the same interpolated title is never a whole block.
+  const plain = [
+    "import { expect, it } from 'vitest';",
+    "const sources = ['a', 'b'] as const;",
+    'for (const source of sources) {',
+    `  it(\`${title}\`, () => {`,
+    '    expect(source).toBeTruthy();',
+    '  });',
+    '}',
+    '',
+  ].join('\n');
+  expect(namesWholeBlock(plain, title)).toBe(false);
 });
