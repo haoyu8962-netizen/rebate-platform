@@ -7,7 +7,7 @@ refs: [BR-FUND-12, BR-FUND-10, BR-FUND-16]
 refs_hash:
   BR-FUND-12: 837883d06fa4
   BR-FUND-10: 3ed330a761d1
-  BR-FUND-16: 077f6d412d5a
+  BR-FUND-16: 084c4c66328c
 deps: [B2-12a, B2-12e]
 paths:
   - 'apps/api/src/modules/ledger/application/bad-debt-writeoff*.ts'

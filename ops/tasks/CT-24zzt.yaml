@@ -8,7 +8,7 @@ type: contract
 refs: [BR-FUND-19, BR-FUND-16]
 refs_hash:
   BR-FUND-19: f72aa79561bc
-  BR-FUND-16: 077f6d412d5a
+  BR-FUND-16: 084c4c66328c
 contract_sections: ['11.1']
 deps: [CT-24zzna]
 paths:
