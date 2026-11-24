@@ -8,8 +8,7 @@ type: contract
 # 新筛选全部可选、与现有条件 AND；非法值 20001 并在 data.fields 点名参数；区间 min > max 为 20001 点名两端；值为空的行不匹配区间。
 # 新接口权限、user.lookup 规则与 adminListOrders 相同，筛选同一套（不另设时间口径）；状态计数按 rebate_status 分组且不收 rebate_status 参数；汇总只给 sub_order_count、pay_amount_fen、est_commission_fen、platform_retain_fen、buyer_count（各字段口径写在字段说明里，空值不计）。
 # 不做（写死，D10-2673）：店铺模糊查找、列表补店铺名与标签（库里无列）；不出 effective_* 或任何「有效订单」口径；不出预估利润 / 实际计算佣金；不在 08 新立条。
-# 两个新操作与 orders 导出由 D2 后端单实现，本单把新操作标 x-implementation: planned（后台按 F1-06zu 清单显示「功能开发中」）；adminListOrders 新参数与行字段可缺省，D2 落地前服务端不认也不报错的口径写进说明。导出沿用现有生命周期、脱敏（BR-ID-33）与留存（BR-ID-30），不改它们的取值。
-# order_tail 字符集定稿前按 09 逐平台核子单号字符集。
+# 两个新操作与 orders 导出由 D2 后端单实现，本单把新操作标 x-implementation: planned（后台按 F1-06zu 清单显示「功能开发中」）；adminListOrders 新参数与行字段可缺省，D2 落地前服务端不认也不报错的口径写进说明。导出沿用现有生命周期、脱敏（BR-ID-33）与留存（BR-ID-30），不改它们的取值。 order_tail 字符集定稿前按 09 逐平台核子单号字符集。
 # 补丁 2（2026-11-23，D10-2710 甲）：契约加 orders 导出后冻结用例 [AC-F1-08fd-SOURCE#1] 的来源下拉全集多出 orders（页面照「无名显示编码」显示），属规则变化；只在该块内把期望改为 SOURCE_OPTIONS 末尾加 'orders'（夹具不动：块外白名单不收数组元素追加），断言逻辑不变，由写测方（Codex）做；refs 加 BR-ID-33（orders 导出始终脱敏），供 rule_change 的 br。上线前必须 FU-ADMIN-EXPORT-ORDERS-OPTION：D3 给 orders 中文名并接通，赶不上则上线前藏起该选项。
 # 补丁 3（2026-11-24，D10-2780 照 D10-2710 甲）：分段全量第 3 段冻结集成用例 [AC-B1-34f#14]（test/spec/admin/exports/list.int.test.ts）的「非法筛选」样例 ?resource=orders 期望 20001，本单 export_resource 加 orders 后该值合法、回 200，属规则变化；只把这一行样例换成一个不存在的 resource 值，断言与期望码 20001 不变，由写测方（Codex）做。该 it.each 表带 as const、工具判为展不开，按 D10-2559 以模板原文整块登记（rule_change + note）。 补丁 4（fe）：PR #670 contracts-check 的 oasdiff 把 export_resource 加 orders 判为三处 response-property-enum-value-added（GET /admin/v1/exports、POST /admin/v1/exports、POST /admin/v1/exports/{id}/retry）；照 CT-24zzm（D10-1934）与 D10-557 先例，在 contracts/oasdiff-accepted.txt 末尾追加这三行与说明块（只 /admin/v1/** 响应加值，后台与服务端同发、无旧客户端），paths 加该文件。接受与否以编排裁定为准。
 # 补丁 1（2026-11-23，fe 自定）：export_resource 加 orders 后，后端 exports.controller.ts 的 commandOf 类型收窄不再成立（tsc 5 处，测试机 verify:fast run 1）。D2 落地前该控制器对 resource=orders 回 20001（data.fields=[resource]），只加这一处守卫与对应单测，不改别的导出行为；契约 adminCreateExport 说明同步写明。
@@ -50,4 +49,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/contracts/admin-orders-query/**'
-status: todo
+status: done
+pr: 670
