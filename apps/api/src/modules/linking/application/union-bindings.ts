@@ -70,6 +70,13 @@
 // highest is read under the user lock (r3 S1): a restore reads the rows again after the lock, a
 // new row re-reads after its lock and moves its own row_version up when a row created and reset
 // meanwhile went past it.
+// B1-04zzzzn (D10-2850 / D10-2851): ① the readiness of the real filing adapter is judged with the
+// site authorization, before the state is checked or consumed (not ready → auth_unavailable, the
+// state stays usable); ② the filing adapter records the attempt (union-filing-attempts.ts, committed
+// on its own) right before publisher.info.save; an id from the save marks it saved on trx before
+// the binding's savepoint; ③ a duplicate answer's read-back id is accepted on matching binding
+// history or an earlier attempt of the same app, user, platform and account whose outcome is
+// unknown.
 import type { components } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import { sql, type Kysely, type Selectable, type Transaction } from 'kysely';
@@ -108,6 +115,11 @@ import {
   type UnionBindingExchangeInput,
   type UnionBindingExchanger,
 } from './union-binding-exchanger.ts';
+import {
+  createFilingRecorder,
+  hasEarlierUnknownAttempt,
+  markFilingSaved,
+} from './union-filing-attempts.ts';
 import { BIND_RETRY_AFTER_SEC, getBindingAdmission } from './upstream-limits.ts';
 
 type BindUnionRequest = components['schemas']['BindUnionRequest'];
@@ -207,7 +219,9 @@ export interface UnionBindingsOptions {
   readonly callerContext: CallerContext;
   readonly reads: UnionAuthReads;
   readonly idempotency: Pick<Idempotency, 'executeInTransaction'>;
-  readonly exchanger: Pick<UnionBindingExchanger, 'exchange'>;
+  /** B1-04zzzzn: filingReady (when present) is judged before the state is consumed. */
+  readonly exchanger: Pick<UnionBindingExchanger, 'exchange'> &
+    Partial<Pick<UnionBindingExchanger, 'filingReady'>>;
   readonly logger: Pick<RootLogger, 'warn'>;
   /** 补丁 2: the failure counter; absent → the process's (unionBindFailureCounter()). */
   readonly failures?: UnionBindFailureCounter;
@@ -546,6 +560,13 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
         reason: 'auth_unavailable',
       });
     }
+    // B1-04zzzzn ④: no real filing adapter → the same answer, before the state is touched.
+    if (exchanger.filingReady !== undefined && !exchanger.filingReady()) {
+      bindFailed(appId, client, body.auth_method, 'filing_unavailable', traceId);
+      return result(status === 'invalid' ? 30102 : 30101, traceId, {
+        reason: 'auth_unavailable',
+      });
+    }
 
     const now = clock.now();
     // ① the state itself: any mismatch is 30104 without reason and leaves it as it is.
@@ -599,11 +620,23 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     // ④ with the application the state recorded for this method.
     // 补丁 2: with the account the binding is written under (the filing checks its inviter code
     // belongs to it, BR-ATTR-05); a failure is counted by client × method × fixed class.
+    // B1-04zzzzn ②: the filing adapter records the attempt through this right before the save.
+    const filing = createFilingRecorder(db, clock, logger, {
+      appId,
+      userId,
+      platform,
+      unionAccountId: accountId,
+      state: session.state,
+      traceId,
+    });
     let exchanged: Awaited<ReturnType<UnionBindingExchanger['exchange']>>;
     try {
       // r4b: the port's input is the five fields; the account is scoped around the call.
-      exchanged = await withBindingUnionAccount(accountId, () =>
-        exchanger.exchange({ appId, method, credential: credentialOf(body), appRef, traceId }),
+      exchanged = await withBindingUnionAccount(
+        accountId,
+        () =>
+          exchanger.exchange({ appId, method, credential: credentialOf(body), appRef, traceId }),
+        filing,
       );
     } catch (error) {
       bindFailed(appId, client, method, bindFailureOf(error), traceId);
@@ -622,6 +655,15 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     // user already has a binding of exactly that id under the same app and union account (any
     // status: the history proves the filing was ours); otherwise nothing is written or activated,
     // the failure is counted and warned as duplicate_unverified, and the answer is 50001.
+    // B1-04zzzzn ②: an id from the save itself → saved, on trx before the binding's savepoint, so
+    // it commits with the binding and also with a refused binding's stored answer (30151 / 10001).
+    const attempt = filing.current();
+    if (exchanged.fromDuplicateLookup !== true && attempt !== null) {
+      await markFilingSaved(trx, attempt, clock.now());
+    }
+    // B1-04zzzzn ③ (D10-2851): or an earlier attempt of the same app, user, platform and account
+    // whose outcome is unknown (its save may have gone through); this request's own attempt and
+    // attempts with a known outcome never count.
     if (exchanged.fromDuplicateLookup === true) {
       const history = await trx
         .selectFrom('union_bindings')
@@ -633,7 +675,14 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
         .where('relation_id', '=', exchanged.relationId)
         .limit(1)
         .executeTakeFirst();
-      if (history === undefined) {
+      const unknownEarlier =
+        history === undefined &&
+        (await hasEarlierUnknownAttempt(
+          trx,
+          { appId, userId, platform, unionAccountId: accountId },
+          attempt,
+        ));
+      if (history === undefined && !unknownEarlier) {
         bindFailed(appId, client, method, 'duplicate_unverified', traceId);
         return result(50001, traceId);
       }

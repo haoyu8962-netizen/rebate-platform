@@ -232,6 +232,8 @@ it('classifies every table of db/schema.sql: the funds and attribution tables an
     'union_receipts',
     // B1-06zh: PDD per-PID filing facts (union_ prefix, BR-ID-22; D10-1097).
     'union_pdd_pid_filings',
+    // B1-04zzzzn: filing attempts (union prefix, attribution side)
+    'union_filing_attempts',
     'admin_adjustments',
     'bad_debt_writeoffs',
     'beneficiary_credits',

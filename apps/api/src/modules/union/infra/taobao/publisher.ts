@@ -94,3 +94,20 @@ export function queriedRelationId(body: string): QueriedRelationId {
   const [relationId = ''] = ids;
   return { kind: 'found', relationId };
 }
+
+/**
+ * B1-04zzzzn (D10-2850): whether a publisher.info.save answer is a definite refusal — the gateway
+ * answered (status below 500, a JSON object) with an error_response that is not a TOP system error.
+ * A system error (sub_code isp.*, except the call limit, which is refused before the call runs)
+ * may hide a filing that went through, so it counts as unknown, like a transport failure.
+ */
+export function saveRefusalIsDefinite(status: number, body: string): boolean {
+  if (status >= 500) return false;
+  const parsed = parseLossless(body);
+  if (!isRecord(parsed) || !Object.hasOwn(parsed, 'error_response')) return false;
+  const error = parsed['error_response'];
+  const subCode = isRecord(error) ? error['sub_code'] : undefined;
+  if (typeof subCode !== 'string') return true;
+  const text = subCode.trim();
+  return !text.startsWith('isp.') || text.startsWith('isp.call-limited');
+}

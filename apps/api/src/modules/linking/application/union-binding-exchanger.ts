@@ -29,6 +29,9 @@
 // demo endpoint) never receives a credential: refused before anything is exchanged; ① an id the
 // adapter only read back after a duplicate filing comes back marked (fromDuplicateLookup) so the
 // bindings use case checks it against its own history before writing anything.
+// B1-04zzzzn (D10-2850): the bindings use case also scopes its filing attempt recorder with the
+// account; it reaches the adapter as BindReq.filing (the attempt is committed before the save is
+// sent). filingReady() exposes `ready` so the use case can refuse before it consumes the state.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { UnionError, type BindReq, type BindResult, type CallCtx } from '../../union/index.ts';
 
@@ -41,12 +44,27 @@ export interface UnionBindingExchangeInput {
   readonly traceId: string;
 }
 
-/** r4b: the union account the binding is written under, scoped by the bindings use case. */
-const bindingUnionAccount = new AsyncLocalStorage<string>();
+/** The filing attempt recorder the bindings use case hands to the filing adapter. */
+export type UnionBindingFilingRecorder = NonNullable<BindReq['filing']>;
 
-/** Runs `run` (the exchange) with the account the binding will be written under. */
-export function withBindingUnionAccount<T>(accountId: string, run: () => Promise<T>): Promise<T> {
-  return bindingUnionAccount.run(accountId, run);
+interface BindingScope {
+  readonly accountId: string;
+  readonly filing: UnionBindingFilingRecorder | undefined;
+}
+
+/** r4b: the union account the binding is written under, scoped by the bindings use case. */
+const bindingUnionAccount = new AsyncLocalStorage<BindingScope>();
+
+/**
+ * Runs `run` (the exchange) with the account the binding will be written under and, B1-04zzzzn,
+ * the recorder of the filing attempt.
+ */
+export function withBindingUnionAccount<T>(
+  accountId: string,
+  run: () => Promise<T>,
+  filing?: UnionBindingFilingRecorder,
+): Promise<T> {
+  return bindingUnionAccount.run({ accountId, filing }, run);
 }
 
 /** The OAuth application a state's reference names (app key + redirect URI, no secret). */
@@ -113,8 +131,15 @@ export class UnionBindingExchanger {
     this.#ready = options?.ready;
   }
 
+  /** B1-04zzzzn: false when the real filing adapter is not ready (no `ready` option: true). */
+  filingReady(): boolean {
+    return this.#ready === undefined || this.#ready();
+  }
+
   async exchange(input: UnionBindingExchangeInput): Promise<UnionBindingExchangeResult> {
-    const unionAccountId = bindingUnionAccount.getStore();
+    const scope = bindingUnionAccount.getStore();
+    const unionAccountId = scope?.accountId;
+    const filing = scope?.filing;
     if (this.#ready !== undefined && !this.#ready()) {
       throw new UnionBindingExchangeRefusal('filing_unavailable');
     }
@@ -141,6 +166,7 @@ export class UnionBindingExchanger {
             credentialType: input.method === 'web_code' ? 'authorization_code' : 'sdk_token',
             ...(unionAccountId === undefined ? {} : { unionAccountId }),
             ...(oauthApp === undefined ? {} : { oauthApp }),
+            ...(filing === undefined ? {} : { filing }),
           };
     try {
       const result = await bind(req, {

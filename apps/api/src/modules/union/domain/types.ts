@@ -829,6 +829,19 @@ export interface BindReq {
   readonly unionAccountId?: string;
   readonly credentialType?: 'authorization_code' | 'sdk_token';
   readonly oauthApp?: { readonly appKey: string; readonly redirectUri: string };
+  /**
+   * B1-04zzzzn (D10-2850): the caller's record of this filing attempt. A filing adapter calls
+   * `started` once the credential gave a user session, right before the filing request is sent,
+   * and sends nothing unless it resolves; it calls `settled` with the filing's definite answer when
+   * that answer carries no id (an explicit refusal, or "already filed"). A filing that gave an id is
+   * reported by the result; a transport failure reports nothing (the outcome stays unknown).
+   */
+  readonly filing?: BindFilingRecorder;
+}
+/** B1-04zzzzn: see BindReq.filing. */
+export interface BindFilingRecorder {
+  started(): Promise<void>;
+  settled(outcome: 'rejected' | 'duplicate'): Promise<void>;
 }
 export interface BindResult {
   readonly relationId: string;

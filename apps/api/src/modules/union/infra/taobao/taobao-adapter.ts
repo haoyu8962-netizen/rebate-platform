@@ -234,6 +234,7 @@ import { parseTaobaoItemLink } from './resolve-link.ts';
 import {
   queriedRelationId,
   savedRelationId,
+  saveRefusalIsDefinite,
   TAOBAO_PUBLISHER_GET,
   TAOBAO_PUBLISHER_GET_ENVELOPE,
   TAOBAO_PUBLISHER_INFO_TYPE,
@@ -619,14 +620,21 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       clock: this.#clock,
     });
     const signal = ctx.signal;
+    // B1-04zzzzn (D10-2850): the caller records the attempt (committed on its own) before the save
+    // is sent; nothing is sent unless that resolves. A definite refusal and an answer without an id
+    // are reported back; a transport failure or a gateway system error reports nothing (unknown).
+    const filing = req.filing;
+    await filing?.started();
     const saved = await this.#publisherCall(
       TAOBAO_PUBLISHER_SAVE,
       TAOBAO_PUBLISHER_SAVE_ENVELOPE,
       { session, inviter_code: inviterCode, info_type: TAOBAO_PUBLISHER_INFO_TYPE },
       signal,
+      filing === undefined ? undefined : () => filing.settled('rejected'),
     );
     const savedId = savedRelationId(saved.body);
     if (savedId !== null) return { relationId: savedId };
+    await filing?.settled('duplicate');
     const queried = await this.#publisherCall(
       TAOBAO_PUBLISHER_GET,
       TAOBAO_PUBLISHER_GET_ENVELOPE,
@@ -662,12 +670,14 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   /**
    * A publisher request carrying the user's session: never archived (no archive context), errors
    * classified by unwrapTaobaoResponse; the raw answer is returned for the lossless relation_id.
+   * `refused` (the save, B1-04zzzzn) runs before a definite refusal is thrown.
    */
   async #publisherCall(
     method: string,
     envelope: string,
     parameters: TaobaoParameters,
     signal: AbortSignal | undefined,
+    refused?: () => Promise<void>,
   ): Promise<UnionTransportResponse> {
     let response: UnionTransportResponse;
     try {
@@ -682,7 +692,15 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       const code = error instanceof UnionError ? error.code : 'upstream_unavailable';
       throw new UnionError(code, `taobao ${method}: transport failed`, 'taobao');
     }
-    unwrapTaobaoResponse(method, envelope, response, this.#warn);
+    try {
+      unwrapTaobaoResponse(method, envelope, response, this.#warn);
+    } catch (error) {
+      // B1-04zzzzn: a definite refusal is reported before the error goes up.
+      if (refused !== undefined && saveRefusalIsDefinite(response.status, response.body)) {
+        await refused();
+      }
+      throw error;
+    }
     return response;
   }
 
