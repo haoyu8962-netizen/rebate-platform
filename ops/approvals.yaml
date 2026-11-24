@@ -1083,3 +1083,9 @@ approvals:
     granted: true
     date: '2026-11-25'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审轮次属门禁流程小改动），D10-2873，先例第 166、168、173 条。原因：CT-24zzv 写测 3 次、规则测试评审 2 轮均已用满；实现 1 交回后发现规则测试 [#2]、[#6] 把「后台可列 10003 的操作」写成只有 24 个标档操作加 adminRetestNotifySms，漏了主干契约里本来就列 10003 的 adminStepUp、adminSendStepUpSms（写测书的错，二次验证线 2026-11-25 自报），实现照规划保留这两处后这两条必红，且不能靠改契约解决（会与服务端现行行为不一致）；规则测试评审 r2 的 S1 与三条 S2 已按 D10-2869 止损线登 FU 并写成实现方单测，本次一并收进规则测试以关闭 FU。非资金用例、不涉及金额与归属规则。评审增量仍判 S1 即停、报编排，不再自起任何一轮；[AC-CT-21e#17] 待负责人答复后另给。'
+  - id: 178
+    row: 4
+    title: 'B3-09m 任务专属一次性追加（D10-2884）：写规则测试增量 1 次（Codex）+ 规则测试评审增量 1 轮（独立 Claude）——范围写死为两处：① 冻结夹具 test/spec/agent/stream-mount/kit.ts 的 contentReaderFor 返回对象末尾追加 configValuesByKey: configValuesByKeyOf(handle)、import 括号内加名（台账补丁 5 support 条目，只按 token 纯插入）；② test/spec/agent/daily-budget/ 内新增「预算三键跨 app 取最保守值」的端到端规则测试（两个 app 配不同值、某 app 缺省或非法）；不改其他已有用例'
+    granted: true
+    date: '2026-11-25'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审轮次属门禁流程小改动），D10-2884，先例第 166、168、170、173 条；实现 9 走独立 Opus 进程不计次、Codex 资金评审 r2 在 3 轮内，均不另列。原因：B3-09m money r1 S1-1（全平台预算按 app 读配置会得出不同熔断结论）取甲后，跨 app 读能力须经组合根 app.module 的 agentReaders 注入（foreign-db-handoff 守卫不许 agent 交 db），冻结夹具 contentReaderFor 要同形补这个方法；写测次数已用 4 次（第 173 条那 1 次已用完）。非资金 / 归属目录（stream-mount 不含资金关键词），非用户资金。'
