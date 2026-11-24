@@ -7,7 +7,7 @@ type: impl
 # 探测 / 刷新 / 失效判定按平台登记（各平台接口以 09 CAP-*-12 为准，未实测的做成登记表与假实现，不伪造平台报文）；短信发送经 notification 新端口（非 prod 假实现，prod 未配置时拒发并告警）；后台告警为结构化日志。linking 只改 union-auth-reads 的时间守卫。
 refs: [BR-ID-24, BR-TEXT-20]
 refs_hash:
-  BR-ID-24: 4d9f9642f621
+  BR-ID-24: c83882bd9813
   BR-TEXT-20: 0886adee3e80
 deps: [B1-22a]
 paths:

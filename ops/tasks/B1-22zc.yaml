@@ -5,7 +5,7 @@ type: impl
 # 2026-11-13 union 入账（编排 D10-1401；方案 couli-runs/DASHBOARD/plan-20261113.md；契约 AdminDashboardTodo.count = 该卡列表页待处理数）。开工前核对：adminListUnionAccounts（application/admin-accounts.ts list）不分页、不按状态筛选，返回本 app 全部账号；auth_status 是存储列，由每日巡检按 union.auth_alert_days 写 expiring、到期或探测 / 调用返回授权失效类错误时写 expired（BR-ID-24 ①④；超时、限流不改状态，所以 01 F-ADM-26「即将到期或探测失效」即 expiring + expired）。判定只写一份：union domain 定义「待处理」= auth_status ∈ {expiring, expired}，计数函数与列表待处理口径同用它；列表接口行为与契约不变。计数按 (app_id, auth_status) 过滤，走 union_accounts_app_id_id_key（app_id 前缀）。
 refs: [BR-ID-24]
 refs_hash:
-  BR-ID-24: 4d9f9642f621
+  BR-ID-24: c83882bd9813
 deps: []
 paths:
   - 'apps/api/src/modules/union/domain/auth-pending.ts'
