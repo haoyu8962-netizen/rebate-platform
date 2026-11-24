@@ -15,6 +15,11 @@
 //   access_token and no `error` gives { accessToken: access_token, refreshToken: refresh_token
 //   (missing or empty → null), expiresAt: clock.now() read after the answer arrived + expires_in
 //   seconds (missing or not a positive number → null) }.
+//   B1-22zd (BR-ID-24 细则「授权时长与续期」, D10-2758): the answer's re_expires_in, r1_expires_in,
+//   r2_expires_in, w1_expires_in and w2_expires_in (seconds) ride along as `durations` (a whole
+//   number ≥ 0 each, anything else null; see taobaoDurations). The property is not enumerable: the
+//   token keeps exactly the three fields above for equality, JSON and spreading (B1-04zzi tests),
+//   while reauth reads `token.durations` to store the numbers (never a token).
 //   Anything else (non-2xx, not JSON, `error` present, access_token missing, transport error) →
 //   rejects with an Error whose text and properties carry no code, token, secret or answer text
 //   (the `error` code may appear) and no `cause`.
@@ -27,7 +32,11 @@
 //   from the injected Clock. The sandbox host oauth.tbsandbox.com is never used.
 import { unionPolicy } from '../../../platform/index.ts';
 import type { Clock, TaobaoAppCredentials } from '../../../platform/index.ts';
-import type { SiteOAuthProvider } from '../../auth-expiry/reauth.ts';
+import type {
+  SiteOAuthDurations,
+  SiteOAuthProvider,
+  SiteOAuthToken,
+} from '../../auth-expiry/reauth.ts';
 import type { UnionTransport, UnionTransportResponse } from '../replay.ts';
 
 export interface TaobaoSiteOAuthOptions {
@@ -93,6 +102,22 @@ async function withTimeout<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** A duration of the token answer: a whole number of seconds ≥ 0, else null. */
+function seconds(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+/** The five validity periods of a Taobao token answer (each null when absent or not valid). */
+export function taobaoDurations(answer: Record<string, unknown>): SiteOAuthDurations {
+  return {
+    reExpiresIn: seconds(answer['re_expires_in']),
+    r1ExpiresIn: seconds(answer['r1_expires_in']),
+    r2ExpiresIn: seconds(answer['r2_expires_in']),
+    w1ExpiresIn: seconds(answer['w1_expires_in']),
+    w2ExpiresIn: seconds(answer['w2_expires_in']),
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -185,12 +210,17 @@ export function createTaobaoSiteOAuth(options: TaobaoSiteOAuthOptions): SiteOAut
         typeof expiresIn === 'number' && Number.isFinite(expiresIn) && expiresIn > 0
           ? later(now, expiresIn * 1000)
           : null;
-      return {
+      const token: SiteOAuthToken = {
         accessToken,
         refreshToken: typeof refresh === 'string' && refresh !== '' ? refresh : null,
         // An expiry beyond the Date range counts as none (reauth estimates it).
         expiresAt: expiresAt !== null && Number.isFinite(expiresAt.getTime()) ? expiresAt : null,
       };
+      Object.defineProperty(token, 'durations', {
+        value: Object.freeze(taobaoDurations(answer)),
+        enumerable: false,
+      });
+      return token;
     },
   };
 }

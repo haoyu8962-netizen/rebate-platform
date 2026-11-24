@@ -2,7 +2,14 @@
 import { expect, it } from 'vitest';
 import {
   DEFAULT_PROBE_TIME,
+  authStatusAt,
+  authTotalMs,
   dueNode,
+  hourNodeAt,
+  hourNodeReached,
+  liveDayNodes,
+  liveHourNodes,
+  parseAlertHours,
   nextCheckSlot,
   parseAlertDays,
   parseProbeCron,
@@ -61,4 +68,53 @@ it('[BR-ID-24] 只提醒已到达的最小节点，跳过的不补、已发的�
   expect(reachedNode(4, nodes)).toBe(7);
   expect(statusFor(14, nodes)).toBe('expiring');
   expect(statusFor(15, nodes)).toBe('active');
+});
+
+// B1-22zd: 错实现下怎么红——缺省或非法不回退 [6, 1]（或空数组也回退默认）则第一条红；
+// 721 / 0 / 1.5 / '6' 被接受、720 被拒，同样第一条红。
+it('[B1-22zd][BR-ID-24] 小时节点取 1–720 去重降序；缺省或任一非法回退 [6, 1]，空数组关闭', () => {
+  expect(parseAlertHours(null)).toEqual([6, 1]);
+  expect(parseAlertHours(undefined)).toEqual([6, 1]);
+  expect(parseAlertHours([])).toEqual([]);
+  expect(parseAlertHours([1, 720, 1])).toEqual([720, 1]);
+  expect(parseAlertHours([3])).toEqual([3]);
+  for (const bad of ['6', [3, 0], [3, 721], [3, 1.5], [3, '6'], { 0: 6 }]) {
+    expect(parseAlertHours(bad)).toEqual([6, 1]);
+  }
+});
+
+// 错实现下怎么红：提前量与总时长比较用 > 而非 ≥（恰好相等不跳过）则 d1 / h1 两处断言红；
+// 总时长未知（auth_renewed_at 为空）也跳过则 null 那组红；状态不计小时节点则最后一组红。
+it('[B1-22zd][BR-ID-24] 提前量不小于总时长的节点跳过（恰好相等也跳过），总时长未知不跳过', () => {
+  const HOUR = 3_600_000;
+  const DAY = 24 * HOUR;
+  expect(authTotalMs(DAY, 0)).toBe(DAY);
+  expect(authTotalMs(DAY, null)).toBeNull();
+  expect(authTotalMs(DAY, DAY)).toBeNull();
+  expect(liveDayNodes([14, 7, 1], DAY)).toEqual([]);
+  expect(liveDayNodes([14, 7, 1], 7 * DAY)).toEqual([1]);
+  expect(liveDayNodes([14, 7, 1], 7 * DAY + 60_000)).toEqual([7, 1]);
+  expect(liveDayNodes([14, 7, 1], null)).toEqual([14, 7, 1]);
+  expect(liveHourNodes([6, 1], HOUR)).toEqual([]);
+  expect(liveHourNodes([6, 1], HOUR + 60_000)).toEqual([1]);
+  expect(liveHourNodes([6, 1], 6 * HOUR)).toEqual([1]);
+  expect(liveHourNodes([6, 1], null)).toEqual([6, 1]);
+
+  const renewed = ms('2026-11-22T09:29:00Z');
+  const expires = renewed + DAY;
+  const judge = (nowMs: number, renewedMs: number | null) =>
+    authStatusAt({
+      expiresMs: expires,
+      renewedMs,
+      nowMs,
+      days: [14, 7, 1],
+      hours: [6, 1],
+      probeTime: DEFAULT_PROBE_TIME,
+    });
+  expect(judge(renewed, renewed)).toBe('active');
+  expect(judge(renewed, null)).toBe('expiring');
+  expect(judge(expires - 6 * HOUR - 1, renewed)).toBe('active');
+  expect(judge(expires - 6 * HOUR, renewed)).toBe('expiring');
+  expect(hourNodeReached(expires, expires - HOUR, [1])).toBe(true);
+  expect(hourNodeAt(expires, 6)).toBe(expires - 6 * HOUR);
 });

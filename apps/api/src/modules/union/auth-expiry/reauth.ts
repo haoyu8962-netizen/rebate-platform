@@ -25,17 +25,49 @@
 // session on error (failed, error = category); a claim that still has not finished 30 minutes
 // after used_at (the callback process died) is failed as `stalled` by expireStale and result.
 //
+// B1-22zd (BR-ID-24 ③ 细则「授权时长与续期」「记录与显示」; D10-2584, D10-2587, D10-2758): the new
+// credential row also gets the provider's validity periods (token.durations: Taobao re_expires_in
+// and r1 / r2 / w1 / w2_expires_in, seconds; only whole numbers ≥ 0 are kept, anything else and a
+// provider without them is NULL), never logged or audited; and, after the renewal committed, the
+// hour alert jobs of the new authorization are sent when a queue is handed in (./hour-alerts.ts).
+// Best effort: a send that fails (e.g. the queue is not running) never undoes the renewal; it is
+// one warn line `union_auth_hour_schedule_failed` (flat ids only) and the daily check backfills.
+//
 // Plain tokens, codes, states and authorize URLs never reach the database, audit rows, errors or
-// logs (this module does not log). Time comes only from the injected Clock.
+// logs (the only log line is the one above). Time comes only from the injected Clock.
 import { createHash, randomBytes as nodeRandomBytes } from 'node:crypto';
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
 import type { ContentReader } from '../../content/index.ts';
-import { newUuidV7, type Clock, type FieldCrypto } from '../../platform/index.ts';
+import {
+  newUuidV7,
+  type Clock,
+  type FieldCrypto,
+  type JobQueue,
+  type RootLogger,
+} from '../../platform/index.ts';
 import { isRegisteredPlatform, type RegisteredPlatform } from '../domain/types.ts';
 import type { UnionAuditWriter } from '../pids/service.ts';
+import { alertHoursOf, sendHourAlerts } from './hour-alerts.ts';
 
 export type ReauthMode = 'oauth' | 'manual' | 'none';
+
+/** Validity periods a provider answered with (seconds), as parsed by the provider. */
+export interface SiteOAuthDurations {
+  readonly reExpiresIn: number | null;
+  readonly r1ExpiresIn: number | null;
+  readonly r2ExpiresIn: number | null;
+  readonly w1ExpiresIn: number | null;
+  readonly w2ExpiresIn: number | null;
+}
+
+/** The token of an exchange; `durations` only from a provider that reads them (Taobao). */
+export interface SiteOAuthToken {
+  accessToken: string;
+  refreshToken: string | null;
+  expiresAt: Date | null;
+  readonly durations?: SiteOAuthDurations;
+}
 
 export interface SiteOAuthProvider {
   authorizeUrl(input: {
@@ -44,11 +76,7 @@ export interface SiteOAuthProvider {
     state: string;
     expiresAt: Date;
   }): Promise<string>;
-  exchange(input: { appId: string; unionAccountId: string; code: string }): Promise<{
-    accessToken: string;
-    refreshToken: string | null;
-    expiresAt: Date | null;
-  }>;
+  exchange(input: { appId: string; unionAccountId: string; code: string }): Promise<SiteOAuthToken>;
 }
 
 export interface SiteReauthOptions {
@@ -60,6 +88,10 @@ export interface SiteReauthOptions {
   modes?: Partial<Readonly<Record<RegisteredPlatform, ReauthMode>>>;
   oauth: Partial<Readonly<Record<RegisteredPlatform, SiteOAuthProvider>>>;
   randomBytes?: (n: number) => Buffer;
+  /** Sends the hour alert jobs of a new authorization; absent → the daily check backfills them. */
+  queue?: Pick<JobQueue, 'send'>;
+  /** Receives the warn line of a failed hour job send. */
+  logger?: Pick<RootLogger, 'warn'>;
 }
 
 export type SiteReauthErrorCode =
@@ -126,6 +158,8 @@ const STALLED = 'stalled';
  * the session lifetime (代理补全的默认, Codex money review B1-22c r1).
  */
 const STALLED_AFTER_MS = 30 * 60 * 1000;
+/** int4 upper bound of the duration columns; a larger number is not stored (NULL). */
+const DURATION_MAX = 2_147_483_647;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** D10-164: platform registry default (09 CAP-*-12); jd is derived from attr.jd.user_key_mode. */
 const DEFAULT_MODES: Readonly<Record<Exclude<RegisteredPlatform, 'jd'>, ReauthMode>> = {
@@ -157,6 +191,16 @@ function truncate(value: string): string {
 
 function iso(value: Date | null): string | null {
   return value === null ? null : value.toISOString();
+}
+
+/** A stored duration: a whole number of seconds 0 – int4 max, else null. */
+function duration(value: unknown): number | null {
+  return typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= DURATION_MAX
+    ? value
+    : null;
 }
 
 export function createSiteReauth(options: SiteReauthOptions): SiteReauth {
@@ -211,9 +255,11 @@ export function createSiteReauth(options: SiteReauthOptions): SiteReauth {
 
   async function finish(
     session: { id: string; app_id: string; union_account_id: string; created_by: string },
-    token: { accessToken: string; refreshToken: string | null; expiresAt: Date | null },
+    token: SiteOAuthToken,
   ): Promise<void> {
-    await db.transaction().execute(async (trx) => {
+    const hours = options.queue === undefined ? [] : await alertHoursOf(config, session.app_id);
+    const durations = token.durations;
+    const renewal = await db.transaction().execute(async (trx) => {
       const tx = trx.withSchema('app');
       const now = clock.now();
       const account = await tx
@@ -247,6 +293,11 @@ export function createSiteReauth(options: SiteReauthOptions): SiteReauth {
               : Buffer.from(crypto.encrypt(token.refreshToken, REFRESH_CONTEXT)),
           expires_at: expiresAt,
           is_current: true,
+          re_expires_in_s: duration(durations?.reExpiresIn),
+          r1_expires_in_s: duration(durations?.r1ExpiresIn),
+          r2_expires_in_s: duration(durations?.r2ExpiresIn),
+          w1_expires_in_s: duration(durations?.w1ExpiresIn),
+          w2_expires_in_s: duration(durations?.w2ExpiresIn),
           created_at: now,
           updated_at: now,
         })
@@ -298,7 +349,33 @@ export function createSiteReauth(options: SiteReauthOptions): SiteReauth {
         },
         ip: null,
       });
+      return { expiresAt, renewedAt: now };
     });
+
+    const queue = options.queue;
+    if (queue === undefined) return;
+    try {
+      await sendHourAlerts(queue, {
+        trx: null,
+        target: {
+          appId: session.app_id,
+          unionAccountId: session.union_account_id,
+          expiresAt: renewal.expiresAt,
+          renewedAt: renewal.renewedAt,
+        },
+        hours,
+        nowMs: renewal.renewedAt.getTime(),
+      });
+    } catch (error) {
+      options.logger?.warn(
+        {
+          app_id: session.app_id,
+          union_account_id: session.union_account_id,
+          error_name: error instanceof Error ? error.name : typeof error,
+        },
+        'union_auth_hour_schedule_failed',
+      );
+    }
   }
 
   return {

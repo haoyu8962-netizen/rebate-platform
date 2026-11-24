@@ -113,3 +113,48 @@ it('[B1-04zzk] 传输忽略 signal 一直挂起：到 offline 超时 signal 中�
   expect(vi.getTimerCount()).toBe(0);
   expect(quick.requests[0]!.signal?.aborted).toBe(false);
 });
+
+// B1-22zd: 错实现下怎么红——durations 读错字段名或不过滤（1.5、-1、'7' 原样带出）则第一条红；
+// 把 durations 写成可枚举属性则 Object.keys / JSON 比对红（冻结的 B1-04zzi toEqual 也会红）；
+// 对缺省项填 0 而不是 null 则第二条红。
+it('[B1-22zd][BR-ID-24] 换票带出五项时长：整数 ≥ 0 原样，非整数、负数、字符串为 null，且不进可枚举字段', async () => {
+  const { oauth } = setup(() => ({
+    status: 200,
+    headers: {},
+    body: JSON.stringify({
+      access_token: 'unit-access',
+      expires_in: 60,
+      re_expires_in: 0,
+      r1_expires_in: 86_400,
+      r2_expires_in: 1.5,
+      w1_expires_in: -1,
+      w2_expires_in: '7',
+    }),
+  }));
+  const token = await oauth.exchange(input);
+  expect(token.durations).toEqual({
+    reExpiresIn: 0,
+    r1ExpiresIn: 86_400,
+    r2ExpiresIn: null,
+    w1ExpiresIn: null,
+    w2ExpiresIn: null,
+  });
+  expect(Object.keys(token).sort()).toEqual(['accessToken', 'expiresAt', 'refreshToken']);
+  expect(JSON.stringify(token)).not.toMatch(/expires_?in|durations/i);
+});
+
+it('[B1-22zd][BR-ID-24] 回包没有时长字段时五项都是 null', async () => {
+  const { oauth } = setup(() => ({
+    status: 200,
+    headers: {},
+    body: JSON.stringify({ access_token: 'unit-access' }),
+  }));
+  const token = await oauth.exchange(input);
+  expect(token.durations).toEqual({
+    reExpiresIn: null,
+    r1ExpiresIn: null,
+    r2ExpiresIn: null,
+    w1ExpiresIn: null,
+    w2ExpiresIn: null,
+  });
+});
