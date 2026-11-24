@@ -77,6 +77,7 @@ import { FlagTags, StatusTag } from './parts.tsx';
 import { SyncDialog } from './SyncDialog.tsx';
 import { SyncRecords } from './SyncRecords.tsx';
 import { SyncStatusBar } from './SyncStatusBar.tsx';
+import { refreshesSyncBar } from './sync-bar.ts';
 import { nextNoticeId, noticeOf, type SyncNotice } from './sync.ts';
 import {
   FIRST_PAGE,
@@ -97,7 +98,6 @@ import {
   failureOf,
   hasConditions,
   money,
-  newerSync,
   platformLabel,
   queryFromSearch,
   requestQuery,
@@ -109,7 +109,6 @@ import {
   type OrderQuery,
   type OrderRow,
   type OrdersBackState,
-  type SyncLatest,
   type SyncOutcome,
 } from './model.ts';
 
@@ -301,7 +300,8 @@ function OrdersList(): ReactElement {
   const [data, setData] = useState<OrderPage>();
   // Manual sync (F1-07eb): nothing is read until a dialog opens.
   const [syncOpen, setSyncOpen] = useState(false);
-  const [submittedSync, setSubmittedSync] = useState<SyncLatest>();
+  // Manual syncs accepted on this page: each one refreshes the sync status bar once.
+  const [syncsAccepted, setSyncsAccepted] = useState(0);
   const [recordsOpen, setRecordsOpen] = useState(false);
   const [notice, setNotice] = useState<SyncNotice>();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -794,10 +794,7 @@ function OrdersList(): ReactElement {
 
   const syncDone = (outcome: SyncOutcome) => {
     setSyncOpen(false);
-    if (outcome.kind === 'created' || outcome.kind === 'reused') {
-      const latest = outcome.latest;
-      if (latest !== undefined) setSubmittedSync((known) => newerSync(known, latest));
-    }
+    if (refreshesSyncBar(outcome)) setSyncsAccepted((count) => count + 1);
     const shown = noticeOf(outcome);
     setNotice(shown === undefined ? undefined : { id: nextNoticeId(), ...shown });
   };
@@ -824,7 +821,7 @@ function OrdersList(): ReactElement {
           </Button>
         </Flex>
       </Flex>
-      <SyncStatusBar submitted={submittedSync} />
+      <SyncStatusBar refresh={syncsAccepted} />
       {notice === undefined ? null : (
         <Alert
           key={notice.id}

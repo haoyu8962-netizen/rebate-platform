@@ -7,11 +7,8 @@ import {
   beijingInput,
   beijingMinute,
   minuteUp,
-  newerSync,
   orderNosOf,
-  syncBarOf,
   syncFailureOf,
-  syncLatestOf,
   thisOrderRejectedText,
 } from './model.ts';
 
@@ -71,53 +68,4 @@ it('[AC-F1-07eb-UNIT#5] 同步此单收到 20001 [platform] 或 [order_nos]：�
   expect(thisOrderRejectedText(['order_nos'])).toBe(t.thisOrderUnsupported);
   expect(thisOrderRejectedText(['from'])).toBe(t.failed);
   expect(thisOrderRejectedText([])).not.toBe(t.orderNosRejected);
-});
-
-it('[AC-F1-07edb-UNIT#3] 手动同步提交成功：状态条取创建响应的状态与创建时间、提交的平台，替换「暂无同步记录」', () => {
-  const latest = syncLatestOf(
-    { sync_id: 'x', status: 'queued', reused: false, created_at: '2026-10-31T10:01:00+08:00' },
-    'pdd',
-  );
-  expect(latest).toEqual({
-    platform: 'pdd',
-    status: 'queued',
-    created_at: '2026-10-31T10:01:00+08:00',
-  });
-  expect(syncBarOf({ status: 'ready', item: undefined }, latest)).toEqual({
-    status: 'ready',
-    item: latest,
-  });
-  // Still reading or the read failed: the accepted request is shown all the same.
-  expect(syncBarOf({ status: 'loading' }, latest)).toEqual({ status: 'ready', item: latest });
-  expect(syncBarOf({ status: 'failed' }, latest)).toEqual({ status: 'ready', item: latest });
-  expect(syncBarOf({ status: 'failed' }, undefined)).toEqual({ status: 'failed' });
-  // An answer without the fields the bar needs changes nothing.
-  expect(syncLatestOf({ sync_id: 'x', reused: false }, 'pdd')).toBeUndefined();
-  expect(syncLatestOf(null, 'pdd')).toBeUndefined();
-});
-
-it('[AC-F1-07edb-UNIT#4] 复用旧请求（reused）时状态条保留创建时间更晚的那条', () => {
-  const read = {
-    platform: 'jd',
-    status: 'done',
-    created_at: '2026-10-31T09:30:00+08:00',
-  } as const;
-  const older = {
-    platform: 'pdd',
-    status: 'running',
-    created_at: '2026-10-31T09:00:00+08:00',
-  } as const;
-  const newer = {
-    platform: 'pdd',
-    status: 'queued',
-    created_at: '2026-10-31T10:00:00+08:00',
-  } as const;
-  expect(newerSync(read, older)).toBe(read);
-  expect(newerSync(read, newer)).toBe(newer);
-  expect(newerSync(undefined, older)).toBe(older);
-  expect(newerSync(read, undefined)).toBe(read);
-  expect(syncBarOf({ status: 'ready', item: read }, older)).toEqual({
-    status: 'ready',
-    item: read,
-  });
 });

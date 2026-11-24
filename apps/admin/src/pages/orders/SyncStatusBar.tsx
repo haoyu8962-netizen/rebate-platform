@@ -3,63 +3,71 @@
 // (GET /admin/v1/order-syncs with page=1, page_size=1; no limits read). It shows the platform's
 // display name (./platforms.ts, all nine platforms alike), the status's console dictionary name
 // and the creation time in Beijing time; no record shows the empty text. A failed read only shows
-// a line in the bar: the list is not affected and no global notice is raised. A manual sync
-// accepted on this page shows at once from the create answer (no further read); of it and the read
-// record the bar keeps the later one.
+// a line in the bar: the list is not affected and no global notice is raised. Only that read is
+// shown: after a manual sync is accepted on this page (created or reused) the bar reads it once
+// more, and of overlapping reads only the answer to the last one sent is shown (./sync-bar.ts).
 import { SyncOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import { Flex, Tag, Typography, theme } from 'antd';
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { usePlanned } from '../../components/planned/index.ts';
 import { ordersTexts } from '../../texts/orders.ts';
 import {
   SYNCS_URL,
   beijingMinute,
   platformLabel,
-  syncBarOf,
   syncStatusName,
   syncTone,
-  type SyncBarState,
-  type SyncLatest,
   type SyncPage,
 } from './model.ts';
+import { syncBarReader, type SyncBarReader, type SyncBarState } from './sync-bar.ts';
 
 const t = ordersTexts.sync.bar;
 
 export interface SyncStatusBarProps {
-  /** The latest sync accepted on this page (from the create answer); undefined: none yet. */
-  readonly submitted?: SyncLatest | undefined;
+  /** Manual syncs accepted on this page so far; each new one reads the latest record again. */
+  readonly refresh: number;
 }
 
-export function SyncStatusBar({ submitted }: SyncStatusBarProps): ReactElement | null {
+export function SyncStatusBar({ refresh }: SyncStatusBarProps): ReactElement | null {
   // adminListOrderSyncs not live yet (planned): no bar and no read (D10-284).
   const planned = usePlanned('adminListOrderSyncs');
-  return planned ? null : <SyncStatusLine submitted={submitted} />;
+  return planned ? null : <SyncStatusLine refresh={refresh} />;
 }
 
-function SyncStatusLine({ submitted }: SyncStatusBarProps): ReactElement {
+function SyncStatusLine({ refresh }: SyncStatusBarProps): ReactElement {
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
-  const [read, setRead] = useState<SyncBarState>({ status: 'loading' });
+  const [latest, setLatest] = useState<SyncBarState>({ status: 'loading' });
+  const reader = useRef<SyncBarReader | undefined>(undefined);
+  const seen = useRef(refresh);
 
+  // The first load: exactly one read.
   useEffect(() => {
-    let current = true;
     const custom = getProvider().custom;
     if (custom === undefined) throw new Error('Missing custom data provider');
-    custom<SyncPage>({ url: SYNCS_URL, method: 'get', query: { page: 1, page_size: 1 } }).then(
-      (response) => {
-        if (current) setRead({ status: 'ready', item: response.data.items[0] });
-      },
-      () => {
-        if (current) setRead({ status: 'failed' });
-      },
+    const mounted = syncBarReader(
+      () =>
+        custom<SyncPage>({ url: SYNCS_URL, method: 'get', query: { page: 1, page_size: 1 } }).then(
+          (response) => response.data,
+        ),
+      setLatest,
     );
+    reader.current = mounted;
+    mounted.load();
     return () => {
-      current = false;
+      mounted.stop();
+      if (reader.current === mounted) reader.current = undefined;
     };
   }, [getProvider]);
 
-  const latest = syncBarOf(read, submitted);
+  // A manual sync accepted since: one more read.
+  useEffect(() => {
+    if (refresh === seen.current) return;
+    seen.current = refresh;
+    reader.current?.load();
+  }, [refresh]);
+
   const small = { fontSize: token.fontSizeSM } as const;
   let content: ReactElement;
   if (latest.status === 'loading') {

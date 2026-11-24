@@ -445,55 +445,15 @@ export function syncTone(code: string): 'success' | 'error' | 'processing' | 'de
 }
 
 /** What a manual sync submit came to. */
-/** What the sync status bar shows of one sync request. */
-export type SyncLatest = Pick<SyncItem, 'platform' | 'status' | 'created_at'>;
-
 export type SyncOutcome =
-  | { readonly kind: 'created'; readonly latest?: SyncLatest | undefined }
-  | { readonly kind: 'reused'; readonly latest?: SyncLatest | undefined }
+  | { readonly kind: 'created' }
+  | { readonly kind: 'reused' }
   | { readonly kind: 'paused'; readonly platform: string }
   | { readonly kind: 'forbidden' }
   | { readonly kind: 'rateLimited' }
   | { readonly kind: 'fields'; readonly fields: readonly string[] }
   | { readonly kind: 'network' }
   | { readonly kind: 'failed' };
-
-/**
- * The status bar's view of an accepted POST /admin/v1/order-syncs: the answer's status and
- * created_at with the platform that was sent; undefined when the answer lacks either.
- */
-export function syncLatestOf(
-  created: unknown,
-  platform: SyncItem['platform'],
-): SyncLatest | undefined {
-  if (typeof created !== 'object' || created === null) return undefined;
-  const { status, created_at: createdAt } = created as Partial<Record<string, unknown>>;
-  if (typeof status !== 'string' || typeof createdAt !== 'string') return undefined;
-  if (!Number.isFinite(Date.parse(createdAt))) return undefined;
-  return { platform, status: status as SyncLatest['status'], created_at: createdAt };
-}
-
-/** The later of two sync requests by creation time; on a tie (or no time) the second one. */
-export function newerSync(
-  known: SyncLatest | undefined,
-  submitted: SyncLatest | undefined,
-): SyncLatest | undefined {
-  if (known === undefined) return submitted;
-  if (submitted === undefined) return known;
-  return Date.parse(known.created_at) > Date.parse(submitted.created_at) ? known : submitted;
-}
-
-/** The sync status bar: reading, the latest request (none: undefined) or a failed read. */
-export type SyncBarState =
-  | { readonly status: 'loading' }
-  | { readonly status: 'ready'; readonly item: SyncLatest | undefined }
-  | { readonly status: 'failed' };
-
-/** What the bar shows: the later of the read record and the one accepted on this page. */
-export function syncBarOf(read: SyncBarState, submitted: SyncLatest | undefined): SyncBarState {
-  if (read.status === 'ready') return { status: 'ready', item: newerSync(read.item, submitted) };
-  return submitted === undefined ? read : { status: 'ready', item: submitted };
-}
 
 /** The outcome of a failed POST /admin/v1/order-syncs. */
 export function syncFailureOf(cause: unknown, platform: string): SyncOutcome {
