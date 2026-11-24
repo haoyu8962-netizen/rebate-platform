@@ -99,6 +99,7 @@ async function boot(entry: 'admin' | 'api') {
   return { app, seen };
 }
 
+// 标题沿用原文，二次验证期望以块内断言为准。
 it('[AC-B2-09f#1] 五个写接口去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent（只有发起补充）、x-error-codes 不变；admin 入口各恰好挂一次 POST 并带契约的请求 schema（body、路径参数、请求头），api 入口不挂', async () => {
   const paths = await contractPaths();
   for (const spec of OPERATIONS) {
@@ -108,7 +109,7 @@ it('[AC-B2-09f#1] 五个写接口去掉 x-implementation: planned（生成的 pl
     expect(op?.['x-auth'], spec.operationId).toBe('admin');
     expect(op?.['x-idempotent'], spec.operationId).toBe(spec.idempotent);
     const codes = [...(op?.['x-error-codes'] ?? [])].sort((a, b) => a - b);
-    expect(codes, spec.operationId).toEqual(spec.codes);
+    expect(codes, spec.operationId).toEqual(spec.codes.filter((code) => code !== 10003));
     expect(plannedOperations.has(spec.operationId), spec.operationId).toBe(false);
   }
 

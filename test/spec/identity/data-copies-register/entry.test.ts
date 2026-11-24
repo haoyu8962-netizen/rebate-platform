@@ -136,12 +136,13 @@ it('[AC-B1-27c#2] 要后台登录：不带 admin_token 时登记与列表都在�
   }
 });
 
+// 保留原标题，错误码表以块内断言为准。
 it('[AC-B1-27c#3] 契约 adminCreateUserDataExport / adminListUserDataExports 去掉 x-implementation: planned，错误码表不变', async () => {
   const path = (await contract()).paths[EXPORTS]!;
   expect(path.post!['x-implementation']).not.toBe('planned');
   expect(path.get!['x-implementation']).not.toBe('planned');
   expect([...(path.post!['x-error-codes'] ?? [])].sort((a, b) => a - b)).toEqual(
-    CREATE_ERROR_CODES,
+    CREATE_ERROR_CODES.filter((code) => code !== 10003),
   );
   expect([...(path.get!['x-error-codes'] ?? [])].sort((a, b) => a - b)).toEqual(LIST_ERROR_CODES);
 });

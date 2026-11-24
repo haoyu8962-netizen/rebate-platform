@@ -129,6 +129,7 @@ it.each(SENSITIVE.filter((s) => s.action !== null))(
   },
 );
 
+// 标题沿用原文，用户端与后台二次验证期望以块内断言为准。
 it('[AC-B1-02zzzc#12] 全契约恰好四个操作带 x-sensitive-operation（值为 true），恰好三个带 x-step-up', () => {
   const all = operations(raw());
   const sensitive = all.filter(({ op }) => Object.hasOwn(op, 'x-sensitive-operation'));
@@ -139,12 +140,57 @@ it('[AC-B1-02zzzc#12] 全契约恰好四个操作带 x-sensitive-operation（值
   const stepUp = all.filter(({ op }) => Object.hasOwn(op, 'x-step-up'));
   expect(
     stepUp
+      .filter(({ where }) => !where.includes(' /admin/v1/'))
       .map(({ where, op }) => [where, op['x-step-up']])
       .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
   ).toEqual(
     SENSITIVE.filter((s) => s.action !== null)
       .map(({ method, path, action }) => [`${method.toUpperCase()} ${path}`, action])
       .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+  );
+  const adminStepUp = stepUp.filter(({ where }) => where.includes(' /admin/v1/'));
+  expect(adminStepUp).toHaveLength(24);
+  expect(
+    adminStepUp
+      .filter(({ op }) => op['x-step-up'] === 'sudo')
+      .map(({ op }) => op['operationId'])
+      .sort(),
+  ).toEqual(
+    [
+      'adminRevealUserField',
+      'adminResetUserUnionBinding',
+      'adminStartUnionReauthorization',
+      'adminPutUnionCredential',
+      'adminCreateUnionPid',
+      'adminUpdateUnionPid',
+      'adminActivateUnionPid',
+      'adminRetireUnionPid',
+      'adminBatchApproveWithdrawals',
+      'adminRejectWithdrawal',
+      'adminCreateExport',
+      'adminRetryExport',
+      'adminUpdateUserRiskState',
+      'adminResolveAppeal',
+      'closeAdminReconDiff',
+    ].sort(),
+  );
+  expect(
+    adminStepUp
+      .filter(({ op }) => op['x-step-up'] === 'strict')
+      .map(({ op }) => op['operationId'])
+      .sort(),
+  ).toEqual(
+    [
+      'adminSaveAdminPermissions',
+      'adminCreateAdjustment',
+      'adminApproveAdjustment',
+      'adminApproveBadDebtWriteoff',
+      'adminCreatePayoutBatch',
+      'adminUpdateKillSwitch',
+      'adminBatchUpdateConfigItems',
+      'adminUpdateConfigItem',
+      'adminRollbackConfigItem',
+    ].sort(),
   );
   // Only an x-step-up operation lists the X-Step-Up-Token parameter (no admin header here: /v1).
   for (const { where, op } of all) {

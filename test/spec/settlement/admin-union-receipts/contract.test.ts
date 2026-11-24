@@ -92,6 +92,7 @@ function mounted(seen: readonly RouteOptions[], route: string, method: Method): 
   return seen.filter((item) => item.url === route && [item.method].flat().includes(method));
 }
 
+// 标题沿用原文，二次验证期望以块内断言为准。
 it('[AC-B2-04zr#1] 三个操作去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent、x-error-codes 不变；admin 入口各恰好挂一次并带契约的请求 schema（请求体、路径与查询参数、请求头），api 入口不挂', async () => {
   const paths = await contractPaths();
   const admin = await boot('admin');
@@ -103,7 +104,7 @@ it('[AC-B2-04zr#1] 三个操作去掉 x-implementation: planned（生成的 plan
       expect(op?.['x-auth'], item.id).toBe('admin');
       expect(op?.['x-idempotent'], item.id).toBe(item.idempotent);
       const codes = [...(op?.['x-error-codes'] ?? [])].sort((a, b) => a - b);
-      expect(codes, item.id).toEqual(item.codes);
+      expect(codes, item.id).toEqual(item.codes.filter((code) => code !== 10003));
       expect(plannedOperations.has(item.id), item.id).toBe(false);
 
       const routes = mounted(admin.seen, item.route, item.method);

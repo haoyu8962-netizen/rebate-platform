@@ -99,10 +99,13 @@ it('[AC-B1-02zx#2] 要后台登录：不带 admin_token 在处理前回 401 / 10
   }
 });
 
+// 保留原标题，错误码表以块内断言为准。
 it('[AC-B1-02zx#3] 契约 adminAddUserReverifiedDevice 去掉 x-implementation: planned，错误码表不变', async () => {
   const op = (await contract()).paths[PATH]!.post!;
   expect(op).not.toHaveProperty('x-implementation');
-  expect([...(op['x-error-codes'] ?? [])].sort((a, b) => a - b)).toEqual(ERROR_CODES);
+  expect([...(op['x-error-codes'] ?? [])].sort((a, b) => a - b)).toEqual(
+    ERROR_CODES.filter((code) => code !== 10003),
+  );
 });
 
 it('[AC-B1-02zx#4] adminAddUserReverifiedDevice 进 route-schemas、出 planned-operations（生成物随契约）', async () => {

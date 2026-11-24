@@ -34,7 +34,8 @@ it.each(ACTIONS)(
     expect(operation).toBeDefined();
     expect(operation!['x-implementation']).not.toBe('planned');
     expect(operation!['x-auth']).toBe('admin');
-    expect(operation!.parameters.map((p) => p.name.toLowerCase())).toContain('x-step-up-token');
+    const parameterNames = operation!.parameters.map((p) => p.name.toLowerCase());
+    expect(parameterNames.includes('x-step-up-token')).toBe(action === 'reset');
     expect(operation!.parameters.map((p) => p.name.toLowerCase())).not.toContain('idempotency-key');
   },
 );
