@@ -60,6 +60,31 @@ CREATE TYPE pgboss.job_state AS ENUM (
 
 
 --
+-- Name: check_union_filing_attempt_session(); Type: FUNCTION; Schema: app; Owner: -
+--
+
+CREATE FUNCTION app.check_union_filing_attempt_session() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM app.union_auth_sessions s
+    WHERE s.state = NEW.state
+      AND s.app_id = NEW.app_id
+      AND s.user_id = NEW.user_id
+      AND s.platform = NEW.platform
+  ) THEN
+    RAISE EXCEPTION 'union_filing_attempts.state must name an authorization session of the same app, user and platform'
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+
+--
 -- Name: copy_referenced_link_logs(text, timestamp with time zone, timestamp with time zone); Type: FUNCTION; Schema: app; Owner: -
 --
 
@@ -11775,6 +11800,13 @@ CREATE TRIGGER union_filing_attempts_no_rewrite BEFORE DELETE OR UPDATE ON app.u
 
 
 --
+-- Name: union_filing_attempts union_filing_attempts_session_check; Type: TRIGGER; Schema: app; Owner: -
+--
+
+CREATE TRIGGER union_filing_attempts_session_check BEFORE INSERT ON app.union_filing_attempts FOR EACH ROW EXECUTE FUNCTION app.check_union_filing_attempt_session();
+
+
+--
 -- Name: union_pids union_pids_no_delete; Type: TRIGGER; Schema: app; Owner: -
 --
 
@@ -13435,6 +13467,13 @@ GRANT USAGE ON SCHEMA app TO couli_maint;
 
 GRANT USAGE ON SCHEMA pgboss TO couli_app;
 GRANT USAGE ON SCHEMA pgboss TO couli_payout;
+
+
+--
+-- Name: FUNCTION check_union_filing_attempt_session(); Type: ACL; Schema: app; Owner: -
+--
+
+REVOKE ALL ON FUNCTION app.check_union_filing_attempt_session() FROM PUBLIC;
 
 
 --
