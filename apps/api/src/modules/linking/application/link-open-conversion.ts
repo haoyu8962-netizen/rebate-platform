@@ -560,15 +560,21 @@ export function createLinkOpenConversion(options: LinkConversionOptions): LinkCo
       // No retry here: one adapter call per conversion (governance owns retries and circuits).
       throw failedConversion('linking: conversion failed');
     }
+    const expireAt = await jumpExpiry(link.app_id);
+    if (platform === 'pdd') {
+      return buildPddPurchaseJump({
+        client: input.client,
+        installed: input.installed ?? 'unknown',
+        paths: pddPurchasePaths(url, schemaUrl, appSchemeOf(options.apps, platform)),
+        expireAt,
+      });
+    }
     return buildDefaultLinkJump({
       platform,
       client: input.client,
       installed: input.installed ?? 'unknown',
-      paths:
-        platform === 'pdd'
-          ? pddPurchasePaths(url, schemaUrl, appSchemeOf(options.apps, platform))
-          : pathsOf(platform, url, appSchemeOf(options.apps, platform)),
-      expireAt: await jumpExpiry(link.app_id),
+      paths: pathsOf(platform, url, appSchemeOf(options.apps, platform)),
+      expireAt,
     });
   }
 
@@ -622,6 +628,28 @@ export function buildDefaultLinkJump(input: {
   }
   const [primary, ...fallbacks] = steps as [Step, ...Step[]];
   return { primary, fallbacks, expire_at: input.expireAt };
+}
+
+/**
+ * B1-06zp (BR-ATTR-27 ①②, Codex money review r1 S1): the Pinduoduo purchase's jump plan. H5 (and
+ * web) is fixed to installed=unknown and, like a native unknown, goes the installed column then
+ * the not-installed one: [scheme (schema_url as returned), h5 (mobile URL)] when the conversion
+ * gave an admissible schema_url, otherwise [h5] only. Native clients take the default matrix.
+ * Only the purchase uses this; the authorization page, jd and Taobao keep their H5 behaviour.
+ */
+export function buildPddPurchaseJump(input: {
+  readonly client: LinkOpenRequoteInput['client'];
+  readonly installed?: components['schemas']['InstalledState'];
+  readonly paths: LinkJumpPaths;
+  readonly expireAt: string;
+}): LinkOpenJump {
+  const { client, paths, expireAt } = input;
+  if (client !== 'h5' && client !== 'web') {
+    return buildDefaultLinkJump({ ...input, platform: 'pdd' });
+  }
+  const h5: Step = { type: 'h5', value: paths.h5 };
+  if (paths.scheme === null) return { primary: h5, fallbacks: [], expire_at: expireAt };
+  return { primary: { type: 'scheme', value: paths.scheme }, fallbacks: [h5], expire_at: expireAt };
 }
 
 const PRODUCT_KEY = /^(jd|pdd):([0-9]{1,20})$/;
