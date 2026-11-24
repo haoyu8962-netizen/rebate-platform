@@ -10,6 +10,11 @@
 // values in the address are ignored). 「列设置」 hides / shows columns, kept per page in
 // localStorage (components/data-table/columns.ts); platform extra columns (./platforms.ts) start
 // hidden. Order numbers and UIDs have copy buttons; the product cell is ProductCell.
+// F1-07edb (BR-ID-46): eight columns and 「操作」 show by default (「平台状态」「标记」 start hidden and can
+// be shown in 「列设置」); a row's 【查看】 opens the detail drawer (./OrderDrawer.tsx) and writes
+// detail=<order_id> to the address, so the full address opens it directly; closing it drops the
+// parameter and gives the focus back to that 【查看】, with the conditions, page and rows kept.
+// 【详情】 still goes to the full page. The sync status bar (./SyncStatusBar.tsx) stays above.
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -44,10 +49,18 @@ import {
   type ThemeConfig,
 } from 'antd';
 import dayjs from 'dayjs';
-import { useEffect, useId, useState, type CSSProperties, type ReactElement } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type ReactElement,
+} from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import type { AccessControl } from '../../providers/access-control/index.ts';
-import { PlannedPage, usePlanned } from '../../components/planned/index.ts';
+import { PlannedPage, plannedButtonProps, usePlanned } from '../../components/planned/index.ts';
 import { CopyText } from '../../components/copy-text/index.ts';
 import { ProductCell } from '../../components/product-cell/index.ts';
 import {
@@ -59,9 +72,11 @@ import {
 } from '../../components/data-table/columns.ts';
 import { ordersTexts as t } from '../../texts/orders.ts';
 import { platformExtraColumns } from './platforms.ts';
+import { OrderDrawer } from './OrderDrawer.tsx';
 import { FlagTags, StatusTag } from './parts.tsx';
 import { SyncDialog } from './SyncDialog.tsx';
 import { SyncRecords } from './SyncRecords.tsx';
+import { SyncStatusBar } from './SyncStatusBar.tsx';
 import { nextNoticeId, noticeOf, type SyncNotice } from './sync.ts';
 import {
   FIRST_PAGE,
@@ -78,6 +93,7 @@ import {
   beijingDate,
   cleanQ,
   codeLabel,
+  detailOf,
   failureOf,
   hasConditions,
   money,
@@ -126,6 +142,9 @@ type ListColumn = TableColumnsType<OrderRow>[number] & {
   readonly defaultVisible?: boolean;
 };
 
+/** Columns that 「列设置」 offers but that start hidden (BR-ID-46). */
+const HIDDEN_BY_DEFAULT: readonly string[] = ['platformStatus', 'flags'];
+
 /** The columns 「列设置」 offers, in display order; 「操作」 is not among them. */
 const configurable: readonly { readonly key: string; readonly defaultVisible?: boolean }[] = [
   ...[
@@ -139,7 +158,7 @@ const configurable: readonly { readonly key: string; readonly defaultVisible?: b
     'platformStatus',
     'rebateStatus',
     'flags',
-  ].map((key) => ({ key })),
+  ].map((key) => (HIDDEN_BY_DEFAULT.includes(key) ? { key, defaultVisible: false } : { key })),
   ...platformExtraColumns().map((field) => ({ key: `extra:${field}`, defaultVisible: false })),
 ];
 
@@ -153,11 +172,15 @@ function initialQuery(search: string, state: unknown): OrderQuery {
 }
 
 /**
- * Writes the conditions to the address in place (no navigation, so the page is not remounted) and
- * drops the router state of an older 【返回】: from here on the address is the only source.
+ * Writes the conditions (and the open drawer's detail=<order_id>) to the address in place (no
+ * navigation, so the page is not remounted) and drops the router state of an older 【返回】: from
+ * here on the address is the only source.
  */
-function writeAddress(query: OrderQuery): void {
-  const search = searchOf(query);
+function writeAddress(query: OrderQuery, detailId: string | undefined): void {
+  const params = new URLSearchParams(searchOf(query));
+  if (detailId !== undefined) params.set('detail', detailId);
+  const text = params.toString();
+  const search = text === '' ? '' : `?${text}`;
   const state: unknown = window.history.state;
   const next = withoutBackState(state);
   if (window.location.search === search && next === state) return;
@@ -204,6 +227,25 @@ function draftOf(query: OrderQuery): Draft {
     paidFrom: query.paidFrom,
     paidTo: query.paidTo,
   };
+}
+
+/** A form day YYYY-MM-DD as a picker value, with the year as written (also years 1–99). */
+function pickerDay(day: string): dayjs.Dayjs {
+  const [year, month, date] = day.split('-').map(Number);
+  const value = new Date(2000, 0, 1);
+  value.setFullYear(year ?? 2000, (month ?? 1) - 1, date ?? 1);
+  return dayjs(value);
+}
+
+/**
+ * The pager item a click landed on (its page number, from the item's title), else undefined. Used
+ * only for the item the pager ignores: on a page past the last one the pager clamps its current
+ * page to the last page, so pressing that page reports no change.
+ */
+function pressedPage(event: MouseEvent<HTMLElement>): number | undefined {
+  const target = event.target instanceof Element ? event.target : null;
+  const title = target?.closest('[title]')?.getAttribute('title') ?? '';
+  return /^[1-9]\d*$/.test(title) ? Number(title) : undefined;
 }
 
 function blank(value: string): string | undefined {
@@ -263,10 +305,24 @@ function OrdersList(): ReactElement {
   const [saved, setSaved] = useState<ColumnSettings | undefined>(() =>
     readSettings(COLUMNS_KEY, configurable),
   );
+  // The detail drawer (F1-07edb): the order shown, from detail=<order_id> in the address at first.
+  const detailPlanned = usePlanned('adminGetOrder');
+  const [detailId, setDetailId] = useState<string | undefined>(() =>
+    detailPlanned ? undefined : detailOf(addressed ? window.location.search : location.search),
+  );
+  // The 【查看】 that opened the drawer: the focus goes back to it on closing.
+  const viewTrigger = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (addressed) writeAddress(query);
-  }, [addressed, query]);
+    if (addressed) writeAddress(query, detailId);
+  }, [addressed, query, detailId]);
+
+  useEffect(() => {
+    if (detailId !== undefined) return;
+    const trigger = viewTrigger.current;
+    viewTrigger.current = null;
+    if (trigger?.isConnected === true) trigger.focus({ preventScroll: true });
+  }, [detailId]);
 
   useEffect(() => {
     let current = true;
@@ -372,6 +428,12 @@ function OrdersList(): ReactElement {
   const open = (orderId: string) => {
     const state: OrdersBackState = { ordersQuery: query };
     void navigate(`/orders/${encodeURIComponent(orderId)}`, { state });
+  };
+
+  // 【查看】: the drawer over the list; the list is not read again.
+  const view = (orderId: string, trigger: HTMLElement) => {
+    viewTrigger.current = trigger;
+    setDetailId(orderId);
   };
 
   const code = { fontFamily: token.fontFamilyCode } as const;
@@ -489,15 +551,27 @@ function OrdersList(): ReactElement {
       title: t.columns.actions,
       fixed: 'right',
       render: (_, row) => (
-        <Button
-          type="link"
-          size="small"
-          aria-label={t.detailActionName(row.sub_order_id)}
-          style={{ paddingInline: 0 }}
-          onClick={() => open(row.order_id)}
-        >
-          {t.detailAction}
-        </Button>
+        <Flex gap={12} style={nowrap}>
+          <Button
+            type="link"
+            size="small"
+            aria-label={t.viewActionName(row.sub_order_id)}
+            style={{ paddingInline: 0 }}
+            {...plannedButtonProps(detailPlanned)}
+            onClick={(event) => view(row.order_id, event.currentTarget)}
+          >
+            {t.viewAction}
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            aria-label={t.detailActionName(row.sub_order_id)}
+            style={{ paddingInline: 0 }}
+            onClick={() => open(row.order_id)}
+          >
+            {t.detailAction}
+          </Button>
+        </Flex>
       ),
     },
   ];
@@ -659,9 +733,21 @@ function OrdersList(): ReactElement {
         >
           {hasConditions(query) ? <Button onClick={reset}>{t.resetConditions}</Button> : null}
         </Empty>
-        {/* A page past the last one (total > 0): the pager stays, to go back or change the size. */}
+        {/* A page past the last one (total > 0): the pager stays, to go back or change the size.
+            The pager shows the last page as current there and ignores a press on it, so that one
+            press is taken here (F1-07edb). */}
         {showsPager(data) ? (
-          <Flex justify="flex-end" style={{ marginTop: token.marginLG }}>
+          <Flex
+            justify="flex-end"
+            style={{ marginTop: token.marginLG }}
+            onClick={(event) => {
+              const pressed = pressedPage(event);
+              const size = query.pageSize ?? PAGE_SIZE;
+              const last = Math.max(1, Math.ceil(data.total / size));
+              if (pressed !== undefined && query.page > last && pressed === last)
+                changePage(pressed, size);
+            }}
+          >
             <Pagination {...pagination(data.total)} />
           </Flex>
         ) : null}
@@ -731,6 +817,7 @@ function OrdersList(): ReactElement {
           </Button>
         </Flex>
       </Flex>
+      <SyncStatusBar />
       {notice === undefined ? null : (
         <Alert
           key={notice.id}
@@ -743,6 +830,7 @@ function OrdersList(): ReactElement {
       )}
       {syncOpen ? <SyncDialog onClose={() => setSyncOpen(false)} onDone={syncDone} /> : null}
       {recordsOpen ? <SyncRecords onClose={() => setRecordsOpen(false)} /> : null}
+      <OrderDrawer orderId={detailId} onClose={() => setDetailId(undefined)} />
       <Card>
         <ConfigProvider theme={FILTER_THEME}>
           {/* Each Select also carries its label as aria-label: the browser would otherwise read the
@@ -825,7 +913,7 @@ function OrdersList(): ReactElement {
                       id={ids.from}
                       format={DAY_FORMAT}
                       placeholder={t.filters.paidFromPlaceholder}
-                      value={draft.paidFrom === undefined ? null : dayjs(draft.paidFrom)}
+                      value={draft.paidFrom === undefined ? null : pickerDay(draft.paidFrom)}
                       onChange={(value) =>
                         setDraft({ ...draft, paidFrom: value?.format(DAY_FORMAT) ?? undefined })
                       }
@@ -838,7 +926,7 @@ function OrdersList(): ReactElement {
                       id={ids.to}
                       format={DAY_FORMAT}
                       placeholder={t.filters.paidToPlaceholder}
-                      value={draft.paidTo === undefined ? null : dayjs(draft.paidTo)}
+                      value={draft.paidTo === undefined ? null : pickerDay(draft.paidTo)}
                       onChange={(value) =>
                         setDraft({ ...draft, paidTo: value?.format(DAY_FORMAT) ?? undefined })
                       }

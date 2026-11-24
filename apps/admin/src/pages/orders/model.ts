@@ -84,10 +84,17 @@ export function dayStart(day: string): string {
 export function dayEnd(day: string): string {
   const found = DAY.exec(day);
   if (found === null) return dayStart(day);
-  const next = new Date(Date.UTC(Number(found[1]), Number(found[2]) - 1, Number(found[3]) + 1));
-  return dayStart(
-    `${next.getUTCFullYear()}-${two(next.getUTCMonth() + 1)}-${two(next.getUTCDate())}`,
-  );
+  // setUTCFullYear takes the year as written: Date.UTC would read years 0–99 as 1900–1999.
+  const next = new Date(0);
+  next.setUTCFullYear(Number(found[1]), Number(found[2]) - 1, Number(found[3]) + 1);
+  const year = String(next.getUTCFullYear()).padStart(4, '0');
+  return dayStart(`${year}-${two(next.getUTCMonth() + 1)}-${two(next.getUTCDate())}`);
+}
+
+/** The order_id of a detail drawer address (detail=<order_id>, F1-07edb), else undefined. */
+export function detailOf(search: string): string | undefined {
+  const value = new URLSearchParams(search).get('detail');
+  return value !== null && ORDER_ID.test(value) ? value : undefined;
 }
 
 /** Request parameters of adminListOrders (absent conditions are left out). */
