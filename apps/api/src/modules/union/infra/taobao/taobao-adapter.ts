@@ -645,13 +645,15 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     // r2 (S0): a call cancelled before the attempt is recorded records nothing; one cancelled after
     // it, up to the moment the save is handed to the transport, closes it 'rejected' (never sent).
     const filing = req.filing;
-    if (signal?.aborted === true) throw this.#bindCancelled();
+    // r3: read afresh each time (the flag can change across an await; a narrowed field read would not).
+    const cancelled = (): boolean => signal?.aborted === true;
+    if (cancelled()) throw this.#bindCancelled();
     await filing?.started(signal);
     const unsent = async (): Promise<never> => {
       await filing?.settled('rejected');
       throw this.#bindCancelled();
     };
-    if (signal?.aborted === true) return unsent();
+    if (cancelled()) return unsent();
     const saved = await this.#publisherCall(
       TAOBAO_PUBLISHER_SAVE,
       TAOBAO_PUBLISHER_SAVE_ENVELOPE,

@@ -626,9 +626,12 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     // 补丁 2: with the account the binding is written under (the filing checks its inviter code
     // belongs to it, BR-ATTR-05); a failure is counted by client × method × fixed class.
     // B1-04zzzzn ②: the filing adapter records the attempt through this right before the save.
+    // r3: the attempt's app, user and platform come from the verified authorization session row
+    // (no INSERT trigger checks the state's ownership, db/AGENTS.md rule 8); its platform was
+    // checked equal to the literal above.
     const filing = createFilingRecorder(db, clock, logger, {
-      appId,
-      userId,
+      appId: session.app_id,
+      userId: session.user_id,
       platform,
       unionAccountId: accountId,
       state: session.state,

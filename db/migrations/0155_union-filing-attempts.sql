@@ -27,23 +27,20 @@
 -- function, no existing guard is touched) refuses any UPDATE once outcome is set and any change of
 -- the other columns, and refuses DELETE (db/AGENTS.md rule 8: reject-only trigger).
 -- couli_readonly gets SELECT.
--- Session ownership (money review r1 S2): the new trigger function
--- app.check_union_filing_attempt_session (a new function; app.union_auth_sessions itself is not
--- touched, D10-2851 ②) refuses on INSERT an attempt whose state's authorization session is not of
--- the attempt's own app_id, user_id and platform (SQLSTATE 23503, as the state foreign key answers a
--- missing session). The columns cannot change afterwards (reject_union_filing_attempt_rewrite), and
--- a session's app, user and platform are fixed when it is issued, so the check holds for the row's
--- life.
+-- Session ownership: the state's authorization session belongs to the attempt's own app_id, user_id
+-- and platform; the application guarantees it (the bindings use case takes those values from the
+-- authorization session row it has verified). No INSERT-time trigger checks it (db/AGENTS.md rule 8
+-- allows only reject-UPDATE / DELETE triggers); the columns cannot change afterwards
+-- (reject_union_filing_attempt_rewrite).
 --
 -- User-data paths: rows hold no credential, token, nick or account name (none is ever stored);
 -- on account deletion or merge they stay under the tombstoned user_id like union_bindings.
 -- Cleanup of finished attempts and the patrol of long-unknown ones are not in this task
 -- (FU-FILING-ATTEMPT-PATROL).
 --
--- Compatibility: additive (one new table, two new functions; nothing existing changes).
+-- Compatibility: additive (one new table, one new function; nothing existing changes).
 -- Recovery: no down migration. Rollback is DROP TABLE app.union_filing_attempts and DROP FUNCTION
--- app.reject_union_filing_attempt_rewrite() and app.check_union_filing_attempt_session(), only while
--- no row has been written; union_* is an
+-- app.reject_union_filing_attempt_rewrite(), only while no row has been written; union_* is an
 -- attribution table, so the migration gate refuses that DROP and it needs a gate change approved by
 -- the owner (db/AGENTS.md rule 11). Once rows exist they are attribution evidence and are kept; the
 -- application simply stops reading and writing them.
@@ -113,32 +110,6 @@ REVOKE ALL ON FUNCTION app.reject_union_filing_attempt_rewrite() FROM PUBLIC;
 CREATE TRIGGER union_filing_attempts_no_rewrite
   BEFORE UPDATE OR DELETE ON app.union_filing_attempts
   FOR EACH ROW EXECUTE FUNCTION app.reject_union_filing_attempt_rewrite();
-
-CREATE FUNCTION app.check_union_filing_attempt_session() RETURNS trigger
-  LANGUAGE plpgsql
-  SET search_path TO 'pg_catalog', 'pg_temp'
-AS $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM app.union_auth_sessions s
-    WHERE s.state = NEW.state
-      AND s.app_id = NEW.app_id
-      AND s.user_id = NEW.user_id
-      AND s.platform = NEW.platform
-  ) THEN
-    RAISE EXCEPTION 'union_filing_attempts.state must name an authorization session of the same app, user and platform'
-      USING ERRCODE = 'foreign_key_violation';
-  END IF;
-  RETURN NEW;
-END
-$$;
-
-REVOKE ALL ON FUNCTION app.check_union_filing_attempt_session() FROM PUBLIC;
-
-CREATE TRIGGER union_filing_attempts_session_check
-  BEFORE INSERT ON app.union_filing_attempts
-  FOR EACH ROW EXECUTE FUNCTION app.check_union_filing_attempt_session();
 
 GRANT SELECT, INSERT ON app.union_filing_attempts TO couli_app;
 GRANT UPDATE (outcome, finished_at) ON app.union_filing_attempts TO couli_app;
