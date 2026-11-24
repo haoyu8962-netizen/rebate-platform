@@ -1,11 +1,25 @@
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { createDb, destroyDb, type DB } from '@couli/db';
 import { createTestDatabase, type TestDatabase } from '@couli/db/testing';
 import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { UnionBindingExchanger } from '../../../../apps/api/src/modules/linking/application/union-binding-exchanger.ts';
 import { createUnionBindings } from '../../../../apps/api/src/modules/linking/application/union-bindings.ts';
-import { systemScheduler } from '../../../../apps/api/src/modules/platform/index.ts';
+import type { LinkOpenPorts } from '../../../../apps/api/src/modules/linking/index.ts';
+import {
+  APP_CONFIG,
+  CLOCK,
+  DB as DB_TOKEN,
+  IDEMPOTENCY,
+  ROOT_LOGGER,
+  createRootLogger,
+  loadConfig,
+  systemScheduler,
+  type Idempotency,
+} from '../../../../apps/api/src/modules/platform/index.ts';
+import { createValidatorCompiler } from '../../../../apps/api/src/modules/platform/validation/index.ts';
 import { createGovernedAdapter } from '../../../../apps/api/src/modules/union/index.ts';
 import {
   connect,
@@ -16,12 +30,15 @@ import {
   newUser,
   requireTable,
 } from '../../db/linking-bindings/kit.ts';
-import { endpoint, response, setup } from '../../union/taobao-core/kit.ts';
+import { endpoint, expectRedacted, response, setup } from '../../union/taobao-core/kit.ts';
 import {
+  ACCESS,
   APP_KEY,
   CODE,
+  REFRESH,
   SECRET,
   TOKEN_ENDPOINT,
+  environment,
   tokenAnswer,
 } from '../../union/taobao-site-oauth/kit.ts';
 import { INVITER_CODE, USER_REDIRECT } from './kit.ts';
@@ -33,6 +50,8 @@ const GET = 'taobao.tbk.sc.publisher.info.get';
 const RELATION = '819712';
 const APP_REF = 'synthetic-issued-app';
 const OAUTH_APP = { appKey: APP_KEY, redirectUri: USER_REDIRECT };
+const TAOBAO_USER_ID = '2200000000001';
+const TAOBAO_USER_NICK = '合成站长';
 const SAVED = response({
   tbk_sc_publisher_info_save_response: { data: { relation_id: RELATION } },
 });
@@ -170,7 +189,12 @@ async function fixture() {
       if (url === TOKEN_ENDPOINT) {
         methods.push('oauth');
         if (answer === 'invalid_grant') return response({ error: 'invalid_grant' }, 400);
-        return response(tokenAnswer());
+        return response(
+          tokenAnswer({
+            taobao_user_id: TAOBAO_USER_ID,
+            taobao_user_nick: encodeURIComponent(TAOBAO_USER_NICK),
+          }),
+        );
       }
       const method = new URLSearchParams(body ?? '').get('method');
       methods.push(method ?? 'missing');
@@ -225,10 +249,13 @@ async function fixture() {
     account,
     bindings,
     clock,
+    deviceId,
+    governed,
     nextState,
     publisher,
     state: await nextState(),
     submit,
+    transport,
     userId,
     warn,
     warning,
@@ -345,7 +372,7 @@ it.each([
   },
 );
 
-it('[AC-B1-04zzzzn#8] 同一归属更早的 save 结局未知，重复查询的编号可写入绑定', async () => {
+it('[AC-B1-04zzzzn#8] 无历史绑定时拒绝重复查回的编号，并告警标明更早结局未知的尝试', async () => {
   await requireTable(TABLE);
   const f = await fixture();
   const earlier = f.submit(f.state, 'save_timeout');
@@ -353,14 +380,35 @@ it('[AC-B1-04zzzzn#8] 同一归属更早的 save 结局未知，重复查询的�
   const unknown = expectStarted(f, earlier);
   f.clock.advanceMs(1000);
   const next = await f.nextState();
+  f.warn.mockClear();
+  f.warning.mockClear();
   const request = f.submit(next, 'duplicate');
-  expect(await request.reply).toMatchObject({ status: 200, envelope: { code: 0 } });
+  expect(await request.reply).toMatchObject({ status: 500, envelope: { code: 50001 } });
   const started = expectStarted(f, request, true);
-  expect(await f.bindings()).toEqual([activeBinding(f)]);
+  expect(await f.bindings()).toEqual([]);
   expect(await attempts(observer, next)).toEqual([
     { ...started, outcome: 'duplicate', finished_at: expect.any(Date) },
   ]);
   expect(await attempts(observer, f.state)).toEqual([unknown]);
+  const warnings = [...f.warn.mock.calls, ...f.warning.mock.calls];
+  const matching = warnings.filter(([fields]) => Object.values(fields ?? {}).includes(unknown.id));
+  expect(matching).toHaveLength(1);
+  const fields = matching[0]?.[0] ?? {};
+  const ordinary = ['linking.bindings.exchange_failed', 'duplicate_unverified'];
+  expect(
+    [fields.event, fields.failure, fields.reason, fields.code, fields.error_code].some(
+      (value) => typeof value === 'string' && value.length > 0 && !ordinary.includes(value),
+    ),
+  ).toBe(true);
+  expectRedacted(warnings, [
+    CODE,
+    SECRET,
+    ACCESS,
+    REFRESH,
+    TAOBAO_USER_ID,
+    TAOBAO_USER_NICK,
+    encodeURIComponent(TAOBAO_USER_NICK),
+  ]);
 });
 
 it('[AC-B1-04zzzzn#9] 本次请求自己的尝试不能证明重复查回的编号归属', async () => {
@@ -495,4 +543,192 @@ it('[AC-B1-04zzzzn#16] 授权码换取令牌失败时返回 30104，且没有结
   expect(request.methods).toEqual(['oauth']);
   expect((await attempts(observer, f.state)).filter(({ outcome }) => outcome === null)).toEqual([]);
   expect(await f.bindings()).toEqual([]);
+});
+
+interface FilingHttpResponse {
+  statusCode: number;
+  json(): { code: number; data?: { state?: string; auth_url?: string; reason?: string } };
+}
+
+interface FilingHttpApp {
+  init(): Promise<unknown>;
+  close(): Promise<unknown>;
+  inject(request: {
+    method: 'GET' | 'POST';
+    url: string;
+    headers: Record<string, string>;
+    payload?: { state: string; auth_method: 'web_code'; code: string };
+  }): Promise<FilingHttpResponse>;
+}
+
+async function withFilingRoutes(
+  f: Fixture,
+  check: (routes: {
+    authUrl: () => Promise<FilingHttpResponse>;
+    bind: (state: string) => Promise<FilingHttpResponse>;
+    selectOtherAccount: () => Promise<void>;
+  }) => Promise<void>,
+) {
+  const api = new URL('../../../../apps/api/', import.meta.url);
+  const requireApi = createRequire(new URL('package.json', api));
+  const { LINK_OPEN_PORTS, LinkingModule } = (await import(
+    new URL('src/modules/linking/linking.module.ts', api).href
+  )) as typeof import('../../../../apps/api/src/modules/linking/linking.module.ts');
+  const { Test } = (await import(pathToFileURL(requireApi.resolve('@nestjs/testing')).href)) as {
+    Test: {
+      createTestingModule(metadata: { imports: object[] }): {
+        compile(): Promise<{ createNestApplication(adapter: unknown): FilingHttpApp }>;
+      };
+    };
+  };
+  const { FastifyAdapter } = (await import(
+    pathToFileURL(requireApi.resolve('@nestjs/platform-fastify')).href
+  )) as {
+    FastifyAdapter: new () => {
+      getInstance(): {
+        setValidatorCompiler: (compiler: ReturnType<typeof createValidatorCompiler>) => void;
+      };
+    };
+  };
+
+  const other = String(await newAccount(APP_ID));
+  await app
+    .updateTable('union_accounts')
+    .set({ auth_status: 'active', auth_expires_at: null })
+    .where('id', 'in', [f.account, other])
+    .execute();
+  const binding = await newBinding({
+    ...activeBinding(f),
+    status: 'pending_auth',
+    relation_id: null,
+  });
+  const config = loadConfig({
+    ...environment('staging'),
+    TAOBAO_APP_KEY: APP_KEY,
+    TAOBAO_APP_SECRET_FILE: '/FAKE_TAOBAO_OAUTH/unused-app-secret',
+    TAOBAO_USER_OAUTH_REDIRECT_URI: USER_REDIRECT,
+    TAOBAO_INVITER_CODE: INVITER_CODE,
+    TAOBAO_INVITER_ACCOUNT_ID: f.account,
+  });
+  const ports: Pick<LinkOpenPorts, 'union'> = { union: { adapter: () => f.governed } };
+  const idempotency: Pick<Idempotency, 'executeInTransaction'> = {
+    executeInTransaction: async (_request, handler) => {
+      const { status, envelope } = await app.transaction().execute(handler);
+      return { status, body: JSON.stringify(envelope), source: 'handler' };
+    },
+  };
+  const providers = [
+    { provide: APP_CONFIG, useValue: config },
+    { provide: DB_TOKEN, useValue: app },
+    { provide: CLOCK, useValue: f.clock },
+    { provide: IDEMPOTENCY, useValue: idempotency },
+    { provide: LINK_OPEN_PORTS, useValue: ports },
+    {
+      provide: ROOT_LOGGER,
+      useValue: createRootLogger({ entry: 'api', appEnv: config.appEnv, level: 'silent' }),
+    },
+  ];
+  class FixtureGlobals {}
+  const testing = await Test.createTestingModule({
+    imports: [
+      {
+        module: FixtureGlobals,
+        global: true,
+        providers,
+        exports: providers.map(({ provide }) => provide),
+      },
+      LinkingModule.forRoot(() => ({ configValue: async () => null }), {
+        callerContext: {
+          useFactory: () => ({
+            current: async () => ({ appId: APP_ID, userId: f.userId, deviceId: f.deviceId }),
+          }),
+        },
+      }),
+    ],
+  }).compile();
+  const adapter = new FastifyAdapter();
+  adapter.getInstance().setValidatorCompiler(createValidatorCompiler());
+  const http = testing.createNestApplication(adapter);
+  const headers = {
+    'x-app-id': APP_ID,
+    'x-device-id': f.deviceId,
+    'x-platform': 'ios',
+    'x-app-version': '1.0.0',
+    'x-trace-id': randomUUID(),
+  };
+  try {
+    await http.init();
+    await check({
+      authUrl: () => http.inject({ method: 'GET', url: '/v1/unions/taobao/auth-url', headers }),
+      bind: (state) =>
+        http.inject({
+          method: 'POST',
+          url: '/v1/unions/taobao/bindings',
+          headers: {
+            ...headers,
+            'idempotency-key': randomUUID(),
+            'x-timestamp': String(Math.floor(f.clock.now().getTime() / 1000)),
+            'x-nonce': 'a'.repeat(32),
+            'x-sign': 'a'.repeat(64),
+          },
+          payload: { state, auth_method: 'web_code', code: CODE },
+        }),
+      async selectOtherAccount() {
+        const updated = await app
+          .updateTable('union_bindings')
+          .set({ union_account_id: other })
+          .where('id', '=', String(binding['id']))
+          .executeTakeFirst();
+        expect(updated.numUpdatedRows).toBe(1n);
+      },
+    });
+  } finally {
+    await http.close();
+  }
+}
+
+it('[AC-B1-04zzzzn#17] 选用的联盟账号与邀请码所属账号不一致时，auth-url 不签发 state', async () => {
+  const f = await fixture();
+  await withFilingRoutes(f, async ({ authUrl, selectOtherAccount }) => {
+    await selectOtherAccount();
+    const reply = await authUrl();
+    expect(reply.statusCode).toBe(422);
+    const body = reply.json();
+    expect(body).toMatchObject({ code: 30101, data: { reason: 'auth_unavailable' } });
+    expect(body.data).not.toHaveProperty('auth_url');
+    expect(body.data).not.toHaveProperty('state');
+    const sessions = await observer
+      .selectFrom('union_auth_sessions')
+      .select('state')
+      .where('app_id', '=', APP_ID)
+      .where('user_id', '=', f.userId)
+      .execute();
+    expect(sessions).toEqual([{ state: f.state }]);
+  });
+});
+
+it('[AC-B1-04zzzzn#18] 提交时联盟账号与邀请码所属账号不一致，bindings 拒绝且不消费 state', async () => {
+  const f = await fixture();
+  await withFilingRoutes(f, async ({ authUrl, bind, selectOtherAccount }) => {
+    const issued = await authUrl();
+    expect(issued.statusCode).toBe(200);
+    const state = issued.json().data?.state;
+    expect(state).toEqual(expect.any(String));
+
+    await selectOtherAccount();
+    const before = await f.bindings();
+    const reply = await bind(state!);
+    expect(reply.statusCode).toBe(422);
+    expect(reply.json()).toMatchObject({ code: 30101, data: { reason: 'auth_unavailable' } });
+    const session = await observer
+      .selectFrom('union_auth_sessions')
+      .select('used_at')
+      .where('state', '=', state!)
+      .executeTakeFirst();
+    expect(session).toEqual({ used_at: null });
+    expect(f.transport).not.toHaveBeenCalled();
+    expect(await f.bindings()).toEqual(before);
+    await requireTable(TABLE);
+    expect(await attempts(observer, state!)).toEqual([]);
+  });
 });
