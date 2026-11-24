@@ -46,7 +46,8 @@ const tiers = new Map<string, 'sudo' | 'strict'>([
   ...strictOperations.map((id) => [id, 'strict'] as const),
 ]);
 const methods = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
-const retest = 'adminRetestNotifySms';
+const notifySmsRetest = 'adminRetestNotifySms';
+const verifyPhoneMissingOperations = [notifySmsRetest, 'adminStepUp', 'adminSendStepUpSms'];
 const adminTokenRef = '#/components/parameters/AdminStepUpToken';
 const factorMethods = ['totp', 'sms'];
 
@@ -83,7 +84,7 @@ it('[AC-CT-24zzv#1] 后台档位严格按白名单标记，用户端三处标记
   });
 });
 
-it('[AC-CT-24zzv#2] 只有 sudo 和 strict 声明二次验证令牌，只有短信重测可额外声明 10003', () => {
+it('[AC-CT-24zzv#2] 只有标档操作声明二次验证令牌，10003 另允许三个验证手机号例外', () => {
   const doc = contract();
   const adminOperations = operations(doc, '/admin/v1/');
   const token = at(doc, 'components', 'parameters', 'AdminStepUpToken');
@@ -120,7 +121,7 @@ it('[AC-CT-24zzv#2] 只有 sudo 和 strict 声明二次验证令牌，只有短�
   }).toEqual({
     tokenRefs: allowed.toSorted(),
     tokenHeaders: allowed.toSorted(),
-    code10003: [...allowed, retest].toSorted(),
+    code10003: [...allowed, ...verifyPhoneMissingOperations].toSorted(),
   });
 });
 
@@ -184,43 +185,50 @@ it('[AC-CT-24zzv#5] 签发请求只要求 code，method 和兼容字段 tier 都
   }
 });
 
-it('[AC-CT-24zzv#6] 后台 10003 示例的 data 只含对应档位，短信重测只含手机号缺失原因', () => {
+it('[AC-CT-24zzv#6] 后台 10003 示例覆盖两档及短信重测，三个手机号例外的 data 只含缺失原因', () => {
   const doc = contract();
   const errorData = operations(doc, '/admin/v1/').flatMap(({ id, operation }) =>
-    Object.entries(at(operation, 'responses'))
-      .filter(([status]) => status === 'default' || /^[45]/.test(status))
-      .flatMap(([, response]) => {
-        const { content } = resolve(doc, response);
-        const media = object(content ?? {})['application/json'];
-        if (media === undefined) return [];
-        const representation = object(media);
-        const namedExamples = Object.values(object(representation['examples'] ?? {}));
-        const examples = [
-          representation['example'],
-          ...namedExamples.map((entry) => resolve(doc, entry)['value']),
-        ];
-        return examples.flatMap((example) => {
-          if (
-            example === null ||
-            typeof example !== 'object' ||
-            !('code' in example) ||
-            example.code !== 10003
-          ) {
-            return [];
-          }
-          return [{ id, data: object(example)['data'] }];
-        });
-      }),
+    Object.values(at(operation, 'responses')).flatMap((response) => {
+      const { content } = resolve(doc, response);
+      const media = object(content ?? {})['application/json'];
+      if (media === undefined) return [];
+      const representation = object(media);
+      const namedExamples = Object.values(object(representation['examples'] ?? {}));
+      const examples = [
+        representation['example'],
+        ...namedExamples.map((entry) => resolve(doc, entry)['value']),
+      ];
+      return examples.flatMap((example) => {
+        if (
+          example === null ||
+          typeof example !== 'object' ||
+          !('code' in example) ||
+          example.code !== 10003
+        ) {
+          return [];
+        }
+        return [{ id, data: object(example)['data'] }];
+      });
+    }),
   );
 
+  const missingPhoneData = { reason: 'verify_phone_missing' };
   for (const { id, data } of errorData) {
     const tier = tiers.get(id);
-    if (tier !== undefined) expect(data, id).toEqual({ tier });
-    if (id === retest) {
-      expect(data, id).toEqual({ reason: 'verify_phone_missing' });
+    if (tier !== undefined) {
+      expect(data, id).toEqual({ tier });
+    } else {
+      expect(verifyPhoneMissingOperations, id).toContain(id);
+      expect(data, id).toEqual(missingPhoneData);
     }
   }
-  expect(errorData.filter(({ id }) => id !== retest && !tiers.has(id))).toEqual([]);
+  expect(errorData).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ data: { tier: 'sudo' } }),
+      expect.objectContaining({ data: { tier: 'strict' } }),
+      { id: notifySmsRetest, data: missingPhoneData },
+    ]),
+  );
 });
 
 it('[AC-CT-24zzv#7] 10003 码表含 sudo、strict 和手机号缺失原因', () => {
@@ -230,10 +238,16 @@ it('[AC-CT-24zzv#7] 10003 码表含 sudo、strict 和手机号缺失原因', () 
 
   expect(list(data['tier'])).toEqual(expect.arrayContaining(['sudo', 'strict']));
   expect(list(data['reason'])).toContain('verify_phone_missing');
+  for (const field of ['meaning', 'action']) {
+    const wording = text(stepUpRequired?.[field]);
+    expect(wording, field).not.toMatch(/(?:动态码|短信|TOTP|SMS)\s*档|\b(?:totp|sms)[ -]tier\b/i);
+    expect(wording, field).toMatch(/\bsudo\b/i);
+    expect(wording, field).toMatch(/\bstrict\b/i);
+  }
 });
 
 it('[AC-CT-24zzv#8] 原先带二次验证令牌且现在归 none 的操作移除验证要求说明', () => {
-  // 固定改造前使用 AdminStepUpToken 且本次归 none 的操作，排除短信重测。
+  // 固定改造前使用 AdminStepUpToken 且本次归 none 的 48 个操作。
   const formerlyProtected = new Set([
     'adminSendMyVerifyPhoneCode',
     'adminCreateAdmin',
@@ -284,18 +298,36 @@ it('[AC-CT-24zzv#8] 原先带二次验证令牌且现在归 none 的操作移除
     'adminReverseUnionReceipt',
     'adminCreatePayoutWatermark',
   ]);
+  const allowedMentions = [
+    /\/auth\/step-up(?:\/[a-z0-9-]+)*/g,
+    /\bstep[- ]up\s*:\s*none\b/g,
+    /\b(?:no|without) step[- ]up(?: (?:checks?|token|verification))?\b/g,
+    /\b(?:no longer|not|never) requires? step[- ]up(?: (?:checks?|token|verification))?\b/g,
+    /不再(?:需要|需)(?:通过|完成)?二次验证/g,
+  ];
   const requirements = [
-    /\b(?:X-Step-Up-Token|step_up_token|data\.tier)\b/i,
-    /(?<!\bnot )\b(?:requires?|needs?|must|without a valid) (?:(?!\b(?:no|not|without)\b)[^.!?;,]){0,80}\bstep[- ]up\b/i,
-    /(?<!\bno )\bstep[- ]up\s*(?::|\(10003\)|(?:totp|sms|sudo|strict|checks?)\b|(?:is )?(?:needed|required)\b)/i,
-    /\b(?:permission, step[- ]up|with step[- ]up and a reason)\b/i,
+    /\b(?:x-step-up-token|step_up_token|data\.tier|10003)\b/,
+    /\b(?:totp|sms)[ -]tier\b/,
+    /\b(?:requires?|needs?|must|without a valid) [^.!?;,]{0,80}\bstep[- ]up\b/,
+    /\bstep[- ]up\s*(?:[:(]|(?:totp|sms|sudo|strict|checks?|token is a header|as above|(?:is )?(?:needed|required))\b)/,
+    /(?:\b(?:and |permission, |with )|→\s*)step[- ]up\b/,
+    /\b(?:sudo|strict)(?:[ -]tier| (?:verification|every time|on every (?:call|request|operation)|(?:is )?(?:needed|required)))\b/,
+    /\b(?:requires?|needs?|must (?:pass|use)) (?:an? )?(?:sudo|strict)(?=\s*(?:[,.!?;)]|$)| (?:for|on|before|when|to)\b)/,
     /(?<![不无])(?:需要|需|必须)(?:通过|完成)?二次验证/,
   ];
   for (const { id, operation } of operations(contract(), '/admin/v1/')) {
     if (!formerlyProtected.has(id)) continue;
-    const description = text(operation['description'] ?? '')
+    let description = text(operation['description'] ?? '')
       .replaceAll('`', '')
-      .replace(/\s+/g, ' ');
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+    for (const mention of allowedMentions) description = description.replace(mention, ' ');
+    if (id === 'adminDisableAdmin' || id === 'adminResetAdminTotp') {
+      description = description.replace(
+        /\band step[- ]up tokens? of the account stops? working\b/g,
+        ' ',
+      );
+    }
     for (const requirement of requirements) expect(description, id).not.toMatch(requirement);
   }
 });
