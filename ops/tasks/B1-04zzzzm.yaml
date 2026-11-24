@@ -13,18 +13,15 @@ type: impl
 # 补丁 1（D10-2717）：TAOBAO_USER_OAUTH_REDIRECT_URI 取值 staging https://l-stg.couliapp.cn/auth/taobao/callback、prod https://l.couliapp.cn/auth/taobao/callback；auth_url 入口 oauth.taobao.com + view=wap（不用 oauth.m.taobao.com、不用沙箱 tbsandbox）；staging 淘宝适配器用 live；code 仍下发客户端，不改契约。
 # 补丁 2（D10-2755，money r1 一 S0 四 S1 一次修全）：备案适配器接收服务端选定的 app_id + 联盟账号，校验邀请码归属（新配置 TAOBAO_INVITER_ACCOUNT_ID = 生成该邀请码的联盟账号），不一致或确认不了即拒绝激活绑定并告警；
 #   生产装配接真实授权应用解析器（linking/infra/auth-apps.ts，Nest 路由测覆盖 prod 签发）；state 记录签发时 OAuth 配置引用（含 redirect_uri），兑换按引用解析；sdk_token 在真实淘宝适配器支持前不下发；web_code 失败按端 × 方式计数（固定分类，不含凭证）。
+# 补丁 3（D10-2806 / D10-2826，负责人 2026-11-24 对话同意；money r2 收口）：① 保存回「重复绑定」且无编号时，查询结果只在库里对得上才接受（同一应用、同一联盟账号下已有该编号的历史绑定且是同一用户），
+#   否则不写绑定、失败告警（duplicate_unverified）；② 签发与兑换共用「真实备案适配器已就绪」判断，staging 淘宝端点为 demo 时签发 auth_unavailable、兑换不把真实凭证交演示适配器；③ 换应用旧 state 失败不在本单（FU-TAOBAO-OAUTH-APP-ROTATION）。[AC-B1-04zzzzm#4] 三例（本单新文件 bind-publisher.test.ts，主干无，不登 modify_existing）由写测增量按 ① 改，负责人已确认。
 refs: [BR-ID-17, BR-ATTR-05]
 refs_hash:
   BR-ID-17: ba4ebcc6279a
   BR-ATTR-05: 655fe77b6d9b
 deps: []
 paths:
-  - 'apps/api/src/modules/linking/application/union-auth-state.ts'
-  - 'apps/api/src/modules/linking/application/union-auth-url.ts'
-  - 'apps/api/src/modules/linking/application/link-open-taobao.ts'
-  - 'apps/api/src/modules/linking/application/{union-binding-exchanger.ts,union-bindings.ts}'
-  - 'apps/api/src/modules/linking/infra/{auth-apps.ts,auth-apps.test.ts}'
-  - 'apps/api/src/modules/linking/linking.module.ts'
+  - 'apps/api/src/modules/linking/{application/{union-auth-state,union-auth-url,link-open-taobao,union-binding-exchanger,union-bindings}.ts,infra/{auth-apps,auth-apps.test}.ts,linking.module.ts}'
   - 'apps/api/src/modules/union/{union.module.ts,domain/types.ts,application/governed-adapter.ts}'
   - 'apps/api/src/modules/union/infra/taobao/{taobao-adapter.ts,site-oauth.ts,user-oauth.ts,user-oauth.test.ts,publisher.ts,publisher.test.ts}'
   - 'apps/api/src/modules/platform/config/{taobao-oauth.ts,taobao-oauth.test.ts,config.ts,index.ts}'
