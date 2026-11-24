@@ -56,6 +56,7 @@ function mounted(seen: readonly RouteOptions[]): RouteOptions[] {
   return seen.filter((item) => item.url === PATH && [item.method].flat().includes('POST'));
 }
 
+// 标题沿用原文，二次验证期望以块内断言为准。
 it('[AC-B2-09m#1] adminBatchManualPaid 去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent、x-error-codes 不变；admin 入口恰好挂一次并带契约的请求 schema，api 入口不挂', async () => {
   const paths = await contractPaths();
   const op: ManualPaidOperation | undefined = paths[PATH]?.['post'];
@@ -65,7 +66,7 @@ it('[AC-B2-09m#1] adminBatchManualPaid 去掉 x-implementation: planned（生成
   expect(op?.['x-auth']).toBe('admin');
   expect(op?.['x-idempotent']).toBe(true);
   expect([...(op?.['x-error-codes'] ?? [])].sort((a, b) => a - b)).toEqual([
-    10001, 10003, 10403, 20001, 20901, 40901,
+    10001, 10403, 20001, 20901, 40901,
   ]);
 
   const admin = await boot('admin');

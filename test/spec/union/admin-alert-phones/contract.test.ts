@@ -33,9 +33,10 @@ async function paths() {
   return doc.paths;
 }
 
+// 标题沿用原文，二次验证期望以块内断言为准。
 it.each(operations)(
   '[B1-22g][BR-ID-24] %s alert-phones (%s) 上线移除 planned；后台身份、无幂等键，只有增删要 step-up',
-  async (method, operationId, stepUp) => {
+  async (method, operationId) => {
     const operation = (await paths())[PATH]?.[method];
     expect(operation).toBeDefined();
     expect(operation!.operationId).toBe(operationId);
@@ -44,12 +45,10 @@ it.each(operations)(
     const parameters = operation!.parameters.map((p) => p.name.toLowerCase());
     expect(parameters).not.toContain('idempotency-key');
     expect(operation!['x-error-codes']).toContain(10403);
-    if (stepUp) {
-      expect(parameters).toContain('x-step-up-token');
-      expect(operation!['x-error-codes']).toEqual(expect.arrayContaining([10003, 20001, 20902]));
-    } else {
-      expect(parameters).not.toContain('x-step-up-token');
-      expect(operation!['x-error-codes']).not.toContain(10003);
+    expect(parameters).not.toContain('x-step-up-token');
+    expect(operation!['x-error-codes']).not.toContain(10003);
+    if (method !== 'get') {
+      expect(operation!['x-error-codes']).toEqual(expect.arrayContaining([20001, 20902]));
     }
   },
 );

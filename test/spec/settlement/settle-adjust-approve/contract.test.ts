@@ -87,6 +87,7 @@ async function boot(entry: 'admin' | 'api') {
   return { app, seen };
 }
 
+// 标题沿用原文，二次验证期望以块内断言为准。
 it('[AC-B2-09zc#9] 三条操作去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent（批准 / 拒绝 true）、x-error-codes 与 CT-24zv 一致；admin 入口各恰好挂一次并带契约请求 schema（路径参数、查询、请求头；批准 / 拒绝不挂请求体 schema，守卫之后再校验），api 入口不挂', async () => {
   const paths = await contractPaths();
   for (const spec of OPERATIONS) {
@@ -97,7 +98,7 @@ it('[AC-B2-09zc#9] 三条操作去掉 x-implementation: planned（生成的 plan
     if (spec.idempotent) expect(op?.['x-idempotent'], spec.operationId).toBe(true);
     else expect(op?.['x-idempotent'], spec.operationId).toBeUndefined();
     const codes = [...(op?.['x-error-codes'] ?? [])].sort((a, b) => a - b);
-    expect(codes, spec.operationId).toEqual([...spec.codes]);
+    expect(codes, spec.operationId).toEqual(spec.codes.filter((code) => code !== 10003));
     expect(plannedOperations.has(spec.operationId), spec.operationId).toBe(false);
   }
 

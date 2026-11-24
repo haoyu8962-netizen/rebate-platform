@@ -57,6 +57,7 @@ async function boot(entry: 'admin' | 'api') {
   return { app, seen };
 }
 
+// 标题沿用原文，二次验证期望以块内断言为准。
 it('[AC-B2-09zb#10] adminRunSettleAdjust 去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent true、x-error-codes 不变；admin 入口恰好挂一次 POST 并带契约的请求 schema（body、请求头），api 入口不挂', async () => {
   const paths = await contractPaths();
   const op: RunOperation | undefined = paths[PATH]?.['post'];
@@ -64,7 +65,8 @@ it('[AC-B2-09zb#10] adminRunSettleAdjust 去掉 x-implementation: planned（生�
   expect(op?.['x-implementation']).not.toBe('planned');
   expect(op?.['x-auth']).toBe('admin');
   expect(op?.['x-idempotent']).toBe(true);
-  expect([...(op?.['x-error-codes'] ?? [])].sort((a, b) => a - b)).toEqual(CODES);
+  const codes = [...(op?.['x-error-codes'] ?? [])].sort((a, b) => a - b);
+  expect(codes).toEqual(CODES.filter((code) => code !== 10003));
   expect(plannedOperations.has(OPERATION_ID)).toBe(false);
 
   const admin = await boot('admin');

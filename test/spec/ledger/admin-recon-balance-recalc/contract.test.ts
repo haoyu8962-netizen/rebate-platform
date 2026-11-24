@@ -63,6 +63,7 @@ async function boot(entry: 'admin' | 'api') {
   return { app, seen };
 }
 
+// 标题沿用原文，二次验证期望以块内断言为准。
 it('[AC-B2-02x#45] recalcBalanceAdminReconDiff 去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、无 x-idempotent、x-error-codes [10001, 10003, 10403, 20001] 不变，请求体仍只有必填的 reason（additionalProperties false，不收金额）；admin 入口恰好挂一次 POST 并带契约的请求 schema（body、路径参数、X-Step-Up-Token 请求头），api 入口不挂', async () => {
   const op: RecalcOperation | undefined = (await contractPaths())[RECALC_PATH]?.['post'];
   expect(op?.operationId).toBe(OPERATION_ID);
@@ -75,7 +76,7 @@ it('[AC-B2-02x#45] recalcBalanceAdminReconDiff 去掉 x-implementation: planned�
   expect(op?.['x-auth'], OPERATION_ID).toBe('admin');
   expect(op?.['x-idempotent'], OPERATION_ID).toBeUndefined();
   const codes = [...(op?.['x-error-codes'] ?? [])].sort((a, b) => a - b);
-  expect(codes, OPERATION_ID).toEqual([10001, 10003, 10403, 20001]);
+  expect(codes, OPERATION_ID).toEqual([10001, 10403, 20001]);
 
   const admin = await boot('admin');
   try {

@@ -100,10 +100,11 @@ it('[AC-B1-27b#2] 要后台登录：不带 admin_token 在处理前回 401 / 100
   }
 });
 
+// 保留原标题，错误码表以块内断言为准。
 it('[AC-B1-27b#3] 契约 adminEditUserProfile 去掉 x-implementation: planned，错误码表不变', async () => {
   const op = (await contract()).paths[PROFILE]!.patch!;
   expect(op['x-implementation']).not.toBe('planned');
   expect([...(op['x-error-codes'] ?? [])].sort((a, b) => a - b)).toEqual([
-    10001, 10003, 10403, 20001, 30411, 44001,
+    10001, 10403, 20001, 30411, 44001,
   ]);
 });

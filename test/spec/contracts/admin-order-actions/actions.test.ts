@@ -107,9 +107,9 @@ it('[AC-CT-24n#15] 指派只收 expected_user_id=null，锁定期望为布尔，
 it('[AC-CT-24n#16] 指派并发与已归属返回 order_attribution 冲突，不合格目标沿用 20001', () => {
   const doc = contract();
   const path = `${orderPath}/reassign`;
-  expect(list(op(doc, path)['x-error-codes'])).toEqual(
-    expect.arrayContaining([20001, 20902, 10003]),
-  );
+  const codes = list(op(doc, path)['x-error-codes']);
+  expect(codes).toEqual(expect.arrayContaining([20001, 20902]));
+  expect(codes).not.toContain(10003);
   errorWith(doc, path, 20902, { resource: 'order_attribution' });
   for (const name of ['order_id', 'user_id', 'reason'])
     errorWith(doc, path, 20001, { fields: [name] });
