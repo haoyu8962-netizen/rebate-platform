@@ -91,6 +91,50 @@ it('[B3-05q][BR-AI-15][BR-AI-04] quote：已下架、认不出是上游对商品
   expect(await thrownCard.quote(KEY, context())).toEqual({ kind: 'server_failed' });
 });
 
+it('[B3-05w][BR-PRICE-08][BR-AI-15] quote：无返利原样交给入口（no_rebate，不 commit、不登记链接）；格式不合的 key 不查目录、按认不出 30132', async () => {
+  const commit = vi.fn(async () => {
+    throw new Error('synthetic: no_rebate never commits');
+  });
+  const assemble = vi.fn<CatalogCardEntry['assemble']>(
+    async () =>
+      ({
+        kind: 'prepared',
+        card: { product_key: KEY, rebate_basis: 'no_rebate' },
+        commit,
+      }) as unknown as Awaited<ReturnType<CatalogCardEntry['assemble']>>,
+  );
+  const readProduct = vi.fn<RebateQuoteDeps['catalog']['readProduct']>(async () => PRODUCT);
+  const readers = createScenarioEntryReaders({
+    quote: quoteDeps(readProduct, assemble),
+    handoff: { texts },
+  });
+  expect(await readers.quote(KEY, context())).toEqual({ kind: 'no_rebate', cards: [] });
+  expect(readProduct).toHaveBeenCalledExactlyOnceWith(
+    KEY,
+    expect.objectContaining({ context: { product_key: KEY } }),
+  );
+  expect(assemble).toHaveBeenCalledOnce();
+  expect(commit).not.toHaveBeenCalled();
+
+  const noCard = createScenarioEntryReaders({
+    quote: quoteDeps(
+      async () => PRODUCT,
+      async () => ({ kind: 'skipped' }),
+    ),
+    handoff: { texts },
+  });
+  expect(await noCard.quote(KEY, context())).toEqual({ kind: 'no_card', cards: [] });
+
+  const malformed = vi.fn<RebateQuoteDeps['catalog']['readProduct']>(async () => PRODUCT);
+  const bad = createScenarioEntryReaders({ quote: quoteDeps(malformed), handoff: { texts } });
+  expect(await bad.quote('TB/not a key', context())).toEqual({
+    kind: 'parse_error',
+    error_code: 30132,
+    cards: [],
+  });
+  expect(malformed).not.toHaveBeenCalled();
+});
+
 function orderDeps(get: AgentCapableOrderQueries['get']): OrderToolsDeps {
   return {
     orders: {

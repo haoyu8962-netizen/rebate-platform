@@ -2,7 +2,8 @@
 // same handlers the model's tools use, so the entry never builds a card of its own:
 //   · quote: get_rebate_quote's own flow for the entry product_key (a fresh catalog lookup, the
 //     link path's card entry and register_links, BR-AI-04 / BR-AI-05), without a card reference (no
-//     model call scope). What the lookup threw tells the upstream's answer about the product
+//     model call scope), via tools/quote createProductQuoteRunner so no_rebate stays no_rebate
+//     (BR-PRICE-08, B3-05w) where the model tool folds it into no_card. What the lookup threw tells the upstream's answer about the product
 //     (ParsingError: delisted, unrecognised) from a server-side failure (anything else, and
 //     ParsingError 50301 dependency unavailable), as BR-AI-15 细则 separates them.
 //   · order: explain_order's own lookup by card reference, the reference bound to the entry
@@ -17,7 +18,11 @@ import type { EntryQuoteOutcome, ScenarioEntryReaders } from '../../orchestrator
 import type { ToolOutcome } from '../../orchestrator/index.ts';
 import { handoffCard, type HandoffDeps } from '../../tools/handoff/index.ts';
 import { createExplainOrderHandler, type OrderToolsDeps } from '../../tools/orders/index.ts';
-import { createRebateQuoteHandler, type RebateQuoteDeps } from '../../tools/quote/index.ts';
+import {
+  createProductQuoteRunner,
+  type ProductQuoteOutcome,
+  type RebateQuoteDeps,
+} from '../../tools/quote/index.ts';
 
 /** parsing's dependency-unavailable code: a server-side failure, not an answer about the item. */
 const DEPENDENCY_DOWN = 50301;
@@ -30,14 +35,6 @@ export interface ScenarioEntryReaderDeps {
   /** The order tools' deps; absent: no order tool is registered (the entry never gets here). */
   readonly orders?: OrderToolsDeps;
   readonly handoff: HandoffDeps;
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function failedView(outcome: ToolOutcome): unknown {
-  return isRecord(outcome.modelView) ? outcome.modelView['error'] : undefined;
 }
 
 /** The order tools' deps without a card reference (no model call scope on the entry path). */
@@ -60,10 +57,10 @@ function entryOrderDeps(deps: OrderToolsDeps, orderId: string): OrderToolsDeps {
 export function createScenarioEntryReaders(deps: ScenarioEntryReaderDeps): ScenarioEntryReaders {
   return {
     async quote(productKey, ctx): Promise<EntryQuoteOutcome> {
-      // Per call: what this call's lookup threw (the handler maps every failure to tool_failed).
+      // Per call: what this call's lookup threw (a card entry or registration failure is ours).
       let thrown: unknown = undefined;
       const quote = deps.quote;
-      const handler = createRebateQuoteHandler({
+      const runner = createProductQuoteRunner({
         ...(quote.tokens === undefined ? {} : { tokens: quote.tokens }),
         parsing: quote.parsing,
         references: quote.references,
@@ -79,22 +76,19 @@ export function createScenarioEntryReaders(deps: ScenarioEntryReaderDeps): Scena
           },
         },
       });
-      const outcome = await handler.run(
-        { product_key: productKey },
-        { ...ctx, context: { product_key: productKey } },
-      );
-      if (outcome.kind === 'ok') return outcome;
-      if (outcome.kind === 'rejected') {
-        // Not a usable key for the catalog (the core checked the format): unrecognised.
-        return { kind: 'parse_error', error_code: 30132, cards: [] };
+      let outcome: ProductQuoteOutcome;
+      try {
+        outcome = await runner.run(productKey, { ...ctx, context: { product_key: productKey } });
+      } catch {
+        if (thrown instanceof ParsingError && thrown.code !== DEPENDENCY_DOWN) {
+          return { kind: 'parse_error', error_code: thrown.code, cards: [] };
+        }
+        return { kind: 'server_failed' };
       }
-      const error = failedView(outcome);
-      if (error === 'price_unavailable') return { kind: 'price_unavailable', cards: [] };
-      if (error === 'no_card') return { kind: 'no_card', cards: [] };
-      if (thrown instanceof ParsingError && thrown.code !== DEPENDENCY_DOWN) {
-        return { kind: 'parse_error', error_code: thrown.code, cards: [] };
-      }
-      return { kind: 'server_failed' };
+      // Not a usable key for the catalog (the core checked the format): unrecognised.
+      if (outcome.kind === 'rejected') return { kind: 'parse_error', error_code: 30132, cards: [] };
+      // ok, price_unavailable, no_card and no_rebate (BR-PRICE-08, B3-05w) pass through as they are.
+      return outcome;
     },
 
     // The same resolver get_rebate_quote uses (the session's result store), read only.

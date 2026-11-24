@@ -6,6 +6,7 @@ import type { RedactedText } from '../../stream/admission/index.ts';
 import type { RunContext, UnnumberedCard } from '../../stream/run/index.ts';
 import type { PathInput, ToolOutcome } from '../core/ports.ts';
 import type { ReplyTemplateTrace } from '../core/reply-templates.ts';
+import { createDeterministicPath } from '../deterministic/index.ts';
 import {
   createScenarioEntryPath,
   type EntryQuoteOutcome,
@@ -253,6 +254,7 @@ it('[B3-05q][BR-AI-04][BR-AI-15] 商品入口：出卡 quoted（带帧编号）�
     [{ kind: 'parse_error', error_code: 30141, cards: [] }, 'error.30141'],
     [{ kind: 'price_unavailable', cards: [] }, 'agent.notice.price_unavailable'],
     [{ kind: 'no_card', cards: [] }, 'agent.notice.price_unavailable'],
+    [{ kind: 'no_rebate', cards: [] }, 'no_rebate.notice'],
   ] as const) {
     const r = rig({ quote: async () => outcome });
     expect(await r.path.product(request(), 'tb:synthetic-entry', r.ctx, r.report)).toEqual({
@@ -320,4 +322,76 @@ it('[B3-05q][BR-AI-05] quotedKey：只认 card_id / ref_ordinal 其一，经同�
     expect(await r.path.quotedKey(request(), args, r.ctx)).toBeNull();
   }
   expect(r.resolve).toHaveBeenCalledTimes(2);
+});
+
+/** Captures the notice cards a path writes (fallback text included). */
+function capture(r: ReturnType<typeof rig>): UnnumberedCard[] {
+  const cards: UnnumberedCard[] = [];
+  const card = r.ctx.card;
+  r.ctx.card = async (value, delivered) => {
+    cards.push(value);
+    await card(value, delivered);
+  };
+  return cards;
+}
+
+it('[B3-05w][BR-PRICE-08][BR-TEXT-22] 商品入口无返利：notice 的 fallback_text 经 texts.text 取 no_rebate.notice（不写死、不直读字典文件），照常 answered', async () => {
+  const r = rig({ quote: async () => ({ kind: 'no_rebate', cards: [] }) });
+  const custom = '合成：后台改过的无返利措辞';
+  const text = vi.fn(async (_app: string, key: string) =>
+    key === 'no_rebate.notice' ? custom : `[${key}]`,
+  );
+  const path = createScenarioEntryPath({ ...r.deps, texts: { ...r.deps.texts, text } });
+  const cards = capture(r);
+  expect(await path.product(request(), 'tb:synthetic-entry', r.ctx, r.report)).toEqual({
+    kind: 'answered',
+  });
+  expect(cards).toEqual([
+    {
+      type: 'notice',
+      schema_version: 1,
+      data: { level: 'warn', text_key: 'no_rebate.notice', actions: [] },
+      fallback_text: custom,
+    },
+  ]);
+  expect(text).toHaveBeenCalledWith('synthetic-app', 'no_rebate.notice');
+  expect(r.reports).toEqual([['get_rebate_quote', { entry: 'product_key' }, 'failed']]);
+});
+
+it('[B3-05w][BR-PRICE-08] 商品入口无返利的 notice 与粘贴链接路径无返利的 notice 形状相同（type / schema_version / level / actions / text_key）', async () => {
+  const entry = rig({ quote: async () => ({ kind: 'no_rebate', cards: [] }) });
+  const entryCards = capture(entry);
+  await entry.path.product(request(), 'tb:synthetic-entry', entry.ctx, entry.report);
+
+  const link = rig();
+  const linkCards = capture(link);
+  const linked = request();
+  const deterministic = createDeterministicPath({
+    quotes: { run: async () => ({ kind: 'no_rebate', cards: [] }) },
+    texts: link.deps.texts,
+  });
+  expect(
+    await deterministic.run(
+      {
+        ...linked,
+        proceed: {
+          ...linked.proceed,
+          links: [{ kind: 'url', raw: 'https://item.example.invalid/syn/1', index: 0 }],
+        },
+      },
+      link.ctx,
+    ),
+  ).toEqual({ kind: 'done', finishReason: 'stop' });
+
+  expect(entryCards).toHaveLength(1);
+  expect(linkCards).toHaveLength(1);
+  const [fromEntry] = entryCards;
+  const [fromLink] = linkCards;
+  expect(fromEntry?.type).toBe(fromLink?.type);
+  expect(fromEntry?.schema_version).toBe(fromLink?.schema_version);
+  expect(fromEntry?.data['level']).toBe(fromLink?.data['level']);
+  expect(fromEntry?.data['actions']).toEqual(fromLink?.data['actions']);
+  expect(fromEntry?.data['text_key']).toBe(fromLink?.data['text_key']);
+  expect(fromEntry?.fallback_text).toBe(fromLink?.fallback_text);
+  expect(fromEntry).toEqual(fromLink);
 });

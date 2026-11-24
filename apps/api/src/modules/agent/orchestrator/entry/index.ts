@@ -6,7 +6,8 @@
 //     link message — a fresh catalog lookup and the link path's card entry (tools/quote, via
 //     ScenarioEntryReaders.quote) — and 1 rebate_quote card; a delisted product, no price, no card
 //     or an unrecognised key are the upstream's answer about the product and get the link path's
-//     notice (error.<code>; agent.notice.price_unavailable for price_unavailable / no_card). A server-side failure (upstream
+//     notice (error.<code>; agent.notice.price_unavailable for price_unavailable / no_card;
+//     no_rebate.notice for no_rebate, BR-PRICE-08, B3-05w). A server-side failure (upstream
 //     timeout, 5xx, circuit open) writes nothing here: the core ends the run with error 50401
 //     without a model, or writes agent.notice.quote_failed with one (BR-AI-15 细则).
 //   · context.order_id (订单详情「问问 AI」): order_query whatever the words say — 判定顺序③ identity
@@ -74,6 +75,8 @@ const QUOTE_FAILED = 'agent.notice.quote_failed';
 const SERVER_FAILURE = 50401;
 /** Same key as the link path for price_unavailable / no_card (BR-TEXT-22, B3-05v). */
 const PRICE_UNAVAILABLE = 'agent.notice.price_unavailable';
+/** Same key as the link path for no_rebate (BR-PRICE-08, BR-TEXT-22, B3-05w). */
+const NO_REBATE = 'no_rebate.notice';
 const PAGE_GUIDE_ENABLED = 'agent.page_guide.enabled';
 const GUIDE_UNAVAILABLE = 'agent.guide.unavailable';
 const ORDER_LIST = 'OrderList';
@@ -193,7 +196,11 @@ class EntryPath implements ScenarioEntryPath {
       if (outcome.kind === 'server_failed') return { kind: 'server_failed' };
       // The upstream's answer about the product: the link path's notice (BR-AI-04).
       const key =
-        outcome.kind === 'parse_error' ? `error.${String(outcome.error_code)}` : PRICE_UNAVAILABLE;
+        outcome.kind === 'parse_error'
+          ? `error.${String(outcome.error_code)}`
+          : outcome.kind === 'no_rebate'
+            ? NO_REBATE
+            : PRICE_UNAVAILABLE;
       const card = await this.notice(appId, key, 'warn');
       if (ctx.signal.aborted) return { kind: 'stopped' };
       await ctx.card(card);
