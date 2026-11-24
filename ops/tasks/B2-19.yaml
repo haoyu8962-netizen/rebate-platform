@@ -24,11 +24,11 @@ test_paths:
   - 'test/spec/union/orders-shape/pdd-times.test.ts'
 modify_existing:
   - file: 'test/spec/union/orders-shape/pdd-times.test.ts'
-    test: '[AC-B1-08e-TIME#2] detail 时间 0 统一为 null，保留原秒字段含义'
+    test: '[AC-B1-08e-TIME#2] ${source} 时间 %s 统一为 null，保留原秒字段含义'
     reason: rule_change
     br: [BR-FUND-02]
     ruling: D10-2684
-    note: '详情补读官方文档列明的两个时间字段，与列表同一取法'
+    note: '详情补读官方文档列明的两个时间字段，与列表同一取法；该块是 for 循环里的 it.each、标题为带插值模板，按 CT-06zzzzzzzd（#658）用模板原文整块申报（补丁 3）'
 impl: claude
 tester: claude-independent
 accept:
