@@ -66,8 +66,21 @@ async function placeholderHit(hit: Hit, query: string): Promise<void> {
   // search; only those may reach the shared users/page fixture, and nothing may be added by the
   // search or by activating the hit.
   await settled(server);
+  // BR-ID-46: besides the orders list, the orders page reads the latest sync record at most once
+  // for its status bar (GET order-syncs, page=1 and page_size=1 only); nothing else may be read.
+  const others = server.users.log.filter(
+    (entry) => !(entry.method === 'GET' && entry.path === '/admin/v1/orders'),
+  );
+  expect(others.length).toBeLessThanOrEqual(1);
   expect(
-    server.users.log.every((entry) => entry.method === 'GET' && entry.path === '/admin/v1/orders'),
+    others.every(
+      (entry) =>
+        entry.method === 'GET' &&
+        entry.path === '/admin/v1/order-syncs' &&
+        entry.query['page'] === '1' &&
+        entry.query['page_size'] === '1' &&
+        Object.keys(entry.query).length === 2,
+    ),
   ).toBe(true);
   const pageRequests = server.users.log.length;
   await submit(query);
@@ -97,8 +110,21 @@ async function multiplePlaceholderHit(
   // search; only those may reach the shared users/page fixture, and nothing may be added by the
   // search or by activating the hit.
   await settled(server);
+  // BR-ID-46: besides the orders list, the orders page reads the latest sync record at most once
+  // for its status bar (GET order-syncs, page=1 and page_size=1 only); nothing else may be read.
+  const others = server.users.log.filter(
+    (entry) => !(entry.method === 'GET' && entry.path === '/admin/v1/orders'),
+  );
+  expect(others.length).toBeLessThanOrEqual(1);
   expect(
-    server.users.log.every((entry) => entry.method === 'GET' && entry.path === '/admin/v1/orders'),
+    others.every(
+      (entry) =>
+        entry.method === 'GET' &&
+        entry.path === '/admin/v1/order-syncs' &&
+        entry.query['page'] === '1' &&
+        entry.query['page_size'] === '1' &&
+        Object.keys(entry.query).length === 2,
+    ),
   ).toBe(true);
   const pageRequests = server.users.log.length;
   await submit(query);
