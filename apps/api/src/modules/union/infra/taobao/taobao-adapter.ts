@@ -48,9 +48,13 @@
 // B1-04zzzzk（D10-2674 ②）：resolveLink 部分实现，只认淘宝 / 天猫商品页 item.htm?id=<数字>（形态见
 // resolve-link.ts）：以该 id 发一次 item.info.upgrade.get（与 getItem 同一请求与错误归类），取本次返回第一条的
 // item_id 原串（BR-PROD-05；不读写商品 id 缓存）；空结果、15/50001、返回行缺 item_id 或不是非空字符串 →
-// link_unrecognized，其余上游错误原样抛。归档 kind = query。不认的链接（推广链、淘口令、m.tb.cn、手机页等）
-// 照旧 adapter_unimplemented，不取凭据、不发请求、不告警；推广链 / 淘口令 / m.tb.cn 由下一单走大淘客
-// parse-content（D10-2683）。
+// link_unrecognized，其余上游错误原样抛。归档 kind = query。
+// B1-04zzzzo（D10-2683 / D10-2891 / D10-2893）：商品页以外的输入（推广短链 s.click / uland、淘口令、m.tb.cn 等）
+// 在有 orderSource 时经大淘客 GET parse-content（v1.0.0，content 原样，见 parse-content.ts）只取 data.goodsId，
+// 再以它发一次 item.info.upgrade.get，取本次返回第一条的 item_id 原串（与商品页路径同一请求与错误归类；
+// 不读写商品 id 缓存）。pid、commission*、转链 url、originInfo 不读、不进结果与日志。25003 / 无 goodsId /
+// upgrade 空结果 → link_unrecognized；其余大淘客错误照 B1-04m 分类。两种请求归档 kind 都是 query。
+// 没有 orderSource → 照旧 adapter_unimplemented，不取凭据、不发请求、不告警。
 import { systemScheduler, type Clock, type Scheduler } from '../../../platform/index.ts';
 import type {
   TaobaoPriceOptions,
@@ -199,6 +203,13 @@ import {
   type TaobaoOwnOrderReader,
   type TaobaoRefundWarning,
 } from './refunds.ts';
+import {
+  DATAOKE_PARSE_CONTENT_CODES,
+  DATAOKE_PARSE_CONTENT_PATH,
+  DATAOKE_PARSE_CONTENT_VERSION,
+  parseContentGoodsId,
+  parseContentParameters,
+} from './parse-content.ts';
 import { parseTaobaoItemLink } from './resolve-link.ts';
 import { unwrapTaobaoResponse, type TaobaoSubCodeMap, type TaobaoWarning } from './response.ts';
 import type { TaobaoSearchCounter, TaobaoSearchMetricSource } from './search-counter.ts';
@@ -569,8 +580,8 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     }
   }
 
-  // 端口方法：resolveLink 只认商品页 item.htm?id=（B1-04zzzzk），其余仍 adapter_unimplemented，不取凭据、
-  // 不发请求；推广链、淘口令、m.tb.cn 下一单走大淘客 parse-content（D10-2683）
+  // 端口方法：resolveLink 商品页 item.htm?id= 直查（B1-04zzzzk），其余有 orderSource 时经大淘客
+  // parse-content（B1-04zzzzo），没有则 adapter_unimplemented，不取凭据、不发请求
   // （convert 见 B1-04d，searchItems 见 B1-04zh / B1-04zx，listOrders 见 B1-04f）。
 
   /**
@@ -973,14 +984,30 @@ export class TaobaoUnionAdapter implements UnionAdapter {
 
   /**
    * B1-04zzzzk (D10-2674 ②): a 淘宝 / 天猫 item page (see resolve-link.ts) → one item.info.upgrade.get
-   * with its numeric id; the item_id is this response's first row as returned (BR-PROD-05), never
-   * from #itemIdCache. Anything else: unimplemented before credentials or transport (frozen
-   * [AC-B1-04j#30]).
+   * with its numeric id. B1-04zzzzo: anything else, with an orderSource, → one 大淘客 parse-content
+   * (see parse-content.ts) for data.goodsId, then one item.info.upgrade.get with that goodsId. Either
+   * way the item_id is this response's first row as returned (BR-PROD-05), never from #itemIdCache.
+   * Without an orderSource: unimplemented before credentials or transport (frozen [AC-B1-04j#30]).
    */
   async resolveLink(raw: string, ctx: CallCtx): Promise<ResolvedLink> {
     const linkId = parseTaobaoItemLink(raw);
-    if (linkId === null) throw unimplemented('resolveLink');
-    const rows = await this.#topItemRows([linkId], ctx);
+    if (linkId !== null) return this.#resolveItemId(linkId, ctx);
+    const source = this.#orderSource;
+    if (source === undefined) throw unimplemented('resolveLink');
+    const parameters = parseContentParameters(raw);
+    const data = await source.request('GET', DATAOKE_PARSE_CONTENT_PATH, parameters, {
+      version: DATAOKE_PARSE_CONTENT_VERSION,
+      archive: archiveOf(ctx, 'query'),
+      outerCodes: DATAOKE_PARSE_CONTENT_CODES,
+      ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
+    });
+    // 只取 goodsId；它不是凑狸口径 item_id（D10-504），必须再经 upgrade.get 换本次原串。
+    return this.#resolveItemId(parseContentGoodsId(data), ctx);
+  }
+
+  /** One item.info.upgrade.get for `id`; the first row's item_id as returned, else link_unrecognized. */
+  async #resolveItemId(id: string, ctx: CallCtx): Promise<ResolvedLink> {
+    const rows = await this.#topItemRows([id], ctx);
     const first: unknown = rows === null ? undefined : rows[0];
     const itemId =
       typeof first === 'object' && first !== null
@@ -989,7 +1016,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     if (typeof itemId !== 'string' || itemId === '') {
       throw new UnionError(
         'link_unrecognized',
-        'taobao resolveLink: no item for this item page',
+        'taobao resolveLink: no item for this link',
         'taobao',
       );
     }
