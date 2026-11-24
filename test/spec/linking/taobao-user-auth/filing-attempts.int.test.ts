@@ -12,6 +12,7 @@ import {
   insertRow,
   newAccount,
   newAuth,
+  newBinding,
   newUser,
   requireTable,
 } from '../../db/linking-bindings/kit.ts';
@@ -49,7 +50,7 @@ const FOUND = response({
 });
 
 type Outcome = 'saved' | 'rejected' | 'duplicate';
-type Answer = Outcome | 'save_timeout' | 'lookup_timeout';
+type Answer = Outcome | 'save_timeout' | 'lookup_timeout' | 'invalid_grant';
 interface Attempt {
   id: string;
   app_id: string;
@@ -168,6 +169,7 @@ async function fixture() {
     transport.mockImplementation(async ({ url, body }) => {
       if (url === TOKEN_ENDPOINT) {
         methods.push('oauth');
+        if (answer === 'invalid_grant') return response({ error: 'invalid_grant' }, 400);
         return response(tokenAnswer());
       }
       const method = new URLSearchParams(body ?? '').get('method');
@@ -430,3 +432,67 @@ it.each(['其他联盟账号', '其他用户', '开始时间更晚'] as const)(
     await expectDuplicateUnverified(f, f.submit(f.state, 'duplicate'));
   },
 );
+
+async function expectKnownOutcomeUnverified(outcome: 'rejected' | 'saved') {
+  await requireTable(TABLE);
+  const f = await fixture();
+  const startedAt = new Date(f.clock.now().getTime() - 2000);
+  const finishedAt = new Date(f.clock.now().getTime() - 1000);
+  const earlierState = await f.nextState(startedAt);
+  const id = randomUUID();
+  await sql`
+    INSERT INTO app.union_filing_attempts
+      (id, app_id, user_id, platform, union_account_id, state, started_at, outcome, finished_at)
+    VALUES (${id}, ${APP_ID}, ${f.userId}, 'taobao', ${f.account}, ${earlierState},
+      ${startedAt}, NULL, NULL)
+  `.execute(app);
+  await sql`
+    UPDATE app.union_filing_attempts SET outcome = ${outcome}, finished_at = ${finishedAt}
+    WHERE id = ${id}
+  `.execute(app);
+  expect(await attempts(observer, earlierState)).toEqual([
+    expect.objectContaining({ id, outcome, finished_at: finishedAt }),
+  ]);
+  expect(await f.bindings()).toEqual([]);
+
+  await expectDuplicateUnverified(f, f.submit(f.state, 'duplicate'));
+}
+
+it('[AC-B1-04zzzzn#13] 更早结局为 rejected 的备案尝试不能证明查回编号的归属', async () => {
+  await expectKnownOutcomeUnverified('rejected');
+});
+
+it('[AC-B1-04zzzzn#14] 更早结局为 saved 且库中没有对应绑定时，拒绝查回的编号', async () => {
+  await expectKnownOutcomeUnverified('saved');
+});
+
+it('[AC-B1-04zzzzn#15] save 返回的编号已被其他用户绑定时，返回 30151 并提交 saved 结局', async () => {
+  await requireTable(TABLE);
+  const f = await fixture();
+  const owner = await newUser({ app_id: APP_ID });
+  await newBinding({
+    ...activeBinding(f),
+    user_id: owner,
+  });
+
+  const request = f.submit(f.state, 'saved');
+  expect(await request.reply).toMatchObject({ status: 422, envelope: { code: 30151 } });
+  const started = expectStarted(f, request);
+  expect(await attempts(observer, f.state)).toEqual([
+    { ...started, outcome: 'saved', finished_at: expect.any(Date) },
+  ]);
+  expect(await f.bindings()).toEqual([]);
+});
+
+it('[AC-B1-04zzzzn#16] 授权码换取令牌失败时返回 30104，且没有结局未知的备案尝试', async () => {
+  await requireTable(TABLE);
+  const f = await fixture();
+  const request = f.submit(f.state, 'invalid_grant');
+  expect(await request.reply).toMatchObject({
+    status: 422,
+    envelope: { code: 30104, data: { reason: 'credential_invalid' } },
+  });
+  expect(request.methods).toEqual(['oauth']);
+  expect((await attempts(observer, f.state)).filter(({ outcome }) => outcome === null)).toEqual([]);
+  expect(await f.bindings()).toEqual([]);
+});
