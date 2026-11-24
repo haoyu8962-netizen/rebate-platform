@@ -2211,6 +2211,18 @@ export interface UnionCredentials {
   updated_at: Generated<Timestamp>;
 }
 
+export interface UnionFilingAttempts {
+  app_id: string;
+  finished_at: Timestamp | null;
+  id: string;
+  outcome: string | null;
+  platform: string;
+  started_at: Timestamp;
+  state: string;
+  union_account_id: string;
+  user_id: string;
+}
+
 export interface UnionPddPidFilings {
   app_id: string;
   created_at: Generated<Timestamp>;
@@ -2552,6 +2564,7 @@ export interface DB {
   union_binding_conflicts: UnionBindingConflicts;
   union_bindings: UnionBindings;
   union_credentials: UnionCredentials;
+  union_filing_attempts: UnionFilingAttempts;
   union_pdd_pid_filings: UnionPddPidFilings;
   union_pids: UnionPids;
   union_raw_payloads: UnionRawPayloads;
