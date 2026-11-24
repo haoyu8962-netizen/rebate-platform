@@ -154,9 +154,13 @@ it(
 );
 
 it(
-  '[AC-F1-07e-DETAIL#5] 状态历史和转链记录展示每条时间及契约内容，不渲染原始报文或写操作',
+  '[AC-F1-07e-DETAIL#5] 状态历史和转链记录展示每条时间及契约内容，不渲染原始报文，写操作只有已接入的入口',
   async () => {
-    const { server } = await mount(createServer(), ROUTE, { isSuper: true, permissions: [] });
+    const { expectWriteEntries } = await import('../admin-orders-writes/kit.ts');
+    const { server } = await mount(createServer(undefined, detail({ reason: 'REFUND' })), ROUTE, {
+      isSuper: true,
+      permissions: [],
+    });
     await loaded();
     const history = section('状态历史');
     for (const text of [
@@ -187,7 +191,7 @@ it(
     expect(opened!.textContent).toContain('01:04');
     expect(converted!.textContent).toContain('search');
     expect(converted!.textContent).toContain('01:03');
-    readOnly(server);
+    expectWriteEntries(server, ['原因细分']);
   },
   FLOW_TIMEOUT,
 );

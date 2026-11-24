@@ -246,16 +246,20 @@ it(
 );
 
 it(
-  '[AC-F1-07e-LIST#6] 行操作名含订单号，使用 order_id 进入详情，超管也无未接入写操作',
+  '[AC-F1-07e-LIST#6] 行操作名含订单号，使用 order_id 进入详情，超管只见已接入的写操作',
   async () => {
-    const { server } = await mount(createServer(), '/orders', { isSuper: true, permissions: [] });
+    const { expectWriteEntries } = await import('../admin-orders-writes/kit.ts');
+    const { detail } = await import('./orders-fixtures.ts');
+    const serverWithRefund = createServer(undefined, detail({ reason: 'REFUND' }));
+    const { server } = await mount(serverWithRefund, '/orders', { isSuper: true, permissions: [] });
     await loaded();
     readOnly(server);
+    expectWriteEntries(server, []);
     await openDetail();
     await waitFor(() => expect(window.location.pathname).toBe(ROUTE));
     await waitFor(() => expect(mainElement().textContent).toContain('分佣快照'));
     expect(server.requests('GET', DETAIL)).toHaveLength(1);
-    readOnly(server);
+    expectWriteEntries(server, ['原因细分']);
   },
   FLOW_TIMEOUT,
 );
