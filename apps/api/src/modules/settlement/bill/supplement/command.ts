@@ -41,6 +41,11 @@ import {
  */
 export type SupplementDependencies = Omit<BillJobDependencies, 'snapshotStatus'> & {
   readonly logger?: Pick<Logger, 'warn'>;
+  /**
+   * B2-04re：候选订单键锁的分块大小（每块：保存点 → 块内按订单键升序取订单键锁 → 经来源读口再读一次 →
+   * 回滚到保存点放掉这一块的订单键锁）。只供测试注入；生产不传，取实现里的默认常量。
+   */
+  readonly lockChunkSize?: number;
 };
 
 export interface SupplementInput {
