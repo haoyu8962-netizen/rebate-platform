@@ -1,0 +1,31 @@
+id: CT-06zzzzzzzd
+repo: rebate-platform
+title: CT-06zzzzzzzd：whole-block 申报支持带 ${…} 插值的模板标题——按模板原文（含插值占位）逐字匹配恰好一个 .each / .for 块（D10-2698 甲）
+type: guard-change
+# 2026-11-23 be 入账（编排 D10-2698 取甲；门禁工具第三类改动，负责人 2026-11-23 14:49 对话「同意改门禁工具」，编排 D10-2709）。起因：B2-19 台账补丁 2（#606，D10-2684）登了冻结用例
+#   [AC-B1-08e-TIME#2]（test/spec/union/orders-shape/pdd-times.test.ts:20-47），它写在 for (const source of sources) 里、是 it.each([0, undefined, null])，
+#   标题是模板串 `[AC-B1-08e-TIME#2] ${source} 时间 %s 统一为 null，保留原秒字段含义`。tools/guard/lib/test-blocks.ts blockViews 只在模板无插值时
+#   （tpl 且 parts.length === 1）给出 template，表展开报「the title is not one string literal」（:1890），按展开名找不到块、按模板原文申报 namesWholeBlock
+#   也是 false（探针 couli-runs/B2-19/gen-modify/probe.ts）；evidence-check、red-check、task.ts 都经 test-blocks 定位，所以这条 modify_existing 无任何登法。
+# 做法（只改 tools/guard/lib/test-blocks.ts 与它的工具测试）：带插值的模板标题，template 取反引号之间的源码原文（含 ${…} 占位，逐字、不做求值或空白归一），
+#   whole-block 申报（CT-06zzzzzzzc 规则：只许 rule_change、note 必填，其余不变）按这份原文逐字相等匹配；同一原文命中多块照旧拒收、原文不一致照旧拒收。
+#   「展不开」照现行 each.ok === false 判：表行是字面量、但标题插值引用块外变量致展开名算不出的（本例），属展不开；能算出全部展开名的仍按展开名登。
+#   不放宽别的判定：可展开的表仍须按展开名登；普通字面量标题与无插值模板的行为不变；不改 evidence-check、red-check、task-file、task.ts 的规则
+#   （它们经 namesWholeBlock / compareModifiedBlocks 自然生效；若实现发现必须改这些文件才能生效，停下报编排，不自行扩 paths）。
+# 工具测试至少钉：① 带插值模板（含 for 循环变量 ${…} 与 %s）能按原文申报，整块定位、整块比较、changed 判定对；② 原文差一个字符（含占位名不同、空白不同）仍拒；
+#   ③ 普通字面量标题、无插值模板的申报与定位行为不变（含可展开表用模板原文仍拒）；④ 同一原文命中两块仍拒。
+# tools/README.md 不改（CT-06zzzzzzzc 那行已写整块申报；若要补「含插值占位原文」一句，另由编排定）。照 CT-06zzzzzzzc 先例走第三类门禁改动流程：完整 guard-change、两家评审，合并前由编排按 approvals 24 逐行核 diff 后加 owner 标签（负责人同意见 D10-2709）。
+refs: []
+refs_hash: {}
+deps: [CT-06zzzzzzzc]
+paths:
+  - 'tools/guard/lib/test-blocks{,.test}.ts'
+  - 'ops/tasks/CT-06zzzzzzzd.yaml'
+test_paths:
+  - 'test/spec/ci/modify-existing-template-interp/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/modify-existing-template-interp/**'
+status: todo
