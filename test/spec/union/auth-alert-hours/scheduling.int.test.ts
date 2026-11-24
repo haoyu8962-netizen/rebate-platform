@@ -68,7 +68,7 @@ it('[AC-B1-22zd#2] 自定义 [3] 只排 3 小时节点，重复值合并且 720 
 
   expectHourJobs(h, disabled.id, later(h, DAY_MS), []);
   expectHourJobs(h, custom.id, later(h, DAY_MS), [3]);
-  expectHourJobs(h, duplicates.id, later(h, 31 * DAY_MS), [720, 1]);
+  expectHourJobs(h, duplicates.id, later(h, 31 * DAY_MS), [720]);
 });
 
 it('[AC-B1-22zd#2] 手工录入的小时节点严格小于授权总时长，恰好 1 小时不排任何节点', async () => {
@@ -118,7 +118,27 @@ it('[AC-B1-22zd#2] 已有刷新端口成功返回新到期时刻后，小时节�
     auth_expires_at: expiry,
     auth_renewed_at: h.clock.now(),
   });
+  expectHourJobs(h, row.id, expiry, []);
+
+  h.send.mockClear();
+  h.clock.set(new Date(expiry.getTime() - DAY_MS));
+  await h.monitor.dailyCheck();
   expectHourJobs(h, row.id, expiry, [6, 1]);
+});
+
+it('[AC-B1-22zd#2] 超过 30 天未排的小时节点在进入窗口后由每日巡检按到点时刻补排', async () => {
+  const h = await harness(db(), '2026-11-23T01:00:00.000Z');
+  h.settings.set(HOURS_KEY, [1]);
+  const id = (await account(h)).id;
+  const expiry = later(h, 31 * DAY_MS);
+  await renew(h, await adminEntry(h), id, 31);
+  expectHourJobs(h, id, expiry, []);
+
+  // 巡检时距到期还有 24 小时，h1 在 23 小时后，早于下一次巡检。
+  h.send.mockClear();
+  h.clock.set(later(h, 30 * DAY_MS));
+  await h.monitor.dailyCheck();
+  expectHourJobs(h, id, expiry, [1]);
 });
 
 it('[AC-B1-22zd#5] 巡检只补排下次巡检前的小时节点，处理后已发的 d1 阶段保持不变', async () => {
