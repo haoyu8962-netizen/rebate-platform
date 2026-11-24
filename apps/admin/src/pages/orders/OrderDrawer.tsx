@@ -84,7 +84,8 @@ export function OrderDrawer({ orderId, onClose }: OrderDrawerProps): ReactElemen
     groups = state(<Typography.Text type="secondary">{t.missing}</Typography.Text>);
   } else if (shown.status === 'forbidden') {
     groups = state(<Typography.Text type="secondary">{t.forbidden}</Typography.Text>);
-  } else if (shown.status === 'failed') {
+  } else if (shown.status !== 'ready') {
+    // Only 'failed' is left here; the check is on 'ready' so the branch below narrows to it.
     groups = state(
       <Flex vertical align="flex-start" gap={8}>
         <Typography.Text type="danger">{t.failed}</Typography.Text>
