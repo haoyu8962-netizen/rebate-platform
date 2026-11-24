@@ -9,6 +9,7 @@ import type { Schema } from '@couli/contracts-ts';
 import {
   adminPrincipal,
   contractRouteSchema,
+  fieldsErrorEnvelope,
   type CheckedRequest,
 } from '../../../platform/index.ts';
 import type {
@@ -113,7 +114,14 @@ export class AdminStepUpController {
     @Res({ passthrough: true }) reply: HeaderReply,
   ): Promise<StepUpResponse> {
     reply.header('Cache-Control', 'no-store');
-    const result = await this.stepUp.stepUp(caller(request), request.body.tier, request.body.code);
+    // The contract made `tier` optional (CT-24zzv); until the service reads `method`, a body
+    // without `tier` is refused as before (20001 [tier]).
+    const { tier } = request.body;
+    if (tier === undefined) {
+      const { statusCode, body } = fieldsErrorEnvelope(['tier'], request.id);
+      throw new HttpException(body, statusCode);
+    }
+    const result = await this.stepUp.stepUp(caller(request), tier, request.body.code);
     if (result.code !== 0) throw failure(result, request.id);
     return { code: 0, msg: '', data: { ...result.grant }, trace_id: request.id };
   }

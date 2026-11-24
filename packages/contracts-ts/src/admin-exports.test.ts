@@ -86,7 +86,9 @@ it('[CT-24k] four admin operations under permission point export, with their err
     expect(o.security).toEqual([{ adminBearerAuth: [] }]);
     expect(o.tags).toEqual(['admin-exports']);
     expect(o['x-error-codes']).toEqual(codes);
-    expect(o['x-step-up']).toBeUndefined();
+    // BR-ID-34 sudo list「查看完整手机号与证件号」: create and retry are sudo (only for full values).
+    const sudo = id === 'adminCreateExport' || id === 'adminRetryExport';
+    expect(o['x-step-up'], id).toBe(sudo ? 'sudo' : undefined);
     expect(o['x-idempotent']).toBeUndefined();
     expect(o.description).toContain('Permission point `export`');
   }
@@ -161,7 +163,7 @@ it('[CT-24k] create answers 202 with a pending task; its body is one branch per 
   expect(text).toContain('`users` needs `user.list`');
   expect(text).toContain('masked like its source list');
   expect(text).toContain('`pii.reveal_phone`');
-  expect(text).toContain('10003 with `data.tier=totp`');
+  expect(text).toContain('10003 with `data.tier=sudo`');
   expect(text).toContain('`data.fields=[reason]`');
   expect(text).toContain('forces `actor_id` to the creator');
   expect(text).toContain('`admin.export.max_rows`');

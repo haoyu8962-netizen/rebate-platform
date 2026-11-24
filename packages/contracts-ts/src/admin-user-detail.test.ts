@@ -1,6 +1,6 @@
 // CT-24e: the user detail additions — GET /admin/v1/users/{user_id}/invitees (direct invitees,
 // 04 §6.6), POST …/level (user.level, BR-INV-14) and POST …/inviter (user.inviter, BR-INV-10);
-// 04 §11.2 (totp step-up, reason). Shape only: x-implementation is not asserted, so the
+// 04 §11.2 (reason; no step-up, BR-ID-34: none). Shape only: x-implementation is not asserted, so the
 // implementing task can drop planned. Reads the dereferenced contract and validates every example
 // with the API workspace's strict Ajv (as admin-users.test.ts does).
 import { readFileSync } from 'node:fs';
@@ -64,12 +64,12 @@ const OPERATIONS = [
     [10001, 10403, 20001],
     ['user.lookup', 'user.list'],
   ],
-  ['post', `${U}/level`, 'adminChangeUserLevel', [10001, 10003, 10403, 20001], ['user.level']],
+  ['post', `${U}/level`, 'adminChangeUserLevel', [10001, 10403, 20001], ['user.level']],
   [
     'post',
     `${U}/inviter`,
     'adminChangeInviter',
-    [10001, 10003, 10403, 20001, 30409, 30401, 30403],
+    [10001, 10403, 20001, 30409, 30401, 30403],
     ['user.inviter'],
   ],
 ] as const;
@@ -122,8 +122,8 @@ it.each(OPERATIONS)(
     const names = (op.parameters ?? []).map((p) => p.name.toLowerCase());
     expect(names).not.toContain('idempotency-key');
     const header = (op.parameters ?? []).find((p) => p.name.toLowerCase() === 'x-step-up-token');
-    if (method === 'get') expect(header).toBeUndefined();
-    else expect(header).toMatchObject({ in: 'header', required: false });
+    // BR-ID-34: level and inviter changes are none, so no operation takes a step-up token.
+    expect(header).toBeUndefined();
     for (const point of points) {
       expect(enums.admin_permission).toContain(point);
       expect(op.description, point).toContain(`\`${point}\``);
@@ -132,15 +132,14 @@ it.each(OPERATIONS)(
   },
 );
 
-it('[CT-24e] both writes need the totp tier and show the 10003 totp example', () => {
+it('[CT-24e] neither write asks for step-up nor shows a 10003 example (BR-ID-34: none)', () => {
   for (const path of [`${U}/level`, `${U}/inviter`]) {
     const op = operation('post', path);
-    expect(flat(op.description), path).toContain('totp tier');
-    expect(flat(op.description), path).toContain('`data.tier=totp`');
+    expect(flat(op.description), path).not.toMatch(/totp tier|X-Step-Up-Token|data\.tier|10003/);
     expect(
       errorExamples(op).filter((e) => e.code === 10003),
       path,
-    ).toEqual([expect.objectContaining({ data: { tier: 'totp' } })]);
+    ).toEqual([]);
   }
 });
 

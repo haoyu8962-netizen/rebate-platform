@@ -1,6 +1,6 @@
 # 后台权限点（规划/04 §2.5 admin_permission、§11）。超管拥有全部权限点；其他后台账号按权限点逐项勾选。
 # 「后台账号与权限」只限超管、不可授予，不是权限点，不列入。specs/permissions.yaml（B1-18）另记 step-up 与守卫。
-# 另有后台登录与二次验证用的枚举（CT-02f）：admin_step_up_tier、admin_login_step、admin_account_status、admin_auth_level；工作台待办卡 admin_dashboard_todo_key（CT-24a）；顶栏一框搜命中类型 admin_search_hit_type（CT-24b）；导出任务的状态 export_status 与来源 export_resource（CT-24k）；找回审核证据视图的比对字段 admin_claim_match_field（CT-24d）；后台订单的标记 admin_order_flag 与状态历史的字段、来源 admin_order_history_field、admin_order_history_source（CT-24m）；风控规则清单的规则状态 risk_rule_status 与命中动作 risk_action（CT-24f）；站长联盟账号与推广位 union_auth_status、union_reauth_mode、admin_union_auth_session_status、union_pid_status（CT-24h）；后台通知渠道与短信登记的渠道 notify_channel、短信模板类型 sms_template_type、短信状态 notify_sms_state 与待测试登记的测试结果 notify_sms_test_status（CT-24t）；后台提现单的展示状态 admin_withdrawal_display_status（CT-24y）；后台月结账单的派生状态 admin_settle_bill_status（CT-24z）；后台发起补充批次的结果 admin_settle_supplement_outcome（CT-24zd）；差错单结构化结论 admin_recon_diff_outcome（CT-24zf）；商品池与条目的状态 product_pool_status、pool_item_status（CT-07d）；审计日志的操作者类型与系统身份 audit_actor_kind、audit_system_actor（CT-24zj）。
+# 另有后台登录与二次验证用的枚举（CT-02f）：admin_step_up_tier、admin_step_up_method、admin_login_step、admin_account_status、admin_auth_level；工作台待办卡 admin_dashboard_todo_key（CT-24a）；顶栏一框搜命中类型 admin_search_hit_type（CT-24b）；导出任务的状态 export_status 与来源 export_resource（CT-24k）；找回审核证据视图的比对字段 admin_claim_match_field（CT-24d）；后台订单的标记 admin_order_flag 与状态历史的字段、来源 admin_order_history_field、admin_order_history_source（CT-24m）；风控规则清单的规则状态 risk_rule_status 与命中动作 risk_action（CT-24f）；站长联盟账号与推广位 union_auth_status、union_reauth_mode、admin_union_auth_session_status、union_pid_status（CT-24h）；后台通知渠道与短信登记的渠道 notify_channel、短信模板类型 sms_template_type、短信状态 notify_sms_state 与待测试登记的测试结果 notify_sms_test_status（CT-24t）；后台提现单的展示状态 admin_withdrawal_display_status（CT-24y）；后台月结账单的派生状态 admin_settle_bill_status（CT-24z）；后台发起补充批次的结果 admin_settle_supplement_outcome（CT-24zd）；差错单结构化结论 admin_recon_diff_outcome（CT-24zf）；商品池与条目的状态 product_pool_status、pool_item_status（CT-07d）；审计日志的操作者类型与系统身份 audit_actor_kind、audit_system_actor（CT-24zj）。
 enums:
   admin_permission:
     source: 规划/04 §11（拍板第二批 §8 ADD-04、ADD-05）
@@ -67,11 +67,19 @@ enums:
       agent.trace: Agent trace 查询（含 AI 举报列表的查看）
       agent.report: AI 举报处理：标记已处理、填写处理说明
   admin_step_up_tier:
-    source: 规划/08 BR-ID-34（二次验证分两档）；规划/04 §6.6 auth、§11 step-up 列（CT-02f）
-    description: 后台 step-up 的档位；step_up_token 记档位，动态码档的 token 不能用于短信档操作；10003 的 data.tier 取本枚举
+    source: 规划/08 BR-ID-34（二次验证分三档）；规划/04 §6.6 auth、§11 step-up 列（CT-02f）
+    description: 后台二次验证的档位（none 不验证、不列入本枚举）；验证方式（动态码或短信）不由档位决定；10003 的 data.tier 取本枚举；totp、sms 为过渡期旧值
     values:
-      totp: 动态码档（身份验证器 TOTP）
-      sms: 短信档（向账号登记的验证手机号发验证码）
+      totp: 旧值，过渡期保留（服务端与前端改造落地后另开契约单删除）；原动态码档（身份验证器 TOTP）
+      sms: 旧值，过渡期保留（服务端与前端改造落地后另开契约单删除）；原短信档（向账号登记的验证手机号发验证码）
+      sudo: 中高危；本次后台会话最近一次第二因子验证通过起 180 分钟内不重问
+      strict: 极高危、不可逆；每次操作都重新验证，不受 sudo 窗口豁免
+  admin_step_up_method:
+    source: 规划/08 BR-ID-34（第二因子、二次验证分三档）；规划/04 §6.6 auth
+    description: 后台二次验证（step-up）所用的第二因子方式；签发的 step_up_token 不分档，本会话任一未用过的令牌都可用于 sudo 或 strict 操作
+    values:
+      totp: 验证器动态码（TOTP）
+      sms: 短信验证码（发到本人登记的验证手机号）
   admin_login_step:
     source: 规划/08 BR-ID-34 细则「首次绑定身份验证器」、BR-ID-43「首次登录强制改密码」；规划/04 §6.6 auth（CT-02f）
     description: 后台登录第一步通过后的下一步，凭中间凭证 login_ticket 完成；两步都完成才签发 admin_token

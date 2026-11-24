@@ -151,8 +151,12 @@ export function AppVersionEditor({
   }, [read]);
 
   const original = load.status === 'ready' ? load.row : undefined;
-  const stepUpTier = (cause?: unknown): 'totp' | 'sms' =>
-    tierOf(cause) ?? access.stepUpTier(PERMISSION, RAISE_OPERATION) ?? 'totp';
+  const stepUpTier = (cause?: unknown): 'totp' | 'sms' => {
+    // AdminStepUpTier also lists sudo / strict (CT-24zzv); the access snapshot only yields totp / sms.
+    const tier: Schema<'AdminStepUpTier'> =
+      tierOf(cause) ?? access.stepUpTier(PERMISSION, RAISE_OPERATION) ?? 'totp';
+    return tier === 'sms' ? 'sms' : 'totp';
+  };
 
   const verify = async (code: string): Promise<StepUpResult> => {
     const call = getProvider().custom;
