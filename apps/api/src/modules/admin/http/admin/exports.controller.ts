@@ -12,6 +12,9 @@
 // skips the guard for a super admin.
 // ledger (CT-24zzm): `export` plus fund.view or user.lookup (use case), always masked, so it never
 // reaches the second guard call.
+// orders (CT-24x, D10-2686): until its back end (D2) merges, an orders create is refused before any
+// guard call with 20001 data.fields=[resource], the ExportFieldsError answer's shape; no use case,
+// no task, no audit.
 // Served by the admin entry only.
 import {
   Body,
@@ -82,7 +85,9 @@ function ipOf(request: ExportsRequest): string | null {
   return typeof request.ip === 'string' && request.ip.length > 0 ? request.ip : null;
 }
 
-function commandOf(body: Schema<'AdminExportCreateRequest'>): ExportCreateCommand {
+function commandOf(
+  body: Exclude<Schema<'AdminExportCreateRequest'>, Schema<'AdminExportCreateOrdersRequest'>>,
+): ExportCreateCommand {
   const filters: Record<string, string> = {};
   for (const [key, value] of Object.entries(body.filters ?? {})) {
     if (typeof value === 'string') filters[key] = value;
@@ -148,6 +153,11 @@ export class AdminExportsController {
     @Req() request: ExportsRequest,
     @Body() body: Schema<'AdminExportCreateRequest'>,
   ): Promise<ExportResponse> {
+    // Not open before D2 (CT-24x): answered alike for every holder, so no guard refusal comes first.
+    if (body.resource === 'orders') {
+      const refused = fieldsErrorEnvelope(['resource'], request.id);
+      throw new HttpException(refused.body, refused.statusCode);
+    }
     const command = commandOf(body);
     // The full tax version does not need export; its token is checked by the second guard call.
     const entry =

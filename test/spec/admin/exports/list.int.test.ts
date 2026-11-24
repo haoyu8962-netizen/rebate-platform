@@ -100,7 +100,7 @@ it.each([
   ['?page_size=201', ['page_size']],
   ['?from=2026-10-02T00:00:00Z&to=2026-10-01T00:00:00Z', ['from', 'to']],
   ['?status=unknown', ['status']],
-  ['?resource=orders', ['resource']],
+  ['?resource=not_a_resource', ['resource']],
 ] as const)('[AC-B1-34f#14] 列表拒绝非法筛选 %s', async (query, fields) => {
   const f = await setup(h);
   await error(await f.list(query), 20001, { fields }, LIST, 'get');

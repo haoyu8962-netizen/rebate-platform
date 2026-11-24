@@ -10239,12 +10239,13 @@ export const CONTRACT_ROUTE_SCHEMAS = {
         },
         "resource": {
           "type": "string",
-          "description": "Source list of an export task (enum export_resource): users = GET /admin/v1/users\n(needs user.list), audit_logs = GET /admin/v1/audit-logs (signed in is enough; own\nrecords only without audit.view_all), tax_withdrawals = the quarterly tax export of\nBR-WDR-21, which has no source list (see POST /admin/v1/exports), ledger = GET\n/admin/v1/ledger (needs fund.view or user.lookup; always masked).\n",
+          "description": "Source list of an export task (enum export_resource): users = GET /admin/v1/users\n(needs user.list), audit_logs = GET /admin/v1/audit-logs (signed in is enough; own\nrecords only without audit.view_all), tax_withdrawals = the quarterly tax export of\nBR-WDR-21, which has no source list (see POST /admin/v1/exports), ledger = GET\n/admin/v1/ledger (needs fund.view or user.lookup; always masked), orders = GET\n/admin/v1/orders (needs order.view; always masked).\n",
           "enum": [
             "users",
             "audit_logs",
             "tax_withdrawals",
-            "ledger"
+            "ledger",
+            "orders"
           ]
         },
         "from": {
@@ -10514,6 +10515,159 @@ export const CONTRACT_ROUTE_SCHEMAS = {
                   "minLength": 1,
                   "maxLength": 128,
                   "description": "Exact voucher biz_id."
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Export of the order list (GET /admin/v1/orders, CT-24x); always masked (the phone number\n3 + 4, BR-ID-33), so neither unmasked nor reason is accepted.\n",
+          "additionalProperties": false,
+          "required": [
+            "resource",
+            "filters"
+          ],
+          "properties": {
+            "resource": {
+              "type": "string",
+              "enum": [
+                "orders"
+              ]
+            },
+            "filters": {
+              "type": "object",
+              "description": "Filters of an orders export (CT-24x): the query parameters of GET /admin/v1/orders without\npaging, judged the same way (20001 for a range whose min is greater than its max, naming\nboth ends; a row whose compared value is null never matches), plus optional order_ids.\nEach property has the list parameter's own schema.\n",
+              "additionalProperties": false,
+              "properties": {
+                "platform": {
+                  "type": "string",
+                  "description": "Platform (contracts/enums/platform.yaml platform).",
+                  "enum": [
+                    "taobao",
+                    "jd",
+                    "pdd",
+                    "meituan",
+                    "vip",
+                    "douyin",
+                    "eleme",
+                    "kuaishou",
+                    "suning"
+                  ]
+                },
+                "platform_status": {
+                  "type": "string",
+                  "description": "Union order status (contracts/enums/order.yaml platform_status; BR-FUND-01, BR-FUND-02).",
+                  "enum": [
+                    "DEPOSIT_PAID",
+                    "PAID",
+                    "RECEIVED",
+                    "SETTLED",
+                    "INVALID"
+                  ]
+                },
+                "rebate_status": {
+                  "type": "string",
+                  "description": "Rebate status (contracts/enums/order.yaml rebate_status; BR-FUND-01).",
+                  "enum": [
+                    "UNATTRIBUTED",
+                    "ESTIMATED",
+                    "WAITING",
+                    "CREDITED",
+                    "VOID",
+                    "CLAWED_BACK"
+                  ]
+                },
+                "flag": {
+                  "type": "string",
+                  "description": "A flag of an admin order row (enum admin_order_flag); the keys of AdminOrderFlags.",
+                  "enum": [
+                    "locked",
+                    "status_locked",
+                    "rights_pending",
+                    "hold"
+                  ]
+                },
+                "user_id": {
+                  "type": "string",
+                  "description": "Entity id, a UUIDv7 string (04 §5).",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "q": {
+                  "type": "string",
+                  "description": "As the list's q (trimmed, spaces removed, then 1–64 characters, else 20001)."
+                },
+                "paid_from": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "Earliest paid_at, inclusive."
+                },
+                "paid_to": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "Latest paid_at, exclusive."
+                },
+                "item_id": {
+                  "type": "string",
+                  "pattern": "^\\s*\\S(?:[\\s\\S]{0,62}\\S)?\\s*$",
+                  "description": "The product id stored on the order; trimmed of surrounding whitespace, then 1–64\ncharacters, matched exactly. Same rule as the list's item_id.\n"
+                },
+                "order_tail": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9]{6}$",
+                  "description": "6 letters or digits, matching the last 6 characters of sub_order_id, or of\nparent_order_id when it is not null. Same rule as the list's order_tail.\n"
+                },
+                "title_kw": {
+                  "type": "string",
+                  "pattern": "^\\s*\\S[\\s\\S]{0,30}\\S\\s*$",
+                  "description": "Trimmed of surrounding whitespace, then 2–32 characters; a case-insensitive substring\nof the title. Same rule as the list's title_kw.\n"
+                },
+                "rate_bp_min": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0,
+                  "maximum": 10000,
+                  "description": "Lowest commission_rate_bp, inclusive."
+                },
+                "rate_bp_max": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0,
+                  "maximum": 10000,
+                  "description": "Highest commission_rate_bp, inclusive."
+                },
+                "est_fen_min": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0,
+                  "description": "Lowest est_commission_fen, inclusive, integer fen."
+                },
+                "est_fen_max": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0,
+                  "description": "Highest est_commission_fen, inclusive, integer fen."
+                },
+                "received_from": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "Earliest received_at, inclusive."
+                },
+                "received_to": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "Latest received_at, exclusive."
+                },
+                "order_ids": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 200,
+                  "description": "Only these sub-orders (the rows' order_id, the console's ticked rows), combined with the\nother filters by AND; an id that is unknown or of another app matches nothing.\n",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
                 }
               }
             }
@@ -11810,6 +11964,48 @@ export const CONTRACT_ROUTE_SCHEMAS = {
           "format": "date-time"
         },
         "paid_to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "item_id": {
+          "type": "string",
+          "pattern": "^\\s*\\S(?:[\\s\\S]{0,62}\\S)?\\s*$"
+        },
+        "order_tail": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9]{6}$"
+        },
+        "title_kw": {
+          "type": "string",
+          "pattern": "^\\s*\\S[\\s\\S]{0,30}\\S\\s*$"
+        },
+        "rate_bp_min": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "rate_bp_max": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "est_fen_min": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0
+        },
+        "est_fen_max": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0
+        },
+        "received_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "received_to": {
           "type": "string",
           "format": "date-time"
         }

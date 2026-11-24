@@ -1,0 +1,119 @@
+{
+  "red_tests": [
+    "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-FILTER#1] 列表筛选的边界、可选性和错误码",
+    "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-ROW#1] 保留旧订单行，新增字段可省略",
+    "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-SCOPE#1] 列表支持商品筛选和商品 ID，排除店铺和标签",
+    "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-COUNT#1] 状态计数的计划标记、鉴权和筛选",
+    "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-COUNT#2] 状态计数接受列表返利状态与非负整数",
+    "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-SUMMARY#1] 汇总的计划标记、鉴权和筛选",
+    "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-SUMMARY#2] 汇总只接受规定的五个非负整数",
+    "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-EXPORT#1] 导出来源枚举登记 orders",
+    "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-EXPORT#2] 订单导出沿用列表筛选且不分页",
+    "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-EXPORT#3] 订单导出可附带 1–200 个 UUID"
+  ],
+  "risk_note": "CT-24x (D10-2669 / D10-2673). Contract-only: contracts/openapi.yaml + enums + regenerated contracts-ts and route schemas, the exports controller narrowed to refuse resource=orders with 20001 until D2, and the contracts-ts unit tests' full sets. New list filters and optional row fields, two planned admin operations (status counts, summary), orders export always masked. Two frozen test blocks changed under modify_existing (rule_change, br BR-ID-33): [AC-F1-08fd-SOURCE#1] (D10-2710) and the [AC-B1-34f#14] it.each table's ?resource=orders sample (D10-2780, whole-block template entry) — needs the owner label (#24).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "Codex contract r1 fail: 4 S1 (order_tail parent number, title_kw / item_id trimming and case, status counts) + 1 S2 (filters accepted but not applied before D2), all fixed in implementation round 4 (the count wording follows the frozen rule tests: a zero status may be left out and reads as 0, D10-2751); r2 pass with 1 S2 (duplicate status entries not excluded by schema; planned operation) logged as FU. couli-runs/CT-24x/review-contract-r1.json, review-contract-r2.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "rule tests written by Codex (codex-run.sh impl --phase test): round 1 (10 tests), round 2 one line inside the frozen [AC-F1-08fd-SOURCE#1] block (approvals 166, D10-2710 / D10-2712), round 3 one sample row of the frozen [AC-B1-34f#14] it.each table (approvals 168, D10-2780); spec-test by an independent Claude context (claude-run.sh, fresh session; tester codex): r1 pass, r2 and r3 incremental pass (couli-runs/CT-24x/review-spec-r1.json, review-spec-r2.json, review-spec-r3.json)",
+    "model": "claude-opus-5-5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-exports-filters/source.test.ts",
+      "test": "[AC-F1-08fd-SOURCE#1] 来源页面列全部 export_resource（中文名取 resource 表、无名显示编码）外加全部，选定后按【查询】才带 resource，选全部不带；任何状态的行都没有【重新导出】",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-08fd-SOURCE#1] 来源页面列全部 export_resource（中文名取 resource 表、无名显示编码）外加全部，选定后按【查询】才带 resource，选全部不带；任何状态的行都没有【重新导出】',\n  { timeout: 120_000 },\n  async () => {\n    const server = createServer(undefined, TASKS);\n    await mount(server);\n    await readsDone(server, 1);\n    await rowsAre(ids(TASKS));\n\n    expect(sourceShown()).toBe('全部');\n    expect(await sourceOptions()).toEqual(SOURCE_OPTIONS);\n\n    // Picking alone sends nothing and keeps the rows.\n    await chooseSource('余额流水');\n    for (let round = 0; round < 5; round += 1) await pause();\n    expect(reads(server)).toHaveLength(1);\n    expect(rowIds()).toEqual(ids(TASKS));\n\n    await query(server);\n    expect(reads(server)[1]).toEqual(listQuery({ resource: 'ledger' }));\n    await rowsAre([LEDGER_EXPIRED.id]);\n    expect(resourceOf(LEDGER_EXPIRED.id)).toBe('余额流水');\n\n    await chooseSource('tax_withdrawals');\n    await query(server);\n    expect(reads(server)[2]).toEqual(listQuery({ resource: 'tax_withdrawals' }));\n    await rowsAre([TAX_DONE.id]);\n    expect(resourceOf(TAX_DONE.id)).toBe('tax_withdrawals');\n\n    await chooseSource('用户列表');\n    await query(server);\n    expect(reads(server)[3]).toEqual(listQuery({ resource: 'users' }));\n    await rowsAre([USERS_DONE.id, USERS_CANCELLED.id]);\n    expect(resourceOf(USERS_DONE.id)).toBe('用户列表');\n\n    await chooseSource('全部');\n    await query(server);\n    expect(reads(server)[4]).toEqual(listQuery());\n    await rowsAre(ids(TASKS));\n    expect(resourceOf(AUDIT_FAILED.id)).toBe('操作日志');\n\n    expect(reads(server)).toEqual([\n      listQuery(),\n      listQuery({ resource: 'ledger' }),\n      listQuery({ resource: 'tax_withdrawals' }),\n      listQuery({ resource: 'users' }),\n      listQuery(),\n    ]);\n    // 【下载】 and 【重试】 unchanged; nothing else in any row, 【重新导出】 nowhere.\n    expect(TASKS.map((task) => actionsOf(task.id))).toEqual([\n      [COPY.download],\n      [COPY.retry],\n      [COPY.download],\n      [],\n      [],\n    ]);\n    expectNoReexport();\n    expect(server.log.filter((request) => request.method !== 'GET')).toEqual([]);\n  },\n);",
+      "after": "it(\n  '[AC-F1-08fd-SOURCE#1] 来源页面列全部 export_resource（中文名取 resource 表、无名显示编码）外加全部，选定后按【查询】才带 resource，选全部不带；任何状态的行都没有【重新导出】',\n  { timeout: 120_000 },\n  async () => {\n    const server = createServer(undefined, TASKS);\n    await mount(server);\n    await readsDone(server, 1);\n    await rowsAre(ids(TASKS));\n\n    expect(sourceShown()).toBe('全部');\n    expect(await sourceOptions()).toEqual([...SOURCE_OPTIONS, 'orders']);\n\n    // Picking alone sends nothing and keeps the rows.\n    await chooseSource('余额流水');\n    for (let round = 0; round < 5; round += 1) await pause();\n    expect(reads(server)).toHaveLength(1);\n    expect(rowIds()).toEqual(ids(TASKS));\n\n    await query(server);\n    expect(reads(server)[1]).toEqual(listQuery({ resource: 'ledger' }));\n    await rowsAre([LEDGER_EXPIRED.id]);\n    expect(resourceOf(LEDGER_EXPIRED.id)).toBe('余额流水');\n\n    await chooseSource('tax_withdrawals');\n    await query(server);\n    expect(reads(server)[2]).toEqual(listQuery({ resource: 'tax_withdrawals' }));\n    await rowsAre([TAX_DONE.id]);\n    expect(resourceOf(TAX_DONE.id)).toBe('tax_withdrawals');\n\n    await chooseSource('用户列表');\n    await query(server);\n    expect(reads(server)[3]).toEqual(listQuery({ resource: 'users' }));\n    await rowsAre([USERS_DONE.id, USERS_CANCELLED.id]);\n    expect(resourceOf(USERS_DONE.id)).toBe('用户列表');\n\n    await chooseSource('全部');\n    await query(server);\n    expect(reads(server)[4]).toEqual(listQuery());\n    await rowsAre(ids(TASKS));\n    expect(resourceOf(AUDIT_FAILED.id)).toBe('操作日志');\n\n    expect(reads(server)).toEqual([\n      listQuery(),\n      listQuery({ resource: 'ledger' }),\n      listQuery({ resource: 'tax_withdrawals' }),\n      listQuery({ resource: 'users' }),\n      listQuery(),\n    ]);\n    // 【下载】 and 【重试】 unchanged; nothing else in any row, 【重新导出】 nowhere.\n    expect(TASKS.map((task) => actionsOf(task.id))).toEqual([\n      [COPY.download],\n      [COPY.retry],\n      [COPY.download],\n      [],\n      [],\n    ]);\n    expectNoReexport();\n    expect(server.log.filter((request) => request.method !== 'GET')).toEqual([]);\n  },\n);",
+      "mutation": [
+        {
+          "mutant": "契约为规则测试提交上的版本（本单实现之前，export_resource 尚无 orders）：测试机 --tests 只跑 test/spec/frontend/admin-exports-filters/source.test.ts，非 0 退出（couli-runs/CT-24x/land/probe-spec.out，变基前的规则测试提交 3b57beb3284f；变基后规则测试内容不变，现为 84ec4883e364）；同文件在实现头上 exit 0（land/probe-head.out）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-33"]
+    },
+    {
+      "file": "test/spec/admin/exports/list.int.test.ts",
+      "test": "[AC-B1-34f#14] 列表拒绝非法筛选 %s",
+      "reason": "rule_change",
+      "before": "it.each([\n  ['?page_size=201', ['page_size']],\n  ['?from=2026-10-02T00:00:00Z&to=2026-10-01T00:00:00Z', ['from', 'to']],\n  ['?status=unknown', ['status']],\n  ['?resource=orders', ['resource']],\n] as const)('[AC-B1-34f#14] 列表拒绝非法筛选 %s', async (query, fields) => {\n  const f = await setup(h);\n  await error(await f.list(query), 20001, { fields }, LIST, 'get');\n  expect(await f.audits()).toEqual([]);\n});",
+      "after": "it.each([\n  ['?page_size=201', ['page_size']],\n  ['?from=2026-10-02T00:00:00Z&to=2026-10-01T00:00:00Z', ['from', 'to']],\n  ['?status=unknown', ['status']],\n  ['?resource=not_a_resource', ['resource']],\n] as const)('[AC-B1-34f#14] 列表拒绝非法筛选 %s', async (query, fields) => {\n  const f = await setup(h);\n  await error(await f.list(query), 20001, { fields }, LIST, 'get');\n  expect(await f.audits()).toEqual([]);\n});",
+      "mutation": [
+        {
+          "mutant": "冻结前的样例 ?resource=orders 放在本单实现上（export_resource 已含 orders）：测试机分段全量第 3 段（int-shard/3，树 fb731f90601e）该行回 200 而非 20001，断言失败（log.txt:1339 / :1354）——旧块在新规则下红；改后的样例 ?resource=not_a_resource 在实现头上的分段全量里绿（land/sharded-final.out）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-33"]
+    }
+  ],
+  "task": "CT-24x",
+  "spec_ref": "081b17766395bc9b55b28eb9f8b9fdae4459b99e",
+  "spec_commit": "33726a203c82844d4f1ccff70d8cf28822ec2749",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "33726a203c82844d4f1ccff70d8cf28822ec2749",
+      "tree": "547d0a49414359ab7ffeb939a6979ba54f89f99b",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-24T14:37:48Z",
+      "finished_at": "2026-11-24T14:37:52Z",
+      "red_tests": [
+        "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-FILTER#1] 列表筛选的边界、可选性和错误码",
+        "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-ROW#1] 保留旧订单行，新增字段可省略",
+        "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-SCOPE#1] 列表支持商品筛选和商品 ID，排除店铺和标签",
+        "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-COUNT#1] 状态计数的计划标记、鉴权和筛选",
+        "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-COUNT#2] 状态计数接受列表返利状态与非负整数",
+        "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-SUMMARY#1] 汇总的计划标记、鉴权和筛选",
+        "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-SUMMARY#2] 汇总只接受规定的五个非负整数",
+        "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-EXPORT#1] 导出来源枚举登记 orders",
+        "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-EXPORT#2] 订单导出沿用列表筛选且不分页",
+        "test/spec/contracts/admin-orders-query/admin-orders-query.test.ts > [AC-CT-24x-EXPORT#3] 订单导出可附带 1–200 个 UUID"
+      ],
+      "expected": ["test/spec/contracts/admin-orders-query/admin-orders-query.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "40dbd19cf5dd9c3e08e570fb9f72b342f71b8f4654b90808b3d0d7677585dc17"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "436157e427f4f35614c291d5c8c9b77a74b52158",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}

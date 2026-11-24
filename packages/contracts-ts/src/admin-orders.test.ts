@@ -136,6 +136,15 @@ it('[CT-24m] the list filters by platform, both statuses, flag, user_id, q and t
     'q',
     'paid_from',
     'paid_to',
+    'item_id',
+    'order_tail',
+    'title_kw',
+    'rate_bp_min',
+    'rate_bp_max',
+    'est_fen_min',
+    'est_fen_max',
+    'received_from',
+    'received_to',
   ]);
   for (const p of params.slice(1)) {
     expect(p.in, p.name).toBe('query');
@@ -186,7 +195,12 @@ it('[CT-24m] the detail is keyed by order_id; unknown and another user are delib
 it('[CT-24m] rows carry the spec columns, the user as user_id and masked phone, and the flag group', () => {
   const row = schema('AdminOrderListItem');
   expect(row.required).toEqual(LIST_FIELDS);
-  expect(Object.keys(row.properties!)).toEqual(LIST_FIELDS);
+  expect(Object.keys(row.properties!)).toEqual([
+    ...LIST_FIELDS,
+    'item_id',
+    'commission_rate_bp',
+    'received_at',
+  ]);
   expect(schema('AdminOrderUser').required).toEqual(['user_id', 'phone_masked']);
   expect(Object.keys(schema('AdminOrderUser').properties!)).toEqual(['user_id', 'phone_masked']);
   const flags = schema('AdminOrderFlags');

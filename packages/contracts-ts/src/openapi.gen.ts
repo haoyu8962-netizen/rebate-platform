@@ -3828,7 +3828,8 @@ export interface paths {
          * @description Permission point `export` (04 §11.1) and, in addition, the permission of the source list
          *     itself (enum export_resource: `users` needs `user.list`; `audit_logs` needs no more than
          *     being signed in; `ledger` needs `fund.view` or `user.lookup`, either one, as GET
-         *     /admin/v1/ledger; `tax_withdrawals` has its own rule, see below); lacking either is 10403
+         *     /admin/v1/ledger; `orders` needs `order.view`; `tax_withdrawals` has its own rule, see
+         *     below); lacking either is 10403
          *     with `data.reason=admin_permission_denied`. The
          *     task is generated asynchronously as one CSV file in a private object-storage bucket
          *     (BR-ID-34 细则「后台导出任务」); the response is 202 with the new task in status pending.
@@ -3875,6 +3876,21 @@ export interface paths {
          *     always masked (`masked=true`) and the request takes neither `unmasked` nor `reason`
          *     (either one is 20001). A user who is unknown or of another app fails the task (20001 for
          *     the list).
+         *     Orders export (`resource=orders`, GET /admin/v1/orders; CT-24x, D10-2686): `export` and
+         *     `order.view` (an account holding only `user.lookup` cannot export orders), re-checked on
+         *     download and retry. `filters` takes every query parameter of the list except `page` and
+         *     `page_size` (`platform`, `platform_status`, `rebate_status`, `flag`, `user_id`, `q`,
+         *     `paid_from`, `paid_to`, `item_id`, `order_tail`, `title_kw`, `rate_bp_min`,
+         *     `rate_bp_max`, `est_fen_min`, `est_fen_max`, `received_from`, `received_to`), judged as
+         *     on the list (a range whose min is greater than its max is 20001 naming both ends), and
+         *     optionally `order_ids` (1–200 UUIDs, the ticked rows; ANDed with the other filters). The
+         *     file holds the rows the list gives for these filters, in the list's order, with the
+         *     list's columns; the attributed user's phone number is masked 3 + 4 (BR-ID-33), never the
+         *     full number. An orders task is always masked (`masked=true`) and the request takes
+         *     neither `unmasked` nor `reason` (either one is 20001). Lifecycle and retention as for
+         *     every export (below). Until the D2 back end merges, the server answers every
+         *     `resource=orders` create with 20001 (`data.fields=[resource]`) before any permission
+         *     check: no task, no audit.
          *     Quarterly tax export (`resource=tax_withdrawals`, BR-WDR-21): `filters.quarter` selects the
          *     natural quarter by `paid_at` (+08:00).
          *     Masked version: `export` and `fund.view`, no step-up, no `reason` (`reason` without
@@ -5018,6 +5034,28 @@ export interface paths {
          *     page (`items=[]`, `total=0`), not an error. A value outside an enum is 20001 with
          *     `data.fields` naming the parameter.
          *
+         *     More filters (CT-24x, D10-2669 / D10-2673 / D10-2686), also combined with AND:
+         *     `item_id` (the product id stored on the order; trimmed of surrounding whitespace, then
+         *     1–64 characters, matched exactly), `order_tail` (6 letters or digits, matching the last 6
+         *     characters of `sub_order_id`, or of `parent_order_id` when it is not null), `title_kw`
+         *     (trimmed of surrounding whitespace, then 2–32 characters, a case-insensitive substring of
+         *     the title), `rate_bp_min` / `rate_bp_max` (inclusive bounds
+         *     on `commission_rate_bp`, integers 0–10000), `est_fen_min` / `est_fen_max` (inclusive
+         *     bounds on `est_commission_fen`, non-negative integer fen) and `received_from` (inclusive)
+         *     / `received_to` (exclusive) on `received_at` (ISO 8601 with offset). A value outside its
+         *     schema is 20001 with `data.fields` naming the parameter; a range whose min is greater
+         *     than its max (`rate_bp_min` > `rate_bp_max`, `est_fen_min` > `est_fen_max`,
+         *     `received_from` later than `received_to`) is 20001 with `data.fields` naming both ends;
+         *     a row whose compared value is null (no title, no rate, no estimate, not received) never
+         *     matches that filter. These parameters and the row fields `item_id`,
+         *     `commission_rate_bp`, `received_at` are declared ahead of the D2 backend: until it ships
+         *     the server may omit the new row fields, and a well-formed new parameter may be accepted
+         *     (200) but not applied, so the page is not narrowed by it. Callers should send the new
+         *     parameters only after the D2 backend ships. Once it ships, the status counts
+         *     (GET /admin/v1/orders/status-counts), the summary (GET /admin/v1/orders/summary) and the
+         *     orders export (`resource=orders`) judge and match every one of these parameters exactly as
+         *     this list does.
+         *
          *     Order: `paid_at` descending (rows without `paid_at` last), then the server's internal
          *     order for the same time. Pages with `page` (any positive integer, as AdminPage; a page past
          *     the last one is `items=[]`) and `page_size` ≤ 200 (a `page_size` above 200 is 20001, as
@@ -5028,6 +5066,86 @@ export interface paths {
          *     contract. Reading does not write an audit record.
          */
         get: operations["adminListOrders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/orders/status-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sub-order counts per rebate status for the order list's filters (planned)
+         * @description The status tabs of the console's order list (CT-24x, D10-2669 / D10-2673 / D10-2686).
+         *     Declared ahead of the D2 backend. This literal path is matched before
+         *     /admin/v1/orders/{order_id} (whose order_id is a UUID), so `status-counts` is never read as an
+         *     order id.
+         *     Read only, no step-up. Permission point `order.view` (04 §11.2) reads every sub-order of
+         *     the console's app. An account holding only `user.lookup` (04 §11.1: it may see the orders
+         *     of a user it looks up) may read the list only together with `user_id`, the user detail
+         *     page's orders tab (design/specs/admin-user-detail.md); without `user_id` that account gets
+         *     10403 with `data.reason=admin_permission_denied`, the same as an account holding neither
+         *     point. A super admin holds every point.
+         *
+         *     Filters: the same query parameters as GET /admin/v1/orders, judged the same way (20001
+         *     for a value outside its schema or a range whose min is greater than its max, naming both
+         *     ends; a row whose compared value is null never matches; a `user_id` that names no user of
+         *     the app is an empty result, not an error), without `page` and `page_size` and without `rebate_status` (the
+         *     counts are per rebate status). `items` has one entry per rebate status (enum
+         *     rebate_status) with at least one sub-order in the filter set, `count` the number of
+         *     sub-orders (rows of the list) in that status; a status with no sub-order may be left out,
+         *     and a client reads a status missing from `items` as count 0 (the admin page shows no
+         *     badge for 0). Each status appears at most once.
+         *     `total` is the number of sub-orders of the filter set, the sum of the counts and the
+         *     `total` GET /admin/v1/orders would give for the same filters. Reading does not write an
+         *     audit record.
+         */
+        get: operations["adminCountOrdersByStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/orders/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sums and counts over the order list's filters (planned)
+         * @description The summary bar of the console's order list (CT-24x, D10-2669 / D10-2673 / D10-2686).
+         *     Declared ahead of the D2 backend. This literal path is matched before
+         *     /admin/v1/orders/{order_id} (whose order_id is a UUID), so `summary` is never read as an
+         *     order id.
+         *     Read only, no step-up. Permission point `order.view` (04 §11.2) reads every sub-order of
+         *     the console's app. An account holding only `user.lookup` (04 §11.1: it may see the orders
+         *     of a user it looks up) may read the list only together with `user_id`, the user detail
+         *     page's orders tab (design/specs/admin-user-detail.md); without `user_id` that account gets
+         *     10403 with `data.reason=admin_permission_denied`, the same as an account holding neither
+         *     point. A super admin holds every point.
+         *
+         *     Filters: the same query parameters as GET /admin/v1/orders, judged the same way (20001
+         *     for a value outside its schema or a range whose min is greater than its max, naming both
+         *     ends; a row whose compared value is null never matches; a `user_id` that names no user of
+         *     the app is an empty result, not an error), without `page` and `page_size`.
+         *     The summary only sums and counts fields already stored on the sub-orders of the filter
+         *     set; there is no "effective order" figure and no profit figure (08 has no rule for them,
+         *     D10-2673). See each field of AdminOrderSummary for what it sums. Amounts are integer
+         *     fen; an empty filter set gives every field 0. Reading does not write an audit record.
+         */
+        get: operations["adminSummarizeOrders"];
         put?: never;
         post?: never;
         delete?: never;
@@ -17956,10 +18074,11 @@ export interface components {
          *     (needs user.list), audit_logs = GET /admin/v1/audit-logs (signed in is enough; own
          *     records only without audit.view_all), tax_withdrawals = the quarterly tax export of
          *     BR-WDR-21, which has no source list (see POST /admin/v1/exports), ledger = GET
-         *     /admin/v1/ledger (needs fund.view or user.lookup; always masked).
+         *     /admin/v1/ledger (needs fund.view or user.lookup; always masked), orders = GET
+         *     /admin/v1/orders (needs order.view; always masked).
          * @enum {string}
          */
-        AdminExportResource: "users" | "audit_logs" | "tax_withdrawals" | "ledger";
+        AdminExportResource: "users" | "audit_logs" | "tax_withdrawals" | "ledger" | "orders";
         /** @description Filters of a users export, the query parameters of GET /admin/v1/users without paging. */
         AdminExportUserFilters: {
             risk_state?: components["schemas"]["AdminUserRiskStateCode"];
@@ -18022,6 +18141,81 @@ export interface components {
             user_id: string;
         };
         /**
+         * @description Filters of an orders export (CT-24x): the query parameters of GET /admin/v1/orders without
+         *     paging, judged the same way (20001 for a range whose min is greater than its max, naming
+         *     both ends; a row whose compared value is null never matches), plus optional order_ids.
+         *     Each property has the list parameter's own schema.
+         */
+        AdminExportOrderFilters: {
+            platform?: components["schemas"]["PlatformCode"];
+            platform_status?: components["schemas"]["AdminOrderPlatformStatus"];
+            rebate_status?: components["schemas"]["AdminOrderRebateStatus"];
+            flag?: components["schemas"]["AdminOrderFlag"];
+            user_id?: components["schemas"]["Id"];
+            /** @description As the list's q (trimmed, spaces removed, then 1–64 characters, else 20001). */
+            q?: string;
+            /**
+             * Format: date-time
+             * @description Earliest paid_at, inclusive.
+             */
+            paid_from?: string;
+            /**
+             * Format: date-time
+             * @description Latest paid_at, exclusive.
+             */
+            paid_to?: string;
+            /**
+             * @description The product id stored on the order; trimmed of surrounding whitespace, then 1–64
+             *     characters, matched exactly. Same rule as the list's item_id.
+             */
+            item_id?: string;
+            /**
+             * @description 6 letters or digits, matching the last 6 characters of sub_order_id, or of
+             *     parent_order_id when it is not null. Same rule as the list's order_tail.
+             */
+            order_tail?: string;
+            /**
+             * @description Trimmed of surrounding whitespace, then 2–32 characters; a case-insensitive substring
+             *     of the title. Same rule as the list's title_kw.
+             */
+            title_kw?: string;
+            /**
+             * Format: int32
+             * @description Lowest commission_rate_bp, inclusive.
+             */
+            rate_bp_min?: number;
+            /**
+             * Format: int32
+             * @description Highest commission_rate_bp, inclusive.
+             */
+            rate_bp_max?: number;
+            /**
+             * Format: int64
+             * @description Lowest est_commission_fen, inclusive, integer fen.
+             */
+            est_fen_min?: number;
+            /**
+             * Format: int64
+             * @description Highest est_commission_fen, inclusive, integer fen.
+             */
+            est_fen_max?: number;
+            /**
+             * Format: date-time
+             * @description Earliest received_at, inclusive.
+             */
+            received_from?: string;
+            /**
+             * Format: date-time
+             * @description Latest received_at, exclusive.
+             */
+            received_to?: string;
+            /**
+             * @description Only these sub-orders (the rows' order_id, the console's ticked rows), combined with the
+             *     other filters by AND; an id that is unknown or of another app matches nothing.
+             */
+            order_ids?: string[];
+        };
+        /**
          * @description Export of the users list. unmasked true asks for the full phone numbers (pii.reveal_phone,
          *     totp step-up and reason required); reason is only accepted together with unmasked true.
          */
@@ -18068,10 +18262,19 @@ export interface components {
             filters: components["schemas"]["AdminExportLedgerFilters"];
         };
         /**
+         * @description Export of the order list (GET /admin/v1/orders, CT-24x); always masked (the phone number
+         *     3 + 4, BR-ID-33), so neither unmasked nor reason is accepted.
+         */
+        AdminExportCreateOrdersRequest: {
+            /** @enum {string} */
+            resource: "orders";
+            filters: components["schemas"]["AdminExportOrderFilters"];
+        };
+        /**
          * @description One branch per source list (enum export_resource), told apart by `resource`; `filters`
          *     follows that list's query parameters (`tax_withdrawals` has no list, only `quarter`).
          */
-        AdminExportCreateRequest: components["schemas"]["AdminExportCreateUsersRequest"] | components["schemas"]["AdminExportCreateAuditLogsRequest"] | components["schemas"]["AdminExportCreateTaxWithdrawalsRequest"] | components["schemas"]["AdminExportCreateLedgerRequest"];
+        AdminExportCreateRequest: components["schemas"]["AdminExportCreateUsersRequest"] | components["schemas"]["AdminExportCreateAuditLogsRequest"] | components["schemas"]["AdminExportCreateTaxWithdrawalsRequest"] | components["schemas"]["AdminExportCreateLedgerRequest"] | components["schemas"]["AdminExportCreateOrdersRequest"];
         /**
          * @description Empty for a masked task. For an unmasked task (masked false) reason is required, with a
          *     new totp-tier X-Step-Up-Token; for a masked task reason is 20001.
@@ -19071,6 +19274,23 @@ export interface components {
             /** @description Set while hold is true, else null. */
             hold_reason: components["schemas"]["AdminOrderHoldReason"] | null;
             flags: components["schemas"]["AdminOrderFlags"];
+            /**
+             * @description The union's product id as stored on the order (orders.raw_item_id, CT-24x); omitted
+             *     before the D2 backend serves it.
+             */
+            item_id?: string;
+            /**
+             * Format: int32
+             * @description Commission rate of the union order in 1/10000 (orders.commission_rate_bp, CT-24x);
+             *     null when the union gave none; omitted before the D2 backend serves it.
+             */
+            commission_rate_bp?: number | null;
+            /**
+             * Format: date-time
+             * @description Confirmed receipt time (orders.received_at, CT-24x); null when not received yet;
+             *     omitted before the D2 backend serves it.
+             */
+            received_at?: string | null;
         };
         AdminOrderPage: {
             items: components["schemas"]["AdminOrderListItem"][];
@@ -19085,6 +19305,69 @@ export interface components {
             code: components["schemas"]["SuccessCode"];
             msg: string;
             data: components["schemas"]["AdminOrderPage"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /** @description Number of sub-orders of the filter set in one rebate status. */
+        AdminOrderStatusCount: {
+            rebate_status: components["schemas"]["AdminOrderRebateStatus"];
+            /** Format: int64 */
+            count: number;
+        };
+        AdminOrderStatusCounts: {
+            /** @description One entry per rebate status with sub-orders, at most once each; a missing status is count 0. */
+            items: components["schemas"]["AdminOrderStatusCount"][];
+            /**
+             * Format: int64
+             * @description Sub-orders of the filter set, the sum of the counts.
+             */
+            total: number;
+        };
+        AdminOrderStatusCountsResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminOrderStatusCounts"];
+            trace_id: components["schemas"]["TraceId"];
+        };
+        /**
+         * @description Sums and counts over the sub-orders of the filter set, from stored fields only (CT-24x,
+         *     D10-2673): no effective-order or profit figure. A null value is not counted in a sum.
+         */
+        AdminOrderSummary: {
+            /**
+             * Format: int64
+             * @description Number of sub-orders (rows of GET /admin/v1/orders) in the filter set.
+             */
+            sub_order_count: number;
+            /**
+             * Format: int64
+             * @description Sum of the sub-orders' pay_amount_fen (orders.pay_amount_fen), integer fen; a
+             *     sub-order whose pay_amount_fen is null adds nothing.
+             */
+            pay_amount_fen: number;
+            /**
+             * Format: int64
+             * @description Sum of the sub-orders' est_commission_fen (orders.est_commission_fen, the union's
+             *     estimate), integer fen; a sub-order whose est_commission_fen is null adds nothing.
+             */
+            est_commission_fen: number;
+            /**
+             * Format: int64
+             * @description Sum of platform_retain_fen of each sub-order's current commission split snapshot
+             *     (commission_splits, one per order), integer fen; a sub-order without a commission
+             *     split adds nothing.
+             */
+            platform_retain_fen: number;
+            /**
+             * Format: int64
+             * @description Number of distinct attributed users (orders.user_id) among the sub-orders; unattributed
+             *     sub-orders (user_id null) are not counted.
+             */
+            buyer_count: number;
+        };
+        AdminOrderSummaryResponse: {
+            code: components["schemas"]["SuccessCode"];
+            msg: string;
+            data: components["schemas"]["AdminOrderSummary"];
             trace_id: components["schemas"]["TraceId"];
         };
         /** @description One row of order_status_history (04 §3.2, insert only). */
@@ -23055,6 +23338,71 @@ export interface components {
         AdminOrderPaidFrom: string;
         /** @description Latest paid_at, exclusive (ISO 8601 with offset). */
         AdminOrderPaidTo: string;
+        /**
+         * @description Only sub-orders of this product (the union's product id as stored on the order,
+         *     orders.raw_item_id, the row's item_id). The value is first trimmed of surrounding
+         *     whitespace; the trimmed value must be 1–64 characters, else 20001 with
+         *     data.fields=[item_id], and it is matched exactly (case-sensitive, no partial match)
+         *     against item_id. The pattern states the same rule on the raw value. The list, the status
+         *     counts, the summary and the orders export apply it the same way (CT-24x; until the D2
+         *     backend ships, a well-formed value may be accepted but not applied).
+         */
+        AdminOrderItemIdFilter: string;
+        /**
+         * @description The last 6 characters of an order number, letters A–Z / a–z and digits only. A sub-order
+         *     matches when the value equals the last 6 characters of its sub-order number
+         *     (sub_order_id) or, when parent_order_id is not null, the last 6 characters of its parent
+         *     order number (parent_order_id); so a parent order's tail lists all its sub-orders.
+         *     Another length or character is 20001 with data.fields=[order_tail]. The list, the status
+         *     counts, the summary and the orders export apply it the same way (CT-24x; until the D2
+         *     backend ships, a well-formed value may be accepted but not applied).
+         */
+        AdminOrderTailFilter: string;
+        /**
+         * @description A keyword of the product title. The value is first trimmed of surrounding whitespace;
+         *     the trimmed value must be 2–32 characters, else 20001 with data.fields=[title_kw]. A row
+         *     matches when its title contains the trimmed value as a substring, compared
+         *     case-insensitively (`macbook` matches `MacBook Air`). A row whose title is null never
+         *     matches. The pattern states the same rule on the raw value. The list, the status counts,
+         *     the summary and the orders export apply it the same way (CT-24x; until the D2 backend
+         *     ships, a well-formed value may be accepted but not applied).
+         */
+        AdminOrderTitleKeywordFilter: string;
+        /**
+         * @description Lowest commission rate, inclusive, in 1/10000 (basis points 0–10000) compared with the
+         *     row's commission_rate_bp; outside 0–10000 or not an integer → 20001 with
+         *     data.fields=[rate_bp_min]; rate_bp_min greater than rate_bp_max → 20001 with
+         *     data.fields=[rate_bp_min, rate_bp_max]. A row without commission_rate_bp never matches
+         *     either bound (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+         */
+        AdminOrderRateBpMin: number;
+        /**
+         * @description Highest commission rate, inclusive, in 1/10000 (0–10000) compared with the row's
+         *     commission_rate_bp; outside 0–10000 or not an integer → 20001 with
+         *     data.fields=[rate_bp_max] (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+         */
+        AdminOrderRateBpMax: number;
+        /**
+         * @description Lowest estimated commission, inclusive, in integer fen compared with the row's
+         *     est_commission_fen; negative or not an integer → 20001 with data.fields=[est_fen_min];
+         *     est_fen_min greater than est_fen_max → 20001 with data.fields=[est_fen_min, est_fen_max].
+         *     A row whose est_commission_fen is null never matches either bound (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+         */
+        AdminOrderEstFenMin: number;
+        /**
+         * @description Highest estimated commission, inclusive, in integer fen compared with the row's
+         *     est_commission_fen; negative or not an integer → 20001 with data.fields=[est_fen_max]
+         *     (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+         */
+        AdminOrderEstFenMax: number;
+        /**
+         * @description Earliest received_at (confirmed receipt), inclusive (ISO 8601 with offset); later than
+         *     received_to → 20001 with data.fields=[received_from, received_to]. A row without
+         *     received_at never matches either bound (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+         */
+        AdminOrderReceivedFrom: string;
+        /** @description Latest received_at, exclusive (ISO 8601 with offset) (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied). */
+        AdminOrderReceivedTo: string;
         /** @description import_id of an Excel import task; unknown or of another app → 20001 with data.fields=[import_id]. */
         AdminRightsImportIdPath: components["schemas"]["Id"];
         /**
@@ -33820,6 +34168,71 @@ export interface operations {
                 paid_from?: components["parameters"]["AdminOrderPaidFrom"];
                 /** @description Latest paid_at, exclusive (ISO 8601 with offset). */
                 paid_to?: components["parameters"]["AdminOrderPaidTo"];
+                /**
+                 * @description Only sub-orders of this product (the union's product id as stored on the order,
+                 *     orders.raw_item_id, the row's item_id). The value is first trimmed of surrounding
+                 *     whitespace; the trimmed value must be 1–64 characters, else 20001 with
+                 *     data.fields=[item_id], and it is matched exactly (case-sensitive, no partial match)
+                 *     against item_id. The pattern states the same rule on the raw value. The list, the status
+                 *     counts, the summary and the orders export apply it the same way (CT-24x; until the D2
+                 *     backend ships, a well-formed value may be accepted but not applied).
+                 */
+                item_id?: components["parameters"]["AdminOrderItemIdFilter"];
+                /**
+                 * @description The last 6 characters of an order number, letters A–Z / a–z and digits only. A sub-order
+                 *     matches when the value equals the last 6 characters of its sub-order number
+                 *     (sub_order_id) or, when parent_order_id is not null, the last 6 characters of its parent
+                 *     order number (parent_order_id); so a parent order's tail lists all its sub-orders.
+                 *     Another length or character is 20001 with data.fields=[order_tail]. The list, the status
+                 *     counts, the summary and the orders export apply it the same way (CT-24x; until the D2
+                 *     backend ships, a well-formed value may be accepted but not applied).
+                 */
+                order_tail?: components["parameters"]["AdminOrderTailFilter"];
+                /**
+                 * @description A keyword of the product title. The value is first trimmed of surrounding whitespace;
+                 *     the trimmed value must be 2–32 characters, else 20001 with data.fields=[title_kw]. A row
+                 *     matches when its title contains the trimmed value as a substring, compared
+                 *     case-insensitively (`macbook` matches `MacBook Air`). A row whose title is null never
+                 *     matches. The pattern states the same rule on the raw value. The list, the status counts,
+                 *     the summary and the orders export apply it the same way (CT-24x; until the D2 backend
+                 *     ships, a well-formed value may be accepted but not applied).
+                 */
+                title_kw?: components["parameters"]["AdminOrderTitleKeywordFilter"];
+                /**
+                 * @description Lowest commission rate, inclusive, in 1/10000 (basis points 0–10000) compared with the
+                 *     row's commission_rate_bp; outside 0–10000 or not an integer → 20001 with
+                 *     data.fields=[rate_bp_min]; rate_bp_min greater than rate_bp_max → 20001 with
+                 *     data.fields=[rate_bp_min, rate_bp_max]. A row without commission_rate_bp never matches
+                 *     either bound (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                rate_bp_min?: components["parameters"]["AdminOrderRateBpMin"];
+                /**
+                 * @description Highest commission rate, inclusive, in 1/10000 (0–10000) compared with the row's
+                 *     commission_rate_bp; outside 0–10000 or not an integer → 20001 with
+                 *     data.fields=[rate_bp_max] (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                rate_bp_max?: components["parameters"]["AdminOrderRateBpMax"];
+                /**
+                 * @description Lowest estimated commission, inclusive, in integer fen compared with the row's
+                 *     est_commission_fen; negative or not an integer → 20001 with data.fields=[est_fen_min];
+                 *     est_fen_min greater than est_fen_max → 20001 with data.fields=[est_fen_min, est_fen_max].
+                 *     A row whose est_commission_fen is null never matches either bound (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                est_fen_min?: components["parameters"]["AdminOrderEstFenMin"];
+                /**
+                 * @description Highest estimated commission, inclusive, in integer fen compared with the row's
+                 *     est_commission_fen; negative or not an integer → 20001 with data.fields=[est_fen_max]
+                 *     (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                est_fen_max?: components["parameters"]["AdminOrderEstFenMax"];
+                /**
+                 * @description Earliest received_at (confirmed receipt), inclusive (ISO 8601 with offset); later than
+                 *     received_to → 20001 with data.fields=[received_from, received_to]. A row without
+                 *     received_at never matches either bound (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                received_from?: components["parameters"]["AdminOrderReceivedFrom"];
+                /** @description Latest received_at, exclusive (ISO 8601 with offset) (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied). */
+                received_to?: components["parameters"]["AdminOrderReceivedTo"];
             };
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
@@ -33899,6 +34312,290 @@ export interface operations {
                      *     }
                      */
                     "application/json": components["schemas"]["AdminOrderPageResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not available (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminCountOrdersByStatus: {
+        parameters: {
+            query?: {
+                /** @description Only sub-orders of this platform (enum platform); absent = all. */
+                platform?: components["parameters"]["AdminOrderPlatformFilter"];
+                /** @description Only sub-orders in this union status (enum platform_status); absent = all. */
+                platform_status?: components["parameters"]["AdminOrderPlatformStatusFilter"];
+                /** @description Only sub-orders whose flag of this name is true (enum admin_order_flag, the keys of a row's flags); absent = all. */
+                flag?: components["parameters"]["AdminOrderFlagFilter"];
+                /**
+                 * @description Only sub-orders attributed to this user (the user_id; UID and phone lookups go through the
+                 *     top-bar search). Required for an account holding user.lookup but not order.view (else
+                 *     10403 with data.reason=admin_permission_denied).
+                 */
+                user_id?: components["parameters"]["AdminOrderUserFilter"];
+                /**
+                 * @description A sub-order number or a parent order number, matched exactly. Trimmed and with spaces
+                 *     removed, then 1–64 characters, else 20001 with data.fields=[q]; the bound is checked after
+                 *     trimming, so the schema carries none.
+                 */
+                q?: components["parameters"]["AdminOrderQuery"];
+                /** @description Earliest paid_at, inclusive (ISO 8601 with offset); later than paid_to → 20001 with data.fields=[paid_from, paid_to]. */
+                paid_from?: components["parameters"]["AdminOrderPaidFrom"];
+                /** @description Latest paid_at, exclusive (ISO 8601 with offset). */
+                paid_to?: components["parameters"]["AdminOrderPaidTo"];
+                /**
+                 * @description Only sub-orders of this product (the union's product id as stored on the order,
+                 *     orders.raw_item_id, the row's item_id). The value is first trimmed of surrounding
+                 *     whitespace; the trimmed value must be 1–64 characters, else 20001 with
+                 *     data.fields=[item_id], and it is matched exactly (case-sensitive, no partial match)
+                 *     against item_id. The pattern states the same rule on the raw value. The list, the status
+                 *     counts, the summary and the orders export apply it the same way (CT-24x; until the D2
+                 *     backend ships, a well-formed value may be accepted but not applied).
+                 */
+                item_id?: components["parameters"]["AdminOrderItemIdFilter"];
+                /**
+                 * @description The last 6 characters of an order number, letters A–Z / a–z and digits only. A sub-order
+                 *     matches when the value equals the last 6 characters of its sub-order number
+                 *     (sub_order_id) or, when parent_order_id is not null, the last 6 characters of its parent
+                 *     order number (parent_order_id); so a parent order's tail lists all its sub-orders.
+                 *     Another length or character is 20001 with data.fields=[order_tail]. The list, the status
+                 *     counts, the summary and the orders export apply it the same way (CT-24x; until the D2
+                 *     backend ships, a well-formed value may be accepted but not applied).
+                 */
+                order_tail?: components["parameters"]["AdminOrderTailFilter"];
+                /**
+                 * @description A keyword of the product title. The value is first trimmed of surrounding whitespace;
+                 *     the trimmed value must be 2–32 characters, else 20001 with data.fields=[title_kw]. A row
+                 *     matches when its title contains the trimmed value as a substring, compared
+                 *     case-insensitively (`macbook` matches `MacBook Air`). A row whose title is null never
+                 *     matches. The pattern states the same rule on the raw value. The list, the status counts,
+                 *     the summary and the orders export apply it the same way (CT-24x; until the D2 backend
+                 *     ships, a well-formed value may be accepted but not applied).
+                 */
+                title_kw?: components["parameters"]["AdminOrderTitleKeywordFilter"];
+                /**
+                 * @description Lowest commission rate, inclusive, in 1/10000 (basis points 0–10000) compared with the
+                 *     row's commission_rate_bp; outside 0–10000 or not an integer → 20001 with
+                 *     data.fields=[rate_bp_min]; rate_bp_min greater than rate_bp_max → 20001 with
+                 *     data.fields=[rate_bp_min, rate_bp_max]. A row without commission_rate_bp never matches
+                 *     either bound (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                rate_bp_min?: components["parameters"]["AdminOrderRateBpMin"];
+                /**
+                 * @description Highest commission rate, inclusive, in 1/10000 (0–10000) compared with the row's
+                 *     commission_rate_bp; outside 0–10000 or not an integer → 20001 with
+                 *     data.fields=[rate_bp_max] (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                rate_bp_max?: components["parameters"]["AdminOrderRateBpMax"];
+                /**
+                 * @description Lowest estimated commission, inclusive, in integer fen compared with the row's
+                 *     est_commission_fen; negative or not an integer → 20001 with data.fields=[est_fen_min];
+                 *     est_fen_min greater than est_fen_max → 20001 with data.fields=[est_fen_min, est_fen_max].
+                 *     A row whose est_commission_fen is null never matches either bound (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                est_fen_min?: components["parameters"]["AdminOrderEstFenMin"];
+                /**
+                 * @description Highest estimated commission, inclusive, in integer fen compared with the row's
+                 *     est_commission_fen; negative or not an integer → 20001 with data.fields=[est_fen_max]
+                 *     (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                est_fen_max?: components["parameters"]["AdminOrderEstFenMax"];
+                /**
+                 * @description Earliest received_at (confirmed receipt), inclusive (ISO 8601 with offset); later than
+                 *     received_to → 20001 with data.fields=[received_from, received_to]. A row without
+                 *     received_at never matches either bound (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                received_from?: components["parameters"]["AdminOrderReceivedFrom"];
+                /** @description Latest received_at, exclusive (ISO 8601 with offset) (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied). */
+                received_to?: components["parameters"]["AdminOrderReceivedTo"];
+            };
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sub-order counts per rebate status. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "items": [
+                     *           {
+                     *             "rebate_status": "ESTIMATED",
+                     *             "count": 12
+                     *           },
+                     *           {
+                     *             "rebate_status": "WAITING",
+                     *             "count": 3
+                     *           }
+                     *         ],
+                     *         "total": 15
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminOrderStatusCountsResponse"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            /** @description Not available (codes in contracts/error-codes.yaml). */
+            "4XX": {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            "5XX": components["responses"]["ServerError"];
+        };
+    };
+    adminSummarizeOrders: {
+        parameters: {
+            query?: {
+                /** @description Only sub-orders of this platform (enum platform); absent = all. */
+                platform?: components["parameters"]["AdminOrderPlatformFilter"];
+                /** @description Only sub-orders in this union status (enum platform_status); absent = all. */
+                platform_status?: components["parameters"]["AdminOrderPlatformStatusFilter"];
+                /** @description Only sub-orders in this rebate status (enum rebate_status); absent = all. */
+                rebate_status?: components["parameters"]["AdminOrderRebateStatusFilter"];
+                /** @description Only sub-orders whose flag of this name is true (enum admin_order_flag, the keys of a row's flags); absent = all. */
+                flag?: components["parameters"]["AdminOrderFlagFilter"];
+                /**
+                 * @description Only sub-orders attributed to this user (the user_id; UID and phone lookups go through the
+                 *     top-bar search). Required for an account holding user.lookup but not order.view (else
+                 *     10403 with data.reason=admin_permission_denied).
+                 */
+                user_id?: components["parameters"]["AdminOrderUserFilter"];
+                /**
+                 * @description A sub-order number or a parent order number, matched exactly. Trimmed and with spaces
+                 *     removed, then 1–64 characters, else 20001 with data.fields=[q]; the bound is checked after
+                 *     trimming, so the schema carries none.
+                 */
+                q?: components["parameters"]["AdminOrderQuery"];
+                /** @description Earliest paid_at, inclusive (ISO 8601 with offset); later than paid_to → 20001 with data.fields=[paid_from, paid_to]. */
+                paid_from?: components["parameters"]["AdminOrderPaidFrom"];
+                /** @description Latest paid_at, exclusive (ISO 8601 with offset). */
+                paid_to?: components["parameters"]["AdminOrderPaidTo"];
+                /**
+                 * @description Only sub-orders of this product (the union's product id as stored on the order,
+                 *     orders.raw_item_id, the row's item_id). The value is first trimmed of surrounding
+                 *     whitespace; the trimmed value must be 1–64 characters, else 20001 with
+                 *     data.fields=[item_id], and it is matched exactly (case-sensitive, no partial match)
+                 *     against item_id. The pattern states the same rule on the raw value. The list, the status
+                 *     counts, the summary and the orders export apply it the same way (CT-24x; until the D2
+                 *     backend ships, a well-formed value may be accepted but not applied).
+                 */
+                item_id?: components["parameters"]["AdminOrderItemIdFilter"];
+                /**
+                 * @description The last 6 characters of an order number, letters A–Z / a–z and digits only. A sub-order
+                 *     matches when the value equals the last 6 characters of its sub-order number
+                 *     (sub_order_id) or, when parent_order_id is not null, the last 6 characters of its parent
+                 *     order number (parent_order_id); so a parent order's tail lists all its sub-orders.
+                 *     Another length or character is 20001 with data.fields=[order_tail]. The list, the status
+                 *     counts, the summary and the orders export apply it the same way (CT-24x; until the D2
+                 *     backend ships, a well-formed value may be accepted but not applied).
+                 */
+                order_tail?: components["parameters"]["AdminOrderTailFilter"];
+                /**
+                 * @description A keyword of the product title. The value is first trimmed of surrounding whitespace;
+                 *     the trimmed value must be 2–32 characters, else 20001 with data.fields=[title_kw]. A row
+                 *     matches when its title contains the trimmed value as a substring, compared
+                 *     case-insensitively (`macbook` matches `MacBook Air`). A row whose title is null never
+                 *     matches. The pattern states the same rule on the raw value. The list, the status counts,
+                 *     the summary and the orders export apply it the same way (CT-24x; until the D2 backend
+                 *     ships, a well-formed value may be accepted but not applied).
+                 */
+                title_kw?: components["parameters"]["AdminOrderTitleKeywordFilter"];
+                /**
+                 * @description Lowest commission rate, inclusive, in 1/10000 (basis points 0–10000) compared with the
+                 *     row's commission_rate_bp; outside 0–10000 or not an integer → 20001 with
+                 *     data.fields=[rate_bp_min]; rate_bp_min greater than rate_bp_max → 20001 with
+                 *     data.fields=[rate_bp_min, rate_bp_max]. A row without commission_rate_bp never matches
+                 *     either bound (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                rate_bp_min?: components["parameters"]["AdminOrderRateBpMin"];
+                /**
+                 * @description Highest commission rate, inclusive, in 1/10000 (0–10000) compared with the row's
+                 *     commission_rate_bp; outside 0–10000 or not an integer → 20001 with
+                 *     data.fields=[rate_bp_max] (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                rate_bp_max?: components["parameters"]["AdminOrderRateBpMax"];
+                /**
+                 * @description Lowest estimated commission, inclusive, in integer fen compared with the row's
+                 *     est_commission_fen; negative or not an integer → 20001 with data.fields=[est_fen_min];
+                 *     est_fen_min greater than est_fen_max → 20001 with data.fields=[est_fen_min, est_fen_max].
+                 *     A row whose est_commission_fen is null never matches either bound (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                est_fen_min?: components["parameters"]["AdminOrderEstFenMin"];
+                /**
+                 * @description Highest estimated commission, inclusive, in integer fen compared with the row's
+                 *     est_commission_fen; negative or not an integer → 20001 with data.fields=[est_fen_max]
+                 *     (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                est_fen_max?: components["parameters"]["AdminOrderEstFenMax"];
+                /**
+                 * @description Earliest received_at (confirmed receipt), inclusive (ISO 8601 with offset); later than
+                 *     received_to → 20001 with data.fields=[received_from, received_to]. A row without
+                 *     received_at never matches either bound (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied).
+                 */
+                received_from?: components["parameters"]["AdminOrderReceivedFrom"];
+                /** @description Latest received_at, exclusive (ISO 8601 with offset) (CT-24x; until the D2 backend ships, a well-formed value may be accepted but not applied). */
+                received_to?: components["parameters"]["AdminOrderReceivedTo"];
+            };
+            header?: {
+                /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
+                "X-Trace-Id"?: components["parameters"]["TraceId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sums and counts of the filter set. */
+            200: {
+                headers: {
+                    "X-Trace-Id": components["headers"]["TraceId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": 0,
+                     *       "msg": "",
+                     *       "data": {
+                     *         "sub_order_count": 3,
+                     *         "pay_amount_fen": 5490,
+                     *         "est_commission_fen": 680,
+                     *         "platform_retain_fen": 120,
+                     *         "buyer_count": 2
+                     *       },
+                     *       "trace_id": "0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminOrderSummaryResponse"];
                 };
             };
             429: components["responses"]["TooManyRequests"];

@@ -1,5 +1,7 @@
 // Unit tests of /admin/v1/exports' controller (CT-24zi): the tax_withdrawals create stays closed
 // until its implementation merges (20001 data.fields=[resource], no guard call, no use case).
+// CT-24x: the orders create stays closed the same way until its back end (D2) merges.
+import { HttpException } from '@nestjs/common';
 import { expect, it } from 'vitest';
 import {
   AdminOperationGuard,
@@ -53,4 +55,26 @@ it('[CT-24zi] the other resources still go through the export guard to the use c
   expect(guard.calls.map((call) => call.permission)).toEqual(['export']);
   expect(checked).toEqual([{ resource: 'audit_logs', filters: {} }]);
   expect(created).toEqual([{ resource: 'audit_logs', filters: {} }]);
+});
+
+it('[CT-24x] an orders create is 20001 on resource before D2: no guard call, no use case', async () => {
+  const { guard, checked, created, controller, request } = setup();
+  const error: unknown = await controller
+    .create(request, { resource: 'orders', filters: { platform: 'pdd' } })
+    .then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+  expect(error).toBeInstanceOf(HttpException);
+  const refused = error as HttpException;
+  expect(refused.getStatus()).toBe(400);
+  expect(refused.getResponse()).toEqual({
+    code: 20001,
+    msg: '参数校验失败',
+    data: { fields: ['resource'] },
+    trace_id: TRACE,
+  });
+  expect(guard.calls).toEqual([]);
+  expect(checked).toEqual([]);
+  expect(created).toEqual([]);
 });
