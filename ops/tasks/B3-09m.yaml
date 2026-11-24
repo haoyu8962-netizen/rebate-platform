@@ -9,7 +9,7 @@ type: impl
 #   ⑤ 首次 ≥80%、首次 ≥100% 各用条件更新抢一次告警时刻，抢到的打 pino 事件（agent.budget_80 / agent.budget_100 / agent.budget_price_missing）并加计数指标。
 # 不做（评审范围外一律 out_of_scope）：成本分摊与报表、后台显示；失败尝试用量（FU-GATEWAY-FAILED-ATTEMPT-USAGE）；model 归因（FU-B3-08T-MODEL-ATTRIBUTION）；离线 / 评测计量；B3-03k 接线；送企业微信群规则（另开给 ops，D10-2668 ④）；按 app 分预算；调参与真实单价；Jev 费用。
 # 验收：故障注入到 100% 后新 run 降级（finish_reason=budget）、进行中照常完成；80% / 100% 各只告警一次（并发下也一次）；单价缺失两种情形；键缺失 / 0 / 非法值；重复收尾不重复记；跨零点冲正归受理日、实际归完成日；BR-AI-16 示例 2000 入 + 300 出 → 320 mfen。
-# 风险级 RV2（动迁移、packages/money、content 注册表），评审 money；迁移号实现时现取（B2-07i 暂停的工作树占着 0155 / 0156，避开），outside_needed 走 LAN-DB-SNAPSHOT，land 前测试机五段全量（D10-2398）。 补丁 1（D10-2831 取乙）：agent.models 列进后台配置列表，两条全量键序冻结用例登 modify_existing、test_paths 加两文件；迁移号改 0155（packages/db migrations.test.ts 要求连号）。开工前测试机跑一次 --related，看有没有冻结用例钉着 cost_mfen 为 null / finish_reason 不含 budget，有就先登 modify_existing。B3-03k 重写时 deps 加 B3-09m（D10-2668 ⑤）。 补丁 2：paths 加 config-registry.test.ts（实现单测长度随改）。
+# 风险级 RV2（动迁移、packages/money、content 注册表），评审 money；迁移号实现时现取（B2-07i 暂停的工作树占着 0155 / 0156，避开），outside_needed 走 LAN-DB-SNAPSHOT，land 前测试机五段全量（D10-2398）。 补丁 3（D10-2848 改判取甲，撤补丁 1）：agent.models 留 LOOKUP_ONLY（按键可查可改，列表暂不显示），列进后台配置列表另开小单（8 条冻结用例 + config-items/kit.ts）；迁移号改 0155（packages/db migrations.test.ts 要求连号）。开工前测试机跑一次 --related，看有没有冻结用例钉着 cost_mfen 为 null / finish_reason 不含 budget，有就先登 modify_existing。B3-03k 重写时 deps 加 B3-09m（D10-2668 ⑤）。 补丁 2：paths 加 config-registry.test.ts（实现单测长度随改）。
 refs: [BR-AI-16, BR-AI-14]
 refs_hash:
   BR-AI-16: ccca6709add2
@@ -29,25 +29,10 @@ paths:
   - 'packages/db/src/db.gen.ts'
 test_paths:
   - 'test/spec/agent/daily-budget/**'
-  - 'test/spec/content/config-settle/registry.test.ts'
-  - 'test/spec/content/invite-reward-config/registry.test.ts'
 impl: claude
 tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/daily-budget/**'
-modify_existing:
-  - file: 'test/spec/content/config-settle/registry.test.ts'
-    test: '[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行为保持不变'
-    reason: rule_change
-    br: [BR-AI-16]
-    ruling: D10-2831
-    note: 'B3-09m 登记 agent.models（BR-AI-16 config.agent.models 单价表）进后台配置列表：只在全量键序清单里按序插入 agent.models 一项，其余键与断言不动'
-  - file: 'test/spec/content/invite-reward-config/registry.test.ts'
-    test: '[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后'
-    reason: rule_change
-    br: [BR-AI-16]
-    ruling: D10-2831
-    note: 'B3-09m 登记 agent.models（BR-AI-16 config.agent.models 单价表）进后台配置列表：只在全量键序清单里按序插入 agent.models 一项，其余键与断言不动'
 status: todo
 pr: null
