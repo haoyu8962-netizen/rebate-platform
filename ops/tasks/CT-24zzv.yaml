@@ -4,7 +4,7 @@ title: 契约：后台二次验证三档——/admin/v1 显式标 x-step-up（su
 type: contract
 # 2026-11-24 二次验证线入账（D10-2821）。内容 = 探针第 4 轮的契约改动（couli-runs/STEPUP-1124c/contract-only.patch，入账稿 couli-runs/STEPUP-BE/entry-draft.md §2、§7）：sudo 15、strict 9 个操作标 x-step-up（按请求内容或键名分档的 9 个标最高档、条件写说明）；49 个 none 操作删令牌参数、10003、示例与说明句；新增 AdminStepUpMethod；10003 的 data 为 tier 与 reason 二者其一（D10-2792 ⑥）；conformance.ts 加后台分支；用户端 3 处 x-step-up 不动。
 # AdminStepUpTier 先加后删（D10-2792 ②）：本单四值并存，旧值等 B1-18l 与前端单落地后另开契约单删。服务端行为不在本单（B1-18l）；本单只带两处编译适配（D10-2821 a）：step-up.controller.ts 缺 tier 回 20001、AppVersionEditor.tsx 放宽一处类型。
-# 冻结用例：探针共 35 条。本次只登非资金、非归属目录的 12 条；其余 23 条（资金与归属目录 21 + 收款契约 2）等负责人答复后出台账补丁再登，落地在那之后（D10-2821 b），契约不做半删。.each 行不改名（D10-2154），标题里的「step-up 头」以块内断言为准。
+# 冻结用例：探针共 35 条。先登非资金、非归属目录的 12 条；补丁 1（同时把 [AC-B1-34h#1]、[AC-B1-34i#1] 两组 .each 改为按标题模板整块登记：写测 1 交回时门禁展不开其表，D10-2559；paths 加 contracts/error-codes.yaml，10003 的档位登记在那里）（D10-2826，负责人 2026-11-24「都同意」）再登其余 23 条（资金与归属目录 21 + 收款契约 2），只改二次验证那一处期望。.each 行不改名（D10-2154），标题里的「step-up 头」以块内断言为准。
 refs: [BR-ID-34]
 refs_hash:
   BR-ID-34: 8bd50e43d350
@@ -15,6 +15,7 @@ paths:
   - 'contracts/openapi.yaml'
   - 'contracts/enums/admin.yaml'
   - 'contracts/oasdiff-accepted.txt'
+  - 'contracts/error-codes.yaml'
   - 'packages/contracts-ts/**'
   - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
   - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
@@ -23,55 +24,23 @@ paths:
   - 'apps/api/src/modules/admin/http/admin/step-up.controller.ts'
   - 'apps/admin/src/pages/app-versions/AppVersionEditor.tsx'
   - 'test/spec/contracts/admin-step-up-tiers/**'
-  - 'test/spec/admin/{admins-write,admins-verify-phone}/contract.test.ts'
-  - 'test/spec/identity/{admin-profile,admin-realname,data-copies-download,data-copies-register,reverify-admin-device}/entry.test.ts'
+  - 'test/spec/{admin/admins-verify-phone/contract.test.ts,admin/admins-write/contract.test.ts,contracts/admin-order-actions/actions.test.ts,contracts/admin-order-actions/operations.test.ts,contracts/pay-admin-http/operations.test.ts,contracts/pay-admin-http/responses.test.ts,identity/admin-profile/entry.test.ts,identity/admin-realname/entry.test.ts,identity/data-copies-download/entry.test.ts,identity/data-copies-register/entry.test.ts,identity/reverify-admin-device/entry.test.ts,ledger/admin-recon-balance-recalc/contract.test.ts,ledger/admin-recon-close/contract.test.ts,ledger/admin-recon-write-off/contract.test.ts,linking/admin-union-bindings/contract.test.ts,orders/admin-mounts/contract.test.ts,orders/rights-mounts/contract.test.ts,payout/admin-manual-paid/contract.test.ts,payout/admin-watermark-entry/contract.test.ts,payout/withdraw-no-step-up/contract.test.ts,settlement/admin-recon-restore/contract.test.ts,settlement/admin-settle-commands/contract.test.ts,settlement/admin-union-receipts/contract.test.ts,settlement/settle-adjust-approve/contract.test.ts,settlement/settle-adjust-generate/contract.test.ts,union/admin-alert-phones/contract.test.ts}'
 test_paths:
   - 'test/spec/contracts/admin-step-up-tiers/**'
-  - 'test/spec/admin/{admins-write,admins-verify-phone}/contract.test.ts'
-  - 'test/spec/identity/{admin-profile,admin-realname,data-copies-download,data-copies-register,reverify-admin-device}/entry.test.ts'
+  - 'test/spec/{admin/admins-verify-phone/contract.test.ts,admin/admins-write/contract.test.ts,contracts/admin-order-actions/actions.test.ts,contracts/admin-order-actions/operations.test.ts,contracts/pay-admin-http/operations.test.ts,contracts/pay-admin-http/responses.test.ts,identity/admin-profile/entry.test.ts,identity/admin-realname/entry.test.ts,identity/data-copies-download/entry.test.ts,identity/data-copies-register/entry.test.ts,identity/reverify-admin-device/entry.test.ts,ledger/admin-recon-balance-recalc/contract.test.ts,ledger/admin-recon-close/contract.test.ts,ledger/admin-recon-write-off/contract.test.ts,linking/admin-union-bindings/contract.test.ts,orders/admin-mounts/contract.test.ts,orders/rights-mounts/contract.test.ts,payout/admin-manual-paid/contract.test.ts,payout/admin-watermark-entry/contract.test.ts,payout/withdraw-no-step-up/contract.test.ts,settlement/admin-recon-restore/contract.test.ts,settlement/admin-settle-commands/contract.test.ts,settlement/admin-union-receipts/contract.test.ts,settlement/settle-adjust-approve/contract.test.ts,settlement/settle-adjust-generate/contract.test.ts,union/admin-alert-phones/contract.test.ts}'
 modify_existing:
   - file: 'test/spec/admin/admins-verify-phone/contract.test.ts'
-    test: '[AC-B1-34i#1] sendFor 保持契约的鉴权级别与 step-up 头，去掉 planned，规则出处改指 BR-ID-45'
+    test: '[AC-B1-34i#1] %s 保持契约的鉴权级别与 step-up 头，去掉 planned，规则出处改指 BR-ID-45'
     reason: rule_change
     br: [BR-ID-34]
     ruling: D10-2783
-    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
-  - file: 'test/spec/admin/admins-verify-phone/contract.test.ts'
-    test: '[AC-B1-34i#1] sendMine 保持契约的鉴权级别与 step-up 头，去掉 planned，规则出处改指 BR-ID-45'
-    reason: rule_change
-    br: [BR-ID-34]
-    ruling: D10-2783
-    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+    note: '整块登记（该 .each 表门禁展不开，按标题模板原文登，D10-2559）；该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
   - file: 'test/spec/admin/admins-write/contract.test.ts'
-    test: '[AC-B1-34h#1] create 保持 super 鉴权与契约的 step-up 头并去掉 planned'
+    test: '[AC-B1-34h#1] %s 保持 super 鉴权与契约的 step-up 头并去掉 planned'
     reason: rule_change
     br: [BR-ID-34]
     ruling: D10-2783
-    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
-  - file: 'test/spec/admin/admins-write/contract.test.ts'
-    test: '[AC-B1-34h#1] disable 保持 super 鉴权与契约的 step-up 头并去掉 planned'
-    reason: rule_change
-    br: [BR-ID-34]
-    ruling: D10-2783
-    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
-  - file: 'test/spec/admin/admins-write/contract.test.ts'
-    test: '[AC-B1-34h#1] enable 保持 super 鉴权与契约的 step-up 头并去掉 planned'
-    reason: rule_change
-    br: [BR-ID-34]
-    ruling: D10-2783
-    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
-  - file: 'test/spec/admin/admins-write/contract.test.ts'
-    test: '[AC-B1-34h#1] regenerate 保持 super 鉴权与契约的 step-up 头并去掉 planned'
-    reason: rule_change
-    br: [BR-ID-34]
-    ruling: D10-2783
-    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
-  - file: 'test/spec/admin/admins-write/contract.test.ts'
-    test: '[AC-B1-34h#1] reset 保持 super 鉴权与契约的 step-up 头并去掉 planned'
-    reason: rule_change
-    br: [BR-ID-34]
-    ruling: D10-2783
-    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+    note: '整块登记（该 .each 表门禁展不开，按标题模板原文登，D10-2559）；该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
   - file: 'test/spec/identity/admin-profile/entry.test.ts'
     test: '[AC-B1-27b#3] 契约 adminEditUserProfile 去掉 x-implementation: planned，错误码表不变'
     reason: rule_change
@@ -102,6 +71,138 @@ modify_existing:
     br: [BR-ID-34]
     ruling: D10-2783
     note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+  - file: 'test/spec/contracts/admin-order-actions/actions.test.ts'
+    test: '[AC-CT-24n#16] 指派并发与已归属返回 order_attribution 冲突，不合格目标沿用 20001'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/contracts/admin-order-actions/operations.test.ts'
+    test: '[AC-CT-24n#1] %s %s（订单写操作）登记 %s、后台权限和已实现（不再 planned）'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '整块登记（该 .each 表门禁展不开，按标题模板原文登，D10-2559）；负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/contracts/admin-order-actions/operations.test.ts'
+    test: '[AC-CT-24n#1] %s %s（维权导入）登记 %s、后台权限和已实现（不再 planned）'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '整块登记（该 .each 表门禁展不开，按标题模板原文登，D10-2559）；负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/contracts/admin-order-actions/operations.test.ts'
+    test: '[AC-CT-24n#3] channel 导入的额外权限和动态码仅条件适用'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/contracts/pay-admin-http/operations.test.ts'
+    test: '[AC-CT-21e#4] 人工处置要求动态码并声明 needs_manual、查询凭证与审计'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/contracts/pay-admin-http/responses.test.ts'
+    test: '[AC-CT-21e#19] %s %s 错误示例给出字段与资源定位'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '整块登记（该 .each 表门禁展不开，按标题模板原文登，D10-2559）；负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/ledger/admin-recon-balance-recalc/contract.test.ts'
+    test: '[AC-B2-02x#45] recalcBalanceAdminReconDiff 去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、无 x-idempotent、x-error-codes [10001, 10003, 10403, 20001] 不变，请求体仍只有必填的 reason（additionalProperties false，不收金额）；admin 入口恰好挂一次 POST 并带契约的请求 schema（body、路径参数、X-Step-Up-Token 请求头），api 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/ledger/admin-recon-close/contract.test.ts'
+    test: '[AC-B2-09b#1] closeAdminReconDiff 去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent true、x-error-codes [10001, 10403, 20001, 20901, 20902, 40901] 不变；admin 入口恰好挂一次 POST 并带契约的请求 schema（body、路径参数、Idempotency-Key 请求头），api 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/ledger/admin-recon-write-off/contract.test.ts'
+    test: '[AC-B2-07e#16] writeOffAdminReconDiff 去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent true、x-error-codes [10001, 10003, 10403, 20001, 20901, 20902, 40901] 不变；admin 入口恰好挂一次 POST 并带契约的请求 schema（body、路径参数、X-Step-Up-Token 与 Idempotency-Key 请求头），api 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/linking/admin-union-bindings/contract.test.ts'
+    test: '[AC-F1-07c#23] %s 上线后移除 planned，保留后台身份与无幂等键契约'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '整块登记（该 .each 表门禁展不开，按标题模板原文登，D10-2559）；负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/orders/admin-mounts/contract.test.ts'
+    test: '[AC-B1-10m#1] adminReassignOrder 去掉 x-implementation: planned（生成的 planned 清单与路由校验同步），x-auth admin、x-error-codes 不变；admin 入口恰好挂一次并带契约的请求 schema，api、stream 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/orders/rights-mounts/contract.test.ts'
+    test: '[AC-B1-10n#1] adminCreateRightsImport 去掉 x-implementation: planned（生成的 planned 清单与路由校验同步，route-schemas 有 id），x-auth admin、x-error-codes 不变；admin 入口恰好挂一次并带契约的请求 schema，api、stream 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/payout/admin-manual-paid/contract.test.ts'
+    test: '[AC-B2-09m#1] adminBatchManualPaid 去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent、x-error-codes 不变；admin 入口恰好挂一次并带契约的请求 schema，api 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/payout/admin-watermark-entry/contract.test.ts'
+    test: '[AC-B2-09i#1] adminCreatePayoutWatermark 去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent、x-error-codes 不变；admin 入口恰好挂一次并带契约的请求 schema（请求体、请求头），api 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/payout/withdraw-no-step-up/contract.test.ts'
+    test: '[AC-B1-02zzzc#12] 全契约恰好四个操作带 x-sensitive-operation（值为 true），恰好三个带 x-step-up'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/settlement/admin-recon-restore/contract.test.ts'
+    test: '[AC-B2-09g#1] restoreAdminReconDiff 去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent true、x-error-codes [10001, 10003, 10403, 20001, 20901, 20902, 40901] 不变；admin 入口恰好挂一次 POST 并带契约的请求 schema（body、路径参数、X-Step-Up-Token 与 Idempotency-Key 请求头），api 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/settlement/admin-settle-commands/contract.test.ts'
+    test: '[AC-B2-09f#1] 五个写接口去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent（只有发起补充）、x-error-codes 不变；admin 入口各恰好挂一次 POST 并带契约的请求 schema（body、路径参数、请求头），api 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/settlement/admin-union-receipts/contract.test.ts'
+    test: '[AC-B2-04zr#1] 三个操作去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent、x-error-codes 不变；admin 入口各恰好挂一次并带契约的请求 schema（请求体、路径与查询参数、请求头），api 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/settlement/settle-adjust-approve/contract.test.ts'
+    test: '[AC-B2-09zc#9] 三条操作去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent（批准 / 拒绝 true）、x-error-codes 与 CT-24zv 一致；admin 入口各恰好挂一次并带契约请求 schema（路径参数、查询、请求头；批准 / 拒绝不挂请求体 schema，守卫之后再校验），api 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/settlement/settle-adjust-generate/contract.test.ts'
+    test: '[AC-B2-09zb#10] adminRunSettleAdjust 去掉 x-implementation: planned（生成的 planned 清单同步），x-auth admin、x-idempotent true、x-error-codes 不变；admin 入口恰好挂一次 POST 并带契约的请求 schema（body、请求头），api 入口不挂'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/union/admin-alert-phones/contract.test.ts'
+    test: '[B1-22g][BR-ID-24] delete alert-phones (adminRemoveUnionAlertPhone) 上线移除 planned；后台身份、无幂等键，只有增删要 step-up'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
+  - file: 'test/spec/union/admin-alert-phones/contract.test.ts'
+    test: '[B1-22g][BR-ID-24] post alert-phones (adminAddUnionAlertPhone) 上线移除 planned；后台身份、无幂等键，只有增删要 step-up'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2826
+    note: '负责人 2026-11-24 对话确认（D10-2826，范围同 D10-2788）：只改二次验证这一处契约期望（归 none 的操作不再带 X-Step-Up-Token 参数与 10003；标档操作的 x-step-up 计数与取值按三档），金额、状态、分录等其余断言不动'
 impl: claude
 tester: codex
 accept:
