@@ -1065,3 +1065,9 @@ approvals:
     granted: true
     date: '2026-11-25'
     note: '编排 D10-2868。原因：money r2 两条 S1 都出在 r3 用 POST 响应与 GET 合并状态条的逻辑；r5 改为只认 GET。静态核对：admin-orders-sync 冻结用例里提交类（results / window / order-nos / order-nos-unsupported / detail / BROWSER#3）只数 POST，records 与 BROWSER#2 用去掉首屏一次后的计数且不提交，故提交后多一次 GET 不撞冻结用例（以测试机为准）。money r3 再 fail 即停、报编排，不再自起任何一轮。'
+  - id: 175
+    row: 4
+    title: 'B1-04zzzzn 任务专属一次性追加（D10-2872）：实现 1 次（Opus）+ 写规则测试增量 1 次（Codex）+ 规则测试评审增量 1 轮（独立 Claude）+ Codex 资金评审 r3（最后一轮）——范围写死两点：① 重复备案查回的接受条件只剩「库里同一（应用、用户、平台、联盟账号）有该编号的历史绑定」，撤掉「更早、结局未知的尝试作凭据」；备案尝试表保留作留痕，存在结局未知的尝试而本次 save 回「重复」时不写绑定、返回失败、发一条带尝试标识且能与普通 duplicate_unverified 区分的告警；save 明确应答时尽力写结局，写不上不影响「不接受」；规则测试 [AC-B1-04zzzzn#8] 及相关用例随之改为新口径；② 就绪判断补「本次选用的联盟账号与邀请码所属账号一致」，不一致不签发 state、不消费 state。state 外键归属（S2）照 FU-FILING-ATTEMPT-STATE-OWNERSHIP。资金评审 r3 再 fail 即停、报编排转负责人，不带 FU 过。'
+    granted: true
+    date: '2026-11-25'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 实现 / 评审轮次属门禁流程小改动），D10-2872，先例第 167、169 条。原因：B1-04zzzzn 实现 3 次已满；Codex 资金评审 r2（couli-runs/B1-04zzzzn/review-money-codex-r2.json）S0 证明「结局为空」分不清「从未得到应答」与「得到应答但落库失败」，编排撤回 D10-2850 / 2851 加的这一支（方案页第 8 节）；取甲不超出负责人 2026-11-24「库里对得上才接受」的确认范围，[AC-B1-04zzzzn#8] 为本单新文件、未冻结。写测增量按第 19 条不由 Codex 评审。'
