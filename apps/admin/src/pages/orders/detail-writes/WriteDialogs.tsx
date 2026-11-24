@@ -71,29 +71,30 @@ function WriteModal<B>(props: {
       </Button>
     </Flex>
   );
+  // While the 动态码 dialog is open this dialog is taken down (its inputs live in the caller's
+  // state and come back unchanged): one dialog at a time, so the accessible name and the focus
+  // belong to the 动态码 dialog only (same as the unions / risk-state pages).
+  if (write.stepUpModal !== null) return write.stepUpModal;
   return (
-    <>
-      <Modal
-        open
-        title={title}
-        footer={footer}
-        closable={closable}
-        maskClosable={false}
-        keyboard={closable}
-        onCancel={close}
-      >
-        <Flex vertical gap={12}>
-          {write.phase === 'unknown' ? (
-            <Alert type="warning" showIcon message={w.result.unknown} />
-          ) : null}
-          {write.error === undefined ? null : <Alert type="error" showIcon message={write.error} />}
-          <Form layout="vertical" component="div">
-            {children}
-          </Form>
-        </Flex>
-      </Modal>
-      {write.stepUpModal}
-    </>
+    <Modal
+      open
+      title={title}
+      footer={footer}
+      closable={closable}
+      maskClosable={false}
+      keyboard={closable}
+      onCancel={close}
+    >
+      <Flex vertical gap={12}>
+        {write.phase === 'unknown' ? (
+          <Alert type="warning" showIcon message={w.result.unknown} />
+        ) : null}
+        {write.error === undefined ? null : <Alert type="error" showIcon message={write.error} />}
+        <Form layout="vertical" component="div">
+          {children}
+        </Form>
+      </Flex>
+    </Modal>
   );
 }
 
