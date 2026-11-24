@@ -1029,3 +1029,9 @@ approvals:
     granted: true
     date: '2026-11-24'
     note: '编排 D10-2780（照 D10-2710 甲）。原因：CT-24x 契约 export_resource 加 orders 后，land 前分段全量第 3 段只红这一条冻结集成用例（该样例拿 orders 当不存在的值），属规则变化（台账补丁 3：modify_existing rule_change，br BR-ID-33，模板原文整块）。非资金用例，land 时编排照第 24 条加标签。'
+  - id: 169
+    row: 4
+    title: 'B1-04zzzzm 任务专属一次性追加（D10-2826）：实现 1 次（Opus）+ 写规则测试增量 1 次（Codex）+ 规则测试评审增量 1 轮（独立 Claude）+ Codex 资金评审全量 1 轮——范围写死为方案页 couli-runs/B1-04zzzzm/plan-orchestrator-1124.md 第 1、2 节：① 淘宝保存接口回「重复绑定」且无编号时，查询结果只在库里对得上才接受（同一应用、同一联盟账号下已有该编号的历史绑定且是同一用户），否则不写绑定、失败告警 duplicate_unverified，[AC-B1-04zzzzm#4] 三例随之改；② 签发与兑换共用「真实备案适配器已就绪」判断，staging 淘宝端点为 demo 时签发 auth_unavailable、兑换不把真实授权凭证交演示适配器。换应用后旧 state 失败（money r2 S1）不在本单，记 FU-TAOBAO-OAUTH-APP-ROTATION，资金评审按 out_of_scope。这一轮资金评审再不过，本单置 void、按实测（FU-TB-05-DUP-LOOKUP）结果重新拆单。'
+    granted: true
+    date: '2026-11-24'
+    note: '负责人 2026-11-24 20:31 对话原话「都同意」（编排逐条说明后；D10-2826 ②），同意收紧并改 [AC-B1-04zzzzm#4]；轮次由编排按 规划/11 §7.1 第 5 行例外决定（D10-2806 方案页第 5 节），先例第 167 条。原因：Codex money r2（couli-runs/B1-04zzzzm/review-money-codex-r2.json）两条 S0、一条 S1；S0 ① 难在平台事实不明，先用自有数据收紧，S0 ② 是明确缺陷。实现、写测、评审计数与第 167 条、D10-2779 额度均已用尽。写测增量按第 19 条不由 Codex 评审。'
