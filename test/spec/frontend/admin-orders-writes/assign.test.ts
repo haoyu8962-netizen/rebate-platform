@@ -146,3 +146,23 @@ it(
   async () => expectTargetRejection('target_deleted', /已注销|已经注销/),
   40_000,
 );
+
+it('[AC-F1-07ee-ASSIGN#6] 原因只有 4 字时不发指定归属请求，满 5 字可提交', async () => {
+  const shown = unattributed();
+  const server = createWriteServer(shown);
+  server.succeed('reassign', assigned(shown));
+  await renderOrder(server, 'order.assign');
+  const form = await open('reassign');
+  await fillAssign(form, '订单凭证');
+  await submit(form);
+  await settled(server);
+  expect(writes(server)).toEqual([]);
+
+  const reason = '核对了凭证';
+  await fill(textbox(ASSIGN_REASON_LABEL, form), reason);
+  await submit(form);
+  await expectAssigned();
+  await settled(server);
+  expectOrderPosts(server, 'reassign', assignBody(shown, reason));
+  expect(writes(server)).toHaveLength(1);
+}, 40_000);

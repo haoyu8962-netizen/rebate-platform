@@ -106,3 +106,84 @@ it('[AC-F1-07ee-ENTRY#5] 客户端未知订单状态隐藏写入口，已知状�
   await renderOrder(known);
   expectWriteEntries(known, [ENTRY.reassign, ENTRY['reason-sub']]);
 }, 40_000);
+
+it('[AC-F1-07ee-ENTRY#6] 预估状态的未暂停订单向 order.hold 开放暂停结算', async () => {
+  const server = createWriteServer(
+    order({ platform_status: 'PAID', rebate_status: 'ESTIMATED', display_status: 'PAID' }),
+  );
+  await renderOrder(server, 'order.hold');
+  expectWriteEntries(server, [ENTRY.hold]);
+}, 40_000);
+
+it('[AC-F1-07ee-ENTRY#7] 平台状态已知但返利状态未知时，超管看不到写入口且不发写请求', async () => {
+  const cases = [
+    { shown: order(), entries: [ENTRY.hold, ENTRY['reason-sub']] },
+    { shown: held(order()), entries: [ENTRY.unhold, ENTRY['reason-sub']] },
+    {
+      shown: unattributed({ reason: 'REFUND', reason_sub: 'IN_SALE' }),
+      entries: [ENTRY.reassign, ENTRY['reason-sub']],
+    },
+  ];
+  for (const { shown, entries } of cases) {
+    const future = createWriteServer({
+      ...shown,
+      rebate_status: 'FUTURE_REBATE' as Detail['rebate_status'],
+    });
+    const unknownView = await renderOrder(future);
+    await settled(future);
+    expectWriteEntries(future, []);
+    expect(unknownView.directFetch).not.toHaveBeenCalled();
+    unknownView.unmount();
+
+    const known = createWriteServer(shown);
+    const knownView = await renderOrder(known);
+    expectWriteEntries(known, entries);
+    knownView.unmount();
+  }
+}, 40_000);
+
+it('[AC-F1-07ee-ENTRY#8] 持 order.claim 时原因细分只对有契约子原因的父原因开放', async () => {
+  for (const reason of ['OTHER', 'PRESALE_UNPAID', 'COMMISSION_ZERO'] as const) {
+    const server = createWriteServer(
+      order({ reason, reason_sub: null, rebate_status: 'VOID', display_status: 'INVALID' }),
+    );
+    const view = await renderOrder(server, 'order.claim');
+    expectWriteEntries(server, []);
+    view.unmount();
+  }
+
+  const other = createWriteServer(
+    order({ reason: 'OTHER', reason_sub: null, rebate_status: 'VOID', display_status: 'INVALID' }),
+  );
+  const superAdmin = await renderOrder(other);
+  expectWriteEntries(other, []);
+  superAdmin.unmount();
+
+  const refundable = createWriteServer(
+    order({ reason_sub: null, rebate_status: 'VOID', display_status: 'INVALID' }),
+  );
+  await renderOrder(refundable, 'order.claim');
+  expectWriteEntries(refundable, [ENTRY['reason-sub']]);
+}, 40_000);
+
+it('[AC-F1-07ee-ENTRY#9] order.hold 不能指定归属，order.assign 不能暂停或恢复结算', async () => {
+  const unowned = createWriteServer(unattributed());
+  const holdOnly = await renderOrder(unowned, 'order.hold');
+  expectWriteEntries(unowned, []);
+  holdOnly.unmount();
+
+  for (const shown of [order(), held(order())]) {
+    const owned = createWriteServer(shown);
+    const assignOnly = await renderOrder(owned, 'order.assign');
+    expectWriteEntries(owned, []);
+    assignOnly.unmount();
+
+    const authorized = createWriteServer(shown);
+    const withHold = await renderOrder(authorized, 'order.hold');
+    expectWriteEntries(authorized, [shown.flags.hold ? ENTRY.unhold : ENTRY.hold]);
+    withHold.unmount();
+  }
+
+  await renderOrder(unowned, 'order.assign');
+  expectWriteEntries(unowned, [ENTRY.reassign]);
+}, 40_000);
