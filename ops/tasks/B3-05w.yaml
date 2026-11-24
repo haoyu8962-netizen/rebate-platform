@@ -34,5 +34,5 @@ accept:
   - 'test/spec/agent/entry-quote-refund/**'
   - 'test/spec/agent/tools-quote/**'
   - 'test/spec/agent/deterministic-failures/**'
-status: todo
-pr: null
+status: done
+pr: 643
