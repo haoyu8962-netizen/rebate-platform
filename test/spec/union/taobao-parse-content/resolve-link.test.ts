@@ -29,6 +29,7 @@ import {
   unionFailure,
   withStatus,
 } from '../taobao-goods/kit.ts';
+import { dtkRow, query, search, searchData, setup as searchSetup } from '../taobao-search/kit.ts';
 
 // 合成夹具，字段按任务书构造。真实样本仍待 FU-PARSE-CONTENT-SAMPLES。
 const parsePath = '/api/tb-service/parse-content';
@@ -152,6 +153,8 @@ it.each<[string, unknown, UnionErrorCode]>([
   ['商品数组为空', detailBody([]), 'link_unrecognized'],
   ['接口业务码 15/50001', errorBody(15, '50001'), 'link_unrecognized'],
   ['首条缺 ID', detailBody([{}, { item_id: itemId }]), 'link_unrecognized'],
+  ['首条 item_id 是空字符串', detailBody([{ item_id: '' }]), 'link_unrecognized'],
+  ['首条 item_id 是数字', detailBody([{ item_id: 123 }]), 'link_unrecognized'],
   ['接口限流', errorBody(7), 'rate_limited'],
   ['HTTP 503', withStatus(503, 'synthetic outage'), 'upstream_unavailable'],
 ])('[AC-B1-04zzzzo#4] 淘宝详情%s时返回 %s', async (_name, detailReply, classified) => {
@@ -198,3 +201,38 @@ it.each(['item.taobao.com', 'detail.tmall.com'])(
     expect(formOf(sent(taobao.transport, 1))).toMatchObject({ method: DETAIL, item_id: goodsId });
   },
 );
+
+it('[AC-B1-04zzzzo#7] 大淘客搜索预热缓存后，同一短链两次解析各取本次联盟原串且保留搜索缓存', async () => {
+  const cachedItemId = 'Synthetic-FromSearch';
+  let returnedItemId = cachedItemId;
+  const harness = searchSetup({
+    data: () => searchData([dtkRow(1, { goodsId })], 1),
+    available: (id) => (id === goodsId ? returnedItemId : undefined),
+  });
+  const { adapter, dataokeTransport, taobaoTransport } = harness;
+  const { items } = await search(harness, query, ctx);
+  expect(items).toMatchObject([{ item_id: cachedItemId }]);
+  expect(dataokeTransport).toHaveBeenCalledTimes(1);
+  expect(taobaoTransport).toHaveBeenCalledTimes(1);
+
+  for (const [index, expectedItemId] of [itemId, nextItemId].entries()) {
+    returnedItemId = expectedItemId;
+    dataokeTransport.mockResolvedValueOnce(dataokeOk({ goodsId }));
+
+    await expectResolvedItem(adapter, shortLink, expectedItemId);
+
+    expect(dataokeTransport).toHaveBeenCalledTimes(index + 2);
+    const parseRequest = dataokeSent(dataokeTransport, index + 1);
+    expect(new URL(parseRequest.url).pathname).toBe(parsePath);
+    expect(queryFields(parseRequest)).toMatchObject({ version: 'v1.0.0', content: shortLink });
+    expect(taobaoTransport).toHaveBeenCalledTimes(index + 2);
+    expect(formOf(sent(taobaoTransport, index + 1))).toMatchObject({
+      method: DETAIL,
+      item_id: goodsId,
+    });
+  }
+
+  const searchAfterResolve = await search(harness, query, ctx);
+  expect(searchAfterResolve.items).toMatchObject([{ item_id: cachedItemId }]);
+  expect(taobaoTransport).toHaveBeenCalledTimes(3);
+});
