@@ -4,12 +4,20 @@
 // Rules: BR-FUND-06 (hold / unhold only while rebate_status is ESTIMATED or WAITING; an
 // UNMAPPED_STATUS hold with its pending record open cannot be released), BR-ATTR-20 / BR-ATTR-31
 // (only an unattributed order can be assigned; an attributed one is never moved to another user),
-// BR-TEXT-05 (an order with a status this console does not know gets no write entry at all).
-import { admin_permission, order_reason_sub, type Schema } from '@couli/contracts-ts';
+// BR-TEXT-05 (an order with a status this console does not know gets no write entry at all,
+// 【同步此单】 included).
+import {
+  admin_permission,
+  display_status,
+  order_reason_sub,
+  type Schema,
+} from '@couli/contracts-ts';
 import type { AccessControl } from '../../../providers/access-control/index.ts';
 import { AdminApiError } from '../../../providers/data/index.ts';
+import { codePointLength } from '../../../text-length.ts';
 import { ordersTexts } from '../../../texts/orders.ts';
 import { PLATFORM_STATUSES, REBATE_STATUSES, orderUrl, type OrderDetail } from '../model.ts';
+import type { WritePhase } from './useOrderWrite.tsx';
 
 const r = ordersTexts.writes.result;
 
@@ -32,6 +40,8 @@ export const NOTE_LIMIT = 200;
 /** adminReassignOrder `reason`: 5–200 characters (BR-ATTR-20 ③). */
 export const ASSIGN_REASON_MIN = 5;
 export const ASSIGN_REASON_LIMIT = 200;
+/** A write without an answer after this long is aborted; its result is unknown. */
+export const WRITE_TIMEOUT_MS = 15_000;
 /** A UUID-shaped user id (contract Id). */
 export const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -76,14 +86,106 @@ export function subReasonLabel(code: string): string {
 
 const KNOWN_PLATFORM: ReadonlySet<string> = new Set(PLATFORM_STATUSES);
 const KNOWN_REBATE: ReadonlySet<string> = new Set(REBATE_STATUSES);
+const KNOWN_DISPLAY: ReadonlySet<string> = new Set(display_status);
 /** Statuses from which a manual hold / unhold is accepted (BR-FUND-01 R11, BR-FUND-06). */
 const HOLDABLE: ReadonlySet<string> = new Set(['ESTIMATED', 'WAITING']);
 /** The risk.* permission points (config.risk is not one of them). */
 const RISK_POINTS: readonly string[] = admin_permission.filter((key) => key.startsWith('risk.'));
 
-/** True when both statuses are values of this console's enums (BR-TEXT-05). */
-export function knownStatuses(order: Pick<OrderDetail, 'platform_status' | 'rebate_status'>) {
-  return KNOWN_PLATFORM.has(order.platform_status) && KNOWN_REBATE.has(order.rebate_status);
+/**
+ * True when every status is a value of this console's enums (BR-TEXT-05): platform_status,
+ * rebate_status and display_status (null, an unattributed order's, is known).
+ */
+export function knownStatuses(
+  order: Pick<OrderDetail, 'platform_status' | 'rebate_status' | 'display_status'>,
+): boolean {
+  return (
+    KNOWN_PLATFORM.has(order.platform_status) &&
+    KNOWN_REBATE.has(order.rebate_status) &&
+    (order.display_status === null || KNOWN_DISPLAY.has(order.display_status))
+  );
+}
+
+/**
+ * A note / reason as it is sent: surrounding whitespace removed. Its length is checked on this
+ * very value (whitespace counts for nothing), so what passes the check is what is sent.
+ */
+export function sentText(value: string): string {
+  return value.trim();
+}
+
+function lengthWithin(value: string, min: number, max: number): boolean {
+  const length = codePointLength(sentText(value));
+  return length >= min && length <= max;
+}
+
+/** adminHoldOrder / adminUnholdOrder `note` after trimming: 1–200 characters. */
+export function noteValid(note: string): boolean {
+  return lengthWithin(note, NOTE_MIN, NOTE_LIMIT);
+}
+
+/** adminReassignOrder `reason` after trimming: 5–200 characters. */
+export function assignReasonValid(reason: string): boolean {
+  return lengthWithin(reason, ASSIGN_REASON_MIN, ASSIGN_REASON_LIMIT);
+}
+
+/**
+ * Whether a write dialog may be closed (【取消】, its close button, Esc): only while editing. Not
+ * while sending or verifying, and not while a result is unknown: then only 【重试】 is offered.
+ */
+export function dialogClosable(phase: WritePhase): boolean {
+  return phase === 'editing';
+}
+
+/** A write sent once: its body and, after a 动态码, the step-up token it carried. */
+export interface SentWrite<B> {
+  readonly body: B;
+  readonly token?: string;
+}
+
+/** A write of an order whose result is unknown, kept until a retry gets a definite answer. */
+export type PendingWrite =
+  | { readonly action: 'hold' | 'unhold'; readonly sent: SentWrite<HoldBody | UnholdBody> }
+  | { readonly action: 'reason-sub'; readonly sent: SentWrite<ReasonSubBody> }
+  | { readonly action: 'reassign'; readonly sent: SentWrite<AssignBody> };
+
+// Kept outside the page: a reload (or leaving and coming back) remounts the writes, and the
+// order's dialog must come back locked with the same body, not as a new editable one.
+const pendingWrites = new Map<string, PendingWrite>();
+
+/** The write of this order whose result is still unknown, if any. */
+export function pendingWriteOf(orderId: string): PendingWrite | undefined {
+  return pendingWrites.get(orderId);
+}
+
+/** The result of this write is unknown: only 【重试】 of the same body may follow. */
+export function keepPendingWrite(orderId: string, write: PendingWrite): void {
+  pendingWrites.set(orderId, write);
+}
+
+/** A definite answer came (success, refusal, 20902, 10003): the order may be written again. */
+export function clearPendingWrite(orderId: string): void {
+  pendingWrites.delete(orderId);
+}
+
+/**
+ * Runs `start` with a signal aborted after `ms`; rejects with a TimeoutError once `ms` passed,
+ * whether or not the request honoured the signal (a late answer is then ignored).
+ */
+export function withDeadline<T>(
+  start: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const timeout = new DOMException('Write timed out', 'TimeoutError');
+      controller.abort(timeout);
+      reject(timeout);
+    }, ms);
+  });
+  return Promise.race([start(controller.signal), deadline]).finally(() => clearTimeout(timer));
 }
 
 export interface WriteEntries {

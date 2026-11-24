@@ -33,6 +33,7 @@ import { useLocation, useNavigate } from 'react-router';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { PlannedPage, usePlanned } from '../../components/planned/index.ts';
 import { ordersTexts } from '../../texts/orders.ts';
+import { knownStatuses } from './detail-writes/model.ts';
 import { OrderWrites } from './detail-writes/OrderWrites.tsx';
 import { subReasonLabel } from './detail-writes/model.ts';
 import { FlagTags, StatusTag } from './parts.tsx';
@@ -161,15 +162,10 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
       </Flex>
       <Flex gap={8} wrap>
         {order === undefined || status !== 'ready' ? null : (
-          <OrderWrites
-            order={order}
-            access={access}
-            onSaved={saved}
-            onConflict={conflicted}
-            onReload={retry}
-          />
+          <OrderWrites order={order} access={access} onSaved={saved} onConflict={conflicted} />
         )}
-        {order === undefined || status !== 'ready' ? null : (
+        {/* BR-TEXT-05: no write action, 【同步此单】 included, for a status this console does not know. */}
+        {order === undefined || status !== 'ready' || !knownStatuses(order) ? null : (
           <Button
             icon={<SyncOutlined aria-hidden />}
             disabled={sync.busy}

@@ -1,7 +1,10 @@
 // Dialogs of the order detail writes (F1-07ee). Each one is mounted only while open (unmounted on
 // close, nothing kept between openings) and sends through useOrderWrite: the body carries the
 // row_version of the shown detail (expected_row_version), or, for 【指定归属】, what the operator
-// saw of the attribution (expected_user_id null, expected_locked = flags.locked).
+// saw of the attribution (expected_user_id null, expected_locked = flags.locked). While a result
+// is unknown the dialog cannot be closed (no 【取消】, close button or Esc) and its inputs stay
+// locked; the write is kept per order, so a remounted dialog comes back the same way (`pending`).
+// Notes and reasons are checked and sent after trimming (sentText).
 import { Alert, Button, Flex, Form, Input, Modal, Radio, Typography } from 'antd';
 import { useId, useState, type ReactElement, type ReactNode } from 'react';
 import type { AccessControl } from '../../../providers/access-control/index.ts';
@@ -10,13 +13,17 @@ import { ordersTexts } from '../../../texts/orders.ts';
 import { codeLabel, type OrderDetail } from '../model.ts';
 import {
   ASSIGN_REASON_LIMIT,
-  ASSIGN_REASON_MIN,
   NONE,
   NOTE_LIMIT,
-  NOTE_MIN,
   STAFF_HOLD_REASONS,
   USER_ID,
+  assignReasonValid,
+  clearPendingWrite,
   derivedHoldReason,
+  dialogClosable,
+  keepPendingWrite,
+  noteValid,
+  sentText,
   subReasonLabel,
   subReasonsOf,
   writeUrl,
@@ -24,6 +31,7 @@ import {
   type HoldBody,
   type ReasonSubChoice,
   type ReasonSubBody,
+  type SentWrite,
   type StaffHoldReason,
   type UnholdBody,
 } from './model.ts';
@@ -31,11 +39,13 @@ import { useOrderWrite, type OrderWrite, type WriteDone } from './useOrderWrite.
 
 const w = ordersTexts.writes;
 
-export interface DialogProps {
+export interface DialogProps<B> {
   readonly order: OrderDetail;
   readonly onDone: (done: WriteDone) => void;
-  /** Closed by the operator; `unknown` when a result was still unknown (the page reads again). */
-  readonly onClose: (unknown: boolean) => void;
+  /** Closed by the operator (only while editing; never while a result is unknown). */
+  readonly onClose: () => void;
+  /** This order's write whose result is still unknown: reopened locked with its body. */
+  readonly pending?: SentWrite<B> | undefined;
 }
 
 function WriteModal<B>(props: {
@@ -43,13 +53,13 @@ function WriteModal<B>(props: {
   readonly submitText: string;
   readonly write: OrderWrite<B>;
   readonly onSubmit: () => void;
-  readonly onClose: (unknown: boolean) => void;
+  readonly onClose: () => void;
   readonly children: ReactNode;
 }): ReactElement {
   const { title, submitText, write, onSubmit, onClose, children } = props;
-  const closable = write.phase === 'editing' || write.phase === 'unknown';
+  const closable = dialogClosable(write.phase);
   const close = () => {
-    if (closable) onClose(write.phase === 'unknown');
+    if (closable) onClose();
   };
   const footer = (
     <Flex justify="flex-end" gap={8} wrap>
@@ -129,30 +139,35 @@ function NoteField(props: {
 
 /** 【暂停结算】 / 【恢复结算】: reason (derived from the points for a hold when it can be) and note. */
 export function HoldDialog(
-  props: DialogProps & { readonly mode: 'hold' | 'unhold'; readonly access: AccessControl },
+  props: DialogProps<HoldBody | UnholdBody> & {
+    readonly mode: 'hold' | 'unhold';
+    readonly access: AccessControl;
+  },
 ): ReactElement {
-  const { order, mode, access, onDone, onClose } = props;
+  const { order, mode, access, onDone, onClose, pending } = props;
   const h = w.hold;
   const title = mode === 'hold' ? w.entries.hold : w.entries.unhold;
   const derived = mode === 'hold' ? derivedHoldReason(access) : undefined;
-  const [reason, setReason] = useState<StaffHoldReason>();
-  const [note, setNote] = useState('');
+  const [reason, setReason] = useState<StaffHoldReason | undefined>(pending?.body.reason_code);
+  const [note, setNote] = useState(pending?.body.note ?? '');
   const [tried, setTried] = useState(false);
   const write = useOrderWrite<HoldBody | UnholdBody>({
     url: writeUrl(order, mode),
     operation: title,
     onDone,
+    pending,
+    onUnknown: (sent) => keepPendingWrite(order.order_id, { action: mode, sent }),
+    onSettled: () => clearPendingWrite(order.order_id),
   });
   const chosen = derived ?? reason;
-  const length = codePointLength(note);
-  const noteValid = length >= NOTE_MIN && length <= NOTE_LIMIT;
+  const noteOk = noteValid(note);
 
   const submit = () => {
     setTried(true);
-    if (chosen === undefined || !noteValid) return;
+    if (chosen === undefined || !noteOk) return;
     write.submit({
       reason_code: chosen,
-      note: note.trim(),
+      note: sentText(note),
       expected_row_version: order.row_version,
     });
   };
@@ -190,30 +205,29 @@ export function HoldDialog(
           <Typography.Text>{h.derived(codeLabel('hold_reason', derived))}</Typography.Text>
         </Form.Item>
       )}
-      <NoteField
-        value={note}
-        onChange={setNote}
-        locked={write.locked}
-        invalid={tried && !noteValid}
-      />
+      <NoteField value={note} onChange={setNote} locked={write.locked} invalid={tried && !noteOk} />
     </WriteModal>
   );
 }
 
 /** 【原因细分】: one sub-reason of the order's reason (the contract groups) or 「无」 (none). */
-export function ReasonSubDialog(props: DialogProps): ReactElement {
-  const { order, onDone, onClose } = props;
+export function ReasonSubDialog(props: DialogProps<ReasonSubBody>): ReactElement {
+  const { order, onDone, onClose, pending } = props;
   const s = w.reasonSub;
   const subs = subReasonsOf(order.reason);
   const current = order.reason_sub ?? null;
-  const [value, setValue] = useState<ReasonSubChoice | undefined>(
-    current === null ? NONE : subs.find((sub) => sub === current),
-  );
+  const [value, setValue] = useState<ReasonSubChoice | undefined>(() => {
+    if (pending !== undefined) return pending.body.reason_sub;
+    return current === null ? NONE : subs.find((sub) => sub === current);
+  });
   const [tried, setTried] = useState(false);
   const write = useOrderWrite<ReasonSubBody>({
     url: writeUrl(order, 'reason-sub'),
     operation: w.entries.reasonSub,
     onDone,
+    pending,
+    onUnknown: (sent) => keepPendingWrite(order.order_id, { action: 'reason-sub', sent }),
+    onSettled: () => clearPendingWrite(order.order_id),
   });
 
   const submit = () => {
@@ -253,22 +267,24 @@ export function ReasonSubDialog(props: DialogProps): ReactElement {
 }
 
 /** 【指定归属】 of an unattributed order: target UID and reason; totp step-up only on 10003. */
-export function AssignDialog(props: DialogProps): ReactElement {
-  const { order, onDone, onClose } = props;
+export function AssignDialog(props: DialogProps<AssignBody>): ReactElement {
+  const { order, onDone, onClose, pending } = props;
   const a = w.assign;
   const userId = useId();
   const reasonId = useId();
-  const [user, setUser] = useState('');
-  const [reason, setReason] = useState('');
+  const [user, setUser] = useState(pending?.body.user_id ?? '');
+  const [reason, setReason] = useState(pending?.body.reason ?? '');
   const [tried, setTried] = useState(false);
   const write = useOrderWrite<AssignBody>({
     url: writeUrl(order, 'reassign'),
     operation: a.stepUpOperation,
     onDone,
+    pending,
+    onUnknown: (sent) => keepPendingWrite(order.order_id, { action: 'reassign', sent }),
+    onSettled: () => clearPendingWrite(order.order_id),
   });
   const userValid = USER_ID.test(user.trim());
-  const length = codePointLength(reason);
-  const reasonValid = length >= ASSIGN_REASON_MIN && length <= ASSIGN_REASON_LIMIT;
+  const reasonValid = assignReasonValid(reason);
 
   const submit = () => {
     setTried(true);
@@ -277,7 +293,7 @@ export function AssignDialog(props: DialogProps): ReactElement {
       user_id: user.trim(),
       expected_user_id: null,
       expected_locked: order.flags.locked,
-      reason: reason.trim(),
+      reason: sentText(reason),
     });
   };
 

@@ -3,8 +3,10 @@
 // - 20902: tell the page, which reads the detail once again; the write is not resent;
 // - 10003 (totp, 【指定归属】 only): verify the 动态码 with StepUpModal, then resend the same body
 //   once with the new X-Step-Up-Token (the first request never carries one, D10-2792 ⑦);
-// - result unknown (timeout, network failure, 5xx): the form stays locked and only 【重试】
-//   resends the very same body (and token); a success or an explicit refusal unlocks it;
+// - result unknown (no answer within WRITE_TIMEOUT_MS, network failure, 5xx): the form stays
+//   locked, the dialog cannot be closed and only 【重试】 resends the very same body (and token);
+//   the write is kept per order (keepPendingWrite) so a remounted page reopens it locked; a
+//   success, 20902 or an explicit refusal unlocks it;
 // - an explicit refusal: its message, the form may be edited again.
 import type { Schema } from '@couli/contracts-ts';
 import { useDataProvider } from '@refinedev/core';
@@ -13,7 +15,13 @@ import { StepUpModal, type StepUpResult } from '../../../components/step-up/inde
 import { AdminApiError } from '../../../providers/data/index.ts';
 import { ordersTexts } from '../../../texts/orders.ts';
 import type { OrderDetail } from '../model.ts';
-import { STEP_UP_URL, writeFailureOf } from './model.ts';
+import {
+  STEP_UP_URL,
+  WRITE_TIMEOUT_MS,
+  withDeadline,
+  writeFailureOf,
+  type SentWrite,
+} from './model.ts';
 
 export type WritePhase = 'editing' | 'sending' | 'verifying' | 'unknown';
 
@@ -33,23 +41,26 @@ export interface OrderWrite<B> {
   readonly stepUpModal: ReactElement | null;
 }
 
-interface Sent<B> {
-  readonly body: B;
-  readonly token?: string;
-}
+type Sent<B> = SentWrite<B>;
 
 export function useOrderWrite<B>(options: {
   readonly url: string;
   /** 「本次操作：」 of the 动态码 dialog. */
   readonly operation: string;
   readonly onDone: (done: WriteDone) => void;
+  /** A write of this order whose result is still unknown: start locked with it. */
+  readonly pending?: Sent<B> | undefined;
+  /** The result became unknown: keep the write outside the dialog (keepPendingWrite). */
+  readonly onUnknown: (sent: Sent<B>) => void;
+  /** A definite answer came: drop the kept write (clearPendingWrite). */
+  readonly onSettled: () => void;
 }): OrderWrite<B> {
   const getProvider = useDataProvider();
-  const [phase, setPhase] = useState<WritePhase>('editing');
+  const { url, operation, onDone, pending, onUnknown, onSettled } = options;
+  const [phase, setPhase] = useState<WritePhase>(pending === undefined ? 'editing' : 'unknown');
   const [error, setError] = useState<string>();
-  const last = useRef<Sent<B> | undefined>(undefined);
+  const last = useRef<Sent<B> | undefined>(pending);
   const busy = useRef(false);
-  const { url, operation, onDone } = options;
 
   const post = async (sent: Sent<B>): Promise<void> => {
     if (busy.current) return;
@@ -60,19 +71,29 @@ export function useOrderWrite<B>(options: {
     try {
       const custom = getProvider().custom;
       if (custom === undefined) throw new Error('Missing custom data provider');
-      const response = await custom<OrderDetail>({
-        url,
-        method: 'post',
-        payload: sent.body,
-        ...(sent.token === undefined ? {} : { meta: { stepUpToken: sent.token } }),
-      });
+      const response = await withDeadline(
+        (signal) =>
+          custom<OrderDetail>({
+            url,
+            method: 'post',
+            payload: sent.body,
+            meta: sent.token === undefined ? { signal } : { signal, stepUpToken: sent.token },
+          }),
+        WRITE_TIMEOUT_MS,
+      );
       busy.current = false;
+      onSettled();
       onDone({ kind: 'saved', order: response.data });
     } catch (cause) {
       busy.current = false;
       const failure = writeFailureOf(cause);
-      if (failure.kind === 'unknown') setPhase('unknown');
-      else if (failure.kind === 'conflict') onDone({ kind: 'conflict' });
+      if (failure.kind === 'unknown') {
+        onUnknown(sent);
+        setPhase('unknown');
+        return;
+      }
+      onSettled();
+      if (failure.kind === 'conflict') onDone({ kind: 'conflict' });
       else if (failure.kind === 'stepUp') setPhase('verifying');
       else {
         setPhase('editing');
