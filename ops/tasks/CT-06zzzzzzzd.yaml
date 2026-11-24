@@ -28,4 +28,5 @@ tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/modify-existing-template-interp/**'
-status: todo
+status: done
+pr: 658
