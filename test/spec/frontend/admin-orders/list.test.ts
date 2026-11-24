@@ -111,6 +111,8 @@ it(
     expect(row().textContent).toContain(UID);
     expect(row().textContent).toContain('138****5678');
     expect(row().textContent).not.toContain('13812345678');
+    await click(button(mainElement(), /^列设置$/));
+    await click(within(mainElement()).getByRole('checkbox', { name: '标记' }));
     expect(within(row()).queryAllByText('已锁定', { exact: true })).toHaveLength(1);
     expect(within(row()).queryAllByText('归属已锁定', { exact: true })).toHaveLength(1);
     expect(row(rows()[1]!.sub_order_id).textContent).toContain('未归因');

@@ -3,16 +3,18 @@ import { expect, vi } from 'vitest';
 import {
   LIST,
   createServer as createOrdersServer,
+  detail,
   manyRows,
+  ok,
   type Row,
   type Server,
 } from '../admin-orders/orders-fixtures.ts';
 import { button, click, mainElement, row } from '../admin-orders/orders-helpers.ts';
-import { detailOnSecondPage } from '../admin-orders-standard/kit.ts';
 import {
   SYNCS,
   createServer as createSyncServer,
   failure,
+  syncRecords,
   type ServerOptions,
 } from '../admin-orders-sync/fixtures.ts';
 
@@ -65,7 +67,20 @@ export const SECOND_PAGE_QUERY = {
   page_size: '50',
 };
 export const SECOND_PAGE_ROUTE = `/orders?${new URLSearchParams(SECOND_PAGE_QUERY)}`;
-export const DRAWER_ORDERS = [...detailOnSecondPage(), ...manyRows().slice(51, 53)];
+const [deepLinkedOrder, ...otherOrders] = manyRows();
+const drawerOrders = [...otherOrders.slice(0, 51), deepLinkedOrder!, otherOrders[51]!];
+export const SECOND_PAGE_ORDERS = drawerOrders.slice(50);
+export const DRAWER_DETAILS = SECOND_PAGE_ORDERS.slice(1).map((order, index) =>
+  detail({ ...order, raw_item_id: `item-drawer-${index + 1}` }),
+);
+
+export function createDrawerServer(): Server {
+  const server = createPageServer(drawerOrders);
+  for (const order of DRAWER_DETAILS) {
+    server.once('GET', `${LIST}/${order.order_id}`, () => ok(order));
+  }
+  return server;
+}
 
 export function addressQuery(): Record<string, string> {
   return Object.fromEntries(new URLSearchParams(window.location.search));
@@ -90,13 +105,15 @@ export function orderDialogs(): HTMLElement[] {
   return within(document.body).queryAllByRole('dialog');
 }
 
-export async function loadedDrawer(number: string): Promise<HTMLElement> {
-  await waitFor(() => {
+export async function loadedDrawer(number: string, rawItemId: string): Promise<HTMLElement> {
+  const dialog = await waitFor(() => {
     const dialogs = orderDialogs();
     expect(dialogs, '订单详情抽屉').toHaveLength(1);
-    expect(dialogs[0]!.textContent).toContain(number);
+    const shown = dialogs[0]!;
+    expect(shown.textContent).toContain(number);
+    expect(shown.textContent, '详情接口返回的商品 ID').toContain(rawItemId);
+    return shown;
   });
-  const dialog = orderDialogs()[0]!;
   expect(dialog.closest('.ant-drawer-right')).not.toBeNull();
   return dialog;
 }
@@ -137,6 +154,15 @@ export function serverWithFailedSync(): Server {
   return server;
 }
 
+export function serverWithKuaishouSync(): Server {
+  const [latest] = syncRecords();
+  return createPageServer(undefined, {
+    records: [
+      { ...latest!, platform: 'kuaishou', status: 'running', created_at: '2026-10-22T16:15:00Z' },
+    ],
+  });
+}
+
 export function expectInitialSync(server: Server): void {
   const syncRequests = server.log.filter(
     ({ path }) => path === SYNCS || path.startsWith(`${SYNCS}/`),
@@ -146,17 +172,24 @@ export function expectInitialSync(server: Server): void {
   ]);
 }
 
-export function expectSummaryAboveList(texts: readonly (string | RegExp)[]): void {
+export function expectSummaryAboveList(texts: readonly (string | RegExp)[]): HTMLElement {
   const main = mainElement();
   const table = within(main).queryByRole('table');
   expect(table).not.toBeNull();
-  const summary = Array.from(main.querySelectorAll<HTMLElement>('*')).find((element) => {
-    const text = element.textContent ?? '';
-    return (
-      !element.contains(table) &&
-      (element.compareDocumentPosition(table!) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 &&
-      texts.every((part) => (typeof part === 'string' ? text.includes(part) : part.test(text)))
-    );
-  });
+  // Tab labels and filter options cannot supply the sync record's display name.
+  const filters = '[role="tablist"], [role="tab"], [role="combobox"]';
+  const summary = Array.from(main.querySelectorAll<HTMLElement>('*'))
+    .reverse()
+    .find((element) => {
+      const text = element.textContent ?? '';
+      return (
+        !element.contains(table) &&
+        (element.compareDocumentPosition(table!) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 &&
+        element.closest(filters) === null &&
+        element.querySelector(filters) === null &&
+        texts.every((part) => (typeof part === 'string' ? text.includes(part) : part.test(text)))
+      );
+    });
   expect(summary, `列表上方的同步状态包含 ${texts.join('、')}`).toBeDefined();
+  return summary!;
 }

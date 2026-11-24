@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { waitFor, within } from '@testing-library/react';
 import { expect, it } from 'vitest';
-import { DETAIL, NUMBER, OID, ROUTE, rows } from '../admin-orders/orders-fixtures.ts';
+import { DETAIL, LIST, NUMBER, OID, ROUTE, rows } from '../admin-orders/orders-fixtures.ts';
 import {
   FLOW_TIMEOUT,
   button,
@@ -15,10 +15,12 @@ import {
 } from '../admin-orders/orders-helpers.ts';
 import { expectActiveTab, rebateLabel, tablistWith } from '../admin-orders-standard/kit.ts';
 import {
-  DRAWER_ORDERS,
+  DRAWER_DETAILS,
+  SECOND_PAGE_ORDERS,
   SECOND_PAGE_QUERY,
   SECOND_PAGE_ROUTE,
   addressQuery,
+  createDrawerServer,
   createPageServer,
   detailReads,
   loadedDrawer,
@@ -27,47 +29,51 @@ import {
 } from './kit.ts';
 
 it(
-  '[AC-F1-07edb-DRAWER#1] 行内查看只读一次详情，关闭恢复焦点和位置并保留筛选、页码与列表',
+  '[AC-F1-07edb-DRAWER#1] 依次查看第二页两笔非首行订单，各读取对应详情，关闭保留焦点位置与筛选分页',
   async () => {
-    const { server } = await mount(createPageServer(DRAWER_ORDERS), SECOND_PAGE_ROUTE);
+    const { server } = await mount(createDrawerServer(), SECOND_PAGE_ROUTE);
     await loaded();
     await settled(server);
     expect(queries(server)).toEqual([SECOND_PAGE_QUERY]);
     expect(addressQuery()).toEqual(SECOND_PAGE_QUERY);
     expect(detailReads(server)).toEqual([]);
-    for (const item of DRAWER_ORDERS.slice(50)) viewButton(item.sub_order_id);
+    for (const item of SECOND_PAGE_ORDERS) viewButton(item.sub_order_id);
 
     const listText = within(mainElement()).getByRole('table').textContent;
-    const trigger = viewButton(NUMBER);
-    trigger.focus();
-    mainElement().scrollTop = 320;
-    await click(trigger);
+    const expectedReads: string[] = [];
+    for (const { order_id, sub_order_id, raw_item_id } of DRAWER_DETAILS) {
+      const trigger = viewButton(sub_order_id);
+      trigger.focus();
+      mainElement().scrollTop = 320;
+      await click(trigger);
 
-    const drawer = await loadedDrawer(NUMBER);
-    await settled(server);
-    expect(detailReads(server)).toEqual([DETAIL]);
-    expect(window.location.pathname).toBe('/orders');
-    expect(addressQuery()).toEqual({ ...SECOND_PAGE_QUERY, detail: OID });
-    expect(queries(server)).toEqual([SECOND_PAGE_QUERY]);
+      const drawer = await loadedDrawer(sub_order_id, raw_item_id);
+      await settled(server);
+      expectedReads.push(`${LIST}/${order_id}`);
+      expect(detailReads(server)).toEqual(expectedReads);
+      expect(window.location.pathname).toBe('/orders');
+      expect(addressQuery()).toEqual({ ...SECOND_PAGE_QUERY, detail: order_id });
+      expect(queries(server)).toEqual([SECOND_PAGE_QUERY]);
 
-    const close = button(drawer, /^(?:close|关\s*闭)$/i);
-    close.focus();
-    expect(document.activeElement).toBe(close);
-    await click(close);
-    await waitFor(() => {
-      expect(orderDialogs()).toEqual([]);
-      expect(document.activeElement).toBe(trigger);
-    });
-    await settled(server);
-    expect(window.location.pathname).toBe('/orders');
-    expect(addressQuery()).toEqual(SECOND_PAGE_QUERY);
-    expect(queries(server)).toEqual([SECOND_PAGE_QUERY]);
-    expect(detailReads(server)).toEqual([DETAIL]);
-    expect(mainElement().scrollTop).toBe(320);
-    expect(within(mainElement()).getByRole('table').textContent).toBe(listText);
-    expectActiveTab(tablistWith('拼多多'), '拼多多');
-    const credited = rebateLabel('CREDITED');
-    expectActiveTab(tablistWith(credited), credited);
+      const close = button(drawer, /^(?:close|关\s*闭)$/i);
+      close.focus();
+      expect(document.activeElement).toBe(close);
+      await click(close);
+      await waitFor(() => {
+        expect(orderDialogs()).toEqual([]);
+        expect(document.activeElement).toBe(trigger);
+      });
+      await settled(server);
+      expect(window.location.pathname).toBe('/orders');
+      expect(addressQuery()).toEqual(SECOND_PAGE_QUERY);
+      expect(queries(server)).toEqual([SECOND_PAGE_QUERY]);
+      expect(detailReads(server)).toEqual(expectedReads);
+      expect(mainElement().scrollTop).toBe(320);
+      expect(within(mainElement()).getByRole('table').textContent).toBe(listText);
+      expectActiveTab(tablistWith('拼多多'), '拼多多');
+      const credited = rebateLabel('CREDITED');
+      expectActiveTab(tablistWith(credited), credited);
+    }
   },
   FLOW_TIMEOUT,
 );
@@ -78,7 +84,7 @@ it(
     const list = { platform: 'taobao', rebate_status: 'UNATTRIBUTED' };
     const route = `/orders?${new URLSearchParams({ ...list, detail: OID })}`;
     const { server } = await mount(createPageServer(), route);
-    await loadedDrawer(NUMBER);
+    await loadedDrawer(NUMBER, server.state.detail.raw_item_id);
     const taobao = rows()[1]!;
     await waitFor(() => expect(mainElement().textContent).toContain(taobao.sub_order_id));
     await settled(server);

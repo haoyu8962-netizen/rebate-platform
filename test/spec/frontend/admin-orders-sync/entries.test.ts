@@ -64,7 +64,14 @@ it(
     await mountList(first, SUPER);
     expect(usable(main(), MANUAL_ENTRY).length, 'super admin 【手动同步】').toBeGreaterThan(0);
     expect(usable(main(), RECORDS_ENTRY).length, 'super admin 【同步记录】').toBeGreaterThan(0);
-    expect(first.syncRequests()).toEqual([]);
+    const requests = first.syncRequests().map(({ method, path, query }) => ({
+      method,
+      path,
+      query,
+    }));
+    expect(requests).toEqual([
+      { method: 'GET', path: '/admin/v1/order-syncs', query: { page: '1', page_size: '1' } },
+    ]);
 
     cleanup();
     const second = createServer();

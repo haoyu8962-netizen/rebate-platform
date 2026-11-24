@@ -19,6 +19,7 @@ import {
   expectInitialSync,
   expectSummaryAboveList,
   serverWithFailedSync,
+  serverWithKuaishouSync,
 } from './kit.ts';
 
 it(
@@ -68,6 +69,21 @@ it(
     const main = mainElement();
     const alerts = within(document.body).queryAllByRole('alert');
     expect(alerts.filter((alert) => !main.contains(alert))).toEqual([]);
+  },
+  FLOW_TIMEOUT,
+);
+
+it(
+  '[AC-F1-07edb-SYNC-BAR#4] 筛选拼多多时，最新同步记录仍显示快手的中文平台名',
+  async () => {
+    const { server } = await mount(serverWithKuaishouSync(), '/orders?platform=pdd');
+    await loaded();
+    await settled(server);
+    expectInitialSync(server);
+    await waitFor(() => {
+      const summary = expectSummaryAboveList(['快手', statusName('running'), /10[-/]23\s*00:15/]);
+      expect(summary.textContent).not.toMatch(/kuaishou/i);
+    });
   },
   FLOW_TIMEOUT,
 );
