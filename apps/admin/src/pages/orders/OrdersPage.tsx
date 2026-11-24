@@ -97,6 +97,7 @@ import {
   failureOf,
   hasConditions,
   money,
+  newerSync,
   platformLabel,
   queryFromSearch,
   requestQuery,
@@ -108,6 +109,7 @@ import {
   type OrderQuery,
   type OrderRow,
   type OrdersBackState,
+  type SyncLatest,
   type SyncOutcome,
 } from './model.ts';
 
@@ -299,6 +301,7 @@ function OrdersList(): ReactElement {
   const [data, setData] = useState<OrderPage>();
   // Manual sync (F1-07eb): nothing is read until a dialog opens.
   const [syncOpen, setSyncOpen] = useState(false);
+  const [submittedSync, setSubmittedSync] = useState<SyncLatest>();
   const [recordsOpen, setRecordsOpen] = useState(false);
   const [notice, setNotice] = useState<SyncNotice>();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -791,6 +794,10 @@ function OrdersList(): ReactElement {
 
   const syncDone = (outcome: SyncOutcome) => {
     setSyncOpen(false);
+    if (outcome.kind === 'created' || outcome.kind === 'reused') {
+      const latest = outcome.latest;
+      if (latest !== undefined) setSubmittedSync((known) => newerSync(known, latest));
+    }
     const shown = noticeOf(outcome);
     setNotice(shown === undefined ? undefined : { id: nextNoticeId(), ...shown });
   };
@@ -817,7 +824,7 @@ function OrdersList(): ReactElement {
           </Button>
         </Flex>
       </Flex>
-      <SyncStatusBar />
+      <SyncStatusBar submitted={submittedSync} />
       {notice === undefined ? null : (
         <Alert
           key={notice.id}

@@ -1,14 +1,16 @@
 // The order detail drawer of the list (F1-07edb, BR-ID-46): a row's 【查看】 (or a list address
 // carrying detail=<order_id>) opens it on the right without leaving the list. It reads only
 // GET /admin/v1/orders/{order_id}, once per opening (【重试】 after a failure reads again), and
-// shows the main fields of that order; the full detail page (/orders/<order_id>) is unchanged and
+// shows the main fields of that order. Every opening shows only its own answer (loading until it
+// arrives, nothing from an earlier opening; ./drawer-state.ts); the full detail page (/orders/<order_id>) is unchanged and
 // stays behind the row's 【详情】. Display only: no amount is computed here.
 import { ReloadOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import { Button, Flex, Typography, theme } from 'antd';
-import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useReducer, type ReactElement, type ReactNode } from 'react';
 import { DetailDrawer, type DetailDrawerProps } from '../../components/detail-drawer/index.ts';
 import { ordersTexts } from '../../texts/orders.ts';
+import { drawerClosed, drawerStep } from './drawer-state.ts';
 import { FlagTags, StatusTag } from './parts.tsx';
 import {
   beijingTime,
@@ -23,10 +25,6 @@ const t = ordersTexts.drawer;
 const basic = ordersTexts.detail.basic;
 const dash = ordersTexts.dash;
 
-type Loaded =
-  | { readonly id: string; readonly status: 'ready'; readonly order: OrderDetail }
-  | { readonly id: string; readonly status: 'failed' | 'missing' | 'forbidden' };
-
 export interface OrderDrawerProps {
   /** The order shown; undefined: the drawer is closed. */
   readonly orderId: string | undefined;
@@ -36,36 +34,42 @@ export interface OrderDrawerProps {
 export function OrderDrawer({ orderId, onClose }: OrderDrawerProps): ReactElement | null {
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
-  const [loaded, setLoaded] = useState<Loaded>();
-  const [attempt, setAttempt] = useState(0);
+  const [state, dispatch] = useReducer(drawerStep, drawerClosed);
+  // A new order, a close or a reopen starts a new opening before anything is shown.
+  if (state.orderId !== orderId) dispatch({ type: 'show', orderId });
+  const opening = state.opening;
+  const shownId = state.orderId;
 
   useEffect(() => {
-    if (orderId === undefined) return undefined;
+    if (shownId === undefined) return undefined;
     let current = true;
     const custom = getProvider().custom;
     if (custom === undefined) throw new Error('Missing custom data provider');
-    custom<OrderDetail>({ url: orderUrl(orderId), method: 'get' }).then(
+    custom<OrderDetail>({ url: orderUrl(shownId), method: 'get' }).then(
       (response) => {
-        if (current) setLoaded({ id: orderId, status: 'ready', order: response.data });
+        if (current)
+          dispatch({ type: 'answer', opening, loaded: { status: 'ready', order: response.data } });
       },
       (cause: unknown) => {
         if (!current) return;
         const kind = failureOf(cause);
-        setLoaded({ id: orderId, status: kind === 'invalid' ? 'missing' : kind });
+        dispatch({
+          type: 'answer',
+          opening,
+          loaded: { status: kind === 'invalid' ? 'missing' : kind },
+        });
       },
     );
     return () => {
       current = false;
     };
-  }, [getProvider, orderId, attempt]);
+  }, [getProvider, shownId, opening]);
 
-  if (orderId === undefined) return null;
-  // An answer for another order (or an older attempt cleared by 【重试】) counts as loading.
-  const shown = loaded?.id === orderId ? loaded : undefined;
+  if (orderId === undefined || state.orderId !== orderId) return null;
+  const shown = state.loaded;
 
   const retry = () => {
-    setLoaded(undefined);
-    setAttempt((value) => value + 1);
+    dispatch({ type: 'retry' });
   };
 
   const code = { fontFamily: token.fontFamilyCode } as const;

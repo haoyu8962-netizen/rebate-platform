@@ -8,6 +8,7 @@ import {
   SYNCS_URL,
   platformLabel,
   syncFailureOf,
+  syncLatestOf,
   type SyncCreateRequest,
   type SyncCreated,
   type SyncOutcome,
@@ -85,7 +86,10 @@ export function useSyncRequest(): {
           method: 'post',
           payload: body,
         });
-        outcome = { kind: response.data.reused ? 'reused' : 'created' };
+        outcome = {
+          kind: response.data.reused ? 'reused' : 'created',
+          latest: syncLatestOf(response.data, body.platform),
+        };
       } catch (cause) {
         outcome = syncFailureOf(cause, body.platform);
       } finally {

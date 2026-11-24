@@ -3,7 +3,9 @@
 // (GET /admin/v1/order-syncs with page=1, page_size=1; no limits read). It shows the platform's
 // display name (./platforms.ts, all nine platforms alike), the status's console dictionary name
 // and the creation time in Beijing time; no record shows the empty text. A failed read only shows
-// a line in the bar: the list is not affected and no global notice is raised.
+// a line in the bar: the list is not affected and no global notice is raised. A manual sync
+// accepted on this page shows at once from the create answer (no further read); of it and the read
+// record the bar keeps the later one.
 import { SyncOutlined } from '@ant-design/icons';
 import { useDataProvider } from '@refinedev/core';
 import { Flex, Tag, Typography, theme } from 'antd';
@@ -14,29 +16,31 @@ import {
   SYNCS_URL,
   beijingMinute,
   platformLabel,
+  syncBarOf,
   syncStatusName,
   syncTone,
-  type SyncItem,
+  type SyncBarState,
+  type SyncLatest,
   type SyncPage,
 } from './model.ts';
 
 const t = ordersTexts.sync.bar;
 
-type Latest =
-  | { readonly status: 'loading' }
-  | { readonly status: 'ready'; readonly item: SyncItem | undefined }
-  | { readonly status: 'failed' };
-
-export function SyncStatusBar(): ReactElement | null {
-  // adminListOrderSyncs not live yet (planned): no bar and no read (D10-284).
-  const planned = usePlanned('adminListOrderSyncs');
-  return planned ? null : <SyncStatusLine />;
+export interface SyncStatusBarProps {
+  /** The latest sync accepted on this page (from the create answer); undefined: none yet. */
+  readonly submitted?: SyncLatest | undefined;
 }
 
-function SyncStatusLine(): ReactElement {
+export function SyncStatusBar({ submitted }: SyncStatusBarProps): ReactElement | null {
+  // adminListOrderSyncs not live yet (planned): no bar and no read (D10-284).
+  const planned = usePlanned('adminListOrderSyncs');
+  return planned ? null : <SyncStatusLine submitted={submitted} />;
+}
+
+function SyncStatusLine({ submitted }: SyncStatusBarProps): ReactElement {
   const getProvider = useDataProvider();
   const { token } = theme.useToken();
-  const [latest, setLatest] = useState<Latest>({ status: 'loading' });
+  const [read, setRead] = useState<SyncBarState>({ status: 'loading' });
 
   useEffect(() => {
     let current = true;
@@ -44,10 +48,10 @@ function SyncStatusLine(): ReactElement {
     if (custom === undefined) throw new Error('Missing custom data provider');
     custom<SyncPage>({ url: SYNCS_URL, method: 'get', query: { page: 1, page_size: 1 } }).then(
       (response) => {
-        if (current) setLatest({ status: 'ready', item: response.data.items[0] });
+        if (current) setRead({ status: 'ready', item: response.data.items[0] });
       },
       () => {
-        if (current) setLatest({ status: 'failed' });
+        if (current) setRead({ status: 'failed' });
       },
     );
     return () => {
@@ -55,6 +59,7 @@ function SyncStatusLine(): ReactElement {
     };
   }, [getProvider]);
 
+  const latest = syncBarOf(read, submitted);
   const small = { fontSize: token.fontSizeSM } as const;
   let content: ReactElement;
   if (latest.status === 'loading') {
