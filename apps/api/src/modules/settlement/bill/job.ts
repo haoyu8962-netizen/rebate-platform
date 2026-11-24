@@ -15,6 +15,7 @@ import {
 import { addFen, applyReserve, parseFen, splitByBp, subFen } from '@couli/money';
 import type { Kysely, Transaction, Selectable } from 'kysely';
 import { newUuidV7, type Clock, type JobPayload } from '../../platform/index.ts';
+import { lockCreditGateExclusive } from '../batch/credit-gate.ts';
 import { decidingSettlement, latestSeqWithin } from '../settlements/index.ts';
 import {
   claimSettleJob,
@@ -265,6 +266,16 @@ async function readConfig(
   return { toleranceFen, maxOrders, creditEnabled: enabled === 'on' || enabled === true };
 }
 
+/** 取到平台结算互斥锁之后复读的入账开关（同 readConfig 的读法：经 config.get，只认明确的 on）。 */
+async function readCreditEnabled(
+  deps: BillJobDependencies,
+  appId: string,
+  platform: string,
+): Promise<boolean> {
+  const enabled = await deps.config.get(appId, `credit.enabled.${platform}`);
+  return enabled === 'on' || enabled === true;
+}
+
 /** D 的前一自然日（+08:00），只经 calendar 原语，不构造 Date。 */
 function previousDay(date: string): string {
   const day = Number(date.slice(8, 10));
@@ -429,6 +440,11 @@ export function createBillJob(dependencies: BillJobDependencies): BillJob {
       billId,
       generationStartedAt: now,
     };
+    // BR-FUND-16 加锁流程第 0 步：平台结算互斥锁排他模式，持有到本事务提交（onGenerated 期间仍在）；在账单行锁
+    // 与重放判定之后取（补充也是先账单行、后平台锁），重放不取。
+    await lockCreditGateExclusive(trx, appId, platform);
+    // BR-FUND-04 ⑨：等锁期间开关可能被关，是否生成主批次以取到锁之后读到的 credit.enabled.<platform> 为准。
+    const creditEnabled = await readCreditEnabled(deps, appId, platform);
     const rows = await deps.readSource(trx, selection);
     const cutoffMs = now.getTime();
 
@@ -583,7 +599,7 @@ export function createBillJob(dependencies: BillJobDependencies): BillJob {
       unsettledCount,
     };
 
-    if (config.creditEnabled) {
+    if (creditEnabled) {
       const drafts = splitSettlementBillBatches(
         billId,
         validations.map((v) => ({
