@@ -9,7 +9,7 @@ type: impl
 #   ③ 列表上方常驻同步状态条：初次加载只用现有 GET /admin/v1/order-syncs 取最近一条（page=1、page_size=1），显示平台显示名、状态与北京时间；无记录显示「暂无同步记录」；接口失败只在状态条显示「同步状态读取失败」，订单列表照常；不请求 limits，不新增请求路径（D10-2748）。
 #   ④ F1-07ed money r2 两条 S2：越界页（items 为空、total 大于 0）上分页器点第 1 页能回第 1 页并同步 URL；URL 里年份小于 100 的日期不被 Date.UTC 当成 19xx（FU-F1-07ED-PAGE-OVERFLOW / FU-F1-07ED-URL-DATE-YEAR）。
 # 不做（写死）：新筛选、页签数量、汇总卡、导出（D3）；暂扣 / 解除暂扣 / 指派（C 段 F1-07ee）；改归属、重新分佣、手动锁定、总代类列、批量暂扣（D10-2669 ③）。不改 contracts/**、apps/admin/src/components/**、App.tsx 路由，不加依赖。
-# 冻结用例：只改下面 8 块，改到与 ①③ 一致为止，别的断言一字不动；先红或 --related 若列出别的冻结用例要改，先报编排补登，不得顺手改。visual-baseline 订单页截图变化只出报告，不挡（D10-2734）。
+# 冻结用例：只改下面 12 块（补丁 1 加 LIST#2、ENTRY#3、BROWSER#1 / #2：规则测试评审 r1 指出它们依赖「标记」列默认可见或首屏零次 order-syncs，与 BR-ID-46 冲突），改到与 ①③ 一致为止，别的断言一字不动；先红或 --related 若列出别的冻结用例要改，先报编排补登，不得顺手改。visual-baseline 订单页截图变化只出报告，不挡（D10-2734）。
 refs: [BR-ID-46]
 refs_hash:
   BR-ID-46: 3d6ad5edcbd9
@@ -24,6 +24,7 @@ test_paths:
   - 'test/spec/frontend/admin-orders-sync/records.test.ts'
   - 'test/spec/frontend/admin-orders-standard/columns.test.ts'
   - 'test/spec/frontend/admin-orders-standard/tabs.test.ts'
+  - 'test/spec/frontend/admin-orders-sync/pages.browser.test.ts'
 modify_existing:
   - file: 'test/spec/frontend/admin-orders/list.test.ts'
     test: '[AC-F1-07e-LIST#1] 默认列表只请求一页，列、北京时间、服务端付款顺序及后台金额格式正确'
@@ -78,6 +79,30 @@ modify_existing:
     br: [BR-ID-46]
     ruling: D10-2748
     note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）；常驻同步状态条初次加载取最近一条（D10-2748）：干净地址下 order-syncs 请求由零改为恰一次（page=1、page_size=1）；无数量角标、默认选中全部的断言不动'
+  - file: 'test/spec/frontend/admin-orders/list.test.ts'
+    test: '[AC-F1-07e-LIST#2] 用户只显示 UID 与脱敏手机号，未归因与零金额区别于未知值，标记独立呈现'
+    reason: rule_change
+    br: [BR-ID-46]
+    ruling: D10-2735
+    note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）；「标记」列改为默认隐藏：先在【列设置】打开「标记」列再断言已锁定 / 归属已锁定 / 暂停 / 维权标签；UID、脱敏手机号、未归因与零金额的断言不动'
+  - file: 'test/spec/frontend/admin-orders-sync/entries.test.ts'
+    test: '[AC-F1-07eb-ENTRY#3] 超管也有【手动同步】【同步记录】；进不了订单页的账号没有这些入口、也不发 order-syncs 请求'
+    reason: rule_change
+    br: [BR-ID-46]
+    ruling: D10-2748
+    note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）；常驻同步状态条：超管首屏 order-syncs 由零次改为恰一次（page=1、page_size=1）；进不了订单页的账号仍零次，入口断言不动'
+  - file: 'test/spec/frontend/admin-orders-sync/pages.browser.test.ts'
+    test: '[AC-F1-07eb-BROWSER#1] 1440 订单列表【手动同步】打开后才读 limits，对话框的两种方式、平台、提交可见，截图 admin-order-sync'
+    reason: rule_change
+    br: [BR-ID-46]
+    ruling: D10-2748
+    note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）；常驻同步状态条：首屏 order-syncs 由零次改为恰一次（page=1、page_size=1）；limits 仍在打开【手动同步】后才读，对话框与截图断言不动'
+  - file: 'test/spec/frontend/admin-orders-sync/pages.browser.test.ts'
+    test: '[AC-F1-07eb-BROWSER#2] 1440【同步记录】列出状态中文名、平台与北京时间，截图 admin-order-sync-records'
+    reason: rule_change
+    br: [BR-ID-46]
+    ruling: D10-2748
+    note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）；常驻同步状态条：点【同步记录】前的 order-syncs 由零次改为只有状态条那一次，弹窗请求计数扣除那一次；列表内容与截图断言不动'
 impl: claude
 tester: codex
 accept:
