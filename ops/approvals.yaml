@@ -1023,3 +1023,9 @@ approvals:
     granted: true
     date: '2026-11-23'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 实现 / 评审轮次属门禁流程小改动），D10-2755，先例第 160、161、162、165 条。原因：B1-04zzzzm 前三次实现用在编译与冻结用例（TS2367、淘宝凭据形状）上，第一次资金评审（couli-runs/B1-04zzzzm/review-money-codex-r1.json）给出一条 S0（备案邀请码所属联盟账号与绑定写入账号可不一致，订单丢归属）与四条 S1，都在本单 paths 内且成立；实现与写测计数都已用满，没有「评过的写法」可退，故准一次追加。写测增量按第 19 条不由 Codex 评审。'
+  - id: 168
+    row: 4
+    title: "CT-24x 任务专属一次性追加：规则测试第 3 次（Codex）+ 规则测试评审增量 1 轮——范围写死为一处：冻结用例 [AC-B1-34f#14]（test/spec/admin/exports/list.int.test.ts）it.each 表里样例 '?resource=orders' 换成一个不存在的 resource 值，fields 与期望码 20001、回调体不变；不新增、不改其他用例"
+    granted: true
+    date: '2026-11-24'
+    note: '编排 D10-2780（照 D10-2710 甲）。原因：CT-24x 契约 export_resource 加 orders 后，land 前分段全量第 3 段只红这一条冻结集成用例（该样例拿 orders 当不存在的值），属规则变化（台账补丁 3：modify_existing rule_change，br BR-ID-33，模板原文整块）。非资金用例，land 时编排照第 24 条加标签。'
