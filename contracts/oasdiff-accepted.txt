@@ -125,3 +125,10 @@ POST /v1/auth/step-up removed `#/components/schemas/StepUpSummaryWithdraw` from 
 # B1-20b（D10-2217 / D10-484）：audit_system_actor 追加 system:self_service（用户本人自助换号的系统审计行），只是响应枚举加值，后台审计列表 / 详情按枚举给中文名（audit-log-view.ts 已补）。
 GET /admin/v1/audit-logs added the new `system:self_service` enum value to the `data/items/items/system_actor` response property for the response status `200`
 GET /admin/v1/audit-logs/{id} added the new `system:self_service` enum value to the `data/system_actor` response property for the response status `200`
+# CT-24x (D10-2669 / D10-2673, accepted by D10-2837 after D10-1934): export_resource (AdminExportResource) adds orders,
+# the order export (always masked, BR-ID-33). Old clients cannot receive it: all three responses are /admin/v1/exports
+# endpoints read only by the admin console, which ships together with the server (D10-557); no /v1/**
+# user-side response references AdminExportResource, so no installed App / H5 client can see the value.
+GET /admin/v1/exports added the new `orders` enum value to the `data/items/items/resource` response property for the response status `200`
+POST /admin/v1/exports added the new `orders` enum value to the `data/resource` response property for the response status `202`
+POST /admin/v1/exports/{id}/retry added the new `orders` enum value to the `data/resource` response property for the response status `200`
