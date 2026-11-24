@@ -8,7 +8,7 @@ type: impl
 # 2026-11-19 置 done（#336）：④ 待批准角标未做——坏账核销页签只在打开时读、不带状态筛选（F1-08ca WRITEOFF#1），现有读取拿不到待批准数，按本单「做不到就不做」；要做须另开单加读取。
 refs: [BR-FUND-16, BR-FUND-12]
 refs_hash:
-  BR-FUND-16: 077f6d412d5a
+  BR-FUND-16: 084c4c66328c
   BR-FUND-12: 837883d06fa4
 deps: [F1-08fa, F1-08cd]
 paths:

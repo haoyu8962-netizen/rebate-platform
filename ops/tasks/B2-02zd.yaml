@@ -17,7 +17,7 @@ type: impl
 refs: [BR-FUND-19, BR-FUND-16]
 refs_hash:
   BR-FUND-19: f72aa79561bc
-  BR-FUND-16: 077f6d412d5a
+  BR-FUND-16: 084c4c66328c
 deps: [B2-02x, B2-02zb, B2-02zda]
 paths:
   - 'apps/api/src/modules/ledger/**'

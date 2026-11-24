@@ -9,7 +9,7 @@ refs: [BR-FUND-05, BR-FUND-10, BR-FUND-16]
 refs_hash:
   BR-FUND-05: 972b05594c07
   BR-FUND-10: 3ed330a761d1
-  BR-FUND-16: 077f6d412d5a
+  BR-FUND-16: 084c4c66328c
 deps: [B2-01b]
 paths:
   - 'packages/domain/src/**'
