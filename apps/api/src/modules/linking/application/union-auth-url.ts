@@ -246,6 +246,18 @@ export function createUnionAuthUrl(options: UnionAuthUrlOptions): UnionAuthUrlSe
       });
     }
 
+    // B1-04zzzzn r4 (D10-2872): the real filing is not ready for the selected account (e.g. it is
+    // not the inviter code's) → the same answer, no state (the bindings submission's judgement).
+    if (
+      platform === 'taobao' &&
+      authApps.taobaoFilingReadyFor !== undefined &&
+      !authApps.taobaoFilingReadyFor(accountId)
+    ) {
+      return fail(status === 'invalid' ? 30102 : 30101, input.traceId, {
+        reason: 'auth_unavailable',
+      });
+    }
+
     // B1-04zzzzm: no issuable Taobao address in staging / prod → the same answer as above, no state.
     const taobaoPlan = platform === 'taobao' ? taobaoAuthUrlPlan(authApps, appEnv) : null;
     if (taobaoPlan?.kind === 'unavailable') {

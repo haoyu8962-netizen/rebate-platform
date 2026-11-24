@@ -109,7 +109,7 @@ const CREDENTIAL_REFUSALS: ReadonlySet<string> = new Set(['invalid_identity', 'u
 export class UnionBindingExchanger {
   readonly #bind: (() => UnionBindPublisher | null) | undefined;
   readonly #resolveApp: UnionBindingAppResolver | undefined;
-  readonly #ready: (() => boolean) | undefined;
+  readonly #ready: ((unionAccountId?: string) => boolean) | undefined;
 
   /**
    * `bind` resolves the Taobao adapter's bindPublisher at call time; absent or resolving to null
@@ -123,7 +123,7 @@ export class UnionBindingExchanger {
     bind?: () => UnionBindPublisher | null,
     options?: {
       readonly resolveApp?: UnionBindingAppResolver;
-      readonly ready?: () => boolean;
+      readonly ready?: (unionAccountId?: string) => boolean;
     },
   ) {
     this.#bind = bind;
@@ -131,16 +131,19 @@ export class UnionBindingExchanger {
     this.#ready = options?.ready;
   }
 
-  /** B1-04zzzzn: false when the real filing adapter is not ready (no `ready` option: true). */
-  filingReady(): boolean {
-    return this.#ready === undefined || this.#ready();
+  /**
+   * B1-04zzzzn: false when the real filing adapter is not ready (no `ready` option: true); r4: for
+   * `unionAccountId`, the account the binding is written under, when given.
+   */
+  filingReady(unionAccountId?: string): boolean {
+    return this.#ready === undefined || this.#ready(unionAccountId);
   }
 
   async exchange(input: UnionBindingExchangeInput): Promise<UnionBindingExchangeResult> {
     const scope = bindingUnionAccount.getStore();
     const unionAccountId = scope?.accountId;
     const filing = scope?.filing;
-    if (this.#ready !== undefined && !this.#ready()) {
+    if (this.#ready !== undefined && !this.#ready(unionAccountId)) {
       throw new UnionBindingExchangeRefusal('filing_unavailable');
     }
     const bind = this.#bind?.() ?? null;

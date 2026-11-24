@@ -497,6 +497,23 @@ function authAppsFor(
       Promise.reject(new Error('linking: the real taobao filing adapter is not ready'));
     return { taobaoUserOAuth: { appKey: null, redirectUri: null }, resolve };
   }
+  // B1-04zzzzn r4 (D10-2872): every live issuance also asks the readiness for the account it uses.
+  const taobaoFilingReadyFor = (accountId: string | null): boolean =>
+    accountId !== null && taobaoFilingReady(appConfig, ports, accountId);
+  const base = authAppsWithOAuth(authApps, appConfig);
+  return {
+    taobaoUserOAuth: base.taobaoUserOAuth,
+    taobaoFilingReadyFor,
+    resolve: (appId, environment, client, method) =>
+      base.resolve(appId, environment, client, method),
+  };
+}
+
+/** The live auth apps before the per-account readiness (B1-04zzzzm 补丁 2). */
+function authAppsWithOAuth(
+  authApps: UnionAuthApps | undefined,
+  appConfig: AppConfig,
+): UnionAuthApps {
   if (authApps?.taobaoUserOAuth !== undefined) return authApps;
   const appKey = appConfig.taobao?.appKey ?? null;
   const redirectUri = appConfig.taobaoUserOAuthRedirectUri ?? null;
@@ -514,8 +531,18 @@ function authAppsFor(
  * B1-04zzzzn r2 (money review S1): and the settings the filing needs (taobaoFilingConfigured: user
  * OAuth app key and redirect URI, inviter code, the inviter code's union account), so an instance
  * missing any of them neither issues a state nor consumes one (auth_unavailable).
+ * r4 (D10-2872): given the account an authorization uses, also that it is the inviter code's
+ * (TAOBAO_INVITER_ACCOUNT_ID): issuance (authAppsFor's taobaoFilingReadyFor) and the submission
+ * (the exchanger's `ready`, before the state is consumed) judge it alike.
  */
-function taobaoFilingReady(appConfig: AppConfig, ports: LinkOpenPorts | undefined): boolean {
+function taobaoFilingReady(
+  appConfig: AppConfig,
+  ports: LinkOpenPorts | undefined,
+  unionAccountId?: string,
+): boolean {
+  if (unionAccountId !== undefined && unionAccountId !== appConfig.taobaoInviterAccountId) {
+    return false;
+  }
   return (
     taobaoLiveFilingReady(
       appConfig.appEnv,
@@ -983,7 +1010,7 @@ export class LinkingModule {
               appConfig.appEnv === 'staging' || appConfig.appEnv === 'prod'
                 ? {
                     resolveApp: resolveIssuedTaobaoOAuthApp,
-                    ready: () => taobaoFilingReady(appConfig, ports),
+                    ready: (unionAccountId) => taobaoFilingReady(appConfig, ports, unionAccountId),
                   }
                 : {},
             ),

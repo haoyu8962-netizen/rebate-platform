@@ -74,9 +74,9 @@
 // site authorization, before the state is checked or consumed (not ready → auth_unavailable, the
 // state stays usable); ② the filing adapter records the attempt (union-filing-attempts.ts, committed
 // on its own) right before publisher.info.save; an id from the save marks it saved on trx before
-// the binding's savepoint; ③ a duplicate answer's read-back id is accepted on matching binding
-// history or an earlier attempt of the same app, user, platform and account whose outcome is
-// unknown.
+// the binding's savepoint; ③ a duplicate answer's read-back id is accepted only on matching
+// binding history (r4, D10-2872: an earlier attempt whose outcome is unknown is no longer evidence;
+// it is warned with its id as duplicate_after_unknown_attempt instead).
 // r2 (money review): the attempt's filing lock (union-filing-attempts.ts) is given back after the
 // key's transaction is over (requestEnded, in bind), so a later request of the same scope only
 // reads attempts of requests that have ended; an id from the save whose answer is not stored
@@ -121,7 +121,7 @@ import {
 } from './union-binding-exchanger.ts';
 import {
   createFilingRecorder,
-  hasEarlierUnknownAttempt,
+  findEarlierUnknownAttempt,
   type FilingRecorder,
 } from './union-filing-attempts.ts';
 import { BIND_RETRY_AFTER_SEC, getBindingAdmission } from './upstream-limits.ts';
@@ -146,6 +146,7 @@ export type UnionBindFailure =
   | 'no_relation_id'
   | 'filing_unavailable'
   | 'duplicate_unverified'
+  | 'duplicate_after_unknown_attempt'
   | 'exchange_failed';
 
 export interface UnionBindFailureSample {
@@ -337,6 +338,7 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     method: UnionAuthMethod,
     failure: UnionBindFailure,
     traceId: string,
+    extra: Readonly<Record<string, string>> = {},
   ): void {
     const count = failures.record(client, method, failure);
     logger.warn(
@@ -349,6 +351,7 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
         failure,
         count,
         trace_id: traceId,
+        ...extra,
       },
       'linking: union binding credential exchange or channel filing failed',
     );
@@ -566,7 +569,8 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
       });
     }
     // B1-04zzzzn ④: no real filing adapter → the same answer, before the state is touched.
-    if (exchanger.filingReady !== undefined && !exchanger.filingReady()) {
+    // r4 (D10-2872): for the account this authorization uses (it must be the inviter code's).
+    if (exchanger.filingReady !== undefined && !exchanger.filingReady(accountId)) {
       bindFailed(appId, client, body.auth_method, 'filing_unavailable', traceId);
       return result(status === 'invalid' ? 30102 : 30101, traceId, {
         reason: 'auth_unavailable',
@@ -669,9 +673,10 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     // answer that is not stored (10001, 50001) has it written again after the rollback (bind).
     const attempt = filing.current();
     if (exchanged.fromDuplicateLookup !== true) await filing.markSaved(trx);
-    // B1-04zzzzn ③ (D10-2851): or an earlier attempt of the same app, user, platform and account
-    // whose outcome is unknown (its save may have gone through); this request's own attempt and
-    // attempts with a known outcome never count.
+    // B1-04zzzzn ③ r4 (D10-2872): only that history counts. An earlier attempt of the same app,
+    // user, platform and account whose outcome is unknown is not evidence (the id may still be
+    // another account's): the answer is the same refusal, warned once as
+    // duplicate_after_unknown_attempt with that attempt's id (no credential or Taobao identity).
     if (exchanged.fromDuplicateLookup === true) {
       const history = await trx
         .selectFrom('union_bindings')
@@ -683,15 +688,19 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
         .where('relation_id', '=', exchanged.relationId)
         .limit(1)
         .executeTakeFirst();
-      const unknownEarlier =
-        history === undefined &&
-        (await hasEarlierUnknownAttempt(
+      if (history === undefined) {
+        const earlier = await findEarlierUnknownAttempt(
           trx,
           { appId, userId, platform, unionAccountId: accountId },
           attempt,
-        ));
-      if (history === undefined && !unknownEarlier) {
-        bindFailed(appId, client, method, 'duplicate_unverified', traceId);
+        );
+        if (earlier === null) {
+          bindFailed(appId, client, method, 'duplicate_unverified', traceId);
+        } else {
+          bindFailed(appId, client, method, 'duplicate_after_unknown_attempt', traceId, {
+            earlier_attempt_id: earlier,
+          });
+        }
         return result(50001, traceId);
       }
     }

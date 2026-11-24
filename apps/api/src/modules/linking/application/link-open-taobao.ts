@@ -475,6 +475,15 @@ function createTaobaoConversion(
     if (!(await reads.siteAuthAvailable(appId, PLATFORM, accountId))) {
       return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
     }
+    // B1-04zzzzn r4 (D10-2872): no state the bindings submission would refuse (the real filing not
+    // ready for this account, e.g. not the inviter code's); a no_rebate open needs no state.
+    if (
+      !noRebate &&
+      authApps.taobaoFilingReadyFor !== undefined &&
+      !authApps.taobaoFilingReadyFor(accountId)
+    ) {
+      return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
+    }
     if (noRebate) {
       authorized.set(owner, await unattributed());
       return { kind: 'allowed' };

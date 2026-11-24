@@ -21,9 +21,10 @@
 // NULL outcome another request reads under its own lock is one whose request has ended: a request
 // in flight is never taken for an unknown outcome. The wait is bounded (FILING_LOCK_WAIT); a
 // request that cannot get the lock inserts and sends nothing.
-// Only an earlier attempt of the same scope whose outcome is unknown is evidence for a duplicate
-// answer's read-back id (hasEarlierUnknownAttempt): the request's own attempt and attempts with a
-// known outcome never are (D10-2851 ①).
+// r4 (D10-2872): no attempt is evidence for a duplicate answer's read-back id any more (only a
+// matching binding is, union-bindings.ts). An earlier attempt of the same scope whose outcome is
+// unknown is only looked up to be named in the refusal's warning (findEarlierUnknownAttempt); the
+// lock is kept so that attempt is one whose request has ended, never one still in flight.
 // Rows hold no credential, token or personal data.
 import type { DB } from '@couli/db';
 import { sql, type Kysely, type Transaction } from 'kysely';
@@ -261,17 +262,18 @@ export function createFilingRecorder(
 }
 
 /**
- * Whether the same (app, user, platform, union account) has an attempt that started before the
- * request's own and whose outcome is unknown (D10-2851 ①). Without an own attempt: none counts.
- * An own attempt means the caller holds the scope's filing lock, so every other attempt of the
- * scope belongs to a request that has ended: its NULL outcome is really unknown.
+ * The id of an attempt of the same (app, user, platform, union account) that started before the
+ * request's own and whose outcome is unknown, or null (r4: named in a warning, never evidence).
+ * Without an own attempt: none. An own attempt means the caller holds the scope's filing lock, so
+ * every other attempt of the scope belongs to a request that has ended: its NULL outcome is
+ * really unknown.
  */
-export async function hasEarlierUnknownAttempt(
+export async function findEarlierUnknownAttempt(
   trx: Transaction<DB>,
   scope: FilingLockScope,
   own: FilingAttempt | null,
-): Promise<boolean> {
-  if (own === null) return false;
+): Promise<string | null> {
+  if (own === null) return null;
   const row = await trx
     .selectFrom('union_filing_attempts')
     .select('id')
@@ -283,7 +285,8 @@ export async function hasEarlierUnknownAttempt(
     .where('id', '!=', own.id)
     .where('outcome', 'is', null)
     .where('finished_at', 'is', null)
+    .orderBy('started_at', 'desc')
     .limit(1)
     .executeTakeFirst();
-  return row !== undefined;
+  return row?.id ?? null;
 }

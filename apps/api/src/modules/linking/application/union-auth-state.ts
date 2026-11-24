@@ -25,6 +25,13 @@ export interface UnionAuthAppsPort {
     readonly appKey: string | null;
     readonly redirectUri: string | null;
   };
+  /**
+   * B1-04zzzzn r4 (D10-2872): the staging / prod wiring's readiness of the real Taobao filing for
+   * the account this authorization uses (it includes that account being the inviter code's,
+   * TAOBAO_INVITER_ACCOUNT_ID); the same judgement the bindings submission refuses under. False →
+   * auth_unavailable and no state. Absent: no such check.
+   */
+  readonly taobaoFilingReadyFor?: (accountId: string | null) => boolean;
   resolve(
     appId: string,
     environment: AppEnv,
