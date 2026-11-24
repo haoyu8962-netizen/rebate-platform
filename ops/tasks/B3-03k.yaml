@@ -11,7 +11,8 @@ type: impl
 refs: []
 refs_hash: {}
 # 2026-11-13：deps 加 B3-05s（C-32：模型给的检索词填 {q_short} 前过 OutputGuard，D10-1469）。
-deps: [B3-03j, B3-03m, B3-03n, B3-03p, B3-03q, B3-03r, B3-05s]
+# 2026-11-25（D10-2668 ⑤ / D10-2849 / D10-2922 (d)）：deps 加 B3-09m（日预算熔断须先在）、B3-09n（agent.models 进后台列表，负责人填单价前须能看到）；必做：路由 / 单价表给每个模型设 max_tokens 上限（B3-09m 对没有 max_tokens 的模型 fail-close 不调），真实路由接线时沿用 app.module agentReaders 上的 configValuesByKey。
+deps: [B3-03j, B3-03m, B3-03n, B3-03p, B3-03q, B3-03r, B3-05s, B3-09m, B3-09n]
 paths:
   - 'apps/api/src/modules/agent/stream/mount/**'
 test_paths:
