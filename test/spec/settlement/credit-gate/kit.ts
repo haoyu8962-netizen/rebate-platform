@@ -17,6 +17,11 @@
 // transaction "in flight": an order key lock held on another connection (rolled back to release),
 // a pause in a wrapper of the bill job's source port, and a pause after one statement of the launch
 // (a Kysely plugin, like ../credit/kit.ts failAfter).
+// Round 2 (任务书 §10.2): more barriers inside a run (barrier(): the supplement's 1st / 2nd source
+// read, the bill job's onGenerated hook, the executor's switch read between two items, the caller's
+// outer transaction around launchInTransaction); row lock waits from pg_stat_activity; every barrier
+// (reachedBefore) and every finally (finish) bounded at 30 s, after which the lock waits of the test
+// database are cancelled so that the stuck run ends, and the case asserts on what was not reached.
 //
 // Amounts (自拟, on the B2-04m harness defaults, same as ../supplement-locked-recheck/kit.ts):
 // N = 1000 fen (seq 1 STATEMENT decides the amount; seq 2 is an API record), reserve 1500 bp:
@@ -27,9 +32,10 @@
 import { randomUUID } from 'node:crypto';
 import type { DB } from '@couli/db';
 import { addFen } from '@couli/money';
-import { PostgresQueryCompiler, sql, type Kysely, type QueryId } from 'kysely';
+import { PostgresQueryCompiler, sql, type Kysely, type QueryId, type Transaction } from 'kysely';
 import { expect, vi } from 'vitest';
 import { creditGateKey } from '../../../../apps/api/src/modules/settlement/batch/credit-gate.ts';
+import type { SettlementWorkerPorts } from '../../../../apps/api/src/modules/settlement/worker/index.ts';
 import { createBatchCommandService } from '../../../../apps/api/src/modules/settlement/batch/commands/service.ts';
 import { createBillSourceReader } from '../../../../apps/api/src/modules/settlement/bill/infra/bill-source.ts';
 import {
@@ -106,6 +112,8 @@ export type GateMode = typeof SHARE | typeof EXCLUSIVE;
 const POLLS = 500;
 const LONG_POLLS = 1500;
 const POLL_MS = 20;
+/** Bound of one barrier, and of the end of the runs in one finally: 30 s (round 2, S2). */
+const BOUND_MS = 30_000;
 
 export interface SavedValidation extends BillValidation {
   readonly billId: string;
@@ -140,6 +148,11 @@ export interface Pause {
   readonly reached: Promise<void>;
   readonly isReached: () => boolean;
   release(): void;
+  /**
+   * A connection of the test database that reachedBefore uses to cancel lock waits when neither
+   * the pause nor the run's end came within the bound (round 2, S2).
+   */
+  readonly observer?: Kysely<DB>;
 }
 
 function sleep(): Promise<void> {
@@ -257,7 +270,7 @@ export async function fixture(db: Kysely<DB>, options: FixtureOptions = {}) {
     });
   }
 
-  const billJob = createBillJob({
+  const billDeps: BillJobDependencies = {
     clock: h.clock,
     config,
     readSource: billSource,
@@ -270,7 +283,8 @@ export async function fixture(db: Kysely<DB>, options: FixtureOptions = {}) {
     }),
     registerDiff,
     saveValidations,
-  });
+  };
+  const billJob = createBillJob(billDeps);
 
   /** The bill-day job of taobao at BILL_RUN_AT (bill MONTH), on the shared pool. */
   function runBill(): Promise<BillJobResult> {
@@ -291,6 +305,7 @@ export async function fixture(db: Kysely<DB>, options: FixtureOptions = {}) {
       reached: reached.promise,
       isReached: () => state.reached,
       release: () => go.resolve(),
+      observer: db,
     };
   }
 
@@ -559,6 +574,125 @@ export async function fixture(db: Kysely<DB>, options: FixtureOptions = {}) {
     return (await h.read(o)).rebate_status;
   }
 
+  // ---- 第 2 次写测追加（任务书 §10.2）：只新增，以上成员不变 ---------------------------------------
+  /** finance's launch for `platform` on bill MONTH (options as supplement()); moment = the Clock. */
+  function supplementOn(platform: string, launch: LaunchOptions = {}): Promise<SupplementResult> {
+    const deps: SupplementDependencies =
+      launch.lockChunkSize === undefined
+        ? supplementDeps
+        : { ...supplementDeps, lockChunkSize: launch.lockChunkSize };
+    return createSupplementCommand(deps).launch(launch.via ?? db, {
+      appId,
+      billId: MONTH,
+      platform,
+      requestedAt: h.clock.now(),
+    });
+  }
+
+  /**
+   * The console's entry (launchAdminSettleSupplement runs it on its idempotency transaction): the
+   * taobao launch on bill MONTH on the caller's `trx`, nominal moment = the Clock.
+   */
+  function supplementInTransaction(trx: Transaction<DB>): Promise<SupplementResult> {
+    return createSupplementCommand(supplementDeps).launchInTransaction(trx, {
+      appId,
+      billId: MONTH,
+      platform: TAOBAO,
+      requestedAt: h.clock.now(),
+    });
+  }
+
+  /**
+   * The supplement's source read number `nth` (1: the first read; 2: the next one, i.e. the re-read
+   * of the first lock chunk) waits at the returned barrier — at its entry, before the production
+   * reader runs, or once the production reader has returned. Other reads are the production reader.
+   */
+  function pauseSupplementSource(nth: 1 | 2, at: 'entry' | 'returned'): Barrier {
+    const pause = barrier(db);
+    if (nth === 2) readSource.mockImplementationOnce((trx, input) => realSource(trx, input));
+    readSource.mockImplementationOnce(async (trx, input) => {
+      if (at === 'entry') await pause.wait();
+      const rows = await realSource(trx, input);
+      if (at === 'returned') await pause.wait();
+      return rows;
+    });
+    return pause;
+  }
+
+  /**
+   * The bill-day job of taobao at BILL_RUN_AT (bill MONTH) whose onGenerated hook — called on the
+   * generating transaction right before it commits — waits at the returned barrier.
+   */
+  function runBillHeldAtCommit(): HeldRun<BillJobResult> {
+    const pause = barrier(db);
+    const job = createBillJob({ ...billDeps, onGenerated: () => pause.wait() });
+    return {
+      run: job.run(db, { appId, platform: TAOBAO, runAt: new Date(BILL_RUN_AT) }),
+      pause,
+    };
+  }
+
+  /**
+   * One batch_execute delivery (as execute()) whose configuration reads go through the switch map
+   * as usual, except that the first read made once `due()` answers true waits at the returned
+   * barrier (`due` is asked before each read until then). The executor reads both switches before
+   * every item transaction (BR-FUND-04 ⑦), so a `due` that becomes true when an item has committed
+   * holds the delivery after that commit and before the next item transaction begins.
+   */
+  function executePaused(batchId: string, due: () => Promise<boolean>): HeldRun<void> {
+    const pause = barrier(db);
+    const state = { armed: true };
+    const get = async (_appId: string, key: string): Promise<unknown> => {
+      if (state.armed && (await due()) && state.armed) {
+        state.armed = false;
+        await pause.wait();
+      }
+      return switches.get(key);
+    };
+    const ports: SettlementWorkerPorts = { ...w.ports, config: () => ({ get }) };
+    const run = withWorker(ports, h, db, async (handler) => {
+      await handler(receivedJob(EXECUTE, { app_id: appId, batch_id: batchId }));
+    });
+    return { run, pause };
+  }
+
+  /** Confirms every DRAFT of the bill (IMMEDIATE) through the console's command; no execution. */
+  async function confirmDrafts(): Promise<string[]> {
+    const drafts = await db
+      .selectFrom('settle_batches')
+      .select(['batch_id', 'row_version'])
+      .where('app_id', '=', appId)
+      .where('bill_id', '=', MONTH)
+      .where('status', '=', 'DRAFT')
+      .orderBy('batch_id')
+      .execute();
+    expect(drafts.length).toBeGreaterThan(0);
+    await commands.confirmBill({
+      appId,
+      adminId,
+      billId: MONTH,
+      expectedBatches: drafts.map((d) => ({
+        batchId: d.batch_id,
+        expectedRowVersion: d.row_version,
+      })),
+    });
+    return drafts.map((d) => d.batch_id);
+  }
+
+  async function obligationsOf(o: SeededOrder) {
+    return (await h.obligations()).filter((row) => row.order_id === o.orderId);
+  }
+
+  /** Rebate history rows ending in CREDITED: from WAITING (R5) and from CREDITED (R5a). */
+  async function creditHistoryCounts(o: SeededOrder) {
+    const rows = await h.history(o);
+    const credited = rows.filter((r) => r.field === 'rebate' && r.to_status === 'CREDITED');
+    return {
+      firstCredit: credited.filter((r) => r.from_status === 'WAITING').length,
+      selfStep: credited.filter((r) => r.from_status === 'CREDITED').length,
+    };
+  }
+
   return {
     h,
     appId,
@@ -587,6 +721,14 @@ export async function fixture(db: Kysely<DB>, options: FixtureOptions = {}) {
     orderLedger,
     creditedHistory,
     rebateOf,
+    supplementOn,
+    supplementInTransaction,
+    pauseSupplementSource,
+    runBillHeldAtCommit,
+    executePaused,
+    confirmDrafts,
+    obligationsOf,
+    creditHistoryCounts,
   };
 }
 
@@ -696,14 +838,139 @@ export function pauseAfter(db: Kysely<DB>, match: (query: CompiledQuery) => bool
     reached: reached.promise,
     isReached: () => state.reached,
     release: () => go.resolve(),
+    observer: db,
   };
   return { db: paused, pause };
 }
 
-/** true once `pause` is reached; false when `pending` ended first. */
+/**
+ * true once `pause` is reached; false when `pending` ended first. Bounded (round 2, S2): when
+ * neither happens within BOUND_MS, the lock waits of the test database are cancelled through
+ * `pause.observer` (so the stuck run fails and its transaction rolls back, and the caller's finally
+ * can end), the end is awaited once more within the bound, and false is returned — the caller's
+ * `expect(reached).toBe(true)` then names the barrier that was not reached.
+ */
 export async function reachedBefore(pause: Pause, pending: Tracked<unknown>): Promise<boolean> {
-  await Promise.race([pause.reached, pending.outcome]);
+  const met = await settlesBy(Promise.race([pause.reached, pending.outcome]), BOUND_MS);
+  if (!met && pause.observer !== undefined) {
+    await cancelLockWaits(pause.observer);
+    await settlesBy(Promise.race([pause.reached, pending.outcome]), BOUND_MS);
+  }
   return pause.isReached();
+}
+
+// ---- 第 2 次写测追加（任务书 §10.2 第 9 点，评审 r1 S2）：屏障与收尾的上限 ---------------------------
+
+/** true when `promise` settles (either way) within `ms`; the timer is always cleared. */
+async function settlesBy(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  const timer: { handle?: ReturnType<typeof setTimeout> } = {};
+  const late = new Promise<false>((resolve) => {
+    timer.handle = setTimeout(() => resolve(false), ms);
+  });
+  const ended = promise.then(settled, settled);
+  try {
+    return await Promise.race([ended, late]);
+  } finally {
+    clearTimeout(timer.handle);
+  }
+}
+
+function settled(): true {
+  return true;
+}
+
+/**
+ * Cancels every statement of the test database (one database per test file) that waits for a
+ * lock, other than the observer's own; returns how many were cancelled. A cancelled statement
+ * fails, so its transaction rolls back and the run that issued it ends.
+ */
+export async function cancelLockWaits(observer: Kysely<DB>): Promise<number> {
+  const result = await sql<{ n: number }>`
+    SELECT count(*)::int AS n FROM (
+      SELECT pg_cancel_backend(pid) FROM pg_stat_activity
+      WHERE datname = current_database() AND pid <> pg_backend_pid()
+        AND wait_event_type = 'Lock'
+    ) AS cancelled`.execute(observer);
+  return result.rows[0]?.n ?? 0;
+}
+
+/**
+ * For a finally: waits within BOUND_MS for every run to end; if some have not, cancels the lock
+ * waits of the test database and waits once more within the bound. Returns the names of the runs
+ * that still have not ended (the caller asserts `[]` after the finally, which names the stage).
+ */
+export async function finish(
+  observer: Kysely<DB>,
+  runs: Readonly<Record<string, Tracked<unknown> | undefined>>,
+): Promise<string[]> {
+  const all = () => Promise.all(Object.values(runs).map((run) => run?.outcome));
+  if (!(await settlesBy(all(), BOUND_MS))) {
+    await cancelLockWaits(observer);
+    await settlesBy(all(), BOUND_MS);
+  }
+  return Object.entries(runs)
+    .filter(([, run]) => run !== undefined && !run.settled)
+    .map(([name]) => name);
+}
+
+/** A barrier a run waits at: wait() marks it reached and resolves on release(). */
+export interface Barrier extends Pause {
+  wait(): Promise<void>;
+}
+
+/** A run started with a barrier inside it. */
+export interface HeldRun<T> {
+  readonly run: Promise<T>;
+  readonly pause: Barrier;
+}
+
+export function barrier(observer: Kysely<DB>): Barrier {
+  const reached = deferred();
+  const go = deferred();
+  const state = { reached: false };
+  return {
+    reached: reached.promise,
+    isReached: () => state.reached,
+    release: () => go.resolve(),
+    observer,
+    async wait() {
+      state.reached = true;
+      reached.resolve();
+      await go.promise;
+    },
+  };
+}
+
+/**
+ * The pid of a backend waiting for a row lock (pg_stat_activity: wait_event_type Lock, not an
+ * advisory lock) in a statement on `table`; null when `pending` ended first, or after the bounded
+ * poll (the caller asserts).
+ */
+export async function rowLockWaiter(
+  observer: Kysely<DB>,
+  table: string,
+  pending: Tracked<unknown>,
+): Promise<number | null> {
+  for (let attempt = 0; attempt < POLLS; attempt += 1) {
+    const result = await sql<{ pid: number }>`
+      SELECT pid FROM pg_stat_activity
+      WHERE datname = current_database() AND pid <> pg_backend_pid()
+        AND wait_event_type = 'Lock' AND wait_event <> 'advisory'
+        AND position(${table} in query) > 0
+      ORDER BY pid LIMIT 1`.execute(observer);
+    const pid = result.rows[0]?.pid;
+    if (pid !== undefined) return pid;
+    if (pending.settled) return null;
+    await sleep();
+  }
+  return null;
+}
+
+/** pg_blocking_pids of `pid`, ascending. */
+export async function blockersOf(observer: Kysely<DB>, pid: number): Promise<number[]> {
+  const result = await sql<{ pid: number }>`
+    SELECT b AS pid FROM unnest(pg_blocking_pids(${pid})) AS b ORDER BY b`.execute(observer);
+  return result.rows.map((row) => row.pid);
 }
 
 // ---- pg_locks ---------------------------------------------------------------------------------------

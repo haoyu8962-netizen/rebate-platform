@@ -244,9 +244,9 @@ it(
   TIMEOUT,
 );
 
-it(
-  '[AC-B2-04re#8] 等锁之后开关已关，这一条不入账：补充在途、旧批次 P 的明细事务在等平台锁共享模式；此时关掉入账开关并把注入时钟推进 11 秒（超过开关缓存时限 10 秒）——放行补充后该明细不入账：P 仍待入账、旧明细结果为空、没有 P 的凭证，批次按 SB7 停在 PARTIAL',
-  async () => {
+it.each([`credit.enabled.${TAOBAO}`, 'settle.auto.enabled'])(
+  '[AC-B2-04re#8] 等锁之后开关已关，这一条不入账（等锁期间关掉的开关：%s）：补充在途、旧批次 P 的明细事务在等平台锁共享模式；此时关掉该开关并把注入时钟推进 11 秒（超过开关缓存时限 10 秒）——放行补充后该明细不入账：P 仍待入账、旧明细结果为空、没有 P 的凭证，批次按 SB7 停在 PARTIAL',
+  async (key) => {
     const f = await fixture(p.db);
     const token = randomUUID().slice(0, 8);
     const order = await f.candidate({ subOrderId: `cg8-${token}-01` });
@@ -265,8 +265,8 @@ it(
       supplementGate = await gateGranted(p.left, f.appId, TAOBAO, EXCLUSIVE, waiter ?? -1);
       execution = track(f.execute(old.batchId));
       executorWaits = await waitsOnGate(p.left, f.appId, TAOBAO, SHARE, execution);
-      // 明细事务等锁期间：入账开关关闭，时钟越过开关缓存时限（只用注入的 Clock）。
-      f.switches.set(`credit.enabled.${TAOBAO}`, false);
+      // 明细事务等锁期间：该开关关闭，时钟越过开关缓存时限（只用注入的 Clock）。
+      f.switches.set(key, false);
       f.h.clock.set(PAST_SWITCH_CACHE);
     } finally {
       holder.release();
@@ -291,6 +291,9 @@ it(
     expect(await f.creditedHistory(order)).toBe(0);
     expect(await f.h.balance(order.user('self'))).toBe(0n);
     expect(await f.batch(old.batchId)).toMatchObject({ status: 'PARTIAL', credited_count: 0 });
+    // 关掉的正是本参数的开关；批次停住而未完成（SB7 不写 finished_at）。
+    expect(f.switches.get(key)).toBe(false);
+    expect(await f.batch(old.batchId)).toMatchObject({ finished_at: null });
   },
   TIMEOUT,
 );
