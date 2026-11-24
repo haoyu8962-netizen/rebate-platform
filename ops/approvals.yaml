@@ -1059,3 +1059,9 @@ approvals:
     granted: true
     date: '2026-11-25'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审轮次属门禁流程小改动），D10-2864，先例第 166、168、170 条。原因：B3-09m（BR-AI-16 日预算熔断）Codex 资金评审 r1 的 S0-2（别处收尾只按预占记实际、真实用量丢失、该熔断不熔断）编排取甲改为调用完成即记账（D10-2858，贴 BR-AI-16「在调用完成时计入完成时刻所在自然日」）；本单自己的四条规则测试是照旧「收尾一次记」口径写的，按新口径必红，错在测试口径，写测次数已用 3 次。非用户资金（模型预算记账），四条都是本单新文件里的用例，不涉及别单冻结用例。'
+  - id: 174
+    row: 4
+    title: 'F1-07edb 任务专属一次性追加：实现 1 次（r5）+ Codex 资金评审 1 轮（money r3，最后一轮）——范围写死为状态条取数：只以 GET /admin/v1/order-syncs?page=1&page_size=1 为准、删去用 POST 响应合并状态条的逻辑、手动同步提交成功后再 GET 一次、请求带序号丢弃晚到旧响应；不改别的行为，不改测试'
+    granted: true
+    date: '2026-11-25'
+    note: '编排 D10-2868。原因：money r2 两条 S1 都出在 r3 用 POST 响应与 GET 合并状态条的逻辑；r5 改为只认 GET。静态核对：admin-orders-sync 冻结用例里提交类（results / window / order-nos / order-nos-unsupported / detail / BROWSER#3）只数 POST，records 与 BROWSER#2 用去掉首屏一次后的计数且不提交，故提交后多一次 GET 不撞冻结用例（以测试机为准）。money r3 再 fail 即停、报编排，不再自起任何一轮。'
