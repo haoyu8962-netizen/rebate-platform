@@ -1,0 +1,38 @@
+id: B3-09m
+repo: rebate-platform
+title: 'B4 最小一段（BR-AI-16）：全平台日预算熔断与用量入库——受理时按当日（实际 + 预占）判定，≥100% 新受理的 run 走无模型降级（finish_reason=budget），进行中的照常完成；受理预占、收尾冲正并写 agent_runs.cost_mfen / price_version；单价缺失 fail-close；≥80% / ≥100% 当天各告警一次'
+type: impl
+# 2026-11-24 agent 线入账（D10-2596 ③ B4 最小一段；口径 D10-2668 五条；规划 05 B3-09、change 20261112 §2.10；完整说明 couli-runs/AGENT-lane/b3-09m-draft.md）。现状：agent_runs.cost_mfen / price_version 恒为 null；config-registry 有 agent.daily_budget_fen、agent.budget.reserve_mfen_per_run（无人读），无 agent.models；router.ts 有 budgetExhausted → degrade('budget') 但生产写死 no_model（真实路由归 B3-03k）；packages/money 无 mfen 运算。
+# 只做：① config-registry 登记 agent.models（按模型 mfen / 百万 token，输入输出分开，带单价版本；本单只读不设值）；单价缺失 fail-close——没单价或读不出的模型不调，全部缺单价则新 run 走无模型降级（finish_reason=budget）并告警一次（D10-2668 ①）。
+#   ② 成本 = ceil(in × in_price / 1e6) + ceil(out × out_price / 1e6)，运算放 packages/money（新增整数 mfen 函数）。③ 新表（迁移）按上海自然日一行（全平台一份、不带 app_id，D10-2668 ②），记实际、预占与 80% / 100% 告警时刻；受理事务判定 + 预占，收尾事务冲正预占（记回受理日）、按调用完成日计实际并写 cost_mfen / price_version，靠唯一受理 / 收尾只记一次；别的请求收尾的崩溃 run 预占按实际计。
+#   ③′ 键读不到用 BR 默认（100000 分 / 1000 mfen），0 = 全部降级，非法值按读不到并告警（D10-2668 ③）。④ 受理时当日（实际 + 预占）≥ 预算 → 本 run 的模型调用由 budgetExhausted 降级，进行中的照常完成，不返回错误码；不依赖模型的消息结束原因照常（BR-AI-14 细则）。
+#   ⑤ 首次 ≥80%、首次 ≥100% 各用条件更新抢一次告警时刻，抢到的打 pino 事件（agent.budget_80 / agent.budget_100 / agent.budget_price_missing）并加计数指标。
+# 不做（评审范围外一律 out_of_scope）：成本分摊与报表、后台显示；失败尝试用量（FU-GATEWAY-FAILED-ATTEMPT-USAGE）；model 归因（FU-B3-08T-MODEL-ATTRIBUTION）；离线 / 评测计量；B3-03k 接线；送企业微信群规则（另开给 ops，D10-2668 ④）；按 app 分预算；调参与真实单价；Jev 费用。
+# 验收：故障注入到 100% 后新 run 降级（finish_reason=budget）、进行中照常完成；80% / 100% 各只告警一次（并发下也一次）；单价缺失两种情形；键缺失 / 0 / 非法值；重复收尾不重复记；跨零点冲正归受理日、实际归完成日；BR-AI-16 示例 2000 入 + 300 出 → 320 mfen。
+# 风险级 RV2（动迁移、packages/money、content 注册表），评审 money；迁移号实现时现取（B2-07i 暂停的工作树占着 0155 / 0156，避开），outside_needed 走 LAN-DB-SNAPSHOT，land 前测试机五段全量（D10-2398）。
+# 开工前测试机跑一次 --related，看有没有冻结用例钉着 cost_mfen 为 null / finish_reason 不含 budget，有就先登 modify_existing。B3-03k 重写时 deps 加 B3-09m（D10-2668 ⑤）。
+refs: [BR-AI-16, BR-AI-14]
+refs_hash:
+  BR-AI-16: ccca6709add2
+  BR-AI-14: a24a409d186b
+deps: [B3-08t]
+paths:
+  - 'apps/api/src/modules/agent/budget/**'
+  - 'apps/api/src/modules/agent/stream/pg/admit.ts'
+  - 'apps/api/src/modules/agent/stream/pg/finalize.ts'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/agent/model-gateway/routing/**'
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'packages/money/src/**'
+  - 'db/migrations/*_agent-budget-day*.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/agent/daily-budget/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/daily-budget/**'
+status: todo
+pr: null
