@@ -1,0 +1,110 @@
+id: CT-24zzv
+repo: rebate-platform
+title: 契约：后台二次验证三档——/admin/v1 显式标 x-step-up（sudo / strict，none 不标），归 none 的操作去掉 AdminStepUpToken 与 10003，10003 data.tier 加 sudo / strict（旧值 totp / sms 过渡期保留），签发请求加 method（totp / sms，旧名 tier 兼容）（BR-ID-34，D10-2760 / D10-2783 / D10-2792）
+type: contract
+# 2026-11-24 二次验证线入账（D10-2821）。内容 = 探针第 4 轮的契约改动（couli-runs/STEPUP-1124c/contract-only.patch，入账稿 couli-runs/STEPUP-BE/entry-draft.md §2、§7）：sudo 15、strict 9 个操作标 x-step-up（按请求内容或键名分档的 9 个标最高档、条件写说明）；49 个 none 操作删令牌参数、10003、示例与说明句；新增 AdminStepUpMethod；10003 的 data 为 tier 与 reason 二者其一（D10-2792 ⑥）；conformance.ts 加后台分支；用户端 3 处 x-step-up 不动。
+# AdminStepUpTier 先加后删（D10-2792 ②）：本单四值并存，旧值等 B1-18l 与前端单落地后另开契约单删。服务端行为不在本单（B1-18l）；本单只带两处编译适配（D10-2821 a）：step-up.controller.ts 缺 tier 回 20001、AppVersionEditor.tsx 放宽一处类型。
+# 冻结用例：探针共 35 条。本次只登非资金、非归属目录的 12 条；其余 23 条（资金与归属目录 21 + 收款契约 2）等负责人答复后出台账补丁再登，落地在那之后（D10-2821 b），契约不做半删。.each 行不改名（D10-2154），标题里的「step-up 头」以块内断言为准。
+refs: [BR-ID-34]
+refs_hash:
+  BR-ID-34: 8bd50e43d350
+# contract_sections 只列 §5（「后台二次验证档位」行所在）：§6.6、§7、§11 整节进任务书会超 24KB，相关行由手裁任务书摘录（D10-2792 ④）。
+contract_sections: ['5']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/enums/admin.yaml'
+  - 'contracts/oasdiff-accepted.txt'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+  - 'apps/api/src/modules/admin/http/admin/step-up.controller.ts'
+  - 'apps/admin/src/pages/app-versions/AppVersionEditor.tsx'
+  - 'test/spec/contracts/admin-step-up-tiers/**'
+  - 'test/spec/admin/{admins-write,admins-verify-phone}/contract.test.ts'
+  - 'test/spec/identity/{admin-profile,admin-realname,data-copies-download,data-copies-register,reverify-admin-device}/entry.test.ts'
+test_paths:
+  - 'test/spec/contracts/admin-step-up-tiers/**'
+  - 'test/spec/admin/{admins-write,admins-verify-phone}/contract.test.ts'
+  - 'test/spec/identity/{admin-profile,admin-realname,data-copies-download,data-copies-register,reverify-admin-device}/entry.test.ts'
+modify_existing:
+  - file: 'test/spec/admin/admins-verify-phone/contract.test.ts'
+    test: '[AC-B1-34i#1] sendFor 保持契约的鉴权级别与 step-up 头，去掉 planned，规则出处改指 BR-ID-45'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2783
+    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+  - file: 'test/spec/admin/admins-verify-phone/contract.test.ts'
+    test: '[AC-B1-34i#1] sendMine 保持契约的鉴权级别与 step-up 头，去掉 planned，规则出处改指 BR-ID-45'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2783
+    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+  - file: 'test/spec/admin/admins-write/contract.test.ts'
+    test: '[AC-B1-34h#1] create 保持 super 鉴权与契约的 step-up 头并去掉 planned'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2783
+    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+  - file: 'test/spec/admin/admins-write/contract.test.ts'
+    test: '[AC-B1-34h#1] disable 保持 super 鉴权与契约的 step-up 头并去掉 planned'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2783
+    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+  - file: 'test/spec/admin/admins-write/contract.test.ts'
+    test: '[AC-B1-34h#1] enable 保持 super 鉴权与契约的 step-up 头并去掉 planned'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2783
+    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+  - file: 'test/spec/admin/admins-write/contract.test.ts'
+    test: '[AC-B1-34h#1] regenerate 保持 super 鉴权与契约的 step-up 头并去掉 planned'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2783
+    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+  - file: 'test/spec/admin/admins-write/contract.test.ts'
+    test: '[AC-B1-34h#1] reset 保持 super 鉴权与契约的 step-up 头并去掉 planned'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2783
+    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+  - file: 'test/spec/identity/admin-profile/entry.test.ts'
+    test: '[AC-B1-27b#3] 契约 adminEditUserProfile 去掉 x-implementation: planned，错误码表不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2783
+    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+  - file: 'test/spec/identity/admin-realname/entry.test.ts'
+    test: '[AC-B1-27a#3] 契约 adminCorrectUserRealname 去掉 x-implementation: planned，错误码表不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2783
+    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+  - file: 'test/spec/identity/data-copies-download/entry.test.ts'
+    test: '[AC-B1-27i#4] 契约三条操作去掉 x-implementation: planned（生成的 planned 清单同步），错误码表不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2783
+    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+  - file: 'test/spec/identity/data-copies-register/entry.test.ts'
+    test: '[AC-B1-27c#3] 契约 adminCreateUserDataExport / adminListUserDataExports 去掉 x-implementation: planned，错误码表不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2783
+    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+  - file: 'test/spec/identity/reverify-admin-device/entry.test.ts'
+    test: '[AC-B1-02zx#3] 契约 adminAddUserReverifiedDevice 去掉 x-implementation: planned，错误码表不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-2783
+    note: '该操作按 BR-ID-34 归 none：契约不再带 X-Step-Up-Token 参数、错误码表不再有 10003；只改这一处期望，鉴权级别、planned 清单与其余断言不动（标题不改名）'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+status: todo
