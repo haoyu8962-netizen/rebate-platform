@@ -281,6 +281,7 @@ it.each([
     const account = '0199a3b4-5c6d-7000-8000-0000000000a1';
     const state = 'synthetic-duplicate-state';
     const device = { platform: 'ios', revoked_at: null };
+    expect(taobaoUserOAuthRef).toBeTypeOf('function');
     const appRef = taobaoUserOAuthRef({ appKey: APP_KEY, redirectUri: USER_REDIRECT });
     const owned = {
       app_id: caller.appId,

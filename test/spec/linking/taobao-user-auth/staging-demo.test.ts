@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import type { DB } from '@couli/db';
@@ -11,7 +12,6 @@ import {
   type QueryResult,
 } from 'kysely';
 import { expect, it, vi, type MockInstance } from 'vitest';
-import { taobaoUserOAuthRef } from '../../../../apps/api/src/modules/linking/infra/auth-apps.ts';
 import type { LinkOpenPorts } from '../../../../apps/api/src/modules/linking/index.ts';
 import {
   APP_CONFIG,
@@ -119,8 +119,13 @@ async function withStagingDemo(
     baseUrl: null,
     quotaKey: 'synthetic-taobao-demo',
   };
+  const endpoints: readonly UnionEndpoint[] = [
+    { platform: 'jd', mode: 'demo', baseUrl: null, quotaKey: 'synthetic-jd-demo' },
+    { platform: 'pdd', mode: 'demo', baseUrl: null, quotaKey: 'synthetic-pdd-demo' },
+    endpoint,
+  ];
   const registry = createUnionRegistry({
-    endpoints: [endpoint],
+    endpoints,
     environment: config.appEnv,
     seed: 'synthetic-staging-demo',
     clock,
@@ -138,7 +143,8 @@ async function withStagingDemo(
   // Simulate a state issued while live OAuth was configured, before the endpoint switched to demo.
   const expireAt = clock.now();
   expireAt.setTime(expireAt.getTime() + 60_000);
-  const appRef = taobaoUserOAuthRef({ appKey: APP_KEY, redirectUri: USER_REDIRECT });
+  const appRefPayload = JSON.stringify({ app_key: APP_KEY, redirect_uri: USER_REDIRECT });
+  const appRef = `taobao-user-oauth/v1/${Buffer.from(appRefPayload, 'utf8').toString('base64url')}`;
   const session = {
     state: STATE,
     app_id: CALLER.appId,
@@ -192,7 +198,7 @@ async function withStagingDemo(
     { provide: CLOCK, useValue: clock },
     { provide: IDEMPOTENCY, useValue: idempotency },
     { provide: LINK_OPEN_PORTS, useValue: ports },
-    { provide: UNION_ENDPOINTS, useValue: [endpoint] },
+    { provide: UNION_ENDPOINTS, useValue: endpoints },
     { provide: UNION_REGISTRY, useValue: registry },
     {
       provide: ROOT_LOGGER,
