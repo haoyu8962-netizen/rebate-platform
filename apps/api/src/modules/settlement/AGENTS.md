@@ -21,7 +21,7 @@
 
 1. 订单类凭证只由本模块编排；记账只经 ledger 的 `lockBalances` / `post` / `reverse`，与订单列写入同一事务，不自写分录或余额。
 2. 订单 `rebate_status` 只由本模块写，且只调用生成的 `transition()`。
-3. 加锁顺序固定：订单键 advisory 锁 → identity 的 users 行锁 → `ledger.lockBalances`；不得颠倒或跳步。
+3. 加锁顺序固定：仅结算批次先取所属平台的结算互斥锁（执行入账的明细事务取共享，生成批次的事务取排他；其余记账事务不取）→ 订单键 advisory 锁 → identity 的 users 行锁 → `ledger.lockBalances`；不得颠倒或跳步，持有订单键锁时不得再等平台锁。
 4. 幂等落在 PG 唯一约束上；任务按至少一次投递写，重放同一事件不重复记账。
 5. 金额只经 `@couli/money`；本模块不自写取整或换算。
 6. 时间只读注入的 `Clock`；会计日与结算月只用 `@couli/domain` 的函数，不用 SQL 时钟。
