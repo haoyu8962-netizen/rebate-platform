@@ -36,10 +36,23 @@
 //          on only when it is true or 'on'; a missing credit.enabled is off, a missing
 //          settle.auto.enabled takes the switch registry default (on); a cached value is at
 //          most 10 seconds old by deps.clock): either off → stop, EXECUTING → PARTIAL (SB7, event
-//          SWITCH_OFF, CAS), 'partial';
+//          SWITCH_OFF, CAS), 'partial' (a value read off returns at once, the other one is not
+//          read). Both values must be read together within the switch cache
+//          period (content's SWITCH_CACHE_TTL_MS, measured by deps.clock from before the first read
+//          to after the second), else both are read again; after a few such rounds the read
+//          throws (SwitchReadStale) without writing anything and the delivery is retried;
 //        - the accounting date of clock.now() differs from the one the run started on and that
 //          day's snapshot check d fails → stop, the batch stays EXECUTING, 'day_rollover'.
-//      Each item runs in its own transaction on the reserved connection:
+//      Each item runs in its own transaction on the reserved connection. Its first statement takes
+//      the platform settle credit gate (credit-gate.ts) in shared mode for the batch's platform
+//      (BR-FUND-16 细则「加锁流程」第 0 步): every item transaction, order and beneficiary items alike,
+//      the first and every later one of a delivery, on every platform — before any order key lock,
+//      so it never waits for the gate while holding one. Once granted (the wait may have been
+//      long), both switches are read again as above (BR-FUND-04 ⑦: a value at most 10 seconds old by
+//      deps.clock; the two values read together within the switch cache period, else read again):
+//      either off → the transaction rolls back having written nothing and the run stops through
+//      the same SB7 path, 'partial'; no timely pair (SwitchReadStale) → an unexpected error as
+//      below. Then:
 //        - item_type order: deps.creditOrder.credit(trx, { appId, orderId, expectedSettleSeq:
 //          item.settle_seq, openedRef: item.id }); credited → result 'credited'; skipped → result
 //          'skipped' and skip_reason = the returned reason (e.g. 'not_waiting',
@@ -97,9 +110,10 @@ import {
   type SettleBatchState,
 } from '@couli/domain';
 import { sql, type Kysely, type Transaction, type Updateable } from 'kysely';
-import { switchSpecOf } from '../../../content/index.ts';
+import { SWITCH_CACHE_TTL_MS, switchSpecOf } from '../../../content/index.ts';
 import type { Clock, EventBus, RootLogger } from '../../../platform/index.ts';
 import type { CreditOrder, CreditRole } from '../../credit/index.ts';
+import { lockCreditGateShared } from '../credit-gate.ts';
 import {
   compareItems,
   previousDay,
@@ -192,6 +206,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** First key of the two-int advisory lock: a key space apart from the bigint order_key locks. */
 const LOCK_NAMESPACE = 'settlement.batch_execute';
 const AUTO_SWITCH = 'settle.auto.enabled';
+/** Rounds of reading both switches before giving up on a pair read within SWITCH_CACHE_TTL_MS. */
+const SWITCH_READ_ROUNDS = 3;
 const DONE_EVENT = 'settle.batch_done';
 const RUN_DONE_EVENT = 'settle.run_done';
 /** First key of the transaction-level run lock (B2-04zf), apart from the batch liveness lock. */
@@ -243,6 +259,25 @@ class DayRollover extends Error {
   constructor() {
     super('settle batch execution crossed into a day whose asset snapshot is not ready');
     this.name = 'DayRollover';
+  }
+}
+
+/** The switches were off when re-read after the platform gate wait: the item transaction rolls back. */
+class SwitchedOffUnderGate extends Error {
+  constructor() {
+    super('settle batch switch found off after the platform credit gate wait');
+    this.name = 'SwitchedOffUnderGate';
+  }
+}
+
+/**
+ * No round read both switches within SWITCH_CACHE_TTL_MS (BR-FUND-04 ⑦): neither credit nor pause;
+ * the error leaves like any unexpected one and a redelivery decides again.
+ */
+class SwitchReadStale extends Error {
+  constructor() {
+    super('settle batch switches could not be read together within the switch cache period');
+    this.name = 'SwitchReadStale';
   }
 }
 
@@ -335,11 +370,24 @@ export function createBatchExecutor(deps: BatchExecutorDependencies): BatchExecu
     return status.state === 'complete' || status.state === 'timed_out';
   }
 
-  /** BR-FUND-04 ⑦: read fresh before every item (no cache, within the 10-second bound). */
+  /**
+   * BR-FUND-04 ⑦: read fresh before every item (no cache, within the 10-second bound). Either off
+   * → false at once (a value read off returns at once, the other one is not read). Both on
+   * counts only when the two reads finished within SWITCH_CACHE_TTL_MS of
+   * the instant before the first one (deps.clock), so "both on" never rests on an aged value; else
+   * both are read again, at most SWITCH_READ_ROUNDS times, then SwitchReadStale.
+   */
   async function switchesOn(appId: string, platform: string): Promise<boolean> {
-    const auto = autoSwitchValue(await deps.config.get(appId, AUTO_SWITCH));
-    const credit = await deps.config.get(appId, `credit.enabled.${platform}`);
-    return switchOn(auto) && switchOn(credit);
+    for (let round = 0; round < SWITCH_READ_ROUNDS; round += 1) {
+      const startedMs = clock.now().getTime();
+      const auto = autoSwitchValue(await deps.config.get(appId, AUTO_SWITCH));
+      if (!switchOn(auto)) return false;
+      const credit = await deps.config.get(appId, `credit.enabled.${platform}`);
+      if (!switchOn(credit)) return false;
+      const elapsedMs = clock.now().getTime() - startedMs;
+      if (elapsedMs >= 0 && elapsedMs <= SWITCH_CACHE_TTL_MS) return true;
+    }
+    throw new SwitchReadStale();
   }
 
   /**
@@ -700,30 +748,29 @@ export function createBatchExecutor(deps: BatchExecutorDependencies): BatchExecu
       return result('idle');
     }
 
+    /** SB7 (event SWITCH_OFF, CAS) and settle.run_done (step 6) on one transaction: 'partial'. */
+    const switchedOff = async (): Promise<BatchExecuteResult> => {
+      const to = nextState('EXECUTING', 'SWITCH_OFF');
+      try {
+        await conn.transaction().execute(async (trx) => {
+          await lockRun(trx, batch);
+          if (!(await casBatch(trx, batch, 'EXECUTING', version, { status: to }))) {
+            throw new LostCas();
+          }
+          await publishRunRest(trx, batch);
+        });
+      } catch (error) {
+        if (error instanceof LostCas) return result('busy');
+        throw error;
+      }
+      logger.warn({ ...fields, event: 'settle_batch_partial' }, 'settle batch stopped by a switch');
+      return result('partial');
+    };
+
     let day = accountingDate(clock.now());
     for (const item of await loadItems(conn, input)) {
       // BR-FUND-04 ⑦: both switches before every item; either off → SB7.
-      if (!(await switchesOn(batch.app_id, batch.platform))) {
-        const to = nextState('EXECUTING', 'SWITCH_OFF');
-        // SB7 and settle.run_done (step 6) on one transaction.
-        try {
-          await conn.transaction().execute(async (trx) => {
-            await lockRun(trx, batch);
-            if (!(await casBatch(trx, batch, 'EXECUTING', version, { status: to }))) {
-              throw new LostCas();
-            }
-            await publishRunRest(trx, batch);
-          });
-        } catch (error) {
-          if (error instanceof LostCas) return result('busy');
-          throw error;
-        }
-        logger.warn(
-          { ...fields, event: 'settle_batch_partial' },
-          'settle batch stopped by a switch',
-        );
-        return result('partial');
-      }
+      if (!(await switchesOn(batch.app_id, batch.platform))) return switchedOff();
       const before = await dayCheck(conn, batch.app_id, day);
       if (before === null) {
         logger.warn({ ...fields, event: 'settle_batch_day_rollover' }, 'settle batch paused');
@@ -732,6 +779,11 @@ export function createBatchExecutor(deps: BatchExecutorDependencies): BatchExecu
       day = before;
       try {
         await conn.transaction().execute(async (trx) => {
+          // BR-FUND-16 加锁流程第 0 步: the first statement of every item transaction, before any
+          // order key lock (taken inside credit() / execute()).
+          await lockCreditGateShared(trx, batch.app_id, batch.platform);
+          // BR-FUND-04 ⑦: the wait for the gate counts; re-read both switches before crediting.
+          if (!(await switchesOn(batch.app_id, batch.platform))) throw new SwitchedOffUnderGate();
           const write = await executeItem(trx, batch, item);
           await writeItem(trx, batch, item, write);
           if (write.result === 'credited') await countCredit(trx, batch);
@@ -745,6 +797,9 @@ export function createBatchExecutor(deps: BatchExecutorDependencies): BatchExecu
           logger.warn({ ...fields, event: 'settle_batch_day_rollover' }, 'settle batch paused');
           return result('day_rollover');
         }
+        // Nothing of this item was written (the transaction rolled back): the same SB7 stop as a
+        // switch read off before the item transaction.
+        if (error instanceof SwitchedOffUnderGate) return switchedOff();
         logger.error(
           { ...fields, item_id: item.id, event: 'settle_batch_item_failed' },
           'settle batch item transaction failed',

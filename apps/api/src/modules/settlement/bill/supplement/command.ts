@@ -8,9 +8,11 @@ import {
   type BillValidationResult,
 } from '@couli/domain';
 import { applyReserve, parseFen, subFen } from '@couli/money';
-import type { Kysely, Transaction } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 import { pino, type Logger } from 'pino';
+import { lockOrderKey } from '../../../orders/index.ts';
 import { newUuidV7 } from '../../../platform/index.ts';
+import { lockCreditGateExclusive } from '../../batch/credit-gate.ts';
 import { decidingSettlement, latestSeqWithin } from '../../settlements/index.ts';
 import {
   registerAmountMismatch,
@@ -19,9 +21,12 @@ import {
   type BillReconDiffInput,
   type BillSnapshot,
   type BillSnapshotSelection,
+  type BillSourceOrder,
+  type BillSourceRow,
   type BillSourceSelection,
   type BillValidation,
 } from '../job.ts';
+import { lockAndReread, subOrderIdOf } from './locked-recheck.ts';
 import {
   claimSettleJob,
   completeSettleJob,
@@ -41,6 +46,11 @@ import {
  */
 export type SupplementDependencies = Omit<BillJobDependencies, 'snapshotStatus'> & {
   readonly logger?: Pick<Logger, 'warn'>;
+  /**
+   * B2-04re：候选订单键锁的分块大小（每块：保存点 → 块内按订单键升序取订单键锁 → 经来源读口再读一次 →
+   * 回滚到保存点放掉这一块的订单键锁）。只供测试注入；生产不传，取实现里的默认常量。
+   */
+  readonly lockChunkSize?: number;
 };
 
 export interface SupplementInput {
@@ -124,6 +134,17 @@ const DIFF_REF_TYPE = 'order';
 
 /** 可能让明细仍待执行的批次状态（SQL 预筛；最终判定在 blocksSupplement）。 */
 const BLOCKING_STATUSES = ['DRAFT', 'CONFIRMED', 'EXECUTING'] as const;
+/**
+ * 补充入批分块取锁用的保存点名（逐块复用：每块 SAVEPOINT → … → ROLLBACK TO → RELEASE，不嵌套累积）。
+ * 回滚到它时 PG 放掉其后取得的事务级咨询锁；保存点内只取锁与读。
+ */
+const LOCK_SAVEPOINT = 'couli_supplement_lock_chunk';
+/**
+ * B2-04re r2（BR-FUND-04 ⑨）：锁账单行之后、认领任务之前开的保存点。取到平台排他锁后复核入账开关发现已关时回滚到
+ * 它（撤销认领任务等此后的写入，连带放掉其后取得的平台锁）再释放，然后拒绝；经 launchInTransaction 进来、调用方
+ * 接住拒绝继续提交外层事务时也不留下任何行。复核通过或判为重放时直接释放（保留其内的写入与锁）。
+ */
+const GATE_SAVEPOINT = 'couli_supplement_gate_recheck';
 
 export interface PendingItemFacts {
   readonly batchStatus: string;
@@ -419,12 +440,16 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
       throw new SupplementRejectedError('credit_disabled');
     }
     const billId = await lockBill(trx, appId, platform, target);
+    await sql`SAVEPOINT ${sql.raw(GATE_SAVEPOINT)}`.execute(trx);
 
     if (jobRunAt.shifted) await warnShifted(trx, appId, platform, requestedAt, jobRunAt.runAt);
     const key: SettleJobKey = { appId, job: JOB, platform, runAt: jobRunAt.runAt };
     // 新键 START；同键 failed 行 RETRY 同一行重跑；done / running 判为重放、不改行。
     const jobId = await claimSettleJob(trx, key, now);
-    if (jobId === null) return { outcome: 'duplicate', billId, platform, batchIds: [] };
+    if (jobId === null) {
+      await sql`RELEASE SAVEPOINT ${sql.raw(GATE_SAVEPOINT)}`.execute(trx);
+      return { outcome: 'duplicate', billId, platform, batchIds: [] };
+    }
 
     const rawTolerance = await deps.config.get(appId, 'settle.batch.match_tolerance_fen');
     const toleranceFen =
@@ -445,32 +470,26 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
       billId,
       generationStartedAt: now,
     };
-    const rows = await deps.readSource(trx, selection);
+    // 截点固定在发起那一刻（now 由入口取一次）：等锁期间 Clock 往前走也不改截点，本函数不再读 Clock。
     const cutoffMs = now.getTime();
-
-    const validations: BillValidation[] = [];
-    const candidates = new Map<string, CandidateFacts>();
-    const credited: CreditedFacts[] = [];
-    let heldCount = 0;
-
-    for (const row of rows) {
-      // 两个数不是同一条记录（B2-04zp，BR-FUND-09）：金额、来源、取得时间看决定金额的 chosen；settle_seq 看
-      // 截点内整单最大 seq。R5 与 R5a 比的是整单最大 seq（BR-FUND-04 ⑦），记成 chosen.seq 的话，STATEMENT
-      // 之后再来一条 API 的单每轮都会被 settlement_changed 跳过，永远入不了账。
+    const facts = (
+      order: BillSourceOrder,
+      snapshots: readonly { commission_version: number; base_fen: bigint }[],
+    ) => ({
+      rebate_status: order.rebateStatus,
+      settle_period: order.settlePeriod,
+      hold: order.hold,
+      rights_pending: order.rightsPending,
+      snapshots,
+      union_authoritative: order.unionAuthoritative,
+    });
+    // 两个数不是同一条记录（B2-04zp，BR-FUND-09）：金额、来源、取得时间看决定金额的 chosen；settle_seq 看
+    // 截点内整单最大 seq。R5 与 R5a 比的是整单最大 seq（BR-FUND-04 ⑦），记成 chosen.seq 的话，STATEMENT
+    // 之后再来一条 API 的单每轮都会被 settlement_changed 跳过，永远入不了账。
+    // 先不读快照判范围与类别（占位快照只用来区分「需要比金额」），再按需读当前版本快照复核。
+    const preliminaryOf = (row: BillSourceRow) => {
       const chosen = decidingSettlement(row.settlements, cutoffMs);
       const order = row.order;
-      const facts = (snapshots: readonly { commission_version: number; base_fen: bigint }[]) =>
-        order === null
-          ? null
-          : {
-              rebate_status: order.rebateStatus,
-              settle_period: order.settlePeriod,
-              hold: order.hold,
-              rights_pending: order.rightsPending,
-              snapshots,
-              union_authoritative: order.unionAuthoritative,
-            };
-      // 先不读快照判范围与类别（占位快照只用来区分「需要比金额」），再按需读当前版本快照复核。
       const preliminary = classifySettlementBillOrder({
         bill_period: billId,
         generation_started_at: now,
@@ -478,7 +497,7 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
           order === null
             ? null
             : {
-                ...facts([{ commission_version: 0, base_fen: 0n }])!,
+                ...facts(order, [{ commission_version: 0, base_fen: 0n }]),
                 union_authoritative: true,
               },
         settlement:
@@ -492,6 +511,57 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
               },
         match_tolerance_fen: toleranceFen,
       });
+      return { chosen, preliminary };
+    };
+
+    // B2-04rd（BR-FUND-04 ④⑦⑧⑫）：初判为候选（下面要读快照比金额的那些）的订单按订单键升序取订单键锁
+    // （与入账环节同一把），经同一来源读口、同一 selection 重读，已上锁的单按重读结果定类别；其余订单按平台锁
+    // 之后的重读（仍不是候选时）定类别，见 lockAndReread。逐单结果与拆批仍按第一次来源行的顺序。资金评审 r1 S1：候选分块，每块在保存点内取锁、
+    // 重读，再回滚到保存点放锁（保存点内不写），同时持有的锁不超过一块。
+    const firstRows = await deps.readSource(trx, selection);
+    // B2-04re（BR-FUND-16 加锁流程第 0 步）：第一次读来源之后、任何保存点与订单键锁之前取平台结算互斥锁排他
+    // 模式（事务级，在分块保存点之外，回滚到分块保存点不放它；取在 GATE_SAVEPOINT 之内，释放该保存点后归本事务，
+    // 只有下面开关复核不过的拒绝路径随回滚放掉它），持有到本事务提交；经 launchInTransaction 进来时即调用方
+    // 外层事务的提交或回滚。没有候选也取。持锁期间同平台入账明细事务提交不了，所以下面只需拆批前那一次
+    // 「仍在未执行批次里」的查询。
+    await lockCreditGateExclusive(trx, appId, platform);
+    // B2-04re r2（BR-FUND-04 ⑨）：等平台锁期间开关可能被关。取到锁后经同一读口再核一次；已关时结果与最前面那次
+    // 读到已关相同——回滚到 GATE_SAVEPOINT 撤销本次发起的全部写入（认领的任务行等）后拒绝，不留下任何东西。
+    if (!(await creditEnabled(appId, platform))) {
+      await sql`ROLLBACK TO SAVEPOINT ${sql.raw(GATE_SAVEPOINT)}`.execute(trx);
+      await sql`RELEASE SAVEPOINT ${sql.raw(GATE_SAVEPOINT)}`.execute(trx);
+      throw new SupplementRejectedError('credit_disabled');
+    }
+    await sql`RELEASE SAVEPOINT ${sql.raw(GATE_SAVEPOINT)}`.execute(trx);
+    // 没上订单键锁的行按平台锁之后的重读定类别（见 lockAndReread；没有候选时它补做一次来源读）。
+    const rows = await lockAndReread(
+      firstRows,
+      (row) => {
+        const { chosen, preliminary } = preliminaryOf(row);
+        return row.order !== null && preliminary === 'candidate' && chosen !== null;
+      },
+      {
+        lock: (key) => lockOrderKey(trx, platform, subOrderIdOf(platform, key)),
+        reread: () => deps.readSource(trx, selection),
+        savepoint: async () => {
+          await sql`SAVEPOINT ${sql.raw(LOCK_SAVEPOINT)}`.execute(trx);
+        },
+        rollbackToSavepoint: async () => {
+          await sql`ROLLBACK TO SAVEPOINT ${sql.raw(LOCK_SAVEPOINT)}`.execute(trx);
+          await sql`RELEASE SAVEPOINT ${sql.raw(LOCK_SAVEPOINT)}`.execute(trx);
+        },
+      },
+      deps.lockChunkSize,
+    );
+
+    const validations: BillValidation[] = [];
+    const candidates = new Map<string, CandidateFacts>();
+    const credited: CreditedFacts[] = [];
+    let heldCount = 0;
+
+    for (const row of rows) {
+      const { chosen, preliminary } = preliminaryOf(row);
+      const order = row.order;
       if (preliminary === null) continue;
 
       let result: BillValidationResult = preliminary;
@@ -508,9 +578,9 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
           bill_period: billId,
           generation_started_at: now,
           order: {
-            ...facts([
+            ...facts(order, [
               { commission_version: order.commissionVersion, base_fen: snapshot.baseFen },
-            ])!,
+            ]),
             union_authoritative: unionConclusionApplies(order, snapshot.baseFen, bSettle),
           },
           settlement: {

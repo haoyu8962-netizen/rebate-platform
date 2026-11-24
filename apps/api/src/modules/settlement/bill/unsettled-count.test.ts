@@ -92,6 +92,10 @@ function fakeDb(options: { bill?: Row; failBillUpdate?: boolean } = {}) {
       ) {
         return Promise.resolve(result([]));
       }
+      if (/pg_advisory_xact_lock/.test(text)) return Promise.resolve(result([]));
+      if (/^(?:savepoint|rollback to savepoint|release savepoint) /i.test(text)) {
+        return Promise.resolve(result([]));
+      }
       return Promise.reject(new Error(`unscripted statement: ${text}`));
     },
     async *streamQuery() {
@@ -357,4 +361,180 @@ it('[AC-B2-18a-UNIT#6] 补充发起遇应结未结：不调 registerDiff、不�
     [missing.orderKey, 'missing_settlement'],
     [late.orderKey, 'candidate'],
   ]);
+});
+
+/** credit-gate.ts 的事务级排他语句（逐字）。 */
+const GATE_EXCLUSIVE = 'select pg_advisory_xact_lock(hashtext($1), hashtext($2))';
+
+it('[AC-B2-04re-UNIT#5] 账单日任务正常出账：针对平台键的语句恰一条、逐字是事务级排他语句、参数 (settlement.credit_gate, app:platform)；在账单行 FOR UPDATE 之后、读来源之前；onGenerated 执行时仍在事务内（其后只有 COMMIT），全程没有解锁 / 会话级 / 试锁语句', async () => {
+  const d = deps([row(waiting(), 1000n)], { 'credit.enabled.taobao': 'on' });
+  const f = fakeDb();
+  const marker = (name: string): Logged => ({ sql: name, params: [] });
+  const dependencies: BillJobDependencies = {
+    ...d.dependencies,
+    readSource: async (trx, input) => {
+      f.log.push(marker('READ_SOURCE'));
+      return d.dependencies.readSource(trx, input);
+    },
+    onGenerated: async () => {
+      f.log.push(marker('ON_GENERATED'));
+    },
+  };
+
+  const result = await createBillJob(dependencies).run(f.db, {
+    appId: APP,
+    platform: 'taobao',
+    runAt: RUN,
+  });
+
+  expect(result.outcome).toBe('generated');
+  const advisory = f.statements().filter((s) => /advisory/i.test(s.sql));
+  expect(advisory).toEqual([
+    { sql: GATE_EXCLUSIVE, params: ['settlement.credit_gate', `${APP}:taobao`] },
+  ]);
+  const at = (pattern: RegExp) =>
+    f.log.findIndex((e) => typeof e !== 'string' && pattern.test(e.sql));
+  const lockBill = at(/^select .* from "app"\."settle_bills".* for update$/);
+  const gate = f.log.findIndex((e) => typeof e !== 'string' && e.sql === GATE_EXCLUSIVE);
+  const read = at(/^READ_SOURCE$/);
+  const hook = at(/^ON_GENERATED$/);
+  const commit = f.log.indexOf('COMMIT');
+  expect(lockBill).toBeGreaterThan(0);
+  expect(lockBill < gate && gate < read && read < hook && hook < commit).toBe(true);
+  expect(f.log.slice(hook + 1)).toEqual(['COMMIT']);
+  for (const s of f.statements()) {
+    expect(s.sql).not.toMatch(/pg_advisory_lock|pg_advisory_unlock|pg_try_advisory|_shared/);
+  }
+});
+
+it('[AC-B2-04re-UNIT#6] 账单日任务重放（该平台本期已出过）：记录到的全部语句里没有任何 advisory 字样，不读来源，返回 duplicate', async () => {
+  const readSource = vi.fn<BillJobDependencies['readSource']>(async () => []);
+  const d = deps([row(waiting(), 1000n)], { 'credit.enabled.taobao': 'on' });
+  const f = fakeDb({ bill: billRow({ platform_order_counts: { taobao: 1 } }) });
+
+  const result = await createBillJob({ ...d.dependencies, readSource }).run(f.db, {
+    appId: APP,
+    platform: 'taobao',
+    runAt: RUN,
+  });
+
+  expect(result.outcome).toBe('duplicate');
+  expect(readSource).not.toHaveBeenCalled();
+  expect(f.statements().length).toBeGreaterThan(0);
+  expect(f.statements().filter((s) => /advisory/i.test(s.sql))).toEqual([]);
+});
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** credit.enabled.taobao 第 n 次（从 0 起）读到的值依次取 values（超出取最后一个）；其余键同 deps 的配置表。 */
+function switchSequence(
+  dependencies: BillJobDependencies,
+  values: readonly unknown[],
+): BillJobDependencies {
+  let reads = 0;
+  return {
+    ...dependencies,
+    config: {
+      get: async (app, key) => {
+        if (key !== 'credit.enabled.taobao') return dependencies.config.get(app, key);
+        const value = values[Math.min(reads, values.length - 1)];
+        reads += 1;
+        return value;
+      },
+    },
+  };
+}
+
+it('[AC-B2-04re-UNIT#20] 账单日任务：锁前 on、取到平台排他锁后 off——不生成主批次，语句序列、账单计数与逐单结果与一开始就 off 完全相同；锁前锁后都 on 照常生成主批次', async () => {
+  const run = async (values: readonly unknown[]) => {
+    const source = [row(waiting(), 1000n), row(waiting())];
+    const d = deps(source);
+    const f = fakeDb();
+    const result = await createBillJob(switchSequence(d.dependencies, values)).run(f.db, {
+      appId: APP,
+      platform: 'taobao',
+      runAt: RUN,
+    });
+    const normalize = (s: Logged): Logged => ({
+      sql: s.sql,
+      // 订单号随全局计数变、任务行 id 是随机 UUIDv7：两者都换成占位再比。
+      params: s.params.map((p) =>
+        typeof p === 'string' ? p.replace(/order-\d+/g, 'order').replace(UUID, 'uuid') : p,
+      ),
+    });
+    return {
+      result,
+      statements: f.statements().map(normalize),
+      log: f.log.map((e) => (typeof e === 'string' ? e : normalize(e).sql)),
+      bill: f.billUpdates(),
+      saved: savedResults(d.saveValidations).map(([, r]) => r),
+    };
+  };
+
+  const flipped = await run(['on', 'off']);
+  const off = await run(['off']);
+  const on = await run(['on']);
+
+  const batchWrites = (statements: readonly Logged[]) =>
+    statements.filter((s) => /^insert into "app"\."settle_batch(es|_items)"/.test(s.sql));
+  expect(batchWrites(flipped.statements)).toEqual([]);
+  expect(flipped.result).toEqual(off.result);
+  expect(flipped.statements).toEqual(off.statements);
+  expect(flipped.log).toEqual(off.log);
+  expect(flipped.bill).toEqual(off.bill);
+  expect(flipped.saved).toEqual(off.saved);
+  expect(flipped.saved).toEqual(['candidate', 'missing_settlement']);
+
+  expect(batchWrites(on.statements).map((s) => s.sql.slice(0, 33))).toEqual([
+    'insert into "app"."settle_batches',
+    'insert into "app"."settle_batch_i',
+  ]);
+  expect(on.result.outcome).toBe('generated');
+});
+
+it('[AC-B2-04re-UNIT#21] 账单日任务：锁后复读开关在平台排他锁之后、读来源之前；重放路径不复读、仍没有任何 advisory 语句', async () => {
+  const events: string[] = [];
+  const d = deps([row(waiting(), 1000n)], { 'credit.enabled.taobao': 'on' });
+  const f = fakeDb();
+  const dependencies: BillJobDependencies = {
+    ...d.dependencies,
+    config: {
+      get: async (app, key) => {
+        if (key === 'credit.enabled.taobao') {
+          events.push(`switch@${String(f.statements().length)}`);
+        }
+        return d.dependencies.config.get(app, key);
+      },
+    },
+    readSource: async (trx, input) => {
+      events.push(`read@${String(f.statements().length)}`);
+      return d.dependencies.readSource(trx, input);
+    },
+  };
+
+  await createBillJob(dependencies).run(f.db, { appId: APP, platform: 'taobao', runAt: RUN });
+
+  const gate = f.statements().findIndex((s) => s.sql === GATE_EXCLUSIVE);
+  // 两次开关读：第一次在平台锁之前，第二次紧跟平台锁之后（中间没有别的语句）、读来源之前。
+  expect(events).toEqual([
+    expect.stringMatching(/^switch@/),
+    `switch@${String(gate + 1)}`,
+    `read@${String(gate + 1)}`,
+  ]);
+  expect(Number(events[0]!.slice('switch@'.length))).toBeLessThanOrEqual(gate);
+
+  const replayEvents: string[] = [];
+  const replay = fakeDb({ bill: billRow({ platform_order_counts: { taobao: 1 } }) });
+  const result = await createBillJob({
+    ...d.dependencies,
+    config: {
+      get: async (app, key) => {
+        replayEvents.push(key);
+        return d.dependencies.config.get(app, key);
+      },
+    },
+  }).run(replay.db, { appId: APP, platform: 'taobao', runAt: RUN });
+  expect(result.outcome).toBe('duplicate');
+  expect(replayEvents).not.toContain('credit.enabled.taobao');
+  expect(replay.statements().filter((s) => /advisory/i.test(s.sql))).toEqual([]);
 });
