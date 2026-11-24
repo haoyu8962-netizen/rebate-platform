@@ -13,8 +13,16 @@
 --   current credential (> 0 true, = 0 false, NULL unknown).
 -- Compatibility: additive. No default, no backfill: credential rows written before this migration
 --   read NULL (unknown). Each column has a named CHECK (>= 0). No existing column, constraint,
---   index, trigger or grant changes; app.union_accounts (alert_stage and its CHECK included) is not
---   touched (D10-2771: hour alert nodes only enter the alert dedupe key).
+--   index, trigger or grant changes; alert_stage and its CHECK on app.union_accounts are not touched
+--   (D10-2771: hour alert nodes only enter the alert dedupe key).
+-- app.union_accounts gains one nullable text column hour_alert_key (task patch 4, review money r1):
+--   the hour alert node last handled for the account, '<auth_expires_at epoch ms>:h<N>'. Writer:
+--   union's hour_alert job only (auth-expiry/service.ts), on the account row locked FOR UPDATE, and
+--   only when the value differs; the alert line and the expiring status are written in the same
+--   transaction, so a repeat or a late job of the same node finds its key and does nothing. The daily
+--   check never writes it. No default, no backfill (NULL: no hour node handled yet), no constraint;
+--   the table-level grants of 0015 (couli_app SELECT / INSERT / UPDATE, couli_readonly SELECT)
+--   already cover it.
 -- Grants: couli_app's table-level SELECT / INSERT (0015) covers the new columns; no UPDATE (the
 --   numbers are written once with the row). couli_readonly reads app.union_credentials by column
 --   list (0015), so SELECT on the five non-secret numbers is added for it.
@@ -22,9 +30,10 @@
 --   readable); a later migration may drop them once nothing reads them.
 --
 -- Timeouts: ADD COLUMN without a default is catalog only, but takes ACCESS EXCLUSIVE on
--- app.union_credentials held to commit (the runner uses one transaction), and the inline CHECKs scan
--- the table (one row per authorization, a few rows). 5s lock wait so a blocked deploy fails fast
--- instead of queueing re-authorizations behind it; 30s overall as a ceiling.
+-- app.union_credentials and app.union_accounts held to commit (the runner uses one transaction),
+-- and the inline CHECKs scan union_credentials (one row per authorization, a few rows). 5s lock
+-- wait so a blocked deploy fails fast instead of queueing union traffic behind it; 30s overall as
+-- a ceiling.
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
 
@@ -45,3 +54,9 @@ GRANT SELECT (re_expires_in_s, r1_expires_in_s, r2_expires_in_s, w1_expires_in_s
 
 COMMENT ON COLUMN app.union_credentials.re_expires_in_s IS
   'BR-ID-24: Taobao re_expires_in seconds of this authorization (> 0 renewable); NULL unknown';
+
+ALTER TABLE app.union_accounts
+  ADD COLUMN hour_alert_key text;
+
+COMMENT ON COLUMN app.union_accounts.hour_alert_key IS
+  'BR-ID-24: last hour alert node handled, <auth_expires_at epoch ms>:h<N>; written by the hour job only';
