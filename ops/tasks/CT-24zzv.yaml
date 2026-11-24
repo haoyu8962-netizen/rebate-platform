@@ -4,7 +4,8 @@ title: 契约：后台二次验证三档——/admin/v1 显式标 x-step-up（su
 type: contract
 # 2026-11-24 二次验证线入账（D10-2821）。内容 = 探针第 4 轮的契约改动（couli-runs/STEPUP-1124c/contract-only.patch，入账稿 couli-runs/STEPUP-BE/entry-draft.md §2、§7）：sudo 15、strict 9 个操作标 x-step-up（按请求内容或键名分档的 9 个标最高档、条件写说明）；49 个 none 操作删令牌参数、10003、示例与说明句；新增 AdminStepUpMethod；10003 的 data 为 tier 与 reason 二者其一（D10-2792 ⑥）；conformance.ts 加后台分支；用户端 3 处 x-step-up 不动。
 # AdminStepUpTier 先加后删（D10-2792 ②）：本单四值并存，旧值等 B1-18l 与前端单落地后另开契约单删。服务端行为不在本单（B1-18l）；本单只带两处编译适配（D10-2821 a）：step-up.controller.ts 缺 tier 回 20001、AppVersionEditor.tsx 放宽一处类型。
-# 冻结用例：探针共 35 条。先登非资金、非归属目录的 12 条；补丁 1（同时把 [AC-B1-34h#1]、[AC-B1-34i#1] 两组 .each 改为按标题模板整块登记：写测 1 交回时门禁展不开其表，D10-2559；paths 加 contracts/error-codes.yaml，10003 的档位登记在那里）；补丁 2（D10-2838 甲类）补登 3 张 it.each 表的其余 7 行，期望值不变；补丁 3（D10-2900，资金评审 r1）：paths / test_paths 加 test/spec/admin/step-up-method/**（签发接口 method / tier 入口归一的规则测试），strict 凭证取「首次使用即绑定、签发时不指定操作」（服务端在 B1-18l 的占用记录里存 operationId）（D10-2826，负责人 2026-11-24「都同意」）再登其余 23 条（资金与归属目录 21 + 收款契约 2），只改二次验证那一处期望。.each 行不改名（D10-2154），标题里的「step-up 头」以块内断言为准。
+# 冻结用例：探针共 35 条。先登非资金、非归属目录的 12 条。补丁 1（D10-2826，负责人 2026-11-24「都同意」）再登其余 23 条（资金与归属目录 21 + 收款契约 2），只改二次验证那一处期望；同一补丁把 [AC-B1-34h#1]、[AC-B1-34i#1] 两组 .each 改为按标题模板整块登记（写测 1 交回时门禁展不开其表，D10-2559），paths 加 contracts/error-codes.yaml（10003 的档位登记在那里）。补丁 2（编排 D10-2838 甲类）补登 3 张 it.each 表的其余 7 行，期望值不变。.each 行不改名（D10-2154），标题里的「step-up 头」以块内断言为准。
+# 补丁 3（编排 D10-2900 裁定，待回写 BR-ID-34 并报负责人；起因 Codex 资金评审 r1）：paths / test_paths 加 test/spec/admin/step-up-method/**（签发接口 method / tier 入口归一的规则测试）；strict 凭证的「绑定所做的操作」取首次使用即绑定、签发时不指定操作（服务端在 B1-18l 的占用记录里存 operationId）。
 refs: [BR-ID-34]
 refs_hash:
   BR-ID-34: 8bd50e43d350
