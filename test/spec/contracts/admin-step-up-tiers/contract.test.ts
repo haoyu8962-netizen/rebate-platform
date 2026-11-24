@@ -4,7 +4,6 @@ import {
   check,
   compile,
   contract,
-  examples,
   list,
   object,
   resolve,
@@ -194,7 +193,13 @@ it('[AC-CT-24zzv#6] 后台 10003 示例的 data 只含对应档位，短信重�
         const { content } = resolve(doc, response);
         const media = object(content ?? {})['application/json'];
         if (media === undefined) return [];
-        return examples(doc, object(media)).flatMap((example) => {
+        const representation = object(media);
+        const namedExamples = Object.values(object(representation['examples'] ?? {}));
+        const examples = [
+          representation['example'],
+          ...namedExamples.map((entry) => resolve(doc, entry)['value']),
+        ];
+        return examples.flatMap((example) => {
           if (
             example === null ||
             typeof example !== 'object' ||
@@ -209,15 +214,88 @@ it('[AC-CT-24zzv#6] 后台 10003 示例的 data 只含对应档位，短信重�
   );
 
   for (const { id, data } of errorData) {
+    const tier = tiers.get(id);
+    if (tier !== undefined) expect(data, id).toEqual({ tier });
     if (id === retest) {
       expect(data, id).toEqual({ reason: 'verify_phone_missing' });
-    } else {
-      expect(tiers.has(id), id).toBe(true);
-      expect(data, id).toEqual({ tier: tiers.get(id) });
     }
   }
-  expect(errorData).toContainEqual({ id: retest, data: { reason: 'verify_phone_missing' } });
-  for (const tier of ['sudo', 'strict']) {
-    expect(errorData).toContainEqual(expect.objectContaining({ data: { tier } }));
+  expect(errorData.filter(({ id }) => id !== retest && !tiers.has(id))).toEqual([]);
+});
+
+it('[AC-CT-24zzv#7] 10003 码表含 sudo、strict 和手机号缺失原因', () => {
+  const codes = list(yaml('contracts/error-codes.yaml')['codes']).map(object);
+  const stepUpRequired = codes.find((entry) => entry['code'] === 10003);
+  const data = at(stepUpRequired, 'data');
+
+  expect(list(data['tier'])).toEqual(expect.arrayContaining(['sudo', 'strict']));
+  expect(list(data['reason'])).toContain('verify_phone_missing');
+});
+
+it('[AC-CT-24zzv#8] 原先带二次验证令牌且现在归 none 的操作移除验证要求说明', () => {
+  // 固定改造前使用 AdminStepUpToken 且本次归 none 的操作，排除短信重测。
+  const formerlyProtected = new Set([
+    'adminSendMyVerifyPhoneCode',
+    'adminCreateAdmin',
+    'adminRegenerateAdminInitialPassword',
+    'adminDisableAdmin',
+    'adminEnableAdmin',
+    'adminResetAdminTotp',
+    'adminSendAdminVerifyPhoneCode',
+    'adminDisableUserUnionBinding',
+    'adminEnableUserUnionBinding',
+    'adminChangeUserLevel',
+    'adminChangeInviter',
+    'adminEditUserProfile',
+    'adminAddUserReverifiedDevice',
+    'adminCorrectUserRealname',
+    'adminCreateUserDataExport',
+    'adminDownloadUserDataExport',
+    'adminReassignOrder',
+    'adminCreateRightsImport',
+    'adminAddUnionAlertPhone',
+    'adminRemoveUnionAlertPhone',
+    'adminPublishAgreementVersion',
+    'adminSaveDictItems',
+    'adminRollbackDictItems',
+    'adminSwitchNotifyChannels',
+    'adminRegisterNotifySms',
+    'adminEnableNotifySms',
+    'adminSaveAppVersion',
+    'adminEnableRiskRule',
+    'adminDisableRiskRule',
+    'resolveAdminPayOrder',
+    'writeOffAdminReconDiff',
+    'restoreAdminReconDiff',
+    'blacklistClawbackAdminReconDiff',
+    'recalcBalanceAdminReconDiff',
+    'adminApproveSettleAdjustBatch',
+    'adminRejectSettleAdjustBatch',
+    'adminRunSettleAdjust',
+    'adminBatchManualPaid',
+    'adminQueryPayoutResult',
+    'adminResolveUnknownPayout',
+    'confirmAdminSettleBill',
+    'createAdminSettleSupplementBatches',
+    'cancelAdminSettleBatchSchedule',
+    'rejectAdminSettleBatch',
+    'resumeAdminSettleBatch',
+    'adminCreateUnionReceipt',
+    'adminReverseUnionReceipt',
+    'adminCreatePayoutWatermark',
+  ]);
+  const requirements = [
+    /\b(?:X-Step-Up-Token|step_up_token|data\.tier)\b/i,
+    /(?<!\bnot )\b(?:requires?|needs?|must|without a valid) (?:(?!\b(?:no|not|without)\b)[^.!?;,]){0,80}\bstep[- ]up\b/i,
+    /(?<!\bno )\bstep[- ]up\s*(?::|\(10003\)|(?:totp|sms|sudo|strict|checks?)\b|(?:is )?(?:needed|required)\b)/i,
+    /\b(?:permission, step[- ]up|with step[- ]up and a reason)\b/i,
+    /(?<![不无])(?:需要|需|必须)(?:通过|完成)?二次验证/,
+  ];
+  for (const { id, operation } of operations(contract(), '/admin/v1/')) {
+    if (!formerlyProtected.has(id)) continue;
+    const description = text(operation['description'] ?? '')
+      .replaceAll('`', '')
+      .replace(/\s+/g, ' ');
+    for (const requirement of requirements) expect(description, id).not.toMatch(requirement);
   }
 });
