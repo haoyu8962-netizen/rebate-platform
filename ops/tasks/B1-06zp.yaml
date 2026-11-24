@@ -1,0 +1,50 @@
+id: B1-06zp
+repo: rebate-platform
+title: linking：拼多多购买的 scheme 步骤改用转链回包 schema_url 原样（已装 / unknown：schema_url → mobile_url，未装只 mobile_url，缺失或不以声明 scheme 开头则只有网页，不再自拼）；contracts/apps.json 拼多多登记安卓包名与 scheme pinduoduo（D10-2817 / D10-2819）
+type: impl
+# 2026-11-24 w1 入账（编排 D10-2817 / D10-2818 / D10-2819；负责人：拼多多购买要直接拉起拼多多 App）。现状（主干只读，D10-2816）：拼多多 open 回包只有一个 h5 步骤（mobile_url）——
+#   scheme 步骤只在 apps.json 声明 scheme 时由 pathsOf 自拼 `<scheme>://com.xunmeng.pinduoduo/?url=<mobile_url>`（link-open-conversion.ts:218–235），而 apps.json 拼多多 query_schemes 为空；转链回包的 schema_url（ConvertResult，union/domain/types.ts:716）从未被 linking 使用（:220 TODO CAP-PDD-11）。
+# ① 购买（convert 与缓存命中）：拼多多 scheme 步骤 = 本次转链回包的 schema_url 原样，且须以 apps.json 声明的拼多多 scheme 加 :// 开头；缺失、为空或前缀不符 → 不出 scheme 步骤。顺序照 BR-ATTR-27 默认矩阵（08 04_ATTR:845）与 buildDefaultLinkJump：已装 [scheme, h5]、未装 [h5]、unknown 合并去重；h5 仍是 mobile_url。京东、授权页（D10-662「回包原样、缺失再派生」）不动。
+#   缓存条目身份带外跳方案变体（BR-ATTR-26 细则「实现另加更细的项只会更严」），旧条目（无 scheme 步骤）不得在新规则下继续命中。prod 放行不变（app.module.ts VERIFIED_JUMP_PATHS 仍空，分端放行等各端真机核过另开）。
+# ② contracts/apps.json 拼多多：status verified（依据：负责人 A54、小米真机上回包 pinduoduo://com.xunmeng.pinduoduo/duo_coupon_landing.html… 直接拉起拼多多，P0-1122/D10-2795、D10-2811；CAP-PDD-11 安卓部分）、android.packages [com.xunmeng.pinduoduo]、
+#   ios.query_schemes [pinduoduo]、harmony.query_schemes 留 []（鸿蒙 scheme 未核，D10-2820）；status 只有整条一个字段，iOS 未经真机实测、鸿蒙待真机核写进 source 与 $comment（「Nothing here is verified yet」一句同步改，保留 CAP-TB-11 等原有字样——[AC-CT-17h#2] 按包含判）。重跑 pnpm codegen（bridge.gen.ts）。
+# 规则测试钉：已装 / unknown 时 primary = {scheme, 回包 schema_url 原样}、fallbacks 含 mobile_url；未装只 h5；schema_url 缺失 / 前缀不符只 h5；两步里的 p_id 与 custom_parameters 与转链请求一致；旧缓存条目不命中。
+# 「schema_url 与 mobile_url 归因是否一致」属 CAP-PDD-11 真实下单待测，记 FU-PDD-SCHEME-ATTR-VERIFY，不在本单。
+refs: [BR-ATTR-27]
+refs_hash:
+  BR-ATTR-27: f908d845271a
+deps: []
+paths:
+  - 'apps/api/src/modules/linking/**'
+  - 'contracts/apps.json'
+  - 'packages/contracts-ts/**'
+test_paths:
+  - 'test/spec/linking/pdd-schema-url-step/**'
+  - 'test/spec/{linking/wiring/app.int.test.ts,contracts/apps-inbound-own/apps-inbound-own.test.ts}'
+modify_existing:
+  - file: 'test/spec/linking/wiring/app.int.test.ts'
+    test: '[AC-B1-06w#14] 已验证拼多多 scheme synthetic-pdd-a 来自注入的 apps.json，不写死 pinduoduo'
+    reason: rule_change
+    br: [BR-ATTR-27]
+    ruling: D10-2819
+    note: '原用例钉 scheme 步骤由注入 apps.json 的 scheme 自拼（demo 转链不带 schema_url）；D10-2819 改为只用回包 schema_url 原样。改法：让本用例的转链回包带一条以注入 scheme 开头的 schema_url，断言 primary 等于它原样、fallbacks 仍为 [h5]；「来自注入 apps.json、不写死 pinduoduo」的原意保留（前缀以注入 scheme 判）。'
+  - file: 'test/spec/linking/wiring/app.int.test.ts'
+    test: '[AC-B1-06w#14] 已验证拼多多 scheme synthetic-pdd-b 来自注入的 apps.json，不写死 pinduoduo'
+    reason: rule_change
+    br: [BR-ATTR-27]
+    ruling: D10-2819
+    note: '同上一行（.each 第二行）。'
+  - file: 'test/spec/contracts/apps-inbound-own/apps-inbound-own.test.ts'
+    test: '[AC-CT-17h#1] couli 只作为三端自有入站 scheme 登记，字段闭合且不改外跳目标和 SDK 查询项'
+    reason: rule_change
+    br: [BR-ATTR-27]
+    ruling: D10-2819
+    note: '用例逐字钉了三条外跳目标条目；只把 pdd 条目的期望改为本单登记值（status verified、ios.query_schemes [pinduoduo]、harmony.query_schemes 仍为 []（D10-2820）、android packages [com.xunmeng.pinduoduo]、source 新文字），taobao、jd、inbound、sdk_queries 的断言一字不动。'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/linking/pdd-schema-url-step/**'
+  - 'test/spec/linking/wiring/**'
+  - 'test/spec/contracts/apps-inbound-own/**'
+status: todo
