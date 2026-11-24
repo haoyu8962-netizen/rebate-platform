@@ -9,7 +9,7 @@ type: contract
 # 规则测试钉：键存在且默认文案逐字相等、无 {变量}；fund-term-keys 归 ordinary、不在 fund_terms、不在 exempt；生成物与源一致由已有 contracts:check / 生成一致性用例覆盖。
 refs: [BR-TEXT-12]
 refs_hash:
-  BR-TEXT-12: 18feba6da83d
+  BR-TEXT-12: 1dca4781b3fa
 deps: []
 paths:
   - 'contracts/texts.default.json'
