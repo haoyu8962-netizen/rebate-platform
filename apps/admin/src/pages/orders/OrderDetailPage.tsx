@@ -2,9 +2,10 @@
 // design/specs/admin-order-detail.md; 01 F-ADM-05, F1-07e): GET /admin/v1/orders/{order_id} only
 // (a direct address never reads the list) with the status card (both lock marks side by side),
 // basic and attribution information, the commission snapshot, the status history and the link
-// records. 【同步此单】 (F1-07eb, CT-24n) asks a manual sync of this sub-order; the other write
-// buttons (hold / unhold, assign) come with a later contract and the raw union payload has no
-// permission point yet, so neither is rendered. An unknown or
+// records. 【同步此单】 (F1-07eb, CT-24n) asks a manual sync of this sub-order; 【暂停结算】 /
+// 【恢复结算】, 【原因细分】 and 【指定归属】 (F1-07ee, ./detail-writes/) each show with their own
+// permission point and replace the detail with the one the server answers; the raw union payload
+// has no permission point yet, so it is not rendered. An unknown or
 // not visible order (20001) shows nothing of it. 【返回】 goes to the list with its conditions (the
 // list address, F1-07ed). 「分佣明细」 (F1-07ed) groups the snapshot's beneficiaries by role with each
 // one's ratio, settlement state and forfeit mark; it shows no amount (amounts stay in 「分佣快照」).
@@ -32,6 +33,8 @@ import { useLocation, useNavigate } from 'react-router';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { PlannedPage, usePlanned } from '../../components/planned/index.ts';
 import { ordersTexts } from '../../texts/orders.ts';
+import { OrderWrites } from './detail-writes/OrderWrites.tsx';
+import { subReasonLabel } from './detail-writes/model.ts';
 import { FlagTags, StatusTag } from './parts.tsx';
 import { nextNoticeId, noticeOf, useSyncRequest, type SyncNotice } from './sync.ts';
 import {
@@ -126,6 +129,17 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
     setNotice(text === undefined ? undefined : { id: nextNoticeId(), ...text });
   };
 
+  // F1-07ee writes: a success shows the detail of the response as it is (nothing derived here);
+  // 20902 shows the message and reads the detail once again, without resending the write.
+  const saved = (updated: OrderDetail, text: string) => {
+    setOrder(updated);
+    setNotice({ id: nextNoticeId(), type: 'success', text });
+  };
+  const conflicted = (text: string) => {
+    setNotice({ id: nextNoticeId(), type: 'warning', text });
+    retry();
+  };
+
   const code = { fontFamily: token.fontFamilyCode } as const;
 
   const header = (
@@ -146,6 +160,15 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
         )}
       </Flex>
       <Flex gap={8} wrap>
+        {order === undefined || status !== 'ready' ? null : (
+          <OrderWrites
+            order={order}
+            access={access}
+            onSaved={saved}
+            onConflict={conflicted}
+            onReload={retry}
+          />
+        )}
         {order === undefined || status !== 'ready' ? null : (
           <Button
             icon={<SyncOutlined aria-hidden />}
@@ -383,6 +406,14 @@ function DetailBody({ order }: { readonly order: OrderDetail }): ReactElement {
       children: `${order.is_presale ? b.presaleYes : b.presaleNo} / ${beijingTime(order.deposit_paid_at)}`,
     },
     { key: 'reason', label: b.reason, children: mono(order.reason) },
+    {
+      key: 'reasonSub',
+      label: t.reasonSub,
+      children:
+        order.reason_sub === undefined || order.reason_sub === null
+          ? dash
+          : subReasonLabel(order.reason_sub),
+    },
   ];
 
   const a = t.attribution;
