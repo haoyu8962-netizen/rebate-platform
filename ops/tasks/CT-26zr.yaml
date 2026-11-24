@@ -25,4 +25,5 @@ tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/contracts/text-keys-50301-rate-limit/**'
-status: todo
+status: done
+pr: 653
