@@ -46,6 +46,14 @@ export const ordersTexts = {
   range: (from: string, to: string): string => `${from} ~ ${to}`,
 
   listTitle: '订单',
+  /** Platform and rebate tabs above the list (F1-07ed); the first tab of each is 「全部」. */
+  tabs: {
+    all: '全部',
+    platformName: '按平台',
+    rebateName: '按返利状态',
+  },
+  /** Column settings of the list (F1-07ed). */
+  columnSettings: '列设置',
   columns: {
     orderNo: '订单号',
     platform: '平台',
@@ -239,6 +247,23 @@ export const ordersTexts = {
       forfeit: '没收原因',
       note: '快照生成后规则版本、预留比例与各受益人比例不可修改；之后金额变化只追加记录。',
       empty: '尚未生成分佣快照（未归因或尚未计算时为空）',
+    },
+
+    /** Per-beneficiary breakdown (F1-07ed): ratios and settlement only, never an amount. */
+    splitDetail: {
+      title: '分佣明细',
+      empty: '暂无分佣明细',
+      /** Contract dictionary beneficiary_role (contracts/enums/fund.yaml). */
+      roles: {
+        self: '本人自购',
+        share: '分享者',
+        direct: '直推上级',
+        indirect: '间推上级',
+      } as Readonly<Record<string, string>>,
+      settled: '已结算',
+      unsettled: '未结算',
+      creditedAt: (time: string): string => `入账 ${time}`,
+      forfeited: '已没收',
     },
 
     history: {

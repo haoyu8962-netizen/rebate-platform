@@ -7,6 +7,7 @@ import type { Schema } from '@couli/contracts-ts';
 import { formatYuanAdmin, parseFen } from '@couli/money';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { ordersTexts as t } from '../../texts/orders.ts';
+import { platformCodes, platformConfig } from './platforms.ts';
 
 export type OrderRow = Schema<'AdminOrderListItem'>;
 export type OrderPage = Schema<'AdminOrderPage'>;
@@ -19,22 +20,16 @@ export type OrderFlag = Schema<'AdminOrderFlag'>;
 export const ORDERS_URL = '/admin/v1/orders';
 export const orderUrl = (orderId: string): string => `${ORDERS_URL}/${encodeURIComponent(orderId)}`;
 
-/** page_size of the list (contract ≤ 200). */
+/** Default page_size of the list (contract ≤ 200). */
 export const PAGE_SIZE = 20;
+/** The page sizes the list offers (F1-07ed). */
+export const PAGE_SIZES = [20, 50, 100] as const;
+export type PageSize = (typeof PAGE_SIZES)[number];
 /** q after removing spaces: 1–64 characters (adminListOrders). */
 export const QUERY_MAX = 64;
 
-export const PLATFORMS: readonly PlatformCode[] = [
-  'taobao',
-  'jd',
-  'pdd',
-  'meituan',
-  'vip',
-  'douyin',
-  'eleme',
-  'kuaishou',
-  'suning',
-];
+/** Contract enum order (PlatformCode), from the platform settings (./platforms.ts). */
+export const PLATFORMS: readonly PlatformCode[] = platformCodes();
 /** Contract enum order (AdminOrderPlatformStatus). */
 export const PLATFORM_STATUSES: readonly PlatformStatus[] = [
   'DEPOSIT_PAID',
@@ -58,6 +53,8 @@ export const FLAGS: readonly OrderFlag[] = ['locked', 'status_locked', 'rights_p
 /** Applied list conditions (what the last 【查询】 sent); dates are Beijing calendar days. */
 export interface OrderQuery {
   readonly page: number;
+  /** Absent: the default PAGE_SIZE. */
+  readonly pageSize?: PageSize | undefined;
   readonly platform?: PlatformCode | undefined;
   readonly platformStatus?: PlatformStatus | undefined;
   readonly rebateStatus?: RebateStatus | undefined;
@@ -97,7 +94,7 @@ export function dayEnd(day: string): string {
 export function requestQuery(query: OrderQuery): Record<string, string | number> {
   return {
     page: query.page,
-    page_size: PAGE_SIZE,
+    page_size: query.pageSize ?? PAGE_SIZE,
     ...(query.platform === undefined ? {} : { platform: query.platform }),
     ...(query.platformStatus === undefined ? {} : { platform_status: query.platformStatus }),
     ...(query.rebateStatus === undefined ? {} : { rebate_status: query.rebateStatus }),
@@ -136,8 +133,30 @@ function textOf(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
-function dayOf(value: unknown): string | undefined {
-  return typeof value === 'string' && DAY.test(value) ? value : undefined;
+/** A real calendar day YYYY-MM-DD (year ≥ 1, month 1–12, day within that month), else undefined. */
+export function dayOf(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const found = DAY.exec(value);
+  if (found === null) return undefined;
+  const [year, month, day] = [Number(found[1]), Number(found[2]), Number(found[3])];
+  if (year < 1 || month < 1 || month > 12 || day < 1) return undefined;
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const lengths = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= (lengths[month - 1] ?? 0) ? value : undefined;
+}
+
+/**
+ * The browser history state without the conditions of an older 【返回】 (F1-07ed): once the list
+ * has written its conditions to the address, the address is their only source, so a refresh with
+ * an empty search must not bring the old router state back. Other entries are kept as they are.
+ */
+export function withoutBackState(historyState: unknown): unknown {
+  if (typeof historyState !== 'object' || historyState === null) return historyState;
+  const { usr } = historyState as { readonly usr?: unknown };
+  if (typeof usr !== 'object' || usr === null || !('ordersQuery' in usr)) return historyState;
+  const rest: Record<string, unknown> = { ...usr };
+  delete rest['ordersQuery'];
+  return { ...historyState, usr: Object.keys(rest).length === 0 ? undefined : rest };
 }
 
 /** The conditions carried by router state (only well-formed values survive), else undefined. */
@@ -149,6 +168,7 @@ export function backQueryOf(state: unknown): OrderQuery | undefined {
   const page = value['page'];
   return {
     page: typeof page === 'number' && Number.isInteger(page) && page >= 1 ? page : 1,
+    pageSize: PAGE_SIZES.find((size) => size === value['pageSize']),
     platform: oneOf(PLATFORMS, value['platform']),
     platformStatus: oneOf(PLATFORM_STATUSES, value['platformStatus']),
     rebateStatus: oneOf(REBATE_STATUSES, value['rebateStatus']),
@@ -158,6 +178,70 @@ export function backQueryOf(state: unknown): OrderQuery | undefined {
     paidFrom: dayOf(value['paidFrom']),
     paidTo: dayOf(value['paidTo']),
   };
+}
+
+/** A q as the list sends it: spaces removed, 1–QUERY_MAX characters; else undefined. */
+export function cleanQ(value: string): string | undefined {
+  const compact = value.replace(/\s/g, '');
+  return compact === '' || compact.length > QUERY_MAX ? undefined : compact;
+}
+
+function trimmed(value: string | null): string | undefined {
+  const text = value?.trim() ?? '';
+  return text === '' ? undefined : text;
+}
+
+/**
+ * The list conditions in an address (F1-07ed): the request parameter names of adminListOrders,
+ * with paid_from / paid_to as the Beijing days shown in the form. A value that is not valid
+ * (unknown code, not a page size, not a day, not a positive page) counts as not set.
+ */
+export function queryFromSearch(search: string): OrderQuery {
+  const params = new URLSearchParams(search);
+  const page = params.get('page');
+  const size = params.get('page_size');
+  const q = params.get('q');
+  return {
+    page: page !== null && /^[1-9]\d{0,8}$/.test(page) ? Number(page) : 1,
+    pageSize: PAGE_SIZES.find((value) => String(value) === size),
+    platform: oneOf(PLATFORMS, params.get('platform')),
+    platformStatus: oneOf(PLATFORM_STATUSES, params.get('platform_status')),
+    rebateStatus: oneOf(REBATE_STATUSES, params.get('rebate_status')),
+    flag: oneOf(FLAGS, params.get('flag')),
+    q: q === null ? undefined : cleanQ(q),
+    userId: trimmed(params.get('user_id')),
+    paidFrom: dayOf(params.get('paid_from')),
+    paidTo: dayOf(params.get('paid_to')),
+  };
+}
+
+/**
+ * Whether the pager is shown with an answer (F1-07ed): whenever orders match, also when the asked
+ * page is past the last one (no rows, total > 0), so the user can go back or change the page size.
+ */
+export function showsPager(answer: Pick<OrderPage, 'total'>): boolean {
+  return answer.total > 0;
+}
+
+/** The address search (with 「?」, or empty) of the list conditions; defaults are left out. */
+export function searchOf(query: OrderQuery): string {
+  const params = new URLSearchParams();
+  const put = (name: string, value: string | undefined) => {
+    if (value !== undefined) params.set(name, value);
+  };
+  put('platform', query.platform);
+  put('platform_status', query.platformStatus);
+  put('rebate_status', query.rebateStatus);
+  put('flag', query.flag);
+  put('q', query.q);
+  put('user_id', query.userId);
+  put('paid_from', query.paidFrom);
+  put('paid_to', query.paidTo);
+  if (query.page !== 1) params.set('page', String(query.page));
+  if (query.pageSize !== undefined && query.pageSize !== PAGE_SIZE)
+    params.set('page_size', String(query.pageSize));
+  const text = params.toString();
+  return text === '' ? '' : `?${text}`;
 }
 
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
@@ -205,7 +289,10 @@ export function percent(bp: number | null): string {
   return `${sign}${Math.trunc(magnitude / 100)}.${two(magnitude % 100)}%`;
 }
 
-export const platformLabel = (code: string): string => t.platforms[code] ?? code;
+export const platformLabel = (code: string): string => {
+  const known = oneOf(PLATFORMS, code);
+  return known === undefined ? (t.platforms[code] ?? code) : platformConfig(known).label;
+};
 
 interface AdminDictionary {
   readonly texts: Readonly<Record<string, string>>;

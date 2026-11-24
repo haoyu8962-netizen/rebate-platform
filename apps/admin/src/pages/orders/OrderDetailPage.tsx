@@ -5,8 +5,11 @@
 // records. 【同步此单】 (F1-07eb, CT-24n) asks a manual sync of this sub-order; the other write
 // buttons (hold / unhold, assign) come with a later contract and the raw union payload has no
 // permission point yet, so neither is rendered. An unknown or
-// not visible order (20001) shows nothing of it. 【返回】 goes to the list with its conditions.
+// not visible order (20001) shows nothing of it. 【返回】 goes to the list with its conditions (the
+// list address, F1-07ed). 「分佣明细」 (F1-07ed) groups the snapshot's beneficiaries by role with each
+// one's ratio, settlement state and forfeit mark; it shows no amount (amounts stay in 「分佣快照」).
 import { ArrowLeftOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons';
+import { beneficiary_role } from '@couli/contracts-ts';
 import { useDataProvider } from '@refinedev/core';
 import {
   Alert,
@@ -39,6 +42,7 @@ import {
   orderUrl,
   percent,
   platformLabel,
+  searchOf,
   thisOrderRejectedText,
   type DictKind,
   type OrderDetail,
@@ -107,7 +111,7 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
     const query = backQueryOf(location.state);
     const state: OrdersBackState | undefined =
       query === undefined ? undefined : { ordersQuery: query };
-    void navigate('/orders', { state });
+    void navigate(`/orders${query === undefined ? '' : searchOf(query)}`, { state });
   };
 
   // 【同步此单】 (F1-07eb, CT-24n): sends at once { platform, order_nos: [this sub-order] }.
@@ -552,8 +556,94 @@ function DetailBody({ order }: { readonly order: OrderDetail }): ReactElement {
           </Flex>
         )}
       </Card>
+      <SplitDetail order={order} />
       {historyCard}
       {linksCard}
     </Flex>
+  );
+}
+
+/** Beneficiary roles in contract order (beneficiary_role); an unknown role is listed after them. */
+const ROLE_ORDER: readonly string[] = beneficiary_role;
+
+/**
+ * 「分佣明细」: one group per role that occurs (self → share → direct → indirect), one line per
+ * beneficiary with the user, the ratio (as in the snapshot), settled or not (credited orders show
+ * the Beijing credit time) and 「已没收」 for a forfeited share. No amount is shown or derived.
+ */
+function SplitDetail({ order }: { readonly order: OrderDetail }): ReactElement {
+  const { token } = theme.useToken();
+  const d = t.splitDetail;
+  const split = order.commission_split;
+  const code = { fontFamily: token.fontFamilyCode } as const;
+  const note = { color: token.colorTextSecondary, fontSize: token.fontSizeSM } as const;
+  const settled = order.rebate_status === 'CREDITED';
+  const unsettled = order.rebate_status === 'ESTIMATED' || order.rebate_status === 'WAITING';
+  const state = settled ? (
+    <Flex gap={8} wrap align="center">
+      <Tag color="success" style={{ marginInlineEnd: 0 }}>
+        {d.settled}
+      </Tag>
+      {order.credited_at === null ? null : (
+        <span style={note}>{d.creditedAt(beijingTime(order.credited_at))}</span>
+      )}
+    </Flex>
+  ) : unsettled ? (
+    <Tag style={{ marginInlineEnd: 0 }}>{d.unsettled}</Tag>
+  ) : (
+    <StatusTag kind="rebate_status" code={order.rebate_status} />
+  );
+  const roles =
+    split === null
+      ? []
+      : [
+          ...ROLE_ORDER,
+          ...split.beneficiaries
+            .map((one) => one.role as string)
+            .filter(
+              (role, index, all) => !ROLE_ORDER.includes(role) && all.indexOf(role) === index,
+            ),
+        ].filter((role) => split.beneficiaries.some((one) => one.role === role));
+  return (
+    <Card title={d.title}>
+      {split === null || split.beneficiaries.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={d.empty} />
+      ) : (
+        <Flex vertical gap={16}>
+          {roles.map((role) => (
+            <Flex key={role} vertical gap={8}>
+              <Typography.Text strong>{d.roles[role] ?? role}</Typography.Text>
+              {split.beneficiaries
+                .filter((one) => one.role === role)
+                .map((one, index) => (
+                  <Flex
+                    key={`${one.user_id}-${index}`}
+                    gap={12}
+                    wrap
+                    align="center"
+                    style={{
+                      padding: `${token.paddingXS}px ${token.paddingSM}px`,
+                      border: `1px solid ${token.colorBorderSecondary}`,
+                      borderRadius: token.borderRadius,
+                    }}
+                  >
+                    <span style={{ ...code, wordBreak: 'break-all' }}>{one.user_id}</span>
+                    <span>{percent(one.ratio_bp)}</span>
+                    {state}
+                    {one.forfeit_reason === null ? null : (
+                      <Flex gap={4} align="center">
+                        <Tag color="error" style={{ marginInlineEnd: 0 }}>
+                          {d.forfeited}
+                        </Tag>
+                        <span style={{ ...code, ...note }}>{one.forfeit_reason}</span>
+                      </Flex>
+                    )}
+                  </Flex>
+                ))}
+            </Flex>
+          ))}
+        </Flex>
+      )}
+    </Card>
   );
 }
