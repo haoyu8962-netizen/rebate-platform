@@ -54,15 +54,18 @@ it(
       '付款时间',
       '付款金额',
       '联盟佣金',
-      '平台状态',
       '返利状态',
-      '标记',
       '操作',
     ])
       expect(
         within(mainElement()).queryAllByRole('columnheader', { name }).length,
         name,
       ).toBeGreaterThan(0);
+    for (const name of ['平台状态', '标记'])
+      expect(within(mainElement()).queryAllByRole('columnheader', { name }), name).toEqual([]);
+    await click(button(mainElement(), /^列设置$/));
+    const platformStatus = within(mainElement()).getByRole('checkbox', { name: '平台状态' });
+    await click(platformStatus);
     for (const text of [
       '抽纸 3 层 120 抽 24 包',
       '12,345.67',
@@ -79,6 +82,8 @@ it(
       expect(row(item.sub_order_id).textContent).toContain(item.platform_status);
       expect(row(item.sub_order_id).textContent).toContain(item.rebate_status);
     }
+    await click(platformStatus);
+    await click(button(mainElement(), /^列设置$/));
     // The board has one commission column; settled orders may show the settlement or both amounts.
     expect(row().textContent).toMatch(/1,123\.45|1,234\.56/);
     const rendered = within(mainElement())

@@ -45,11 +45,15 @@ async function hideCommission(): Promise<void> {
 }
 
 it(
-  '[AC-F1-07ed-COLUMNS#1] 默认展示十一列，隐藏联盟佣金后在同一地址重新打开仍隐藏',
+  '[AC-F1-07ed-COLUMNS#1] 默认展示八列与操作列，隐藏联盟佣金后在同一地址重新打开仍隐藏',
   async () => {
     const first = await mount();
     await loaded();
-    expect(columnHeadings()).toEqual(headings);
+    const optional = ['平台状态', '标记'];
+    expect(columnHeadings()).toEqual(headings.filter((name) => !optional.includes(name)));
+    await click(button(mainElement(), /^列设置$/));
+    for (const name of optional) await click(within(mainElement()).getByRole('checkbox', { name }));
+    await click(button(mainElement(), /^列设置$/));
     await hideCommission();
 
     const route = currentUrl();
@@ -62,10 +66,14 @@ it(
 );
 
 it(
-  '[AC-F1-07ed-COLUMNS#2] 写坏真实的本地列设置后恢复默认十一列，订单正常显示',
+  '[AC-F1-07ed-COLUMNS#2] 写坏真实的本地列设置后恢复默认八列与操作列，订单正常显示',
   async () => {
     const first = await mount();
     await loaded();
+    const optional = ['平台状态', '标记'];
+    await click(button(mainElement(), /^列设置$/));
+    for (const name of optional) await click(within(mainElement()).getByRole('checkbox', { name }));
+    await click(button(mainElement(), /^列设置$/));
     const writes = vi.spyOn(Storage.prototype, 'setItem');
     await hideCommission();
     const keys = writes.mock.calls.map(([key]) => key);
@@ -79,7 +87,7 @@ it(
     window.localStorage.setItem(key, '{broken json');
     await mount(undefined, route);
     await loaded();
-    expect(columnHeadings()).toEqual(headings);
+    expect(columnHeadings()).toEqual(headings.filter((name) => !optional.includes(name)));
   },
   FLOW_TIMEOUT,
 );

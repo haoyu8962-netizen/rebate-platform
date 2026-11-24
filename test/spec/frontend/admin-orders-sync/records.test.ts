@@ -47,17 +47,17 @@ async function checkRow(kind: keyof typeof RECORD): Promise<void> {
 }
 
 it(
-  '[AC-F1-07eb-RECORDS#1] 点【同步记录】后才请求 GET /admin/v1/order-syncs（只带 page / page_size），列出状态中文名（字典，缺键显示编码）、平台、单号或北京时间时间窗、北京创建时间',
+  '[AC-F1-07eb-RECORDS#1] 点【同步记录】后才另发同步记录列表请求 GET /admin/v1/order-syncs（只带 page / page_size，状态条初次加载那一次不算），列出状态中文名（字典，缺键显示编码）、平台、单号或北京时间时间窗、北京创建时间',
   async () => {
     const { server } = await mountList();
-    expect(server.recordReads(), 'no records read before 【同步记录】').toEqual([]);
+    const initialQueries = server.recordReads().map(({ query }) => query);
+    expect(initialQueries).toEqual([{ page: '1', page_size: '1' }]);
+    const dialogReads = () => server.recordReads().slice(1);
     await openRecords();
-    await waitFor(() => expect(server.recordReads()).toHaveLength(1));
+    await waitFor(() => expect(dialogReads()).toHaveLength(1));
     await settled(server);
-    assertPageQuery(server.recordReads()[0]!.query);
-    expect(server.recordReads()[0]!.headers.get('Authorization')).toBe(
-      'Bearer example-admin-token',
-    );
+    assertPageQuery(dialogReads()[0]!.query);
+    expect(dialogReads()[0]!.headers.get('Authorization')).toBe('Bearer example-admin-token');
     await checkRow('queued');
     await checkRow('done');
     await checkRow('running');
@@ -70,7 +70,7 @@ it(
     expect(squash(rowsWith(RECORD.failed.marker)[0]!.textContent)).toContain(
       squash(WINDOW_END.failed),
     );
-    expect(server.recordReads()).toHaveLength(1);
+    expect(dialogReads()).toHaveLength(1);
     expect(server.posts()).toEqual([]);
   },
   FLOW_TIMEOUT,
@@ -81,14 +81,17 @@ it(
   async () => {
     const server = createServer({ records: [] });
     await mountList(server);
+    const initialQueries = server.recordReads().map(({ query }) => query);
+    expect(initialQueries).toEqual([{ page: '1', page_size: '1' }]);
+    const dialogReads = () => server.recordReads().slice(1);
     const before = snapshotText();
     await openRecords();
-    await waitFor(() => expect(server.recordReads()).toHaveLength(1));
+    await waitFor(() => expect(dialogReads()).toHaveLength(1));
     await settled(server);
     await waitFor(() => expect(freshAll(before)).toMatch(EMPTY));
     for (const kind of Object.keys(RECORD) as (keyof typeof RECORD)[])
       expect(rowsWith(RECORD[kind].marker)).toEqual([]);
-    expect(server.recordReads()).toHaveLength(1);
+    expect(dialogReads()).toHaveLength(1);
   },
   FLOW_TIMEOUT,
 );
@@ -97,10 +100,13 @@ it(
   '[AC-F1-07eb-RECORDS#3] 同步记录读取失败显示可重试的出错态，重试只多一个列表请求并列出记录',
   async () => {
     const { server } = await mountList();
+    const initialQueries = server.recordReads().map(({ query }) => query);
+    expect(initialQueries).toEqual([{ page: '1', page_size: '1' }]);
+    const dialogReads = () => server.recordReads().slice(1);
     server.once('GET', SYNCS, () => networkDown());
     const before = snapshotText();
     await openRecords();
-    await waitFor(() => expect(server.recordReads()).toHaveLength(1));
+    await waitFor(() => expect(dialogReads()).toHaveLength(1));
     await settled(server);
     await waitFor(() => expect(freshAll(before)).toMatch(FAILED));
     expect(rowsWith(RECORD.done.marker)).toEqual([]);
@@ -110,11 +116,11 @@ it(
       ),
     );
     await click(usable(document.body, /^重试$/)[0]!);
-    await waitFor(() => expect(server.recordReads()).toHaveLength(2));
+    await waitFor(() => expect(dialogReads()).toHaveLength(2));
     await settled(server);
-    assertPageQuery(server.recordReads()[1]!.query);
+    assertPageQuery(dialogReads()[1]!.query);
     await checkRow('done');
-    expect(server.recordReads()).toHaveLength(2);
+    expect(dialogReads()).toHaveLength(2);
   },
   FLOW_TIMEOUT,
 );

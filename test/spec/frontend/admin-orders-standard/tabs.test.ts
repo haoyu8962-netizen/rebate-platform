@@ -30,14 +30,18 @@ function tabLabels(list: HTMLElement): string[] {
 }
 
 it(
-  '[AC-F1-07ed-TABS#1] 列表上方两组页签没有数量角标，干净地址默认选中全部且不请求同步接口',
+  '[AC-F1-07ed-TABS#1] 列表上方两组页签没有数量角标，干净地址默认选中全部，同步接口只有状态条的一次请求',
   async () => {
     const { server } = await mount();
     await loaded();
     await settled(server);
-    expect(server.log.filter(({ path }) => /^\/admin\/v1\/order-syncs(?:\/|$)/.test(path))).toEqual(
-      [],
-    );
+    expect(
+      server.log
+        .filter(({ path }) => /^\/admin\/v1\/order-syncs(?:\/|$)/.test(path))
+        .map(({ method, path, query }) => ({ method, path, query })),
+    ).toEqual([
+      { method: 'GET', path: '/admin/v1/order-syncs', query: { page: '1', page_size: '1' } },
+    ]);
     const platform = tablistWith('拼多多');
     const rebate = tablistWith(rebateLabel('CREDITED'));
     expect(platform).not.toBe(rebate);
