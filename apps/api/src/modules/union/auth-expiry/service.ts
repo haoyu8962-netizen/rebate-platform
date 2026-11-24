@@ -31,25 +31,28 @@
 //
 // Job chain (queue union-auth, exclusive, worker only): seed() sends each App's next check slot
 // (singletonKey per App and +08:00 minute); handle() runs that App's check and sends the next slot.
-// heal() resends those next slots, a deliver_alerts job for every account with queued alerts and
-// an expiry_due job for every account expiring within 24 hours; it never rejects.
+// heal() resends those next slots, a deliver_alerts job for every account with queued alerts,
+// an expiry_due job for every account expiring within 24 hours and the hour jobs (B1-22zd, below);
+// it never rejects.
 //
 // B1-22zd (BR-ID-24 细则「授权时长与续期」; D10-2585, D10-2587, D10-2758, D10-2771, D10-2777):
 // - Skip rule: day and hour nodes whose lead is not below the total of the authorization
 //   (auth_renewed_at → auth_expires_at; unknown when auth_renewed_at is null) are skipped for the
 //   status, the alert and the hour jobs (./schedule.ts).
 // - Hour nodes (union.auth_alert_hours): one `hour_alert` job per live node (./hour-alerts.ts),
-//   planned on a new authorization (callback, manual entry, refresh) and backfilled by each daily
-//   check for the nodes before the next check. At its instant the job plans one UNION_AUTH_EXPIRING
+//   planned on a new authorization (callback, manual entry, refresh; after the commit, best effort,
+//   within the queue's largest delay) and backfilled by each daily check and each heal for the nodes
+//   before the next check; the smallest node already due whose job was lost (hour_alert_key does
+//   not carry it) is sent at once by both. At its instant the job plans one UNION_AUTH_EXPIRING
 //   with stage h<N> (only in the alert dedupe key; alert_stage is never written by it) and puts the
 //   account into expiring. It does nothing when the authorization changed since it was planned
 //   (expiry or renewal instant differ), the account is expired (judged by a call or a probe), the
 //   node is no longer live, or a smaller live hour node is already due (never sent late). Due
 //   at or after the expiry → expired at once (EXPIRED only).
-// - Repeat of an hour job: with phones the notify_logs dedupe key keeps it from planning twice and
-//   no second alert line is written; without phones (no notify_logs row) the account row is
-//   written at each hour alert and a job finding updated_at already at or past its node instant
-//   counts as done (a late job after another write of the row is then silent: backend line only).
+// - Repeat of an hour job: union_accounts.hour_alert_key ('<expiry ms>:h<N>', written only by the
+//   hour job, on the locked row, together with its alert and status) marks the node handled; a
+//   repeat or a late job of the same node finds it and does nothing, phones configured or not. The
+//   notify_logs dedupe key still keeps the reminder itself from being planned twice.
 import { createHash } from 'node:crypto';
 import type { DB } from '@couli/db';
 import { sql, type Kysely, type Transaction, type Updateable } from 'kysely';
@@ -82,7 +85,14 @@ import {
   remainingDays,
   type ProbeTime,
 } from './schedule.ts';
-import { JOB_HOUR_ALERT, UNION_AUTH_QUEUE, alertHoursOf, sendHourAlerts } from './hour-alerts.ts';
+import {
+  HOUR_JOB_MAX_DELAY_SECONDS,
+  JOB_HOUR_ALERT,
+  UNION_AUTH_QUEUE,
+  alertHoursOf,
+  hourAlertMark,
+  sendHourAlerts,
+} from './hour-alerts.ts';
 import { normalizeAlertPhone } from './phone.ts';
 
 export { UNION_AUTH_QUEUE };
@@ -185,7 +195,7 @@ interface AccountRow {
   readonly alert_stage: string;
   readonly auth_renewed_at: Date | null;
   readonly row_version: number;
-  readonly updated_at: Date;
+  readonly hour_alert_key: string | null;
 }
 
 interface AlertPhone {
@@ -211,7 +221,7 @@ const ACCOUNT_COLUMNS = [
   'alert_stage',
   'auth_renewed_at',
   'row_version',
-  'updated_at',
+  'hour_alert_key',
 ] as const;
 
 /**
@@ -563,7 +573,7 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
       account.appId,
       account.unionAccountId,
       undefined,
-      async (trx, row, patch) => {
+      async (_trx, row, patch) => {
         // Renewed or expired meanwhile: the newer state wins.
         if (row.auth_status === 'expired') return false;
         if (row.auth_expires_at?.getTime() !== seen.auth_expires_at?.getTime()) return false;
@@ -573,19 +583,6 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
         patch.auth_renewed_by = null;
         patch.auth_status = 'active';
         patch.alert_stage = 'none';
-        // The hour nodes of the new authorization, with the renewal (same transaction).
-        await sendHourAlerts(queue, {
-          trx,
-          target: {
-            appId: row.app_id,
-            unionAccountId: row.id,
-            expiresAt,
-            renewedAt: now,
-          },
-          hours: ctx.hours,
-          nowMs: now.getTime(),
-          sent,
-        });
         return true;
       },
     );
@@ -594,6 +591,24 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
         { ...fields, auth_expires_at: expiresAt.toISOString(), estimated },
         'union_auth_refreshed',
       );
+      // The hour nodes of the new authorization, after the renewal committed and best effort
+      // (a failed send never undoes it; the daily backfill and heal send them again).
+      try {
+        await sendHourAlerts(queue, {
+          trx: null,
+          target: {
+            appId: account.appId,
+            unionAccountId: account.unionAccountId,
+            expiresAt,
+            renewedAt: now,
+          },
+          hours: ctx.hours,
+          nowMs: now.getTime(),
+          sent,
+        });
+      } catch (error) {
+        logger.warn({ ...fields, error_name: errorName(error) }, 'union_auth_hour_schedule_failed');
+      }
     }
   }
 
@@ -649,13 +664,12 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
       if (nowMs < dueMs) return;
       // A smaller node is already due: the larger one is never sent late.
       if (live.some((other) => other < node && hourNodeAt(expiresMs, other) <= nowMs)) return;
-      if (ctx.phones.length === 0) {
-        // No notify_logs row to dedupe on: the row written at this node's alert marks it done.
-        if (row.updated_at.getTime() >= dueMs) return;
-        patch.auth_status = 'expiring';
-      } else if (row.auth_status !== 'expiring') {
-        patch.auth_status = 'expiring';
-      }
+      // Handled already (a repeat or a late job of this node): the mark, written below in this same
+      // transaction on the locked row, is the only dedupe the backend alert line needs.
+      const mark = hourAlertMark(expiresMs, node);
+      if (row.hour_alert_key === mark) return;
+      patch.hour_alert_key = mark;
+      if (row.auth_status !== 'expiring') patch.auth_status = 'expiring';
       await alert(trx, ctx, row, `h${node}`, expires, null, effects, now, true);
     });
   }
@@ -689,12 +703,22 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
     }
   }
 
-  /** Daily check: the hour jobs of the nodes due before the next check (a lost job comes back). */
-  async function backfillHours(ctx: AppContext, row: AccountRow, sent: Set<string>): Promise<void> {
+  /**
+   * Daily check and heal: the hour jobs of the nodes due before the next check, and the smallest
+   * node already due that the account has not handled (its job was lost), at once.
+   */
+  async function backfillHours(
+    ctx: AppContext,
+    row: AccountRow,
+    sent: Set<string>,
+    event = 'union_auth_hour_schedule_failed',
+  ): Promise<void> {
     const expires = row.auth_expires_at;
-    if (expires === null || row.auth_status === 'expired') return;
+    if (expires === null || row.auth_status === 'expired' || ctx.hours.length === 0) return;
     const now = clock.now();
+    if (now.getTime() >= expires.getTime()) return;
     try {
+      if ((await reauthModeOf(ctx, row.platform)) === 'none') return;
       await sendHourAlerts(queue, {
         trx: null,
         target: {
@@ -707,11 +731,12 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
         nowMs: now.getTime(),
         untilMs: nextCheckSlot(now.getTime(), ctx.probeTime).dueMs,
         sent,
+        catchUp: { doneMark: row.hour_alert_key },
       });
     } catch (error) {
       logger.warn(
         { app_id: row.app_id, union_account_id: row.id, error_name: errorName(error) },
-        'union_auth_hour_schedule_failed',
+        event,
       );
     }
   }
@@ -986,6 +1011,53 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
     }
   }
 
+  /**
+   * Heal: the hour jobs of every account not expired whose hour nodes may fall before its App's
+   * next check (a job lost after a new authorization comes back within minutes, not the next day).
+   */
+  async function healHours(): Promise<void> {
+    const now = clock.now();
+    const rows = await db
+      .selectFrom('union_accounts')
+      .select(ACCOUNT_COLUMNS)
+      .where('platform', 'in', PLATFORMS)
+      .where('auth_status', '!=', 'expired')
+      .where('auth_expires_at', '>', now)
+      .where(
+        'auth_expires_at',
+        '<=',
+        dateAt(now, now.getTime() + HOUR_JOB_MAX_DELAY_SECONDS * 1000 + DUE_WINDOW_MS),
+      )
+      .orderBy('app_id')
+      .orderBy('id')
+      .execute();
+    const contexts = new Map<string, AppContext>();
+    const sent = new Set<string>();
+    for (const row of rows) {
+      let ctx = contexts.get(row.app_id);
+      if (ctx === undefined) {
+        try {
+          ctx = {
+            appId: row.app_id,
+            nodes: [],
+            hours: await alertHoursOf(config, row.app_id),
+            probeTime: await probeTimeOf(row.app_id),
+            phones: [],
+            modes: new Map(),
+          };
+        } catch (error) {
+          logger.warn(
+            { app_id: row.app_id, union_account_id: row.id, error_name: errorName(error) },
+            'union_auth_heal_failed',
+          );
+          continue;
+        }
+        contexts.set(row.app_id, ctx);
+      }
+      await backfillHours(ctx, row, sent, 'union_auth_heal_failed');
+    }
+  }
+
   // ——— Public operations ———
 
   const monitor: SiteAuthMonitor = {
@@ -1137,6 +1209,15 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
         }
         await healDeliveries();
         await healExpiries();
+      } catch (error) {
+        logger.warn(
+          { queue: UNION_AUTH_QUEUE, error_name: errorName(error) },
+          'union_auth_heal_failed',
+        );
+      }
+      // Separately, so a failure above never keeps the hour jobs from coming back.
+      try {
+        await healHours();
       } catch (error) {
         logger.warn(
           { queue: UNION_AUTH_QUEUE, error_name: errorName(error) },

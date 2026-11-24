@@ -255,14 +255,23 @@ export class AdminUnionAccounts {
 
   async list(appId: string): Promise<AdminUnionAccount[]> {
     const db = this.#database();
+    // One statement: each account row with its current credential (left join), so the expiry and
+    // auth_refreshable always come from the same authorization (never two reads around a renewal).
     const rows = await db
       .withSchema('app')
-      .selectFrom('union_accounts')
-      .select(ACCOUNT_COLUMNS)
-      .where('app_id', '=', appId)
-      .orderBy('platform')
-      .orderBy('account_name')
-      .orderBy('id')
+      .selectFrom('union_accounts as a')
+      .leftJoin('union_credentials as c', (join) =>
+        join
+          .onRef('c.app_id', '=', 'a.app_id')
+          .onRef('c.union_account_id', '=', 'a.id')
+          .on('c.is_current', '=', true),
+      )
+      .select(ACCOUNT_COLUMNS.map((column) => `a.${column}` as const))
+      .select('c.re_expires_in_s')
+      .where('a.app_id', '=', appId)
+      .orderBy('a.platform')
+      .orderBy('a.account_name')
+      .orderBy('a.id')
       .execute();
     const phones = await this.#phonesConfigured(appId);
     const modes = new Map<string, Promise<ReauthMode>>();
@@ -274,17 +283,9 @@ export class AdminUnionAccounts {
       }
       return mode;
     };
-    const credentials = await db
-      .withSchema('app')
-      .selectFrom('union_credentials')
-      .select(['union_account_id', 're_expires_in_s'])
-      .where('app_id', '=', appId)
-      .where('is_current', '=', true)
-      .execute();
-    const durations = new Map(credentials.map((c) => [c.union_account_id, c.re_expires_in_s]));
     const items: AdminUnionAccount[] = [];
     for (const row of rows) {
-      items.push(toAccount(row, await modeOf(row.platform), phones, durations.get(row.id) ?? null));
+      items.push(toAccount(row, await modeOf(row.platform), phones, row.re_expires_in_s));
     }
     return items;
   }
