@@ -1,0 +1,139 @@
+{
+  "task": "B1-06zp",
+  "spec_ref": "081b17766395bc9b55b28eb9f8b9fdae4459b99e",
+  "spec_commit": "dad1a92458aa97b16f7aa31e8946660aeee87a54",
+  "red_tests": [
+    "test/spec/linking/pdd-schema-url-step/apps-contract.test.ts > [AC-B1-06zp#4] 生成的 bridge 反映拼多多的登记状态与两端 scheme 配置",
+    "test/spec/linking/pdd-schema-url-step/apps-contract.test.ts > [AC-B1-06zp#5] apps.json 注释记录 iOS 与鸿蒙仍待真机验证",
+    "test/spec/linking/pdd-schema-url-step/cache.int.test.ts > [AC-B1-06zp#3] 旧版仅 H5 的缓存未过期也要重新转链，新缓存命中时保留回包 scheme 与网页",
+    "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#1] ios 已装状态 true 按回包原样给出 scheme → H5，同端未装只给出 H5",
+    "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#1] android 已装状态 unknown 按回包原样给出 scheme → H5，同端未装只给出 H5",
+    "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#2] schema_url 缺失 时，已装和 unknown 都只给出 mobile_url",
+    "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#2] schema_url 为空 时，已装和 unknown 都只给出 mobile_url",
+    "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#2] schema_url 是网页地址 时，已装和 unknown 都只给出 mobile_url",
+    "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#2] schema_url scheme 名只有相同开头 时，已装和 unknown 都只给出 mobile_url",
+    "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#2] schema_url 缺少双斜杠 时，已装和 unknown 都只给出 mobile_url"
+  ],
+  "risk_note": "Pinduoduo purchase jump (D10-2817 / D10-2819 / D10-2820, BR-ATTR-27). Before: the open answer for a Pinduoduo purchase had a single h5 step (mobile_url) on every client, because the scheme step was only self-built from a contracts/apps.json scheme that Pinduoduo never declared, and the conversion's schema_url was never used. Now the Pinduoduo purchase scheme step is the schema_url of this conversion verbatim, only when it is a non-empty string starting with the declared Pinduoduo scheme plus ://; otherwise there is no scheme step. Order follows the BR-ATTR-27 default matrix: installed [scheme, h5], not installed [h5], unknown merged; H5 / web are fixed to unknown (BR-ATTR-27 ①②) and get the same [scheme, h5] for Pinduoduo purchases only. The jump cache variant changed for every client and installed value (p2), so entries built before the change miss once and are converted again. contracts/apps.json Pinduoduo entry: status verified (Android real-device evidence), ios.query_schemes [pinduoduo], android.packages [com.xunmeng.pinduoduo], harmony.query_schemes stays [] (not verified); bridge.gen.ts regenerated. Production admission is unchanged: VERIFIED_JUMP_PATHS in app.module.ts is still empty. JD, Taobao and the Pinduoduo authorization page (D10-662) are unchanged, except that with a declared scheme the authorization page derives a scheme step when the authority answer has no schema_url (D10-662 behaviour, now reachable). p_id and custom_parameters are carried verbatim in both steps. No money, order, ledger or db code touched.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "dad1a92458aa97b16f7aa31e8946660aeee87a54",
+      "tree": "f78c70f209d801d0a938b10ae7c8e99172472fb2",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-24T14:25:22Z",
+      "finished_at": "2026-11-24T14:25:34Z",
+      "red_tests": [
+        "test/spec/linking/pdd-schema-url-step/apps-contract.test.ts > [AC-B1-06zp#4] 生成的 bridge 反映拼多多的登记状态与两端 scheme 配置",
+        "test/spec/linking/pdd-schema-url-step/apps-contract.test.ts > [AC-B1-06zp#5] apps.json 注释记录 iOS 与鸿蒙仍待真机验证",
+        "test/spec/linking/pdd-schema-url-step/cache.int.test.ts > [AC-B1-06zp#3] 旧版仅 H5 的缓存未过期也要重新转链，新缓存命中时保留回包 scheme 与网页",
+        "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#1] ios 已装状态 true 按回包原样给出 scheme → H5，同端未装只给出 H5",
+        "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#1] android 已装状态 unknown 按回包原样给出 scheme → H5，同端未装只给出 H5",
+        "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#2] schema_url 缺失 时，已装和 unknown 都只给出 mobile_url",
+        "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#2] schema_url 为空 时，已装和 unknown 都只给出 mobile_url",
+        "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#2] schema_url 是网页地址 时，已装和 unknown 都只给出 mobile_url",
+        "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#2] schema_url scheme 名只有相同开头 时，已装和 unknown 都只给出 mobile_url",
+        "test/spec/linking/pdd-schema-url-step/conversion.test.ts > [AC-B1-06zp#2] schema_url 缺少双斜杠 时，已装和 unknown 都只给出 mobile_url"
+      ],
+      "expected": [
+        "test/spec/linking/pdd-schema-url-step/apps-contract.test.ts",
+        "test/spec/linking/pdd-schema-url-step/cache.int.test.ts",
+        "test/spec/linking/pdd-schema-url-step/conversion.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "419b474bbe467bc51024d0eeada71c7a45986275a2391298100fb817d396b35f"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "a45749e44c6485aec56ac891b9d79a7ef86884fcf0ed8821bba19f3cf12c2769"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27). r1 fail: one S1 in scope - the Pinduoduo purchase on h5 / web returned only mobile_url although BR-ATTR-27 ①② fix H5 to unknown, which takes the installed column first; two out-of-scope notes (link-open-wiring variantOf vs BR-PRICE-13; contracts/texts.default.json, caused by the branch being behind main and gone after rebase). Implementation 2 fixed only the Pinduoduo purchase h5 / web branch and added unit tests. r2 pass, no findings, no out-of-scope. couli-runs/B1-06zp/review-money-codex-r{1,2}.json. Test machine on the implementation tree: --tests test/spec/linking, test/spec/contracts, packages/contracts-ts, apps/api/src/modules/linking green (325 files, 3168 tests), verify:fast exit 0."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (gpt-6.2-sol, ledger tester codex, attempt 1), reviewed by a fresh independent Claude (approvals 19). r1 pass with one S2 (a cache variant changed only for installed=true would let old unknown entries hit) - carried into implementation as a must and met (variant p2 for every client and installed value); one out-of-scope S2: frozen [AC-B1-06w#15] title premise is stale (it still passes). Frozen changes: [AC-B1-06w#14] x2 and [AC-CT-17h#1] (modify_existing rule_change, D10-2819 / D10-2820; owner confirmation D10-2817 as recorded by the orchestrator in D10-2820). The generated brief exceeded 24 KB; section 2 was trimmed by hand per the D10-1977 precedent."
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "295ee136143f5758a27d96e4ed00ff9cfae7cef9",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/linking/wiring/app.int.test.ts",
+      "test": "[AC-B1-06w#14] 已验证拼多多 scheme synthetic-pdd-a 来自注入的 apps.json，不写死 pinduoduo",
+      "reason": "rule_change",
+      "br": ["BR-ATTR-27"],
+      "before": "it.each(['synthetic-pdd-a', 'synthetic-pdd-b'])(\n  '[AC-B1-06w#14] 已验证拼多多 scheme %s 来自注入的 apps.json，不写死 pinduoduo',\n  async (scheme) => {\n    const configured = structuredClone(apps);\n    const modified: LinkOpenApps = {\n      apps: {\n        ...configured.apps,\n        pdd: {\n          ...configured.apps.pdd,\n          status: 'verified',\n          ios: { query_schemes: [scheme] },\n        },\n      },\n    };\n    const f = await setup('pdd', {\n      appEnv: 'prod',\n      apps: modified,\n      verifiedPaths: { pdd: { ios: ['scheme', 'h5'] } },\n    });\n    const jump = jumpOf(await f.open());\n    expect(jump.primary.type).toBe('scheme');\n    expect(jump.primary.value.startsWith(`${scheme}://`)).toBe(true);\n    expect(jump.fallbacks.map((step) => step.type)).toEqual(['h5']);\n  },\n  30_000,\n);\n// .each row 1 of 2: 'synthetic-pdd-a'",
+      "after": "it.each(['synthetic-pdd-a', 'synthetic-pdd-b'])(\n  '[AC-B1-06w#14] 已验证拼多多 scheme %s 来自注入的 apps.json，不写死 pinduoduo',\n  async (scheme) => {\n    const configured = structuredClone(apps);\n    const modified: LinkOpenApps = {\n      apps: {\n        ...configured.apps,\n        pdd: {\n          ...configured.apps.pdd,\n          status: 'verified',\n          ios: { query_schemes: [scheme] },\n        },\n      },\n    };\n    const f = await setup('pdd', {\n      appEnv: 'prod',\n      apps: modified,\n      verifiedPaths: { pdd: { ios: ['scheme', 'h5'] } },\n    });\n    const mobileUrl = 'https://example.test/synthetic-pdd-purchase';\n    const schemaUrl = `${scheme}://synthetic/landing?token=a%2fb`;\n    f.convert.mockResolvedValue({ kind: 'url', url: mobileUrl, schema_url: schemaUrl });\n    const jump = jumpOf(await f.open());\n    expect(jump.primary).toEqual({ type: 'scheme', value: schemaUrl });\n    expect(jump.fallbacks).toEqual([{ type: 'h5', value: mobileUrl }]);\n  },\n  30_000,\n);\n// .each row 1 of 2: 'synthetic-pdd-a'",
+      "mutation": [
+        {
+          "mutant": "main before this task (spec commit 4685fd473 on the test machine, couli-runs/B1-06zp/tests/4): the Pinduoduo purchase scheme step is self-built from the injected apps.json scheme (`<scheme>://com.xunmeng.pinduoduo/?url=<mobile_url>`) and the conversion's schema_url is ignored, so primary is not the schema_url verbatim and the changed block fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/linking/wiring/app.int.test.ts",
+      "test": "[AC-B1-06w#14] 已验证拼多多 scheme synthetic-pdd-b 来自注入的 apps.json，不写死 pinduoduo",
+      "reason": "rule_change",
+      "br": ["BR-ATTR-27"],
+      "before": "it.each(['synthetic-pdd-a', 'synthetic-pdd-b'])(\n  '[AC-B1-06w#14] 已验证拼多多 scheme %s 来自注入的 apps.json，不写死 pinduoduo',\n  async (scheme) => {\n    const configured = structuredClone(apps);\n    const modified: LinkOpenApps = {\n      apps: {\n        ...configured.apps,\n        pdd: {\n          ...configured.apps.pdd,\n          status: 'verified',\n          ios: { query_schemes: [scheme] },\n        },\n      },\n    };\n    const f = await setup('pdd', {\n      appEnv: 'prod',\n      apps: modified,\n      verifiedPaths: { pdd: { ios: ['scheme', 'h5'] } },\n    });\n    const jump = jumpOf(await f.open());\n    expect(jump.primary.type).toBe('scheme');\n    expect(jump.primary.value.startsWith(`${scheme}://`)).toBe(true);\n    expect(jump.fallbacks.map((step) => step.type)).toEqual(['h5']);\n  },\n  30_000,\n);\n// .each row 2 of 2: 'synthetic-pdd-b'",
+      "after": "it.each(['synthetic-pdd-a', 'synthetic-pdd-b'])(\n  '[AC-B1-06w#14] 已验证拼多多 scheme %s 来自注入的 apps.json，不写死 pinduoduo',\n  async (scheme) => {\n    const configured = structuredClone(apps);\n    const modified: LinkOpenApps = {\n      apps: {\n        ...configured.apps,\n        pdd: {\n          ...configured.apps.pdd,\n          status: 'verified',\n          ios: { query_schemes: [scheme] },\n        },\n      },\n    };\n    const f = await setup('pdd', {\n      appEnv: 'prod',\n      apps: modified,\n      verifiedPaths: { pdd: { ios: ['scheme', 'h5'] } },\n    });\n    const mobileUrl = 'https://example.test/synthetic-pdd-purchase';\n    const schemaUrl = `${scheme}://synthetic/landing?token=a%2fb`;\n    f.convert.mockResolvedValue({ kind: 'url', url: mobileUrl, schema_url: schemaUrl });\n    const jump = jumpOf(await f.open());\n    expect(jump.primary).toEqual({ type: 'scheme', value: schemaUrl });\n    expect(jump.fallbacks).toEqual([{ type: 'h5', value: mobileUrl }]);\n  },\n  30_000,\n);\n// .each row 2 of 2: 'synthetic-pdd-b'",
+      "mutation": [
+        {
+          "mutant": "main before this task (spec commit 4685fd473 on the test machine, couli-runs/B1-06zp/tests/4): the Pinduoduo purchase scheme step is self-built from the injected apps.json scheme (`<scheme>://com.xunmeng.pinduoduo/?url=<mobile_url>`) and the conversion's schema_url is ignored, so primary is not the schema_url verbatim and the changed block fails",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/contracts/apps-inbound-own/apps-inbound-own.test.ts",
+      "test": "[AC-CT-17h#1] couli 只作为三端自有入站 scheme 登记，字段闭合且不改外跳目标和 SDK 查询项",
+      "reason": "rule_change",
+      "br": ["BR-ATTR-27"],
+      "before": "it('[AC-CT-17h#1] couli 只作为三端自有入站 scheme 登记，字段闭合且不改外跳目标和 SDK 查询项', () => {\n  const doc = contract();\n  const entry = ownScheme(doc);\n  expect(Object.keys(entry).sort()).toEqual([\n    'kind',\n    'platforms',\n    'purpose',\n    'scheme',\n    'source_sdk',\n  ]);\n  expect(entry['source_sdk']).toBeNull();\n  expect(typeof entry['purpose']).toBe('string');\n  expect(String(entry['purpose']).trim().length).toBeGreaterThan(0);\n  expect(Array.isArray(entry['platforms'])).toBe(true);\n  expect([...(entry['platforms'] as unknown[])].sort()).toEqual(['android', 'harmony', 'ios']);\n  expect(doc['apps']).toEqual(EXISTING_APPS);\n  expect(doc['sdk_queries']).toEqual([]);\n});",
+      "after": "it('[AC-CT-17h#1] couli 只作为三端自有入站 scheme 登记，字段闭合且不改外跳目标和 SDK 查询项', () => {\n  const doc = contract();\n  const entry = ownScheme(doc);\n  expect(Object.keys(entry).sort()).toEqual([\n    'kind',\n    'platforms',\n    'purpose',\n    'scheme',\n    'source_sdk',\n  ]);\n  expect(entry['source_sdk']).toBeNull();\n  expect(typeof entry['purpose']).toBe('string');\n  expect(String(entry['purpose']).trim().length).toBeGreaterThan(0);\n  expect(Array.isArray(entry['platforms'])).toBe(true);\n  expect([...(entry['platforms'] as unknown[])].sort()).toEqual(['android', 'harmony', 'ios']);\n  expect(doc['apps']).toEqual({\n    ...EXISTING_APPS,\n    pdd: {\n      ...EXISTING_APPS.pdd,\n      status: 'verified',\n      source:\n        '规划/09 CAP-PDD-11（A54、P0-1122/D10-2795、D10-2811：小米安卓真机验证转链回包的 pinduoduo scheme 可拉起拼多多；iOS 未经真机实测，鸿蒙待真机核验，D10-2820）',\n      ios: { query_schemes: ['pinduoduo'] },\n      android: { packages: ['com.xunmeng.pinduoduo'] },\n    },\n  });\n  expect(doc['sdk_queries']).toEqual([]);\n});",
+      "mutation": [
+        {
+          "mutant": "contracts/apps.json at main before this task (spec commit 4685fd473 on the test machine, couli-runs/B1-06zp/tests/4): the pdd entry is still candidate with empty schemes and package, so the changed toEqual fails",
+          "result": "killed"
+        }
+      ]
+    }
+  ]
+}
