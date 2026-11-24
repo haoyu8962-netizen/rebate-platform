@@ -51,6 +51,10 @@ const verifyPhoneMissingOperations = [notifySmsRetest, 'adminStepUp', 'adminSend
 const adminTokenRef = '#/components/parameters/AdminStepUpToken';
 const factorMethods = ['totp', 'sms'];
 
+function wording(value: unknown): string {
+  return text(value).replaceAll('`', '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 function operations(doc: Obj, prefix: string) {
   return Object.entries(at(doc, 'paths')).flatMap(([path, rawPathItem]) => {
     if (!path.startsWith(prefix)) return [];
@@ -140,7 +144,7 @@ it('[AC-CT-24zzv#3] 仅部分请求验证的后台操作在说明中写出档位
     ['adminRollbackConfigItem', configCaps],
   ] as const;
   for (const [id, condition] of conditions) {
-    const description = text(byId.get(id)?.operation['description']);
+    const description = wording(byId.get(id)?.operation['description']);
     expect(description, id).toMatch(new RegExp(`\\b${tiers.get(id)}\\b`));
     expect(description, id).toMatch(condition);
   }
@@ -238,11 +242,12 @@ it('[AC-CT-24zzv#7] 10003 码表含 sudo、strict 和手机号缺失原因', () 
 
   expect(list(data['tier'])).toEqual(expect.arrayContaining(['sudo', 'strict']));
   expect(list(data['reason'])).toContain('verify_phone_missing');
+  const legacyTier = /(?:动态码|短信|totp|sms)\s*档|\b(?:totp|sms)[ -]tier\b/;
   for (const field of ['meaning', 'action']) {
-    const wording = text(stepUpRequired?.[field]);
-    expect(wording, field).not.toMatch(/(?:动态码|短信|TOTP|SMS)\s*档|\b(?:totp|sms)[ -]tier\b/i);
-    expect(wording, field).toMatch(/\bsudo\b/i);
-    expect(wording, field).toMatch(/\bstrict\b/i);
+    const description = wording(stepUpRequired?.[field]);
+    expect(description, field).not.toMatch(legacyTier);
+    expect(description, field).toMatch(/\bsudo\b/);
+    expect(description, field).toMatch(/\bstrict\b/);
   }
 });
 
@@ -302,25 +307,26 @@ it('[AC-CT-24zzv#8] 原先带二次验证令牌且现在归 none 的操作移除
     /\/auth\/step-up(?:\/[a-z0-9-]+)*/g,
     /\bstep[- ]up\s*:\s*none\b/g,
     /\b(?:no|without) step[- ]up(?: (?:checks?|token|verification))?\b/g,
-    /\b(?:no longer|not|never) requires? step[- ]up(?: (?:checks?|token|verification))?\b/g,
+    /\b(?:no longer|not|never|doesn['’]t) (?:requires?|needs?) [^.!?;,]{0,80}?\b(?:(?:x-)?step[- _]up(?:[- _](?:checks?|tokens?|verification))?|(?:totp|sms)[ -]tier|(?:sudo|strict) verification)\b/g,
+    /\b(?:no longer|not|never|doesn['’]t|won['’]t) (?:returns?|answers?|responds? with) 10003(?: with data\.tier(?:\s*=\s*\w+)?)?\b/g,
+    /\b10003(?: with data\.tier(?:\s*=\s*\w+)?)? (?:is not|isn['’]t) (?:an? )?(?:error(?: here)?|returned)\b/g,
     /不再(?:需要|需)(?:通过|完成)?二次验证/g,
   ];
   const requirements = [
-    /\b(?:x-step-up-token|step_up_token|data\.tier|10003)\b/,
+    /\b(?:x-step-up-token|step_up_token)\b/,
+    /(?:→\s*|\b(?:returns?|answers?|responds? with) )10003\b|\b10003 with data\.tier\b/,
     /\b(?:totp|sms)[ -]tier\b/,
     /\b(?:requires?|needs?|must|without a valid) [^.!?;,]{0,80}\bstep[- ]up\b/,
     /\bstep[- ]up\s*(?:[:(]|(?:totp|sms|sudo|strict|checks?|token is a header|as above|(?:is )?(?:needed|required))\b)/,
     /(?:\b(?:and |permission, |with )|→\s*)step[- ]up\b/,
+    /,\s*step[- ]up and\b/,
     /\b(?:sudo|strict)(?:[ -]tier| (?:verification|every time|on every (?:call|request|operation)|(?:is )?(?:needed|required)))\b/,
     /\b(?:requires?|needs?|must (?:pass|use)) (?:an? )?(?:sudo|strict)(?=\s*(?:[,.!?;)]|$)| (?:for|on|before|when|to)\b)/,
     /(?<![不无])(?:需要|需|必须)(?:通过|完成)?二次验证/,
   ];
   for (const { id, operation } of operations(contract(), '/admin/v1/')) {
     if (!formerlyProtected.has(id)) continue;
-    let description = text(operation['description'] ?? '')
-      .replaceAll('`', '')
-      .replace(/\s+/g, ' ')
-      .toLowerCase();
+    let description = wording(operation['description'] ?? '');
     for (const mention of allowedMentions) description = description.replace(mention, ' ');
     if (id === 'adminDisableAdmin' || id === 'adminResetAdminTotp') {
       description = description.replace(
@@ -329,5 +335,104 @@ it('[AC-CT-24zzv#8] 原先带二次验证令牌且现在归 none 的操作移除
       );
     }
     for (const requirement of requirements) expect(description, id).not.toMatch(requirement);
+  }
+});
+
+it('[AC-CT-24zzv#9] strict 凭证在首次使用时绑定操作，只能重试同一操作', () => {
+  const doc = contract();
+  const properties = at(doc, 'components', 'schemas', 'AdminStepUpRequest', 'properties');
+  expect(Object.keys(properties).toSorted()).toEqual(['code', 'method', 'tier']);
+
+  const token = at(doc, 'components', 'parameters', 'AdminStepUpToken');
+  const issue = at(doc, 'paths', '/admin/v1/auth/step-up', 'post');
+  const binding = [
+    /\bfirst\b/,
+    /\b(?:bound|binds?|binding)\b/,
+    /\bsame (?:strict )?operation\b/,
+    /\b(?:retry|retries|retried|reuse[ds]?|replay(?:ed)?|used again)\b/,
+  ];
+  const descriptions = [token, issue].map((entry) => wording(entry['description']));
+  expect(
+    descriptions.some((description) => binding.every((keyword) => keyword.test(description))),
+    'AdminStepUpToken 或 adminStepUp 应说明首次使用时绑定操作及同一操作重试',
+  ).toBe(true);
+});
+
+it('[AC-CT-24zzv#10] 签发接口与凭证请求头说明验证成功起五分钟有效', () => {
+  const doc = contract();
+  const token = at(doc, 'components', 'parameters', 'AdminStepUpToken');
+  const issue = at(doc, 'paths', '/admin/v1/auth/step-up', 'post');
+  for (const [name, entry] of [
+    ['AdminStepUpToken', token],
+    ['adminStepUp', issue],
+  ] as const) {
+    const description = wording(entry['description']);
+    expect(description, name).toMatch(/\b(?:5|five)[ -]minutes?\b/);
+    expect(description, name).toMatch(
+      /\b(?:successful (?:second[- ]factor )?(?:verification|check)|verification (?:succeeds?|success|passes?)|successfully verified|verified successfully)\b/,
+    );
+  }
+  expect(wording(issue['description'])).not.toMatch(
+    /\b(?:token lifetime|validity (?:period|duration))\b[^.]*\b(?:server decides|left to the server)\b/,
+  );
+});
+
+it('[AC-CT-24zzv#11] strict 凭证成功即消耗、明确失败可重试、结果未知占用到过期', () => {
+  const doc = contract();
+  const token = wording(at(doc, 'components', 'parameters', 'AdminStepUpToken')['description']);
+  const issue = wording(at(doc, 'paths', '/admin/v1/auth/step-up', 'post')['description']);
+  const success = /\b(?:business success|successful operation|operation succeeds?|code\s*=\s*0)\b/;
+  const spent = /\b(?:spent|consum(?:ed|es?))\b/;
+  const failure = /\b(?:reject\w*|refus\w*|fail\w*|errors?)\b/;
+  const known = /\b(?:definit\w*|explicit\w*|clear\w*|confirmed|known|unambiguous)\b/;
+  const retry = /\b(?:retr\w+|replay\w*|reuse\w*|used again|sent again|another attempt)\b/;
+  const unknown =
+    /\bunknown (?:\w+ )?(?:outcome|result)\b|\b(?:outcome|result)\b[^.!?;]{0,60}\bunknown\b/;
+  const occupied =
+    /\b(?:held|holds?|reserved|occupied|locked|blocked|unavailable|retained|claimed)\b/;
+  const expires = /\b(?:expir\w*|still valid|within (?:its |the )?validity)\b/;
+  const sentences = token.split(/(?<=[.!?])\s+/);
+  const passages = sentences.map((sentence, index) => `${sentence} ${sentences[index + 1] ?? ''}`);
+  for (const [label, keywords] of [
+    ['业务成功即消耗', [success, spent]],
+    ['明确失败后在有效期内可重试', [known, failure, retry, expires]],
+    ['结果未知时占用到过期', [unknown, occupied, expires]],
+  ] as const) {
+    const matches = passages.some((passage) => keywords.every((keyword) => keyword.test(passage)));
+    expect(matches, label).toBe(true);
+  }
+
+  const blanketRelease =
+    /\b(?:on|after) (?:a )?(?:rejection|failure|error) or (?:an? )?(?:rejection|failure|error),? (?:it|the token) (?:is |will be )?released\b/;
+  const releaseOnUnknown =
+    /\b(?:outcome|result)(?: is)? unknown,? (?:it|the (?:token|reservation)) (?:is|will be|can be) (?:released|reused)\b/;
+  for (const description of [token, issue]) {
+    expect(description).not.toMatch(blanketRelease);
+    expect(description).not.toMatch(releaseOnUnknown);
+  }
+});
+
+it('[AC-CT-24zzv#12] 我的权限中最高档位仅供展示，验证由操作标记和 10003 决定', () => {
+  const doc = contract();
+  const description = wording(at(doc, 'paths', '/admin/v1/me/permissions', 'get')['description']);
+
+  expect(description).toMatch(/\bstep_up_tier\b/);
+  expect(description).toMatch(/\b(?:highest|maximum)\b/);
+  expect(description).toMatch(
+    /\b(?:display only|only (?:for|used for) display|for display purposes)\b/,
+  );
+  expect(description).toMatch(/\bx-step-up\b/);
+  expect(description).toMatch(/\b10003\b/);
+});
+
+it('[AC-CT-24zzv#13] 签发与发送验证码接口说明移除已取消的验证方式档位', () => {
+  const doc = contract();
+  const obsoleteTier =
+    /\b(?:sms|totp)(?:[ -]step[ -]up)?[ -]tier\b|\bdata\.tier\s*=\s*(?:sms|totp)\b|短信档|动态码档/;
+  for (const path of ['/admin/v1/auth/step-up', '/admin/v1/auth/step-up/sms-codes']) {
+    const operation = at(doc, 'paths', path, 'post');
+    for (const field of ['summary', 'description']) {
+      expect(wording(operation[field] ?? ''), `${path} ${field}`).not.toMatch(obsoleteTier);
+    }
   }
 });
