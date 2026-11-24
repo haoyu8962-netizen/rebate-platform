@@ -47,4 +47,5 @@ accept:
   - 'test/spec/linking/pdd-schema-url-step/**'
   - 'test/spec/linking/wiring/**'
   - 'test/spec/contracts/apps-inbound-own/**'
-status: todo
+status: done
+pr: 674
