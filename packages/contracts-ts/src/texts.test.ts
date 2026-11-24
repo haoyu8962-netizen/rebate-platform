@@ -48,6 +48,9 @@ const SCENE = {
   'error.30102.auth_unavailable.auth_manage': 'error.30102.auth_unavailable',
   'error.30151.auth_manage': 'error.30151',
   'error.30411.phone_change': 'error.30411',
+  // CT-26zr: 08 BR-TEXT-14 表 A 50301 场景子键（实名 / 银行卡核验不可用），缺键时退回「其他 5xxxx」。
+  'error.50301.bank_vendor': 'error.50001',
+  'error.50301.realname_vendor': 'error.50001',
 } as Record<string, string>;
 
 it('[AC-CT-19c#1] withdraw_detail.net.actual 默认文案为实际到账 {net}', () => {
@@ -117,10 +120,12 @@ it('[CT-16i] table B scene keys are 08 verbatim and fall back to a present key',
   expect(texts['error.30102.auth_unavailable.auth_manage']).toBe('淘宝授权暂时不可用，请稍后再试');
   expect(texts['error.30151.auth_manage']).toBe('这个淘宝账号暂时无法绑定到当前账号');
   expect(texts['error.30411.phone_change']).toBe('该手机号已被其他凑狸账号使用，请换一个手机号');
+  expect(texts['error.50301.realname_vendor']).toBe('实名核验服务暂时不可用，请稍后再试');
+  expect(texts['error.50301.bank_vendor']).toBe('银行卡核验服务暂时不可用，请稍后再试');
   for (const [key, base] of Object.entries(SCENE)) expect(texts[base], key).toBeTypeOf('string');
 });
 
-it('[CT-16i] the checker lets exactly the four scene keys through, not look-alikes', () => {
+it('[CT-16i] the checker lets exactly the six scene keys through, not look-alikes', () => {
   expect(ERROR_SCENE_KEYS).toEqual(SCENE);
   const { codes } = loadErrorCodes();
   expect(checkErrorKeys(texts, codes)).toEqual([]);
@@ -131,6 +136,9 @@ it('[CT-16i] the checker lets exactly the four scene keys through, not look-alik
     'error.30411.auth_manage',
     'error.30412.phone_change',
     'error.30411.phone_change.extra',
+    // CT-26zr: 50301 只放行这两个场景子键；回退必须是 error.50001，换成别的子键名就拒。
+    'error.50301.idcard_vendor',
+    'error.50301.realname_vendor.extra',
   ];
   for (const key of lookAlikes) {
     expect(checkErrorKeys({ ...texts, [key]: '文案' }, codes), key).toHaveLength(1);
@@ -138,6 +146,11 @@ it('[CT-16i] the checker lets exactly the four scene keys through, not look-alik
   const withoutBase: Record<string, string> = { ...texts };
   delete withoutBase['error.30151'];
   expect(checkErrorKeys(withoutBase, codes).join('\n')).toContain('error.30151.auth_manage');
+  const without50001: Record<string, string> = { ...texts };
+  delete without50001['error.50001'];
+  const missing = checkErrorKeys(without50001, codes).join('\n');
+  expect(missing).toContain('error.50301.realname_vendor');
+  expect(missing).toContain('error.50301.bank_vendor');
 });
 
 it('covers the keys of contract ledger rows b1-40 … b5-28', () => {
