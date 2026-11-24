@@ -1,9 +1,12 @@
 import { expect, it } from 'vitest';
 import { UnionError } from '../../domain/types.ts';
 import {
+  DATAOKE_PARSE_CONTENT_ARCHIVE_OMIT,
   DATAOKE_PARSE_CONTENT_CODES,
+  DATAOKE_PARSE_CONTENT_MISSING_DATA,
   DATAOKE_PARSE_CONTENT_PATH,
   DATAOKE_PARSE_CONTENT_VERSION,
+  parseContentArchiveBody,
   parseContentGoodsId,
   parseContentParameters,
 } from './parse-content.ts';
@@ -62,4 +65,38 @@ it.each<[string, Record<string, unknown>]>([
   expect(caught).toBeInstanceOf(UnionError);
   expect((caught as UnionError).code).toBe('link_unrecognized');
   expect((caught as UnionError).message).not.toContain('syn-pid');
+});
+
+it('[AC-B1-04zzzzo-UNIT#4] 归档选项：摘要剔除 content，成功码无 data → link_unrecognized', () => {
+  expect(DATAOKE_PARSE_CONTENT_ARCHIVE_OMIT).toEqual(['content']);
+  expect(DATAOKE_PARSE_CONTENT_MISSING_DATA).toBe('link_unrecognized');
+});
+
+it('[AC-B1-04zzzzo-UNIT#5] 归档应答白名单：只留 code、data.goodsId 与 error_response 的 code / sub_code', () => {
+  const full = JSON.stringify({
+    time: 1,
+    code: 0,
+    msg: '￥UnitEcho01￥',
+    data: {
+      goodsId: 'g1',
+      pid: 'p1',
+      commissionRate: 'r1',
+      url: 'https://promotion.invalid/u1',
+      originInfo: { activityId: 'a1' },
+      error_response: { code: 15, sub_code: 'isv.x', sub_msg: 'm1' },
+    },
+  });
+  expect(JSON.parse(parseContentArchiveBody(full))).toEqual({
+    code: 0,
+    data: { goodsId: 'g1', error_response: { code: 15, sub_code: 'isv.x' } },
+  });
+  expect(parseContentArchiveBody('{"code":25003,"msg":"echo","data":null}')).toBe(
+    '{"code":25003,"data":null}',
+  );
+  expect(parseContentArchiveBody('{"code":0,"data":{"goodsId":7,"title":"t"}}')).toBe(
+    '{"code":0,"data":{}}',
+  );
+  expect(parseContentArchiveBody('{"code":{"x":1},"data":"s"}')).toBe('{}');
+  expect(parseContentArchiveBody('not json ￥UnitEcho02￥')).toBe('');
+  expect(parseContentArchiveBody('[1]')).toBe('');
 });

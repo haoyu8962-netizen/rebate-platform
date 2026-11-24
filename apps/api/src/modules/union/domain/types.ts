@@ -144,6 +144,13 @@ export interface CallCtx {
    * does not change, and the governed wrapper passes it through with the rest of the context.
    */
   readonly rowErrors?: 'collect';
+  /**
+   * B1-04zzzzo (BR-AI-04, D10-2917): 'agent' when the call comes from the Agent chain (set by the
+   * agent stream assembly). An adapter then never uses a third-party password / link parse service
+   * (淘宝 resolveLink: no 大淘客 parse-content); official lookups are unchanged. Absent: any other
+   * caller. The governed wrapper passes it through with the rest of the context.
+   */
+  readonly origin?: 'agent';
 }
 
 /** B1-04w: see CallCtx.gateUpstream. The request receives the signal of its own attempt. */

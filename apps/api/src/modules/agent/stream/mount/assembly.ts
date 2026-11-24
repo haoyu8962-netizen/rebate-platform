@@ -9,6 +9,8 @@
 // for them (its trace.calls stays empty by design).
 // B3-16a: with ports.earnings, get_my_earnings is registered too (a template tool of the core,
 // agent.earnings.summary / unavailable).
+// B1-04zzzzo: parseToken / parseUrl are bound with CallCtx.origin 'agent' (BR-AI-04: no third-party
+// password or link parse on the Agent chain), for the deterministic runner and the model tool alike.
 import { randomUUID } from 'node:crypto';
 import type { StreamReviewOptions, StreamReviewPorts } from './review.ts';
 import type { DB } from '@couli/db';
@@ -309,9 +311,16 @@ export function createAgentStreamAssembly(deps: AgentStreamAssemblyDeps): AgentS
   };
   // The deterministic runner never numbers cards (no card call scope on that path): no
   // cardReference there; the model tool gets the core's.
+  // B1-04zzzzo (BR-AI-04, D10-2917): every parse the Agent asks for carries origin 'agent', so the
+  // union adapter never sends it to a third-party parse service. Bound here once: the deterministic
+  // runner uses runnerDeps and the model's get_rebate_quote uses quoteDeps, which spreads it.
   const runnerDeps: RebateQuoteDeps = {
-    tokens: { parseToken: (raw, context) => parseToken(ports.parsing, raw, context) },
-    parsing: { parseUrl: (url, context) => parseUrl(ports.parsing, url, context) },
+    tokens: {
+      parseToken: (raw, context) => parseToken(ports.parsing, raw, { ...context, origin: 'agent' }),
+    },
+    parsing: {
+      parseUrl: (url, context) => parseUrl(ports.parsing, url, { ...context, origin: 'agent' }),
+    },
     catalog: { readProduct: ports.readProduct, cards: cardsFor },
     references: createReferenceResolver({ store }),
   };

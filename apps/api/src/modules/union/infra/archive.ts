@@ -9,6 +9,7 @@
 //   payload 存空串的 gzip、error_code 记 archive_body_rewrite_failed（非 2xx 仍记 http_<status>），打 error 日志。
 // - B1-04zzu：archiveBody 可以返回 Promise；它以 ArchiveBodyLookupError 失败（改写要用的查询失败）时照样插入，
 //   payload 存收到的原文、error_code 记 archive_body_lookup_failed（非 2xx 仍记 http_<status>），日志只带错误名。
+// - B1-04zzzzo：请求带 archiveOmitParams 时，点名的参数不进请求摘要（线路与签名不受影响）；缺省时摘要不变。
 // 演示适配器不经传输，因此从不归档。
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
@@ -94,7 +95,34 @@ function bodyParameters(request: UnionTransportRequest, body: string): object | 
   }
 }
 
-/** `{ method, url, params }`；体不可解析时 `{ method, url, body_bytes }`。不含请求头与体原文。 */
+/**
+ * B1-04zzzzo：去掉 request.archiveOmitParams 点名的参数（按名字精确匹配，查询串与表单 / JSON 体同样处理）。
+ * 确有参数被去掉时，摘要另带 `omitted_params`（被去掉的名字，按点名顺序），表明这一行的 params 不完整。
+ * 没点名（缺省或空数组）时原样返回同一个对象，摘要与以前逐字节相同。
+ */
+function omitParameters(
+  request: UnionTransportRequest,
+  parameters: Record<string, unknown>,
+  summary: Record<string, unknown>,
+): Record<string, unknown> {
+  const names = request.archiveOmitParams;
+  if (names === undefined || names.length === 0) return parameters;
+  const omitted = names.filter((name, index) => {
+    return names.indexOf(name) === index && Object.hasOwn(parameters, name);
+  });
+  if (omitted.length === 0) return parameters;
+  const kept: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(parameters)) {
+    if (!omitted.includes(name)) kept[name] = value;
+  }
+  summary['omitted_params'] = omitted;
+  return kept;
+}
+
+/**
+ * `{ method, url, params }`；体不可解析时 `{ method, url, body_bytes }`。不含请求头与体原文。
+ * B1-04zzzzo：archiveOmitParams 点名的参数不进 params（见 omitParameters）；只影响存下的摘要。
+ */
 export function requestSummary(request: UnionTransportRequest): Record<string, unknown> {
   let url: string;
   let query: Record<string, unknown> = {};
@@ -108,7 +136,7 @@ export function requestSummary(request: UnionTransportRequest): Record<string, u
   const summary: Record<string, unknown> = { method: request.method, url };
   const body = request.body;
   if (body === undefined || body === '') {
-    summary['params'] = redact(query);
+    summary['params'] = redact(omitParameters(request, query, summary));
     return summary;
   }
   const parameters = bodyParameters(request, body);
@@ -116,7 +144,7 @@ export function requestSummary(request: UnionTransportRequest): Record<string, u
     summary['body_bytes'] = Buffer.byteLength(body, 'utf8');
     return summary;
   }
-  summary['params'] = redact({ ...query, ...parameters });
+  summary['params'] = redact(omitParameters(request, { ...query, ...parameters }, summary));
   return summary;
 }
 

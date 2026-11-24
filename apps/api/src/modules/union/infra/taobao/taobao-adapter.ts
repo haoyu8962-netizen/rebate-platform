@@ -55,6 +55,9 @@
 // 不读写商品 id 缓存）。pid、commission*、转链 url、originInfo 不读、不进结果与日志。25003 / 无 goodsId /
 // upgrade 空结果 → link_unrecognized；其余大淘客错误照 B1-04m 分类。两种请求归档 kind 都是 query。
 // 没有 orderSource → 照旧 adapter_unimplemented，不取凭据、不发请求、不告警。
+// B1-04zzzzo r2（D10-2917）：ctx.origin === 'agent'（BR-AI-04）时商品页以外的输入同样 adapter_unimplemented，
+// 不调 parse-content、不取大淘客凭据；商品页官方直查照常。parse-content 的归档请求摘要不留 content，
+// 应答只存白名单字段；成功码但 data 缺失 / null → link_unrecognized（见 parse-content.ts）。
 import { systemScheduler, type Clock, type Scheduler } from '../../../platform/index.ts';
 import type {
   TaobaoPriceOptions,
@@ -204,9 +207,12 @@ import {
   type TaobaoRefundWarning,
 } from './refunds.ts';
 import {
+  DATAOKE_PARSE_CONTENT_ARCHIVE_OMIT,
   DATAOKE_PARSE_CONTENT_CODES,
+  DATAOKE_PARSE_CONTENT_MISSING_DATA,
   DATAOKE_PARSE_CONTENT_PATH,
   DATAOKE_PARSE_CONTENT_VERSION,
+  parseContentArchiveBody,
   parseContentGoodsId,
   parseContentParameters,
 } from './parse-content.ts';
@@ -987,18 +993,24 @@ export class TaobaoUnionAdapter implements UnionAdapter {
    * with its numeric id. B1-04zzzzo: anything else, with an orderSource, → one 大淘客 parse-content
    * (see parse-content.ts) for data.goodsId, then one item.info.upgrade.get with that goodsId. Either
    * way the item_id is this response's first row as returned (BR-PROD-05), never from #itemIdCache.
-   * Without an orderSource: unimplemented before credentials or transport (frozen [AC-B1-04j#30]).
+   * Without an orderSource, or for the Agent chain (ctx.origin 'agent', BR-AI-04): unimplemented
+   * before credentials or transport (frozen [AC-B1-04j#30]).
    */
   async resolveLink(raw: string, ctx: CallCtx): Promise<ResolvedLink> {
     const linkId = parseTaobaoItemLink(raw);
     if (linkId !== null) return this.#resolveItemId(linkId, ctx);
+    // BR-AI-04（D10-2917）：Agent 链路不用第三方口令 / 链接解析，判在取凭据与发请求之前。
+    if (ctx.origin === 'agent') throw unimplemented('resolveLink');
     const source = this.#orderSource;
     if (source === undefined) throw unimplemented('resolveLink');
     const parameters = parseContentParameters(raw);
     const data = await source.request('GET', DATAOKE_PARSE_CONTENT_PATH, parameters, {
       version: DATAOKE_PARSE_CONTENT_VERSION,
       archive: archiveOf(ctx, 'query'),
+      archiveBody: parseContentArchiveBody,
+      archiveOmitParams: DATAOKE_PARSE_CONTENT_ARCHIVE_OMIT,
       outerCodes: DATAOKE_PARSE_CONTENT_CODES,
+      missingData: DATAOKE_PARSE_CONTENT_MISSING_DATA,
       ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
     });
     // 只取 goodsId；它不是凑狸口径 item_id（D10-504），必须再经 upgrade.get 换本次原串。

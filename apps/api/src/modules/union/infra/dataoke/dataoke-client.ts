@@ -10,16 +10,22 @@
 // - 凭据每次请求经注入的提供者取一次，构造时不取；appSecret 只在内存参与签名，不进 URL、表单、
 //   请求头、错误、warn 与对象自身。不读 process.env、不读文件。
 // - 经注入的 UnionTransport 发送（platform 'taobao'）；调用方 AbortSignal 与归档上下文原样挂在传输请求上，
-//   不上线路（B1-04zzc：归档正文改写函数 archiveBody 同样只挂在传输请求上）。
+//   不上线路（B1-04zzc：归档正文改写函数 archiveBody 同样只挂在传输请求上；B1-04zzzzo：归档摘要剔除名单
+//   archiveOmitParams 也只挂在传输请求上，签名与线路参数不变）。
 //   传输抛错（非 UnionError）→ upstream_unavailable（不带原文、不挂 cause）。
 // - 响应解包与错误分类见 response.ts；返回 data 对象，不做订单字段映射（B1-04f / B1-04z）。
 // - B1-04d：调用方可按接口给出外层 code 细分表（outerCodes），只覆盖表内 code 的分类。
 // - B1-04f：exchange 与 request 同样签名、发送、解包与分类，另把传输响应原样交回（订单映射要从原文
 //   二次解析 JSON 数字原文，并读归档传输挂在响应上的 raw_payload_id）。
 import type { Clock } from '../../../platform/index.ts';
-import { UnionError } from '../../domain/types.ts';
+import { UnionError, type UnionErrorCode } from '../../domain/types.ts';
 import type { ArchiveContext, UnionTransport, UnionTransportResponse } from '../replay.ts';
-import { unwrapDataokeResponse, type DataokeCodeMap, type DataokeWarning } from './response.ts';
+import {
+  unwrapDataokeResponse,
+  type DataokeCodeMap,
+  type DataokeUnwrapOptions,
+  type DataokeWarning,
+} from './response.ts';
 import { DATAOKE_NONCE_BOUND, dataokeNonce, dataokeSignRan, dataokeTimer } from './sign.ts';
 
 export type { DataokeCodeMap, DataokeWarning } from './response.ts';
@@ -76,6 +82,17 @@ export interface DataokeRequestOptions {
    * link's goods-not-promotable codes → item_unavailable. Codes not listed keep the gz-13 grouping.
    */
   readonly outerCodes?: DataokeCodeMap;
+  /**
+   * B1-04zzzzo: classification of a success code whose `data` is absent or null (see response.ts
+   * DataokeUnwrapOptions.missingData). Absent: upstream_unavailable as before.
+   */
+  readonly missingData?: UnionErrorCode;
+  /**
+   * B1-04zzzzo: rides on the transport request as `archiveOmitParams` (business parameter names the
+   * archiving transport leaves out of the stored request summary); never on the wire, and the
+   * signature and the sent query / form keep every parameter.
+   */
+  readonly archiveOmitParams?: readonly string[];
 }
 
 /** 公共参数名；业务参数不得占用（同名 → invalid_dto，不发请求）。 */
@@ -130,6 +147,14 @@ function parameterText(path: string, name: string, value: unknown): string | und
   throw invalidDto(path, `unsupported parameter ${name}`);
 }
 
+/** The decoding options a request passes to unwrapDataokeResponse (only the ones it was given). */
+function unwrapOptions(options: DataokeRequestOptions): DataokeUnwrapOptions {
+  return {
+    ...(options.outerCodes === undefined ? {} : { outerCodes: options.outerCodes }),
+    ...(options.missingData === undefined ? {} : { missingData: options.missingData }),
+  };
+}
+
 export class DataokeClient {
   readonly #credentials: () => Promise<DataokeCredentials>;
   readonly #transport: UnionTransport;
@@ -158,9 +183,7 @@ export class DataokeClient {
     options: DataokeRequestOptions,
   ): Promise<Readonly<Record<string, unknown>>> {
     const response = await this.#send(method, path, parameters, options);
-    return unwrapDataokeResponse(path, response, this.#warn, {
-      ...(options.outerCodes === undefined ? {} : { outerCodes: options.outerCodes }),
-    });
+    return unwrapDataokeResponse(path, response, this.#warn, unwrapOptions(options));
   }
 
   /**
@@ -175,9 +198,7 @@ export class DataokeClient {
   ): Promise<DataokeExchange> {
     const response = await this.#send(method, path, parameters, options);
     return {
-      data: unwrapDataokeResponse(path, response, this.#warn, {
-        ...(options.outerCodes === undefined ? {} : { outerCodes: options.outerCodes }),
-      }),
+      data: unwrapDataokeResponse(path, response, this.#warn, unwrapOptions(options)),
       response,
     };
   }
@@ -186,7 +207,7 @@ export class DataokeClient {
     method: DataokeHttpMethod,
     path: string,
     parameters: DataokeParameters,
-    { version, signal, archive, archiveBody }: DataokeRequestOptions,
+    { version, signal, archive, archiveBody, archiveOmitParams }: DataokeRequestOptions,
   ): Promise<UnionTransportResponse> {
     // 不需要凭据的同步检查在前：不合格的调用不取凭据、不发请求。
     if (method !== 'GET' && method !== 'POST') throw invalidDto(path, 'unsupported method');
@@ -220,6 +241,7 @@ export class DataokeClient {
         ...(signal === undefined ? {} : { signal }),
         ...(archive === undefined ? {} : { archive }),
         ...(archiveBody === undefined ? {} : { archiveBody }),
+        ...(archiveOmitParams === undefined ? {} : { archiveOmitParams }),
       });
     } catch (error) {
       if (error instanceof UnionError) throw error;

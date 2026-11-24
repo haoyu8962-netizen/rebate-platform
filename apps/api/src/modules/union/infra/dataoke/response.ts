@@ -3,7 +3,8 @@
 // 外层 code 非 0（数字与同值字符串同等）按 gz-13 分类：限流码 → rate_limited；应用凭据 / 签名 / 接口
 // 权限码 → upstream_misconfigured、站长联盟授权码 → site_auth_invalid（B1-04zzzx，D10-967），两组都
 // 调 warn 一次（只带路径与 code）；服务端暂时故障码 → upstream_unavailable；其余 → upstream_rejected。
-// 外层 code 0：data 必须是对象，否则 upstream_unavailable；data 里有淘宝 TOP 形式的 error_response 时
+// 外层 code 0：data 必须是对象，否则 upstream_unavailable（B1-04zzzzo：调用方可经 missingData 给 data 缺失或
+// null 另定分类）；data 里有淘宝 TOP 形式的 error_response 时
 // 按 B1-04j 同义分类（code 7 或 sub_code 以 isp.call-limited 开头 → rate_limited；其余 code 11 →
 // upstream_misconfigured，code 11 都 warn；其余 → upstream_rejected）；否则返回 data。
 // 错误信息只带路径与 code（及 sub_code），不带 msg / sub_msg / request_id / 参数；不做字段映射。
@@ -72,6 +73,13 @@ export type DataokeCodeMap = Readonly<Record<string, UnionErrorCode>>;
 /** Per-interface decoding options of unwrapDataokeResponse. */
 export interface DataokeUnwrapOptions {
   readonly outerCodes?: DataokeCodeMap;
+  /**
+   * B1-04zzzzo: the classification when the outer code is success but `data` is absent or null
+   * (e.g. the parse-content → link_unrecognized: nothing was recognised). Absent: such a response
+   * stays upstream_unavailable. A non-null `data` that is not an object is upstream_unavailable
+   * either way; HTTP faults, non-JSON bodies and non-success codes are not affected.
+   */
+  readonly missingData?: UnionErrorCode;
 }
 
 // data 内淘宝 TOP error_response（与 B1-04j taobao/response.ts 同义）。
@@ -138,7 +146,7 @@ export function unwrapDataokeResponse(
   warn?: (event: DataokeWarning) => void,
   options: DataokeUnwrapOptions = {},
 ): Readonly<Record<string, unknown>> {
-  const { outerCodes } = options;
+  const { outerCodes, missingData } = options;
   if (response.status >= 500) {
     throw failure('upstream_unavailable', path, `HTTP ${response.status}`);
   }
@@ -158,6 +166,9 @@ export function unwrapDataokeResponse(
     throw failure(refined ?? classifyOuter(code), path, `code=${code}`);
   }
   const data = Object.hasOwn(parsed, 'data') ? parsed.data : undefined;
+  if ((data === undefined || data === null) && missingData !== undefined) {
+    throw failure(missingData, path, 'response has no data');
+  }
   if (!isRecord(data))
     throw failure('upstream_unavailable', path, 'response data is not an object');
   if (Object.hasOwn(data, 'error_response')) throw topFailure(path, data.error_response, warn);
