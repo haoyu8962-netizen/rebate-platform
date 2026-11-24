@@ -1,0 +1,54 @@
+id: F1-07ee
+repo: rebate-platform
+title: 后台订单写操作入口第二段（订单管理标准化 C 段，整页详情版）——订单详情整页的暂停结算 / 恢复结算（order.hold）、未归因订单指定归属（order.assign）、原因细分；按权限点显示，接已上线的 adminHoldOrder / adminUnholdOrder / adminReassignOrder / adminSetOrderReasonSub
+type: impl
+# 2026-11-25 入账（前端线 f1-frontend-7；编排 D10-2669 ① / D10-2881；任务书 couli-runs/briefs/ADMIN-ORDERS-STANDARD-20261122.md §4 C；规划/05 F1-07ee 行）。后端 B1-10m 已上线，不改契约、不占契约槽；发现要改契约即停下报。
+# 只做（写死）：整页详情 /orders/<order_id> 的写入口——【暂停结算】【恢复结算】（order.hold，原因取 AdminOrderStaffHoldReason、备注照契约）、【指定归属】（order.assign，只对 user 为 null 的未归因订单出现；目标须是本应用、未封禁、未注销中的用户，服务端拒绝码照契约提示）、【原因细分】（adminSetOrderReasonSub，取值照 order_reason_sub 与 none）；入口按权限点显示，无权限不渲染、不发请求；2026-11-23 起这几项不做二次验证（BR-ID-34 none 档）。
+# 写请求：结果未知（超时 / 网络断 / 5xx）锁定输入与键、只许原键原体重试；409 / 版本冲突按契约提示并重读详情；成功后以服务端返回的详情为准刷新，不前端推算状态（BR-FUND-06）。
+# 不做（写死）：抽屉里的入口（FU-F107EE-DRAWER-ENTRY，deps F1-07edb）；改已归属订单的归属（BR-FUND-01 R14，已归属订单不出现改给他人的入口）；批量暂扣、重新分佣、手动锁定；列表页行内写入口；不改 contracts/**、components/**、App.tsx 路由，不加依赖。
+# 冻结用例（D10-1733 通例：后单加写入口，前单「无写入口」类冻结块改为恰等于已落地入口，严格相等；无权限点角色仍无入口）：admin-orders 的 LIST#6、DETAIL#5、BROWSER#2 三块是超管视角、断言没有这些入口——只在这三块内把期望改为「超管恰见本单入口」，块外辅助（orders-helpers.ts readOnly）不动、新断言写在本单测试目录的 kit 里；其余断言不动。先红 / --related 若列出别的冻结用例要改，先报编排补登。
+# 与 F1-07edb（暂停中）共改 apps/admin/src/texts/orders.ts，谁后落地谁变基解冲突。
+refs: [BR-FUND-06, BR-ATTR-20, BR-ATTR-31, BR-ID-34, BR-TEXT-05]
+refs_hash:
+  BR-FUND-06: f903ec00076a
+  BR-ATTR-20: 0f939f3aa5c1
+  BR-ATTR-31: 853082f204ef
+  BR-ID-34: 8bd50e43d350
+  BR-TEXT-05: 34a6ab7e2ca2
+deps: [F1-07ed, B1-10m]
+paths:
+  - 'apps/admin/src/pages/orders/OrderDetailPage.tsx'
+  - 'apps/admin/src/pages/orders/detail-writes/**'
+  - 'apps/admin/src/texts/orders.ts'
+test_paths:
+  - 'test/spec/frontend/admin-orders-writes/**'
+  - 'test/spec/frontend/admin-orders/list.test.ts'
+  - 'test/spec/frontend/admin-orders/detail.test.ts'
+  - 'test/spec/frontend/admin-orders/pages.browser.test.ts'
+modify_existing:
+  - file: 'test/spec/frontend/admin-orders/list.test.ts'
+    test: '[AC-F1-07e-LIST#6] 行操作名含订单号，使用 order_id 进入详情，超管也无未接入写操作'
+    retitle_to: '[AC-F1-07e-LIST#6] 行操作名含订单号，使用 order_id 进入详情，超管只见已接入的写操作'
+    reason: rule_change
+    br: [BR-FUND-06, BR-ATTR-31]
+    ruling: D10-1733
+    note: '同 D10-1733：F1-07ee 接入暂停 / 恢复结算、指定归属、原因细分后，超管详情页的写入口期望由「没有」改为恰等于本单已落地入口（严格相等）；列表页仍无写入口、进详情与请求次数断言不动'
+  - file: 'test/spec/frontend/admin-orders/detail.test.ts'
+    test: '[AC-F1-07e-DETAIL#5] 状态历史和转链记录展示每条时间及契约内容，不渲染原始报文或写操作'
+    retitle_to: '[AC-F1-07e-DETAIL#5] 状态历史和转链记录展示每条时间及契约内容，不渲染原始报文，写操作只有已接入的入口'
+    reason: rule_change
+    br: [BR-FUND-06, BR-ATTR-31]
+    ruling: D10-1733
+    note: '同 D10-1733：超管详情页写入口期望改为恰等于本单已落地入口（严格相等）；状态历史、转链记录、不渲染原始报文的断言不动'
+  - file: 'test/spec/frontend/admin-orders/pages.browser.test.ts'
+    test: '[AC-F1-07e-BROWSER#2] 1440 详情各区块和两个锁定标记可见，截图 admin-order-detail'
+    reason: rule_change
+    br: [BR-FUND-06, BR-ATTR-31]
+    ruling: D10-1733
+    note: '同 D10-1733：超管视角下「暂停结算 / 恢复结算 / 指定归属」按订单状态恰见本单入口（已归属订单不出现指定归属）；各区块可见、截图断言不动'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-orders-writes/**'
+status: todo
