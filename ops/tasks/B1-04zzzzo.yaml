@@ -1,0 +1,27 @@
+id: B1-04zzzzo
+repo: rebate-platform
+title: 淘宝 resolveLink 第二段：推广短链（s.click / uland）、淘口令、m.tb.cn 经大淘客 parse-content 只取 goodsId，再经 taobao.tbk.item.info.upgrade.get 换成凑狸口径 item_id；不用其 pid、转链结果与活动 id（D10-2683 / D10-2891 / D10-2893）
+type: impl
+# 2026-11-25 w1 入账（编排 D10-2891 认可范围、D10-2893 准入账）。现状：B1-04zzzzk 只认商品页 item.htm?id=，推广短链 / 淘口令 / m.tb.cn 一律 adapter_unimplemented（taobao-adapter.ts 头注释 B1-04zzzzk 段）。
+# ① 只在已配大淘客来源（orderSource）时：对 B1-04zzzzk 不认的输入调 GET https://openapi.dataoke.com/api/tb-service/parse-content（version v1.0.0，参数 content；docs-mirror dataoke/md/api-33.md），复用现有 orderSource 客户端的签名与错误归类。
+# ② 只取 data.goodsId（非空字符串）；goodsId 不当 item_id（D10-504，见 dataoke-search.ts:16），以它发一次 item.info.upgrade.get，取本次返回第一条的 item_id 原串（同 B1-04zzzzk 商品页路径与错误归类，BR-PROD-05）。
+# ③ 返回里的 pid、commission*、转链 url、originInfo.activityId 一律不读、不进结果、不进日志（D10-2683）。code 25003 / 无 goodsId / upgrade.get 空结果 → link_unrecognized；其余大淘客错误照现有大淘客错误归类；归档 kind = query。
+# ④ 没配大淘客来源 → 维持 adapter_unimplemented，不取凭据、不发请求、不告警（冻结 [AC-B1-04j#30]、[AC-B1-04zzzzk#1/#4] 的 setup 都未配来源，探针：主干上调 resolveLink 的测试里配了 orderSource 的两处都是 vi.fn 桩，预计零冻结改动）。
+# 不改契约 / openapi（resolveLink 为内部端口，错误码沿用），不占契约槽；不改 parsing 模块。样本未到：FU-PARSE-CONTENT-SAMPLES。
+refs: [BR-PROD-03, BR-PROD-05, BR-PROD-10]
+refs_hash:
+  BR-PROD-03: 7769390bcd28
+  BR-PROD-05: 692dcc678e1e
+  BR-PROD-10: 619f14ca3641
+deps: []
+paths:
+  - 'apps/api/src/modules/union/infra/taobao/{taobao-adapter.ts,resolve-link.ts,resolve-link.test.ts,parse-content.ts,parse-content.test.ts}'
+  - 'ops/tasks/B1-04zzzzo.yaml'
+test_paths:
+  - 'test/spec/union/taobao-parse-content/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/union/taobao-parse-content/**'
+status: todo
