@@ -1,0 +1,86 @@
+id: F1-07edb
+repo: rebate-platform
+title: 后台订单页标准化 B 段第二张（改冻结用例）——默认 8 列与操作列、行内【查看】开详情抽屉（深链直开、关闭回原位、筛选不丢）、列表常驻同步状态条，并修 F1-07ed 两条 S2（越界页回第 1 页、URL 年份小于 100）
+type: impl
+# 2026-11-24 入账（前端线 f1-frontend-7；编排 D10-2734 / D10-2735 / D10-2748，登法 D10-2799 / D10-2826：rule_change、br BR-ID-46；任务书 couli-runs/briefs/ADMIN-ORDERS-STANDARD-20261122.md §4 B；规划 08 BR-ID-46，couli#28 → 081b17766395）。
+# 只做（写死）：
+#   ① 默认列：订单号、平台、商品、用户、付款时间、付款金额、联盟佣金、返利状态 8 列与【操作】默认显示（列头文字沿用现有），平台状态、标记默认隐藏，可在【列设置】打开（D10-2735）；平台额外列仍默认隐藏。
+#   ② 行内【查看】开右侧详情抽屉（用 F1-07ec 的 detail-drawer）：URL 带抽屉参数可直接打开，关闭后回到原滚动位置，筛选、页签、页码不丢；【详情】仍进整页 /orders/<order_id>，整页详情与「分佣快照」「分佣明细」不变（D10-2734）。
+#   ③ 列表上方常驻同步状态条：初次加载只用现有 GET /admin/v1/order-syncs 取最近一条（page=1、page_size=1），显示平台显示名、状态与北京时间；无记录显示「暂无同步记录」；接口失败只在状态条显示「同步状态读取失败」，订单列表照常；不请求 limits，不新增请求路径（D10-2748）。
+#   ④ F1-07ed money r2 两条 S2：越界页（items 为空、total 大于 0）上分页器点第 1 页能回第 1 页并同步 URL；URL 里年份小于 100 的日期不被 Date.UTC 当成 19xx（FU-F1-07ED-PAGE-OVERFLOW / FU-F1-07ED-URL-DATE-YEAR）。
+# 不做（写死）：新筛选、页签数量、汇总卡、导出（D3）；暂扣 / 解除暂扣 / 指派（C 段 F1-07ee）；改归属、重新分佣、手动锁定、总代类列、批量暂扣（D10-2669 ③）。不改 contracts/**、apps/admin/src/components/**、App.tsx 路由，不加依赖。
+# 冻结用例：只改下面 8 块，改到与 ①③ 一致为止，别的断言一字不动；先红或 --related 若列出别的冻结用例要改，先报编排补登，不得顺手改。visual-baseline 订单页截图变化只出报告，不挡（D10-2734）。
+refs: [BR-ID-46]
+refs_hash:
+  BR-ID-46: 3d6ad5edcbd9
+deps: [F1-07ed]
+paths:
+  - 'apps/admin/src/pages/orders/**'
+  - 'apps/admin/src/texts/orders.ts'
+test_paths:
+  - 'test/spec/frontend/admin-orders-standard-b2/**'
+  - 'test/spec/frontend/admin-orders/list.test.ts'
+  - 'test/spec/frontend/admin-orders-sync/entries.test.ts'
+  - 'test/spec/frontend/admin-orders-sync/records.test.ts'
+  - 'test/spec/frontend/admin-orders-standard/columns.test.ts'
+  - 'test/spec/frontend/admin-orders-standard/tabs.test.ts'
+modify_existing:
+  - file: 'test/spec/frontend/admin-orders/list.test.ts'
+    test: '[AC-F1-07e-LIST#1] 默认列表只请求一页，列、北京时间、服务端付款顺序及后台金额格式正确'
+    reason: rule_change
+    br: [BR-ID-46]
+    ruling: D10-2735
+    note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）：默认列由现有 11 列改为 8 列与【操作】（平台状态、标记默认隐藏、列设置里打开后出现），具体口径见变更记录 §6 与 D10-2735；只改列头那段断言，请求、时间、顺序、金额断言不动'
+  - file: 'test/spec/frontend/admin-orders-standard/columns.test.ts'
+    test: '[AC-F1-07ed-COLUMNS#1] 默认展示十一列，隐藏联盟佣金后在同一地址重新打开仍隐藏'
+    retitle_to: '[AC-F1-07ed-COLUMNS#1] 默认展示八列与操作列，隐藏联盟佣金后在同一地址重新打开仍隐藏'
+    reason: rule_change
+    br: [BR-ID-46]
+    ruling: D10-2735
+    note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）；默认列口径由 11 列改为 8 列与【操作】（D10-2735，变更记录 §6）；只改默认列头集合那段，隐藏联盟佣金后重开仍隐藏的断言不动'
+  - file: 'test/spec/frontend/admin-orders-standard/columns.test.ts'
+    test: '[AC-F1-07ed-COLUMNS#2] 写坏真实的本地列设置后恢复默认十一列，订单正常显示'
+    retitle_to: '[AC-F1-07ed-COLUMNS#2] 写坏真实的本地列设置后恢复默认八列与操作列，订单正常显示'
+    reason: rule_change
+    br: [BR-ID-46]
+    ruling: D10-2735
+    note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）；默认列口径由 11 列改为 8 列与【操作】（D10-2735，变更记录 §6）；只改恢复后的默认列头集合，写坏本地设置不报错、订单照常显示的断言不动'
+  - file: 'test/spec/frontend/admin-orders-sync/entries.test.ts'
+    test: '[AC-F1-07eb-ENTRY#1] 持 order.view 的订单列表标题行有可用的【手动同步】【同步记录】，列表初次加载不请求 order-syncs 与 limits'
+    retitle_to: '[AC-F1-07eb-ENTRY#1] 持 order.view 的订单列表标题行有可用的【手动同步】【同步记录】，列表初次加载只为同步状态条请求一次 order-syncs（page=1、page_size=1），不请求 limits'
+    reason: rule_change
+    br: [BR-ID-46]
+    ruling: D10-2748
+    note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）；常驻同步状态条初次加载取最近一条同步记录（D10-2748，变更记录 §6）：order-syncs 期望由零次改为恰一次且只带 page=1、page_size=1；limits 仍零次，两个入口可用的断言不动'
+  - file: 'test/spec/frontend/admin-orders-sync/records.test.ts'
+    test: '[AC-F1-07eb-RECORDS#1] 点【同步记录】后才请求 GET /admin/v1/order-syncs（只带 page / page_size），列出状态中文名（字典，缺键显示编码）、平台、单号或北京时间时间窗、北京创建时间'
+    retitle_to: '[AC-F1-07eb-RECORDS#1] 点【同步记录】后才另发同步记录列表请求 GET /admin/v1/order-syncs（只带 page / page_size，状态条初次加载那一次不算），列出状态中文名（字典，缺键显示编码）、平台、单号或北京时间时间窗、北京创建时间'
+    reason: rule_change
+    br: [BR-ID-46]
+    ruling: D10-2748
+    note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）；常驻同步状态条初次加载多一次 order-syncs（D10-2748）：点【同步记录】前的请求数由零改为只有状态条那一次，记录列表请求的计数与参数、列表内容断言不动'
+  - file: 'test/spec/frontend/admin-orders-sync/records.test.ts'
+    test: '[AC-F1-07eb-RECORDS#2] 没有同步记录时显示空态'
+    reason: rule_change
+    br: [BR-ID-46]
+    ruling: D10-2748
+    note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）；常驻同步状态条初次加载多一次 order-syncs（D10-2748）：记录弹窗请求的绝对计数扣除状态条那一次；空态断言不动'
+  - file: 'test/spec/frontend/admin-orders-sync/records.test.ts'
+    test: '[AC-F1-07eb-RECORDS#3] 同步记录读取失败显示可重试的出错态，重试只多一个列表请求并列出记录'
+    reason: rule_change
+    br: [BR-ID-46]
+    ruling: D10-2748
+    note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）；常驻同步状态条初次加载多一次 order-syncs（D10-2748）：记录弹窗请求的绝对计数扣除状态条那一次，网络失败只作用于记录弹窗那一次请求；出错态、重试只多一个列表请求、列出记录的断言不动'
+  - file: 'test/spec/frontend/admin-orders-standard/tabs.test.ts'
+    test: '[AC-F1-07ed-TABS#1] 列表上方两组页签没有数量角标，干净地址默认选中全部且不请求同步接口'
+    retitle_to: '[AC-F1-07ed-TABS#1] 列表上方两组页签没有数量角标，干净地址默认选中全部，同步接口只有状态条的一次请求'
+    reason: rule_change
+    br: [BR-ID-46]
+    ruling: D10-2748
+    note: '负责人 2026-11-23 看画稿后定、2026-11-24 对话确认（BR-ID-46）；常驻同步状态条初次加载取最近一条（D10-2748）：干净地址下 order-syncs 请求由零改为恰一次（page=1、page_size=1）；无数量角标、默认选中全部的断言不动'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-orders-standard-b2/**'
+status: todo
