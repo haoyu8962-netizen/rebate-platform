@@ -128,6 +128,8 @@ export type UnionBindFailure =
   | 'filing_refused'
   | 'upstream_unavailable'
   | 'no_relation_id'
+  | 'filing_unavailable'
+  | 'duplicate_unverified'
   | 'exchange_failed';
 
 export interface UnionBindFailureSample {
@@ -614,6 +616,27 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     if (typeof exchanged.relationId !== 'string' || exchanged.relationId === '') {
       bindFailed(appId, client, method, 'no_relation_id', traceId);
       throw new AuthConfigError('linking: the credential exchange returned no relation id');
+    }
+    // B1-04zzzzm 补丁 3 ① (D10-2826; BR-ATTR-05): an id read back after a duplicate filing may be
+    // another union account's (the query's scope is not documented). It is accepted only when this
+    // user already has a binding of exactly that id under the same app and union account (any
+    // status: the history proves the filing was ours); otherwise nothing is written or activated,
+    // the failure is counted and warned as duplicate_unverified, and the answer is 50001.
+    if (exchanged.fromDuplicateLookup === true) {
+      const history = await trx
+        .selectFrom('union_bindings')
+        .select('id')
+        .where('app_id', '=', appId)
+        .where('user_id', '=', userId)
+        .where('platform', '=', platform)
+        .where('union_account_id', '=', accountId)
+        .where('relation_id', '=', exchanged.relationId)
+        .limit(1)
+        .executeTakeFirst();
+      if (history === undefined) {
+        bindFailed(appId, client, method, 'duplicate_unverified', traceId);
+        return result(50001, traceId);
+      }
     }
 
     // F1-07c: write first (the decide savepoints and the unique race unchanged), then the user

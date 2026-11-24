@@ -201,6 +201,9 @@ export function governAdapter(
   };
   const governed: UnionAdapter = {
     platform: adapter.platform,
+    // B1-04zzzzm 补丁 3 (D10-2826 ②): which endpoint mode governs this adapter (linking's readiness
+    // of the real Taobao filing reads it; a demo endpoint is never a real filing).
+    endpointMode: endpoint.mode,
     searchItems: (q, ctx) => run('idempotent_read', ctx, (c) => adapter.searchItems(q, c)),
     getItem: (ref, ctx) => run('idempotent_read', ctx, (c) => adapter.getItem(ref, c)),
     resolveLink: (raw, ctx) => run('idempotent_read', ctx, (c) => adapter.resolveLink(raw, c)),

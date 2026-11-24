@@ -7,6 +7,7 @@ import {
   createTaobaoUnionAuthApps,
   parseTaobaoUserOAuthRef,
   resolveIssuedTaobaoOAuthApp,
+  taobaoLiveFilingReady,
   taobaoUserOAuthRef,
 } from './auth-apps.ts';
 
@@ -74,5 +75,36 @@ describe('resolveIssuedTaobaoOAuthApp', () => {
       expect(resolveIssuedTaobaoOAuthApp(ref, 'web_code')).toBeNull();
     }
     expect(resolveIssuedTaobaoOAuthApp(taobaoUserOAuthRef(APP), 'sdk_token')).toBeNull();
+  });
+});
+
+describe('taobaoLiveFilingReady', () => {
+  const bindPublisher = async () => ({ relationId: 'synthetic-relation' });
+
+  it('[AC-B1-04zzzzm#8] staging / prod 只认受治理于 live 端点且能备案的淘宝适配器', () => {
+    for (const env of ['staging', 'prod'] as const) {
+      expect(taobaoLiveFilingReady(env, () => ({ bindPublisher, endpointMode: 'live' }))).toBe(
+        true,
+      );
+      expect(taobaoLiveFilingReady(env, () => ({ bindPublisher, endpointMode: 'demo' }))).toBe(
+        false,
+      );
+      expect(taobaoLiveFilingReady(env, () => ({ bindPublisher, endpointMode: 'replay' }))).toBe(
+        false,
+      );
+      expect(taobaoLiveFilingReady(env, () => ({ bindPublisher }))).toBe(false);
+      expect(taobaoLiveFilingReady(env, () => ({ endpointMode: 'live' }))).toBe(false);
+      const noEndpoint = () => {
+        throw new Error('union: no endpoint for taobao');
+      };
+      expect(taobaoLiveFilingReady(env, noEndpoint)).toBe(false);
+    }
+  });
+
+  it('[AC-B1-04zzzzm#8] 没有联盟端口时 staging 不就绪、prod 就绪；local / test 不判', () => {
+    expect(taobaoLiveFilingReady('staging', undefined)).toBe(false);
+    expect(taobaoLiveFilingReady('prod', undefined)).toBe(true);
+    expect(taobaoLiveFilingReady('local', () => ({ endpointMode: 'demo' }))).toBe(true);
+    expect(taobaoLiveFilingReady('test', undefined)).toBe(true);
   });
 });

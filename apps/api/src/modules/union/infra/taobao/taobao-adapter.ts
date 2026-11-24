@@ -561,7 +561,8 @@ export class TaobaoUnionAdapter implements UnionAdapter {
    * warning and upstream_misconfigured, nothing sent. Then ① the authorization code is exchanged
    * for the user's access token (user-oauth.ts; refused → invalid_identity), ② publisher.info.save
    * with session = that token, inviter_code, info_type=1 gives data.relation_id; ③ without one
-   * (duplicate filing) publisher.info.get with the same session gives the one common-scene id;
+   * (duplicate filing) publisher.info.get with the same session gives the one common-scene id,
+   * returned marked fromDuplicateLookup (补丁 3: the caller accepts it only against its own history);
    * ④ neither → a flat warning and upstream_misconfigured (no made-up relation id). The token lives
    * only in this call: no archive context on any of these requests, never logged, returned or
    * thrown; personal fields of the answers (taobao_user_nick, account_name, …) are not read.
@@ -637,7 +638,9 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       signal,
     );
     const found = queriedRelationId(queried.body);
-    if (found.kind === 'found') return { relationId: found.relationId };
+    // 补丁 3 (D10-2826 ①): whose filing the read-back id is cannot be told from the answer; it is
+    // marked so the bindings use case accepts it only against its own binding history.
+    if (found.kind === 'found') return { relationId: found.relationId, fromDuplicateLookup: true };
     throw this.#bindMisconfigured(
       TAOBAO_PUBLISHER_GET,
       found.kind === 'ambiguous' ? 'relation_id_ambiguous' : 'relation_id_missing',

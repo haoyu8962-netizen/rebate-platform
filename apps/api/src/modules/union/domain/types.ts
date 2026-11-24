@@ -832,6 +832,13 @@ export interface BindReq {
 }
 export interface BindResult {
   readonly relationId: string;
+  /**
+   * B1-04zzzzm 补丁 3 (D10-2826 ①): true when the filing was answered as a duplicate without an id
+   * and the id was read back with publisher.info.get. Whose filing that id is cannot be told from
+   * the answer, so the caller accepts it only when its own binding history already holds it for
+   * the same app, union account and user; absent: the id came from the filing itself.
+   */
+  readonly fromDuplicateLookup?: true;
 }
 export interface TimeWindow {
   readonly from: string;
@@ -919,6 +926,12 @@ export interface TljCreateResult {
 
 export interface UnionAdapter {
   readonly platform: Platform;
+  /**
+   * B1-04zzzzm 补丁 3 (D10-2826 ②): the mode of the endpoint this adapter is governed under, set by
+   * the governed wrapper only (governed-adapter.ts). Linking issues and exchanges a real Taobao
+   * user authorization only when the Taobao filing adapter is governed under a live endpoint.
+   */
+  readonly endpointMode?: UnionMode;
   /**
    * B1-04w: declared by an adapter whose listOrders sends several upstream requests and runs
    * each through CallCtx.gateUpstream. The governed wrapper then takes no token of its own for

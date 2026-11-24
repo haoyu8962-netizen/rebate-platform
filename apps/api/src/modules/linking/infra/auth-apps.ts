@@ -4,6 +4,7 @@
 // reference names the public app key and redirect URI the authorize address carries).
 import { Buffer } from 'node:buffer';
 import type { AppEnv } from '../../platform/index.ts';
+import type { UnionAdapter } from '../../union/index.ts';
 import type {
   AuthClient,
   UnionAuthMethod,
@@ -140,4 +141,29 @@ export function resolveIssuedTaobaoOAuthApp(
 ): IssuedTaobaoOAuthApp | null {
   if (method !== 'web_code') return null;
   return parseTaobaoUserOAuthRef(ref);
+}
+
+/**
+ * B1-04zzzzm 补丁 3 ② (D10-2826; BR-ID-17 / BR-ATTR-05): whether the real Taobao filing adapter is
+ * ready, the one judgement GET auth-url / the opens issue a real Taobao authorization under and the
+ * credential exchange hands a credential over under. Only staging / prod are judged (local / test
+ * keep the demo exchange): the Taobao adapter of the process's union ports must have a channel
+ * filing and be governed under a live endpoint (UnionAdapter.endpointMode); a demo (or replay)
+ * endpoint, an adapter without filing, or no Taobao endpoint at all is not ready. Without union
+ * ports (`adapter` undefined) staging is not ready; prod is judged ready, because its union boot
+ * refuses non-live endpoints and such a process has no filing adapter for the exchange to reach.
+ */
+export function taobaoLiveFilingReady(
+  appEnv: AppEnv,
+  adapter: (() => Pick<UnionAdapter, 'bindPublisher' | 'endpointMode'>) | undefined,
+): boolean {
+  if (appEnv !== 'staging' && appEnv !== 'prod') return true;
+  if (adapter === undefined) return appEnv === 'prod';
+  let filing: Pick<UnionAdapter, 'bindPublisher' | 'endpointMode'>;
+  try {
+    filing = adapter();
+  } catch {
+    return false;
+  }
+  return typeof filing.bindPublisher === 'function' && filing.endpointMode === 'live';
 }

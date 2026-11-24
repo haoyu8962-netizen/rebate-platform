@@ -24,6 +24,11 @@
 // written under), scoped around the call with withBindingUnionAccount and read here; without it
 // (a caller outside the bindings use case) the request names no account, and the live adapter,
 // whose credentials always carry TAOBAO_INVITER_ACCOUNT_ID, refuses the filing unsent.
+// 补丁 3 (D10-2826): ② with `ready` (the staging / prod wiring: the readiness auth-url issues
+// under, infra/auth-apps.ts taobaoLiveFilingReady) a filing adapter that is not the real one (a
+// demo endpoint) never receives a credential: refused before anything is exchanged; ① an id the
+// adapter only read back after a duplicate filing comes back marked (fromDuplicateLookup) so the
+// bindings use case checks it against its own history before writing anything.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { UnionError, type BindReq, type BindResult, type CallCtx } from '../../union/index.ts';
 
@@ -58,7 +63,7 @@ export type UnionBindingAppResolver = (
 
 /** A refusal before anything is exchanged; `reason` is a fixed classification only. */
 export class UnionBindingExchangeRefusal extends Error {
-  readonly reason: 'oauth_app_unresolved' | 'method_unsupported';
+  readonly reason: 'oauth_app_unresolved' | 'method_unsupported' | 'filing_unavailable';
 
   constructor(reason: UnionBindingExchangeRefusal['reason']) {
     super(`linking: credential exchange refused (${reason})`);
@@ -68,7 +73,13 @@ export class UnionBindingExchangeRefusal extends Error {
 }
 
 export type UnionBindingExchangeResult =
-  { readonly kind: 'bound'; readonly relationId: string } | { readonly kind: 'credential_invalid' };
+  | {
+      readonly kind: 'bound';
+      readonly relationId: string;
+      /** 补丁 3 ①: read back after a duplicate filing; accepted only against binding history. */
+      readonly fromDuplicateLookup?: true;
+    }
+  | { readonly kind: 'credential_invalid' };
 
 /** The union adapter's channel filing (governed or demo), as linking calls it. */
 export type UnionBindPublisher = (req: BindReq, ctx: CallCtx) => Promise<BindResult>;
@@ -80,23 +91,33 @@ const CREDENTIAL_REFUSALS: ReadonlySet<string> = new Set(['invalid_identity', 'u
 export class UnionBindingExchanger {
   readonly #bind: (() => UnionBindPublisher | null) | undefined;
   readonly #resolveApp: UnionBindingAppResolver | undefined;
+  readonly #ready: (() => boolean) | undefined;
 
   /**
    * `bind` resolves the Taobao adapter's bindPublisher at call time; absent or resolving to null
    * (no union adapter in this process, or an adapter without channel filing) every exchange
    * rejects, which the bindings use case answers as a server fault. `options.resolveApp` (staging /
    * prod) resolves the state's reference; without it the adapter's current setting is used.
+   * `options.ready` (staging / prod, 补丁 3 ②) is the shared readiness of the real filing adapter;
+   * false → refused (filing_unavailable) before the adapter is resolved or anything is sent.
    */
   constructor(
     bind?: () => UnionBindPublisher | null,
-    options?: { readonly resolveApp?: UnionBindingAppResolver },
+    options?: {
+      readonly resolveApp?: UnionBindingAppResolver;
+      readonly ready?: () => boolean;
+    },
   ) {
     this.#bind = bind;
     this.#resolveApp = options?.resolveApp;
+    this.#ready = options?.ready;
   }
 
   async exchange(input: UnionBindingExchangeInput): Promise<UnionBindingExchangeResult> {
     const unionAccountId = bindingUnionAccount.getStore();
+    if (this.#ready !== undefined && !this.#ready()) {
+      throw new UnionBindingExchangeRefusal('filing_unavailable');
+    }
     const bind = this.#bind?.() ?? null;
     if (bind === null) {
       throw new Error('linking: no union channel filing for the credential exchange');
@@ -130,7 +151,9 @@ export class UnionBindingExchanger {
       if (typeof result?.relationId !== 'string' || result.relationId === '') {
         throw new Error('linking: the channel filing returned no relation id');
       }
-      return { kind: 'bound', relationId: result.relationId };
+      return result.fromDuplicateLookup === true
+        ? { kind: 'bound', relationId: result.relationId, fromDuplicateLookup: true }
+        : { kind: 'bound', relationId: result.relationId };
     } catch (error) {
       if (error instanceof UnionError && CREDENTIAL_REFUSALS.has(error.code)) {
         return { kind: 'credential_invalid' };
