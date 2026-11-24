@@ -1,0 +1,88 @@
+id: B3-09n
+repo: rebate-platform
+title: 'agent.models（BR-AI-16 模型单价表）列进后台配置列表：config-registry 从 LOOKUP_ONLY 挪进 REGISTRY（紧跟 agent.budget.reserve_mfen_per_run），10 条全量键序冻结用例块内补这一项'
+type: impl
+# 2026-11-25 agent 线入账（D10-2848 改判甲、D10-2849 同意范围与「kit.ts 一字不动、只在用例块内补期望值」、D10-2861 核过探针放行；探针 couli-runs/B3-09m/kit-probe/：--early shape 0、content 全绿）。B3-09m 把 agent.models 放在 LOOKUP_ONLY；本单只把它列进列表，负责人填单价前必须能在后台看到。
+# 只做：config-registry.ts 挪一项 + 实现单测 config-registry.test.ts 长度 180 / Agent 尾 27；10 条冻结用例块内期望值只多 agent.models 一项（无种子键清单也多这一项，[AC-F1-10e#3] 计数多减 1）。不改 test/spec/content/config-items/kit.ts 与任何块外代码；[AC-F1-10e#10] 块内对 agent.models 写出其「未写过」期望值（kit 的 unwritten 查不到它）。B3-09m 合并后开工。
+refs: [BR-AI-16]
+refs_hash:
+  BR-AI-16: ccca6709add2
+deps: [B3-09m]
+paths:
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+test_paths:
+  - 'test/spec/content/config-items/registry.test.ts'
+  - 'test/spec/content/config-items/read.int.test.ts'
+  - 'test/spec/content/invite-reward-eligibility/registry.test.ts'
+  - 'test/spec/content/config-settle/writes.int.test.ts'
+  - 'test/spec/content/config-settle/registry.test.ts'
+  - 'test/spec/content/invite-reward-config/registry.test.ts'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/**'
+modify_existing:
+  - file: 'test/spec/content/config-items/registry.test.ts'
+    test: '[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 agent.page_guide.routes、external_hosts，不多不少不重复'
+    reason: rule_change
+    br: [BR-AI-16]
+    ruling: D10-2849
+    note: 'B3-09n：agent.models 列进后台配置列表——块内期望清单在 agent.budget.reserve_mfen_per_run 之后多 agent.models 一项（无种子键清单也多这一项），其余键与断言不动'
+  - file: 'test/spec/content/config-items/registry.test.ts'
+    test: '[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 object）'
+    reason: rule_change
+    br: [BR-AI-16]
+    ruling: D10-2849
+    note: 'B3-09n：agent.models 无种子行，块内计数多减 1；其余断言不动'
+  - file: 'test/spec/content/config-items/registry.test.ts'
+    test: '[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加在裁定 14 之后，逐键值类型、options、权限点、可改标记）'
+    reason: rule_change
+    br: [BR-AI-16]
+    ruling: D10-2849
+    note: 'B3-09n：agent.models 列进后台配置列表——块内期望清单在 agent.budget.reserve_mfen_per_run 之后多 agent.models 一项（无种子键清单也多这一项），其余键与断言不动'
+  - file: 'test/spec/content/config-items/registry.test.ts'
+    test: '[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登记（紧接 settle.* 之后、其后是 eligibility_days、payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项，逐键值类型、options、权限点、可改标记）'
+    reason: rule_change
+    br: [BR-AI-16]
+    ruling: D10-2849
+    note: 'B3-09n：agent.models 列进后台配置列表——块内期望清单在 agent.budget.reserve_mfen_per_run 之后多 agent.models 一项（无种子键清单也多这一项），其余键与断言不动'
+  - file: 'test/spec/content/config-items/registry.test.ts'
+    test: '[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接 ip_window_hours 登记、其后紧接 payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项（按登记顺序，逐键值类型、options、权限点、可改标记；options 为 null、config.business、可改）'
+    reason: rule_change
+    br: [BR-AI-16]
+    ruling: D10-2849
+    note: 'B3-09n：agent.models 列进后台配置列表——块内期望清单在 agent.budget.reserve_mfen_per_run 之后多 agent.models 一项（无种子键清单也多这一项），其余键与断言不动'
+  - file: 'test/spec/content/invite-reward-eligibility/registry.test.ts'
+    test: '[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天数紧接 IP 窗口，其后紧接 payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项'
+    reason: rule_change
+    br: [BR-AI-16]
+    ruling: D10-2849
+    note: 'B3-09n：agent.models 列进后台配置列表——块内期望清单在 agent.budget.reserve_mfen_per_run 之后多 agent.models 一项（无种子键清单也多这一项），其余键与断言不动'
+  - file: 'test/spec/content/config-items/read.int.test.ts'
+    test: '[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 value=null、version=0、无作者与时间'
+    reason: rule_change
+    br: [BR-AI-16]
+    ruling: D10-2849
+    note: 'B3-09n：agent.models 列进后台配置列表——块内期望清单在 agent.budget.reserve_mfen_per_run 之后多 agent.models 一项（无种子键清单也多这一项），其余键与断言不动'
+  - file: 'test/spec/content/config-settle/writes.int.test.ts'
+    test: '[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约返回'
+    reason: rule_change
+    br: [BR-AI-16]
+    ruling: D10-2849
+    note: 'B3-09n：agent.models 列进后台配置列表——块内期望清单在 agent.budget.reserve_mfen_per_run 之后多 agent.models 一项（无种子键清单也多这一项），其余键与断言不动'
+  - file: 'test/spec/content/config-settle/registry.test.ts'
+    test: '[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行为保持不变'
+    reason: rule_change
+    br: [BR-AI-16]
+    ruling: D10-2849
+    note: 'B3-09n：agent.models 列进后台配置列表——块内期望清单在 agent.budget.reserve_mfen_per_run 之后多 agent.models 一项（无种子键清单也多这一项），其余键与断言不动'
+  - file: 'test/spec/content/invite-reward-config/registry.test.ts'
+    test: '[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后'
+    reason: rule_change
+    br: [BR-AI-16]
+    ruling: D10-2849
+    note: 'B3-09n：agent.models 列进后台配置列表——块内期望清单在 agent.budget.reserve_mfen_per_run 之后多 agent.models 一项（无种子键清单也多这一项），其余键与断言不动'
+status: todo
+pr: null
