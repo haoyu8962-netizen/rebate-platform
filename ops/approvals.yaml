@@ -1113,3 +1113,9 @@ approvals:
     granted: true
     date: '2026-11-25'
     note: '编排 D10-2936（取乙）。原因：money r2（被校验器拒收的原文 F1-07ee/review-money-r2.rejected.json）有 S0（待确认请求不分账号，换人登录可见可重试）与 5 条 S1，集中在 r3 自写的待确认存储；unknown-marker 已在 F1-08ap 过资金评审。常规实现 3 次已用完（r4 为 D10-2930 追认的机械补修不计次）。money r3 是最后一轮，不过即停、转负责人。'
+  - id: 183
+    row: 4
+    title: 'B1-04zzzzo 任务专属一次性追加（D10-2958）：写规则测试增量 1 次（Codex）+ 规则测试评审增量 1 轮（独立 Claude）——范围写死为开关 parse.third_party.enabled（BR-AI-04 细则）：本单 test/spec/union/taobao-parse-content/** 与 test/spec/agent/no-third-party-parse/** 里以「配了大淘客来源即解析」为前提的用例改为在开关开时才解析；新增缺省 / 关 → 推广链 / 淘口令 / m.tb.cn 不取大淘客凭据、不发请求、adapter_unimplemented，开 + origin=agent → 不发，开 → 只作官方口令解析失败 / 无权限后的降级（官方淘宝口令解析至今未实现、恒不可用）。实现与资金评审用常规第 3 次 / 第 3 轮，不在本条。'
+    granted: true
+    date: '2026-11-25'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审轮次属门禁流程小改动），D10-2952 / D10-2958，先例第 175、180 条。原因：Codex money r2（couli-runs/B1-04zzzzo/review-money-codex-r2.json）范围外 S1 指出本单与 08 BR-AI-04 细则（第三方口令解析禁止、开关 parse.third_party.enabled 默认 off、启用后任何链路只作降级）冲突，编排取甲（加开关、缺省关），开关不进配置注册表（台账补丁 3）；写测计数 3 / 3、规则测试评审计数 2 / 2 已满。写测作者为 Codex，按第 19 条由独立 Claude 评审。开时主干末条 181，#709（182）在开，本条排其后。'
