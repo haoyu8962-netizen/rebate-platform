@@ -456,7 +456,7 @@ it(
 // 第 4 次写测（编排 D10-2544，任务书 §12）。断言都在用例体里；后台回调里只发请求与取数。
 
 it(
-  '[AC-B2-18#33] 后台补充（真实后台生产入口）不读 recon_diffs（D10-2415；第 5 次写测改为白名单，编排 D10-2567）：快照 1234、结算 1100 的 WAITING 单另有一张已结案、结论「以联盟为准」的旧差错单；在这次请求所用的数据库执行器上，凡是把 recon_diffs 当读取对象的语句（任何 SELECT——含 SELECT *、整列 resolution、子查询、EXISTS、CTE、JOIN——以及 INSERT … SELECT / UPDATE … FROM 的数据来源；纯写入的 INSERT … VALUES / ON CONFLICT DO NOTHING 不算；允许清单为空）一执行就抛错并计数 → 请求 200，违规读取 0 次；探针自检：专用结论读口与 ledger 的通用读口（getReconDiffs 按单与按应用、恢复用的按 id 读与加锁读、未结计数、入账后核对 gauge）经同一执行器各调一次都被拦下；该单按 1100 重生成 v2（550 / 110）并入补充批次，明细恰好一份（b_settle 1100、settle_seq 1）；不告警、旧差错单原样不新增、账单行不回写',
+  '[AC-B2-18#33] 后台补充（真实后台生产入口）不读 recon_diffs（D10-2415；第 5 次写测改为白名单，编排 D10-2567）：快照 1234、结算 1100 的 WAITING 单另有一张已结案、结论「以联盟为准」的旧差错单；在这次请求所用的主库与只读库两个数据库执行器上（dbHandles.db 与 dbHandles.dbRead，各装一个独立的观察插件；第 8 次写测补上只读库），凡是把 recon_diffs 当读取对象的语句（任何 SELECT——含 SELECT *、整列 resolution、子查询、EXISTS、CTE、JOIN——以及 INSERT … SELECT / UPDATE … FROM 的数据来源；纯写入的 INSERT … VALUES / ON CONFLICT DO NOTHING 不算；允许清单为空）一执行就抛错并计数 → 请求 200，两个执行器上违规读取都是 0 次，后台容器的只读库令牌解析到的就是注入的只读执行器；探针自检：专用结论读口与 ledger 的通用读口（getReconDiffs 按单与按应用、恢复用的按 id 读与加锁读、未结计数、入账后核对 gauge）经主库、只读库执行器各调一次都被拦下；该单按 1100 重生成 v2（550 / 110）并入补充批次，明细恰好一份（b_settle 1100、settle_seq 1）；不告警、旧差错单原样不新增、账单行不回写',
   async () => {
     const base = fixture(s);
     const a = await appOf(base);
@@ -469,6 +469,11 @@ it(
     // 清单（空，零读取）见 kit isReconDiffsRead / RECON_DIFFS_READ_ALLOWLIST 的注释。
     const fault = reconDiffsReadFault(base.db);
     const f: Fixture = { ...base, db: fault.db };
+    // 第 8 次写测（§16.1）：只读库执行器——自己独立的插件实例、计数与违规清单，不与主库那个共用；交给后台入口作
+    // dbHandles.dbRead。它包在同一个 base.db 上（同一连接池、同一角色 couli_app）：本用例的库来自别的目录的冻结
+    // Suite，拿不到 couli_readonly 的连接串，冻结文件不改。这里要证明的是「后台入口拿到的只读库句柄上一旦读旧结论
+    // 就会被拦下并计数」，句柄背后是哪个数据库角色不影响这一点。
+    const readFault = reconDiffsReadFault(base.db);
 
     // 判定规则的形状自检（纯函数，取数；断言在下面）：这些都是「读」，那些是纯写入或别的表。
     const readShapes = [
@@ -521,20 +526,62 @@ it(
       probeResults.push([name, outcome.ok ? 'not rejected' : errorText(outcome.error)]);
     }
     const probed = { executed: fault.executed, fired: fault.fired, statements: fault.statements };
-    const seen: { status?: number; body?: string; lines: LogLine[] } = { lines: [] };
+    // 只读库执行器上的探针自检（取数；断言在下面）：同样 7 个读口各调一次，需要事务的两个各用只读执行器上自己的
+    // 事务对象。
+    const readRestoreRead = readFault.db.transaction();
+    const readRestoreLock = readFault.db.transaction();
+    const readProbes: [string, () => Promise<unknown>][] = [
+      [
+        'readUnionAuthoritativeOrderKeys',
+        () => readUnionAuthoritativeOrderKeys(readFault.db, conclusionKeys),
+      ],
+      ['getReconDiffs by order, closed', () => getReconDiffs(readFault.db, closedOfOrder)],
+      ['getReconDiffs of the app', () => getReconDiffs(readFault.db, { appId: a.appId })],
+      [
+        'readReconDiffForRestore',
+        () => readRestoreRead.execute((trx) => readReconDiffForRestore(trx, a.appId, diffId)),
+      ],
+      [
+        'lockReconDiffForRestore',
+        () => readRestoreLock.execute((trx) => lockReconDiffForRestore(trx, a.appId, diffId)),
+      ],
+      ['countReconDiffOpen', () => countReconDiffOpen(readFault.db, a.appId)],
+      ['readCreditPostcheckOpen', () => readCreditPostcheckOpen(readFault.db)],
+    ];
+    const readProbeResults: [string, string][] = [];
+    for (const [name, read] of readProbes) {
+      const outcome = await within(read(), `read-replica probe: ${name}`);
+      readProbeResults.push([name, outcome.ok ? 'not rejected' : errorText(outcome.error)]);
+    }
+    const readProbed = { executed: readFault.executed, fired: readFault.fired };
+    const seen: {
+      status?: number;
+      body?: string;
+      lines: LogLine[];
+      readHandle?: unknown;
+    } = { lines: [] };
 
-    await withSupplementAdmin(f, async (h) => {
-      const sent = await h.supplement(BILL_ID, TAOBAO);
-      seen.status = sent.statusCode;
-      seen.body = sent.body;
-      seen.lines = h.lines;
-    });
+    await withSupplementAdmin(
+      f,
+      async (h) => {
+        seen.readHandle = h.resolvedDbRead();
+        const sent = await h.supplement(BILL_ID, TAOBAO);
+        seen.status = sent.statusCode;
+        seen.body = sent.body;
+        seen.lines = h.lines;
+      },
+      { dbRead: readFault.db },
+    );
 
     expect(missedReads).toEqual([]);
     expect(flaggedWrites).toEqual([]);
     const rejected = probes.map(([name]) => [name, expect.stringContaining(INJECTED_READ)]);
     expect(probeResults).toEqual(rejected);
     expect(probed).toMatchObject({ executed: probes.length, fired: probes.length });
+    // 只读库执行器上的自检：7 次都被拦下，计数只记在只读执行器自己身上。
+    const readRejected = readProbes.map(([name]) => [name, expect.stringContaining(INJECTED_READ)]);
+    expect(readProbeResults).toEqual(readRejected);
+    expect(readProbed).toEqual({ executed: 7, fired: 7 });
 
     // 请求成功，且这次请求里对 recon_diffs 的读取一次都没执行（观察确实装在请求的执行器上：其间经过了别的语句）。
     expect(seen.status, seen.body).toBe(200);
@@ -542,6 +589,12 @@ it(
     expect(fault.executed - probed.executed).toBe(0);
     expect(fault.fired - probed.fired).toBe(0);
     expect(fault.statements).toBeGreaterThan(probed.statements);
+    // 只读库执行器：请求期间同样零读取。不断言它的语句数增加——后台补充不经只读库是允许的；改为断言后台容器里
+    // 只读库令牌解析到的就是注入的那个执行器（同一引用），证明观察确实装在后台入口拿到的只读库句柄上。
+    expect(readFault.violations.slice(readProbed.executed)).toEqual([]);
+    expect(readFault.executed - readProbed.executed).toBe(0);
+    expect(readFault.fired - readProbed.fired).toBe(0);
+    expect(seen.readHandle).toBe(readFault.db);
     expect(allAlerts(seen.lines)).toEqual([]);
 
     // 按 9.2 第 1–3 条：重生成 v2（基数 = B_settle 1100，例 2 的 550 / 110）并入补充批次。

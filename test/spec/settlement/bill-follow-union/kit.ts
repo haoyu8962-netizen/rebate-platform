@@ -50,6 +50,7 @@ import {
   LocalKeyProvider,
 } from '../../../../apps/api/src/modules/platform/crypto/index.ts';
 import {
+  DB_READ,
   FixedClock,
   REDIS,
   createRootLogger,
@@ -1492,6 +1493,18 @@ export interface SupplementAdmin {
     body: unknown,
     options?: { readonly key?: string },
   ): Promise<AdminSent>;
+  /**
+   * 后台应用容器里只读库令牌 DB_READ 解析到的对象（第 8 次写测，§16.1）：用来证明测试注入的只读执行器就是后台入口
+   * 拿到的只读库句柄。只在 withSupplementAdmin 收到 wiring.dbRead 时可调；没给只读执行器时容器里没有这个令牌，
+   * Nest 的 get 会抛错。
+   */
+  resolvedDbRead(): unknown;
+}
+
+/** withSupplementAdmin 的可选项（§16.1）。 */
+export interface SupplementAdminOptions {
+  /** 交给后台入口的只读库执行器（dbHandles.dbRead）；不给时仍为 null，与此前各调用点的行为相同。 */
+  readonly dbRead?: Kysely<DB>;
 }
 
 /** 契约格式的 Idempotency-Key（8–64 位 [A-Za-z0-9_-]）。 */
@@ -1499,10 +1512,14 @@ export function idempotencyKey(): string {
   return `bfu_${randomBytes(12).toString('hex')}`;
 }
 
-/** 在夹具的库（f.db，可带故障插件）、Clock 与 Redis 上起后台入口，根 logger 收日志。 */
+/**
+ * 在夹具的库（f.db，可带故障插件）、Clock 与 Redis 上起后台入口，根 logger 收日志。wiring.dbRead 给了时作为
+ * 后台入口的只读库句柄（dbHandles.dbRead，可带故障插件），不给时为 null。
+ */
 export async function withSupplementAdmin(
   f: AdminFixture,
   run: (h: SupplementAdmin) => Promise<void>,
+  wiring: SupplementAdminOptions = {},
 ): Promise<void> {
   const { createHttpApp } = (await import(new URL('apps/api/src/bootstrap.ts', REPO).href)) as {
     createHttpApp(
@@ -1542,7 +1559,7 @@ export async function withSupplementAdmin(
       }),
       clock: f.clock,
       logger,
-      dbHandles: { db: f.db, dbRead: null, close: async () => undefined },
+      dbHandles: { db: f.db, dbRead: wiring.dbRead ?? null, close: async () => undefined },
       redisUrl: loadConnectionConfig('admin', {
         DATABASE_URL: 'postgres://couli_app@127.0.0.1:1/unused',
         DATABASE_READ_URL: 'postgres://couli_app@127.0.0.1:1/unused',
@@ -1593,6 +1610,9 @@ export async function withSupplementAdmin(
     );
     await run({
       lines,
+      resolvedDbRead() {
+        return app.get<unknown>(DB_READ);
+      },
       async supplement(billId, body, options = {}) {
         const grant = await createAdminStepUpTokens({
           clock: f.clock,
