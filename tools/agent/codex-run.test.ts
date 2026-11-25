@@ -3215,12 +3215,26 @@ it(
     const confirm = (...extra: string[]) =>
       codexRun(fx, [...specReview(fx), '--confirm-round', ...extra]);
 
-    // The trusted root is not a Git checkout of its own yet (the fixture lies inside this
-    // repository): the baseline cannot be checked there.
+    const refused = ({ args, text }: { args: string[]; text: string }): void => {
+      const label = args.join(' ') || '(no value)';
+      const before = releaseCalls(fx).length;
+      const res = confirm(...args);
+      expect(res.status, `${label}\n${res.stderr}`).toBe(2);
+      expect(res.stderr, label).toContain(text);
+      expect(existsSync(join(fx.log, 'argv.nul')), label).toBe(false);
+      if (args.includes('--dry-run')) {
+        expect(releaseCalls(fx), label).toHaveLength(before);
+      } else {
+        expect(releaseCalls(fx), label).toHaveLength(before + 1);
+        expectSpecRelease(releaseCalls(fx).at(-1));
+      }
+    };
+    // The trusted root is not a Git checkout of its own yet (no repository at all, or only an
+    // enclosing one): the baseline cannot be checked there. Checked before the trusted root gets a
+    // repository of its own below (CT-06zzzzzzzg mechanical correction, D10-3235 ③).
     const outside = gitIn(fx.main, ['rev-parse', 'HEAD']);
-    const cases: { args: string[]; text: string }[] = [
-      { args: [outside], text: 'not a Git checkout of its own' },
-    ];
+    refused({ args: [outside], text: 'not a Git checkout of its own' });
+    const cases: { args: string[]; text: string }[] = [];
     const baseline = commitConfirmLedger(fx, 'Baseline', []);
     gitIn(fx.trusted, ['rm', '-q', '--', CONFIRM_LEDGER]);
     gitIn(fx.trusted, ['commit', '-q', '-m', 'no ledger']);
@@ -3235,20 +3249,7 @@ it(
       { args: [unrelated], text: "is not on the trusted root's history" },
       { args: [noLedger], text: `has no ${CONFIRM_LEDGER}` },
     );
-    for (const { args, text } of cases) {
-      const label = args.join(' ') || '(no value)';
-      const before = releaseCalls(fx).length;
-      const res = confirm(...args);
-      expect(res.status, `${label}\n${res.stderr}`).toBe(2);
-      expect(res.stderr, label).toContain(text);
-      expect(existsSync(join(fx.log, 'argv.nul')), label).toBe(false);
-      if (args.includes('--dry-run')) {
-        expect(releaseCalls(fx), label).toHaveLength(before);
-      } else {
-        expect(releaseCalls(fx), label).toHaveLength(before + 1);
-        expectSpecRelease(releaseCalls(fx).at(-1));
-      }
-    }
+    for (const c of cases) refused(c);
     // A ledger the parser rejects cannot give a delta: refused too, never "all" or "none".
     writeFileSync(join(fx.trusted, CONFIRM_LEDGER), 'id: [broken\n');
     const broken = confirm(baseline);
