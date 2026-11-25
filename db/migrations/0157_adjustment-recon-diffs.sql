@@ -72,6 +72,17 @@
 --   HAVING count(DISTINCT a.adjust_id) > 1;
 -- and settle them by hand first (reverse the surplus forms through the console), then deploy.
 --
+-- Deploy order (the old admin entry must be quiesced first): the backfill covers only the forms
+-- committed when its statement runs, and the old admin writes only admin_adjustments.refs, no link
+-- rows. A manual adjustment the old admin still executes after the backfill commits has no link
+-- row, so after the switch the same member can submit a second form on the same diff (BR-FUND-24
+-- ⑨ bypassed). Before releasing the version with this migration, stop the old admin processes (at
+-- least close the manual adjustment and reversal entry POST /admin/v1/adjustments) and wait for
+-- in-flight requests to finish, then run the migration; reopen the entry only once the new admin
+-- is up; keep it closed on rollback as well. A first release (no old admin running) has no such
+-- window. Orchestrator ruling D10-3251; carrying this into the release script and the go-live
+-- checklist is follow-up FU-DEPLOY-0157-ADMIN-QUIESCE.
+--
 -- squawk: require-concurrent-index-creation is excluded globally in .squawk.toml (the runner applies
 -- migrations in one transaction, precedent 0152).
 -- Timeouts: ADD COLUMN takes ACCESS EXCLUSIVE on app.recon_diffs (catalog only) held to commit;
