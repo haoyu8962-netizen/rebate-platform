@@ -178,7 +178,9 @@ it('[AC-CT-06zzzzzzzj#5] 整块登记沿用 rule_change 和非空 note 的门槛
     expect.stringContaining('rule_change'),
   );
   const { note, ...withoutNote } = entry;
-  expect(problem(withoutNote)).toEqual(expect.stringContaining('note'));
+  expect(problem(withoutNote as ModifyExistingBlockDeclaration)).toEqual(
+    expect.stringContaining('note'),
+  );
   expect(problem({ ...withoutNote, note: '  ' })).toEqual(expect.stringContaining('note'));
   expect(problem({ ...withoutNote, note })).toBeNull();
 });
