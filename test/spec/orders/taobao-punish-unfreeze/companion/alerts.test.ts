@@ -1,7 +1,8 @@
 // B1-04zzac 伴随测试（FU-B1-04ZZAB-SPEC-R3-GAP；08 BR-FUND-22 决-06 实测前 A：「解冻」是映射表之外的信号，按
 // BR-FUND-02 进待处理表并告警、留下证据）：punish.window 中途失败时告警不能丢（资金评审 r2 修出来的行为）。
-// - 待处理写入失败（含窗口里第一条就失败）：写入失败的那一类照样一条 warn，计数只算已落库的（第一条就失败时为 0），
-//   并标出没记下的 1 条与窗口没跑完；另一类有已落库的也各一条 warn，计数如实；原错误原样外抛。
+// - 待处理写入失败（含窗口里第一条就失败，或一类已落库之后另一类的第一条失败，两种先后都钉）：写入失败的那一类
+//   照样一条 warn，计数只算已落库的（第一条就失败时为 0），并标出没记下的 1 条与窗口没跑完；另一类有已落库的
+//   也各一条 warn，计数如实；原错误原样外抛。
 // - 不是待处理写入失败（写入方抛错、取页抛错）：已落库的类别照样各一条 warn，计数如实，原错误外抛。
 // - 告警只在 warn 级，不带订单号、违规单号与金额。
 // 会抛的调用先 settle 再用普通断言判。用例全部是顶层 it。
@@ -113,33 +114,43 @@ it('[AC-B1-04zzac#9] 第二页上一条解冻的待处理写入失败（第一�
   });
 });
 
-it('[AC-B1-04zzac#10] 已落库一条解冻之后，表外值的第一条待处理写入失败：解冻一条 warn（计数 1、没记下 0 条），表外值一条 warn（计数 0、没记下 1 条）；原错误外抛', async () => {
-  const u1 = unfrozen(1);
-  const odd2 = frozen(2, { punish_status: '2' });
-  const f = fixture({ punishPages: [[u1, odd2]] });
-  const broken = new Error('synthetic order_sync_pending failure');
-  f.record.mockImplementation(async (signal) => {
-    if (signal.sub_order_id === odd2.order_id) throw broken;
-  });
+it.each([
+  ['先落库解冻、表外值', '1', 'UNFREEZE_SIGNAL', '2', 'UNMAPPED_STATUS', [1, 0], [0, 1]],
+  ['先落库表外值、解冻', '2', 'UNMAPPED_STATUS', '1', 'UNFREEZE_SIGNAL', [0, 1], [1, 0]],
+] as const)(
+  '[AC-B1-04zzac#10] %s的第一条待处理写入失败：两类各一条 warn——已落库的一类计数 1、没记下 0 条，写入失败的一类计数 0、没记下 1 条，窗口没跑完；抛出的就是那个写入错误',
+  async (_name, firstRaw, firstReason, secondRaw, secondReason, unfreezeIs, unmappedIs) => {
+    const first = frozen(1, { punish_status: firstRaw });
+    const second = frozen(2, { punish_status: secondRaw });
+    const f = fixture({ punishPages: [[first, second]] });
+    const broken = new Error('synthetic order_sync_pending failure');
+    f.record.mockImplementation(async (signal) => {
+      if (signal.sub_order_id === second.order_id) throw broken;
+    });
 
-  const out = await settle(handlePunishWindow(job(PUNISH_JOB, WINDOW), f.handler));
-  expectThrown(out, broken);
+    const out = await settle(handlePunishWindow(job(PUNISH_JOB, WINDOW), f.handler));
+    expectThrown(out, broken);
 
-  const { unfreeze, unmapped } = alertsOf(f, [u1, odd2]);
-  expect(unfreeze).toHaveLength(1);
-  expect(unfreeze[0]).toMatchObject({
-    [UNFREEZE_COUNT]: 1,
-    not_recorded: 0,
-    window_complete: false,
-  });
-  expect(unmapped).toHaveLength(1);
-  expect(unmapped[0]).toMatchObject({
-    [UNMAPPED_COUNT]: 0,
-    not_recorded: 1,
-    window_complete: false,
-  });
-  expect(f.write).not.toHaveBeenCalled();
-});
+    expect(f.signals()).toEqual([
+      signalOf(first, firstReason, firstRaw),
+      signalOf(second, secondReason, secondRaw),
+    ]);
+    const { unfreeze, unmapped } = alertsOf(f, [first, second]);
+    expect(unfreeze).toHaveLength(1);
+    expect(unfreeze[0]).toMatchObject({
+      [UNFREEZE_COUNT]: unfreezeIs[0],
+      not_recorded: unfreezeIs[1],
+      window_complete: false,
+    });
+    expect(unmapped).toHaveLength(1);
+    expect(unmapped[0]).toMatchObject({
+      [UNMAPPED_COUNT]: unmappedIs[0],
+      not_recorded: unmappedIs[1],
+      window_complete: false,
+    });
+    expect(f.write).not.toHaveBeenCalled();
+  },
+);
 
 it('[AC-B1-04zzac#11] 写入方在冻结行上抛错（此前已落库解冻 1 条、表外值 1 条）：两类各一条 warn，计数各 1、没记下 0 条，窗口没跑完；写入方的错误原样外抛', async () => {
   const u1 = unfrozen(1);

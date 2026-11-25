@@ -1,9 +1,11 @@
 // B1-04zzac 伴随测试（FU-B1-04ZZAB-SPEC-R3-GAP；08 BR-FUND-22 决-06 实测前 A、BR-FUND-02）：B1-04zzab 规则测试
 // 评审 r3 / r4 剩的缺口与资金评审 r1 / r2 修出来的行为，在真实库表上钉住（实现已在主干，本文件在主干上应为绿）：
-// - 已付款未收货（platform_status PAID、rebate_status ESTIMATED）的订单遇 punish_status 1（解冻）或 0 / 1 以外的值：
-//   订单整行（platform_status、rebate_status、hold、金额列）逐列不变，不交写入方，只多一条对应原因的 open 待处理。
+// - 已付款未收货（platform_status PAID、rebate_status ESTIMATED）的订单遇 punish_status 1（解冻）：订单整行
+//   （platform_status、rebate_status、hold、金额列）逐列不变；遇 0 / 1 以外的值：platform_status、rebate_status 与
+//   金额列不变（hold 不判，D10-3221 另登 FU-PUNISH-UNMAPPED-HOLD-SCOPE）；都不交写入方，只多一条对应原因的
+//   open 待处理，该类告警一条。
 // - 同键（app、平台、子订单、原因）已有别的来源的 open 记录：原记录的原值（raw_status、raw_payload_id、created_at、
-//   order_id、原说明）保留，违规信号的标记并进说明；同一信号再来不重复追加。
+//   order_id、原说明）保留，表外值 2、7 的完整来源标记各并进说明一次；重复信号不重复追加。
 // - 订单后入库：order_id 为 null 的 open 记录在同一信号再来时补成我方订单；已有关联（非 null）的不改。
 // - 两个窗口（注入时钟不同）先后或并发处理同一信号：detected_at 取较晚的，不回退。
 // - 待处理写入第一条就失败：该类别照样一条 warn，原错误外抛，库里不留半截。
@@ -36,6 +38,7 @@ import {
   PUNISH_JOB,
   UNFREEZE_COUNT,
   UNFREEZE_EVENT,
+  UNMAPPED_COUNT,
   UNMAPPED_EVENT,
   job,
   linesOf,
@@ -61,9 +64,11 @@ const EARLIER = new Date(Date.parse(NOW) - 2 * 3_600_000);
 /** What another source (the order sync's own UNMAPPED_STATUS) left on the open record. */
 const OTHER_RAW = 'TB_TK_STATUS_99';
 const OTHER_DETAIL = 'order sync: tk_status 99 not in specs/order-status-map/taobao.csv';
+const OTHER_PAYLOAD_ID = 424_242n;
 
-/** The punish signal's value as it shows in the merged detail. */
-const MARK_OF_2 = 'punish_status=2';
+/** The full source marks of the punish window's values 2 and 7 as they show in the merged detail. */
+const MARK_OF_2 = 'punish.window punish_status=2';
+const MARK_OF_7 = 'punish.window punish_status=7';
 
 /** A run's outcome, read after it settles (no .resolves / .rejects). */
 async function settle(run: Promise<void>): Promise<PromiseSettledResult<void>> {
@@ -100,122 +105,182 @@ async function expectUntouched(appId: string, orders: readonly Order[], before: 
   expect([after.history, after.rights, after.events]).toEqual([[], [], []]);
 }
 
-it.each([
-  ['解冻', '1', 'UNFREEZE_SIGNAL'],
-  ['表外值', '2', 'UNMAPPED_STATUS'],
-] as const)(
-  '[AC-B1-04zzac#1] 已付款未收货订单（platform_status PAID、rebate_status ESTIMATED）遇违规接口%s（punish_status %s）：platform_status、rebate_status、hold 与金额列逐列不变，不交写入方，只多一条 %s 的 open 待处理',
-  async (_name, raw, reason) => {
-    const appId = newAppId();
-    const userId = await seedUser(h.db, appId);
-    const order = await seedOrder(h.db, appId, {
-      platform_status: 'PAID',
-      rebate_status: 'ESTIMATED',
-      user_id: userId,
-      received_at: null,
-      settle_period: null,
-    });
-    const before = await trailOf(h.db, appId, [order]);
-    expect(await pendingOf(h.db, appId)).toEqual([]);
-    const f = dbHandler(h.db, [[unfreezeRow(order.sub_order_id, { punish_status: raw })]]);
+/** A paid, not yet received order of a member (platform_status PAID, rebate_status ESTIMATED). */
+async function seedPaidOrder(appId: string): Promise<Order> {
+  const userId = await seedUser(h.db, appId);
+  return seedOrder(h.db, appId, {
+    platform_status: 'PAID',
+    rebate_status: 'ESTIMATED',
+    user_id: userId,
+    received_at: null,
+    settle_period: null,
+  });
+}
 
-    const out = await settle(handlePunishWindow(job(PUNISH_JOB, windowOf(appId)), f.deps));
-    expect(out.status).toBe('fulfilled');
+/** platform_status, rebate_status and every amount column (`*_fen`) of each order. */
+function moneyStateOf(trail: Trail) {
+  return trail.orders.map((o) => ({
+    order_id: o.order_id,
+    platform_status: o.platform_status,
+    rebate_status: o.rebate_status,
+    amounts: Object.entries(o).filter(([key]) => key.endsWith('_fen')),
+  }));
+}
 
-    const after = await trailOf(h.db, appId, [order]);
-    expect(statusOf(after)).toEqual([['PAID', 'ESTIMATED', false, null]]);
-    await expectUntouched(appId, [order], before);
-    expect(f.rightsRecord).not.toHaveBeenCalled();
-    expect(await rightsOf(h.db, appId)).toEqual([]);
-    expect((await pendingOf(h.db, appId)).map(view)).toEqual([
-      {
-        sub_order_id: order.sub_order_id,
-        order_id: order.order_id,
-        reason,
-        raw_status: raw,
-        status: 'open',
-        detected_at: new Date(NOW),
-      },
-    ]);
-  },
-);
+it('[AC-B1-04zzac#1] 已付款未收货订单（platform_status PAID、rebate_status ESTIMATED）遇违规接口解冻（punish_status 1）：platform_status、rebate_status、hold 与金额列逐列不变，不交写入方，只多一条 UNFREEZE_SIGNAL 的 open 待处理，解冻告警一条', async () => {
+  const appId = newAppId();
+  const order = await seedPaidOrder(appId);
+  const before = await trailOf(h.db, appId, [order]);
+  expect(await pendingOf(h.db, appId)).toEqual([]);
+  const f = dbHandler(h.db, [[unfreezeRow(order.sub_order_id, { punish_status: '1' })]]);
 
-it.each([
-  ['原说明非空', OTHER_DETAIL],
-  ['原说明为空', null],
-] as const)(
-  '[AC-B1-04zzac#2] 同键已有一条别的来源（订单同步）的 open UNMAPPED_STATUS 记录（%s）：表外值信号到来，原记录的 raw_status、raw_payload_id、created_at、order_id 与原说明保留，违规信号的标记并进说明；同一信号再来不重复追加',
-  async (_name, detail) => {
-    const appId = newAppId();
-    const order = await seedOrder(h.db, appId);
-    const before = await trailOf(h.db, appId, [order]);
-    await h.db
-      .insertInto('order_sync_pending')
-      .values({
-        app_id: appId,
-        platform: 'taobao',
-        sub_order_id: order.sub_order_id,
-        order_id: order.order_id,
-        reason: 'UNMAPPED_STATUS',
-        raw_status: OTHER_RAW,
-        raw_payload_id: null,
-        detail,
-        detected_at: EARLIER,
-        status: 'open',
-        created_at: EARLIER,
-      })
-      .execute();
-    const original = await pendingOf(h.db, appId);
-    expect(original).toHaveLength(1);
-    const row = unfreezeRow(order.sub_order_id, { punish_status: '2' });
-    const f = dbHandler(h.db, [[row]]);
+  const out = await settle(handlePunishWindow(job(PUNISH_JOB, windowOf(appId)), f.deps));
+  expect(out.status).toBe('fulfilled');
 
-    const first = await settle(handlePunishWindow(job(PUNISH_JOB, windowOf(appId)), f.deps));
-    expect(first.status).toBe('fulfilled');
-    const once = await pendingOf(h.db, appId);
-    expect(once).toHaveLength(1);
-    expect(once[0]).toMatchObject({
-      id: original[0]!.id,
+  const after = await trailOf(h.db, appId, [order]);
+  expect(statusOf(after)).toEqual([['PAID', 'ESTIMATED', false, null]]);
+  await expectUntouched(appId, [order], before);
+  expect(f.rightsRecord).not.toHaveBeenCalled();
+  expect(await rightsOf(h.db, appId)).toEqual([]);
+  expect((await pendingOf(h.db, appId)).map(view)).toEqual([
+    {
+      sub_order_id: order.sub_order_id,
+      order_id: order.order_id,
+      reason: 'UNFREEZE_SIGNAL',
+      raw_status: '1',
+      status: 'open',
+      detected_at: new Date(NOW),
+    },
+  ]);
+  const warns = linesOf(f.logger.warn, UNFREEZE_EVENT);
+  expect(warns).toHaveLength(1);
+  expect(warns[0]).toMatchObject({ [UNFREEZE_COUNT]: 1 });
+});
+
+// D10-3221: whether the BR-FUND-02 hold clause applies to a punish-interface unmapped value is
+// FU-PUNISH-UNMAPPED-HOLD-SCOPE; this case pins neither 「hold」 nor 「no hold」.
+it('[AC-B1-04zzac#1] 已付款未收货订单（platform_status PAID、rebate_status ESTIMATED）遇违规接口表外值（punish_status 2）：platform_status、rebate_status 与金额列不变（hold 不在本条判定），不交写入方，只多一条 UNMAPPED_STATUS 的 open 待处理，表外值告警一条', async () => {
+  const appId = newAppId();
+  const order = await seedPaidOrder(appId);
+  const before = await trailOf(h.db, appId, [order]);
+  expect(await pendingOf(h.db, appId)).toEqual([]);
+  const f = dbHandler(h.db, [[unfreezeRow(order.sub_order_id, { punish_status: '2' })]]);
+
+  const out = await settle(handlePunishWindow(job(PUNISH_JOB, windowOf(appId)), f.deps));
+  expect(out.status).toBe('fulfilled');
+
+  const after = await trailOf(h.db, appId, [order]);
+  const [state] = moneyStateOf(after);
+  expect([state?.platform_status, state?.rebate_status]).toEqual(['PAID', 'ESTIMATED']);
+  expect(moneyStateOf(after)).toEqual(moneyStateOf(before));
+  expect(f.rightsRecord).not.toHaveBeenCalled();
+  expect(await rightsOf(h.db, appId)).toEqual([]);
+  expect((await pendingOf(h.db, appId)).map(view)).toEqual([
+    {
+      sub_order_id: order.sub_order_id,
+      order_id: order.order_id,
+      reason: 'UNMAPPED_STATUS',
+      raw_status: '2',
+      status: 'open',
+      detected_at: new Date(NOW),
+    },
+  ]);
+  const warns = linesOf(f.logger.warn, UNMAPPED_EVENT);
+  expect(warns).toHaveLength(1);
+  expect(warns[0]).toMatchObject({ [UNMAPPED_COUNT]: 1 });
+});
+
+it('[AC-B1-04zzac#2] 同键已有一条别的来源（订单同步）的 open UNMAPPED_STATUS 记录（raw_payload_id、原说明、原码均非空）：依次送入表外值 2、7 及各自的重复信号，仍只一条 open，raw_payload_id、原说明、原码、created_at、order_id 保留，2 与 7 两条完整的来源标记各出现一次，重复不追加', async () => {
+  const appId = newAppId();
+  const order = await seedOrder(h.db, appId);
+  const before = await trailOf(h.db, appId, [order]);
+  await h.db
+    .insertInto('order_sync_pending')
+    .values({
       app_id: appId,
       platform: 'taobao',
       sub_order_id: order.sub_order_id,
       order_id: order.order_id,
       reason: 'UNMAPPED_STATUS',
       raw_status: OTHER_RAW,
-      raw_payload_id: null,
+      raw_payload_id: OTHER_PAYLOAD_ID,
+      detail: OTHER_DETAIL,
+      detected_at: EARLIER,
       status: 'open',
       created_at: EARLIER,
+    })
+    .execute();
+  const original = await pendingOf(h.db, appId);
+  expect(original).toHaveLength(1);
+  const kept = {
+    id: original[0]!.id,
+    app_id: appId,
+    platform: 'taobao',
+    sub_order_id: order.sub_order_id,
+    order_id: order.order_id,
+    reason: 'UNMAPPED_STATUS',
+    raw_status: OTHER_RAW,
+    raw_payload_id: OTHER_PAYLOAD_ID,
+    status: 'open',
+    created_at: EARLIER,
+    detected_at: new Date(NOW),
+    resolved_by: null,
+    resolved_at: null,
+  };
+  const f2 = dbHandler(h.db, [[unfreezeRow(order.sub_order_id, { punish_status: '2' })]]);
+  const f7 = dbHandler(h.db, [[unfreezeRow(order.sub_order_id, { punish_status: '7' })]]);
+  /** The same signal straight through the production recorder. */
+  function direct(raw: string): Promise<void> {
+    return createPunishPendingRecorder({ db: h.db }).record({
+      app_id: appId,
+      platform: 'taobao',
+      sub_order_id: order.sub_order_id,
+      reason: 'UNMAPPED_STATUS',
+      raw_status: raw,
       detected_at: new Date(NOW),
-      resolved_by: null,
-      resolved_at: null,
     });
-    const merged = once[0]!.detail ?? '';
-    const kept = detail ?? '';
-    expect(merged.slice(0, kept.length)).toBe(kept);
-    expect(count(merged, MARK_OF_2)).toBe(1);
+  }
+  /** The one open record: the original columns kept, and how often each full mark is in detail. */
+  async function expectOne(two: number, seven: number): Promise<PendingRow[]> {
+    const rows = await pendingOf(h.db, appId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject(kept);
+    const detail = rows[0]!.detail ?? '';
+    expect(detail.slice(0, OTHER_DETAIL.length)).toBe(OTHER_DETAIL);
+    const marked = [count(detail, MARK_OF_2), count(detail, MARK_OF_7)];
+    expect(marked).toEqual([two, seven]);
+    return rows;
+  }
 
-    // The same signal again: by the window and by the recorder directly.
-    const again = await settle(handlePunishWindow(job(PUNISH_JOB, windowOf(appId), 2), f.deps));
-    expect(again.status).toBe('fulfilled');
-    const direct = await settle(
-      createPunishPendingRecorder({ db: h.db }).record({
-        app_id: appId,
-        platform: 'taobao',
-        sub_order_id: order.sub_order_id,
-        reason: 'UNMAPPED_STATUS',
-        raw_status: '2',
-        detected_at: new Date(NOW),
-      }),
-    );
-    expect(direct.status).toBe('fulfilled');
-    const twice = await pendingOf(h.db, appId);
-    expect(twice).toEqual(once);
-    expect(count(twice[0]!.detail ?? '', MARK_OF_2)).toBe(1);
+  // Value 2, then its repeats (the window again, and the recorder directly).
+  const first2 = await settle(handlePunishWindow(job(PUNISH_JOB, windowOf(appId)), f2.deps));
+  expect(first2.status).toBe('fulfilled');
+  const after2 = await expectOne(1, 0);
+  const again2 = await settle(handlePunishWindow(job(PUNISH_JOB, windowOf(appId), 2), f2.deps));
+  expect(again2.status).toBe('fulfilled');
+  const direct2 = await settle(direct('2'));
+  expect(direct2.status).toBe('fulfilled');
+  expect(await expectOne(1, 0)).toEqual(after2);
 
-    expect(f.rightsRecord).not.toHaveBeenCalled();
-    await expectUntouched(appId, [order], before);
-  },
-);
+  // Value 7, then its repeats.
+  const first7 = await settle(handlePunishWindow(job(PUNISH_JOB, windowOf(appId), 3), f7.deps));
+  expect(first7.status).toBe('fulfilled');
+  const after7 = await expectOne(1, 1);
+  const again7 = await settle(handlePunishWindow(job(PUNISH_JOB, windowOf(appId), 4), f7.deps));
+  expect(again7.status).toBe('fulfilled');
+  const direct7 = await settle(direct('7'));
+  expect(direct7.status).toBe('fulfilled');
+  expect(await expectOne(1, 1)).toEqual(after7);
+
+  // And 2 once more after 7: still nothing appended.
+  const late2 = await settle(handlePunishWindow(job(PUNISH_JOB, windowOf(appId), 5), f2.deps));
+  expect(late2.status).toBe('fulfilled');
+  expect(await expectOne(1, 1)).toEqual(after7);
+
+  expect(f2.rightsRecord).not.toHaveBeenCalled();
+  expect(f7.rightsRecord).not.toHaveBeenCalled();
+  await expectUntouched(appId, [order], before);
+});
 
 it('[AC-B1-04zzac#3] 订单后入库：先有一条 order_id 为 null 的 open 解冻记录，我方订单入库后同一信号再来，order_id 补成我方订单，其余列不变、仍只一条', async () => {
   const appId = newAppId();
