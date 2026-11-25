@@ -3,6 +3,7 @@ import { expect, it, vi } from 'vitest';
 
 import type { Scheduler } from '../../../platform/index.ts';
 import { parseModelPrices } from '../../budget/index.ts';
+import { createHttpTransport, quirksFor } from '../openai-compat/index.ts';
 import { VendorError, type VendorGateway, type VendorResponse } from '../vendors/index.ts';
 import { budgetedRequest, chargeFor, textOnlyBody } from './budget.ts';
 import { createModelRouter } from './router.ts';
@@ -127,4 +128,30 @@ it('[AC-B3-09m#u15] 余额放不下或含非文本内容时不出请求', () => 
   expect(
     textOnlyBody({ messages: [{ role: 'user', content: [{ type: 'image_url', image_url: {} }] }] }),
   ).toBe(false);
+});
+
+it('[AC-B3-09o#u4] 传输层在 fetch 之前失败（凭据读不到）不计入 U；fetch 之后结果不明仍按最坏成本计', async () => {
+  const fetch = vi.fn(() => Promise.reject(new Error('synthetic network down')));
+  let key: () => string = () => {
+    throw new Error('synthetic credential rotation');
+  };
+  const transport = createHttpTransport({
+    vendor: 'qwen',
+    baseUrl: 'https://synthetic-model.invalid/compatible-mode/v1',
+    apiKey: () => key(),
+    fetch,
+    quirks: quirksFor('qwen'),
+  });
+  const gateway: VendorGateway = { invoke: (call, signal) => transport.send(call, signal) };
+  const unsent = budget();
+  const first = await router(gateway).complete(chat, ctx(unsent));
+  expect(fetch).not.toHaveBeenCalled();
+  expect(first).toMatchObject({ kind: 'degraded', reason: 'vendor_misconfigured' });
+  expect(unsent).toMatchObject({ spentMfen: 0n, calls: 0 });
+  key = () => 'synthetic-key';
+  const sent = budget();
+  const planned = budgetedRequest(entry, chat, sent)!;
+  await router(gateway).complete(chat, ctx(sent));
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(sent).toMatchObject({ spentMfen: planned.worstMfen, calls: 1 });
 });

@@ -774,10 +774,18 @@ class AgentRun {
         if (settled !== null) return settled;
         // U-11: degrade only before any model / tool content; otherwise end with what was sent.
         // B3-08m (gate review S1-1): a template run never degrades; it ends with its templates.
+        // B3-09o · BR-AI-16 细则「已出的卡与文字保留，后续走无模型降级」: a run the budget stopped
+        // keeps what it sent and goes on to the no-model path (done budget) even after content;
+        // every other reason still ends done stop once content was delivered.
+        const budget = outcome.reason === 'budget';
         if (!this.templated && !this.delivered) return this.degrade(proceed, outcome.reason);
-        // B3-09m · BR-AI-16 (D10-3116): a run the budget stopped after it delivered content keeps
-        // what it sent and ends done budget; every other reason still ends done stop.
-        return this.finishText(outcome.reason === 'budget' ? 'budget' : 'stop');
+        if (!this.templated && budget) {
+          // The model text the guard still holds goes out first, as the budget end did before.
+          const ended = await this.endGuard();
+          if (ended !== null) return ended;
+          return this.degrade(proceed, outcome.reason);
+        }
+        return this.finishText(budget ? 'budget' : 'stop');
       }
       this.model = outcome.model;
       const deltas: string[] = [];
@@ -1170,6 +1178,18 @@ class AgentRun {
       if (stop !== null) return stop;
     }
     return this.final(done(reason));
+  }
+
+  /**
+   * B3-09o: the guard's end (its last held sentence), written as finishText writes it; a result
+   * means the run ends here. Used before the no-model path takes over a run with content.
+   */
+  private async endGuard(): Promise<RunBodyResult | null> {
+    const guard = this.guard;
+    if (guard === null || this.out.limitHit) return null;
+    const emits = await this.wait(guard.end());
+    if (emits === ABORTED) return done('stop');
+    return this.writeEmits(emits, guard);
   }
 
   /** One ctx.text per GuardEmit, in guard order. */

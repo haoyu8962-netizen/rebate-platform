@@ -518,7 +518,10 @@ export function createAgentStreamRuntime(
       return { kind: 'degraded', reason: 'route_no_model', attempts: [] };
     },
   };
-  const modelClock = () => createRunModelClock(timings.runMaxMs);
+  // B3-09o · BR-AI-14 细则「无模型降级」: on the budgeted path the run's model clock starts from its
+  // app's agent.model_timeout_ms (read with the plan, default 8,000 ms); the whole-run limit
+  // (runMaxMs) only bounds the run. Without a model gateway nothing changes.
+  const modelClock = () => budgeted?.modelClock() ?? createRunModelClock(timings.runMaxMs);
   const errorMsg = async (_appId: string, code: number) => texts.errorMsg(code);
   const fallbackReview: AgentRunBodyDeps['review'] = { review: async () => 'timeout' };
   // B3-05o: with a business assembly the body is built by createStreamAgentBody (./agent-body.ts),

@@ -63,3 +63,17 @@ export function classifyFailure(
   if (failure.status >= 500 && failure.status <= 599) return 'server';
   return 'bad_request';
 }
+
+// B3-09o · BR-AI-16 细则「请求根本没发出去，不计」：传输层在调用 fetch 之前抛出的错登记在这里，
+// 路由记账见到登记过的错就不计。不给错误对象加字段（冻结用例断言了 ModelProtocolError 的形状）。
+const notSent = new WeakSet<object>();
+
+/** 登记一个在请求交给 HTTP 客户端之前抛出的错；非对象的抛出值无法登记，按已发出处理。 */
+export function markNotSent(error: unknown): void {
+  if (typeof error === 'object' && error !== null) notSent.add(error);
+}
+
+/** 这个错是否在请求交给 HTTP 客户端之前抛出（经 markNotSent 登记）。 */
+export function wasNotSent(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && notSent.has(error);
+}

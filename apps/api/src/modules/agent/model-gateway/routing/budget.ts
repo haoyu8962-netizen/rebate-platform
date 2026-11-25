@@ -6,7 +6,12 @@
 import { callCostMfen } from '@couli/money';
 
 import { callAllowance, type ModelPrice } from '../../budget/index.ts';
-import { buildModelRequest, quirksFor, toVendorRequest } from '../openai-compat/index.ts';
+import {
+  buildModelRequest,
+  quirksFor,
+  toVendorRequest,
+  wasNotSent,
+} from '../openai-compat/index.ts';
 import { assertOnlineVendor, VendorError } from '../vendors/index.ts';
 import type { VendorRequest, VendorUsage } from '../vendors/index.ts';
 import type { RouteEntry, RouterChatInput, RunCallBudget } from './types.ts';
@@ -131,7 +136,10 @@ export interface CallCharge {
   dispatched(): void;
   /** The gateway answered with usage (success or a response that failed later). */
   answered(usage: unknown): void;
-  /** The call failed or was given up on: by its usage when known, else W if it was sent. */
+  /**
+   * The call failed or was given up on: by its usage when known, else W if it was sent (a
+   * VendorError or an error the transport marked as raised before fetch was never sent).
+   */
   failed(error: unknown): void;
 }
 
@@ -173,8 +181,9 @@ export function chargeFor(
       const usage =
         typeof error === 'object' && error !== null ? (error as { usage?: unknown }).usage : null;
       if (byUsage(usage)) return;
-      // The gateway refuses before the transport with VendorError: never sent, not charged.
-      if (!dispatched || error instanceof VendorError) {
+      // Never sent, not charged: the gateway refuses before the transport with VendorError, or
+      // the transport failed before handing the request to its HTTP client (B3-09o: wasNotSent).
+      if (!dispatched || error instanceof VendorError || wasNotSent(error)) {
         done = true;
         return;
       }

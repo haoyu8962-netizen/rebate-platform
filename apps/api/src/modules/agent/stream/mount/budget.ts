@@ -5,10 +5,15 @@
 // - admit(): before the admission transaction (pg/admit.ts F0, nothing held) the run's plan is
 //   read: agent.daily_budget_fen / agent.budget.reserve_mfen_per_run across every app (content's
 //   configValuesByKey; the smallest budget, the largest reservation), the run's app's own
-//   agent.models (fresh read) and its route. The run's price entry is fixed here: the first
-//   route candidate with a usable price; the run then only uses candidates priced at that same
-//   version (one version per run). A failed read, or no usable price, is a blocked plan: no
-//   reservation, the run ends by budget (never 50xxx), with a warn alert. The transaction that
+//   agent.models (fresh read) and its route. B3-09o: the two platform-wide keys are read and
+//   fall back on their own (D10-3187 ④): a failed budget read is a blocked plan, a failed
+//   reservation read takes the BR default (5,000 mfen) with a warn alert. The run's unit prices
+//   are fixed here as one snapshot of every candidate's own entry (D10-3187 ⑤; each call is
+//   priced by its model's entry, never filtered by version); the price version recorded for the
+//   run is the first route candidate with a usable price (D10-3193). A failed price read, or no
+//   usable price, is a blocked plan: no reservation, the run ends by budget (never 50xxx), with
+//   a warn alert. The run's agent.model_timeout_ms is read with the plan (BR-AI-14; a failed,
+//   missing or invalid value is 8,000 ms) and starts the run's model clock (modelClock()). The transaction that
 //   inserts the run reserves R against the budget (createDailyBudgetOn, logger + countBudgetAlert).
 // - bind(): the run body runs inside the run's AsyncLocalStorage store, so the prompt source and
 //   the model below know their run.
@@ -39,8 +44,11 @@ import {
 } from '../../budget/index.ts';
 import {
   createModelRouter,
+  createRunModelClock,
+  type ModelOutcome,
   type ResolvedRoute,
   type RunCallBudget,
+  type RunModelClock,
 } from '../../model-gateway/routing/index.ts';
 import type { VendorGateway } from '../../model-gateway/vendors/index.ts';
 import type { AgentRunBodyDeps, PromptSource } from '../../orchestrator/core/ports.ts';
@@ -58,7 +66,10 @@ export interface BudgetedModelPathDeps {
   readonly clock: Clock;
   readonly scheduler: Scheduler;
   readonly logger: Pick<RootLogger, 'warn'>;
-  /** The router's per-attempt limit (the run's model time budget). */
+  /**
+   * The router's per-attempt limit (the run's whole limit; one router for the runtime). Each
+   * attempt is cut to what is left of the run's model clock anyway (router.ts).
+   */
   readonly attemptTimeoutMs: number;
 }
 
@@ -74,12 +85,18 @@ export interface BudgetedModelPath {
   settleFields(runId: string): Promise<LiveRunBudget | undefined>;
   /** The platform-wide budget now (mfen), for settlements without live detail. */
   budgetLimit(): Promise<bigint>;
+  /**
+   * B3-09o · BR-AI-14: the current run's model clock, started from its app's
+   * agent.model_timeout_ms read with the plan; undefined outside a run of this path.
+   */
+  modelClock(): RunModelClock | undefined;
 }
 
 interface PlannedRun {
   readonly plan: RunBudgetPlan;
   readonly route: ResolvedRoute;
   readonly prices: ModelPrices;
+  readonly modelTimeoutMs: number;
 }
 
 interface BudgetedRun {
@@ -88,23 +105,30 @@ interface BudgetedRun {
   exhausted: boolean;
   readonly route: ResolvedRoute;
   readonly spend: RunCallBudget;
+  readonly modelTimeoutMs: number;
+  /** The version fixed at admission (written on the reservation and agent_runs). */
+  readonly priceVersion: string | null;
+  /** The (admission, priced) version pairs already logged for this run. */
+  readonly versionsWarned: Set<string>;
 }
 
 const NO_MODEL: ResolvedRoute = { mode: 'no_model', attempts: [], dropped: [] };
 const BUDGET_PROMPT = Object.freeze({ version: 'none', system: '' });
 
+/** BR-AI-14 细则「无模型降级」: agent.model_timeout_ms default (as platform/resilience model.qwen). */
+const DEFAULT_MODEL_TIMEOUT_MS = 8_000;
+const MODEL_TIMEOUT_KEY = 'agent.model_timeout_ms';
+const INT4_MAX = 2_147_483_647;
+
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
 }
 
-/** Prices restricted to the run's one version (the entry fixed at admission). */
-function pricesAt(prices: ModelPrices, version: string): ModelPrices {
-  return {
-    priceOf(modelId) {
-      const price = prices.priceOf(modelId);
-      return price?.version === version ? price : undefined;
-    },
-  };
+/** A value the config registry accepts for agent.model_timeout_ms (integer, 1 … INT4_MAX). */
+function modelTimeoutOf(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= INT4_MAX
+    ? value
+    : undefined;
 }
 
 export function createBudgetedModelPath(deps: BudgetedModelPathDeps): BudgetedModelPath {
@@ -138,28 +162,71 @@ export function createBudgetedModelPath(deps: BudgetedModelPathDeps): BudgetedMo
     return read(key);
   }
 
-  async function budgetConfig() {
-    const [budgets, reserves] = await Promise.all([
+  /**
+   * B3-09o (D10-3187 ④): the two keys are read on their own. A failed budget read rejects (the
+   * caller fails closed); a failed reservation read takes the BR default (every app's value
+   * missing: 5,000 mfen) with a warn alert. Read anew every time (no cache, D10-3193).
+   */
+  async function budgetConfig(runId?: string) {
+    const [budgets, reserves] = await Promise.allSettled([
       configValues(BUDGET_KEYS.dailyBudgetFen),
       configValues(BUDGET_KEYS.reserveMfenPerRun),
     ]);
-    const config = budgetConfigAcrossApps(budgets, reserves);
+    if (budgets.status === 'rejected') throw budgets.reason;
+    if (reserves.status === 'rejected') {
+      logger.warn(
+        {
+          ...(runId === undefined ? {} : { run_id: runId }),
+          config_key: BUDGET_KEYS.reserveMfenPerRun,
+          error_name: errorName(reserves.reason),
+        },
+        'agent.budget_reserve_unread',
+      );
+    }
+    const config = budgetConfigAcrossApps(
+      budgets.value,
+      reserves.status === 'fulfilled' ? reserves.value : [],
+    );
     if (config.invalid.length > 0) {
       logger.warn({ config_keys: [...config.invalid] }, 'agent.budget_config_invalid');
     }
     return config;
   }
 
+  /** The run's app's agent.model_timeout_ms (never rejects; any failure is the default). */
+  async function modelTimeoutFor(appId: string, runId: string): Promise<number> {
+    let stored: Awaited<ReturnType<BudgetedModelPathDeps['content']['freshConfigValue']>>;
+    try {
+      stored = await deps.content.freshConfigValue(appId, MODEL_TIMEOUT_KEY);
+    } catch (error) {
+      logger.warn(
+        { run_id: runId, app_id: appId, error_name: errorName(error) },
+        'agent.model_timeout_unread',
+      );
+      return DEFAULT_MODEL_TIMEOUT_MS;
+    }
+    if (stored === null || stored.value === null) return DEFAULT_MODEL_TIMEOUT_MS;
+    const valid = modelTimeoutOf(stored.value);
+    if (valid === undefined) {
+      logger.warn({ run_id: runId, app_id: appId }, 'agent.model_timeout_invalid');
+      return DEFAULT_MODEL_TIMEOUT_MS;
+    }
+    return valid;
+  }
+
   /** The plan of one run (never rejects: any failure is a blocked plan with a warn alert). */
   async function planOf(appId: string, runId: string): Promise<PlannedRun> {
+    // Not a budget verdict: read on its own, never blocks the plan (BR-AI-14).
+    const modelTimeoutMs = await modelTimeoutFor(appId, runId);
     const blocked = (route: ResolvedRoute = NO_MODEL): PlannedRun => ({
       plan: { blocked: true, budgetMfen: 0n, reserveMfen: 0n, priceVersion: null },
       route,
       prices: parseModelPrices(undefined),
+      modelTimeoutMs,
     });
     let config: BudgetConfig;
     try {
-      config = await budgetConfig();
+      config = await budgetConfig(runId);
     } catch (error) {
       logger.warn({ run_id: runId, error_name: errorName(error) }, 'agent.budget_unavailable');
       return blocked();
@@ -207,8 +274,36 @@ export function createBudgetedModelPath(deps: BudgetedModelPathDeps): BudgetedMo
         priceVersion: fixed?.version ?? null,
       },
       route,
-      prices: fixed === undefined ? parseModelPrices(undefined) : pricesAt(prices, fixed.version),
+      // B3-09o (D10-3187 ⑤): every candidate's own entry, as read now (one snapshot per run).
+      prices: fixed === undefined ? parseModelPrices(undefined) : prices,
+      modelTimeoutMs,
     };
+  }
+
+  /**
+   * B3-09o (D10-3193): a call priced by an entry whose version differs from the one fixed at
+   * admission (e.g. the backup after the primary failed) is logged, once per run and pair; the
+   * booked values do not change. A tried attempt is one priced by its model's entry.
+   */
+  function warnPricedVersions(run: BudgetedRun, outcome: ModelOutcome): void {
+    for (const attempt of outcome.attempts) {
+      if (attempt.result === 'circuit_open') continue;
+      const entry = run.route.attempts.find((one) => one.id === attempt.entryId);
+      if (entry === undefined) continue;
+      const priced = run.spend.prices.priceOf(entry.model)?.version;
+      if (priced === undefined || priced === run.priceVersion) continue;
+      const pair = JSON.stringify([run.priceVersion, priced]);
+      if (run.versionsWarned.has(pair)) continue;
+      run.versionsWarned.add(pair);
+      logger.warn(
+        {
+          run_id: run.runId,
+          admitted_price_version: run.priceVersion,
+          priced_price_version: priced,
+        },
+        'agent.budget_price_version_differs',
+      );
+    }
   }
 
   async function budgetLimit(): Promise<bigint> {
@@ -244,6 +339,9 @@ export function createBudgetedModelPath(deps: BudgetedModelPathDeps): BudgetedMo
           spentMfen: 0n,
           calls: 0,
         },
+        modelTimeoutMs: one?.modelTimeoutMs ?? DEFAULT_MODEL_TIMEOUT_MS,
+        priceVersion: one?.plan.priceVersion ?? null,
+        versionsWarned: new Set(),
       });
       return result;
     },
@@ -288,7 +386,9 @@ export function createBudgetedModelPath(deps: BudgetedModelPathDeps): BudgetedMo
         if (run === undefined || run.exhausted) {
           return { kind: 'degraded', reason: 'budget', attempts: [] };
         }
-        return router.complete(input, { ...ctx, budget: run.spend });
+        const outcome = await router.complete(input, { ...ctx, budget: run.spend });
+        warnPricedVersions(run, outcome);
+        return outcome;
       },
     },
 
@@ -307,5 +407,10 @@ export function createBudgetedModelPath(deps: BudgetedModelPathDeps): BudgetedMo
     },
 
     budgetLimit,
+
+    modelClock() {
+      const run = current.getStore();
+      return run === undefined ? undefined : createRunModelClock(run.modelTimeoutMs);
+    },
   };
 }
