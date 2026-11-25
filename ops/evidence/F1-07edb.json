@@ -1,0 +1,283 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-orders-standard-b2/columns.test.ts > [AC-F1-07edb-COLUMNS#1] 干净地址默认八列与操作列，打开平台状态和标记后重开仍显示",
+    "test/spec/frontend/admin-orders-standard-b2/columns.test.ts > [AC-F1-07edb-COLUMNS#2] 保存后的列设置损坏时恢复八列与操作列",
+    "test/spec/frontend/admin-orders-standard-b2/columns.test.ts > [AC-F1-07edb-COLUMNS#3] 本地存储拒绝读取列设置时仍显示八列与操作列",
+    "test/spec/frontend/admin-orders-standard-b2/drawer.test.ts > [AC-F1-07edb-DRAWER#1] 依次查看第二页两笔非首行订单，各读取对应详情，关闭保留焦点位置与筛选分页",
+    "test/spec/frontend/admin-orders-standard-b2/drawer.test.ts > [AC-F1-07edb-DRAWER#2] 带筛选的深链直接打开详情，即使该订单不在筛选结果内",
+    "test/spec/frontend/admin-orders-standard-b2/drawer.test.ts > [AC-F1-07edb-DRAWER#3] 非法深链不读详情也不开抽屉，行内详情仍进入整页",
+    "test/spec/frontend/admin-orders-standard-b2/fixes.test.ts > [AC-F1-07edb-FIXES#1] 第三页越界但仍有十八条匹配订单时，点第 1 页重新查询并更新地址",
+    "test/spec/frontend/admin-orders-standard-b2/fixes.test.ts > [AC-F1-07edb-FIXES#2] 提交 URL 中公元 99 年的起始日和结束日时使用正确的北京时间边界",
+    "test/spec/frontend/admin-orders-standard-b2/sync-bar-refresh.test.ts > [AC-F1-07edb-SYNC-REFRESH#1] 初次读取成功后，状态条显示读取成功时的北京时间「更新于 HH:mm:ss」",
+    "test/spec/frontend/admin-orders-standard-b2/sync-bar-refresh.test.ts > [AC-F1-07edb-SYNC-REFRESH#2] 点击【刷新】只重读一次最近同步记录，更新条内的记录和读取时刻",
+    "test/spec/frontend/admin-orders-standard-b2/sync-bar-refresh.test.ts > [AC-F1-07edb-SYNC-REFRESH#3] 刷新失败只在状态条提示，订单行仍在且无全局错误",
+    "test/spec/frontend/admin-orders-standard-b2/sync-bar-refresh.test.ts > [AC-F1-07edb-SYNC-REFRESH#4] 手动同步受理后不重读状态条，保留初次读取的记录和时刻",
+    "test/spec/frontend/admin-orders-standard-b2/sync-bar.test.ts > [AC-F1-07edb-SYNC-BAR#1] 初次加载只取最近一条同步记录，列表上方常驻平台、中文状态和北京时间",
+    "test/spec/frontend/admin-orders-standard-b2/sync-bar.test.ts > [AC-F1-07edb-SYNC-BAR#2] 没有同步记录时状态条显示空态，订单仍可见",
+    "test/spec/frontend/admin-orders-standard-b2/sync-bar.test.ts > [AC-F1-07edb-SYNC-BAR#3] 同步记录读取失败只在状态条提示，列表照常显示且无全局错误",
+    "test/spec/frontend/admin-orders-standard-b2/sync-bar.test.ts > [AC-F1-07edb-SYNC-BAR#4] 筛选拼多多时，最新同步记录仍显示快手的中文平台名"
+  ],
+  "risk_note": "F1-07edb. apps/admin only (pages/orders, texts/orders.ts). Orders list: default 8 columns + actions, row 查看 drawer with deep link, a sync status bar that reads the latest order-sync once on load and on a manual 刷新 only (latest answer wins), shows 更新于 HH:mm:ss (Beijing, 24-hour) and stays on the read-time record after a submit; two F1-07ed S2 fixes (overflow page, URL year < 100). 12 frozen blocks changed as rule_change under BR-ID-46 with the reverse check. No contract, money or db change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 4,
+      "note": "Codex money r1–r3 fail (S1s all on when the sync bar re-reads), BR-ID-46 amended (read-time record, 更新于, manual refresh; D10-2970 ② / D10-2973), implementation r6 (approvals 199); r4 full review against main pass with one S2 (dev StrictMode double first read) recorded as FU-F107EDB-SYNCBAR-STRICTMODE-DOUBLE-READ. couli-runs/F1-07edb/review-money-r4.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 3,
+    "last_verdict": "fail",
+    "note": "rule tests by Codex (ledger tester codex), 3 rounds (round 3 = approvals 199 increment); spec-test reviews by an independent Claude (claude-run.sh, approvals 19 / 36): r1 fail (4 S1) → r2 pass → r3 incremental fail with 1 S1 (the 更新于 samples are all before 12:00 Beijing, so a 12-hour clock passes); orchestrator ruling D10-3100: no further review round, made an implementation must-hold item (24-hour clock, unit tests pin 14:30:00 and a midnight crossing 00:05:06) with FU-F107EDB-UPDATED-AT-24H before launch",
+    "model": "claude-opus-5-5",
+    "ruling": "D10-3100"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-orders/list.test.ts",
+      "test": "[AC-F1-07e-LIST#1] 默认列表只请求一页，列、北京时间、服务端付款顺序及后台金额格式正确",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07e-LIST#1] 默认列表只请求一页，列、北京时间、服务端付款顺序及后台金额格式正确',\n  async () => {\n    const { server, directFetch } = await mount();\n    await loaded();\n    await settled(server);\n    expect(queries(server)).toHaveLength(1);\n    expect(Object.keys(queries(server)[0]!).sort()).toEqual(['page', 'page_size']);\n    expect(queries(server)[0]!['page']).toBe('1');\n    const size = Number(queries(server)[0]!['page_size']);\n    expect(Number.isInteger(size) && size >= 3 && size <= 200).toBe(true);\n    expect(server.requests('GET', LIST)[0]!.headers.get('Authorization')).toBe(\n      'Bearer example-admin-token',\n    );\n    for (const name of [\n      '订单号',\n      '平台',\n      '商品',\n      '用户',\n      '付款时间',\n      '付款金额',\n      '联盟佣金',\n      '平台状态',\n      '返利状态',\n      '标记',\n      '操作',\n    ])\n      expect(\n        within(mainElement()).queryAllByRole('columnheader', { name }).length,\n        name,\n      ).toBeGreaterThan(0);\n    for (const text of [\n      '抽纸 3 层 120 抽 24 包',\n      '12,345.67',\n      'SETTLED',\n      'CREDITED',\n      '2026-10-07',\n      '01:05',\n    ])\n      expect(row().textContent).toContain(text);\n    expect(row(rows()[0]!.sub_order_id).textContent).toContain('拼多多');\n    expect(row(rows()[1]!.sub_order_id).textContent).toContain('淘宝');\n    expect(row(rows()[2]!.sub_order_id).textContent).toContain('京东');\n    for (const item of rows()) {\n      expect(row(item.sub_order_id).textContent).toContain(item.platform_status);\n      expect(row(item.sub_order_id).textContent).toContain(item.rebate_status);\n    }\n    // The board has one commission column; settled orders may show the settlement or both amounts.\n    expect(row().textContent).toMatch(/1,123\\.45|1,234\\.56/);\n    const rendered = within(mainElement())\n      .queryAllByRole('row')\n      .filter((node) => within(node).queryAllByRole('cell').length > 0);\n    expect(\n      rendered\n        .slice(0, 3)\n        .map(\n          (node) =>\n            rows().find((item) => node.textContent?.includes(item.sub_order_id))?.sub_order_id,\n        ),\n    ).toEqual(rows().map((item) => item.sub_order_id));\n    expect(server.requests('GET', DETAIL)).toHaveLength(0);\n    expect(directFetch).not.toHaveBeenCalled();\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07e-LIST#1] 默认列表只请求一页，列、北京时间、服务端付款顺序及后台金额格式正确',\n  async () => {\n    const { server, directFetch } = await mount();\n    await loaded();\n    await settled(server);\n    expect(queries(server)).toHaveLength(1);\n    expect(Object.keys(queries(server)[0]!).sort()).toEqual(['page', 'page_size']);\n    expect(queries(server)[0]!['page']).toBe('1');\n    const size = Number(queries(server)[0]!['page_size']);\n    expect(Number.isInteger(size) && size >= 3 && size <= 200).toBe(true);\n    expect(server.requests('GET', LIST)[0]!.headers.get('Authorization')).toBe(\n      'Bearer example-admin-token',\n    );\n    for (const name of [\n      '订单号',\n      '平台',\n      '商品',\n      '用户',\n      '付款时间',\n      '付款金额',\n      '联盟佣金',\n      '返利状态',\n      '操作',\n    ])\n      expect(\n        within(mainElement()).queryAllByRole('columnheader', { name }).length,\n        name,\n      ).toBeGreaterThan(0);\n    for (const name of ['平台状态', '标记'])\n      expect(within(mainElement()).queryAllByRole('columnheader', { name }), name).toEqual([]);\n    await click(button(mainElement(), /^列设置$/));\n    const platformStatus = within(mainElement()).getByRole('checkbox', { name: '平台状态' });\n    await click(platformStatus);\n    for (const text of [\n      '抽纸 3 层 120 抽 24 包',\n      '12,345.67',\n      'SETTLED',\n      'CREDITED',\n      '2026-10-07',\n      '01:05',\n    ])\n      expect(row().textContent).toContain(text);\n    expect(row(rows()[0]!.sub_order_id).textContent).toContain('拼多多');\n    expect(row(rows()[1]!.sub_order_id).textContent).toContain('淘宝');\n    expect(row(rows()[2]!.sub_order_id).textContent).toContain('京东');\n    for (const item of rows()) {\n      expect(row(item.sub_order_id).textContent).toContain(item.platform_status);\n      expect(row(item.sub_order_id).textContent).toContain(item.rebate_status);\n    }\n    await click(platformStatus);\n    await click(button(mainElement(), /^列设置$/));\n    // The board has one commission column; settled orders may show the settlement or both amounts.\n    expect(row().textContent).toMatch(/1,123\\.45|1,234\\.56/);\n    const rendered = within(mainElement())\n      .queryAllByRole('row')\n      .filter((node) => within(node).queryAllByRole('cell').length > 0);\n    expect(\n      rendered\n        .slice(0, 3)\n        .map(\n          (node) =>\n            rows().find((item) => node.textContent?.includes(item.sub_order_id))?.sub_order_id,\n        ),\n    ).toEqual(rows().map((item) => item.sub_order_id));\n    expect(server.requests('GET', DETAIL)).toHaveLength(0);\n    expect(directFetch).not.toHaveBeenCalled();\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 4bd1b379c626 的树上跑；couli-runs/F1-07edb/tests/6 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-46"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders-standard/columns.test.ts",
+      "test": "[AC-F1-07ed-COLUMNS#1] 默认展示十一列，隐藏联盟佣金后在同一地址重新打开仍隐藏",
+      "retitle_to": "[AC-F1-07ed-COLUMNS#1] 默认展示八列与操作列，隐藏联盟佣金后在同一地址重新打开仍隐藏",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07ed-COLUMNS#1] 默认展示十一列，隐藏联盟佣金后在同一地址重新打开仍隐藏',\n  async () => {\n    const first = await mount();\n    await loaded();\n    expect(columnHeadings()).toEqual(headings);\n    await hideCommission();\n\n    const route = currentUrl();\n    first.unmount();\n    await mount(undefined, route);\n    await loaded();\n    expect(columnHeadings()).toEqual(withoutCommission);\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07ed-COLUMNS#1] 默认展示八列与操作列，隐藏联盟佣金后在同一地址重新打开仍隐藏',\n  async () => {\n    const first = await mount();\n    await loaded();\n    const optional = ['平台状态', '标记'];\n    expect(columnHeadings()).toEqual(headings.filter((name) => !optional.includes(name)));\n    await click(button(mainElement(), /^列设置$/));\n    for (const name of optional) await click(within(mainElement()).getByRole('checkbox', { name }));\n    await click(button(mainElement(), /^列设置$/));\n    await hideCommission();\n\n    const route = currentUrl();\n    first.unmount();\n    await mount(undefined, route);\n    await loaded();\n    expect(columnHeadings()).toEqual(withoutCommission);\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 4bd1b379c626 的树上跑；couli-runs/F1-07edb/tests/6 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-46"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders-standard/columns.test.ts",
+      "test": "[AC-F1-07ed-COLUMNS#2] 写坏真实的本地列设置后恢复默认十一列，订单正常显示",
+      "retitle_to": "[AC-F1-07ed-COLUMNS#2] 写坏真实的本地列设置后恢复默认八列与操作列，订单正常显示",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07ed-COLUMNS#2] 写坏真实的本地列设置后恢复默认十一列，订单正常显示',\n  async () => {\n    const first = await mount();\n    await loaded();\n    const writes = vi.spyOn(Storage.prototype, 'setItem');\n    await hideCommission();\n    const keys = writes.mock.calls.map(([key]) => key);\n    expect(new Set(keys).size).toBe(1);\n    const key = keys[0]!;\n    expect(window.localStorage.getItem(key)).not.toBeNull();\n    writes.mockRestore();\n\n    const route = currentUrl();\n    first.unmount();\n    window.localStorage.setItem(key, '{broken json');\n    await mount(undefined, route);\n    await loaded();\n    expect(columnHeadings()).toEqual(headings);\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07ed-COLUMNS#2] 写坏真实的本地列设置后恢复默认八列与操作列，订单正常显示',\n  async () => {\n    const first = await mount();\n    await loaded();\n    const optional = ['平台状态', '标记'];\n    await click(button(mainElement(), /^列设置$/));\n    for (const name of optional) await click(within(mainElement()).getByRole('checkbox', { name }));\n    await click(button(mainElement(), /^列设置$/));\n    const writes = vi.spyOn(Storage.prototype, 'setItem');\n    await hideCommission();\n    const keys = writes.mock.calls.map(([key]) => key);\n    expect(new Set(keys).size).toBe(1);\n    const key = keys[0]!;\n    expect(window.localStorage.getItem(key)).not.toBeNull();\n    writes.mockRestore();\n\n    const route = currentUrl();\n    first.unmount();\n    window.localStorage.setItem(key, '{broken json');\n    await mount(undefined, route);\n    await loaded();\n    expect(columnHeadings()).toEqual(headings.filter((name) => !optional.includes(name)));\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 4bd1b379c626 的树上跑；couli-runs/F1-07edb/tests/6 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-46"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders-sync/entries.test.ts",
+      "test": "[AC-F1-07eb-ENTRY#1] 持 order.view 的订单列表标题行有可用的【手动同步】【同步记录】，列表初次加载不请求 order-syncs 与 limits",
+      "retitle_to": "[AC-F1-07eb-ENTRY#1] 持 order.view 的订单列表标题行有可用的【手动同步】【同步记录】，列表初次加载只为同步状态条请求一次 order-syncs（page=1、page_size=1），不请求 limits",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07eb-ENTRY#1] 持 order.view 的订单列表标题行有可用的【手动同步】【同步记录】，列表初次加载不请求 order-syncs 与 limits',\n  async () => {\n    const { server } = await mountList();\n    expect(server.syncRequests(), 'no order-syncs request on the first load').toEqual([]);\n    expect(usable(main(), MANUAL_ENTRY).length, '【手动同步】 in the title row').toBeGreaterThan(0);\n    expect(usable(main(), RECORDS_ENTRY).length, '【同步记录】 in the title row').toBeGreaterThan(\n      0,\n    );\n    await settled(server);\n    expect(server.syncRequests()).toEqual([]);\n    expect(server.posts()).toEqual([]);\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07eb-ENTRY#1] 持 order.view 的订单列表标题行有可用的【手动同步】【同步记录】，列表初次加载只为同步状态条请求一次 order-syncs（page=1、page_size=1），不请求 limits',\n  async () => {\n    const { server } = await mountList();\n    const syncRequests = () =>\n      server.syncRequests().map(({ method, path, query }) => ({ method, path, query }));\n    const expected = [\n      { method: 'GET', path: '/admin/v1/order-syncs', query: { page: '1', page_size: '1' } },\n    ];\n    expect(syncRequests(), 'one order-syncs request for the status bar on the first load').toEqual(\n      expected,\n    );\n    expect(usable(main(), MANUAL_ENTRY).length, '【手动同步】 in the title row').toBeGreaterThan(0);\n    expect(usable(main(), RECORDS_ENTRY).length, '【同步记录】 in the title row').toBeGreaterThan(\n      0,\n    );\n    await settled(server);\n    expect(syncRequests()).toEqual(expected);\n    expect(server.posts()).toEqual([]);\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 4bd1b379c626 的树上跑；couli-runs/F1-07edb/tests/6 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-46"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders-sync/records.test.ts",
+      "test": "[AC-F1-07eb-RECORDS#1] 点【同步记录】后才请求 GET /admin/v1/order-syncs（只带 page / page_size），列出状态中文名（字典，缺键显示编码）、平台、单号或北京时间时间窗、北京创建时间",
+      "retitle_to": "[AC-F1-07eb-RECORDS#1] 点【同步记录】后才另发同步记录列表请求 GET /admin/v1/order-syncs（只带 page / page_size，状态条初次加载那一次不算），列出状态中文名（字典，缺键显示编码）、平台、单号或北京时间时间窗、北京创建时间",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07eb-RECORDS#1] 点【同步记录】后才请求 GET /admin/v1/order-syncs（只带 page / page_size），列出状态中文名（字典，缺键显示编码）、平台、单号或北京时间时间窗、北京创建时间',\n  async () => {\n    const { server } = await mountList();\n    expect(server.recordReads(), 'no records read before 【同步记录】').toEqual([]);\n    await openRecords();\n    await waitFor(() => expect(server.recordReads()).toHaveLength(1));\n    await settled(server);\n    assertPageQuery(server.recordReads()[0]!.query);\n    expect(server.recordReads()[0]!.headers.get('Authorization')).toBe(\n      'Bearer example-admin-token',\n    );\n    await checkRow('queued');\n    await checkRow('done');\n    await checkRow('running');\n    await checkRow('failed');\n    // The window rows show both ends in Beijing time (each end is on a later day than its start,\n    // so its date shows either way).\n    expect(squash(rowsWith(RECORD.running.marker)[0]!.textContent)).toContain(\n      squash(WINDOW_END.running),\n    );\n    expect(squash(rowsWith(RECORD.failed.marker)[0]!.textContent)).toContain(\n      squash(WINDOW_END.failed),\n    );\n    expect(server.recordReads()).toHaveLength(1);\n    expect(server.posts()).toEqual([]);\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07eb-RECORDS#1] 点【同步记录】后才另发同步记录列表请求 GET /admin/v1/order-syncs（只带 page / page_size，状态条初次加载那一次不算），列出状态中文名（字典，缺键显示编码）、平台、单号或北京时间时间窗、北京创建时间',\n  async () => {\n    const { server } = await mountList();\n    const initialQueries = server.recordReads().map(({ query }) => query);\n    expect(initialQueries).toEqual([{ page: '1', page_size: '1' }]);\n    const dialogReads = () => server.recordReads().slice(1);\n    await openRecords();\n    await waitFor(() => expect(dialogReads()).toHaveLength(1));\n    await settled(server);\n    assertPageQuery(dialogReads()[0]!.query);\n    expect(dialogReads()[0]!.headers.get('Authorization')).toBe('Bearer example-admin-token');\n    await checkRow('queued');\n    await checkRow('done');\n    await checkRow('running');\n    await checkRow('failed');\n    // The window rows show both ends in Beijing time (each end is on a later day than its start,\n    // so its date shows either way).\n    expect(squash(rowsWith(RECORD.running.marker)[0]!.textContent)).toContain(\n      squash(WINDOW_END.running),\n    );\n    expect(squash(rowsWith(RECORD.failed.marker)[0]!.textContent)).toContain(\n      squash(WINDOW_END.failed),\n    );\n    expect(dialogReads()).toHaveLength(1);\n    expect(server.posts()).toEqual([]);\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 4bd1b379c626 的树上跑；couli-runs/F1-07edb/tests/6 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-46"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders-sync/records.test.ts",
+      "test": "[AC-F1-07eb-RECORDS#2] 没有同步记录时显示空态",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07eb-RECORDS#2] 没有同步记录时显示空态',\n  async () => {\n    const server = createServer({ records: [] });\n    await mountList(server);\n    const before = snapshotText();\n    await openRecords();\n    await waitFor(() => expect(server.recordReads()).toHaveLength(1));\n    await settled(server);\n    await waitFor(() => expect(freshAll(before)).toMatch(EMPTY));\n    for (const kind of Object.keys(RECORD) as (keyof typeof RECORD)[])\n      expect(rowsWith(RECORD[kind].marker)).toEqual([]);\n    expect(server.recordReads()).toHaveLength(1);\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07eb-RECORDS#2] 没有同步记录时显示空态',\n  async () => {\n    const server = createServer({ records: [] });\n    await mountList(server);\n    const initialQueries = server.recordReads().map(({ query }) => query);\n    expect(initialQueries).toEqual([{ page: '1', page_size: '1' }]);\n    const dialogReads = () => server.recordReads().slice(1);\n    const before = snapshotText();\n    await openRecords();\n    await waitFor(() => expect(dialogReads()).toHaveLength(1));\n    await settled(server);\n    await waitFor(() => expect(freshAll(before)).toMatch(EMPTY));\n    for (const kind of Object.keys(RECORD) as (keyof typeof RECORD)[])\n      expect(rowsWith(RECORD[kind].marker)).toEqual([]);\n    expect(dialogReads()).toHaveLength(1);\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 4bd1b379c626 的树上跑；couli-runs/F1-07edb/tests/6 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-46"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders-sync/records.test.ts",
+      "test": "[AC-F1-07eb-RECORDS#3] 同步记录读取失败显示可重试的出错态，重试只多一个列表请求并列出记录",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07eb-RECORDS#3] 同步记录读取失败显示可重试的出错态，重试只多一个列表请求并列出记录',\n  async () => {\n    const { server } = await mountList();\n    server.once('GET', SYNCS, () => networkDown());\n    const before = snapshotText();\n    await openRecords();\n    await waitFor(() => expect(server.recordReads()).toHaveLength(1));\n    await settled(server);\n    await waitFor(() => expect(freshAll(before)).toMatch(FAILED));\n    expect(rowsWith(RECORD.done.marker)).toEqual([]);\n    await waitFor(() =>\n      expect(usable(document.body, /^重试$/).length, 'a 【重试】 on the records').toBeGreaterThan(\n        0,\n      ),\n    );\n    await click(usable(document.body, /^重试$/)[0]!);\n    await waitFor(() => expect(server.recordReads()).toHaveLength(2));\n    await settled(server);\n    assertPageQuery(server.recordReads()[1]!.query);\n    await checkRow('done');\n    expect(server.recordReads()).toHaveLength(2);\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07eb-RECORDS#3] 同步记录读取失败显示可重试的出错态，重试只多一个列表请求并列出记录',\n  async () => {\n    const { server } = await mountList();\n    const initialQueries = server.recordReads().map(({ query }) => query);\n    expect(initialQueries).toEqual([{ page: '1', page_size: '1' }]);\n    const dialogReads = () => server.recordReads().slice(1);\n    server.once('GET', SYNCS, () => networkDown());\n    const before = snapshotText();\n    await openRecords();\n    await waitFor(() => expect(dialogReads()).toHaveLength(1));\n    await settled(server);\n    await waitFor(() => expect(freshAll(before)).toMatch(FAILED));\n    expect(rowsWith(RECORD.done.marker)).toEqual([]);\n    await waitFor(() =>\n      expect(usable(document.body, /^重试$/).length, 'a 【重试】 on the records').toBeGreaterThan(\n        0,\n      ),\n    );\n    await click(usable(document.body, /^重试$/)[0]!);\n    await waitFor(() => expect(dialogReads()).toHaveLength(2));\n    await settled(server);\n    assertPageQuery(dialogReads()[1]!.query);\n    await checkRow('done');\n    expect(dialogReads()).toHaveLength(2);\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 4bd1b379c626 的树上跑；couli-runs/F1-07edb/tests/6 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-46"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders-standard/tabs.test.ts",
+      "test": "[AC-F1-07ed-TABS#1] 列表上方两组页签没有数量角标，干净地址默认选中全部且不请求同步接口",
+      "retitle_to": "[AC-F1-07ed-TABS#1] 列表上方两组页签没有数量角标，干净地址默认选中全部，同步接口只有状态条的一次请求",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07ed-TABS#1] 列表上方两组页签没有数量角标，干净地址默认选中全部且不请求同步接口',\n  async () => {\n    const { server } = await mount();\n    await loaded();\n    await settled(server);\n    expect(server.log.filter(({ path }) => /^\\/admin\\/v1\\/order-syncs(?:\\/|$)/.test(path))).toEqual(\n      [],\n    );\n    const platform = tablistWith('拼多多');\n    const rebate = tablistWith(rebateLabel('CREDITED'));\n    expect(platform).not.toBe(rebate);\n    const table = within(mainElement()).getByRole('table');\n    for (const list of [platform, rebate]) {\n      expect(list.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();\n      expectActiveTab(list, ALL);\n    }\n    expect(tabLabels(platform).sort()).toEqual([ALL, ...PLATFORM_NAMES].sort());\n    expect(tabLabels(rebate).sort()).toEqual([ALL, ...REBATE_STATUSES.map(rebateLabel)].sort());\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07ed-TABS#1] 列表上方两组页签没有数量角标，干净地址默认选中全部，同步接口只有状态条的一次请求',\n  async () => {\n    const { server } = await mount();\n    await loaded();\n    await settled(server);\n    expect(\n      server.log\n        .filter(({ path }) => /^\\/admin\\/v1\\/order-syncs(?:\\/|$)/.test(path))\n        .map(({ method, path, query }) => ({ method, path, query })),\n    ).toEqual([\n      { method: 'GET', path: '/admin/v1/order-syncs', query: { page: '1', page_size: '1' } },\n    ]);\n    const platform = tablistWith('拼多多');\n    const rebate = tablistWith(rebateLabel('CREDITED'));\n    expect(platform).not.toBe(rebate);\n    const table = within(mainElement()).getByRole('table');\n    for (const list of [platform, rebate]) {\n      expect(list.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();\n      expectActiveTab(list, ALL);\n    }\n    expect(tabLabels(platform).sort()).toEqual([ALL, ...PLATFORM_NAMES].sort());\n    expect(tabLabels(rebate).sort()).toEqual([ALL, ...REBATE_STATUSES.map(rebateLabel)].sort());\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 4bd1b379c626 的树上跑；couli-runs/F1-07edb/tests/6 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-46"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders/list.test.ts",
+      "test": "[AC-F1-07e-LIST#2] 用户只显示 UID 与脱敏手机号，未归因与零金额区别于未知值，标记独立呈现",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07e-LIST#2] 用户只显示 UID 与脱敏手机号，未归因与零金额区别于未知值，标记独立呈现',\n  async () => {\n    await mount();\n    await loaded();\n    expect(row().textContent).toContain(UID);\n    expect(row().textContent).toContain('138****5678');\n    expect(row().textContent).not.toContain('13812345678');\n    expect(within(row()).queryAllByText('已锁定', { exact: true })).toHaveLength(1);\n    expect(within(row()).queryAllByText('归属已锁定', { exact: true })).toHaveLength(1);\n    expect(row(rows()[1]!.sub_order_id).textContent).toContain('未归因');\n    expect(row(rows()[1]!.sub_order_id).textContent).toContain('0.00');\n    expect(row(rows()[1]!.sub_order_id).textContent).not.toContain(UID);\n    for (const item of rows().filter((item) => !item.flags.hold && !item.flags.rights_pending)) {\n      expect(row(item.sub_order_id).textContent).not.toContain('暂停');\n      expect(row(item.sub_order_id).textContent).not.toContain('维权');\n    }\n    const unknown = row(rows()[2]!.sub_order_id);\n    expect(unknown.textContent).toContain(UID);\n    expect(unknown.textContent).toMatch(/暂停/);\n    expect(unknown.textContent).toMatch(/维权/);\n    expect(unknown.textContent).not.toContain('0.00');\n    expect(unknown.textContent).not.toMatch(/undefined|null/);\n    expect(within(unknown).queryAllByText('已锁定', { exact: true })).toHaveLength(0);\n    expect(within(unknown).queryAllByText('归属已锁定', { exact: true })).toHaveLength(0);\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07e-LIST#2] 用户只显示 UID 与脱敏手机号，未归因与零金额区别于未知值，标记独立呈现',\n  async () => {\n    await mount();\n    await loaded();\n    expect(row().textContent).toContain(UID);\n    expect(row().textContent).toContain('138****5678');\n    expect(row().textContent).not.toContain('13812345678');\n    await click(button(mainElement(), /^列设置$/));\n    await click(within(mainElement()).getByRole('checkbox', { name: '标记' }));\n    expect(within(row()).queryAllByText('已锁定', { exact: true })).toHaveLength(1);\n    expect(within(row()).queryAllByText('归属已锁定', { exact: true })).toHaveLength(1);\n    expect(row(rows()[1]!.sub_order_id).textContent).toContain('未归因');\n    expect(row(rows()[1]!.sub_order_id).textContent).toContain('0.00');\n    expect(row(rows()[1]!.sub_order_id).textContent).not.toContain(UID);\n    for (const item of rows().filter((item) => !item.flags.hold && !item.flags.rights_pending)) {\n      expect(row(item.sub_order_id).textContent).not.toContain('暂停');\n      expect(row(item.sub_order_id).textContent).not.toContain('维权');\n    }\n    const unknown = row(rows()[2]!.sub_order_id);\n    expect(unknown.textContent).toContain(UID);\n    expect(unknown.textContent).toMatch(/暂停/);\n    expect(unknown.textContent).toMatch(/维权/);\n    expect(unknown.textContent).not.toContain('0.00');\n    expect(unknown.textContent).not.toMatch(/undefined|null/);\n    expect(within(unknown).queryAllByText('已锁定', { exact: true })).toHaveLength(0);\n    expect(within(unknown).queryAllByText('归属已锁定', { exact: true })).toHaveLength(0);\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 4bd1b379c626 的树上跑；couli-runs/F1-07edb/tests/6 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-46"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders-sync/entries.test.ts",
+      "test": "[AC-F1-07eb-ENTRY#3] 超管也有【手动同步】【同步记录】；进不了订单页的账号没有这些入口、也不发 order-syncs 请求",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07eb-ENTRY#3] 超管也有【手动同步】【同步记录】；进不了订单页的账号没有这些入口、也不发 order-syncs 请求',\n  async () => {\n    const first = createServer();\n    await mountList(first, SUPER);\n    expect(usable(main(), MANUAL_ENTRY).length, 'super admin 【手动同步】').toBeGreaterThan(0);\n    expect(usable(main(), RECORDS_ENTRY).length, 'super admin 【同步记录】').toBeGreaterThan(0);\n    expect(first.syncRequests()).toEqual([]);\n\n    cleanup();\n    const second = createServer();\n    await mount(second, '/orders', OUTSIDER);\n    await settled(second);\n    expect(document.body.textContent).not.toContain(NUMBER);\n    expect(actions(document.body, MANUAL_ENTRY)).toEqual([]);\n    expect(actions(document.body, RECORDS_ENTRY)).toEqual([]);\n    expect(actions(document.body, THIS_ORDER_ENTRY)).toEqual([]);\n    expect(second.syncRequests()).toEqual([]);\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07eb-ENTRY#3] 超管也有【手动同步】【同步记录】；进不了订单页的账号没有这些入口、也不发 order-syncs 请求',\n  async () => {\n    const first = createServer();\n    await mountList(first, SUPER);\n    expect(usable(main(), MANUAL_ENTRY).length, 'super admin 【手动同步】').toBeGreaterThan(0);\n    expect(usable(main(), RECORDS_ENTRY).length, 'super admin 【同步记录】').toBeGreaterThan(0);\n    const requests = first.syncRequests().map(({ method, path, query }) => ({\n      method,\n      path,\n      query,\n    }));\n    expect(requests).toEqual([\n      { method: 'GET', path: '/admin/v1/order-syncs', query: { page: '1', page_size: '1' } },\n    ]);\n\n    cleanup();\n    const second = createServer();\n    await mount(second, '/orders', OUTSIDER);\n    await settled(second);\n    expect(document.body.textContent).not.toContain(NUMBER);\n    expect(actions(document.body, MANUAL_ENTRY)).toEqual([]);\n    expect(actions(document.body, RECORDS_ENTRY)).toEqual([]);\n    expect(actions(document.body, THIS_ORDER_ENTRY)).toEqual([]);\n    expect(second.syncRequests()).toEqual([]);\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 4bd1b379c626 的树上跑；couli-runs/F1-07edb/tests/6 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-46"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders-sync/pages.browser.test.ts",
+      "test": "[AC-F1-07eb-BROWSER#1] 1440 订单列表【手动同步】打开后才读 limits，对话框的两种方式、平台、提交可见，截图 admin-order-sync",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07eb-BROWSER#1] 1440 订单列表【手动同步】打开后才读 limits，对话框的两种方式、平台、提交可见，截图 admin-order-sync',\n  async () => {\n    await page.viewport(1440, 1080);\n    const server = createServer();\n    const marker = await show(server, '/orders');\n    const main = page.getByRole('main');\n    await expect.element(main.getByText(NUMBER, { exact: true }), FIRST).toBeVisible();\n    await expect.element(page.elementLocator(marker), FIRST).toHaveAttribute('data-pending', '0');\n    expect(server.syncRequests()).toEqual([]);\n    const entry = main.getByRole('button', { name: /^手动同步$/ });\n    await expect.element(entry, FIRST).toBeVisible();\n    await entry.click();\n    const dialog = page.getByRole('dialog', { name: /手动同步/ });\n    await expect.element(dialog, FIRST).toBeVisible();\n    await expect.poll(() => server.limitReads().length, FIRST).toBeGreaterThan(0);\n    await expect.element(dialog.getByText(/^按时间窗/).first()).toBeVisible();\n    await expect.element(dialog.getByText(/^按订单号/).first()).toBeVisible();\n    await expect.element(dialog.getByRole('combobox', { name: /^平台$/ })).toBeVisible();\n    await expect\n      .element(dialog.getByRole('button', { name: /^(?:提交同步|提\\s*交|确\\s*定|确\\s*认)$/ }))\n      .toBeVisible();\n    expect(server.posts()).toEqual([]);\n    await screenshot('admin-order-sync', marker);\n  },\n  TEST_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07eb-BROWSER#1] 1440 订单列表【手动同步】打开后才读 limits，对话框的两种方式、平台、提交可见，截图 admin-order-sync',\n  async () => {\n    await page.viewport(1440, 1080);\n    const server = createServer();\n    const marker = await show(server, '/orders');\n    const main = page.getByRole('main');\n    await expect.element(main.getByText(NUMBER, { exact: true }), FIRST).toBeVisible();\n    await expect.element(page.elementLocator(marker), FIRST).toHaveAttribute('data-pending', '0');\n    const requests = server.syncRequests().map(({ method, path, query }) => ({\n      method,\n      path,\n      query,\n    }));\n    expect(requests).toEqual([\n      { method: 'GET', path: '/admin/v1/order-syncs', query: { page: '1', page_size: '1' } },\n    ]);\n    const entry = main.getByRole('button', { name: /^手动同步$/ });\n    await expect.element(entry, FIRST).toBeVisible();\n    await entry.click();\n    const dialog = page.getByRole('dialog', { name: /手动同步/ });\n    await expect.element(dialog, FIRST).toBeVisible();\n    await expect.poll(() => server.limitReads().length, FIRST).toBeGreaterThan(0);\n    await expect.element(dialog.getByText(/^按时间窗/).first()).toBeVisible();\n    await expect.element(dialog.getByText(/^按订单号/).first()).toBeVisible();\n    await expect.element(dialog.getByRole('combobox', { name: /^平台$/ })).toBeVisible();\n    await expect\n      .element(dialog.getByRole('button', { name: /^(?:提交同步|提\\s*交|确\\s*定|确\\s*认)$/ }))\n      .toBeVisible();\n    expect(server.posts()).toEqual([]);\n    await screenshot('admin-order-sync', marker);\n  },\n  TEST_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 4bd1b379c626 的树上跑；couli-runs/F1-07edb/browser/9 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-46"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders-sync/pages.browser.test.ts",
+      "test": "[AC-F1-07eb-BROWSER#2] 1440【同步记录】列出状态中文名、平台与北京时间，截图 admin-order-sync-records",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07eb-BROWSER#2] 1440【同步记录】列出状态中文名、平台与北京时间，截图 admin-order-sync-records',\n  async () => {\n    await page.viewport(1440, 1080);\n    const server = createServer();\n    const marker = await show(server, '/orders');\n    const main = page.getByRole('main');\n    await expect.element(main.getByText(NUMBER, { exact: true }), FIRST).toBeVisible();\n    expect(server.recordReads()).toEqual([]);\n    // A button or a link named 同步记录 (its text node is the click target either way).\n    const entry = main.getByText(/^同步记录$/).first();\n    await expect.element(entry, FIRST).toBeVisible();\n    await entry.click();\n    await expect.poll(() => server.recordReads().length, FIRST).toBe(1);\n    // Date and time may sit in separate nodes: whitespace between them is optional.\n    const loose = (text: string): RegExp => new RegExp(text.replace(' ', '\\\\s*'));\n    for (const sample of Object.values(RECORD)) {\n      const row = page.getByRole('row').filter({ hasText: loose(sample.marker) });\n      await expect.element(row, FIRST).toBeVisible();\n      await expect.element(row).toMatchTextContent(statusName(sample.status));\n      await expect.element(row).toMatchTextContent(loose(sample.created));\n    }\n    await screenshot('admin-order-sync-records', marker);\n  },\n  TEST_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07eb-BROWSER#2] 1440【同步记录】列出状态中文名、平台与北京时间，截图 admin-order-sync-records',\n  async () => {\n    await page.viewport(1440, 1080);\n    const server = createServer();\n    const marker = await show(server, '/orders');\n    const main = page.getByRole('main');\n    await expect.element(main.getByText(NUMBER, { exact: true }), FIRST).toBeVisible();\n    const initialQueries = () => server.recordReads().map(({ query }) => query);\n    await expect.poll(initialQueries, FIRST).toEqual([{ page: '1', page_size: '1' }]);\n    // A button or a link named 同步记录 (its text node is the click target either way).\n    const entry = main.getByText(/^同步记录$/).first();\n    await expect.element(entry, FIRST).toBeVisible();\n    await entry.click();\n    await expect.poll(() => server.recordReads().length - 1, FIRST).toBe(1);\n    // Date and time may sit in separate nodes: whitespace between them is optional.\n    const loose = (text: string): RegExp => new RegExp(text.replace(' ', '\\\\s*'));\n    for (const sample of Object.values(RECORD)) {\n      const row = page.getByRole('row').filter({ hasText: loose(sample.marker) });\n      await expect.element(row, FIRST).toBeVisible();\n      await expect.element(row).toMatchTextContent(statusName(sample.status));\n      await expect.element(row).toMatchTextContent(loose(sample.created));\n    }\n    await screenshot('admin-order-sync-records', marker);\n  },\n  TEST_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 4bd1b379c626 的树上跑；couli-runs/F1-07edb/browser/9 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-ID-46"]
+    }
+  ],
+  "task": "F1-07edb",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "spec_commit": "3802126282a7082280564ec986f3f59a7a4a2240",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "3802126282a7082280564ec986f3f59a7a4a2240",
+      "tree": "91fe35464e7a022a3d31f032ff8e9ac672e83e7e",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-25T12:59:44Z",
+      "finished_at": "2026-11-25T13:00:32Z",
+      "red_tests": [
+        "test/spec/frontend/admin-orders-standard-b2/columns.test.ts > [AC-F1-07edb-COLUMNS#1] 干净地址默认八列与操作列，打开平台状态和标记后重开仍显示",
+        "test/spec/frontend/admin-orders-standard-b2/columns.test.ts > [AC-F1-07edb-COLUMNS#2] 保存后的列设置损坏时恢复八列与操作列",
+        "test/spec/frontend/admin-orders-standard-b2/columns.test.ts > [AC-F1-07edb-COLUMNS#3] 本地存储拒绝读取列设置时仍显示八列与操作列",
+        "test/spec/frontend/admin-orders-standard-b2/drawer.test.ts > [AC-F1-07edb-DRAWER#1] 依次查看第二页两笔非首行订单，各读取对应详情，关闭保留焦点位置与筛选分页",
+        "test/spec/frontend/admin-orders-standard-b2/drawer.test.ts > [AC-F1-07edb-DRAWER#2] 带筛选的深链直接打开详情，即使该订单不在筛选结果内",
+        "test/spec/frontend/admin-orders-standard-b2/drawer.test.ts > [AC-F1-07edb-DRAWER#3] 非法深链不读详情也不开抽屉，行内详情仍进入整页",
+        "test/spec/frontend/admin-orders-standard-b2/fixes.test.ts > [AC-F1-07edb-FIXES#1] 第三页越界但仍有十八条匹配订单时，点第 1 页重新查询并更新地址",
+        "test/spec/frontend/admin-orders-standard-b2/fixes.test.ts > [AC-F1-07edb-FIXES#2] 提交 URL 中公元 99 年的起始日和结束日时使用正确的北京时间边界",
+        "test/spec/frontend/admin-orders-standard-b2/sync-bar-refresh.test.ts > [AC-F1-07edb-SYNC-REFRESH#1] 初次读取成功后，状态条显示读取成功时的北京时间「更新于 HH:mm:ss」",
+        "test/spec/frontend/admin-orders-standard-b2/sync-bar-refresh.test.ts > [AC-F1-07edb-SYNC-REFRESH#2] 点击【刷新】只重读一次最近同步记录，更新条内的记录和读取时刻",
+        "test/spec/frontend/admin-orders-standard-b2/sync-bar-refresh.test.ts > [AC-F1-07edb-SYNC-REFRESH#3] 刷新失败只在状态条提示，订单行仍在且无全局错误",
+        "test/spec/frontend/admin-orders-standard-b2/sync-bar-refresh.test.ts > [AC-F1-07edb-SYNC-REFRESH#4] 手动同步受理后不重读状态条，保留初次读取的记录和时刻",
+        "test/spec/frontend/admin-orders-standard-b2/sync-bar.test.ts > [AC-F1-07edb-SYNC-BAR#1] 初次加载只取最近一条同步记录，列表上方常驻平台、中文状态和北京时间",
+        "test/spec/frontend/admin-orders-standard-b2/sync-bar.test.ts > [AC-F1-07edb-SYNC-BAR#2] 没有同步记录时状态条显示空态，订单仍可见",
+        "test/spec/frontend/admin-orders-standard-b2/sync-bar.test.ts > [AC-F1-07edb-SYNC-BAR#3] 同步记录读取失败只在状态条提示，列表照常显示且无全局错误",
+        "test/spec/frontend/admin-orders-standard-b2/sync-bar.test.ts > [AC-F1-07edb-SYNC-BAR#4] 筛选拼多多时，最新同步记录仍显示快手的中文平台名"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-orders-standard-b2/columns.test.ts",
+        "test/spec/frontend/admin-orders-standard-b2/drawer.test.ts",
+        "test/spec/frontend/admin-orders-standard-b2/fixes.test.ts",
+        "test/spec/frontend/admin-orders-standard-b2/sync-bar-refresh.test.ts",
+        "test/spec/frontend/admin-orders-standard-b2/sync-bar.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "84006faaced93cab5d643b62e399231ea54c7da0cd7f8bde7d56d76d9695a672"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "d064ce3b51cda5f6d8909d7c6c8c9887b1701143",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
