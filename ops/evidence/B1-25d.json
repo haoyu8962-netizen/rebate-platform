@@ -1,0 +1,109 @@
+{
+  "risk_note": "RV2 by path (infra/monitoring, infra/staging). Monitoring only, no money moves (D10-2945 / D10-2959): ① exporter scrape outage — infra/monitoring/rules/outage.yaml couli-outage group gets two rules on the second vmagent's up series, CouliPgExporterScrapeDown (up{job=\"couli-pg\"} == 0) and CouliRedisExporterScrapeDown (up{job=\"couli-redis\"} == 0), for 2m, critical, no fund label, one alert name each so they never share an Alertmanager group (money r2 S1); frozen [AC-B1-25c#7] changed as registered in modify_existing (ruling D10-2959), [AC-B1-25c#8] unchanged. ② the WeCom forwarder infra/monitoring/forwarder/webhook.ts deduplicates Alertmanager re-deliveries for 30 minutes per (receiver, groupKey, envelope status, digest of the group's alert instances: fingerprint or labels + startsAt + each alert's own status) (ledger patch 1, D10-3010, money r1 S1); annotation-only re-sends stay deduplicated, a group that gains or loses an instance or changes an instance status is pushed; fingerprint and digest live only in the in-memory key, never in messages or logs; timeout retry unchanged ([AC-B1-25c#5]); in-process memory with a size cap. ③ two cases from B1-25c spec r2. README alert section updated. No app code, compose or migration changed; no secret values.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Codex money r1 (full) fail: S1 webhook.ts:301 a new alert instance in the same group within 30 minutes was swallowed as a duplicate — orchestrator D10-3010 took 甲 (key adds the instance-set digest; ledger patch 1 #734; rule test [AC-B1-25d#9] added in write-test 3). r2 (full; the wrapper did not take r1 as previous because a spec-test round ran in between) fail: S1 outage.yaml:36 both exporters shared one alert name and app_id-less group, so a short second outage inside the 30 min group_interval never notified — fixed in implementation r3 by one alert name per exporter. r3 (incremental) pass, one S2: README step 3 still expects five couli-outage rules (now six), logged FU-B1-25D-README-RULE-COUNT. Validator moved 0 entries in all rounds (couli-runs/B1-25d/review-codex.json and attempts/)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex. Attempt 1 voided-equivalent: [AC-B1-25c#7] not yet changed (brief said add-only); attempt 2 changed only the registered #7 block (modify_existing, D10-2959); spec-test r1 by an independent Claude (approvals 36) pass. After ledger patch 1 (D10-3010) attempt 3 added [AC-B1-25d#9] (new instance inside the window is pushed, an identical re-send is deduplicated, no fingerprint in messages or logs); red 3 rounds; spec-test r2 pass with one S2 (per-alert status in the key — implemented, implementer unit test not runnable because infra/monitoring/forwarder/** is outside every vitest config, logged FU-INFRA-FORWARDER-UNIT-TEST-ENTRY) and one out-of-scope S2: the new case reuses the tag [AC-B1-25d#9] already on exporter-scrape-outage.test.ts:20, logged FU-B1-25D-AC9-DUPLICATE. Write-test post-run reported out-of-bounds on monitoring.test.ts each time — a false positive of the write-phase path guard ignoring modify_existing (FU-BRIEF-TEST-PHASE-MODIFY-EXISTING). Test machine: verify:fast exit 0; --tests test/spec/platform/alerting-wecom 30 / 30 green."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#1] 同组同状态只发一次，恢复、触发和其他组分别送达",
+    "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#2] 同一个 groupKey 发给财务和值班时各自去重",
+    "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#3] 30 分钟内的重复送达不续期，到期后可再推送",
+    "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#4] 机器人超时在同一次请求内照常重试，成功后才挡重复送达",
+    "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#5] 所有推送尝试均失败时仍允许 Alertmanager 重新送达",
+    "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#6] 达到条数上限时淘汰最旧的去重记录",
+    "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#7] 并发收到同组同状态的 webhook 时只推送一次",
+    "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#8] 首次推送成功及去重应答的日志均不含 Webhook 地址或 key",
+    "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#9] 同组同状态新增告警实例时照常推送，随后重复送达时去重",
+    "test/spec/platform/alerting-wecom/exporter-scrape-outage.test.ts > [AC-B1-25d#9] 使用独立队列目录的 vmagent 为宕机组提供两个 exporter 的抓取状态"
+  ],
+  "modify_existing": [
+    {
+      "file": "test/spec/platform/alerting-wecom/monitoring.test.ts",
+      "test": "[AC-B1-25c#7] 宕机组按抓取失败覆盖 api、worker、admin 三个应用任务",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-25c#7] 宕机组按抓取失败覆盖 api、worker、admin 三个应用任务', () => {\n  const checks = zeroSelectors(outageRules(), 'up');\n  expect(checks.length).toBeGreaterThan(0);\n  const expectedJobs = ENTRIES.map((entry) => `couli-${entry}`);\n  const { pg, redis } = exporterJobs();\n  const jobNames = [...scrapeJobs(), pg, redis].map((job) => string(job['job_name']));\n  const observedJobs = new Set<string>();\n  for (const { rule, selector } of checks) {\n    checkOps(rule);\n    const matcher = /^job\\s*(=~|=)\\s*\"([^\"]+)\"$/.exec(selector ?? '');\n    expect(matcher, 'scope up to the application scrape jobs').not.toBeNull();\n    const operator = matcher?.[1];\n    const value = matcher?.[2] ?? '';\n    const pattern = operator === '=~' ? new RegExp(`^(?:${value})$`) : null;\n    const matched = jobNames.filter((name) => (pattern ? pattern.test(name) : value === name));\n    expect(matched.length, `jobs matched by ${selector}`).toBeGreaterThan(0);\n    for (const name of matched) observedJobs.add(name);\n  }\n  expect([...observedJobs].sort()).toEqual([...expectedJobs].sort());\n});",
+      "after": "it('[AC-B1-25c#7] 宕机组按抓取失败覆盖 api、worker、admin 三个应用任务', () => {\n  const checks = zeroSelectors(outageRules(), 'up');\n  expect(checks.length).toBeGreaterThan(0);\n  const requiredJobs = ENTRIES.map((entry) => `couli-${entry}`);\n  const allowedJobs = [...requiredJobs, 'couli-pg', 'couli-redis'];\n  const { pg, redis } = exporterJobs();\n  const jobNames = [...scrapeJobs(), pg, redis].map((job) => string(job['job_name']));\n  const observedJobs = new Set<string>();\n  for (const { rule, selector } of checks) {\n    checkOps(rule);\n    const matcher = /^job\\s*(=~|=)\\s*\"([^\"]+)\"$/.exec(selector ?? '');\n    expect(matcher, 'scope up to the application or exporter scrape jobs').not.toBeNull();\n    const operator = matcher?.[1];\n    const value = matcher?.[2] ?? '';\n    const pattern = operator === '=~' ? new RegExp(`^(?:${value})$`) : null;\n    const matched = jobNames.filter((name) => (pattern ? pattern.test(name) : value === name));\n    expect(matched.length, `jobs matched by ${selector}`).toBeGreaterThan(0);\n    for (const name of matched) observedJobs.add(name);\n  }\n  expect([...observedJobs]).toEqual(expect.arrayContaining(requiredJobs));\n  for (const name of observedJobs) expect(allowedJobs).toContain(name);\n});",
+      "mutation": [
+        {
+          "mutant": "m1：在实现后的 outage.yaml couli-outage 组再加一条 `up{job=\"couli-other\"} == 0`（覆盖了允许集合以外的抓取任务）；测试机只跑 monitoring.test.ts（couli-runs/B1-25d/mutation/m1-extra-job.*，tests/4）：8 条中只有本条红，断言 monitoring.test.ts:165「jobs matched by job=\"couli-other\": expected 0 to be greater than 0」",
+          "result": "killed"
+        },
+        {
+          "mutant": "m2：把 CouliProcessDown 的 `up{job=~\"couli-api|couli-worker|couli-admin\"}` 改成漏掉 couli-worker；同法（mutation/m2-missing-worker.*，tests/5）：只有本条红，断言 monitoring.test.ts:168 `arrayContaining(requiredJobs)` 失败",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-WDR-24"]
+    }
+  ],
+  "task": "B1-25d",
+  "spec_commit": "d00ddd302f34cdb7d0a9fe6a9d3550f4cca1ec5d",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "d00ddd302f34cdb7d0a9fe6a9d3550f4cca1ec5d",
+      "tree": "ae1ac7b78de50ed22167976f0fadc4fa6da75be3",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-25T09:26:15Z",
+      "finished_at": "2026-11-25T09:26:18Z",
+      "red_tests": [
+        "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#1] 同组同状态只发一次，恢复、触发和其他组分别送达",
+        "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#2] 同一个 groupKey 发给财务和值班时各自去重",
+        "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#3] 30 分钟内的重复送达不续期，到期后可再推送",
+        "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#4] 机器人超时在同一次请求内照常重试，成功后才挡重复送达",
+        "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#5] 所有推送尝试均失败时仍允许 Alertmanager 重新送达",
+        "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#6] 达到条数上限时淘汰最旧的去重记录",
+        "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#7] 并发收到同组同状态的 webhook 时只推送一次",
+        "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#8] 首次推送成功及去重应答的日志均不含 Webhook 地址或 key",
+        "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts > [AC-B1-25d#9] 同组同状态新增告警实例时照常推送，随后重复送达时去重",
+        "test/spec/platform/alerting-wecom/exporter-scrape-outage.test.ts > [AC-B1-25d#9] 使用独立队列目录的 vmagent 为宕机组提供两个 exporter 的抓取状态"
+      ],
+      "expected": [
+        "test/spec/platform/alerting-wecom/delivery-deduplication.test.ts",
+        "test/spec/platform/alerting-wecom/exporter-scrape-outage.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "14a081282c56e59bbde3c4ddefb8d859f1615901865ea4c9a67e9fb3820e90cd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "e24c23235da0b96435a6e4e38c45a0f3c7358556",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
