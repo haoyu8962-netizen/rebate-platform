@@ -11,6 +11,12 @@
 // - 无手机号时告警行仍在提交之后才记（提交成功但结果没回来就丢，重投又因键已写跳过）：第四条里
 //   提交抛错后没有告警行、或告警行排在提交之后，红。
 // - hour_alert_key 只按「等于本节点」判断：第五条里已处理 h1 后改配置为 [6]，h6 任务或自愈仍补发 h6，红。
+// B1-22ze（持久告警）：
+// - 告警行仍由监控直接写（提交前或提交后），或告警记录 / alert_log 任务不在写键的同一事务里
+//   （trx 为 null、排在提交之后）：第一、四条红（它们要求监控本身不写告警行，记录与任务都在提交前、
+//   带同一事务）。
+// - 插入冲突（记录已在）仍排 alert_log：第六条红。
+// - alert_log 任务不按记录拼行（字段取当前配置而非记录、漏 phones_missing、级别错）：第七条红。
 import type { DB } from '@couli/db';
 import {
   Kysely,
@@ -29,6 +35,7 @@ import {
   type JobQueue,
   type RootLogger,
 } from '../../platform/index.ts';
+import { JOB_ALERT_LOG } from './alert-log.ts';
 import { JOB_HOUR_ALERT, KEY_ALERT_HOURS, hourAlertMark } from './hour-alerts.ts';
 import { createSiteAuthMonitor } from './service.ts';
 
@@ -76,12 +83,16 @@ function setup(
     /** The commit reaches the database but its result never comes back (the call throws). */
     failCommit?: boolean;
     hours?: number[];
+    /** The union_auth_alerts row already exists: the insert conflicts and returns nothing. */
+    alertExists?: boolean;
   } = {},
 ) {
   /** Commits and log lines in the order they happened. */
   const order: string[] = [];
   const updates: { sql: string; params: readonly unknown[] }[] = [];
   const ends = { commit: 0, rollback: 0 };
+  /** Rows the monitor inserted into app.union_auth_alerts (RETURNING answered unless it exists). */
+  const alertRows: Record<string, unknown>[] = [];
   const result = <R>(rows: unknown[], affected?: bigint): QueryResult<R> =>
     (affected === undefined ? { rows } : { rows, numAffectedRows: affected }) as QueryResult<R>;
   const connection: DatabaseConnection = {
@@ -92,6 +103,21 @@ function setup(
       }
       if (text.startsWith('select') && text.includes('"app"."union_accounts"')) {
         return Promise.resolve(result([{ ...row }]));
+      }
+      if (text.includes('INSERT INTO app.union_auth_alerts')) {
+        const names = ['id', 'app_id', 'union_account_id', 'platform', 'stage', 'alert_key'];
+        const more = ['auth_expires_at', 'entered_at', 'phones_configured', 'cause', 'created_at'];
+        const record = Object.fromEntries(
+          [...names, ...more].map((name, i) => [name, compiled.parameters[i]]),
+        );
+        order.push('insert_alert');
+        if (options.alertExists === true) return Promise.resolve(result([], 0n));
+        alertRows.push(record);
+        return Promise.resolve(result([record], 1n));
+      }
+      if (text.includes('FROM app.union_auth_alerts')) {
+        const id = compiled.parameters[2];
+        return Promise.resolve(result(alertRows.filter((r) => r['id'] === id)));
       }
       if (text.startsWith('update "app"."union_accounts"')) {
         updates.push({ sql: text, params: compiled.parameters });
@@ -131,6 +157,7 @@ function setup(
     send: async (...args) => {
       sends.push(args);
       const [, name, , sendOptions] = args;
+      order.push(`send:${name}`);
       // The platform queue's own limit (validation.ts: delaySeconds 0..2 592 000).
       if ((sendOptions.delaySeconds ?? 0) > 2_592_000) throw new Error('invalid_option');
       if (name === JOB_HOUR_ALERT && options.failHourSend === true) throw new Error('timeout');
@@ -180,6 +207,7 @@ function setup(
     sends,
     lines,
     order,
+    alertRows,
     refreshTo: (ms: number) => {
       refreshed = ms;
     },
@@ -204,15 +232,21 @@ function hourJob(hours: number) {
 
 const hourSends = (sends: Parameters<JobQueue['send']>[]) =>
   sends.filter(([, name]) => name === JOB_HOUR_ALERT);
+const logSends = (sends: Parameters<JobQueue['send']>[]) =>
+  sends.filter(([, name]) => name === JOB_ALERT_LOG);
 
 it('[B1-22zd][BR-ID-24] 无手机号：小时节点按 hour_alert_key 去重——键为空时记告警并写键；同节点重投不再写不再记；h6 之后 h1 照记', async () => {
+  const recorded = (run: ReturnType<typeof setup>) => logSends(run.sends).length === 1;
   // The daily check already put the account into expiring at h6 (status written, key untouched).
   const first = setup(seedRow(), EXPIRES - 6 * HOUR + 60_000);
   await first.monitor.handle(hourJob(6));
   expect(first.updates).toHaveLength(1);
   expect(first.updates[0]!.sql).toContain('"hour_alert_key" = $');
   expect(first.updates[0]!.params).toContain(hourAlertMark(EXPIRES, 6));
-  expect(first.lines).toContainEqual(['warn', 'union_auth_expiring']);
+  expect(recorded(first)).toBe(true);
+  expect(first.alertRows).toMatchObject([{ stage: 'h6', phones_configured: false, cause: null }]);
+  // The monitor itself writes no alert line: the alert_log job does.
+  expect(first.lines).not.toContainEqual(['warn', 'union_auth_expiring']);
   expect(first.ends).toEqual({ commit: 1, rollback: 0 });
 
   const repeat = setup(
@@ -221,7 +255,8 @@ it('[B1-22zd][BR-ID-24] 无手机号：小时节点按 hour_alert_key 去重—�
   );
   await repeat.monitor.handle(hourJob(6));
   expect(repeat.updates).toEqual([]);
-  expect(repeat.lines).not.toContainEqual(['warn', 'union_auth_expiring']);
+  expect(repeat.alertRows).toEqual([]);
+  expect(logSends(repeat.sends)).toEqual([]);
 
   const next = setup(
     seedRow({ hour_alert_key: hourAlertMark(EXPIRES, 6) }),
@@ -230,7 +265,8 @@ it('[B1-22zd][BR-ID-24] 无手机号：小时节点按 hour_alert_key 去重—�
   await next.monitor.handle(hourJob(1));
   expect(next.updates).toHaveLength(1);
   expect(next.updates[0]!.params).toContain(hourAlertMark(EXPIRES, 1));
-  expect(next.lines).toContainEqual(['warn', 'union_auth_expiring']);
+  expect(recorded(next)).toBe(true);
+  expect(next.alertRows).toMatchObject([{ stage: 'h1' }]);
   // The status is already expiring: only the key is written, never alert_stage.
   expect(next.updates[0]!.sql).not.toContain('"alert_stage"');
   expect(next.updates[0]!.sql).not.toContain('"auth_status"');
@@ -296,23 +332,37 @@ it('[B1-22zd][BR-ID-24] 续期成功后小时任务在提交后尽力排：入�
   expect(hourSends(long.sends)).toEqual([]);
 });
 
-it('[B1-22zd][BR-ID-24] 无手机号：小时节点的后台告警行在写键的事务提交之前记——提交结果丢了也不丢告警；重投因键已写而跳过', async () => {
+it('[B1-22ze][BR-ID-24] 小时节点的告警记录与 alert_log 任务和键在同一事务、提交之前；监控不写告警行；提交结果丢了重投因键已写而跳过', async () => {
   const at = EXPIRES - 6 * HOUR + 60_000;
   const lost = setup(seedRow(), at, { failCommit: true });
   await expect(lost.monitor.handle(hourJob(6))).rejects.toThrow('connection_lost');
   // The mark went into the committed update …
   expect(lost.updates).toHaveLength(1);
   expect(lost.updates[0]!.params).toContain(hourAlertMark(EXPIRES, 6));
-  // … and the alert line was already written, before the commit.
-  expect(lost.lines).toContainEqual(['warn', 'union_auth_expiring']);
-  expect(lost.order.indexOf('union_auth_expiring')).toBeGreaterThanOrEqual(0);
-  expect(lost.order.indexOf('union_auth_expiring')).toBeLessThan(lost.order.indexOf('commit'));
+  // … with the alert record and its alert_log job on the same transaction, before the commit.
+  const commit = lost.order.indexOf('commit');
+  expect(lost.order.indexOf('insert_alert')).toBeGreaterThanOrEqual(0);
+  expect(lost.order.indexOf('insert_alert')).toBeLessThan(commit);
+  expect(lost.order.indexOf(`send:${JOB_ALERT_LOG}`)).toBeLessThan(commit);
+  expect(lost.order.indexOf(`send:${JOB_ALERT_LOG}`)).toBeGreaterThan(
+    lost.order.indexOf('insert_alert'),
+  );
+  const [log] = logSends(lost.sends);
+  expect(log![3].trx).not.toBeNull();
+  expect(log![2]).toEqual({
+    app_id: APP,
+    union_account_id: ACCOUNT,
+    alert_id: lost.alertRows[0]!['id'],
+  });
+  expect(log![3].singletonKey).toContain(String(lost.alertRows[0]!['id']));
+  expect(lost.lines.filter(([, m]) => m.startsWith('union_auth_ex'))).toEqual([]);
 
-  // The redelivered job finds the committed mark: nothing more (the one line above is the alert).
+  // The redelivered job finds the committed mark: nothing more.
   const again = setup(seedRow({ hour_alert_key: hourAlertMark(EXPIRES, 6) }), at + 60_000);
   await again.monitor.handle(hourJob(6));
   expect(again.updates).toEqual([]);
-  expect(again.lines).not.toContainEqual(['warn', 'union_auth_expiring']);
+  expect(again.alertRows).toEqual([]);
+  expect(logSends(again.sends)).toEqual([]);
 });
 
 it('[B1-22zd][BR-ID-24] 已处理更小节点后不补发更大的：h1 已发、配置改为 [6]，h6 任务不记不写、自愈不补 h6；别的到期时刻的键不算', async () => {
@@ -322,7 +372,8 @@ it('[B1-22zd][BR-ID-24] 已处理更小节点后不补发更大的：h1 已发�
   const job = setup(handledH1, at, { hours: [6] });
   await job.monitor.handle(hourJob(6));
   expect(job.updates).toEqual([]);
-  expect(job.lines).not.toContainEqual(['warn', 'union_auth_expiring']);
+  expect(job.alertRows).toEqual([]);
+  expect(logSends(job.sends)).toEqual([]);
 
   const heal = setup(handledH1, at, { hours: [6] });
   await heal.monitor.heal();
@@ -334,5 +385,42 @@ it('[B1-22zd][BR-ID-24] 已处理更小节点后不补发更大的：h1 已发�
   await fresh.monitor.handle(hourJob(6));
   expect(fresh.updates).toHaveLength(1);
   expect(fresh.updates[0]!.params).toContain(hourAlertMark(EXPIRES, 6));
-  expect(fresh.lines).toContainEqual(['warn', 'union_auth_expiring']);
+  expect(fresh.alertRows).toMatchObject([{ stage: 'h6' }]);
+  expect(logSends(fresh.sends)).toHaveLength(1);
+});
+
+it('[B1-22ze][BR-ID-24] 告警记录已在（插入冲突）时不排 alert_log；键照写', async () => {
+  const conflict = setup(seedRow(), EXPIRES - 6 * HOUR + 60_000, { alertExists: true });
+  await conflict.monitor.handle(hourJob(6));
+  expect(conflict.order).toContain('insert_alert');
+  expect(conflict.updates[0]!.params).toContain(hourAlertMark(EXPIRES, 6));
+  expect(logSends(conflict.sends)).toEqual([]);
+  expect(conflict.ends).toEqual({ commit: 1, rollback: 0 });
+});
+
+it('[B1-22ze][BR-ID-24] alert_log 任务读记录打行（无手机号：先 phones_missing 再 expiring）；记录不存在只记一条 warn、不抛', async () => {
+  const run = setup(seedRow(), EXPIRES - 6 * HOUR + 60_000);
+  await run.monitor.handle(hourJob(6));
+  const [log] = logSends(run.sends);
+  await run.monitor.handle({
+    id: 'job-2',
+    queue: 'union-auth',
+    name: JOB_ALERT_LOG,
+    attempt: 1,
+    payload: log![2],
+  });
+  expect(run.lines.slice(-2)).toEqual([
+    ['warn', 'union_auth_alert_phones_missing'],
+    ['warn', 'union_auth_expiring'],
+  ]);
+
+  const missing = setup(seedRow(), EXPIRES - 6 * HOUR + 60_000);
+  await missing.monitor.handle({
+    id: 'job-3',
+    queue: 'union-auth',
+    name: JOB_ALERT_LOG,
+    attempt: 1,
+    payload: { app_id: APP, union_account_id: ACCOUNT, alert_id: 'absent' },
+  });
+  expect(missing.lines).toEqual([['warn', 'union_auth_alert_log_missing']]);
 });
