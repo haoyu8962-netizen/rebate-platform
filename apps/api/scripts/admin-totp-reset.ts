@@ -10,11 +10,26 @@
 // 确认（只认精确的 yes，其他任何输入都退出、不写库）→ 在同一事务里锁行重新判定、清掉验证器三列、写系统审计
 // （system_actor system:ops_command，action admin_totp_reset）、作废该账号之前签发的 admin_token、登录票据与
 // 二次验证令牌（Redis 命名空间 admin-auth）；作废写不进去时整笔回滚。用例见
-// src/modules/admin/application/operator-totp-reset.ts。密码、权限点、启用状态与验证手机号不变；该账号下次登录
-// 改为开启第二因子（已登记验证手机号的照常用短信登录）。终端与日志都不出现任何密钥。
+// src/modules/admin/application/operator-totp-reset.ts。密码、权限点、启用状态与验证手机号不变。终端与日志都不出现
+// 任何密钥。
 //
-// 退出码见 TOTP_RESET_EXIT：0 已重置；2 参数或输入不合法（缺 --app / --login、不是交互终端、原因不合法）；
-// 3 同应用另有可用超管；4 未输入 yes；5 找不到该账号；6 该账号不是超管；1 其他失败（配置、连接、作废写入等；事务内的失败整笔回滚）。
+// 已是未绑定：锁行后发现该账号的验证器已经未绑定（例如上一次重置已经成功、只是没看到成功提示就重跑），本命令
+// 不改行、不写审计、不推进作废时刻，提示「已是未绑定，未做任何改动」，退出码 7（编排裁定 D10-2999 ②）；上一次
+// 重置之后本人已拿到的绑定票据照常可用。本人在那之后已经绑定了新验证器、又需要重置的，是新的一次重置，照常执行。
+//
+// 重置之后的登录路径：账号密码（及 IP 白名单）→ 绑定新验证器（重新生成密钥），两步完成才签发 admin_token，
+// 与契约的登录流程一致；已登记验证手机号的账号在登录第二步改走短信属于二次验证线的后续
+// （FU-B134T-SMS-LOGIN-AFTER-RESET，D10-2999 ③），本命令不涉及。
+//
+// 失败与重跑：作废写在事务内、提交前（与后台 adminResetAdminTotp 同写法）。退出码 1 时，验证器可能仍是绑定状态
+// 而已有会话已被作废、被要求重新登录——这是预期的偏严结果；重跑本命令即可完成重置（D10-2999 ①）。
+//
+// 退出码见 TOTP_RESET_EXIT：
+//   0 已重置；
+//   1 其他失败（配置、连接、作废写入、提交等；事务内的失败整笔回滚，重跑即可）；
+//   2 参数或输入不合法（缺 --app / --login、不是交互终端、原因不合法）；
+//   3 同应用另有可用超管；4 未输入 yes；5 找不到该账号；6 该账号不是超管；
+//   7 该账号的验证器已是未绑定，未做任何改动。
 //
 // 只组装 @couli/db、platform 与 admin/ 的纯模块，不 import Nest、不跑 dist。日志（pino）写到 stderr。
 // 导入本文件不启动入口（规则测试注入 terminal 与 useCase 调 runAdminTotpResetCommand）。
@@ -25,6 +40,7 @@ import { destination } from 'pino';
 import {
   OPERATOR_TOTP_RESET_REASON_MAX,
   createOperatorTotpReset,
+  createTerminalLineEditor,
   operatorResetReasonOk,
   type OperatorTotpReset,
   type OperatorTotpResetResult,
@@ -45,6 +61,7 @@ export const TOTP_RESET_EXIT = Object.freeze({
   notConfirmed: 4,
   unknown: 5,
   notSuper: 6,
+  alreadyUnbound: 7,
 });
 
 export interface AdminTotpResetTerminal {
@@ -141,21 +158,30 @@ export async function runAdminTotpResetCommand(
   const result = await useCase.reset({ ...target, reason });
   if (result.kind === 'reset') {
     terminal.write(
-      '已重置：验证器已清除，之前签发的登录凭证全部作废，已写审计。该账号下次登录时重新开启第二因子。',
+      '已重置：验证器已清除，之前签发的登录凭证全部作废，已写审计。该账号下次登录：账号密码 → 绑定新验证器。',
     );
     return TOTP_RESET_EXIT.ok;
+  }
+  if (result.kind === 'already_unbound') {
+    terminal.write(
+      '该账号的身份验证器已是未绑定，未做任何改动（没有写审计，已有的登录凭证不受影响）。',
+    );
+    return TOTP_RESET_EXIT.alreadyUnbound;
   }
   const [code, message] = REFUSALS[result.reason];
   terminal.write(message);
   return code;
 }
 
-/** Reads one echoed line from the TTY. null on Ctrl-C, Ctrl-D or end of input. */
+/**
+ * Reads one echoed line from the TTY. null on Ctrl-C, Ctrl-D or end of input. The bytes go through
+ * the streaming line editor, so a character split over two chunks is decoded whole.
+ */
 function readLine(prompt: string): Promise<string | null> {
   const input = process.stdin;
   process.stdout.write(prompt);
   return new Promise((resolve) => {
-    let value = '';
+    const editor = createTerminalLineEditor();
     const finish = (result: string | null) => {
       input.off('data', onData);
       input.off('end', onEnd);
@@ -166,17 +192,9 @@ function readLine(prompt: string): Promise<string | null> {
     };
     const onEnd = () => finish(null);
     const onData = (chunk: Buffer) => {
-      for (const char of chunk.toString('utf8')) {
-        if (char === '\r' || char === '\n') return finish(value);
-        if (char === '\u0003' || char === '\u0004') return finish(null);
-        if (char === '\u007f' || char === '\b') {
-          if (value !== '') process.stdout.write('\b \b');
-          value = [...value].slice(0, -1).join('');
-        } else if (char >= ' ') {
-          process.stdout.write(char);
-          value += char;
-        }
-      }
+      const step = editor.feed(chunk);
+      if (step.echo !== '') process.stdout.write(step.echo);
+      if (step.done !== undefined) finish(step.done);
     };
     input.setRawMode(true);
     input.resume();
@@ -256,7 +274,8 @@ if (executedDirectly()) {
     (error: unknown) => {
       // Configuration, database and Redis errors carry fixed texts without values.
       process.stderr.write(
-        `重置失败：${error instanceof Error ? `${error.name}: ${error.message}` : 'unknown error'}\n`,
+        `重置失败：${error instanceof Error ? `${error.name}: ${error.message}` : 'unknown error'}\n` +
+          '若已有会话被要求重新登录，属预期（作废先于提交，偏严），重跑本命令即可完成重置。\n',
       );
       process.exitCode = TOTP_RESET_EXIT.failed;
     },

@@ -9,6 +9,10 @@
 //      statement in id order (SELECT … FOR UPDATE), then judged: no such account → unknown; not a
 //      super admin → not_super; another super admin of the app that is usable (status active and an
 //      authenticator bound, D10-2947 ①) → another_usable_super: that one resets it over HTTP;
+//      the target's authenticator already unbound (totp_bound_at null) → already_unbound: nothing is
+//      written, audited or voided (D10-2999 ②), so a rerun after a reset whose result the owner never
+//      saw leaves the binding ticket issued since then working; once the owner has bound a new
+//      authenticator, a rerun is a new reset and goes ahead;
 //   3. the authenticator columns are cleared (totp_secret_cipher, totp_bound_at, totp_last_step),
 //      conditional on the locked row_version (row_version + 1); status, password, permission points
 //      and the verify phone are unchanged, so an account with SMS still signs in with it
@@ -19,7 +23,10 @@
 //   5. the account's voiding instant (Redis, ../infra/admin-revocations.ts) at the Clock instant:
 //      every admin_token, login ticket and step-up token issued before it stops working. A failing
 //      write throws and rolls 3 and 4 back, as the HTTP reset does.
-// A refusal writes nothing and voids nothing. A super admin row created after the lock (only the
+// A refusal and already_unbound write nothing and void nothing (the transaction rolls back).
+// The voiding stays inside the transaction, before the commit (as the HTTP reset): when the commit
+// then fails, sessions are void while the authenticator is still bound — the stricter side; a rerun
+// finds the row still bound and completes the reset (D10-2999 ①, FU-ADMIN-CREDENTIAL-VERSION-PG). A super admin row created after the lock (only the
 // bootstrap creates one, and only when there is none) is not seen; promoting an account to super
 // admin is not an operation of this code base.
 //
@@ -45,6 +52,8 @@ export interface OperatorTotpResetRequest extends OperatorTotpResetTarget {
 
 export type OperatorTotpResetResult =
   | { readonly kind: 'reset' }
+  /** The target's authenticator was already unbound: nothing written (D10-2999 ②). */
+  | { readonly kind: 'already_unbound' }
   | {
       readonly kind: 'refused';
       readonly reason: 'unknown' | 'not_super' | 'another_usable_super' | 'invalid_reason';
@@ -77,13 +86,15 @@ export function operatorResetReasonOk(value: string): boolean {
   return value.trim().length > 0 && [...value].length <= OPERATOR_TOTP_RESET_REASON_MAX;
 }
 
-class Refused extends Error {
-  readonly reason: Refusal;
-  constructor(reason: Refusal) {
-    super(reason);
-    this.reason = reason;
+/** Ends the transaction with a rollback and carries the result that wrote nothing. */
+class NothingWritten extends Error {
+  readonly result: Exclude<OperatorTotpResetResult, { kind: 'reset' }>;
+  constructor(result: Exclude<OperatorTotpResetResult, { kind: 'reset' }>) {
+    super(result.kind);
+    this.result = result;
   }
 }
+const refused = (reason: Refusal) => new NothingWritten({ kind: 'refused', reason });
 
 export function createOperatorTotpReset(deps: OperatorTotpResetDeps): OperatorTotpReset {
   const { db, clock, audit, revocations } = deps;
@@ -116,8 +127,8 @@ export function createOperatorTotpReset(deps: OperatorTotpResetDeps): OperatorTo
             .forUpdate()
             .execute();
           const target = rows.find((row) => row.login_name === request.loginName);
-          if (target === undefined) throw new Refused('unknown');
-          if (!target.is_super) throw new Refused('not_super');
+          if (target === undefined) throw refused('unknown');
+          if (!target.is_super) throw refused('not_super');
           const usable = rows.some(
             (row) =>
               row.id !== target.id &&
@@ -125,7 +136,8 @@ export function createOperatorTotpReset(deps: OperatorTotpResetDeps): OperatorTo
               row.status === ACTIVE &&
               row.totp_bound_at !== null,
           );
-          if (usable) throw new Refused('another_usable_super');
+          if (usable) throw refused('another_usable_super');
+          if (target.totp_bound_at === null) throw new NothingWritten({ kind: 'already_unbound' });
 
           const now = clock.now();
           const updated = await trx
@@ -155,10 +167,54 @@ export function createOperatorTotpReset(deps: OperatorTotpResetDeps): OperatorTo
           await revocations.voidBefore({ appId: request.appId, adminId: target.id }, now.getTime());
         });
       } catch (error) {
-        if (error instanceof Refused) return { kind: 'refused', reason: error.reason };
+        if (error instanceof NothingWritten) return error.result;
         throw error;
       }
       return { kind: 'reset' };
+    },
+  };
+}
+
+/** What one chunk of raw terminal bytes did to the line being typed. */
+export interface TerminalLineStep {
+  /** Text to echo back (typed characters, `\b \b` per erased one). */
+  readonly echo: string;
+  /** Undefined while the line is open; the line on Enter; null on Ctrl-C or Ctrl-D. */
+  readonly done?: string | null;
+}
+
+/**
+ * The command's line editor over raw TTY bytes (D10-2999 S2). The UTF-8 decoder is streaming, so a
+ * character whose bytes the terminal splits over two chunks (an SSH paste of a Chinese reason)
+ * comes out whole once its last byte arrives, never as replacement characters. Backspace erases one
+ * character (code point); other control characters are ignored; what follows Enter is dropped.
+ */
+export function createTerminalLineEditor(): { feed(chunk: Uint8Array): TerminalLineStep } {
+  const decoder = new TextDecoder('utf-8');
+  let value = '';
+  let closed = false;
+  return {
+    feed(chunk) {
+      if (closed) return { echo: '' };
+      let echo = '';
+      for (const char of decoder.decode(chunk, { stream: true })) {
+        if (char === '\r' || char === '\n') {
+          closed = true;
+          return { echo, done: value };
+        }
+        if (char === '\u0003' || char === '\u0004') {
+          closed = true;
+          return { echo, done: null };
+        }
+        if (char === '\u007f' || char === '\b') {
+          if (value !== '') echo += '\b \b';
+          value = [...value].slice(0, -1).join('');
+        } else if (char >= ' ') {
+          echo += char;
+          value += char;
+        }
+      }
+      return { echo };
     },
   };
 }
