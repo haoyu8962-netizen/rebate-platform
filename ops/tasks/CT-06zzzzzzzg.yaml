@@ -1,0 +1,40 @@
+id: CT-06zzzzzzzg
+repo: rebate-platform
+title: CT-06zzzzzzzg：通用评审口径进可信提示词、按台账字段与参数带出——伴随测试单不按先红评、豁免确认轮的范围（FU-REVIEW-RUBRIC-TRUSTED，D10-2961 / D10-2976）
+type: guard-change
+# 2026-11-25 ops 入账（编排 D10-2976：负责人 2026-11-25 同意，D10-2970 ⑩；approvals 185 待登记，#719——合并前以「负责人 2026-11-25 已同意（D10-2970），approvals 待登记」为准）。
+# 第三类门禁改动，合并照 approvals 16；范围 couli-runs/OPS-lane/D10-2961/rubric-trusted-scope.md。起因（D10-2961）：任务书对评审方是不可信数据，通用口径要进可信提示词、由脚本按可信台账带出。
+#   D10-2317 ① 已在 tools/agent/prompts/review-spec-test.md:82 起（approvals 184 补登记，#718）；本单补另两条。
+# 做法：
+#   ① review-spec-test.md 加两节（只描述判法，不对具体任务下令）：
+#      「伴随测试单」：台账 type 为 test-change、且 paths 除台账文件与 test_paths 外没有实现路径——实现已在主干、测试在主干上本就绿，不按先红评，
+#        只评这些测试能否抓住错误实现（变异探针口径同 D10-2317 ①）；
+#      「豁免确认轮」：上下文标明是确认轮时，范围只是台账里本轮新增 / 改动的 red_exempt、red_exempt_outside、renames、expected_values 条目，逐条确认或不确认
+#        （不确认即 S1，同 Part 4），其余测试不在本轮（写 out_of_scope）。D10-2317 ① 一节标题补 approvals 184 条号。
+#   ② tools/agent/codex-run.sh（claude-run.sh 复用）build_review_prompt 在生成的 Review context 里加两行由可信台账 / 参数算出的事实：
+#      `Task kind: companion test task (test-change, no implementation paths)`（不是则不出现）与 `Confirmation round: yes`（新参数 --confirm-round 给出时）。
+#      --confirm-round 只对 --review-type spec-test 有效，别的类型给了就拒（退出 2，轮次退回）。
+#   ③ brief.ts 若生成对评审方的祈使式口径段落就去掉（只留事实与裁定号）；④ README §11 写 --confirm-round 与两节口径的出处。先后：排在 CT-06zzzzzzzf（#722，同改 codex-run.sh）落地之后开工。
+#   不改校验器（CT-06zzzzzzzf）、evidence-check（CT-06zzzzzzzh）与评审输出 schema；必须改才能生效就停下报编排。
+# 规则测试至少钉：① 台账 test-change 且无实现路径 → context 有 companion 行；有实现路径或 type 不是 test-change → 没有；② --confirm-round → context 有确认轮行；
+#   ③ --confirm-round 配非 spec-test → 退出 2、轮次退回；④ 两节口径在可信提示词里（关键句）；⑤ 任务书里写的口径只出现在 data 段之后，不出现在提示词正文。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/agent/prompts/review-spec-test.md'
+  - 'tools/agent/codex-run.sh'
+  - 'tools/agent/codex-run.test.ts'
+  - 'tools/agent/claude-run.sh'
+  - 'tools/agent/claude-run.test.ts'
+  - 'tools/ops/brief{,.test}.ts'
+  - 'tools/agent/README.md'
+  - 'ops/tasks/CT-06zzzzzzzg.yaml'
+test_paths:
+  - 'test/spec/ci/review-rubric-trusted/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/review-rubric-trusted/**'
+status: todo
