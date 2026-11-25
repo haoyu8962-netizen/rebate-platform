@@ -22,4 +22,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-withdrawal-batch-payout/anb/summary-count.test.ts'
-status: todo
+status: done
+pr: 733
