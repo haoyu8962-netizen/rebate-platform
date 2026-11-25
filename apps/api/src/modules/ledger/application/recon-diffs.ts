@@ -29,6 +29,11 @@ export interface RegisterReconDiffInput {
   readonly diffFen: bigint;
   readonly dedupeKey: string | null;
   readonly resolution: JobPayload | null;
+  /**
+   * B2-17 (⑭): the involved members registered with the diff (involved_user_ids, written only by
+   * the INSERT); only the daily ledger check passes them. Absent, null or empty: NULL.
+   */
+  readonly involvedUserIds?: readonly string[] | null;
 }
 
 export interface ReconDiffSelection {
@@ -50,6 +55,7 @@ const MONTH_END: ReconDiffType = 'month_end_unbalanced';
  * except an order-level ticket (ref_type order), which keeps one per accounting day (D10-2295).
  */
 const UNRESOLVED_UNIQUE: readonly ReconDiffType[] = ['ledger_mismatch'];
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function text(value: unknown, name: string): string {
   if (typeof value !== 'string' || value.length === 0) {
@@ -102,6 +108,19 @@ function checkInput(input: RegisterReconDiffInput): void {
   if (input.resolution !== null && !isPlainObject(input.resolution)) {
     throw new LedgerError('INVALID_INPUT', 'resolution must be a JSON object or null');
   }
+  const users = input.involvedUserIds;
+  if (users !== undefined && users !== null) {
+    if (!Array.isArray(users) || users.some((id) => typeof id !== 'string' || !UUID.test(id))) {
+      throw new LedgerError('INVALID_INPUT', 'involvedUserIds must be user ids');
+    }
+  }
+}
+
+/** involved_user_ids of the INSERT: lower case, unique, ascending; omitted when there are none. */
+function involvedColumn(input: RegisterReconDiffInput): { involved_user_ids?: string[] } {
+  const users = input.involvedUserIds;
+  if (users === undefined || users === null || users.length === 0) return {};
+  return { involved_user_ids: [...new Set(users.map((id) => id.toLowerCase()))].sort() };
 }
 
 /**
@@ -183,6 +202,7 @@ export async function registerReconDiffOnce(
     resolution: input.resolution,
     created_at: now,
     updated_at: now,
+    ...involvedColumn(input),
   });
   if (inserted !== undefined) return { row: inserted, inserted: true };
   // B2-02zc: a conflicting unresolved ticket concluded by a concurrent transaction between this

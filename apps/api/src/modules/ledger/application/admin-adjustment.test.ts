@@ -2,6 +2,7 @@
 // withdrawal or account_deletion id is a UUID, the same document in either letter case; an `order`
 // ref_id is an order_key and is compared as written. A form past the check reaches the member lock,
 // which refuses it here with user_id, so nothing beyond the check runs; the rule tests run the rest.
+// B2-17: the linked recon diffs are locked before the member; the stand-in store finds none.
 import type { DB } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
 import { expect, it, vi, type Mock } from 'vitest';
@@ -19,6 +20,7 @@ import {
   type AdminAdjustmentRefType,
 } from './admin-adjustment.ts';
 import type { Ledger } from './ledger.ts';
+import type { AdjustmentReconStore } from '../infra/adjustment-recon-diffs-store.ts';
 
 const USER = '0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a01';
 const DOC = '0199a3b4-5c6d-7e8f-9a0b-abcdef012345';
@@ -48,6 +50,9 @@ async function submit(refs: readonly AdminAdjustmentRef[]): Promise<Submitted> {
     auditOn: vi.fn(),
     ledger: {} as Ledger,
     ports: { lockUsers } as unknown as AdminAdjustmentPorts,
+    reconLinks: {
+      lockDiffs: () => Promise.resolve(new Map()),
+    } as unknown as AdjustmentReconStore,
   };
   const response = await createAdminAdjustment(deps, {
     appId: 'app_unit',

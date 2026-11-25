@@ -350,3 +350,147 @@ export async function restoreAdminReconDiffRow(
     .returningAll()
     .executeTakeFirst();
 }
+
+// ---------------------------------------------------------------------------------------------
+// B2-17 (08 BR-FUND-24 ⑨, 细则「对外差错单的调账」): the diffs a manual adjustment links.
+
+/** The type recon_diffs_unresolved_internal_key covers (migration 0152). */
+const UNRESOLVED_INTERNAL_TYPE = 'ledger_mismatch';
+
+/** A linked diff as the submission reads it under its row lock. */
+export interface LockedReconDiff {
+  readonly id: string;
+  readonly source: string;
+  readonly type: string;
+  readonly status: string;
+  readonly ref_type: string;
+  readonly ref_id: string;
+  /** The involved members registered with the diff (lower case), null when none were. */
+  readonly involved_user_ids: readonly string[] | null;
+}
+
+/**
+ * The app's recon diffs among `ids` (any source), locked FOR UPDATE in ascending id order (the
+ * rows are locked as the sorted scan returns them). IDs not of the app are absent.
+ */
+export async function lockReconDiffsForAdjustment(
+  trx: Transaction<DB>,
+  appId: string,
+  ids: readonly string[],
+): Promise<ReadonlyMap<string, LockedReconDiff>> {
+  const result = new Map<string, LockedReconDiff>();
+  if (ids.length === 0) return result;
+  const rows = await trx
+    .withSchema('app')
+    .selectFrom('recon_diffs')
+    .select(['id', 'source', 'type', 'status', 'ref_type', 'ref_id'])
+    .select(sql<string[] | null>`involved_user_ids::text[]`.as('involved_user_ids'))
+    .where('app_id', '=', appId)
+    .where('id', '=', sql<string>`ANY(${ids}::uuid[])`)
+    .orderBy('id')
+    .forUpdate()
+    .execute();
+  for (const row of rows) {
+    const id = row.id.toLowerCase();
+    result.set(id, {
+      id,
+      source: row.source,
+      type: row.type,
+      status: row.status,
+      ref_type: row.ref_type,
+      ref_id: row.ref_id,
+      involved_user_ids:
+        row.involved_user_ids === null
+          ? null
+          : row.involved_user_ids.map((user) => user.toLowerCase()),
+    });
+  }
+  return result;
+}
+
+/**
+ * 置 adjusted: open / processing → adjusted, compare-and-set on the status; handler_id the filer,
+ * closed_at = updated_at = `at`; no other column. The number of rows written (0 or 1).
+ */
+export async function adjustReconDiffForAdjustment(
+  trx: Transaction<DB>,
+  input: {
+    readonly appId: string;
+    readonly id: string;
+    readonly handlerId: string;
+    readonly at: Date;
+  },
+): Promise<bigint> {
+  const result = await trx
+    .withSchema('app')
+    .updateTable('recon_diffs')
+    .set({
+      status: 'adjusted',
+      handler_id: input.handlerId,
+      closed_at: input.at,
+      updated_at: input.at,
+    })
+    .where('app_id', '=', input.appId)
+    .where('id', '=', input.id)
+    .where('status', 'in', CLOSABLE)
+    .executeTakeFirst();
+  return result.numUpdatedRows;
+}
+
+/**
+ * 置 processing: open → processing, compare-and-set on the status; updated_at = `at`, handler_id
+ * and closed_at untouched (empty on an open row). The number of rows written (0 or 1).
+ */
+export async function processReconDiffForAdjustment(
+  trx: Transaction<DB>,
+  input: { readonly appId: string; readonly id: string; readonly at: Date },
+): Promise<bigint> {
+  const result = await trx
+    .withSchema('app')
+    .updateTable('recon_diffs')
+    .set({ status: 'processing', updated_at: input.at })
+    .where('app_id', '=', input.appId)
+    .where('id', '=', input.id)
+    .where('status', '=', 'open')
+    .executeTakeFirst();
+  return result.numUpdatedRows;
+}
+
+/**
+ * 退回 processing (a reversal): adjusted → processing, closed_at emptied, updated_at = `at`,
+ * handler_id kept. Not written (the row stays adjusted) when it would collide in
+ * recon_diffs_unresolved_internal_key (migration 0152): the row is a ledger_mismatch whose ref_type
+ * is not order and another open / processing ledger_mismatch of the same (app_id, type, ref_id),
+ * ref_type not order, exists (§9.3 ⑯, D10-3191 ⑤). The number of rows written (0 or 1).
+ */
+export async function sendBackReconDiffForReversal(
+  trx: Transaction<DB>,
+  input: { readonly appId: string; readonly id: string; readonly at: Date },
+): Promise<bigint> {
+  const result = await trx
+    .withSchema('app')
+    .updateTable('recon_diffs as d')
+    .set({ status: 'processing', closed_at: null, updated_at: input.at })
+    .where('d.app_id', '=', input.appId)
+    .where('d.id', '=', input.id)
+    .where('d.status', '=', 'adjusted')
+    .where((eb) =>
+      eb.not(
+        eb.exists(
+          eb
+            .selectFrom('recon_diffs as o')
+            .select(sql<number>`1`.as('one'))
+            .whereRef('o.app_id', '=', 'd.app_id')
+            .whereRef('o.type', '=', 'd.type')
+            .whereRef('o.ref_id', '=', 'd.ref_id')
+            .whereRef('o.id', '<>', 'd.id')
+            .where('o.type', '=', UNRESOLVED_INTERNAL_TYPE)
+            .where('o.ref_type', '<>', 'order')
+            .where('o.status', 'in', CLOSABLE)
+            .where('d.ref_type', '<>', 'order'),
+        ),
+      ),
+    )
+    .executeTakeFirst();
+  return result.numUpdatedRows;
+}
