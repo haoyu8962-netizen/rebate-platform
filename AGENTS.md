@@ -138,7 +138,7 @@
 - 单元测试 `src/**/*.test.ts`（`tools/` 下是 `**/*.test.ts`）；集成测试 `*.int.test.ts`，只由 `pnpm test:int` 运行。属性测试的次数与种子只从 `PROP_RUNS`、`PROP_SEED` 读（经 `@couli/testing`）。
 - 测试用的临时仓库与夹具工作区放 `.tmp/<名字>/`（已被 git 忽略）；任何东西都不放 `/tmp` 或 `$TMPDIR`（那是 Codex 沙箱的可写根）。
 - 业务表在 schema `app`（Kysely 用 `.withSchema('app')`），队列表在 `pgboss`；扩展由超级用户在 `db/bootstrap/` 建，不写进迁移；迁移是 `db/migrations/NNNN_名字.sql`，授权写在建对象的那条迁移里。
-- `tools/` 下的脚本用 `node tools/<目录>/<名字>.ts` 直接运行，只依赖 Node 内置模块与 ajv；起门禁作用的 schema、提示词、守卫从可信副本读，不从任务 worktree 读。
+- `tools/` 下的脚本用 `node tools/<目录>/<名字>.ts` 直接运行，只依赖 Node 内置模块与 ajv（例外：tools/guard 的测试文件检查可以用仓库已有的 typescript 开发依赖做语法分析，版本照锁文件、不新装依赖，`ops/approvals.yaml` 第 206 条）；起门禁作用的 schema、提示词、守卫从可信副本读，不从任务 worktree 读。
 - 任务 worktree 放 `../couli-runs/worktrees/<任务编号>`，分支 `task/<任务编号>`；运行产物都在 `../couli-runs/`，不入库。
 - Codex 只经 `tools/agent/codex-run.sh` 调用，不直接运行 `codex exec`；写测试与评审用的独立 Claude 子代理只经 `tools/agent/claude-run.sh` 调用（第 36 条）。
 - 应用代码日志只走 pino（`console` 只允许出现在 `tools/**` 与 `**/scripts/**`）；Shell 脚本要兼容 macOS bash 3.2，路径一律加引号（仓库路径含中文）。
