@@ -22,6 +22,9 @@ export interface ForwarderOptions {
   fetch: typeof fetch;
   sleep: (milliseconds: number) => Promise<void>;
   timeoutSignal: (milliseconds: number) => AbortSignal;
+  /** Clock for the process-local deduplication window, in milliseconds. */
+  now?: () => number;
+  deduplicationCapacity?: number;
 }
 
 const RECEIVERS: readonly Receiver[] = ['finance', 'oncall'];
@@ -327,6 +330,8 @@ async function serve(
   line({ status: response.status, result: body });
   res.writeHead(response.status, { 'content-type': 'application/json' }).end(body);
 }
+
+export { serve };
 
 function main(): void {
   const argv = process.argv.slice(2);
