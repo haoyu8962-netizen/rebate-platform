@@ -1167,3 +1167,15 @@ approvals:
     granted: true
     date: '2026-11-25'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-2972；方向由负责人 2026-11-25 定（D10-2970，取甲）。原因：Codex money r3（couli-runs/B1-04zzzzn/review-money-codex-r3.json）两条 S1（进店入口签发 30102 未做联盟账号一致检查；查回超时漏发带标识告警）；写测计数 3 / 3、规则测试评审 2 / 2、实现 3 / 3 已满。写测作者为 Codex，按第 19 条由独立 Claude 评审。不动迁移与台账 paths。开时主干末条 190（原预计 190，让给 CT-24zzv，D10-2996 / D10-3017）。'
+  - id: 192
+    row: 4
+    title: 'CT-06zzzzzzzh 任务专属一次性追加（D10-3014）：规则测试评审增量 1 轮（写测作者为 Codex，按第 19、36 条由独立 Claude 评，只看写测第 3 次的改动 34b866f39093..087a995929fa）——范围写死：写测第 3 次只把 test/spec/ci/evidence-review-binding/evidence.test.ts 的入口显式传 reviewBinding: true、另补「缺省关时缺 commit / tree 照旧过」一条（[AC-CT-06zzzzzzzh#11]），骨架只给 EvidenceInput 加可选字段；不得顺带改其它用例的期望。止损：评审增量仍判 S1 即停下报编排，不再加轮。实现第 2 次、码评审第 2 轮用常规计数，不在本条。'
+    granted: true
+    date: '2026-11-25'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审轮次属门禁流程小改动），D10-3013 / D10-3014，先例第 175、180、183、188 条。原因：Codex 资金清单码评审 r1（couli-runs/CT-06zzzzzzzh/review-codex.json）S1-①② 是「新绑定一生效所有新单都落不了」，编排取甲（D10-3013）：评审绑定检查挂开关 REVIEW_BINDING_ENABLED、缺省关（台账补丁 1，#735），①② 另开 CT-06zzzzzzzi；缺省关使本单已提交的规则测试不再触发新规则，须写测第 3 次改入口。计数：写测 3 / 3（第 3 次已用）、规则测试评审 2 / 2 已满。号码不预留（D10-3014），开时主干末条 191；本条与第 193 条同一张 PR（D10-3021 / D10-3022）。'
+  - id: 193
+    row: 4
+    title: 'CT-06zzzzzzze 任务专属一次性追加（D10-3021）：实现 1 次（r4，Opus）——范围写死：保留实现 r3 对 Codex 资金清单码评审 r1 两条 S1 的修法（`.each<…>` 类型参数段后照常认注册；函数引用回调 + skip 等选项要报），只消除 r3 判法在全仓的误报；硬条件 ① 对主干全仓跑 test-guard 相对 r2 新增报告为 0，② 实现方单测补注释行、普通三参数调用、字面量回调、本文件 const 选项各一条不报，函数引用回调 + skip 选项一条要报；规则测试不改。止损（D10-2662，非资金单）：r4 的 verify:fast 仍红或其后码评审 r2 仍有属实 S1，即不再追加，撤回 S1-2 的修法回到 r2 行为、保留 S1-1，S1-2 登 FU-TESTGUARD-FN-REF-SKIP 另开单。码评审 r2 用常规计数，不在本条。'
+    granted: true
+    date: '2026-11-25'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定（实现轮次属门禁流程小改动），D10-3021，先例第 175、180、183、188 条。原因：实现 r3 修码评审 r1 S1-2 后，测试机 verify:fast 红——test-guard 全仓新报 34 条（18 个文件、20 个位置，含 14 个冻结规则测试），全是误报（清单 couli-runs/CT-06zzzzzzze/fast3-guard-hits.txt）；S1-2 是现行漏洞（函数引用回调 + skip 选项能过门禁），不带着落地。计数：实现 3 / 3 已满，码评审 1 / 3。开时主干末条 191；本条与第 192 条同一张 PR（D10-3021 / D10-3022）；实现方不得引入 typescript 包，照 AGENTS.md §9 用 tools/guard/lib/test-blocks.ts 现有的 tokenize / parseTestFile（D10-3022）。'
