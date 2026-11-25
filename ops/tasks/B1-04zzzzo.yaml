@@ -37,4 +37,5 @@ accept:
   - 'pnpm verify:fast'
   - 'test/spec/union/taobao-parse-content/**'
   - 'test/spec/agent/no-third-party-parse/**'
-status: todo
+status: done
+pr: 732
