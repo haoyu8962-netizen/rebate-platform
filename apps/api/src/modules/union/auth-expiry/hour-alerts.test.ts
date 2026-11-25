@@ -5,6 +5,8 @@
 // 不看 hour_alert_key 照样重补、超过队列最大延迟（30 天）的节点照排（send 会被拒），任一都会让后两条红。
 // r3（Codex money r2）：键只按「等于本节点」判断（已处理 h1 后改配置为 [6] 仍补 h6）、把别的到期时刻
 // 或格式不对的键当成已处理、节点 7 与 h1 前缀相同被误认，任一都会让最后一条红。
+// B1-22ze r2（Codex money r1 S1-②）：延迟按调用前（如事务开头）取的旧时刻算、而不是每次 send 前用注入
+// Clock 重算（h6 晚 30 秒）、发送途中已到点的节点不即时发、到期后仍排，任一都会让最末一条红。
 import { expect, it } from 'vitest';
 import type { JobQueue } from '../../platform/index.ts';
 import {
@@ -31,6 +33,19 @@ function recorder() {
   return { calls, queue };
 }
 
+/** A Clock standing at `ms`. */
+function fixed(ms: number) {
+  return { now: () => new Date(ms) };
+}
+
+/** A Clock answering `times` in turn (the last one from then on): time passing between reads. */
+function moving(...times: number[]) {
+  let i = 0;
+  return {
+    now: () => new Date(times[Math.min(i++, times.length - 1)]!),
+  };
+}
+
 function target(totalHours: number) {
   const expiresAt = new Date(NOW + totalHours * HOUR);
   return { appId: 'unit-app', unionAccountId: 'unit-account', expiresAt, renewedAt: new Date(NOW) };
@@ -39,7 +54,7 @@ function target(totalHours: number) {
 it('[B1-22zd][BR-ID-24] 每个未跳过的未来小时节点一条单例任务，delay 对到节点时刻，payload 不含 ISO 到期', async () => {
   const { calls, queue } = recorder();
   const t = target(24);
-  await sendHourAlerts(queue, { trx: null, target: t, hours: [6, 1], nowMs: NOW });
+  await sendHourAlerts(queue, { trx: null, target: t, hours: [6, 1], clock: fixed(NOW) });
   expect(calls.map(([q, name]) => [q, name])).toEqual([
     [UNION_AUTH_QUEUE, JOB_HOUR_ALERT],
     [UNION_AUTH_QUEUE, JOB_HOUR_ALERT],
@@ -61,13 +76,25 @@ it('[B1-22zd][BR-ID-24] 每个未跳过的未来小时节点一条单例任务�
 
 it('[B1-22zd][BR-ID-24] 6 小时授权只排 h1；补排窗口外与已过的节点不排；同一轮同 key 只发一次', async () => {
   const short = recorder();
-  await sendHourAlerts(short.queue, { trx: null, target: target(6), hours: [6, 1], nowMs: NOW });
+  await sendHourAlerts(short.queue, {
+    trx: null,
+    target: target(6),
+    hours: [6, 1],
+    clock: fixed(NOW),
+  });
   expect(short.calls.map(([, , p]) => p['hours'])).toEqual([1]);
 
   const windowed = recorder();
   const sent = new Set<string>();
   const t = target(28);
-  const input = { trx: null, target: t, hours: [6, 1], nowMs: NOW, untilMs: NOW + 24 * HOUR, sent };
+  const input = {
+    trx: null,
+    target: t,
+    hours: [6, 1],
+    clock: fixed(NOW),
+    untilMs: NOW + 24 * HOUR,
+    sent,
+  };
   await sendHourAlerts(windowed.queue, input);
   await sendHourAlerts(windowed.queue, input);
   expect(windowed.calls.map(([, , p]) => p['hours'])).toEqual([6]);
@@ -77,7 +104,7 @@ it('[B1-22zd][BR-ID-24] 6 小时授权只排 h1；补排窗口外与已过的节
     trx: null,
     target: target(24),
     hours: [6, 1],
-    nowMs: NOW + 20 * HOUR,
+    clock: fixed(NOW + 20 * HOUR),
   });
   expect(late.calls.map(([, , p]) => p['hours'])).toEqual([1]);
 });
@@ -90,7 +117,7 @@ it('[B1-22zd][BR-ID-24] 补排：已到点而本次授权未处理的最小节�
   // 18h10m 后：h6 已到点、h1 未到；任务丢了（hour_alert_key 为空）→ h6 立即，h1 延迟。
   const lost = recorder();
   const at = NOW + 18 * HOUR + 600_000;
-  await sendHourAlerts(lost.queue, { ...base, nowMs: at, catchUp: { doneMark: null } });
+  await sendHourAlerts(lost.queue, { ...base, clock: fixed(at), catchUp: { doneMark: null } });
   expect(lost.calls.map(([, , p, o]) => [p['hours'], o.delaySeconds])).toEqual([
     [6, undefined],
     [1, Math.ceil((expiresMs - HOUR - at) / 1000)],
@@ -101,7 +128,7 @@ it('[B1-22zd][BR-ID-24] 补排：已到点而本次授权未处理的最小节�
   const done = recorder();
   await sendHourAlerts(done.queue, {
     ...base,
-    nowMs: at,
+    clock: fixed(at),
     catchUp: { doneMark: hourAlertMark(expiresMs, 6) },
   });
   expect(done.calls.map(([, , p]) => p['hours'])).toEqual([1]);
@@ -109,24 +136,24 @@ it('[B1-22zd][BR-ID-24] 补排：已到点而本次授权未处理的最小节�
   // 23h10m 后：h6、h1 都已到，只补 h1（h6 不补发）；已处理 h1 则什么都不发。
   const both = recorder();
   const later = NOW + 23 * HOUR + 600_000;
-  await sendHourAlerts(both.queue, { ...base, nowMs: later, catchUp: { doneMark: null } });
+  await sendHourAlerts(both.queue, { ...base, clock: fixed(later), catchUp: { doneMark: null } });
   expect(both.calls.map(([, , p, o]) => [p['hours'], o.delaySeconds])).toEqual([[1, undefined]]);
   const quiet = recorder();
   await sendHourAlerts(quiet.queue, {
     ...base,
-    nowMs: later,
+    clock: fixed(later),
     catchUp: { doneMark: hourAlertMark(expiresMs, 1) },
   });
   expect(quiet.calls).toEqual([]);
 
   // 不带 catchUp（新授权排程）不补已到节点；已过到期时刻也不补。
   const plain = recorder();
-  await sendHourAlerts(plain.queue, { ...base, nowMs: later });
+  await sendHourAlerts(plain.queue, { ...base, clock: fixed(later) });
   expect(plain.calls).toEqual([]);
   const expired = recorder();
   await sendHourAlerts(expired.queue, {
     ...base,
-    nowMs: expiresMs,
+    clock: fixed(expiresMs),
     catchUp: { doneMark: null },
   });
   expect(expired.calls).toEqual([]);
@@ -135,10 +162,20 @@ it('[B1-22zd][BR-ID-24] 补排：已到点而本次授权未处理的最小节�
 it('[B1-22zd][BR-ID-24] 超过队列最大延迟的节点不排（留给每日补排），以内的照排', async () => {
   const { calls, queue } = recorder();
   // 90 天授权：h720 在 60 天后、h1 在约 90 天后，都超过 30 天 → 不排。
-  await sendHourAlerts(queue, { trx: null, target: target(90 * 24), hours: [720, 1], nowMs: NOW });
+  await sendHourAlerts(queue, {
+    trx: null,
+    target: target(90 * 24),
+    hours: [720, 1],
+    clock: fixed(NOW),
+  });
   expect(calls).toEqual([]);
   // 31 天授权：h720 在 1 天后照排，h1 在 31 天减 1 小时后，超过上限不排。
-  await sendHourAlerts(queue, { trx: null, target: target(31 * 24), hours: [720, 1], nowMs: NOW });
+  await sendHourAlerts(queue, {
+    trx: null,
+    target: target(31 * 24),
+    hours: [720, 1],
+    clock: fixed(NOW),
+  });
   expect(calls.map(([, , p, o]) => [p['hours'], o.delaySeconds])).toEqual([[720, 24 * 3600]]);
   expect(calls.every(([, , , o]) => (o.delaySeconds ?? 0) <= HOUR_JOB_MAX_DELAY_SECONDS)).toBe(
     true,
@@ -167,7 +204,7 @@ it('[B1-22zd][BR-ID-24] hour_alert_key：同一到期时刻下已处理节点 �
     trx: null,
     target: t,
     hours: [6],
-    nowMs: later,
+    clock: fixed(later),
     catchUp: { doneMark: h1 },
   });
   expect(changed.calls).toEqual([]);
@@ -177,8 +214,50 @@ it('[B1-22zd][BR-ID-24] hour_alert_key：同一到期时刻下已处理节点 �
     trx: null,
     target: t,
     hours: [6],
-    nowMs: later,
+    clock: fixed(later),
     catchUp: { doneMark: hourAlertMark(expiresMs - HOUR, 1) },
   });
   expect(stale.calls.map(([, , p, o]) => [p['hours'], o.delaySeconds])).toEqual([[6, undefined]]);
+});
+
+it('[B1-22ze][BR-ID-24] 每次入队前用注入 Clock 重算延迟：事务与前一次入队的耗时不推迟节点；途中到点即发，到期后不排', async () => {
+  const t = target(24);
+  const expiresMs = t.expiresAt.getTime();
+  // 开始时 NOW；排 h6 时已过 30 秒，排 h1 时已过 45 秒：两条的延迟都对到各自节点时刻。
+  const slow = recorder();
+  await sendHourAlerts(slow.queue, {
+    trx: null,
+    target: t,
+    hours: [6, 1],
+    clock: moving(NOW, NOW + 30_000, NOW + 45_000),
+  });
+  expect(slow.calls.map(([, , p, o]) => [p['hours'], o.delaySeconds])).toEqual([
+    [6, 18 * 3600 - 30],
+    [1, 23 * 3600 - 45],
+  ]);
+
+  // 开始时 h6 还差 10 秒，入队时已过节点（未到期）→ 立即发、不带延迟；h1 照常延迟。
+  const start = expiresMs - 6 * HOUR - 10_000;
+  const due = recorder();
+  await sendHourAlerts(due.queue, {
+    trx: null,
+    target: t,
+    hours: [6, 1],
+    clock: moving(start, start + 20_000),
+  });
+  expect(due.calls.map(([, , p, o]) => [p['hours'], o.delaySeconds])).toEqual([
+    [6, undefined],
+    [1, Math.ceil((expiresMs - HOUR - start - 20_000) / 1000)],
+  ]);
+  expect(due.calls[0]![3]).toEqual({ trx: null, singletonKey: hourAlertKey(t, 6) });
+
+  // 开始时 h1 未到，入队时已过到期时刻 → 不排（到期由 expiry_due 与巡检处理）。
+  const gone = recorder();
+  await sendHourAlerts(gone.queue, {
+    trx: null,
+    target: t,
+    hours: [1],
+    clock: moving(expiresMs - HOUR - 1000, expiresMs),
+  });
+  expect(gone.calls).toEqual([]);
 });

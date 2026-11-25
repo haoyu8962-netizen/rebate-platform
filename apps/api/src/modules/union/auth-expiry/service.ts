@@ -138,6 +138,15 @@ export interface SiteAuthAlertPlanInput {
   stage: string;
   code: 'UNION_AUTH_EXPIRING' | 'UNION_AUTH_EXPIRED';
   phoneIds: readonly string[];
+  /**
+   * expired only: the instant the account entered expired, the same value the persistent alert
+   * (union_auth_alerts.entered_at and alert_key) is written with; null for an EXPIRING alert.
+   * The SMS dedupe key of an expired alert is to carry this instant (money r1 S1-①, B1-22ze).
+   * TODO(规划/11 §3.2): notification's createSiteAuthAlertPort still keys an expired alert by its
+   * own clock.now() — blocked on notification/site-auth-alert/service.ts being outside B1-22ze's
+   * paths (one change there: key by plan.enteredAt when given).
+   */
+  enteredAt: Date | null;
 }
 /**
  * The alert port the monitor needs, implemented by notification's createSiteAuthAlertPort and
@@ -475,6 +484,7 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
         stage,
         code: cause === null ? 'UNION_AUTH_EXPIRING' : 'UNION_AUTH_EXPIRED',
         phoneIds: ctx.phones.map((p) => p.phoneId),
+        enteredAt: cause === null ? null : now,
       });
       if (added > 0) {
         await queue.send(
@@ -563,8 +573,9 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
   }
 
   async function expireByTime(ctx: Pick<AppContext, 'phones'>, row: AccountRow): Promise<void> {
-    const now = clock.now();
     await onRow(row.app_id, row.id, undefined, async (trx, locked, patch) => {
+      // Read on the locked row: the instant expired is entered at, as the alert records it.
+      const now = clock.now();
       const expires = locked.auth_expires_at;
       if (expires === null || now.getTime() < expires.getTime()) return;
       await expire(trx, ctx, locked, 'time', patch, now);
@@ -632,7 +643,7 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
             renewedAt: now,
           },
           hours: ctx.hours,
-          nowMs: now.getTime(),
+          clock,
           sent,
         });
       } catch (error) {
@@ -673,14 +684,17 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
     renewedMs: number | null,
   ): Promise<void> {
     const ctx = await appContext(appId);
-    const now = clock.now();
-    const nowMs = now.getTime();
     await onRow(appId, unionAccountId, undefined, async (trx, row, patch) => {
       const expires = row.auth_expires_at;
       // Another authorization since the job was planned: nothing to do.
       if (expires === null || expires.getTime() !== expiresMs) return;
       if ((row.auth_renewed_at?.getTime() ?? null) !== renewedMs) return;
       if ((await reauthModeOf(ctx, row.platform)) === 'none') return;
+      // The Clock is read only now, the row locked and the mode read (money r1 S1-③, B1-22ze): a
+      // job that waited for the lock across the expiry judges by the time it actually acts at, so
+      // it enters expired instead of recording an hour alert.
+      const now = clock.now();
+      const nowMs = now.getTime();
       // Judged invalid by a call or a probe (or already expired): no EXPIRING, no status change.
       if (row.auth_status === 'expired') return;
       if (nowMs >= expiresMs) {
@@ -757,7 +771,7 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
           renewedAt: row.auth_renewed_at,
         },
         hours: ctx.hours,
-        nowMs: now.getTime(),
+        clock,
         untilMs: nextCheckSlot(now.getTime(), ctx.probeTime).dueMs,
         sent,
         catchUp: { doneMark: row.hour_alert_key },
@@ -1118,8 +1132,9 @@ export function createSiteAuthMonitor(options: SiteAuthMonitorOptions): SiteAuth
         phones,
         modes: new Map(),
       };
-      const now = clock.now();
       await onRow(appId, unionAccountId, undefined, async (trx, row, patch) => {
+        // Read on the locked row (as the hour job, money r1 S1-③).
+        const now = clock.now();
         const expires = row.auth_expires_at;
         // Renewed (or never set) since the job was planned, or not yet due: nothing to do.
         if (expires === null || expires.getTime() !== due || now.getTime() < due) return;

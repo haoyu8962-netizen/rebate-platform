@@ -17,7 +17,7 @@
 import type { DB } from '@couli/db';
 import type { Transaction } from 'kysely';
 import type { ContentReader } from '../../content/index.ts';
-import type { JobQueue } from '../../platform/index.ts';
+import type { Clock, JobQueue } from '../../platform/index.ts';
 import { authTotalMs, hourNodeAt, liveHourNodes, parseAlertHours } from './schedule.ts';
 
 /** The queue of the chain (platform/queue/catalog.ts: exclusive, worker only, concurrency 1). */
@@ -74,12 +74,19 @@ export function hourNodeHandled(mark: string | null, expiresMs: number, hours: n
 }
 
 /**
- * Sends the hour jobs of the live nodes whose instant is after `nowMs` (and at or before `untilMs`
- * when given, and within the queue's largest delay: a later node is left to the daily backfill),
- * skipping keys already in `sent` (one run never sends a key twice). With `catchUp` (the daily
- * backfill and heal) the smallest live node already due before the expiry is sent at once unless
- * the account's hour_alert_key shows it or a smaller node handled (hourNodeHandled); larger due
- * nodes never are.
+ * Sends the hour jobs of the live nodes whose instant is after the Clock's time at the call (and at
+ * or before `untilMs` when given, and within the queue's largest delay: a later node is left to the
+ * daily backfill), skipping keys already in `sent` (one run never sends a key twice). With `catchUp`
+ * (the daily backfill and heal) the smallest live node already due before the expiry is sent at
+ * once unless the account's hour_alert_key shows it or a smaller node handled (hourNodeHandled);
+ * larger due nodes never are.
+ *
+ * The delay of each job is worked out from the Clock read right before that job is sent (money r1
+ * S1-②, B1-22ze): the queue counts a delay from the moment the job is queued, so a delay computed
+ * from an earlier instant (a slow transaction before, an earlier send) would make the job late, and
+ * a late job cannot be replaced (its singletonKey holds). A node that became due meanwhile, before
+ * the expiry, is sent at once; once the expiry is reached nothing is sent (the expiry is handled by
+ * expiry_due and the daily check).
  */
 export async function sendHourAlerts(
   queue: Pick<JobQueue, 'send'>,
@@ -87,7 +94,7 @@ export async function sendHourAlerts(
     readonly trx: Transaction<DB> | null;
     readonly target: HourAlertTarget;
     readonly hours: readonly number[];
-    readonly nowMs: number;
+    readonly clock: Pick<Clock, 'now'>;
     readonly untilMs?: number;
     readonly sent?: Set<string>;
     readonly catchUp?: { readonly doneMark: string | null };
@@ -97,6 +104,7 @@ export async function sendHourAlerts(
   const expiresMs = target.expiresAt.getTime();
   const total = authTotalMs(expiresMs, target.renewedAt?.getTime() ?? null);
   const live = liveHourNodes(input.hours, total);
+  const startMs = input.clock.now().getTime();
   const send = async (node: number, delaySeconds: number | null): Promise<void> => {
     const singletonKey = hourAlertKey(target, node);
     if (input.sent?.has(singletonKey) === true) return;
@@ -116,8 +124,8 @@ export async function sendHourAlerts(
     );
     input.sent?.add(singletonKey);
   };
-  if (input.catchUp !== undefined && input.nowMs < expiresMs) {
-    const due = live.filter((node) => hourNodeAt(expiresMs, node) <= input.nowMs);
+  if (input.catchUp !== undefined && startMs < expiresMs) {
+    const due = live.filter((node) => hourNodeAt(expiresMs, node) <= startMs);
     if (due.length > 0) {
       const node = Math.min(...due);
       if (!hourNodeHandled(input.catchUp.doneMark, expiresMs, node)) await send(node, null);
@@ -125,9 +133,16 @@ export async function sendHourAlerts(
   }
   for (const node of live) {
     const dueMs = hourNodeAt(expiresMs, node);
-    if (dueMs <= input.nowMs) continue;
+    if (dueMs <= startMs) continue;
     if (input.untilMs !== undefined && dueMs > input.untilMs) continue;
-    const delaySeconds = Math.ceil((dueMs - input.nowMs) / 1000);
+    // The time this very send is queued at (see above).
+    const nowMs = input.clock.now().getTime();
+    if (nowMs >= expiresMs) return;
+    if (dueMs <= nowMs) {
+      await send(node, null);
+      continue;
+    }
+    const delaySeconds = Math.ceil((dueMs - nowMs) / 1000);
     if (delaySeconds > HOUR_JOB_MAX_DELAY_SECONDS) continue;
     await send(node, delaySeconds);
   }

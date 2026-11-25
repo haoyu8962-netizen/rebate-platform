@@ -17,6 +17,11 @@
 //   带同一事务）。
 // - 插入冲突（记录已在）仍排 alert_log：第六条红。
 // - alert_log 任务不按记录拼行（字段取当前配置而非记录、漏 phones_missing、级别错）：第七条红。
+// B1-22ze r2（Codex money r1）：
+// - S1-③ 小时任务在取账户行锁之前读 Clock（等锁跨过到期仍按旧时间判）：倒数第二条里会记 h1 告警、
+//   写 hour_alert_key、不进 expired，红。
+// - S1-① 进入失效的时刻不交给短信计划（plan 里没有 enteredAt，或与告警记录的 entered_at 不是同一个值）：
+//   最末一条红。
 import type { DB } from '@couli/db';
 import {
   Kysely,
@@ -37,7 +42,7 @@ import {
 } from '../../platform/index.ts';
 import { JOB_ALERT_LOG } from './alert-log.ts';
 import { JOB_HOUR_ALERT, KEY_ALERT_HOURS, hourAlertMark } from './hour-alerts.ts';
-import { createSiteAuthMonitor } from './service.ts';
+import { createSiteAuthMonitor, type SiteAuthAlertPlanInput } from './service.ts';
 
 const APP = 'unit-app';
 const ACCOUNT = '00000000-0000-4000-8000-000000000001';
@@ -85,6 +90,10 @@ function setup(
     hours?: number[];
     /** The union_auth_alerts row already exists: the insert conflicts and returns nothing. */
     alertExists?: boolean;
+    /** Time that passes while waiting for the account row lock (SELECT … FOR UPDATE). */
+    lockWaitMs?: number;
+    /** Alert phones configured (the cipher double keeps the list as plain JSON). */
+    phones?: string[];
   } = {},
 ) {
   /** Commits and log lines in the order they happened. */
@@ -102,6 +111,9 @@ function setup(
         return Promise.resolve(result(options.appIds === true ? [{ app_id: APP }] : []));
       }
       if (text.startsWith('select') && text.includes('"app"."union_accounts"')) {
+        if (text.includes('for update') && options.lockWaitMs !== undefined) {
+          clock.advanceMs(options.lockWaitMs);
+        }
         return Promise.resolve(result([{ ...row }]));
       }
       if (text.includes('INSERT INTO app.union_auth_alerts')) {
@@ -178,18 +190,24 @@ function setup(
     debug: log('debug'),
   } as unknown as RootLogger;
   const clock = new FixedClock(new Date(at));
+  const plans: SiteAuthAlertPlanInput[] = [];
   let refreshed: number | null = null;
   const monitor = createSiteAuthMonitor({
     db,
     clock,
     queue,
     logger,
-    crypto: {} as FieldCrypto,
+    crypto: {
+      decrypt: (cipher: string) => cipher,
+      blindIndex: (value: string) => `id-${value}`,
+    } as unknown as FieldCrypto,
     config: {
       configValue: async (_appId: string, key: string) =>
         key === KEY_ALERT_HOURS && options.hours !== undefined
           ? { value: options.hours, version: 1 }
-          : null,
+          : key === 'union.auth_alert_phones' && options.phones !== undefined
+            ? { value: { cipher: JSON.stringify(options.phones) }, version: 1 }
+            : null,
     },
     probe: { probe: async () => ({ kind: 'unsupported' }) },
     refresher: {
@@ -198,7 +216,14 @@ function setup(
           ? { ok: false, error: 'none' }
           : { ok: true, expiresAt: new Date(refreshed) },
     },
-    alerts: { plan: async () => 0, deliver: async () => undefined },
+    alerts: {
+      plan: async (_trx, plan) => {
+        plans.push(plan);
+        order.push('plan');
+        return plan.phoneIds.length;
+      },
+      deliver: async () => undefined,
+    },
   });
   return {
     monitor,
@@ -208,6 +233,7 @@ function setup(
     lines,
     order,
     alertRows,
+    plans,
     refreshTo: (ms: number) => {
       refreshed = ms;
     },
@@ -423,4 +449,40 @@ it('[B1-22ze][BR-ID-24] alert_log 任务读记录打行（无手机号：先 pho
     payload: { app_id: APP, union_account_id: ACCOUNT, alert_id: 'absent' },
   });
   expect(missing.lines).toEqual([['warn', 'union_auth_alert_log_missing']]);
+});
+
+it('[B1-22ze][BR-ID-24] 小时任务取得行锁后才读 Clock：等锁跨过到期时刻 → 进 expired（只 EXPIRED），不记 h1、不写 hour_alert_key', async () => {
+  // Picked up 100 ms before the expiry; the row lock is granted 200 ms later (100 ms past it).
+  const late = setup(seedRow(), EXPIRES - 100, { lockWaitMs: 200, phones: ['13800138000'] });
+  await late.monitor.handle(hourJob(1));
+  expect(late.updates).toHaveLength(1);
+  expect(late.updates[0]!.sql).toContain('"auth_status" = $');
+  expect(late.updates[0]!.sql).toContain('"alert_stage" = $');
+  expect(late.updates[0]!.params).toContain('expired');
+  expect(late.updates[0]!.sql).not.toContain('"hour_alert_key"');
+  expect(late.alertRows).toMatchObject([{ stage: 'expired', cause: 'time' }]);
+  expect(late.alertRows[0]!['entered_at']).toEqual(new Date(EXPIRES + 100));
+  expect(late.plans.map((p) => [p.stage, p.code])).toEqual([['expired', 'UNION_AUTH_EXPIRED']]);
+
+  // Lock granted before the expiry: h1 as before.
+  const onTime = setup(seedRow(), EXPIRES - 300, { lockWaitMs: 200, phones: ['13800138000'] });
+  await onTime.monitor.handle(hourJob(1));
+  expect(onTime.alertRows).toMatchObject([{ stage: 'h1', entered_at: null }]);
+  expect(onTime.plans.map((p) => [p.stage, p.code, p.enteredAt])).toEqual([
+    ['h1', 'UNION_AUTH_EXPIRING', null],
+  ]);
+});
+
+it('[B1-22ze][BR-ID-24] 进入失效的时刻只取一次：告警记录的 entered_at 与 alert_key、短信计划的 enteredAt 是同一个值', async () => {
+  const run = setup(seedRow(), EXPIRES + 5_000, { phones: ['13800138000', '13900139000'] });
+  await run.monitor.expiryDue(APP, ACCOUNT, new Date(EXPIRES).toISOString());
+  expect(run.alertRows).toHaveLength(1);
+  const entered = run.alertRows[0]!['entered_at'] as Date;
+  expect(entered).toEqual(new Date(EXPIRES + 5_000));
+  expect(String(run.alertRows[0]!['alert_key'])).toContain(entered.toISOString());
+  expect(run.plans).toHaveLength(1);
+  expect(run.plans[0]!.code).toBe('UNION_AUTH_EXPIRED');
+  expect(run.plans[0]!.enteredAt).toEqual(entered);
+  // Planned on the same transaction, before the commit.
+  expect(run.order.indexOf('plan')).toBeLessThan(run.order.indexOf('commit'));
 });

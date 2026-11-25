@@ -257,7 +257,6 @@ export function createSiteReauth(options: SiteReauthOptions): SiteReauth {
     session: { id: string; app_id: string; union_account_id: string; created_by: string },
     token: SiteOAuthToken,
   ): Promise<void> {
-    const hours = options.queue === undefined ? [] : await alertHoursOf(config, session.app_id);
     const durations = token.durations;
     const renewal = await db.transaction().execute(async (trx) => {
       const tx = trx.withSchema('app');
@@ -352,9 +351,14 @@ export function createSiteReauth(options: SiteReauthOptions): SiteReauth {
       return { expiresAt, renewedAt: now };
     });
 
+    // The new authorization is committed and the session succeeded above; reading the hour nodes
+    // and sending their jobs come only now, in one failure-isolated step (money r1 S1-④, B1-22ze):
+    // a config read or queue failure never blocks the re-authorization, and the daily backfill and
+    // the heal (./service.ts) send the jobs again.
     const queue = options.queue;
     if (queue === undefined) return;
     try {
+      const hours = await alertHoursOf(config, session.app_id);
       await sendHourAlerts(queue, {
         trx: null,
         target: {
@@ -364,7 +368,7 @@ export function createSiteReauth(options: SiteReauthOptions): SiteReauth {
           renewedAt: renewal.renewedAt,
         },
         hours,
-        nowMs: renewal.renewedAt.getTime(),
+        clock,
       });
     } catch (error) {
       options.logger?.warn(

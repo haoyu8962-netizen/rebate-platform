@@ -422,7 +422,6 @@ export class AdminUnionAccounts {
     const expiresAt = given ?? dateAt(now, now.getTime() + validityDays * DAY_MS);
     const authStatus = await this.#statusFor(actor.appId, expiresAt, now);
     const queue = this.#queue;
-    const hours = queue === undefined ? [] : await alertHoursOf(this.#reader(), actor.appId);
 
     await db.transaction().execute(async (trx) => {
       const tx = trx.withSchema('app');
@@ -497,8 +496,10 @@ export class AdminUnionAccounts {
       });
     });
 
+    // After the commit, read and send in one failure-isolated step (as reauth.ts, money r1 S1-④).
     if (queue !== undefined) {
       try {
+        const hours = await alertHoursOf(this.#reader(), actor.appId);
         await sendHourAlerts(queue, {
           trx: null,
           target: {
@@ -508,7 +509,7 @@ export class AdminUnionAccounts {
             renewedAt: now,
           },
           hours,
-          nowMs: now.getTime(),
+          clock: this.#clock,
         });
       } catch (error) {
         this.#logger?.warn?.(
