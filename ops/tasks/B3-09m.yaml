@@ -2,7 +2,7 @@ id: B3-09m
 repo: rebate-platform
 title: 'B4 最小一段（BR-AI-16）：全平台日预算熔断与用量入库——受理时按当日（实际 + 预占）判定，≥100% 新受理的 run 走无模型降级（finish_reason=budget），进行中的照常完成；受理预占、收尾冲正并写 agent_runs.cost_mfen / price_version；单价缺失 fail-close；≥80% / ≥100% 当天各告警一次'
 type: impl
-# 补丁 6（2026-11-25，BR-AI-16 取甲，D10-2975 / D10-3038）：本单口径以补丁 6 为准——title 里「收尾冲正」「≥80% / ≥100% 当天各告警一次」等与之不符的说法作废，改为：预占 agent.budget.reserve_mfen_per_run（默认 5,000 mfen）即单 run 花费上限、调用前按最坏成本检查、全部记受理日、正常收尾按实际 / 其他收尾按预占记满、单价取 run 所属 app 一份、告警尽力而为（title 按 ledger-overwrite 不改）。 2026-11-24 agent 线入账（D10-2596 ③ B4 最小一段；口径 D10-2668 五条；规划 05 B3-09、change 20261112 §2.10；完整说明 couli-runs/AGENT-lane/b3-09m-draft.md）。现状：agent_runs.cost_mfen / price_version 恒为 null；config-registry 有 agent.daily_budget_fen、agent.budget.reserve_mfen_per_run（无人读），无 agent.models；router.ts 有 budgetExhausted → degrade('budget') 但生产写死 no_model（真实路由归 B3-03k）；packages/money 无 mfen 运算。
+# 2026-11-26 置 void（agent，编排 D10-3188）：并入 B3-09o——本单的 Codex 调用实际 12 次，超过每任务 10 次的防失控上限；照工具给的出路换单接手，不动熔断。规则测试、迁移、生成物、实现第 1 次的提交与 kit.ts 的 modify_existing 登记由 B3-09o 带走（登记已搬过去，不在本文件保留）；approvals 第 173、178、203 条随本单作废；第 11、12 次调用的经过记在 B3-09o 台账。 补丁 6（2026-11-25，BR-AI-16 取甲，D10-2975 / D10-3038）：本单口径以补丁 6 为准——title 里「收尾冲正」「≥80% / ≥100% 当天各告警一次」等与之不符的说法作废，改为：预占 agent.budget.reserve_mfen_per_run（默认 5,000 mfen）即单 run 花费上限、调用前按最坏成本检查、全部记受理日、正常收尾按实际 / 其他收尾按预占记满、单价取 run 所属 app 一份、告警尽力而为（title 按 ledger-overwrite 不改）。 2026-11-24 agent 线入账（D10-2596 ③ B4 最小一段；口径 D10-2668 五条；规划 05 B3-09、change 20261112 §2.10；完整说明 couli-runs/AGENT-lane/b3-09m-draft.md）。现状：agent_runs.cost_mfen / price_version 恒为 null；config-registry 有 agent.daily_budget_fen、agent.budget.reserve_mfen_per_run（无人读），无 agent.models；router.ts 有 budgetExhausted → degrade('budget') 但生产写死 no_model（真实路由归 B3-03k）；packages/money 无 mfen 运算。
 # 只做（补丁 6 起按 BR-AI-16 新文「甲」，SPEC_REF 1025764be5af；D10-2970 ⑦ / D10-2975 / D10-2985 / D10-3025；草稿 couli-runs/B3-09m/br-ai-16-draft.md）：① config-registry 登记 agent.models（按模型 mfen / 百万 token，输入输出分开，带单价版本；本单只读不设值）；单价缺失、非正或读不出的模型不调，全部缺单价则新 run 无模型降级（finish_reason=budget）并告警。单价受理时取 run 所属 app 的一份、整个 run 用它、只记一个版本（取代 D10-2858 S1-1 跨 app 取最大）。
 #   ② 成本 = ceil(in × in_price / 1e6) + ceil(out × out_price / 1e6)，运算放 packages/money（整数 mfen 函数）。③ 新表（迁移）：日累计按上海自然日一行（全平台一份、不带 app_id），记实际、预占与 80% / 100% 告警时刻；每 run 一条预占记录（受理日、R、单价版本、结清时刻；不设调用前登记 / 待定成本 / 逐次入账列）。③′ 预算上限跨 app 取最小、预占额跨 app 取最大（content 只读读口 configValuesByKey）；读不到用 BR 默认（100000 分 / 5000 mfen）并告警，预算 0 或预占 0 = 全部降级。④ 受理事务：当日（实际 + 预占）≥ 上限 → 降级、不预占；否则受理日预占 += R 并写预占记录。⑤ run 内每次调用前：W_in = ceil(请求体 UTF-8 字节 × in_price / 1e6)，Rem = R − U − W_in；Rem ≤ 0 或 M = min(M_cfg, floor(Rem × 1e6 / out_price)) < 256 就不调、本 run 按预算收尾（已出内容保留，finish_reason=budget）；M 真写进请求；非文本内容不调。已花 U 只在进程内：有用量按用量、已发出结果不明按 W、没发出不计。⑥ 收尾事务（唯一一次，结清时刻条件更新）：受理日预占 −= R、受理日实际 += 成本，写 cost_mfen / price_version；活进程记 U（超过 W 照实记并告警日志），其他收尾（别的请求、清扫、崩溃）记 R。⑦ 告警尽力而为：受理与收尾时首次 ≥80% / ≥100% 用条件更新抢当日告警时刻，抢到的打 pino 事件（agent.budget_80 / agent.budget_100 / agent.budget_price_missing）并加计数，可能重复或晚到。进行中的 run 照常完成，不返回错误码；不依赖模型的消息结束原因照常（BR-AI-14 细则）。
 # 不做（评审范围外一律 out_of_scope）：成本分摊与报表、后台显示；失败尝试用量（FU-GATEWAY-FAILED-ATTEMPT-USAGE）；model 归因（FU-B3-08T-MODEL-ATTRIBUTION）；离线 / 评测计量；B3-03k 接线；送企业微信群规则（另开给 ops，D10-2668 ④）；按 app 分预算；调参与真实单价；Jev 费用。
@@ -36,12 +36,5 @@ test_paths:
 impl: claude
 tester: codex
 accept: ['pnpm verify', 'test/spec/agent/daily-budget/**']
-modify_existing:
-  - file: 'test/spec/agent/stream-mount/kit.ts'
-    scope: support
-    reason: rule_change
-    br: [BR-AI-16]
-    ruling: D10-2884
-    note: 'B3-09m 预算全平台最保守值（D10-2858 / D10-2864 S1-1）：contentReaderFor 返回对象末尾追加 configValuesByKey: configValuesByKeyOf(handle)，import 括号内加 configValuesByKeyOf；与生产 app.module agentReaders 同形；只按 token 纯插入（compareSupportFile 本地自查 0 处拒收，couli-runs/B3-09m/kit-probe/probe2.mts），既有方法与断言不动。'
-status: todo
+status: void
 pr: null
