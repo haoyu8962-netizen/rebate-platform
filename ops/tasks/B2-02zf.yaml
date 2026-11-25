@@ -1,0 +1,27 @@
+id: B2-02zf
+repo: rebate-platform
+title: 'B2-02zf：ledger 差错单登记新增只写口——与现有登记口同一套入参校验、同一条 INSERT … ON CONFLICT DO NOTHING，只返回这次有没有插入；冲突即返回、不回读已有行（月结账单日任务与后台补充登记 union_mismatch 用，装配随 B2-18 改接）'
+type: impl
+# 2026-11-25 funds 入账（编排 D10-2982 ② / D10-2987 / D10-2988；负责人 2026-11-25 已同意（D10-2982），approvals 第 186 条（#725）待合并）。资金单（RV2，ops/risk-map.yaml ledger 行）：Claude 实现、Codex 写规则测试、Codex 资金评审；常规轮次。
+# 来历：B2-18 资金评审第 5 轮 S1 第 2 条（couli-runs/B2-18/review-money-r5-codex.json）——月结与补充登记 union_mismatch 差错单时，同键差错单已存在的话，现有登记口 registerReconDiffOnce 在 INSERT … ON CONFLICT DO NOTHING 没插入之后经 findExisting 回读整行（含 resolution），与 B2-18「出账不以任何方式读取差错结论」相抵。负责人 2026-11-25 定：账本另出只写的登记口，月结与补充改接它。
+# 范围：apps/api/src/modules/ledger/application/recon-diffs.ts 新增 registerReconDiffWriteOnly(trx, input, { clock })，返回 { inserted: boolean }，经 ledger/index.ts 导出。入参校验用现有 checkInput；写入用现有 insertReconDiffIfAbsent（infra/recon-diffs-store.ts，INSERT … ON CONFLICT DO NOTHING RETURNING *：RETURNING 只回本条刚插入的行，冲突时不回任何行）；插入了返回 true，没插入返回 false；不调 findExisting，不对 recon_diffs 发任何 SELECT。写入的行与现有口登记的相同（status open、handler / closed_at 为空、id 取 clock）。
+# 不动：registerReconDiff、registerReconDiffOnce 与 store 文件一字不改；主干现有 12 处调用（payout 对账、payment 对账与结算、risk 申诉恢复、orders 平台恢复、黑名单扣回、入账后扣回、订单申诉恢复、账本日检与入账后核对）都不换；月结与补充的两处装配（app.module.ts 的 registerDiff）属 B2-18 的路径，不在本单。无迁移、无契约、无库表改动。
+# 与现有口的差别（读源码所得，未经用例验证）：现有口只在一种情况抛错——INSERT 冲突后 findExisting 找不到行；业务键、dedupe_key、月末键三类冲突的行不删、键不改，回读找得到，只有「未结唯一」类型（现为 ledger_mismatch，B2-02zc 的部分唯一索引 recon_diffs_unresolved_internal_key）的未结票在 INSERT 与回读之间被并发事务结案时找不到，现有口抛错使调用方回滚、任务重试时再登记。只写口在这种情况不抛、返回 inserted=false。月结与补充只登记 union_mismatch，不经这条路。
+# 验收（规则测试，新目录 test/spec/ledger/recon-diffs-write-only/，标题 [AC-B2-02zf#n]）：新插入返回 true，落库行与现有口用同样入参登记的逐字段相同（id、时间除外）；业务键、dedupe_key、月末键、未结唯一键四类冲突各返回 false，已有行（含 status、resolution、金额、source）逐字段不变，本事务不出 23505、之后还能继续写；并发：同键的未提交插入在途时等待，对方提交后返回 false、对方回滚后返回 true；未结票被并发结案的那种冲突返回 false、不抛；冲突路径与新插入路径上，这条事务对 recon_diffs 没有任何读取语句（INSERT … ON CONFLICT DO NOTHING [RETURNING] 之外不出现该表）；入参校验与现有口同一套（各非法入参 INVALID_INPUT、不写库）。现有冻结用例（test/spec/ledger/recon-diffs/、recon-diffs-unresolved/ 等）不登记改动、保持通过。
+refs: [BR-FUND-09, BR-FUND-19]
+refs_hash:
+  BR-FUND-09: 891062fdd62b
+  BR-FUND-19: f72aa79561bc
+deps: []
+paths:
+  - 'apps/api/src/modules/ledger/application/recon-diffs.ts'
+  - 'apps/api/src/modules/ledger/application/recon-diffs.test.ts'
+  - 'apps/api/src/modules/ledger/index.ts'
+test_paths:
+  - 'test/spec/ledger/recon-diffs-write-only/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/ledger/recon-diffs-write-only/**'
+status: todo
