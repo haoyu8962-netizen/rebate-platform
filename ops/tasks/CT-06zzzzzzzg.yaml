@@ -16,8 +16,7 @@ type: guard-change
 #      --confirm-round 只对 --review-type spec-test 有效，别的类型给了就拒（退出 2，轮次退回）。
 #   ③ brief.ts 若生成对评审方的祈使式口径段落就去掉（只留事实与裁定号）；④ README §11 写 --confirm-round 与两节口径的出处。先后：排在 CT-06zzzzzzzf（#722，同改 codex-run.sh）落地之后开工。
 #   不改校验器（CT-06zzzzzzzf）、evidence-check（CT-06zzzzzzzh）与评审输出 schema；必须改才能生效就停下报编排。
-# 规则测试至少钉：① 台账 test-change 且无实现路径 → context 有 companion 行；有实现路径或 type 不是 test-change → 没有；② --confirm-round → context 有确认轮行；
-#   ③ --confirm-round 配非 spec-test → 退出 2、轮次退回；④ 两节口径在可信提示词里（关键句）；⑤ 任务书里写的口径只出现在 data 段之后，不出现在提示词正文。
+# 规则测试至少钉：① 台账 test-change 且无实现路径 → context 有 companion 行；有实现路径或 type 不是 test-change → 没有；② --confirm-round → context 有确认轮行； ③ --confirm-round 配非 spec-test → 退出 2、轮次退回；④ 两节口径在可信提示词里（关键句）；⑤ 任务书里写的口径只出现在 data 段之后，不出现在提示词正文。
 refs: []
 refs_hash: {}
 deps: []
@@ -37,4 +36,5 @@ tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/review-rubric-trusted/**'
-status: todo
+status: done
+pr: 831
