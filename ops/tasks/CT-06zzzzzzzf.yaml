@@ -37,4 +37,5 @@ tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/review-validator-scope/**'
-status: todo
+status: done
+pr: 801
