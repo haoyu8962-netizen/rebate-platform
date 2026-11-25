@@ -1,0 +1,103 @@
+{
+  "risk_note": "RV2 by path (tools/agent, tools/ops). Review tooling only, no money moves (FU-REVIEW-RUBRIC-TRUSTED; D10-2961 / D10-2976 / D10-2996; ops/approvals.yaml ids 184, 185, 188, 215). The trusted spec-test review prompt gets two sections — companion test tasks (test-change with no implementation paths: red-first does not apply, the tests are judged by whether they catch a wrong implementation) and the exemption confirmation round — and its scope text follows the validator as merged by CT-06zzzzzzzf. The wrapper writes `Task kind: companion test task …` from the trusted ledger, and `--confirm-round <baseline commit>` (spec-test only, refused for every other type as a separate check) writes the added / changed red_exempt, red_exempt_outside, renames and expected_values entries between that baseline ledger and the trusted ledger now; a missing or unusable baseline refuses the call (exit 2, round returned). A confirmation round is marked in meta, carries no ordinary incremental context and is never the baseline of a later ordinary review. The S1 rule of the prompt says how an unconfirmed exemption is judged. Third-class gate change: merge under ops/approvals.yaml id 16 after the orchestrator checks the diff.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Three Codex money rounds. r1 (full) fail, three S1: the confirmation round gave no trusted-ledger delta (codex-run.sh:1393; orchestrator D10-3211 took a baseline argument, rule tests added under approvals 215); a confirmation round could become the baseline of a later ordinary review (:1394); the prompt's S1 rule conflicted for unconfirmed exemptions (review-spec-test.md:131) — all fixed in implementation r2, together with the two must-satisfy items of D10-3231 (the delta uses the baseline commit's ledger content, whatever commits lie between; the spec-test-only check stays a separate check), which r2 reviewed and found met. r2 (incremental) fail, one S1: the confirmation round still carried the ordinary incremental context (codex-run.sh:1249) — fixed in r3; one S2 (renames compared without their order) logged FU-CT06G-RENAMES-ORDER-DELTA. r3 (incremental) pass, no findings. The validator moved 0 findings out of scope in every round (D10-2954). On the test machine verify:fast exit 0 (fast4) and the rule-test directories with the codex-run / claude-run unit tests green (tests4)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 4,
+    "last_verdict": "fail",
+    "note": "Rule tests by Codex: three regular write-test attempts, then one write-test increment under approvals 215 (D10-3212: [#2] call and fixture changed, [#7]–[#10] added for the confirmation baseline). Spec-test reviews by an independent Claude: r1 fail, r2 fail, an increment under approvals 188 pass (one S2 left, FU-CT06G-RED-FIRST-PHRASE-S2), and an increment under approvals 215 fail with two S1 ([#9]'s baseline is always the previous ledger revision; [#3] is now refused by the baseline check before the review-type check). With the rule-test review rounds used up, the orchestrator (D10-3231) turned the two S1 into must-satisfy items of the implementation with implementer unit tests, and FU-CT06G-CONFIRM-ROUND-SPEC-GAPS (a test-change companion task after landing makes them rule tests); the code review r2 judged both items met. Mechanical corrections by ops, each its own commit and not counted (D10-3235): the rule-test fixture copies tools/guard/protected-paths.json (red re-run after it: [#9]/[#10] red on the missing --confirm-round, not on the missing file); two implementer unit tests corrected likewise."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#1] codex-run.sh labels companion tasks",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#1] claude-run.sh labels companion tasks",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#2] codex-run.sh marks confirmation from the flag and keeps brief instructions in data",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#2] claude-run.sh marks confirmation from the flag and keeps brief instructions in data",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#3] codex-run.sh refuses the flag outside spec-test reviews and returns the round",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#3] claude-run.sh refuses the flag outside spec-test reviews and returns the round",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#7] codex-run.sh refuses a confirmation with no baseline and returns the round",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#7] claude-run.sh refuses a confirmation with no baseline and returns the round",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#8] codex-run.sh refuses baselines outside trusted history and returns the round",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#8] claude-run.sh refuses baselines outside trusted history and returns the round",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#9] codex-run.sh reports only added and changed trusted declaration keys and their count",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#9] claude-run.sh reports only added and changed trusted declaration keys and their count",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#10] codex-run.sh starts the confirmation and reports zero for unchanged declarations",
+    "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#10] claude-run.sh starts the confirmation and reports zero for unchanged declarations",
+    "test/spec/ci/review-rubric-trusted/prompt.test.ts > [AC-CT-06zzzzzzzg#4] companion tests still need to detect wrong implementations",
+    "test/spec/ci/review-rubric-trusted/prompt.test.ts > [AC-CT-06zzzzzzzg#5] a confirmation round reviews only new and changed declarations",
+    "test/spec/ci/review-rubric-trusted/prompt.test.ts > [AC-CT-06zzzzzzzg#6] the S1 rule heading cites approval 184"
+  ],
+  "task": "CT-06zzzzzzzg",
+  "spec_commit": "f56884281a7e46d6b41b5975f1bcb16669de93fe",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "f56884281a7e46d6b41b5975f1bcb16669de93fe",
+      "tree": "ef8907af43a8a5acc2c52d71411e4ff7521c2850",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-25T23:09:36Z",
+      "finished_at": "2026-11-25T23:09:42Z",
+      "red_tests": [
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#1] codex-run.sh labels companion tasks",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#1] claude-run.sh labels companion tasks",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#2] codex-run.sh marks confirmation from the flag and keeps brief instructions in data",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#2] claude-run.sh marks confirmation from the flag and keeps brief instructions in data",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#3] codex-run.sh refuses the flag outside spec-test reviews and returns the round",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#3] claude-run.sh refuses the flag outside spec-test reviews and returns the round",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#7] codex-run.sh refuses a confirmation with no baseline and returns the round",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#7] claude-run.sh refuses a confirmation with no baseline and returns the round",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#8] codex-run.sh refuses baselines outside trusted history and returns the round",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#8] claude-run.sh refuses baselines outside trusted history and returns the round",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#9] codex-run.sh reports only added and changed trusted declaration keys and their count",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#9] claude-run.sh reports only added and changed trusted declaration keys and their count",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#10] codex-run.sh starts the confirmation and reports zero for unchanged declarations",
+        "test/spec/ci/review-rubric-trusted/context.test.ts > [AC-CT-06zzzzzzzg#10] claude-run.sh starts the confirmation and reports zero for unchanged declarations",
+        "test/spec/ci/review-rubric-trusted/prompt.test.ts > [AC-CT-06zzzzzzzg#4] companion tests still need to detect wrong implementations",
+        "test/spec/ci/review-rubric-trusted/prompt.test.ts > [AC-CT-06zzzzzzzg#5] a confirmation round reviews only new and changed declarations",
+        "test/spec/ci/review-rubric-trusted/prompt.test.ts > [AC-CT-06zzzzzzzg#6] the S1 rule heading cites approval 184"
+      ],
+      "expected": [
+        "test/spec/ci/review-rubric-trusted/context.test.ts",
+        "test/spec/ci/review-rubric-trusted/prompt.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "a75ac08e4dccafe34123fd596f0c16015b1109101cb6dc42b9b1e1f8345ead25"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "c52b69976e1c2234d7a469995b5b44b48fbd86ed",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
