@@ -80,18 +80,19 @@ it('[AC-B2-12c#24] Idempotency-Key 必填（不带 → 20001，不留痕）；10
   await withAdjustAdmin(f, async (h) => {
     const userId = await member(f, { available: 3000n });
     const diff: Ref = { ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id };
-    const body = (amount: bigint) =>
+    const other: Ref = { ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id };
+    const body = (amount: bigint, ref: Ref = diff) =>
       newForm({
         userId,
         direction: 'increase',
         amount,
         reason: 'RECON_FIX',
-        refs: [diff],
+        refs: [ref],
         note: '漏记的结算补回',
         contra: 'UNION_RECEIVABLE',
         platform: 'pdd',
       });
-    const expectation = (amount: bigint, available: bigint) => ({
+    const expectation = (amount: bigint, available: bigint, ref: Ref = diff) => ({
       caller: h.maker,
       userId,
       direction: 'increase' as const,
@@ -99,7 +100,7 @@ it('[AC-B2-12c#24] Idempotency-Key 必填（不带 → 20001，不留痕）；10
       reason: 'RECON_FIX',
       contra: 'UNION_RECEIVABLE',
       platform: 'pdd',
-      refs: [diff],
+      refs: [ref],
       note: '漏记的结算补回',
       before: { available, frozen: 0n },
     });
@@ -113,17 +114,17 @@ it('[AC-B2-12c#24] Idempotency-Key 必填（不带 → 20001，不留痕）；10
 
     const running = newKey();
     const lock = await holdMember(f, userId);
-    const first = track(h.create(body(200n), { key: running }));
+    const first = track(h.create(body(200n, other), { key: running }));
     try {
       expect(await waiting(f, 1, [first]), '第一次请求应在会员行锁上等待').toBe(true);
-      await answer(await h.create(body(200n), { key: running }), 40901);
-      await answer(await h.create(body(300n), { key: running }), 40901);
+      await answer(await h.create(body(200n, other), { key: running }), 40901);
+      await answer(await h.create(body(300n, other), { key: running }), 40901);
     } finally {
       await lock.release();
     }
     const sent = await first.promise;
-    await expectAdjusted(f, sent, expectation(200n, 3100n));
-    const replay = await h.create(body(200n), { key: running });
+    await expectAdjusted(f, sent, expectation(200n, 3100n, other));
+    const replay = await h.create(body(200n, other), { key: running });
     expect(replay.body).toBe(sent.body);
     expect(await audits(f, CREATE_ACTION)).toHaveLength(2);
   });

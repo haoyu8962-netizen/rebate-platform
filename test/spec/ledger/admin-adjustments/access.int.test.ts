@@ -113,18 +113,19 @@ it('[AC-B2-12c#21] 短信档 step-up：有 fund.adjust 的账号与超管，不�
     expect(await trace(f)).toEqual(before);
     expect(await audits(f, DENIED_ACTION)).toEqual([]);
 
-    for (const [who, start] of [
-      [h.maker, 3000n],
-      [boss, 3500n],
+    const other: Ref = { ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id };
+    for (const [who, start, ref] of [
+      [h.maker, 3000n, diff],
+      [boss, 3500n, other],
     ] as const) {
-      await expectAdjusted(f, await h.create(body, { caller: who }), {
+      await expectAdjusted(f, await h.create({ ...body, refs: [ref] }, { caller: who }), {
         caller: who,
         userId,
         direction: 'increase',
         amount: 500n,
         reason: 'RECON_FIX',
         contra: 'BAD_DEBT',
-        refs: [diff],
+        refs: [ref],
         note: '漏记的结算补回',
         before: { available: start, frozen: 0n },
       });

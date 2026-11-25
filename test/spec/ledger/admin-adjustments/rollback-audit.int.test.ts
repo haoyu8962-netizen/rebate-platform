@@ -46,8 +46,8 @@ it('[AC-B2-12c#42] 调减提交时写审计或写站内信失败 → 50001，aud
   const f = fixture(s);
   await withAdjustAdmin(f, async (h) => {
     const userId = await member(f, { available: 3000n });
-    const diff: Ref = { ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id };
     for (const point of POINTS) {
+      const diff: Ref = { ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id };
       const note = `多记的结算冲减（审计核对 ${point}）`;
       const body = newForm({
         userId,
