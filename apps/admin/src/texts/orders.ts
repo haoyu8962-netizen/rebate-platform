@@ -198,6 +198,9 @@ export const ordersTexts = {
       empty: '暂无同步记录',
       failed: '同步状态读取失败',
       createdAt: (time: string): string => `创建于 ${time}（北京时间）`,
+      /** HH:mm:ss (24-hour, Beijing) of the moment the bar was read. */
+      updatedAt: (time: string): string => `更新于 ${time}`,
+      refresh: '刷新',
     },
   },
 
