@@ -240,3 +240,65 @@ it('[AC-B1-25d#8] 首次推送成功及去重应答的日志均不含 Webhook �
     for (const spy of [...consoleSpies, stderr, stdout]) spy.mockRestore();
   }
 });
+
+it('[AC-B1-25d#9] 同组同状态新增告警实例时照常推送，随后重复送达时去重', async () => {
+  const { options, advance } = forwarder();
+  const fingerprints = ['c01a1e0000000001', 'c01a1e0000000002', 'c01a1e0000000003'] as const;
+  const groupKey = GROUP.replace('fixture-a', 'fixture-instance-set');
+  const body = webhookBody('finance', groupKey, 'firing');
+  const original = {
+    ...body,
+    alerts: body.alerts.map((alert, index) => ({ ...alert, fingerprint: fingerprints[index] })),
+  };
+  const updated = {
+    ...original,
+    alerts: [
+      ...original.alerts,
+      {
+        status: 'firing',
+        labels: {
+          alertname: 'CouliWithdrawalResultUnknown',
+          severity: 'critical',
+          instance: 'fixture-new-target',
+        },
+        startsAt: '2026-11-25T01:18:00Z',
+        fingerprint: fingerprints[2],
+      },
+    ],
+  };
+
+  const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+  const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+  const diagnostics = console as unknown as Record<string, (...values: unknown[]) => void>;
+  const consoleSpies = Object.keys(diagnostics)
+    .filter((name) => typeof diagnostics[name] === 'function')
+    .map((name) => vi.spyOn(diagnostics, name).mockReturnValue(undefined));
+  try {
+    expect(await serveFinance(options, original)).toEqual([200]);
+    expect(options.fetch).toHaveBeenCalledTimes(1);
+    advance(WINDOW_MS / 2);
+    expect(await serveFinance(options, updated)).toEqual([200]);
+    expect(options.fetch).toHaveBeenCalledTimes(2);
+    advance(60_000);
+    expect(await serveFinance(options, updated)).toEqual([200]);
+    expect(options.fetch).toHaveBeenCalledTimes(2);
+
+    const messages = await Promise.all(
+      options.fetch.mock.calls.map((call) => new Request(...call).text()),
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const streamLogs = [...stdout.mock.calls, ...stderr.mock.calls]
+      .map(([chunk]) => (typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString()))
+      .join('');
+    const consoleLogs = inspect(
+      consoleSpies.flatMap((spy) => spy.mock.calls),
+      { depth: null, maxStringLength: null, maxArrayLength: null, customInspect: false },
+    );
+    for (const fingerprint of fingerprints) {
+      expect(messages.join('\n')).not.toContain(fingerprint);
+      expect(`${streamLogs}${consoleLogs}`).not.toContain(fingerprint);
+    }
+  } finally {
+    for (const spy of [...consoleSpies, stderr, stdout]) spy.mockRestore();
+  }
+});
