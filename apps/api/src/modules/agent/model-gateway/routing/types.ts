@@ -11,6 +11,7 @@
 // 时间只取注入的 Scheduler（单调毫秒）与 Clock（计量时刻）。规则测试在 test/spec/agent/model-routing/。
 // 不在本段：路由文件与同意厂商清单文件及其 CI 校验、done / error 帧（B3-03）、日预算记账（B3-09）。
 import type { BreakerPolicy, Clock, Scheduler } from '../../../platform/index.ts';
+import type { ModelPrices } from '../../budget/index.ts';
 import type { UsageSink, VendorGateway, VendorId, VendorUsage } from '../vendors/index.ts';
 import type { ChatInput, ModelErrorKind, ModelEvent } from '../openai-compat/index.ts';
 import type { DegradeReason } from '../degraded/index.ts';
@@ -135,9 +136,17 @@ export interface ModelRouterOptions {
 
 export type RouterChatInput = Omit<ChatInput, 'vendor' | 'model'>;
 
+export interface RunCallBudget {
+  readonly reserveMfen: bigint;
+  readonly prices: ModelPrices;
+  spentMfen: bigint;
+  calls: number;
+}
+
 export interface RouterContext {
   readonly clock: RunModelClock;
   readonly signal: AbortSignal;
+  readonly budget?: RunCallBudget;
 }
 
 export interface ModelRouter {

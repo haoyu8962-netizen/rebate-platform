@@ -123,6 +123,7 @@ import {
 } from '../../orchestrator/index.ts';
 import type { AgentRunBodyDeps } from '../../orchestrator/core/ports.ts';
 import { createRunModelClock, type ResolvedRoute } from '../../model-gateway/routing/index.ts';
+import type { VendorGateway } from '../../model-gateway/vendors/index.ts';
 import { createAgentRedactor } from '../../preprocess/redact/index.ts';
 import { agentSessionDefaults, createPgAgentSessionStore } from '../../store/index.ts';
 import { createPgAgentTraceWriter } from '../../store/results/index.ts';
@@ -244,6 +245,12 @@ export interface AgentStreamRuntimeDeps {
 export interface AgentStreamSeams {
   readonly inputCheck?: InputCheckPort;
   readonly tools?: OrchestratorTools;
+  readonly modelRouting?: {
+    readonly gateway: VendorGateway;
+    readonly route: (appId: string) => Promise<ResolvedRoute>;
+    readonly prompt: AgentRunBodyDeps['prompt'];
+    readonly review?: AgentRunBodyDeps['review'];
+  };
   /** The RunManager's scheduler (the system scheduler otherwise). */
   readonly schedule?: Scheduler;
 }

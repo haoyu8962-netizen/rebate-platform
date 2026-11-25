@@ -1,4 +1,4 @@
-import type { ContentConfig, ContentReader } from '../../../content/index.ts';
+import type { ConfigValuesByKey, ContentConfig, ContentReader } from '../../../content/index.ts';
 import type { Clock } from '../../../platform/index.ts';
 
 // B3-08k (D10-294; rule tests: test/spec/agent/foreign-db-handoff/**): agent never builds another
@@ -22,6 +22,7 @@ import type { Clock } from '../../../platform/index.ts';
 export interface AgentContentReader {
   configValue(appId: string, key: string): Promise<ContentConfig | null>;
   freshConfigValue(appId: string, key: string): Promise<ContentConfig | null>;
+  configValuesByKey?: ConfigValuesByKey;
 }
 
 const CONTENT_READER = Symbol('AGENT_CONTENT_READER');
