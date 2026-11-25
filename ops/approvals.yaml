@@ -1251,3 +1251,15 @@ approvals:
     granted: true
     date: '2026-11-25'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（写测 / 评审 / 实现轮次属门禁流程小改动），D10-3105。负责人依据：三档清单 D10-2583 / D10-2760（BR-ID-34，2026-11-23 确认）；资金相关 40 条 / 31 块 2026-11-24 17:49 对话原话「同意放宽」（D10-2788）；资金与归属目录其余断言 2026-11-24 20:31 对话原话「都同意」（D10-2826，范围同 D10-2788）；支付单处置维持 none 见第 185 条。清单以外的冻结用例不在批准内，增补须另报。重探（主干 975a82638，测试机 4824 文件 / 55201 条）未见同意范围以外的资金或归属新类别；白名单不扩不提档（机读清单对契约逐操作核对一致）。Codex 不可用时按第 36 条由独立 Claude 承担并照实记。'
+  - id: 206
+    row: 4
+    title: '负责人 2026-11-25 对编排逐件讲清并给了建议的五件待决事项回「都按建议办」（D10-3129），同意的是下列各项的建议本身：① CT-06zzzzzzzf 再补一次，只修评审原文写回不全这一处（couli-runs/CT-06zzzzzzzf/options-after-r4.md 的甲 (a)：只在 validate-output 自己写回评审文件处核写入是否完整，写不全即报错、保留原文件、不改名覆盖；在原 paths 内，不动 tools/lib/fsx.ts，其短写问题另登 FU-FSX-ATOMIC-SHORT-WRITE）+ Codex 码评审 1 轮（增量）；② F1-07ee 照 F1-08ap 已过资金评审的做法（D10-2493）再做一轮：实现 1 次（r7）+ Codex 资金评审 1 轮（全量），范围写死为 money-r4-stop.md 的甲（读到的版本没有更新就不给【关闭】、改给【放弃这次提交】；同标签页里标记被清掉时自动重读一次），不另想新办法、不加别的行为；③ B1-22ze 改冻结用例两处：test/spec/union/auth-probe/kit.ts 给 harness 的 monitor 加一层只执行 alert_log 任务的包装（支撑改动一处），atomicity.int.test.ts [AC-S1-64#32] 在日志断言前加一步「先执行本轮排入的 alert_log 任务」，日志断言的内容、条数、字段不变；④ 门禁里检查测试文件的那部分可用仓库已有的 typescript 做语法分析（couli-runs/CT-06zzzzzzze/redo-options.md 选项一）：AGENTS.md §9 加一句窄例外「tools/guard 的测试文件检查可以用仓库已有的 typescript 开发依赖做语法分析」，版本照锁文件 5.9.3、不新装依赖，tools/ 其它脚本照旧只用 Node 内置与 ajv；CT-06zzzzzzze 照选项一重做（FU-TESTGUARD-FN-REF-SKIP 并入），CT-06zzzzzzzj 按同一底子做；⑤ B1-04zzzzn 再给一轮：台账补丁（paths 加 shop-open.ts 及其单测）+ 实现 1 次 + Codex 资金评审 1 轮 + 规则测试补「查回真等到治理层时限」一例（写测增量 1 次 + 规则测试评审增量 1 轮，评审方照第 19 条），范围写死为 money r4 的两条（查回超时由治理层先结束调用时改看本次备案记录器已落库的 duplicate 结局、照发带更早尝试编号的告警；shop-open.ts 把已选定的 accountId 传进 issueTaobaoAuthState、参数改必填）'
+    granted: true
+    date: '2026-11-25'
+    note: '负责人 2026-11-25 晚（21:12 前后）在编排会话里，对编排逐件用白话讲清并给了建议的五件事回「都按建议办」（编排裁定 D10-3129）。如实登记，边界：只同意这五件的建议本身；每件的止损之后的事不在同意之内——① 这一轮码评审仍有属实 S1 即暂停、改走乙（把磁盘满口径挪出本单）报编排，不再加实现；② 这一轮仍有属实 S1 即暂停、不再追加，届时在乙（只上不会结果未知的入口）与丙之间请负责人定；③ 只限上述两处，B1-22ze 其余冻结改动不在本条内；④ 只限 tools/guard 的测试文件检查，不扩到 tools/ 其它脚本，不新装、不升级依赖；⑤ 这一轮资金评审仍有属实 S1 即暂停登 FU，不再向负责人要轮次。各线的一次性轮次条目各自起草、排队取号，note 引本条。AGENTS.md §9 的那一句由 ops 另开 PR（第三类保护路径，标签照第 16 条由编排加）。'
+  - id: 207
+    row: 4
+    title: 'CT-06zzzzzzzf 任务专属一次性追加（D10-3129 ①，第 206 条）：实现 1 次（r6，Opus）+ Codex 资金清单码评审 1 轮（增量）——范围写死为 couli-runs/CT-06zzzzzzzf/options-after-r4.md 的甲 (a)：只在 tools/agent/validate-output.ts 自己写回评审文件（含旁路记录）的那一处核写入是否完整，写不全即报错退非零、保留原文件、不改名覆盖；补实现方单测一条；在原台账 paths 内，不动 tools/lib/fsx.ts（其 writeFileAtomic 短写问题另登 FU-FSX-ATOMIC-SHORT-WRITE），规则测试不改。止损：这一轮码评审仍有属实 S1 即暂停，改走乙（把磁盘满口径挪出本单）报编排，不再加实现。'
+    granted: true
+    date: '2026-11-25'
+    note: '负责人依据第 206 条 ①（D10-3129）。原因：第 201 条那一轮 Codex 码评审（couli-runs/CT-06zzzzzzzf/review-codex.json，增量）S1：validate-output.ts:718 写回评审时经 tools/lib/fsx.ts:26 的 writeFileAtomic，writeSync 不核返回字节数，磁盘将满时短写后照样 fsync + rename，评审原文被截断、旁路记录哈希对不上，违反台账补丁 1「不得改坏已写出的评审原文」；移出 0 条，其中 S0 / S1 0 条。计数：实现与码评审常规 3 / 3 已满，第 194、201 条的一次性轮次已用完；本条的两次照先例不 bump。与第 206 条同一张 PR。'
