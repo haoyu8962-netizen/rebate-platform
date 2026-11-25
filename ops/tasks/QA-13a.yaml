@@ -8,6 +8,7 @@ type: deps
 # 只改 apps/api/package.json 的 dependencies 段与 pnpm-lock.yaml（保护路径第二类，锁文件只有 deps 任务可改）；不改 scripts。由编排者在沙箱外执行 pnpm install。
 # 传递依赖的许可证由编排者装后核（approvals #3）；有无许可证或不合规的，停下报编排换版本，不开例外。
 # 标签按 approvals 24 由编排核后加。实现接入另见 QA-13b。
+# 2026-11-26 置 void（w1，编排 D10-3243 / D10-3244）：@sentry/node 11.x 全系带入 FSL-1.1-Apache-2.0 的 sentry CLI，改装 @sentry/core 并自写最小 Node 接入；由 QA-13c 取代。
 refs: []
 refs_hash: {}
 deps: []
@@ -18,4 +19,4 @@ impl: claude
 tester: none
 accept:
   - 'pnpm verify'
-status: todo
+status: void

@@ -14,6 +14,7 @@ type: impl
 # 规则测试钉：① 未配置 DSN 不初始化；② 构造含手机号、证件号、卡号、支付宝登录号、token、authorization 头、请求体的异常与上下文，经 beforeSend 后事件序列化里没有这些明文；
 #   ③ payout 遇公网 DSN 不初始化；④ 初始化参数快照（F-OBS-01「CI 用快照测试锁住 SDK 初始化参数与过滤器」）。上报走假传输（transport 注入），测试不联网。
 # 受控异常在 staging 证明堆栈可读一步由 ops 在本单合并后做（D10-2599），不在本单验收里。
+# 2026-11-26 置 void（w1，编排 D10-3243 / D10-3244）：@sentry/node 11.x 全系带入 FSL-1.1-Apache-2.0 的 sentry CLI，改装 @sentry/core 并自写最小 Node 接入；由 QA-13d 取代。
 refs: []
 refs_hash: {}
 deps: [QA-13a]
@@ -30,4 +31,4 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/platform/crash-report/**'
-status: todo
+status: void
