@@ -110,7 +110,14 @@ it(
     const main = page.getByRole('main');
     await expect.element(main.getByText(NUMBER, { exact: true }), FIRST).toBeVisible();
     await expect.element(page.elementLocator(marker), FIRST).toHaveAttribute('data-pending', '0');
-    expect(server.syncRequests()).toEqual([]);
+    const requests = server.syncRequests().map(({ method, path, query }) => ({
+      method,
+      path,
+      query,
+    }));
+    expect(requests).toEqual([
+      { method: 'GET', path: '/admin/v1/order-syncs', query: { page: '1', page_size: '1' } },
+    ]);
     const entry = main.getByRole('button', { name: /^手动同步$/ });
     await expect.element(entry, FIRST).toBeVisible();
     await entry.click();
@@ -137,12 +144,13 @@ it(
     const marker = await show(server, '/orders');
     const main = page.getByRole('main');
     await expect.element(main.getByText(NUMBER, { exact: true }), FIRST).toBeVisible();
-    expect(server.recordReads()).toEqual([]);
+    const initialQueries = () => server.recordReads().map(({ query }) => query);
+    await expect.poll(initialQueries, FIRST).toEqual([{ page: '1', page_size: '1' }]);
     // A button or a link named 同步记录 (its text node is the click target either way).
     const entry = main.getByText(/^同步记录$/).first();
     await expect.element(entry, FIRST).toBeVisible();
     await entry.click();
-    await expect.poll(() => server.recordReads().length, FIRST).toBe(1);
+    await expect.poll(() => server.recordReads().length - 1, FIRST).toBe(1);
     // Date and time may sit in separate nodes: whitespace between them is optional.
     const loose = (text: string): RegExp => new RegExp(text.replace(' ', '\\s*'));
     for (const sample of Object.values(RECORD)) {

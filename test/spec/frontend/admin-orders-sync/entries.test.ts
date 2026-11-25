@@ -19,16 +19,23 @@ import {
 } from './helpers.ts';
 
 it(
-  '[AC-F1-07eb-ENTRY#1] 持 order.view 的订单列表标题行有可用的【手动同步】【同步记录】，列表初次加载不请求 order-syncs 与 limits',
+  '[AC-F1-07eb-ENTRY#1] 持 order.view 的订单列表标题行有可用的【手动同步】【同步记录】，列表初次加载只为同步状态条请求一次 order-syncs（page=1、page_size=1），不请求 limits',
   async () => {
     const { server } = await mountList();
-    expect(server.syncRequests(), 'no order-syncs request on the first load').toEqual([]);
+    const syncRequests = () =>
+      server.syncRequests().map(({ method, path, query }) => ({ method, path, query }));
+    const expected = [
+      { method: 'GET', path: '/admin/v1/order-syncs', query: { page: '1', page_size: '1' } },
+    ];
+    expect(syncRequests(), 'one order-syncs request for the status bar on the first load').toEqual(
+      expected,
+    );
     expect(usable(main(), MANUAL_ENTRY).length, '【手动同步】 in the title row').toBeGreaterThan(0);
     expect(usable(main(), RECORDS_ENTRY).length, '【同步记录】 in the title row').toBeGreaterThan(
       0,
     );
     await settled(server);
-    expect(server.syncRequests()).toEqual([]);
+    expect(syncRequests()).toEqual(expected);
     expect(server.posts()).toEqual([]);
   },
   FLOW_TIMEOUT,
@@ -57,7 +64,14 @@ it(
     await mountList(first, SUPER);
     expect(usable(main(), MANUAL_ENTRY).length, 'super admin 【手动同步】').toBeGreaterThan(0);
     expect(usable(main(), RECORDS_ENTRY).length, 'super admin 【同步记录】').toBeGreaterThan(0);
-    expect(first.syncRequests()).toEqual([]);
+    const requests = first.syncRequests().map(({ method, path, query }) => ({
+      method,
+      path,
+      query,
+    }));
+    expect(requests).toEqual([
+      { method: 'GET', path: '/admin/v1/order-syncs', query: { page: '1', page_size: '1' } },
+    ]);
 
     cleanup();
     const second = createServer();

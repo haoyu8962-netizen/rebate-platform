@@ -72,6 +72,23 @@ export const ordersTexts = {
   detailAction: '详情',
   /** Screen-reader name of a row's action (规格 §6: 「详情 TB…」). */
   detailActionName: (orderNo: string): string => `详情 ${orderNo}`,
+  /** The row's 【查看】: opens the detail drawer on the list (F1-07edb, BR-ID-46). */
+  viewAction: '查看',
+  viewActionName: (orderNo: string): string => `查看 ${orderNo}`,
+  /** The detail drawer of the list (F1-07edb): the main fields of one order. */
+  drawer: {
+    title: '订单详情',
+    stateLabel: '读取状态',
+    loading: '加载中…',
+    failed: '订单加载失败，网络错误或服务异常。',
+    missing: '订单不存在或无权查看',
+    forbidden: '无权限查看订单',
+    statusTitle: '订单状态',
+    platform: '平台',
+    platformStatus: '平台状态',
+    rebateStatus: '返利状态',
+    flags: '标记',
+  },
 
   /** Caption of an order without an attributed user (user null). */
   noUser: '未归因',
@@ -173,6 +190,18 @@ export const ordersTexts = {
     window: (from: string, to: string): string => `${from} ~ ${to}`,
     counts: (fetched: number, stored: number): string => `${fetched} / ${stored}`,
     close: '关闭',
+
+    /** The status bar above the list (F1-07edb, BR-ID-46): the latest sync record. */
+    bar: {
+      label: '最近同步',
+      loading: '正在读取同步状态…',
+      empty: '暂无同步记录',
+      failed: '同步状态读取失败',
+      createdAt: (time: string): string => `创建于 ${time}（北京时间）`,
+      /** HH:mm:ss (24-hour, Beijing) of the moment the bar was read. */
+      updatedAt: (time: string): string => `更新于 ${time}`,
+      refresh: '刷新',
+    },
   },
 
   detail: {
