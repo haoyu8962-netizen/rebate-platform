@@ -4,7 +4,8 @@
 #
 #   claude-run.sh impl   <id> [--phase test] [--worktree <dir>] [--timeout-min <n>] [--dry-run]
 #   claude-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test]
-#                             [--base <ref>] [--timeout-min <n>] [--dry-run]
+#                             [--base <ref>] [--timeout-min <n>] [--full]
+#                             [--confirm-round <commit>] [--dry-run]
 #   claude-run.sh selfcheck
 #
 # The same command line, limits, exit codes (a usage limit or an overloaded model is 11), trusted

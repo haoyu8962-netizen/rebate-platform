@@ -773,3 +773,155 @@ it(
     expect(existsSync(join(fx.run, 'canary', '1', 'wt'))).toBe(false);
   },
 );
+
+it('[CT-06zzzzzzzg] claude-run.sh refuses --confirm-round for the test phase', LONG, () => {
+  const fx = fixture('rubric-confirm-impl');
+  ledger(fx, {});
+  const res = claudeRun(fx, ['impl', TASK, '--phase', 'test', '--confirm-round', '--dry-run']);
+  expect(res.status).toBe(2);
+  expect(res.stderr).toContain('--confirm-round applies to spec-test reviews only');
+});
+
+/** A trusted root that is a Git checkout of its own with the task ledger committed (D10-3211). */
+function commitTrustedLedger(
+  fx: Fixture,
+  title: string,
+  redExemptTests: readonly string[],
+): string {
+  const ledgerFile = `ops/tasks/${TASK}.yaml`;
+  if (!existsSync(join(fx.trusted, '.git'))) {
+    gitIn(fx.trusted, ['init', '-q', '-b', 'trusted']);
+    // tools/lib/task-file.ts (copied by the fixture) imports tools/guard/lib.
+    cpSync(join(TOOLS_DIR, 'guard', 'lib'), join(fx.trusted, 'tools', 'guard', 'lib'), {
+      recursive: true,
+    });
+  }
+  const redExempt =
+    redExemptTests.length === 0
+      ? ['red_exempt: []']
+      : [
+          'red_exempt:',
+          ...redExemptTests.flatMap((test) => [
+            '  - file: "test/spec/t1/check.test.ts"',
+            `    test: ${JSON.stringify(test)}`,
+            '    reason: "Kept green on the base since the start"',
+          ]),
+        ];
+  const yaml = [
+    `id: ${TASK}`,
+    'repo: rebate-platform',
+    `title: ${title}`,
+    'type: impl',
+    'refs: []',
+    'refs_hash: {}',
+    'deps: []',
+    'paths: ["src/a.ts"]',
+    'test_paths: ["test/spec/t1/**"]',
+    'impl: claude',
+    'tester: claude-independent',
+    'accept: [pnpm verify:fast]',
+    'status: todo',
+    ...redExempt,
+    '',
+  ].join('\n');
+  mkdirSync(join(fx.trusted, 'ops', 'tasks'), { recursive: true });
+  writeFileSync(join(fx.trusted, ledgerFile), yaml);
+  gitIn(fx.trusted, ['add', '--', ledgerFile]);
+  gitIn(fx.trusted, ['commit', '-q', '-m', title]);
+  return gitIn(fx.trusted, ['rev-parse', 'HEAD']);
+}
+
+it(
+  '[CT-06zzzzzzzg] claude-run.sh writes the confirmation line and the ledger delta, not the option, for a spec-test review',
+  LONG,
+  () => {
+    const fx = fixture('rubric-confirm-spec');
+    ledger(fx, {});
+    const baseline = commitTrustedLedger(fx, 'Baseline', ['frozen kept']);
+    commitTrustedLedger(fx, 'Middle', ['frozen kept', 'frozen added']);
+    commitTrustedLedger(fx, 'Current', ['frozen kept', 'frozen added', 'frozen later']);
+    const res = claudeRun(fx, [
+      'review',
+      TASK,
+      '--base',
+      fx.baseSha,
+      '--confirm-round',
+      baseline,
+      '--review-type',
+      'spec-test',
+      '--dry-run',
+    ]);
+    expect(res.status, res.stderr).toBe(0);
+    const argv = decodeDryRun(res.stdout);
+    const prompt = res.stdout.trimEnd().split('\n').at(-1) ?? '';
+    expect(argv.slice(0, -1)).not.toContain('--confirm-round');
+    expect(argv.slice(0, -1)).not.toContain(baseline);
+    expect(prompt).toContain('- Confirmation round: yes');
+    expect(prompt).toContain(
+      '- Declarations added or changed this round: 2 entries (red_exempt 2, red_exempt_outside 0, renames 0, expected_values 0)',
+    );
+    expect(prompt).toContain('frozen added');
+    expect(prompt).toContain('frozen later');
+    expect(prompt).not.toContain('frozen kept');
+    expect(prompt).not.toContain('- Task kind: companion test task');
+    // codex money review r2 S1: the round number, but no ordinary incremental context.
+    expect(prompt).toContain('### Review round (data; exemption confirmation round)');
+    expect(prompt).toContain('- This review round: 1 (earlier usable spec-test outputs found: 0');
+    expect(prompt).not.toContain('Previous review round');
+    expect(prompt).not.toContain('git-diff-since-previous.patch');
+  },
+);
+
+it(
+  '[CT-06zzzzzzzg, D10-3231 ②] claude-run.sh refuses --confirm-round with a valid baseline on other review types',
+  LONG,
+  () => {
+    const fx = fixture('rubric-confirm-types');
+    ledger(fx, {});
+    writeStub(join(fx.trusted, 'tools', 'ops', 'state.ts'), 'state');
+    const baseline = commitTrustedLedger(fx, 'Baseline', []);
+    for (const reviewType of [undefined, 'general', 'money', 'contract']) {
+      const typeArgs = reviewType === undefined ? [] : ['--review-type', reviewType];
+      const label = reviewType ?? 'default review type';
+      const res = claudeRun(fx, [
+        'review',
+        TASK,
+        '--base',
+        fx.baseSha,
+        ...typeArgs,
+        '--confirm-round',
+        baseline,
+      ]);
+      expect(res.status, `${label}\n${res.stderr}`).toBe(2);
+      expect(res.stderr, label).toContain('--confirm-round applies to spec-test reviews only');
+      const release = stubCalls(fx, 'state')
+        .filter((call) => call[1] === 'release')
+        .at(-1);
+      const at = (release ?? []).indexOf('--review-type');
+      expect(release?.[at + 1], label).toBe(reviewType ?? 'general');
+      expect(existsSync(join(fx.log, 'argv.nul')), label).toBe(false);
+    }
+  },
+);
+
+it(
+  '[CT-06zzzzzzzg, D10-3211] claude-run.sh refuses a confirmation round without a baseline',
+  LONG,
+  () => {
+    const fx = fixture('rubric-confirm-nobase');
+    ledger(fx, {});
+    commitTrustedLedger(fx, 'Current', []);
+    const res = claudeRun(fx, [
+      'review',
+      TASK,
+      '--base',
+      fx.baseSha,
+      '--review-type',
+      'spec-test',
+      '--confirm-round',
+      '--dry-run',
+    ]);
+    expect(res.status).toBe(2);
+    expect(res.stderr).toContain('--confirm-round needs a baseline');
+  },
+);
