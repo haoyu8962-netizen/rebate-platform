@@ -8,7 +8,7 @@ type: impl
 # 2026-11-22 编排 D10-2437：money r2 S1——openapi.yaml adminStepUp 说明仍写「任何其他状态或服务端错误都释放令牌」，与 BR-ID-08「只能用于 1 次成功的业务请求」及本单行为不一致；只改这段 description（业务拒绝或已确认回滚：释放、可复用；提交结果未知：原令牌作废、重试 10003），不动形状与错误码表；生成物 openapi.gen.ts 内嵌说明文字，一并重生成。
 refs: [BR-ID-34]
 refs_hash:
-  BR-ID-34: 8bd50e43d350
+  BR-ID-34: 6ed9502449a2
 deps: []
 paths:
   - 'apps/api/src/modules/admin/application/step-up-outcome.ts'

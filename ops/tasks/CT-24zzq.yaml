@@ -10,7 +10,7 @@ type: contract
 refs: [BR-WDR-29, BR-ID-34]
 refs_hash:
   BR-WDR-29: 3f0cf42a584e
-  BR-ID-34: 8bd50e43d350
+  BR-ID-34: 6ed9502449a2
 contract_sections: ['11.1']
 deps: []
 paths:

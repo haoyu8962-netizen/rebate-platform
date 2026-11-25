@@ -5,7 +5,7 @@ type: impl
 # 2026-10-30 入账（union 线，编排裁定 D10-434 ①，B1-22b money r3 S2）。现状 notification/site-auth-alert/service.ts 以固定 row_version（0 queued / 1 claimed / 2 final）识别领取，挂起超 10 分钟的旧领取在新领取后落定或退回可能把新领取退回 queued → 同一号码同一阶段重复短信。依据 08 BR-ID-24 ②（告警短信去重）。优先不加迁移（如确需新列，停下报编排排迁移槽）。Codex 不可用至 11-02，测试与评审由独立 Claude（approvals #36）。
 refs: [BR-ID-24]
 refs_hash:
-  BR-ID-24: c83882bd9813
+  BR-ID-24: 3c3ffd8471cd
 deps: [B1-22b]
 paths:
   - 'apps/api/src/modules/notification/site-auth-alert/**'

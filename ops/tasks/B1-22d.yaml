@@ -6,7 +6,7 @@ type: impl
 # 2026-10-23 前置 B1-22b / B1-22c / CT-24h 均已合并；Codex 用量至 10-30 不可用，规则测试与评审改由独立 Claude（approvals #36）。
 refs: [BR-ID-24]
 refs_hash:
-  BR-ID-24: c83882bd9813
+  BR-ID-24: 3c3ffd8471cd
 deps: [B1-22b, B1-22c, CT-24h]
 paths:
   - 'apps/api/src/modules/union/**'

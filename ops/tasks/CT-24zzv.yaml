@@ -8,7 +8,7 @@ type: contract
 # 补丁 3（编排 D10-2900 裁定，待回写 BR-ID-34 并报负责人；起因 Codex 资金评审 r1）：paths / test_paths 加 test/spec/admin/step-up-method/**（签发接口 method / tier 入口归一的规则测试）；strict 凭证的「绑定所做的操作」取首次使用即绑定、签发时不指定操作（服务端在 B1-18l 的占用记录里存 operationId）。 补丁 4（编排 D10-2900 ④ 的实现方单测落点）：paths 里 step-up.controller.ts 一行改为含同目录的 step-up.controller.test.ts（控制器入口归一的单元测试，非规则测试）。 补丁 5（负责人 2026-11-25 对话确认支付单处置维持 none，D10-2970 第 4 条；approvals 待登记）：登 [AC-CT-21e#17] 整块，test_paths 加 pay-admin-http/generated.test.ts。
 refs: [BR-ID-34]
 refs_hash:
-  BR-ID-34: 8bd50e43d350
+  BR-ID-34: 6ed9502449a2
 # contract_sections 只列 §5（「后台二次验证档位」行所在）：§6.6、§7、§11 整节进任务书会超 24KB，相关行由手裁任务书摘录（D10-2792 ④）。
 contract_sections: ['5']
 deps: []

@@ -7,7 +7,7 @@ type: impl
 # 分工：订单归属 → impl claude、tester codex（D10-15）。
 refs: [BR-ATTR-15]
 refs_hash:
-  BR-ATTR-15: fb9f0b75f991
+  BR-ATTR-15: e3d465a124a8
 deps: [B1-08j]
 paths:
   - 'apps/api/src/modules/orders/**'

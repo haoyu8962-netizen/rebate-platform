@@ -10,7 +10,7 @@ refs: [BR-WDR-18, BR-FUND-20, BR-ID-34]
 refs_hash:
   BR-WDR-18: 9247640dde57
   BR-FUND-20: c29dae35777c
-  BR-ID-34: 8bd50e43d350
+  BR-ID-34: 6ed9502449a2
 deps: [F1-08bb]
 paths:
   - 'apps/admin/src/pages/withdrawals/**'

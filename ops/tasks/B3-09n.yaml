@@ -7,7 +7,7 @@ type: impl
 # 与 B1-34s（工作日日历十键登进注册表，be 线，D10-2946 / D10-2950）改同一批注册表冻结块：后 land 的一张在先合并的期望清单上再追加，modify_existing 的块前后以 land 时主干为准。
 refs: [BR-AI-16]
 refs_hash:
-  BR-AI-16: ccca6709add2
+  BR-AI-16: dbd76c5b95b5
 deps: [B3-09m]
 paths:
   - 'apps/api/src/modules/content/domain/config-registry.ts'

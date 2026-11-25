@@ -5,7 +5,7 @@ type: impl
 # 2026-10-31 入账（withdraw 线，D10-467 ④；D10-475 ② 定稿）。时间只读注入的 Clock，日切 / 槽位用 @couli/domain；每单只判定一次由 review_overdue_at 保证（B2-05m）；review_deadline 为空的单（自动到账判定中 / 自动单）不判。EVENT_NAMES、队列目录 / worker-plan / limits 计数照 D10-415 ① 由规则测试作者单列 test(spec) 提交（排在实现前、不计写测试轮次），其余未改用例 red_exempt（入账时按变基后主干的实际用例补）；计数以变基后主干为准（identity 的 order.snapshot_created、funds 的 run 级完成事件也在加）。
 refs: [BR-WDR-26, BR-WDR-24]
 refs_hash:
-  BR-WDR-26: 158db40de631
+  BR-WDR-26: e629666e7e2a
   BR-WDR-24: 356b5d012a5d
 deps: [B2-05m]
 paths:

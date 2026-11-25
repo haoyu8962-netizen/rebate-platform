@@ -9,7 +9,7 @@ type: impl
 refs: [BR-FUND-02, BR-FUND-04, BR-CALC-13, BR-WDR-14, BR-WDR-18, BR-WDR-24]
 refs_hash:
   BR-FUND-02: f287247d4d07
-  BR-FUND-04: 27c6704ac9af
+  BR-FUND-04: faf2ddd22d5b
   BR-CALC-13: 194c980d806d
   BR-WDR-14: 6328f3cda2e6
   BR-WDR-18: 9247640dde57

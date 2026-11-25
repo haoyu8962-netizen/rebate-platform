@@ -9,7 +9,7 @@ refs: [BR-WDR-17, BR-WDR-33, BR-ID-34]
 refs_hash:
   BR-WDR-17: 25dba2f638b0
   BR-WDR-33: '543d57be5414'
-  BR-ID-34: 8bd50e43d350
+  BR-ID-34: 6ed9502449a2
 deps: [F1-08bd]
 paths:
   - 'apps/admin/src/pages/withdrawals/**'

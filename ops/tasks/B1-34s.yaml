@@ -13,7 +13,7 @@ refs: [BR-ID-36, BR-ID-27, BR-WDR-26]
 refs_hash:
   BR-ID-36: 1518efdd5860
   BR-ID-27: b6a7f00720b4
-  BR-WDR-26: 158db40de631
+  BR-WDR-26: e629666e7e2a
 deps: []
 paths:
   - 'apps/api/src/modules/content/domain/config-registry{,.test}.ts'

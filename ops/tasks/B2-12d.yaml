@@ -6,7 +6,7 @@ refs: [BR-FUND-24, BR-ID-28, BR-FUND-16]
 refs_hash:
   BR-FUND-24: 7cca08c02491
   BR-ID-28: 0723f447192c
-  BR-FUND-16: 084c4c66328c
+  BR-FUND-16: 493ff1223801
 deps: [B2-12c, CT-26u]
 paths:
   - 'apps/api/src/modules/ledger/application/admin-adjustment-closing*.ts'

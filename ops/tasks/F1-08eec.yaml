@@ -21,7 +21,7 @@ refs_hash:
   BR-FUND-24: 7cca08c02491
   BR-FUND-19: f72aa79561bc
   BR-WDR-23: 92950f49116f
-  BR-ID-34: 8bd50e43d350
+  BR-ID-34: 6ed9502449a2
 deps: [F1-08ee]
 paths:
   - 'test/spec/frontend/admin-recon-adjust-restore/eec/**'

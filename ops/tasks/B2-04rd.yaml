@@ -12,7 +12,7 @@ type: impl
 # 2026-11-24 置 void（funds，编排 D10-2800 ③）：并入 B2-04re——只改补充一侧不成立（资金评审 r1 / r2），改做平台级「生成 / 执行」互斥；本单的 14 条规则测试与实现 r3 由 B2-04re 带走。
 refs: [BR-FUND-04]
 refs_hash:
-  BR-FUND-04: 27c6704ac9af
+  BR-FUND-04: faf2ddd22d5b
 deps: []
 paths:
   - 'apps/api/src/modules/settlement/bill/supplement/**'

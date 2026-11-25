@@ -12,7 +12,7 @@ type: test-change
 #   每个探针杀到哪几条写进 PR 正文与证据。不登 red_exempt。spec-test 由 Codex 做；本机不跑 vitest，走测试机 --tests（D10-2404）。
 refs: [BR-FUND-04, BR-FUND-09]
 refs_hash:
-  BR-FUND-04: 27c6704ac9af
+  BR-FUND-04: faf2ddd22d5b
   BR-FUND-09: 891062fdd62b
 deps: [B2-18a]
 paths:

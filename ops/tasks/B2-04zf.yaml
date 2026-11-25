@@ -9,7 +9,7 @@ type: impl
 # 事件名与载荷照 02 §11 / EVENT_NAMES 既有命名口径（两段式 a.b）；若需新增事件名，进 EVENT_NAMES 并在 PR 说明标出；契约 / 事件清单未写清处报编排。
 refs: [BR-FUND-04, BR-TEXT-09]
 refs_hash:
-  BR-FUND-04: 27c6704ac9af
+  BR-FUND-04: faf2ddd22d5b
   BR-TEXT-09: 00b5038b8224
 deps: [B2-04ze, B2-04zfa]
 paths:

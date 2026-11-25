@@ -7,7 +7,7 @@ type: impl
 # 2026-10-24 paths 补 packages/contracts-ts/src/planned-operations.gen.ts：去 planned 后 codegen 会改这份生成物（contracts:check 校验它）。
 refs: [BR-ID-24]
 refs_hash:
-  BR-ID-24: c83882bd9813
+  BR-ID-24: 3c3ffd8471cd
 deps: [B1-22b, CT-24h]
 paths:
   - 'apps/api/src/modules/union/**'

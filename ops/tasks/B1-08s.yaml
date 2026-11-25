@@ -9,7 +9,7 @@ type: impl
 # 2026-10-21 test_paths 补冻结夹具（编排裁定 D10-88 机械修正，只改夹具准备方式、断言不动；guard-git path-guard-author 要求在本任务测试路径内）。
 refs: [BR-ATTR-15]
 refs_hash:
-  BR-ATTR-15: fb9f0b75f991
+  BR-ATTR-15: e3d465a124a8
 deps: [B1-08j]
 paths:
   - 'apps/api/src/modules/linking/**'

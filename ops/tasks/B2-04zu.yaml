@@ -10,7 +10,7 @@ type: impl
 # 2026-11-06 作废（D10-726）：夹紧方案两轮 Codex money 同一根因 S1，改走计数水位，由 B2-04zy 承接；r2 规则测试 run-done-skew/** 并入 B2-04zy。
 refs: [BR-FUND-04, BR-TEXT-09]
 refs_hash:
-  BR-FUND-04: 27c6704ac9af
+  BR-FUND-04: faf2ddd22d5b
   BR-TEXT-09: 00b5038b8224
 deps: [B2-04zt]
 paths:

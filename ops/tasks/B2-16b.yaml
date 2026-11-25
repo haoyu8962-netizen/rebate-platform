@@ -8,7 +8,7 @@ refs: [BR-INV-24, BR-FUND-15, BR-FUND-16]
 refs_hash:
   BR-INV-24: f37c80461c35
   BR-FUND-15: 849cd1eab9f2
-  BR-FUND-16: 084c4c66328c
+  BR-FUND-16: 493ff1223801
 deps: [B2-16a]
 paths:
   - 'apps/api/src/modules/ledger/application/invite-reward-grant*.ts'

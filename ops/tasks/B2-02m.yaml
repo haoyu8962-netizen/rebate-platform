@@ -6,7 +6,7 @@ type: test-change
 # 只新增测试文件，已有规则测试一字不改、不削弱；实现已在 #915 / #917 修好，新用例应直接通过（不做先红）。Codex 写，Claude 快速核「只增不削弱」。
 refs: [BR-FUND-16, BR-FUND-19]
 refs_hash:
-  BR-FUND-16: 084c4c66328c
+  BR-FUND-16: 493ff1223801
   BR-FUND-19: f72aa79561bc
 deps: [B2-02l, B2-02j]
 paths:
