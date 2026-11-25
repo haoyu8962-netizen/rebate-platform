@@ -1275,3 +1275,9 @@ approvals:
     granted: true
     date: '2026-11-25'
     note: '依据：负责人 2026-11-25 答「都按建议办」第 ② 件（第 206 条，编排 D10-3129）。原因：资金评审 r4（全量，couli-runs/F1-07ee/review-money-r4.json）2 条 S1——OrderWrites.tsx:170 读到旧版本也能点【关闭】解锁；OrderDetailPage.tsx:170 原请求成功只交给已卸载的旧页面、新页面不重读。第 198 条的轮次已用完。止损：这一轮仍有属实 S1 即暂停、不再追加，届时在乙（只上不会结果未知的入口）与丙之间请负责人定。排在 F1-07edb 落地之后做。'
+  - id: 210
+    row: 4
+    title: '负责人 2026-11-25 晚（21:17 前后）对 F1-07edb 的 8 块冻结用例改动答「同意」（D10-3133）：同意的是订单页初次加载为同步状态条请求一次 order-syncs（page=1、page_size=1）、同步记录弹窗的请求计数扣掉这一次，涉及 [AC-F1-07eb-ENTRY#1]、[AC-F1-07eb-ENTRY#3]、[AC-F1-07eb-RECORDS#1]、[AC-F1-07eb-RECORDS#2]、[AC-F1-07eb-RECORDS#3]、[AC-F1-07ed-TABS#1]、[AC-F1-07eb-BROWSER#1]、[AC-F1-07eb-BROWSER#2] 这 8 块（test/spec/frontend/admin-orders-standard-b2/ 下，门禁判为资金 / 归属类目录）；别的断言不动'
+    granted: true
+    date: '2026-11-25'
+    note: '负责人原话「同意」，针对编排问的「F1-07edb 那 8 块测试把『打开订单页不请求同步记录』改成『只请求一次』，同意，还是先别合」（编排裁定 D10-3133；状态条做法本身见第 185 条 ②）。如实登记，边界：不含这 8 块之外的任何冻结用例；同单另 4 块（[AC-F1-07e-LIST#1]、[#2]、[AC-F1-07ed-COLUMNS#1]、[#2]，默认列头由十一列改为八列 + 操作）是编排按 D10-1899「只改按钮 / 入口 / 权限可见清单」一类放行，不在本条负责人同意之内。before / after 原文在 couli-runs/F1-07edb/me-records.json 与 ops/evidence/F1-07edb.json。紧跟第 206 条登记（D10-3133 ops 一项）；开时主干末条 209，无别的 approvals PR 在开。'
