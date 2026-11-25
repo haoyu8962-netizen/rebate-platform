@@ -27,9 +27,11 @@ import {
   creditOn,
   diffsOf,
   errorText,
+  reconDiffInsertsOf,
   reconDiffsReadFault,
   seedOrder,
   settlementOnly,
+  traceStatements,
   voidOrder,
   withSupplementAdmin,
   withWorker,
@@ -120,13 +122,15 @@ async function supplementVia(
 }
 
 it(
-  '[AC-B2-18#43] 只写登记口（新插入与重放写在同一个 it）：前半——生产装配的账单日（worker，执行器装 reconDiffsReadFault）遇「联盟有结算、我方 VOID」的单：登记恰一张 union_mismatch（period = 账单号、ref_type order、ref_id = 订单键、dedupe_key 与 resolution 为 NULL、status open），error_count 1，主库执行器上对 recon_diffs 的读取为零；后半——对同一账单经后台入口发起补充（主库与只读库两个执行器都注入），那张 VOID 单仍在来源里：请求 200，差错单仍恰一张且与前半读到的那一行逐字段相同，两个执行器在请求期间 executed / fired 增量都是 0、新增违规为空，主库执行器语句数增加，只读库令牌解析到的就是注入的执行器',
+  '[AC-B2-18#43] 只写登记口（新插入与重放写在同一个 it）：前半——生产装配的账单日（worker，执行器装 reconDiffsReadFault）遇「联盟有结算、我方 VOID」的单：登记恰一张 union_mismatch（period = 账单号、ref_type order、ref_id = 订单键、dedupe_key 与 resolution 为 NULL、status open），error_count 1，主库执行器上对 recon_diffs 的读取为零；后半——对同一账单经后台入口发起补充（主库与只读库两个执行器都注入），那张 VOID 单仍在来源里：请求 200，差错单仍恰一张且与前半读到的那一行逐字段相同，两个执行器在请求期间 executed / fired 增量都是 0、新增违规为空，主库执行器语句数增加，只读库令牌解析到的就是注入的执行器；每次登记只发一条 INSERT（B2-18d 评审第 5 条：主库执行器上记下的语句里，写 recon_diffs 的 INSERT 新登记阶段恰 1 条、重放阶段恰 1 条，都针对这张单的订单键）',
   async () => {
     const base = fixture(s, AT_BILL_DAY);
     const a = await appOf(base);
     const o = await seedOrder(a, { snapshotN: 1000n, settleFen: 1000n, people: EXAMPLE_PEOPLE });
     await voidOrder(a, o);
-    const main = reconDiffsReadFault(base.db);
+    // B2-18d 评审第 5 条：主库执行器先经 traceStatements 记下每条语句，再装读取探针（同一执行器，两个插件）。
+    const traced = traceStatements(base.db);
+    const main = reconDiffsReadFault(traced.db);
 
     // 前半：账单日（worker 回调里只投递与取数）。
     const billed: { outcome?: Outcome<void> } = {};
@@ -141,6 +145,7 @@ it(
     const firstDiffs = await diffsOf(a);
     const countsAfterBill = await countsOf(a);
     const billAfterBill = await billRow(a);
+    const billStatements = traced.statements.length;
 
     expect(shown(billed.outcome)).toBe('ok');
     expect(firstDiffs).toEqual([expect.objectContaining(unionMismatchOf(a, o))]);
@@ -150,6 +155,11 @@ it(
       fired: afterBill.fired,
       violations: afterBill.violations,
     }).toEqual({ executed: 0, fired: 0, violations: [] });
+    // 新登记阶段：写 recon_diffs 的 INSERT 恰一条（针对这张单），不连发两次。
+    expect(reconDiffInsertsOf(traced.statements.slice(0, billStatements), o)).toEqual({
+      total: 1,
+      forOrder: 1,
+    });
 
     // 后半：对同一账单发起补充（重放登记）。
     const readOnly = reconDiffsReadFault(base.db);
@@ -165,6 +175,11 @@ it(
     expect(readOnly.executed).toBe(0);
     expect(readOnly.fired).toBe(0);
     expect(seen.readHandle).toBe(readOnly.db);
+    // 重放阶段：写 recon_diffs 的 INSERT 同样恰一条（冲突、不新增），不连发两次。
+    expect(reconDiffInsertsOf(traced.statements.slice(billStatements), o)).toEqual({
+      total: 1,
+      forOrder: 1,
+    });
     // 补充不写账单计数列。
     expect(await billRow(a)).toEqual(billAfterBill);
   },
@@ -172,7 +187,7 @@ it(
 );
 
 it(
-  '[AC-B2-18#44] 补充自己的新插入：账单日那次这张 VOID 单还没有联盟结算（不在账单里、不登记），之后联盟结算数据才到（STATEMENT seq 1 结算 1000，订单状态不动）；对同一账单经后台入口发起补充（主库与只读库两个执行器都注入 reconDiffsReadFault）：请求 200，首次登记 union_mismatch 恰一张、字段同 #43，两个执行器零读取（executed / fired 为 0、违规为空），主库执行器上有语句经过、只读库令牌解析到注入的执行器；账单行（含 error_count）不回写',
+  '[AC-B2-18#44] 补充自己的新插入：账单日那次这张 VOID 单还没有联盟结算（不在账单里、不登记），之后联盟结算数据才到（STATEMENT seq 1 结算 1000，订单状态不动）；对同一账单经后台入口发起补充（主库与只读库两个执行器都注入 reconDiffsReadFault）：请求 200，首次登记 union_mismatch 恰一张、字段同 #43，两个执行器零读取（executed / fired 为 0、违规为空），主库执行器上有语句经过、只读库令牌解析到注入的执行器；账单行（含 error_count）不回写；这次新登记只发一条 INSERT（B2-18d 评审第 5 条：主库执行器上写 recon_diffs 的 INSERT 恰 1 条、针对这张单的订单键）',
   async () => {
     const base = fixture(s, AT_BILL_DAY);
     const a = await appOf(base);
@@ -187,7 +202,9 @@ it(
     const billAfterBill = await billRow(a);
     await settlementOnly(a, o, { seq: 1, source: 'STATEMENT', fen: 1000n });
 
-    const main = reconDiffsReadFault(base.db);
+    // B2-18d 评审第 5 条：主库执行器先经 traceStatements 记下每条语句，再装读取探针（同一执行器，两个插件）。
+    const traced = traceStatements(base.db);
+    const main = reconDiffsReadFault(traced.db);
     const readOnly = reconDiffsReadFault(base.db);
     const seen = await supplementVia(base, a, main, readOnly);
 
@@ -197,6 +214,8 @@ it(
     expect(await diffsOf(a)).toEqual([expect.objectContaining(unionMismatchOf(a, o))]);
     expect(snapshotOf(main)).toMatchObject({ executed: 0, fired: 0, violations: [] });
     expect(main.statements).toBeGreaterThan(0);
+    // 新登记：写 recon_diffs 的 INSERT 恰一条（针对这张单），不连发两次。
+    expect(reconDiffInsertsOf(traced.statements, o)).toEqual({ total: 1, forOrder: 1 });
     expect(snapshotOf(readOnly)).toMatchObject({ executed: 0, fired: 0, violations: [] });
     expect(seen.readHandle).toBe(readOnly.db);
     expect(await billRow(a)).toEqual(billAfterBill);

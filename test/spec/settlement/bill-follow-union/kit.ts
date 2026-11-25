@@ -2238,3 +2238,64 @@ export async function seedMany(a: App, spec: ManySpec): Promise<Seeded[]> {
   }
   return seeded;
 }
+
+// ---------------------------------------------------------------------------------------------
+// B2-18d 写测第 1 次追加（任务书 §19，规则测试评审第 1 轮五条 S1）：只新增，以上导出不变；只做搭建与取数，不 expect。
+
+/**
+ * 一个「正常返回、却写入了偏差版本」的重生成端口（评审第 3 条；参照 ./ports.int.test.ts 的 skewedPort，只是金额行不
+ * 手写）：与 refreshRegeneration 同一做法——在调用方事务里把 orders.commission_version 推到 入参版本 + 1，再由
+ * commission 真实的 refresh 写这一版的合计与金额行；只是对 skewFor 里的订单按 联盟结算佣金 + skewFen 估值（预留 0 时
+ * 新基数 = B_settle + skewFen ≠ B_settle，复核必然不一致），其余订单按联盟结算佣金估值（复核一致）。不取锁、不抛错。
+ */
+export function skewedRefreshRegeneration(
+  a: App,
+  skewFor: ReadonlySet<string>,
+  skewFen = 7n,
+): RefreshRegeneration {
+  const calls: string[] = [];
+  const port: BillSnapshotRegeneration = {
+    async regenerate(trx, input) {
+      calls.push(input.orderId);
+      const estimates = await estimatesFor(a);
+      const row = await trx
+        .selectFrom('orders')
+        .select('attr_at')
+        .where('app_id', '=', input.appId)
+        .where('order_id', '=', input.orderId)
+        .executeTakeFirstOrThrow();
+      const version = input.commissionVersion + 1;
+      await trx
+        .updateTable('orders')
+        .set((eb) => ({ commission_version: version, row_version: eb('row_version', '+', 1) }))
+        .where('app_id', '=', input.appId)
+        .where('order_id', '=', input.orderId)
+        .execute();
+      const commissionFen = skewFor.has(input.orderId)
+        ? addFen(input.settleCommissionFen, skewFen)
+        : input.settleCommissionFen;
+      await estimates.refresh(
+        trx,
+        { appId: input.appId, orderId: input.orderId, attrAt: row.attr_at },
+        { commissionFen },
+      );
+      return { commissionVersion: version };
+    },
+  };
+  return { port, calls };
+}
+
+/**
+ * 这些语句里写 recon_diffs 的 INSERT（评审第 5 条）：total 是以 `INSERT INTO [app.]recon_diffs` 开头的语句条数（去掉
+ * 标识符双引号后判，与 isReconDiffsRead 的纯写入判据同一个开头），forOrder 是其中参数里带 o 的订单键（ref_id）的条数。
+ */
+export function reconDiffInsertsOf(
+  statements: readonly TracedStatement[],
+  o: Pick<Seeded, 'orderKey'>,
+): { total: number; forOrder: number } {
+  const inserts = statements.filter((s) => RECON_DIFFS_INSERT_TARGET.test(s.sql.replace(/"/g, '')));
+  return {
+    total: inserts.length,
+    forOrder: inserts.filter((s) => parametersText(s.parameters).includes(o.orderKey)).length,
+  };
+}
