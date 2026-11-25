@@ -4,6 +4,7 @@ title: 'agent.models（BR-AI-16 模型单价表）列进后台配置列表：con
 type: impl
 # 2026-11-25 agent 线入账（D10-2848 改判甲、D10-2849 同意范围与「kit.ts 一字不动、只在用例块内补期望值」、D10-2861 核过探针放行；探针 couli-runs/B3-09m/kit-probe/：--early shape 0、content 全绿）。B3-09m 把 agent.models 放在 LOOKUP_ONLY；本单只把它列进列表，负责人填单价前必须能在后台看到。
 # 只做：config-registry.ts 挪一项 + 实现单测 config-registry.test.ts 长度 180 / Agent 尾 27；10 条冻结用例块内期望值只多 agent.models 一项（无种子键清单也多这一项，[AC-F1-10e#3] 计数多减 1）。不改 test/spec/content/config-items/kit.ts 与任何块外代码；[AC-F1-10e#10] 块内对 agent.models 写出其「未写过」期望值（kit 的 unwritten 查不到它）。B3-09m 合并后开工。
+# 与 B1-34s（工作日日历十键登进注册表，be 线，D10-2946 / D10-2950）改同一批注册表冻结块：后 land 的一张在先合并的期望清单上再追加，modify_existing 的块前后以 land 时主干为准。
 refs: [BR-AI-16]
 refs_hash:
   BR-AI-16: ccca6709add2
