@@ -12,8 +12,8 @@
 // - appendBeneficiaryEvent = commission appendBeneficiaryEvent ((trx, input, { clock }); the worker
 //   adapts it to the (trx, input) port of credit-order / beneficiary-credit);
 // - readUnionAuthoritative = ledger readUnionAuthoritativeOrderKeys; snapshotStatus = ledger
-//   getAssetSnapshotStatus; registerDiff = ledger registerReconDiff; readOrderNets = ledger
-//   getOrderNets; ledger = ledger createLedger;
+//   getAssetSnapshotStatus; registerDiff = ledger registerReconDiffWriteOnly (B2-18d, D10-2982 ②);
+//   readOrderNets = ledger getOrderNets; ledger = ledger createLedger;
 // - lockUsers = identity lockUsersForUpdate; deletionStatus / realnameStatus = identity's batch
 //   readers; minors = identity createMinorStatusBatchReader (B1-03zc); riskState = risk
 //   createRiskStateBatchReader;
@@ -26,6 +26,11 @@
 // - systemAudit = admin's system audit writer (B2-09zb: the audit of a candidate superseded by a
 //   newer commission_version, in the generating transaction). Optional for the worker pieces that
 //   never supersede; a run that has to supersede without it fails that order (nothing written).
+// - regenerationRefresh (B2-18, BR-FUND-04 ④, BR-FUND-01 R7) = commission createCommissionEstimates
+//   ({ clock, readOrder: orders' readOrder }).refresh: the bill job's snapshot regeneration writes
+//   the new version's rows through it. Optional in the type (a mismatch is then a failed
+//   regeneration: alert, stays WAITING); app.module always gives it on the worker.
+// - readUnionAuthoritative is kept in the shape but never called by the bill (D10-2415 ③).
 import type { DB } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
 import type { Ledger, OrderNetSelection, OrderNets } from '../../ledger/index.ts';
@@ -33,6 +38,7 @@ import type { Clock, EventBus, FieldCrypto, RootLogger } from '../../platform/in
 import type { RiskStateBatchReader } from '../../risk/index.ts';
 import type { BillSourceDependencies } from '../bill/infra/bill-source.ts';
 import type { BillJobDependencies } from '../bill/job.ts';
+import type { BillSnapshotRegenerationDependencies } from '../bill/regenerate.ts';
 import type {
   LockUsersInput,
   MinorStatusReader,
@@ -74,7 +80,7 @@ export interface SettlementWorkerPorts {
     input: BeneficiaryEventInput,
     dependencies: { readonly clock: Clock },
   ) => Promise<void>;
-  /** ledger readUnionAuthoritativeOrderKeys (the bill source). */
+  /** ledger readUnionAuthoritativeOrderKeys. B2-18: kept in the shape, never called. */
   readonly readUnionAuthoritative: BillSourceDependencies['readUnionAuthoritative'];
   /** ledger getAssetSnapshotStatus. */
   readonly snapshotStatus: BillJobDependencies['snapshotStatus'];
@@ -111,4 +117,6 @@ export interface SettlementWorkerPorts {
   readonly inviteRewardTrigger?: (runtime: SettlementInviteTriggerRuntime) => CreditInviteTrigger;
   /** admin's createSystemAuditWriter over the worker's clock (optional, see the header). */
   readonly systemAudit?: (clock: Clock) => SettleAdjustAudit;
+  /** B2-18: commission's estimates refresh with an explicit value, over the worker's clock. */
+  readonly regenerationRefresh?: (clock: Clock) => BillSnapshotRegenerationDependencies['refresh'];
 }

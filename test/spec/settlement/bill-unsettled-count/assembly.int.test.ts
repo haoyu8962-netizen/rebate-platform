@@ -101,11 +101,12 @@ it.each([
         expect(jobs).toStrictEqual([
           { job: 'bill', platform: TAOBAO, run_at: BILL_DAY_START, status: 'done' },
         ]);
+        // B2-18（D10-2521 ①）：amount_mismatch_count 与 unsettled_count 同一口径，出账后落具体数（无则 0）。
         expect(await billCounts(db, APP, BILL_MONTH)).toEqual({
           error_count: 1,
           held_count: 0,
           unsettled_count: 2,
-          amount_mismatch_count: null,
+          amount_mismatch_count: 0,
         });
         const diffs = calls.diffs.map((diff) => ({
           type: diff.type,

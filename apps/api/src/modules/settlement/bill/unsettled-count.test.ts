@@ -170,11 +170,11 @@ function row(order: BillSourceOrder | null, commissionFen?: bigint): BillSourceR
 
 function deps(rows: readonly BillSourceRow[], config: Record<string, unknown> = {}) {
   const registerDiff = vi.fn<BillJobDependencies['registerDiff']>(
-    async (_trx, input) =>
-      ({
-        expected_fen: input.expectedFen,
-        actual_fen: input.actualFen,
-      }) as Awaited<ReturnType<BillJobDependencies['registerDiff']>>,
+    // 端口返回类型是 Promise<unknown>（D10-2982 ②：调用方不用返回值）。
+    async (_trx, input) => ({
+      expected_fen: input.expectedFen,
+      actual_fen: input.actualFen,
+    }),
   );
   const saveValidations = vi.fn<BillJobDependencies['saveValidations']>(async () => undefined);
   const dependencies: BillJobDependencies = {
@@ -202,7 +202,7 @@ function savedResults(saveValidations: ReturnType<typeof deps>['saveValidations'
   );
 }
 
-it('[AC-B2-18a-UNIT#1] 账单日任务遇应结未结：不调 registerDiff、不计 error_count，unsettled_count 与 error_count / held_count 同一条 UPDATE 写入，amount_mismatch_count 不写', async () => {
+it('[AC-B2-18a-UNIT#1] 账单日任务遇应结未结：不调 registerDiff、不计 error_count，unsettled_count 与 error_count / held_count 同一条 UPDATE 写入；B2-18 起 amount_mismatch_count 也在这条 UPDATE 里（没有时落 0）', async () => {
   const missingA = row(waiting());
   const missingB = row(waiting());
   const voided = row(waiting({ rebateStatus: 'VOID' }), 1000n);
@@ -223,7 +223,7 @@ it('[AC-B2-18a-UNIT#1] 账单日任务遇应结未结：不调 registerDiff、�
   expect(f.billUpdates()).toEqual([
     expect.objectContaining({ error_count: 1, held_count: 1, unsettled_count: 2 }),
   ]);
-  expect(f.billUpdates()[0]).not.toHaveProperty('amount_mismatch_count');
+  expect(f.billUpdates()[0]).toHaveProperty('amount_mismatch_count', 0);
   expect(savedResults(d.saveValidations)).toEqual([
     [missingA.orderKey, 'missing_settlement'],
     [missingB.orderKey, 'missing_settlement'],

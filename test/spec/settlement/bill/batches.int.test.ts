@@ -398,8 +398,9 @@ it.each(['off', undefined])(
     const s = await state(h);
     expect(s.batches).toEqual([]);
     expect(s.items).toEqual([]);
-    expect(s.diffs).toHaveLength(1);
-    expect(s.bills[0]).toMatchObject({ error_count: 1, held_count: 1 });
+    // B2-18：bad 单（结算 9000、基数 850）不再登记 settle_amount_mismatch，也不计 error_count。
+    expect(s.diffs).toHaveLength(0);
+    expect(s.bills[0]).toMatchObject({ error_count: 0, held_count: 1 });
     expect(await validations(h)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ orderKey: good.key, result: 'candidate' }),
@@ -421,8 +422,18 @@ it(
   async () => {
     const h = fixture(database.db);
     await snapshot(h);
-    const a = await order(h, { unionAuthoritative: true });
-    const b = await order(h, { unionAuthoritative: true });
+    // B2-18：「以联盟为准」结论不再读；两单改为快照基数与结算额换算相等。
+    // floor(9007199254740993 × 8500 / 10000) = floor(9007199254740994 × 8500 / 10000)
+    // = 7656119366529844；份额 5000 / 1000 / 500 bp 向下取整，余额归平台（夹具值，不是被测期望）。
+    const huge = {
+      tlj: 0n,
+      base: 7656119366529844n,
+      amounts: [3828059683264922n, 765611936652984n, 382805968326492n],
+      userTotal: 4976477588244398n,
+      retain: 2679641778285446n,
+    };
+    const a = await order(h, {}, 'taobao', huge);
+    const b = await order(h, {}, 'taobao', huge);
     await settlement(h, a, { settle_commission_fen: 9007199254740993n });
     await settlement(h, b, { settle_commission_fen: 9007199254740994n });
     await h.run();

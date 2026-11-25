@@ -50,7 +50,9 @@ import {
 import {
   createBillSourceReader,
   saveBillValidations,
+  createBillSnapshotRegeneration,
   type BillJobDependencies,
+  type BillSnapshotRegenerationDependencies,
   type BillSourceDependencies,
 } from '../bill/index.ts';
 import {
@@ -92,8 +94,14 @@ export interface AdminSettleCommandPorts {
   readonly readTljDeductFen: BillJobDependencies['readTljDeductFen'];
   /** ledger's registerReconDiff. */
   readonly registerDiff: BillJobDependencies['registerDiff'];
-  /** ledger's readUnionAuthoritativeOrderKeys. */
+  /** ledger's readUnionAuthoritativeOrderKeys. B2-18: kept in the shape, never called (D10-2415 ③). */
   readonly readUnionAuthoritative: BillSourceDependencies['readUnionAuthoritative'];
+  /**
+   * B2-18 (BR-FUND-04 ④, BR-FUND-01 R7): commission's estimates refresh with an explicit value over
+   * the entry's clock; the supplement's snapshot regeneration writes the new version through it.
+   * Optional: absent, an amount mismatch is a failed regeneration (alert, not batched).
+   */
+  readonly regenerationRefresh?: (clock: Clock) => BillSnapshotRegenerationDependencies['refresh'];
 }
 
 export interface AdminSettleCommandDeps {
@@ -151,13 +159,20 @@ export function createAdminSettleCommandDeps(
     readonly db: Kysely<DB>;
     readonly clock: Clock;
     readonly idempotency: Idempotency;
-    readonly logger: Pick<Logger, 'warn'>;
+    readonly logger: Pick<Logger, 'warn' | 'error'>;
   },
 ): AdminSettleCommandDeps {
   const { db, clock, idempotency, logger } = runtime;
+  // The conclusion port is passed for the shape only; the reader never calls it (D10-2415 ③).
   const readSource = createBillSourceReader({
     readUnionAuthoritative: ports.readUnionAuthoritative,
   });
+  // B2-18: the supplement's amount mismatch follows the union in the launch's own transaction.
+  const refresh = ports.regenerationRefresh?.(clock);
+  const regeneration =
+    refresh === undefined
+      ? {}
+      : { regenerateSnapshot: createBillSnapshotRegeneration({ clock, refresh }) };
   return {
     db,
     clock,
@@ -179,6 +194,7 @@ export function createAdminSettleCommandDeps(
         registerDiff: ports.registerDiff,
         saveValidations: saveBillValidations,
         logger,
+        ...regeneration,
       }),
     auditOn: (trx) => ports.auditWriter(trx, clock),
   };

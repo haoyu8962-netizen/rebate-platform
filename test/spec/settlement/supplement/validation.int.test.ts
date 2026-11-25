@@ -100,31 +100,32 @@ it(
 );
 
 it(
-  '[AC-B2-04r#3] 金额不一致经差错结论「以联盟为准」后进入补充批次，B_settle 取联盟结算额换算',
+  '[AC-B2-04r#3] 金额不一致不登记差错单；差错结论「以联盟为准」不再使其进入补充批次（B2-18）',
   async () => {
     const h = fixture(database.db);
     const o = await order(h);
     await settlement(h, o, { settle_commission_fen: 2000n });
     await main(h);
     const before = await state(h);
-    expect(before.diffs).toEqual([
-      expect.objectContaining({ type: 'settle_amount_mismatch', ref_id: o.key, period: MONTH }),
-    ]);
+    // B2-18：结论不再读；本夹具不注入重生成端口，按重生成失败处理。
+    expect(before.diffs).toHaveLength(0);
     o.fact.order.unionAuthoritative = true;
 
     await h.launch();
     const s = await state(h);
-    // 联盟结算佣金 2000，预留 1500bp：B_settle = 1700，不取快照基数 850。
-    expect(itemsOf(s, supplements(s))).toEqual([
-      expect.objectContaining({ item_type: 'order', order_id: o.id, b_settle_fen: 1700n }),
-    ]);
+    expect(itemsOf(s, supplements(s))).toEqual([]);
     expect(s.diffs).toEqual(before.diffs);
+    expect(await validations(h)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ orderKey: o.key, result: 'amount_mismatch' }),
+      ]),
+    );
   },
   TIMEOUT,
 );
 
 it(
-  '[AC-B2-04r#4] 仍不一致的不入批且同账单同单差错不重复；补充时新发现的不一致按目标账单月登记',
+  '[AC-B2-04r#4] 仍不一致的不入批、不登记差错单（B2-18）',
   async () => {
     const h = fixture(database.db);
     const stale = await order(h);
@@ -133,32 +134,15 @@ it(
     await settlement(h, fresh, { created_at: new Date(LATER), settle_commission_fen: 9000n });
     await main(h);
     const before = await state(h);
-    expect(before.diffs).toHaveLength(1);
+    // B2-18：金额不一致不再登记差错单；本夹具不注入重生成端口，按重生成失败处理。
+    expect(before.diffs).toHaveLength(0);
 
     await h.launch();
     const s = await state(h);
     expect(s.batches).toEqual([]);
     expect(s.items).toEqual([]);
-    expect(s.diffs).toHaveLength(2);
-    expect(s.diffs).toEqual(expect.arrayContaining(before.diffs));
-    expect(s.diffs).toContainEqual(
-      expect.objectContaining({
-        type: 'settle_amount_mismatch',
-        ref_id: fresh.key,
-        period: MONTH,
-        expected_fen: 850n,
-        actual_fen: 7650n,
-      }),
-    );
-    // 差额口径以契约为准（D10-507 ②）：diff_fen = expected_fen − actual_fen，联盟多结为负。
-    expect(
-      s.diffs.find((d) => d.ref_id === fresh.key && d.type === 'settle_amount_mismatch')?.diff_fen,
-    ).toBe(-6800n);
-    expect(h.registerDiff).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ appId: h.appId, type: 'settle_amount_mismatch', refId: fresh.key }),
-      expect.objectContaining({ clock: h.clock }),
-    );
+    expect(s.diffs).toHaveLength(0);
+    expect(h.registerDiff).not.toHaveBeenCalled();
     expect(await validations(h)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ orderKey: stale.key, result: 'amount_mismatch' }),
@@ -475,16 +459,8 @@ it(
     const s = await state(h);
     expect(supplements(s)).toEqual([]);
     expect(s.items).toEqual([]);
-    expect(s.diffs).toEqual([
-      expect.objectContaining({
-        type: 'settle_amount_mismatch',
-        ref_id: o.key,
-        period: MONTH,
-        expected_fen: 1700n,
-        actual_fen: 850n,
-        diff_fen: 850n,
-      }),
-    ]);
+    // B2-18：不再登记账单金额不一致差错单（原 expected 1700 / actual 850 那张）。
+    expect(s.diffs).toEqual([]);
     expect(await validations(h)).toEqual([
       expect.objectContaining({ orderKey: o.key, result: 'amount_mismatch', settleSeq: 1 }),
     ]);

@@ -145,7 +145,7 @@ it('[AC-B2-09f#28] 一次发起是新的一轮：生成的批次 in_current_roun
   });
 });
 
-it('[AC-B2-09f#29] 校验范围：只看所发起平台和本应用的子订单；hold、维权中的单不入批；金额不符的单不入批且登记 R1 差错 settle_amount_mismatch，账期为账单月；已入账子订单上开着的补记义务生成受益人明细（order_count 不计）；差错数与暂缓数不回写账单（D10-280 ③）', async () => {
+it('[AC-B2-09f#29] 校验范围：只看所发起平台和本应用的子订单；hold、维权中的单不入批；金额不符的单不入批、不登记差错单（B2-18）；已入账子订单上开着的补记义务生成受益人明细（order_count 不计）；差错数与暂缓数不回写账单（D10-280 ③）', async () => {
   const f = fixture(s);
   const other = fixture(s);
   await creditOn(f, 'taobao', 'jd');
@@ -156,7 +156,9 @@ it('[AC-B2-09f#29] 校验范围：只看所发起平台和本应用的子订单�
   await seedOrder(f, { platform: 'jd' });
   await seedOrder(f, { hold: true });
   await seedOrder(f, { rightsPending: true });
-  await seedOrder(f, { commissionFen: 1100n });
+  // B2-18 (D10-2521 ②): the union settled 0 against a snapshot base of 850 — not regenerated, an
+  // engineering alert, not in the batch (the production launch has the regeneration port).
+  await seedOrder(f, { commissionFen: 0n });
   const credited = await seedOrder(f, { rebateStatus: 'CREDITED' });
   const creditId = await seedObligation(f, credited);
   await seedOrder(other);
@@ -180,18 +182,10 @@ it('[AC-B2-09f#29] 校验范围：只看所发起平台和本应用的子订单�
       role: 'self',
       b_settle_fen: null,
     });
-    const diffs = await allDiffs(f);
-    expect(diffs).toHaveLength(1);
-    expect(diffs[0]).toMatchObject({
-      source: 'R1',
-      type: 'settle_amount_mismatch',
-      period: bill.bill_id,
-      ref_type: 'order',
-      expected_fen: 850n,
-      actual_fen: 935n,
-    });
+    // B2-18: the amount mismatch no longer opens an R1 difference.
+    expect(await allDiffs(f)).toHaveLength(0);
     expect(await allBatches(other)).toEqual([]);
-    // One difference and two deferred orders in this run: error_count and held_count stay.
+    // Two deferred orders in this run: error_count and held_count stay.
     expect((await everything(f)).bills).toEqual(bills);
   });
 });

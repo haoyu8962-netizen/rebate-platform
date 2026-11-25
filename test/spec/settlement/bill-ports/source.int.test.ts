@@ -278,7 +278,7 @@ it(
 );
 
 it(
-  '[AC-B2-04zd#6] unionAuthoritative 只取差错结论读口（同一事务、本 app、本单键）；closed 差错单不冒充以联盟为准',
+  '[AC-B2-04zd#6] 来源读口不再调用差错结论读口（B2-18）：unionAuthoritative 恒为 false，closed 差错单也不冒充以联盟为准',
   async () => {
     const db = database.db;
     const appId = newApp();
@@ -290,26 +290,17 @@ it(
       status: 'closed',
       resolution: { reason: '以联盟为准' },
     });
+    // B2-18（D10-2415 ③）：读口若被调用会把 concluded 标为以联盟为准；有结论也不读。
     const reader = vi.fn<Reader>(async (_db, sel) => {
       return new Set(sel.orderKeys.filter((k) => k === concluded.key));
     });
-    let seen: Transaction<DB> | undefined;
 
-    const rows = await read({ readUnionAuthoritative: reader }, selection(appId), (trx) => {
-      seen = trx;
-    });
+    const rows = await read({ readUnionAuthoritative: reader }, selection(appId));
 
     const flag = (key: string) => rows.find((r) => r.orderKey === key)?.order?.unionAuthoritative;
-    expect(flag(concluded.key)).toBe(true);
+    expect(flag(concluded.key)).toBe(false);
     expect(flag(closedOnly.key)).toBe(false);
-    expect(reader).toHaveBeenCalled();
-    for (const [handle, sel] of reader.mock.calls) {
-      expect(handle).toBe(seen);
-      expect(sel.appId).toBe(appId);
-    }
-    expect(reader.mock.calls.flatMap(([, sel]) => sel.orderKeys)).toEqual(
-      expect.arrayContaining([concluded.key, closedOnly.key]),
-    );
+    expect(reader).not.toHaveBeenCalled();
   },
   TIMEOUT,
 );

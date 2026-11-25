@@ -54,7 +54,8 @@ it(
     await main(h);
     const before = await state(h);
     expect(before.batches).toEqual([]);
-    expect(before.diffs).toHaveLength(1);
+    // B2-18：开关 off 期间 bad 单金额不一致不再登记差错单。
+    expect(before.diffs).toHaveLength(0);
 
     h.values.set('credit.enabled.taobao', 'on');
     const result = await h.launch();

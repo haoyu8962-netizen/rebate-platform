@@ -147,18 +147,10 @@ it.each([
     expect(await validations(h)).toEqual([expect.objectContaining({ result: expected })]);
     const s = await state(h);
     expect(s.items).toHaveLength(expected === 'candidate' ? 1 : 0);
-    expect(s.diffs).toHaveLength(expected === 'candidate' ? 0 : 1);
+    // B2-18：超容差也不再登记差错单；本夹具不注入重生成端口，按重生成失败处理（不进批次）。
+    expect(s.diffs).toHaveLength(0);
     if (expected === 'amount_mismatch') {
-      expect(s.diffs[0]).toMatchObject({
-        type: 'settle_amount_mismatch',
-        ref_id: o.key,
-        expected_fen: 850n,
-      });
-      expect(h.registerDiff).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ appId: h.appId, type: 'settle_amount_mismatch', refId: o.key }),
-        expect.objectContaining({ clock: h.clock }),
-      );
+      expect(h.registerDiff).not.toHaveBeenCalled();
     }
   },
   TIMEOUT,
@@ -184,9 +176,12 @@ it(
     expect(s.items).toEqual([
       expect.objectContaining({ order_id: latest.id, b_settle_fen: 1700n }),
     ]);
-    expect(s.diffs).toEqual([
-      expect.objectContaining({ ref_id: zero.key, type: 'settle_amount_mismatch', actual_fen: 0n }),
-    ]);
+    // B2-18：结算佣金 0 而快照基数 850——不作废、不重生成、不进批次，也不再登记差错单；
+    // 逐单结果是金额不一致（有数据），不是应结未结。
+    expect(s.diffs).toEqual([]);
+    expect(await validations(h)).toContainEqual(
+      expect.objectContaining({ orderKey: zero.key, result: 'amount_mismatch' }),
+    );
   },
   TIMEOUT,
 );
@@ -221,7 +216,7 @@ it.each([
 );
 
 it(
-  '[AC-B2-04n#12] 以联盟为准只豁免金额差异，不能越过 hold 或缺结算数据',
+  '[AC-B2-04n#12] 以联盟为准的结论不再豁免金额差异（B2-18），也不能越过 hold 或缺结算数据',
   async () => {
     const h = fixture(database.db);
     await snapshot(h);
@@ -230,12 +225,11 @@ it(
     const missing = await order(h, { unionAuthoritative: true });
     for (const o of [accepted, held]) await settlement(h, o, { settle_commission_fen: 2000n });
     await h.run();
-    expect((await state(h)).items).toEqual([
-      expect.objectContaining({ order_id: accepted.id, b_settle_fen: 1700n }),
-    ]);
+    // B2-18：结论不再读；本夹具不注入重生成端口，按重生成失败处理。
+    expect((await state(h)).items).toEqual([]);
     expect(await validations(h)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ orderKey: accepted.key, result: 'candidate' }),
+        expect.objectContaining({ orderKey: accepted.key, result: 'amount_mismatch' }),
         expect.objectContaining({ orderKey: held.key, result: 'deferred' }),
         expect.objectContaining({ orderKey: missing.key, result: 'missing_settlement' }),
       ]),

@@ -166,7 +166,8 @@ it(
     expect(itemsOf(s, supplements(s))).toEqual([
       expect.objectContaining({ item_type: 'order', order_id: a.id }),
     ]);
-    expect(s.diffs).toHaveLength(before.diffs.length + 1);
+    // B2-18：late 单金额不一致不再登记差错单（本夹具不注入重生成端口，按重生成失败处理）。
+    expect(s.diffs).toHaveLength(before.diffs.length + 0);
     expect(s.supplementValidations).toHaveLength(2);
     expect(runKey(s, LAUNCH)).toEqual([expect.objectContaining({ status: 'done' })]);
   },

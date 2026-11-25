@@ -252,7 +252,7 @@ function setup(s: Setup) {
       events.push('saveValidations');
       saved.push(...rows);
     }),
-    logger: { warn: () => undefined },
+    logger: { warn: () => undefined, error: () => undefined },
     ...(s.lockChunkSize === undefined ? {} : { lockChunkSize: s.lockChunkSize }),
   };
   const command = createSupplementCommand(deps);

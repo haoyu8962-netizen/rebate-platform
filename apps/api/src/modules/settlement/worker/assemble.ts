@@ -29,6 +29,7 @@ import { createSettleAdjustJob } from '../adjust/run-job.ts';
 import { createBillSourceReader } from '../bill/infra/bill-source.ts';
 import { saveBillValidations } from '../bill/infra/bill-validations.ts';
 import { createBillJob } from '../bill/job.ts';
+import { createBillSnapshotRegeneration } from '../bill/regenerate.ts';
 import { createBeneficiaryGate } from '../credit/beneficiary-gate.ts';
 import {
   createBeneficiaryCredit,
@@ -176,9 +177,16 @@ export function createSettleWorkerHandler(
     creditBeneficiary: itemCredit(beneficiaryCredit),
     events,
   });
+  // B2-18: the amount mismatch follows the union (R7 regeneration in the generating transaction).
+  const refresh = ports.regenerationRefresh?.(clock);
   const bill = createBillJob({
     clock,
     config,
+    logger,
+    ...(refresh === undefined
+      ? {}
+      : { regenerateSnapshot: createBillSnapshotRegeneration({ clock, refresh }) }),
+    // The conclusion port is passed for the shape only; the reader never calls it (D10-2415 ③).
     readSource: createBillSourceReader({ readUnionAuthoritative: ports.readUnionAuthoritative }),
     readSnapshot: ports.readSnapshot,
     readTljDeductFen: ports.readTljDeductFen,
