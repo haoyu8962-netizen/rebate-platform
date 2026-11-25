@@ -659,13 +659,15 @@ api / stream / worker 三个进程把 OpenTelemetry 链路以 OTLP/HTTP 导出�
 - 路由不变：资金告警（规则带 `fund: 'true'`）任何时间都发 finance 组和 oncall 组；其余是运维告警，只发 oncall 组，22:00–08:00（+08:00）静默，08:00 后汇总发出。同一告警 30 分钟内合并。
 - 转发器把 `/finance` 发到财务群、`/oncall` 发到值班群；群消息只带告警名、级别、firing / resolved、开始与恢复时间（+08:00）和 summary；summary 里的链接、手机号、证件号、卡号、收款账号、token 一律去掉（与应用日志同一口径），不截留部分号码。
 - 每次推送 5 秒超时；失败（网络、超时、HTTP 错误，或 HTTP 200 但 errcode 不为 0）最多重试 3 次（间隔 1、2、4 秒）；仍失败时回 502，Alertmanager 稍后会再投一次。
-- 宕机规则（`outage.yaml`）：api / worker / admin 抓取失败（`up == 0`）持续 2 分钟；PostgreSQL 连不上（`pg_up == 0`）持续 2 分钟；五个容器任一不健康（`couli_container_healthy == 0`）持续 2 分钟；任一容器 5 分钟没有新的健康样本（推送定时器停了）。Redis 连不上仍只有 `couli.yaml` 的 CouliRedisDown 一条。宕机告警都是运维告警，夜里静默。
+- 转发器按（接收组、Alertmanager 告警组、firing / resolved）记住推送成功的通知 30 分钟（从首次推送成功算起，重复送达不续期）：期间同组同状态、组里告警实例（及各自 firing / resolved）都没变的再送到时回 200、不再推送，只挡 Alertmanager 层面的重复送达（只改了 summary 等注解文字的也算重复）；组里新增或减少告警、或其中某条状态变了，照常推送；推送失败的不记，Alertmanager 重投时照常推送。超时后照旧重试，所以偶尔会在同一次通知里收到两条相同消息（群机器人没有幂等键，宁可多一条不漏一条）。
+- 已知行为：去重记忆只在转发器进程内存里，不落盘、条数有上限（满了先丢最旧的）；转发器重启后去重记忆清空，重启后 30 分钟内同一告警可能再收到一次。
+- 宕机规则（`outage.yaml`）：api / worker / admin 抓取失败（`up == 0`）持续 2 分钟；PostgreSQL 连不上（`pg_up == 0`）持续 2 分钟；pg_exporter / redis_exporter 自己抓不到（CouliPgExporterScrapeDown：`up{job="couli-pg"} == 0`；CouliRedisExporterScrapeDown：`up{job="couli-redis"} == 0`；两个 exporter 各用一个告警名，不会被 Alertmanager 并进同一组；区别于 PG / Redis 本身连不上）持续 2 分钟；五个容器任一不健康（`couli_container_healthy == 0`）持续 2 分钟；任一容器 5 分钟没有新的健康样本（推送定时器停了）。Redis 连不上仍只有 `couli.yaml` 的 CouliRedisDown 一条。宕机告警都是运维告警，夜里静默。
 - 淘宝订单同步水位落后（CouliSyncWatermarkLag）不带 `fund` 标签，是运维告警：只发 oncall 组，22:00–08:00（+08:00）同样静默；夜里持续到 08:00 仍未恢复的，在静默结束后的下一个分组周期（30 分钟内）发到值班群。正文写明平台，并提示「若淘宝授权已过期，属预期，到后台重新授权即恢复」。
 
 ### 9.5 怎么证明它是好的
 
 1. 单元都在跑：`systemctl is-active couli-alertmanager couli-vmagent couli-vmagent-exporters couli-vmalert couli-vmalert-outage couli-alert-forwarder`，六行都是 `active`；`systemctl list-timers couli-container-health.timer` 能看到下次运行时间。
 2. 数据进来了：`curl -s 'http://127.0.0.1:8428/api/v1/query?query=up'` 里有 couli-api / couli-worker / couli-admin / couli-pg / couli-redis 五个 job 且值为 1；`query=couli_container_healthy` 有五个容器、正常时都是 1；`query=pg_up` 与 `query=redis_up` 为 1。
-3. 规则加载了：`curl -s http://127.0.0.1:8882/api/v1/rules` 里有 couli-outage 组的四条规则，`http://127.0.0.1:8881/api/v1/rules` 里仍是原有两份规则。
+3. 规则加载了：`curl -s http://127.0.0.1:8882/api/v1/rules` 里有 couli-outage 组的五条规则，`http://127.0.0.1:8881/api/v1/rules` 里仍是原有两份规则。
 4. 群里收得到：在节点上对 Alertmanager 发一条演练告警（ops 私有手册里的演练脚本，告警名带「演练」），值班群应在约 30 秒内收到 firing，演练结束后收到 resolved；带 `fund="true"` 的演练告警财务群和值班群都收到。`journalctl -u couli-alert-forwarder --since 10min` 里对应行是 `"status":200`，且整段日志里没有 Webhook 地址。
 5. 宕机能报出来：停一个容器（如 `docker stop couli-staging-admin-1`）约 2 分钟后值班群收到 CouliContainerUnhealthy 与 CouliProcessDown（夜间静默时段内则次日 08:00 后汇总），`docker start` 后收到 resolved。演练结果记在私有运维手册。

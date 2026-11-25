@@ -6,6 +6,11 @@
 #   infra/monitoring/scrape/couli.yml (0 when the process or its /metrics listener is down).
 # - pg_up{job="couli-pg"}: pg_exporter, scraped by the second vmagent (scrape/exporters.yml); the
 #   job selector keeps Pigsty's own pg_exporter series out of this rule.
+# - up{job="couli-pg"} / up{job="couli-redis"}: written by the second vmagent for each scrape of the
+#   two exporters (0 when pg_exporter / redis_exporter itself cannot be scraped; pg_up / redis_up
+#   then disappear instead of turning 0, so CouliPostgresDown / CouliRedisDown stay silent). One
+#   alert name per exporter, so the two never share an Alertmanager group (group_by alertname,
+#   app_id; D10-2997).
 # - couli_container_healthy{name}: pushed every 60 s by scripts/container-health.ts (systemd timer
 #   couli-container-health.timer) into the couli vmagent.
 # Redis down stays the single CouliRedisDown rule of couli.yaml (redis_up == 0); not repeated here.
@@ -30,6 +35,22 @@ groups:
         annotations:
           summary: 'PostgreSQL 连不上超过 2 分钟（pg_exporter 报 pg_up = 0）'
           description: 'pg_exporter on the node cannot connect to PostgreSQL.'
+      - alert: CouliPgExporterScrapeDown
+        expr: 'up{job="couli-pg"} == 0'
+        for: '2m'
+        labels:
+          severity: critical
+        annotations:
+          summary: 'pg_exporter 抓取失败超过 2 分钟：exporter 进程没在跑或端口不通（不是 PostgreSQL 本身连不上，此时 PostgreSQL 连不上的告警也报不出来）'
+          description: 'up == 0 for the couli-pg scrape job of the second vmagent; check pg_exporter on the node.'
+      - alert: CouliRedisExporterScrapeDown
+        expr: 'up{job="couli-redis"} == 0'
+        for: '2m'
+        labels:
+          severity: critical
+        annotations:
+          summary: 'redis_exporter 抓取失败超过 2 分钟：exporter 进程没在跑或端口不通（不是 Redis 本身连不上，此时 Redis 连不上的告警也报不出来）'
+          description: 'up == 0 for the couli-redis scrape job of the second vmagent; check redis_exporter on the node.'
       - alert: CouliContainerUnhealthy
         expr: 'couli_container_healthy == 0'
         for: '2m'
