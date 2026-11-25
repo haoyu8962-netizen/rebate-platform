@@ -863,6 +863,8 @@ export interface BindResult {
    * and the id was read back with publisher.info.get. Whose filing that id is cannot be told from
    * the answer, so the caller accepts it only when its own binding history already holds it for
    * the same app, union account and user; absent: the id came from the filing itself.
+   * B1-04zzzzp (D10-3196): also true when the filing's answer is flagged duplicate and carries an
+   * id itself (that id is returned, checked against the history the same way).
    */
   readonly fromDuplicateLookup?: true;
 }

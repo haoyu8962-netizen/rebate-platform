@@ -232,8 +232,10 @@ import {
 } from './parse-content.ts';
 import { parseTaobaoItemLink } from './resolve-link.ts';
 import {
+  isGatewaySystemError,
   queriedRelationId,
   savedRelationId,
+  saveIsDuplicate,
   saveRefusalIsDefinite,
   TAOBAO_PUBLISHER_GET,
   TAOBAO_PUBLISHER_GET_ENVELOPE,
@@ -663,8 +665,13 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       unsent,
     );
     const savedId = savedRelationId(saved.body);
-    if (savedId !== null) return { relationId: savedId };
+    // B1-04zzzzp (D10-3196; BR-ATTR-05): an answer flagged duplicate is a duplicate even when it
+    // carries an id — the attempt ends 'duplicate' and the id (the save's own: the answer to this
+    // very filing, no further request) goes up marked fromDuplicateLookup, so the bindings use case
+    // accepts it only against its own history (the same path as an id read back below).
+    if (savedId !== null && !saveIsDuplicate(saved.body)) return { relationId: savedId };
     await filing?.settled('duplicate');
+    if (savedId !== null) return { relationId: savedId, fromDuplicateLookup: true };
     const queried = await this.#publisherCall(
       TAOBAO_PUBLISHER_GET,
       TAOBAO_PUBLISHER_GET_ENVELOPE,
@@ -754,6 +761,22 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       // B1-04zzzzn: a definite refusal is reported before the error goes up.
       if (refused !== undefined && saveRefusalIsDefinite(response.status, response.body)) {
         await refused();
+      }
+      // B1-04zzzzp (D10-3196; BR-ID-17): a gateway system error (sub_code isp.*, the call limit
+      // excepted) on the filing calls is a dependency failure, not a refused credential: it goes up
+      // as upstream_unavailable with a fixed text (the attempt stays unknown: not a definite
+      // refusal above). Only these two calls; response.ts keeps its shared classification.
+      if (
+        error instanceof UnionError &&
+        error.code === 'upstream_rejected' &&
+        isGatewaySystemError(response.body)
+      ) {
+        throw new UnionError(
+          'upstream_unavailable',
+          `taobao ${method}: gateway system error`,
+          'taobao',
+          { duplicateConfirmed: afterDuplicate },
+        );
       }
       throw error;
     }

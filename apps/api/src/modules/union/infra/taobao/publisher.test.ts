@@ -4,8 +4,10 @@ import { FixedClock } from '../../../platform/index.ts';
 import { UnionError } from '../../domain/types.ts';
 import type { UnionTransportRequest, UnionTransportResponse } from '../replay.ts';
 import {
+  isGatewaySystemError,
   queriedRelationId,
   savedRelationId,
+  saveIsDuplicate,
   saveRefusalIsDefinite,
   TAOBAO_PUBLISHER_GET,
   TAOBAO_PUBLISHER_SAVE,
@@ -66,14 +68,18 @@ const UNIT_INVITER = 'unit-inviter-code';
 const UNIT_USER_ID = '2200000000777';
 const UNIT_NICK = 'unit-nick';
 
+const json = (body: unknown): UnionTransportResponse => ({
+  status: 200,
+  headers: {},
+  body: JSON.stringify(body),
+});
+
 /** The adapter with a transport answering the token, a duplicate save and a failing get. */
-function duplicateThenFailingGet(lookup: () => Promise<UnionTransportResponse>) {
+function duplicateThenFailingGet(
+  lookup: () => Promise<UnionTransportResponse>,
+  saveAnswer: unknown = { tbk_sc_publisher_info_save_response: { data: { desc: '重复绑定渠道' } } },
+) {
   const methods: string[] = [];
-  const json = (body: unknown): UnionTransportResponse => ({
-    status: 200,
-    headers: {},
-    body: JSON.stringify(body),
-  });
   const adapter = new TaobaoUnionAdapter({
     clock: new FixedClock('2032-01-01T00:00:00.000Z'),
     credentials: async () => ({
@@ -90,9 +96,7 @@ function duplicateThenFailingGet(lookup: () => Promise<UnionTransportResponse>) 
     transport: async (request: UnionTransportRequest) => {
       const method = new URLSearchParams(request.body ?? '').get('method') ?? 'oauth';
       methods.push(method);
-      if (method === TAOBAO_PUBLISHER_SAVE) {
-        return json({ tbk_sc_publisher_info_save_response: { data: { desc: '重复绑定渠道' } } });
-      }
+      if (method === TAOBAO_PUBLISHER_SAVE) return json(saveAnswer);
       if (method === TAOBAO_PUBLISHER_GET) return lookup();
       return json({
         access_token: UNIT_ACCESS,
@@ -151,4 +155,77 @@ it('[AC-B1-04zzzzn#20] get 已应答但无编号不算查回失败：错误不�
       { appId: 'unit-app', requestId: 'r', purpose: 'online' },
     ),
   ).rejects.toMatchObject({ code: 'upstream_misconfigured', duplicateConfirmed: false });
+});
+
+it('[AC-B1-04zzzzp#1] save 应答 desc 重复且带编号 → 走重复：尝试记 duplicate，编号标 fromDuplicateLookup', async () => {
+  expect(
+    saveIsDuplicate(
+      '{"tbk_sc_publisher_info_save_response":{"data":{"desc":"重复绑定渠道","relation_id":7}}}',
+    ),
+  ).toBe(true);
+  expect(
+    saveIsDuplicate('{"tbk_sc_publisher_info_save_response":{"data":{"relation_id":7}}}'),
+  ).toBe(false);
+  const { adapter, methods } = duplicateThenFailingGet(
+    () => Promise.reject(new Error('unit: get not expected')),
+    {
+      tbk_sc_publisher_info_save_response: { data: { desc: '重复绑定渠道', relation_id: 819712 } },
+    },
+  );
+  const settled: string[] = [];
+  const result = await adapter.bindPublisher(
+    {
+      authorizationCode: UNIT_CODE,
+      filing: {
+        started: async () => {},
+        settled: async (outcome) => {
+          settled.push(outcome);
+        },
+        done: () => {},
+      },
+    },
+    { appId: 'unit-app', requestId: 'r', purpose: 'online' },
+  );
+  expect(result).toEqual({ relationId: '819712', fromDuplicateLookup: true });
+  expect(settled).toEqual(['duplicate']);
+  expect(methods).toEqual(['oauth', TAOBAO_PUBLISHER_SAVE]);
+});
+
+it.each(['isp.unknown-error', 'isp.remote-service-timeout', 'isp.top-remote-connection-error'])(
+  '[AC-B1-04zzzzp#2] save 收 %s → upstream_unavailable，尝试不结束',
+  async (subCode) => {
+    const body = { error_response: { code: 15, sub_code: subCode } };
+    expect(isGatewaySystemError(JSON.stringify(body))).toBe(true);
+    const { adapter, methods } = duplicateThenFailingGet(
+      () => Promise.reject(new Error('unit: get not expected')),
+      body,
+    );
+    const settled: string[] = [];
+    await expect(
+      adapter.bindPublisher(
+        {
+          authorizationCode: UNIT_CODE,
+          filing: {
+            started: async () => {},
+            settled: async (outcome) => {
+              settled.push(outcome);
+            },
+            done: () => {},
+          },
+        },
+        { appId: 'unit-app', requestId: 'r', purpose: 'online' },
+      ),
+    ).rejects.toMatchObject({ code: 'upstream_unavailable', duplicateConfirmed: false });
+    expect(settled).toEqual([]);
+    expect(methods).toEqual(['oauth', TAOBAO_PUBLISHER_SAVE]);
+  },
+);
+
+it('[AC-B1-04zzzzp#2] 限流与业务拒绝不算网关系统错误', () => {
+  const refusal = (subCode: string) =>
+    JSON.stringify({ error_response: { code: 15, sub_code: subCode } });
+  expect(isGatewaySystemError(refusal('isp.call-limited'))).toBe(false);
+  expect(isGatewaySystemError(refusal('isv.invalid-parameter'))).toBe(false);
+  expect(isGatewaySystemError('{"error_response":{"code":15}}')).toBe(false);
+  expect(isGatewaySystemError('not json')).toBe(false);
 });

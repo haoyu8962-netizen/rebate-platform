@@ -9,6 +9,9 @@
 // relation_id 按报文原文取（JSON 数字取源文本，不经 JS number：大数不丢精度；字符串原样：前导零
 // 保留），只认 1–64 位十进制数字。account_name、taobao_user_id 等个人信息不读、不返回。
 // 错误（error_response、外层键缺失）仍由 response.ts unwrapTaobaoResponse 分类；这里只取编号。
+// B1-04zzzzp（D10-3196）：save 的 data.desc 带「重复」时，不论带不带 relation_id 都按重复处理
+// （saveIsDuplicate）；备案调用里 sub_code 为 isp.*（isp.call-limited 除外）的网关系统错误按依赖
+// 不可用处理（isGatewaySystemError），不当凭证无效。
 
 export const TAOBAO_PUBLISHER_SAVE = 'taobao.tbk.sc.publisher.info.save';
 export const TAOBAO_PUBLISHER_SAVE_ENVELOPE = 'tbk_sc_publisher_info_save_response';
@@ -62,6 +65,19 @@ export function savedRelationId(body: string): string | null {
   return relationIdOf(dataOf(body, TAOBAO_PUBLISHER_SAVE_ENVELOPE)?.['relation_id']);
 }
 
+/** The text in data.desc of a publisher.info.save answer that marks a duplicate filing. */
+const DUPLICATE_MARK = '重复';
+
+/**
+ * B1-04zzzzp (D10-3196; BR-ATTR-05): whether a publisher.info.save answer says the filing is a
+ * duplicate (data.desc carries 「重复」, e.g. 「重复绑定渠道」) — with or without a relation_id. Such an
+ * answer never counts as saved: whose filing the id is cannot be told from it.
+ */
+export function saveIsDuplicate(body: string): boolean {
+  const desc = dataOf(body, TAOBAO_PUBLISHER_SAVE_ENVELOPE)?.['desc'];
+  return typeof desc === 'string' && desc.includes(DUPLICATE_MARK);
+}
+
 export type QueriedRelationId =
   | { readonly kind: 'found'; readonly relationId: string }
   | { readonly kind: 'none' }
@@ -105,9 +121,24 @@ export function saveRefusalIsDefinite(status: number, body: string): boolean {
   if (status >= 500) return false;
   const parsed = parseLossless(body);
   if (!isRecord(parsed) || !Object.hasOwn(parsed, 'error_response')) return false;
-  const error = parsed['error_response'];
+  return !isSystemSubCode(parsed['error_response']);
+}
+
+/** An error_response whose sub_code is a TOP system error (isp.*), the call limit excepted. */
+function isSystemSubCode(error: unknown): boolean {
   const subCode = isRecord(error) ? error['sub_code'] : undefined;
-  if (typeof subCode !== 'string') return true;
+  if (typeof subCode !== 'string') return false;
   const text = subCode.trim();
-  return !text.startsWith('isp.') || text.startsWith('isp.call-limited');
+  return text.startsWith('isp.') && !text.startsWith('isp.call-limited');
+}
+
+/**
+ * B1-04zzzzp (D10-3196; BR-ID-17): whether a publisher answer is a TOP gateway system error — an
+ * error_response with a sub_code isp.* other than the call limit (any such sub_code, not only
+ * timeouts). The gateway failed; the user's credential was not refused, so the filing calls answer
+ * it as a dependency failure (upstream_unavailable), never as an invalid credential.
+ */
+export function isGatewaySystemError(body: string): boolean {
+  const parsed = parseLossless(body);
+  return isRecord(parsed) && isSystemSubCode(parsed['error_response']);
 }
