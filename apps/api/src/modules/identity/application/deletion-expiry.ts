@@ -54,6 +54,14 @@ import { createDailyDedup } from './daily-dedup.ts';
 /** The working-day calendar's configuration (calendar.cn_holidays.<year>, ...cn_makeup_workdays.<year>). */
 export interface DeletionCalendarConfigReader {
   configValue(appId: string, key: string): Promise<{ readonly value: unknown } | null>;
+  /**
+   * B1-34s (D10-3002): one statement for a year's two keys (risk's WorkingDayCalendarReader); the
+   * production wiring supplies it, without it each key is read on its own.
+   */
+  configValues?(
+    appId: string,
+    keys: readonly string[],
+  ): Promise<ReadonlyMap<string, { readonly value: unknown }>>;
 }
 
 export interface DeletionExpiryOptions {
@@ -297,6 +305,8 @@ export function createDeletionExpiry(options: DeletionExpiryOptions): DeletionEx
   async function overdue(roundNow: Date, stopping: () => boolean): Promise<void> {
     // One read per (app_id, key) per round: each app's year calendar is read once.
     const reads = new Map<string, Promise<{ readonly value: unknown } | null>>();
+    const batchReads = new Map<string, Promise<ReadonlyMap<string, { readonly value: unknown }>>>();
+    const batch = calendar.configValues;
     const config: DeletionCalendarConfigReader = {
       configValue(appId, key) {
         const k = `${appId}\u0000${key}`;
@@ -307,6 +317,20 @@ export function createDeletionExpiry(options: DeletionExpiryOptions): DeletionEx
         }
         return read;
       },
+      // B1-34s: one batch read per (app_id, key set) per round, the year's keys kept together.
+      ...(batch === undefined
+        ? {}
+        : {
+            configValues(appId: string, keys: readonly string[]) {
+              const k = [appId, ...keys].join('\u0000');
+              let read = batchReads.get(k);
+              if (read === undefined) {
+                read = batch.call(calendar, appId, keys);
+                batchReads.set(k, read);
+              }
+              return read;
+            },
+          }),
     };
     // The unconfigured-year line once per (app_id, year) and +08:00 day, not once per request.
     const calendarLogger = {

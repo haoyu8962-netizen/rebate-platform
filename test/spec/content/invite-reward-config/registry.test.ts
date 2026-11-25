@@ -197,6 +197,10 @@ it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
     'agent.require_phone',
     'agent.filing_text',
     'agent.examples',
+    ...[2026, 2027, 2028, 2029, 2030].flatMap((year) => [
+      `calendar.cn_holidays.${year}`,
+      `calendar.cn_makeup_workdays.${year}`,
+    ]),
   ]);
 });
 

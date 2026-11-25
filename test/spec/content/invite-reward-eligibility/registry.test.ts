@@ -251,6 +251,10 @@ it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天�
     ...AUTO_CORRECT_KEYS,
     ...DEFAULT_WORD_KEYS,
     ...AGENT_A10_KEYS,
+    ...[2026, 2027, 2028, 2029, 2030].flatMap((year) => [
+      `calendar.cn_holidays.${year}`,
+      `calendar.cn_makeup_workdays.${year}`,
+    ]),
   ];
   const end = registry.length - tail.length;
   expect(registry.slice(end).map((entry) => entry.key)).toStrictEqual(tail);
