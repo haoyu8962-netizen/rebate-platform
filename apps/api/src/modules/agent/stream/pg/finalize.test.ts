@@ -10,7 +10,7 @@ import {
   sql,
 } from 'kysely';
 import { expect, it } from 'vitest';
-import { runFieldsSql } from './finalize.ts';
+import { runCostSql, runFieldsSql, settlementOf } from './finalize.ts';
 import type { LiveRunFields } from './types.ts';
 
 const compiler = new Kysely<DB>({
@@ -52,4 +52,39 @@ it('[AC-B3-08t#5] exit F5: the run-level columns never include model or model_sn
     'inputPassed',
     'intent',
   ]);
+});
+
+it('[AC-B3-09m#u16] 别处收尾（无活进程明细）按预占记满，并带上登记的预算去抢告警', () => {
+  expect(settlementOf('run-1', undefined, 5_000n)).toEqual({
+    runId: 'run-1',
+    live: null,
+    budgetMfen: 5_000n,
+  });
+  expect(settlementOf('run-1', undefined, undefined)).toEqual({ runId: 'run-1', live: null });
+});
+
+it('[AC-B3-09m#u17] 活进程收尾带 U、调用次数和当时的预算', () => {
+  expect(settlementOf('run-1', { spentMfen: 700n, calls: 2, budgetMfen: 9n }, 5_000n)).toEqual({
+    runId: 'run-1',
+    live: { spentMfen: 700n, calls: 2 },
+    budgetMfen: 9n,
+  });
+});
+
+it('[AC-B3-09m#u18] 结清且有成本才写 cost_mfen / price_version，否则两列不动', () => {
+  const write = runCostSql({ costMfen: 700n, priceVersion: 'synthetic-v1', settled: true });
+  const out = sql`SET cost_mfen = ${write.costMfen}, price_version = ${write.priceVersion}`.compile(
+    compiler,
+  );
+  expect(out.parameters).toEqual([700n, 'synthetic-v1']);
+  for (const settled of [
+    { costMfen: null, priceVersion: 'synthetic-v1', settled: true },
+    { costMfen: null, priceVersion: null, settled: false },
+  ]) {
+    const keep = runCostSql(settled);
+    expect(
+      sql`SET cost_mfen = ${keep.costMfen}, price_version = ${keep.priceVersion}`.compile(compiler)
+        .sql,
+    ).toBe('SET cost_mfen = cost_mfen, price_version = price_version');
+  }
 });

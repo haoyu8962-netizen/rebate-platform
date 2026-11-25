@@ -580,3 +580,75 @@ it('[AC-B3-05n][BR-AI-14] 登记意图后用户中途停止本轮（降级路径
   expect(routeDegradedIntent(late!, 'earnings_query')).toBe(false);
   expect(routed.traces[0]?.intent).toBe('order_query');
 });
+
+// B3-09m · BR-AI-16 (D10-3116): a degraded model call after content was delivered.
+function deliveredThenDegraded(reason: 'budget' | 'models_failed' | 'model_timeout') {
+  const notice: UnnumberedCard = {
+    type: 'notice',
+    schema_version: 1,
+    data: { level: 'info', text_key: 'agent.degraded.empty', actions: [] },
+    fallback_text: '合成卡',
+  };
+  const rounds: ModelOutcome[] = [
+    modelRound([
+      { t: 'text_delta', text: '合成说明。' },
+      { t: 'tool_call', index: 0, call: call('a', 'search_products', '{"q":"合成"}') },
+      { t: 'done', reason: 'tool_calls' },
+    ]),
+    { kind: 'degraded', reason, attempts: [] },
+  ];
+  const execute = vi.fn(async (): Promise<ToolOutcome> => ({
+    kind: 'ok',
+    modelView: {},
+    cards: [notice],
+  }));
+  const degraded = vi.fn<AgentRunBodyDeps['degraded']['run']>(async () => ({
+    kind: 'done',
+    finishReason: 'fallback',
+  }));
+  const deps: AgentRunBodyDeps = { ...baseDeps(rounds, execute), degraded: { run: degraded } };
+  return { deps, execute, degraded };
+}
+
+it('[AC-B3-09m#u9] 已出内容后预算降级：保留已出内容并以 budget 收尾，不走无模型降级', async () => {
+  const { deps, execute, degraded } = deliveredThenDegraded('budget');
+  const out = context();
+  expect(await createAgentRunBody(deps)(input())(out.ctx)).toEqual({
+    kind: 'done',
+    finishReason: 'budget',
+  });
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(degraded).not.toHaveBeenCalled();
+});
+
+it.each(['models_failed', 'model_timeout'] as const)(
+  '[AC-B3-09m#u10] 已出内容后非预算降级（%s）仍以 stop 收尾',
+  async (reason) => {
+    const { deps, execute, degraded } = deliveredThenDegraded(reason);
+    const out = context();
+    expect(await createAgentRunBody(deps)(input())(out.ctx)).toEqual({
+      kind: 'done',
+      finishReason: 'stop',
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(degraded).not.toHaveBeenCalled();
+  },
+);
+
+it('[AC-B3-09m#u11] 未出内容时预算降级仍走无模型降级路径', async () => {
+  const deps: AgentRunBodyDeps = {
+    ...baseDeps([{ kind: 'degraded', reason: 'budget', attempts: [] }], vi.fn()),
+    degraded: {
+      run: vi.fn<AgentRunBodyDeps['degraded']['run']>(async () => ({
+        kind: 'done',
+        finishReason: 'budget',
+      })),
+    },
+  };
+  const out = context();
+  expect(await createAgentRunBody(deps)(input())(out.ctx)).toEqual({
+    kind: 'done',
+    finishReason: 'budget',
+  });
+  expect(deps.degraded.run).toHaveBeenCalledTimes(1);
+});

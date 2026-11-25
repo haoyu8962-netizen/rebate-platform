@@ -775,7 +775,9 @@ class AgentRun {
         // U-11: degrade only before any model / tool content; otherwise end with what was sent.
         // B3-08m (gate review S1-1): a template run never degrades; it ends with its templates.
         if (!this.templated && !this.delivered) return this.degrade(proceed, outcome.reason);
-        return this.finishText('stop');
+        // B3-09m · BR-AI-16 (D10-3116): a run the budget stopped after it delivered content keeps
+        // what it sent and ends done budget; every other reason still ends done stop.
+        return this.finishText(outcome.reason === 'budget' ? 'budget' : 'stop');
       }
       this.model = outcome.model;
       const deltas: string[] = [];

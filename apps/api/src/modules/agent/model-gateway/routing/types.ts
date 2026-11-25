@@ -132,10 +132,22 @@ export interface ModelRouterOptions {
    */
   readonly billable?: boolean;
   readonly onAlert?: (alert: RouterAlert) => void;
+  /**
+   * B3-09m (BR-AI-16 细则「已花 U 怎么累加」): a vendor's reported usage costing more than the
+   * call's worst case W is booked as is and logged here once (warn agent.budget_usage_over_worst).
+   */
+  readonly budgetLogger?: { warn(obj: object, msg: string): void };
 }
 
 export type RouterChatInput = Omit<ChatInput, 'vendor' | 'model'>;
 
+/**
+ * B3-09m · BR-AI-16: one run's model spending, in process memory only. reserveMfen is the run's
+ * reservation R (its spending cap), prices the one unit-price entry set fixed at admission;
+ * spentMfen (U) and calls are updated by the router after each call that was sent: by the
+ * vendor's usage when reported, by the call's worst case W when the result is unknown; a request
+ * that was never sent adds nothing.
+ */
 export interface RunCallBudget {
   readonly reserveMfen: bigint;
   readonly prices: ModelPrices;

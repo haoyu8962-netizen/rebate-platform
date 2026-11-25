@@ -258,3 +258,11 @@ it('[AC-B1-34s#2] a calendar value is a list of distinct real dates of the key o
   expect(configValueFits(spec('agent.examples'), ['2026-02-29', 'x'])).toBe(true);
   expect(configValueFits(spec('agent.whitelist_user_ids'), { a: 1 })).toBe(true);
 });
+
+it('[AC-B3-09m#u5] agent.models is looked up by key as a business object, not listed', () => {
+  const found = configItemSpecOf('agent.models');
+  expect(found).toMatchObject({ key: 'agent.models', valueType: 'object' });
+  expect(configValueFits(found!, { 'qwen-flash-2026-09-01': { version: 'v1' } })).toBe(true);
+  expect(configValueFits(found!, 'prices')).toBe(false);
+  expect(configRegistry().some((entry) => entry.key === 'agent.models')).toBe(false);
+});

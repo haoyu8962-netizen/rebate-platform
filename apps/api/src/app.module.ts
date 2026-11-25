@@ -107,6 +107,7 @@ import {
   PageReader,
   combineConfigItemSaveChecks,
   configRegistry,
+  configValuesByKeyOf,
   createContentReader,
   createPublishedArticleAppsReader,
   createPublishedArticlesReader,
@@ -3823,6 +3824,9 @@ function agentReaders(
         configValue: (appId, key) => shared.configValue(appId, key),
         freshConfigValue: (appId, key) =>
           createContentReader({ db: handle, clock }).configValue(appId, key),
+        // B3-09m · BR-AI-16 (D10-2884): one key across every app, read-only, for the
+        // platform-wide daily budget (agent hands content no handle).
+        configValuesByKey: configValuesByKeyOf(handle),
       };
     },
   };

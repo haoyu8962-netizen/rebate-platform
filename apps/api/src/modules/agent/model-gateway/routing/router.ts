@@ -12,6 +12,8 @@ import type { ModelErrorKind } from '../openai-compat/index.ts';
 import type { DegradeReason } from '../degraded/index.ts';
 import { RunDeadlineError, withinRun } from './attempt.ts';
 import { gatewayBilling } from './billing.ts';
+import { budgetedRequest, chargeFor } from './budget.ts';
+import type { BudgetedRequest, CallCharge } from './budget.ts';
 import type {
   AttemptRecord,
   ModelOutcome,
@@ -31,21 +33,34 @@ function failureKind(error: unknown): ModelErrorKind | 'circuit_open' {
   return 'network';
 }
 
-/** 成功和协议失败的用量均由网关计量；路由器只负责组装结果。 */
+/**
+ * 成功和协议失败的用量均由网关计量；路由器只负责组装结果。
+ * B3-09m：带本 run 预算时，发出的是预先按余额定好 max_tokens 的请求，用量（或结果不明时的最坏成本）
+ * 计入本 run 的已花 U（budget.ts chargeFor，只计一次）。
+ */
 async function invoke(
   options: ModelRouterOptions,
   entry: RouteEntry,
   input: RouterChatInput,
   signal: AbortSignal,
+  budgeted?: { readonly planned: BudgetedRequest; readonly charge: CallCharge },
 ) {
   const vendor = assertOnlineVendor(entry.vendor);
-  const request = toVendorRequest(
-    buildModelRequest({ ...input, vendor, model: entry.model }, quirksFor(vendor)),
-  );
-  const response = await options.gateway.invoke(
-    { ...request, vendor, purpose: 'online', dataClass: 'user_input' },
-    signal,
-  );
+  const request =
+    budgeted?.planned.request ??
+    toVendorRequest(buildModelRequest({ ...input, vendor, model: entry.model }, quirksFor(vendor)));
+  budgeted?.charge.dispatched();
+  let response;
+  try {
+    response = await options.gateway.invoke(
+      { ...request, vendor, purpose: 'online', dataClass: 'user_input' },
+      signal,
+    );
+  } catch (error) {
+    budgeted?.charge.failed(error);
+    throw error;
+  }
+  budgeted?.charge.answered(response.usage);
   // 组装失败或内容拒绝时，response 已由网关计量，不得在此重复计量。
   const events = assembleChunks(response.chunks);
   if (events.some((event) => event.t === 'done' && event.reason === 'content_filter')) {
@@ -117,6 +132,26 @@ export function createModelRouter(inputOptions: ModelRouterOptions): ModelRouter
           attempts.push({ entryId: entry.id, result: 'circuit_open', elapsedMs: 0 });
           continue;
         }
+        // B3-09m · BR-AI-16: with the run's budget, the request is priced before it goes out; a
+        // model without a price is skipped, a call the remaining reservation cannot pay for (or
+        // with non-text content) is not made and the run ends by budget.
+        let budgeted: { planned: BudgetedRequest; charge: CallCharge } | undefined;
+        const budget = ctx.budget;
+        if (budget !== undefined) {
+          if (budget.prices.priceOf(entry.model) === undefined) continue;
+          let planned: BudgetedRequest | null | undefined;
+          try {
+            planned = budgetedRequest(entry, input, budget);
+          } catch {
+            // A request that cannot be built goes through invoke below and fails there as before
+            // (never sent, so nothing is charged).
+            planned = undefined;
+          }
+          if (planned === null) return degrade('budget');
+          if (planned !== undefined) {
+            budgeted = { planned, charge: chargeFor(budget, planned, options.budgetLogger) };
+          }
+        }
         const started = options.scheduler.now();
         let result;
         let failure: ModelErrorKind | 'circuit_open' | undefined;
@@ -124,7 +159,7 @@ export function createModelRouter(inputOptions: ModelRouterOptions): ModelRouter
           result = await governor.call(
             (signal) =>
               withinRun(
-                (upstream) => invoke(options, entry, input, upstream),
+                (upstream) => invoke(options, entry, input, upstream, budgeted),
                 signal,
                 ctx.signal,
                 options.scheduler,
@@ -147,6 +182,8 @@ export function createModelRouter(inputOptions: ModelRouterOptions): ModelRouter
           );
         } catch (error) {
           failure = ctx.signal.aborted ? 'aborted' : failureKind(error);
+          // Given up (timeout, cancel) before the vendor answered: the late answer is not awaited.
+          budgeted?.charge.failed(error);
         } finally {
           const elapsedMs = Math.max(0, options.scheduler.now() - started);
           ctx.clock.charge(elapsedMs);
@@ -166,6 +203,8 @@ export function createModelRouter(inputOptions: ModelRouterOptions): ModelRouter
           return { kind: 'model', entryId: entry.id, model: entry.model, ...result, attempts };
         }
       }
+      // B3-09m: every candidate lacked a price (none was tried): the run ends by budget.
+      if (ctx.budget !== undefined && attempts.length === 0) return degrade('budget');
       return degrade('models_failed');
     },
   };
