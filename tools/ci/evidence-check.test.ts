@@ -1531,6 +1531,102 @@ it('[approvals 36] an independent Claude review stands in for the missing side, 
   );
 });
 
+it('[D10-3108] a spec-test entry neither fills a required code review nor stands in for one', () => {
+  const head = git(repo, ['rev-parse', 'HEAD']);
+  const cfg = loadProtected(REPO);
+  const problemsOf = (doc: unknown, implementer: 'claude' | 'codex' | 'unknown'): string =>
+    evidenceProblems(doc, { prDir: repo, head, task: 'B2-01a', cfg, red: RED, implementer }).join(
+      '\n',
+    );
+  const independent = {
+    reviewer: 'claude-independent',
+    engine: 'claude-independent',
+    model: 'claude-opus-5-5',
+    verdict: 'pass',
+    open_s0_s1: 0,
+    checklist_complete: true,
+  };
+  const codexPass = {
+    reviewer: 'codex',
+    engine: 'codex',
+    model: 'gpt-6.2-sol',
+    verdict: 'pass',
+    open_s0_s1: 0,
+    checklist_complete: true,
+  };
+  const claudePass = { reviewer: 'claude', engine: 'claude', verdict: 'pass', open_s0_s1: 0 };
+  const spec = <T extends object>(entry: T): T & { review_type: string } => ({
+    ...entry,
+    review_type: 'spec-test',
+  });
+  // Ledger unreadable (both sides required): a spec-test entry does not fill either side.
+  expect(
+    problemsOf(
+      evidence({ reviews: [{ ...codexPass, review_type: 'money' }, spec(claudePass)] }),
+      'unknown',
+    ),
+  ).toMatch(/missing the claude review/);
+  expect(problemsOf(evidence({ reviews: [claudePass, spec(codexPass)] }), 'unknown')).toMatch(
+    /missing the codex review/,
+  );
+  expect(problemsOf(evidence({ reviews: [claudePass, spec(independent)] }), 'unknown')).toMatch(
+    /missing the codex review/,
+  );
+  // A code review next to a spec-test entry of the same reviewer still counts.
+  expect(
+    problemsOf(evidence({ reviews: [spec(claudePass), claudePass, codexPass] }), 'unknown'),
+  ).toBe('');
+  expect(
+    problemsOf(evidence({ reviews: [claudePass, independent, spec(independent)] }), 'unknown'),
+  ).toBe('');
+  // An entry without review_type is a code review, as before.
+  expect(problemsOf(evidence({ reviews: [independent] }), 'codex')).toBe('');
+  // One side each: the spec-test entry of the required side, or of an independent Claude, is not enough.
+  expect(problemsOf(evidence({ reviews: [spec(codexPass)] }), 'claude')).toMatch(
+    /missing the codex review/,
+  );
+  expect(problemsOf(evidence({ reviews: [spec(claudePass)] }), 'codex')).toMatch(
+    /missing the claude review/,
+  );
+  expect(problemsOf(evidence({ reviews: [spec(independent)] }), 'codex')).toMatch(
+    /missing the claude review/,
+  );
+  // The required side's spec-test entry is still checked next to its code review, in either order.
+  const failing = { verdict: 'fail', open_s0_s1: 1 };
+  const codexFailing = problemsOf(
+    evidence({
+      reviews: [spec({ ...codexPass, ...failing }), { ...codexPass, review_type: 'money' }],
+    }),
+    'claude',
+  );
+  expect(codexFailing).toMatch(/reviews.codex.verdict: must be pass/);
+  expect(codexFailing).toMatch(/reviews.codex.open_s0_s1: must be 0/);
+  expect(
+    problemsOf(
+      evidence({ reviews: [codexPass, spec({ ...codexPass, checklist_complete: false })] }),
+      'claude',
+    ),
+  ).toBe('');
+  expect(
+    problemsOf(evidence({ reviews: [spec({ ...claudePass, ...failing }), claudePass] }), 'codex'),
+  ).toMatch(/reviews.claude.verdict: must be pass/);
+  // A failing code review behind a passing spec-test entry is checked too.
+  expect(
+    problemsOf(evidence({ reviews: [spec(codexPass), { ...codexPass, ...failing }] }), 'claude'),
+  ).toMatch(/reviews.codex.verdict: must be pass/);
+  // The non-required side's first entry is checked as before, spec-test or not.
+  expect(
+    problemsOf(evidence({ reviews: [codexPass, spec({ ...claudePass, ...failing })] }), 'claude'),
+  ).toMatch(/reviews.claude.verdict: must be pass/);
+  // A failing spec-test entry of an independent Claude is still checked.
+  expect(
+    problemsOf(
+      evidence({ reviews: [codexPass, spec({ ...independent, verdict: 'fail' })] }),
+      'claude',
+    ),
+  ).toMatch(/reviews.claude-independent.verdict: must be pass/);
+});
+
 it("[approvals 36] an independent Claude review is never filed as Codex's: engine and model are bound to the reviewer", () => {
   const head = git(repo, ['rev-parse', 'HEAD']);
   const cfg = loadProtected(REPO);

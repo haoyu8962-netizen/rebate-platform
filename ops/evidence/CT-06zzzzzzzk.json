@@ -1,0 +1,72 @@
+{
+  "risk_note": "RV2 by path (tools/ci). Gate tooling only, no money moves (D10-3108 / D10-3110; split from CT-06zzzzzzzh ③): in the non-switch branch of evidenceProblems a required side (claude / codex) now needs a code-review entry (review_type other than spec-test; an entry without review_type counts as a code review), and the independent-Claude stand-in pool holds code-review entries only; each side's first entry of any review_type is still checked as on main (engine, verdict, open_s0_s1, codex checklist_complete), and its first code-review entry is checked the same way. No switch, no binding logic of CT-06zzzzzzzh. Impact: of the 1389 evidence files on main bf795d57b none has a side whose first entry differs from its first code-review entry; the earlier scan of 1113 evidence templates and 36 remote branches (D10-3049) found none relying on a spec-test entry alone. Third-class gate change: merge under ops/approvals.yaml id 16 after the orchestrator checks the diff.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money r1 (full, on implementation r1) fail: S1 evidence-check.ts:1733 a side's failing spec-test entry placed first was no longer checked (a loosening) — fixed in implementation r2 (first entry of any type checked as before, plus the first code-review entry). r2 (incremental) pass, no findings; the validator moved 0 findings out of scope in both rounds (D10-2954). Both rounds reviewed the uncommitted work tree on spec commit ac38fbc0d; the tree committed as 4174981cb is the one reviewed in r2 and verified on the test machine (verify:fast exit 0, fast4; rule-test directory green, tests3)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (two write-test attempts, red1 / red2 passed). Spec-test r1 by an independent Claude (approvals 36) fail; write-test 2 added cases; r2 (incremental) pass. In r2 the reviewer itself listed one S2 under out_of_scope (the case where the implementer cannot be read and both sides are required is not covered); it was given to the implementer as a fact. The validator moved no S0 / S1 out of scope."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/ci/evidence-spec-test-not-code-review/evidence.test.ts > [AC-CT-06zzzzzzzk#1] Claude 实现需要 Codex 代码评审，Codex 的规则测试评审可与它并存",
+    "test/spec/ci/evidence-spec-test-not-code-review/evidence.test.ts > [AC-CT-06zzzzzzzk#2] 独立 Claude 只有代码评审可以替补 Codex，规则测试评审仍须通过校验",
+    "test/spec/ci/evidence-spec-test-not-code-review/evidence.test.ts > [AC-CT-06zzzzzzzk#3] Codex 实现需要 Claude 代码评审，Claude 的规则测试评审可与它并存"
+  ],
+  "task": "CT-06zzzzzzzk",
+  "spec_commit": "a339e611a085c4f1ac77b57bed62daca1f3ce7e0",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "a339e611a085c4f1ac77b57bed62daca1f3ce7e0",
+      "tree": "74a36e9ecc30c10045b7213578f9a5bee2ef59c1",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-25T15:47:42Z",
+      "finished_at": "2026-11-25T15:47:46Z",
+      "red_tests": [
+        "test/spec/ci/evidence-spec-test-not-code-review/evidence.test.ts > [AC-CT-06zzzzzzzk#1] Claude 实现需要 Codex 代码评审，Codex 的规则测试评审可与它并存",
+        "test/spec/ci/evidence-spec-test-not-code-review/evidence.test.ts > [AC-CT-06zzzzzzzk#2] 独立 Claude 只有代码评审可以替补 Codex，规则测试评审仍须通过校验",
+        "test/spec/ci/evidence-spec-test-not-code-review/evidence.test.ts > [AC-CT-06zzzzzzzk#3] Codex 实现需要 Claude 代码评审，Claude 的规则测试评审可与它并存"
+      ],
+      "expected": ["test/spec/ci/evidence-spec-test-not-code-review/evidence.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "58f3f65faaf39ee6b88e01ae7a5f710e1cbc70394a49586057e29fec8a5bf4cf"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "d0e66944161360f61cae584bb6cbfecd3b81de57",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}

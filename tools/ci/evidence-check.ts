@@ -1173,6 +1173,8 @@ export type RedRequirement = {
 
 /** Who produced a review: the reviewer values an evidence entry may carry. */
 export const REVIEWERS = ['codex', 'claude', 'claude-independent'] as const;
+/** review_type of a rule-test review: it is not a code review and never fills a required side. */
+const SPEC_TEST_REVIEW = 'spec-test';
 
 /**
  * The model each engine runs (tools/agent/codex-run.sh MODEL): an entry of that engine must name
@@ -1669,7 +1671,7 @@ export function evidenceProblems(
       (r): r is Record<string, unknown> & { commit: string } =>
         isRecord(r) &&
         (r['reviewer'] === 'claude' || r['reviewer'] === 'claude-independent') &&
-        r['review_type'] !== 'spec-test' &&
+        r['review_type'] !== SPEC_TEST_REVIEW &&
         typeof r['commit'] === 'string' &&
         COMMIT_ID.test(r['commit']) &&
         isAncestor(ctx.prDir, from, r['commit']) &&
@@ -1720,15 +1722,25 @@ export function evidenceProblems(
     const independent = reviews.filter(
       (r): r is Record<string, unknown> => isRecord(r) && r['reviewer'] === 'claude-independent',
     );
+    // A rule-test review (review_type spec-test) is not a code review: it neither fills a required
+    // side nor stands in for one (an entry without review_type counts as a code review). It is
+    // still checked below like every independent Claude entry.
+    const codeReview = (r: unknown): boolean =>
+      !isRecord(r) || r['review_type'] !== SPEC_TEST_REVIEW;
+    const standInPool = independent.filter(codeReview);
     let standIns = 0;
     for (const reviewer of ['claude', 'codex']) {
-      const entry = reviews.find((r) => isRecord(r) && r['reviewer'] === reviewer);
-      if (!isRecord(entry)) {
-        if (required.has(reviewer)) {
-          if (standIns < independent.length) {
-            standIns += 1;
-            continue;
-          }
+      // The reviewer's first entry (of any review_type) is checked as before; its first code
+      // review is checked too and is what a required side needs.
+      const first = reviews.find((r) => isRecord(r) && r['reviewer'] === reviewer);
+      const entry = reviews.find((r) => isRecord(r) && r['reviewer'] === reviewer && codeReview(r));
+      const checked = [first, entry].filter(
+        (r, i, all): r is Record<string, unknown> => isRecord(r) && all.indexOf(r) === i,
+      );
+      if (!isRecord(entry) && required.has(reviewer)) {
+        if (standIns < standInPool.length) {
+          standIns += 1;
+        } else {
           at(
             'reviews',
             `missing the ${reviewer} review (${why}; the side that did not ` +
@@ -1737,14 +1749,15 @@ export function evidenceProblems(
               'stands in, ops/approvals.yaml id 36)',
           );
         }
-        continue;
       }
-      const engine = engineProblem(entry);
-      if (engine !== null) at(`reviews.${reviewer}.engine`, engine);
-      if (entry['verdict'] !== 'pass') at(`reviews.${reviewer}.verdict`, 'must be pass');
-      if (entry['open_s0_s1'] !== 0) at(`reviews.${reviewer}.open_s0_s1`, 'must be 0');
-      if (reviewer === 'codex' && entry['checklist_complete'] !== true) {
-        at('reviews.codex.checklist_complete', 'must be true (资金评审清单必填, 规划/11 §3.3)');
+      for (const e of checked) {
+        const engine = engineProblem(e);
+        if (engine !== null) at(`reviews.${reviewer}.engine`, engine);
+        if (e['verdict'] !== 'pass') at(`reviews.${reviewer}.verdict`, 'must be pass');
+        if (e['open_s0_s1'] !== 0) at(`reviews.${reviewer}.open_s0_s1`, 'must be 0');
+        if (reviewer === 'codex' && e['checklist_complete'] !== true) {
+          at('reviews.codex.checklist_complete', 'must be true (资金评审清单必填, 规划/11 §3.3)');
+        }
       }
     }
     if (required.size === 2 && standIns === 2) {
