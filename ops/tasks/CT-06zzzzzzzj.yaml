@@ -35,4 +35,5 @@ accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/modify-existing-for-of-template/**'
   - 'test/spec/ci/red-modified-only-not-support/**'
-status: todo
+status: done
+pr: 819
