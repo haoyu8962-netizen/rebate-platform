@@ -442,7 +442,7 @@ function DetailBody({ order }: { readonly order: OrderDetail }): ReactElement {
     statusItems.push({
       key: 'holdReason',
       label: t.status.holdReason,
-      children: status('hold_reason', order.hold_reason),
+      children: <StatusTag kind="hold_reason" code={order.hold_reason} />,
     });
 
   const b = t.basic;
