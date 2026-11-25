@@ -3,7 +3,7 @@ repo: rebate-platform
 title: 'B1-22ze（接手 B1-22zd）：联盟授权到期提醒加按小时节点与跳过规则；授权回调记录淘宝 re_expires_in 等五个时长，后台账号行返回 auth_refreshable；后台告警做成同事务持久记录 union_auth_alerts、日志由同事务任务至少一次打出'
 type: impl
 # 2026-11-25 be 入账（编排 D10-3121：接手 B1-22zd，B1-22zd 置 void 并入本单）。来由：B1-22zd 的 Codex 调用已到每任务 10 次的防失控上限（规划/11 §2.5），写测增量 2 起不来；照工具给的出路换单、不动熔断、不改派独立 Claude（同 B2-18 → B2-18d，D10-3066）。常规计数（写测 3、规则测试评审 2、实现 3、资金评审 3），不另开一次性条目；approvals 第 195、204 条随 B1-22zd 作废。 范围 = B1-22zd 现有全部（下文 ①–⑥ 与补丁 1–7 原文照搬）+ 持久告警（D10-2970 第 3 条、D10-3064 取 (i)、D10-3074 kit 包装两条硬要求：包装只执行 alert_log；钉「日志只由任务打」「任务重试直到打出」「任务失败不回滚记录」的新规则测试不经包装）。 带过来的：task/B1-22zd 上的规则测试提交（头 0e592f7b3，标题里的 AC-B1-22zd 编号不改）；未提交的第 195 条那次 Codex 写测产出（含新文件 test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts；其中对 auth-probe/monitor.int.test.ts 的改动按 D10-3074 由本单写测撤回）；迁移、快照与实现 r1–r3 的提交系列（couli-runs/B1-22zd/impl-series-t6/）在实现轮接着改；modify_existing 3 条逐条原样搬（3 → 3）。迁移号、refs_hash 照主干现状。
-# B1-22zd 名下已有的评审（事实，供第一轮全量规则测试评审参照，细目写在评审书里）：规则测试评审 3 轮（独立 Claude）：r1 fail（3×S1）、r2 pass、r3 pass；第 195 条那次写测（持久告警）还没有评过。资金评审 4 轮（Codex）：r1 fail（3×S1）、r2 fail（1×S1）、r3 fail（2×S1）、r4 窄评审（approvals 172）fail（2×S1）——r3 / r4 两条 S1（无手机号重复、有手机号丢失）即持久告警的来由。 冻结用例改动（kit.ts 一处 + atomicity [AC-S1-64#32] 一块）目录段含 union，判为资金 / 归属测试：只走 rule_change，仍等负责人确认（D10-3065 / D10-3121），任务 PR 的标签届时再说。
+# B1-22zd 名下已有的评审（事实，供第一轮全量规则测试评审参照，细目写在评审书里）：规则测试评审 3 轮（独立 Claude）：r1 fail（3×S1）、r2 pass、r3 pass；第 195 条那次写测（持久告警）还没有评过。资金评审 4 轮（Codex）：r1 fail（3×S1）、r2 fail（1×S1）、r3 fail（2×S1）、r4 窄评审（approvals 172）fail（2×S1）——r3 / r4 两条 S1（无手机号重复、有手机号丢失）即持久告警的来由。 冻结用例改动（kit.ts 一处 + atomicity [AC-S1-64#32] 一块）目录段含 union，判为资金 / 归属测试：只走 rule_change，仍等负责人确认（D10-3065 / D10-3121），任务 PR 的标签届时再说。 补丁 1（2026-11-25，编排 D10-3125，先例 B1-06zh #2932）：新表 union_auth_alerts 按前缀 union_ 判为资金 / 归属表，tools/ci/lint-migrations.test.ts 的显式期望集合只机械加 'union_auth_alerts' 一行（第三类保护路径，随任务 PR 的负责人标签；lint-migrations.ts 本身与别的期望不动）。
 # 2026-11-23 be 入账（FU-TAOBAO-TOKEN-REFRESH 第一步之 ②③ 合并，编排 D10-2585 / D10-2587 / D10-2758：现在就做、不等规划回写；BR-ID-24 的规划文字由编排随二次验证规划 PR 提交，草稿 couli-runs/STEPUP-1122/BR-ID-24-待并入.md）。 背景：未上线淘宝应用的站长授权固定 24 小时，现按天节点（union.auth_alert_days，默认 14 / 7 / 1）会一授权就进「即将到期」、每天早上发短信；能否用 refresh_token 续期要看授权返回的 re_expires_in，库里没存。
 # ① 小时节点：新配置 union.auth_alert_hours（整数 1–720，去重降序；缺失或任一元素非法取代码默认 [6, 1]；空数组 = 关闭按小时提醒，补丁 1 照规划变更记录 20261123-后台二次验证三档 §7，编排 D10-2771），与 union.auth_alert_days 同一读法（union 经 settings 直接读、不登记配置注册表，be 11-23 自定已报编排）。
 # ② 跳过规则：提前量不小于本次授权总时长（auth_expires_at − auth_renewed_at）的节点，天或小时一律跳过；auth_renewed_at 为空（总时长未知）时不跳过，即现行为不变。
@@ -20,14 +20,14 @@ refs_hash:
 deps: [CT-24ha]
 paths:
   - 'apps/api/src/modules/union/auth-expiry/**'
-  - 'apps/api/src/modules/union/infra/taobao/site-oauth{,.test}.ts'
-  - 'apps/api/src/modules/union/infra/fake-site-oauth{,.test}.ts'
+  - 'apps/api/src/modules/union/infra/{taobao/site-oauth,fake-site-oauth}{,.test}.ts'
   - 'apps/api/src/modules/union/application/admin-accounts{,.test}.ts'
   - 'apps/api/src/modules/union/union-admin.module.ts'
   - 'db/migrations/**'
   - 'db/schema.sql'
   - 'packages/db/src/db.gen.ts'
   - 'test/spec/union/auth-alert-hours/**'
+  - 'tools/ci/lint-migrations.test.ts'
 test_paths:
   - 'test/spec/union/auth-alert-hours/**'
   - 'test/spec/db/union/auth-expiry/auth-expiry.int.test.ts'
