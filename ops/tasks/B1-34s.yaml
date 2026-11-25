@@ -8,7 +8,7 @@ type: impl
 # ② 逐项校验（新）：这十个键写入值须为数组，每项为字符串 YYYY-MM-DD 且是真实日期、年份等于键名里的年、不重复；空数组允许。不合格 → 现有 20001（单条 fields=['value']、批量 fields=[key]），不新增错误码。校验放 content/domain（注册表规格上的可选逐项校验），其它键行为不变。
 # ③ 不做：节假日与补班日跨键不相交（读侧已定节假日优先，risk/domain/appeal-deadline.ts）；缺键或非法时读方静默退回只跳周末——现状不改，年底未写入的告警登 FU-CALENDAR-YEAR-MISSING-ALERT。不动契约（后台配置接口通用、AdminConfigValueType 已含 object）；后台中文标签另开 fe 小单。
 # 风险级照 risk-map：content = RV2（D10-2946）。
-# 资金类判定（D10-2950）：test/spec/content/config-settle/ 两块（registry.test.ts [AC-F1-02zj#2]、writes.int.test.ts [AC-F1-02zj#13]）的目录段含关键词 settle，tools/lib/task-file.ts isMoneyOrAttributionTest（MONEY_TEST_DIR_KEYWORDS 含 'settle'，:216-252）判为资金 / 归属测试——只走 rule_change；改动只在整表清单 / 计数末尾多日历十键、不动任何 settle.* 期望值；待负责人确认（编排已核内容、建议同意，D10-2953），确认前不 land。其余 8 块不含关键词。
+# 资金类判定（D10-2950）：test/spec/content/config-settle/ 两块（registry.test.ts [AC-F1-02zj#2]、writes.int.test.ts [AC-F1-02zj#13]）的目录段含关键词 settle，tools/lib/task-file.ts isMoneyOrAttributionTest（MONEY_TEST_DIR_KEYWORDS 含 'settle'，:216-252）判为资金 / 归属测试——只走 rule_change；改动只在整表清单 / 计数末尾多日历十键、不动任何 settle.* 期望值；负责人 2026-11-25 已同意（D10-2970 第 9 条、D10-2974），approvals 待登记。其余 8 块不含关键词。
 # 与 B3-09n（agent.models 列进后台配置列表，agent 线在途）改同一批注册表冻结块（[AC-F1-10e#1/#3/#10/#56/#57/#58]、config-settle 两块、invite-reward 两块）：后 land 的一张在先合并的期望清单上再追加，modify_existing 的块前后以 land 时主干为准。
 # 冻结用例（探针 couli-runs/CAL-1125/probe.out：test/spec/content + subsidy-itemized + risk-flags + content 单测，7028 条只红 13）：10 块钉注册表全集 / 顺序 / 计数的规则测试登 modify_existing（全在 test/spec/content，无资金 / 归属目录，同 B3-09n 那 10 块）；另 3 条实现方单测（config-registry.test.ts、config-item-admin.test.ts）随实现改。
 refs: [BR-ID-36, BR-ID-27, BR-WDR-26]
