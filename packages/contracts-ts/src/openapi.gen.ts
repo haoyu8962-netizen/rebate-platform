@@ -3179,9 +3179,15 @@ export interface paths {
          *     or voided SMS code is 20003.
          *     Token use (BR-ID-34 「验证结果只能用于一次成功的操作」; BR-ID-08 「只能用于 1 次成功的业务请求」
          *     as the admin side follows it): a token is spent by one business success of an operation
-         *     that checks it (HTTP 2xx with `code=0`); after that a request with it is 10003. After a
-         *     definite rejection or failure of that operation the token is not spent, and the request may
-         *     be sent again with it until `expire_at`. When the outcome is unknown (for example, the
+         *     that checks it (`code=0` and, for an operation whose answer carries an `outcome`, an
+         *     outcome other than rejected); after that a request with it is 10003. After a definite
+         *     rejection or failure of that operation the token is not spent, and the request may be sent
+         *     again with it until `expire_at`. An answer of `code=0` with `outcome=rejected` (POST
+         *     /admin/v1/payout-batches refused with payout_disabled, say) is such a definite rejection:
+         *     the token is not spent and the same operation may be retried with it until `expire_at`.
+         *     Transitional until B1-18l: the current server still uses the token up on every HTTP 2xx
+         *     answer with `code=0`, `outcome=rejected` included; the rule here is the contract and
+         *     B1-18l brings the server to it. When the outcome is unknown (for example, the
          *     result of the commit is not known, or the token's state could not be recorded), the token
          *     stays held until it expires: a request with it is 10003 and a new verification is needed.
          *     After an answer of 10003 the caller must obtain a new token through a new verification
@@ -3216,14 +3222,18 @@ export interface paths {
          *     highest tier among the operations of that point (null = none needs one) and is display
          *     only: whether an operation needs a verification is decided by that operation's own
          *     `x-step-up` and its 10003 answer, and the console must not block an operation in advance
-         *     because of this field. `step_up_operations` lists the step-up operations whose tier
-         *     differs from it; operations that need none are not listed (under `fund.adjust`, rejecting
-         *     or withdrawing an adjustment needs no verification although `step_up_tier` is strict).
-         *     Examples of listed operations: only executing a payout batch under `payout.execute` is
-         *     strict; only unfreezing under `risk.freeze` is sudo; under `config.business` and
-         *     `switch.all` the operation is the configuration key or switch name, e.g.
-         *     `payout.single_cap_fen` strict. Tiers are sudo and strict (BR-ID-34 二次验证分三档);
-         *     operation keys come from specs/permissions.yaml (B1-18). `verify_phone_masked` is null when
+         *     because of this field. `step_up_operations` lists the step-up operations of the point whose
+         *     tier is lower than `step_up_tier` (a sudo operation under a point whose highest tier is
+         *     strict); operations that need none are not listed, and the list is empty when every
+         *     step-up operation of the point has the tier `step_up_tier` shows (under `fund.adjust`,
+         *     rejecting or withdrawing an adjustment needs no verification although `step_up_tier` is
+         *     strict). So `payout.execute` shows strict (only executing a payout batch needs it),
+         *     `fund.recon` shows sudo (only closing a difference that releases a withdrawal hold needs
+         *     it), `risk.freeze` shows sudo (only unfreezing), and `config.business` and `switch.all`
+         *     show strict (only the keys and the switch of the BR-ID-34 strict list, e.g.
+         *     `payout.single_cap_fen`); each with an empty list. Tiers are sudo and strict (BR-ID-34
+         *     二次验证分三档); operation keys come from specs/permissions.yaml (B1-18).
+         *     `verify_phone_masked` is null when
          *     no verify phone is registered: the SMS method is not offered (03 §9.2).
          */
         get: operations["adminGetMyPermissions"];
@@ -10984,6 +10994,12 @@ export interface paths {
          *     F-ADM-07; BR-WDR-11, BR-WDR-12, BR-WDR-18; design/specs/admin-withdrawals.md,
          *     admin-payouts.md; ruling D10-595). Permission point `payout.execute`; a super admin holds
          *     every point; the executor may be the reviewer of the same withdrawal (ADD-05). Step-up: strict (BR-ID-34 strict list「执行打款」): every call needs a valid `X-Step-Up-Token`, the sudo window does not apply (without one → 10003 with `data.tier=strict`); a token serves one successful call.
+         *     Only an `executed` answer is that success: with `outcome=rejected` the strict token sent
+         *     is not spent (a definite rejection, AdminStepUpToken), and after fixing what refused the
+         *     batch the same operation may be retried with the same token until its expire_at (with a
+         *     new `Idempotency-Key`, below). Transitional until B1-18l: the current server still uses
+         *     the token up on every HTTP 2xx answer with `code=0`, `outcome=rejected` included; the
+         *     rule here is the contract and B1-18l brings the server to it.
          *
          *     Request (AdminPayoutBatchCreateRequest): `withdrawal_ids`, 1 to 200 ids without duplicates
          *     (200 is 代理补全的默认, D10-595; a duplicate is 20001 with `data.fields=[withdrawal_ids]`).
@@ -16081,12 +16097,12 @@ export interface components {
             operation: string;
             tier: components["schemas"]["AdminStepUpTier"];
         };
-        /** @description A permission point of the account with its step-up annotation (04 §11 step-up column). */
+        /** @description A permission point of the account with its step-up annotation (04 §11 step-up column), display only; step_up_tier is the highest tier among the point's operations and step_up_operations lists those of a lower tier. */
         AdminPermissionGrant: {
             key: components["schemas"]["AdminPermissionKey"];
-            /** @description Tier of every step-up operation of this point; null = none needs step-up. */
+            /** @description Highest tier among the operations of this point, display only (each operation's own x-step-up and 10003 decide); null = none needs step-up. */
             step_up_tier: components["schemas"]["AdminStepUpTier"] | null;
-            /** @description Operations of this point whose tier differs from step_up_tier. */
+            /** @description Step-up operations of this point whose tier is lower than step_up_tier; operations that need none are not listed; empty when every step-up operation has the tier step_up_tier shows. */
             step_up_operations: components["schemas"]["AdminStepUpOperation"][];
         };
         AdminMe: {
@@ -23459,10 +23475,16 @@ export interface components {
          *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
          *     20001; that is why the header is optional). Only on admin console operations; app
          *     operations use StepUpToken.
-         *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-         *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-         *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-         *     verification is needed (see POST /admin/v1/auth/step-up).
+         *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+         *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+         *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+         *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+         *     a definite rejection, so the token is not spent and the same operation may be retried with
+         *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+         *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+         *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+         *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+         *     it.
          */
         AdminStepUpToken: string;
         /** @description Template code (code of GET /admin/v1/notify-channels); not a template code of the app → 20001 with data.fields=[code]. */
@@ -31347,10 +31369,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32021,10 +32049,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32157,10 +32191,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32722,10 +32762,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32803,10 +32849,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32864,10 +32916,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -35706,10 +35764,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -35860,10 +35924,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36262,10 +36332,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36340,10 +36416,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36428,10 +36510,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36531,10 +36619,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -41399,10 +41493,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -42496,10 +42596,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -42968,10 +43074,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -43153,10 +43265,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -43425,10 +43543,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -44122,10 +44246,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -44512,10 +44642,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -45747,10 +45883,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -46151,10 +46293,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -46329,10 +46477,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -46498,10 +46652,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -46664,10 +46824,16 @@ export interface operations {
                  *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
                  *     20001; that is why the header is optional). Only on admin console operations; app
                  *     operations use StepUpToken.
-                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
-                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
-                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
-                 *     verification is needed (see POST /admin/v1/auth/step-up).
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };

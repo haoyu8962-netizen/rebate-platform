@@ -248,7 +248,7 @@ it('[CT-24zzv] a step-up token lives 5 minutes from the successful verification'
 
 it('[CT-24zzv] a token is spent on success, retried after a definite failure, held when unknown', () => {
   expect(tokenText).toContain(
-    'the token is spent when the operation succeeds (http 2xx with code=0)',
+    'the token is spent when the operation succeeds: code=0 and, for an operation whose answer carries an outcome, an outcome other than rejected',
   );
   expect(tokenText).toContain(
     'after a definite rejection or failure it is not spent and can be sent again until its expire_at',
@@ -263,7 +263,7 @@ it('[CT-24zzv] a token is spent on success, retried after a definite failure, he
   }
 });
 
-it('[CT-24zzv] me/permissions: step_up_tier is the highest tier, display only; examples unchanged', () => {
+it('[CT-24zzv] me/permissions: step_up_tier is the highest tier, display only', () => {
   const me = (contract['paths'] as Record<string, Row>)['/admin/v1/me/permissions']!['get'] as Row;
   const text = flat(me['description']);
   expect(text).toContain('step_up_tier is the highest tier among the operations of that point');
@@ -302,4 +302,81 @@ it('[CT-24zzv] AdminStepUpRequest: method and tier take totp or sms only; method
     for (const value of ['sudo', 'strict', 'none'])
       expect(validate({ code, [field]: value }), `${field}=${value}`).toBe(false);
   }
+});
+
+// Codex money review r2 (D10-2943) ①: every permission point of every me/permissions example shows
+// the highest tier of its operations (BR-ID-34 sudo and strict lists, each operation's x-step-up);
+// a point on neither list shows null; step_up_operations only lists operations of a lower tier.
+const HIGHEST_TIER: Record<string, 'sudo' | 'strict'> = {
+  'fund.adjust': 'strict',
+  'fund.writeoff': 'strict',
+  'payout.execute': 'strict',
+  'switch.all': 'strict',
+  'config.business': 'strict',
+  'fund.recon': 'sudo',
+  'withdraw.review': 'sudo',
+  'union.pid': 'sudo',
+  'union.binding_reset': 'sudo',
+  'union.account_auth': 'sudo',
+  'risk.freeze': 'sudo',
+  'pii.reveal_phone': 'sudo',
+  'pii.reveal_identity': 'sudo',
+  'tax.export_full': 'sudo',
+};
+const RANK: Record<string, number> = { sudo: 1, strict: 2 };
+
+it('[CT-24zzv] me/permissions examples: each point shows its highest tier; listed operations are lower', () => {
+  const me = (contract['paths'] as Record<string, Row>)['/admin/v1/me/permissions']!['get'] as Row;
+  const ok = resolve((me['responses'] as Row)['200']);
+  const media = (ok['content'] as Record<string, Row>)['application/json']!;
+  const examples = Object.entries((media['examples'] ?? {}) as Row).map(
+    ([name, entry]) => [name, resolve(entry)['value'] as Row] as const,
+  );
+  if (media['example'] !== undefined) examples.push(['example', media['example'] as Row]);
+  expect(examples.length).toBeGreaterThan(0);
+  let points = 0;
+  for (const [name, value] of examples) {
+    for (const grant of ((value['data'] as Row)['permissions'] ?? []) as Row[]) {
+      points += 1;
+      const key = String(grant['key']);
+      const tier = grant['step_up_tier'] as string | null;
+      expect(tier, `${name} ${key}`).toBe(HIGHEST_TIER[key] ?? null);
+      for (const entry of grant['step_up_operations'] as Row[]) {
+        const rank = RANK[String(entry['tier'])];
+        expect(rank, `${name} ${key} ${String(entry['operation'])}`).toBeDefined();
+        expect(rank, `${name} ${key} ${String(entry['operation'])}`).toBeLessThan(
+          tier === null ? 0 : RANK[tier]!,
+        );
+      }
+    }
+  }
+  expect(points).toBeGreaterThan(0);
+});
+
+// Codex money review r2 (D10-2943) ②: code=0 with outcome=rejected is a definite rejection, so the
+// strict token is not spent and the same operation may retry with it. The token header, the issue
+// operation and the payout batch say so alike, and each marks the 2xx-means-spent server behaviour
+// as transitional until B1-18l.
+it('[CT-24zzv] code=0 with outcome=rejected leaves the token unspent, said alike in three places', () => {
+  const payout = flat(
+    ((contract['paths'] as Record<string, Row>)['/admin/v1/payout-batches']!['post'] as Row)[
+      'description'
+    ],
+  );
+  for (const [name, text] of [
+    ['AdminStepUpToken', tokenText],
+    ['adminStepUp', issueText],
+    ['adminCreatePayoutBatch', payout],
+  ] as const) {
+    expect(text, name).toMatch(/outcome=rejected[^.]*\bnot spent\b/);
+    expect(text, name).toMatch(/\bsame operation may be retried with\b/);
+    expect(text, name).toContain('transitional until b1-18l');
+    expect(text, name).not.toContain('(http 2xx with code=0)');
+    // Any sentence about 2xx is the transitional note that names outcome=rejected.
+    for (const sentence of text.split(/(?<=[.!?])\s+/).filter((s) => s.includes('2xx')))
+      expect(sentence, name).toMatch(/^transitional until b1-18l:.*outcome=rejected included/);
+  }
+  for (const text of [tokenText, issueText])
+    expect(text).toContain('an outcome other than rejected');
+  expect(payout).toContain('only an executed answer is that success');
 });
