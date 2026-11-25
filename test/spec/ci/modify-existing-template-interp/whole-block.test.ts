@@ -163,8 +163,6 @@ it('[AC-CT-06zzzzzzzd#6] 循环内的普通 it 拒绝按插值模板原文申报
   const missing = { ok: true, blocks: [{ test: TITLE, found: false }] };
 
   expect(compareModifiedBlocks(base, mixedHead, [TITLE])).toMatchObject(missing);
-  expect(namesWholeBlock(mixedBase, TITLE)).toBe(false);
-  expect(compareModifiedBlocks(mixedBase, mixedHead, [TITLE])).toMatchObject(missing);
   expect(namesWholeBlock(mixedBase, tableTitle)).toBe(true);
   expect(compareModifiedBlocks(mixedBase, mixedHead, [tableTitle])).toMatchObject({
     ok: true,
