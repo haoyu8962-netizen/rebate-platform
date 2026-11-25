@@ -9490,14 +9490,14 @@ export const CONTRACT_ROUTE_SCHEMAS = {
     "body": {
       "type": "object",
       "additionalProperties": false,
-      "description": "One of `method` or its legacy name `tier` is required (neither → 20001 [method]). `tier` is the legacy name of `method` (the second-factor method), still accepted.",
+      "description": "One of `method` or its legacy name `tier` is required (neither → 20001 [method]). `tier` is the legacy name of `method` (the second-factor method), still accepted. When both are sent and differ, `method` is used and only it is verified.",
       "required": [
         "code"
       ],
       "properties": {
         "tier": {
           "type": "string",
-          "description": "Second-factor method of an admin step-up (enum admin_step_up_method, BR-ID-34 第二因子):\ntotp = authenticator code, sms = SMS code to the registered verify phone. The step_up_token\ndoes not depend on it: any token of the session serves a sudo or strict operation.\n",
+          "description": "Second-factor method of an admin step-up (enum admin_step_up_method, BR-ID-34 第二因子):\ntotp = authenticator code, sms = SMS code to the registered verify phone. The step_up_token\ndoes not depend on it: an unused token of the session serves a sudo or strict operation.\n",
           "enum": [
             "totp",
             "sms"
@@ -9505,7 +9505,7 @@ export const CONTRACT_ROUTE_SCHEMAS = {
         },
         "method": {
           "type": "string",
-          "description": "Second-factor method of an admin step-up (enum admin_step_up_method, BR-ID-34 第二因子):\ntotp = authenticator code, sms = SMS code to the registered verify phone. The step_up_token\ndoes not depend on it: any token of the session serves a sudo or strict operation.\n",
+          "description": "Second-factor method of an admin step-up (enum admin_step_up_method, BR-ID-34 第二因子):\ntotp = authenticator code, sms = SMS code to the registered verify phone. The step_up_token\ndoes not depend on it: an unused token of the session serves a sudo or strict operation.\n",
           "enum": [
             "totp",
             "sms"

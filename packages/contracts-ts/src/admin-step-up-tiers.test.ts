@@ -11,6 +11,12 @@ import { errorCodes } from './index.ts';
 const { parseYamlLite } = createRequire(import.meta.url)('../../../tools/lib/yaml-lite.ts') as {
   parseYamlLite(text: string): unknown;
 };
+const apiRequire = createRequire(new URL('../../../apps/api/package.json', import.meta.url));
+const { Ajv2020 } = apiRequire('ajv/dist/2020.js') as {
+  Ajv2020: new (options: { strict: boolean; allErrors: true }) => {
+    compile(schema: object): (data: unknown) => boolean;
+  };
+};
 
 type Row = Record<string, unknown>;
 const METHODS = ['get', 'put', 'post', 'delete', 'patch'] as const;
@@ -198,4 +204,102 @@ it('[CT-24zzv] issuing a step-up token picks a method, not a tier: no per-method
   const methodRef = { $ref: '#/components/schemas/AdminStepUpMethod' };
   expect(properties['method']).toEqual(methodRef);
   expect(properties['tier']).toEqual(methodRef);
+});
+
+// Codex money review r1 (D10-2900): the issue operation, the token header and me/permissions state
+// how a strict token binds, how long a token lives and what happens to it after each outcome.
+function flat(value: unknown): string {
+  return String(value ?? '')
+    .replaceAll('`', '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+const components = contract['components'] as Record<string, Record<string, Row>>;
+const issueText = flat(
+  ((contract['paths'] as Record<string, Row>)['/admin/v1/auth/step-up']!['post'] as Row)[
+    'description'
+  ],
+);
+const tokenText = flat(components['parameters']!['AdminStepUpToken']!['description']);
+
+it('[CT-24zzv] a strict token is bound to the first strict operation that takes it, not at issue', () => {
+  for (const text of [issueText, tokenText]) {
+    expect(text).toContain('the first time a strict operation takes');
+    expect(text).toContain('bound to that operation');
+    expect(text).toContain('only the same operation may retry with it');
+    expect(text).not.toMatch(/\bany live, unused token\b/);
+  }
+  expect(issueText).toContain('no operation is named at issue');
+});
+
+it('[CT-24zzv] a step-up token lives 5 minutes from the successful verification', () => {
+  for (const text of [issueText, tokenText]) {
+    expect(text).toContain('5 minutes from the successful verification');
+    expect(text).not.toMatch(/300 seconds|\b5 min\b/);
+  }
+  expect(issueText).not.toContain('token lifetime');
+  expect(issueText).not.toContain('the server decides');
+  // The open question on the login-failure lock stays.
+  expect(issueText).toContain(
+    'left open here: whether wrong step-up codes count towards the login-failure lock.',
+  );
+});
+
+it('[CT-24zzv] a token is spent on success, retried after a definite failure, held when unknown', () => {
+  expect(tokenText).toContain(
+    'the token is spent when the operation succeeds (http 2xx with code=0)',
+  );
+  expect(tokenText).toContain(
+    'after a definite rejection or failure it is not spent and can be sent again until its expire_at',
+  );
+  expect(tokenText).toContain('when the outcome is unknown, it stays held until it expires');
+  expect(issueText).toContain('after a definite rejection or failure of that operation');
+  expect(issueText).toContain('when the outcome is unknown');
+  expect(issueText).toContain('the token stays held until it expires');
+  for (const text of [issueText, tokenText]) {
+    expect(text).not.toContain('it is released and can be sent again');
+    expect(text).not.toContain('the server may release the token');
+  }
+});
+
+it('[CT-24zzv] me/permissions: step_up_tier is the highest tier, display only; examples unchanged', () => {
+  const me = (contract['paths'] as Record<string, Row>)['/admin/v1/me/permissions']!['get'] as Row;
+  const text = flat(me['description']);
+  expect(text).toContain('step_up_tier is the highest tier among the operations of that point');
+  expect(text).toContain('display only');
+  expect(text).not.toMatch(/display-only|informational/);
+  expect(text).toContain("decided by that operation's own x-step-up and its 10003 answer");
+  expect(text).toContain('must not block an operation in advance');
+  expect(text).toContain('rejecting or withdrawing an adjustment needs no verification');
+  const ok = resolve(me['responses'] as Row);
+  const media = (resolve(ok['200'])['content'] as Record<string, Row>)['application/json']!;
+  const finance = resolve((media['examples'] as Row)['finance'])['value'] as Row;
+  const permissions = (finance['data'] as Row)['permissions'] as Row[];
+  expect(permissions.find((entry) => entry['key'] === 'fund.adjust')).toEqual({
+    key: 'fund.adjust',
+    step_up_tier: 'strict',
+    step_up_operations: [],
+  });
+});
+
+it('[CT-24zzv] AdminStepUpRequest: method and tier take totp or sms only; method wins when both differ', () => {
+  const schemas = components['schemas']!;
+  const request = schemas['AdminStepUpRequest']!;
+  expect(Object.keys(request['properties'] as Row).toSorted()).toEqual(['code', 'method', 'tier']);
+  expect(flat(request['description'])).toContain(
+    'when both are sent and differ, method is used and only it is verified',
+  );
+  const properties = Object.fromEntries(
+    Object.entries(request['properties'] as Row).map(([key, value]) => [key, resolve(value)]),
+  );
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const validate = ajv.compile({ ...request, properties });
+  const code = '123456';
+  expect(validate({ code })).toBe(true);
+  for (const field of ['method', 'tier']) {
+    for (const value of ['totp', 'sms']) expect(validate({ code, [field]: value })).toBe(true);
+    for (const value of ['sudo', 'strict', 'none'])
+      expect(validate({ code, [field]: value }), `${field}=${value}`).toBe(false);
+  }
 });
