@@ -195,6 +195,17 @@ export async function registerReconDiffOnce(
   return { row: existing, inserted: false };
 }
 
+export async function registerReconDiffWriteOnly(
+  trx: Transaction<DB>,
+  input: RegisterReconDiffInput,
+  dependencies: { readonly clock: Clock },
+): Promise<{ readonly inserted: boolean }> {
+  void trx;
+  void input;
+  void dependencies;
+  throw new Error('NotImplemented: registerReconDiffWriteOnly');
+}
+
 /** Uses the supplied connection/snapshot and never locks or writes. */
 export async function getReconDiffs(
   db: Kysely<DB>,

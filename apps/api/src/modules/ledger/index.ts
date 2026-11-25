@@ -31,6 +31,7 @@ export type { LedgerAssetSnapshotWorkerOptions } from './asset-snapshot.module.t
 export {
   registerReconDiff,
   registerReconDiffOnce,
+  registerReconDiffWriteOnly,
   getReconDiffs,
 } from './application/recon-diffs.ts';
 export type {
