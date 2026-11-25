@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DB } from '@couli/db';
 import { createTestDatabase } from '@couli/db/testing';
-import { sql, type Transaction } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 import { expect, it, vi } from 'vitest';
 import type { JobPayload, JobQueue } from '../../../../apps/api/src/modules/platform/index.ts';
 import { createRootLogger } from '../../../../apps/api/src/modules/platform/logging/index.ts';
@@ -128,23 +128,29 @@ async function withProducer(
 }
 
 function interruptedTransaction(h: Harness, boundary: 'before' | 'after', fault: Error) {
-  const db = h.db.withSchema('app');
-  const transaction = db.transaction.bind(db);
-  vi.spyOn(db, 'transaction').mockImplementation(() => {
-    const builder = transaction();
-    const execute = builder.execute.bind(builder);
-    return Object.assign(builder, {
-      async execute<T>(work: (trx: Transaction<DB>) => Promise<T>): Promise<T> {
-        await execute(async (trx) => {
-          const value = await work(trx);
-          if (boundary === 'before') throw fault;
-          return value;
-        });
-        throw fault;
-      },
+  function instrument(db: Kysely<DB>): Kysely<DB> {
+    const withSchema = db.withSchema.bind(db);
+    vi.spyOn(db, 'withSchema').mockImplementation((schema) => instrument(withSchema(schema)));
+
+    const transaction = db.transaction.bind(db);
+    vi.spyOn(db, 'transaction').mockImplementation(() => {
+      const builder = transaction();
+      const execute = builder.execute.bind(builder);
+      return Object.assign(builder, {
+        async execute<T>(work: (trx: Transaction<DB>) => Promise<T>): Promise<T> {
+          await execute(async (trx) => {
+            const value = await work(trx);
+            if (boundary === 'before') throw fault;
+            return value;
+          });
+          throw fault;
+        },
+      });
     });
-  });
-  return db;
+    return db;
+  }
+
+  return instrument(h.db.withSchema('app'));
 }
 
 it.each([false, true])(
@@ -182,6 +188,7 @@ it.each([false, true])(
           platform: 'taobao',
           stage: 'h6',
           auth_expires_at: expiry,
+          entered_at: null,
           phones_configured: phonesConfigured,
           cause: null,
           created_at: h.clock.now(),
@@ -357,10 +364,13 @@ it.each(['短信登记', '日志入队'] as const)(
         {
           stage: 'd14',
           auth_expires_at: expiry,
+          entered_at: null,
+          cause: null,
           created_at: h.clock.now(),
           phones_configured: true,
         },
       ]);
+      expect(facts[0]!.alert_key).toContain(expiry.toISOString());
       expect(await outbox(h)).toHaveLength(PHONES.length);
       expect(await logJobs(h, id)).toHaveLength(1);
       const rows = await (await adminEntry(h)).list(h.appId);
@@ -427,6 +437,36 @@ it('[AC-B1-22zd#19] 同一到期时刻恢复后再次失效，两条告警按进
       facts.map((fact) => fact.id).sort(),
     );
     expect(await outbox(h)).toHaveLength(2 * PHONES.length);
+  });
+});
+
+it('[AC-B1-22zd#22] 重新授权后的 d14 按新到期时刻另记告警并排日志任务', async () => {
+  const h = await harness(db());
+  h.settings.set(HOURS_KEY, []);
+  const firstExpiry = later(h, 14 * DAY_MS);
+  const { id } = await account(h, {
+    auth_expires_at: firstExpiry,
+    auth_renewed_at: later(h, -30 * DAY_MS),
+  });
+  await withProducer(h, async (queue) => {
+    const monitor = createSiteAuthMonitor({ ...h.options, queue });
+    await daily(h, monitor);
+    const first = await alertsFor(h, id);
+    expect(first).toMatchObject([{ stage: 'd14', auth_expires_at: firstExpiry }]);
+    expect(first[0]!.alert_key).toContain(firstExpiry.toISOString());
+
+    const newExpiry = later(h, 365 * DAY_MS);
+    await renew(h, await adminEntry(h), id, 365);
+    h.clock.set(new Date(newExpiry.getTime() - 14 * DAY_MS));
+    await daily(h, monitor);
+
+    const facts = await alertsFor(h, id);
+    expect(facts).toMatchObject([first[0]!, { stage: 'd14', auth_expires_at: newExpiry }]);
+    expect(facts[1]!.alert_key).toContain(newExpiry.toISOString());
+    expect(facts[1]!.alert_key).not.toBe(first[0]!.alert_key);
+    expect((await logJobs(h, id)).map((job) => job.payload['alert_id']).sort()).toEqual(
+      facts.map((fact) => fact.id).sort(),
+    );
   });
 });
 
