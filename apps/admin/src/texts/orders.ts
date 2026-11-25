@@ -226,7 +226,11 @@ export const ordersTexts = {
       statusLockNote: '订单失效或结算至余额后自动锁定；已锁定：订单状态不再随联盟同步更新',
       attributionLock: '归属锁定 locked',
       attributionLockNote: '找回通过或指定归属后显示「归属已锁定」',
+      /** BR-TEXT-05: a display_status this console does not know (order_status.UNKNOWN). */
+      unknownDisplay: '未知状态 UNKNOWN',
     },
+    /** F1-07ee: rereads this order once (GET only, nothing is sent). */
+    refresh: '刷新',
 
     basic: {
       title: '基本信息',
@@ -383,6 +387,14 @@ export const ordersTexts = {
       reasonPlaceholder: '写明核实依据，5–200 字，写入审计',
       reasonInvalid: '请填写指派原因（5–200 字）',
       stepUpOperation: '指定归属',
+    },
+    /** F1-07ee: an order write whose result is unknown (the marker of this account). */
+    pendingPrompt: {
+      notice: '这一订单上次的操作结果未知',
+      moment: (time: string): string => `结果未知的时间：${time}（北京时间）。`,
+      check: '请先点【刷新】重新读取订单、核对是否已生效，核对后点【关闭】再操作。',
+      statusUnknown: '订单当前状态本端无法识别，暂不能重试；请点【刷新】，状态可识别后再处理。',
+      close: '关闭',
     },
     result: {
       held: '已暂停结算，页面已按服务端返回的订单更新。',

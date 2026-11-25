@@ -145,29 +145,66 @@ export interface SentWrite<B> {
   readonly token?: string;
 }
 
-/** A write of an order whose result is unknown, kept until a retry gets a definite answer. */
-export type PendingWrite =
-  | { readonly action: 'hold' | 'unhold'; readonly sent: SentWrite<HoldBody | UnholdBody> }
-  | { readonly action: 'reason-sub'; readonly sent: SentWrite<ReasonSubBody> }
-  | { readonly action: 'reassign'; readonly sent: SentWrite<AssignBody> };
-
-// Kept outside the page: a reload (or leaving and coming back) remounts the writes, and the
-// order's dialog must come back locked with the same body, not as a new editable one.
-const pendingWrites = new Map<string, PendingWrite>();
-
-/** The write of this order whose result is still unknown, if any. */
-export function pendingWriteOf(orderId: string): PendingWrite | undefined {
-  return pendingWrites.get(orderId);
+/**
+ * The page of this order's result-unknown marker (components/unknown-marker): one per order, kept
+ * in this tab's sessionStorage under the signed-in account only. It holds no body, no UID, no
+ * reason: after a reload or a remount only the prompt and the locked entries come back, never a
+ * form. Each write's own submission holds it separately (holdUnknown / releaseUnknown), so a
+ * definite answer to one request never drops the marker another request of the order still holds.
+ */
+export function markerPageOf(orderId: string): string {
+  return `orders/${orderId}`;
 }
 
-/** The result of this write is unknown: only 【重试】 of the same body may follow. */
-export function keepPendingWrite(orderId: string, write: PendingWrite): void {
-  pendingWrites.set(orderId, write);
+/** One status code this console does not know: the enum name and the code, nothing more. */
+export interface UnknownCode {
+  readonly enum: 'platform_status' | 'rebate_status' | 'display_status';
+  readonly code: string;
 }
 
-/** A definite answer came (success, refusal, 20902, 10003): the order may be written again. */
-export function clearPendingWrite(orderId: string): void {
-  pendingWrites.delete(orderId);
+/** The status codes of an order that are not values of this console's enums (BR-TEXT-05). */
+export function unknownCodesOf(
+  order: Pick<OrderDetail, 'platform_status' | 'rebate_status' | 'display_status'>,
+): UnknownCode[] {
+  const codes: UnknownCode[] = [];
+  if (!KNOWN_PLATFORM.has(order.platform_status))
+    codes.push({ enum: 'platform_status', code: order.platform_status });
+  if (!KNOWN_REBATE.has(order.rebate_status))
+    codes.push({ enum: 'rebate_status', code: order.rebate_status });
+  if (order.display_status !== null && !KNOWN_DISPLAY.has(order.display_status))
+    codes.push({ enum: 'display_status', code: order.display_status });
+  return codes;
+}
+
+/** Whether display_status is a code this console does not know (shown as order_status.UNKNOWN). */
+export function displayStatusUnknown(order: Pick<OrderDetail, 'display_status'>): boolean {
+  return order.display_status !== null && !KNOWN_DISPLAY.has(order.display_status);
+}
+
+/** The browser event that carries a console diagnostic (detail: event, enum and code only). */
+export const DIAGNOSTIC_EVENT = 'couli.admin.diagnostic';
+const reported = new Set<string>();
+
+/**
+ * Reports each unknown code once per enum and code for this run of the console (BR-TEXT-05,
+ * 规划/03 §4.7): only the enum name and the code, never the order id, a user or an amount.
+ * Returns the codes reported now (an already reported pair is skipped).
+ */
+export function reportUnknownCodes(codes: readonly UnknownCode[]): UnknownCode[] {
+  const fresh = codes.filter((one) => {
+    const key = `${one.enum}\u0000${one.code}`;
+    if (reported.has(key)) return false;
+    reported.add(key);
+    return true;
+  });
+  if (typeof window === 'undefined') return fresh;
+  for (const one of fresh)
+    window.dispatchEvent(
+      new CustomEvent(DIAGNOSTIC_EVENT, {
+        detail: { event: 'unknown_code', enum: one.enum, code: one.code },
+      }),
+    );
+  return fresh;
 }
 
 /**
@@ -199,7 +236,8 @@ export interface WriteEntries {
   readonly assign: boolean;
 }
 
-const NO_ENTRIES: WriteEntries = {
+/** No write entry at all. */
+export const NO_ENTRIES: WriteEntries = {
   hold: false,
   unhold: false,
   unholdBlocked: false,

@@ -9,6 +9,11 @@
 // not visible order (20001) shows nothing of it. 【返回】 goes to the list with its conditions (the
 // list address, F1-07ed). 「分佣明细」 (F1-07ed) groups the snapshot's beneficiaries by role with each
 // one's ratio, settlement state and forfeit mark; it shows no amount (amounts stay in 「分佣快照」).
+// 【刷新】 (F1-07ee r5, BR-TEXT-05) rereads the detail once with the same GET and sends nothing
+// else; it stays while a status is one this console does not know. Such a display_status shows
+// order_status.UNKNOWN, and every unknown code is reported once (enum name and code only). An
+// order write whose result is unknown (the marker of this account, ./detail-writes/) shows its
+// read-only prompt above the detail.
 import { ArrowLeftOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons';
 import { beneficiary_role } from '@couli/contracts-ts';
 import { useDataProvider } from '@refinedev/core';
@@ -32,10 +37,17 @@ import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { PlannedPage, usePlanned } from '../../components/planned/index.ts';
+import { CONSOLE_CLOCK, type MarkerClock } from '../../components/unknown-marker/index.ts';
 import { ordersTexts } from '../../texts/orders.ts';
-import { knownStatuses } from './detail-writes/model.ts';
-import { OrderWrites } from './detail-writes/OrderWrites.tsx';
-import { subReasonLabel } from './detail-writes/model.ts';
+import {
+  displayStatusUnknown,
+  knownStatuses,
+  reportUnknownCodes,
+  subReasonLabel,
+  unknownCodesOf,
+} from './detail-writes/model.ts';
+import { OrderWrites, UnknownWritePrompt } from './detail-writes/OrderWrites.tsx';
+import { useOrderMarker } from './detail-writes/useOrderMarker.ts';
 import { FlagTags, StatusTag } from './parts.tsx';
 import { nextNoticeId, noticeOf, useSyncRequest, type SyncNotice } from './sync.ts';
 import {
@@ -63,6 +75,8 @@ type LoadStatus = 'loading' | 'ready' | 'failed' | 'missing' | 'forbidden';
 export interface OrderDetailPageProps {
   readonly access: AccessControl;
   readonly orderId: string;
+  /** Injected clock (AGENTS.md §4 rule 5) of the write marker; the console's default if left out. */
+  readonly clock?: MarkerClock | undefined;
 }
 
 /** GET /admin/v1/orders/{order_id} not live yet (planned): the placeholder, no read (D10-284). */
@@ -71,7 +85,11 @@ export function OrderDetailPage(props: OrderDetailPageProps): ReactElement {
   return planned ? <PlannedPage title={t.title} /> : <OrderDetailContent {...props} />;
 }
 
-function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactElement {
+function OrderDetailContent({
+  access,
+  orderId,
+  clock = CONSOLE_CLOCK,
+}: OrderDetailPageProps): ReactElement {
   const getProvider = useDataProvider();
   const navigate = useNavigate();
   const location = useLocation();
@@ -82,6 +100,8 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
   const [attempt, setAttempt] = useState(0);
   const sync = useSyncRequest();
   const [notice, setNotice] = useState<SyncNotice>();
+  const [refreshing, setRefreshing] = useState(false);
+  const marker = useOrderMarker(orderId);
 
   useEffect(() => {
     if (!permitted) return undefined;
@@ -91,11 +111,13 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
     custom<OrderDetail>({ url: orderUrl(orderId), method: 'get' }).then(
       (response) => {
         if (!current) return;
+        setRefreshing(false);
         setOrder(response.data);
         setStatus('ready');
       },
       (cause: unknown) => {
         if (!current) return;
+        setRefreshing(false);
         setOrder(undefined);
         const kind = failureOf(cause);
         setStatus(kind === 'invalid' ? 'missing' : kind);
@@ -110,6 +132,17 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
     setStatus('loading');
     setAttempt((value) => value + 1);
   };
+  // 【刷新】: the same GET once more, the shown detail stays until its answer; no write is sent.
+  const refresh = () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setAttempt((value) => value + 1);
+  };
+
+  // BR-TEXT-05: each unknown status code is reported once (enum name and code only).
+  useEffect(() => {
+    if (order !== undefined) reportUnknownCodes(unknownCodesOf(order));
+  }, [order]);
 
   const back = () => {
     const query = backQueryOf(location.state);
@@ -162,7 +195,14 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
       </Flex>
       <Flex gap={8} wrap>
         {order === undefined || status !== 'ready' ? null : (
-          <OrderWrites order={order} access={access} onSaved={saved} onConflict={conflicted} />
+          <OrderWrites
+            order={order}
+            access={access}
+            marker={marker}
+            clock={clock}
+            onSaved={saved}
+            onConflict={conflicted}
+          />
         )}
         {/* BR-TEXT-05: no write action, 【同步此单】 included, for a status this console does not know. */}
         {order === undefined || status !== 'ready' || !knownStatuses(order) ? null : (
@@ -173,6 +213,16 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
             onClick={() => void syncThisOrder(order)}
           >
             {ordersTexts.sync.thisOrderEntry}
+          </Button>
+        )}
+        {order === undefined || status !== 'ready' ? null : (
+          <Button
+            icon={<ReloadOutlined aria-hidden />}
+            disabled={refreshing}
+            aria-busy={refreshing || undefined}
+            onClick={refresh}
+          >
+            {t.refresh}
           </Button>
         )}
         <Button icon={<ArrowLeftOutlined aria-hidden />} onClick={back}>
@@ -235,6 +285,7 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
           onClose={() => setNotice(undefined)}
         />
       )}
+      <UnknownWritePrompt marker={marker} order={status === 'ready' ? order : undefined} />
       {body}
     </Flex>
   );
@@ -285,7 +336,9 @@ function DetailBody({ order }: { readonly order: OrderDetail }): ReactElement {
         order.display_status === null ? (
           dash
         ) : (
-          <Tag style={{ marginInlineEnd: 0, ...code }}>{order.display_status}</Tag>
+          <Tag style={{ marginInlineEnd: 0, ...code }}>
+            {displayStatusUnknown(order) ? t.status.unknownDisplay : order.display_status}
+          </Tag>
         ),
     },
     {

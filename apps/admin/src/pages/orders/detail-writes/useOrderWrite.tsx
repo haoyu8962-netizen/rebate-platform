@@ -5,19 +5,29 @@
 //   once with the new X-Step-Up-Token (the first request never carries one, D10-2792 ⑦);
 // - result unknown (no answer within WRITE_TIMEOUT_MS, network failure, 5xx): the form stays
 //   locked, the dialog cannot be closed and only 【重试】 resends the very same body (and token);
-//   the write is kept per order (keepPendingWrite) so a remounted page reopens it locked; a
-//   success, 20902 or an explicit refusal unlocks it;
+//   a success, 20902 or an explicit refusal unlocks it;
 // - an explicit refusal: its message, the form may be edited again.
+// The order's result-unknown marker (components/unknown-marker, page markerPageOf, this account
+// only) is held from the moment a request is sent until a definite answer to that very request:
+// a page remounted or reloaded meanwhile finds it and offers no new submission (OrderWrites). A
+// definite answer releases only this hook's hold; an ended session (10001) leaves it in place. No
+// body is kept outside this hook: a remount never restores a form.
 import type { Schema } from '@couli/contracts-ts';
 import { useDataProvider } from '@refinedev/core';
-import { useRef, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../../components/step-up/index.ts';
+import {
+  endsSession,
+  useUnknownMarker,
+  type MarkerClock,
+} from '../../../components/unknown-marker/index.ts';
 import { AdminApiError } from '../../../providers/data/index.ts';
 import { ordersTexts } from '../../../texts/orders.ts';
 import type { OrderDetail } from '../model.ts';
 import {
   STEP_UP_URL,
   WRITE_TIMEOUT_MS,
+  markerPageOf,
   withDeadline,
   writeFailureOf,
   type SentWrite,
@@ -49,23 +59,30 @@ export function useOrderWrite<B>(options: {
   /** 「本次操作：」 of the 动态码 dialog. */
   readonly operation: string;
   readonly onDone: (done: WriteDone) => void;
-  /** A write of this order whose result is still unknown: start locked with it. */
-  readonly pending?: Sent<B> | undefined;
-  /** The result became unknown: keep the write outside the dialog (keepPendingWrite). */
-  readonly onUnknown: (sent: Sent<B>) => void;
-  /** A definite answer came: drop the kept write (clearPendingWrite). */
-  readonly onSettled: () => void;
+  /** The order whose result-unknown marker this write holds while its result is open. */
+  readonly orderId: string;
+  /** The console clock of the marker's moment. */
+  readonly clock: MarkerClock;
+  /** Nothing may be sent now (the shown detail has a status this console does not know). */
+  readonly blocked: boolean;
 }): OrderWrite<B> {
   const getProvider = useDataProvider();
-  const { url, operation, onDone, pending, onUnknown, onSettled } = options;
-  const [phase, setPhase] = useState<WritePhase>(pending === undefined ? 'editing' : 'unknown');
+  const { url, operation, onDone, orderId, clock, blocked } = options;
+  const marker = useUnknownMarker(markerPageOf(orderId), clock);
+  const [phase, setPhase] = useState<WritePhase>('editing');
   const [error, setError] = useState<string>();
-  const last = useRef<Sent<B> | undefined>(pending);
+  const last = useRef<Sent<B> | undefined>(undefined);
   const busy = useRef(false);
+  const blockedRef = useRef(blocked);
+  useEffect(() => {
+    blockedRef.current = blocked;
+  }, [blocked]);
 
   const post = async (sent: Sent<B>): Promise<void> => {
-    if (busy.current) return;
+    if (busy.current || blockedRef.current) return;
     busy.current = true;
+    // In flight counts as open: a remount before the answer must not offer a second submission.
+    marker.mark();
     last.current = sent;
     setPhase('sending');
     setError(undefined);
@@ -83,17 +100,19 @@ export function useOrderWrite<B>(options: {
         WRITE_TIMEOUT_MS,
       );
       busy.current = false;
-      onSettled();
+      marker.clear();
       onDone({ kind: 'saved', order: response.data });
     } catch (cause) {
       busy.current = false;
       const failure = writeFailureOf(cause);
       if (failure.kind === 'unknown') {
-        onUnknown(sent);
+        // The marker stays held (marked before sending) until a definite answer.
         setPhase('unknown');
         return;
       }
-      onSettled();
+      // A definite answer to this very request; an ended session settles nothing.
+      if (endsSession(cause)) marker.leave();
+      else marker.clear();
       if (failure.kind === 'conflict') onDone({ kind: 'conflict' });
       else if (failure.kind === 'stepUp') setPhase('verifying');
       else {
@@ -147,12 +166,12 @@ export function useOrderWrite<B>(options: {
     locked: phase !== 'editing',
     error,
     submit: (body) => {
-      if (phase !== 'editing') return;
+      if (phase !== 'editing' || blocked) return;
       void post({ body });
     },
     retry: () => {
       const sent = last.current;
-      if (phase !== 'unknown' || sent === undefined) return;
+      if (phase !== 'unknown' || sent === undefined || blocked) return;
       void post(sent);
     },
     stepUpModal,

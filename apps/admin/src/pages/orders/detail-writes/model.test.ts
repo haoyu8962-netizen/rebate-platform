@@ -1,7 +1,8 @@
 // Unit tests of the order detail write helpers (F1-07ee r3): unknown statuses (display_status
 // included) hide every write entry and 【同步此单】, notes / reasons are checked and sent trimmed,
 // a write without an answer times out as result unknown, a dialog cannot be closed while a result
-// is unknown, and the unknown write is kept per order until a definite answer.
+// is unknown; unknown status codes are listed with the enum name and code only and reported once
+// per pair (the result-unknown marker is tested in ./marker.test.ts).
 import { afterEach, expect, it, vi } from 'vitest';
 import type { AccessControl } from '../../../providers/access-control/index.ts';
 import { AdminApiError } from '../../../providers/data/index.ts';
@@ -9,13 +10,15 @@ import type { OrderDetail } from '../model.ts';
 import {
   WRITE_TIMEOUT_MS,
   assignReasonValid,
-  clearPendingWrite,
   dialogClosable,
-  keepPendingWrite,
+  DIAGNOSTIC_EVENT,
+  displayStatusUnknown,
   knownStatuses,
+  markerPageOf,
   noteValid,
-  pendingWriteOf,
+  reportUnknownCodes,
   sentText,
+  unknownCodesOf,
   withDeadline,
   writeEntriesOf,
   writeFailureOf,
@@ -133,16 +136,32 @@ it('[AC-F1-07ee-UNIT#6] 弹窗只在编辑中可关闭；发送中、验证中�
   expect(dialogClosable('unknown')).toBe(false);
 });
 
-it('[AC-F1-07ee-UNIT#7] 结果未知的写按订单保留原体与令牌，明确结果后才清除，别的订单不受影响', () => {
-  const id = 'order-unit-7';
-  const other = 'order-unit-7-other';
-  expect(pendingWriteOf(id)).toBeUndefined();
-  const body = { reason_code: 'RISK' as const, note: '核对', expected_row_version: 7 };
-  keepPendingWrite(id, { action: 'hold', sent: { body, token: 'tok' } });
-  expect(pendingWriteOf(id)).toEqual({ action: 'hold', sent: { body, token: 'tok' } });
-  expect(pendingWriteOf(other)).toBeUndefined();
-  // A remount reads the same write back (same body, nothing re-derived).
-  expect(pendingWriteOf(id)?.sent.body).toBe(body);
-  clearPendingWrite(id);
-  expect(pendingWriteOf(id)).toBeUndefined();
+it('[AC-F1-07ee-UNIT#7] 未知编码只列枚举名与编码，按枚举名和编码各上报一次；标记按订单区分', () => {
+  const future = detail({
+    platform_status: 'RECEIVED_V2',
+    display_status: 'SETTLING_V2',
+  } as unknown as Partial<OrderDetail>);
+  expect(unknownCodesOf(detail({}))).toEqual([]);
+  expect(unknownCodesOf(detail({ display_status: null }))).toEqual([]);
+  expect(displayStatusUnknown(future)).toBe(true);
+  expect(displayStatusUnknown(detail({}))).toBe(false);
+  const codes = unknownCodesOf(future);
+  expect(codes).toEqual([
+    { enum: 'platform_status', code: 'RECEIVED_V2' },
+    { enum: 'display_status', code: 'SETTLING_V2' },
+  ]);
+  const seen: unknown[] = [];
+  const listener = (event: Event) => seen.push((event as CustomEvent).detail);
+  window.addEventListener(DIAGNOSTIC_EVENT, listener);
+  try {
+    expect(reportUnknownCodes(codes)).toEqual(codes);
+    expect(reportUnknownCodes(codes)).toEqual([]);
+  } finally {
+    window.removeEventListener(DIAGNOSTIC_EVENT, listener);
+  }
+  expect(seen).toEqual([
+    { event: 'unknown_code', enum: 'platform_status', code: 'RECEIVED_V2' },
+    { event: 'unknown_code', enum: 'display_status', code: 'SETTLING_V2' },
+  ]);
+  expect(markerPageOf('a')).not.toBe(markerPageOf('b'));
 });
