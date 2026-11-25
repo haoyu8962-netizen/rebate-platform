@@ -1,0 +1,35 @@
+id: CT-06zzzzzzzh
+repo: rebate-platform
+title: CT-06zzzzzzzh：证据里的代码评审绑定被评审的提交 / 树——落地时其后改到实现路径的提交须有覆盖它的增量评审，或带裁定号登记为评审后整理且只改限定类别（FU-EVIDENCE-REVIEW-TREE-BINDING，D10-2964 / D10-2976）
+type: guard-change
+# 2026-11-25 ops 入账（编排 D10-2976：负责人 2026-11-25 同意，D10-2970 ⑩；approvals 185 待登记，#719——合并前以「负责人 2026-11-25 已同意（D10-2970），approvals 待登记」为准）。第三类门禁改动，合并照 approvals 16。
+# 起因（D10-2964，CT-24zzv）：tools/ci/evidence-check.ts 只在换家分支（:1588-1680）把评审绑到提交；普通证据的 reviews 条目只查引擎、结论、open_s0_s1、清单，
+#   评审之后实现文件又改了也照样放行（money r3 评 8a31e0605，其后整理提交 85cebe896）。
+# 做法（只改 evidence-check 与它的工具测试、README 证据一节）：
+#   ① reviews 里 money / general / contract 条目加必填 `commit`（被评审的提交，40 位，取 codex-run / claude-run 该轮 meta.json 的 head_before）与 `tree`（该提交的树）；
+#      两者须一致、commit 须是落地头的祖先。spec-test 条目不变。
+#   ② 落地头上算每类评审最后一条通过条目的 commit..head：其间改到实现路径（台账 paths 减去台账文件、ops/evidence、第一类规则测试资产）的每个提交，
+#      要么被一条更晚、同类型、通过的条目覆盖（其 commit 是该提交或其后代），要么列在证据新字段
+#      `post_review_commits: [{commit, ruling: D10-…, note}]` 里且只改限定类别（contracts/oasdiff-accepted.txt、实现方单测 **/*.test.ts、纯格式化——清单写进检查与 README）；
+#      否则报问题，点名提交与文件。换家分支的现行规则不变。
+#   ③ 过渡：只对 spec_commit 以本单落地提交为祖先的任务生效；之前已有 spec_commit 的在途单照旧规则（入账时 15 张：B1-04zzzzn、B1-04zzzzo、B1-22zd、B1-25d、
+#      B2-07h、B2-07i、B2-18、B3-09m、CT-06zzzzzzze、CT-24zzv、F1-07edb、F1-07ee、F1-08atb、F1-08ee、F1-08eec），不让新门禁挡住正在落地的单。
+#   ④ tools/agent/README.md 证据一节写 commit / tree / post_review_commits 的写法与允许类别。
+#   不改 codex-run / claude-run、校验器（CT-06zzzzzzzf）、提示词（CT-06zzzzzzzg）；必须改才能生效就停下报编排。
+# 规则测试至少钉：① 新规则下 money 条目缺 commit / tree → 拒；② 评审后改业务实现文件且无覆盖 → 拒并点名提交；③ 有更晚的同类通过评审覆盖 → 过；
+#   ④ 列进 post_review_commits、带裁定号且只改允许类别 → 过；带裁定号但改了业务实现文件 → 拒；⑤ spec_commit 早于落地提交的任务照旧规则（缺 commit 也过）；⑥ 换家情形照旧。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ci/evidence-check{,.test}.ts'
+  - 'tools/agent/README.md'
+  - 'ops/tasks/CT-06zzzzzzzh.yaml'
+test_paths:
+  - 'test/spec/ci/evidence-review-binding/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/evidence-review-binding/**'
+status: todo
