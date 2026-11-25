@@ -1,0 +1,38 @@
+id: CT-06zzzzzzzj
+repo: rebate-platform
+title: CT-06zzzzzzzj：modify_existing 整块登记扩到顶层 for…of 循环体里模板标题的 it（按标题模板原文、只许 rule_change、note 必填，认不出的写法整文件重判）；改动全在登记块内而移出先红名单的冻结文件不再当测试支撑文件（D10-3107 / D10-3128 / D10-3143）
+type: guard-change
+# 2026-11-25 ops 入账（编排 D10-3107 / D10-3128 / D10-3143）。第三类门禁改动，合并照 approvals 16。范围稿 couli-runs/OPS-lane/CT-06zzzzzzzj/scope-draft.md、plan-after-206.md。
+# 第一条（D10-3107）：CT-06zzzzzv 只认「内联字面量表 + 循环体一个 it + 只改行」、CT-06zzzzzzzd 只认 .each / .for；B1-18l 的 18 条 / 7 块（couli-runs/B1-18l/undeclarable-18.md，具名表、循环体 1–3 个 it、改块体）
+#   与 B1-22zd 的 monitor.int.test.ts [AC-S1-65#1]（内联表、一个 it、改块体）现只能整文件重判。做法：文件顶层 `for (const <x> of <表达式>) { … }` 循环体里、标题为模板字面量的普通 it / test（无修饰），
+#   可按标题模板原文（反引号之间逐字，含 ${…}，同 CT-06zzzzzzzd）整块登记，覆盖该 it 在所有行上的展开；只许 rule_change，note 必填；循环头与循环体里未登记的语句、其他 it 逐字不变，
+#   否则照旧整文件重判；同一原文命中多块、差一个字符照旧拒；内联表只改行照旧走 CT-06zzzzzv 逐行登。嵌套循环、循环里的 describe、非顶层 for…of、带修饰的 it 不在本单，照旧。
+#   底子（D10-3143 取甲）：手写记号识别（test-blocks.ts 已有 tokenize），认不出的写法一律整文件重判、不得放过；本单 paths 内不得 import typescript——test-blocks.ts 经 evidence-check.ts:232 与
+#   tools/lib/task-file.ts 被引用，CI 的 evidence.yml 不装依赖（第 206 条 ④ 只放开 tools/guard 的测试文件检查即 test-guard）。认得出 / 认不出的边界用实现方单测逐类钉住，
+#   含 B1-18l 那 4 个文件 18 条 for…of 的真实写法作样本（risk/admin-risk-rules/permissions、union/admin-accounts/access、union/admin-alert-phones/access、union/admin-pids/access）。
+# 第二条（D10-3128）：样例 couli-runs/B1-18l/red/1/red-check.json（「无牙」95 条 / 7 个文件）。被改冻结文件 refusals.int.test.ts 改动全在登记块内，按 CT-06zzzg / D10-701 ② 移出先红名单；
+#   lib/red-check.ts:1028 judged 只含先红名单，:1226 把不在名单的被改文件按测试支撑文件判（mayReadSupport），admin/auth/kit.ts 的 createRequire、review-harness.ts 的 computed name 令引用它们的
+#   7 个文件整文件判定。做法：这类移出名单的冻结规则测试文件判别的文件时按规则测试文件对待（mayImportRuleTest，只有显式 import 才整文件判，同 CT-06zzz / D10-586）；真正的支撑文件
+#   （kit、fixture、数据）被改照旧整文件判；未改用例照旧列 exempt 与 notes 给规则测试评审。不改 createRequire 的判法。
+# red-check / evidence-check / task.ts 经 test-blocks / red-check 自然生效；必须改别处才能生效就停下报编排。
+# 规则测试至少钉：① B1-18l 形状（具名表、循环体 3 个 it、改其中 1 个块体）按模板原文登记 → 整块定位、changed 判对、其余 it 须不变；② B1-22zd 形状（内联表、一个 it、改块体）同上；
+#   ③ 循环头变了 / 循环体里未登记的语句变了 → 整文件重判、登记无效；④ 原文差一个字符、同一原文命中两块 → 拒；⑤ 内联表只改行 → 照旧逐行登，用模板原文整块登仍拒；⑥ 嵌套循环 / 循环里的 describe /
+#   带修饰的 it → 照旧；⑦ 冻结文件 A 改动全在登记块内（移出名单），B 经用 createRequire 的 kit 引用公共代码、B 改一条登记块其余未改 → 未改用例免红（exempt 列出）、改的那条照旧要红；
+#   ⑧ 同上但 kit 本身也被改 → B 照旧整文件判；⑨ B 显式 import A → 照旧整文件判；⑩ A 有块外改动（在先红名单里）→ B 按现有规则。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/guard/lib/test-blocks{,.test}.ts'
+  - 'tools/guard/lib/red-check{,.test}.ts'
+  - 'ops/tasks/CT-06zzzzzzzj.yaml'
+test_paths:
+  - 'test/spec/ci/modify-existing-for-of-template/**'
+  - 'test/spec/ci/red-modified-only-not-support/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/modify-existing-for-of-template/**'
+  - 'test/spec/ci/red-modified-only-not-support/**'
+status: todo
