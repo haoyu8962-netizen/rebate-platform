@@ -674,6 +674,9 @@ export class TaobaoUnionAdapter implements UnionAdapter {
         relation_app: TAOBAO_PUBLISHER_RELATION_APP,
       },
       signal,
+      undefined,
+      undefined,
+      true,
     );
     const found = queriedRelationId(queried.body);
     // 补丁 3 (D10-2826 ①): whose filing the read-back id is cannot be told from the answer; it is
@@ -711,7 +714,8 @@ export class TaobaoUnionAdapter implements UnionAdapter {
    * classified by unwrapTaobaoResponse; the raw answer is returned for the lossless relation_id.
    * `refused` (the save, B1-04zzzzn) runs before a definite refusal is thrown. r2: with `unsent`
    * (the save), the signal is checked once more right before the request is handed to the
-   * transport; aborted by then → `unsent` (nothing was sent).
+   * transport; aborted by then → `unsent` (nothing was sent). r5 (D10-2972): `afterDuplicate` (the
+   * read-back after a save answered "duplicate") marks a transport failure duplicateConfirmed.
    */
   async #publisherCall(
     method: string,
@@ -720,6 +724,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     signal: AbortSignal | undefined,
     refused?: () => Promise<void>,
     unsent?: () => Promise<never>,
+    afterDuplicate = false,
   ): Promise<UnionTransportResponse> {
     let response: UnionTransportResponse;
     try {
@@ -739,7 +744,9 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       // own UnionError message may quote the request or the answer: the user's session, Taobao
       // user id or nick); no cause is kept.
       const code = error instanceof UnionError ? error.code : 'upstream_unavailable';
-      throw new UnionError(code, `taobao ${method}: transport failed`, 'taobao');
+      throw new UnionError(code, `taobao ${method}: transport failed`, 'taobao', {
+        duplicateConfirmed: afterDuplicate,
+      });
     }
     try {
       unwrapTaobaoResponse(method, envelope, response, this.#warn);

@@ -184,6 +184,8 @@ export class UnionBindingExchanger {
         ? { kind: 'bound', relationId: result.relationId, fromDuplicateLookup: true }
         : { kind: 'bound', relationId: result.relationId };
     } catch (error) {
+      // r5 (D10-2972): a duplicate filing whose read-back failed goes up as it is (the flag kept).
+      if (error instanceof UnionError && error.duplicateConfirmed) throw error;
       if (error instanceof UnionError && CREDENTIAL_REFUSALS.has(error.code)) {
         return { kind: 'credential_invalid' };
       }

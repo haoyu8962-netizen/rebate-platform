@@ -122,6 +122,7 @@ import {
 import {
   createFilingRecorder,
   findEarlierUnknownAttempt,
+  type FilingAttempt,
   type FilingRecorder,
 } from './union-filing-attempts.ts';
 import { BIND_RETRY_AFTER_SEC, getBindingAdmission } from './upstream-limits.ts';
@@ -355,6 +356,39 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
       },
       'linking: union binding credential exchange or channel filing failed',
     );
+  }
+
+  /**
+   * B1-04zzzzn ③ (D10-2872, r5 D10-2972): a duplicate filing refused for want of matching history,
+   * warned once: duplicate_after_unknown_attempt with the id of an earlier attempt of the same app,
+   * user, platform and account whose outcome is unknown, else duplicate_unverified. Reads only.
+   */
+  async function duplicateRefused(
+    trx: Transaction<DB>,
+    appId: string,
+    userId: string,
+    platform: 'taobao',
+    accountId: string,
+    attempt: FilingAttempt | null,
+    labels: {
+      readonly client: AuthClient;
+      readonly method: UnionAuthMethod;
+      readonly traceId: string;
+    },
+  ): Promise<void> {
+    const { client, method, traceId } = labels;
+    const earlier = await findEarlierUnknownAttempt(
+      trx,
+      { appId, userId, platform, unionAccountId: accountId },
+      attempt,
+    );
+    if (earlier === null) {
+      bindFailed(appId, client, method, 'duplicate_unverified', traceId);
+    } else {
+      bindFailed(appId, client, method, 'duplicate_after_unknown_attempt', traceId, {
+        earlier_attempt_id: earlier,
+      });
+    }
   }
 
   /** BR-ID-19 on relation id R of account A, read once; writes are conditional. */
@@ -652,6 +686,16 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
         filing,
       );
     } catch (error) {
+      // r5 (D10-2972): the save was answered "duplicate" but its read-back failed in transport: the
+      // same refusal as an unverified read-back id (50001, nothing written), warned the same way.
+      if (error instanceof UnionError && error.duplicateConfirmed) {
+        await duplicateRefused(trx, appId, userId, platform, accountId, filing.current(), {
+          client,
+          method,
+          traceId,
+        });
+        return result(50001, traceId);
+      }
       bindFailed(appId, client, method, bindFailureOf(error), traceId);
       throw error;
     }
@@ -689,18 +733,11 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
         .limit(1)
         .executeTakeFirst();
       if (history === undefined) {
-        const earlier = await findEarlierUnknownAttempt(
-          trx,
-          { appId, userId, platform, unionAccountId: accountId },
-          attempt,
-        );
-        if (earlier === null) {
-          bindFailed(appId, client, method, 'duplicate_unverified', traceId);
-        } else {
-          bindFailed(appId, client, method, 'duplicate_after_unknown_attempt', traceId, {
-            earlier_attempt_id: earlier,
-          });
-        }
+        await duplicateRefused(trx, appId, userId, platform, accountId, attempt, {
+          client,
+          method,
+          traceId,
+        });
         return result(50001, traceId);
       }
     }

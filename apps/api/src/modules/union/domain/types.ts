@@ -86,18 +86,25 @@ export class UnionError extends Error {
    * halves the window on it (application/fetch-window.ts) without knowing the platform.
    */
   readonly windowTooLarge: boolean;
+  /**
+   * B1-04zzzzn r5 (D10-2972): bindPublisher's filing was answered "duplicate" by the platform, but
+   * the read-back of the filed id then failed in transport (timeout, network). Only the fact; the
+   * error carries no credential, token, inviter code or platform user identity.
+   */
+  readonly duplicateConfirmed: boolean;
 
   constructor(
     code: UnionErrorCode,
     message: string,
     platform: Platform | null = null,
-    options: { readonly windowTooLarge?: boolean } = {},
+    options: { readonly windowTooLarge?: boolean; readonly duplicateConfirmed?: boolean } = {},
   ) {
     super(message);
     this.name = 'UnionError';
     this.code = code;
     this.platform = platform;
     this.windowTooLarge = options.windowTooLarge ?? false;
+    this.duplicateConfirmed = options.duplicateConfirmed ?? false;
   }
 }
 

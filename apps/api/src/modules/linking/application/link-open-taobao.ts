@@ -269,6 +269,10 @@ export interface TaobaoAuthIssueDeps {
  * 30101 / 30102 with a one-time state bound to uid + device (+ the link an open serves; null for
  * the shop entry, which has no link). A caller that is not the user, or has no usable device,
  * answers 10001; a device without an app client has no authorization path (50301).
+ * B1-04zzzzn r5 (D10-2972): no state the bindings submission would refuse — the real filing adapter
+ * not ready, or the union account this issuance uses not the inviter code's — answers the same code
+ * with auth_unavailable before anything is written. `accountId` is the account the caller selected;
+ * a caller that names none (the shop entry) gets the one its reads select (binding → authAccountId).
  */
 export async function issueTaobaoAuthState(
   deps: TaobaoAuthIssueDeps,
@@ -279,10 +283,23 @@ export async function issueTaobaoAuthState(
     readonly userId: string;
     readonly code: 30101 | 30102;
     readonly linkId: string | null;
+    readonly accountId?: string;
   },
 ): Promise<Extract<LinkOpenAuthorization, { kind: 'refused' }>> {
   const { config, pids, clock, appEnv, authApps } = deps;
   const { appId, caller, userId, code } = input;
+  const reads = createUnionAuthReads({ db: executor, config, appEnv, pids, clock });
+  const ready = authApps.taobaoFilingReadyFor;
+  if (ready !== undefined) {
+    const accountId =
+      input.accountId ??
+      (await reads.authAccountId(
+        appId,
+        PLATFORM,
+        (await reads.binding(appId, userId, PLATFORM)).accountId,
+      ));
+    if (!ready(accountId)) return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
+  }
   if (caller.deviceId === null || caller.userId !== userId) {
     return { kind: 'refused', code: 10001 };
   }
@@ -301,7 +318,6 @@ export async function issueTaobaoAuthState(
     throw error;
   }
   if (client === 'missing') return { kind: 'refused', code: 10001 };
-  const reads = createUnionAuthReads({ db: executor, config, appEnv, pids, clock });
   // 补丁 2: under the real user OAuth only web_code is handed out; nothing left → auth_unavailable.
   const methods = issuableTaobaoMethods(plan, await reads.configuredMethods(appId, client));
   if (methods.length === 0) {
@@ -475,20 +491,13 @@ function createTaobaoConversion(
     if (!(await reads.siteAuthAvailable(appId, PLATFORM, accountId))) {
       return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
     }
-    // B1-04zzzzn r4 (D10-2872): no state the bindings submission would refuse (the real filing not
-    // ready for this account, e.g. not the inviter code's); a no_rebate open needs no state.
-    if (
-      !noRebate &&
-      authApps.taobaoFilingReadyFor !== undefined &&
-      !authApps.taobaoFilingReadyFor(accountId)
-    ) {
-      return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
-    }
+    // A no_rebate open needs no state; the issuance judges the filing's readiness for the account
+    // in use (r5: in issueTaobaoAuthState, shared with the shop entry).
     if (noRebate) {
       authorized.set(owner, await unattributed());
       return { kind: 'allowed' };
     }
-    return issue(executor, caller, owner, subject, code);
+    return issue(executor, caller, owner, subject, code, accountId);
   }
 
   /** 30101 / 30102 with a one-time state bound to uid + device + the link this open serves. */
@@ -498,6 +507,7 @@ function createTaobaoConversion(
     owner: LinkOpenOwnerResult,
     userId: string,
     code: 30101 | 30102,
+    accountId: string,
   ): Promise<LinkOpenAuthorization> {
     return issueTaobaoAuthState({ config, pids, clock, appEnv, authApps }, executor, {
       appId: owner.link.app_id,
@@ -505,6 +515,7 @@ function createTaobaoConversion(
       userId,
       code,
       linkId: owner.link.link_id,
+      accountId,
     });
   }
 
