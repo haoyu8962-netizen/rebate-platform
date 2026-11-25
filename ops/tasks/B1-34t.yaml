@@ -1,0 +1,36 @@
+id: B1-34t
+repo: rebate-platform
+title: '唯一超管验证器的运维重置命令（BR-ID-43「只有一位超管时由负责人用运维命令重置」）：apps/api/scripts/admin-totp-reset.ts + admin 用例，同事务清密钥、置未绑定、写系统审计、作废全部令牌'
+type: impl
+# 2026-11-25 be 入账（FU-ADMIN-SUPER-TOTP-SELF-RESET，编排 D10-2945 / D10-2947；范围 couli-runs/ADMIN-TOTP-1125/scope.md）。上线前必须：契约 adminResetAdminTotp 说明已承诺「with a single super admin the owner uses the operations command on the server」，仓库没有该命令；HTTP 接口不许重置自己。
+# 命令：node --conditions=couli-src apps/api/scripts/admin-totp-reset.ts --app <app> --login <登录名>；交互终端输入原因（1–200 字）→ 回显 app、登录名、是否已绑定 → 输入 yes 确认才执行；不显示任何密钥；连库同 admin-bootstrap.ts，另连 Redis（作废令牌，admin-revocations）。退出码由实现定、写进命令头注释（照 BOOTSTRAP_EXIT 风格）。
+# 用例：admin-account-writes.ts 新增一个方法，不改现有 resetTotp 签名与 HTTP 控制器。一个事务内锁目标行 → 判定 → 清 totp_secret_cipher / totp_bound_at / totp_last_step → 写审计 → revocations.voidBefore（Redis 失败则整体回滚，同 HTTP 路径）。
+# 判定（D10-2947 ① 同意）：目标须是超管；「可用超管」= 同 app 下 is_super、status active、totp 已绑定的另一个账号——存在任一个即拒绝（由他经后台重置），不改库不写审计；目标不存在、原因不合法、未确认同样不改库。
+# 审计（D10-2947 ②）：走系统审计 admin/infra/system-audit.ts（admin_id 为空），system_actor 新值 system:ops_command（中文名「运维命令」），action admin_totp_reset（与 HTTP 同名），target 为目标账号（admins:<admin_id>，同 HTTP），after 含 admin_id、totp_bound=false、reason。audit_system_actor 是契约枚举：本单在 contracts/enums/admin.yaml 追加该值（照 B1-20b 追加 system:self_service 的先例，响应枚举加值，oasdiff-accepted 登记），重新生成 packages/contracts-ts，audit-log-view.ts 的中文名表加一行——**动契约，land 前要排契约槽**（现在 CT-24zzv 手上）。后台审计页按接口返回的 actor_name 显示，apps/admin 无自己的系统操作者标签表，不需 fe 单。
+# 与二次验证线 B1-18l 无同文件改动（本单不碰守卫、签发、会话、权限清单与控制器），可并行。
+# RV2：admin 模块与 scripts（未列入 risk-map）均 RV2；评审 money 口径（账号与授权边界）。
+refs: [BR-ID-43]
+refs_hash:
+  BR-ID-43: d8bbf2cae2bb
+deps: []
+paths:
+  - 'apps/api/scripts/admin-totp-reset.ts'
+  - 'apps/api/src/modules/admin/infra/admin-account-writes.ts'
+  - 'apps/api/src/modules/admin/infra/admin-account-writes.test.ts'
+  - 'apps/api/src/modules/admin/infra/system-audit.ts'
+  - 'apps/api/src/modules/admin/infra/system-audit.test.ts'
+  - 'apps/api/src/modules/admin/application/operator-totp-reset.ts'
+  - 'apps/api/src/modules/admin/application/operator-totp-reset.test.ts'
+  - 'apps/api/src/modules/admin/domain/audit-log-view.ts'
+  - 'contracts/{openapi.yaml,enums/admin.yaml,oasdiff-accepted.txt}'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/{validation/route-schemas.gen.ts,validation/signing-routes.gen.ts,http/auth-routes.gen.ts}'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/admin/operator-totp-reset/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/admin/operator-totp-reset/**'
+status: todo
