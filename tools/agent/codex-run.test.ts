@@ -15,6 +15,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 import {
   AGENT_DIR,
@@ -521,6 +522,68 @@ it('an -o file that is not JSON, or does not match the schema, gives exit 10', L
     expect(existsSync(join(fx.run, 'impl.json.rejected'))).toBe(true);
   }
 });
+
+it(
+  '[CT-06zzzzzzzf] a validator exit 3 outside review mode is a failed validation (exit 10)',
+  LONG,
+  () => {
+    const fx = fixture('validate-3-impl');
+    writeStub(join(fx.trusted, 'tools', 'agent', 'validate-output.ts'), 'validate', [
+      { exit: 3, stderr: 'warning: 1 条 S0/S1 被判范围外，需人工核' },
+    ]);
+    const res = codexRun(fx, ['impl', TASK]);
+    expect(stubCalls(fx, 'validate'), res.stderr).toHaveLength(1);
+    expect(res.status, res.stderr).toBe(10);
+    expect(readJson(join(fx.run, 'meta.json'))).toMatchObject({
+      exit_code: 10,
+      has_output: false,
+      validation: 'failed',
+    });
+    expect(existsSync(join(fx.run, 'impl.json'))).toBe(false);
+    expect(existsSync(join(fx.run, 'impl.json.rejected'))).toBe(true);
+  },
+);
+
+it(
+  '[CT-06zzzzzzzf] review: once the result is 13, a failed metadata write (ENOSPC) still ends with 13',
+  LONG,
+  () => {
+    const fx = fixture('validate-3-meta-enospc');
+    writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
+    writeStub(join(fx.trusted, 'tools', 'agent', 'validate-output.ts'), 'validate', [
+      { exit: 3, stderr: 'warning: 1 条 S0/S1 被判范围外，需人工核' },
+    ]);
+    // Only the final `meta.ts merge` (the one carrying exit_code=13) fails, as on a full disk.
+    const preload = join(fx.root, 'meta-enospc-preload.mjs');
+    writeFileSync(
+      preload,
+      [
+        "import { createRequire, syncBuiltinESMExports } from 'node:module';",
+        "if (process.argv.includes('merge') && process.argv.includes('exit_code=13')) {",
+        "  const fs = createRequire(import.meta.url)('node:fs');",
+        '  fs.writeSync = () => {',
+        "    const error = new Error('ENOSPC: no space left on device, write');",
+        "    error.code = 'ENOSPC';",
+        '    throw error;',
+        '  };',
+        '  syncBuiltinESMExports();',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    const res = codexRun(fx, ['review', TASK, '--review-type', 'general', '--base', fx.baseSha], {
+      NODE_OPTIONS: `--import ${pathToFileURL(preload).href}`,
+    });
+    expect(stubCalls(fx, 'validate'), res.stderr).toHaveLength(1);
+    expect(res.status, res.stderr).toBe(13);
+    expect(res.stderr).toContain('ENOSPC');
+    expect(res.stderr).toContain('meta.json was not updated');
+    // The metadata of the start stays as it was (not rewritten into a pass); the output is kept.
+    expect(readJson(join(fx.run, 'meta.json'))['exit_code']).toBeUndefined();
+    expect(existsSync(join(fx.run, 'review-codex.json'))).toBe(true);
+    expect(existsSync(join(fx.run, 'review-codex.json.rejected'))).toBe(false);
+  },
+);
 
 it('exit 0 without a final turn.completed event gives exit 10', LONG, () => {
   const fx = fixture('no-turn');
@@ -1371,12 +1434,13 @@ it(
     expect(decodeDryRun(dry.stdout).join('\n')).toContain(
       "- In-scope rules (the task's refs): BR-CALC-01, BR-CALC-08",
     );
-    // A pass whose only S1 is about a rule outside the refs is a usable spec-test review.
+    // A pass whose only finding (an S2) is about a rule outside the refs is a usable spec-test
+    // review. (An S0 / S1 moved out of scope needs a human, exit 13: see the paths case below.)
     writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 2;\n');
     mkdirSync(fx.log, { recursive: true });
     const outputFile = join(fx.log, 'review-output.json');
     const finding = {
-      severity: 'S1',
+      severity: 'S2',
       key: 'src/a.ts#a#BR-FUND-03',
       file: 'src/a.ts',
       line: 1,
@@ -1392,16 +1456,22 @@ it(
       checklist: [],
     };
     writeFileSync(outputFile, JSON.stringify(output));
-    const run = (type: string) =>
+    const run = (type: string, file = outputFile) =>
       codexRun(fx, ['review', TASK, '--review-type', type, '--base', fx.baseSha], {
-        FAKE_CODEX_OUTPUT_FILE: outputFile,
+        FAKE_CODEX_OUTPUT_FILE: file,
       });
     const spec = run('spec-test');
     expect(spec.status, spec.stderr).toBe(0);
     const messages = readJson(join(fx.run, 'meta.json'))['validation_messages'] as string[];
     expect(messages.join('\n')).toContain('rule cites BR-FUND-03, outside the task refs');
-    // The general review has no refs check: the same pass is contradictory there.
-    expect(run('general').status).toBe(10);
+    // The general review has no refs check: a pass with an S1 about a rule outside the refs is
+    // contradictory there.
+    const generalFile = join(fx.log, 'review-output-general.json');
+    writeFileSync(
+      generalFile,
+      JSON.stringify({ ...output, findings: [{ ...finding, severity: 'S1' }] }),
+    );
+    expect(run('general', generalFile).status).toBe(10);
   },
 );
 
@@ -1446,7 +1516,7 @@ it(
     mkdirSync(fx.log, { recursive: true });
     const outputFile = join(fx.log, 'review-output.json');
     const outside = {
-      severity: 'S1',
+      severity: 'S2',
       key: 'packages/db/src/schema.ts#-#BR-CALC-01',
       file: 'packages/db/src/schema.ts',
       line: 1,
@@ -1475,7 +1545,37 @@ it(
     const messages = readJson(join(fx.run, 'meta.json'))['validation_messages'] as string[];
     expect(messages.join('\n')).toContain('file packages/db/src/schema.ts is outside the task');
     const log = readFileSync(join(fx.run, 'out-of-scope.md'), 'utf8');
-    expect(log).toContain(`- \`${outside.key}\` S1`);
+    expect(log).toContain(`- \`${outside.key}\` S2`);
+    // CT-06zzzzzzzf: an S1 judged out of scope is not recomputed into a pass. The validator
+    // exits 3 and the wrapper stops with 13; the output is kept with the reviewer's verdict.
+    const blocking = { ...outside, severity: 'S1', key: 'packages/db/src/schema.ts#s1#BR-CALC-01' };
+    writeFileSync(
+      outputFile,
+      JSON.stringify({
+        verdict: 'fail',
+        summary: 'BR-CALC-01#1 → t1; BR-CALC-01#2 → MISSING (packages/db).',
+        findings: [blocking],
+        out_of_scope: [],
+        checklist: [],
+      }),
+    );
+    const held = codexRun(
+      fx,
+      ['review', TASK, '--review-type', 'spec-test', '--base', fx.baseSha],
+      { FAKE_CODEX_OUTPUT_FILE: outputFile },
+    );
+    expect(held.status, held.stderr).toBe(13);
+    expect(readJson(join(fx.run, 'meta.json'))).toMatchObject({
+      exit_code: 13,
+      has_output: true,
+      validation: 'needs-human',
+    });
+    expect(readJson(join(fx.run, 'review-codex.json'))['verdict']).toBe('fail');
+    const heldMessages = readJson(join(fx.run, 'meta.json'))['validation_messages'] as string[];
+    expect(heldMessages.join('\n')).toContain('1 条 S0/S1 被判范围外，需人工核');
+    expect(readFileSync(join(fx.run, 'out-of-scope.md'), 'utf8')).toContain(
+      `- \`${blocking.key}\` S1`,
+    );
   },
 );
 

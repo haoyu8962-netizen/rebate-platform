@@ -18,13 +18,25 @@
 // --allowed-paths <glob,glob> (spec-test reviews; the task's `paths`, owner decision 2026-10-02,
 //   ops/approvals.yaml id 14): a finding counts toward the verdict only when it concerns
 //   behaviour testable within the task's allowed paths plus the rule-test locations (class 1 of
-//   tools/guard/protected-paths.json, read from this script's checkout). A finding whose `file`
-//   lies outside both, or whose text cites repository paths that all lie outside both, is out
-//   of scope, and so is a finding whose `rule` starts with the reviewer's scope marker
-//   `[out-of-scope]`. Like the --refs case, it is reported as a warning and never counts.
+//   tools/guard/protected-paths.json, read from this script's checkout). The scope is judged by
+//   the finding's `file` alone (CT-06zzzzzzzf, D10-2976): a finding whose `file` lies outside
+//   both is out of scope; repository paths named in its rule / scenario / suggestion text never
+//   move it (an example or a contract cited in the text is not where the problem is). A finding
+//   whose `rule` starts with the reviewer's scope marker `[out-of-scope]` is out of scope too.
+//   Like the --refs case, it is reported as a warning and never counts.
+//   Never out of scope (pinned): a finding whose `rule` is `prompt-injection`, or whose `file`
+//   points at the task brief or the run directory (starts with `../`, is a `brief.md`, or lies
+//   under `couli-runs/`).
 // --rewrite (with a schema-valid, rule-valid review): writes the review back to --file with every
-//   out-of-scope finding moved to `out_of_scope` and `verdict` recomputed from the in-scope
-//   S0 / S1 findings only (fail when there is one, else pass).
+//   out-of-scope finding moved to `out_of_scope`. When only S2 findings were moved, `verdict` is
+//   recomputed from the in-scope S0 / S1 findings (fail when there is one, else pass). When an
+//   S0 / S1 finding was moved, or a pinned finding is S0 / S1, the reviewer's verdict is kept, a
+//   warning "N 条 S0/S1 被判范围外，需人工核" is printed and the exit code is 3 (needs a human).
+//   Before the review is written back, the moved S0 / S1 keys go into a side record
+//   `<file>.needs-human.json` (with the sha256 of the text written back). A later --rewrite of
+//   the same file (same content) still ends with 3 and keeps the verdict, so an interrupted run
+//   cannot turn the moved S0 / S1 into a pass on re-validation; the reviewer's own out_of_scope
+//   entries carry no record and never trigger 3. A human clears it by deleting the side record.
 // --out-of-scope-log <file> (with a valid review): appends every `out_of_scope` entry (the
 //   reviewer's and the moved ones) whose key is not in the file yet to that Markdown file
 //   (created when missing; codex-run.sh passes <runs>/<id>/out-of-scope.md), so later tasks can
@@ -36,7 +48,10 @@
 //   is a warning, not an error (D10-2086).
 //
 // Exit codes: 0 valid, 1 invalid (problems on stderr, or as JSON with --json), 2 usage or
-// internal error.
+// internal error, 3 valid but needs a human (--rewrite only: an S0 / S1 finding was judged out
+// of scope now or by an earlier --rewrite of the same file (side record), or a pinned finding is
+// S0 / S1; codex-run.sh turns it into its exit 13).
+import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { Ajv2020 } from 'ajv/dist/2020.js';
@@ -217,9 +232,29 @@ export function insidePaths(path: string, globs: readonly string[]): boolean {
   return matchesAny(path, globs) || matchesAny(`${path.replace(/\/+$/, '')}/x`, globs);
 }
 
+const PROMPT_INJECTION = /(?<![\w-])prompt-injection(?![\w-])/i;
+
+/**
+ * A finding that is never moved out of scope (CT-06zzzzzzzf): a prompt injection, or a problem in
+ * the task brief or the run directory (outside the repository by construction). Being S0 / S1,
+ * it makes --rewrite end with exit 3.
+ */
+export function isPinned(f: Finding): boolean {
+  if (PROMPT_INJECTION.test(f.rule)) return true;
+  const file = f.file.trim();
+  const segments = file.split('/');
+  return (
+    file.startsWith('../') ||
+    file === '..' ||
+    segments.at(-1) === 'brief.md' ||
+    segments.includes('couli-runs')
+  );
+}
+
 /** Why a finding is outside the review scope (empty when it is in scope). */
 export function scopeReasons(f: Finding, scope: ReviewScope): string[] {
   const reasons: string[] = [];
+  if (isPinned(f)) return reasons;
   if (scope.refs !== undefined && scope.refs.length > 0) {
     const outside = outsideRefs(f.rule, scope.refs);
     if (outside.length > 0) {
@@ -231,20 +266,9 @@ export function scopeReasons(f: Finding, scope: ReviewScope): string[] {
   if (f.rule.trim().toLowerCase().startsWith(SCOPE_MARKER)) {
     reasons.push(`the reviewer marked it ${SCOPE_MARKER}`);
   }
-  if (scope.paths !== undefined && scope.paths.length > 0) {
-    const paths = scope.paths;
-    if (!insidePaths(f.file, paths)) {
-      reasons.push(
-        `file ${f.file} is outside the task's allowed paths and the rule-test locations`,
-      );
-    } else {
-      const cited = citedPaths(`${f.rule}\n${f.scenario}\n${f.suggestion}`);
-      if (cited.length > 0 && !cited.some((p) => insidePaths(p, paths))) {
-        reasons.push(
-          `it cites only paths outside the task's allowed paths and the rule-test locations (${cited.join(', ')})`,
-        );
-      }
-    }
+  // Only the finding's own `file` decides (CT-06zzzzzzzf): paths cited in its text do not.
+  if (scope.paths !== undefined && scope.paths.length > 0 && !insidePaths(f.file, scope.paths)) {
+    reasons.push(`file ${f.file} is outside the task's allowed paths and the rule-test locations`);
   }
   return reasons;
 }
@@ -350,28 +374,111 @@ function misplacedFindings(review: ReviewOutput, scope: ReviewScope): Map<number
 }
 
 /**
- * The review as the gate reads it: out-of-scope findings moved to `out_of_scope` and the verdict
- * recomputed from the in-scope S0 / S1 findings only. `moved` lists the moved entries.
+ * The review as the gate reads it: out-of-scope findings moved to `out_of_scope`. `moved` lists
+ * the moved entries. `movedBlocking` counts the moved S0 / S1 entries and `pinnedBlocking` the
+ * S0 / S1 entries that are never moved (isPinned); when either is non-zero the reviewer's verdict
+ * is kept and a human has to look (CT-06zzzzzzzf). Otherwise (only S2 moved, or nothing) the
+ * verdict is recomputed from the in-scope S0 / S1 findings.
  */
 export function normalizeReview(
   review: ReviewOutput,
   scope: ReviewScope,
-): { review: ReviewOutput; moved: { finding: Finding; reasons: string[] }[] } {
+  held: ReadonlySet<string> = new Set(),
+): {
+  review: ReviewOutput;
+  moved: { finding: Finding; reasons: string[] }[];
+  movedBlocking: number;
+  pinnedBlocking: number;
+  heldBlocking: number;
+} {
   const misplaced = misplacedFindings(review, scope);
   const moved = [...misplaced].map(([i, reasons]) => ({
     finding: review.findings[i] as Finding,
     reasons,
   }));
   const findings = review.findings.filter((_, i) => !misplaced.has(i));
+  const movedBlocking = moved.filter((m) => isBlocking(m.finding)).length;
+  const pinnedBlocking = findings.filter((f) => isBlocking(f) && isPinned(f)).length;
+  const heldBlocking = review.out_of_scope.filter((f) => isBlocking(f) && held.has(f.key)).length;
+  const keep = movedBlocking > 0 || pinnedBlocking > 0 || heldBlocking > 0;
   return {
     review: {
       ...review,
-      verdict: findings.some(isBlocking) ? 'fail' : 'pass',
+      verdict: keep ? review.verdict : findings.some(isBlocking) ? 'fail' : 'pass',
       findings,
       out_of_scope: [...review.out_of_scope, ...moved.map((m) => m.finding)],
     },
     moved,
+    movedBlocking,
+    pinnedBlocking,
+    heldBlocking,
   };
+}
+
+/** Side record of the S0 / S1 entries a --rewrite moved out of scope (CT-06zzzzzzzf). */
+export type NeedsHumanRecord = {
+  kind: 'validate-output/needs-human';
+  file: string;
+  sha256: string;
+  verdict: ReviewOutput['verdict'];
+  entries: { key: string; severity: Finding['severity'] }[];
+};
+
+/** Where the side record of `file` lives: next to it, in the run directory. */
+export function needsHumanPath(file: string): string {
+  return `${file}.needs-human.json`;
+}
+
+export function sha256(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+/**
+ * Keys held for a human by the side record of `file`, when the record exists, is well formed and
+ * was written for exactly the current content `text` (another review in the same place does not
+ * inherit it). Empty when there is no record (ENOENT) or it was written for other content.
+ * A record that exists but cannot be read or parsed, or whose `entries` is not a list, throws
+ * (D10-3033 / D10-3059): treating it as "no record"
+ * would turn a held fail into a pass and rewrite the file, so the record could not match again.
+ */
+export function heldKeys(file: string, text: string): Set<string> {
+  const path = needsHumanPath(file);
+  let raw: string;
+  try {
+    raw = readFileSync(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return new Set();
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `side record ${path} exists but cannot be read (旁路记录读不了; the review is left unchanged): ${message}`,
+    );
+  }
+  let doc: unknown;
+  try {
+    doc = JSON.parse(raw);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `side record ${path} cannot be parsed (旁路记录读不了; the review is left unchanged): ${message}`,
+    );
+  }
+  if (typeof doc !== 'object' || doc === null) return new Set();
+  const record = doc as Partial<NeedsHumanRecord>;
+  if (record.kind !== 'validate-output/needs-human' || record.sha256 !== sha256(text)) {
+    return new Set();
+  }
+  // A record for this very content whose entries are not a list is a damaged record (D10-3059),
+  // not "nothing held": treating it as empty would turn the held fail into a pass.
+  if (!Array.isArray(record.entries)) {
+    throw new Error(
+      `side record ${path} is damaged: entries is not a list (旁路记录坏了; the review is left unchanged)`,
+    );
+  }
+  return new Set(
+    record.entries
+      .map((e) => (typeof e === 'object' && e !== null ? (e as { key?: unknown }).key : undefined))
+      .filter((k): k is string => typeof k === 'string'),
+  );
 }
 
 /**
@@ -551,8 +658,10 @@ function main(argv: readonly string[]): number {
   let report: Report;
   let data: unknown;
   let parseError = '';
+  let text = '';
   try {
-    data = JSON.parse(readFileSync(args.file, 'utf8'));
+    text = readFileSync(args.file, 'utf8');
+    data = JSON.parse(text);
   } catch (error) {
     parseError = error instanceof Error ? error.message : String(error);
   }
@@ -571,12 +680,18 @@ function main(argv: readonly string[]): number {
   }
 
   const isReview = report.ok && isReviewSchema(schema);
+  let needsHuman = false;
   if ((args.rewrite || args.outOfScopeLog !== undefined) && !isReviewSchema(schema)) {
     throw new UsageError('--rewrite and --out-of-scope-log apply to review outputs only');
   }
   if (isReview && (args.rewrite || args.outOfScopeLog !== undefined)) {
     const raw = data as ReviewOutput;
-    const { review, moved } = normalizeReview(raw, opts);
+    const held = args.rewrite ? heldKeys(args.file, text) : new Set<string>();
+    const { review, moved, movedBlocking, pinnedBlocking, heldBlocking } = normalizeReview(
+      raw,
+      opts,
+      held,
+    );
     if (args.rewrite) {
       if (review.verdict !== raw.verdict) {
         report.warnings.push(
@@ -584,18 +699,62 @@ function main(argv: readonly string[]): number {
         );
       }
       if (moved.length > 0 || review.verdict !== raw.verdict) {
-        writeFileAtomic(args.file, `${JSON.stringify(review, null, 2)}\n`);
+        const written = `${JSON.stringify(review, null, 2)}\n`;
+        const movedKeys = new Set(moved.map((m) => m.finding.key));
+        const blocking = review.out_of_scope.filter(
+          (f) => isBlocking(f) && (held.has(f.key) || movedKeys.has(f.key)),
+        );
+        if (blocking.length > 0) {
+          // Persisted before the review is overwritten: re-validating the written file keeps 3.
+          const record: NeedsHumanRecord = {
+            kind: 'validate-output/needs-human',
+            file: basename(args.file),
+            sha256: sha256(written),
+            verdict: review.verdict,
+            entries: blocking.map((f) => ({ key: f.key, severity: f.severity })),
+          };
+          writeFileAtomic(needsHumanPath(args.file), `${JSON.stringify(record, null, 2)}\n`);
+        }
+        writeFileAtomic(args.file, written);
         report.warnings.push(
           `rewrote ${args.file}: ${moved.length} finding(s) moved to out_of_scope, verdict ${review.verdict}`,
         );
       }
+      // CT-06zzzzzzzf: an S0 / S1 judged out of scope (or pinned) never turns into a silent pass.
+      if (movedBlocking > 0) {
+        report.warnings.push(
+          `${movedBlocking} 条 S0/S1 被判范围外，需人工核 (verdict "${review.verdict}" kept as the reviewer wrote it)`,
+        );
+      }
+      if (pinnedBlocking > 0) {
+        report.warnings.push(
+          `${pinnedBlocking} 条 S0/S1 是 prompt-injection 或指向任务书 / 运行目录，不移出范围，需人工核`,
+        );
+      }
+      if (heldBlocking > 0) {
+        report.warnings.push(
+          `${heldBlocking} 条 S0/S1 被判范围外，需人工核 (moved by an earlier --rewrite, recorded in ${needsHumanPath(args.file)}; verdict "${review.verdict}" kept)`,
+        );
+      }
+      needsHuman = movedBlocking > 0 || pinnedBlocking > 0 || heldBlocking > 0;
     }
     if (args.outOfScopeLog !== undefined) {
       const reasons = new Map(moved.map((m) => [m.finding.key, m.reasons]));
-      const added = appendOutOfScope(args.outOfScopeLog, review.out_of_scope, reasons, {
-        source: `review ${basename(args.file)}`,
-        at: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
-      });
+      let added = 0;
+      try {
+        added = appendOutOfScope(args.outOfScopeLog, review.out_of_scope, reasons, {
+          source: `review ${basename(args.file)}`,
+          at: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+        });
+      } catch (error) {
+        // D10-3033: a failed append must not turn "needs a human" (3) into a plain failure (2),
+        // which the wrappers would treat as a retryable rejection. Otherwise it stays an error.
+        if (!needsHuman) throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        report.warnings.push(
+          `out-of-scope.md 没写上: appending to ${args.outOfScopeLog} failed (${message}); the review and ${needsHumanPath(args.file)} are kept, still 需人工核`,
+        );
+      }
       if (added > 0) {
         report.warnings.push(
           `appended ${added} out-of-scope entr${added === 1 ? 'y' : 'ies'} to ${args.outOfScopeLog}`,
@@ -608,7 +767,8 @@ function main(argv: readonly string[]): number {
   for (const warning of report.warnings) process.stderr.write(`warning: ${warning}\n`);
   for (const problem of report.errors) process.stderr.write(`invalid: ${problem}\n`);
   if (report.ok) process.stderr.write('validate-output: ok\n');
-  return report.ok ? 0 : 1;
+  if (!report.ok) return 1;
+  return needsHuman ? 3 : 0;
 }
 
 if (import.meta.main) {
