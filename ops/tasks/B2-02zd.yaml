@@ -2,7 +2,7 @@ id: B2-02zd
 repo: rebate-platform
 title: 'B2-02zd：日终校验按分录自动更正余额缓存（开关默认关、三条护栏、按账户核对日结存、告警分级；D10-2219 新单 A）'
 type: impl
-# 2026-11-21 be 入账（D10-2219 ④ 负责人 B/B/B 题 1；方案 couli-runs/LEDGER-REVIEW-1120/be-plan-A-B-C.md A 节 + D10-2224 / D10-2230 / D10-2235；D10-2298 先起入账与写测书）。
+# 2026-11-21 be 入账（D10-2219 ④ 负责人 B/B/B 题 1；方案 couli-runs/LEDGER-REVIEW-1120/be-plan-A-B-C.md A 节 + D10-2224 / D10-2230 / D10-2235；D10-2298 先起入账与写测书）。 2026-11-25 编排 D10-3166：取 D10-2390 的（一），移出上线前范围、上线后再议——上线前不做自动改余额（主干现行即「登记差错单 + 冻结该用户提现 + 告警」，ledger.auto_correct.enabled 默认 false，规则也写明告警送达人之前不在真实环境开启），规则不改、分支与 23 条规则测试原样留着、status 保持 todo、不再为本单要轮次；上线前出现差异走人工触发余额重算。拆出的 B2-02zdb（仅日结存差异只重跑不冻结）记为普通后续单，不排期。
 # 规划依据（SPEC_REF d49d8aa）：BR-FUND-19 细则「差异以分录为准修正」——系统自动更正、护栏 (a)(b)(c)、(b) 按账户核对与 daily_balances 缺行、两个配置键、告警级别、日结存缺行或不平只告警并重跑；正文「例（自动更正）」「例（被护栏拦下）」。
 # 配置键（content/domain/config-registry.ts，config.business）：ledger.auto_correct.enabled（boolean，默认 false——关闭时全部走现行旧路：登记、冻结、告警，D10-2230 ④ / D10-2235 ③）；ledger.auto_correct.max_accounts（businessInteger 0–1000，默认 3）。
 # 只作用于不变量 01 的 balance_cache 差异（用户账户余额缓存 ≠ 分录合计）。一轮的判定（同一次 execute 内）：
