@@ -6,6 +6,11 @@
 // - result unknown (no answer within WRITE_TIMEOUT_MS, network failure, 5xx): the form stays
 //   locked, the dialog cannot be closed and only 【重试】 resends the very same body (and token);
 //   a success, 20902 or an explicit refusal unlocks it;
+// - 10003 once this submission's result has been unknown (a 【重试】, or a resend after the
+//   动态码, F1-07ee r9 / D10-3234; as F1-08as / D10-2060): judged before the server's own checks,
+//   it is no definite answer — the first request may have taken effect. The marker stays held,
+//   the 动态码 may still be verified (then the same body is resent with the new token), and
+//   cancelling it goes back to result unknown (locked, only 【重试】), never to editing;
 // - an explicit refusal: its message, the form may be edited again.
 // The order's result-unknown marker (components/unknown-marker, page markerPageOf, this account
 // only) is held from the moment a request is sent until a definite answer to that very request:
@@ -78,6 +83,8 @@ export function useOrderWrite<B>(options: {
   const [error, setError] = useState<string>();
   const last = useRef<Sent<B> | undefined>(undefined);
   const busy = useRef(false);
+  /** This submission's result has been unknown once: a later 10003 settles nothing. */
+  const wasUnknown = useRef(false);
   const blockedRef = useRef(blocked);
   useEffect(() => {
     blockedRef.current = blocked;
@@ -114,8 +121,16 @@ export function useOrderWrite<B>(options: {
       const failure = writeFailureOf(cause);
       if (failure.kind === 'unknown') {
         // The marker stays held (marked before sending) until a definite answer.
+        wasUnknown.current = true;
         ended();
         setPhase('unknown');
+        return;
+      }
+      if (failure.kind === 'stepUp' && wasUnknown.current) {
+        // Refused before any check of the order (D10-3234): the earlier request may still have
+        // taken effect, so the marker stays held; verify, or go back to result unknown.
+        ended();
+        setPhase('verifying');
         return;
       }
       // A definite answer to this very request; an ended session settles nothing.
@@ -159,12 +174,17 @@ export function useOrderWrite<B>(options: {
         operation={operation}
         onSubmit={verify}
         onClose={() => {
+          if (wasUnknown.current) {
+            // Still unknown: locked, only 【重试】 (D10-3234).
+            setPhase('unknown');
+            return;
+          }
           setPhase('editing');
           setError(ordersTexts.writes.result.stepUpFailed);
         }}
         onVerified={(token) => {
           const sent = last.current;
-          if (sent === undefined) setPhase('editing');
+          if (sent === undefined) setPhase(wasUnknown.current ? 'unknown' : 'editing');
           else void post({ body: sent.body, token });
         }}
       />
@@ -176,6 +196,8 @@ export function useOrderWrite<B>(options: {
     error,
     submit: (body) => {
       if (phase !== 'editing' || blocked) return;
+      // A new submission: nothing of it is unknown yet.
+      wasUnknown.current = false;
       void post({ body });
     },
     retry: () => {

@@ -46,7 +46,6 @@ import { PlannedPage, usePlanned } from '../../components/planned/index.ts';
 import { CONSOLE_CLOCK, type MarkerClock } from '../../components/unknown-marker/index.ts';
 import { ordersTexts } from '../../texts/orders.ts';
 import {
-  displayStatusUnknown,
   knownStatuses,
   reportUnknownCodes,
   subReasonLabel,
@@ -337,8 +336,21 @@ function DetailBody({ order }: { readonly order: OrderDetail }): ReactElement {
     />
   );
 
-  const status = (kind: DictKind, value: string | null): ReactNode =>
-    value === null ? dash : <StatusTag kind={kind} code={value} />;
+  // BR-TEXT-05: a code this console does not know shows order_status.UNKNOWN, the raw code (when
+  // there is one) only as a small secondary line; the same judgment as the write entries'.
+  const unknownCodes = new Set(unknownCodesOf(order).map((unknown) => unknown.enum));
+  const unknownStatus = (raw: string | null): ReactNode => (
+    <Flex vertical gap={2} align="flex-start">
+      <Tag style={{ marginInlineEnd: 0 }}>{t.status.unknownDisplay}</Tag>
+      {raw === null ? null : (
+        <span style={{ ...code, color: token.colorTextSecondary, wordBreak: 'break-all' }}>
+          {raw}
+        </span>
+      )}
+    </Flex>
+  );
+  const status = (kind: 'platform_status' | 'rebate_status', value: string): ReactNode =>
+    unknownCodes.has(kind) ? unknownStatus(value) : <StatusTag kind={kind} code={value} />;
 
   const statusItems: Items = [
     {
@@ -354,14 +366,14 @@ function DetailBody({ order }: { readonly order: OrderDetail }): ReactElement {
     {
       key: 'display',
       label: t.status.displayStatus,
-      children:
-        order.display_status === null ? (
-          dash
-        ) : (
-          <Tag style={{ marginInlineEnd: 0, ...code }}>
-            {displayStatusUnknown(order) ? t.status.unknownDisplay : order.display_status}
-          </Tag>
-        ),
+      // Any status unknown to this console: the user-side display is unknown too (null included).
+      children: !knownStatuses(order) ? (
+        unknownStatus(order.display_status)
+      ) : order.display_status === null ? (
+        dash
+      ) : (
+        <Tag style={{ marginInlineEnd: 0, ...code }}>{order.display_status}</Tag>
+      ),
     },
     {
       key: 'holdRights',

@@ -746,3 +746,191 @@ it('[AC-F1-07ee-UNIT#28] A11 遗留标记消失后重读回答前：没有【同
     answers.length = 0;
   }
 });
+
+// ---- r9 (D10-3234): 10003 after an unknown result; BR-TEXT-05 in the status area ----
+
+const w = ordersTexts.writes;
+const TARGET_UID = '0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5c02';
+const STEP_UP_DIALOG = '二次验证 · 动态码';
+const STEP_UP = fail({ code: 10003, httpStatus: 403, data: { tier: 'totp' } });
+const unowned = order({
+  user: null,
+  user_basis: null,
+  rebate_status: 'UNATTRIBUTED',
+  display_status: null,
+  commission_split: null,
+  reason: null,
+  reason_sub: null,
+});
+const owned = order({
+  user: { user_id: TARGET_UID, phone_masked: '137****4321' },
+  user_basis: 'admin',
+  flags: { locked: true, status_locked: false, rights_pending: false, hold: false },
+  rebate_status: 'WAITING',
+  display_status: 'WAITING',
+  commission_split: null,
+  reason: null,
+  reason_sub: null,
+  row_version: 8,
+});
+
+/** A button name as antd may render it (a space inserted between two CJK characters). */
+function named(text: string): RegExp {
+  return new RegExp(`^${[...text].join('\\s?')}$`);
+}
+function reassignPosts() {
+  return custom.mock.calls
+    .map(
+      ([request]) => request as { url: string; payload?: unknown; meta?: { stepUpToken?: string } },
+    )
+    .filter((request) => request.url.endsWith('/reassign'))
+    .map((request) => ({ body: request.payload, token: request.meta?.stepUpToken ?? null }));
+}
+async function openAssign(): Promise<HTMLElement> {
+  answers.push(() => Promise.resolve({ data: unowned }));
+  renderPage();
+  await detailShown();
+  await act(async () => {
+    fireEvent.click(await screen.findByRole('button', { name: named(e.assign) }));
+  });
+  const dialog = await screen.findByRole('dialog', { name: e.assign });
+  fireEvent.change(within(dialog).getByLabelText(w.assign.user), {
+    target: { value: TARGET_UID },
+  });
+  fireEvent.change(within(dialog).getByLabelText(w.assign.reason), {
+    target: { value: '凭购物凭证核实订单归属' },
+  });
+  return dialog;
+}
+async function clickIn(scope: HTMLElement, name: string): Promise<void> {
+  await act(async () => {
+    fireEvent.click(within(scope).getByRole('button', { name: named(name) }));
+  });
+}
+const SENT = {
+  user_id: TARGET_UID,
+  expected_user_id: null,
+  expected_locked: false,
+  reason: '凭购物凭证核实订单归属',
+};
+
+it('[AC-F1-07ee-UNIT#29] 结果未知后的【重试】收到 10003：标记保留；动态码取消回到结果未知（锁定、只有【重试】、不能关）；再验证后原体带新令牌重发成功才清标记', async () => {
+  await settle();
+  const dialog = await openAssign();
+  answers.push(NETWORK);
+  await clickIn(dialog, w.submit.assign);
+  const unknownDialog = await screen.findByRole('dialog', { name: e.assign });
+  expect(await within(unknownDialog).findByText(w.result.unknown)).toBeDefined();
+
+  answers.push(STEP_UP);
+  await clickIn(unknownDialog, w.retry);
+  let stepUp = await screen.findByRole('dialog', { name: STEP_UP_DIALOG });
+  expect(readUnknown(SCOPE), 'a 10003 after an unknown result settles nothing').toBeDefined();
+  await clickIn(stepUp, '取消');
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: STEP_UP_DIALOG })).toBeNull());
+
+  // Back to result unknown: locked, only 【重试】, not closable, no 「验证失败」.
+  const back = await screen.findByRole('dialog', { name: e.assign });
+  expect(within(back).getByText(w.result.unknown)).toBeDefined();
+  expect(within(back).queryByText(w.result.stepUpFailed)).toBeNull();
+  expect((within(back).getByLabelText(w.assign.user) as HTMLInputElement).disabled).toBe(true);
+  expect((within(back).getByLabelText(w.assign.reason) as HTMLTextAreaElement).disabled).toBe(true);
+  expect(
+    (within(back).getByRole('button', { name: named(w.submit.assign) }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(
+    (within(back).getByRole('button', { name: named(w.cancel) }) as HTMLButtonElement).disabled,
+  ).toBe(true);
+  expect(within(back).queryByRole('button', { name: '关闭' })).toBeNull();
+  expect(within(back).getByRole('button', { name: named(w.retry) })).toBeDefined();
+  expect(readUnknown(SCOPE)).toBeDefined();
+
+  // 【重试】 → 10003 → verify → the same body with the new token → saved.
+  answers.push(STEP_UP);
+  await clickIn(back, w.retry);
+  stepUp = await screen.findByRole('dialog', { name: STEP_UP_DIALOG });
+  expect(readUnknown(SCOPE)).toBeDefined();
+  fireEvent.change(within(stepUp).getByLabelText('动态码', { exact: true }), {
+    target: { value: '123456' },
+  });
+  answers.push(() => Promise.resolve({ data: { step_up_token: 'tok-r9' } }));
+  answers.push(() => Promise.resolve({ data: owned }));
+  await clickIn(stepUp, '验证并继续');
+  expect(await screen.findByText(w.result.assigned)).toBeDefined();
+  await waitFor(() => expect(readUnknown(SCOPE)).toBeUndefined());
+  // The detail shown is the one the success answered with (its masked phone).
+  expect(document.body.textContent).toContain('137****4321');
+  expect(reassignPosts()).toEqual([
+    { body: SENT, token: null },
+    { body: SENT, token: null },
+    { body: SENT, token: null },
+    { body: SENT, token: 'tok-r9' },
+  ]);
+});
+
+it('[AC-F1-07ee-UNIT#30] 此前未曾结果未知的提交收到 10003：照旧清标记、进动态码；取消后回到可编辑并提示验证失败', async () => {
+  await settle();
+  const dialog = await openAssign();
+  answers.push(STEP_UP);
+  await clickIn(dialog, w.submit.assign);
+  const stepUp = await screen.findByRole('dialog', { name: STEP_UP_DIALOG });
+  expect(readUnknown(SCOPE)).toBeUndefined();
+  await clickIn(stepUp, '取消');
+  const back = await screen.findByRole('dialog', { name: e.assign });
+  expect(within(back).getByText(w.result.stepUpFailed)).toBeDefined();
+  expect(within(back).queryByText(w.result.unknown)).toBeNull();
+  expect((within(back).getByLabelText(w.assign.user) as HTMLInputElement).disabled).toBe(false);
+  expect(within(back).queryByRole('button', { name: named(w.retry) })).toBeNull();
+  expect(reassignPosts()).toEqual([{ body: SENT, token: null }]);
+});
+
+/** The value cell of a status item (antd Descriptions, vertical layout: label row, value row). */
+function statusCell(label: string): HTMLElement {
+  const labelCell = screen
+    .getAllByText(label)
+    .map((node) => node.closest('th, td'))
+    .find((cell): cell is HTMLElement => cell instanceof HTMLElement) as HTMLElement;
+  const row = labelCell.parentElement as HTMLTableRowElement;
+  const index = Array.from(row.children).indexOf(labelCell);
+  const valueRow = row.nextElementSibling as HTMLTableRowElement;
+  return valueRow.children[index] as HTMLElement;
+}
+
+it('[AC-F1-07ee-UNIT#31] 状态区按 BR-TEXT-05：不认识的平台状态 / 返利状态显示 UNKNOWN 文案（原始编码只作次要信息），有不认识的状态时用户侧显示也是 UNKNOWN（含 null）；全部认识时照旧', async () => {
+  const s = ordersTexts.detail.status;
+  answers.push(() => Promise.resolve({ data: { ...unowned, platform_status: 'DELIVERED_V2' } }));
+  renderPage();
+  await detailShown();
+  let platform = statusCell(s.platformStatus);
+  expect(within(platform).getByText(s.unknownDisplay)).toBeDefined();
+  expect(platform.textContent).toBe(`${s.unknownDisplay}DELIVERED_V2`);
+  expect(within(statusCell(s.displayStatus)).getByText(s.unknownDisplay)).toBeDefined();
+  expect(statusCell(s.displayStatus).textContent).not.toBe(ordersTexts.dash);
+  expect(within(statusCell(s.rebateStatus)).queryByText(s.unknownDisplay)).toBeNull();
+  cleanup();
+
+  answers.push(() => Promise.resolve({ data: order({ rebate_status: 'PAUSED_V2' }) }));
+  renderPage();
+  await detailShown();
+  expect(within(statusCell(s.rebateStatus)).getByText(s.unknownDisplay)).toBeDefined();
+  expect(statusCell(s.rebateStatus).textContent).toContain('PAUSED_V2');
+  expect(within(statusCell(s.platformStatus)).queryByText(s.unknownDisplay)).toBeNull();
+  expect(within(statusCell(s.displayStatus)).getByText(s.unknownDisplay)).toBeDefined();
+  cleanup();
+
+  // All known: as before (null display shows the dash, a known one its code).
+  answers.push(() => Promise.resolve({ data: unowned }));
+  renderPage();
+  await detailShown();
+  expect(screen.queryByText(s.unknownDisplay)).toBeNull();
+  expect(statusCell(s.displayStatus).textContent).toBe(ordersTexts.dash);
+  cleanup();
+  answers.push(() => Promise.resolve({ data: order() }));
+  renderPage();
+  await detailShown();
+  expect(screen.queryByText(s.unknownDisplay)).toBeNull();
+  expect(statusCell(s.displayStatus).textContent).toBe('WAITING');
+  platform = statusCell(s.platformStatus);
+  expect(platform.textContent).toContain('RECEIVED');
+});
