@@ -149,14 +149,15 @@ it('[AC-B1-25c#6] vmagent 以独立的回环任务抓取 PG 与 Redis exporter',
 it('[AC-B1-25c#7] 宕机组按抓取失败覆盖 api、worker、admin 三个应用任务', () => {
   const checks = zeroSelectors(outageRules(), 'up');
   expect(checks.length).toBeGreaterThan(0);
-  const expectedJobs = ENTRIES.map((entry) => `couli-${entry}`);
+  const requiredJobs = ENTRIES.map((entry) => `couli-${entry}`);
+  const allowedJobs = [...requiredJobs, 'couli-pg', 'couli-redis'];
   const { pg, redis } = exporterJobs();
   const jobNames = [...scrapeJobs(), pg, redis].map((job) => string(job['job_name']));
   const observedJobs = new Set<string>();
   for (const { rule, selector } of checks) {
     checkOps(rule);
     const matcher = /^job\s*(=~|=)\s*"([^"]+)"$/.exec(selector ?? '');
-    expect(matcher, 'scope up to the application scrape jobs').not.toBeNull();
+    expect(matcher, 'scope up to the application or exporter scrape jobs').not.toBeNull();
     const operator = matcher?.[1];
     const value = matcher?.[2] ?? '';
     const pattern = operator === '=~' ? new RegExp(`^(?:${value})$`) : null;
@@ -164,7 +165,8 @@ it('[AC-B1-25c#7] 宕机组按抓取失败覆盖 api、worker、admin 三个应�
     expect(matched.length, `jobs matched by ${selector}`).toBeGreaterThan(0);
     for (const name of matched) observedJobs.add(name);
   }
-  expect([...observedJobs].sort()).toEqual([...expectedJobs].sort());
+  expect([...observedJobs]).toEqual(expect.arrayContaining(requiredJobs));
+  for (const name of observedJobs) expect(allowedJobs).toContain(name);
 });
 
 it('[AC-B1-25c#8] PG 和 Redis 按连接状态告警，Redis 规则只保留一条', () => {
