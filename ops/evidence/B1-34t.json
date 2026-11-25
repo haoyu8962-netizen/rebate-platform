@@ -1,0 +1,119 @@
+{
+  "risk_note": "B1-34t (admin, RV2; BR-ID-43; FU-ADMIN-SUPER-TOTP-SELF-RESET; D10-2945 / D10-2947 / D10-2999 / D10-3058 → D10-3061). New operations command apps/api/scripts/admin-totp-reset.ts and use case admin/application/operator-totp-reset.ts reset the authenticator of the sole super admin: one transaction locks the target and the app's super rows, refuses when another usable super exists (same app, is_super, active, bound), clears the three totp columns by row_version, writes a system audit row (system_actor system:ops_command, action admin_totp_reset, target admins:<id>) and voids the account's credentials (admin-revocations voidBefore, before commit, as adminResetAdminTotp). Already unbound → nothing written, own exit code; state changed between preview and confirm → nothing written; confirmation text decoded across chunks and without swallowing a BOM. Contract: audit_system_actor gains system:ops_command (enums/admin.yaml, openapi, oasdiff-accepted, contracts-ts), audit-log-view Chinese name. HTTP resetTotp and its controller unchanged.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 4,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27). money r1 fail: S1 ① void before commit (kept, same as adminResetAdminTotp, D10-2999; FU-ADMIN-CREDENTIAL-VERSION-PG), S1 ② retry after a delivered-but-unreported reset (fixed in impl r2), S1 ③ no SMS login after reset (kept, matches contract; FU-B134T-SMS-LOGIN-AFTER-RESET), S2 UTF-8 across chunks (fixed). couli-runs/B1-34t/review-money-r1.json money r2 fail: S1 state changed during confirmation (fixed in impl r3 by comparing the previewed state), S2 BOM (fixed). couli-runs/B1-34t/review-money-r2.json money r3 fail: S0 void instant in ms vs whole-second iat (strict <). Checked against main: after the reset the account is unbound and old sessions are refused; rebinding voids again at the binding login's whole second (admin-login.ts:408-417, B1-34n), pinned by frozen [AC-B1-34n#1][#2]. D10-3058 small task withdrawn by D10-3061. couli-runs/B1-34t/review-money-r3.json money r4 (one-time approvals entry 197, D10-3061; scope: r3 S0 under main's existing defences and the rebase onto #752) pass; validator moved 0; one reviewer-placed out-of-scope S1 (main admins.controller.ts still asks TOTP step-up for resetting another admin) belongs to B1-18l (D10-3077). couli-runs/B1-34t/review-money-r4.json No finding was moved to out_of_scope in any round (D10-2954)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (2 attempts; the second only turned a tier literal into `as const` for tsc). spec-test r1 pass (4 S2 out of scope, taken into the implementation), r2 pass; validator moved 0 both rounds."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#1] 确认前回显应用、登录名和绑定状态（已绑定），合法边界原因随重置请求传入",
+    "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#1] 确认前回显应用、登录名和绑定状态（未绑定），合法边界原因随重置请求传入",
+    "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#2] 未明确输入 yes（null）时退出且不调用重置",
+    "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#2] 未明确输入 yes（\"\"）时退出且不调用重置",
+    "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#2] 未明确输入 yes（\"no\"）时退出且不调用重置",
+    "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#3] 原因未输入时拒绝重置",
+    "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#3] 原因为空时拒绝重置",
+    "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#3] 原因全空白时拒绝重置",
+    "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#3] 原因超过 200 字时拒绝重置",
+    "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#4] 缺 app 时拒绝重置",
+    "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#4] 缺登录名 时拒绝重置",
+    "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#4] 没有交互终端 时拒绝重置",
+    "test/spec/admin/operator-totp-reset/credentials.int.test.ts > [AC-B1-34t#12] 运维重置作废旧会话、登录票据和二次验证令牌，其他账号的会话仍可用",
+    "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#5] 命令确认后清除验证器三列，保留短信和账号状态，写系统审计并作废目标凭证",
+    "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#6] 有另一位同应用、启用且已绑定的超管时，拒绝且双方数据、审计和令牌不变",
+    "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#7] 普通账号、停用超管、未绑定超管及其他应用的超管均不阻止重置",
+    "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#8] 预览时未发现可用超管、确认前出现可用超管，仍拒绝重置",
+    "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#9] admin 用例拒绝登录名不存在且无副作用",
+    "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#9] admin 用例拒绝应用不匹配且无副作用",
+    "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#9] admin 用例拒绝普通账号且无副作用",
+    "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#9] admin 用例拒绝非法原因且无副作用",
+    "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#10] Redis 作废失败时，账号改动与系统审计一起回滚",
+    "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#11] 审计写入后报错时，账号改动与审计一起回滚且未作废凭证"
+  ],
+  "task": "B1-34t",
+  "spec_commit": "f720f375c6af3daac984c38f029bbdece8ca7cd9",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "f720f375c6af3daac984c38f029bbdece8ca7cd9",
+      "tree": "36813dcab4fb4201a80c66f202ddef15e562bbb4",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-25T11:07:24Z",
+      "finished_at": "2026-11-25T11:07:37Z",
+      "red_tests": [
+        "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#1] 确认前回显应用、登录名和绑定状态（已绑定），合法边界原因随重置请求传入",
+        "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#1] 确认前回显应用、登录名和绑定状态（未绑定），合法边界原因随重置请求传入",
+        "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#2] 未明确输入 yes（null）时退出且不调用重置",
+        "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#2] 未明确输入 yes（\"\"）时退出且不调用重置",
+        "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#2] 未明确输入 yes（\"no\"）时退出且不调用重置",
+        "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#3] 原因未输入时拒绝重置",
+        "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#3] 原因为空时拒绝重置",
+        "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#3] 原因全空白时拒绝重置",
+        "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#3] 原因超过 200 字时拒绝重置",
+        "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#4] 缺 app 时拒绝重置",
+        "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#4] 缺登录名 时拒绝重置",
+        "test/spec/admin/operator-totp-reset/command.test.ts > [AC-B1-34t#4] 没有交互终端 时拒绝重置",
+        "test/spec/admin/operator-totp-reset/credentials.int.test.ts > [AC-B1-34t#12] 运维重置作废旧会话、登录票据和二次验证令牌，其他账号的会话仍可用",
+        "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#5] 命令确认后清除验证器三列，保留短信和账号状态，写系统审计并作废目标凭证",
+        "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#6] 有另一位同应用、启用且已绑定的超管时，拒绝且双方数据、审计和令牌不变",
+        "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#7] 普通账号、停用超管、未绑定超管及其他应用的超管均不阻止重置",
+        "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#8] 预览时未发现可用超管、确认前出现可用超管，仍拒绝重置",
+        "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#9] admin 用例拒绝登录名不存在且无副作用",
+        "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#9] admin 用例拒绝应用不匹配且无副作用",
+        "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#9] admin 用例拒绝普通账号且无副作用",
+        "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#9] admin 用例拒绝非法原因且无副作用",
+        "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#10] Redis 作废失败时，账号改动与系统审计一起回滚",
+        "test/spec/admin/operator-totp-reset/reset.int.test.ts > [AC-B1-34t#11] 审计写入后报错时，账号改动与审计一起回滚且未作废凭证"
+      ],
+      "expected": [
+        "test/spec/admin/operator-totp-reset/command.test.ts",
+        "test/spec/admin/operator-totp-reset/credentials.int.test.ts",
+        "test/spec/admin/operator-totp-reset/reset.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "ef5177cf6dab2ad4874ff652770f61dc64beccb3b032ae993481c5b108181d47"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "014eb523f54e6ccb81b58d67c697027f2f6698aaa86c1565e65a27558eebe655"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "7d9b7dc8cea4053d5048c694dce0b999aa835534",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
