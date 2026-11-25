@@ -34,7 +34,12 @@ import { readSmsConfig, type SmsConfig } from './sms.ts';
 import { readStagingTestPhoneConfig, type StagingTestPhoneConfig } from './staging-test-phones.ts';
 import { readStagingTestRealnameConfig } from './staging-test-realname.ts';
 import { readTaobaoConfig, type TaobaoAppConfig } from './taobao.ts';
-import { readTaobaoOAuthConfig } from './taobao-oauth.ts';
+import {
+  readTaobaoInviterAccountId,
+  readTaobaoInviterCode,
+  readTaobaoOAuthConfig,
+  readTaobaoUserOAuthConfig,
+} from './taobao-oauth.ts';
 import { readTaobaoSourceConfig } from './taobao-sources.ts';
 import { readTrustedProxies } from './trusted-proxies.ts';
 import { readUnionEndpointOverrideConfig } from './union-endpoint-override.ts';
@@ -216,6 +221,23 @@ export interface AppConfig {
    * null when unset; a hand-built config without it counts as unset.
    */
   readonly taobaoOAuthRedirectUri?: string | null;
+  /**
+   * TAOBAO_USER_OAUTH_REDIRECT_URI (B1-04zzzzm, D10-2713): the redirect_uri of the user-level Taobao
+   * OAuth (the H5 callback relay page). Same rules as taobaoOAuthRedirectUri; absent or null when
+   * unset. staging / prod issue no synthetic authorization address without it.
+   */
+  readonly taobaoUserOAuthRedirectUri?: string | null;
+  /**
+   * TAOBAO_INVITER_CODE (B1-04zzzzm, D10-2716): the channel inviter code of publisher.info.save,
+   * trimmed; null when blank, absent when not given. Without it channel filing fails and warns.
+   */
+  readonly taobaoInviterCode?: string | null;
+  /**
+   * TAOBAO_INVITER_ACCOUNT_ID (B1-04zzzzm 补丁 2, D10-2755; BR-ATTR-05): the union account id that
+   * generated TAOBAO_INVITER_CODE, trimmed; null when blank, absent when not given. Channel filing
+   * runs only for a binding on that very account; without it every filing is refused.
+   */
+  readonly taobaoInviterAccountId?: string | null;
   /**
    * DATAOKE_APP_KEY / DATAOKE_APP_SECRET_FILE (./dataoke.ts, B1-04e): staging only, both or neither;
    * the 大淘客 order source of the live Taobao adapter. The secret file is read once by the union
@@ -430,6 +452,7 @@ export function loadConfig(
     problems.push(...readPddQueryConfig(env).problems);
     problems.push(...readTaobaoSourceConfig(env).problems);
     problems.push(...readTaobaoOAuthConfig(env).problems);
+    problems.push(...readTaobaoUserOAuthConfig(env).problems);
     if (appEnv.success)
       problems.push(...readUnionEndpointOverrideConfig(appEnv.data, env).problems);
     if (appEnv.success) problems.push(...readAgentUserHashConfig(appEnv.data, env).problems);
@@ -495,6 +518,11 @@ export function loadConfig(
   violations.push(...taobaoSourceProblems);
   const { taobaoOAuthRedirectUri, problems: taobaoOAuthProblems } = readTaobaoOAuthConfig(env);
   violations.push(...taobaoOAuthProblems);
+  const { taobaoUserOAuthRedirectUri, problems: taobaoUserOAuthProblems } =
+    readTaobaoUserOAuthConfig(env);
+  violations.push(...taobaoUserOAuthProblems);
+  const inviter = readTaobaoInviterCode(env);
+  const inviterAccount = readTaobaoInviterAccountId(env);
   const { unionEndpointOverrideDir, problems: overrideProblems } = readUnionEndpointOverrideConfig(
     values.APP_ENV,
     env,
@@ -551,6 +579,13 @@ export function loadConfig(
     ...(taobao === null ? {} : { taobao }),
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.
     ...(taobaoOAuthRedirectUri === null ? {} : { taobaoOAuthRedirectUri }),
+    // B1-04zzzzm: absent when unset, so the documented shape of an unconfigured result is unchanged.
+    ...(taobaoUserOAuthRedirectUri === null ? {} : { taobaoUserOAuthRedirectUri }),
+    // B1-04zzzzm: present when the variable is given (blank → null), absent when not given.
+    ...(inviter.set ? { taobaoInviterCode: inviter.taobaoInviterCode } : {}),
+    ...(inviterAccount.set
+      ? { taobaoInviterAccountId: inviterAccount.taobaoInviterAccountId }
+      : {}),
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.
     ...(dataoke === null ? {} : { dataoke }),
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.

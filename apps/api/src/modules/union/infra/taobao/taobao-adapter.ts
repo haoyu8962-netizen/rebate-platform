@@ -63,6 +63,11 @@
 // → adapter_unimplemented，不取大淘客凭据、不发请求、不告警）。开时顺序为「官方淘宝口令解析 → 不可用 / 无权限
 // 才降级大淘客 parse-content」；官方淘宝口令解析尚未实现，恒视为不可用。商品页 item.htm 官方直查不读开关。
 // 生产装配尚未注入开关读取器，故生产恒关；启用单负责接线（FU，见 review-spec-test-r4 范围外 S2）。
+// B1-04zzzzm（D10-2713 / D10-2716）：bindPublisher = 用户授权码换用户令牌（user-oauth.ts）→
+// publisher.info.save → relation_id，重复备案经 publisher.info.get 取回（publisher.ts）；邀请码或用户
+// 回调缺失、两路都拿不到编号 → 平铺告警 + upstream_misconfigured。这几条请求都不归档。
+// 补丁 2（D10-2755）：邀请码所属联盟账号（TAOBAO_INVITER_ACCOUNT_ID）须等于绑定所用账号，缺省或不一致
+// 即拒绝、不发请求；state 签发时的 OAuth 应用（appKey + redirect_uri）优先于实例当前配置；sdk_token 不发。
 import { systemScheduler, type Clock, type Scheduler } from '../../../platform/index.ts';
 import type {
   TaobaoPriceOptions,
@@ -71,6 +76,8 @@ import type {
 } from '../../domain/taobao-price.ts';
 import {
   UnionError,
+  type BindReq,
+  type BindResult,
   type CallCtx,
   type ConvertReq,
   type ConvertResult,
@@ -224,8 +231,22 @@ import {
   type ThirdPartyParseConfig,
 } from './parse-content.ts';
 import { parseTaobaoItemLink } from './resolve-link.ts';
+import {
+  isGatewaySystemError,
+  queriedRelationId,
+  savedRelationId,
+  saveIsDuplicate,
+  saveRefusalIsDefinite,
+  TAOBAO_PUBLISHER_GET,
+  TAOBAO_PUBLISHER_GET_ENVELOPE,
+  TAOBAO_PUBLISHER_INFO_TYPE,
+  TAOBAO_PUBLISHER_RELATION_APP,
+  TAOBAO_PUBLISHER_SAVE,
+  TAOBAO_PUBLISHER_SAVE_ENVELOPE,
+} from './publisher.ts';
 import { unwrapTaobaoResponse, type TaobaoSubCodeMap, type TaobaoWarning } from './response.ts';
 import type { TaobaoSearchCounter, TaobaoSearchMetricSource } from './search-counter.ts';
+import { exchangeTaobaoUserCode } from './user-oauth.ts';
 import {
   dataokeFailureReason,
   officialFailureReason,
@@ -266,6 +287,21 @@ export type { TaobaoPunishWarning, TaobaoPunishWarningEvent } from './punishment
 export interface TaobaoCredentials {
   readonly appKey: string;
   readonly appSecret: string;
+  /**
+   * B1-04zzzzm: what bindPublisher needs besides the app pair — TAOBAO_USER_OAUTH_REDIRECT_URI and
+   * TAOBAO_INVITER_CODE (server settings, not secrets, but never logged). Absent or null → the
+   * filing fails with a flat warning and nothing is sent.
+   */
+  readonly userOAuth?: {
+    readonly redirectUri: string | null;
+    readonly inviterCode: string | null;
+    /**
+     * B1-04zzzzm 补丁 2 (BR-ATTR-05): TAOBAO_INVITER_ACCOUNT_ID, the union account that generated
+     * the inviter code. The production wiring always sets the key (null when unset); whenever it is
+     * set, or the request names the binding's account, the filing runs only when the two agree.
+     */
+    readonly inviterAccountId?: string | null;
+  };
 }
 
 export interface TaobaoAdapterOptions {
@@ -411,6 +447,14 @@ function unimplemented(name: string): UnionError {
   return new UnionError('adapter_unimplemented', `taobao ${name}: not implemented`, 'taobao');
 }
 
+/** B1-04zzzzn r2: the save's call was cancelled before the request was handed to the transport. */
+class SaveNotSent extends Error {
+  constructor() {
+    super('taobao publisher.info.save: not sent');
+    this.name = 'SaveNotSent';
+  }
+}
+
 export class TaobaoUnionAdapter implements UnionAdapter {
   readonly platform = 'taobao' as const;
   readonly #credentials: () => Promise<TaobaoCredentials>;
@@ -522,6 +566,223 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     this.#ownOrders = options.ownOrders;
   }
 
+  /**
+   * B1-04zzzzm (D10-2713 / D10-2716; BR-ID-17 web_code): the user's channel filing. The inviter code
+   * and the user OAuth redirect URI come from the credentials (userOAuth); either missing → a flat
+   * warning and upstream_misconfigured, nothing sent. Then ① the authorization code is exchanged
+   * for the user's access token (user-oauth.ts; refused → invalid_identity), ② publisher.info.save
+   * with session = that token, inviter_code, info_type=1 gives data.relation_id; ③ without one
+   * (duplicate filing) publisher.info.get with the same session gives the one common-scene id,
+   * returned marked fromDuplicateLookup (补丁 3: the caller accepts it only against its own history);
+   * ④ neither → a flat warning and upstream_misconfigured (no made-up relation id). The token lives
+   * only in this call: no archive context on any of these requests, never logged, returned or
+   * thrown; personal fields of the answers (taobao_user_nick, account_name, …) are not read.
+   */
+  async bindPublisher(req: BindReq, ctx: CallCtx): Promise<BindResult> {
+    // B1-04zzzzn r2: the caller holds the filing's lock until the call is over, whatever its end.
+    try {
+      return await this.#bindPublisher(req, ctx);
+    } finally {
+      req.filing?.done();
+    }
+  }
+
+  async #bindPublisher(req: BindReq, ctx: CallCtx): Promise<BindResult> {
+    // 补丁 2 (D10-2755): an SDK access token is never exchanged as an authorization code; the live
+    // adapter has no SDK path yet (TODO in union-binding-exchanger.ts), so it is refused unsent.
+    if (req.credentialType !== undefined && req.credentialType !== 'authorization_code') {
+      throw this.#bindRefused('adapter_unimplemented', 'sdk_token_unsupported');
+    }
+    const app = await this.#credentials();
+    const inviterCode = app.userOAuth?.inviterCode?.trim() ?? '';
+    if (inviterCode === '') {
+      throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'inviter_code_missing');
+    }
+    // 补丁 2 (BR-ATTR-05 / BR-ID-17): the relation id belongs to the account whose inviter code
+    // files it, so the filing runs only for a binding on that account. Checked whenever the request
+    // names the binding's account or the credentials carry the setting (the production wiring always
+    // does); a missing setting or another account → refused before any upstream request.
+    const expectedAccount = app.userOAuth?.inviterAccountId;
+    if (req.unionAccountId !== undefined || expectedAccount !== undefined) {
+      if (typeof expectedAccount !== 'string' || expectedAccount.trim() === '') {
+        throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'inviter_account_missing');
+      }
+      if (req.unionAccountId !== expectedAccount.trim()) {
+        throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'inviter_account_mismatch');
+      }
+    }
+    // 补丁 2: the OAuth application the state was issued with, when the caller resolved one; its
+    // app key must be this adapter's (the secret is only known for it), its redirect URI is used as
+    // issued instead of the instance's current setting.
+    const issued = req.oauthApp;
+    if (issued !== undefined && issued.appKey !== app.appKey) {
+      throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'oauth_app_mismatch');
+    }
+    const redirectUri = issued?.redirectUri ?? app.userOAuth?.redirectUri ?? '';
+    if (redirectUri === '') {
+      throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'user_oauth_redirect_uri_missing');
+    }
+    const code = req.authorizationCode;
+    if (typeof code !== 'string' || code === '') {
+      throw new UnionError(
+        'invalid_identity',
+        'taobao bindPublisher: no authorization code',
+        'taobao',
+      );
+    }
+    const signal = ctx.signal;
+    // B1-04zzzzn r2 (money review S0): the token exchange runs under the same signal as the save.
+    const session = await exchangeTaobaoUserCode({
+      appKey: app.appKey,
+      appSecret: app.appSecret,
+      redirectUri,
+      code,
+      transport: this.#transport,
+      clock: this.#clock,
+      ...(signal === undefined ? {} : { signal }),
+    });
+    // B1-04zzzzn (D10-2850): the caller records the attempt (committed on its own) before the save
+    // is sent; nothing is sent unless that resolves. A definite refusal and an answer without an id
+    // are reported back; a transport failure or a gateway system error reports nothing (unknown).
+    // r2 (S0): a call cancelled before the attempt is recorded records nothing; one cancelled after
+    // it, up to the moment the save is handed to the transport, closes it 'rejected' (never sent).
+    const filing = req.filing;
+    // r3: read afresh each time (the flag can change across an await; a narrowed field read would not).
+    const cancelled = (): boolean => signal?.aborted === true;
+    if (cancelled()) throw this.#bindCancelled();
+    await filing?.started(signal);
+    const unsent = async (): Promise<never> => {
+      await filing?.settled('rejected');
+      throw this.#bindCancelled();
+    };
+    if (cancelled()) return unsent();
+    const saved = await this.#publisherCall(
+      TAOBAO_PUBLISHER_SAVE,
+      TAOBAO_PUBLISHER_SAVE_ENVELOPE,
+      { session, inviter_code: inviterCode, info_type: TAOBAO_PUBLISHER_INFO_TYPE },
+      signal,
+      filing === undefined ? undefined : () => filing.settled('rejected'),
+      unsent,
+    );
+    const savedId = savedRelationId(saved.body);
+    // B1-04zzzzp (D10-3196; BR-ATTR-05): an answer flagged duplicate is a duplicate even when it
+    // carries an id — the attempt ends 'duplicate' and the id (the save's own: the answer to this
+    // very filing, no further request) goes up marked fromDuplicateLookup, so the bindings use case
+    // accepts it only against its own history (the same path as an id read back below).
+    if (savedId !== null && !saveIsDuplicate(saved.body)) return { relationId: savedId };
+    await filing?.settled('duplicate');
+    if (savedId !== null) return { relationId: savedId, fromDuplicateLookup: true };
+    const queried = await this.#publisherCall(
+      TAOBAO_PUBLISHER_GET,
+      TAOBAO_PUBLISHER_GET_ENVELOPE,
+      {
+        session,
+        info_type: TAOBAO_PUBLISHER_INFO_TYPE,
+        relation_app: TAOBAO_PUBLISHER_RELATION_APP,
+      },
+      signal,
+      undefined,
+      undefined,
+      true,
+    );
+    const found = queriedRelationId(queried.body);
+    // 补丁 3 (D10-2826 ①): whose filing the read-back id is cannot be told from the answer; it is
+    // marked so the bindings use case accepts it only against its own binding history.
+    if (found.kind === 'found') return { relationId: found.relationId, fromDuplicateLookup: true };
+    throw this.#bindMisconfigured(
+      TAOBAO_PUBLISHER_GET,
+      found.kind === 'ambiguous' ? 'relation_id_ambiguous' : 'relation_id_missing',
+    );
+  }
+
+  /** One flat warning (method + fixed code only) and the refusal of a filing that cannot finish. */
+  #bindMisconfigured(method: string, code: string): UnionError {
+    this.#warn?.({ method, code });
+    return new UnionError('upstream_misconfigured', `taobao bindPublisher: ${code}`, 'taobao');
+  }
+
+  /** B1-04zzzzn r2: a filing whose call was cancelled before the save was sent. */
+  #bindCancelled(): UnionError {
+    return new UnionError(
+      'upstream_unavailable',
+      'taobao bindPublisher: cancelled before the filing was sent',
+      'taobao',
+    );
+  }
+
+  /** A filing refused before anything is sent: one flat warning and the given refusal code. */
+  #bindRefused(errorCode: 'adapter_unimplemented', code: string): UnionError {
+    this.#warn?.({ method: TAOBAO_PUBLISHER_SAVE, code });
+    return new UnionError(errorCode, `taobao bindPublisher: ${code}`, 'taobao');
+  }
+
+  /**
+   * A publisher request carrying the user's session: never archived (no archive context), errors
+   * classified by unwrapTaobaoResponse; the raw answer is returned for the lossless relation_id.
+   * `refused` (the save, B1-04zzzzn) runs before a definite refusal is thrown. r2: with `unsent`
+   * (the save), the signal is checked once more right before the request is handed to the
+   * transport; aborted by then → `unsent` (nothing was sent). r5 (D10-2972): `afterDuplicate` (the
+   * read-back after a save answered "duplicate") marks a transport failure duplicateConfirmed.
+   */
+  async #publisherCall(
+    method: string,
+    envelope: string,
+    parameters: TaobaoParameters,
+    signal: AbortSignal | undefined,
+    refused?: () => Promise<void>,
+    unsent?: () => Promise<never>,
+    afterDuplicate = false,
+  ): Promise<UnionTransportResponse> {
+    let response: UnionTransportResponse;
+    try {
+      response = await this.#send(
+        method,
+        parameters,
+        { envelope, ...(signal === undefined ? {} : { signal }) },
+        unsent === undefined
+          ? undefined
+          : () => {
+              if (signal?.aborted === true) throw new SaveNotSent();
+            },
+      );
+    } catch (error) {
+      if (error instanceof SaveNotSent && unsent !== undefined) return unsent();
+      // 补丁 2 ⑥: a transport failure is answered with its code and a fixed text only (a transport's
+      // own UnionError message may quote the request or the answer: the user's session, Taobao
+      // user id or nick); no cause is kept.
+      const code = error instanceof UnionError ? error.code : 'upstream_unavailable';
+      throw new UnionError(code, `taobao ${method}: transport failed`, 'taobao', {
+        duplicateConfirmed: afterDuplicate,
+      });
+    }
+    try {
+      unwrapTaobaoResponse(method, envelope, response, this.#warn);
+    } catch (error) {
+      // B1-04zzzzn: a definite refusal is reported before the error goes up.
+      if (refused !== undefined && saveRefusalIsDefinite(response.status, response.body)) {
+        await refused();
+      }
+      // B1-04zzzzp (D10-3196; BR-ID-17): a gateway system error (sub_code isp.*, the call limit
+      // excepted) on the filing calls is a dependency failure, not a refused credential: it goes up
+      // as upstream_unavailable with a fixed text (the attempt stays unknown: not a definite
+      // refusal above). Only these two calls; response.ts keeps its shared classification.
+      if (
+        error instanceof UnionError &&
+        error.code === 'upstream_rejected' &&
+        isGatewaySystemError(response.body)
+      ) {
+        throw new UnionError(
+          'upstream_unavailable',
+          `taobao ${method}: gateway system error`,
+          'taobao',
+          { duplicateConfirmed: afterDuplicate },
+        );
+      }
+      throw error;
+    }
+    return response;
+  }
+
   /** Internal request foundation; returns the inner object of `options.envelope`. */
   async request(
     method: string,
@@ -539,6 +800,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     method: string,
     parameters: TaobaoParameters,
     { signal, archive }: TaobaoRequestOptions,
+    beforeSend?: () => void,
   ): Promise<UnionTransportResponse> {
     const url = this.#endpoint.baseUrl;
     if (url === null) {
@@ -564,6 +826,8 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     const form = new URLSearchParams(taobaoSignedEntries(unsigned));
     form.append('sign', signTaobaoParameters(unsigned, appSecret));
 
+    // B1-04zzzzn r2: the last check before the request leaves (no await in between).
+    beforeSend?.();
     try {
       return await this.#transport({
         platform: 'taobao',

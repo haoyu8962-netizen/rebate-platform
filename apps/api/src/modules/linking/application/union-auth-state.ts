@@ -14,8 +14,24 @@ export const AUTH_STATE_TTL_MS = 600_000;
 
 const CLIENTS: ReadonlySet<string> = new Set<AuthClient>(['ios', 'android', 'harmony']);
 
-/** Server-owned application configuration references, scoped to the issuing environment. */
+/**
+ * Server-owned application configuration references, scoped to the issuing environment.
+ * B1-04zzzzm: `taobaoUserOAuth` is the user-level Taobao OAuth (app key, TAOBAO_USER_OAUTH_REDIRECT_URI)
+ * the staging / prod wiring always passes; absent (hand-built ports, rule tests of B1-06g) the
+ * synthetic address stays as before.
+ */
 export interface UnionAuthAppsPort {
+  readonly taobaoUserOAuth?: {
+    readonly appKey: string | null;
+    readonly redirectUri: string | null;
+  };
+  /**
+   * B1-04zzzzn r4 (D10-2872): the staging / prod wiring's readiness of the real Taobao filing for
+   * the account this authorization uses (it includes that account being the inviter code's,
+   * TAOBAO_INVITER_ACCOUNT_ID); the same judgement the bindings submission refuses under. False →
+   * auth_unavailable and no state. Absent: no such check.
+   */
+  readonly taobaoFilingReadyFor?: (accountId: string | null) => boolean;
   resolve(
     appId: string,
     environment: AppEnv,
@@ -33,12 +49,80 @@ export function newAuthState(): string {
 }
 
 /**
- * TODO(规划/11 §4.5): real Taobao authorization link generation — blocked on FU-TB-AUTH-SESSION.
- * Until then a synthetic address on example.test carrying only the issued state. Taobao only:
- * Pinduoduo's link comes from UnionAdapter.pddAuthorityUrl (B1-06zf, pdd-authority.ts).
+ * The synthetic address on example.test carrying only the issued state: what a Taobao authorization
+ * gets when no user OAuth port is wired (hand-built ports), and in local / test when that port lacks
+ * the app key or redirect URI. Taobao only: Pinduoduo's link comes from UnionAdapter.pddAuthorityUrl
+ * (B1-06zf, pdd-authority.ts).
  */
 export function syntheticAuthUrl(platform: 'taobao', state: string): string {
   return `https://oauth.example.test/${platform}/authorize?state=${encodeURIComponent(state)}`;
+}
+
+/** The Taobao OAuth2.0 authorize endpoint (docs-mirror taobao/guides/118, 105590). */
+const TAOBAO_AUTHORIZE_URL = 'https://oauth.taobao.com/authorize';
+
+/**
+ * B1-04zzzzm (D10-2713): how a Taobao authorization address is made for this environment.
+ * - no `taobaoUserOAuth` port → 'synthetic' (unchanged behaviour of hand-built ports);
+ * - the port with both a non-empty app key and redirect URI → 'oauth';
+ * - the port missing either → 'unavailable' in staging / prod (the caller answers auth_unavailable
+ *   and issues no state; never a synthetic address there), 'synthetic' in local / test.
+ */
+export type TaobaoAuthUrlPlan =
+  | { readonly kind: 'synthetic' }
+  | { readonly kind: 'unavailable' }
+  | { readonly kind: 'oauth'; readonly appKey: string; readonly redirectUri: string };
+
+export function taobaoAuthUrlPlan(authApps: UnionAuthAppsPort, appEnv: AppEnv): TaobaoAuthUrlPlan {
+  const oauth = authApps.taobaoUserOAuth;
+  if (oauth === undefined) return { kind: 'synthetic' };
+  const { appKey, redirectUri } = oauth;
+  if (
+    typeof appKey === 'string' &&
+    appKey !== '' &&
+    typeof redirectUri === 'string' &&
+    redirectUri !== ''
+  ) {
+    return { kind: 'oauth', appKey, redirectUri };
+  }
+  return appEnv === 'staging' || appEnv === 'prod'
+    ? { kind: 'unavailable' }
+    : { kind: 'synthetic' };
+}
+
+/**
+ * The address of an issuable plan: the real Taobao OAuth authorize address (response_type=code,
+ * client_id, redirect_uri as configured, the issued state as is, view=wap for the mobile page;
+ * docs-mirror taobao/guides/105590) or the synthetic one. Shared by GET auth-url and the open's
+ * 30101 / 30102 so both hand out the same address.
+ */
+export function taobaoAuthUrl(
+  plan: Exclude<TaobaoAuthUrlPlan, { readonly kind: 'unavailable' }>,
+  state: string,
+): string {
+  if (plan.kind === 'synthetic') return syntheticAuthUrl('taobao', state);
+  const params: readonly (readonly [string, string])[] = [
+    ['response_type', 'code'],
+    ['client_id', plan.appKey],
+    ['redirect_uri', plan.redirectUri],
+    ['state', state],
+    ['view', 'wap'],
+  ];
+  const query = params.map(([name, value]) => `${name}=${encodeURIComponent(value)}`).join('&');
+  return `${TAOBAO_AUTHORIZE_URL}?${query}`;
+}
+
+/**
+ * B1-04zzzzm 补丁 2 (D10-2755; BR-ID-17 细则「授权方式」): the configured methods a Taobao state may
+ * carry under this plan. The real user OAuth ('oauth') only completes web_code: the live adapter
+ * cannot file with an SDK access token yet, so sdk_token is never handed out with it (the configured
+ * order of what remains is kept). Empty → the caller answers auth_unavailable and issues no state.
+ */
+export function issuableTaobaoMethods(
+  plan: TaobaoAuthUrlPlan,
+  methods: readonly UnionAuthMethod[],
+): readonly UnionAuthMethod[] {
+  return plan.kind === 'oauth' ? methods.filter((method) => method === 'web_code') : methods;
 }
 
 /**

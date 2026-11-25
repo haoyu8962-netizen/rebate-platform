@@ -86,18 +86,25 @@ export class UnionError extends Error {
    * halves the window on it (application/fetch-window.ts) without knowing the platform.
    */
   readonly windowTooLarge: boolean;
+  /**
+   * B1-04zzzzn r5 (D10-2972): bindPublisher's filing was answered "duplicate" by the platform, but
+   * the read-back of the filed id then failed in transport (timeout, network). Only the fact; the
+   * error carries no credential, token, inviter code or platform user identity.
+   */
+  readonly duplicateConfirmed: boolean;
 
   constructor(
     code: UnionErrorCode,
     message: string,
     platform: Platform | null = null,
-    options: { readonly windowTooLarge?: boolean } = {},
+    options: { readonly windowTooLarge?: boolean; readonly duplicateConfirmed?: boolean } = {},
   ) {
     super(message);
     this.name = 'UnionError';
     this.code = code;
     this.platform = platform;
     this.windowTooLarge = options.windowTooLarge ?? false;
+    this.duplicateConfirmed = options.duplicateConfirmed ?? false;
   }
 }
 
@@ -815,10 +822,51 @@ export interface ShopConvertResult {
 export type ShopConvertSources = readonly ['dataoke'];
 
 export interface BindReq {
+  /** The credential (web_code: the authorization code; sdk_token: the SDK access token). */
   readonly authorizationCode: string;
+  /**
+   * B1-04zzzzm 补丁 2 (D10-2755; BR-ATTR-05 / BR-ID-17): what the bindings use case passes besides the
+   * credential. `unionAccountId` is the server-selected union account the binding will be written
+   * under (the adapter files only when its inviter code belongs to that account); `credentialType`
+   * keeps the credential's kind so an SDK token is never exchanged as an authorization code (absent:
+   * an authorization code, the legacy callers); `oauthApp` is the OAuth application the state was
+   * issued with (app key + redirect URI, resolved from the state's reference), used instead of the
+   * instance's current configuration.
+   */
+  readonly unionAccountId?: string;
+  readonly credentialType?: 'authorization_code' | 'sdk_token';
+  readonly oauthApp?: { readonly appKey: string; readonly redirectUri: string };
+  /**
+   * B1-04zzzzn (D10-2850): the caller's record of this filing attempt. A filing adapter calls
+   * `started` once the credential gave a user session, right before the filing request is sent,
+   * and sends nothing unless it resolves; it calls `settled` with the filing's definite answer when
+   * that answer carries no id (an explicit refusal, or "already filed"). A filing that gave an id is
+   * reported by the result; a transport failure reports nothing (the outcome stays unknown).
+   * r2 (money review S0): `started` gets the call's signal and records nothing once it is aborted;
+   * the adapter checks the same signal after `started` and right before the save is sent, and an
+   * attempt recorded for a save that was then not sent is settled 'rejected' (not filed). `done`
+   * is called once the adapter's call is over, whatever its result (the caller holds the filing's
+   * lock until then).
+   */
+  readonly filing?: BindFilingRecorder;
+}
+/** B1-04zzzzn: see BindReq.filing. */
+export interface BindFilingRecorder {
+  started(signal?: AbortSignal): Promise<void>;
+  settled(outcome: 'rejected' | 'duplicate'): Promise<void>;
+  done(): void;
 }
 export interface BindResult {
   readonly relationId: string;
+  /**
+   * B1-04zzzzm 补丁 3 (D10-2826 ①): true when the filing was answered as a duplicate without an id
+   * and the id was read back with publisher.info.get. Whose filing that id is cannot be told from
+   * the answer, so the caller accepts it only when its own binding history already holds it for
+   * the same app, union account and user; absent: the id came from the filing itself.
+   * B1-04zzzzp (D10-3196): also true when the filing's answer is flagged duplicate and carries an
+   * id itself (that id is returned, checked against the history the same way).
+   */
+  readonly fromDuplicateLookup?: true;
 }
 export interface TimeWindow {
   readonly from: string;
@@ -906,6 +954,12 @@ export interface TljCreateResult {
 
 export interface UnionAdapter {
   readonly platform: Platform;
+  /**
+   * B1-04zzzzm 补丁 3 (D10-2826 ②): the mode of the endpoint this adapter is governed under, set by
+   * the governed wrapper only (governed-adapter.ts). Linking issues and exchanges a real Taobao
+   * user authorization only when the Taobao filing adapter is governed under a live endpoint.
+   */
+  readonly endpointMode?: UnionMode;
   /**
    * B1-04w: declared by an adapter whose listOrders sends several upstream requests and runs
    * each through CallCtx.gateUpstream. The governed wrapper then takes no token of its own for

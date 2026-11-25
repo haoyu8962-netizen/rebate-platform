@@ -70,6 +70,17 @@
 // highest is read under the user lock (r3 S1): a restore reads the rows again after the lock, a
 // new row re-reads after its lock and moves its own row_version up when a row created and reset
 // meanwhile went past it.
+// B1-04zzzzn (D10-2850 / D10-2851): ① the readiness of the real filing adapter is judged with the
+// site authorization, before the state is checked or consumed (not ready → auth_unavailable, the
+// state stays usable); ② the filing adapter records the attempt (union-filing-attempts.ts, committed
+// on its own) right before publisher.info.save; an id from the save marks it saved on trx before
+// the binding's savepoint; ③ a duplicate answer's read-back id is accepted only on matching
+// binding history (r4, D10-2872: an earlier attempt whose outcome is unknown is no longer evidence;
+// it is warned with its id as duplicate_after_unknown_attempt instead).
+// r2 (money review): the attempt's filing lock (union-filing-attempts.ts) is given back after the
+// key's transaction is over (requestEnded, in bind), so a later request of the same scope only
+// reads attempts of requests that have ended; an id from the save whose answer is not stored
+// (10001 after a ban, 50001) has its 'saved' written again on its own after the rollback.
 import type { components } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import { sql, type Kysely, type Selectable, type Transaction } from 'kysely';
@@ -101,13 +112,89 @@ import {
   type UnionAuthMethod,
   type UnionAuthReads,
 } from './union-auth-reads.ts';
-import type {
-  UnionBindingExchangeInput,
-  UnionBindingExchanger,
+import { UnionError } from '../../union/index.ts';
+import {
+  UnionBindingExchangeRefusal,
+  withBindingUnionAccount,
+  type UnionBindingExchangeInput,
+  type UnionBindingExchanger,
 } from './union-binding-exchanger.ts';
+import {
+  createFilingRecorder,
+  findEarlierUnknownAttempt,
+  type FilingAttempt,
+  type FilingRecorder,
+} from './union-filing-attempts.ts';
 import { BIND_RETRY_AFTER_SEC, getBindingAdmission } from './upstream-limits.ts';
 
 type BindUnionRequest = components['schemas']['BindUnionRequest'];
+
+// B1-04zzzzm 补丁 2 (D10-2755; BR-ID-17 细则「凭证无效」): every failed credential exchange / channel
+// filing is counted here, where the device record's client and the auth_method are still known, by
+// client × method × a fixed failure class, and warned once with those labels only (never the
+// credential, an upstream answer or anything personal). Process-local, like union's
+// couli_taobao_search_total counter (search-counter.ts); no table, no contract change.
+// TODO(规划/11 §4.5): export the snapshot on /metrics (entry.ts → createMetricsRegistry) — blocked on
+// 本单 paths 不含 entry.ts 与 platform/metrics.
+
+/** The fixed failure classes of a binding's exchange / filing. */
+export type UnionBindFailure =
+  | 'credential_invalid'
+  | 'oauth_app_unresolved'
+  | 'method_unsupported'
+  | 'filing_refused'
+  | 'upstream_unavailable'
+  | 'no_relation_id'
+  | 'filing_unavailable'
+  | 'duplicate_unverified'
+  | 'duplicate_after_unknown_attempt'
+  | 'exchange_failed';
+
+export interface UnionBindFailureSample {
+  readonly client: AuthClient;
+  readonly method: UnionAuthMethod;
+  readonly failure: UnionBindFailure;
+  readonly value: number;
+}
+
+export interface UnionBindFailureCounter {
+  record(client: AuthClient, method: UnionAuthMethod, failure: UnionBindFailure): number;
+  snapshot(): readonly UnionBindFailureSample[];
+}
+
+/** A new counter with nothing counted. */
+export function createUnionBindFailureCounter(): UnionBindFailureCounter {
+  const series = new Map<string, UnionBindFailureSample>();
+  return {
+    record(client, method, failure) {
+      const key = `${client}/${method}/${failure}`;
+      const value = (series.get(key)?.value ?? 0) + 1;
+      series.set(key, { client, method, failure, value });
+      return value;
+    },
+    snapshot: () => [...series.values()],
+  };
+}
+
+const PROCESS_BIND_FAILURES = createUnionBindFailureCounter();
+
+/** The process's counter (what a metrics exporter would read). */
+export function unionBindFailureCounter(): UnionBindFailureCounter {
+  return PROCESS_BIND_FAILURES;
+}
+
+/** The fixed class of an exchange that threw (never its message). */
+function bindFailureOf(error: unknown): UnionBindFailure {
+  if (error instanceof UnionBindingExchangeRefusal) return error.reason;
+  if (error instanceof UnionError) {
+    if (error.code === 'adapter_unimplemented') return 'method_unsupported';
+    if (error.code === 'upstream_unavailable' || error.code === 'rate_limited') {
+      return 'upstream_unavailable';
+    }
+    return 'filing_refused';
+  }
+  return 'exchange_failed';
+}
 type BindingRow = Selectable<DB['union_bindings']>;
 
 export interface UnionBindInput {
@@ -138,8 +225,12 @@ export interface UnionBindingsOptions {
   readonly callerContext: CallerContext;
   readonly reads: UnionAuthReads;
   readonly idempotency: Pick<Idempotency, 'executeInTransaction'>;
-  readonly exchanger: Pick<UnionBindingExchanger, 'exchange'>;
+  /** B1-04zzzzn: filingReady (when present) is judged before the state is consumed. */
+  readonly exchanger: Pick<UnionBindingExchanger, 'exchange'> &
+    Partial<Pick<UnionBindingExchanger, 'filingReady'>>;
   readonly logger: Pick<RootLogger, 'warn'>;
+  /** 补丁 2: the failure counter; absent → the process's (unionBindFailureCounter()). */
+  readonly failures?: UnionBindFailureCounter;
 }
 
 const CLIENTS: ReadonlySet<string> = new Set<AuthClient>(['ios', 'android', 'harmony']);
@@ -239,6 +330,66 @@ async function userRows(
 
 export function createUnionBindings(options: UnionBindingsOptions): UnionBindingsService {
   const { db, clock, callerContext, reads, idempotency, exchanger, logger } = options;
+  const failures = options.failures ?? PROCESS_BIND_FAILURES;
+
+  /** One failed exchange / filing: counted and warned with fixed labels only. */
+  function bindFailed(
+    appId: string,
+    client: AuthClient,
+    method: UnionAuthMethod,
+    failure: UnionBindFailure,
+    traceId: string,
+    extra: Readonly<Record<string, string>> = {},
+  ): void {
+    const count = failures.record(client, method, failure);
+    logger.warn(
+      {
+        event: 'linking.bindings.exchange_failed',
+        app_id: appId,
+        platform: 'taobao',
+        client,
+        auth_method: method,
+        failure,
+        count,
+        trace_id: traceId,
+        ...extra,
+      },
+      'linking: union binding credential exchange or channel filing failed',
+    );
+  }
+
+  /**
+   * B1-04zzzzn ③ (D10-2872, r5 D10-2972): a duplicate filing refused for want of matching history,
+   * warned once: duplicate_after_unknown_attempt with the id of an earlier attempt of the same app,
+   * user, platform and account whose outcome is unknown, else duplicate_unverified. Reads only.
+   */
+  async function duplicateRefused(
+    trx: Transaction<DB>,
+    appId: string,
+    userId: string,
+    platform: 'taobao',
+    accountId: string,
+    attempt: FilingAttempt | null,
+    labels: {
+      readonly client: AuthClient;
+      readonly method: UnionAuthMethod;
+      readonly traceId: string;
+    },
+  ): Promise<void> {
+    const { client, method, traceId } = labels;
+    const earlier = await findEarlierUnknownAttempt(
+      trx,
+      { appId, userId, platform, unionAccountId: accountId },
+      attempt,
+    );
+    if (earlier === null) {
+      bindFailed(appId, client, method, 'duplicate_unverified', traceId);
+    } else {
+      bindFailed(appId, client, method, 'duplicate_after_unknown_attempt', traceId, {
+        earlier_attempt_id: earlier,
+      });
+    }
+  }
 
   /** BR-ID-19 on relation id R of account A, read once; writes are conditional. */
   async function decide(
@@ -435,6 +586,7 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     client: AuthClient,
     body: BindUnionRequest,
     traceId: string,
+    onFiling: (recorder: FilingRecorder) => void,
   ): Promise<HandlerResult> {
     const platform = 'taobao';
     const { status, accountId: bound } = await reads.binding(appId, userId, platform);
@@ -446,6 +598,14 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     // The account this authorization uses, judged exactly as auth-url judged it (D7-3 ⑦).
     const accountId = await reads.authAccountId(appId, platform, bound);
     if (accountId === null || !(await reads.siteAuthAvailable(appId, platform, accountId))) {
+      return result(status === 'invalid' ? 30102 : 30101, traceId, {
+        reason: 'auth_unavailable',
+      });
+    }
+    // B1-04zzzzn ④: no real filing adapter → the same answer, before the state is touched.
+    // r4 (D10-2872): for the account this authorization uses (it must be the inviter code's).
+    if (exchanger.filingReady !== undefined && !exchanger.filingReady(accountId)) {
+      bindFailed(appId, client, body.auth_method, 'filing_unavailable', traceId);
       return result(status === 'invalid' ? 30102 : 30101, traceId, {
         reason: 'auth_unavailable',
       });
@@ -501,18 +661,88 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     if (consumed.numUpdatedRows !== 1n) return result(30104, traceId);
 
     // ④ with the application the state recorded for this method.
-    const exchanged = await exchanger.exchange({
-      appId,
-      method,
-      credential: credentialOf(body),
-      appRef,
+    // 补丁 2: with the account the binding is written under (the filing checks its inviter code
+    // belongs to it, BR-ATTR-05); a failure is counted by client × method × fixed class.
+    // B1-04zzzzn ②: the filing adapter records the attempt through this right before the save.
+    // r3: the attempt's app, user and platform come from the verified authorization session row
+    // (no INSERT trigger checks the state's ownership, db/AGENTS.md rule 8); its platform was
+    // checked equal to the literal above.
+    const filing = createFilingRecorder(db, clock, logger, {
+      appId: session.app_id,
+      userId: session.user_id,
+      platform,
+      unionAccountId: accountId,
+      state: session.state,
       traceId,
     });
+    onFiling(filing);
+    let exchanged: Awaited<ReturnType<UnionBindingExchanger['exchange']>>;
+    try {
+      // r4b: the port's input is the five fields; the account is scoped around the call.
+      exchanged = await withBindingUnionAccount(
+        accountId,
+        () =>
+          exchanger.exchange({ appId, method, credential: credentialOf(body), appRef, traceId }),
+        filing,
+      );
+    } catch (error) {
+      // r5 (D10-2972): the save was answered "duplicate" but its read-back failed in transport: the
+      // same refusal as an unverified read-back id (50001, nothing written), warned the same way.
+      // r6 (D10-3129 ⑤): the call layer's time limit can end the call first (GovernanceError), so
+      // the adapter's duplicateConfirmed error never comes up: this request's own attempt already
+      // committed as 'duplicate' is the same fact, whatever the error.
+      if ((error instanceof UnionError && error.duplicateConfirmed) || filing.duplicateSettled()) {
+        await duplicateRefused(trx, appId, userId, platform, accountId, filing.current(), {
+          client,
+          method,
+          traceId,
+        });
+        return result(50001, traceId);
+      }
+      bindFailed(appId, client, method, bindFailureOf(error), traceId);
+      throw error;
+    }
     if (exchanged.kind === 'credential_invalid') {
+      bindFailed(appId, client, method, 'credential_invalid', traceId);
       return result(30104, traceId, { reason: 'credential_invalid' });
     }
     if (typeof exchanged.relationId !== 'string' || exchanged.relationId === '') {
+      bindFailed(appId, client, method, 'no_relation_id', traceId);
       throw new AuthConfigError('linking: the credential exchange returned no relation id');
+    }
+    // B1-04zzzzm 补丁 3 ① (D10-2826; BR-ATTR-05): an id read back after a duplicate filing may be
+    // another union account's (the query's scope is not documented). It is accepted only when this
+    // user already has a binding of exactly that id under the same app and union account (any
+    // status: the history proves the filing was ours); otherwise nothing is written or activated,
+    // the failure is counted and warned as duplicate_unverified, and the answer is 50001.
+    // B1-04zzzzn ②: an id from the save itself → saved, on trx before the binding's savepoint, so
+    // it commits with the binding and also with a refused binding's stored answer (30151); r2: an
+    // answer that is not stored (10001, 50001) has it written again after the rollback (bind).
+    const attempt = filing.current();
+    if (exchanged.fromDuplicateLookup !== true) await filing.markSaved(trx);
+    // B1-04zzzzn ③ r4 (D10-2872): only that history counts. An earlier attempt of the same app,
+    // user, platform and account whose outcome is unknown is not evidence (the id may still be
+    // another account's): the answer is the same refusal, warned once as
+    // duplicate_after_unknown_attempt with that attempt's id (no credential or Taobao identity).
+    if (exchanged.fromDuplicateLookup === true) {
+      const history = await trx
+        .selectFrom('union_bindings')
+        .select('id')
+        .where('app_id', '=', appId)
+        .where('user_id', '=', userId)
+        .where('platform', '=', platform)
+        .where('union_account_id', '=', accountId)
+        .where('relation_id', '=', exchanged.relationId)
+        .limit(1)
+        .executeTakeFirst();
+      if (history === undefined) {
+        await duplicateRefused(trx, appId, userId, platform, accountId, attempt, {
+          client,
+          method,
+          traceId,
+        });
+        return result(50001, traceId);
+      }
     }
 
     // F1-07c: write first (the decide savepoints and the unique race unchanged), then the user
@@ -559,6 +789,12 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     };
   }
 
+  /** Whether the key stores (commits) a handler's answer: code 0 or 30000–39999 (idempotency). */
+  function answerStored(answer: HandlerResult): boolean {
+    const code = answer.envelope.code;
+    return code === 0 || (code >= 30000 && code <= 39999);
+  }
+
   /** The handler's failures are server faults: logged without the request, answered 50001. */
   async function guarded(traceId: string, run: () => Promise<HandlerResult>) {
     try {
@@ -598,23 +834,39 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
       // Submissions of one process that may hold their transaction's connection at once (the api
       // pool has 10, POOL_SIZES.api.db): each needs a second connection for the consumption and
       // the shared reads, so the cap stays well below the pool size; the others wait without one.
-      const admitted = await getBindingAdmission().run(() =>
-        idempotency.executeInTransaction(
-          {
-            appId,
-            actor: { userId, deviceId, phoneHmac: null },
-            method: 'POST',
-            path: `/v1/unions/${input.platform}/bindings`,
-            key: input.idempotencyKey,
-            body: input.body,
-            traceId,
-          },
-          (trx) =>
-            guarded(traceId, () =>
-              handle(trx, appId, userId, deviceId, client, input.body, traceId),
-            ),
-        ),
-      );
+      // B1-04zzzzn r2: the filing lock's connection is that second one (held instead of the pool
+      // handle's while the filing runs).
+      const ran: { filing?: FilingRecorder; answer?: HandlerResult } = {};
+      const submit = () =>
+        getBindingAdmission().run(() =>
+          idempotency.executeInTransaction(
+            {
+              appId,
+              actor: { userId, deviceId, phoneHmac: null },
+              method: 'POST',
+              path: `/v1/unions/${input.platform}/bindings`,
+              key: input.idempotencyKey,
+              body: input.body,
+              traceId,
+            },
+            async (trx) => {
+              const answer = await guarded(traceId, () =>
+                handle(trx, appId, userId, deviceId, client, input.body, traceId, (recorder) => {
+                  ran.filing = recorder;
+                }),
+              );
+              ran.answer = answer;
+              return answer;
+            },
+          ),
+        );
+      let admitted: Awaited<ReturnType<typeof submit>>;
+      try {
+        admitted = await submit();
+      } finally {
+        // The key's transaction is over (committed or rolled back): the attempt's lock may go.
+        await ran.filing?.requestEnded(ran.answer !== undefined && answerStored(ran.answer));
+      }
       if (admitted.kind !== 'completed') {
         // Refused before the transaction: nothing consumed, called or stored (data: none).
         logger.warn(

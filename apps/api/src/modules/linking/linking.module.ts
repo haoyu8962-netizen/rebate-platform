@@ -111,7 +111,14 @@ import {
 } from './application/event-intake.ts';
 import { UNION_AUTH_URL, UnionAuthUrlController } from './http/public/auth-url.controller.ts';
 import { createUnionAuthUrl, type UnionAuthUrlService } from './application/union-auth-url.ts';
-import { createDemoUnionAuthApps, type UnionAuthApps } from './infra/auth-apps.ts';
+import {
+  createDemoUnionAuthApps,
+  createTaobaoUnionAuthApps,
+  resolveIssuedTaobaoOAuthApp,
+  taobaoFilingConfigured,
+  taobaoLiveFilingReady,
+  type UnionAuthApps,
+} from './infra/auth-apps.ts';
 import { UNION_BINDINGS, UnionBindingsController } from './http/public/bindings.controller.ts';
 import { createUnionBindings, type UnionBindingsService } from './application/union-bindings.ts';
 import { createUnionBindingsWithPddQuery } from './application/union-bindings-pdd.ts';
@@ -465,6 +472,91 @@ interface LinkOpenParts {
   readonly authApps: UnionAuthApps | undefined;
 }
 
+/**
+ * B1-04zzzzm (D10-2713; 补丁 2, D10-2755): the auth apps every Taobao authorization of this process
+ * issues with. In staging / prod the real resolver (infra/auth-apps.ts createTaobaoUnionAuthApps:
+ * the Taobao app key and TAOBAO_USER_OAUTH_REDIRECT_URI, a web_code reference naming them recorded
+ * in the state), so GET auth-url and the open's / shop open's / share's 30101 / 30102 hand out the
+ * same real address, and an incomplete configuration answers auth_unavailable instead of a
+ * synthetic address; never the demo resolver there (it refuses prod). local / test keep the demo
+ * one. A provided port is used as is when it already carries taobaoUserOAuth; a provided port
+ * without it keeps its references (their exchange then fails closed in staging / prod).
+ * 补丁 3 ② (D10-2826): with the real Taobao filing adapter not ready (taobaoFilingReady, the same
+ * judgement the exchange refuses under) the user OAuth is reported unconfigured, so every Taobao
+ * issuance answers auth_unavailable and records no state.
+ */
+function authAppsFor(
+  authApps: UnionAuthApps | undefined,
+  appConfig: AppConfig,
+  ports: LinkOpenPorts | undefined,
+): UnionAuthApps {
+  const live = appConfig.appEnv === 'staging' || appConfig.appEnv === 'prod';
+  if (!live) return authApps ?? createDemoUnionAuthApps();
+  if (!taobaoFilingReady(appConfig, ports)) {
+    const resolve: UnionAuthApps['resolve'] = () =>
+      Promise.reject(new Error('linking: the real taobao filing adapter is not ready'));
+    return { taobaoUserOAuth: { appKey: null, redirectUri: null }, resolve };
+  }
+  // B1-04zzzzn r4 (D10-2872): every live issuance also asks the readiness for the account it uses.
+  const taobaoFilingReadyFor = (accountId: string | null): boolean =>
+    accountId !== null && taobaoFilingReady(appConfig, ports, accountId);
+  const base = authAppsWithOAuth(authApps, appConfig);
+  return {
+    ...(base.taobaoUserOAuth === undefined ? {} : { taobaoUserOAuth: base.taobaoUserOAuth }),
+    taobaoFilingReadyFor,
+    resolve: (appId, environment, client, method) =>
+      base.resolve(appId, environment, client, method),
+  };
+}
+
+/** The live auth apps before the per-account readiness (B1-04zzzzm 补丁 2). */
+function authAppsWithOAuth(
+  authApps: UnionAuthApps | undefined,
+  appConfig: AppConfig,
+): UnionAuthApps {
+  if (authApps?.taobaoUserOAuth !== undefined) return authApps;
+  const appKey = appConfig.taobao?.appKey ?? null;
+  const redirectUri = appConfig.taobaoUserOAuthRedirectUri ?? null;
+  if (authApps === undefined) return createTaobaoUnionAuthApps({ appKey, redirectUri });
+  return {
+    taobaoUserOAuth: { appKey: appKey === '' ? null : appKey, redirectUri },
+    resolve: (appId, environment, client, method) =>
+      authApps.resolve(appId, environment, client, method),
+  };
+}
+
+/**
+ * 补丁 3 ② (D10-2826): the one readiness of the real Taobao filing adapter, read by issuance
+ * (authAppsFor) and by the exchange (UnionBindingExchanger's `ready`) alike.
+ * B1-04zzzzn r2 (money review S1): and the settings the filing needs (taobaoFilingConfigured: user
+ * OAuth app key and redirect URI, inviter code, the inviter code's union account), so an instance
+ * missing any of them neither issues a state nor consumes one (auth_unavailable).
+ * r4 (D10-2872): given the account an authorization uses, also that it is the inviter code's
+ * (TAOBAO_INVITER_ACCOUNT_ID): issuance (authAppsFor's taobaoFilingReadyFor) and the submission
+ * (the exchanger's `ready`, before the state is consumed) judge it alike.
+ */
+function taobaoFilingReady(
+  appConfig: AppConfig,
+  ports: LinkOpenPorts | undefined,
+  unionAccountId?: string,
+): boolean {
+  if (unionAccountId !== undefined && unionAccountId !== appConfig.taobaoInviterAccountId) {
+    return false;
+  }
+  return (
+    taobaoLiveFilingReady(
+      appConfig.appEnv,
+      ports === undefined ? undefined : () => ports.union.adapter('taobao'),
+    ) &&
+    taobaoFilingConfigured(appConfig.appEnv, {
+      appKey: appConfig.taobao?.appKey,
+      userRedirectUri: appConfig.taobaoUserOAuthRedirectUri,
+      inviterCode: appConfig.taobaoInviterCode,
+      inviterAccountId: appConfig.taobaoInviterAccountId,
+    })
+  );
+}
+
 /** The open's options (B1-06w / B1-06f), shared by the convert (B1-06i). */
 function openOptions(parts: LinkOpenParts): TaobaoLinkOpenOptions {
   const { db, idempotency, ports, process, appConfig, clock, logger } = parts;
@@ -516,7 +608,7 @@ function openOptions(parts: LinkOpenParts): TaobaoLinkOpenOptions {
       verifiedPaths: ports.verifiedPaths,
     },
     appEnv: appConfig.appEnv,
-    authApps: authApps ?? createDemoUnionAuthApps(),
+    authApps: authAppsFor(authApps, appConfig, ports),
   };
 }
 
@@ -665,7 +757,7 @@ export class LinkingModule {
               idempotency: parts.idempotency,
               logger,
               appEnv: appConfig.appEnv,
-              authApps: parts.authApps ?? createDemoUnionAuthApps(),
+              authApps: authAppsFor(parts.authApps, appConfig, ports),
             });
           },
         },
@@ -736,7 +828,7 @@ export class LinkingModule {
                 callerContext,
                 config,
                 appEnv,
-                authApps: parts.authApps ?? createDemoUnionAuthApps(),
+                authApps: authAppsFor(parts.authApps, appConfig, ports),
                 pids,
                 jumpEnvironment: { appEnv, apps: ports.apps, verifiedPaths: ports.verifiedPaths },
                 logger,
@@ -879,7 +971,7 @@ export class LinkingModule {
                   callerContext,
                   config,
                   appEnv: appConfig.appEnv,
-                  authApps: authApps ?? createDemoUnionAuthApps(),
+                  authApps: authAppsFor(authApps, appConfig, ports),
                   pids,
                   attrCodes,
                   // The pdd auth_jump uses the open's jump environment (apps.json, verified paths);
@@ -901,15 +993,27 @@ export class LinkingModule {
           // B1-06h: the credential exchange, by default the governed Taobao adapter's channel
           // filing (the demo adapter outside prod); without LINK_OPEN_PORTS every exchange
           // rejects (50001). Replaceable by a later provider of the same class token.
+          // B1-04zzzzm 补丁 2: in staging / prod the state's reference is resolved to the OAuth
+          // application it was issued with (auth-apps.ts); anything else is refused unexchanged.
+          // 补丁 3 ② (D10-2826): and only while the real filing adapter is ready (the readiness
+          // auth-url issues under); a demo endpoint never receives a real credential.
           provide: UnionBindingExchanger,
-          inject: [{ token: LINK_OPEN_PORTS, optional: true }],
-          useFactory: (ports: LinkOpenPorts | undefined): UnionBindingExchanger =>
-            new UnionBindingExchanger(() => {
-              if (ports === undefined) return null;
-              const adapter = ports.union.adapter('taobao');
-              const bind = adapter.bindPublisher;
-              return bind === undefined ? null : (req, ctx) => bind.call(adapter, req, ctx);
-            }),
+          inject: [{ token: LINK_OPEN_PORTS, optional: true }, APP_CONFIG],
+          useFactory: (ports: LinkOpenPorts | undefined, appConfig: AppConfig) =>
+            new UnionBindingExchanger(
+              () => {
+                if (ports === undefined) return null;
+                const adapter = ports.union.adapter('taobao');
+                const bind = adapter.bindPublisher;
+                return bind === undefined ? null : (req, ctx) => bind.call(adapter, req, ctx);
+              },
+              appConfig.appEnv === 'staging' || appConfig.appEnv === 'prod'
+                ? {
+                    resolveApp: resolveIssuedTaobaoOAuthApp,
+                    ready: (unionAccountId) => taobaoFilingReady(appConfig, ports, unionAccountId),
+                  }
+                : {},
+            ),
         },
         {
           // B1-06h: POST /v1/unions/{platform}/bindings and GET /v1/unions/bindings, per request

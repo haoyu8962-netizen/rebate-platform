@@ -81,8 +81,10 @@ import {
   authAppRefs,
   deviceClientOf,
   insertAuthSession,
+  issuableTaobaoMethods,
   newAuthState,
-  syntheticAuthUrl,
+  taobaoAuthUrl,
+  taobaoAuthUrlPlan,
 } from './union-auth-state.ts';
 import type { UnionAuthUrlOptions } from './union-auth-url.ts';
 
@@ -267,6 +269,13 @@ export interface TaobaoAuthIssueDeps {
  * 30101 / 30102 with a one-time state bound to uid + device (+ the link an open serves; null for
  * the shop entry, which has no link). A caller that is not the user, or has no usable device,
  * answers 10001; a device without an app client has no authorization path (50301).
+ * B1-04zzzzn r5 (D10-2972): no state the bindings submission would refuse — the real filing adapter
+ * not ready, or the union account this issuance uses not the inviter code's — answers the same code
+ * with auth_unavailable before anything is written. `accountId` is the account the caller selected
+ * and checked the site authorization of (r6, D10-3129 ⑤: both entries pass it; the issuance never
+ * selects one again, so both checks are on the same account). The type keeps it optional only for
+ * a frozen rule test's call that names none (with no readiness check wired); while the readiness
+ * check is wired, a call without it issues nothing (auth_unavailable), it is not looked up.
  */
 export async function issueTaobaoAuthState(
   deps: TaobaoAuthIssueDeps,
@@ -277,12 +286,24 @@ export async function issueTaobaoAuthState(
     readonly userId: string;
     readonly code: 30101 | 30102;
     readonly linkId: string | null;
+    readonly accountId?: string;
   },
 ): Promise<Extract<LinkOpenAuthorization, { kind: 'refused' }>> {
   const { config, pids, clock, appEnv, authApps } = deps;
   const { appId, caller, userId, code } = input;
+  const reads = createUnionAuthReads({ db: executor, config, appEnv, pids, clock });
+  const ready = authApps.taobaoFilingReadyFor;
+  if (ready !== undefined && (input.accountId === undefined || !ready(input.accountId))) {
+    return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
+  }
   if (caller.deviceId === null || caller.userId !== userId) {
     return { kind: 'refused', code: 10001 };
+  }
+  // B1-04zzzzm: staging / prod without the user OAuth app key or redirect URI issue no state and
+  // no synthetic address (the same answer as an unavailable site authorization).
+  const plan = taobaoAuthUrlPlan(authApps, appEnv);
+  if (plan.kind === 'unavailable') {
+    return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
   }
   let client: AuthClient | 'missing';
   try {
@@ -293,8 +314,11 @@ export async function issueTaobaoAuthState(
     throw error;
   }
   if (client === 'missing') return { kind: 'refused', code: 10001 };
-  const reads = createUnionAuthReads({ db: executor, config, appEnv, pids, clock });
-  const methods = await reads.configuredMethods(appId, client);
+  // 补丁 2: under the real user OAuth only web_code is handed out; nothing left → auth_unavailable.
+  const methods = issuableTaobaoMethods(plan, await reads.configuredMethods(appId, client));
+  if (methods.length === 0) {
+    return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
+  }
   const refs = await authAppRefs(authApps, appEnv, appId, client, methods);
   const now = clock.now();
   // A second reading of the injected clock, moved by the TTL (no `new Date` outside the clock).
@@ -317,7 +341,7 @@ export async function issueTaobaoAuthState(
   return {
     kind: 'refused',
     code,
-    data: { auth_url: syntheticAuthUrl(PLATFORM, state), state, auth_methods: [...methods] },
+    data: { auth_url: taobaoAuthUrl(plan, state), state, auth_methods: [...methods] },
   };
 }
 
@@ -463,11 +487,13 @@ function createTaobaoConversion(
     if (!(await reads.siteAuthAvailable(appId, PLATFORM, accountId))) {
       return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
     }
+    // A no_rebate open needs no state; the issuance judges the filing's readiness for the account
+    // in use (r5: in issueTaobaoAuthState, shared with the shop entry).
     if (noRebate) {
       authorized.set(owner, await unattributed());
       return { kind: 'allowed' };
     }
-    return issue(executor, caller, owner, subject, code);
+    return issue(executor, caller, owner, subject, code, accountId);
   }
 
   /** 30101 / 30102 with a one-time state bound to uid + device + the link this open serves. */
@@ -477,6 +503,7 @@ function createTaobaoConversion(
     owner: LinkOpenOwnerResult,
     userId: string,
     code: 30101 | 30102,
+    accountId: string,
   ): Promise<LinkOpenAuthorization> {
     return issueTaobaoAuthState({ config, pids, clock, appEnv, authApps }, executor, {
       appId: owner.link.app_id,
@@ -484,6 +511,7 @@ function createTaobaoConversion(
       userId,
       code,
       linkId: owner.link.link_id,
+      accountId,
     });
   }
 

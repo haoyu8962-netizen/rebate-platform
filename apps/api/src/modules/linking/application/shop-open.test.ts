@@ -1,6 +1,6 @@
 import type { DB } from '@couli/db';
 import type { Kysely, Transaction } from 'kysely';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
   HandlerResult,
   Idempotency,
@@ -10,9 +10,31 @@ import type {
 import {
   ShopEntryNeedsAuthState,
   ShopEntryNeedsConvert,
+  createShopOpen,
   runShopEntry,
   type ShopEntryMode,
+  type ShopOpenOptions,
 } from './shop-open.ts';
+
+// r6 (D10-3129 ⑤): the issuance and the reads are replaced so the account handed to the issuance
+// can be observed without a database (the other link-open-taobao functions stay as they are).
+const issued = vi.hoisted(() => ({
+  issue: vi.fn(),
+  reads: {
+    binding: vi.fn(),
+    authAccountId: vi.fn(),
+    siteAuthAvailable: vi.fn(),
+    userBanned: vi.fn(),
+  },
+}));
+vi.mock('./link-open-taobao.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./link-open-taobao.ts')>()),
+  issueTaobaoAuthState: issued.issue,
+}));
+vi.mock('./union-auth-reads.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./union-auth-reads.ts')>()),
+  createUnionAuthReads: () => issued.reads,
+}));
 
 // A synthetic idempotency store with the platform's two modes, in memory: the standard mode stores
 // the handler's result after it returns (a throw stores nothing); the transactional mode buffers
@@ -165,4 +187,64 @@ describe('shop entry idempotency modes (B1-06zg r2)', () => {
     );
     expect(f.calls).toEqual(['execute']);
   });
+});
+
+it('[AC-B1-04zzzzn] 进店把站长授权检查用的那个账号传给签发（签发不再自选账号）', async () => {
+  issued.reads.binding.mockResolvedValue({ status: 'unbound', accountId: null });
+  issued.reads.authAccountId.mockResolvedValue('synthetic-account-b');
+  issued.reads.siteAuthAvailable.mockResolvedValue(true);
+  issued.issue.mockResolvedValue({
+    kind: 'refused',
+    code: 30101,
+    data: { state: 'synthetic-state' },
+  });
+  const settings: Record<string, unknown> = {
+    'shop.entry.enabled.taobao': true,
+    'shop.entry.source.taobao': 'synthetic-source',
+    'convert.enabled.taobao': true,
+  };
+  const f = fakeIdempotency();
+  const options = {
+    db: {},
+    clock: {},
+    callerContext: {
+      current: async () => ({
+        appId: 'synthetic-app',
+        userId: 'synthetic-user',
+        deviceId: 'synthetic-device',
+      }),
+    },
+    config: {
+      configValue: async (_appId: string, key: string) =>
+        key in settings ? { value: settings[key], version: 1 } : null,
+    },
+    pids: {},
+    registry: { get: () => ({ shopConvertSources: ['synthetic-source'] }) },
+    shops: {},
+    cache: {},
+    idempotency: f.idempotency,
+    logger: { warn: () => undefined },
+    appEnv: 'dev',
+    authApps: {},
+  } as unknown as ShopOpenOptions;
+  const out = await createShopOpen(options).open({
+    productKey: 'synthetic-key',
+    body: { platform: 'taobao' } as never,
+    idempotencyKey: 'synthetic-shop-open-key',
+    traceId: 'synthetic-trace',
+    client: 'ios' as never,
+  });
+  expect(out.envelope.code).toBe(30101);
+  expect(issued.reads.siteAuthAvailable).toHaveBeenCalledWith(
+    'synthetic-app',
+    'taobao',
+    'synthetic-account-b',
+  );
+  expect(issued.issue).toHaveBeenCalledTimes(1);
+  expect(issued.issue.mock.calls[0]?.[2]).toMatchObject({
+    accountId: 'synthetic-account-b',
+    linkId: null,
+  });
+  // The account is selected once per attempt; the issuance never looks it up again.
+  expect(issued.reads.authAccountId).toHaveBeenCalledTimes(2);
 });

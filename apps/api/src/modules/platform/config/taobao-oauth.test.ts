@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
-import { TAOBAO_OAUTH_REDIRECT_URI_ENV as NAME, readTaobaoOAuthConfig } from './taobao-oauth.ts';
+import {
+  TAOBAO_INVITER_ACCOUNT_ID_ENV,
+  TAOBAO_OAUTH_REDIRECT_URI_ENV as NAME,
+  readTaobaoInviterAccountId,
+  readTaobaoOAuthConfig,
+} from './taobao-oauth.ts';
 
 const GOOD = 'https://console.fake-unit.test/unions/oauth-callback';
 
@@ -29,4 +34,17 @@ it.each([
   expect(result.problems).toHaveLength(1);
   expect(result.problems[0]).toContain(NAME);
   expect(result.problems[0]).not.toContain(value);
+});
+
+it('[AC-B1-04zzzzm#6] TAOBAO_INVITER_ACCOUNT_ID：去空白后原样，空白为 null，未设则不出现', () => {
+  const id = '0199a3b4-5c6d-7000-8000-0000000000a1';
+  expect(readTaobaoInviterAccountId({ [TAOBAO_INVITER_ACCOUNT_ID_ENV]: ` ${id} ` })).toEqual({
+    set: true,
+    taobaoInviterAccountId: id,
+  });
+  expect(readTaobaoInviterAccountId({ [TAOBAO_INVITER_ACCOUNT_ID_ENV]: '  ' })).toEqual({
+    set: true,
+    taobaoInviterAccountId: null,
+  });
+  expect(readTaobaoInviterAccountId({})).toEqual({ set: false, taobaoInviterAccountId: null });
 });

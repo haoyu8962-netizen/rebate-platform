@@ -247,6 +247,22 @@ const TAOBAO_PRICE_CODES: ReadonlySet<string> = new Set([
 ]);
 /** B1-04zzzzg: the row validation codes on the Taobao warn hook (大淘客 search warnOf). */
 const TAOBAO_ROW_CODES: ReadonlySet<string> = new Set(['invalid_item', 'invalid_commission']);
+/**
+ * B1-04zzzzm: the channel filing refusals of TaobaoUnionAdapter.bindPublisher (missing inviter code
+ * or user OAuth redirect URI, the inviter code's account missing or not the binding's (补丁 2), the
+ * state's OAuth app not this adapter's, an SDK token, no or no single relation_id); logged with
+ * method and code only.
+ */
+const TAOBAO_PUBLISHER_CODES: ReadonlySet<string> = new Set([
+  'inviter_code_missing',
+  'inviter_account_missing',
+  'inviter_account_mismatch',
+  'oauth_app_mismatch',
+  'sdk_token_unsupported',
+  'user_oauth_redirect_uri_missing',
+  'relation_id_missing',
+  'relation_id_ambiguous',
+]);
 /** B1-04j: the TOP code of an API permission refusal (response.ts). */
 const TAOBAO_PERMISSION_CODE = '11';
 
@@ -298,7 +314,9 @@ export function logTaobaoWarning(logger: RootLogger, warning: TaobaoWarning): vo
       ? ['TAOBAO_PRICE_WARNING', 'taobao price warning']
       : TAOBAO_ROW_CODES.has(warning.code)
         ? ['TAOBAO_SEARCH_ROW_INVALID', 'taobao search row invalid']
-        : ['TAOBAO_WARNING_UNKNOWN', 'unknown taobao warning'];
+        : TAOBAO_PUBLISHER_CODES.has(warning.code)
+          ? ['TAOBAO_PUBLISHER_BIND_FAILED', 'taobao channel filing failed']
+          : ['TAOBAO_WARNING_UNKNOWN', 'unknown taobao warning'];
     logger.warn({ event, method: warning.method, code: warning.code }, message);
     return;
   }
@@ -668,8 +686,24 @@ async function startUnionRegistry(
         'taobao',
       );
     }
+    // B1-04zzzzm: bindPublisher's user OAuth redirect URI, inviter code and the union account that
+    // generated the code (补丁 2, TAOBAO_INVITER_ACCOUNT_ID) ride on the credentials (read from the
+    // config here). None set → no userOAuth field at all, so the credentials stay exactly
+    // { appKey, appSecret }; the filing then fails with a flat warning. Whenever userOAuth is
+    // attached it carries inviterAccountId (null when unset), so the adapter always checks the
+    // inviter code's account against the binding's and refuses without it.
+    const redirectUri = config.taobaoUserOAuthRedirectUri ?? null;
+    const inviterCode = config.taobaoInviterCode ?? null;
+    const inviterAccountId = config.taobaoInviterAccountId ?? null;
+    const userOAuth =
+      redirectUri === null && inviterCode === null && inviterAccountId === null
+        ? undefined
+        : { redirectUri, inviterCode, inviterAccountId };
     taobaoLive = {
-      credentials,
+      credentials:
+        userOAuth === undefined
+          ? credentials
+          : async () => ({ ...(await credentials()), userOAuth }),
       transport: archivedTransport(createUnionHttpTransport(), source, clock, logger),
       warn: (warning: TaobaoWarning) => logTaobaoWarning(logger, warning),
       // B1-04zzzzg: detail / official search price warnings, their own event (not `warn`).

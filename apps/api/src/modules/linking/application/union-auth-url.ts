@@ -22,7 +22,9 @@
 // auth_url and the h5 / universal-link steps carry the web address (mobile_short_url → url); the
 // scheme step is the upstream schema_url as is (built from the web address only when there is
 // none); the state is only in union_auth_sessions, never in the link. No slot or attr_code → 50301 maintenance; the port missing or failing → 50303; neither
-// leaves a state. Taobao keeps its synthetic address (syntheticAuthUrl).
+// leaves a state. B1-04zzzzm: Taobao's address is the real user OAuth one when the wiring passes
+// taobaoUserOAuth (taobaoAuthUrlPlan / taobaoAuthUrl, shared with the open's 30101 / 30102); staging /
+// prod with it incomplete answer auth_unavailable without a state; no port keeps the synthetic one.
 import type { components } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
@@ -49,8 +51,10 @@ import {
   authAppRefs,
   deviceClientOf,
   insertAuthSession,
+  issuableTaobaoMethods,
   newAuthState,
-  syntheticAuthUrl,
+  taobaoAuthUrl,
+  taobaoAuthUrlPlan,
   type UnionAuthAppsPort,
 } from './union-auth-state.ts';
 
@@ -242,7 +246,40 @@ export function createUnionAuthUrl(options: UnionAuthUrlOptions): UnionAuthUrlSe
       });
     }
 
-    const methods = platform === 'taobao' ? await reads.configuredMethods(appId, client) : null;
+    // B1-04zzzzn r4 (D10-2872): the real filing is not ready for the selected account (e.g. it is
+    // not the inviter code's) → the same answer, no state (the bindings submission's judgement).
+    if (
+      platform === 'taobao' &&
+      authApps.taobaoFilingReadyFor !== undefined &&
+      !authApps.taobaoFilingReadyFor(accountId)
+    ) {
+      return fail(status === 'invalid' ? 30102 : 30101, input.traceId, {
+        reason: 'auth_unavailable',
+      });
+    }
+
+    // B1-04zzzzm: no issuable Taobao address in staging / prod → the same answer as above, no state.
+    const taobaoPlan = platform === 'taobao' ? taobaoAuthUrlPlan(authApps, appEnv) : null;
+    if (taobaoPlan?.kind === 'unavailable') {
+      return fail(status === 'invalid' ? 30102 : 30101, input.traceId, {
+        reason: 'auth_unavailable',
+      });
+    }
+
+    // 补丁 2: under the real user OAuth only web_code is handed out (issuableTaobaoMethods); a
+    // configuration left with no method answers auth_unavailable without a state.
+    const methods =
+      platform === 'taobao'
+        ? issuableTaobaoMethods(
+            taobaoPlan ?? { kind: 'synthetic' },
+            await reads.configuredMethods(appId, client),
+          )
+        : null;
+    if (methods !== null && methods.length === 0) {
+      return fail(status === 'invalid' ? 30102 : 30101, input.traceId, {
+        reason: 'auth_unavailable',
+      });
+    }
     let pddLink: PddAuthorityLink | null = null;
     if (platform === 'pdd') {
       // The identity the conversion and the filing query use (no state exists yet).
@@ -286,7 +323,10 @@ export function createUnionAuthUrl(options: UnionAuthUrlOptions): UnionAuthUrlSe
     const expireAt = clock.now();
     expireAt.setTime(now.getTime() + AUTH_STATE_TTL_MS);
     const state = newAuthState();
-    const authUrl = pddLink?.webUrl ?? syntheticAuthUrl('taobao', state);
+    const authUrl =
+      pddLink?.webUrl ??
+      // 'unavailable' already returned above; no Taobao plan → the synthetic address.
+      taobaoAuthUrl(taobaoPlan ?? { kind: 'synthetic' }, state);
     const authJump =
       methods === null && pddLink !== null
         ? pddAuthJump(
