@@ -44,7 +44,24 @@ import {
   createAdminStepUpTokens,
 } from '../../../../apps/api/src/modules/admin/application/permission-guard.ts';
 import { createAdminSessions } from '../../../../apps/api/src/modules/admin/infra/admin-sessions.ts';
-import { createLedger } from '../../../../apps/api/src/modules/ledger/index.ts';
+import {
+  createLedger,
+  getAssetSnapshotStatus,
+  readUnionAuthoritativeOrderKeys,
+  registerReconDiff,
+} from '../../../../apps/api/src/modules/ledger/index.ts';
+import {
+  lockOrderKey,
+  orderLockKeyText,
+  type AdminHoldInput,
+} from '../../../../apps/api/src/modules/orders/index.ts';
+import {
+  createBillSourceReader,
+  type BillJobDependencies,
+  type BillSnapshotRegeneration,
+  type BillValidation,
+} from '../../../../apps/api/src/modules/settlement/bill/index.ts';
+import { createRebateAdminCommandPort } from '../../../../apps/api/src/modules/settlement/rights/index.ts';
 import {
   createWrappedKeyring,
   LocalKeyProvider,
@@ -1646,4 +1663,578 @@ export async function withSupplementAdmin(
       rmSync(dir, { recursive: true, force: true });
     }
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 第 9 次写测追加（编排 D10-2982 / D10-3045 / D10-3046，任务书 §17）：一次出账的重生成上限与只写登记口。
+// 只新增，以上导出不变；只做搭建与取数，不 expect（断言都在用例体里）。
+
+/** 账单日 00:00 +08:00：直接组装的账单日任务的名义 run_at。 */
+export const BILL_RUN_AT = new Date(`${BILL_DAY}T00:00:00+08:00`);
+/** pino 的 warn 级。 */
+export const WARN_LEVEL = 40;
+/** 本次出账留下的张数的日志事件（消息即事件名，08 细则「一次出账的重生成上限」，编排 D10-2988）。 */
+export const DEFERRED_EVENT = 'settle_regeneration_deferred';
+/** refreshRegeneration 对指定订单抛出的错误文字。 */
+export const REGENERATION_FAILURE = 'synthetic regeneration failure';
+
+// commission 的公开出口（运行时加载，同上面的 commission），按账单日任务依赖的类型取用。
+const billCommission = (await import(
+  new URL('../../../../apps/api/src/modules/commission/index.ts', import.meta.url).href
+)) as {
+  readonly readCommissionSnapshot: BillJobDependencies['readSnapshot'];
+  readonly readTljDeductFen: BillJobDependencies['readTljDeductFen'];
+};
+
+/** 直接组装的依赖：账单日任务与补充命令共用（补充命令的依赖类型由它派生），带收日志的 logger。 */
+export type DirectDependencies = BillJobDependencies & { readonly logger: RootLogger };
+
+export interface DirectOptions {
+  readonly regenerateSnapshot?: BillSnapshotRegeneration;
+  /** 注入的重生成上限（BillJobDependencies.regenerationCap）；不给时不传（取缺省 500）。 */
+  readonly regenerationCap?: number;
+  /** settle.batch.match_tolerance_fen（缺省未设，即 0）。 */
+  readonly toleranceFen?: string;
+  /**
+   * 第一次来源读取返回之前跑一次的并发动作（在真实读取已经返回行之后、行交回任务之前；动作在另一条连接上完成并
+   * 提交）——用来确定地造「来源读出之后」的时点，不靠时序。只对第一次读生效。
+   */
+  readonly afterFirstSourceRead?: () => Promise<void>;
+  /** 保存逐单结果时调用（逐单处理之后、写批次与提交之前）：用来从另一条连接探订单键锁。 */
+  readonly onSaveValidations?: () => Promise<void>;
+}
+
+export interface Direct {
+  readonly deps: DirectDependencies;
+  /** logger 写出的每一行（JSON）。 */
+  readonly lines: LogLine[];
+  /** 本组依赖上每次 saveValidations 收到的逐单结果（按收到的顺序）。 */
+  readonly saved: BillValidation[];
+}
+
+/**
+ * 直接组装（参照 ./ports.int.test.ts 的 dependencies()）：生产 readSource（createBillSourceReader，结论读口为 ledger
+ * 的真实读口）、commission 的快照与淘礼金读口、ledger 的 getAssetSnapshotStatus 与 registerReconDiff；入账开关 on；
+ * saveValidations 是记录器；重生成端口与上限按 options 注入（不给就不出现在依赖里）。
+ */
+export function directAssembly(a: App, options: DirectOptions = {}): Direct {
+  const { logger, lines } = capturingLogger();
+  const saved: BillValidation[] = [];
+  const real = createBillSourceReader({ readUnionAuthoritative: readUnionAuthoritativeOrderKeys });
+  const pending = { action: options.afterFirstSourceRead };
+  const tolerance = options.toleranceFen;
+  const deps: DirectDependencies = {
+    clock: a.clock,
+    config: {
+      get: async (_appId: string, key: string): Promise<unknown> =>
+        key.startsWith('credit.enabled.')
+          ? 'on'
+          : key === 'settle.batch.match_tolerance_fen'
+            ? tolerance
+            : undefined,
+    },
+    readSource: async (trx, input) => {
+      const rows = await real(trx, input);
+      const action = pending.action;
+      pending.action = undefined;
+      if (action !== undefined) await action();
+      return rows;
+    },
+    readSnapshot: billCommission.readCommissionSnapshot,
+    readTljDeductFen: billCommission.readTljDeductFen,
+    snapshotStatus: getAssetSnapshotStatus,
+    registerDiff: registerReconDiff,
+    saveValidations: async (_trx, _input, rows) => {
+      saved.push(...rows);
+      if (options.onSaveValidations !== undefined) await options.onSaveValidations();
+    },
+    logger,
+    ...(options.regenerateSnapshot === undefined
+      ? {}
+      : { regenerateSnapshot: options.regenerateSnapshot }),
+    ...(options.regenerationCap === undefined ? {} : { regenerationCap: options.regenerationCap }),
+  };
+  return { deps, lines, saved };
+}
+
+/** commission 真实的 estimates 端口（createCommissionEstimates，../../commission/estimate-port/kit.ts，只 import 不改）。 */
+async function estimatesFor(a: App) {
+  const port = await import('../../commission/estimate-port/kit.ts');
+  return port.estimatesOf(a.clock);
+}
+
+export interface RefreshRegeneration {
+  readonly port: BillSnapshotRegeneration;
+  /** 每次调用的 orderId（按调用顺序，含抛错的那些）。 */
+  readonly calls: string[];
+}
+
+/**
+ * 一个会成功的重生成端口（直接组装用；参照 ./ports.int.test.ts 里追加版本的端口，只是金额行不手写）：在调用方事务里
+ * 把 orders.commission_version 推到 入参版本 + 1，再由 commission 真实的 refresh 按联盟结算佣金写这一版的合计与金额
+ * 行（frozen 条款：快照的预留与淘礼金扣减，拆分与 commission 平时写版本行同一算法；created_at 取 a.clock）。不取锁
+ * ——取订单键锁是出账任务的事。failFor 里的订单一调用就抛 REGENERATION_FAILURE（什么都不写）。
+ */
+export function refreshRegeneration(
+  a: App,
+  failFor: ReadonlySet<string> = new Set<string>(),
+): RefreshRegeneration {
+  const calls: string[] = [];
+  const port: BillSnapshotRegeneration = {
+    async regenerate(trx, input) {
+      calls.push(input.orderId);
+      if (failFor.has(input.orderId)) throw new Error(REGENERATION_FAILURE);
+      const estimates = await estimatesFor(a);
+      const row = await trx
+        .selectFrom('orders')
+        .select('attr_at')
+        .where('app_id', '=', input.appId)
+        .where('order_id', '=', input.orderId)
+        .executeTakeFirstOrThrow();
+      const version = input.commissionVersion + 1;
+      await trx
+        .updateTable('orders')
+        .set((eb) => ({ commission_version: version, row_version: eb('row_version', '+', 1) }))
+        .where('app_id', '=', input.appId)
+        .where('order_id', '=', input.orderId)
+        .execute();
+      await estimates.refresh(
+        trx,
+        { appId: input.appId, orderId: input.orderId, attrAt: row.attr_at },
+        { commissionFen: input.settleCommissionFen },
+      );
+      return { commissionVersion: version };
+    },
+  };
+  return { port, calls };
+}
+
+/**
+ * 另一个事务在 conn 上把 o 的分佣快照版本推进到按联盟结算佣金 fen 估值的一版并提交：取订单键锁（orders lockOrderKey）、
+ * 重读订单行 FOR UPDATE、commission_version + 1，再由 commission 真实的 refresh 按 fen 写这一版的合计与金额行（与
+ * ./idempotency.int.test.ts [AC-B2-18#15] 的订单同步同一加锁顺序，金额行不手写）。返回新版本号。
+ */
+export async function pushVersionToUnion(
+  conn: Kysely<DB>,
+  a: App,
+  o: Seeded,
+  fen: bigint,
+): Promise<number> {
+  const estimates = await estimatesFor(a);
+  return conn.transaction().execute(async (trx) => {
+    await lockOrderKey(trx, o.platform, o.subOrderId);
+    const row = await trx
+      .selectFrom('orders')
+      .select(['commission_version', 'row_version'])
+      .where('app_id', '=', a.appId)
+      .where('order_id', '=', o.orderId)
+      .forUpdate()
+      .executeTakeFirstOrThrow();
+    const version = row.commission_version + 1;
+    await trx
+      .updateTable('orders')
+      .set({ commission_version: version, row_version: row.row_version + 1 })
+      .where('app_id', '=', a.appId)
+      .where('order_id', '=', o.orderId)
+      .execute();
+    await estimates.refresh(
+      trx,
+      { appId: a.appId, orderId: o.orderId, attrAt: o.attrAt },
+      { commissionFen: fen },
+    );
+    return version;
+  });
+}
+
+/**
+ * 另一个事务在 conn 上经 settlement 的 R11（createRebateAdminCommandPort.adminHold，orders 调它的方式：先 lockOrderKey、
+ * 重读订单行 FOR UPDATE）给 o 加人工 hold 并提交；返回端口的回答（kind）。
+ */
+export async function holdBy(
+  conn: Kysely<DB>,
+  a: App,
+  o: Seeded,
+  adminId: string,
+): Promise<string> {
+  const port = createRebateAdminCommandPort({ clock: a.clock, logger: capturingLogger().logger });
+  return conn.transaction().execute(async (trx) => {
+    await lockOrderKey(trx, o.platform, o.subOrderId);
+    const before = await trx
+      .selectFrom('orders')
+      .selectAll()
+      .where('app_id', '=', a.appId)
+      .where('order_id', '=', o.orderId)
+      .where('attr_at', '=', o.attrAt)
+      .forUpdate()
+      .executeTakeFirstOrThrow();
+    const input: AdminHoldInput = {
+      before,
+      expected_row_version: before.row_version,
+      reason_code: 'RISK',
+      reason: 'synthetic note',
+      actor: adminId,
+      ip: null,
+      now: a.clock.now(),
+    };
+    return (await port.adminHold(trx, input)).kind;
+  });
+}
+
+export interface TracedStatement {
+  readonly sql: string;
+  readonly parameters: readonly unknown[];
+}
+
+/** 记下经返回的 db 执行的每条语句（查询构造器与原生 SQL 都经同一执行器编译到这里）；不改语句、不注入故障。 */
+export function traceStatements(db: Kysely<DB>) {
+  const statements: TracedStatement[] = [];
+  const traced = db.withPlugin({
+    transformQuery(args) {
+      const compiled = new PostgresQueryCompiler().compileQuery(args.node, args.queryId);
+      statements.push({ sql: compiled.sql, parameters: compiled.parameters });
+      return args.node;
+    },
+    async transformResult(args) {
+      return args.result;
+    },
+  });
+  return { db: traced, statements };
+}
+
+const ADVISORY_LOCK = /pg_(?:try_)?advisory_(?:xact_)?lock/i;
+
+/**
+ * 这些语句里取 o 的订单键锁的条数：咨询锁语句（pg_advisory_xact_lock 等）且参数里带 orders lockOrderKey 的键文本
+ * （'orders.order_key:' + 订单键；lockOrderKey 的语句是 select pg_advisory_xact_lock(hashtextextended($1, 0))）。按参数
+ * 文本判，一条语句一次锁多张单（数组参数）也算到每一张上。
+ */
+export function orderKeyLocks(
+  statements: readonly TracedStatement[],
+  o: Pick<Seeded, 'platform' | 'subOrderId'>,
+): number {
+  const keyText = orderLockKeyText(o.platform, o.subOrderId);
+  return statements.filter(
+    (s) => ADVISORY_LOCK.test(s.sql) && parametersText(s.parameters).includes(keyText),
+  ).length;
+}
+
+/**
+ * 从另一条连接 conn 用 pg_try_advisory_xact_lock 探 o 的订单键（lockOrderKey 同一个 bigint 键），探完随事务结束立即
+ * 放掉：true 能取到（没人持有），false 取不到；探测本身失败或超时（OBSERVE_STATEMENT_MS）时给出错误文字。
+ */
+export async function orderKeyFree(
+  conn: Kysely<DB>,
+  o: Pick<Seeded, 'platform' | 'subOrderId'>,
+): Promise<boolean | string> {
+  const keyText = orderLockKeyText(o.platform, o.subOrderId);
+  const outcome = await within(
+    conn.transaction().execute(async (trx) => {
+      const { rows } = await sql<{ ok: boolean }>`
+        SELECT pg_try_advisory_xact_lock(hashtextextended(${keyText}, 0)) AS ok`.execute(trx);
+      return rows[0]?.ok ?? null;
+    }),
+    'probing the order key lock',
+    OBSERVE_STATEMENT_MS,
+  );
+  if (!outcome.ok) return `probe failed: ${errorText(outcome.error)}`;
+  return outcome.value ?? 'probe returned no row';
+}
+
+/**
+ * 日志里 settle_regeneration_deferred 事件的摘要：逐条取 level / app_id / bill_id / platform / run / deferred_count，
+ * 以及是否带 alert、order_id 字段；leaks 是这些事件的 JSON 里出现的订单号（order_id、平台子订单号、order_key）。
+ */
+export function deferredSummary(lines: readonly LogLine[], orders: readonly Seeded[]) {
+  const events = lines.filter((l) => l['msg'] === DEFERRED_EVENT);
+  return {
+    events: events.map((l) => ({
+      level: l['level'],
+      app_id: l['app_id'],
+      bill_id: l['bill_id'],
+      platform: l['platform'],
+      run: l['run'],
+      deferred_count: l['deferred_count'],
+      alert: Object.prototype.hasOwnProperty.call(l, 'alert'),
+      order_id: Object.prototype.hasOwnProperty.call(l, 'order_id'),
+    })),
+    leaks: events.flatMap((l) => {
+      const text = JSON.stringify(l);
+      return orders.flatMap((o) =>
+        [o.orderId, o.subOrderId, o.orderKey].filter((id) => text.includes(id)),
+      );
+    }),
+  };
+}
+
+/** 一单各版本的 [版本号, 基数]（按版本）。 */
+export async function basesOf(a: App, o: Pick<Seeded, 'orderId'>): Promise<[number, bigint][]> {
+  return (await versionsOf(a, o)).totals.map((t): [number, bigint] => [
+    t.commission_version,
+    t.base_fen,
+  ]);
+}
+
+/** 一单的批次明细各落在哪种批次（main / supplement），按明细 id。 */
+export async function placedIn(a: App, o: Pick<Seeded, 'orderId'>): Promise<string[]> {
+  const kinds = new Map((await batchesOf(a)).map((b) => [b.batch_id, b.kind]));
+  return (await itemsFor(a, o)).map((i) => kinds.get(i.batch_id) ?? 'unknown batch');
+}
+
+/**
+ * 把 o 置为我方已作废（VOID）：rebate_status = VOID、platform_status = INVALID、reason = REFUND（与 seedOrder 同一种
+ * 直接造行的做法；联盟有结算而我方 VOID 是 BR-FUND-09 登记 union_mismatch 的情形）。
+ */
+export async function voidOrder(a: App, o: Pick<Seeded, 'orderId'>): Promise<void> {
+  await a.db
+    .updateTable('orders')
+    .set((eb) => ({
+      rebate_status: 'VOID',
+      platform_status: 'INVALID',
+      reason: 'REFUND',
+      row_version: eb('row_version', '+', 1),
+    }))
+    .where('app_id', '=', a.appId)
+    .where('order_id', '=', o.orderId)
+    .execute();
+}
+
+/**
+ * 联盟结算记录后到、不动订单状态（与 settleLater 不同：不改 platform_status，作废单仍是 INVALID）：写一条
+ * order_settlements（写在 a.at）并把订单行的 settle_commission_fen 跟上。
+ */
+export async function settlementOnly(a: App, o: Seeded, s: SettlementSpec): Promise<void> {
+  await a.db
+    .insertInto('order_settlements')
+    .values({
+      app_id: a.appId,
+      order_id: o.orderId,
+      seq: s.seq,
+      source: s.source ?? 'STATEMENT',
+      settle_commission_fen: s.fen,
+      settled_at: a.at,
+      content_hash: randomUUID(),
+      created_at: a.at,
+    })
+    .execute();
+  await a.db
+    .updateTable('orders')
+    .set((eb) => ({ settle_commission_fen: s.fen, row_version: eb('row_version', '+', 1) }))
+    .where('app_id', '=', a.appId)
+    .where('order_id', '=', o.orderId)
+    .execute();
+}
+
+export interface ManySpec {
+  readonly count: number;
+  /** 快照 v1 的 N（预留 0、淘礼金 0：v1 基数 = N）。 */
+  readonly snapshotN: bigint;
+  /** 联盟结算佣金（每单一条 seq 1 的 STATEMENT）。 */
+  readonly settleFen: bigint;
+  readonly people?: readonly PersonSpec[];
+}
+
+function inChunks<T>(rows: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let start = 0; start < rows.length; start += size) out.push(rows.slice(start, start + size));
+  return out;
+}
+
+/**
+ * 批量造 count 张与 seedOrder 同形的 WAITING 子订单（taobao、settle_period = a.period、快照 v1、结算记录 seq 1），
+ * 多行 INSERT、每块 200 张；受益人（会员）在这批订单间共用。子订单号 `{tag}-{序号四位}`，所以订单键升序 = 返回顺序。
+ */
+export async function seedMany(a: App, spec: ManySpec): Promise<Seeded[]> {
+  const platform = TAOBAO;
+  const tag = `bfu-many-${randomUUID()}`;
+  const people: SeededPerson[] = [];
+  for (const p of spec.people ?? EXAMPLE_PEOPLE) {
+    people.push({
+      userId: await user(a),
+      role: p.role,
+      ratioBp: p.ratioBp,
+      initialStatus: 'active',
+    });
+  }
+  const owner = people.find((p) => p.role === 'self' || p.role === 'share') ?? people[0]!;
+  const { base, reserve } = baseOf(spec.snapshotN, 0, 0n);
+  const amounts = people.map((p) => shareOf(base, p.ratioBp));
+  const userTotal = amounts.reduce((sum, x) => addFen(sum, x), 0n);
+  const at = a.at;
+  const seeded: Seeded[] = [];
+  for (let i = 0; i < spec.count; i += 1) {
+    const orderId = randomUUID();
+    const subOrderId = `${tag}-${String(i).padStart(4, '0')}`;
+    seeded.push({
+      appId: a.appId,
+      orderId,
+      platform,
+      subOrderId,
+      orderKey: `${platform}:${subOrderId}`,
+      attrAt: at,
+      seq: 1,
+      settleFen: spec.settleFen,
+      people,
+      reserveBp: 0,
+      tljDeductFen: 0n,
+      snapshotBase: base,
+      user(role) {
+        const found = people.find((p) => p.role === role);
+        if (found === undefined) throw new Error(`kit: no ${role} beneficiary`);
+        return found.userId;
+      },
+    });
+  }
+  const beneficiaries = JSON.stringify(
+    people.map((p) => ({
+      user_id: p.userId,
+      role: p.role,
+      ratio_bp: p.ratioBp,
+      level: 'L1',
+      initial_status: 'active',
+      forfeit_reason: null,
+    })),
+  );
+  for (const part of inChunks(seeded, 200)) {
+    await a.db
+      .insertInto('order_keys')
+      .values(
+        part.map((o) => ({
+          app_id: a.appId,
+          order_id: o.orderId,
+          platform,
+          sub_order_id: o.subOrderId,
+          attr_at: at,
+        })),
+      )
+      .execute();
+    await a.db
+      .insertInto('orders')
+      .values(
+        part.map((o) => ({
+          app_id: a.appId,
+          order_id: o.orderId,
+          platform,
+          sub_order_id: o.subOrderId,
+          attr_at: at,
+          raw_item_id: 'synthetic',
+          user_id: owner.userId,
+          user_basis: 'param' as const,
+          buy_type: owner.role === 'share' ? ('share' as const) : ('self' as const),
+          platform_status: 'SETTLED',
+          rebate_status: 'WAITING',
+          hold: false,
+          hold_reason: null,
+          rights_pending: false,
+          commission_version: 1,
+          est_commission_fen: spec.snapshotN,
+          settle_commission_fen: spec.settleFen,
+          subsidy_commission_fen: 0n,
+          initial_est_fen: spec.snapshotN,
+          n_total_fen: spec.snapshotN,
+          pre_base_deduct_fen: subFen(spec.snapshotN, base),
+          base_fen: base,
+          platform_est_profit_fen: subFen(spec.snapshotN, userTotal),
+          activity_type: null,
+          paid_at: at,
+          received_at: at,
+          settle_period: a.period,
+          quantity: 1,
+          refunded_quantity: 0,
+          created_at: at,
+          updated_at: at,
+        })),
+      )
+      .execute();
+    await a.db
+      .insertInto('commission_splits')
+      .values(
+        part.map((o) => ({
+          app_id: a.appId,
+          order_id: o.orderId,
+          rule_version_id: a.ruleVersionId,
+          order_type: owner.role === 'share' ? ('share' as const) : ('self' as const),
+          activity_type: null,
+          rebate_mode: null,
+          paid_at: at,
+          paid_at_source: 'platform' as const,
+          raw_n_fen: spec.snapshotN,
+          subsidy_commission_fen: 0n,
+          reserve_bp: 0,
+          reserve_fen: reserve,
+          tlj_deduct_fen: 0n,
+          base_fen: base,
+          platform_retain_fen: subFen(base, userTotal),
+          beneficiaries,
+          created_at: at,
+        })),
+      )
+      .execute();
+    await a.db
+      .insertInto('commission_split_totals')
+      .values(
+        part.map((o) => ({
+          app_id: a.appId,
+          order_id: o.orderId,
+          commission_version: 1,
+          n_total_fen: spec.snapshotN,
+          pre_base_deduct_fen: subFen(spec.snapshotN, base),
+          base_fen: base,
+          user_share_total_fen: userTotal,
+          tlj_redpacket_fen: 0n,
+          platform_est_profit_fen: subFen(spec.snapshotN, userTotal),
+          subsidy_commission_fen: 0n,
+          created_at: at,
+        })),
+      )
+      .execute();
+    await a.db
+      .insertInto('commission_split_amounts')
+      .values(
+        part.flatMap((o) =>
+          people.map((p, i) => ({
+            app_id: a.appId,
+            order_id: o.orderId,
+            commission_version: 1,
+            user_id: p.userId,
+            role: p.role,
+            base_fen: base,
+            amount_fen: amounts[i]!,
+            created_at: at,
+          })),
+        ),
+      )
+      .execute();
+    await a.db
+      .insertInto('commission_split_beneficiary_events')
+      .values(
+        part.flatMap((o) =>
+          people.map((p) => ({
+            app_id: a.appId,
+            order_id: o.orderId,
+            user_id: p.userId,
+            role: p.role,
+            status: 'active' as const,
+            reason: null,
+            created_at: at,
+          })),
+        ),
+      )
+      .execute();
+    await a.db
+      .insertInto('order_settlements')
+      .values(
+        part.map((o) => ({
+          app_id: a.appId,
+          order_id: o.orderId,
+          seq: 1,
+          source: 'STATEMENT' as const,
+          settle_commission_fen: spec.settleFen,
+          settled_at: at,
+          content_hash: randomUUID(),
+          created_at: at,
+        })),
+      )
+      .execute();
+  }
+  return seeded;
 }

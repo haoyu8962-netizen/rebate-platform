@@ -155,6 +155,8 @@ export interface BillJobDependencies {
    * stays WAITING, no difference registered).
    */
   readonly regenerateSnapshot?: BillSnapshotRegeneration;
+  /** B2-18 (BR-FUND-04 ④ regeneration cap, D10-2982): test-only; production passes none (default 500); a non-positive-integer throws RangeError. */
+  readonly regenerationCap?: number;
 }
 
 export interface BillJobResult {
