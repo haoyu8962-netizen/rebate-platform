@@ -306,7 +306,7 @@ export type AdminUnionAuthSessionStatus = (typeof admin_union_auth_session_statu
  */
 export const union_pid_status = [
   "pending", // 已登记、未启用（只有本状态可修改）
-  "active", // 启用中，可用于转链；同一 app × platform × pid_scene 至多一条
+  "active", // 启用中，可用于转链；同一 app × platform × 联盟账号 × pid_scene 至多一条
   "retired", // 已停用，停止新转链，仍留在白名单
 ] as const;
 export type UnionPidStatus = (typeof union_pid_status)[number];
@@ -2036,6 +2036,7 @@ export type BuyType = (typeof buy_type)[number];
 export const scene_basis = [
   "pid", // 推广位
   "param", // 推广参数
+  "link", // 服务端登记的转链记录
   "fallback", // 兜底
 ] as const;
 export type SceneBasis = (typeof scene_basis)[number];

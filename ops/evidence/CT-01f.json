@@ -1,0 +1,79 @@
+{
+  "risk_note": "CT-01f (contract enums; PDD single promotion slot A′, owner 2026-11-25 D10-2970 #6; D10-3025 / D10-3036 / D10-3058; planning couli#31: 04 §2.3 scene_basis gains link, BR-ATTR-09 / BR-ATTR-08). contracts/enums/trade.yaml scene_basis gains link (between param and fallback); openapi AdminOrderSceneBasis enum synced (its only use) with one description sentence; enums/admin.yaml union_pid_status.active note now names the union account (as migration 0093's partial unique key); oasdiff-accepted.txt registers the response enum addition for the 5 operations returning AdminOrderDetailResponse; contracts-ts enums.gen.ts / openapi.gen.ts regenerated. No server, schema or client change; orders.scene_basis CHECK and judging buy_type by link belong to the follow-up implementation task.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "contract r1 (full, --base e5cd6913c) pass, no findings (couli-runs/CT-01f/review-contract-r1.json); validator moved 0."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (2 attempts). spec-test r1 by an independent Claude: output rejected by the validator (out_of_scope key/file mismatch), counted; the rejected text was fail with one S1 (assertions only checked that link is present; adding link to the adjacent user_basis too would pass) — taken as the reviewer's verdict (D10-2954) and fixed by write-test 2 (exact value sets, adjacent enums unchanged). spec-test r2 pass, no findings; 3 S2 out of scope (orders CHECK, judging buy_type by link, keeping scene_basis on claim) belong to the follow-up implementation task."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#1] 交易枚举仅在场景依据的 param 与 fallback 之间加入 link",
+    "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#2] OpenAPI 仅在 AdminOrderSceneBasis 加入 link",
+    "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#3] 后台订单详情区分场景依据和用户依据，两个字段均接受 null",
+    "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#4] contracts-ts 的枚举数组与后台订单类型仅在场景依据包含 link",
+    "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#5] active 推广位按 App、平台、联盟账号和推广位场景联合限定唯一",
+    "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#6] 生成枚举中的 active 说明同步联盟账号维度",
+    "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#7] 后台订单详情和返回详情的写操作登记 link 响应枚举扩展"
+  ],
+  "task": "CT-01f",
+  "spec_commit": "80669143247f5994952e6e9fba95d87109da16d9",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "80669143247f5994952e6e9fba95d87109da16d9",
+      "tree": "97f45dba3878af5b2c1c619769765af272fb73f6",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-25T09:19:33Z",
+      "finished_at": "2026-11-25T09:19:37Z",
+      "red_tests": [
+        "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#1] 交易枚举仅在场景依据的 param 与 fallback 之间加入 link",
+        "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#2] OpenAPI 仅在 AdminOrderSceneBasis 加入 link",
+        "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#3] 后台订单详情区分场景依据和用户依据，两个字段均接受 null",
+        "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#4] contracts-ts 的枚举数组与后台订单类型仅在场景依据包含 link",
+        "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#5] active 推广位按 App、平台、联盟账号和推广位场景联合限定唯一",
+        "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#6] 生成枚举中的 active 说明同步联盟账号维度",
+        "test/spec/contracts/scene-basis-link/scene-basis-link.test.ts > [AC-CT-01f#7] 后台订单详情和返回详情的写操作登记 link 响应枚举扩展"
+      ],
+      "expected": ["test/spec/contracts/scene-basis-link/scene-basis-link.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "62f96d55c4a852cfce48a9d9567afa28c52f7ad0e701d7e4f07199b3f555ea71"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "1e4a2b86d06c7ce27e96f388b6da8a46b95a66a0",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}

@@ -39,6 +39,8 @@ enums:
     values:
       pid: 推广位
       param: 推广参数
+      # CT-01f（couli#31，D10-2970）：拼多多单推广位 A′，buy_type 按服务端登记的转链记录判
+      link: 服务端登记的转链记录
       fallback: 兜底
   user_basis:
     source: 规划/04 §2.3；BR-ATTR-09

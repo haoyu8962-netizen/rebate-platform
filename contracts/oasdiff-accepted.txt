@@ -141,3 +141,12 @@ GET /admin/v1/me/permissions added the new `strict` enum value to the `data/perm
 GET /admin/v1/me/permissions added the new `strict` enum value to the `data/permissions/items/step_up_tier/anyOf[#/components/schemas/AdminStepUpTier]/` response property for the response status `200`
 GET /admin/v1/me/permissions added the new `sudo` enum value to the `data/permissions/items/step_up_operations/items/tier` response property for the response status `200`
 GET /admin/v1/me/permissions added the new `sudo` enum value to the `data/permissions/items/step_up_tier/anyOf[#/components/schemas/AdminStepUpTier]/` response property for the response status `200`
+# CT-01f (couli#31 / D10-2970 / D10-2974): scene_basis (AdminOrderSceneBasis) adds link, the server-registered
+# link record that decides buy_type for the Pinduoduo single PID (BR-ATTR-08/09). Response enum addition only; every
+# response carrying it is an /admin/v1/orders/{order_id} endpoint read only by the admin console, which ships together
+# with the server (D10-557); no /v1/** user-side response references AdminOrderSceneBasis.
+GET /admin/v1/orders/{order_id} added the new `link` enum value to the `data/scene_basis/anyOf[#/components/schemas/AdminOrderSceneBasis]/` response property for the response status `200`
+POST /admin/v1/orders/{order_id}/hold added the new `link` enum value to the `data/scene_basis/anyOf[#/components/schemas/AdminOrderSceneBasis]/` response property for the response status `200`
+POST /admin/v1/orders/{order_id}/unhold added the new `link` enum value to the `data/scene_basis/anyOf[#/components/schemas/AdminOrderSceneBasis]/` response property for the response status `200`
+POST /admin/v1/orders/{order_id}/reason-sub added the new `link` enum value to the `data/scene_basis/anyOf[#/components/schemas/AdminOrderSceneBasis]/` response property for the response status `200`
+POST /admin/v1/orders/{order_id}/reassign added the new `link` enum value to the `data/scene_basis/anyOf[#/components/schemas/AdminOrderSceneBasis]/` response property for the response status `200`

@@ -19151,10 +19151,10 @@ export interface components {
          */
         AdminOrderBuyType: "self" | "share";
         /**
-         * @description What buy_type was decided from (contracts/enums/trade.yaml scene_basis; BR-ATTR-09).
+         * @description What buy_type was decided from (contracts/enums/trade.yaml scene_basis; BR-ATTR-09); link is the server-registered link record (Pinduoduo single PID).
          * @enum {string}
          */
-        AdminOrderSceneBasis: "pid" | "param" | "fallback";
+        AdminOrderSceneBasis: "pid" | "param" | "link" | "fallback";
         /**
          * @description Where the attributed user came from (contracts/enums/trade.yaml user_basis; BR-ATTR-09).
          * @enum {string}
