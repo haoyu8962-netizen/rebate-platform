@@ -2,14 +2,12 @@ id: B1-34s
 repo: rebate-platform
 title: '工作日日历两键（calendar.cn_holidays.<年>、calendar.cn_makeup_workdays.<年>，2026–2030 共十个字面量键）登进 content 配置注册表，后台可写并逐项校验'
 type: impl
-# 2026-11-25 be 入账（编排 D10-2944 / D10-2946；范围 couli-runs/CAL-1125/scope.md，探针 couli-runs/CAL-1125/probe.out）。
-# 背景：申诉期限（BR-ID-36）、注销到期告警与个人信息副本（BR-ID-27 / BR-ID-40）、提现审核期限（BR-WDR-26 细则「工作日日历」）都按年读这两键，但它们不在注册表，后台配置接口 20001 拒写，ops 无法按国办通知录入（D10-2632 ③、D10-2942）。
+# 2026-11-25 be 入账（编排 D10-2944 / D10-2946；范围 couli-runs/CAL-1125/scope.md，探针 couli-runs/CAL-1125/probe.out）。 背景：申诉期限（BR-ID-36）、注销到期告警与个人信息副本（BR-ID-27 / BR-ID-40）、提现审核期限（BR-WDR-26 细则「工作日日历」）都按年读这两键，但它们不在注册表，后台配置接口 20001 拒写，ops 无法按国办通知录入（D10-2632 ③、D10-2942）。
 # ① 注册：config-registry.ts 追加十个字面量键 calendar.cn_holidays.2026–2030、calendar.cn_makeup_workdays.2026–2030（值类型 object、权限 config.general、adminEditable、不播种）；仍不认前缀，2031 起另加一行代码。
 # ② 逐项校验（新）：这十个键写入值须为数组，每项为字符串 YYYY-MM-DD 且是真实日期、年份等于键名里的年、不重复；空数组允许。不合格 → 现有 20001（单条 fields=['value']、批量 fields=[key]），不新增错误码。校验放 content/domain（注册表规格上的可选逐项校验），其它键行为不变。
-# ③ 不做：节假日与补班日跨键不相交（读侧已定节假日优先，risk/domain/appeal-deadline.ts）；缺键或非法时读方静默退回只跳周末——现状不改，年底未写入的告警登 FU-CALENDAR-YEAR-MISSING-ALERT。不动契约（后台配置接口通用、AdminConfigValueType 已含 object）；后台中文标签另开 fe 小单。
-# 风险级照 risk-map：content = RV2（D10-2946）。
-# 资金类判定（D10-2950）：test/spec/content/config-settle/ 两块（registry.test.ts [AC-F1-02zj#2]、writes.int.test.ts [AC-F1-02zj#13]）的目录段含关键词 settle，tools/lib/task-file.ts isMoneyOrAttributionTest（MONEY_TEST_DIR_KEYWORDS 含 'settle'，:216-252）判为资金 / 归属测试——只走 rule_change；改动只在整表清单 / 计数末尾多日历十键、不动任何 settle.* 期望值；负责人 2026-11-25 已同意（D10-2970 第 9 条、D10-2974），approvals 待登记。其余 8 块不含关键词。
-# 与 B3-09n（agent.models 列进后台配置列表，agent 线在途）改同一批注册表冻结块（[AC-F1-10e#1/#3/#10/#56/#57/#58]、config-settle 两块、invite-reward 两块）：后 land 的一张在先合并的期望清单上再追加，modify_existing 的块前后以 land 时主干为准。
+# ③ 不做：节假日与补班日跨键不相交（读侧已定节假日优先，risk/domain/appeal-deadline.ts）；缺键或非法时读方静默退回只跳周末——现状不改，年底未写入的告警登 FU-CALENDAR-YEAR-MISSING-ALERT。不动契约（后台配置接口通用、AdminConfigValueType 已含 object）；后台中文标签另开 fe 小单。 风险级照 risk-map：content = RV2（D10-2946）。
+# 补丁 2（D10-3001，money r1 S1：读方分两次读同年两键，批量改时可能读到新旧混合）：读方一次读同年两键——payout readReviewCalendars（withdraw-apply 与 auto-payout 共用）与 risk readYear（申诉；identity 注销扫描 / 个人信息副本经 resolveWorkingDayDeadline 复用）端口有 configValues 时一条语句读两键，没有时照旧单读；生产装配（app.module）给这些读方接上 configValues。探针（静态）：两遍读回退会撞 [AC-B1-15f#41]（每 app 每年每键只读一次，非资金目录），故回退取照旧单读，预计不撞冻结用例；实现时测试机再核，撞资金 / 归属目录先报。
+# 资金类判定（D10-2950）：test/spec/content/config-settle/ 两块（registry.test.ts [AC-F1-02zj#2]、writes.int.test.ts [AC-F1-02zj#13]）的目录段含关键词 settle，tools/lib/task-file.ts isMoneyOrAttributionTest（MONEY_TEST_DIR_KEYWORDS 含 'settle'，:216-252）判为资金 / 归属测试——只走 rule_change；改动只在整表清单 / 计数末尾多日历十键、不动任何 settle.* 期望值；负责人 2026-11-25 已同意（D10-2970 第 9 条、D10-2974），approvals 待登记。其余 8 块不含关键词。 与 B3-09n（agent.models 列进后台配置列表，agent 线在途）改同一批注册表冻结块（[AC-F1-10e#1/#3/#10/#56/#57/#58]、config-settle 两块、invite-reward 两块）：后 land 的一张在先合并的期望清单上再追加，modify_existing 的块前后以 land 时主干为准。
 # 冻结用例（探针 couli-runs/CAL-1125/probe.out：test/spec/content + subsidy-itemized + risk-flags + content 单测，7028 条只红 13）：10 块钉注册表全集 / 顺序 / 计数的规则测试登 modify_existing（全在 test/spec/content，无资金 / 归属目录，同 B3-09n 那 10 块）；另 3 条实现方单测（config-registry.test.ts、config-item-admin.test.ts）随实现改。
 refs: [BR-ID-36, BR-ID-27, BR-WDR-26]
 refs_hash:
@@ -18,10 +16,12 @@ refs_hash:
   BR-WDR-26: 158db40de631
 deps: []
 paths:
-  - 'apps/api/src/modules/content/domain/config-registry.ts'
-  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
-  - 'apps/api/src/modules/content/application/config-item-admin.ts'
-  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+  - 'apps/api/src/modules/content/domain/config-registry{,.test}.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin{,.test}.ts'
+  - 'apps/api/src/modules/payout/application/withdraw-apply{,.test}.ts'
+  - 'apps/api/src/modules/risk/application/appeal-calendar{,.test}.ts'
+  - 'apps/api/src/modules/identity/application/{deletion-expiry,admin-data-copies}.ts'
+  - 'apps/api/src/app.module.ts'
 test_paths:
   - 'test/spec/content/config-calendar/**'
   - 'test/spec/content/config-items/registry.test.ts'
