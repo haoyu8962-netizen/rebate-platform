@@ -12,6 +12,7 @@ type: impl
 # 迁移按两段：实现写迁移与代码（不手改 db/schema.sql、db.gen.ts）→ 编排在测试机 LAN 快照回填 schema.sql / db.gen.ts → 实现照快照补类型。探针（couli-runs/B1-04zzzzn/probe）：只加此表时 test/spec 冻结用例零改动，红的只有迁移格式（Up 标记、SET LOCAL 超时）与上述清单一行。
 # 补丁 2（D10-3129，负责人 11-25「都按建议办」第 ⑤ 件）：paths 加 linking/application/shop-open.ts 与 shop-open.test.ts——进店入口把已选定的 accountId 传进 issueTaobaoAuthState、该参数改必填（money r4 S1-②）；查回被治理层时限先结束时改看备案记录器已落库的 duplicate 结局照发带编号告警（S1-①）。
 # 不在本单：长期未完成尝试的巡检告警（FU-FILING-ATTEMPT-PATROL）；换应用旧 state（FU-TAOBAO-OAUTH-APP-ROTATION）；淘宝接口行为实测（FU-TB-05-DUP-LOOKUP）。
+# 2026-11-25 置 void（w1，编排 D10-3175）：Codex 调用 10 / 10 熔断（money r5 输入混有已撤回口径，D10-3173 作废）；并入 B1-04zzzzp——带走规则测试与实现 r1–r6（分支已变基，头 121229330）。
 refs: [BR-ID-17, BR-ATTR-05]
 refs_hash:
   BR-ID-17: ba4ebcc6279a
@@ -36,4 +37,4 @@ accept:
   - 'pnpm verify:fast'
   - 'test/spec/linking/taobao-user-auth/**'
   - 'test/spec/db/union-filing-attempts/**'
-status: todo
+status: void
