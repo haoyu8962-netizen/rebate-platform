@@ -60,3 +60,51 @@ ALTER TABLE app.union_accounts
 
 COMMENT ON COLUMN app.union_accounts.hour_alert_key IS
   'BR-ID-24: last hour alert node handled, <auth_expires_at epoch ms>:h<N>; written by the hour job only';
+
+-- app.union_auth_alerts (task B1-22ze, owner 2026-11-25 D10-2970 ③; BR-ID-24 细则「后台告警的
+--   持久记录」, 04 §3.2 union_auth_alerts; D10-3063 / D10-3064 (i), D10-3074): the backend alert of
+--   the site authorization as a fact, one row per account, node and authorization. Writer: union
+--   (auth-expiry/service.ts alert()), INSERT … ON CONFLICT DO NOTHING in the same transaction as the
+--   account's alert_stage / hour_alert_key / status and the notify_logs rows; a new row also queues
+--   the alert_log job (the pino line) in that transaction. No handler, no state, nothing to close.
+--   stage: d<N> / h<N> / expired (the notify_logs dedupe key's stage). alert_key: the rest of that
+--   dedupe key without the account and the phone — '<auth_expires_at ISO | none>:<stage>', and for
+--   expired ':<entered ISO>' appended (a later re-entry is a new row, a rerun of one entry is not).
+--   entered_at: the instant expired was entered (expired only). cause: time / probe / call (expired
+--   only). phones_configured: whether alert phones were configured when it was recorded.
+-- Append-only: app.reject_update_delete() (as audit_logs / event_log); couli_app SELECT / INSERT,
+--   couli_readonly SELECT. New table only: no existing constraint, index, trigger, grant or
+--   alert_stage CHECK changes (D10-2771).
+-- Recovery: no down migration; the application stops writing it, a later migration may drop it.
+CREATE TABLE app.union_auth_alerts (
+  id                uuid NOT NULL,
+  app_id            text NOT NULL,
+  union_account_id  uuid NOT NULL,
+  platform          text NOT NULL,
+  stage             text NOT NULL,
+  alert_key         text NOT NULL,
+  auth_expires_at   timestamptz,
+  entered_at        timestamptz,
+  phones_configured boolean NOT NULL,
+  cause             text,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT union_auth_alerts_pkey PRIMARY KEY (id),
+  CONSTRAINT union_auth_alerts_account_fkey FOREIGN KEY (app_id, platform, union_account_id)
+    REFERENCES app.union_accounts (app_id, platform, id),
+  CONSTRAINT union_auth_alerts_alert_key UNIQUE (app_id, union_account_id, stage, alert_key),
+  CONSTRAINT union_auth_alerts_stage_check CHECK (stage ~ '^(d[0-9]+|h[0-9]+|expired)$'),
+  CONSTRAINT union_auth_alerts_cause_check CHECK (cause IN ('time', 'probe', 'call')),
+  CONSTRAINT union_auth_alerts_expired_check CHECK (
+    (stage = 'expired') = (cause IS NOT NULL) AND (stage = 'expired') = (entered_at IS NOT NULL)
+  )
+);
+
+CREATE TRIGGER union_auth_alerts_append_only
+  BEFORE UPDATE OR DELETE ON app.union_auth_alerts
+  FOR EACH ROW EXECUTE FUNCTION app.reject_update_delete();
+
+GRANT SELECT, INSERT ON app.union_auth_alerts TO couli_app;
+GRANT SELECT ON app.union_auth_alerts TO couli_readonly;
+
+COMMENT ON TABLE app.union_auth_alerts IS
+  'BR-ID-24: backend alert of the site authorization, one row per account, node and authorization; append-only';
