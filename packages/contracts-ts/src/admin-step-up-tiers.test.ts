@@ -319,6 +319,7 @@ const HIGHEST_TIER: Record<string, 'sudo' | 'strict'> = {
   'union.binding_reset': 'sudo',
   'union.account_auth': 'sudo',
   'risk.freeze': 'sudo',
+  'risk.appeal': 'sudo',
   'pii.reveal_phone': 'sudo',
   'pii.reveal_identity': 'sudo',
   'tax.export_full': 'sudo',

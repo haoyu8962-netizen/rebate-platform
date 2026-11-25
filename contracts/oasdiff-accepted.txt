@@ -132,3 +132,12 @@ GET /admin/v1/audit-logs/{id} added the new `system:self_service` enum value to 
 GET /admin/v1/exports added the new `orders` enum value to the `data/items/items/resource` response property for the response status `200`
 POST /admin/v1/exports added the new `orders` enum value to the `data/resource` response property for the response status `202`
 POST /admin/v1/exports/{id}/retry added the new `orders` enum value to the `data/resource` response property for the response status `200`
+#
+# D10-2963 / D10-557 / D10-2792 (CT-24zzv): AdminStepUpTier adds sudo and strict (BR-ID-34 二次验证分三档;
+# the old values totp and sms stay for the transition and a later contract task removes them). The
+# only reader of GET /admin/v1/me/permissions is the admin console, which ships with the server and
+# has no old client, and the field is display only (the console acts on each operation's own 10003).
+GET /admin/v1/me/permissions added the new `strict` enum value to the `data/permissions/items/step_up_operations/items/tier` response property for the response status `200`
+GET /admin/v1/me/permissions added the new `strict` enum value to the `data/permissions/items/step_up_tier/anyOf[#/components/schemas/AdminStepUpTier]/` response property for the response status `200`
+GET /admin/v1/me/permissions added the new `sudo` enum value to the `data/permissions/items/step_up_operations/items/tier` response property for the response status `200`
+GET /admin/v1/me/permissions added the new `sudo` enum value to the `data/permissions/items/step_up_tier/anyOf[#/components/schemas/AdminStepUpTier]/` response property for the response status `200`
