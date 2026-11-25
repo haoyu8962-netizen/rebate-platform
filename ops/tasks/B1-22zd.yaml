@@ -12,7 +12,7 @@ type: impl
 # ⑤ infra/taobao/site-oauth.ts 解析这五个值（缺省、非整数或负数 → null，不报错）；reauth.ts 写新凭据行时一并写；手工录入（admin-accounts.ts）写 null。数值不进日志、不进审计明文；token 照旧不出现在任何日志或响应里。fake-site-oauth 只按现有假实现补这五个字段，不伪造真实报文。 ⑥ adminListUnionAccounts / adminPutUnionCredential 的行按 CT-24ha 契约返回 auth_refreshable：当前凭据 re_expires_in_s > 0 → true，= 0 → false，null 或无当前凭据 → null；不返回原始时长。
 # 不在本单：自动续期本身（第二步，D10-2585 等实测 re_expires_in > 0）、后台页显示（fe，F1-08atb 之后）、把两个提醒键登记进配置注册表。
 # 冻结用例盘点（be 11-23 只读，couli-runs/FU-TAOBAO-TOKEN-REFRESH/prep.md 末节）：现有规则测试的账户种子 auth_renewed_at 大多为空、置了值的总时长都远大于 14 天，跳过规则不触及；alert_stage 列不动；凭据列用例只禁 token / secret 明文列名。按 ③ 的写法预计不需 modify_existing；实现中如撞冻结用例，停下以补丁补登，不改测试。 补丁 2（11-24，写测 1 的 out_of_scope）：手工录入凭据也要排小时任务，后台装配 union-admin.module.ts 未给授权服务传队列，paths 补这一个文件（只接线）。 补丁 3（11-24，实现 r1 撞冻结）：[AC-B1-22a#2] 精确钉凭据表列，登 modify_existing。
-# 补丁 5（2026-11-25，负责人同意持久告警，D10-2970 第 3 条 / D10-2974；规划 couli#31 BR-ID-24 细则「后台告警的持久记录」、04 §3.2 union_auth_alerts；做法 couli-runs/B1-22zd/persistent-alert-plan.md，money r3/r4 两条 S1 的修法）：后台告警由日志行改为 union 独写、只追加的 union_auth_alerts（id、app_id、union_account_id、platform、stage、alert_key、auth_expires_at、entered_at、phones_configured、cause、created_at；唯一 (app_id, union_account_id, stage, alert_key)，alert_key 与短信去重键同组成；reject_update_delete 触发器、app 角色只 INSERT / SELECT），与 hour_alert_key / alert_stage / notify_logs 同一事务 INSERT … ON CONFLICT DO NOTHING，按天节点、小时节点、expired 都写；插入成功时同事务排任务打原日志行（日志至少一次、表恰好一次）。不是工单：无处理人 / 状态 / 关闭列，不改契约与后台接口。迁移并入本分支 0155（未合并），land 前取主干下一个空号。新规则测试要点 couli-runs/B1-22zd/persistent-alert-tests.md；本单冻结用例要改的由入账前探针定，另登补丁。一次性 approvals：写测增量 1 次 + 规则测试评审增量 1 轮 + 实现 r4 1 次 + money r5 1 轮。 补丁 6（D10-3063 / D10-3064）：日志只由同事务排入的 union-auth / alert_log 任务打（载荷 { app_id, union_account_id, alert_id }，执行时读记录拼原日志行），至少一次；auth-probe 两文件 5 块冻结用例只在日志断言前加「执行本轮排入的 alert_log 任务」一步（before / after couli-runs/B1-22zd/frozen-blocks-before-after.md）；目录段含关键词 union，tools/lib/task-file.ts isMoneyOrAttributionTest 判为资金 / 归属测试——只走 rule_change，待负责人确认（编排核内容）。
+# 补丁 5（2026-11-25，负责人同意持久告警，D10-2970 第 3 条 / D10-2974；规划 couli#31 BR-ID-24 细则「后台告警的持久记录」、04 §3.2 union_auth_alerts；做法 couli-runs/B1-22zd/persistent-alert-plan.md，money r3/r4 两条 S1 的修法）：后台告警由日志行改为 union 独写、只追加的 union_auth_alerts（id、app_id、union_account_id、platform、stage、alert_key、auth_expires_at、entered_at、phones_configured、cause、created_at；唯一 (app_id, union_account_id, stage, alert_key)，alert_key 与短信去重键同组成；reject_update_delete 触发器、app 角色只 INSERT / SELECT），与 hour_alert_key / alert_stage / notify_logs 同一事务 INSERT … ON CONFLICT DO NOTHING，按天节点、小时节点、expired 都写；插入成功时同事务排任务打原日志行（日志至少一次、表恰好一次）。不是工单：无处理人 / 状态 / 关闭列，不改契约与后台接口。迁移并入本分支 0155（未合并），land 前取主干下一个空号。新规则测试要点 couli-runs/B1-22zd/persistent-alert-tests.md；本单冻结用例要改的由入账前探针定，另登补丁。一次性 approvals：写测增量 1 次 + 规则测试评审增量 1 轮 + 实现 r4 1 次 + money r5 1 轮。 补丁 6（D10-3063 / D10-3064）：日志只由同事务排入的 union-auth / alert_log 任务打（载荷 { app_id, union_account_id, alert_id }，执行时读记录拼原日志行），至少一次；auth-probe 两文件 5 块冻结用例只在日志断言前加「执行本轮排入的 alert_log 任务」一步（before / after couli-runs/B1-22zd/frozen-blocks-before-after.md）；目录段含关键词 union，tools/lib/task-file.ts isMoneyOrAttributionTest 判为资金 / 归属测试——只走 rule_change，待负责人确认（编排核内容）。 补丁 7（D10-3074）：门禁不认 monitor.int.test.ts 循环里模板标题的块，改为 monitor.int.test.ts 不改、只改共用支撑文件 test/spec/union/auth-probe/kit.ts——harness 的 monitor 每次调用返回后逐个 handle 本轮尚未执行的 alert_log 任务（只执行 alert_log，jobs / send 记录不变）；atomicity [AC-S1-64#32] 仍只加一步。
 refs: [BR-ID-24]
 refs_hash:
   BR-ID-24: 3c3ffd8471cd
@@ -30,7 +30,7 @@ paths:
 test_paths:
   - 'test/spec/union/auth-alert-hours/**'
   - 'test/spec/db/union/auth-expiry/auth-expiry.int.test.ts'
-  - 'test/spec/union/auth-probe/{monitor,atomicity}.int.test.ts'
+  - 'test/spec/union/auth-probe/{kit.ts,atomicity.int.test.ts}'
 modify_existing:
   - file: 'test/spec/db/union/auth-expiry/auth-expiry.int.test.ts'
     test: '[AC-B1-22a#2] reminder stages accept configurable days 1–999 and reject malformed values on insert/update'
@@ -38,36 +38,18 @@ modify_existing:
     br: [BR-ID-24]
     ruling: D10-2758
     note: 'BR-ID-24 细则「授权时长与续期」要求记录回调返回的有效期数值；块尾 credentialColumns 把 union_credentials 精确钉成 9 列，只在该列表追加 re_expires_in_s、r1_expires_in_s、r2_expires_in_s、w1_expires_in_s、w2_expires_in_s 五行（int4、可空、无默认），提醒阶段与其余断言一字不动。'
-  - file: 'test/spec/union/auth-probe/monitor.int.test.ts'
-    test: '[AC-S1-64#1] 08:59 属前一巡检日；09:00 命中 d14，随后 d7、d1、到期各提醒一次'
-    reason: rule_change
-    br: [BR-ID-24]
-    ruling: D10-3064
-    note: '日志只由同事务排入的 alert_log 任务打（BR-ID-24「后台告警的持久记录」：记录写入后再打原有告警日志，至少一次）；本块只在日志断言前加一步「执行本轮排入的 alert_log 任务」（jobs(h, a.id) 中名为 alert_log 的逐个 handle），日志断言的内容、条数、字段不变'
-  - file: 'test/spec/union/auth-probe/monitor.int.test.ts'
-    test: '[AC-S1-65#1] 探测授权失效立即 expired，空到期时间也只靠探测（${expiresAt}）'
-    reason: rule_change
-    br: [BR-ID-24]
-    ruling: D10-3064
-    note: '日志只由同事务排入的 alert_log 任务打（BR-ID-24「后台告警的持久记录」：记录写入后再打原有告警日志，至少一次）；本块只在日志断言前加一步「执行本轮排入的 alert_log 任务」（jobs(h, a.id) 中名为 alert_log 的逐个 handle），日志断言的内容、条数、字段不变'
-  - file: 'test/spec/union/auth-probe/monitor.int.test.ts'
-    test: '[AC-S1-65#2] 任一联盟调用失效立即置位，不写 last_probe，账号/app 隔离且不重发'
-    reason: rule_change
-    br: [BR-ID-24]
-    ruling: D10-3064
-    note: '日志只由同事务排入的 alert_log 任务打（BR-ID-24「后台告警的持久记录」：记录写入后再打原有告警日志，至少一次）；本块只在日志断言前加一步「执行本轮排入的 alert_log 任务」（jobs(h, a.id) 中名为 alert_log 的逐个 handle），日志断言的内容、条数、字段不变'
-  - file: 'test/spec/union/auth-probe/monitor.int.test.ts'
-    test: '[AC-S1-64#14] 未配置号码只后台告警且阶段前移，后来配号不补发该节点'
-    reason: rule_change
-    br: [BR-ID-24]
-    ruling: D10-3064
-    note: '日志只由同事务排入的 alert_log 任务打（BR-ID-24「后台告警的持久记录」：记录写入后再打原有告警日志，至少一次）；本块只在日志断言前加一步「执行本轮排入的 alert_log 任务」（jobs(h, a.id) 中名为 alert_log 的逐个 handle），日志断言的内容、条数、字段不变'
   - file: 'test/spec/union/auth-probe/atomicity.int.test.ts'
     test: '[AC-S1-64#32] 短信故障不丢后台告警，不回滚 expired，失败记录不自动重发'
     reason: rule_change
     br: [BR-ID-24]
     ruling: D10-3064
     note: '日志只由同事务排入的 alert_log 任务打（BR-ID-24「后台告警的持久记录」：记录写入后再打原有告警日志，至少一次）；本块只在日志断言前加一步「执行本轮排入的 alert_log 任务」（jobs(h, a.id) 中名为 alert_log 的逐个 handle），日志断言的内容、条数、字段不变'
+  - file: 'test/spec/union/auth-probe/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-24]
+    ruling: D10-3074
+    note: '日志只由同事务排入的 alert_log 任务打（BR-ID-24「后台告警的持久记录」，至少一次）；harness 的 monitor 包一层：每次调用返回后逐个 handle 本轮 send 记录里尚未执行、任务名为 alert_log 的任务（不碰别的任务名，jobs / send 记录不变），使 monitor.int.test.ts 现有日志断言原样成立；该文件各块不改'
 impl: claude
 tester: codex
 accept:
