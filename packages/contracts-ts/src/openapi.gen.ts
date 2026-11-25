@@ -9397,9 +9397,10 @@ export interface paths {
          *     `union_mismatch` or `channel_mismatch` (a person never files an adjustment linking a union
          *     or channel reconciliation difference, whatever the reason code, BR-FUND-24 ⑨), or a
          *     `withdrawal` or `account_deletion` of another member, is 20001 with `data.fields=[refs]`
-         *     and `data.reason=adjust_ref_invalid` → a linked `recon_diff` no longer open / processing
-         *     (adjusted, written off or closed), or one on which the member already has an executed,
-         *     unreversed adjustment, is 20902 with `data.resource=recon_diff` and nothing is written
+         *     and `data.reason=adjust_ref_invalid` → a linked `recon_diff` of type `ledger_mismatch` no
+         *     longer open / processing (adjusted, written off or closed), or one on which the member
+         *     already has an executed, unreversed adjustment, is 20902 with `data.resource=recon_diff`
+         *     and nothing is written
          *     (BR-FUND-24 ⑨: the linked differences are locked in the same transaction; at most one
          *     executed, unreversed adjustment per difference and member); an original already reversed
          *     is 20902 with `data.resource=admin_adjustment` (a form can be reversed once, BR-FUND-16;
