@@ -12,6 +12,9 @@ type: impl
 #   淘宝适配器见 origin=agent 不调 parse-content（按未配来源处理：adapter_unimplemented）。另修 money r1 两条 S1：归档请求摘要剔除 content、应答归档按白名单只留 goodsId 与错误分类字段；成功码下 data 缺失 / null → link_unrecognized。
 # 补丁 2（spec-test r3 范围外 S2：归档请求摘要由 union/infra/archive.ts 按参数名脱敏，只在原 paths 内无法剔除 content，[#8]/[#9] 无解）：paths 加 union/infra/{archive.ts,replay.ts} 与 dataoke/{dataoke-client.ts,response.ts}——
 #   传输请求加只挂在传输层、不上线路的「归档剔除参数」选项，dataoke 客户端透传，archive.ts 请求摘要按它剔除；response.ts 给「成功码但 data 缺失 / null」结构化原因，适配器不靠报错文字分类。既有调用不传选项时行为不变。
+# 补丁 3（D10-2952 / D10-2958，BR-AI-04 细则「第三方口令解析禁止，开关 parse.third_party.enabled 默认 off，启用后任何链路只作官方失败 / 无权限后的降级」）：union 按品牌直接读 parse.third_party.enabled（不进配置注册表，先例 union.auth_alert_days），
+#   缺省 / 非 true 即关 → 推广链 / 淘口令 / m.tb.cn 维持 adapter_unimplemented（→ 30132）、不取大淘客凭据、不发请求；开 → 只在官方口令解析失败 / 无权限后降级调 parse-content（官方淘宝口令解析至今未实现、恒不可用，parsing.ts TODO）；origin=agent 一律不调；请求只带链接或口令原文。
+#   不得用直接改库打开；启用须负责人 + 法务定后另开单登注册表并列入隐私政策第三方共享清单。
 refs: [BR-PROD-03, BR-PROD-05, BR-PROD-10]
 refs_hash:
   BR-PROD-03: 7769390bcd28
@@ -20,7 +23,7 @@ refs_hash:
 deps: []
 paths:
   - 'apps/api/src/modules/union/infra/taobao/{taobao-adapter.ts,resolve-link.ts,resolve-link.test.ts,parse-content.ts,parse-content.test.ts}'
-  - 'apps/api/src/modules/union/domain/types.ts'
+  - 'apps/api/src/modules/union/{domain/types.ts,union.module.ts}'
   - 'apps/api/src/modules/union/infra/{archive.ts,archive.test.ts,replay.ts,replay.test.ts}'
   - 'apps/api/src/modules/union/infra/dataoke/{dataoke-client.ts,response.ts}'
   - 'apps/api/src/modules/agent/stream/mount/assembly.ts'
