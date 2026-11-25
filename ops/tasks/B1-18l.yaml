@@ -5,6 +5,7 @@ type: impl
 # 2026-11-25 二次验证线入账（D10-3105）。入账稿 couli-runs/STEPUP-BE/entry-draft-B1-18l.md；重探原型 couli-runs/STEPUP-1125p/prototype-r2.patch（主干 975a82638 上量的）。裁定：守卫真实路由只看清单，取不到 operationId 且不在契约对照表里才按权限点最高档兜底，并以规则测试钉「已注册的 /admin/v1 路由全部解析到 operationId」（D10-3105 1）；关差错单是否解除冻结经 payout 冻结端口读、closeAdminReconDiff 按主干入参调用行为不变（3）；凭证用于 sudo 的三个细节为代理补全的默认（5）。不做：第二因子二选一、企业微信告警、apps/admin、微信打款两个上限键与两处无接口项（FU，D10-3105 4）。
 # 冻结用例：重探会红 262 条 / 148 块 / 75 文件（couli-runs/STEPUP-BE/frozen-handling-b118l.csv），本次登记 197 条目（覆盖 244 条；生成脚本与输入 couli-runs/B1-18l/gen-ledger.ts、ledger-entries.json）。资金与归属目录的条目 note 里逐条写明负责人依据（D10-2788 / D10-2826）。另 18 条（4 个文件、写在 for…of 循环里、标题是模板字面量）现门禁无法按名登记，待编排裁定后以台账补丁补（见 notices）。it.each 共用块体的同表其余行，写测后按实际改动以补丁补登（D10-2838 甲类）。
 # 补丁 1（D10-3128 ②，2026-11-25）：6 个资金文件的文件级 support 条目，只限 stepUpRequired 那一行 import；对应 10 块并进下一次写测。
+# 补丁 2（D10-3144 a，2026-11-25）：step-up-commit-unknown 两个文件的文件级 support 条目，只限 stepUpRequired 那一行 import。
 refs: [BR-ID-34]
 refs_hash:
   BR-ID-34: 6ed9502449a2
@@ -1244,6 +1245,18 @@ modify_existing:
     br: [BR-ID-34]
     ruling: D10-3128
     note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-3128 ②）：只许删掉或改动 import 列表里 stepUpRequired 那一行（第 26 行；该文件已登记的块改用新档位断言后这个共用助手不再被引用，留着 eslint 报未使用），别的块外行一个不动；是负责人已同意的二次验证断言改动（D10-2788 / D10-2826）的连带结果，不是新的断言改动'
+  - file: 'test/spec/admin/step-up-commit-unknown/balance-recalc.int.test.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3144
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-3144 a，同 D10-3128 ② 口径）：只许删掉或改动 import 列表里 stepUpRequired 那一行（第 25 行；该文件已登记的块改完后这个共用助手不再被引用，留着 eslint 报未使用；仍有块在用就不删），别的块外行一个不动；是负责人已同意的二次验证断言改动（D10-2788）的连带结果，不是新的断言改动'
+  - file: 'test/spec/admin/step-up-commit-unknown/write-off.int.test.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3144
+    note: '块外支撑改动按 CT-06zzzzzi 文件级条目登记（D10-3144 a，同 D10-3128 ② 口径）：只许删掉或改动 import 列表里 stepUpRequired 那一行（第 21 行；该文件已登记的块改完后这个共用助手不再被引用，留着 eslint 报未使用；仍有块在用就不删），别的块外行一个不动；是负责人已同意的二次验证断言改动（D10-2788）的连带结果，不是新的断言改动'
 impl: claude
 tester: codex
 accept:
