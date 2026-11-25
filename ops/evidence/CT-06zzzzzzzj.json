@@ -1,0 +1,91 @@
+{
+  "risk_note": "RV2 by path (tools/guard). Gate tooling only, no money moves (D10-3107 / D10-3128 / D10-3143 / D10-3153). ① modify_existing whole-block entries now also cover a plain it with a template title directly in the body of a top-level for…of loop (by the template text, rule_change only, note required); any shape not recognised is judged as a whole file, as before; the loops of a file are compared row by row loop by loop, and in the spec_commit → head range a declared row changed before spec_commit is still located (found, unchanged), while from the merge base an unchanged declared row is still refused as redundant. ② A frozen rule-test file left out of the red list because every change lies in its declared blocks (modifiedOnlyFiles, with every whole-block entry checked by wholeBlockEntryProblem first) is judged as a rule-test file for its neighbours (mayImportRuleTest), not as a support file. test-blocks.ts does not import typescript (evidence.yml installs nothing). Third-class gate change: merge under ops/approvals.yaml id 16 after the orchestrator checks the diff.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Three Codex money rounds. r1 (full, on implementation r1 + mechanical corrections) fail, two S1: test-blocks.ts:3104 one changed loop call voided the row-by-row comparison of every other loop of the file; red-check.ts:1042 modifiedOnlyFiles left a file out of the red list on a non-compliant whole-block entry — both fixed in implementation r2. r2 (incremental) fail, one S1: test-blocks.ts:2660 in the spec_commit → head range a declared row changed only before spec_commit was not located, so the evidence gate refused a valid change; reproduced by ops (couli-runs/OPS-lane/CT-06zzzzzzzj-r2check/repro.mjs) and fixed in implementation r3. r3 (incremental) pass, no findings. The validator moved 0 findings out of scope in every round (D10-2954). The reviewed r3 tree is the committed one; on the test machine verify:fast exit 0 (fast5) and the rule-test directories with the related ci directories and the two unit-test files green (tests5)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (two write-test attempts; the first stopped on a conflict with the frozen [AC-CT-06zzzzzzzd#6], resolved by test-change #792, D10-3153). Two mechanical corrections of the rule tests by ops, each its own commit and not counted as a write-test attempt: whole-block.test.ts:189 (a literal describe( in a fixture string split, D10-3174) and :181 (a type assertion, D10-3181); spec_commit 3e3fc4e61. Spec-test r1 by an independent Claude pass, one S2 (only the modified-only class was pinned, given to the implementer, who took the narrow reading) and one out-of-scope S2 from the reviewer (fixture realism against the B1-18l samples, covered by implementer unit tests). One mechanical correction of an implementer unit test (test-blocks.test.ts:5154, D10-3194)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#1] 具名表整块登记覆盖该块所有展开用例",
+    "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#2] 内联表改块体可整块登记，只改行仍按全名登记",
+    "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#3] 循环头或未登记语句有改动时仍判整文件",
+    "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#4] 按模板原文字面匹配，拒绝差一个字符和重复命中",
+    "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#5] 整块登记沿用 rule_change 和非空 note 的门槛",
+    "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#6] 只接受顶层循环体内直接调用的普通测试",
+    "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#11] 同一循环内的 it.each 与普通 it 各按自己的标题模板整块登记",
+    "test/spec/ci/red-modified-only-not-support/classification.test.ts > [AC-CT-06zzzzzzzj#7] A 的改动全在登记块时，B 未改的用例照旧豁免，未经登记的新改动仍须先红",
+    "test/spec/ci/red-modified-only-not-support/classification.test.ts > [AC-CT-06zzzzzzzj#8] 真正的支撑文件改动仍让 B 整文件重判，包括经 createRequire 可能读到的文件",
+    "test/spec/ci/red-modified-only-not-support/classification.test.ts > [AC-CT-06zzzzzzzj#9] A 虽已移出先红名单，B 显式导入 A 仍触发整文件判定",
+    "test/spec/ci/red-modified-only-not-support/classification.test.ts > [AC-CT-06zzzzzzzj#10] A 有块外改动时留在先红名单，B 经同一个 kit 仍可逐块判定"
+  ],
+  "task": "CT-06zzzzzzzj",
+  "spec_commit": "7440894d4349ae0f17910aef9d71286ad07b76fe",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "7440894d4349ae0f17910aef9d71286ad07b76fe",
+      "tree": "57e124466b90a409defbd9dcb8f969f00133576d",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-25T20:52:03Z",
+      "finished_at": "2026-11-25T20:52:09Z",
+      "red_tests": [
+        "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#1] 具名表整块登记覆盖该块所有展开用例",
+        "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#2] 内联表改块体可整块登记，只改行仍按全名登记",
+        "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#3] 循环头或未登记语句有改动时仍判整文件",
+        "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#4] 按模板原文字面匹配，拒绝差一个字符和重复命中",
+        "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#5] 整块登记沿用 rule_change 和非空 note 的门槛",
+        "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#6] 只接受顶层循环体内直接调用的普通测试",
+        "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts > [AC-CT-06zzzzzzzj#11] 同一循环内的 it.each 与普通 it 各按自己的标题模板整块登记",
+        "test/spec/ci/red-modified-only-not-support/classification.test.ts > [AC-CT-06zzzzzzzj#7] A 的改动全在登记块时，B 未改的用例照旧豁免，未经登记的新改动仍须先红",
+        "test/spec/ci/red-modified-only-not-support/classification.test.ts > [AC-CT-06zzzzzzzj#8] 真正的支撑文件改动仍让 B 整文件重判，包括经 createRequire 可能读到的文件",
+        "test/spec/ci/red-modified-only-not-support/classification.test.ts > [AC-CT-06zzzzzzzj#9] A 虽已移出先红名单，B 显式导入 A 仍触发整文件判定",
+        "test/spec/ci/red-modified-only-not-support/classification.test.ts > [AC-CT-06zzzzzzzj#10] A 有块外改动时留在先红名单，B 经同一个 kit 仍可逐块判定"
+      ],
+      "expected": [
+        "test/spec/ci/modify-existing-for-of-template/whole-block.test.ts",
+        "test/spec/ci/red-modified-only-not-support/classification.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "263a96d81960db0aa29faa74b9d7f52eac273bb506e73d8946318a590d4e5245"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "aadc90aead86d267bd08e8991d678ce871e7da39",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}

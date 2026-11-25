@@ -4939,16 +4939,449 @@ it('[CT-06zzzzzzzd] two blocks of one template text are refused on either side, 
     ok: true,
     blocks: [{ found: false }],
   });
-  // A plain it with the same interpolated title is never a whole block.
-  const plain = [
+  // A plain it with the same interpolated title outside a top-level for…of loop is no whole
+  // block; inside one it is since CT-06zzzzzzzj (D10-3107, tested below).
+  const plain = (open: string, close: string): string =>
+    [
+      "import { describe, expect, it } from 'vitest';",
+      "const sources = ['a', 'b'] as const;",
+      open,
+      `  it(\`${title}\`, () => {`,
+      '    expect(sources).toBeTruthy();',
+      '  });',
+      close,
+      '',
+    ].join('\n');
+  expect(namesWholeBlock(plain('{', '}'), title)).toBe(false);
+  expect(namesWholeBlock(plain("describe('d', () => {", '});'), title)).toBe(false);
+  expect(namesWholeBlock(plain('for (const source of sources) {', '}'), title)).toBe(true);
+});
+
+// CT-06zzzzzzzj (D10-3107 / D10-3143 甲): a plain it / test right in the body of a top-level
+// `for (const <x> of <expression>) { … }` loop, its title one template with `${…}`, is named whole
+// by its verbatim template text. The shapes after B1-18l's four files and B1-22zd's monitor.
+const FO_IMPORTS = [
+  "import { randomUUID } from 'node:crypto';",
+  "import { expect, it, test } from 'vitest';",
+  "import { WRITES, rejected, setup } from './kit.ts';",
+];
+const FO16 = '[AC-X#16] ${action} 成功消耗动态码，重放不再修改；不要求 Idempotency-Key';
+const FO14 = '[AC-X#14] ${action} 先拒绝缺少权限，不能以动态码代替权限';
+const FO15 = '[AC-X#15] ${action} 每次需要有效 totp token，超管=%s';
+const FO17 = '[AC-X#17] ${action} 不接受另一后台会话的动态码';
+
+/** After test/spec/union/admin-pids/access.int.test.ts:26-77 (WRITES from ./kit.ts, inner fors). */
+const pidsLoop = (
+  code16 = 10003,
+  code17 = 10003,
+  header = 'for (const action of WRITES) {',
+): string =>
+  [
+    header,
+    `  it(\`${FO14}\`, async () => {`,
+    '    const s = await setup({ grants: [] });',
+    '    for (const token of [null, await s.issue()]) {',
+    '      await rejected(await s.write(action, { token }), 10403);',
+    '    }',
+    '  });',
+    '',
+    '  it.each([false, true])(',
+    `    \`${FO15}\`,`,
+    '    async (isSuper) => {',
+    '      const s = await setup({ isSuper });',
+    "      for (const token of [null, 'invalid-token']) {",
+    '        await rejected(await s.write(action, { token }), 10003);',
+    '      }',
+    '    },',
+    '  );',
+    '',
+    `  it(\`${FO16}\`, async () => {`,
+    '    const s = await setup({});',
+    '    const token = await s.issue();',
+    `    await rejected(await s.write(action, { token }), ${code16});`,
+    '  });',
+    '',
+    `  it(\`${FO17}\`, async () => {`,
+    '    const s = await setup({});',
+    `    await rejected(await s.write(action, { token: randomUUID() }), ${code17});`,
+    '  });',
+    '}',
+  ].join('\n');
+
+const foFile = (...parts: string[]): string =>
+  [
+    ...FO_IMPORTS,
+    '',
+    "it('[AC-X#13] 列表缺权限返回 10403', async () => {",
+    '  expect(await setup({})).toBeTruthy();',
+    '});',
+    '',
+    ...parts,
+    '',
+  ].join('\n');
+
+// Wrong implementation: plain calls in a loop still never whole → namesWholeBlock false; any it
+// of the loop taken → a sibling's change let through.
+it('[CT-06zzzzzzzj] B1-18l admin-pids shape: each plain it of the loop is named whole by its template, the .each beside it as before; only the declared block may change', () => {
+  const base = foFile(pidsLoop());
+  const head = foFile(pidsLoop(10004));
+  for (const t of [FO14, FO15, FO16, FO17]) expect(namesWholeBlock(base, t), t).toBe(true);
+  const got = compareModifiedBlocks(base, head, [FO16]);
+  expect(got).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [{ test: FO16, found: true, changed: true, whole: { head: 3 } }],
+  });
+  const block = got.ok ? got.blocks[0] : undefined;
+  const whole = block?.found === true ? block.whole : undefined;
+  for (const a of ['create', 'update', 'activate', 'retire']) {
+    const own = `[AC-X#16] ${a} 成功消耗动态码，重放不再修改；不要求 Idempotency-Key`;
+    expect(whole?.produces(own), a).toBe(true);
+    expect(whole?.produces(`[AC-X#17] ${a} 不接受另一后台会话的动态码`), a).toBe(false);
+  }
+  // The undeclared sibling changed too: a difference besides.
+  const both = compareModifiedBlocks(base, foFile(pidsLoop(10004, 10005)), [FO16]);
+  expect(both.ok && both.outside).toEqual(expect.stringContaining('is not declared'));
+  // Both declared: both found, nothing besides.
+  const two = compareModifiedBlocks(base, foFile(pidsLoop(10004, 10005)), [FO16, FO17]);
+  expect(two).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [
+      { found: true, changed: true },
+      { found: true, changed: true },
+    ],
+  });
+  // The header changed (also to the `[…] as const` of :79): the shared rest differs.
+  const header = "for (const action of ['update', 'activate', 'retire'] as const) {";
+  expect(namesWholeBlock(foFile(pidsLoop(10003, 10003, header)), FO16)).toBe(true);
+  const moved = compareModifiedBlocks(base, foFile(pidsLoop(10004, 10003, header)), [FO16]);
+  expect(moved.ok && moved.outside).toEqual(expect.stringContaining('code outside the tests'));
+});
+
+// Wrong implementation: requiring the loop to be preceded by `;` → B1-18l admin-accounts (a
+// function declaration's `}` before the loop) refused; JSON.stringify in the title, `test`, an
+// aliased name or `as const` not read.
+it('[CT-06zzzzzzzj] B1-18l / B1-22zd shapes: a loop after a function, JSON.stringify in the title, test(), an aliased it, an inline table with as const', () => {
+  const accounts = (code: number) =>
+    [
+      "import { expect, it as spec } from 'vitest';",
+      'async function targets() {',
+      '  return { id: 1 };',
+      '}',
+      '',
+      "for (const grants of [[], ['union.pid', 'union.binding_reset']]) {",
+      '  spec(`[B1-22d] 缺权限（授予 ${JSON.stringify(grants)}）都是 10403`, async () => {',
+      `    expect((await targets()).id + grants.length).toBeLessThan(${code});`,
+      '  });',
+      '}',
+      '',
+    ].join('\n');
+  const accTitle = '[B1-22d] 缺权限（授予 ${JSON.stringify(grants)}）都是 10403';
+  expect(namesWholeBlock(accounts(9), accTitle)).toBe(true);
+  expect(compareModifiedBlocks(accounts(9), accounts(10), [accTitle])).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [{ found: true, changed: true, whole: { head: 0 } }],
+  });
+  const monitor = (body: string) =>
+    [
+      "import { expect, test } from 'vitest';",
+      "for (const expiresAt of ['2027-02-01T00:00:00Z', null] as const) {",
+      '  test(`[AC-S1-65#1] 探测授权失效立即 expired（${expiresAt}）`, async () => {',
+      `    ${body}`,
+      '  });',
+      '}',
+      '',
+    ].join('\n');
+  const monTitle = '[AC-S1-65#1] 探测授权失效立即 expired（${expiresAt}）';
+  const mb = monitor('expect(expiresAt).not.toBeUndefined();');
+  expect(namesWholeBlock(mb, monTitle)).toBe(true);
+  expect(compareModifiedBlocks(mb, monitor('expect(1).toBe(1);'), [monTitle])).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [{ found: true, changed: true, whole: { head: 0 } }],
+  });
+});
+
+/** A file with one loop around the call (`wrap`), the call's assertion `n`. */
+const foShape = (wrap: (call: string) => string, n = 1, callee = 'it'): string =>
+  [
+    "import { describe, expect, it, test } from 'vitest';",
+    "const ROWS = ['a', 'b'];",
+    'const on = true;',
+    wrap(`${callee}(\`[AC-X#20] \${row} 值\`, () => {\n    expect(${n}).toBe(${n});\n  })`),
+    '',
+  ].join('\n');
+const FO20 = '[AC-X#20] ${row} 值';
+const foLoop = (call: string, head = 'for (const row of ROWS)'): string =>
+  `${head} {\n  ${call};\n}`;
+/** Why the first name of a comparison is not found (null: found, or no comparison). */
+const foReason = (c: ReturnType<typeof compareModifiedBlocks>): string | null => {
+  const b = c.ok ? c.blocks[0] : undefined;
+  return b !== undefined && !b.found ? b.reason : null;
+};
+
+// Wrong implementation: any it whose nearest loop is a for…of, or any for keyword, accepted →
+// the shapes below would name a block; each is outside this task and must stay as before.
+it('[CT-06zzzzzzzj] shapes not recognised name no whole block (the file is judged as before)', () => {
+  const itLoop = foShape((c) => foLoop(c));
+  const testLoop = foShape((c) => foLoop(c), 1, 'test');
+  expect(namesWholeBlock(itLoop, FO20)).toBe(true);
+  expect(namesWholeBlock(testLoop, FO20)).toBe(true);
+  const refused: [string, (c: string) => string][] = [
+    ['let head', (c) => foLoop(c, 'for (let row of ROWS)')],
+    ['destructuring head', (c) => foLoop(c, 'for (const [row] of [ROWS])')],
+    ['for…in', (c) => foLoop(c, 'for (const row in ROWS)')],
+    ['for await', (c) => foLoop(c, 'for await (const row of ROWS)')],
+    ['classic for', (c) => foLoop(c, 'for (let row = 0; row < 2; row++)')],
+    ['labelled loop', (c) => `outer: ${foLoop(c)}`],
+    ['loop under if', (c) => `if (on) ${foLoop(c)}`],
+    ['loop under else', (c) => `if (on) {} else ${foLoop(c)}`],
+    ['loop inside a function', (c) => `function f() {\n${foLoop(c)}\n}`],
+    ['loop inside a block', (c) => `{\n${foLoop(c)}\n}`],
+    ['nested loop', (c) => foLoop(`for (const i of [0]) {\n${c};\n}`)],
+    ['while around', (c) => `while (on) {\n  ${c};\n}`],
+    ['loop with a describe', (c) => foLoop(`describe('d', () => {});\n  ${c}`)],
+    ['describe in the loop', (c) => foLoop(`describe('d', () => {\n${c};\n})`)],
+    ['another loop in the body', (c) => foLoop(`while (!on) {}\n  ${c}`)],
+    ['a helper with a loop', (c) => foLoop(`const f = () => {\n    for (;;) break;\n  };\n  ${c}`)],
+    ['call under if', (c) => foLoop(`if (on) ${c}`)],
+    ['call after a block', (c) => foLoop(`{}\n  ${c}`)],
+    ['call in an expression', (c) => foLoop(`void ${c}`)],
+    ['call assigned', (c) => foLoop(`const t = ${c}`)],
+    ['call without its ;', (c) => `for (const row of ROWS) {\n  ${c}\n}`],
+    ['modifier', (c) => foLoop(c.replace(/^it\(/, ['it', 'skip('].join('.')))],
+    ['concurrent', (c) => foLoop(c.replace(/^it\(/, 'it.concurrent('))],
+    ['type arguments', (c) => foLoop(c.replace(/^it\(/, 'it<object>('))],
+  ];
+  for (const [name, wrap] of refused) {
+    const base = foShape(wrap);
+    expect(namesWholeBlock(base, FO20), name).toBe(false);
+    const got = compareModifiedBlocks(base, foShape(wrap, 2), [FO20]);
+    expect(got.ok && got.blocks[0]?.found, name).not.toBe(true);
+  }
+  // A title that is no template with `${…}`, or more than the one template, names nothing.
+  for (const title of ['`[AC-X#20] 值`', "'[AC-X#20] ' + row", '`[AC-X#20] ${row}` + `值`']) {
+    const base = foShape((c) => foLoop(c.replace('`[AC-X#20] ${row} 值`', title)));
+    expect(namesWholeBlock(base, FO20), title).toBe(false);
+    expect(namesWholeBlock(base, title.slice(1, -1)), title).toBe(false);
+  }
+});
+
+// Wrong implementation: one kind locating the other at the head, a renamed whole block, or a
+// template overriding the row-by-row reading of a changed inline table.
+it('[CT-06zzzzzzzj] kinds stay apart, a whole block is not renamed, a merge-base ruling is kept, and a loop whose rows changed is declared row by row', () => {
+  const plainBase = foShape((c) => foLoop(c));
+  const eachHead = foShape((c) => foLoop(c.replace(/^it\(/, 'it.each([0])(')), 2);
+  expect(namesWholeBlock(eachHead, FO20)).toBe(true);
+  for (const [b, h] of [
+    [plainBase, eachHead],
+    [eachHead, plainBase],
+  ] as const) {
+    const got = compareModifiedBlocks(b, h, [FO20]);
+    expect(got).toMatchObject({ ok: true, blocks: [{ found: false }] });
+    expect(foReason(got)).toContain('not the same block');
+  }
+  // retitle_to of a whole for…of block: refused.
+  const renamedHead = foShape((c) => foLoop(c.replace('值', '新值')), 2);
+  const newName = '[AC-X#20] ${row} 新值';
+  const renamed = compareModifiedBlocks(plainBase, renamedHead, [FO20], [newName]);
+  expect(renamed).toMatchObject({ ok: true, blocks: [{ found: false }] });
+  // The merge base ruled the entry whole (wholeAt): located by its template on both sides.
+  const ruledHead = foShape((c) => foLoop(c), 2);
+  const ruled = compareModifiedBlocks(plainBase, ruledHead, [FO20], undefined, undefined, [true]);
+  expect(ruled).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [{ found: true, changed: true }],
+  });
+  // An inline table whose row changed (CT-06zzzzzv): the template does not name the block, even
+  // when its cooked title does not match the template text (an escape).
+  const inline = (rows: string, n = 1) =>
+    [
+      "import { expect, it } from 'vitest';",
+      `for (const row of [${rows}]) {`,
+      `  it(\`[AC-X#21] \\u0041 \${row}\`, () => {`,
+      `    expect(${n}).toBe(${n});`,
+      '  });',
+      '}',
+      '',
+    ].join('\n');
+  const t21 = '[AC-X#21] \\u0041 ${row}';
+  expect(namesWholeBlock(inline("'a', 'b'"), t21)).toBe(true);
+  const rowOnly = compareModifiedBlocks(inline("'a', 'b'"), inline("'a', 'c'"), [t21]);
+  expect(rowOnly).toMatchObject({ ok: true, blocks: [{ found: false }] });
+  expect(foReason(rowOnly)).toContain('row by its full name');
+  expect(compareModifiedBlocks(inline("'a', 'c'"), inline("'a', 'c'", 2), [t21])).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [{ found: true, changed: true }],
+  });
+});
+
+// CT-06zzzzzzzj (money-codex r1 S1-1, after test/spec/union/auth-probe/monitor.int.test.ts:256 /
+// :319): one inline loop whose body changed (declared whole by its template) does not stop another
+// inline loop of the file from being compared row by row (a changed row declared by its full
+// name). Wrong implementation: forOfRows null for the whole file once one loop's call changed →
+// the row entry is not found and the row is a difference besides.
+const MON64 = '[AC-S1-64#8] ${error} 30 分钟后重试一次，仍失败只后台告警';
+const MON65 = '[AC-S1-65#1] 探测授权失效立即 expired（${expiresAt}）';
+const monitor = (assertion: string, errors: string, expiry: string): string =>
+  [
     "import { expect, it } from 'vitest';",
-    "const sources = ['a', 'b'] as const;",
-    'for (const source of sources) {',
-    `  it(\`${title}\`, () => {`,
-    '    expect(source).toBeTruthy();',
+    '',
+    `for (const error of [${errors}]) {`,
+    `  it(\`${MON64}\`, async () => {`,
+    `    ${assertion}`,
+    '  });',
+    '}',
+    '',
+    `for (const expiresAt of ['${expiry}', null]) {`,
+    `  it(\`${MON65}\`, async () => {`,
+    '    expect(expiresAt === null || expiresAt.length > 0).toBe(true);',
     '  });',
     '}',
     '',
   ].join('\n');
-  expect(namesWholeBlock(plain, title)).toBe(false);
+const MON_ERRORS = "'timeout', 'rate-limit'";
+const MON_BASE = monitor('expect(error).toBeTruthy();', MON_ERRORS, '2027-02-01T00:00:00Z');
+const MON_HEAD = monitor("expect(error).not.toBe('');", MON_ERRORS, '2027-03-01T00:00:00Z');
+const MON_ROW = '[AC-S1-65#1] 探测授权失效立即 expired（2027-03-01T00:00:00Z）';
+
+it('[CT-06zzzzzzzj] a loop whose body changed is left out of the row comparison alone: the other loop is still compared row by row', () => {
+  const rows = forOfRows(MON_BASE, MON_HEAD);
+  expect(rows).not.toBeNull();
+  expect(rows?.loops).toHaveLength(1);
+  expect(rows?.loops[0]?.rows.map((r) => r.changed)).toEqual([true, false]);
+  const got = compareModifiedBlocks(MON_BASE, MON_HEAD, [MON64, MON_ROW]);
+  expect(got).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [
+      { test: MON64, found: true, changed: true },
+      { test: MON_ROW, found: true, changed: true },
+    ],
+  });
+  expect(got.ok && got.blocks[0]?.found === true && got.blocks[0].whole).toBeTruthy();
+  // Either entry alone: the other change is a difference besides.
+  for (const names of [[MON64], [MON_ROW]]) {
+    const one = compareModifiedBlocks(MON_BASE, MON_HEAD, names);
+    expect(one.ok && one.outside, names[0]).toEqual(expect.any(String));
+  }
+  // The body-changed loop with its own rows changed too: its rows are not masked, so the
+  // template entry is no cover for them (a difference besides), whatever the other loop does.
+  const bothHead = monitor(
+    "expect(error).not.toBe('');",
+    "'timeout', 'busy'",
+    '2027-03-01T00:00:00Z',
+  );
+  const both = compareModifiedBlocks(MON_BASE, bothHead, [MON64, MON_ROW]);
+  expect(both.ok && both.outside).toEqual(expect.any(String));
+});
+
+// CT-06zzzzzzzj (money-codex r2 S1): a row declared by its full name whose change lies before the
+// range (spec_commit → head) is still located there, unchanged, while the loop whose body changed
+// is declared whole by its template; and the reverse (the template entry's loop unchanged in the
+// range, the row changed). Wrong implementation: forOfRows null when no row changed in the range
+// (the row entry not found: a merge refused), or every loop of forOfRows taken as a loop whose
+// rows changed (the template entry not found).
+const MON_A1 = 'expect(error).toBeTruthy();';
+const MON_A2 = "expect(error).not.toBe('');";
+const MON_A3 = 'expect(error.length).toBeGreaterThan(0);';
+const MON_OLD = '2027-02-01T00:00:00Z';
+const MON_NEW = '2027-03-01T00:00:00Z';
+
+it('[CT-06zzzzzzzj] spec_commit → head: a row changed only before it is found unchanged, the whole loop next to it found changed', () => {
+  const mBase = monitor(MON_A1, MON_ERRORS, MON_OLD);
+  const mSpec = monitor(MON_A2, MON_ERRORS, MON_NEW);
+  const mHead = monitor(MON_A3, MON_ERRORS, MON_NEW);
+  const names = [MON64, MON_ROW];
+  const both = (changed64: boolean, changedRow: boolean) => ({
+    ok: true,
+    outside: null,
+    blocks: [
+      { test: MON64, found: true, changed: changed64 },
+      { test: MON_ROW, found: true, changed: changedRow },
+    ],
+  });
+  expect(compareModifiedBlocks(mBase, mSpec, names)).toMatchObject(both(true, true));
+  expect(compareModifiedBlocks(mBase, mHead, names)).toMatchObject(both(true, true));
+  const range = compareModifiedBlocks(mSpec, mHead, names);
+  expect(range).toMatchObject(both(true, false));
+  expect(range.ok && range.blocks[0]?.found === true && range.blocks[0].whole).toBeTruthy();
+  expect(range.ok && range.blocks[1]?.found === true && range.blocks[1].whole).toBeFalsy();
+  // As evidence-check calls it for spec_commit → head (the merge base ruled the template whole).
+  expect(
+    compareModifiedBlocks(mSpec, mHead, names, undefined, undefined, [true, false]),
+  ).toMatchObject(both(true, false));
+  // Nothing of the loops changed in the range: still found, both unchanged.
+  expect(compareModifiedBlocks(mHead, mHead, names)).toMatchObject(both(false, false));
+  // The undeclared row change is still a difference besides in the range.
+  const rowAfter = monitor(MON_A3, MON_ERRORS, '2027-04-01T00:00:00Z');
+  const extra = compareModifiedBlocks(mSpec, rowAfter, [MON64]);
+  expect(extra.ok && extra.outside).toEqual(expect.any(String));
+});
+
+it('[CT-06zzzzzzzj] spec_commit → head: a template entry whose loop is unchanged in the range is found while a row of the other loop changed', () => {
+  const mBase = monitor(MON_A1, MON_ERRORS, MON_OLD);
+  const mSpec = monitor(MON_A2, MON_ERRORS, MON_OLD);
+  const mHead = monitor(MON_A2, MON_ERRORS, MON_NEW);
+  const names = [MON64, MON_ROW];
+  expect(compareModifiedBlocks(mBase, mHead, names)).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [
+      { test: MON64, found: true, changed: true },
+      { test: MON_ROW, found: true, changed: true },
+    ],
+  });
+  for (const wholeAt of [undefined, [true, false]]) {
+    const range = compareModifiedBlocks(mSpec, mHead, names, undefined, undefined, wholeAt);
+    expect(range, String(wholeAt)).toMatchObject({
+      ok: true,
+      outside: null,
+      blocks: [
+        { test: MON64, found: true, changed: false },
+        { test: MON_ROW, found: true, changed: true },
+      ],
+    });
+    expect(range.ok && range.blocks[0]?.found === true && range.blocks[0].whole).toBeTruthy();
+  }
+  // A template entry of a loop whose own rows changed is still not found (rows by full name).
+  const ownRows = monitor(MON_A2, "'timeout', 'busy'", MON_OLD);
+  expect(compareModifiedBlocks(mSpec, ownRows, [MON64])).toMatchObject({
+    ok: true,
+    blocks: [{ test: MON64, found: false }],
+  });
+});
+
+it('[CT-06zzzzzzzj] merge base → head: a declared row that did not change is found unchanged (redundant), not changed', () => {
+  // Not loosened: evidence-check and red-check want every declared block changed from the merge
+  // base; a declared row the range leaves alone is found with changed false (an entry too many).
+  const mBase = monitor(MON_A1, MON_ERRORS, MON_OLD);
+  const mHead = monitor(MON_A2, MON_ERRORS, MON_OLD);
+  const oldRow = `[AC-S1-65#1] 探测授权失效立即 expired（${MON_OLD}）`;
+  expect(compareModifiedBlocks(mBase, mHead, [MON64, oldRow])).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [
+      { test: MON64, found: true, changed: true },
+      { test: oldRow, found: true, changed: false },
+    ],
+  });
+  // A row name no row gives is not found.
+  expect(compareModifiedBlocks(mBase, mHead, [MON64, MON_ROW])).toMatchObject({
+    ok: true,
+    blocks: [{ found: true }, { test: MON_ROW, found: false }],
+  });
+  // forOfRows without `unchanged` (compareTestFileRows, compareOutsideChangedRows) is as before:
+  // null when no row changed, and when a declared name is an unchanged row's.
+  expect(forOfRows(mBase, mBase)).toBeNull();
+  expect(forOfRows(mBase, mHead)).toBeNull();
+  const rowHead = monitor(MON_A1, MON_ERRORS, MON_NEW);
+  expect(forOfRows(mBase, rowHead)).not.toBeNull();
+  expect(
+    forOfRows(mBase, rowHead, ['[AC-S1-64#8] timeout 30 分钟后重试一次，仍失败只后台告警']),
+  ).toBeNull();
 });
