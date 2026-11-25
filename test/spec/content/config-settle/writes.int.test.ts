@@ -363,6 +363,10 @@ it('[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约�
     'agent.require_phone',
     'agent.filing_text',
     'agent.examples',
+    ...[2026, 2027, 2028, 2029, 2030].flatMap((year) => [
+      `calendar.cn_holidays.${year}`,
+      `calendar.cn_makeup_workdays.${year}`,
+    ]),
   ];
   const settleEnd = keys.length - tail.length;
   const settleStart = settleEnd - 16;

@@ -193,6 +193,10 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
     'agent.require_phone',
     'agent.filing_text',
     'agent.examples',
+    ...[2026, 2027, 2028, 2029, 2030].flatMap((year) => [
+      `calendar.cn_holidays.${year}`,
+      `calendar.cn_makeup_workdays.${year}`,
+    ]),
   ]);
   expect(registry.slice(0, 29)).toStrictEqual(
     EXPECTED.map((entry) => ({ ...entry, options: null })),

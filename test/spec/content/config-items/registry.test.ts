@@ -157,6 +157,10 @@ function registered(key: string): ConfigItemSpec {
 }
 
 it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 agent.page_guide.routes、external_hosts，不多不少不重复', () => {
+  const calendarKeys = [2026, 2027, 2028, 2029, 2030].flatMap((year) => [
+    `calendar.cn_holidays.${year}`,
+    `calendar.cn_makeup_workdays.${year}`,
+  ]);
   const keys = configRegistry().map((spec) => spec.key);
   expect(new Set(keys).size).toBe(keys.length);
   const seeds = [...seedRows().keys()];
@@ -194,6 +198,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...AUTO_CORRECT_UNSEEDED,
         ...DEFAULT_WORD_UNSEEDED,
         ...AGENT_A10_UNSEEDED,
+        ...calendarKeys,
       ]),
     ]),
   );
@@ -220,6 +225,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
     ...AUTO_CORRECT_UNSEEDED,
     ...DEFAULT_WORD_UNSEEDED,
     ...AGENT_A10_UNSEEDED,
+    ...calendarKeys,
   ]) {
     expect(seeds, key).not.toContain(key);
   }
@@ -325,7 +331,8 @@ it('[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 o
       SERVICE_FEE_BP_UNSEEDED.length -
       AUTO_CORRECT_UNSEEDED.length -
       DEFAULT_WORD_UNSEEDED.length -
-      AGENT_A10_UNSEEDED.length,
+      AGENT_A10_UNSEEDED.length -
+      10,
   );
   expect(registered('agent.page_guide.routes').valueType).toBe('object');
 });
@@ -486,10 +493,17 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...DEFAULT_WORD,
     ...AGENT_A10,
   ].map((e) => e.key);
+  const calendarKeys = [2026, 2027, 2028, 2029, 2030].flatMap((year) => [
+    `calendar.cn_holidays.${year}`,
+    `calendar.cn_makeup_workdays.${year}`,
+  ]);
   expect(keys.slice(EXPECTED.length, EXPECTED.length + SETTLE.length)).toStrictEqual(
     SETTLE.map((entry) => entry.key),
   );
-  expect(keys.slice(EXPECTED.length + SETTLE.length)).toStrictEqual(inviteTail);
+  expect(keys.slice(EXPECTED.length + SETTLE.length)).toStrictEqual([
+    ...inviteTail,
+    ...calendarKeys,
+  ]);
   for (const entry of SETTLE) {
     const spec = registered(entry.key);
     expect({
@@ -560,8 +574,12 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...DEFAULT_WORD,
     ...AGENT_A10,
   ];
-  const head = keys.length - tail.length;
-  expect(keys.slice(head)).toStrictEqual(tail.map((entry) => entry.key));
+  const calendarKeys = [2026, 2027, 2028, 2029, 2030].flatMap((year) => [
+    `calendar.cn_holidays.${year}`,
+    `calendar.cn_makeup_workdays.${year}`,
+  ]);
+  const head = keys.length - tail.length - calendarKeys.length;
+  expect(keys.slice(head)).toStrictEqual([...tail.map((entry) => entry.key), ...calendarKeys]);
   expect(keys.slice(head, head + INVITE_CFG.length)).toStrictEqual(
     INVITE_CFG.map((entry) => entry.key),
   );
@@ -605,6 +623,10 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
   expect(keys.filter((entry) => entry === key)).toHaveLength(1);
   const at = keys.indexOf(key);
   expect(keys[at - 1]).toBe('growth.invite_reward.ip_window_hours');
+  const calendarKeys = [2026, 2027, 2028, 2029, 2030].flatMap((year) => [
+    `calendar.cn_holidays.${year}`,
+    `calendar.cn_makeup_workdays.${year}`,
+  ]);
   expect(keys.slice(at + 1)).toStrictEqual(
     [
       ...PAYOUT,
@@ -641,7 +663,9 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...AUTO_CORRECT,
       ...DEFAULT_WORD,
       ...AGENT_A10,
-    ].map((entry) => entry.key),
+    ]
+      .map((entry) => entry.key)
+      .concat(calendarKeys),
   );
   for (const entry of [
     ...PAYOUT,

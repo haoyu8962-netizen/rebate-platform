@@ -68,7 +68,27 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
   const f = await setup(h);
   const items = await listAll(f);
   expect(items.map((item) => item.key)).toStrictEqual(configRegistry().map((spec) => spec.key));
-  expect(items.map(normalized)).toStrictEqual(configRegistry().map((spec) => unwritten(spec.key)));
+  const calendarKeys = [2026, 2027, 2028, 2029, 2030].flatMap((year) => [
+    `calendar.cn_holidays.${year}`,
+    `calendar.cn_makeup_workdays.${year}`,
+  ]);
+  const unwrittenCalendar = calendarKeys.map((key) => ({
+    key,
+    value: null,
+    value_type: 'object',
+    options: null,
+    permission: 'config.general',
+    admin_editable: true,
+    version: 0,
+    updated_by: null,
+    updated_at: null,
+  }));
+  expect(items.map(normalized)).toStrictEqual([
+    ...configRegistry()
+      .filter((spec) => !calendarKeys.includes(spec.key))
+      .map((spec) => unwritten(spec.key)),
+    ...unwrittenCalendar,
+  ]);
   // F1-02zt：过渡已收紧, EXPECTED + settle.* + invite; B2-06bz: + the eight payout.* keys;
   // B2-11z: + the six risk.withdraw.* keys; B2-11y: + the seventeen withdraw.auto_payout.* keys;
   // B2-11dz: + the four payout.auto_enable_check.* keys; B1-28g: + rank.cache_ttl_seconds;
@@ -124,10 +144,9 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...DEFAULT_WORD,
     ...AGENT_A10,
   ];
-  expect(items).toHaveLength(expectedNow().length + tail.length);
-  expect(items.slice(-tail.length).map((item) => item.key)).toStrictEqual(
-    tail.map((entry) => entry.key),
-  );
+  const tailKeys = [...tail.map((entry) => entry.key), ...calendarKeys];
+  expect(items).toHaveLength(expectedNow().length + tailKeys.length);
+  expect(items.slice(-tailKeys.length).map((item) => item.key)).toStrictEqual(tailKeys);
 });
 
 it('[AC-F1-10e#11] 列表与单项给出写过的当前值、version、作者快照与时间；种子行照常列出', async () => {
