@@ -159,7 +159,7 @@ it('[AC-F1-02zj#11] list exposes the enum options of settle.* items', async () =
   const page = await admin.list('couli', { page: 1, page_size: 100 });
   const source = page.items.find((item) => item.key === 'settle.statement_source.taobao');
   expect(source?.options).toStrictEqual(['api', 'upload']);
-  expect(page.total).toBe(179);
+  expect(page.total).toBe(189);
 });
 
 it('[AC-B1-05m] combined save checks run only for their own written keys and read only their keys', () => {
@@ -285,4 +285,35 @@ it('[AC-B1-22zb unit] a store without the AI consent lock refuses to write the k
   ).rejects.toThrow('cannot lock');
   expect(f.writes).toStrictEqual([]);
   expect(f.calls).toStrictEqual([]);
+});
+
+it('[AC-B1-34s#5] PUT a calendar key with a date of another year or a repeat is 20001 [value], no write', async () => {
+  const { admin, writes, audits } = fake({});
+  const key = 'calendar.cn_makeup_workdays.2028';
+  for (const value of [['2027-02-28'], ['2028-02-29', '2028-02-29'], ['2028-02-30']]) {
+    expect(
+      await fieldsOf(admin.update(actor, key, { value, expected_version: 0 })),
+      JSON.stringify(value),
+    ).toStrictEqual(['value']);
+  }
+  expect([writes, audits]).toStrictEqual([[], []]);
+  const item = await admin.update(actor, key, { value: ['2028-02-29'], expected_version: 0 });
+  expect(item.value).toStrictEqual(['2028-02-29']);
+  expect(writes).toHaveLength(1);
+});
+
+it('[AC-B1-34s#6] batch lists only the calendar keys whose dates fail and writes nothing', async () => {
+  const { admin, writes, audits } = fake({});
+  expect(
+    await fieldsOf(
+      admin.batch(actor, {
+        items: [
+          { key: 'calendar.cn_holidays.2027', value: ['2027-12-31'], expected_version: 0 },
+          { key: 'calendar.cn_holidays.2028', value: ['2029-01-01'], expected_version: 0 },
+          { key: 'calendar.cn_makeup_workdays.2028', value: ['2028-1-02'], expected_version: 0 },
+        ],
+      }),
+    ),
+  ).toStrictEqual(['calendar.cn_holidays.2028', 'calendar.cn_makeup_workdays.2028']);
+  expect([writes, audits]).toStrictEqual([[], []]);
 });

@@ -28,7 +28,7 @@ function spec(key: string) {
 
 it('[AC-F1-02zj#2] settle.* items are appended after the 29 earlier items, editable config.business', () => {
   const registry = configRegistry();
-  expect(registry).toHaveLength(179);
+  expect(registry).toHaveLength(189);
   expect(registry[28]!.key).toBe('external_hosts');
   expect(registry.slice(29, 45).map((entry) => entry.key)).toStrictEqual(SETTLE_KEYS);
   for (const entry of registry.slice(29, 45)) {
@@ -159,11 +159,18 @@ const AGENT_A10: readonly (readonly [string, string, string, unknown])[] = [
   ['agent.examples', 'object', 'config.general', null],
 ];
 
-it('[AC-B1-22y#1] the Agent keys are the last 26 items, editable, with their type, point and bounds or options', () => {
+const CALENDAR_KEYS = [2026, 2027, 2028, 2029, 2030].flatMap((year) => [
+  `calendar.cn_holidays.${year}`,
+  `calendar.cn_makeup_workdays.${year}`,
+]);
+
+it('[AC-B1-22y#1] the Agent keys are the 26 items before the 10 calendar keys, editable, with their type, point and bounds or options', () => {
   const registry = configRegistry();
-  expect(registry.slice(-AGENT_A10.length).map((entry) => entry.key)).toStrictEqual(
-    AGENT_A10.map(([key]) => key),
-  );
+  expect(
+    registry
+      .slice(-AGENT_A10.length - CALENDAR_KEYS.length, -CALENDAR_KEYS.length)
+      .map((entry) => entry.key),
+  ).toStrictEqual(AGENT_A10.map(([key]) => key));
   for (const [key, valueType, permission, extra] of AGENT_A10) {
     const entry = spec(key);
     expect([entry.valueType, entry.permission, entry.adminEditable], key).toStrictEqual([
@@ -203,4 +210,51 @@ it('[AC-B1-22y#2] Agent key values: integer bounds, enum options, the 0..300 cac
   expect(configValueFits(spec('agent.whitelist_user_ids'), 'u1')).toBe(false);
   expect(configValueFits(spec('agent.filing_text'), '')).toBe(true);
   expect(configValueFits(spec('agent.require_phone'), 'true')).toBe(false);
+});
+
+it('[AC-B1-34s#1] the calendar keys close the registry year by year, editable config.general objects', () => {
+  const registry = configRegistry();
+  expect(registry.slice(-CALENDAR_KEYS.length).map((entry) => entry.key)).toStrictEqual(
+    CALENDAR_KEYS,
+  );
+  for (const key of CALENDAR_KEYS) {
+    const entry = spec(key);
+    expect(
+      [entry.valueType, entry.permission, entry.adminEditable, entry.options],
+      key,
+    ).toStrictEqual(['object', 'config.general', true, null]);
+    expect('range' in entry, key).toBe(false);
+  }
+  expect(configItemSpecOf('calendar.cn_holidays.2031')).toBeNull();
+  expect(configItemSpecOf('calendar.cn_holidays')).toBeNull();
+});
+
+it('[AC-B1-34s#2] a calendar value is a list of distinct real dates of the key own year', () => {
+  const holidays = spec('calendar.cn_holidays.2028');
+  const makeup = spec('calendar.cn_makeup_workdays.2026');
+  expect(configValueFits(holidays, [])).toBe(true);
+  expect(configValueFits(holidays, ['2028-02-29', '2028-12-31', '2028-01-01'])).toBe(true);
+  expect(configValueFits(makeup, ['2026-02-28'])).toBe(true);
+  for (const value of [
+    ['2026-02-29'], // not a leap year
+    ['2025-12-31'], // year below the key's
+    ['2027-01-01'], // year above the key's
+    ['x2026-01-04'], // start not anchored
+    ['2026-01-04x'], // end not anchored
+    ['2026-01-04\n'],
+    ['2026-1-04'],
+    ['2026-06-31'],
+    ['2026-13-01'],
+    ['2026-01-00'],
+    ['2026-01-04', '2026-01-04'],
+    ['2026-01-04', 20260105],
+    { date: '2026-01-04' },
+    '2026-01-04',
+    null,
+  ]) {
+    expect(configValueFits(makeup, value), JSON.stringify(value)).toBe(false);
+  }
+  // Other object items keep the type-only check.
+  expect(configValueFits(spec('agent.examples'), ['2026-02-29', 'x'])).toBe(true);
+  expect(configValueFits(spec('agent.whitelist_user_ids'), { a: 1 })).toBe(true);
 });

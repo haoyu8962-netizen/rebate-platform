@@ -125,6 +125,47 @@ function autoPayoutHours(suffix: string): string[] {
   return Array.from({ length: 14 }, (_, i) => `${String(9 + i).padStart(2, '0')}${suffix}`);
 }
 
+/** B1-34s (D10-2946): the years the workday calendar keys are registered for. */
+const CALENDAR_YEARS = [2026, 2027, 2028, 2029, 2030] as const;
+
+/** B1-34s: the two calendar lists of a year, in registry order. */
+const CALENDAR_KINDS = ['cn_holidays', 'cn_makeup_workdays'] as const;
+
+const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * B1-34s: whether `value` is an array of distinct real dates of `year` written YYYY-MM-DD (the
+ * pattern anchored at both ends, so no time part or trailing newline; leap years counted).
+ */
+function isCalendarDateList(value: unknown, year: number): boolean {
+  if (!Array.isArray(value)) return false;
+  const seen = new Set<string>();
+  for (const item of value as unknown[]) {
+    if (typeof item !== 'string' || seen.has(item)) return false;
+    const match = CALENDAR_DATE.exec(item);
+    if (match === null) return false;
+    const [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])];
+    if (y !== year || m < 1 || m > 12 || d < 1 || d > daysInMonth(y, m)) return false;
+    seen.add(item);
+  }
+  return true;
+}
+
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
+/** B1-34s: per-key value checks beyond the registered type, keyed by the literal key. */
+const VALUE_CHECKS: ReadonlyMap<string, (value: unknown) => boolean> = new Map(
+  CALENDAR_YEARS.flatMap((year) =>
+    CALENDAR_KINDS.map(
+      (kind) =>
+        [`calendar.${kind}.${year}`, (value: unknown) => isCalendarDateList(value, year)] as const,
+    ),
+  ),
+);
+
 // F1-10e ruling 14: explicit entries, including the read-only money-rule flags.
 const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   spec('withdraw.payout_account_verify_per_day', 'number', 'config.business'),
@@ -471,6 +512,15 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
   spec('agent.require_phone', 'boolean', 'config.risk'),
   spec('agent.filing_text', 'string', 'config.general'),
   spec('agent.examples', 'object', 'config.general'),
+  // B1-34s (D10-2944 / D10-2946; BR-WDR-26 / BR-ID-36 / BR-ID-27 工作日日历): the State Council
+  // holidays and make-up workdays of each year 2026–2030, one literal key per year and kind, year
+  // by year, config.general, editable. A JSON array of distinct real dates (YYYY-MM-DD) of the
+  // key's own year; an empty array is valid. No seed rows; unset = that year only skips weekends
+  // (the readers' fallback). Overlap between the two keys is not refused here: the readers let a
+  // holiday win. Registration and the per-value check only.
+  ...CALENDAR_YEARS.flatMap((year) =>
+    CALENDAR_KINDS.map((kind) => spec(`calendar.${kind}.${year}`, 'object', 'config.general')),
+  ),
 ]);
 
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(
@@ -489,8 +539,16 @@ export function configItemSpecOf(key: string): ConfigItemSpec | null {
   return BY_KEY.get(key) ?? null;
 }
 
-/** Whether `value` is of the item's registered type (an enum value must be one of options). */
+/**
+ * Whether `value` is of the item's registered type (an enum value must be one of options), and
+ * passes the item's own value check when it has one (B1-34s: the calendar date lists).
+ */
 export function configValueFits(spec: ConfigItemSpec, value: unknown): boolean {
+  const check = VALUE_CHECKS.get(spec.key);
+  return check === undefined ? fitsType(spec, value) : fitsType(spec, value) && check(value);
+}
+
+function fitsType(spec: ConfigItemSpec, value: unknown): boolean {
   switch (spec.valueType) {
     case 'enum':
       return typeof value === 'string' && (spec.options?.includes(value) ?? false);
