@@ -5182,7 +5182,9 @@ export class AppModule {
                   // appeal.resolved need_reauth: linking's Taobao binding read (SELECT only).
                   taobaoReauth: needsTaobaoReauth,
                   ports: adminAppealWritePorts,
-                  config: (db, clock) => createContentReader({ db, clock }),
+                  // B1-34s (D10-3115): the appeal deadline reads its calendar keys in one
+                  // statement, like the API entry's appeals.
+                  config: (db, clock) => workdayCalendarConfig(db, clock),
                 },
               }),
             ]

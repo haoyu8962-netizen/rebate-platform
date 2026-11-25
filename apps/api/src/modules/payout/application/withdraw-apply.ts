@@ -192,10 +192,10 @@ function datesOf(value: unknown, year: number): string[] | null {
 /**
  * The calendar years a deadline from `from` may reach (BR-WDR-26), read through `config` on
  * `handle`; an unreadable year counts weekends only (warned `workday_calendar_unconfigured`).
- * Shared by W1 (switch off) and the automatic decision (B2-11c). B1-34s (D10-3001): with the
- * port's `configValues` a year's two keys come from one statement and are taken as one saved
- * state (a key it does not return is unconfigured, never read again on its own); without it each
- * key is read once.
+ * Shared by W1 (switch off) and the automatic decision (B2-11c). B1-34s (D10-3001 / D10-3115):
+ * with the port's `configValues` the keys of every year the deadline may reach come from one
+ * statement and are taken as one saved state (a key it does not return is unconfigured, never
+ * read again on its own); without it each key is read once.
  */
 export async function readReviewCalendars(
   options: {
@@ -214,19 +214,34 @@ export async function readReviewCalendars(
   from: Date,
 ): Promise<Record<number, WorkdayCalendarYear>> {
   const { first, last } = reviewDeadlineDays(from);
-  const years = new Set<number>([civilYearOfDay(from, first), civilYearOfDay(from, last)]);
+  const years = [...new Set<number>([civilYearOfDay(from, first), civilYearOfDay(from, last)])];
+  const keysOf = (year: number) => [
+    CALENDAR_KEYS.holidays(year),
+    CALENDAR_KEYS.makeupWorkdays(year),
+  ];
+  // B1-34s (D10-3115): with a batch read every year's keys come from one statement, so a batch
+  // save committing during the computation is seen whole or not at all (never an old year paired
+  // with a new one); a failed batch read leaves every year unconfigured.
+  let batch: ReadonlyMap<string, { value: unknown }> | null | undefined;
+  if (options.config.configValues !== undefined) {
+    try {
+      batch = await options.config.configValues(appId, years.flatMap(keysOf), handle);
+    } catch {
+      // The error may carry configuration values or driver details: never logged.
+      batch = null;
+    }
+  }
   const result: Record<number, WorkdayCalendarYear> = {};
   for (const year of years) {
     let read: WorkdayCalendarYear | null = null;
     try {
-      const holidaysKey = CALENDAR_KEYS.holidays(year);
-      const makeupKey = CALENDAR_KEYS.makeupWorkdays(year);
+      const [holidaysKey, makeupKey] = keysOf(year) as [string, string];
       let holidays: { value: unknown } | null;
       let makeup: { value: unknown } | null;
-      if (options.config.configValues !== undefined) {
-        const rows = await options.config.configValues(appId, [holidaysKey, makeupKey], handle);
-        holidays = rows.get(holidaysKey) ?? null;
-        makeup = rows.get(makeupKey) ?? null;
+      if (batch !== undefined) {
+        // A key the batch read does not return is unconfigured (never read again on its own).
+        holidays = batch?.get(holidaysKey) ?? null;
+        makeup = batch?.get(makeupKey) ?? null;
       } else {
         holidays = await options.config.configValue(appId, holidaysKey, handle);
         makeup = await options.config.configValue(appId, makeupKey, handle);
