@@ -4,7 +4,8 @@
 #   codex-run.sh impl   <id> [--phase test|handover] [--worktree <dir>] [--timeout-min <n>]
 #                            [--dry-run]
 #   codex-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test]
-#                            [--base <ref>] [--timeout-min <n>] [--full] [--dry-run]
+#                            [--base <ref>] [--timeout-min <n>] [--full]
+#                            [--confirm-round <commit>] [--dry-run]
 #   codex-run.sh canary <id> --review-type <t> --base <ref> --worktree <dir> --round <n>
 #   codex-run.sh selfcheck
 #
@@ -51,6 +52,17 @@
 # Its test phase also formats the test files it handed back (tools/agent/format-tests.ts,
 # D10-292) and records the summary as `test_format` in meta.json; a change that is not
 # format-only makes the call "no usable output" (exit 10).
+#
+# Review context facts for the rule-test review rubric (CT-06zzzzzzzg, D10-2961 / D10-2976): the
+# rubric lives in the trusted prompt (prompts/review-spec-test.md); a spec-test review context
+# carries `Task kind: companion test task (…)` when the trusted ledger makes the task one
+# (companion_task), and `Confirmation round: yes` when --confirm-round <commit> is given, with the
+# red_exempt / red_exempt_outside / renames / expected_values entries the trusted ledger added or
+# changed since that commit and their count (D10-3211). --confirm-round applies to spec-test
+# reviews only, and needs a baseline commit on the trusted root's history that holds the ledger
+# (otherwise: exit 2, round released); it is never passed to the model. Its meta says
+# confirm_round: true, and its output is never the baseline of a later round (D10-3210 ③). The
+# brief stays data and never sets either line.
 set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -104,7 +116,8 @@ WT_ARG=''
 REVIEW_TYPE=''
 REVIEW_EFFORT=''
 # Review scope of this round (build_previous_round): full or incremental, why a full review
-# (first-round, other-engine, unusable-previous, no-change or flag) and the baseline output.
+# (first-round, confirmation-only, other-engine, unusable-previous, no-change or flag) and the
+# baseline output.
 REVIEW_SCOPE=''
 FULL_REASON=''
 PREV_OUTPUT=''
@@ -113,6 +126,14 @@ TIMEOUT_MIN=''
 DRY_RUN=0
 # --full (review only, D10-940): this round reviews the whole change, whatever the earlier rounds.
 FULL=0
+# --confirm-round <baseline> (spec-test review only, CT-06zzzzzzzg, D10-3211): the review context
+# says `Confirmation round: yes` and lists the red_exempt / red_exempt_outside / renames /
+# expected_values entries the trusted ledger added or changed since the baseline commit
+# (CONFIRM_DELTA, resolve_confirm_delta). CONFIRM_BASELINE is the full commit once checked.
+CONFIRM_ROUND=0
+CONFIRM_BASELINE=''
+CONFIRM_DELTA=''
+TASK_TYPE=''
 # CT-06zzzp: a refusal gives back the caller's round only once the arguments are parsed (task id,
 # mode, phase, --dry-run known) and the trusted root is resolved.
 ARGS_PARSED=0
@@ -133,10 +154,13 @@ print_usage() {
     cat <<'EOF'
 usage: claude-run.sh impl   <id> [--phase test] [--worktree <dir>] [--timeout-min <n>] [--dry-run]
        claude-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test]
-                                 [--base <ref>] [--timeout-min <n>] [--full] [--dry-run]
+                                 [--base <ref>] [--timeout-min <n>] [--full]
+                                 [--confirm-round <commit>] [--dry-run]
        claude-run.sh selfcheck
 --full (review only): review the whole change this round, with no previous round as baseline;
        the round still counts
+--confirm-round <commit> (spec-test review only): an exemption confirmation round; <commit> is
+       the trusted ledger's commit of the previous round (the baseline of the ledger delta)
 env:   CLAUDE_INDEPENDENT_CONFIG_DIR  Claude configuration directory (the account) of the fresh
                                       context, passed as CLAUDE_CONFIG_DIR; unset: the current one
 exit:  0 usable output | 10 no usable output | 11 model capacity or usage limit
@@ -149,10 +173,14 @@ EOF
 usage: codex-run.sh impl   <id> [--phase test|handover] [--worktree <dir>] [--timeout-min <n>]
                                 [--dry-run]
        codex-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test]
-                                [--base <ref>] [--timeout-min <n>] [--full] [--dry-run]
+                                [--base <ref>] [--timeout-min <n>] [--full]
+                                [--confirm-round <commit>] [--dry-run]
        codex-run.sh selfcheck
 --full (review only): review the whole change this round, with no previous round as baseline;
        the round still counts (not passed to codex)
+--confirm-round <commit> (spec-test review only): an exemption confirmation round; <commit> is
+       the trusted ledger's commit of the previous round, the baseline of the ledger delta (not
+       passed to codex)
 env:   CODEX_REVIEW_EFFORT  review reasoning effort: minimal|low|medium|high|xhigh (default medium;
                             change only when the owner decides otherwise; impl stays high)
 exit:  0 usable output | 10 no usable output | 11 model capacity or usage limit
@@ -284,6 +312,24 @@ parse_args() {
         FULL=1
         shift
         ;;
+      --confirm-round)
+        # This wrapper's own option (CT-06zzzzzzzg): never passed to the model. Its value, the
+        # baseline commit of the trusted ledger (D10-3211), is read when the next argument is not
+        # an option; a missing or unusable baseline is refused in run_task, once the round can be
+        # given back (resolve_confirm_delta), after the review type check.
+        CONFIRM_ROUND=1
+        shift
+        if [ $# -gt 0 ]; then
+          case "$1" in
+            -*) ;;
+            *)
+              check_forbidden "$1"
+              CONFIRM_BASELINE="$1"
+              shift
+              ;;
+          esac
+        fi
+        ;;
       *)
         check_forbidden "$opt"
         fail_usage "unknown argument: $opt (arguments are not passed through to codex)"
@@ -295,6 +341,7 @@ parse_args() {
     [ -z "$REVIEW_TYPE" ] || fail_usage "--review-type applies to review only"
     [ -z "$BASE_ARG" ] || fail_usage "--base applies to review only"
     [ "$FULL" = 0 ] || fail_usage "--full applies to review only"
+    [ "$CONFIRM_ROUND" = 0 ] || fail_usage "--confirm-round applies to spec-test reviews only"
     case "$PHASE" in
       '') PHASE=test ;;
       test | handover | impl) ;;
@@ -468,6 +515,7 @@ read_task_info() {
   TASK_TESTER=''
   TASK_IMPL=''
   TASK_TEST_PATHS=''
+  TASK_TYPE=''
   local task_json=''
   if [ -f "$TRUSTED/tools/ops/task.ts" ]; then
     task_json="$(node "$TRUSTED/tools/ops/task.ts" show "$TASK" --json 2>/dev/null || true)"
@@ -493,6 +541,11 @@ read_task_info() {
       node "$SELF_DIR/meta.ts" get --file /dev/stdin tester 2>/dev/null || true)"
     TASK_IMPL="$(printf '%s\n' "$task_json" |
       node "$SELF_DIR/meta.ts" get --file /dev/stdin impl 2>/dev/null || true)"
+    TASK_TYPE="$(printf '%s\n' "$task_json" |
+      node "$SELF_DIR/meta.ts" get --file /dev/stdin type 2>/dev/null || true)"
+    case "$TASK_TYPE" in
+      *[!a-z-]*) TASK_TYPE='' ;;
+    esac
     # claude-independent: where the test phase may write (test_paths and the skeleton paths).
     TASK_TEST_PATHS="$(printf '%s\n' "$task_json" |
       node "$SELF_DIR/meta.ts" get --file /dev/stdin test_paths 2>/dev/null || true)"
@@ -974,6 +1027,12 @@ resolve_review_base() {
   [ -n "$BASE_SHA" ] || fail_usage "base ref is not a commit in the worktree: $BASE"
 }
 
+# CT-06zzzzzzzg (D10-3210 ③): true when the meta file is of an exemption confirmation round
+# (confirm_round: true, written by --confirm-round).
+confirmation_meta() {
+  [ "$(node "$SELF_DIR/meta.ts" get --file "$1" confirm_round 2>/dev/null || true)" = true ]
+}
+
 # Prints the review_type and the reviewed head (head_before, else head) of a meta file, one per
 # line; empty lines when the file is unreadable or lacks them.
 review_meta_facts() {
@@ -1050,13 +1109,18 @@ full_review_round_block() {
 #     incremental, whether or not a file differs.
 #   --full (FULL=1, D10-940): a full review whatever the earlier rounds; the round still counts,
 #     and as this engine's output it is the baseline of the next round.
+#   Exemption confirmation rounds (meta confirm_round: true, CT-06zzzzzzzg, D10-3210 ③): they
+#     count as rounds but are never the baseline: such a round reviews only its declarations, so
+#     the baseline stays the latest other output of this engine and its open findings are checked
+#     again; with confirmation rounds only, a full review (confirmation-only).
 # $1: the untracked files the prompt lists (build_review_prompt). Sets PREV_BLOCK (the `Previous
 # review round` block of an incremental review; for a full review from round 2 on the `Review
 # round` block of full_review_round_block; empty in round 1), PREV_HEAD and PREV_OUTPUT (the
 # baseline's head and output, empty for a full review; archive_previous follows PREV_OUTPUT when
 # it moves the file), REVIEW_SCOPE (full or incremental) and FULL_REASON (for a full review:
-# flag, which wins over every other reason, first-round, other-engine, unusable-previous or
-# no-change; empty for an incremental one). Every full review logs one line why, with its round.
+# flag, which wins over every other reason, first-round, confirmation-only, other-engine,
+# unusable-previous or no-change; empty for an incremental one). Every full review logs one line
+# why, with its round.
 build_previous_round() {
   local untracked="$1"
   PREV_BLOCK=''
@@ -1064,7 +1128,7 @@ build_previous_round() {
   PREV_OUTPUT=''
   REVIEW_SCOPE=full
   FULL_REASON=''
-  local prev_json='' prev_meta='' run_out='' d name best=-1 rounds=0 facts h why out
+  local prev_json='' prev_meta='' run_out='' d name best=-1 rounds=0 facts h why out skipped=0
   # RUN holds the output of the latest review call, of either engine.
   for out in $REVIEW_OUT_NAMES; do
     [ -z "$run_out" ] || break
@@ -1074,8 +1138,12 @@ build_previous_round() {
         run_out="$out"
         rounds=1
         if [ "$out" = "$REVIEW_OUT_NAME" ]; then
-          prev_json="$RUN/$out"
-          prev_meta="$RUN/meta.review.json"
+          if confirmation_meta "$RUN/meta.review.json"; then
+            skipped=$((skipped + 1))
+          else
+            prev_json="$RUN/$out"
+            prev_meta="$RUN/meta.review.json"
+          fi
         fi
       else
         log "review: $RUN/$out is not used as a previous $REVIEW_TYPE round ($why)"
@@ -1094,6 +1162,10 @@ build_previous_round() {
       [ -s "$d/$out" ] || continue
       [ "$(review_output_paired "$d/$out" "$d/meta.json" "$out")" = ok ] || continue
       rounds=$((rounds + 1))
+      if [ "$out" = "$REVIEW_OUT_NAME" ] && confirmation_meta "$d/meta.json"; then
+        skipped=$((skipped + 1))
+        continue
+      fi
       if [ "$out" = "$REVIEW_OUT_NAME" ] && [ "$prev_meta" != "$RUN/meta.review.json" ] &&
         [ "$((10#$name))" -gt "$best" ]; then
         best="$((10#$name))"
@@ -1115,6 +1187,15 @@ build_previous_round() {
   if [ "$rounds" = 0 ]; then
     FULL_REASON=first-round
     log "review: no previous $REVIEW_TYPE round of $TASK in $RUN, full review (round 1)"
+    return 0
+  fi
+  if [ "$skipped" -gt 0 ]; then
+    log "review: $skipped earlier $REVIEW_TYPE output(s) of $AGENT_ENGINE are exemption confirmation rounds (--confirm-round): never a baseline, they count as rounds only (D10-3210 ③)"
+  fi
+  if [ -z "$prev_json" ] && [ "$skipped" -gt 0 ]; then
+    FULL_REASON=confirmation-only
+    log "review: the earlier $REVIEW_TYPE rounds of $AGENT_ENGINE are exemption confirmation rounds only, never a baseline (D10-3210 ③); full review (round $round)"
+    full_review_round_block "$round" "$rounds" "the earlier usable $REVIEW_TYPE outputs of this engine are all exemption confirmation rounds (--confirm-round), which review only their declarations and are never the baseline of a later round (D10-3210 ③)"
     return 0
   fi
   if [ -z "$prev_json" ]; then
@@ -1165,6 +1246,7 @@ build_previous_round() {
 - Previous head is an ancestor of the current HEAD: $ancestry
 - Increment to review: $increment
 - Previous review output: $prev_json
+- Exemption confirmation rounds skipped as baseline: $skipped (a confirmation round reviews only its declarations, so the open findings of the previous review output above still stand unless this round closes them)
 
 #### Files changed since the previous round (\`git diff --name-only $h\`)
 
@@ -1290,6 +1372,121 @@ $body"
 # after the untracked files (build_citable_block), and `Previous attempt rejected by the
 # validator` with the messages of the latest money call when the validator rejected it
 # (build_rejected_block, read here, before archive_previous). The dry run prints the same prompt.
+# CT-06zzzzzzzg (D10-2961): true when the trusted ledger makes the task a companion test task:
+# type test-change, and every entry of its paths is the ledger file itself or lies inside one of
+# its test_paths (an entry equal to a test_paths glob, or matched by one, `**` read as any
+# depth). An entry that cannot be matched this way counts as an implementation path, so a doubt
+# never adds the line (the review then keeps red-first).
+companion_task() {
+  [ "$TASK_TYPE" = test-change ] && [ -n "$TASK_PATHS" ] && [ -n "$TASK_TEST_PATHS" ] || return 1
+  local ledger="ops/tasks/$TASK.yaml" entry glob covered old_ifs="$IFS"
+  local -a entries globs
+  IFS=','
+  read -r -a entries <<<"$TASK_PATHS"
+  read -r -a globs <<<"$TASK_TEST_PATHS"
+  IFS="$old_ifs"
+  for entry in "${entries[@]}"; do
+    [ -n "$entry" ] || continue
+    [ "$entry" != "$ledger" ] || continue
+    covered=0
+    for glob in "${globs[@]}"; do
+      [ -n "$glob" ] || continue
+      if [ "$entry" = "$glob" ]; then
+        covered=1
+        break
+      fi
+      case "$glob" in
+        *'{'* | *'['* | *'?'*) continue ;;
+        */'**') ;;
+        *) continue ;;
+      esac
+      # `<dir>/**`: the entry lies under <dir>/ (a literal prefix, so `<dir>-x` never matches).
+      case "$entry" in
+        "${glob%'**'}"?*)
+          covered=1
+          break
+          ;;
+      esac
+    done
+    [ "$covered" = 1 ] || return 1
+  done
+  return 0
+}
+
+# CT-06zzzzzzzg (D10-3211, D10-3231 ①): checks the baseline of --confirm-round and sets
+# CONFIRM_BASELINE (full commit) and CONFIRM_DELTA (context lines). The baseline must be a commit
+# of the trusted root's own Git repository (its top level is the trusted root), an ancestor of
+# its HEAD (or HEAD itself), and hold this task's ledger. The delta compares the ledger at the
+# baseline with the trusted ledger now (the file task.ts reads), whatever commits lie between:
+# every red_exempt (file + test), red_exempt_outside (file), renames (from) and expected_values
+# (file + helper + from) entry of the current ledger that the baseline lacks (added) or holds with
+# other values (changed); removed entries are not listed. Anything that cannot be checked or
+# computed refuses the call (exit 2, the round given back): never "all entries", never "none".
+# An empty delta is written as 0 entries.
+resolve_confirm_delta() {
+  local b="$CONFIRM_BASELINE" ledger="ops/tasks/$TASK.yaml" top full
+  local why="D10-3211: a confirmation round needs the trusted ledger's commit of the previous round"
+  [ -n "$b" ] || refuse_start "--confirm-round needs a baseline: --confirm-round <commit> ($why)"
+  if ! [[ "$b" =~ ^[0-9a-f]{7,40}$ ]]; then
+    refuse_start "--confirm-round baseline is not a commit id: $b ($why)"
+  fi
+  top="$(git -C "$TRUSTED" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -z "$top" ] || [ "$(real_dir "$top")" != "$(real_dir "$TRUSTED")" ]; then
+    refuse_start "--confirm-round: the trusted root $TRUSTED is not a Git checkout of its own, so the baseline $b cannot be checked ($why)"
+  fi
+  full="$(git -C "$TRUSTED" rev-parse --verify --quiet "$b^{commit}" 2>/dev/null || true)"
+  [ -n "$full" ] || refuse_start "--confirm-round baseline $b is not a commit of the trusted root ($why)"
+  if ! git -C "$TRUSTED" merge-base --is-ancestor "$full" HEAD 2>/dev/null; then
+    refuse_start "--confirm-round baseline $full is not on the trusted root's history (not HEAD or an ancestor of it) ($why)"
+  fi
+  if ! git -C "$TRUSTED" cat-file -e "$full:$ledger" 2>/dev/null; then
+    refuse_start "--confirm-round baseline $full has no $ledger in the trusted root ($why)"
+  fi
+  [ -f "$TRUSTED/$ledger" ] || refuse_start "--confirm-round: the trusted root has no $ledger now ($why)"
+  [ -f "$TRUSTED/tools/lib/task-file.ts" ] ||
+    refuse_start "--confirm-round: the trusted root has no tools/lib/task-file.ts to read the ledger with ($why)"
+  local delta
+  if ! delta="$(git -C "$TRUSTED" show "$full:$ledger" 2>/dev/null | node --input-type=module -e '
+import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+const [parser, currentFile, ledgerName] = process.argv.slice(1);
+const { parseTaskFile } = await import(pathToFileURL(parser).href);
+const before = parseTaskFile(readFileSync(0, "utf8"), ledgerName);
+const after = parseTaskFile(readFileSync(currentFile, "utf8"), ledgerName);
+const keys = {
+  red_exempt: (e) => [e.file, e.test],
+  red_exempt_outside: (e) => [e.file],
+  renames: (e) => [e.from],
+  expected_values: (e) => [e.file, e.helper, e.from],
+};
+const lines = [];
+const counts = [];
+let total = 0;
+for (const [field, keyOf] of Object.entries(keys)) {
+  const old = before[field];
+  if (!Array.isArray(after[field]) || !Array.isArray(old)) throw new Error(`${field} unreadable`);
+  const previous = new Map(old.map((e) => [JSON.stringify(keyOf(e)), JSON.stringify(e)]));
+  let n = 0;
+  for (const entry of after[field]) {
+    const seen = previous.get(JSON.stringify(keyOf(entry)));
+    if (seen === JSON.stringify(entry)) continue;
+    n += 1;
+    lines.push(`  - ${field} (${seen === undefined ? "added" : "changed"}): ${JSON.stringify(entry)}`);
+  }
+  counts.push(`${field} ${n}`);
+  total += n;
+}
+const label = total === 1 ? "entry" : "entries";
+console.log(`- Declarations added or changed this round: ${total} ${label} (${counts.join(", ")})`);
+for (const line of lines) console.log(line);
+' "$TRUSTED/tools/lib/task-file.ts" "$TRUSTED/$ledger" "$ledger")" || [ -z "$delta" ]; then
+    refuse_start "--confirm-round: the declarations added or changed since $full cannot be computed from the trusted ledger ($why)"
+  fi
+  CONFIRM_BASELINE="$full"
+  CONFIRM_DELTA="- Confirmation baseline: the trusted ledger $ledger at $full (from --confirm-round), compared with the trusted ledger now
+$delta"
+}
+
 build_review_prompt() {
   local prompt_file="$TRUSTED/tools/agent/prompts/review-$REVIEW_TYPE.md"
   [ -s "$prompt_file" ] || refuse_start "review prompt missing in the trusted root: $prompt_file"
@@ -1311,6 +1508,17 @@ build_review_prompt() {
   if [ "$REVIEW_TYPE" = spec-test ]; then
     paths_line="
 - Allowed paths (the task's paths; the rule-test locations are added): ${TASK_PATHS:-(none listed)}"
+    # CT-06zzzzzzzg: facts for the rubric of the trusted prompt, from the trusted ledger and
+    # this call's arguments only (never from the brief).
+    if companion_task; then
+      paths_line="${paths_line}
+- Task kind: companion test task (test-change, no implementation paths)"
+    fi
+    if [ "$CONFIRM_ROUND" = 1 ]; then
+      paths_line="${paths_line}
+- Confirmation round: yes
+$CONFIRM_DELTA"
+    fi
   fi
   # The same untracked list the prompt shows: an untracked file is a change too, so a round with
   # one is never "no change since the previous round" (D10-896).
@@ -1368,7 +1576,18 @@ run_task() {
   resolve_roots
   resolve_codex_bin
   resolve_limits
-  if [ "$MODE" = review ]; then resolve_review_type; fi
+  if [ "$MODE" = review ]; then
+    resolve_review_type
+    # CT-06zzzzzzzg: a confirmation round is a rule-test review's (the rubric is in
+    # prompts/review-spec-test.md); any other type is refused and the round given back. This
+    # check stands on its own (D10-3231 ②): a valid baseline never lets another type through.
+    if [ "$CONFIRM_ROUND" = 1 ] && [ "$REVIEW_TYPE" != spec-test ]; then
+      fail_usage "--confirm-round applies to spec-test reviews only (this review is $REVIEW_TYPE)"
+    fi
+    # D10-3211: the baseline is checked and the ledger delta computed here, before any file is
+    # written (the dry run shows the same context); a refusal gives the round back.
+    if [ "$CONFIRM_ROUND" = 1 ]; then resolve_confirm_delta; fi
+  fi
   # A handover implementation is for RV0 / RV1 only; RV2 stops instead (规划/11 §2.5).
   if [ "$MODE" = impl ] && [ "$PHASE" = handover ]; then
     read_task_info
@@ -1492,6 +1711,13 @@ run_task() {
     # full review, and the baseline output where archive_previous keeps it (null for a full
     # review), so that the round can be checked later. All three keys, a null written out.
     meta_args+=(--str "review_scope=$REVIEW_SCOPE")
+    # CT-06zzzzzzzg (D10-3210 ③): a confirmation round is marked, with its ledger baseline; its
+    # output is never the baseline of a later round (build_previous_round).
+    if [ "$CONFIRM_ROUND" = 1 ]; then
+      meta_args+=(--bool confirm_round=true --str "confirm_baseline=$CONFIRM_BASELINE")
+    else
+      meta_args+=(--bool confirm_round=false --null confirm_baseline)
+    fi
     if [ "$REVIEW_SCOPE" = incremental ]; then
       meta_args+=(--null full_reason --str "previous_output=$PREV_OUTPUT")
     else

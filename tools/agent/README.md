@@ -55,7 +55,7 @@ tools/agent/codex-run.sh impl <id> [--phase test|handover] [--worktree <dir>] [-
 
 # 评审（只读沙箱）
 tools/agent/codex-run.sh review <id> [--worktree <dir>] \
-  [--review-type money|general|contract|spec-test] [--base <ref>] [--timeout-min <n>] [--full] [--dry-run]
+  [--review-type money|general|contract|spec-test] [--base <ref>] [--timeout-min <n>] [--full] [--confirm-round <commit>] [--dry-run]
 
 # 自检：不发起任何 Codex 回合，不耗额度
 tools/agent/codex-run.sh selfcheck
@@ -75,6 +75,7 @@ node tools/agent/validate-output.ts --schema <schema> --file <json> [--money] [-
 - `--timeout-min` 只能调小：实现上限 30 分钟、评审 15 分钟（规划/11 §2.2）。超时的任务要拆小，不是加时间。
 - `--dry-run` 把将要执行的 argv 一行一个打印出来（参数里的换行显示为 `\n`），不启动 Codex、不写任何文件。
 - `--full` 只用于 `review`（CT-06zzzw，D10-940）：本轮强制全面审，不拼 `Previous review round` 块，轮次照常计数，这一轮的产出照常当本引擎下一轮的增量基准；是包装脚本自己的开关，不传给 Codex（argv 与不加时相同，只有提示词不同）。位置不限，可与 `--dry-run` 同用（dry-run 语义不变）。`impl` 带 `--full` 是用法错误（退出 2）。编排人工判定「这轮必须全面审」时用它，不必再挪运行目录里的文件；证据 note 写明为什么全面审。
+- `--confirm-round <commit>` 只用于 `--review-type spec-test`（CT-06zzzzzzzg，D10-2961 / D10-2976 / D10-3211）：`<commit>` 是比较基线，即上一轮时可信台账所在的提交（可信副本自己的 Git 历史上、是 HEAD 或其祖先、含本任务台账）。脚本用这个提交里的台账与可信台账当前内容比（中间隔几次提交都照算），把 `red_exempt`（file + test）、`red_exempt_outside`（file）、`renames`（from）、`expected_values`（file + helper + from）四类里新增或改动的条目逐条写进 Review context，并写总条数与分类条数（没有就照实写 0 条；删掉的不列）；上下文另有一行 `Confirmation round: yes`，评审只看这些条目（口径见 §11 第 6 条）。没给基线、基线不是提交号、不在可信历史上、基线里没有台账、或算不出增量，一律拒绝（退出 2，评审轮次退回），不降级成「全部」或「不看」。「只对 spec-test 有效」是独立的一道检查：别的评审类型（含不传 `--review-type` 而按风险级定的）即使带合法基线也退出 2、轮次退回；`impl` 带它同样是用法错误。确认轮的 meta 记 `confirm_round: true` 与 `confirm_baseline`；它的产出照常计轮次，但永不当后续轮次的增量基线——普通增量评审越过确认轮，以本引擎上一份普通评审为基线，继续核对其中未关的条目（只剩确认轮时全面审，`full_reason: confirmation-only`）。选项本身和基线都不传给模型。
 
 ## 3. 包装脚本保证什么
 
@@ -242,6 +243,7 @@ Codex 写的规则测试由另一家过审（规划/11 §2.3 第 4 步，RV2 必
 3. 计数：`state.ts bump-attempt <id> review --review-type spec-test`（最多 2 轮，计数器不变）。
 4. 起一个新的 Claude 子代理（不是本任务的实现子代理，也不是别的评审子代理），只读：提示词 = 可信副本的 `prompts/review-spec-test.md` + 一段上下文（任务编号、基线 = 分叉点、`spec_commit`、任务 refs、任务 paths、`git diff --name-only <基线> <spec_commit>`）+ `brief.ts <id> --phase review` 生成的任务书。它不运行测试（变异清单靠推演；要跑就由编排者在容器里跑）。
 5. 产出按 `schemas/review.schema.json` 写到 `<runs>/<id>/review-claude-spec-test.json`，编排者校验：`node <可信副本>/tools/agent/validate-output.ts --schema <可信副本>/tools/agent/schemas/review.schema.json --file <产出> --refs <refs> --allowed-paths <paths> --rewrite --out-of-scope-log <runs>/<id>/out-of-scope.md --diff-base <基线> --cwd <wt>`。校验不过算一轮、没有结论；`verdict: fail`（范围内有 S0 / S1）就退回 Codex 改测试（`dispatch.sh <id>` 前先 `state.ts set --spec-commit none`，在途状态的 `last_error` 指向这份评审）。
+6. 通用评审口径只写在可信提示词 `prompts/review-spec-test.md` 里，由包装脚本按可信台账与参数带出事实，任务书只是数据、不下口径（CT-06zzzzzzzg，D10-2961 / D10-2976；负责人 2026-11-25 同意，D10-2970）：「The bar for S1」一节是 D10-2317 ①（`ops/approvals.yaml` 第 184 条）；「Companion test tasks」一节——台账 `type: test-change`、`paths` 除本任务台账文件外都落在 `test_paths` 内（与某条 glob 相同，或在 `<目录>/**` 之下；判不了的一律当实现路径）时，spec-test 评审的 Review context 多一行 `Task kind: companion test task (test-change, no implementation paths)`，评审不按先红评，只评测试能否抓住错误实现（变异探针口径同 D10-2317 ①）；「Confirmation round of exemptions」一节——给了 `--confirm-round <commit>` 时上下文多一行 `Confirmation round: yes` 和脚本算出的台账增量，范围只是台账本轮新增 / 改动的 `red_exempt`、`red_exempt_outside`、`renames`、`expected_values` 条目，逐条确认（不确认即 S1，同 Part 4；按 D10-2961 / D10-2976 判，不要求给出逃过用例的错误实现，测试覆盖缺口仍按 D10-2317 ①），其余测试写 `out_of_scope`。这两行只由包装脚本写进上下文；任务书里同样的字样在 `Task brief (data)` 段之后，不起作用。
 
 ## 12. 私有库（`rebate-private`）里的 Codex 写入
 
@@ -281,7 +283,7 @@ Agent 评测集与注入集放私有库（规划/11 §1.1）。读脚本的结�
 
 ```bash
 tools/agent/claude-run.sh impl <id> [--phase test] [--worktree <dir>] [--timeout-min <n>] [--dry-run]
-tools/agent/claude-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test] [--base <ref>] [--timeout-min <n>] [--full] [--dry-run]
+tools/agent/claude-run.sh review <id> [--worktree <dir>] [--review-type money|general|contract|spec-test] [--base <ref>] [--timeout-min <n>] [--full] [--confirm-round <commit>] [--dry-run]
 tools/agent/claude-run.sh selfcheck      # 只读 claude --help，不发起任何 Claude 回合
 ```
 
