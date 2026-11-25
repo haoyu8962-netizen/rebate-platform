@@ -7,7 +7,7 @@ type: impl
 #   ② 成本 = ceil(in × in_price / 1e6) + ceil(out × out_price / 1e6)，运算放 packages/money（整数 mfen 函数）。③ 新表（迁移）：日累计按上海自然日一行（全平台一份、不带 app_id），记实际、预占与 80% / 100% 告警时刻；每 run 一条预占记录（受理日、R、单价版本、结清时刻；不设调用前登记 / 待定成本 / 逐次入账列）。③′ 预算上限跨 app 取最小、预占额跨 app 取最大（content 只读读口 configValuesByKey）；读不到用 BR 默认（100000 分 / 5000 mfen）并告警，预算 0 或预占 0 = 全部降级。④ 受理事务：当日（实际 + 预占）≥ 上限 → 降级、不预占；否则受理日预占 += R 并写预占记录。⑤ run 内每次调用前：W_in = ceil(请求体 UTF-8 字节 × in_price / 1e6)，Rem = R − U − W_in；Rem ≤ 0 或 M = min(M_cfg, floor(Rem × 1e6 / out_price)) < 256 就不调、本 run 按预算收尾（已出内容保留，finish_reason=budget）；M 真写进请求；非文本内容不调。已花 U 只在进程内：有用量按用量、已发出结果不明按 W、没发出不计。⑥ 收尾事务（唯一一次，结清时刻条件更新）：受理日预占 −= R、受理日实际 += 成本，写 cost_mfen / price_version；活进程记 U（超过 W 照实记并告警日志），其他收尾（别的请求、清扫、崩溃）记 R。⑦ 告警尽力而为：受理与收尾时首次 ≥80% / ≥100% 用条件更新抢当日告警时刻，抢到的打 pino 事件（agent.budget_80 / agent.budget_100 / agent.budget_price_missing）并加计数，可能重复或晚到。进行中的 run 照常完成，不返回错误码；不依赖模型的消息结束原因照常（BR-AI-14 细则）。
 # 不做（评审范围外一律 out_of_scope）：成本分摊与报表、后台显示；失败尝试用量（FU-GATEWAY-FAILED-ATTEMPT-USAGE）；model 归因（FU-B3-08T-MODEL-ATTRIBUTION）；离线 / 评测计量；B3-03k 接线；送企业微信群规则（另开给 ops，D10-2668 ④）；按 app 分预算；调参与真实单价；Jev 费用。
 # 验收：故障注入到 100% 后新 run 降级、进行中照常完成；单 run 花费不超过 R（放不下不调、M 按剩余额度并真写进请求、M < 256 不调）；活进程收尾记 U、其他收尾记满 R、重复收尾不重复记；跨零点全部记受理日；单价缺失两种情形；键缺失 / 0 / 非法值；示例 2000 入 + 300 出 → 320 mfen，BR 细则两次调用例（U = 700；崩溃记 5,000）。告警只验「越线会发」，不验恰好一次。
-# 风险级 RV2（动迁移、packages/money、content 注册表），评审 money；迁移号取 land 时主干下一个空号（D10-2829；现为 0155），outside_needed 走 LAN-DB-SNAPSHOT，land 前测试机五段全量（D10-2398）。 补丁 3（D10-2848 改判取甲，撤补丁 1）：agent.models 留 LOOKUP_ONLY（按键可查可改，列表暂不显示），列进后台配置列表另开小单（8 条冻结用例 + config-items/kit.ts）；迁移号改 0155（packages/db migrations.test.ts 要求连号）。开工前测试机跑一次 --related，看有没有冻结用例钉着 cost_mfen 为 null / finish_reason 不含 budget，有就先登 modify_existing。B3-03k 重写时 deps 加 B3-09m（D10-2668 ⑤）。 补丁 2：paths 加 config-registry.test.ts。补丁 5（D10-2884 取甲）：app.module.ts 只在 agentReaders 的 AgentContentReader 上接 configValuesByKey（组合根，foreign-db-handoff 允许），冻结夹具 stream-mount/kit.ts 的 contentReaderFor 末尾补同一方法（support 条目，非资金 / 归属目录）。补丁 4（D10-2864）：money r1 S1-1 全平台最保守值要 content 只读读口（按键列出各 app 当前值，content/infra/config-values-by-key*.ts + index.ts 导出，不改任何写路径），另加 stream/pg 两个实现单测。 补丁 6（取甲重做）：撤掉 D10-2858 S0-2 甲（调用完成即入账）、D10-2922 ③（调用前登记、held）、D10-2928（默认输出上限 32768、失败尝试撤登记）与「实际归完成日」「告警恰好一次」的口径；旧分支 task/B3-09m（头 ed747befe94f）只作参考，新实现从主干重起，规则测试重写。
+# 风险级 RV2（动迁移、packages/money、content 注册表），评审 money；迁移号取 land 时主干下一个空号（D10-2829；现为 0155），outside_needed 走 LAN-DB-SNAPSHOT，land 前测试机五段全量（D10-2398）。 补丁 3（D10-2848 改判取甲，撤补丁 1）：agent.models 留 LOOKUP_ONLY（按键可查可改，列表暂不显示），列进后台配置列表另开小单（8 条冻结用例 + config-items/kit.ts）；迁移号改 0155（packages/db migrations.test.ts 要求连号）。开工前测试机跑一次 --related，看有没有冻结用例钉着 cost_mfen 为 null / finish_reason 不含 budget，有就先登 modify_existing。B3-03k 重写时 deps 加 B3-09m（D10-2668 ⑤）。 补丁 2：paths 加 config-registry.test.ts。补丁 5（D10-2884 取甲）：app.module.ts 只在 agentReaders 的 AgentContentReader 上接 configValuesByKey（组合根，foreign-db-handoff 允许），冻结夹具 stream-mount/kit.ts 的 contentReaderFor 末尾补同一方法（support 条目，非资金 / 归属目录）。补丁 4（D10-2864）：money r1 S1-1 全平台最保守值要 content 只读读口（按键列出各 app 当前值，content/infra/config-values-by-key*.ts + index.ts 导出，不改任何写路径），另加 stream/pg 两个实现单测。 补丁 6（取甲重做）：撤掉 D10-2858 S0-2 甲（调用完成即入账）、D10-2922 ③（调用前登记、held）、D10-2928（默认输出上限 32768、失败尝试撤登记）与「实际归完成日」「告警恰好一次」的口径；旧分支 task/B3-09m（头 ed747befe94f）只作参考，新实现从主干重起，规则测试重写。 补丁 7（D10-3116）：paths 加 orchestrator/core/run.ts 与同目录单测 run.test.ts——[AC-B3-09m#25] 要求单 run 封顶后已出内容保留、按 budget 收尾；只在降级原因为 budget 时改收尾原因，别的降级原因（已出内容时 stop）一个不改，并由实现方单测钉住。
 refs: [BR-AI-16, BR-AI-14]
 refs_hash:
   BR-AI-16: dbd76c5b95b5
@@ -19,6 +19,8 @@ paths:
   - 'apps/api/src/modules/agent/stream/pg/finalize*.ts'
   - 'apps/api/src/modules/agent/stream/mount/**'
   - 'apps/api/src/modules/agent/model-gateway/routing/**'
+  - 'apps/api/src/modules/agent/orchestrator/core/run.ts'
+  - 'apps/api/src/modules/agent/orchestrator/core/run.test.ts'
   - 'apps/api/src/modules/content/domain/config-registry.ts'
   - 'apps/api/src/modules/content/domain/config-registry.test.ts'
   - 'apps/api/src/modules/content/index.ts'
@@ -33,9 +35,7 @@ test_paths:
   - 'test/spec/agent/stream-mount/kit.ts'
 impl: claude
 tester: codex
-accept:
-  - 'pnpm verify'
-  - 'test/spec/agent/daily-budget/**'
+accept: ['pnpm verify', 'test/spec/agent/daily-budget/**']
 modify_existing:
   - file: 'test/spec/agent/stream-mount/kit.ts'
     scope: support
