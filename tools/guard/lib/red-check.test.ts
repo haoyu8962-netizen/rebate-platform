@@ -5292,3 +5292,83 @@ it('[CT-06zzzzzzzj] a changed file that is no rule-test file stays a support fil
   expect(got).toMatchObject({ kind: 'support' });
   expect(got?.kind === 'support' && got.reason).toEqual(expect.stringContaining(ZJ_SHARED));
 });
+
+// CT-06zzzzzzzj (money-codex r1 S1-2): a whole-block entry of a plain it of a for…of loop leaves
+// the file out of the expected list (and makes it a rule-test file to its neighbours) only when
+// it is valid as checkRedReports exempts it (wholeBlockEntryProblem: rule_change only, note
+// required). Wrong implementation: modifiedOnlyFiles taking any found and changed block → the
+// tighten_only and note-less entries below leave the file out and B stops being judged whole.
+it('[CT-06zzzzzzzj] a for…of whole-block entry that is not rule_change with a note leaves no file out and the file stays a support file', () => {
+  const tpl = '[AC-J#4] ${action} refuses without the permission';
+  const loopA = (assertion: string): string =>
+    [
+      "import { expect, it } from 'vitest';",
+      "const ACTIONS = ['create', 'delete'];",
+      'for (const action of ACTIONS) {',
+      `  it(\`${tpl}\`, () => {`,
+      `    ${assertion}`,
+      '  });',
+      '}',
+      '',
+    ].join('\n');
+  const aBase = loopA('expect(action).toBeTruthy();');
+  const aHead = loopA("expect(['create', 'delete']).toContain(action);");
+  const aRead = reader({ [ZJ_A]: aBase }, { [ZJ_A]: aHead });
+  const valid = mxModify(ZJ_A, tpl);
+  expect(modifiedOnlyFiles([ZJ_A], aRead, [valid])).toEqual([{ file: ZJ_A, tests: [tpl] }]);
+  expect(zjBaseline(aHead, [valid], ZJ_A, aBase)?.kind).toBe('tests');
+  const tighten: ModifyExistingDeclaration = {
+    file: ZJ_A,
+    test: tpl,
+    reason: 'tighten_only',
+    ruling: 'D10-701',
+    note: MOD_NOTE,
+  };
+  const noNote: ModifyExistingDeclaration = { ...valid, note: '  ' };
+  for (const d of [tighten, noNote]) {
+    expect(modifiedOnlyFiles([ZJ_A], aRead, [d]), d.reason).toEqual([]);
+    expect(zjBaseline(aHead, [d], ZJ_A, aBase)?.kind, d.reason).toBe('support');
+  }
+});
+
+// CT-06zzzzzzzj (money-codex r2 S1, not loosened): compareModifiedBlocks now finds a declared
+// for…of row that did not change (it may have changed before spec_commit → head); from the merge
+// base such a row is found unchanged, so the file is not left out of the expected list. Wrong
+// implementation: taking found as enough → the file left out with an entry that changes nothing.
+it('[CT-06zzzzzzzj] a declared for…of row that is the merge base’s keeps the file expected', () => {
+  const tpl = '[AC-J#5] ${error} retries once';
+  const rowName = (at: string): string => `[AC-J#6] expires (${at})`;
+  const monitor = (assertion: string, expiry: string): string =>
+    [
+      "import { expect, it } from 'vitest';",
+      "for (const error of ['timeout', 'busy']) {",
+      `  it(\`${tpl}\`, () => {`,
+      `    ${assertion}`,
+      '  });',
+      '}',
+      `for (const at of ['${expiry}', null]) {`,
+      '  it(`[AC-J#6] expires (${at})`, () => {',
+      '    expect(at === null || at.length > 0).toBe(true);',
+      '  });',
+      '}',
+      '',
+    ].join('\n');
+  const base = monitor('expect(error).toBeTruthy();', '2027-02-01');
+  const both = monitor("expect(error).not.toBe('');", '2027-03-01');
+  const bodyOnly = monitor("expect(error).not.toBe('');", '2027-02-01');
+  const entries = (row: string): ModifyExistingDeclaration[] => [
+    mxModify(ZJ_A, tpl),
+    mxModify(ZJ_A, rowName(row)),
+  ];
+  expect(
+    modifiedOnlyFiles([ZJ_A], reader({ [ZJ_A]: base }, { [ZJ_A]: both }), entries('2027-03-01')),
+  ).toEqual([{ file: ZJ_A, tests: [tpl, rowName('2027-03-01')] }]);
+  // The row declared, but the merge base's at the head: found unchanged, the file stays expected.
+  expect(
+    modifiedOnlyFiles(
+      [ZJ_A],
+      reader({ [ZJ_A]: base }, { [ZJ_A]: bodyOnly }),
+      entries('2027-02-01'),
+    ),
+  ).toEqual([]);
+});

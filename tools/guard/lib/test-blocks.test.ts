@@ -5219,3 +5219,169 @@ it('[CT-06zzzzzzzj] kinds stay apart, a whole block is not renamed, a merge-base
     blocks: [{ found: true, changed: true }],
   });
 });
+
+// CT-06zzzzzzzj (money-codex r1 S1-1, after test/spec/union/auth-probe/monitor.int.test.ts:256 /
+// :319): one inline loop whose body changed (declared whole by its template) does not stop another
+// inline loop of the file from being compared row by row (a changed row declared by its full
+// name). Wrong implementation: forOfRows null for the whole file once one loop's call changed →
+// the row entry is not found and the row is a difference besides.
+const MON64 = '[AC-S1-64#8] ${error} 30 分钟后重试一次，仍失败只后台告警';
+const MON65 = '[AC-S1-65#1] 探测授权失效立即 expired（${expiresAt}）';
+const monitor = (assertion: string, errors: string, expiry: string): string =>
+  [
+    "import { expect, it } from 'vitest';",
+    '',
+    `for (const error of [${errors}]) {`,
+    `  it(\`${MON64}\`, async () => {`,
+    `    ${assertion}`,
+    '  });',
+    '}',
+    '',
+    `for (const expiresAt of ['${expiry}', null]) {`,
+    `  it(\`${MON65}\`, async () => {`,
+    '    expect(expiresAt === null || expiresAt.length > 0).toBe(true);',
+    '  });',
+    '}',
+    '',
+  ].join('\n');
+const MON_ERRORS = "'timeout', 'rate-limit'";
+const MON_BASE = monitor('expect(error).toBeTruthy();', MON_ERRORS, '2027-02-01T00:00:00Z');
+const MON_HEAD = monitor("expect(error).not.toBe('');", MON_ERRORS, '2027-03-01T00:00:00Z');
+const MON_ROW = '[AC-S1-65#1] 探测授权失效立即 expired（2027-03-01T00:00:00Z）';
+
+it('[CT-06zzzzzzzj] a loop whose body changed is left out of the row comparison alone: the other loop is still compared row by row', () => {
+  const rows = forOfRows(MON_BASE, MON_HEAD);
+  expect(rows).not.toBeNull();
+  expect(rows?.loops).toHaveLength(1);
+  expect(rows?.loops[0]?.rows.map((r) => r.changed)).toEqual([true, false]);
+  const got = compareModifiedBlocks(MON_BASE, MON_HEAD, [MON64, MON_ROW]);
+  expect(got).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [
+      { test: MON64, found: true, changed: true },
+      { test: MON_ROW, found: true, changed: true },
+    ],
+  });
+  expect(got.ok && got.blocks[0]?.found === true && got.blocks[0].whole).toBeTruthy();
+  // Either entry alone: the other change is a difference besides.
+  for (const names of [[MON64], [MON_ROW]]) {
+    const one = compareModifiedBlocks(MON_BASE, MON_HEAD, names);
+    expect(one.ok && one.outside, names[0]).toEqual(expect.any(String));
+  }
+  // The body-changed loop with its own rows changed too: its rows are not masked, so the
+  // template entry is no cover for them (a difference besides), whatever the other loop does.
+  const bothHead = monitor(
+    "expect(error).not.toBe('');",
+    "'timeout', 'busy'",
+    '2027-03-01T00:00:00Z',
+  );
+  const both = compareModifiedBlocks(MON_BASE, bothHead, [MON64, MON_ROW]);
+  expect(both.ok && both.outside).toEqual(expect.any(String));
+});
+
+// CT-06zzzzzzzj (money-codex r2 S1): a row declared by its full name whose change lies before the
+// range (spec_commit → head) is still located there, unchanged, while the loop whose body changed
+// is declared whole by its template; and the reverse (the template entry's loop unchanged in the
+// range, the row changed). Wrong implementation: forOfRows null when no row changed in the range
+// (the row entry not found: a merge refused), or every loop of forOfRows taken as a loop whose
+// rows changed (the template entry not found).
+const MON_A1 = 'expect(error).toBeTruthy();';
+const MON_A2 = "expect(error).not.toBe('');";
+const MON_A3 = 'expect(error.length).toBeGreaterThan(0);';
+const MON_OLD = '2027-02-01T00:00:00Z';
+const MON_NEW = '2027-03-01T00:00:00Z';
+
+it('[CT-06zzzzzzzj] spec_commit → head: a row changed only before it is found unchanged, the whole loop next to it found changed', () => {
+  const mBase = monitor(MON_A1, MON_ERRORS, MON_OLD);
+  const mSpec = monitor(MON_A2, MON_ERRORS, MON_NEW);
+  const mHead = monitor(MON_A3, MON_ERRORS, MON_NEW);
+  const names = [MON64, MON_ROW];
+  const both = (changed64: boolean, changedRow: boolean) => ({
+    ok: true,
+    outside: null,
+    blocks: [
+      { test: MON64, found: true, changed: changed64 },
+      { test: MON_ROW, found: true, changed: changedRow },
+    ],
+  });
+  expect(compareModifiedBlocks(mBase, mSpec, names)).toMatchObject(both(true, true));
+  expect(compareModifiedBlocks(mBase, mHead, names)).toMatchObject(both(true, true));
+  const range = compareModifiedBlocks(mSpec, mHead, names);
+  expect(range).toMatchObject(both(true, false));
+  expect(range.ok && range.blocks[0]?.found === true && range.blocks[0].whole).toBeTruthy();
+  expect(range.ok && range.blocks[1]?.found === true && range.blocks[1].whole).toBeFalsy();
+  // As evidence-check calls it for spec_commit → head (the merge base ruled the template whole).
+  expect(
+    compareModifiedBlocks(mSpec, mHead, names, undefined, undefined, [true, false]),
+  ).toMatchObject(both(true, false));
+  // Nothing of the loops changed in the range: still found, both unchanged.
+  expect(compareModifiedBlocks(mHead, mHead, names)).toMatchObject(both(false, false));
+  // The undeclared row change is still a difference besides in the range.
+  const rowAfter = monitor(MON_A3, MON_ERRORS, '2027-04-01T00:00:00Z');
+  const extra = compareModifiedBlocks(mSpec, rowAfter, [MON64]);
+  expect(extra.ok && extra.outside).toEqual(expect.any(String));
+});
+
+it('[CT-06zzzzzzzj] spec_commit → head: a template entry whose loop is unchanged in the range is found while a row of the other loop changed', () => {
+  const mBase = monitor(MON_A1, MON_ERRORS, MON_OLD);
+  const mSpec = monitor(MON_A2, MON_ERRORS, MON_OLD);
+  const mHead = monitor(MON_A2, MON_ERRORS, MON_NEW);
+  const names = [MON64, MON_ROW];
+  expect(compareModifiedBlocks(mBase, mHead, names)).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [
+      { test: MON64, found: true, changed: true },
+      { test: MON_ROW, found: true, changed: true },
+    ],
+  });
+  for (const wholeAt of [undefined, [true, false]]) {
+    const range = compareModifiedBlocks(mSpec, mHead, names, undefined, undefined, wholeAt);
+    expect(range, String(wholeAt)).toMatchObject({
+      ok: true,
+      outside: null,
+      blocks: [
+        { test: MON64, found: true, changed: false },
+        { test: MON_ROW, found: true, changed: true },
+      ],
+    });
+    expect(range.ok && range.blocks[0]?.found === true && range.blocks[0].whole).toBeTruthy();
+  }
+  // A template entry of a loop whose own rows changed is still not found (rows by full name).
+  const ownRows = monitor(MON_A2, "'timeout', 'busy'", MON_OLD);
+  expect(compareModifiedBlocks(mSpec, ownRows, [MON64])).toMatchObject({
+    ok: true,
+    blocks: [{ test: MON64, found: false }],
+  });
+});
+
+it('[CT-06zzzzzzzj] merge base → head: a declared row that did not change is found unchanged (redundant), not changed', () => {
+  // Not loosened: evidence-check and red-check want every declared block changed from the merge
+  // base; a declared row the range leaves alone is found with changed false (an entry too many).
+  const mBase = monitor(MON_A1, MON_ERRORS, MON_OLD);
+  const mHead = monitor(MON_A2, MON_ERRORS, MON_OLD);
+  const oldRow = `[AC-S1-65#1] 探测授权失效立即 expired（${MON_OLD}）`;
+  expect(compareModifiedBlocks(mBase, mHead, [MON64, oldRow])).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [
+      { test: MON64, found: true, changed: true },
+      { test: oldRow, found: true, changed: false },
+    ],
+  });
+  // A row name no row gives is not found.
+  expect(compareModifiedBlocks(mBase, mHead, [MON64, MON_ROW])).toMatchObject({
+    ok: true,
+    blocks: [{ found: true }, { test: MON_ROW, found: false }],
+  });
+  // forOfRows without `unchanged` (compareTestFileRows, compareOutsideChangedRows) is as before:
+  // null when no row changed, and when a declared name is an unchanged row's.
+  expect(forOfRows(mBase, mBase)).toBeNull();
+  expect(forOfRows(mBase, mHead)).toBeNull();
+  const rowHead = monitor(MON_A1, MON_ERRORS, MON_NEW);
+  expect(forOfRows(mBase, rowHead)).not.toBeNull();
+  expect(
+    forOfRows(mBase, rowHead, ['[AC-S1-64#8] timeout 30 分钟后重试一次，仍失败只后台告警']),
+  ).toBeNull();
+});

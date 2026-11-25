@@ -746,7 +746,8 @@ export type ModifiedOnly = { file: string; tests: string[] };
  * a file that needs them stays expected), can be made, finds every declared block of it on both
  * sides, each changed, and says nothing else differs (`outside` null: no new, removed, moved or
  * other changed test, no change outside the tests). Anything else — the comparison cannot be made,
- * a declared block is the base's or gone at the head, a new test next to them — stays expected and
+ * a declared block is the base's or gone at the head, a new test next to them, a whole-block entry
+ * that is not valid (wholeBlockEntryProblem; CT-06zzzzzzzj) — stays expected and
  * is judged as before (the new test must be red; checkRedReports says what is wrong with the
  * entries).
  */
@@ -778,6 +779,15 @@ export function modifiedOnlyFiles(
     );
     if (!compared.ok || compared.outside !== null) continue;
     if (!compared.blocks.every((b) => b.found && b.changed)) continue;
+    // CT-06zzzzzzzj (money-codex r1 S1-2): a whole-block entry (an .each / .for template, or a plain
+    // it / test of a for…of loop) leaves the file out only when it is valid (wholeBlockEntryProblem:
+    // rule_change only, note required), as checkRedReports exempts it; a bad one keeps the file
+    // expected (judged, and not read as a support file either: test-blocks judged).
+    const bad = (b: (typeof compared.blocks)[number], k: number): boolean =>
+      b.found &&
+      b.whole !== undefined &&
+      wholeBlockEntryProblem(here[k] as ModifyExistingBlockDeclaration) !== null;
+    if (compared.blocks.some(bad)) continue;
     out.push({ file, tests: names });
   }
   return out;

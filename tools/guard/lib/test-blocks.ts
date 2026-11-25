@@ -2404,8 +2404,11 @@ export function compareEachRows(base: string, head: string): (EachRows | null)[]
 // - A name the ledger declares in modify_existing that an unchanged row may produce: the whole
 //   table (the declared row is not changed).
 // Anything else — another form, rows added, removed or moved, a changed row with a field of code,
-// a changed loop body, a duplicated name — is not compared row by row (forOfRows null): the file is
-// compared as before (its shared rest differs: the whole file). For the comparison the changed rows
+// a duplicated name — is not compared row by row (forOfRows null): the file is
+// compared as before (its shared rest differs: the whole file). A loop whose loop body (its test
+// call) changed is left out alone (CT-06zzzzzzzj, money-codex r1 S1-1): its rows are not masked,
+// so a change of them is still a difference of the shared rest, and the other loops are compared
+// row by row. For the comparison the changed rows
 // of both sides are masked (one `0` each, its line breaks kept), so that the shared rest and the
 // blocks' places are the base's exactly when nothing but those rows changed.
 
@@ -2609,12 +2612,16 @@ export type ForOfRows = {
  * The qualifying for…of tables of `base` and `head` compared row by row (see the comment above),
  * or null when there is none whose rows changed or anything else is found (the file is then
  * compared as before). `declared`: the full names (at the head) the ledger declares in
- * modify_existing for the file; one an unchanged row may produce makes it null.
+ * modify_existing for the file; one an unchanged row may produce makes it null. `unchanged`
+ * (compareModifiedBlocks only; CT-06zzzzzzzj, money-codex r2 S1): the loops are given also when no
+ * row of them changed (nothing masked), so that a declared row whose change lies before this range
+ * (spec_commit → head) is still located by its full name, unchanged.
  */
 export function forOfRows(
   base: string,
   head: string,
   declared: readonly string[] = [],
+  unchanged = false,
 ): ForOfRows | null {
   let bl: ForOfLoop[];
   let hl: ForOfLoop[];
@@ -2628,9 +2635,15 @@ export function forOfRows(
   }
   if (bl.length === 0 || bl.length !== hl.length) return null;
   const loops: ForOfRows['loops'] = [];
+  // The entry of `loops` for the loop at index i of both sides (undefined: a loop left out).
+  const entryOf: (ForOfRows['loops'][number] | undefined)[] = [];
   for (const [i, y] of hl.entries()) {
     const x = bl[i] as ForOfLoop;
-    if (x.rows.length !== y.rows.length || x.call !== y.call) return null;
+    // CT-06zzzzzzzj (money-codex r1 S1-1): a loop whose test call changed is left out (none of its
+    // rows masked, it is compared as a block as before: a change of its rows stays a difference of
+    // the shared rest), so that the other loops of the file are still compared row by row.
+    if (x.call !== y.call) continue;
+    if (x.rows.length !== y.rows.length) return null;
     const rows: ForOfRows['loops'][number]['rows'] = [];
     for (const [k, r] of y.rows.entries()) {
       const b = x.rows[k] as ForOfRow;
@@ -2643,10 +2656,12 @@ export function forOfRows(
       }
       rows.push({ changed, segments: r.segments, before: b.raw, after: r.raw });
     }
-    loops.push({ baseTest: x.test, headTest: y.test, rows });
+    const entry = { baseTest: x.test, headTest: y.test, rows };
+    loops.push(entry);
+    entryOf[i] = entry;
   }
   const all = loops.flatMap((l) => l.rows);
-  if (!all.some((r) => r.changed)) return null;
+  if (unchanged ? loops.length === 0 : !all.some((r) => r.changed)) return null;
   const loopTests = new Set(loops.map((l) => l.headTest));
   for (const r of all) {
     if (!r.changed) continue;
@@ -2659,7 +2674,7 @@ export function forOfRows(
   }
   const mask = (source: string, side: readonly ForOfLoop[]): string => {
     const spans = side
-      .flatMap((l, i) => l.rows.filter((_, k) => loops[i]?.rows[k]?.changed === true))
+      .flatMap((l, i) => l.rows.filter((_, k) => entryOf[i]?.rows[k]?.changed === true))
       .sort((p, q) => q.start - p.start);
     let text = source;
     for (const r of spans) {
@@ -3073,7 +3088,11 @@ export function compareModifiedBlocks(
   // CT-06zzzzzv (D10-2152 / D10-2163): the changed rows of qualifying for…of tables masked on both
   // sides (forOfRows); a declared name is then one row, found at the head by its full name and at
   // the base by its index, and a changed row no name declares is a difference besides.
-  const forOf = forOfRows(base, head);
+  // CT-06zzzzzzzj (money-codex r2 S1): the loops are given also when none of their rows changed
+  // here, so that a row declared by its full name whose change lies before this range
+  // (spec_commit → head) is found, unchanged (the merge base → head check still wants it changed:
+  // an unchanged declared row stays redundant there).
+  const forOf = forOfRows(base, head, [], true);
   try {
     before = blockViews(
       forOf?.base ?? base,
@@ -3099,9 +3118,13 @@ export function compareModifiedBlocks(
   // a side the merge base ruled not whole): by its pattern only, as before the change.
   type Mode = 'judge' | 'whole' | 'plain';
   // CT-06zzzzzzzj (D10-3107): a for…of plain call whose loop's rows changed (CT-06zzzzzv masked
-  // them) is declared row by row, by full name, never by its template.
+  // them) is declared row by row, by full name, never by its template. A loop none of whose rows
+  // changed here (money-codex r2 S1: given unchanged) keeps its template entry.
   const maskedLoop = (where: 'base' | 'head', i: number): boolean =>
-    forOf !== null && forOf.loops.some((l) => (where === 'base' ? l.baseTest : l.headTest) === i);
+    forOf !== null &&
+    forOf.loops.some(
+      (l) => (where === 'base' ? l.baseTest : l.headTest) === i && l.rows.some((r) => r.changed),
+    );
   const rowsChanged = (where: string): Located => ({
     reason: `its block at the ${where} is in a for…of loop whose table rows changed: declare each changed row by its full name (逐行按全名登记), not by the title template`,
   });
@@ -3208,7 +3231,12 @@ export function compareModifiedBlocks(
   const blocks = names.map((test, at): ModifiedBlock => {
     const headTest = headNames?.[at] ?? test;
     const renamed = headTest !== test;
-    const loop = loopRow(headTest);
+    // CT-06zzzzzzzj (money-codex r2 S1): a name that is a title template of the head (a whole-block
+    // entry), or an entry the merge base ruled whole, is no row name: it is located by locate.
+    const loop =
+      wholeAt?.[at] === true || templateBlocks(after, headTest).length > 0
+        ? null
+        : loopRow(headTest);
     if (loop !== null && forOf !== null) {
       if ('reason' in loop) return { test, found: false, reason: loop.reason };
       if (renamed) {
