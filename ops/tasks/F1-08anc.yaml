@@ -1,0 +1,25 @@
+id: F1-08anc
+repo: rebate-platform
+title: 'F1-08anc：批量自动打款结果汇总「未审核 N 张」正数分支补精确断言（FU-F108AN-SUMMARY-UNREVIEWED-COUNT，D10-2961 / D10-2994 / D10-2995）'
+type: test-change
+# 2026-11-25 fe 入账（编排 D10-2995 认可范围，范围稿 couli-runs/F1-08anc/scope.md）。来由：F1-08an 埋雷抽查第 5–7 次（GEN-03，withdrawals.ts 汇总条件反转）都记 hit=false，
+# 只读核对（couli-runs/OPS-lane/D10-2949/f1-08an-check.md）确认主干只钉了「未审核 0 张」（anb/left.test.ts、anb/receipt.test.ts 的 SUMMARY），混选时「，未审核 N 张」的正数分支没有精确断言；实现方向正确。
+# 只新增一个文件 anb/summary-count.test.ts，不动任何冻结块与 helpers.ts，无 modify_existing。两条（汇总全文严格相等）：
+# ① 超管混选 1 张待审核 + 2 张待执行，executed 两张都进入打款 →「进入打款 2 张，留在待执行 0 张，未审核 1 张；列表与页签计数已刷新。」；
+# ② 混选 2 张待审核 + 2 张待执行，一张进入打款、一张留下 →「进入打款 1 张，留在待执行 1 张，未审核 2 张；列表与页签计数已刷新。」（区分未审核与留下两个计数）。
+# 实现已在主干（D10-1843 / D10-1879）：不做正式先红，在主干实现上为绿，配三个变异探针证明有牙（各自至少红一条，结果逐个写进证据）——P1 汇总条件 === 改 !==（GEN-03）、P2 去掉「，未审核 N 张」、P3 未审核张数错传为留下张数。
+# 目录含 withdraw / payout，门禁算资金类测试；只新增文件，不涉及负责人本人确认。tester claude-independent（调用数从零算），spec-test 由 Codex 全量至少 1 轮（D10-2199）。
+refs: [BR-WDR-12]
+refs_hash:
+  BR-WDR-12: 3a822658ab35
+deps: [F1-08an, F1-08anb]
+paths:
+  - 'test/spec/frontend/admin-withdrawal-batch-payout/anb/summary-count.test.ts'
+test_paths:
+  - 'test/spec/frontend/admin-withdrawal-batch-payout/anb/summary-count.test.ts' # 新文件
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-withdrawal-batch-payout/anb/summary-count.test.ts'
+status: todo
