@@ -6,7 +6,7 @@
 // 实现的文案；定位方式同 ./receipt.test.ts（对话框里以「进入打款」开头的叶子元素恰为一处），但比较的是该元素
 // 的 textContent 原文（只去首尾空白、不删内部空白），与期望全文严格相等。约定见 ../helpers.ts 与 ./helpers.ts 开头。
 // 三组裁定输入（留下 0 / 未审核 1、留下 1 / 未审核 2、留下 1 / 未审核 1）使「未审核张数 = 留下张数 + 1」之类
-// 取错来源的实现不能同时通过。
+// 取错来源的实现不能同时通过；第四组（同页另有一张未勾选的待审核单）使「按本页全部待审核单计」的实现不能通过。
 import { waitFor } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import {
@@ -147,6 +147,34 @@ it(
     expect(await summaryOf(), 'the summary in full').toEqual([ONE_LEFT_ONE_PENDING]);
     expect(showsIn(pending, TEXT.unreviewed), 'pending: unreviewed').toBe(true);
     expect(showsIn(pending, TEXT.paying), 'pending: not paying').toBe(false);
+    expect(showsIn(alipay, TEXT.paying), 'alipay: paying').toBe(true);
+    expect(showsIn(bank, LEFT_TEXT[reason]), 'bank card: its own reason').toBe(true);
+    expect(showsIn(bank, TEXT.paying), 'bank card: not paying').toBe(false);
+    expect(writeLines(server)).toEqual(ONE_BATCH);
+  },
+);
+
+it(
+  '[AC-F1-08anc-SUMMARY#4] 列表同一页有两张待审核单与两张待执行单，只勾其中一张待审核单与两张待执行单（另一张待审核单不勾），服务端回 executed：支付宝单进入打款，银行卡单因打款通道未开通留在 left；请求体只有两张待执行单（列表顺序）；结果对话框里汇总全文恰为「进入打款 1 张，留在待执行 1 张，未审核 1 张；列表与页签计数已刷新。」（按勾选中的待审核单计，不按本页全部待审核单计）',
+  { timeout: 120_000 },
+  async () => {
+    const unticked = row(1, 'PENDING_REVIEW', 5500, 'wechat');
+    const alipay = row(2, 'APPROVED', 1234567, 'alipay');
+    const pending = row(3, 'PENDING_REVIEW', 30000, 'alipay');
+    const bank = row(4, 'APPROVED', 9801, 'bank_card');
+    const reason: LeftReason = 'channel_disabled';
+    const left = [{ withdrawal_id: bank.withdrawal_id, reason }];
+    const server = serverFor([unticked, alipay, pending, bank]);
+    server.once('POST', '/admin/v1/payout-batches', () =>
+      executedReply(server, [alipay.withdrawal_id], left),
+    );
+    await mount(server, SUPER);
+    await execute(server, [bank, pending, alipay]);
+    assertBatch(server, 0, [alipay.withdrawal_id, bank.withdrawal_id]);
+
+    expect(await summaryOf(), 'the summary in full').toEqual([ONE_LEFT_ONE_PENDING]);
+    expect(showsIn(pending, TEXT.unreviewed), 'ticked pending: unreviewed').toBe(true);
+    expect(showsIn(pending, TEXT.paying), 'ticked pending: not paying').toBe(false);
     expect(showsIn(alipay, TEXT.paying), 'alipay: paying').toBe(true);
     expect(showsIn(bank, LEFT_TEXT[reason]), 'bank card: its own reason').toBe(true);
     expect(showsIn(bank, TEXT.paying), 'bank card: not paying').toBe(false);
