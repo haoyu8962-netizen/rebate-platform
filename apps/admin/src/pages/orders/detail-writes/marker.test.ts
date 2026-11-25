@@ -45,8 +45,11 @@ function identityOf(id: string): () => Promise<unknown> {
   }
   return found;
 }
+// One provider getter for every render, as refine's useDataProvider (a useCallback on the data
+// context) gives it; a new getter per render would rerun the detail GET effect.
+const getProvider = () => ({ custom });
 vi.mock('@refinedev/core', () => ({
-  useDataProvider: () => () => ({ custom }),
+  useDataProvider: () => getProvider,
   useActiveAuthProvider: () => ({ getIdentity: identityOf(admin) }),
 }));
 
