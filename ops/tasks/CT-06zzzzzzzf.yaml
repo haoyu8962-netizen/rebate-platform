@@ -2,8 +2,7 @@ id: CT-06zzzzzzzf
 repo: rebate-platform
 title: CT-06zzzzzzzf：评审产出校验器的范围判定只按 finding 的 file / line；被判范围外的 S0 / S1 不再把结论重算成 pass，校验器以退出码 3 标「需人工核」、codex-run / claude-run 以 13 停链（FU-REVIEW-VALIDATOR-OOS-RECOMPUTE，D10-2949 / D10-2976）
 type: guard-change
-# 2026-11-25 ops 入账（编排 D10-2976：负责人 2026-11-25 同意评审门禁三条，D10-2970 ⑩；approvals 185 待登记，#719——合并前本台账以「负责人 2026-11-25 已同意（D10-2970），approvals 待登记」为准）。
-# 门禁工具第三类改动，合并照 ops/approvals.yaml 第 16 条由编排逐行核 diff 后加 owner 标签；本单改了第 14 条的范围口径，负责人已同意（D10-2970 ⑩ (a)）。
+# 2026-11-25 ops 入账（编排 D10-2976：负责人 2026-11-25 同意评审门禁三条，D10-2970 ⑩；approvals 185 待登记，#719——合并前本台账以「负责人 2026-11-25 已同意（D10-2970），approvals 待登记」为准）。 门禁工具第三类改动，合并照 ops/approvals.yaml 第 16 条由编排逐行核 diff 后加 owner 标签；本单改了第 14 条的范围口径，负责人已同意（D10-2970 ⑩ (a)）。
 # 起因（回看 couli-runs/OPS-lane/D10-2949/report.md）：tools/agent/validate-output.ts scopeReasons（:221-252）在 finding 的 file 位于范围内时，还把 rule / scenario / suggestion
 #   全文里出现的仓库路径（citedPaths :206-214）抽出来，全在范围外就整条移出；normalizeReview（:356-379）再按剩下的 S0 / S1 重算 verdict，只打 warning、退出码 0。
 #   近 7 天 11 次移出、S0 / S1 7 次、4 次 fail → pass（B2-18 r5、B2-02xb、CT-06zzzzzzzc、F1-08an canary 5）。
@@ -19,6 +18,7 @@ type: guard-change
 # 规则测试至少钉：① B2-18 现场形状（file 在范围内、场景里举例引了范围外路径）不再移出、结论仍是 fail；② 只引范围外契约路径的范围内 finding（B2-02xb 形状）不移出；
 #   ③ file 在范围外的 S1 → 移出、verdict 不重算、退出 3、out-of-scope.md 照写；④ 只有 S2 被移出 → 照旧重算、退出 0；⑤ prompt-injection / 任务书路径的 S1 不移出、退出 3；
 #   ⑥ refs 判定与 [out-of-scope] 标记照旧；⑦ codex-run 收到校验器 3 → 退出 13、meta.validation = needs-human、产出文件在。
+# 台账补丁 1（编排 D10-3059）故障口径：磁盘满 / 读写故障 / 记录损坏时只要求两条——① 不得退 0、不得把 fail 写成 pass；② 已写出的评审原文与旁路记录不得被改坏；此类故障下退出码是 13 还是别的非零值不作保证（编排对任何非零都按不能往下走；旁路记录在，磁盘恢复后重新校验仍退 3 / 13）。r5 只修：(a) 包装已定最终码 13 后元数据写失败不改最终码、仍退 13、失败只打 stderr；(b) 旁路记录 entries 非数组按记录坏了处理（保留原文件、不写回、非零退出）。
 refs: []
 refs_hash: {}
 deps: []
