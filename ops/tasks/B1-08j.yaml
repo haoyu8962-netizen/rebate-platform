@@ -7,7 +7,7 @@ type: impl
 # W_backfill 等窗口见 BR-ATTR-13；淘宝 item_id 口径待实测（08/04_ATTR §4.3 第 5 条）。
 refs: [BR-ATTR-15]
 refs_hash:
-  BR-ATTR-15: fb9f0b75f991
+  BR-ATTR-15: e3d465a124a8
 deps: [B1-08h, B1-08i]
 paths:
   - 'apps/api/src/modules/orders/**'

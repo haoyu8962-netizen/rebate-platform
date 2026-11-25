@@ -8,7 +8,7 @@ type: impl
 # 迁移号按 D10-116 落地时取主干最大 + 1、占迁移槽；schema.sql / db.gen.ts 在测试机快照。RV2（db/**），Codex 测试 + money 评审（不可用按 #36 独立 Claude）。
 refs: [BR-ID-24]
 refs_hash:
-  BR-ID-24: c83882bd9813
+  BR-ID-24: 3c3ffd8471cd
 deps: [B1-19a]
 paths:
   - 'db/migrations/**'

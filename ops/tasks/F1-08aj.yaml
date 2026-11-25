@@ -11,7 +11,7 @@ refs_hash:
   BR-WDR-14: 6328f3cda2e6
   BR-WDR-15: 086ccaee6316
   BR-WDR-28: ef356bc99abd
-  BR-ID-34: 8bd50e43d350
+  BR-ID-34: 6ed9502449a2
 deps: [F1-08ai]
 paths:
   - 'apps/admin/src/pages/withdrawals/**'

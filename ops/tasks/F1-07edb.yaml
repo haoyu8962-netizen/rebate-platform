@@ -12,7 +12,7 @@ type: impl
 # 冻结用例：只改下面 12 块（补丁 1 加 LIST#2、ENTRY#3、BROWSER#1 / #2：规则测试评审 r1 指出它们依赖「标记」列默认可见或首屏零次 order-syncs，与 BR-ID-46 冲突），改到与 ①③ 一致为止，别的断言一字不动；先红或 --related 若列出别的冻结用例要改，先报编排补登，不得顺手改。visual-baseline 订单页截图变化只出报告，不挡（D10-2734）。
 refs: [BR-ID-46]
 refs_hash:
-  BR-ID-46: 3d6ad5edcbd9
+  BR-ID-46: 2afd75e36271
 deps: [F1-07ed]
 paths:
   - 'apps/admin/src/pages/orders/**'

@@ -7,7 +7,7 @@ type: impl
 # 资金测试改动：Codex 写测试 + Codex money 评审，评审提示词写明「只为支持红冲而改判定、不放宽」。
 refs: [BR-FUND-16, BR-FUND-19]
 refs_hash:
-  BR-FUND-16: 084c4c66328c
+  BR-FUND-16: 493ff1223801
   BR-FUND-19: f72aa79561bc
 deps: [B2-02e]
 paths:

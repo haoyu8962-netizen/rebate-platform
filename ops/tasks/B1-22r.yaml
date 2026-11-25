@@ -5,8 +5,8 @@ type: impl
 # 2026-10-30 入账（union 线，编排裁定 D10-427 ① ③）。① B1-22g money S2：告警手机号 reason 带换行时路由放行、content 写入端口拒收 → 5XX；同查 union-accounts / union-pids 的 reason。② query-reader.ts：D10-231 后各账号可各有同场景 active，现取最早更新的一条但同时刻不确定；保持现行口径、补 id 升序并记日志，按业务挑账号待多账号启用时再定（FU-PDD-QUERY-ACCT）。依据 08 BR-ID-24、BR-ATTR-08。Codex 不可用至 11-02，测试与评审由独立 Claude（approvals #36）。
 refs: [BR-ID-24, BR-ATTR-08]
 refs_hash:
-  BR-ID-24: c83882bd9813
-  BR-ATTR-08: 4fdb1d3c8906
+  BR-ID-24: 3c3ffd8471cd
+  BR-ATTR-08: ae1e71cb81e0
 deps: [B1-22g, B1-22h, B1-22d]
 paths:
   - 'apps/api/src/modules/union/**'

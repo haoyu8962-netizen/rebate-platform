@@ -6,7 +6,7 @@ type: impl
 # 列语义：NULL = 未判定；非空 = 超时检查任务在该时刻判定「审核超时」（判定时 status ∈ {PENDING_REVIEW, APPROVED}）；终态单不再写。快照 db/schema.sql / db.gen.ts 由本线在测试机 pnpm db:snapshot 生成。
 refs: [BR-WDR-26]
 refs_hash:
-  BR-WDR-26: 158db40de631
+  BR-WDR-26: e629666e7e2a
 deps: [B2-08a]
 paths:
   - 'db/migrations/**'

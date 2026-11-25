@@ -9,7 +9,7 @@ type: impl
 # 依赖前置 B2-04zv（冻结 shape 的具名检查扩到所有 settle_runs 迁移）。不改代码、不改主键（第 27 项 RUN-KEY 暂缓至多 App 前，D10-719 ④）。Codex money。RV2。
 refs: [BR-FUND-04, BR-TEXT-09]
 refs_hash:
-  BR-FUND-04: 27c6704ac9af
+  BR-FUND-04: faf2ddd22d5b
   BR-TEXT-09: 00b5038b8224
 deps: [B2-04zy]
 paths:

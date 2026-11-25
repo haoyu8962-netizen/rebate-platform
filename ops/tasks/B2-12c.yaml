@@ -6,7 +6,7 @@ refs: [BR-FUND-24, BR-FUND-10, BR-FUND-16, BR-TEXT-19]
 refs_hash:
   BR-FUND-24: 7cca08c02491
   BR-FUND-10: 3ed330a761d1
-  BR-FUND-16: 084c4c66328c
+  BR-FUND-16: 493ff1223801
   BR-TEXT-19: 833dc40d2edc
 deps: [B2-12a, B2-12b, CT-26n]
 paths:

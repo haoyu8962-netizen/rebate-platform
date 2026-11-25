@@ -9,7 +9,7 @@ type: impl
 refs: [BR-FUND-12, BR-ID-34]
 refs_hash:
   BR-FUND-12: 837883d06fa4
-  BR-ID-34: 8bd50e43d350
+  BR-ID-34: 6ed9502449a2
 deps: [F1-08cc]
 paths:
   - 'apps/admin/src/pages/adjustments/**'

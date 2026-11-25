@@ -10,7 +10,7 @@ type: impl
 # RV2 settlement：规则测试先跑 Codex（钉「计数 = 同 app 列表 awaiting_confirm=true 的 total」、交集、轮外 DRAFT、无候选 issued、generating、跨 app 隔离），money 评审 Codex medium。
 refs: [BR-FUND-04]
 refs_hash:
-  BR-FUND-04: 27c6704ac9af
+  BR-FUND-04: faf2ddd22d5b
 deps: [CT-24zzj, B2-09d]
 paths:
   - 'apps/api/src/modules/settlement/application/admin-settle-bills*.ts'

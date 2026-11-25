@@ -6,7 +6,7 @@ type: impl
 # 只改 ledger 模块；不改已有规则测试。Codex 写测试（连库），Claude 过审，Opus 实现，Codex money 评审。
 refs: [BR-FUND-16, BR-FUND-19]
 refs_hash:
-  BR-FUND-16: 084c4c66328c
+  BR-FUND-16: 493ff1223801
   BR-FUND-19: f72aa79561bc
 deps: [B2-02j, B2-02f]
 paths:

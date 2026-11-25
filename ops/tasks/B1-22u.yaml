@@ -6,7 +6,7 @@ type: impl
 refs: [BR-ATTR-05, BR-ID-24]
 refs_hash:
   BR-ATTR-05: 655fe77b6d9b
-  BR-ID-24: c83882bd9813
+  BR-ID-24: 3c3ffd8471cd
 deps: [B1-22n, B1-22b]
 paths:
   - 'apps/api/src/modules/linking/application/link-open-pdd-auth.ts'

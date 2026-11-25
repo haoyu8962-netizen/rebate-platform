@@ -7,7 +7,7 @@ refs: [BR-FUND-24, BR-FUND-12, BR-FUND-16]
 refs_hash:
   BR-FUND-24: 7cca08c02491
   BR-FUND-12: 837883d06fa4
-  BR-FUND-16: 084c4c66328c
+  BR-FUND-16: 493ff1223801
 deps: [B2-04zh]
 paths:
   - 'db/migrations/**'

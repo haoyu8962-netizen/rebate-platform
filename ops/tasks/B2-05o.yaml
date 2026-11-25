@@ -5,7 +5,7 @@ type: impl
 # 2026-10-31 入账（withdraw 线，编排裁定 D10-475 ②(b)）。上线门槛：真实资金环境开提现前须合并（编排记 HANDOFF）。platform 不引 payout：payout/index.ts 只导出该只读计数端口，entry.ts 注入 metrics（照 B1-01zzp 的 D10-393 (c) 做法）；计数 SQL 只读 withdrawals，不写。
 refs: [BR-WDR-26, BR-WDR-24]
 refs_hash:
-  BR-WDR-26: 158db40de631
+  BR-WDR-26: e629666e7e2a
   BR-WDR-24: 356b5d012a5d
 deps: [B2-05n, B1-01zzp]
 paths:

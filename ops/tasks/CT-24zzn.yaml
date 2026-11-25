@@ -12,8 +12,8 @@ type: contract
 refs: [BR-FUND-19, BR-FUND-16, BR-ID-34]
 refs_hash:
   BR-FUND-19: f72aa79561bc
-  BR-FUND-16: 084c4c66328c
-  BR-ID-34: 8bd50e43d350
+  BR-FUND-16: 493ff1223801
+  BR-ID-34: 6ed9502449a2
 contract_sections: ['11.1']
 deps: []
 paths:

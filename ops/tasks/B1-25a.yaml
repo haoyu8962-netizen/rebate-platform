@@ -12,7 +12,7 @@ type: impl
 refs: [BR-WDR-24, BR-WDR-26]
 refs_hash:
   BR-WDR-24: 356b5d012a5d
-  BR-WDR-26: 158db40de631
+  BR-WDR-26: e629666e7e2a
 deps: []
 paths:
   - 'infra/monitoring/alertmanager/**'

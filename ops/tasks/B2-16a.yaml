@@ -12,7 +12,7 @@ refs_hash:
   BR-FUND-01: 521dbf5aee39
   BR-FUND-13: ad7aad8f8846
   BR-FUND-15: 849cd1eab9f2
-  BR-FUND-16: 084c4c66328c
+  BR-FUND-16: 493ff1223801
   BR-INV-24: f37c80461c35
 deps: [B2-01l]
 paths:

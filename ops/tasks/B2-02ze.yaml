@@ -14,7 +14,7 @@ type: impl
 refs: [BR-ID-33, BR-ID-34]
 refs_hash:
   BR-ID-33: 01b25f773b29
-  BR-ID-34: 8bd50e43d350
+  BR-ID-34: 6ed9502449a2
 deps: []
 paths:
   - 'apps/api/src/modules/admin/**'
