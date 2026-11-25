@@ -9,7 +9,7 @@ type: impl
 # ④ 拒绝由人发起、关联单据含联盟对账（union_mismatch）或通道对账（channel_mismatch）差错单的调账单（20001，adjust_ref_invalid）。⑤ 调账与红冲不动 withdraw_holds。
 # 契约（openapi.yaml）：调账预填单（PAYOUT_RECOVERY 来源 / 只读金额）与执行 / 红冲路径上的 20902 recon_diff 响应要登记——本单借契约槽（编排 D10-3185，2026-11-26；B1-01zzw 已 done、槽空着），只改 adminCreateAdjustment 的三段说明文字与生成物，不加错误码、枚举、字段；预填单与批准 / 驳回接口的契约归 B2-17a。
 # 不在本单：「账单金额不一致」改为系统按 R7 以联盟结算数据重生成分佣快照再校验、仍不一致告警工程不开差错单（BR-FUND-04 细则 2026-11-21 改写）——规划/05 未单列行，入账公告请编排定归属（D10-2361）。
-# 2026-11-21 补丁 1（funds，编排 D10-2417）：拆两张，本单收窄为 ①②④⑤（ledger：执行时 CAS、（差错单，用户）唯一、红冲退回 processing、拒人工关联对外差错单；契约只给创建 / 批准登记 20902 recon_diff），③ 与预填单的批准 / 驳回归 B2-17a。涉及用户名单在登记差错单时写进差错单，名单为空或存量差错单按只涉及正在调账的这一个用户；红冲时差错单不存在或不在 adjusted 就不动；差错单状态沿用带条件的更新（FU-RECON-DIFF-STATE-MACHINE）。8 条冻结用例对同一张差错单连续执行多张调账，改为每张各种一张差错单、期望值不改（modify_existing，D10-1670 委托）；[AC-B2-12c#6] 的期望改动已登记在下（ruling D10-2425）。标题按门禁保留原文。
+# 2026-11-21 补丁 1（funds，编排 D10-2417）：拆两张，本单收窄为 ①②④⑤（ledger：执行时 CAS、（差错单，用户）唯一、红冲退回 processing、拒人工关联对外差错单；契约只给创建 / 批准登记 20902 recon_diff），③ 与预填单的批准 / 驳回归 B2-17a。涉及用户名单在登记差错单时写进差错单，名单为空或存量差错单按只涉及正在调账的这一个用户；红冲时差错单不存在或不在 adjusted 就不动；差错单状态沿用带条件的更新（FU-RECON-DIFF-STATE-MACHINE）。8 条冻结用例对同一张差错单连续执行多张调账，改为每张各种一张差错单、期望值不改（modify_existing，D10-1670 委托）；[AC-B2-12c#6] 只换夹具、期望不改，登记在下（ruling D10-3191）。标题按门禁保留原文。
 # 2026-11-26 补丁 2（funds，编排 D10-3185）：上面两处旧注释改为现状。paths 去掉 payout（①②④⑤ 都在 ledger：调账读提现单走 payout 已有的只读端口 withdrawal-adjust-ref.ts，经 app.module 装配，本单不改它），加 tools/ci/lint-migrations.test.ts——新表 adjustment_recon_diffs 按前缀 adjust 被迁移门禁判为资金表，那份显式期望集合机械加一行（照 D10-3125 / B1-06zh 先例，单独一个提交，不动 lint-migrations.ts 与别的期望）。迁移形状写在任务书：新表 app.adjustment_recon_diffs（调账单 × 差错单 × 用户，部分唯一索引兜底 ②）与 app.recon_diffs.involved_user_ids（登记时写入的涉及用户名单）；迁移号开工时按主干取，落地前再核。
 refs: [BR-FUND-24, BR-WDR-23, BR-WDR-05]
 refs_hash:
@@ -84,11 +84,10 @@ modify_existing:
     note: 'BR-FUND-24 ⑨：同一差错单对同一用户至多一张已执行、未红冲的调账单。本用例的夹具对同一张 R3 差错单、同一会员连续执行多张调账单（要测的是别的事），第二张起会被 20902 拦；只把夹具改为每张调账单各用一张新种的差错单，断言与期望值未改'
   - file: 'test/spec/ledger/admin-adjustments/negative.int.test.ts'
     test: '[AC-B2-12c#6] 契约示例：available 3000 以 PAYOUT_RECOVERY 调减 10000（支付宝提现单 + 差错单）→ 应答前后 3000 / −7000，借 USER_BALANCE.available 10000 / 贷 CASH_ALIPAY 10000，negative_since 记为当天，event_log 恰好一条 account.went_negative，审计 adjustment_create 含单号、会员、方向、金额、原因码与前后 available'
-    retitle_to: '[AC-B2-12c#6] 人工发起、关联通道对账差错单的 PAYOUT_RECOVERY 调减不受理：20001 fields=[refs]、reason=adjust_ref_invalid，不写单、凭证、余额、事件与审计（B2-17；这个场景只走系统预填追回单）'
     reason: rule_change
     br: [BR-FUND-24]
-    ruling: D10-2425
-    note: '负责人 2026-11-21 同意。BR-FUND-24 ⑨：由人发起、关联通道对账差错单的调账单不受理。本用例夹具是 R2 channel_mismatch 差错单，期望由「成功、余额 3000 → −7000」改为 20001 adjust_ref_invalid 且不留痕；原场景的成功路径（系统预填追回单批准后 −7000）由 B2-17a 新目录的用例接替，金额口径不变'
+    ruling: D10-3191
+    note: 'BR-FUND-24 ⑨：由人发起、关联通道对账差错单的调账单不受理。本用例的夹具是 R2 channel_mismatch 差错单；只把夹具换成默认的 R3 差错单（seedReconDiff 不带覆盖参数），标题、断言与期望值（3000 → −7000）未改；「人工关联联盟 / 通道对账差错单 → 20001 adjust_ref_invalid、不留痕」由本单新目录 test/spec/ledger/recon-plan-b 的用例钉（编排 D10-3191 取甲，取代原先登记的改名与期望改动）'
 accept:
   - 'pnpm verify'
   - 'test/spec/ledger/recon-plan-b/**'
