@@ -1,15 +1,19 @@
 id: B2-03z
 repo: rebate-platform
-title: B2-03z：staging README 改正 rebate.taobao.compare_rate_ratio_bp 的说明——已登记、报价不读（D10-641），切 live 前不用配（FU-COMPARE-RATE-KEY-REMOVE 缩小为只改文档，D10-2945 / D10-2959）
+title: B2-03z：staging README 1.10 末尾追加一行纠正说明——rebate.taobao.compare_rate_ratio_bp 已登记、报价不读（D10-641），不用配，上文两句要求对它不适用（FU-COMPARE-RATE-KEY-REMOVE 缩小为只改文档，D10-2945 / D10-2959 / D10-2984）
 type: impl
 # 2026-11-25 ops 入账（编排 D10-2945：第 6 项缩小为只改 infra/staging/README.md 那三行，同意不去键、D10-641 不推翻；D10-2959：不等 B1-25d、先入账）。
 # 起因：infra/staging/README.md 1.10 一节三处把 rebate.taobao.compare_rate_ratio_bp 写成「切 live 前必须配」——:362 配置键表的说明行、:365「tech_fee_bp 与
 #   rebate.taobao.compare_rate_ratio_bp 要先在 staging 配好…再切 live」、:369「…现在可以经后台修改：在后台改好取值后再切 live」。而报价早已不读它
 #   （commission/application/types.ts:12「D10-641: stays registered in content, never read by a quote」；rebate-quoter.ts:6）。照这三行做会让人误以为缺它报价失败。
-# 做法：只改这三处文字——键表那行改为「已登记、报价不读（D10-641），不用配」；:365 / :369 两句去掉这个键，只留 tech_fee_bp。不改代码、不改配置注册表、
-#   不动任何测试与种子；README 其余内容一字不动。
-# infra/** 不在 risk-map 白名单，按默认 RV2，所以要规则测试作者：规则测试只钉文档口径——README 里不再出现「compare_rate_ratio_bp 要先配好 / 改好再切 live」
-#   这类要求，且键表那行写明报价不读（D10-641）；tech_fee_bp 那两句的要求保留。
+# 2026-11-25 台账补丁 1（编排 D10-2984 取甲）：写测第 1 次交回 blocked——test/spec/infra/staging-readme-wording/readme.test.ts 的冻结用例
+#   [AC-B1-04zze#6] 把 README 1.10 原有每一行钉成「原样按序保留，只许在 1.10 之内追加」（含 :357「它读下面三个配置键；缺任何一项时报价失败」与上面三行），
+#   [AC-B1-04zze#4] 要求留一行写明两键可经后台（config.business）修改；照原做法改三行必红，所以改为只追加、不改原行、不动任何冻结用例。
+# 做法：不改 README 任何原有行；只在 1.10 一节末尾（「真实返利报价器的配置」之下、该节最后）追加一行纠正说明，大意：
+#   「rebate.taobao.compare_rate_ratio_bp 已登记（config.business）、报价不读（D10-641），实际不用配；上文『缺任何一项时报价失败』与『要先配好 / 改好再切 live』对它不适用，只对 tech_fee_bp 成立。」
+#   不改代码、配置注册表、种子与任何已有测试；README 其余内容一字不动。
+# infra/** 不在 risk-map 白名单，按默认 RV2，所以要规则测试作者：规则测试只钉这行追加说明——1.10 内有且只有一行同时写明该键已登记、报价不读（D10-641）、
+#   不用配、上文两句要求对它不适用；tech_fee_bp 的要求照旧保留。写测第 1 次的三条用例（未提交）按此改。
 refs: []
 refs_hash: {}
 deps: []
