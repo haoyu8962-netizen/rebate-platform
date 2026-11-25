@@ -2,7 +2,8 @@
 // Per +08:00 civil year it reads `calendar.cn_holidays.<year>` and
 // `calendar.cn_makeup_workdays.<year>` through the configuration port (values: arrays of
 // `YYYY-MM-DD` strings of that year). A year whose two keys are not both configured with valid
-// values, or whose read fails, counts weekends only, and one warn line
+// values, or whose read fails, counts weekends only (with a batch read, a failed re-read keeps the
+// years of the last successful read, D10-3209), and one warn line
 // `appeal_calendar_unconfigured` is logged for it with app_id and year only (never a value or the
 // error): the calendar never refuses an appeal. Only the years the deadline actually reaches are
 // read (a submission late in December may reach into January).
@@ -126,8 +127,10 @@ async function resolveDeadline(
  * one statement (one snapshot of config_items, so a batch save is seen whole or not at all). When
  * the deadline turns out to reach a later year, all years are read again in one statement and the
  * deadline is recomputed from that result alone (an earlier read is never combined with a later
- * one). A key the batch read does not return leaves its year unconfigured (never read on its own);
- * a failed batch read leaves every year of it unconfigured.
+ * one). A key the batch read does not return leaves its year unconfigured (never read on its own).
+ * D10-3209: a failed read leaves the calendars of the last successful read in force (as a whole,
+ * nothing of the failed read is used) and every year it did not cover counts weekends only; when
+ * the very first read fails every year counts weekends only.
  */
 async function resolveDeadlineBatched(
   source: CalendarSource,
@@ -142,6 +145,8 @@ async function resolveDeadlineBatched(
     firstYear,
     appealLocalYear(workingDayDeadline(from, {}, workingDays), -1),
   );
+  // The calendars of the last successful read (none before the first one).
+  let inForce: Record<number, AppealCalendarYear> = {};
   for (;;) {
     const years: number[] = [];
     for (let year = firstYear; year <= lastRead; year += 1) years.push(year);
@@ -152,23 +157,28 @@ async function resolveDeadlineBatched(
       // The error may carry configuration values or driver details: never logged.
       rows = null;
     }
-    const calendars: Record<number, AppealCalendarYear> = {};
-    const unconfigured: number[] = [];
-    for (const year of years) {
-      const [holidaysKey, makeupKey] = keysOf(year);
-      const calendar =
-        rows === null
-          ? null
-          : calendarOf(year, rows.get(holidaysKey) ?? null, rows.get(makeupKey) ?? null);
-      if (calendar === null) unconfigured.push(year);
-      else calendars[year] = calendar;
+    if (rows !== null) {
+      const calendars: Record<number, AppealCalendarYear> = {};
+      for (const year of years) {
+        const [holidaysKey, makeupKey] = keysOf(year);
+        const calendar = calendarOf(
+          year,
+          rows.get(holidaysKey) ?? null,
+          rows.get(makeupKey) ?? null,
+        );
+        if (calendar !== null) calendars[year] = calendar;
+      }
+      inForce = calendars;
     }
-    const deadline = workingDayDeadline(from, calendars, workingDays);
+    const deadline = workingDayDeadline(from, inForce, workingDays);
     // The last working day counted is the civil day before the deadline instant.
     const lastYear = appealLocalYear(deadline, -1);
-    if (lastYear <= lastRead) {
-      for (const year of unconfigured) {
-        if (year <= lastYear) source.logger.warn({ app_id: source.appId, year }, unconfiguredKey);
+    // A failed read is not retried: the deadline stands on the calendars in force.
+    if (rows === null || lastYear <= lastRead) {
+      for (let year = firstYear; year <= lastYear; year += 1) {
+        if (inForce[year] === undefined) {
+          source.logger.warn({ app_id: source.appId, year }, unconfiguredKey);
+        }
       }
       return deadline;
     }

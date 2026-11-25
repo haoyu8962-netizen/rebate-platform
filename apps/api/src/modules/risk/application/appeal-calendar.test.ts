@@ -246,3 +246,114 @@ it('[AC-B1-34s#8] the admin console registration of an appeal is assembled with 
     await db.destroy();
   }
 });
+
+// B1-34s (D10-3209): a re-read that fails keeps the calendars of the last successful read.
+const KEYS_2026 = ['calendar.cn_holidays.2026', 'calendar.cn_makeup_workdays.2026'];
+
+/** Batch calls answered in order: a record of saved keys, or an error (a transient timeout). */
+function callsInOrder(answers: readonly (Readonly<Record<string, readonly string[]>> | Error)[]) {
+  let calls = 0;
+  return vi.fn((_appId: string, keys: readonly string[]) => {
+    const answer = answers[Math.min(calls, answers.length - 1)]!;
+    calls += 1;
+    if (answer instanceof Error) return Promise.reject(answer);
+    return Promise.resolve(
+      new Map(
+        keys.filter((key) => key in answer).map((key) => [key, { value: answer[key], version: 2 }]),
+      ),
+    );
+  });
+}
+
+it('[AC-B1-34s#8] a failed re-read keeps the year read before: 12-28 with 12-31 a holiday ends 2027-01-01 24:00', async () => {
+  // Mon 2026-12-28: the first call reads 2026 (12-31 a holiday), which reaches 01-01; the re-read
+  // of 2026–2027 fails. 2026 stays in force, 2027 counts weekends only: 12-29, 12-30, 01-01.
+  // Wrong (dropping every year on the failed re-read): weekends only, 2026-12-31 24:00.
+  const config = {
+    configValue: vi.fn(mixedRead),
+    configValues: callsInOrder([OLD, new Error('timeout with secret detail')]),
+  };
+  const logger = { warn: vi.fn() };
+  const deadline = await resolveAppealDeadline({
+    appId: APP_ID,
+    clock: new FixedClock('2026-12-28T12:00:00+08:00'),
+    config,
+    logger,
+  });
+  expect(deadline.toISOString()).toBe('2027-01-01T16:00:00.000Z');
+  expect(config.configValues.mock.calls.map(([, keys]) => [...keys].sort())).toEqual([
+    KEYS_2026,
+    BOTH_YEARS,
+  ]);
+  expect(config.configValue).not.toHaveBeenCalled();
+});
+
+it('[AC-B1-34s#8] a failed re-read counts the new year weekends only and warns for it alone', async () => {
+  // 2027 is not read successfully, so 01-01 is a working day and only 2027 is warned for. Wrong
+  // (dropping 2026 too): a second warn line for 2026 and 12-31 24:00; wrong (retrying the re-read
+  // until it succeeds): a third batch call.
+  const config = {
+    configValue: vi.fn(mixedRead),
+    configValues: callsInOrder([OLD, new Error('timeout with secret detail')]),
+  };
+  const logger = { warn: vi.fn() };
+  const deadline = await resolveWorkingDayDeadline({
+    appId: APP_ID,
+    from: new Date('2026-12-28T12:00:00+08:00'),
+    workingDays: 3,
+    config,
+    logger,
+  });
+  expect(deadline.toISOString()).toBe('2027-01-01T16:00:00.000Z');
+  expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+    { app_id: APP_ID, year: 2027 },
+    'workday_calendar_unconfigured',
+  );
+  expect(config.configValues).toHaveBeenCalledTimes(2);
+  expect(config.configValue).not.toHaveBeenCalled();
+});
+
+it('[AC-B1-34s#8] a successful re-read is taken whole: a year it lacks is not filled from the earlier read', async () => {
+  // The re-read (after a save removing 2026's keys) returns 2027 only, 01-01 a holiday. 2026 is now
+  // unconfigured: 12-29, 12-30, 12-31 → 2026-12-31 24:00, one warn for 2026. Wrong (keeping the
+  // earlier 2026 where the re-read lacks it): 12-31 and 01-01 both off → 2027-01-04 24:00.
+  const config = {
+    configValue: vi.fn(mixedRead),
+    configValues: callsInOrder([
+      OLD,
+      { 'calendar.cn_holidays.2027': ['2027-01-01'], 'calendar.cn_makeup_workdays.2027': [] },
+    ]),
+  };
+  const logger = { warn: vi.fn() };
+  const deadline = await resolveAppealDeadline({
+    appId: APP_ID,
+    clock: new FixedClock('2026-12-28T12:00:00+08:00'),
+    config,
+    logger,
+  });
+  expect(deadline.toISOString()).toBe('2026-12-31T16:00:00.000Z');
+  expect(config.configValues).toHaveBeenCalledTimes(2);
+  expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+    { app_id: APP_ID, year: 2026 },
+    'appeal_calendar_unconfigured',
+  );
+  expect(config.configValue).not.toHaveBeenCalled();
+});
+
+it('[AC-B1-34s#8] an October appeal still reads once, the year of submission only, even with later calls failing', async () => {
+  // Wrong (reading the next year up front, or re-reading): a second call, which fails here, or
+  // 2027 keys in the one call.
+  const config = {
+    configValue: vi.fn(mixedRead),
+    configValues: callsInOrder([
+      { [HOLIDAYS]: CALENDAR.holidays, [MAKEUP]: CALENDAR.makeupWorkdays },
+      new Error('timeout'),
+    ]),
+  };
+  const logger = { warn: vi.fn() };
+  const deadline = await resolveAppealDeadline({ appId: APP_ID, clock: CLOCK, config, logger });
+  expect(deadline.toISOString()).toBe(SAVED);
+  expect(config.configValues).toHaveBeenCalledTimes(1);
+  expect([...config.configValues.mock.calls[0]![1]].sort()).toEqual(KEYS_2026);
+  expect(logger.warn).not.toHaveBeenCalled();
+});
