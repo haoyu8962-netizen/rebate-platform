@@ -1,0 +1,59 @@
+id: B1-22ze
+repo: rebate-platform
+title: 'B1-22ze（接手 B1-22zd）：联盟授权到期提醒加按小时节点与跳过规则；授权回调记录淘宝 re_expires_in 等五个时长，后台账号行返回 auth_refreshable；后台告警做成同事务持久记录 union_auth_alerts、日志由同事务任务至少一次打出'
+type: impl
+# 2026-11-25 be 入账（编排 D10-3121：接手 B1-22zd，B1-22zd 置 void 并入本单）。来由：B1-22zd 的 Codex 调用已到每任务 10 次的防失控上限（规划/11 §2.5），写测增量 2 起不来；照工具给的出路换单、不动熔断、不改派独立 Claude（同 B2-18 → B2-18d，D10-3066）。常规计数（写测 3、规则测试评审 2、实现 3、资金评审 3），不另开一次性条目；approvals 第 195、204 条随 B1-22zd 作废。 范围 = B1-22zd 现有全部（下文 ①–⑥ 与补丁 1–7 原文照搬）+ 持久告警（D10-2970 第 3 条、D10-3064 取 (i)、D10-3074 kit 包装两条硬要求：包装只执行 alert_log；钉「日志只由任务打」「任务重试直到打出」「任务失败不回滚记录」的新规则测试不经包装）。 带过来的：task/B1-22zd 上的规则测试提交（头 0e592f7b3，标题里的 AC-B1-22zd 编号不改）；未提交的第 195 条那次 Codex 写测产出（含新文件 test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts；其中对 auth-probe/monitor.int.test.ts 的改动按 D10-3074 由本单写测撤回）；迁移、快照与实现 r1–r3 的提交系列（couli-runs/B1-22zd/impl-series-t6/）在实现轮接着改；modify_existing 3 条逐条原样搬（3 → 3）。迁移号、refs_hash 照主干现状。
+# B1-22zd 名下已有的评审（事实，供第一轮全量规则测试评审参照，细目写在评审书里）：规则测试评审 3 轮（独立 Claude）：r1 fail（3×S1）、r2 pass、r3 pass；第 195 条那次写测（持久告警）还没有评过。资金评审 4 轮（Codex）：r1 fail（3×S1）、r2 fail（1×S1）、r3 fail（2×S1）、r4 窄评审（approvals 172）fail（2×S1）——r3 / r4 两条 S1（无手机号重复、有手机号丢失）即持久告警的来由。 冻结用例改动（kit.ts 一处 + atomicity [AC-S1-64#32] 一块）目录段含 union，判为资金 / 归属测试：只走 rule_change，仍等负责人确认（D10-3065 / D10-3121），任务 PR 的标签届时再说。
+# 2026-11-23 be 入账（FU-TAOBAO-TOKEN-REFRESH 第一步之 ②③ 合并，编排 D10-2585 / D10-2587 / D10-2758：现在就做、不等规划回写；BR-ID-24 的规划文字由编排随二次验证规划 PR 提交，草稿 couli-runs/STEPUP-1122/BR-ID-24-待并入.md）。 背景：未上线淘宝应用的站长授权固定 24 小时，现按天节点（union.auth_alert_days，默认 14 / 7 / 1）会一授权就进「即将到期」、每天早上发短信；能否用 refresh_token 续期要看授权返回的 re_expires_in，库里没存。
+# ① 小时节点：新配置 union.auth_alert_hours（整数 1–720，去重降序；缺失或任一元素非法取代码默认 [6, 1]；空数组 = 关闭按小时提醒，补丁 1 照规划变更记录 20261123-后台二次验证三档 §7，编排 D10-2771），与 union.auth_alert_days 同一读法（union 经 settings 直接读、不登记配置注册表，be 11-23 自定已报编排）。
+# ② 跳过规则：提前量不小于本次授权总时长（auth_expires_at − auth_renewed_at）的节点，天或小时一律跳过；auth_renewed_at 为空（总时长未知）时不跳过，即现行为不变。
+# ③ 小时节点只由自己的单例任务触发（新 job，singletonKey 含账户 + 节点 + 到期时刻；到点核对账户当前到期时刻不符即空转），排任务的时机：重新授权成功、手工录入凭据、续期成功（refresher 返回新到期）各排一次，daily_check 只补排下次巡检前到点的节点；每日巡检的按天判定、expiry_due、探测重试不改。
+#    小时节点触发 = 现有「即将到期」提醒（UNION_AUTH_EXPIRING、同一模板同一投递链，阶段记 h<N> 只进提醒去重键），auth_status 由 active 进 expiring；同一到期时刻每个小时节点至多一次、已发更小节点后不补发更大的；已过期按到期处理；之后的每日巡检不得把它改回 active。 alert_stage 列与其检查约束不动（按天节点照旧 d<N>）：重建 union_ 表上的约束要登记 APPROVED_GUARD_CHANGES（门禁改动），本单不走那条路（编排 D10-2771 取此做法，04 §3.2 措辞由编排回写）。
+# ④ 迁移（只增）：union_credentials 加 re_expires_in_s、r1_expires_in_s、r2_expires_in_s、w1_expires_in_s、w2_expires_in_s 五个可空整数列（只收 ≥ 0 或 null），随新凭据行一起插入，不给 app 角色加 UPDATE；不重建任何已有约束、索引或守卫。迁移号 land 前按主干取下一个空号。；补丁 4（11-24，money r1 S1：无手机号时小时告警去重不可靠）：同一迁移可给 union_accounts 加一个可空列记「本次授权已发出的最近小时节点」（如 hour_alert_key text：到期时刻 + 节点），由 union 在小时任务与巡检里写，作防重复依据；alert_stage 及其约束仍一字不动（D10-2771），不加 CHECK 重建
+# ⑤ infra/taobao/site-oauth.ts 解析这五个值（缺省、非整数或负数 → null，不报错）；reauth.ts 写新凭据行时一并写；手工录入（admin-accounts.ts）写 null。数值不进日志、不进审计明文；token 照旧不出现在任何日志或响应里。fake-site-oauth 只按现有假实现补这五个字段，不伪造真实报文。 ⑥ adminListUnionAccounts / adminPutUnionCredential 的行按 CT-24ha 契约返回 auth_refreshable：当前凭据 re_expires_in_s > 0 → true，= 0 → false，null 或无当前凭据 → null；不返回原始时长。
+# 不在本单：自动续期本身（第二步，D10-2585 等实测 re_expires_in > 0）、后台页显示（fe，F1-08atb 之后）、把两个提醒键登记进配置注册表。
+# 冻结用例盘点（be 11-23 只读，couli-runs/FU-TAOBAO-TOKEN-REFRESH/prep.md 末节）：现有规则测试的账户种子 auth_renewed_at 大多为空、置了值的总时长都远大于 14 天，跳过规则不触及；alert_stage 列不动；凭据列用例只禁 token / secret 明文列名。按 ③ 的写法预计不需 modify_existing；实现中如撞冻结用例，停下以补丁补登，不改测试。 补丁 2（11-24，写测 1 的 out_of_scope）：手工录入凭据也要排小时任务，后台装配 union-admin.module.ts 未给授权服务传队列，paths 补这一个文件（只接线）。 补丁 3（11-24，实现 r1 撞冻结）：[AC-B1-22a#2] 精确钉凭据表列，登 modify_existing。
+# 补丁 5（2026-11-25，负责人同意持久告警，D10-2970 第 3 条 / D10-2974；规划 couli#31 BR-ID-24 细则「后台告警的持久记录」、04 §3.2 union_auth_alerts；做法 couli-runs/B1-22zd/persistent-alert-plan.md，money r3/r4 两条 S1 的修法）：后台告警由日志行改为 union 独写、只追加的 union_auth_alerts（id、app_id、union_account_id、platform、stage、alert_key、auth_expires_at、entered_at、phones_configured、cause、created_at；唯一 (app_id, union_account_id, stage, alert_key)，alert_key 与短信去重键同组成；reject_update_delete 触发器、app 角色只 INSERT / SELECT），与 hour_alert_key / alert_stage / notify_logs 同一事务 INSERT … ON CONFLICT DO NOTHING，按天节点、小时节点、expired 都写；插入成功时同事务排任务打原日志行（日志至少一次、表恰好一次）。不是工单：无处理人 / 状态 / 关闭列，不改契约与后台接口。迁移并入本分支 0155（未合并），land 前取主干下一个空号。新规则测试要点 couli-runs/B1-22zd/persistent-alert-tests.md；本单冻结用例要改的由入账前探针定，另登补丁。一次性 approvals：写测增量 1 次 + 规则测试评审增量 1 轮 + 实现 r4 1 次 + money r5 1 轮。 补丁 6（D10-3063 / D10-3064）：日志只由同事务排入的 union-auth / alert_log 任务打（载荷 { app_id, union_account_id, alert_id }，执行时读记录拼原日志行），至少一次；auth-probe 两文件 5 块冻结用例只在日志断言前加「执行本轮排入的 alert_log 任务」一步（before / after couli-runs/B1-22zd/frozen-blocks-before-after.md）；目录段含关键词 union，tools/lib/task-file.ts isMoneyOrAttributionTest 判为资金 / 归属测试——只走 rule_change，待负责人确认（编排核内容）。 补丁 7（D10-3074）：门禁不认 monitor.int.test.ts 循环里模板标题的块，改为 monitor.int.test.ts 不改、只改共用支撑文件 test/spec/union/auth-probe/kit.ts——harness 的 monitor 每次调用返回后逐个 handle 本轮尚未执行的 alert_log 任务（只执行 alert_log，jobs / send 记录不变）；atomicity [AC-S1-64#32] 仍只加一步。
+refs: [BR-ID-24]
+refs_hash:
+  BR-ID-24: 3c3ffd8471cd
+deps: [CT-24ha]
+paths:
+  - 'apps/api/src/modules/union/auth-expiry/**'
+  - 'apps/api/src/modules/union/infra/taobao/site-oauth{,.test}.ts'
+  - 'apps/api/src/modules/union/infra/fake-site-oauth{,.test}.ts'
+  - 'apps/api/src/modules/union/application/admin-accounts{,.test}.ts'
+  - 'apps/api/src/modules/union/union-admin.module.ts'
+  - 'db/migrations/**'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+  - 'test/spec/union/auth-alert-hours/**'
+test_paths:
+  - 'test/spec/union/auth-alert-hours/**'
+  - 'test/spec/db/union/auth-expiry/auth-expiry.int.test.ts'
+  - 'test/spec/union/auth-probe/{kit.ts,atomicity.int.test.ts}'
+modify_existing:
+  - file: 'test/spec/db/union/auth-expiry/auth-expiry.int.test.ts'
+    test: '[AC-B1-22a#2] reminder stages accept configurable days 1–999 and reject malformed values on insert/update'
+    reason: rule_change
+    br: [BR-ID-24]
+    ruling: D10-2758
+    note: 'BR-ID-24 细则「授权时长与续期」要求记录回调返回的有效期数值；块尾 credentialColumns 把 union_credentials 精确钉成 9 列，只在该列表追加 re_expires_in_s、r1_expires_in_s、r2_expires_in_s、w1_expires_in_s、w2_expires_in_s 五行（int4、可空、无默认），提醒阶段与其余断言一字不动。'
+  - file: 'test/spec/union/auth-probe/atomicity.int.test.ts'
+    test: '[AC-S1-64#32] 短信故障不丢后台告警，不回滚 expired，失败记录不自动重发'
+    reason: rule_change
+    br: [BR-ID-24]
+    ruling: D10-3064
+    note: '日志只由同事务排入的 alert_log 任务打（BR-ID-24「后台告警的持久记录」：记录写入后再打原有告警日志，至少一次）；本块只在日志断言前加一步「执行本轮排入的 alert_log 任务」（jobs(h, a.id) 中名为 alert_log 的逐个 handle），日志断言的内容、条数、字段不变'
+  - file: 'test/spec/union/auth-probe/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-ID-24]
+    ruling: D10-3074
+    note: '日志只由同事务排入的 alert_log 任务打（BR-ID-24「后台告警的持久记录」，至少一次）；harness 的 monitor 包一层：每次调用返回后逐个 handle 本轮 send 记录里尚未执行、任务名为 alert_log 的任务（不碰别的任务名，jobs / send 记录不变），使 monitor.int.test.ts 现有日志断言原样成立；该文件各块不改'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/union/auth-alert-hours/**'
+status: todo
