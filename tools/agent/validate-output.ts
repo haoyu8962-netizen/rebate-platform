@@ -51,11 +51,23 @@
 // internal error, 3 valid but needs a human (--rewrite only: an S0 / S1 finding was judged out
 // of scope now or by an earlier --rewrite of the same file (side record), or a pinned finding is
 // S0 / S1; codex-run.sh turns it into its exit 13).
-import { createHash } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  fstatSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeSync,
+} from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import { readJsonFile, writeFileAtomic } from '../lib/fsx.ts';
+import { readJsonFile } from '../lib/fsx.ts';
 import { git } from '../lib/git.ts';
 import { matchesAny, splitTopLevelCommas } from '../lib/glob.ts';
 
@@ -434,6 +446,47 @@ export function sha256(text: string): string {
 }
 
 /**
+ * Writes `data` (UTF-8) to `file` through a temporary file in the same directory and a rename,
+ * like fsx.ts writeFileAtomic, but only renames once every byte is on the temporary file
+ * (CT-06zzzzzzzf r6): a short write is continued, a write that makes no progress or a size
+ * mismatch throws, and the temporary file is removed, so `file` keeps its previous content.
+ */
+export function writeFileComplete(file: string, data: string): void {
+  const bytes = Buffer.from(data, 'utf8');
+  const dir = dirname(file);
+  mkdirSync(dir, { recursive: true });
+  const tmp = join(dir, `.${basename(file)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
+  try {
+    const fd = openSync(tmp, 'wx', 0o644);
+    try {
+      let offset = 0;
+      while (offset < bytes.length) {
+        const n = writeSync(fd, bytes, offset, bytes.length - offset);
+        if (!Number.isInteger(n) || n <= 0) {
+          throw new Error(
+            `short write to ${file}: ${offset} of ${bytes.length} bytes written (写不全; ${file} is left unchanged)`,
+          );
+        }
+        offset += n;
+      }
+      fsyncSync(fd);
+      const size = fstatSync(fd).size;
+      if (size !== bytes.length) {
+        throw new Error(
+          `short write to ${file}: ${size} of ${bytes.length} bytes on disk (写不全; ${file} is left unchanged)`,
+        );
+      }
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(tmp, file);
+  } catch (error) {
+    rmSync(tmp, { force: true });
+    throw error;
+  }
+}
+
+/**
  * Keys held for a human by the side record of `file`, when the record exists, is well formed and
  * was written for exactly the current content `text` (another review in the same place does not
  * inherit it). Empty when there is no record (ENOENT) or it was written for other content.
@@ -713,9 +766,9 @@ function main(argv: readonly string[]): number {
             verdict: review.verdict,
             entries: blocking.map((f) => ({ key: f.key, severity: f.severity })),
           };
-          writeFileAtomic(needsHumanPath(args.file), `${JSON.stringify(record, null, 2)}\n`);
+          writeFileComplete(needsHumanPath(args.file), `${JSON.stringify(record, null, 2)}\n`);
         }
-        writeFileAtomic(args.file, written);
+        writeFileComplete(args.file, written);
         report.warnings.push(
           `rewrote ${args.file}: ${moved.length} finding(s) moved to out_of_scope, verdict ${review.verdict}`,
         );

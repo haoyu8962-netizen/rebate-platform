@@ -1,6 +1,6 @@
 // Tests for the output schemas and validate-output.ts (规划/11 §2.4 schema 写法, §3.1, §3.3).
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { AGENT_DIR, type Fixture, gitIn, makeFixture, REPO } from './testing/fixture.ts';
@@ -947,6 +947,80 @@ it(
       expect(readFileSync(needsHumanPath(file), 'utf8')).toBe(damaged);
       expect((JSON.parse(before) as ReviewOutput).verdict).toBe('fail');
     }
+  },
+);
+
+/** A preload that caps or stalls writeSync on the temporary files of the review / side record. */
+function shortWritePreload(fx: Fixture, mode: 'chunk' | 'stall'): string {
+  const preload = join(fx.root, `short-write-${mode}.mjs`);
+  writeFileSync(
+    preload,
+    [
+      "import { createRequire, syncBuiltinESMExports } from 'node:module';",
+      "const fs = createRequire(import.meta.url)('node:fs');",
+      'const open = fs.openSync;',
+      'const write = fs.writeSync;',
+      'const paths = new Map();',
+      'let stalled = false;',
+      'fs.openSync = (path, ...rest) => {',
+      '  const fd = open(path, ...rest);',
+      '  paths.set(fd, String(path));',
+      '  return fd;',
+      '};',
+      'fs.writeSync = (fd, buf, offset, length, ...rest) => {',
+      "  const path = paths.get(fd) ?? '';",
+      "  if (!path.endsWith('.tmp') || typeof buf === 'string') return write(fd, buf, offset, length, ...rest);",
+      `  if (${JSON.stringify(mode)} === 'chunk') return write(fd, buf, offset, Math.min(length, 7));`,
+      "  if (path.includes('needs-human')) return write(fd, buf, offset, length, ...rest);",
+      '  // Disk full after the first 64 bytes: writeSync reports what it wrote, then nothing more.',
+      '  if (stalled) return 0;',
+      '  stalled = true;',
+      '  return write(fd, buf, offset, Math.min(length, 64));',
+      '};',
+      'syncBuiltinESMExports();',
+      '',
+    ].join('\n'),
+  );
+  return preload;
+}
+
+it(
+  '[CT-06zzzzzzzf] CLI: short writes are continued; the review and side record are written whole',
+  { timeout: 60_000 },
+  () => {
+    const fx = makeFixture('validate-short-write-chunk');
+    fixtures.push(fx);
+    const { file, args } = outsideS1Review(fx);
+    const res = runCli(args, ['--import', shortWritePreload(fx, 'chunk')]);
+    expect(res.status, res.stderr).toBe(3);
+    const text = readFileSync(file, 'utf8');
+    expect((JSON.parse(text) as ReviewOutput).verdict).toBe('fail');
+    const record = JSON.parse(readFileSync(needsHumanPath(file), 'utf8')) as NeedsHumanRecord;
+    expect(record.sha256).toBe(sha256(text));
+  },
+);
+
+it(
+  '[CT-06zzzzzzzf] CLI: a write that cannot finish exits non-zero and keeps the original review',
+  { timeout: 60_000 },
+  () => {
+    const fx = makeFixture('validate-short-write-stall');
+    fixtures.push(fx);
+    const { file, args } = outsideS1Review(fx);
+    const before = readFileSync(file, 'utf8');
+    const res = runCli(args, ['--import', shortWritePreload(fx, 'stall')]);
+    expect(res.status, res.stderr).not.toBe(0);
+    expect(res.status).not.toBe(3);
+    expect(res.stderr).toContain('写不全');
+    expect(readFileSync(file, 'utf8')).toBe(before);
+    expect(readdirSync(fx.root).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+    // The record written for the unfinished content matches nothing; a clean rerun recovers.
+    const rerun = runCli(args);
+    expect(rerun.status, rerun.stderr).toBe(3);
+    const text = readFileSync(file, 'utf8');
+    expect((JSON.parse(text) as ReviewOutput).verdict).toBe('fail');
+    const record = JSON.parse(readFileSync(needsHumanPath(file), 'utf8')) as NeedsHumanRecord;
+    expect(record.sha256).toBe(sha256(text));
   },
 );
 
