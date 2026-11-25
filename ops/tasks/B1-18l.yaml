@@ -1,0 +1,1214 @@
+id: B1-18l
+repo: rebate-platform
+title: 后台二次验证三档（后端）：机读清单 specs/step-up.yaml（按 operationId，按键名 / 条件分档的登记到键）+ 守卫按清单取档 + sudo 窗口记在后台会话上（180 分钟）+ strict 每次验证（凭证首次使用绑定操作）+ 令牌不分方式 + 归 none 的操作去掉校验（BR-ID-34，D10-2792 / D10-2900 / D10-2943 / D10-3105）
+type: impl
+# 2026-11-25 二次验证线入账（D10-3105）。入账稿 couli-runs/STEPUP-BE/entry-draft-B1-18l.md；重探原型 couli-runs/STEPUP-1125p/prototype-r2.patch（主干 975a82638 上量的）。裁定：守卫真实路由只看清单，取不到 operationId 且不在契约对照表里才按权限点最高档兜底，并以规则测试钉「已注册的 /admin/v1 路由全部解析到 operationId」（D10-3105 1）；关差错单是否解除冻结经 payout 冻结端口读、closeAdminReconDiff 按主干入参调用行为不变（3）；凭证用于 sudo 的三个细节为代理补全的默认（5）。不做：第二因子二选一、企业微信告警、apps/admin、微信打款两个上限键与两处无接口项（FU，D10-3105 4）。
+# 冻结用例：重探会红 262 条 / 148 块 / 75 文件（couli-runs/STEPUP-BE/frozen-handling-b118l.csv），本次登记 197 条目（覆盖 244 条；生成脚本与输入 couli-runs/B1-18l/gen-ledger.ts、ledger-entries.json）。资金与归属目录的条目 note 里逐条写明负责人依据（D10-2788 / D10-2826）。另 18 条（4 个文件、写在 for…of 循环里、标题是模板字面量）现门禁无法按名登记，待编排裁定后以台账补丁补（见 notices）。it.each 共用块体的同表其余行，写测后按实际改动以补丁补登（D10-2838 甲类）。
+refs: [BR-ID-34]
+refs_hash:
+  BR-ID-34: 6ed9502449a2
+deps: [CT-24zzv]
+paths:
+  - 'specs/{step-up,permissions}.yaml'
+  - 'apps/api/src/modules/admin/**'
+  - 'apps/api/src/modules/platform/http/admin-guard.ts'
+  - 'apps/api/src/modules/{content,identity,ledger,linking,notification,orders,payment,payout,risk,settlement,union}/http/admin/**'
+  - 'apps/api/src/modules/ledger/application/admin-recon-diff-close{,.test}.ts'
+  - 'apps/api/src/modules/risk/application/admin-appeals-write{,.test}.ts'
+  - 'apps/api/src/modules/notification/admin-channels/service{,.test}.ts'
+  - 'apps/api/src/modules/payout/application/withdraw-holds{,.test}.ts'
+  - 'apps/api/src/modules/payout/index.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'test/spec/admin/step-up-tiers/**'
+  - 'test/spec/{admin/admins-permissions/refusals.int.test.ts,admin/admins-verify-phone/self.int.test.ts,admin/admins-verify-phone/super.int.test.ts,admin/admins-write/auth.int.test.ts,admin/admins-write/create.int.test.ts,admin/exports/create.int.test.ts,admin/exports/retry.int.test.ts,admin/guard-any/guard.int.test.ts,admin/guard-mount/guard.int.test.ts,admin/lookup-blank-write-readback/orders.int.test.ts,admin/lookup-blank-write-readback/users.int.test.ts,admin/permissions/catalog.test.ts,admin/permissions/guard.int.test.ts,admin/permissions/me.int.test.ts,admin/step-up-commit-unknown/balance-recalc.int.test.ts,admin/step-up-commit-unknown/write-off.int.test.ts,admin/step-up/binding.int.test.ts,admin/step-up/sms.int.test.ts,admin/tax-export/create.int.test.ts,admin/tax-export/tasks.int.test.ts,content/admin-dict/delivery.int.test.ts,content/agreements-admin/agreements.int.test.ts,content/app-versions-admin/admin.int.test.ts,content/config-items/access.int.test.ts,content/config-settle/writes.int.test.ts,content/dict-admin/dict-items.int.test.ts,content/dict-agreement-real-name/save.int.test.ts,content/invite-reward-eligibility/writes.int.test.ts,content/kill-switches/cas.int.test.ts,content/kill-switches/update.int.test.ts,content/system-switch/admin.int.test.ts,contracts/admin-tax-export/operations.test.ts,identity/admin-profile/access.int.test.ts,identity/admin-realname/access.int.test.ts,identity/admin-user-pii/reveal.int.test.ts,identity/data-copies-download/access.int.test.ts,identity/data-copies-register/access.int.test.ts,identity/reverify-admin-device/access.int.test.ts,identity/reverify-admin-device/order.int.test.ts,ledger/admin-adjustments-closing/approve-access.int.test.ts,ledger/admin-adjustments/access-reverse.int.test.ts,ledger/admin-adjustments/access.int.test.ts,ledger/admin-adjustments/idempotency.int.test.ts,ledger/admin-recon-balance-recalc/access.int.test.ts,ledger/admin-recon-write-off/refusals.int.test.ts,ledger/bad-debt-writeoffs/access.int.test.ts,linking/admin-union-bindings/validation.int.test.ts,notification/admin-channels/pending.int.test.ts,notification/admin-channels/register.int.test.ts,notification/admin-channels/switch.int.test.ts,orders/admin-mounts/permissions.int.test.ts,orders/rights-mounts/permissions.int.test.ts,payment/admin/resolve.int.test.ts,payout/admin-manual-paid/access.int.test.ts,payout/admin-manual-paid/audit.int.test.ts,payout/admin-manual-paid/idempotency.int.test.ts,payout/admin-manual-paid/manual-paid-edges.int.test.ts,payout/admin-payout-batch/access.int.test.ts,payout/admin-unknown-payouts/access-atomic.int.test.ts,payout/admin-watermark-entry/refusals.int.test.ts,payout/admin-withdrawal-review/access.int.test.ts,risk/admin-appeals-write/permissions.int.test.ts,risk/admin-appeals-write/rules.test.ts,risk/admin-risk-rules/permissions.int.test.ts,risk/admin-risk-state/http.int.test.ts,settlement/admin-recon-restore/refusals.int.test.ts,settlement/admin-settle-commands/access.int.test.ts,settlement/admin-union-receipts/refusals.int.test.ts,settlement/blacklist-clawback/refusals.int.test.ts,settlement/settle-adjust-approve/guard.int.test.ts,settlement/settle-adjust-generate/admin.int.test.ts,union/admin-accounts/access.int.test.ts,union/admin-alert-phones/access.int.test.ts,union/admin-alert-phones/secrecy.int.test.ts,union/admin-pids/access.int.test.ts}'
+test_paths:
+  - 'test/spec/admin/step-up-tiers/**'
+  - 'test/spec/{admin/admins-permissions/refusals.int.test.ts,admin/admins-verify-phone/self.int.test.ts,admin/admins-verify-phone/super.int.test.ts,admin/admins-write/auth.int.test.ts,admin/admins-write/create.int.test.ts,admin/exports/create.int.test.ts,admin/exports/retry.int.test.ts,admin/guard-any/guard.int.test.ts,admin/guard-mount/guard.int.test.ts,admin/lookup-blank-write-readback/orders.int.test.ts,admin/lookup-blank-write-readback/users.int.test.ts,admin/permissions/catalog.test.ts,admin/permissions/guard.int.test.ts,admin/permissions/me.int.test.ts,admin/step-up-commit-unknown/balance-recalc.int.test.ts,admin/step-up-commit-unknown/write-off.int.test.ts,admin/step-up/binding.int.test.ts,admin/step-up/sms.int.test.ts,admin/tax-export/create.int.test.ts,admin/tax-export/tasks.int.test.ts,content/admin-dict/delivery.int.test.ts,content/agreements-admin/agreements.int.test.ts,content/app-versions-admin/admin.int.test.ts,content/config-items/access.int.test.ts,content/config-settle/writes.int.test.ts,content/dict-admin/dict-items.int.test.ts,content/dict-agreement-real-name/save.int.test.ts,content/invite-reward-eligibility/writes.int.test.ts,content/kill-switches/cas.int.test.ts,content/kill-switches/update.int.test.ts,content/system-switch/admin.int.test.ts,contracts/admin-tax-export/operations.test.ts,identity/admin-profile/access.int.test.ts,identity/admin-realname/access.int.test.ts,identity/admin-user-pii/reveal.int.test.ts,identity/data-copies-download/access.int.test.ts,identity/data-copies-register/access.int.test.ts,identity/reverify-admin-device/access.int.test.ts,identity/reverify-admin-device/order.int.test.ts,ledger/admin-adjustments-closing/approve-access.int.test.ts,ledger/admin-adjustments/access-reverse.int.test.ts,ledger/admin-adjustments/access.int.test.ts,ledger/admin-adjustments/idempotency.int.test.ts,ledger/admin-recon-balance-recalc/access.int.test.ts,ledger/admin-recon-write-off/refusals.int.test.ts,ledger/bad-debt-writeoffs/access.int.test.ts,linking/admin-union-bindings/validation.int.test.ts,notification/admin-channels/pending.int.test.ts,notification/admin-channels/register.int.test.ts,notification/admin-channels/switch.int.test.ts,orders/admin-mounts/permissions.int.test.ts,orders/rights-mounts/permissions.int.test.ts,payment/admin/resolve.int.test.ts,payout/admin-manual-paid/access.int.test.ts,payout/admin-manual-paid/audit.int.test.ts,payout/admin-manual-paid/idempotency.int.test.ts,payout/admin-manual-paid/manual-paid-edges.int.test.ts,payout/admin-payout-batch/access.int.test.ts,payout/admin-unknown-payouts/access-atomic.int.test.ts,payout/admin-watermark-entry/refusals.int.test.ts,payout/admin-withdrawal-review/access.int.test.ts,risk/admin-appeals-write/permissions.int.test.ts,risk/admin-appeals-write/rules.test.ts,risk/admin-risk-rules/permissions.int.test.ts,risk/admin-risk-state/http.int.test.ts,settlement/admin-recon-restore/refusals.int.test.ts,settlement/admin-settle-commands/access.int.test.ts,settlement/admin-union-receipts/refusals.int.test.ts,settlement/blacklist-clawback/refusals.int.test.ts,settlement/settle-adjust-approve/guard.int.test.ts,settlement/settle-adjust-generate/admin.int.test.ts,union/admin-accounts/access.int.test.ts,union/admin-alert-phones/access.int.test.ts,union/admin-alert-phones/secrecy.int.test.ts,union/admin-pids/access.int.test.ts}'
+modify_existing:
+  - file: 'test/spec/admin/admins-permissions/refusals.int.test.ts'
+    test: '[AC-B1-34k#10] 超管不带令牌保存返回 10003 tier=totp，什么都不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/admins-permissions/refusals.int.test.ts'
+    test: '[AC-B1-34k#10] 超管令牌已用过保存返回 10003 tier=totp，什么都不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/admins-permissions/refusals.int.test.ts'
+    test: '[AC-B1-34k#10] 超管令牌无效保存返回 10003 tier=totp，什么都不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/admins-verify-phone/self.int.test.ts'
+    test: '[AC-B1-34i#2] 普通账号（未勾选任何权限点） 本人登记验证手机号：动态码档发码到新号，核验后才生效，短信档改发新号，写审计，会话不作废'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/admins-verify-phone/self.int.test.ts'
+    test: '[AC-B1-34i#2] 超管 本人登记验证手机号：动态码档发码到新号，核验后才生效，短信档改发新号，写审计，会话不作废'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/admins-verify-phone/self.int.test.ts'
+    test: '[AC-B1-34i#4] 发码须动态码档 step-up：不带令牌或只带短信档令牌返回 10003 tier=totp，不发短信、什么都不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/admins-verify-phone/super.int.test.ts'
+    test: '[AC-B1-34i#24] 超管代改发码不带 step-up 令牌返回 10003 tier=totp，不发短信、什么都不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/admins-write/auth.int.test.ts'
+    test: '[AC-B1-34h#9] 超管不带 step-up 令牌调用 create 返回 10003 tier=totp，什么都不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/admins-write/auth.int.test.ts'
+    test: '[AC-B1-34h#9] 超管不带 step-up 令牌调用 disable 返回 10003 tier=totp，什么都不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/admins-write/auth.int.test.ts'
+    test: '[AC-B1-34h#9] 超管不带 step-up 令牌调用 enable 返回 10003 tier=totp，什么都不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/admins-write/auth.int.test.ts'
+    test: '[AC-B1-34h#9] 超管不带 step-up 令牌调用 regenerate 返回 10003 tier=totp，什么都不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/admins-write/auth.int.test.ts'
+    test: '[AC-B1-34h#9] 超管不带 step-up 令牌调用 reset 返回 10003 tier=totp，什么都不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/admins-write/create.int.test.ts'
+    test: '[AC-B1-34h#7] 新建缺少有效的动态码档 step-up（expired）返回 10003 tier=totp，不建账号'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/admins-write/create.int.test.ts'
+    test: '[AC-B1-34h#7] 新建缺少有效的动态码档 step-up（invalid）返回 10003 tier=totp，不建账号'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/admins-write/create.int.test.ts'
+    test: '[AC-B1-34h#7] 新建缺少有效的动态码档 step-up（missing）返回 10003 tier=totp，不建账号'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/admins-write/create.int.test.ts'
+    test: '[AC-B1-34h#7] 新建缺少有效的动态码档 step-up（used）返回 10003 tier=totp，不建账号'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/exports/create.int.test.ts'
+    test: '[AC-B1-34f#33] 明文创建拒绝短信档令牌，必须使用 pii 权限点的 totp 档'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/exports/create.int.test.ts'
+    test: '[AC-B1-34f#7] 明文创建用 pii.reveal_phone 守卫，202 消耗令牌并分别审计'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/exports/create.int.test.ts'
+    test: '[AC-B1-34f#8] 明文创建拒绝 expired 动态码令牌'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/exports/create.int.test.ts'
+    test: '[AC-B1-34f#8] 明文创建拒绝 invalid 动态码令牌'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/exports/create.int.test.ts'
+    test: '[AC-B1-34f#8] 明文创建拒绝 missing 动态码令牌'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/exports/retry.int.test.ts'
+    test: '[AC-B1-34f#30] 明文重试需新理由和令牌；成功只消费一次，分别写重试与明文审计'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/exports/retry.int.test.ts'
+    test: '[AC-B1-34f#38] 明文重试拒绝 expired 令牌，任务和审计均不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/exports/retry.int.test.ts'
+    test: '[AC-B1-34f#38] 明文重试拒绝 invalid 令牌，任务和审计均不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/guard-any/guard.int.test.ts'
+    test: '[AC-F1-10c#10] 写 + 混档数组 %j（持有 %j）是编程错误 50001：不执行业务、不核销令牌'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '整块登记（该 .each / .for 表门禁展不开，按标题模板原文登，D10-2559）；重探里该表有 6 行会红；例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽；表里不涉及二次验证的行期望不变'
+  - file: 'test/spec/admin/guard-any/guard.int.test.ts'
+    test: '[AC-F1-10c#12] 超管未勾任何点：只读数组直接放行；写数组仍按共同档位要令牌；混档与空数组仍是 50001'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/guard-any/guard.int.test.ts'
+    test: '[AC-F1-10c#13] 单个权限点：非只读（缺省或 readOnly=false）与单元素数组同 F1-06u，只读则不要求令牌'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/guard-any/guard.int.test.ts'
+    test: '[AC-F1-10c#2] 只读不读也不核销所带令牌，之后令牌仍可用于一次写操作'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽'
+  - file: 'test/spec/admin/guard-any/guard.int.test.ts'
+    test: '[AC-F1-10c#3] 只读不判二次验证：短信档权限点未登记验证手机号也放行，写操作仍要求'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/guard-any/guard.int.test.ts'
+    test: '[AC-F1-10c#4] 只读 + 数组都不持有返回 10403，不执行业务也不核销令牌；勾选后即放行'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/guard-any/guard.int.test.ts'
+    test: '[AC-F1-10c#6] 写 + 同档（totp）数组，持有 %j：缺令牌 10003，带有效令牌执行一次并核销'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '整块登记（该 .each / .for 表门禁展不开，按标题模板原文登，D10-2559）；重探里该表有 3 行会红；该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动；表里不涉及二次验证的行期望不变'
+  - file: 'test/spec/admin/guard-any/guard.int.test.ts'
+    test: '[AC-F1-10c#7] 写 + 同档数组都不持有返回 10403 且不核销令牌；勾选其一后同一令牌可用一次'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/guard-any/guard.int.test.ts'
+    test: '[AC-F1-10c#9] 写 + 同档（短信）数组按短信档要令牌，已登记验证手机号=false'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/guard-any/guard.int.test.ts'
+    test: '[AC-F1-10c#9] 写 + 同档（短信）数组按短信档要令牌，已登记验证手机号=true'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#15] 后台鉴权之后 Redis 不可用，需 step-up 的请求不能执行'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#16] 同账号的另一登录会话不能使用原会话签发的令牌，拒绝不核销'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#17] 原样传回业务 HTTP 200 / code 20001，失败响应不核销令牌'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#17] 原样传回业务 HTTP 409 / code 0，失败响应不核销令牌'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#4] 超管未勾任何点也能执行，但不能绕过二次验证'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#5] totp 权限缺少令牌时按实际请求 trace_id 返回 10003'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#6] HTTP 签发的 sms 令牌可执行一次成功业务，成功后不能重用'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#6] HTTP 签发的 totp 令牌可执行一次成功业务，成功后不能重用'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#7] null 档忽略无效令牌，也不核销所带有效令牌'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#8] 短信档读取验证手机号登记状态，超管=false 也不能省略'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#8] 短信档读取验证手机号登记状态，超管=true 也不能省略'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#9] 传递操作 content.app_version / content.app_version.raise_min_supported_version 的例外档位 totp'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/guard-mount/guard.int.test.ts'
+    test: '[AC-F1-06u#9] 传递操作 fund.recon / fund.recon.balance_recalc 的例外档位 sms'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/lookup-blank-write-readback/orders.int.test.ts'
+    test: '[AC-B1-10p#6] 置空不改写操作的动态码：adminReassignOrder 不带 X-Step-Up-Token 仍 10003、什么都不写；带有效 token 成功且响应置空；同一 token 已消耗，再用仍 10003'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/lookup-blank-write-readback/users.int.test.ts'
+    test: '[AC-B1-10p#9] 置空不改写操作的动态码：adminEditUserProfile 不带 X-Step-Up-Token 仍 10003、什么都不写；带有效 token 成功且响应置空；同一 token 已消耗，再用仍 10003'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/permissions/catalog.test.ts'
+    test: '[AC-F1-06l#1] 权限清单逐项符合裁定，键与枚举恰好一致且不重复'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#22] 逐个权限与操作例外要求裁定档位，普通权限无需令牌'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#23] 超管有全部权限但仍需要 sms 档令牌'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#23] 超管有全部权限但仍需要 totp 档令牌'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#24] 短信档未登记手机号明确提示；超管=false 也不例外'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#24] 短信档未登记手机号明确提示；超管=true 也不例外'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#25] 令牌无效场景 admin 返回所需档位且不调用业务'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#25] 令牌无效场景 app 返回所需档位且不调用业务'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#25] 令牌无效场景 expired 返回所需档位且不调用业务'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#25] 令牌无效场景 missing 返回所需档位且不调用业务'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#25] 令牌无效场景 session 返回所需档位且不调用业务'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#25] 令牌无效场景 sms-for-totp 返回所需档位且不调用业务'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#25] 令牌无效场景 totp-for-sms 返回所需档位且不调用业务'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#25] 令牌无效场景 unknown 返回所需档位且不调用业务'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#26] HTTP 200 且 code=0 成功后核销；另一守卫实例也不能重用'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#26] HTTP 201 且 code=0 成功后核销；另一守卫实例也不能重用'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#26] HTTP 299 且 code=0 成功后核销；另一守卫实例也不能重用'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#27] HTTP 199 / code 0 不核销，有效期内可重试'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#27] HTTP 200 / code 20001 不核销，有效期内可重试'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#27] HTTP 200 / code 50001 不核销，有效期内可重试'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#27] HTTP 302 / code 0 不核销，有效期内可重试'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#27] HTTP 400 / code 0 不核销，有效期内可重试'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#27] HTTP 500 / code 0 不核销，有效期内可重试'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#29] 同一令牌并发请求至多一次成功，不产生两次业务操作'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#35] 动态码档未登记手机号只提示 tier=totp，不带 reason；超管=false'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/guard.int.test.ts'
+    test: '[AC-F1-06l#35] 动态码档未登记手机号只提示 tier=totp，不带 reason；超管=true'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/permissions/me.int.test.ts'
+    test: '[AC-F1-06l#3] 超管无需权限行即按枚举顺序拥有全部权限，含档位与操作例外'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽'
+  - file: 'test/spec/admin/permissions/me.int.test.ts'
+    test: '[AC-F1-06l#4] 普通账号仅返回自身已勾选且在枚举内的权限，按枚举排序并脱敏手机号'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽'
+  - file: 'test/spec/admin/step-up-commit-unknown/balance-recalc.int.test.ts'
+    test: '[AC-B2-02ze#10] 短信档（余额重算）：连接在 COMMIT 抵达数据库之前断开（库里没有提交），调用方同样只见连接中断 → 应答为错误，重算没有生效、没有审计；结果未知就不释放（不能以「错误后查得到审计行」判定）：用同一令牌重试 → 10003，库里仍没有重算、没有审计；对照：重新验证拿到的新令牌照常完成重算'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/step-up-commit-unknown/balance-recalc.int.test.ts'
+    test: '[AC-B2-02ze#11] 短信档（余额重算）：COMMIT 已执行、等待确认时驱动抛出不带 SQLSTATE 的 Error(「Connection terminated unexpectedly」) → 应答为错误；用同一令牌重试 → 10003，重算只执行一次（余额行只改一次）、审计只有一条'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/step-up-commit-unknown/balance-recalc.int.test.ts'
+    test: '[AC-B2-02ze#8] 短信档（余额重算，无幂等键）：业务提交时连接中断、结果未知 → 应答为错误，用同一令牌重试 → 10003，重算没有第二次执行（余额行只改一次、审计只有一条）；对照：事务回调内失败已回滚 → 同一令牌重试照常成功、成功后该令牌再用 → 10003；业务正常返回拒绝（20001）→ 令牌照旧可用'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/step-up-commit-unknown/write-off.int.test.ts'
+    test: '[AC-B2-02ze#9] 动态码档（差错核销，带幂等键）：业务提交时连接中断、结果未知 → 应答为错误，用同一令牌、同一幂等键重试 → 10003，核销没有第二次执行（审计只有一条）；对照：事务回调内失败已回滚 → 同一令牌、同一幂等键重试照常成功、成功后该令牌再用 → 10003；业务正常返回拒绝（20001）→ 令牌照旧可用'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/admin/step-up/binding.int.test.ts'
+    test: '[AC-F1-06l#30] HTTP 签发的 sms 令牌绑定实际账号与签发会话，错误使用不核销'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/step-up/binding.int.test.ts'
+    test: '[AC-F1-06l#30] HTTP 签发的 totp 令牌绑定实际账号与签发会话，错误使用不核销'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/step-up/sms.int.test.ts'
+    test: '[AC-F1-06l#6] 未登记验证手机号的发送与验证均提示 sms/verify_phone_missing，绝不发短信'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/admin/tax-export/create.int.test.ts'
+    test: '[AC-B2-08e#7] 全量版只要 tax.export_full：不需 export、fund.view，202 后令牌已核销'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/tax-export/create.int.test.ts'
+    test: '[AC-B2-08e#9] 全量版 令牌无效 → 10003 tier=totp，不建任务'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/tax-export/create.int.test.ts'
+    test: '[AC-B2-08e#9] 全量版 令牌过期 → 10003 tier=totp，不建任务'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/tax-export/create.int.test.ts'
+    test: '[AC-B2-08e#9] 全量版 短信档 → 10003 tier=totp，不建任务'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/tax-export/create.int.test.ts'
+    test: '[AC-B2-08e#9] 全量版 缺令牌 → 10003 tier=totp，不建任务'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/admin/tax-export/tasks.int.test.ts'
+    test: '[AC-B2-08e#33] 只持 tax.export_full 能重试本人失败的全量任务：要新 reason 与新令牌，生成后审计记新用途'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/content/admin-dict/delivery.int.test.ts'
+    test: '[AC-F1-02zd#5] 读取不消耗 step-up，资金键权限及动态码拒绝留审计，原 token 仍可写且只用一次'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/content/agreements-admin/agreements.int.test.ts'
+    test: '[AC-F1-02p#2] an ordinary permitted admin reads without step-up but cannot publish without totp'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/content/agreements-admin/agreements.int.test.ts'
+    test: '[AC-F1-02p#5] a successful publish consumes the step-up token'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/content/app-versions-admin/admin.int.test.ts'
+    test: '[AC-F1-02zc#27] 非空表非法确认键经 HTTP 拒绝；权限与动态码先于业务校验'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/content/app-versions-admin/admin.int.test.ts'
+    test: '[AC-F1-02zc#5] 最低版本从 1.0.0 提高必须 totp，成功后令牌失效'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/content/app-versions-admin/admin.int.test.ts'
+    test: '[AC-F1-02zc#5] 最低版本从 absent 提高必须 totp，成功后令牌失效'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/content/app-versions-admin/admin.int.test.ts'
+    test: '[AC-F1-02zc#5] 最低版本从 null 提高必须 totp，成功后令牌失效'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/content/config-items/access.int.test.ts'
+    test: '[AC-F1-10e#23] config.business 的键：缺令牌 10003 tier=totp 不写库，带有效 totp 令牌后改值成功；守卫只收该点'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/content/config-items/access.int.test.ts'
+    test: '[AC-F1-10e#23] config.risk 的键：缺令牌 10003 tier=totp 不写库，带有效 totp 令牌后改值成功；守卫只收该点'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/content/config-items/access.int.test.ts'
+    test: '[AC-F1-10e#25] 超管改 risk / business 的键同样要 totp 令牌，改 general 的键不要'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/content/config-settle/writes.int.test.ts'
+    test: '[AC-F1-02zj#9] config.business 经 TOTP 保存 bill_day=22，历史与审计各增加一行'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/content/dict-admin/dict-items.int.test.ts'
+    test: '[AC-F1-02t#3] 资金与未知键选资金权限：拒绝留键级审计，totp 每次必需且成功记录前后值'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/content/dict-admin/dict-items.int.test.ts'
+    test: '[AC-F1-02t#4] privacy/perm 使用 agreement 权限和 totp，保存与回滚都要求法务确认人'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/content/dict-agreement-real-name/save.int.test.ts'
+    test: '[AC-F1-02zzi#4] 仅协议权限经 totp 和法务确认可保存实名同意书，发布与审计同事务落库'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/content/invite-reward-eligibility/writes.int.test.ts'
+    test: '[AC-F1-02zx#12] config.business 未 step-up 修改天数和同组金额均要求 TOTP'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/content/kill-switches/cas.int.test.ts'
+    test: '[AC-F1-10d#24] §9.2 #4 / BR-INV-21 %s（持 %s）每次成功改动恰打一条 warn 级 config_change_alert：带键、前后值、操作者与 trace，不含其他配置值；被拒与同值空操作不打'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '整块登记（该 .each / .for 表门禁展不开，按标题模板原文登，D10-2559）；重探里该表有 5 行会红；负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动；表里不涉及二次验证的行期望不变'
+  - file: 'test/spec/content/kill-switches/cas.int.test.ts'
+    test: '[AC-F1-10d#32] 裁定 13：同值写入（版本匹配）是空操作——200 返回当前状态，version、行、历史、审计都不变，无告警；缺令牌仍 10003'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/content/kill-switches/update.int.test.ts'
+    test: '[AC-F1-10d#11] §9.2 #2 growth.invite_bind.enabled 要 totp 档二次验证：缺令牌或无效令牌 10003 tier=totp 且不写库；令牌只能用一次'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/content/kill-switches/update.int.test.ts'
+    test: '[AC-F1-10d#11] §9.2 #2 pay.enabled 要 totp 档二次验证：缺令牌或无效令牌 10003 tier=totp 且不写库；令牌只能用一次'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/content/kill-switches/update.int.test.ts'
+    test: '[AC-F1-10d#11] §9.2 #2 payout.queue_paused 要 totp 档二次验证：缺令牌或无效令牌 10003 tier=totp 且不写库；令牌只能用一次'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/content/kill-switches/update.int.test.ts'
+    test: '[AC-F1-10d#11] §9.2 #2 withdraw.enabled 要 totp 档二次验证：缺令牌或无效令牌 10003 tier=totp 且不写库；令牌只能用一次'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/content/system-switch/admin.int.test.ts'
+    test: '[AC-F1-02zk#12] 系统不需 step-up；重新打开仍需 switch.all 与 totp，无令牌 10003，有令牌 200'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/contracts/admin-tax-export/operations.test.ts'
+    test: '[AC-CT-24zi#2] tax.export_full 的 step-up 档位是 totp，没有另定档位的操作'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽'
+  - file: 'test/spec/identity/admin-profile/access.int.test.ts'
+    test: '[AC-B1-27b#6] 超管=false 也要有效 totp 令牌：缺失或无效为 10003 tier=totp，什么都不写'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/identity/admin-profile/access.int.test.ts'
+    test: '[AC-B1-27b#6] 超管=true 也要有效 totp 令牌：缺失或无效为 10003 tier=totp，什么都不写'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/identity/admin-realname/access.int.test.ts'
+    test: '[AC-B1-27a#6] 超管=false 也要有效 totp 令牌：缺失或无效为 10003 tier=totp，不调供应商、什么都不写'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/identity/admin-realname/access.int.test.ts'
+    test: '[AC-B1-27a#6] 超管=true 也要有效 totp 令牌：缺失或无效为 10003 tier=totp，不调供应商、什么都不写'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/identity/admin-user-pii/reveal.int.test.ts'
+    test: '[AC-F1-07a#10] 同一令牌并发请求最多一次返回明文，且只有一条查看审计'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽'
+  - file: 'test/spec/identity/admin-user-pii/reveal.int.test.ts'
+    test: '[AC-F1-07a#21] 有效 sms 级别令牌不能代替 totp 动态码令牌'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/identity/admin-user-pii/reveal.int.test.ts'
+    test: '[AC-F1-07a#7] 超管=false 也必须提供有效 totp 令牌，缺失或无效为 10003 tier=totp'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/identity/admin-user-pii/reveal.int.test.ts'
+    test: '[AC-F1-07a#7] 超管=true 也必须提供有效 totp 令牌，缺失或无效为 10003 tier=totp'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/identity/admin-user-pii/reveal.int.test.ts'
+    test: '[AC-F1-07a#9] totp 令牌成功后不可复用；新令牌的相同请求仍各记一条审计'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/identity/data-copies-download/access.int.test.ts'
+    test: '[AC-B1-27i#6]每次下载都要 totp 档二次验证：不带、无效或已被一次成功下载用掉的 X-Step-Up-Token → 10003 tier=totp'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/identity/data-copies-register/access.int.test.ts'
+    test: '[AC-B1-27c#5] 登记要 totp 档二次验证：不带或带无效的 X-Step-Up-Token → 10003 tier=totp，什么都不写'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/identity/reverify-admin-device/access.int.test.ts'
+    test: '[AC-B1-02zx#7] 超管=false 也要有效 totp 令牌：缺失或无效为 10003 tier=totp，什么都不写、不记审计'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/identity/reverify-admin-device/access.int.test.ts'
+    test: '[AC-B1-02zx#7] 超管=true 也要有效 totp 令牌：缺失或无效为 10003 tier=totp，什么都不写、不记审计'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/identity/reverify-admin-device/access.int.test.ts'
+    test: '[AC-B1-02zx#8] 别的管理员的 totp 令牌不算数 → 10003 tier=totp'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/identity/reverify-admin-device/order.int.test.ts'
+    test: '[AC-B1-02zx#19] step-up 其次：不带令牌时，请求体不合格、id 不是 UUID、user_id 未知、设备不对、无标记都还是 10003，不记审计'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/ledger/admin-adjustments-closing/approve-access.int.test.ts'
+    test: '[AC-B2-12d#11] 批准的检查顺序：只有 fund.view 或无权限点（带不带短信档令牌）→ 10403；有权限不带令牌、带动态码档令牌、对不存在的单不带令牌 → 10003 tier=sms；没登记验证手机号 → verify_phone_missing；带短信档令牌但请求体多出 amount_fen → 20001；全程什么都不写；超管（无权限点）带短信档令牌批准成功'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/ledger/admin-adjustments-closing/approve-access.int.test.ts'
+    test: '[AC-B2-12d#12] 批准的幂等：同一 Idempotency-Key 先因不带令牌得 10003，再带短信档令牌 → 批准；同键重放 → 原样返回第一次的结果（不回 20902、不再记账、不再写审计）；换新键 → 20902'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/ledger/admin-adjustments/access-reverse.int.test.ts'
+    test: '[AC-B2-12c#41] 红冲真实已批准的原单（+500）：无权限账号（只有 fund.view 带或不带短信档令牌、没有任何权限点）→ 10403 并各写一条 adjustment_denied；有权限账号与超管不带令牌、带动态码档令牌 → 10003 tier=sms；没登记验证手机号的（含超管）→ verify_phone_missing；余额、单、凭证、事件、站内信都不变，只有三条无权限审计；之后超管带短信档令牌一次冲回'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/ledger/admin-adjustments/access.int.test.ts'
+    test: '[AC-B2-12c#21] 短信档 step-up：有 fund.adjust 的账号与超管，不带令牌、带动态码档令牌 → 10003 tier=sms；没登记验证手机号的（超管也一样）→ 10003 verify_phone_missing；都不留痕、不写 adjustment_denied；之后带短信档令牌一次生效'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/ledger/admin-adjustments/idempotency.int.test.ts'
+    test: '[AC-B2-12c#23] 同一 Idempotency-Key 同一请求体重放（带新的短信档令牌）：原样返回第一次的应答，只有一张单、一张凭证、一条审计、一条站内信；用已用过的令牌重放 → 10003 sms；同 key 换请求体 → 20901'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/ledger/admin-adjustments/idempotency.int.test.ts'
+    test: '[AC-B2-12c#24] Idempotency-Key 必填（不带 → 20001，不留痕）；10003 之后同一 key 带令牌照常生效；同一 key 的第一次还在执行时再发（同体或换体）→ 40901，放行后第一次照常完成，之后重放得到它的应答'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/ledger/admin-recon-balance-recalc/access.int.test.ts'
+    test: '[AC-B2-02x#37] 短信档 step-up（BR-ID-34）：不带令牌、带 totp 档令牌 → 10003 data.tier=sms；未登记验证手机的账号（含超管）→ 另带 data.reason=verify_phone_missing；都不改余额、不写审计'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/ledger/admin-recon-balance-recalc/access.int.test.ts'
+    test: '[AC-B2-02x#38] 每次都要新的短信验证：成功用过的令牌再用 → 10003 data.tier=sms，余额不变（缓存再次被改坏也不重算）、不多写审计；换新令牌即可再算'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/ledger/admin-recon-balance-recalc/access.int.test.ts'
+    test: '[AC-B2-02x#39] 原因：去首尾空白后为空 → 20001 data.fields=[reason]（在二次验证之后、差错单之前判：无令牌先回 10003，未知差错单先回 [reason]）；恰好 200 字可以重算并原样记入审计'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/ledger/admin-recon-write-off/refusals.int.test.ts'
+    test: '[AC-B2-07e#23] 二次验证（totp 档）：不带 X-Step-Up-Token、令牌是别的账号的 → 10003 data.tier=totp，先于请求体与差错单检查；什么都不变；拿到令牌后用同一 Idempotency-Key 重放即成功'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/ledger/bad-debt-writeoffs/access.int.test.ts'
+    test: '[AC-B2-12f#13] 短信档 step-up：fund.writeoff 账号与超管不带令牌、带动态码档令牌 → 10003 tier=sms；没登记验证手机号的（超管也一样）→ 10003 verify_phone_missing；都不写任何东西；之后带短信档令牌一人即可批准（超管也可以）'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/linking/admin-union-bindings/validation.int.test.ts'
+    test: '[AC-F1-07c#7] ${action} 缺失或无效动态码均拒绝，超管=%s'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '整块登记（该 .each / .for 表门禁展不开，按标题模板原文登，D10-2559）；重探里该表有 6 行会红；负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动；表里不涉及二次验证的行期望不变'
+  - file: 'test/spec/notification/admin-channels/pending.int.test.ts'
+    test: '[AC-B1-12z#44] 重新测试时没有验证手机号 → 10003 {tier: totp, reason: verify_phone_missing}，不发不存；登记号码后同一操作成功'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '短信重测的业务前置不变，10003 的 data 由 {tier, reason} 改为只有 {reason: verify_phone_missing}（契约 CT-24zzv 已定）；其余断言不动'
+  - file: 'test/spec/notification/admin-channels/pending.int.test.ts'
+    test: '[AC-B1-12z#45] 重新测试的检查顺序：编码 → 变体 → 请求体（sample 键不是变量 → [sample]）→ 没有「待测试」→ [variant] → 20902 → 没有验证手机号'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '短信重测的业务前置不变，10003 的 data 由 {tier, reason} 改为只有 {reason: verify_phone_missing}（契约 CT-24zzv 已定）；其余断言不动'
+  - file: 'test/spec/notification/admin-channels/pending.int.test.ts'
+    test: '[AC-B1-12z#46] 重新测试每次都要 totp 动态码（缺失 → 10003 {tier: totp}，不是 verify_phone_missing）；只有 content.article → 10403'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/notification/admin-channels/pending.int.test.ts'
+    test: '[AC-B1-12z#51] 启用的检查顺序：动态码 → 编码 → 变体 → 请求体 → 「待测试」→ 20902；不符 20902 不带 data'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/notification/admin-channels/register.int.test.ts'
+    test: '[AC-B1-12z#40] 每次都要 totp 动态码（保存与测试发送共用一枚）：缺失 → 10003，权限先于动态码；成功后同一令牌重放 → 10003；一次保存只发一条'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/notification/admin-channels/switch.int.test.ts'
+    test: '[AC-B1-12z#23] 每次都要有效的 totp 动态码：缺失、无效、他人会话的 → 10003 {tier: totp}；成功即消耗，同一令牌重放为 10003；动态码先于编码与请求体检查'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/notification/admin-channels/switch.int.test.ts'
+    test: '[AC-B1-12z#24] 只有 content.article（或只有 content.fund_terms）→ 10403，带不带动态码都一样，权限先于动态码；超管不勾权限点可以开关（仍要动态码）'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/orders/admin-mounts/permissions.int.test.ts'
+    test: '[AC-B1-10m#7] reassign X-Step-Up-Token 无效 → 10003 tier=totp，什么都不写'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/orders/admin-mounts/permissions.int.test.ts'
+    test: '[AC-B1-10m#7] reassign 没带 X-Step-Up-Token → 10003 tier=totp，什么都不写'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/orders/admin-mounts/permissions.int.test.ts'
+    test: '[AC-B1-10m#8] reassign 的动态码 token 成功后已消耗：再用同一个 → 10003'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/orders/admin-mounts/permissions.int.test.ts'
+    test: '[AC-B1-10m#9] 别的账号的动态码 token 不算数：reassign → 10003，什么都不写'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/orders/rights-mounts/permissions.int.test.ts'
+    test: '[AC-B1-10n#7] channel X-Step-Up-Token 无效 → 10003 tier=totp，不留任务、审计与作业'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/orders/rights-mounts/permissions.int.test.ts'
+    test: '[AC-B1-10n#7] channel 没带 X-Step-Up-Token → 10003 tier=totp，不留任务、审计与作业'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/orders/rights-mounts/permissions.int.test.ts'
+    test: '[AC-B1-10n#8] channel 的动态码 token 成功后已消耗：同一个再用 → 10003'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/orders/rights-mounts/permissions.int.test.ts'
+    test: '[AC-B1-10n#9] 别的账号的动态码 token 不算数：channel → 10003，什么都不写'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/payment/admin/resolve.int.test.ts'
+    test: '[AC-B2-15f#1] %s needs_manual 支付单【立即查询】渠道已支付（我方标识、金额相符、成功状态）→ PO2：支付单 PAID（paid_at、渠道交易号），同一事务一张 PAY_RECEIPT、一个 pay_order.paid、一个 biz.reconcile；只查询一次（一条 kind=query 渠道请求，查询应答留作凭证）、不调关单；应答为处置后的支付单与查询摘要（不含渠道侧用户标识）；一条审计（处置人、前后状态、查询结果）；step-up 令牌用后作废，再处置 20902'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '整块登记（该 .each / .for 表门禁展不开，按标题模板原文登，D10-2559）；重探里该表有 2 行会红；负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动；表里不涉及二次验证的行期望不变'
+  - file: 'test/spec/payment/admin/resolve.int.test.ts'
+    test: '[AC-B2-15f#7] step-up 动态码档：不带 X-Step-Up-Token、短信档令牌、别的账号的令牌、过期令牌都是 10003 data.tier=totp；超管不需勾选权限点但同样要 totp 令牌；被拒的调用不查询渠道、不记渠道请求、不写审计、支付单不变'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/payout/admin-manual-paid/access.int.test.ts'
+    test: '[AC-B2-09m#50] 能补录的账号：只持 payout.manual_entry；超管没有权限点行也能，manual_entry_by 与 manual_confirm_by 是超管；超管同样要动态码档（无令牌 10003）'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/payout/admin-manual-paid/access.int.test.ts'
+    test: '[AC-B2-09m#51] 二次验证（动态码档）：不带令牌、令牌是别的账号的、令牌是短信档的 → 10003 data.tier=totp，先于重复 id 的检查；什么都不写'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/payout/admin-manual-paid/access.int.test.ts'
+    test: '[AC-B2-09m#56] 一个动态码档令牌覆盖整个请求：同一令牌一次补 3 单；令牌成功后被消费，再用 → 10003，单不动'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/payout/admin-manual-paid/audit.int.test.ts'
+    test: '[AC-B2-09m#65] 被拒的请求（10403、10003、重复 id、不合格请求体）不写 withdrawal_manual_paid 审计'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽'
+  - file: 'test/spec/payout/admin-manual-paid/idempotency.int.test.ts'
+    test: '[AC-B2-09m#61] 令牌不进请求体哈希：10003 之后带令牌用同一 Idempotency-Key 能执行'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/payout/admin-manual-paid/manual-paid-edges.int.test.ts'
+    test: '[AC-B2-09m#81] 流水号含 NUL：U+0000 在中间、开头、结尾或只有它 → 路由层 20001，data.fields 指向该字段（无权限、不带 step-up 也是），不是 5xx；什么都不写，同请求里合法的项也不执行；去掉 NUL 后两项都能补'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/payout/admin-payout-batch/access.int.test.ts'
+    test: '[AC-B2-09l#37] 二次验证（动态码档）：不带令牌、令牌是别的账号的、令牌是短信档的 → 10003 data.tier=totp，先于重复 id 的检查；什么都不写；令牌不进请求体哈希，拿到令牌后用同一 Idempotency-Key 重试即执行'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/payout/admin-payout-batch/access.int.test.ts'
+    test: '[AC-B2-09l#40] 能执行的账号：只持 payout.execute；超管没有权限点行也能，executor_id 与 created_by 是超管；超管同样要动态码档（无令牌 10003）'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/payout/admin-payout-batch/access.int.test.ts'
+    test: '[AC-B2-09l#42] 一个动态码档令牌覆盖整批；令牌成功后被消费，再用 → 10003，单不动'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/payout/admin-unknown-payouts/access-atomic.int.test.ts'
+    test: '[AC-B2-09s#17] 合法体按权限10403→totp 10003→20001检查；withdraw.review、fund.view、payout.manual_entry不可操作或读列表；super与payout.execute可操作'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/payout/admin-unknown-payouts/access-atomic.int.test.ts'
+    test: '[AC-B2-09s#19] 两个写操作都必须幂等键；10003后同键带totp可执行，成功后同键异体20901，同键同体原样返回且不多任何写入'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/payout/admin-watermark-entry/refusals.int.test.ts'
+    test: '[AC-B2-09i#12] 二次验证（动态码档）：不带 X-Step-Up-Token、令牌是别的账号的、令牌是短信档的 → 10003 data.tier=totp，先于空白 note 与取数时间的检查；什么都不写；令牌不进请求体哈希，拿到令牌后用同一 Idempotency-Key 重放即成功且只有一行'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/payout/admin-watermark-entry/refusals.int.test.ts'
+    test: '[AC-B2-09i#13] 超管没有权限点行也能录入，entered_by 是超管；超管同样要动态码档（无令牌 10003）'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/payout/admin-withdrawal-review/access.int.test.ts'
+    test: '[AC-B2-09k#12] 批量通过的二次验证（动态码档）：不带令牌、令牌是别的账号的、令牌是短信档的 → 10003 data.tier=totp，先于重复 id 的检查；什么都不写；令牌不进请求体哈希，拿到令牌后用同一 Idempotency-Key 重放即成功'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/payout/admin-withdrawal-review/access.int.test.ts'
+    test: '[AC-B2-09k#15] 一个动态码档令牌覆盖整批：同一令牌一次通过 3 单；令牌成功后被消费，再用 → 10003'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/payout/admin-withdrawal-review/access.int.test.ts'
+    test: '[AC-B2-09k#16] 超管没有权限点行也能批量通过与驳回，reviewer_id 是超管；超管同样要动态码档（无令牌 10003）'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/payout/admin-withdrawal-review/access.int.test.ts'
+    test: '[AC-B2-09k#17] 驳回的校验顺序：10403 先于 10003 先于空白 note 先于未知 id 先于状态（有转账尝试的判断在状态之后）；什么都不写'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：旧档位词 totp / sms 改为该操作的 sudo / strict；同块里「持另一档令牌 → 10003」「未登记验证手机号 → verify_phone_missing」两类断言随 BR-ID-34 取消；其余断言不动'
+  - file: 'test/spec/risk/admin-appeals-write/permissions.int.test.ts'
+    test: '[AC-B1-03ze#13] 撤销 %s：持附加权限但无 / 无效动态码 → 10003 tier=totp，无改动；有效动态码后成功'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '整块登记（该 .each / .for 表门禁展不开，按标题模板原文登，D10-2559）；重探里该表有 3 行会红；该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动；表里不涉及二次验证的行期望不变'
+  - file: 'test/spec/risk/admin-appeals-write/permissions.int.test.ts'
+    test: '[AC-B1-03ze#14] 动态码过期（5 分钟后）→ 10003，无改动'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/risk/admin-appeals-write/permissions.int.test.ts'
+    test: '[AC-B1-03ze#15] 超管持全部权限点，撤销封禁仍需动态码'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/risk/admin-appeals-write/permissions.int.test.ts'
+    test: '[AC-B1-03ze#18] 顺序：未知申诉 20001 与状态冲突 20902 先于附加权限与动态码'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/risk/admin-appeals-write/rules.test.ts'
+    test: '[AC-B1-03ze#3] 维持 %j 只需 risk.appeal，无 step-up'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '整块登记（该 .each / .for 表门禁展不开，按标题模板原文登，D10-2559）；重探里该表有 5 行会红；例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽；表里不涉及二次验证的行期望不变'
+  - file: 'test/spec/risk/admin-appeals-write/rules.test.ts'
+    test: '[AC-B1-03ze#4] 撤销 %j → %j'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '整块登记（该 .each / .for 表门禁展不开，按标题模板原文登，D10-2559）；重探里该表有 5 行会红；例子随三档失效或期望形状随档位登记方式改变（逐条判断见 couli-runs/STEPUP-BE/entry-draft.md §4.3 与 entry-draft-B1-18l.md §1.1）：换成在三档下仍成立的例子，规则本身不放宽；表里不涉及二次验证的行期望不变'
+  - file: 'test/spec/risk/admin-risk-rules/permissions.int.test.ts'
+    test: '[AC-B1-03zg#10] ${change} 缺动态码或动态码无效 → 10003 tier=totp，超管=%s'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '整块登记（该 .each / .for 表门禁展不开，按标题模板原文登，D10-2559）；重探里该表有 4 行会红；该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动；表里不涉及二次验证的行期望不变'
+  - file: 'test/spec/risk/admin-risk-rules/permissions.int.test.ts'
+    test: '[AC-B1-03zg#12] 每次启停都要新的动态码：生效一次后同一令牌再用 → 10003'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/risk/admin-risk-state/http.int.test.ts'
+    test: '[AC-F1-07d#2] ${action} 必须有有效 totp，超管=%s'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '整块登记（该 .each / .for 表门禁展不开，按标题模板原文登，D10-2559）；重探里该表有 8 行会红；该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动；表里不涉及二次验证的行期望不变'
+  - file: 'test/spec/risk/admin-risk-state/http.int.test.ts'
+    test: '[AC-F1-07d#36] %s 已过期的动态码不能操作'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '整块登记（该 .each / .for 表门禁展不开，按标题模板原文登，D10-2559）；重探里该表有 4 行会红；该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动；表里不涉及二次验证的行期望不变'
+  - file: 'test/spec/settlement/admin-recon-restore/refusals.int.test.ts'
+    test: '[AC-B2-09g#3] 二次验证（totp 档）：不带 X-Step-Up-Token、令牌是别的账号的、令牌是短信档的 → 10003 data.tier=totp，先于请求体与差错单检查；什么都不变；令牌不进请求体哈希，拿到令牌后用同一 Idempotency-Key 重放即成功'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/settlement/admin-settle-commands/access.int.test.ts'
+    test: '[AC-B2-09f#5] 二次验证（totp 档）：不带 X-Step-Up-Token、令牌是别的账号的、令牌是 sms 档的 → 10003 data.tier=totp，先于请求体与 id 检查；什么都不变；成功后令牌已消费，再用 → 10003；发起补充在 10003 之后用同一 Idempotency-Key 重放即成功'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/settlement/admin-union-receipts/refusals.int.test.ts'
+    test: '[AC-B2-04zr#10] 超管没有权限点行也能录入与红冲，created_by / reversed_by 是超管；超管同样要动态码档（无令牌 10003）'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/settlement/admin-union-receipts/refusals.int.test.ts'
+    test: '[AC-B2-04zr#8] 二次验证（动态码档）：不带 X-Step-Up-Token、令牌是别的账号的、令牌是短信档的 → 录入 10003 data.tier=totp，先于请求体；什么都不变；令牌不进请求体哈希，拿到令牌后用同一 Idempotency-Key 重放即成功且只有一条记录'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/settlement/admin-union-receipts/refusals.int.test.ts'
+    test: '[AC-B2-04zr#9] 二次验证（动态码档）：红冲同样 10003 data.tier=totp，先于 reason 与 receipt_id 的检查；什么都不变；拿到令牌后同一 Idempotency-Key 重放即成功'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/settlement/blacklist-clawback/refusals.int.test.ts'
+    test: '[AC-B2-04zzl#21] 二次验证（totp 档）：不带、别的账号的、短信档的令牌 → 10003 data.tier=totp，先于请求体与差错单检查；什么都不变；令牌不进请求体哈希，拿到令牌后用同一 Idempotency-Key 重放即成功'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/settlement/settle-adjust-approve/guard.int.test.ts'
+    test: '[AC-B2-09zc#1] 缺 step-up 或 sms 档：批准、拒绝都 10003 data.tier=totp（先于请求体校验），什么都不写'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/settlement/settle-adjust-generate/admin.int.test.ts'
+    test: '[AC-B2-09zb#10] 无 fund.settle_adjust（只有 fund.view）→ 10403；缺 step-up 或 sms 档 → 10003（tier totp）；都不入队、不写审计'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2788「同意放宽」，资金相关 40 条 / 31 块之一）：该操作按 BR-ID-34 归 none：只许改「无令牌 → 10003」这一条断言（改为无令牌照常成功、照写审计），金额、幂等、审计、状态等其余断言一个不动'
+  - file: 'test/spec/union/admin-accounts/access.int.test.ts'
+    test: '[B1-22d][BR-ID-24 ③] 超管不勾权限点也能查看、发起与录入（仍要动态码）'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动'
+  - file: 'test/spec/union/admin-alert-phones/access.int.test.ts'
+    test: '[B1-22g][F-ADM-16] 动态码检查先于号码检查：无动态码时不合格号码也是 10003'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/union/admin-alert-phones/access.int.test.ts'
+    test: '[B1-22g][F-ADM-16] 超管不勾权限点也能查看与增删（增删仍要动态码）'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/union/admin-alert-phones/secrecy.int.test.ts'
+    test: '[B1-22g][BR-ID-33] 被拒的新增（已满 10 个、号码不合格、缺或无效动态码、缺权限点）也不把输入的号码写进日志或错误'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 none：「无令牌 → 10003」改为无令牌照常成功、照写审计；同块其余断言不动'
+  - file: 'test/spec/union/admin-pids/access.int.test.ts'
+    test: '[AC-B1-22h#15] ${action} 每次需要有效 totp token，超管=%s'
+    reason: rule_change
+    br: [BR-ID-34]
+    ruling: D10-3105
+    note: '整块登记（该 .each / .for 表门禁展不开，按标题模板原文登，D10-2559）；重探里该表有 8 行会红；负责人 2026-11-24 对话确认（D10-2826「都同意」，范围同 D10-2788，只改二次验证那一条断言，金额、状态、分录等其余断言不动）：该操作按 BR-ID-34 归 sudo：「无令牌 → 10003」限定到 sudo 窗口外（tier 词改 sudo），补窗口内无令牌放行；其余断言不动；表里不涉及二次验证的行期望不变'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
