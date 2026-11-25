@@ -186,7 +186,7 @@ it('[AC-CT-06zzzzzzzj#5] 整块登记沿用 rule_change 和非空 note 的门槛
 it('[AC-CT-06zzzzzzzj#6] 只接受顶层循环体内直接调用的普通测试', () => {
   expect(leftOut(base, head, entry)).toEqual([{ file: FILE, tests: [TITLE] }]);
 
-  const suite = (body: string) => `describe('group', () => {\n${body}\n});`;
+  const suite = (body: string) => `${'describe'}('group', () => {\n${body}\n});`;
   const cases = [
     ['嵌套循环', (block: string) => loop(LOOP_HEADER, loop('for (const i of [0])', block))],
     ['循环内 describe', (block: string) => loop(LOOP_HEADER, suite(block))],
