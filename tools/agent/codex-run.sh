@@ -12,7 +12,9 @@
 # after an RV2 review passed; see run_canary. It never changes the review's exit code.
 #
 # Exit codes: 0 usable output | 10 no usable output | 11 model capacity error or usage limit |
-#             12 position assertion failed (out of bounds) | 124 timeout or inactivity kill |
+#             12 position assertion failed (out of bounds) | 13 review with an S0 / S1 judged out
+#             of scope, needs a human (output kept, validation needs-human; CT-06zzzzzzzf) |
+#             124 timeout or inactivity kill |
 #             2 usage error or refused argument. selfcheck: 0 ok, 1 a check failed.
 #
 # The command line given to Codex is fixed here. Callers cannot pass arguments through.
@@ -138,7 +140,8 @@ usage: claude-run.sh impl   <id> [--phase test] [--worktree <dir>] [--timeout-mi
 env:   CLAUDE_INDEPENDENT_CONFIG_DIR  Claude configuration directory (the account) of the fresh
                                       context, passed as CLAUDE_CONFIG_DIR; unset: the current one
 exit:  0 usable output | 10 no usable output | 11 model capacity or usage limit
-       12 position assertion failed | 124 timeout | 2 usage error or refused argument
+       12 position assertion failed | 13 review needs a human (S0/S1 judged out of scope)
+       124 timeout | 2 usage error or refused argument
 EOF
     return 0
   fi
@@ -153,7 +156,8 @@ usage: codex-run.sh impl   <id> [--phase test|handover] [--worktree <dir>] [--ti
 env:   CODEX_REVIEW_EFFORT  review reasoning effort: minimal|low|medium|high|xhigh (default medium;
                             change only when the owner decides otherwise; impl stays high)
 exit:  0 usable output | 10 no usable output | 11 model capacity or usage limit
-       12 position assertion failed | 124 timeout | 2 usage error or refused argument
+       12 position assertion failed | 13 review needs a human (S0/S1 judged out of scope)
+       124 timeout | 2 usage error or refused argument
 EOF
 }
 
@@ -1599,18 +1603,35 @@ run_task() {
       if [ "$REVIEW_TYPE" = spec-test ]; then
         if [ -n "$TASK_REFS" ]; then validate_args+=(--refs "$TASK_REFS"); fi
         if [ -n "$TASK_PATHS" ]; then validate_args+=(--allowed-paths "$TASK_PATHS"); fi
-        # Out-of-scope findings are moved and the verdict recomputed in the -o file itself, and
-        # every out-of-scope entry is kept in <runs>/<id>/out-of-scope.md for later rule tests.
+        # Out-of-scope findings are moved in the -o file itself (the verdict is recomputed only
+        # when nothing but S2 was moved), and every out-of-scope entry is kept in
+        # <runs>/<id>/out-of-scope.md for later rule tests.
         validate_args+=(--rewrite --out-of-scope-log "$RUN/out-of-scope.md")
       fi
     fi
-    if node "$TRUSTED/tools/agent/validate-output.ts" "${validate_args[@]}" \
-      >/dev/null 2>"$WORK/validate.txt"; then
-      has_output=1
-      validated=ok
-    else
-      validated=failed
-    fi
+    # Validator exit 3 (CT-06zzzzzzzf, D10-2976): a valid review with an S0 / S1 judged out of
+    # scope (or a prompt injection / brief / run-directory S0 / S1). The output is kept as it is,
+    # but it is neither a pass nor a rejected answer: the wrapper ends with 13 (needs a human).
+    # The validator keeps a side record "$OUT.needs-human.json" (written before the -o file is
+    # overwritten), so re-validating the same written-back file still gives 3 / 13 (D10-2997).
+    local validate_rc=0
+    node "$TRUSTED/tools/agent/validate-output.ts" "${validate_args[@]}" \
+      >/dev/null 2>"$WORK/validate.txt" || validate_rc=$?
+    case "$validate_rc" in
+      0)
+        has_output=1
+        validated=ok
+        ;;
+      3)
+        if [ "$MODE" = review ]; then
+          has_output=1
+          validated=needs-human
+        else
+          validated=failed
+        fi
+        ;;
+      *) validated=failed ;;
+    esac
   fi
 
   # claude-independent test phase (D10-292): format the handed-back test files, only once the
@@ -1634,6 +1655,8 @@ run_task() {
 
   if [ "$timed_out" = 1 ] || [ "$idle_killed" = 1 ]; then
     final=124
+  elif [ "$has_output" = 1 ] && [ "$validated" = needs-human ]; then
+    final=13
   elif [ "$has_output" = 1 ]; then
     final=0
   elif [ "$capacity" = 1 ]; then
@@ -1643,8 +1666,8 @@ run_task() {
     final=12
   fi
   # An output that is not accepted must not be mistaken for a result later on (this covers an
-  # `-o` file written after the kill).
-  if [ "$final" != 0 ] && [ -e "$OUT" ]; then
+  # `-o` file written after the kill). A needs-human review (13) keeps its output for the human.
+  if [ "$final" != 0 ] && [ "$final" != 13 ] && [ -e "$OUT" ]; then
     mv "$OUT" "$OUT.rejected"
   fi
 
@@ -1653,6 +1676,10 @@ run_task() {
   rm -f "$WORK/pgid"
   local exit_key=codex_exit
   if [ "$AGENT_ENGINE" = claude-independent ]; then exit_key=agent_exit; fi
+  # Once the result is 13 (needs a human, D10-3059 (a)), a failed metadata write (ENOSPC, I/O)
+  # must not replace it: the failure is only reported on stderr and the wrapper still ends with 13.
+  # Any other result keeps the old behaviour (set -e ends the wrapper with meta.ts's exit code).
+  local meta_rc=0
   node "$SELF_DIR/meta.ts" merge --file "$RUN/meta.json" --copy-to "$RUN/meta.$MODE.json" \
     --str "finished_at=$(agent_now_utc)" --num "exit_code=$final" --num "$exit_key=$codex_exit" \
     --bool "timed_out=$timed_out" --bool "idle_killed=$idle_killed" --bool "aborted=$aborted" \
@@ -1662,7 +1689,14 @@ run_task() {
     --num "escaped_killed=$escaped" --num "descendants_left=$descendants_left" \
     --str "validation=$validated" --lines "validation_messages=$WORK/validate.txt" \
     --list "position_changed=$changed" --bool "other_task_branches_changed=$other_tasks" \
-    ${format_meta[@]+"${format_meta[@]}"}
+    ${format_meta[@]+"${format_meta[@]}"} || meta_rc=$?
+  if [ "$meta_rc" != 0 ]; then
+    if [ "$final" = 13 ]; then
+      log "warning: meta.json was not updated (tools/agent/meta.ts merge exit $meta_rc); the result stays 13 (需人工核)"
+    else
+      exit "$meta_rc"
+    fi
+  fi
 
   # Token accounting only (规划/11 §1.3): the Codex quota is unlimited and nothing is gated on
   # this ledger, so a failure here is a warning and never changes the exit code. The ledger reads
@@ -1696,11 +1730,12 @@ run_task() {
       fi
       ;;
     12) log "$MODE $TASK: position assertion failed, changed: $changed" ;;
+    13) log "$MODE $TASK: 评审有被判范围外的 S0/S1，需人工核 (output kept at $OUT; validation needs-human, see validation_messages in meta.json)" ;;
     124) log "$MODE $TASK: killed after timeout or inactivity" ;;
     *) log "$MODE $TASK: no usable output (${SCRIPT_NAME%-run.sh} exit $codex_exit, last event $last_type, validation $validated, stragglers $stragglers, escaped $escaped, descendants left $descendants_left)" ;;
   esac
   canary_after_review "$final"
-  cat "$RUN/meta.json"
+  cat "$RUN/meta.json" || [ "$final" = 13 ]
   exit "$final"
 }
 

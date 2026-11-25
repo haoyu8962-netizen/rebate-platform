@@ -1,0 +1,93 @@
+{
+  "risk_note": "RV2 by path (tools/agent). Review-gate tooling only, no money moves (D10-2954 / D10-2976; owner decisions in ops/approvals.yaml ids 194, 201, 206 ①, 207): validate-output.ts judges a finding's scope by its file / line only; an S0 / S1 finding judged out of scope (now, or by an earlier --rewrite of the same file, kept in a side record) is no longer recomputed into a pass: the validator exits 3 and codex-run.sh turns that into its exit 13, which stops the chain; prompt-injection findings and findings on the brief are never moved out. Fault paths (ledger patch 1, #758): on a full disk, a read / write fault or a damaged record the run must not exit 0, must not turn a fail into a pass and must not damage the written review or side record; whether the exit code is 13 is not guaranteed. Round 6 (approval 207): the validator's own write-back of the review and of the side record continues a short write and, when the bytes are not all on disk, throws, keeps the previous file and does not rename; tools/lib/fsx.ts is untouched (FU-FSX-ATOMIC-SHORT-WRITE). Known remainder, S2 of the last review round: the side record is replaced before the review is written back, so a failed write-back after a manual re-validation with a narrower scope leaves a record that no longer matches the review on disk (FU-VALIDATOR-SIDE-RECORD-ORDER). Third-class gate change: merge under ops/approvals.yaml id 16 after the orchestrator checks the diff.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 5,
+      "note": "Five Codex money rounds. r1 (full, implementation r1–r2) fail: S1 validate-output.ts:391 the held-for-a-human state was lost on a later run — fixed in r3 (side record). r2 (incremental) fail: two S1 on I/O fault paths failing open (log append overriding the needs-human exit; unreadable side record read as none) — fixed in r4 (approval 194). r3 (incremental) fail: S1 codex-run.sh:1659 a metadata write failure overrode exit 13, plus one S2 (side record with a non-array entries) — fixed in r5 (approval 201, commit e10b3ecb4; mechanical correction of one unit-test expectation 73bd9fc34, D10-3096). r4 (incremental, the round of approval 201) fail: S1 validate-output.ts:718 a short write through fsx.ts writeFileAtomic truncated the review — fixed in r6 (approval 207, this commit). r5 (incremental, the round of approval 207) pass: no S0 / S1, one S2 (side record replaced before the review write-back; logged FU-VALIDATOR-SIDE-RECORD-ORDER). The validator moved 0 findings out of scope in every round (D10-2954). r5 reviewed the uncommitted r6 work tree on 73bd9fc34; the tree then committed is that tree, verified on the test machine (verify:fast exit 0, fast8; rule-test directory and validate-output unit tests green, tests7)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (one write-test attempt, red passed at be4ee22ea). Spec-test r1 by an independent Claude (approvals 36) pass with one S2; the reviewer itself listed one item under out_of_scope. The rule tests were not changed afterwards."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/ci/review-validator-scope/review-run.test.ts > [AC-CT-06zzzzzzzf#7] codex-run.sh 将校验码 3 转为 13，保留产出和轮次",
+    "test/spec/ci/review-validator-scope/review-run.test.ts > [AC-CT-06zzzzzzzf#7] claude-run.sh 将校验码 3 转为 13，保留产出和轮次",
+    "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#1] 场景举例引用外部路径，范围内的发现仍保留",
+    "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#2] 规则测试的发现只引用范围外契约，仍判 fail",
+    "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#3] 范围外 S1 移出并写日志，保留原判且退出 3",
+    "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#4] 仅移出 S2 时仍重算，S0 和 S1 要人工核",
+    "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#5] 范围内的 prompt-injection 的 S1 保留在 findings 并退出 3",
+    "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#5] 范围外的 prompt-injection 的 S1 保留在 findings 并退出 3",
+    "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#5] 任务书 的 S1 保留在 findings 并退出 3",
+    "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#5] 上级目录引用 的 S1 保留在 findings 并退出 3",
+    "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#5] 运行目录 的 S1 保留在 findings 并退出 3",
+    "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#6] BR refs 和范围标记仍生效，S1 要人工核"
+  ],
+  "task": "CT-06zzzzzzzf",
+  "spec_commit": "e98eea5c7a945e547d70029f95faa04ec0afb83e",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "e98eea5c7a945e547d70029f95faa04ec0afb83e",
+      "tree": "615e1ea3591cd0ca4ac1c1a2de99d3799060a9df",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-25T16:19:50Z",
+      "finished_at": "2026-11-25T16:19:55Z",
+      "red_tests": [
+        "test/spec/ci/review-validator-scope/review-run.test.ts > [AC-CT-06zzzzzzzf#7] codex-run.sh 将校验码 3 转为 13，保留产出和轮次",
+        "test/spec/ci/review-validator-scope/review-run.test.ts > [AC-CT-06zzzzzzzf#7] claude-run.sh 将校验码 3 转为 13，保留产出和轮次",
+        "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#1] 场景举例引用外部路径，范围内的发现仍保留",
+        "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#2] 规则测试的发现只引用范围外契约，仍判 fail",
+        "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#3] 范围外 S1 移出并写日志，保留原判且退出 3",
+        "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#4] 仅移出 S2 时仍重算，S0 和 S1 要人工核",
+        "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#5] 范围内的 prompt-injection 的 S1 保留在 findings 并退出 3",
+        "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#5] 范围外的 prompt-injection 的 S1 保留在 findings 并退出 3",
+        "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#5] 任务书 的 S1 保留在 findings 并退出 3",
+        "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#5] 上级目录引用 的 S1 保留在 findings 并退出 3",
+        "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#5] 运行目录 的 S1 保留在 findings 并退出 3",
+        "test/spec/ci/review-validator-scope/validate-output.test.ts > [AC-CT-06zzzzzzzf#6] BR refs 和范围标记仍生效，S1 要人工核"
+      ],
+      "expected": [
+        "test/spec/ci/review-validator-scope/review-run.test.ts",
+        "test/spec/ci/review-validator-scope/validate-output.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "06bc5c82d04c94c8da7865ff7c08731f8f4437a1a46168a3d81a569ab4782be6"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2e21e890b8813851158ee743eb521cee67bd0196",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}

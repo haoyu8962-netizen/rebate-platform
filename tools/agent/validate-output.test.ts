@@ -1,6 +1,6 @@
 // Tests for the output schemas and validate-output.ts (规划/11 §2.4 schema 写法, §3.1, §3.3).
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { AGENT_DIR, type Fixture, gitIn, makeFixture, REPO } from './testing/fixture.ts';
@@ -9,9 +9,14 @@ import {
   CHECKLIST_ITEMS,
   citedPaths,
   gitLineChecker,
+  heldKeys,
   type LineChecker,
+  type NeedsHumanRecord,
+  needsHumanPath,
   normalizeReview,
+  sha256,
   outsideRefs,
+  isPinned,
   ruleTestLocations,
   SCOPE_MARKER,
   scopeReasons,
@@ -427,14 +432,19 @@ it('validateOutput applies review rules only to review schemas', () => {
   expect(() => validateOutput(implSchema, validImpl(), { money: true })).toThrow(/review outputs/);
 });
 
-function runCli(args: readonly string[]): {
+function runCli(
+  args: readonly string[],
+  nodeArgs: readonly string[] = [],
+): {
   status: number | null;
   stdout: string;
   stderr: string;
 } {
-  const res = spawnSync(process.execPath, [join(AGENT_DIR, 'validate-output.ts'), ...args], {
-    encoding: 'utf8',
-  });
+  const res = spawnSync(
+    process.execPath,
+    [...nodeArgs, join(AGENT_DIR, 'validate-output.ts'), ...args],
+    { encoding: 'utf8' },
+  );
   return { status: res.status, stdout: res.stdout, stderr: res.stderr };
 }
 
@@ -559,13 +569,17 @@ it('[规划/11 §3.3] findings about behaviour outside the allowed paths are out
       scope,
     )[0],
   ).toContain('file apps/api/src/main.ts is outside the task');
-  // A rule-test location, but every cited path is another module.
+  // [CT-06zzzzzzzf] A rule-test location whose text cites only another module stays in scope:
+  // only the finding's own file decides.
   expect(
     scopeReasons(
-      specFinding({ scenario: 'amount columns in packages/db/src/schema.ts may be numeric' }),
+      specFinding({
+        scenario: 'amount columns in packages/db/src/schema.ts may be numeric',
+        suggestion: 'see contracts/openapi.yaml:17',
+      }),
       scope,
-    )[0],
-  ).toContain('cites only paths outside the task');
+    ),
+  ).toEqual([]);
   // The reviewer's own marker.
   expect(scopeReasons(specFinding({ rule: `${SCOPE_MARKER} BR-CALC-01 CI lint` }), scope)).toEqual([
     `the reviewer marked it ${SCOPE_MARKER}`,
@@ -592,11 +606,21 @@ it('[规划/11 §3.3] out-of-scope findings are moved and the verdict is recompu
   expect(problems.warnings.join('\n')).toContain(
     'findings[0]: file apps/api/src/modules/settlement/run.ts is outside the task',
   );
+  // [CT-06zzzzzzzf] A moved S1 keeps the reviewer's verdict (a human has to look).
   const normalized = normalizeReview(review, scope);
-  expect(normalized.review.verdict).toBe('pass');
+  expect(normalized.review.verdict).toBe('fail');
   expect(normalized.review.findings).toEqual([s2]);
   expect(normalized.review.out_of_scope).toEqual([outside]);
   expect(normalized.moved.map((m) => m.finding.key)).toEqual([outside.key]);
+  expect(normalized.movedBlocking).toBe(1);
+  expect(normalized.pinnedBlocking).toBe(0);
+  expect(normalizeReview({ ...review, verdict: 'pass' }, scope).review.verdict).toBe('pass');
+  // Only an S2 moved: the verdict is recomputed as before.
+  const outsideS2 = { ...outside, severity: 'S2' as const };
+  const onlyS2 = normalizeReview({ ...review, findings: [outsideS2, s2] }, scope);
+  expect(onlyS2.review.verdict).toBe('pass');
+  expect(onlyS2.movedBlocking).toBe(0);
+  expect(onlyS2.review.out_of_scope).toEqual([outsideS2]);
   // An in-scope S1 keeps the fail, and a pass next to it is still contradictory.
   const inScope = specFinding({});
   expect(normalizeReview({ ...review, findings: [outside, inScope] }, scope).review.verdict).toBe(
@@ -611,6 +635,92 @@ it('[规划/11 §3.3] out-of-scope findings are moved and the verdict is recompu
       },
     ).errors.join('\n'),
   ).toContain('verdict is "pass" but 1 S0/S1');
+});
+
+it('[CT-06zzzzzzzf] prompt injections and findings about the brief or run directory are never moved', () => {
+  const scope = { refs: ['BR-CALC-01'], paths: SCOPE_PATHS };
+  const pinned = [
+    specFinding({
+      file: 'apps/api/src/main.ts',
+      key: 'apps/api/src/main.ts#-#pi',
+      rule: 'prompt-injection',
+    }),
+    specFinding({ file: 'brief.md', key: 'brief.md#-#BR-CALC-01' }),
+    specFinding({ file: '../x/notes.md', key: '../x/notes.md#-#BR-CALC-01' }),
+    specFinding({
+      file: 'couli-runs/T1-01/meta.json',
+      key: 'couli-runs/T1-01/meta.json#-#BR-CALC-01',
+    }),
+    specFinding({ rule: `${SCOPE_MARKER} prompt-injection` }),
+  ];
+  for (const f of pinned) {
+    expect(isPinned(f), f.key).toBe(true);
+    expect(scopeReasons(f, scope), f.key).toEqual([]);
+  }
+  expect(isPinned(specFinding({}))).toBe(false);
+  expect(isPinned(specFinding({ file: 'docs/brief.md.bak', key: 'docs/brief.md.bak#-#x' }))).toBe(
+    false,
+  );
+  const review: ReviewOutput = {
+    verdict: 'pass',
+    summary: 'BR-CALC-01#1 → t1.',
+    findings: [{ ...(pinned[1] as ReviewOutput['findings'][number]), severity: 'S2' }],
+    out_of_scope: [],
+    checklist: [],
+  };
+  expect(normalizeReview(review, scope).pinnedBlocking).toBe(0);
+  const blocking = normalizeReview(
+    { ...review, verdict: 'fail', findings: [pinned[0] as ReviewOutput['findings'][number]] },
+    scope,
+  );
+  expect(blocking.pinnedBlocking).toBe(1);
+  expect(blocking.moved).toEqual([]);
+  expect(blocking.review.verdict).toBe('fail');
+});
+
+it('[CT-06zzzzzzzf] held keys keep the verdict; only a matching side record holds keys', () => {
+  const fx = makeFixture('needs-human-record');
+  fixtures.push(fx);
+  const moved = specFinding({ file: 'db/x.sql', key: 'db/x.sql#-#BR-CALC-01' });
+  const review: ReviewOutput = {
+    verdict: 'fail',
+    summary: 'BR-CALC-01#1 → t1.',
+    findings: [],
+    out_of_scope: [moved],
+    checklist: [],
+  };
+  const scope = { money: false, paths: ['packages/money/src/**'] };
+  expect(normalizeReview(review, scope).review.verdict).toBe('pass');
+  const held = normalizeReview(review, scope, new Set([moved.key]));
+  expect(held.heldBlocking).toBe(1);
+  expect(held.review.verdict).toBe('fail');
+  // An S2 held key does not keep the verdict.
+  const minor = { ...moved, severity: 'S2' as const };
+  expect(
+    normalizeReview({ ...review, out_of_scope: [minor] }, scope, new Set([moved.key])).review
+      .verdict,
+  ).toBe('pass');
+
+  const file = join(fx.run, 'review-codex.json');
+  const text = JSON.stringify(review);
+  writeFileSync(file, text);
+  expect(heldKeys(file, text)).toEqual(new Set());
+  const record: NeedsHumanRecord = {
+    kind: 'validate-output/needs-human',
+    file: 'review-codex.json',
+    sha256: sha256(text),
+    verdict: 'fail',
+    entries: [{ key: moved.key, severity: 'S1' }],
+  };
+  writeFileSync(needsHumanPath(file), JSON.stringify(record));
+  expect(heldKeys(file, text)).toEqual(new Set([moved.key]));
+  expect(heldKeys(file, `${text}\n`)).toEqual(new Set());
+  // D10-3033: a record that exists but cannot be parsed or read is an error, not "no record".
+  writeFileSync(needsHumanPath(file), '{not json');
+  expect(() => heldKeys(file, text)).toThrow('旁路记录读不了');
+  rmSync(needsHumanPath(file));
+  mkdirSync(needsHumanPath(file));
+  expect(() => heldKeys(file, text)).toThrow('旁路记录读不了');
 });
 
 it('[规划/11 §3.3] out-of-scope entries are appended once per key to the run-state file', () => {
@@ -668,19 +778,55 @@ it('CLI: --allowed-paths, --rewrite and --out-of-scope-log', { timeout: 60_000 }
   expect(checked.stderr).toContain('warning: findings[0]: file packages/db/src/schema.ts');
   expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(raw);
 
+  // [CT-06zzzzzzzf] The moved finding is an S1: verdict kept, exit 3 (needs a human).
   const rewritten = runCli([...args, '--rewrite', '--out-of-scope-log', log]);
-  expect(rewritten.status, rewritten.stderr).toBe(0);
-  expect(rewritten.stderr).toContain('recomputed "pass"');
+  expect(rewritten.status, rewritten.stderr).toBe(3);
+  expect(rewritten.stderr).toContain('warning: 1 条 S0/S1 被判范围外，需人工核');
+  expect(rewritten.stderr).not.toContain('recomputed');
   const after = JSON.parse(readFileSync(file, 'utf8')) as ReviewOutput;
-  expect(after.verdict).toBe('pass');
+  expect(after.verdict).toBe('fail');
   expect(after.findings).toEqual([]);
   expect(after.out_of_scope.map((f) => f.key)).toEqual(['db/z.sql#-#BR-CALC-26', outside.key]);
   const text = readFileSync(log, 'utf8');
   expect(text).toContain(`- \`${outside.key}\` S1`);
   expect(text).toContain('- `db/z.sql#-#BR-CALC-26` S1');
-  // Idempotent: a second run appends nothing and leaves the review as it is.
-  expect(runCli([...args, '--rewrite', '--out-of-scope-log', log]).status).toBe(0);
+  // The moved S1 is recorded next to the review before it is written back (D10-2997).
+  const record = JSON.parse(readFileSync(needsHumanPath(file), 'utf8')) as NeedsHumanRecord;
+  expect(record.entries).toEqual([{ key: outside.key, severity: 'S1' }]);
+  expect(record.sha256).toBe(sha256(readFileSync(file, 'utf8')));
+  // [CT-06zzzzzzzf] Re-validating the written-back file (e.g. after an interrupted run) still
+  // needs a human: exit 3, the verdict stays "fail", nothing is appended or rewritten.
+  const writtenBack = readFileSync(file, 'utf8');
+  const again = runCli([...args, '--rewrite', '--out-of-scope-log', log]);
+  expect(again.status, again.stderr).toBe(3);
+  expect(again.stderr).toContain('1 条 S0/S1 被判范围外，需人工核');
+  expect(again.stderr).not.toContain('recomputed');
+  expect(readFileSync(file, 'utf8')).toBe(writtenBack);
   expect(readFileSync(log, 'utf8')).toBe(text);
+  // A human clears it by deleting the side record; then the reviewer's verdict is recomputed.
+  rmSync(needsHumanPath(file));
+  const cleared = runCli([...args, '--rewrite']);
+  expect(cleared.status, cleared.stderr).toBe(0);
+  expect((JSON.parse(readFileSync(file, 'utf8')) as ReviewOutput).verdict).toBe('pass');
+
+  // An S1 the reviewer itself put in out_of_scope (no side record) never needs a human.
+  writeFileSync(file, JSON.stringify({ ...raw, findings: [], out_of_scope: [outside] }));
+  const own = runCli([...args, '--rewrite']);
+  expect(own.status, own.stderr).toBe(0);
+  expect((JSON.parse(readFileSync(file, 'utf8')) as ReviewOutput).verdict).toBe('pass');
+  // A side record written for other content (a later review in the same place) is ignored.
+  writeFileSync(file, JSON.stringify({ ...raw, findings: [], out_of_scope: [outside] }));
+  writeFileSync(needsHumanPath(file), JSON.stringify({ ...record, sha256: sha256('other') }));
+  expect(runCli([...args, '--rewrite']).status).toBe(0);
+  rmSync(needsHumanPath(file));
+
+  // Only an S2 moved: recomputed, exit 0.
+  const minor = { ...outside, severity: 'S2', key: 'packages/db/src/schema.ts#-#weak' };
+  writeFileSync(file, JSON.stringify({ ...raw, findings: [minor] }));
+  const recomputed = runCli([...args, '--rewrite']);
+  expect(recomputed.status, recomputed.stderr).toBe(0);
+  expect(recomputed.stderr).toContain('recomputed "pass"');
+  expect((JSON.parse(readFileSync(file, 'utf8')) as ReviewOutput).verdict).toBe('pass');
 
   // An invalid review is neither rewritten nor logged.
   const contradictory = { ...raw, verdict: 'pass', findings: [specFinding({})] };
@@ -697,6 +843,186 @@ it('CLI: --allowed-paths, --rewrite and --out-of-scope-log', { timeout: 60_000 }
   writeFileSync(impl, JSON.stringify(validImpl()));
   expect(runCli(['--schema', IMPL_SCHEMA_FILE, '--file', impl, '--rewrite']).status).toBe(2);
 });
+
+function outsideS1Review(fx: Fixture): { file: string; args: string[]; raw: ReviewOutput } {
+  const file = join(fx.root, 'review.json');
+  const raw: ReviewOutput = {
+    verdict: 'fail',
+    summary: 'BR-CALC-01#1 → t1.',
+    findings: [
+      specFinding({
+        file: 'packages/db/src/schema.ts',
+        key: 'packages/db/src/schema.ts#-#BR-CALC-01',
+      }),
+    ],
+    out_of_scope: [],
+    checklist: [],
+  };
+  writeFileSync(file, JSON.stringify(raw));
+  const args = [
+    '--schema',
+    REVIEW_SCHEMA_FILE,
+    '--file',
+    file,
+    '--allowed-paths',
+    'packages/money/src/**',
+    '--rewrite',
+  ];
+  return { file, args, raw };
+}
+
+it(
+  '[CT-06zzzzzzzf] CLI: appending out-of-scope.md fails with ENOSPC — still exit 3, output kept',
+  { timeout: 60_000 },
+  () => {
+    const fx = makeFixture('validate-oos-enospc');
+    fixtures.push(fx);
+    const { file, args } = outsideS1Review(fx);
+    const log = join(fx.run, 'out-of-scope.md');
+    const preload = join(fx.root, 'enospc-preload.mjs');
+    writeFileSync(
+      preload,
+      [
+        "import { createRequire, syncBuiltinESMExports } from 'node:module';",
+        "const fs = createRequire(import.meta.url)('node:fs');",
+        'fs.appendFileSync = () => {',
+        "  const error = new Error('ENOSPC: no space left on device, write');",
+        "  error.code = 'ENOSPC';",
+        '  throw error;',
+        '};',
+        'syncBuiltinESMExports();',
+        '',
+      ].join('\n'),
+    );
+    const res = runCli([...args, '--out-of-scope-log', log], ['--import', preload]);
+    expect(res.status, res.stderr).toBe(3);
+    expect(res.stderr).toContain('out-of-scope.md 没写上');
+    expect(res.stderr).toContain('ENOSPC');
+    expect(res.stderr).toContain('1 条 S0/S1 被判范围外，需人工核');
+    expect(existsSync(log)).toBe(false);
+    const after = JSON.parse(readFileSync(file, 'utf8')) as ReviewOutput;
+    expect(after.verdict).toBe('fail');
+    const record = JSON.parse(readFileSync(needsHumanPath(file), 'utf8')) as NeedsHumanRecord;
+    expect(record.sha256).toBe(sha256(readFileSync(file, 'utf8')));
+  },
+);
+
+it(
+  '[CT-06zzzzzzzf] CLI: side record exists but cannot be read — non-zero exit, review unchanged',
+  { timeout: 60_000 },
+  () => {
+    const fx = makeFixture('validate-record-unreadable');
+    fixtures.push(fx);
+    const { file, args } = outsideS1Review(fx);
+    // A directory in place of the record: readFileSync throws EISDIR, not ENOENT.
+    mkdirSync(needsHumanPath(file));
+    const before = readFileSync(file, 'utf8');
+    const res = runCli(args);
+    expect(res.status, res.stderr).not.toBe(0);
+    expect(res.status).not.toBe(3);
+    expect(res.stderr).toContain('旁路记录读不了');
+    expect(readFileSync(file, 'utf8')).toBe(before);
+  },
+);
+
+it(
+  '[CT-06zzzzzzzf] CLI: side record entries is not a list — non-zero exit, review and record unchanged',
+  { timeout: 60_000 },
+  () => {
+    const fx = makeFixture('validate-record-entries');
+    fixtures.push(fx);
+    const { file, args } = outsideS1Review(fx);
+    expect(runCli(args).status).toBe(3);
+    const record = JSON.parse(readFileSync(needsHumanPath(file), 'utf8')) as NeedsHumanRecord;
+    for (const entries of [null, {}, 'x']) {
+      // kind and sha256 still match the written-back file; only entries is damaged (D10-3059).
+      const damaged = `${JSON.stringify({ ...record, entries })}\n`;
+      writeFileSync(needsHumanPath(file), damaged);
+      const before = readFileSync(file, 'utf8');
+      const res = runCli(args);
+      expect(res.status, res.stderr).not.toBe(0);
+      expect(res.status).not.toBe(3);
+      expect(res.stderr).toContain('旁路记录坏了');
+      expect(readFileSync(file, 'utf8')).toBe(before);
+      expect(readFileSync(needsHumanPath(file), 'utf8')).toBe(damaged);
+      expect((JSON.parse(before) as ReviewOutput).verdict).toBe('fail');
+    }
+  },
+);
+
+/** A preload that caps or stalls writeSync on the temporary files of the review / side record. */
+function shortWritePreload(fx: Fixture, mode: 'chunk' | 'stall'): string {
+  const preload = join(fx.root, `short-write-${mode}.mjs`);
+  writeFileSync(
+    preload,
+    [
+      "import { createRequire, syncBuiltinESMExports } from 'node:module';",
+      "const fs = createRequire(import.meta.url)('node:fs');",
+      'const open = fs.openSync;',
+      'const write = fs.writeSync;',
+      'const paths = new Map();',
+      'let stalled = false;',
+      'fs.openSync = (path, ...rest) => {',
+      '  const fd = open(path, ...rest);',
+      '  paths.set(fd, String(path));',
+      '  return fd;',
+      '};',
+      'fs.writeSync = (fd, buf, offset, length, ...rest) => {',
+      "  const path = paths.get(fd) ?? '';",
+      "  if (!path.endsWith('.tmp') || typeof buf === 'string') return write(fd, buf, offset, length, ...rest);",
+      `  if (${JSON.stringify(mode)} === 'chunk') return write(fd, buf, offset, Math.min(length, 7));`,
+      "  if (path.includes('needs-human')) return write(fd, buf, offset, length, ...rest);",
+      '  // Disk full after the first 64 bytes: writeSync reports what it wrote, then nothing more.',
+      '  if (stalled) return 0;',
+      '  stalled = true;',
+      '  return write(fd, buf, offset, Math.min(length, 64));',
+      '};',
+      'syncBuiltinESMExports();',
+      '',
+    ].join('\n'),
+  );
+  return preload;
+}
+
+it(
+  '[CT-06zzzzzzzf] CLI: short writes are continued; the review and side record are written whole',
+  { timeout: 60_000 },
+  () => {
+    const fx = makeFixture('validate-short-write-chunk');
+    fixtures.push(fx);
+    const { file, args } = outsideS1Review(fx);
+    const res = runCli(args, ['--import', shortWritePreload(fx, 'chunk')]);
+    expect(res.status, res.stderr).toBe(3);
+    const text = readFileSync(file, 'utf8');
+    expect((JSON.parse(text) as ReviewOutput).verdict).toBe('fail');
+    const record = JSON.parse(readFileSync(needsHumanPath(file), 'utf8')) as NeedsHumanRecord;
+    expect(record.sha256).toBe(sha256(text));
+  },
+);
+
+it(
+  '[CT-06zzzzzzzf] CLI: a write that cannot finish exits non-zero and keeps the original review',
+  { timeout: 60_000 },
+  () => {
+    const fx = makeFixture('validate-short-write-stall');
+    fixtures.push(fx);
+    const { file, args } = outsideS1Review(fx);
+    const before = readFileSync(file, 'utf8');
+    const res = runCli(args, ['--import', shortWritePreload(fx, 'stall')]);
+    expect(res.status, res.stderr).not.toBe(0);
+    expect(res.status).not.toBe(3);
+    expect(res.stderr).toContain('写不全');
+    expect(readFileSync(file, 'utf8')).toBe(before);
+    expect(readdirSync(fx.root).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+    // The record written for the unfinished content matches nothing; a clean rerun recovers.
+    const rerun = runCli(args);
+    expect(rerun.status, rerun.stderr).toBe(3);
+    const text = readFileSync(file, 'utf8');
+    expect((JSON.parse(text) as ReviewOutput).verdict).toBe('fail');
+    const record = JSON.parse(readFileSync(needsHumanPath(file), 'utf8')) as NeedsHumanRecord;
+    expect(record.sha256).toBe(sha256(text));
+  },
+);
 
 // CT-06zzzzzq (D10-2086 ②): an `na` checklist item carries no position; an `na` position
 // outside the diff is a warning, every other position check stays an error.
