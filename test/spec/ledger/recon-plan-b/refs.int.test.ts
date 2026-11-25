@@ -12,6 +12,7 @@ import {
   invalid,
   member,
   newForm,
+  seedForm,
   seedR4Diff,
   seedWithdrawal,
   suite,
@@ -29,6 +30,7 @@ import {
   seedTicket,
   send,
 } from './kit.ts';
+import { seedLink } from './kit-more.ts';
 
 const s = suite();
 
@@ -179,6 +181,42 @@ it('[AC-B2-17#11] 判断先后（20902 recon_diff 先于 adjust_user_deleted）�
         expect(await footprint(f), `${status} ${kind.type}`).toEqual(before);
       }
       const open = await seedTicket(f);
+      const before = await footprint(f);
+      await invalid(
+        await send(h, { userId, refs: [diffRef(open)] }),
+        ['user_id'],
+        'adjust_user_deleted',
+      );
+      expect(await footprint(f), `${status} open`).toEqual(before);
+    }
+  });
+});
+
+it('[AC-B2-17#29] 判断先后（本人未红冲关联的 20902 recon_diff 先于 adjust_user_deleted）：注销中（deleting）或已注销（deleted）的会员，名单为本人与另一会员、仍是 processing 的差错单上已有本人一张已执行未红冲的调账单（迁移后的关联行）→ 单独关联它、或与一张 open 差错单一起关联（排第二）都 20902 recon_diff，不留痕；只关联那张 open 差错单时才是 20001 adjust_user_deleted', async () => {
+  const f = fixture(s);
+  await withAdjustAdmin(f, async (h) => {
+    await schemaReady(f.db);
+    for (const status of ['deleting', 'deleted'] as const) {
+      const userId = await member(f, { available: 1000n, status });
+      const other = await member(f, { available: 1000n });
+      const shared = await seedTicket(f, { status: 'processing', users: [userId, other] });
+      const earlier = await seedForm(f, {
+        userId,
+        direction: 'increase',
+        amount: 200n,
+        refs: [diffRef(shared)],
+      });
+      await seedLink(f, earlier.adjust_id, shared.id, userId, earlier.created_at);
+      const open = await seedTicket(f);
+
+      for (const refs of [[diffRef(shared)], [diffRef(open), diffRef(shared)]]) {
+        const before = await footprint(f);
+        await diffConflict(await send(h, { userId, refs }));
+        expect(await footprint(f), `${status} ${refs.length}`).toEqual(before);
+      }
+      await expectUnchanged(f, shared);
+      await expectUnchanged(f, open);
+
       const before = await footprint(f);
       await invalid(
         await send(h, { userId, refs: [diffRef(open)] }),

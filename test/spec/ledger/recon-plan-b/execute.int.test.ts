@@ -6,7 +6,16 @@
 // §9.3 ①②③④ of the task (涉及用户 = involved_user_ids, NULL / empty → only the member filed for;
 // 本次会员不在名单里照常受理 is 本线补全的默认, D10-3191). Every refusal leaves no trace (kit footprint).
 import { expect, it } from 'vitest';
-import { fixture, member, suite, withAdjustAdmin } from '../admin-adjustments/kit.ts';
+import {
+  expectAdjusted,
+  fixture,
+  member,
+  newForm,
+  seedWithdrawal,
+  suite,
+  withAdjustAdmin,
+  type Ref,
+} from '../admin-adjustments/kit.ts';
 import {
   diffConflict,
   diffNow,
@@ -15,6 +24,7 @@ import {
   expectNowProcessing,
   expectUnchanged,
   fileOk,
+  fixBody,
   footprint,
   linkOf,
   linksOf,
@@ -26,6 +36,20 @@ import {
 } from './kit.ts';
 
 const s = suite();
+
+const RECOVERY_NOTE = '迟到成功重复出款，追回';
+
+/** A manual PAYOUT_RECOVERY decrease (the system takes CASH_ALIPAY from the alipay withdrawal). */
+function recoveryBody(userId: string, refs: readonly Ref[]): Record<string, unknown> {
+  return newForm({
+    userId,
+    direction: 'decrease',
+    amount: 10_000n,
+    reason: 'PAYOUT_RECOVERY',
+    refs,
+    note: RECOVERY_NOTE,
+  });
+}
 
 it('[AC-B2-17#1] 新单关联一张 open（没有名单）或 processing 的差错单 → 200，应答、单、凭证、余额照主干；同一事务里差错单置 adjusted（handler_id = 提交人，closed_at = updated_at = 时钟，其余列不变），关联表多一行（会员、未红冲、created_at = 时钟）', async () => {
   const f = fixture(s);
@@ -165,5 +189,102 @@ it('[AC-B2-17#7] 同一会员对同一张差错单的第二张（前一张未红
     }
     expect(await footprint(f), '仍 processing').toEqual(before);
     await expectUnchanged(f, processing);
+  });
+});
+
+it('[AC-B2-17#27] 迁移与关联不分原因码：关联一张 open R3 差错单的 OTHER 调减 120，与关联支付宝提现单 + 一张 open R3 差错单的 PAYOUT_RECOVERY 调减 10000（2880 → −7120），都 200、记账照主干，各自的差错单置 adjusted、各一行关联；之后同一会员对其中任一张再提交 RECON_FIX、OTHER 或 PAYOUT_RECOVERY → 20902 recon_diff，不留痕', async () => {
+  const f = fixture(s);
+  await withAdjustAdmin(f, async (h) => {
+    await schemaReady(f.db);
+    const userId = await member(f, { available: 3000n });
+    const forOther = await seedTicket(f);
+    const other = await fileOk(f, h, {
+      userId,
+      refs: [diffRef(forOther)],
+      reason: 'OTHER',
+      direction: 'decrease',
+      amount: 120n,
+    });
+    const otherAt = f.clock.now();
+    await expectNowAdjusted(f, forOther, h.maker.id);
+    tick(f);
+
+    const forRecovery = await seedTicket(f);
+    const withdrawal: Ref = { ref_type: 'withdrawal', ref_id: await seedWithdrawal(f, userId) };
+    const refs = [withdrawal, diffRef(forRecovery)];
+    const recovered = await expectAdjusted(f, await h.create(recoveryBody(userId, refs)), {
+      caller: h.maker,
+      userId,
+      direction: 'decrease',
+      amount: 10_000n,
+      reason: 'PAYOUT_RECOVERY',
+      contra: 'CASH_ALIPAY',
+      refs,
+      note: RECOVERY_NOTE,
+      before: { available: 2880n, frozen: 0n },
+    });
+    expect(recovered.after).toBe(-7120n);
+    await expectNowAdjusted(f, forRecovery, h.maker.id);
+    const linked = sortedLinks([
+      linkOf(f, other.row.adjust_id, forOther.id, userId, null, otherAt),
+      linkOf(f, recovered.row.adjust_id, forRecovery.id, userId),
+    ]);
+    expect(await linksOf(f)).toEqual(linked);
+    tick(f);
+
+    for (const diff of [forOther, forRecovery]) {
+      const again = [diffRef(diff)];
+      const fresh: Ref = { ref_type: 'withdrawal', ref_id: await seedWithdrawal(f, userId) };
+      const bodies = [
+        fixBody({ userId, refs: again }),
+        fixBody({ userId, refs: again, reason: 'OTHER', direction: 'decrease', amount: 120n }),
+        recoveryBody(userId, [fresh, diffRef(diff)]),
+      ];
+      const settled = await diffNow(f, diff.id);
+      expect(settled.status).toBe('adjusted');
+      for (const body of bodies) {
+        const before = await footprint(f);
+        await diffConflict(await h.create(body));
+        expect(await footprint(f), `${diff.id} ${String(body['reason_code'])}`).toEqual(before);
+      }
+      await expectUnchanged(f, settled);
+    }
+  });
+});
+
+it('[AC-B2-17#28] refs 里任一张差错单已有本会员未红冲的关联（名单 U1、U2，U1 已调过、差错单仍 processing）→ 整单 20902 recon_diff（不是唯一冲突透出的 50001），不论它排在第几个；同单里可受理的 open / processing 差错单保持原状、没有关联行，不留痕；U2 以同样的 refs 提交照常受理', async () => {
+  const f = fixture(s);
+  await withAdjustAdmin(f, async (h) => {
+    await schemaReady(f.db);
+    const u1 = await member(f, { available: 1000n });
+    const u2 = await member(f, { available: 1000n });
+    const shared = await seedTicket(f, { users: [u1, u2] });
+    await fileOk(f, h, { userId: u1, refs: [diffRef(shared)] });
+    const processing = await expectNowProcessing(f, shared);
+    tick(f);
+
+    const open = await seedTicket(f);
+    const busy = await seedTicket(f, { status: 'processing' });
+    const orders = [
+      [diffRef(open), diffRef(shared)],
+      [diffRef(shared), diffRef(open)],
+      [diffRef(open), diffRef(busy), diffRef(shared)],
+    ];
+    for (const refs of orders) {
+      for (const direction of ['increase', 'decrease'] as const) {
+        const before = await footprint(f);
+        await diffConflict(await send(h, { userId: u1, direction, refs }));
+        const label = `${refs.map((ref) => ref.ref_id).join(',')} ${direction}`;
+        expect(await footprint(f), label).toEqual(before);
+      }
+    }
+    await expectUnchanged(f, processing);
+    await expectUnchanged(f, open);
+    await expectUnchanged(f, busy);
+
+    await fileOk(f, h, { userId: u2, refs: [diffRef(open), diffRef(shared)] });
+    await expectNowAdjusted(f, open, h.maker.id);
+    await expectNowAdjusted(f, processing, h.maker.id);
+    await expectUnchanged(f, busy);
   });
 });

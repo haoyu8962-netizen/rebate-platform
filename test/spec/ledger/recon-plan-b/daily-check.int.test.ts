@@ -9,21 +9,38 @@ import { randomUUID } from 'node:crypto';
 import { createTestDatabase } from '@couli/db/testing';
 import { expect, it } from 'vitest';
 import {
+  APP,
   DAY,
+  OTHER,
   TIMEOUT,
   balanceCacheDiff,
   diffByRef,
   diffsOf,
   entry,
+  executedOf,
   invalidCreditedAccountDiff,
+  member,
   orderKey,
   platformAccount,
+  receivableDiff,
   userAccount,
   voucher,
   voucherDiff,
   withHarness,
+  type Harness,
 } from '../daily-check-execute/kit.ts';
 import { listOf, schemaReady } from './kit.ts';
+
+/** A CREDIT voucher of the sub-order naming the beneficiary (no entries needed here). */
+function credit(h: Harness, key: string, userId: string, appId = APP) {
+  return voucher(h, {
+    appId,
+    orderKey: key,
+    beneficiaryUserId: userId,
+    role: 'self',
+    kind: 'CREDIT',
+  });
+}
 
 it(
   '[AC-B2-17#26] 日终校验新登记差错单时写入涉及会员名单：账户级差异 = 该账户的会员；按子订单登记、两位受益人（明细里一个写成大写）= 两人小写、去重、升序；只涉及平台科目的凭证差异算不出会员 = NULL；同一天重跑不改已登记的行',
@@ -68,6 +85,66 @@ it(
       await h.executor.execute(h.db, { accountingDate: DAY, differences });
       expect(await diffsOf(h), '重跑不改已登记的行').toEqual(registered);
       expect(await lists()).toEqual([[account.userId.toLowerCase()], pair, null]);
+    });
+  },
+  TIMEOUT,
+);
+
+it(
+  '[AC-B2-17#34] 名单取自 involvedUsers 的全部来源、与同次登记加冻结的会员相同：不平凭证（明细只给 voucher_id）= 它的分录记到的两位会员账户的会员（平台科目不算）；联盟应收（05，按子订单登记、明细里没有会员）= 该子订单凭证上的两位受益人（同一受益人两张凭证只算一次；别的子订单、别的应用的凭证不算）；明细里有会员的 05 = 明细会员与凭证受益人的并集；都小写、去重、升序',
+  async () => {
+    await withHarness(createTestDatabase, async (h) => {
+      await schemaReady(h.db);
+      const debited = await userAccount(h);
+      const credited = await userAccount(h);
+      const cash = await platformAccount(h, 'CASH');
+      const unbalanced = await voucher(h);
+      await entry(h, unbalanced.id, debited.accountId, -100n, true);
+      await entry(h, unbalanced.id, credited.accountId, 60n, true);
+      await entry(h, unbalanced.id, cash, 33n, false);
+
+      const bare = orderKey();
+      const first = await member(h);
+      const second = await member(h);
+      const stranger = await member(h);
+      const elsewhere = await member(h, OTHER);
+      for (const userId of [first, second, first]) await credit(h, bare, userId);
+      await credit(h, orderKey(), stranger);
+      await credit(h, bare, elsewhere, OTHER);
+      const withoutUsers = receivableDiff(bare, randomUUID(), first, {
+        expected: 600n,
+        actual: 500n,
+      });
+      const receivable = {
+        ...withoutUsers,
+        detail: { ...(withoutUsers.detail as Record<string, unknown>), pending_items: [] },
+      };
+
+      const named = orderKey();
+      const pending = await member(h);
+      const onVoucher = await member(h);
+      await credit(h, named, onVoucher);
+      const withUser = receivableDiff(named, randomUUID(), pending, {
+        expected: 900n,
+        actual: 800n,
+      });
+
+      const execution = await h.executor.execute(h.db, {
+        accountingDate: DAY,
+        differences: [voucherDiff(unbalanced, -7n, 3), receivable, withUser],
+      });
+      const sorted = (ids: readonly string[]) => ids.map((id) => id.toLowerCase()).sort();
+      const expected: readonly (readonly [string, string[]])[] = [
+        [`02:${unbalanced.id}`, sorted([debited.userId, credited.userId])],
+        [`05:${bare}`, sorted([first, second])],
+        [`05:${named}`, sorted([pending, onVoucher])],
+      ];
+      for (const [refId, users] of expected) {
+        const row = await diffByRef(h, refId);
+        expect(await listOf(h.db, row.app_id, row.id), refId).toEqual(users);
+        const held = executedOf(execution, row).heldUserIds;
+        expect(sorted(held), `${refId} 加冻结的会员`).toEqual(users);
+      }
     });
   },
   TIMEOUT,

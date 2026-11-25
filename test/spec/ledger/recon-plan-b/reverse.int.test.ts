@@ -11,7 +11,9 @@ import { expect, it } from 'vitest';
 import {
   fixture,
   member,
+  newAppId,
   seedForm,
+  seedReconDiff,
   suite,
   withAdjustAdmin,
   type AdjustFixture,
@@ -32,7 +34,9 @@ import {
   seedTicket,
   sortedLinks,
   tick,
+  type DiffStatus,
 } from './kit.ts';
+import { rowOf } from './kit-more.ts';
 
 const s = suite();
 
@@ -195,6 +199,168 @@ it('[AC-B2-17#16] 红冲时同一（app、type、ref_id）已另有未解决的 
       const mark = reversal.row.adjust_id;
       const links = (await linksOf(f)).filter((row) => row.recon_diff_id === earlier.id);
       expect(links, String(next)).toEqual([linkOf(f, id, earlier.id, userId, mark, filedAt)]);
+      tick(f);
+    }
+  });
+});
+
+it('[AC-B2-17#30] 「已覆盖」只算未红冲的关联：名单 U1、U2，U1 调账（processing）→ 红冲 U1 那张（差错单整行不变）→ U2 调账后差错单仍是 processing（整行不变，不置 adjusted）；U1 再提交一张后才 adjusted（handler 为这一张的提交人）；关联行为 U1 已红冲一行、U2 一行、U1 新一行', async () => {
+  const f = fixture(s);
+  await withAdjustAdmin(f, async (h) => {
+    await schemaReady(f.db);
+    const u1 = await member(f, { available: 1000n });
+    const u2 = await member(f, { available: 1000n });
+    const diff = await seedTicket(f, { users: [u1, u2] });
+    const refs = [diffRef(diff)];
+
+    const first = await fileOk(f, h, { userId: u1, refs });
+    const firstAt = f.clock.now();
+    const processing = await expectNowProcessing(f, diff);
+    tick(f);
+    const reversal = await reverseOk(f, h, first.row);
+    await expectUnchanged(f, processing);
+    tick(f);
+
+    const second = await fileOk(f, h, { userId: u2, refs });
+    const secondAt = f.clock.now();
+    await expectUnchanged(f, processing);
+    const u1Link = linkOf(f, first.row.adjust_id, diff.id, u1, reversal.row.adjust_id, firstAt);
+    const u2Link = linkOf(f, second.row.adjust_id, diff.id, u2, null, secondAt);
+    expect(await linksOf(f)).toEqual(sortedLinks([u1Link, u2Link]));
+    tick(f);
+
+    const colleague = await h.caller(['fund.adjust']);
+    const third = await fileOk(f, h, { userId: u1, refs, caller: colleague });
+    await expectNowAdjusted(f, processing, colleague.id);
+    const fresh = linkOf(f, third.row.adjust_id, diff.id, u1);
+    expect(await linksOf(f)).toEqual(sortedLinks([u1Link, u2Link, fresh]));
+  });
+});
+
+interface Candidate {
+  readonly label: string;
+  /** ref_type of the earlier diff (the one the reversed form set adjusted). */
+  readonly earlier: 'ledger_account' | 'order';
+  readonly appId?: 'other';
+  readonly type?: string;
+  readonly refType: 'ledger_account' | 'order';
+  readonly status: DiffStatus;
+}
+
+/** Diffs sharing the ref_id with which the earlier one cannot collide in the 0152 index. */
+const CANDIDATES: readonly Candidate[] = [
+  {
+    label: '同 ref 已 closed',
+    earlier: 'ledger_account',
+    refType: 'ledger_account',
+    status: 'closed',
+  },
+  {
+    label: '同 ref 已 adjusted',
+    earlier: 'ledger_account',
+    refType: 'ledger_account',
+    status: 'adjusted',
+  },
+  {
+    label: '同 ref 已 written_off',
+    earlier: 'ledger_account',
+    refType: 'ledger_account',
+    status: 'written_off',
+  },
+  {
+    label: '别的应用 open',
+    earlier: 'ledger_account',
+    appId: 'other',
+    refType: 'ledger_account',
+    status: 'open',
+  },
+  {
+    label: '别的应用 processing',
+    earlier: 'ledger_account',
+    appId: 'other',
+    refType: 'ledger_account',
+    status: 'processing',
+  },
+  {
+    label: '别的 type open',
+    earlier: 'ledger_account',
+    type: 'month_end_unbalanced',
+    refType: 'ledger_account',
+    status: 'open',
+  },
+  {
+    label: '别的 type processing',
+    earlier: 'ledger_account',
+    type: 'settle_amount_mismatch',
+    refType: 'ledger_account',
+    status: 'processing',
+  },
+  {
+    label: '候选是 order、open',
+    earlier: 'ledger_account',
+    refType: 'order',
+    status: 'open',
+  },
+  {
+    label: '原单是 order、候选 open',
+    earlier: 'order',
+    refType: 'ledger_account',
+    status: 'open',
+  },
+  {
+    label: '都是 order、候选 open',
+    earlier: 'order',
+    refType: 'order',
+    status: 'open',
+  },
+  {
+    label: '都是 order、候选 processing',
+    earlier: 'order',
+    refType: 'order',
+    status: 'processing',
+  },
+];
+
+it('[AC-B2-17#31] ⑯ 的例外只在 recon_diffs_unresolved_internal_key 会被违反时：同 ref_id 的另一张是 closed / adjusted / written_off、属别的应用、是别的 type，或原单与另一张任一的 ref_type 是 order → 红冲照 ⑥ 把原差错单退回 processing，另一张整行不变，关联行照常写上红冲单号', async () => {
+  const f = fixture(s);
+  await withAdjustAdmin(f, async (h) => {
+    await schemaReady(f.db);
+    const otherApp = newAppId();
+    for (const candidate of CANDIDATES) {
+      const userId = await member(f, { available: 1000n });
+      const refId = `01:${randomUUID()}`;
+      const earlier = await seedTicket(f, {
+        refType: candidate.earlier,
+        refId,
+        period: '2026-11-27',
+      });
+      const original = await fileOk(f, h, { userId, refs: [diffRef(earlier)] });
+      const filedAt = f.clock.now();
+      const adjusted = await expectNowAdjusted(f, earlier, h.maker.id);
+
+      const appId = candidate.appId === 'other' ? otherApp : f.appId;
+      const status = candidate.status;
+      const concluded = status !== 'open' && status !== 'processing';
+      const seeded = await seedReconDiff(f, {
+        app_id: appId,
+        type: candidate.type ?? 'ledger_mismatch',
+        source: 'R3',
+        period: '2026-11-28',
+        ref_type: candidate.refType,
+        ref_id: refId,
+        status,
+        closed_at: concluded ? f.clock.now() : null,
+      });
+      const other = await rowOf(f, appId, seeded.id);
+      tick(f);
+
+      const reversal = await reverseOk(f, h, original.row);
+      await expectSentBack(f, adjusted);
+      expect(await rowOf(f, appId, other.id), candidate.label).toEqual(other);
+      const mark = reversal.row.adjust_id;
+      const links = (await linksOf(f)).filter((row) => row.recon_diff_id === earlier.id);
+      const expected = [linkOf(f, original.row.adjust_id, earlier.id, userId, mark, filedAt)];
+      expect(links, candidate.label).toEqual(expected);
       tick(f);
     }
   });
