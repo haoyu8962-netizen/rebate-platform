@@ -104,7 +104,7 @@ it('[CT-24r] six admin operations under risk.appeal with the codes of 04 §6.6',
     expect(o.security).toEqual([{ adminBearerAuth: [] }]);
     expect(o.tags).toEqual(['admin-appeals']);
     expect(o['x-error-codes']).toEqual(codes);
-    expect(o['x-step-up']).toBeUndefined();
+    expect(o['x-step-up'], id).toBe(id === 'adminResolveAppeal' ? 'sudo' : undefined);
     expect(o['x-idempotent']).toBeUndefined();
     expect(names(o)).not.toContain('Idempotency-Key');
     expect(names(o).includes('X-Step-Up-Token'), id).toBe(id === 'adminResolveAppeal');
@@ -156,12 +156,13 @@ it('[CT-24r] claim and resolve take expected_row_version; a mismatch is 20902 ap
   expect([...schema('AdminAppealDecision').enum!]).toEqual(['upheld', 'revoked']);
 });
 
-it('[CT-24r] revoking a ban, a freeze or a blocklist block needs the extra point and a totp step-up', () => {
+it('[CT-24r] revoking a ban, a freeze or a blocklist block needs the extra point; only a freeze needs a sudo step-up', () => {
   const text = flat(op(RESOLVE, 'post').description);
   for (const point of ['`risk.ban`', '`risk.freeze`', '`risk.blocklist`'])
     expect(text).toContain(point);
-  expect(text).toContain('totp-tier `X-Step-Up-Token`');
-  expect(text).toContain('10003 with `data.tier=totp`');
+  expect(text).toContain('Only revoking a freeze also needs step-up: sudo');
+  expect(text).toContain('10003 with `data.tier=sudo`');
+  expect(text).toContain('Revoking a ban or a blocklist block needs its point but no step-up');
   expect(text).toContain('编排裁定 D10-154');
   expect([...schema('AdminAppealRevokePermission').enum!]).toEqual([
     'risk.ban',
@@ -169,7 +170,7 @@ it('[CT-24r] revoking a ban, a freeze or a blocklist block needs the extra point
     'risk.blocklist',
   ]);
   expect((errors(op(RESOLVE, 'post'))['stepUpRequired']!.value as { data: Row }).data).toEqual({
-    tier: 'totp',
+    tier: 'sudo',
   });
 });
 

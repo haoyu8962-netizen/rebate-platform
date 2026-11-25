@@ -246,9 +246,7 @@ it.each([resolveEndpoint, ...refunds])(
       );
     }
     if (endpoint[3] === 'pay.resolve') {
-      expect(errors).toContainEqual(
-        expect.objectContaining({ code: 10003, data: expect.objectContaining({ tier: 'totp' }) }),
-      );
+      expect(errors).not.toContainEqual(expect.objectContaining({ code: 10003 }));
     }
   },
 );

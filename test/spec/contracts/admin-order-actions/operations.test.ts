@@ -99,16 +99,8 @@ it.each(
     expect(names).not.toContain('idempotency-key');
     expect(names).not.toContain('x-app-id');
     expect(names).not.toContain('x-sign');
-    const needsToken = method === 'post' && (path === importPath || path.endsWith('/reassign'));
-    expect(names.includes('x-step-up-token')).toBe(needsToken);
-    if (needsToken) {
-      expect(description(doc, path, method)).toMatch(/totp|动态码/i);
-      expect(parameters.find((param) => param['name'] === 'X-Step-Up-Token')).toMatchObject({
-        in: 'header',
-        required: false,
-      });
-      expect(list(operation['x-error-codes'])).toContain(10003);
-    }
+    expect(names).not.toContain('x-step-up-token');
+    expect(list(operation['x-error-codes'])).not.toContain(10003);
     for (const name of ['order_id', 'import_id']) {
       if (!path.includes(`{${name}}`)) continue;
       const parameter = parameters.find((entry) => entry['name'] === name);
@@ -157,16 +149,8 @@ it.each(
     expect(names).not.toContain('idempotency-key');
     expect(names).not.toContain('x-app-id');
     expect(names).not.toContain('x-sign');
-    const needsToken = method === 'post' && (path === importPath || path.endsWith('/reassign'));
-    expect(names.includes('x-step-up-token')).toBe(needsToken);
-    if (needsToken) {
-      expect(description(doc, path, method)).toMatch(/totp|动态码/i);
-      expect(parameters.find((param) => param['name'] === 'X-Step-Up-Token')).toMatchObject({
-        in: 'header',
-        required: false,
-      });
-      expect(list(operation['x-error-codes'])).toContain(10003);
-    }
+    expect(names).not.toContain('x-step-up-token');
+    expect(list(operation['x-error-codes'])).not.toContain(10003);
     for (const name of ['order_id', 'import_id']) {
       if (!path.includes(`{${name}}`)) continue;
       const parameter = parameters.find((entry) => entry['name'] === name);
@@ -271,11 +255,12 @@ it.each(['/admin/v1/order-syncs', '/admin/v1/rights-imports'])(
   },
 );
 
+// 标题沿用原文，二次验证期望以块内断言为准。
 it('[AC-CT-24n#3] channel 导入的额外权限和动态码仅条件适用', () => {
   const doc = contract();
   const desc = description(doc, importPath);
   for (const word of ['channel', 'order.claim', 'risk.blocklist']) expect(desc).toContain(word);
-  expect(desc).toMatch(/totp|动态码/i);
+  expect(desc).not.toMatch(/step[ -]up|二次验证|totp|动态码|10003/i);
   expect(desc).toMatch(/only|仅|只有/i);
   expect(op(doc, importPath)).not.toHaveProperty('x-step-up');
 });

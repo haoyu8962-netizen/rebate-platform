@@ -9,6 +9,7 @@ import type { Schema } from '@couli/contracts-ts';
 import {
   adminPrincipal,
   contractRouteSchema,
+  fieldsErrorEnvelope,
   type CheckedRequest,
 } from '../../../platform/index.ts';
 import type {
@@ -113,7 +114,14 @@ export class AdminStepUpController {
     @Res({ passthrough: true }) reply: HeaderReply,
   ): Promise<StepUpResponse> {
     reply.header('Cache-Control', 'no-store');
-    const result = await this.stepUp.stepUp(caller(request), request.body.tier, request.body.code);
+    // The verification method is `method`, or its legacy name `tier` (CT-24zzv); when both are
+    // sent and differ, `method` wins and is the only one verified. Neither → 20001 [method].
+    const method = request.body.method ?? request.body.tier;
+    if (method === undefined) {
+      const { statusCode, body } = fieldsErrorEnvelope(['method'], request.id);
+      throw new HttpException(body, statusCode);
+    }
+    const result = await this.stepUp.stepUp(caller(request), method, request.body.code);
     if (result.code !== 0) throw failure(result, request.id);
     return { code: 0, msg: '', data: { ...result.grant }, trace_id: request.id };
   }

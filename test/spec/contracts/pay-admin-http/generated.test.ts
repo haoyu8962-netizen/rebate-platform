@@ -215,6 +215,7 @@ it.each(endpoints.filter((e): boolean => e[2] === 'listAdminPayReconDiffs'))(
   },
 );
 
+// 标题沿用原文，二次验证期望以块内断言为准。
 it.each(
   endpoints.filter(
     (e): boolean =>
@@ -264,7 +265,7 @@ it.each(
         'CONTRACT_ROUTE_SCHEMAS',
       ),
     );
-    // 形状与契约一致：无 Idempotency-Key；处置的头部可带动态码；路径参数与查询参数取自契约且无多余；
+    // 形状与契约一致：无 Idempotency-Key；头部不带二次验证凭证；路径参数与查询参数取自契约且无多余；
     // 只有处置有请求体（固定的 expected_status / action）。
     expect(schemas, `route-schemas.gen.ts: ${id}`).toHaveProperty(id);
     const entry = object(schemas[id]);
@@ -272,11 +273,7 @@ it.each(
     expect(headers['type']).toBe('object');
     expect(object(headers['properties'])).not.toHaveProperty(['idempotency-key']);
     expect(list(headers['required'] ?? [])).not.toContain('idempotency-key');
-    if (id === 'resolveAdminPayOrder') {
-      expect(object(headers['properties'])).toHaveProperty(['x-step-up-token']);
-    } else {
-      expect(object(headers['properties'])).not.toHaveProperty(['x-step-up-token']);
-    }
+    expect(object(headers['properties'])).not.toHaveProperty(['x-step-up-token']);
     const names = [...path.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]!);
     if (names.length === 0) {
       expect(entry).not.toHaveProperty('params');

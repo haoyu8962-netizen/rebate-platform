@@ -3128,11 +3128,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Send the SMS code of the sms step-up tier
+         * Send the SMS code for a step-up by SMS (method sms)
          * @description Sends a verification code to the verify phone registered on the signed-in admin account
-         *     (BR-ID-34 短信档; template ADMIN_STEP_UP). An account without a registered verify phone is
-         *     10003 with `data.tier=sms` and `data.reason=verify_phone_missing` and nothing is sent (the
-         *     console greys out sms-tier buttons beforehand from `verify_phone_masked` of GET
+         *     (BR-ID-34 第二因子 短信验证码; template ADMIN_STEP_UP), for POST /admin/v1/auth/step-up
+         *     with `method=sms`. An account without a registered verify phone is 10003 with
+         *     `data.reason=verify_phone_missing` and nothing is sent (the console offers the SMS method
+         *     only from `verify_phone_masked` of GET
          *     /admin/v1/me/permissions; the phone is registered or changed with POST
          *     /admin/v1/me/verify-phone/sms-codes and PUT /admin/v1/me/verify-phone, and until such a
          *     change succeeds codes keep going to the current phone). Sending too often is 42901 with
@@ -3156,31 +3157,45 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Admin second verification (totp or sms tier)
-         * @description Returns a step_up_token that records its tier (BR-ID-34): `tier=totp` with the current
-         *     authenticator code, `tier=sms` with the code sent by POST /admin/v1/auth/step-up/sms-codes.
-         *     The console sends the token as the `X-Step-Up-Token` request header of the admin
-         *     operation that answered 10003 and replays that request; the header is never put in the
-         *     body. An operation that needs the sms tier rejects a totp-tier token with 10003
-         *     `data.tier=sms`. Which tier each operation needs is annotated per permission in GET
-         *     /admin/v1/me/permissions (04 §11 step-up column).
-         *     `tier=sms` on an account without a registered verify phone is 10003 with `data.tier=sms`
-         *     and `data.reason=verify_phone_missing`. A wrong code is 20002 without a reason; an expired
+         * Admin second verification (method totp or sms)
+         * @description Returns a step_up_token (BR-ID-34 二次验证分三档): `method=totp` with the current
+         *     authenticator code, `method=sms` with the code sent by POST /admin/v1/auth/step-up/sms-codes
+         *     (`tier` is the legacy name of `method` and is still accepted; one of them is required,
+         *     neither → 20001 with `data.fields=[method]`; when both are sent and differ, `method` is
+         *     used and only it is verified). sudo and strict do not differ by method; the response's
+         *     `tier` echoes the method (record only). The token is valid for 5 minutes from the
+         *     successful verification (`expire_at` is that moment plus 5 minutes). No operation is named
+         *     at issue: a live token that no operation has used yet serves any one sudo or strict
+         *     operation of this account and admin session; the first time a strict operation takes it,
+         *     the token is bound to that operation, and from then on only the same operation may retry
+         *     with it until `expire_at`. A successful verification also starts the session's
+         *     180-minute sudo window again. The console sends the token as the
+         *     `X-Step-Up-Token` request header of the admin operation that answered 10003 (`data.tier`
+         *     = sudo or strict, the tier that operation needs) and replays that request; the header is
+         *     never put in the body. Which operations need which tier is marked by `x-step-up` and
+         *     annotated per permission in GET /admin/v1/me/permissions (04 §11 step-up column).
+         *     `method=sms` on an account without a registered verify phone is 10003 with
+         *     `data.reason=verify_phone_missing`. A wrong code is 20002 without a reason; an expired
          *     or voided SMS code is 20003.
-         *     Token use (BR-ID-08 「只能用于 1 次成功的业务请求」 as the admin side follows it): a token
-         *     is spent only by one business success of an operation that checks it (HTTP 2xx with
-         *     `code=0`); after that a request with it is 10003. When such a request is refused or fails,
-         *     the server may release the token, and the token may then be reused until `expire_at`, but
-         *     this is not guaranteed: for example, it cannot be reused when the outcome of the commit is
-         *     unknown or when the release could not be recorded. The caller may replay the request with
-         *     the same token; after an answer of 10003 it must obtain a new token before submitting
-         *     again, through a new verification, and the caller decides whether to ask again at once or
-         *     to let the administrator start the operation again; it must not assume that the token can
-         *     still be used. While one request holds the token,
-         *     another request with it is 10003. An operation that needs no step-up ignores a token sent
-         *     with it. Not fixed by BR-ID-34 and left open here: whether wrong step-up codes count
-         *     towards the login-failure lock, and the token lifetime (the response carries `expire_at`;
-         *     the server decides).
+         *     Token use (BR-ID-34 「验证结果只能用于一次成功的操作」; BR-ID-08 「只能用于 1 次成功的业务请求」
+         *     as the admin side follows it): a token is spent by one business success of an operation
+         *     that checks it (`code=0` and, for an operation whose answer carries an `outcome`, an
+         *     outcome other than rejected); after that a request with it is 10003. After a definite
+         *     rejection or failure of that operation the token is not spent, and the request may be sent
+         *     again with it until `expire_at`. An answer of `code=0` with `outcome=rejected` (POST
+         *     /admin/v1/payout-batches refused with payout_disabled, say) is such a definite rejection:
+         *     the token is not spent and the same operation may be retried with it until `expire_at`.
+         *     Transitional until B1-18l: the current server still uses the token up on every HTTP 2xx
+         *     answer with `code=0`, `outcome=rejected` included; the rule here is the contract and
+         *     B1-18l brings the server to it. When the outcome is unknown (for example, the
+         *     result of the commit is not known, or the token's state could not be recorded), the token
+         *     stays held until it expires: a request with it is 10003 and a new verification is needed.
+         *     After an answer of 10003 the caller must obtain a new token through a new verification
+         *     before submitting again, and decides whether to ask again at once or to let the
+         *     administrator start the operation again; it must not assume that the token can still be
+         *     used. While one request holds the token, another request with it is 10003. An operation
+         *     that needs no step-up ignores a token sent with it. Not fixed by BR-ID-34 and left open
+         *     here: whether wrong step-up codes count towards the login-failure lock.
          */
         post: operations["adminStepUp"];
         delete?: never;
@@ -3204,12 +3219,22 @@ export interface paths {
          *     「暂无权限」 page (BR-ID-34 细则「首次绑定身份验证器」). Permission keys are values of
          *     contracts/enums/admin.yaml `admin_permission`; clients ignore a key they do not know.
          *     Each entry carries its step-up annotation (04 §11 step-up column): `step_up_tier` is the
-         *     tier every step-up operation of that point needs (null = none needs one), and
-         *     `step_up_operations` lists the operations whose tier differs from it (e.g. only raising the
-         *     minimum supported version under `content.app_version` needs totp; only the balance cache
-         *     recalculation under `fund.recon` needs sms). Operation keys come from specs/permissions.yaml
-         *     (B1-18). `verify_phone_masked` is null when no verify phone is registered: sms-tier
-         *     buttons are greyed out with a prompt to register one (03 §9.2).
+         *     highest tier among the operations of that point (null = none needs one) and is display
+         *     only: whether an operation needs a verification is decided by that operation's own
+         *     `x-step-up` and its 10003 answer, and the console must not block an operation in advance
+         *     because of this field. `step_up_operations` lists the step-up operations of the point whose
+         *     tier is lower than `step_up_tier` (a sudo operation under a point whose highest tier is
+         *     strict); operations that need none are not listed, and the list is empty when every
+         *     step-up operation of the point has the tier `step_up_tier` shows (under `fund.adjust`,
+         *     rejecting or withdrawing an adjustment needs no verification although `step_up_tier` is
+         *     strict). So `payout.execute` shows strict (only executing a payout batch needs it),
+         *     `fund.recon` shows sudo (only closing a difference that releases a withdrawal hold needs
+         *     it), `risk.freeze` shows sudo (only unfreezing), and `config.business` and `switch.all`
+         *     show strict (only the keys and the switch of the BR-ID-34 strict list, e.g.
+         *     `payout.single_cap_fen`); each with an empty list. Tiers are sudo and strict (BR-ID-34
+         *     二次验证分三档); operation keys come from specs/permissions.yaml (B1-18).
+         *     `verify_phone_masked` is null when
+         *     no verify phone is registered: the SMS method is not offered (03 §9.2).
          */
         get: operations["adminGetMyPermissions"];
         put?: never;
@@ -3230,12 +3255,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Send a code to the new verify phone of the signed-in account (step-up)
+         * Send a code to the new verify phone of the signed-in account
          * @description First step of registering or changing the signed-in account's own verify phone on its
          *     「我的账号」 page (BR-ID-45 ① ⑤). Any signed-in admin account,
-         *     super admins included (no permission point). Step-up: totp tier, checked here when the
-         *     change is started (without a valid totp-tier `X-Step-Up-Token` → 10003 with
-         *     `data.tier=totp`).
+         *     super admins included (no permission point).
          *     `phone` is normalised (BR-ID-05 细则「手机号规范化」; not a mainland mobile number → 20001
          *     with `data.fields=[phone]` and `data.reason=phone_invalid`); the account's current verify
          *     phone is 20001 with `data.fields=[phone]`. The phone is not checked for uniqueness among
@@ -3243,7 +3266,7 @@ export interface paths {
          *     phone and submitted with PUT /admin/v1/me/verify-phone. Only the new phone and the
          *     authenticator are verified: no code goes to the old phone, so losing it does not block
          *     the change (②). Sending again replaces the earlier pending code. Until the change
-         *     succeeds the current verify phone stays valid and sms-tier step-up codes (POST
+         *     succeeds the current verify phone stays valid and second-factor SMS codes (POST
          *     /admin/v1/auth/step-up/sms-codes) keep going to it. Sending too often is 42901 with
          *     Retry-After; the send limits and the code validity are those of POST
          *     /admin/v1/auth/step-up/sms-codes (not fixed by BR-ID-45), the response states the values
@@ -3267,16 +3290,15 @@ export interface paths {
         /**
          * Register or change the signed-in account's verify phone with the new phone's code
          * @description Second step of the change started by POST /admin/v1/me/verify-phone/sms-codes (BR-ID-45
-         *     ①). Any signed-in admin account; the step-up was made when the
-         *     code was sent, so no step-up token is checked here. `phone` is normalised as for sending.
+         *     ①). Any signed-in admin account; no step-up (BR-ID-34: none). `phone` is normalised as for sending.
          *     `code` must be the pending code sent to this `phone` for this account: a wrong code is
          *     20002 without a reason; no pending code for this account and phone, an expired code or
          *     one voided (by too many wrong tries, a newer send or a change that succeeded meanwhile,
          *     including one made by a super admin) is 20003 and nothing changes. Only a verified new
          *     phone takes effect: the verify phone is replaced (stored encrypted with its blind index,
          *     BR-ID-33; `verify_phone_set_at` = now), the pending code is used up and every other
-         *     pending verify-phone code of the account is voided; sms-tier step-up codes go to the new
-         *     phone from then on and the sms-tier buttons become available (`verify_phone_masked` of
+         *     pending verify-phone code of the account is voided; step-up SMS codes go to the new
+         *     phone from then on and the SMS method becomes available (`verify_phone_masked` of
          *     GET /admin/v1/me/permissions). Sessions are not revoked. Audit: action
          *     admin_verify_phone_change with the masked phones before and after. The response carries
          *     the masked phone only. No Idempotency-Key (04 §6.6).
@@ -3374,11 +3396,10 @@ export interface paths {
         get: operations["adminListAdmins"];
         put?: never;
         /**
-         * Create an ordinary admin account with a one-time initial password (super admin, step-up)
+         * Create an ordinary admin account with a one-time initial password (super admin)
          * @description Super admin only (04 §11 引言: creating and disabling accounts and ticking points are limited
-         *     to super admins, need step-up and write an audit record; any other account is 10403 with
-         *     `data.reason=admin_permission_denied`). Step-up: totp tier (without a valid totp-tier
-         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`).
+         *     to super admins and write an audit record; any other account is 10403 with
+         *     `data.reason=admin_permission_denied`).
          *     Creates an ordinary account only (`is_super=false`; super admins are not created here):
          *     no permission point is ticked (they are ticked afterwards with PUT
          *     /admin/v1/admins/{admin_id}/permissions), no verify phone is registered (registered
@@ -3444,11 +3465,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Regenerate the one-time initial password of an account not yet signed in (super admin, step-up)
+         * Regenerate the one-time initial password of an account not yet signed in (super admin)
          * @description For an initial password that never reached the holder, e.g. when the outcome of POST
          *     /admin/v1/admins was unknown (BR-ID-43「重新生成初始密码」). Super admin only (otherwise
-         *     10403 with `data.reason=admin_permission_denied`). Step-up: totp tier (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). No request body. An unknown
+         *     10403 with `data.reason=admin_permission_denied`). No request body. An unknown
          *     `admin_id` is 20001 with `data.fields=[admin_id]`; a target with `is_super=true`, the
          *     caller's own account included, is 10403 with `data.reason=admin_permission_denied`
          *     (super admin rows are 「不可修改」).
@@ -3484,10 +3504,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Disable an ordinary admin account (super admin, step-up, reason)
+         * Disable an ordinary admin account (super admin, reason)
          * @description Super admin only (04 §11 引言; otherwise 10403 with `data.reason=admin_permission_denied`).
-         *     Step-up: totp tier (without a valid totp-tier `X-Step-Up-Token` → 10003 with
-         *     `data.tier=totp`). `reason` is required (1–200 characters, else 20001 with
+         *     `reason` is required (1–200 characters, else 20001 with
          *     `data.fields=[reason]`). An unknown `admin_id` is 20001 with `data.fields=[admin_id]`.
          *     A super admin account cannot be disabled here (the console shows super admin rows as
          *     「不可修改」), which also keeps the caller from disabling itself: a target with
@@ -3521,10 +3540,9 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Enable a disabled admin account again (super admin, step-up)
+         * Enable a disabled admin account again (super admin)
          * @description Super admin only (04 §11 引言; otherwise 10403 with `data.reason=admin_permission_denied`).
-         *     Step-up: totp tier (without a valid totp-tier `X-Step-Up-Token` → 10003 with
-         *     `data.tier=totp`). No request body. An unknown `admin_id` is 20001 with
+         *     No request body. An unknown `admin_id` is 20001 with
          *     `data.fields=[admin_id]`; a target with `is_super=true` is 10403 with
          *     `data.reason=admin_permission_denied` (super admin rows are 「不可修改」).
          *     Only a disabled account is enabled; an active one is 20902 with
@@ -3554,8 +3572,7 @@ export interface paths {
          * Replace the ticked permission points of an ordinary admin account (super admin, step-up)
          * @description Super admin only (04 §11 引言: ticking and unticking points is limited to super admins,
          *     needs step-up and writes an audit record; otherwise 10403 with
-         *     `data.reason=admin_permission_denied`). Step-up: totp tier (without a valid totp-tier
-         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`). An unknown `admin_id` is 20001 with
+         *     `data.reason=admin_permission_denied`). Step-up: strict (BR-ID-34 strict list「分配或变更权限」): every call needs a valid `X-Step-Up-Token`, the sudo window does not apply (without one → 10003 with `data.tier=strict`); a token serves one successful call. An unknown `admin_id` is 20001 with
          *     `data.fields=[admin_id]`; a target with `is_super=true` is 10403 with
          *     `data.reason=admin_permission_denied` (a super admin holds every point and is not written
          *     to admin_permissions, 04 §3.2). A disabled account can be edited; its points apply when
@@ -3592,9 +3609,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reset another admin account's authenticator (super admin, step-up, reason)
-         * @description Super admin only (otherwise 10403 with `data.reason=admin_permission_denied`). Step-up:
-         *     totp tier (without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`).
+         * Reset another admin account's authenticator (super admin, reason)
+         * @description Super admin only (otherwise 10403 with `data.reason=admin_permission_denied`).
          *     `reason` is required and says how the holder was confirmed to be who they claim (1–200
          *     characters, else 20001 with `data.fields=[reason]`; BR-ID-43「重置身份验证器」). An
          *     unknown `admin_id` is 20001 with `data.fields=[admin_id]`.
@@ -3655,12 +3671,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Send a code to the new verify phone of another admin account (super admin, step-up)
+         * Send a code to the new verify phone of another admin account (super admin)
          * @description First step of a super admin registering or changing another account's verify phone on
          *     its holder's behalf (BR-ID-45 ③). Super admin only
-         *     (otherwise 10403 with `data.reason=admin_permission_denied`). Step-up: totp tier, checked
-         *     here when the change is started (without a valid totp-tier `X-Step-Up-Token` → 10003
-         *     with `data.tier=totp`). An unknown `admin_id` is 20001 with `data.fields=[admin_id]`.
+         *     (otherwise 10403 with `data.reason=admin_permission_denied`). An unknown `admin_id` is 20001 with `data.fields=[admin_id]`.
          *     Target: an ordinary account only. The caller's own account and every other super admin
          *     are 10403 with `data.reason=admin_permission_denied`: a super admin changes its own phone
          *     through POST /admin/v1/me/verify-phone/sms-codes (③), and super admin rows are
@@ -3672,7 +3686,7 @@ export interface paths {
          *     phone; the holder reads it to the super admin, who submits it with PUT
          *     /admin/v1/admins/{admin_id}/verify-phone. A change without the new phone's code is not
          *     possible. Sending again for the same account replaces the earlier pending code. Until the
-         *     change succeeds the current verify phone stays valid and sms-tier step-up codes keep
+         *     change succeeds the current verify phone stays valid and second-factor SMS codes keep
          *     going to it. Sending too often is 42901 with Retry-After; the send limits and the code
          *     validity are those of POST /admin/v1/auth/step-up/sms-codes (not fixed by BR-ID-45), the
          *     response states the values in force. Audit: action admin_verify_phone_code_send with the
@@ -3697,8 +3711,7 @@ export interface paths {
          * Register or change another admin account's verify phone with the new phone's code (super admin)
          * @description Second step of the change started by POST /admin/v1/admins/{admin_id}/verify-phone/sms-codes
          *     (BR-ID-45 ③). Super admin only (otherwise 10403 with
-         *     `data.reason=admin_permission_denied`); the step-up was made when the code was sent, so
-         *     no step-up token is checked here. Targets as for sending: an unknown `admin_id` is 20001
+         *     `data.reason=admin_permission_denied`); no step-up (BR-ID-34: none). Targets as for sending: an unknown `admin_id` is 20001
          *     with `data.fields=[admin_id]`, the caller's own account and other super admins are 10403
          *     with `data.reason=admin_permission_denied`. `reason` is required (1–200 characters, else
          *     20001 with `data.fields=[reason]`). `phone` is normalised as for sending.
@@ -3708,7 +3721,7 @@ export interface paths {
          *     is 20003 and nothing changes. Only a verified new phone takes effect: the verify phone is
          *     replaced (stored encrypted with its blind index, BR-ID-33; `verify_phone_set_at` = now),
          *     the pending code is used up and every other pending verify-phone code of the account is
-         *     voided; the old phone stops receiving sms-tier codes from then on. Sessions are not
+         *     voided; the old phone stops receiving step-up SMS codes from then on. Sessions are not
          *     revoked. Audit: action admin_verify_phone_change with the reason, the masked phones before
          *     and after and that a super admin made it. The response is the account as it is now
          *     (masked phone only). No Idempotency-Key (04 §6.6).
@@ -3853,8 +3866,8 @@ export interface paths {
          *     BR-ID-33) and the task has `masked=true`. Apart from `tax_withdrawals` (see below), only a
          *     `users` export may ask for the full values
          *     with `unmasked: true`; then the creator must hold `pii.reveal_phone` (the users list's only
-         *     sensitive column; otherwise 10403), send a valid totp-tier `X-Step-Up-Token` (the tier of
-         *     `pii.reveal_phone`; missing, expired or lower → 10003 with `data.tier=totp`) and give
+         *     sensitive column; otherwise 10403), pass the sudo step-up (BR-ID-34 sudo list「查看完整手机号与证件号」:
+         *     no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again) and give
          *     `reason` (1–200 characters; missing → 20001 with `data.fields=[reason]`). `reason` without
          *     `unmasked: true` is 20001 with `data.fields=[reason]`; an `audit_logs` request takes
          *     neither field (audit values are stored masked) and either one is 20001. Without
@@ -3896,8 +3909,8 @@ export interface paths {
          *     Masked version: `export` and `fund.view`, no step-up, no `reason` (`reason` without
          *     `unmasked: true` is 20001 with `data.fields=[reason]`).
          *     Full version `unmasked: true`: `tax.export_full` alone (a super admin holds it; `export` is
-         *     not needed as well, and no `fund.*` point implies it), a valid totp-tier `X-Step-Up-Token`
-         *     (missing, expired or lower → 10003 with `data.tier=totp`) and `reason` (1–200 characters,
+         *     not needed as well, and no `fund.*` point implies it), the sudo step-up as above (without
+         *     it → 10003 with `data.tier=sudo`) and `reason` (1–200 characters,
          *     the purpose BR-WDR-21 asks for; missing → 20001 with `data.fields=[reason]`).
          *     File: line one is a note (the creator's account name and the export time), the header
          *     follows on line two (for this resource only). Columns: name, identity number, income type,
@@ -3994,8 +4007,8 @@ export interface paths {
          *     The checks of creating are made again on the caller's current points: the permission of
          *     the source list (`users` → `user.list`; `ledger` → `fund.view` or `user.lookup`, either
          *     one) and, for an unmasked task (`masked=false`),
-         *     `pii.reveal_phone` (`tax.export_full` for a `tax_withdrawals` task), both 10403 when lacking. An unmasked task also needs a new totp-tier
-         *     `X-Step-Up-Token` (missing, expired or lower → 10003 with `data.tier=totp`) and a new
+         *     `pii.reveal_phone` (`tax.export_full` for a `tax_withdrawals` task), both 10403 when lacking. An unmasked task also needs the sudo
+         *     step-up (BR-ID-34 sudo list「查看完整手机号与证件号」: no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again) and a new
          *     `reason` (1–200 characters; missing → 20001 with `data.fields=[reason]`): every
          *     generation of a file with full values is verified anew. A masked task takes an empty body;
          *     `reason` there is 20001 with `data.fields=[reason]` and no step-up token is checked.
@@ -4242,8 +4255,7 @@ export interface paths {
         /**
          * Show one sensitive field of a user in full (audited)
          * @description Permission point `pii.reveal_phone` for `field=phone` (04 §11.1, BR-ID-33); lacking it is
-         *     10403 with `data.reason=admin_permission_denied`. Step-up: totp tier (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). Only `field=phone` for now:
+         *     10403 with `data.reason=admin_permission_denied`. Step-up: sudo (BR-ID-34 sudo list「查看完整手机号与证件号」): no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again. Only `field=phone` for now:
          *     the identity number and payout account (`pii.reveal_identity`) come with the real-name
          *     and payout data. One field of one user per call; `reason` is required (1–200 characters).
          *     Every call that returns a value writes its own audit record (action user_pii_reveal:
@@ -4272,8 +4284,9 @@ export interface paths {
          * Ban, unban, freeze or unfreeze a user
          * @description Permission point by `action` (04 §11.2): `ban` and `unban` need `risk.ban`, `freeze` and
          *     `unfreeze` need `risk.freeze`; lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier for every action (without a
-         *     valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). An unknown `user_id`
+         *     `data.reason=admin_permission_denied`. Step-up only for `unfreeze`: sudo (BR-ID-34 sudo
+         *     list「解除提现冻结」): no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again. `ban`, `unban` and `freeze` need no step-up
+         *     (BR-ID-34: none). An unknown `user_id`
          *     is 20001 with `data.fields=[user_id]`.
          *     Body checks (20001 with `data.fields` naming the field): `reason` is required (1–200
          *     characters); `reason_category` (enum risk_reason_category, BR-TEXT-23 细则「原因类别」) is
@@ -4328,8 +4341,7 @@ export interface paths {
         /**
          * Reset a user's union authorization (release the binding)
          * @description Permission point `union.binding_reset` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier (without a valid totp-tier
-         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`). Reset is the console's "unbind the
+         *     `data.reason=admin_permission_denied`. Step-up: sudo (BR-ID-34 sudo list「换绑或重置联盟账号」): no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again. Reset is the console's "unbind the
          *     taobao filing" (解绑淘宝备案) in the user's filing details, for correcting a wrong binding
          *     (OPS-11); users cannot unbind or rebind themselves (BR-ID-19, BR-ID-20). `reason` is
          *     required (1–200 characters, else 20001 with `data.fields=[reason]`). An unknown `user_id`
@@ -4371,8 +4383,7 @@ export interface paths {
         /**
          * Stop rebates for a user's union binding (停用返利)
          * @description Permission point `union.binding_disable` (04 §11.2, shared with enable); lacking it is
-         *     10403 with `data.reason=admin_permission_denied`. Step-up: totp tier (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). `reason` is required (1–200
+         *     10403 with `data.reason=admin_permission_denied`. `reason` is required (1–200
          *     characters, else 20001 with `data.fields=[reason]`). An unknown `user_id` is 20001 with
          *     `data.fields=[user_id]`; a platform without user authorization (such as jd) is 20001 with
          *     `data.fields=[platform]`.
@@ -4408,8 +4419,7 @@ export interface paths {
         /**
          * Restore rebates for a disabled union binding (恢复返利)
          * @description Permission point `union.binding_disable` (04 §11.2, shared with disable); lacking it is
-         *     10403 with `data.reason=admin_permission_denied`. Step-up: totp tier (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). `reason` is required (1–200
+         *     10403 with `data.reason=admin_permission_denied`. `reason` is required (1–200
          *     characters, else 20001 with `data.fields=[reason]`). An unknown `user_id` is 20001 with
          *     `data.fields=[user_id]`; a platform without user authorization (such as jd) is 20001 with
          *     `data.fields=[platform]`.
@@ -4482,9 +4492,8 @@ export interface paths {
         /**
          * Change a user's distribution level (调等级)
          * @description Permission point `user.level` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier (without a valid totp-tier
-         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`). In the MVP a level only changes through
-         *     this operation, with step-up and a reason (BR-INV-14); automatic promotion is P1.
+         *     `data.reason=admin_permission_denied`. In the MVP a level only changes through
+         *     this operation, with a reason (BR-INV-14); automatic promotion is P1.
          *     Body checks (20001 with `data.fields` naming the field): `level` is required and only
          *     L1, L2 or L3 (enum user_level, BR-INV-14); `reason` is required (1–200 characters). An
          *     unknown `user_id` is 20001 with `data.fields=[user_id]`. A level whose status in the
@@ -4522,14 +4531,12 @@ export interface paths {
         /**
          * Change or remove a user's inviter (改上级)
          * @description Permission point `user.inviter` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier (without a valid totp-tier
-         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`). Users never change or remove their own
+         *     `data.reason=admin_permission_denied`. Users never change or remove their own
          *     inviter (BR-INV-10); this is the console's change of inviter, removal included
          *     (`inviter_user_id: null` leaves the user without an inviter). `reason` is required (1–200
          *     characters, else 20001 with `data.fields=[reason]`). An unknown `user_id` is 20001 with
          *     `data.fields=[user_id]`.
-         *     Order of checks, the first hit is returned (BR-INV-10): permission, step-up and reason
-         *     (10403, 10003, 20001) → the target user has no direct invitee, no order (any status; an
+         *     Order of checks, the first hit is returned (BR-INV-10): permission and reason (10403, 20001) → the target user has no direct invitee, no order (any status; an
          *     UNATTRIBUTED order has no user and does not count, BR-INV-07 细则) and no claim in any
          *     status, else 30409 → the new inviter (`inviter_user_id`) is a user of the console's app
          *     and inviter_unavailable is false (BR-INV-02), else 30401; an unknown inviter_user_id is
@@ -4576,8 +4583,7 @@ export interface paths {
          * Edit a user's phone number and nickname (编辑会员信息)
          * @description Permission point `user.phone_change` (04 §11.2; since 2026-10-05 it covers the nickname as
          *     well, the key is unchanged); lacking it is 10403 with `data.reason=admin_permission_denied`.
-         *     Step-up: totp tier (without a valid totp-tier `X-Step-Up-Token` → 10003 with
-         *     `data.tier=totp`). The console's edit of member information after the customer service
+         *     The console's edit of member information after the customer service
          *     checked the user's identity in the WeCom conversation (BR-ID-06 细则「客服代办换号」,
          *     BR-ID-39 细则「后台改昵称」): only `phone` and `nickname` are edited here, the real-name
          *     data goes through `user.realname_fix` (BR-ID-25) and the balance through `fund.adjust`
@@ -4765,9 +4771,7 @@ export interface paths {
         /**
          * Record a device of the user as re-verified without changing the phone (旧号加验)
          * @description Permission point `user.phone_change` (04 §11.2, 编辑会员信息; the nearest existing point —
-         *     04 §11.2 has no point of its own for this operation; 编排 D10-513); lacking it is 10403 with `data.reason=admin_permission_denied`. Step-up:
-         *     totp tier, as that point (without a valid totp-tier `X-Step-Up-Token` → 10003 with
-         *     `data.tier=totp`). BR-WDR-01 细则「旧手机号被二次放号时的提现加验」, 清除标记只走人工: the
+         *     04 §11.2 has no point of its own for this operation; 编排 D10-513); lacking it is 10403 with `data.reason=admin_permission_denied`. BR-WDR-01 细则「旧手机号被二次放号时的提现加验」, 清除标记只走人工: the
          *     user contacts customer service, who checks the identity in the WeCom conversation by hand;
          *     when the phone number is not changed, the console may only record the device the user
          *     names as a re-verified device. The "pending re-verification" flag, its time and the trusted
@@ -4777,7 +4781,7 @@ export interface paths {
          *     console picks it from GET /admin/v1/users/{user_id}/devices) and `reason` (required; trimmed
          *     of leading and trailing white space it must be 1–200 characters: what was checked in the
          *     WeCom conversation).
-         *     Checks, in this order, first hit wins: permission (10403) → step-up (10003) → body (20001
+         *     Checks, in this order, first hit wins: permission (10403) → body (20001
          *     with `data.fields` naming the field; an empty reason after trimming is
          *     `data.fields=[reason]`) → an unknown `user_id`, or one of another app, is 20001 with
          *     `data.fields=[user_id]` → a `device_id` that is unknown, of another app, revoked, or not a
@@ -4792,8 +4796,7 @@ export interface paths {
          *     Effect: one reverified_devices row (app, user, the device's device_hash, source admin) is
          *     written; a device already recorded (by the user's own re-verification or an earlier
          *     console record) is not written again and the answer has `created: false`. The failure
-         *     count of BR-WDR-01 细则「加验依据」 is not touched. Every request that passes the permission,
-         *     step-up and body checks writes one audit record (action user_reverified_device_add: admin,
+         *     count of BR-WDR-01 细则「加验依据」 is not touched. Every request that passes the permission and body checks writes one audit record (action user_reverified_device_add: admin,
          *     reason, user_id, device_id, result code; never the device_hash), refusals included. No
          *     Idempotency-Key (04 §6.6): a retry is naturally idempotent (`created: false`, one more
          *     audit record).
@@ -4817,8 +4820,7 @@ export interface paths {
         /**
          * Correct a user's real-name data (name and ID number) on the user's behalf (audited)
          * @description Permission point `user.realname_fix` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier (without a valid totp-tier
-         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`). The user contacts customer service in a
+         *     `data.reason=admin_permission_denied`. The user contacts customer service in a
          *     WeCom (企业微信) conversation; the agent checks the user's identity there by hand (no
          *     system verification flow, 2026-10-05) and submits the corrected `name` and `id_no`
          *     (18-digit resident ID number) with `reason` (1–200 characters: what was checked in the
@@ -4855,7 +4857,7 @@ export interface paths {
          *     and the first rebinding after it are not counted in the user's monthly changes), and the
          *     domain event `user.realname_corrected` (old and new id_no_hmac, never plaintext) is
          *     queued in the same transaction (规划/02 §11). Minor rules follow the new birth_date.
-         *     Audit: every submission that passes the permission, step-up and body checks writes one
+         *     Audit: every submission that passes the permission and body checks writes one
          *     audit record (action user_realname_correct: admin, reason, result code, the new values
          *     masked or their id_no_hmac, never the plaintext), refusals included; a success also
          *     records the masked before and after values (BR-ID-33). The name and the ID number never
@@ -4893,8 +4895,7 @@ export interface paths {
         /**
          * Register a request for a user's personal information copy (audited, asynchronous)
          * @description Permission point `user.data_export` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier (without a valid totp-tier
-         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`). The user asks for a copy of their
+         *     `data.reason=admin_permission_denied`. The user asks for a copy of their
          *     personal information in a WeCom (企业微信) conversation; the agent checks the identity
          *     there by hand and registers the request here (BR-ID-40; 04 §6.6 users/{id}/data-exports).
          *     Body (20001 with `data.fields` naming a missing or invalid field): `reason` (1–200
@@ -4937,7 +4938,7 @@ export interface paths {
          *     /admin/v1/users/{user_id}/data-exports/{export_id}/download). The template codes of the
          *     in-app message and the SMS are fixed with the implementation; the wording waits for
          *     BR-TEXT.
-         *     Audit (BR-ID-40): every registration that passes the permission, step-up and body checks
+         *     Audit (BR-ID-40): every registration that passes the permission and body checks
          *     writes one audit record (action user_data_copy_request: admin, user, reason, the two
          *     channel facts, the result — created, reused with the returned request's id, or the
          *     refusal code); generating and delivering write their own records. No Idempotency-Key
@@ -4964,8 +4965,7 @@ export interface paths {
          * @description Only for requests with delivery `wecom_session` (BR-ID-40 细则「企业微信会话交付的下载」;
          *     04 §6.6): the copy holds the full phone number and the Agent conversations, so the caller
          *     must hold both `user.data_export` and `pii.reveal_phone` (04 §11.2; lacking either is
-         *     10403 with `data.reason=admin_permission_denied`) and every call needs a valid totp-tier
-         *     `X-Step-Up-Token` (else 10003 with `data.tier=totp`). Only the registrant
+         *     10403 with `data.reason=admin_permission_denied`). Only the registrant
          *     (`requested_by`) can download, even a super admin cannot download another account's
          *     request: an unknown `export_id`, a request of another user or another app, an
          *     `in_app_sms` request and another account's request are all 20001 with
@@ -5367,8 +5367,7 @@ export interface paths {
          * Assign an unattributed sub-order to a user
          * @description Unattributed order assignment (01 F-ADM-05; 04 §6.6 `orders/{id}/reassign`; BR-ATTR-31).
          *     Permission point `order.assign` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier (动态码; without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). One admin completes it alone
+         *     `data.reason=admin_permission_denied`. One admin completes it alone
          *     (ADD-05). No Idempotency-Key: only an order whose user_id is null is accepted, so a repeated
          *     submit gets 20902.
          *
@@ -5518,10 +5517,8 @@ export interface paths {
          * @description Excel import of the order console (01 F-ORD-10; 04 §6.6 `rights-imports`; 04 §3.2
          *     rights_imports). Permission point `order.claim` (04 §11.2); lacking it is 10403 with
          *     `data.reason=admin_permission_denied`. Only `kind=channel` (渠道单) writes the blocklist
-         *     and therefore also needs permission point `risk.blocklist` and step-up of the totp tier
-         *     (动态码; without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`;
-         *     BR-ATTR-26 细则「渠道单导入」); rights and punish need neither. The handler checks this
-         *     condition, so the operation carries no operation-level step-up marker. No Idempotency-Key.
+         *     and therefore also needs permission point `risk.blocklist` (BR-ATTR-26 细则「渠道单导入」);
+         *     rights and punish do not. No Idempotency-Key.
          *
          *     `multipart/form-data` with the parts:
          *     - `kind` (enum rights_import_kind): rights (维权单, by sub-order number: every row must
@@ -5879,8 +5876,7 @@ export interface paths {
         /**
          * Start an OAuth re-authorization of a station-owner union account
          * @description Permission point `union.account_auth` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`; 01 F-ADM-16). The body holds
+         *     `data.reason=admin_permission_denied`. Step-up: sudo (BR-ID-34 sudo list「换绑或重置联盟账号」): no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again. The body holds
          *     only an optional `reason` (1–200 characters, else 20001 with `data.fields=[reason]`;
          *     BR-ID-24 细则「后台联盟账号列表」).
          *     Only for an account whose `reauth_mode` is `oauth` (any platform whose station-owner
@@ -5999,8 +5995,7 @@ export interface paths {
         /**
          * Enter a new station-owner credential by hand (reauth_mode manual)
          * @description Permission point `union.account_auth` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). For an account whose
+         *     `data.reason=admin_permission_denied`. Step-up: sudo (BR-ID-34 sudo list「换绑或重置联盟账号」): no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again. For an account whose
          *     `reauth_mode` is `manual` only: a station-owner credential that is not OAuth but that
          *     the owner takes again from the union's own console, such as the JD 推客授权 Key
          *     (CAP-JD-12; BR-ID-24 细则「后台告警手机号与重新授权会话」, orchestrator ruling D10-159 and
@@ -6056,9 +6051,8 @@ export interface paths {
         /**
          * Add an alert phone number
          * @description Permission point `union.account_auth` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`; 01 F-ADM-16). Order of
-         *     checks, the first hit is returned: permission, step-up → body (20001 with `data.fields`
+         *     `data.reason=admin_permission_denied`. Order of
+         *     checks, the first hit is returned: permission → body (20001 with `data.fields`
          *     naming the field; `reason` optional, 1–200 characters) → `phone` normalized by BR-ID-05
          *     细则「手机号规范化」, not a mainland 11-digit number → 20001 with `data.fields=[phone]` and
          *     `data.reason=phone_invalid` (as users/{user_id}/profile) → CAS: `expected_version` is
@@ -6075,8 +6069,7 @@ export interface paths {
         /**
          * Remove an alert phone number
          * @description Permission point `union.account_auth` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). No body and no reason: the
+         *     `data.reason=admin_permission_denied`. No body and no reason: the
          *     query holds only the identifiers `phone_id` and `expected_version`, so no free text
          *     reaches the URL or the access log (04 §6.6, orchestrator 2026-10-22). `phone_id` is a
          *     query parameter here, not the path segment of 04 §6.6
@@ -6154,8 +6147,7 @@ export interface paths {
         /**
          * Register a PID (always pending)
          * @description Permission point `union.pid` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). Body checks, each 20001
+         *     `data.reason=admin_permission_denied`. Step-up: sudo (BR-ID-34 sudo list「改推广位 PID」): no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again. Body checks, each 20001
          *     with `data.fields` naming the field (04 §6.6 union-pids): `platform` not in enum
          *     platform; `union_account_id` unknown, of another app or of another platform;
          *     `site_id` missing for taobao, or given (not null) for any other platform; `pid` or
@@ -6190,8 +6182,7 @@ export interface paths {
         /**
          * Change a pending PID
          * @description Permission point `union.pid` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). Only a pending row can be
+         *     `data.reason=admin_permission_denied`. Step-up: sudo (BR-ID-34 sudo list「改推广位 PID」): no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again. Only a pending row can be
          *     changed (orchestrator ruling D10-159, BR-ATTR-02 细则「后台修改与启用的裁定」): any of
          *     `platform`, `union_account_id`, `site_id`, `pid`, `pid_scene` (at least one, else
          *     20001 with `data.fields=[body]`), with `expected_row_version` and an optional `reason`. An unknown `pid_id`, or one of another
@@ -6222,8 +6213,7 @@ export interface paths {
         /**
          * Activate a pending PID, with the 花卷云 ignore confirmation and screenshot
          * @description Permission point `union.pid` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). `multipart/form-data` with
+         *     `data.reason=admin_permission_denied`. Step-up: sudo (BR-ID-34 sudo list「改推广位 PID」): no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again. `multipart/form-data` with
          *     the parts `expected_row_version`, `hjy_ignore_confirmed_at` (when the 花卷云 ignore was
          *     confirmed, not later than now), the screenshot file `hjy_ignore_evidence` (PNG or JPEG,
          *     at most 5 MB) and an optional `reason` (1–200 characters) (BR-ATTR-02 细则「后台修改与启用的裁定」,
@@ -6269,8 +6259,7 @@ export interface paths {
         /**
          * Retire an active PID (stays on the whitelist)
          * @description Permission point `union.pid` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). Body `expected_row_version`
+         *     `data.reason=admin_permission_denied`. Step-up: sudo (BR-ID-34 sudo list「改推广位 PID」): no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again. Body `expected_row_version`
          *     and an optional `reason` (1–200 characters; 20001 with `data.fields` naming a bad
          *     field). An unknown `pid_id`, or one of another app, is 20001 with `data.fields=[pid_id]`.
          *     Only active → retired (BR-ATTR-02 细则「后台登记与启停」): a pending or retired row, or an
@@ -6959,8 +6948,7 @@ export interface paths {
         /**
          * Publish a new version of an agreement
          * @description Permission point `content.agreement` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier for every publish (without a
-         *     valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`; 04 §11.2 动态码, OPS-14).
+         *     `data.reason=admin_permission_denied`.
          *     The version number is the type's current newest version + 1 (1 for the first), set by the
          *     server. `title` and `body` (tiptap JSON as a string, nodes and marks within the agreement
          *     body whitelist) are the text; `min_version` is the oldest version still valid (BR-ID-12:
@@ -7477,12 +7465,11 @@ export interface paths {
          * Save and publish dictionary texts
          * @description Saving publishes (no separate draft step, 编排者默认): the changed keys take effect as a new
          *     dictionary version (BR-TEXT-12 细则). One request changes keys of one class only, and the
-         *     class picks the permission point and step-up (04 §11.2, BR-ID-34): `general` →
-         *     `config.general`, no step-up; `fund_terms` → `content.fund_terms`, totp tier every time;
-         *     `agreement` → `content.agreement`, totp tier, and `legal_confirmed_by` is required. Keys
+         *     class picks the permission point (04 §11.2): `general` → `config.general`; `fund_terms` →
+         *     `content.fund_terms`; `agreement` → `content.agreement`, and `legal_confirmed_by` is
+         *     required. No step-up for any class (BR-ID-34: none). Keys
          *     of more than one class → 20001 with `data.fields=[changes]`; lacking the class's point →
-         *     10403 with `data.reason=admin_permission_denied`; without a valid totp-tier
-         *     `X-Step-Up-Token` where needed → 10003 with `data.tier=totp`. A key the server cannot
+         *     10403 with `data.reason=admin_permission_denied`. A key the server cannot
          *     classify counts as a fund term key (BR-TEXT-12 细则). `admin_dict.*` keys (BR-TEXT-25) are
          *     classed the same way, by specs/fund-term-keys.yaml (fund term keys → `fund_terms`, the
          *     others → `general`); no permission point of their own. Every change is checked first, and
@@ -7547,12 +7534,11 @@ export interface paths {
          * @description Writes, for every key in `keys`, the text the key had at dictionary version `to_version`
          *     (its newest row at or below that version; none, or `to_version` 0 → null, back to the
          *     bundled default) as a new row at a new dictionary version (current plus 1); history is
-         *     never rewritten (BR-TEXT-12 细则). Classes, permission point, step-up and
+         *     never rewritten (BR-TEXT-12 细则). Classes, permission point and
          *     `legal_confirmed_by` as for PUT /admin/v1/dict-items (one class per request: `general` →
-         *     `config.general`, no step-up; `fund_terms` → `content.fund_terms`, totp tier;
-         *     `agreement` → `content.agreement`, totp tier and `legal_confirmed_by`; mixed classes →
-         *     20001 with `data.fields=[keys]`; lacking the point → 10403; without a valid totp-tier
-         *     `X-Step-Up-Token` where needed → 10003 with `data.tier=totp`). Checked first, with nothing
+         *     `config.general`; `fund_terms` → `content.fund_terms`; `agreement` →
+         *     `content.agreement` and `legal_confirmed_by`; mixed classes → 20001 with
+         *     `data.fields=[keys]`; lacking the point → 10403; no step-up). Checked first, with nothing
          *     written on failure (20001): `to_version` not lower than the current dictionary version →
          *     `data.fields=[to_version]`; a key in neither contracts/texts.default.json nor
          *     contracts/texts.admin.default.json, or listed twice →
@@ -7690,11 +7676,10 @@ export interface paths {
         /**
          * Turn the push or SMS channel of a template code on or off
          * @description Permission point `notify.channels` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). Only switching: no
+         *     `data.reason=admin_permission_denied`. Only switching: no
          *     `content.fund_terms` is needed, also for a fund code (BR-TEXT-20 细则). The switch applies
          *     to the code as a whole (every variant). Order of checks, the first hit is returned:
-         *     permission, step-up → `code` not a template code of the app → 20001 with
+         *     permission → `code` not a template code of the app → 20001 with
          *     `data.fields=[code]` → body (20001 with `data.fields` naming the field; neither `push`
          *     nor `sms` given → `data.fields=[push, sms]`) → what the item of GET
          *     /admin/v1/notify-channels allows: `push` given on a code whose `push_switchable` is false
@@ -7733,16 +7718,13 @@ export interface paths {
          * Save an SMS registration of a template code as pending and test-send it
          * @description Permission point `notify.channels` (04 §11.2), and for a fund code (`fund_terms` true in
          *     GET /admin/v1/notify-channels) also `content.fund_terms`; lacking either is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call, one code for the
-         *     save and its test send (without a valid totp-tier `X-Step-Up-Token` → 10003 with
-         *     `data.tier=totp`). One registration per code × variant (`variant` query parameter,
+         *     `data.reason=admin_permission_denied`. One registration per code × variant (`variant` query parameter,
          *     `default` when absent). The signature and template are applied for and approved in the
          *     provider's console (Aliyun SMS); here they are only registered, and `preview_text` is the
          *     approved text as the operator copies it (not checked against the provider in MVP, 规划/09
          *     CAP-X-09). Rules: 08 BR-TEXT-20 细则「短信渠道登记与后台渠道开关」 (「待测试」登记与启用,
          *     D10-337 ①, D10-339 ⑤).
-         *     Order of checks, the first hit is returned, nothing is saved on any of them: permission,
-         *     step-up → `code` not a template code of the app → 20001 with `data.fields=[code]` → a
+         *     Order of checks, the first hit is returned, nothing is saved on any of them: permission → `code` not a template code of the app → 20001 with `data.fields=[code]` → a
          *     fund code without `content.fund_terms` → 10403 → the code may not send SMS (neither
          *     `sms_fixed` nor `sms_switchable`) → 20001 with `data.fields=[code]` and
          *     `data.reason=notify_channel_locked` → `variant` not a variant of the code → 20001 with
@@ -7774,14 +7756,14 @@ export interface paths {
          *       (orchestrator ruling D10-342 ②);
          *     - the account has no verify phone (also when it lost it after the page was loaded) → the
          *       pending registration is still saved, nothing is sent, 200 with
-         *       `pending.test.status=not_sent_no_verify_phone` and `test_send_phone_masked` null (never
-         *       10003 here, D10-339 ⑤);
+         *       `pending.test.status=not_sent_no_verify_phone` and `test_send_phone_masked` null (not an
+         *       error here, D10-339 ⑤);
          *     - not accepted: the provider rejects it (including a wrong signature or template CODE) or
          *       errors → 50301; times out or the outcome is unknown → 50401 (D10-335 ③). The pending
          *       registration is saved anyway with `test.status=failed` and `row_version` raised, so the
          *       console refreshes the list after these codes; the active registration stays in force.
          *     The test SMS counts against the provider's rate limits for that phone and may delay the
-         *     operator's own sms-tier step-up codes right after. Saving and the test result are written
+         *     operator's own second-factor SMS codes right after. Saving and the test result are written
          *     under the `row_version` checked above in one transaction after the provider answers
          *     (20902 when the code changed meanwhile; the test SMS may already have gone out). Audit:
          *     every save writes one record (action notify_sms_register: code, variant, the pending or
@@ -7842,17 +7824,15 @@ export interface paths {
         /**
          * Test-send the pending SMS registration of a code × variant again
          * @description Permission point `notify.channels` (04 §11.2; no `content.fund_terms`, also for a fund
-         *     code); lacking it is 10403 with `data.reason=admin_permission_denied`. Step-up: totp tier
-         *     on every call (without a valid totp-tier `X-Step-Up-Token` → 10003 with
-         *     `data.tier=totp`). 「测试发送 / 重新测试」 of the pending registration of the code ×
+         *     code); lacking it is 10403 with `data.reason=admin_permission_denied`. 「测试发送 / 重新测试」 of the pending registration of the code ×
          *     variant (`variant`, `default` when absent), whatever its current test result. Order of
-         *     checks, the first hit is returned: permission, step-up → `code` not a template code of the
+         *     checks, the first hit is returned: permission → `code` not a template code of the
          *     app → 20001 with `data.fields=[code]` → `variant` not a variant of the code → 20001 with
          *     `data.fields=[variant]` → body (20001 with `data.fields` naming the field; a `sample` key
          *     that is not one of the variant's variables → `data.fields=[sample]`) → no pending
          *     registration → 20001 with `data.fields=[variant]` → `row_version` differs from the code's
          *     current one → 20902 without data → the account has no verify phone (BR-ID-45) → 10003
-         *     with `data.tier=totp` and `data.reason=verify_phone_missing` (no step-up prompt: register
+         *     with `data.reason=verify_phone_missing` (no step-up prompt: register
          *     the verify phone first; this operation is the only one that returns it, D10-339 ⑤),
          *     nothing sent or saved. Otherwise one SMS goes synchronously to the operator's own verify
          *     phone with the pending signature and template CODE, filled with `sample` (variables not
@@ -7886,10 +7866,9 @@ export interface paths {
          * Enable the pending SMS registration of a code × variant (test accepted)
          * @description Permission point `notify.channels` (04 §11.2), and for a fund code also
          *     `content.fund_terms` (D10-339 ③); lacking either is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). 「启用新配置」, from the test
+         *     `data.reason=admin_permission_denied`. 「启用新配置」, from the test
          *     result dialog or later from the code's edit drawer (D10-339 ①). Order of checks, the
-         *     first hit is returned: permission, step-up → `code` not a template code of the app →
+         *     first hit is returned: permission → `code` not a template code of the app →
          *     20001 with `data.fields=[code]` → a fund code without `content.fund_terms` → 10403 →
          *     `variant` not a variant of the code → 20001 with `data.fields=[variant]` → body (20001
          *     with `data.fields` naming the field) → no pending registration, or its `test.status` is
@@ -7899,7 +7878,7 @@ export interface paths {
          *     without data. The gate is the pending registration's accepted test, which already
          *     satisfied BR-TEXT-20's test send to a verify phone: the enabling operator needs no verify
          *     phone of their own and nothing is sent here (orchestrator ruling D10-342 ②; permission
-         *     and step-up as above). Otherwise the pending registration becomes the active one of the code ×
+         *     as above). Otherwise the pending registration becomes the active one of the code ×
          *     variant (replacing the earlier active one; `enabled_at` = now), the pending one is
          *     cleared and `row_version` goes up by 1; from then on that code × variant is sent with it
          *     (for `SMS_CODE` the deployment fallback no longer applies). When this makes `sms_ready`
@@ -7955,11 +7934,8 @@ export interface paths {
         /**
          * Save the version settings of one platform and channel (created when absent)
          * @description Permission point `content.app_version` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up by request (04 §11.2, BR-ID-34): when the
-         *     saved `min_supported_version` is higher than before (none before — no row yet, or null —
-         *     counts as higher), a totp-tier `X-Step-Up-Token` is required (without one → 10003 with
-         *     `data.tier=totp`; operation `content.app_version.raise_min_supported_version`); any other
-         *     save needs no step-up. Only ios, android and harmony are saved here (h5 and admin rows are
+         *     `data.reason=admin_permission_denied`. No step-up, raising `min_supported_version`
+         *     included (BR-ID-34: none). Only ios, android and harmony are saved here (h5 and admin rows are
          *     read-only). The request replaces the whole row. CAS: `expected_row_version` is the
          *     row's `row_version` as the console showed it, null when this platform and channel has no
          *     row yet (the save creates it); a mismatch — including null while a row exists, or a
@@ -8033,8 +8009,7 @@ export interface paths {
         /**
          * Enable one risk rule
          * @description Permission point `config.risk` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). Body checks (20001 with
+         *     `data.reason=admin_permission_denied`. Body checks (20001 with
          *     `data.fields` naming the field): `expected_version` is required; `reason` is optional
          *     (1–200 characters). An unknown `rule_id`, or one of another app, is 20001 with
          *     `data.fields=[rule_id]`. CAS: `expected_version` is the rule's `version` as GET
@@ -8066,8 +8041,7 @@ export interface paths {
         /**
          * Disable one risk rule
          * @description Permission point `config.risk` (04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up: totp tier on every call (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). Body checks (20001 with
+         *     `data.reason=admin_permission_denied`. Body checks (20001 with
          *     `data.fields` naming the field): `expected_version` is required; `reason` is optional
          *     (1–200 characters). An unknown `rule_id`, or one of another app, is 20001 with
          *     `data.fields=[rule_id]`. CAS: `expected_version` is the rule's `version` as GET
@@ -8216,7 +8190,8 @@ export interface paths {
          *     a freeze (frozen), `risk.blocklist` for a blocked_request appeal whose request a
          *     blocklist entry blocked (cause blocklist; 编排裁定 D10-154); null otherwise (order
          *     appeals, blocked requests blocked by another rule). When it is not null revoking also
-         *     needs a totp-tier step-up; upholding never needs either.
+         *     needs the point; only `risk.freeze` (revoking a freeze) also needs the sudo step-up (BR-ID-34);
+         *     upholding never needs either.
          *
          *     `blocked_request` is the blocked request (request type, the amount for a withdrawal,
          *     when it was blocked and the reason category) for a blocked_request appeal, null
@@ -8298,10 +8273,11 @@ export interface paths {
          *     permission point `risk.appeal` always. Revoking an account appeal against a ban
          *     (prev_risk_state banned) also needs `risk.ban`, against a freeze (frozen) also
          *     `risk.freeze`, and revoking a blocked_request appeal whose request a blocklist entry
-         *     blocked (cause blocklist) also `risk.blocklist` (编排裁定 D10-154); each of these three
-         *     also needs a totp-tier `X-Step-Up-Token`. Upholding, revoking an order appeal and
-         *     revoking a blocked_request appeal blocked by another rule (cause rule) need `risk.appeal`
-         *     only and no step-up. GET /admin/v1/appeals/{appeal_id} returns the extra point as
+         *     blocked (cause blocklist) also `risk.blocklist` (编排裁定 D10-154). Only revoking a freeze
+         *     also needs step-up: sudo (BR-ID-34 sudo list「解除提现冻结」: 申诉结案撤销冻结; no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again).
+         *     Revoking a ban or a blocklist block needs its point but no step-up (BR-ID-34: none);
+         *     upholding, revoking an order appeal and revoking a blocked_request appeal blocked by
+         *     another rule (cause rule) need `risk.appeal` only. GET /admin/v1/appeals/{appeal_id} returns the extra point as
          *     `revoke_permission`.
          *
          *     Order of checks: `risk.appeal` (10403 with `data.reason=admin_permission_denied`) →
@@ -8309,7 +8285,8 @@ export interface paths {
          *     another app (20001 with `data.fields=[appeal_id]`) → an appeal no longer processing, or
          *     whose `row_version` is not `expected_row_version` (20902 with `data.resource=appeal`,
          *     nothing changed; refresh) → for `revoked`, the extra permission point (10403 with
-         *     `data.reason=admin_permission_denied`) → its step-up (10003 with `data.tier=totp`).
+         *     `data.reason=admin_permission_denied`) → for revoking a freeze, its step-up (10003 with
+         *     `data.tier=sudo`).
          *
          *     Effects, in one transaction: `status` becomes the decision, `closed_at` the server's
          *     current time, `handler_id` the caller (the resolver, whoever claimed it), `claimed_at`
@@ -8472,8 +8449,7 @@ export interface paths {
         /**
          * Settle a needs_manual pay order by querying the channel now
          * @description The manual settlement of BR-PAY-05 ③ (【立即查询】). Permission point `pay.resolve`
-         *     (04 §11.2). Step-up: totp tier (04 §11.2, BR-ID-34): without a valid totp-tier
-         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`. Only for a pay order with
+         *     (04 §11.2). Only for a pay order with
          *     `needs_manual=true` in status PENDING: the body is fixed (`expected_status=PENDING`,
          *     `action=query_and_settle`); the console sends no channel result, status or evidence of
          *     its own. A pay order that is no longer PENDING, or whose `needs_manual` is false, is 20902
@@ -8762,8 +8738,13 @@ export interface paths {
          * Close a reconciliation difference of source R1–R3 without further handling (结案)
          * @description Closes a 差错单 as 「已关闭（不处理）」 with a required reason (01 F-ADM-08; 04 §3.2
          *     recon_diffs, withdraw_holds; BR-FUND-19, BR-FUND-22; design/specs/admin-recon.md §4).
-         *     Permission point `fund.recon` (04 §11.2; `fund.view` alone is not enough); no step-up
-         *     (04 §11.2, design/specs/admin-recon.md §5).
+         *     Permission point `fund.recon` (04 §11.2; `fund.view` alone is not enough). Step-up only
+         *     when the close releases a withdrawal hold (the difference has an unreleased
+         *     withdraw_holds row whose source is this difference): sudo (BR-ID-34 sudo list「解除提现冻结」:
+         *     关闭会解除提现冻结的差错单; no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again). A close that releases no hold needs no step-up
+         *     (BR-ID-34: none); a close checked as one that releases no hold but that would release
+         *     one after all (a hold added meanwhile) is 20902 with `data.resource=recon_diff`, nothing
+         *     changed.
          *
          *     Request: `reason`, required: after trimming surrounding whitespace 1–200 characters, else
          *     20001 with `data.fields=[reason]`. Only a difference of source R1, R2 or R3 whose `status`
@@ -8855,8 +8836,7 @@ export interface paths {
          *     operation settles the original withdrawal as PAID_API on that evidence (BR-WDR-08 W11,
          *     owner decision 2026-10-03 决-08 A), so the member is paid once, never twice.
          *     Permission point `payout.execute` (04 §11.2; the reviewer of the withdrawal may do it,
-         *     ADD-05). Step-up: totp tier (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` →
-         *     10003 with `data.tier=totp`.
+         *     ADD-05).
          *
          *     Request: `expected_withdrawal_status`, fixed `APPROVED` (the console confirms what it
          *     showed); `note`, optional, 1–200 characters after trimming (else 20001 with
@@ -8867,12 +8847,10 @@ export interface paths {
          *     The route schema runs first (D10-590 ⑥, D10-1132, as every console route): a body that
          *     fails it (for example a missing `expected_withdrawal_status`, an
          *     `expected_withdrawal_status` other than `APPROVED`, an extra key, or a non-string or
-         *     over-long `note`) is 20001 before `payout.execute` and step-up, with or without that
-         *     permission or a step-up token, and writes nothing; a well-formed body follows the order
+         *     over-long `note`) is 20001 before `payout.execute` with or without that permission, and writes nothing; a well-formed body follows the order
          *     below, where the body step covers the checks after the schema (for example a `note` that
          *     is blank after trimming).
-         *     Order of checks: `payout.execute` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → body (20001) → an unknown `recon_diff_id`, a difference of another
+         *     Order of checks: `payout.execute` (10403 with `data.reason=admin_permission_denied`) → body (20001) → an unknown `recon_diff_id`, a difference of another
          *     app, or one of source R4 is 20001 with `data.fields=[recon_diff_id]` (no 404) → a
          *     difference already `closed`, `adjusted` or `written_off` is 20902 with
          *     `data.resource=recon_diff` → the W11 guard, each refusal 20001 with
@@ -8913,8 +8891,7 @@ export interface paths {
          *     (BR-WDR-23).
          *
          *     `Idempotency-Key` is required: same key and body → the first result; same key with
-         *     another body → 20901; same key while still running → 40901. The step-up token is a
-         *     header and not part of the body hash, so a replay after a 10003 keeps its key.
+         *     another body → 20901; same key while still running → 40901.
          */
         post: operations["writeOffAdminReconDiff"];
         delete?: never;
@@ -8954,8 +8931,7 @@ export interface paths {
          *     `rebate_status` (VOID or CLAWED_BACK when registered) and `platform_status`, and no
          *     `shares`). The list and the detail are
          *     GET /admin/v1/recon-diffs and GET /admin/v1/recon-diffs/{recon_diff_id}. Permission point
-         *     `order.restore` (04 §11.2; one person can complete it, ADD-05). Step-up: totp tier
-         *     (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *     `order.restore` (04 §11.2; one person can complete it, ADD-05).
          *
          *     Request: `note`, optional, 1–200 characters after trimming (else 20001 with
          *     `data.fields=[note]`), recorded under `resolution.note`; the body is `{}` without it. The
@@ -8964,11 +8940,10 @@ export interface paths {
          *
          *     The route schema runs first (D10-590 ⑥, D10-1132, as every console route): a body that
          *     fails it (for example an extra key, or a non-string or over-long `note`) is 20001 before
-         *     `order.restore` and step-up, with or without that permission or a step-up token, and
+         *     `order.restore` with or without that permission, and
          *     writes nothing; a well-formed body follows the order below, where the body step covers the
          *     checks after the schema (for example a `note` that is blank after trimming).
-         *     Order of checks: `order.restore` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → body (20001) → an unknown `recon_diff_id`, a difference of another app,
+         *     Order of checks: `order.restore` (10403 with `data.reason=admin_permission_denied`) → body (20001) → an unknown `recon_diff_id`, a difference of another app,
          *     or one of source R4 is 20001 with `data.fields=[recon_diff_id]` (no 404) → a difference
          *     already `adjusted`, `written_off` or `closed` is 20902 with `data.resource=recon_diff` →
          *     a difference whose `type` is neither `appeal_restore` nor `platform_restore`, or an
@@ -9108,8 +9083,7 @@ export interface paths {
          *
          *     `Idempotency-Key` is required: same key and body → the first result (the same
          *     `restored_fen`); same key with another body → 20901; same key while still running →
-         *     40901. A new key for a difference that is already `adjusted` is 20902. The step-up token
-         *     is a header and not part of the body hash, so a replay after a 10003 keeps its key. The
+         *     40901. A new key for a difference that is already `adjusted` is 20902. The
          *     same holds for both types.
          */
         post: operations["restoreAdminReconDiff"];
@@ -9143,8 +9117,6 @@ export interface paths {
          *     GET /admin/v1/recon-diffs/{recon_diff_id}. This operation is the conclusion 「扣回」. The
          *     conclusion 「不扣回」 is POST /admin/v1/recon-diffs/{recon_diff_id}/close, unchanged.
          *     Permission point `order.blacklist_clawback` (one person can complete it, ADD-05).
-         *     Step-up: totp tier (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with
-         *     `data.tier=totp`.
          *
          *     Request: `note`, optional, 1–200 characters after trimming (else 20001 with
          *     `data.fields=[note]`), recorded under `resolution.note`; the body is `{}` without it. The
@@ -9152,7 +9124,7 @@ export interface paths {
          *     taken back is calculated by the server when this operation runs, and may differ from it.
          *
          *     Order of checks: `order.blacklist_clawback` (10403 with
-         *     `data.reason=admin_permission_denied`) → step-up (10003) → body (20001) → an unknown
+         *     `data.reason=admin_permission_denied`) → body (20001) → an unknown
          *     `recon_diff_id`, a difference of another app, or one of source R4 is 20001 with
          *     `data.fields=[recon_diff_id]` (no 404) → a difference already `adjusted`, `written_off`
          *     or `closed` is 20902 with `data.resource=recon_diff` → a difference whose `type` is not
@@ -9184,8 +9156,7 @@ export interface paths {
          *
          *     `Idempotency-Key` is required: same key and body → the first result (the same
          *     `clawed_back_fen`); same key with another body → 20901; same key while still running →
-         *     40901. A new key for a difference that is already `adjusted` is 20902. The step-up token
-         *     is a header and not part of the body hash, so a replay after a 10003 keeps its key.
+         *     40901. A new key for a difference that is already `adjusted` is 20902.
          */
         post: operations["blacklistClawbackAdminReconDiff"];
         delete?: never;
@@ -9211,11 +9182,7 @@ export interface paths {
          *     recalculation from the difference; the server sets the cache to the entry sums. The
          *     handler cannot enter an amount. The list and the detail are GET /admin/v1/recon-diffs and
          *     GET /admin/v1/recon-diffs/{recon_diff_id}. Permission point `fund.recon` (04 §11.1, §11.2;
-         *     `fund.view` alone is not enough). Step-up: sms tier (BR-ID-34; operation
-         *     `fund.recon.balance_recalc` of specs/permissions.yaml, the only step-up operation under
-         *     `fund.recon`, see GET /admin/v1/me/permissions): without a valid sms-tier
-         *     `X-Step-Up-Token`, a totp-tier token included → 10003 with `data.tier=sms`; an account
-         *     without a registered verify phone also gets `data.reason=verify_phone_missing`.
+         *     `fund.view` alone is not enough).
          *
          *     Request: `reason`, required: after trimming surrounding whitespace 1–200 characters, else
          *     20001 with `data.fields=[reason]` (as POST .../close); recorded in the audit record. The
@@ -9233,11 +9200,10 @@ export interface paths {
          *
          *     The route schema runs first (D10-590 ⑥, D10-1132, as every console route): a body that
          *     fails it (a missing `reason`, a non-string or over-long `reason`, an extra key) is 20001
-         *     before `fund.recon` and step-up, with or without that permission or a step-up token, and
+         *     before `fund.recon` with or without that permission, and
          *     writes nothing; a well-formed body follows the order below, where the body step covers
          *     the checks after the schema (a `reason` that is blank after trimming).
-         *     Order of checks: `fund.recon` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → body (20001 with `data.fields=[reason]`) → an unknown
+         *     Order of checks: `fund.recon` (10403 with `data.reason=admin_permission_denied`) → body (20001 with `data.fields=[reason]`) → an unknown
          *     `recon_diff_id`, a difference of another app, or one of source R4 (see
          *     GET /admin/v1/pay-recon-diffs) is 20001 with `data.fields=[recon_diff_id]` (no 404) → a
          *     difference whose `type` is not `ledger_mismatch`, whose `status` is `adjusted`,
@@ -9331,9 +9297,7 @@ export interface paths {
          *     No Idempotency-Key (04 §6.6): the operation sets the cache to a value derived from the
          *     entries under the lock, so a repeated call on the same difference, a retry after a lost
          *     response included, is not an error and normally answers `changed=false`, with an audit
-         *     record of its own. Each call needs its own sms-tier step-up: the token of a call that
-         *     succeeded is spent, so a retry that reuses it is 10003 with `data.tier=sms` and changes
-         *     nothing; the console asks for a new code and calls again. Two calls at once are serialized by the locks; the second reads the
+         *     record of its own. Two calls at once are serialized by the locks; the second reads the
          *     cache the first wrote. A posting committed between two calls is in the entries and in
          *     the cache alike, so the second call does not undo it.
          */
@@ -9376,10 +9340,7 @@ export interface paths {
          *     design/specs/admin-adjustments.md 新建抽屉, 红冲对话框, and the 【调整余额】 of the user detail).
          *     One submission saves and approves at once: there is no 保存待批 and no 撤回, and the form
          *     is born APPROVED with `reviewed_by` equal to `created_by` (BR-FUND-24 细则「后台入口」, owner
-         *     2026-10-18 ②; ADD-05). Permission point `fund.adjust` (04 §11.2). Step-up: sms tier
-         *     (BR-ID-34): without a valid sms-tier `X-Step-Up-Token`, a totp-tier token included → 10003
-         *     with `data.tier=sms`; an account without a registered verify phone also gets
-         *     `data.reason=verify_phone_missing`.
+         *     2026-10-18 ②; ADD-05). Permission point `fund.adjust` (04 §11.2). Step-up: strict (BR-ID-34 strict list「人工调账」): every call needs a valid `X-Step-Up-Token`, the sudo window does not apply (without one → 10003 with `data.tier=strict`); a token serves one successful call.
          *
          *     Request, one of two closed shapes (AdminAdjustmentCreateRequest):
          *
@@ -9518,9 +9479,7 @@ export interface paths {
          *     design/specs/admin-adjustments.md). Only a PENDING form can be approved, and the only
          *     PENDING forms are the ACCOUNT_CLOSED decreases the system prefills when a deletion reaches
          *     processing: a form a person submits is APPROVED from the start. Permission point
-         *     `fund.adjust` (04 §11.2). Step-up: sms tier (BR-ID-34): without a valid sms-tier
-         *     `X-Step-Up-Token`, a totp-tier token included → 10003 with `data.tier=sms`; an account
-         *     without a registered verify phone also gets `data.reason=verify_phone_missing`.
+         *     `fund.adjust` (04 §11.2). Step-up: strict (BR-ID-34 strict list「人工调账」): every call needs a valid `X-Step-Up-Token`, the sudo window does not apply (without one → 10003 with `data.tier=strict`); a token serves one successful call.
          *
          *     Request: an empty object. The console sends no amount: `amount_fen` is the member's
          *     `available` when this operation runs, which may differ from the preview.
@@ -9566,7 +9525,7 @@ export interface paths {
          * @description The 【驳回】 of the 批准对话框 (BR-FUND-24 ① and 细则「驳回与撤回不需二次验证」;
          *     design/specs/admin-adjustments.md). Only a PENDING form can be rejected, which means a
          *     system-prefilled ACCOUNT_CLOSED form (see POST .../approve). Permission point `fund.adjust`
-         *     (04 §11.2). No step-up of either tier: only approval needs one.
+         *     (04 §11.2). No step-up: only submitting and approving need one (strict).
          *
          *     Request: `reason`, required: after trimming surrounding whitespace 1–200 characters, else
          *     20001 with `data.fields=[reason]`.
@@ -9640,10 +9599,7 @@ export interface paths {
          * Approve a write-off candidate; the amount is the balance read at approval
          * @description The 【批准核销】 of the 坏账核销 tab (BR-FUND-12; 04 §3.2 bad_debt_writeoffs;
          *     design/specs/admin-adjustments.md 批准核销对话框). A write-off is never automatic. Permission
-         *     point `fund.writeoff` (04 §11.2; one person can complete it, ADD-05). Step-up: sms tier
-         *     (BR-ID-34): without a valid sms-tier `X-Step-Up-Token`, a totp-tier token included → 10003
-         *     with `data.tier=sms`; an account without a registered verify phone also gets
-         *     `data.reason=verify_phone_missing`.
+         *     point `fund.writeoff` (04 §11.2; one person can complete it, ADD-05). Step-up: strict (BR-ID-34 strict list「坏账核销」): every call needs a valid `X-Step-Up-Token`, the sudo window does not apply (without one → 10003 with `data.tier=strict`); a token serves one successful call.
          *
          *     Request: an empty object. The console sends no amount: `candidate_fen` is not used.
          *
@@ -9723,16 +9679,13 @@ export interface paths {
         /**
          * Approve a batch of positive settlement differences; each order is recomputed now
          * @description The 【批准补差】 of the 补差批次 list (BR-FUND-09 ②; ADD-05: one person can complete it;
-         *     rulings D10-769, D10-770 ①②③). Permission point `fund.settle_adjust` (04 §11.2). Step-up:
-         *     totp tier (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with
-         *     `data.tier=totp`.
+         *     rulings D10-769, D10-770 ①②③). Permission point `fund.settle_adjust` (04 §11.2).
          *
          *     Request: an empty object. The console sends no amount: every pending candidate of the batch
          *     is recomputed from the order's current `settle_commission_fen` (B_settle by BR-CALC-02 with
          *     the snapshot `reserve_bp`) and the beneficiaries' current nets (as BR-FUND-08).
          *
-         *     Order of checks: `fund.settle_adjust` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → body (20001) → an unknown `batch_id` or a batch of another app is 20001
+         *     Order of checks: `fund.settle_adjust` (10403 with `data.reason=admin_permission_denied`) → body (20001) → an unknown `batch_id` or a batch of another app is 20001
          *     with `data.fields=[batch_id]` (no 404) → a batch already confirmed (`confirmed_at` set: it
          *     was approved or rejected before) is 20902 with `data.resource=settle_adjust_batch`
          *     (refresh). A batch whose remaining candidates were all voided is not refused: the answer is
@@ -9794,7 +9747,7 @@ export interface paths {
         /**
          * Reject the pending candidates of a batch; nothing is written to the ledger
          * @description The 【拒绝补差】 of the 补差批次 list (BR-FUND-09 ②; rulings D10-769, D10-770 ①).
-         *     Permission point `fund.settle_adjust`; step-up totp tier as adminApproveSettleAdjustBatch.
+         *     Permission point `fund.settle_adjust`; no step-up.
          *     Request: `reason` (AdminUserReason). Order of checks as adminApproveSettleAdjustBatch; then
          *     every pending candidate of the batch becomes rejected with the `reason`, `approver_id` the
          *     caller and `decided_at`, and the batch gets `confirmed_by` and `confirmed_at`. No voucher, no
@@ -9820,8 +9773,8 @@ export interface paths {
         /**
          * Queue the positive-difference candidate run of one platform and bill day now
          * @description Finance's manual trigger of R1's positive-difference run (BR-FUND-09: 「finance 可手动触发」;
-         *     rulings D10-769, D10-770). Permission point `fund.settle_adjust`; step-up totp tier as
-         *     adminApproveSettleAdjustBatch. Request: `platform` and `bill_date` (the monthly bill day,
+         *     rulings D10-769, D10-770). Permission point `fund.settle_adjust`; no step-up.
+         *     Request: `platform` and `bill_date` (the monthly bill day,
          *     +08:00). Queues the same job as the scheduled run (settle_jobs.job=settle_adjust) and
          *     answers `submitted`; the job writes a new batch for the orders whose current settlement
          *     record has no pending candidate yet (a candidate is never generated twice for one seq and
@@ -9989,9 +9942,7 @@ export interface paths {
          * Approve the chosen withdrawals, each on its own (批量通过)
          * @description The 【批量通过】 of the withdrawal review page; one withdrawal is a batch of one (01 F-ADM-07;
          *     BR-WDR-10, BR-WDR-05; design/specs/admin-withdrawals.md §2, §4; ruling D10-595). Permission
-         *     point `withdraw.review`; a super admin holds every point. Step-up: totp tier (BR-ID-34): one
-         *     valid totp-tier `X-Step-Up-Token` covers the whole request; without one → 10003 with
-         *     `data.tier=totp`.
+         *     point `withdraw.review`; a super admin holds every point. Step-up: sudo (BR-ID-34 sudo list「提现审核」): no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again.
          *
          *     Request (AdminWithdrawalBatchApproveRequest): `withdrawal_ids`, 1 to 200 ids without
          *     duplicates (200 is 代理补全的默认, D10-595; a duplicate is 20001 with
@@ -10046,8 +9997,7 @@ export interface paths {
          *     BR-WDR-16, BR-WDR-08 W8, BR-WDR-09, BR-WDR-17; ruling D10-595). Finance has already paid the
          *     member from a company account and records it here, so this is the way out while a channel's
          *     transfer interface is not open. Permission point `payout.manual_entry`; a super admin holds
-         *     every point. Step-up: totp tier (BR-ID-34): one valid totp-tier `X-Step-Up-Token` covers the
-         *     whole request; without one → 10003 with `data.tier=totp`. Entering and confirming are one
+         *     every point. Entering and confirming are one
          *     submission and one person may do both, also the reviewer (BR-WDR-16, ADD-05);
          *     `manual_entry_by` and `manual_confirm_by` are both the caller. A separate confirmation step
          *     is not offered.
@@ -10061,11 +10011,10 @@ export interface paths {
          *     paid; any integer reaches the item's own check). A withdrawal may appear only once: a duplicate `withdrawal_id` is 20001 with
          *     `data.fields=[items]`.
          *
-         *     Order of checks: the route schema comes first, before the permission and step-up checks, as
+         *     Order of checks: the route schema comes first, before the permission check, as
          *     on every admin route (D10-591): a body that fails it is 20001 with `data.fields` naming the
          *     field, also for a caller without the permission point or a token, and nothing is written.
-         *     Then `payout.manual_entry` (10403 with `data.reason=admin_permission_denied`) → step-up
-         *     (10003) → the duplicate check. After that the answer is 200 and each item has its own
+         *     Then `payout.manual_entry` (10403 with `data.reason=admin_permission_denied`) → the duplicate check. After that the answer is 200 and each item has its own
          *     result: an item that cannot be recorded never fails the others.
          *
          *     Each item runs in its own transaction, in the order given, under the member's locks and the
@@ -10124,8 +10073,7 @@ export interface paths {
          *     APPROVED row again.
          *
          *     `Idempotency-Key` is required: same key and body → the first result; same key with another
-         *     body → 20901; same key while still running → 40901. The step-up token is a header and not
-         *     part of the body hash, so a replay after a 10003 keeps its key.
+         *     body → 20901; same key while still running → 40901.
          */
         post: operations["adminBatchManualPaid"];
         delete?: never;
@@ -10185,12 +10133,11 @@ export interface paths {
          * @description The 【立即查询】 of the disposal page (BR-WDR-15; rulings D10-595 ③, D10-596 ①, D10-625). The
          *     channel keys live only in the payout process, so this queues one query and answers
          *     `submitted`; the result appears as `latest_query` when the job has run, and the page refreshes
-         *     to see it. Permission point `payout.execute`; a super admin holds every point. Step-up: totp
-         *     tier (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *     to see it. Permission point `payout.execute`; a super admin holds every point.
          *     The request has no body fields.
          *
          *     Order of checks: the route schema first, as on every admin route (D10-591). Then
-         *     `payout.execute` (10403 with `data.reason=admin_permission_denied`) → step-up (10003) → an
+         *     `payout.execute` (10403 with `data.reason=admin_permission_denied`) → an
          *     unknown `withdrawal_id` or one of another app is 20001 with `data.fields=[withdrawal_id]`
          *     (no 404) → a withdrawal that is neither of the two below is 20902 with
          *     `data.resource=withdrawal`.
@@ -10208,8 +10155,7 @@ export interface paths {
          *     Writes an audit record (action payout_query_request, with the `withdrawal_id`, the status and
          *     no personal data) on the transaction that queues the job. `Idempotency-Key` is required:
          *     same key and body → the first answer and no second job; same key with another body → 20901;
-         *     same key while still running → 40901. A new key queries again. The step-up token is a header
-         *     and not part of the body hash, so a replay after a 10003 keeps its key.
+         *     same key while still running → 40901. A new key queries again.
          */
         post: operations["adminQueryPayoutResult"];
         delete?: never;
@@ -10231,8 +10177,7 @@ export interface paths {
          * End a withdrawal whose result stayed unknown (W10, 未知结果处置)
          * @description The 【确认处置】 of the disposal page (BR-WDR-15, BR-WDR-08 W10, BR-WDR-09, BR-WDR-14; rulings
          *     D10-595, D10-625, D10-626). Permission point `payout.execute`; a super admin holds every point;
-         *     one person may do it (ADD-05). Step-up: totp tier (BR-ID-34): without a valid totp-tier
-         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *     one person may do it (ADD-05).
          *
          *     Request (AdminUnknownPayoutResolveRequest): `resolution`, `paid` or `failed`; `proof_text`,
          *     the pasted proof, the query answer or the bill line naming this out_biz_no, 1 to 4000
@@ -10241,7 +10186,7 @@ export interface paths {
          *     characters, no whitespace or NUL, compared exactly) and `paid_at` (when the channel paid).
          *
          *     Order of checks: the route schema first, as on every admin route (D10-591). Then
-         *     `payout.execute` (10403 with `data.reason=admin_permission_denied`) → step-up (10003) →
+         *     `payout.execute` (10403 with `data.reason=admin_permission_denied`) →
          *     a blank `proof_text`, or `paid` without `channel_order_id` or `paid_at`, is 20001 with
          *     `data.fields` naming them → an unknown `withdrawal_id` or one of another app is 20001 with
          *     `data.fields=[withdrawal_id]` (no 404) → a withdrawal not PAYING with `needs_manual=true`, or
@@ -10304,8 +10249,7 @@ export interface paths {
          *
          *     `Idempotency-Key` is required: same key and body → the first result; same key with another
          *     body → 20901; same key while still running → 40901. 2xxxx refusals are not stored, so a fixed
-         *     request can reuse its key. The step-up token is a header and not part of the body hash, so a
-         *     replay after a 10003 keeps its key.
+         *     request can reuse its key.
          */
         post: operations["adminResolveUnknownPayout"];
         delete?: never;
@@ -10327,8 +10271,7 @@ export interface paths {
          * Reject one withdrawal and return its money to the balance (驳回)
          * @description The 【驳回】 of the withdrawal review page and detail (01 F-ADM-07; BR-WDR-10, BR-WDR-09;
          *     design/specs/admin-withdrawals.md; ruling D10-595). Permission point `withdraw.review`; a
-         *     super admin holds every point. Step-up: totp tier (BR-ID-34): without a valid totp-tier
-         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *     super admin holds every point. Step-up: sudo (BR-ID-34 sudo list「提现审核」): no new verification within 180 minutes of the admin session's last second-factor verification (the login second step or any step-up); after that a valid `X-Step-Up-Token` is needed (without one → 10003 with `data.tier=sudo`), and a success on it starts the window again.
          *
          *     Request (AdminWithdrawalRejectRequest): `reason_code`, one of the five a person can choose
          *     (RISK_SUSPECT, ORDER_ABNORMAL, PAYEE_INFO_INVALID, USER_REQUEST, OTHER); NEGATIVE_BALANCE
@@ -10495,8 +10438,7 @@ export interface paths {
          * Confirm every DRAFT batch of the bill, to run now or at a set time (SB2)
          * @description The 【确认立即执行】 and 【定时执行】 of the bill detail (01 F-ADM-08 月结; BR-FUND-04 ⑥,
          *     迁移表 SB2; design/specs/admin-settle-bills.md §4). Permission point `settle.bill` (04
-         *     §11.2; `fund.view` alone is not enough). Step-up: totp tier (BR-ID-34): without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`. One person confirms.
+         *     §11.2; `fund.view` alone is not enough). One person confirms.
          *
          *     One confirmation covers every DRAFT batch of the bill, whatever its round and platform,
          *     never a choice of batches (BR-FUND-04 ⑥「一次确认该账单全部 DRAFT 批次」; 编排裁定
@@ -10512,8 +10454,7 @@ export interface paths {
          *     allowed with IMMEDIATE, later than the moment of confirmation and outside the nominal
          *     asset snapshot window (BR-FUND-04 ⑥, BR-FUND-18).
          *
-         *     Order of checks: `settle.bill` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → body (20001 with `data.fields` naming the field; `settle_mode` and
+         *     Order of checks: `settle.bill` (10403 with `data.reason=admin_permission_denied`) → body (20001 with `data.fields` naming the field; `settle_mode` and
          *     `scheduled_at` not fitting each other, or a time not allowed, is 20001 with
          *     `data.fields=[scheduled_at]`) → a `bill_id` that does not match the pattern, an unknown
          *     one or one of another app is 20001 with `data.fields=[bill_id]` (no 404) → a bill still
@@ -10557,9 +10498,7 @@ export interface paths {
         /**
          * Launch a supplement check and its batches for one platform of a bill
          * @description The 【发起补充批次】 of the bill detail (01 F-ADM-08 月结; BR-FUND-04 ⑧ ⑫;
-         *     design/specs/admin-settle-bills.md §4). Permission point `settle.bill` (04 §11.2). Step-up:
-         *     totp tier (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with
-         *     `data.tier=totp`.
+         *     design/specs/admin-settle-bills.md §4). Permission point `settle.bill` (04 §11.2).
          *
          *     Request: `platform`, the one platform to check. The server checks that platform's orders
          *     of the bill as the bill-day task does and generates DRAFT batches of kind supplement
@@ -10567,8 +10506,7 @@ export interface paths {
          *     through POST /admin/v1/settle-bills/{bill_id}/confirm, which covers every DRAFT batch of the
          *     bill (编排裁定 D10-444).
          *
-         *     Order of checks: `settle.bill` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → body (20001 with `data.fields=[platform]`) → a `bill_id` that does not
+         *     Order of checks: `settle.bill` (10403 with `data.reason=admin_permission_denied`) → body (20001 with `data.fields=[platform]`) → a `bill_id` that does not
          *     match the pattern, an unknown one or one of another app is 20001 with
          *     `data.fields=[bill_id]` (no 404) → the launch guard, each refusal 20001 with `data.reason`,
          *     nothing written: `credit_disabled` with `data.fields=[platform]` (the switch
@@ -10588,8 +10526,7 @@ export interface paths {
          *     This operation has no compare-and-set, so `Idempotency-Key` is required, as on the
          *     recon-diff close and write-off: same key and body → the first result, the same
          *     `batch_ids`, without a second launch; same key with another body → 20901; same key while
-         *     still running → 40901. A deliberate second launch uses a new key. The step-up token is a
-         *     header and not part of the body hash, so a replay after a 10003 keeps its key.
+         *     still running → 40901. A deliberate second launch uses a new key.
          *
          *     Effects: the check results, differences of the supplement run (registered as on the bill
          *     day) and the batches with their items, in one transaction. The totals of settle_bills are
@@ -10658,15 +10595,13 @@ export interface paths {
         /**
          * Cancel the schedule of a confirmed batch, back to DRAFT (SB3)
          * @description The 【撤销定时】 of a batch (01 F-ADM-08 月结; BR-FUND-04 ⑥, 迁移表 SB3;
-         *     design/specs/admin-settle-bills.md §4). Permission point `settle.bill` (04 §11.2; `fund.view` alone is not enough). Step-up: totp
-         *     tier (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *     design/specs/admin-settle-bills.md §4). Permission point `settle.bill` (04 §11.2; `fund.view` alone is not enough).
          *
          *     Request: `expected_row_version` is the batch's `row_version` from GET
          *     /admin/v1/settle-bills/{bill_id}. Only a CONFIRMED batch with `settle_mode` SCHEDULED that has not started can
          *     be cancelled.
          *
-         *     Order of checks: `settle.bill` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → body (20001) → an unknown `batch_id` or a batch of another app is 20001
+         *     Order of checks: `settle.bill` (10403 with `data.reason=admin_permission_denied`) → body (20001) → an unknown `batch_id` or a batch of another app is 20001
          *     with `data.fields=[batch_id]` (no 404) → 20902 with `data.resource=settle_batch`, nothing changed (refresh the detail):
          *     `expected_row_version` out of date, or a batch that is not CONFIRMED, not SCHEDULED, or
          *     already started.
@@ -10702,15 +10637,13 @@ export interface paths {
         /**
          * Reject a DRAFT batch with a reason (SB4)
          * @description The 【驳回】 of a batch (01 F-ADM-08 月结; BR-FUND-04 ⑥, 迁移表 SB4;
-         *     design/specs/admin-settle-bills.md §4). Permission point `settle.bill` (04 §11.2; `fund.view` alone is not enough). Step-up: totp
-         *     tier (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *     design/specs/admin-settle-bills.md §4). Permission point `settle.bill` (04 §11.2; `fund.view` alone is not enough).
          *
          *     Request: `expected_row_version` is the batch's `row_version` from GET
          *     /admin/v1/settle-bills/{bill_id}. `reason`, required: after trimming surrounding whitespace 1–200 characters,
          *     else 20001 with `data.fields=[reason]`. Only a DRAFT batch can be rejected.
          *
-         *     Order of checks: `settle.bill` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → body (20001) → an unknown `batch_id` or a batch of another app is 20001
+         *     Order of checks: `settle.bill` (10403 with `data.reason=admin_permission_denied`) → body (20001) → an unknown `batch_id` or a batch of another app is 20001
          *     with `data.fields=[batch_id]` (no 404) → 20902 with `data.resource=settle_batch`, nothing changed (refresh the detail):
          *     `expected_row_version` out of date, or a batch that is not DRAFT.
          *
@@ -10741,14 +10674,12 @@ export interface paths {
         /**
          * Continue a PARTIAL batch after the switches are back on (SB8)
          * @description The 【继续执行】 of a batch (01 F-ADM-08 月结; BR-FUND-04 ⑦, 迁移表 SB8;
-         *     design/specs/admin-settle-bills.md §4). Permission point `settle.bill` (04 §11.2; `fund.view` alone is not enough). Step-up: totp
-         *     tier (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *     design/specs/admin-settle-bills.md §4). Permission point `settle.bill` (04 §11.2; `fund.view` alone is not enough).
          *
          *     Request: `expected_row_version` is the batch's `row_version` from GET
          *     /admin/v1/settle-bills/{bill_id}. Only a PARTIAL batch can continue.
          *
-         *     Order of checks: `settle.bill` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → body (20001) → an unknown `batch_id` or a batch of another app is 20001
+         *     Order of checks: `settle.bill` (10403 with `data.reason=admin_permission_denied`) → body (20001) → an unknown `batch_id` or a batch of another app is 20001
          *     with `data.fields=[batch_id]` (no 404) → 20902 with `data.resource=settle_batch`, nothing changed (refresh the detail):
          *     `expected_row_version` out of date, or a batch that is not PARTIAL → the guard, each refusal
          *     20001 with `data.fields=[batch_id]` and `data.reason`, the batch stays PARTIAL:
@@ -10858,8 +10789,7 @@ export interface paths {
          * Enter one union collection and post its voucher (录入联盟回款)
          * @description The 【录入联盟回款】 dialog of the fund ledger page (01 F-ADM-08; 04 §11.2 `fund.cash_entry`;
          *     BR-FUND-20 and its 细则「联盟回款凭证」; design/specs/admin-fund-dashboard.md §2, §6). Permission
-         *     point `fund.cash_entry`; a super admin holds every point. Step-up: totp tier (BR-ID-34):
-         *     without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`. The entry of
+         *     point `fund.cash_entry`; a super admin holds every point. The entry of
          *     the enterprise Alipay balance W, under the same permission point, is not part of this
          *     operation: it belongs to the payout console (BR-WDR-18).
          *
@@ -10870,11 +10800,10 @@ export interface paths {
          *     goes here. Who entered the record comes from the session; `method` is always ADMIN_ENTRY
          *     here, the request does not carry it.
          *
-         *     Order of checks: the route schema comes first, before the permission and step-up checks,
+         *     Order of checks: the route schema comes first, before the permission check,
          *     as on every admin route (D10-591): a body that fails it is 20001 with `data.fields` naming
          *     the field, also for a caller without the permission point or a token, and nothing is
-         *     written. Then `fund.cash_entry` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → the checks on a body that fits the schema (20001 with `data.fields`
+         *     written. Then `fund.cash_entry` (10403 with `data.reason=admin_permission_denied`) → the checks on a body that fits the schema (20001 with `data.fields`
          *     naming the field: a blank `note`; a `receipt_date` later than the current accounting day of
          *     the injected Clock, +08:00, with `data.fields=[receipt_date]`; CASH_BANK while 银行卡通道未开通,
          *     with `data.fields=[cash_account]`). An earlier `receipt_date` has no lower bound. The amount is
@@ -10889,8 +10818,7 @@ export interface paths {
          *     no personal data).
          *
          *     `Idempotency-Key` is required: same key and body → the first result; same key with
-         *     another body → 20901; same key while still running → 40901. The step-up token is a header
-         *     and not part of the body hash, so a replay after a 10003 keeps its key. There is no
+         *     another body → 20901; same key while still running → 40901. There is no
          *     business key: two records with the same platform, day and amount under different keys
          *     are two collections. One collection is entered once (BR-FUND-20 细则) by reading the
          *     platform's records of the last 30 days first (design/specs/admin-fund-dashboard.md §6); R1
@@ -10918,19 +10846,17 @@ export interface paths {
          * @description The 【红冲】 action of a row of the 联盟回款记录 table (01 F-ADM-08; BR-FUND-16, BR-FUND-20 细则
          *     「联盟回款凭证」; design/specs/admin-fund-dashboard.md §4, §6). 代理补全的默认，待财务确认
          *     (D10-538), as the voucher of the entry itself. Permission point `fund.cash_entry`; a super
-         *     admin holds every point. Step-up: totp tier (BR-ID-34): without a valid totp-tier
-         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *     admin holds every point.
          *
          *     Only the whole record is reversed and a record is reversed once; there is no partial
          *     reversal and no amount in the request. To change an amount, reverse the record and enter
          *     it again with POST /admin/v1/union-receipts. A record of either `method` can be reversed.
          *     Request (AdminUnionReceiptReverseRequest): `reason`, required.
          *
-         *     Order of checks: the route schema comes first, before the permission and step-up checks,
+         *     Order of checks: the route schema comes first, before the permission check,
          *     as on every admin route (D10-591): a body that fails it is 20001 with `data.fields` naming
          *     the field, also for a caller without the permission point or a token, and nothing is
-         *     written. Then `fund.cash_entry` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → a `reason` blank after trimming (20001 with `data.fields=[reason]`) → an
+         *     written. Then `fund.cash_entry` (10403 with `data.reason=admin_permission_denied`) → a `reason` blank after trimming (20001 with `data.fields=[reason]`) → an
          *     unknown `receipt_id` or one
          *     of another app is 20001 with `data.fields=[receipt_id]` → a record already reversed is
          *     20902 with `data.resource=union_receipt` (a record can be reversed once, BR-FUND-16; the
@@ -10948,8 +10874,7 @@ export interface paths {
          *
          *     `Idempotency-Key` is required: same key and body → the first result; same key with
          *     another body → 20901; same key while still running → 40901. A new key for a record already
-         *     reversed is 20902. The step-up token is a header and not part of the body hash, so a
-         *     replay after a 10003 keeps its key.
+         *     reversed is 20902.
          */
         post: operations["adminReverseUnionReceipt"];
         delete?: never;
@@ -10973,8 +10898,7 @@ export interface paths {
          *     dialog for the WeChat operating account (01 F-ADM-07, F-ADM-08; BR-WDR-18 and its 细则「W 的
          *     取数时刻」「多通道的 W」; 04 §3.2 payout_watermarks; design/specs/admin-payouts.md §2;
          *     rulings D10-223, D10-241, D10-248, D10-285, D10-592). Permission point `fund.cash_entry`; a
-         *     super admin holds every point. Step-up: totp tier (BR-ID-34): without a valid totp-tier
-         *     `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *     super admin holds every point.
          *
          *     Request (AdminPayoutWatermarkCreateRequest): `channel`, alipay or wechat; bank_card opens
          *     with its channel and fails at the schema until then (D10-592, as D10-538 ⑥). `available_fen`,
@@ -10982,11 +10906,10 @@ export interface paths {
          *     (t_W). `note`, optional, at most 500 characters and not blank after trimming. Who entered it
          *     comes from the session.
          *
-         *     Order of checks: the route schema comes first, before the permission and step-up checks,
+         *     Order of checks: the route schema comes first, before the permission check,
          *     as on every admin route (D10-591): a body that fails it is 20001 with `data.fields` naming
          *     the field, also for a caller without the permission point or a token, and nothing is
-         *     written. Then `fund.cash_entry` (10403 with `data.reason=admin_permission_denied`) →
-         *     step-up (10003) → the checks on a body that fits the schema, each 20001: a blank `note`
+         *     written. Then `fund.cash_entry` (10403 with `data.reason=admin_permission_denied`) → the checks on a body that fits the schema, each 20001: a blank `note`
          *     with `data.fields=[note]`; and with `data.fields=[measured_at]`, compared with the injected
          *     Clock, a `measured_at` more than 5 minutes after now (BR-WDR-18 细则, D10-241, D10-248), more
          *     than 2 hours before now, or before the channel's latest `measured_at` (design/specs/
@@ -11004,8 +10927,7 @@ export interface paths {
          *     personal data).
          *
          *     `Idempotency-Key` is required: same key and body → the first result; same key with
-         *     another body → 20901; same key while still running → 40901. The step-up token is a header
-         *     and not part of the body hash, so a replay after a 10003 keeps its key.
+         *     another body → 20901; same key while still running → 40901.
          */
         post: operations["adminCreatePayoutWatermark"];
         delete?: never;
@@ -11071,8 +10993,13 @@ export interface paths {
          * @description The 【批量自动打款】 of the withdrawal review page and the 【执行所选】 of the payout console (01
          *     F-ADM-07; BR-WDR-11, BR-WDR-12, BR-WDR-18; design/specs/admin-withdrawals.md,
          *     admin-payouts.md; ruling D10-595). Permission point `payout.execute`; a super admin holds
-         *     every point; the executor may be the reviewer of the same withdrawal (ADD-05). Step-up: totp
-         *     tier (BR-ID-34): without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *     every point; the executor may be the reviewer of the same withdrawal (ADD-05). Step-up: strict (BR-ID-34 strict list「执行打款」): every call needs a valid `X-Step-Up-Token`, the sudo window does not apply (without one → 10003 with `data.tier=strict`); a token serves one successful call.
+         *     Only an `executed` answer is that success: with `outcome=rejected` the strict token sent
+         *     is not spent (a definite rejection, AdminStepUpToken), and after fixing what refused the
+         *     batch the same operation may be retried with the same token until its expire_at (with a
+         *     new `Idempotency-Key`, below). Transitional until B1-18l: the current server still uses
+         *     the token up on every HTTP 2xx answer with `code=0`, `outcome=rejected` included; the
+         *     rule here is the contract and B1-18l brings the server to it.
          *
          *     Request (AdminPayoutBatchCreateRequest): `withdrawal_ids`, 1 to 200 ids without duplicates
          *     (200 is 代理补全的默认, D10-595; a duplicate is 20001 with `data.fields=[withdrawal_ids]`).
@@ -11332,9 +11259,12 @@ export interface paths {
          *     `data.reason=admin_permission_denied`. `withdraw.auto_payout.enabled` can only be turned
          *     off from the console (BR-WDR-30: off is the safe direction): `false` follows the rules
          *     here, `true` is 20001 with `data.fields=[value]`; turning it on needs the owner's
-         *     confirmation, a separate flow outside this operation. Step-up: totp tier for every key, clearing
-         *     `payout.queue_paused` and `payout.channel_paused.<channel>` included (04 §11.2, BR-ID-34):
-         *     without a valid totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`.
+         *     confirmation, a separate flow outside this operation. Step-up by key: only
+         *     `withdraw.auto_payout.enabled` is strict (BR-ID-34 strict list「改自动到账开关与上限」):
+         *     every call on it needs a valid `X-Step-Up-Token`, the sudo window does not apply (without
+         *     one → 10003 with `data.tier=strict`); a token serves one successful call. Every other
+         *     switch, clearing `payout.queue_paused` and `payout.channel_paused.<channel>` included,
+         *     needs no step-up (BR-ID-34: none).
          *     A key the server has not registered, or one the console may not change
          *     (`agent.whitelist_only`, `agent.model_route`; `admin_editable=false`), is 20001 with
          *     `data.fields=[key]`; a value of the wrong type or outside `options` is 20001 with
@@ -11396,10 +11326,15 @@ export interface paths {
          * Change several configuration items at once
          * @description Permission point: the one point that guards every key of the batch (`config.general`,
          *     `config.risk` or `config.business`, 04 §11.2); a batch mixing keys of different points
-         *     is 20001 with `data.fields=[items]`, as is a key listed twice. Step-up by that point
-         *     (04 §11.2, BR-ID-34): none for `config.general`; totp tier for `config.risk` and
-         *     `config.business` (without a valid totp-tier `X-Step-Up-Token` → 10003 with
-         *     `data.tier=totp`). The whole batch takes effect or nothing does (05 F1-10): first every
+         *     is 20001 with `data.fields=[items]`, as is a key listed twice. Step-up by key (BR-ID-34
+         *     strict list「改自动到账开关与上限」): a batch holding any of `withdraw.auto_payout.max_amount_fen`, `withdraw.auto_payout.platform_daily_max_fen`,
+         *     `withdraw.auto_payout.payee_daily_max_count`, `withdraw.auto_payout.payee_monthly_max_count`,
+         *     `withdraw.auto_payout.user_daily_max_count`, `withdraw.auto_payout.user_monthly_max_count`,
+         *     `payout.single_cap_fen`, `payout.daily_cap_fen` and the per-channel `payout.wechat.single_cap_fen`,
+         *     `payout.wechat.daily_cap_fen` is strict as a
+         *     whole: every call needs a valid `X-Step-Up-Token`, the sudo window does not apply (without one →
+         *     10003 with `data.tier=strict`); a token serves one successful call. A batch of other keys only needs no step-up (BR-ID-34: none).
+         *     The whole batch takes effect or nothing does (05 F1-10): first every
          *     key and value is checked (unregistered or not admin-editable keys, values of the wrong
          *     type, outside `options` or failing the key's own rule such as the candidate set of
          *     BR-AI-01 细则「页面引导」), and any failure is 20001 with `data.fields` listing every
@@ -11435,9 +11370,14 @@ export interface paths {
          * Change one configuration item
          * @description Permission point: the point that guards the key (its `permission`: `config.general`,
          *     `config.risk` or `config.business`, 04 §11.2); lacking it is 10403 with
-         *     `data.reason=admin_permission_denied`. Step-up by that point (04 §11.2, BR-ID-34): none
-         *     for `config.general`; totp tier for `config.risk` and `config.business` (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). A key the server has not
+         *     `data.reason=admin_permission_denied`. Step-up by key (BR-ID-34 strict list「改自动到账开关与上限」):
+         *     `withdraw.auto_payout.max_amount_fen`, `withdraw.auto_payout.platform_daily_max_fen`,
+         *     `withdraw.auto_payout.payee_daily_max_count`, `withdraw.auto_payout.payee_monthly_max_count`,
+         *     `withdraw.auto_payout.user_daily_max_count`, `withdraw.auto_payout.user_monthly_max_count`,
+         *     `payout.single_cap_fen`, `payout.daily_cap_fen` and the per-channel `payout.wechat.single_cap_fen`,
+         *     `payout.wechat.daily_cap_fen` are strict: every call needs a valid `X-Step-Up-Token`, the sudo window does not apply (without one →
+         *     10003 with `data.tier=strict`); a token serves one successful call. Every other key needs no step-up (BR-ID-34:
+         *     none). A key the server has not
          *     registered, or one the console may not change (`admin_editable=false`:
          *     `agent.page_guide.routes`, `external_hosts`), is 20001 with `data.fields=[key]`; a value
          *     of the wrong type, outside `options` or failing the key's own rule is 20001 with
@@ -11495,9 +11435,11 @@ export interface paths {
         /**
          * Roll one configuration item back to an older version
          * @description Permission point and step-up as for PUT /admin/v1/config-items/{key}: the key's point
-         *     (`config.general`, `config.risk` or `config.business`, 04 §11.2); totp tier for
-         *     `config.risk` and `config.business`, none for `config.general` (without a valid
-         *     totp-tier `X-Step-Up-Token` → 10003 with `data.tier=totp`). Writes the value of
+         *     (`config.general`, `config.risk` or `config.business`, 04 §11.2); strict for the keys
+         *     listed there, the six `withdraw.auto_payout.*` caps and `payout.single_cap_fen`,
+         *     `payout.daily_cap_fen`, `payout.wechat.single_cap_fen`, `payout.wechat.daily_cap_fen`
+         *     (BR-ID-34 strict list「改自动到账开关与上限」, rolling back included; without a
+         *     valid `X-Step-Up-Token` → 10003 with `data.tier=strict`), none for every other key. Writes the value of
          *     `to_version` as a new version (the current version plus 1); history is never rewritten.
          *     `to_version` must be a stored version lower than the current one, otherwise 20001 with
          *     `data.fields=[to_version]`; the restored value is checked against the key's current rule
@@ -16056,7 +15998,7 @@ export interface components {
             /** @description Must differ from the initial password; composition rules are set by the server. */
             new_password: string;
         };
-        /** @description Current 6-digit code of the authenticator, or of the SMS for the sms tier. */
+        /** @description Current 6-digit code of the authenticator, or of the SMS for the sms method. */
         AdminTotpCode: string;
         AdminTotpCodeRequest: {
             login_ticket: components["schemas"]["AdminLoginTicket"];
@@ -16112,18 +16054,30 @@ export interface components {
             trace_id: components["schemas"]["TraceId"];
         };
         /**
-         * @description Admin step-up tier (enum admin_step_up_tier, BR-ID-34).
+         * @description Admin step-up tier (enum admin_step_up_tier, BR-ID-34). totp and sms are legacy values kept
+         *     for the transition only; a later contract task removes them once the server and the admin
+         *     front end have moved to sudo and strict. Operations are marked only with sudo or strict.
          * @enum {string}
          */
-        AdminStepUpTier: "totp" | "sms";
+        AdminStepUpTier: "totp" | "sms" | "sudo" | "strict";
+        /**
+         * @description Second-factor method of an admin step-up (enum admin_step_up_method, BR-ID-34 第二因子):
+         *     totp = authenticator code, sms = SMS code to the registered verify phone. The step_up_token
+         *     does not depend on it: an unused token of the session serves a sudo or strict operation.
+         * @enum {string}
+         */
+        AdminStepUpMethod: "totp" | "sms";
+        /** @description One of `method` or its legacy name `tier` is required (neither → 20001 [method]). `tier` is the legacy name of `method` (the second-factor method), still accepted. When both are sent and differ, `method` is used and only it is verified. */
         AdminStepUpRequest: {
-            tier: components["schemas"]["AdminStepUpTier"];
+            tier?: components["schemas"]["AdminStepUpMethod"];
+            method?: components["schemas"]["AdminStepUpMethod"];
             code: components["schemas"]["AdminTotpCode"];
         };
         AdminStepUpData: {
-            /** @description Sent as the `X-Step-Up-Token` header of the admin operation; records its tier. */
+            /** @description Sent as the `X-Step-Up-Token` header of the admin operation; serves one sudo or strict operation of this session. */
             step_up_token: string;
-            tier: components["schemas"]["AdminStepUpTier"];
+            /** @description The method of the request, echoed (record only). */
+            tier: components["schemas"]["AdminStepUpMethod"];
             /** Format: date-time */
             expire_at: string;
         };
@@ -16143,12 +16097,12 @@ export interface components {
             operation: string;
             tier: components["schemas"]["AdminStepUpTier"];
         };
-        /** @description A permission point of the account with its step-up annotation (04 §11 step-up column). */
+        /** @description A permission point of the account with its step-up annotation (04 §11 step-up column), display only; step_up_tier is the highest tier among the point's operations and step_up_operations lists those of a lower tier. */
         AdminPermissionGrant: {
             key: components["schemas"]["AdminPermissionKey"];
-            /** @description Tier of every step-up operation of this point; null = none needs step-up. */
+            /** @description Highest tier among the operations of this point, display only (each operation's own x-step-up and 10003 decide); null = none needs step-up. */
             step_up_tier: components["schemas"]["AdminStepUpTier"] | null;
-            /** @description Operations of this point whose tier differs from step_up_tier. */
+            /** @description Step-up operations of this point whose tier is lower than step_up_tier; operations that need none are not listed; empty when every step-up operation has the tier step_up_tier shows. */
             step_up_operations: components["schemas"]["AdminStepUpOperation"][];
         };
         AdminMe: {
@@ -16158,7 +16112,7 @@ export interface components {
             /** @description Admin display name (admin_users.display_name); omitted when empty, then clients show username (the login name). Set by POST /admin/v1/admins and PUT /admin/v1/admins/{admin_id}/display-name. */
             display_name?: string;
             is_super: boolean;
-            /** @description Masked verify phone (BR-ID-33); null = none registered, sms tier unavailable. */
+            /** @description Masked verify phone (BR-ID-33); null = none registered, SMS method unavailable. */
             verify_phone_masked: string | null;
             /** @description Every point for a super admin, the ticked points otherwise; empty = no permission. */
             permissions: components["schemas"]["AdminPermissionGrant"][];
@@ -16794,7 +16748,7 @@ export interface components {
         };
         AdminAppVersionSaveRequest: {
             latest_version: components["schemas"]["SemVer"];
-            /** @description Null = no minimum. Saving a higher one than before (none before counts) needs the totp tier. */
+            /** @description Null = no minimum. Saving a higher one than before needs no step-up (BR-ID-34, none). */
             min_supported_version: components["schemas"]["SemVer"] | null;
             recommended_version: components["schemas"]["SemVer"] | null;
             update_title: string;
@@ -18277,7 +18231,7 @@ export interface components {
         AdminExportCreateRequest: components["schemas"]["AdminExportCreateUsersRequest"] | components["schemas"]["AdminExportCreateAuditLogsRequest"] | components["schemas"]["AdminExportCreateTaxWithdrawalsRequest"] | components["schemas"]["AdminExportCreateLedgerRequest"] | components["schemas"]["AdminExportCreateOrdersRequest"];
         /**
          * @description Empty for a masked task. For an unmasked task (masked false) reason is required, with a
-         *     new totp-tier X-Step-Up-Token; for a masked task reason is 20001.
+         *     sudo step-up (X-Step-Up-Token outside the 180-minute window); for a masked task reason is 20001.
          */
         AdminExportRetryRequest: {
             reason?: components["schemas"]["AdminUserReason"];
@@ -23510,13 +23464,27 @@ export interface components {
          */
         AdminBlockedRequestIdFilter: components["schemas"]["Id"];
         /**
-         * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-         *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-         *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-         *     optional). Only on admin console operations; app operations use StepUpToken.
-         *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-         *     error it is released and can be sent again until its expire_at (see POST
-         *     /admin/v1/auth/step-up).
+         * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+         *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+         *     from the successful verification that issued it (its expire_at). A live token of this
+         *     account and admin session that no operation has used yet serves either tier (the token is
+         *     not tiered). The first time a strict operation takes the token, the token is bound to that
+         *     operation: from then on only the same operation may retry with it until its expire_at. A
+         *     sudo operation does not read it within 180 minutes of the session's last second-factor
+         *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+         *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+         *     20001; that is why the header is optional). Only on admin console operations; app
+         *     operations use StepUpToken.
+         *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+         *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+         *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+         *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+         *     a definite rejection, so the token is not spent and the same operation may be retried with
+         *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+         *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+         *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+         *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+         *     it.
          */
         AdminStepUpToken: string;
         /** @description Template code (code of GET /admin/v1/notify-channels); not a template code of the app → 20001 with data.fields=[code]. */
@@ -30768,7 +30736,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description A step-up token of the requested tier. */
+            /** @description A step-up token for one sudo or strict operation of this session. */
             200: {
                 headers: {
                     "X-Trace-Id": components["headers"]["TraceId"];
@@ -30834,16 +30802,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path?: never;
             cookie?: never;
@@ -31073,16 +31031,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path?: never;
             cookie?: never;
@@ -31211,16 +31159,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description Id of an admin account; unknown → 20001 with data.fields=[admin_id]. */
@@ -31285,16 +31223,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description Id of an admin account; unknown → 20001 with data.fields=[admin_id]. */
@@ -31366,16 +31294,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description Id of an admin account; unknown → 20001 with data.fields=[admin_id]. */
@@ -31440,13 +31358,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -31530,16 +31462,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description Id of an admin account; unknown → 20001 with data.fields=[admin_id]. */
@@ -31682,16 +31604,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description Id of an admin account; unknown → 20001 with data.fields=[admin_id]. */
@@ -32126,13 +32038,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32254,13 +32180,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32811,13 +32751,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32884,13 +32838,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32937,13 +32905,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -33018,16 +33000,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description user_id of an app user of the console's app; unknown → 20001 with data.fields=[user_id]. */
@@ -33100,16 +33072,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description user_id of an app user of the console's app; unknown → 20001 with data.fields=[user_id]. */
@@ -33254,16 +33216,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description user_id of an app user of the console's app; unknown → 20001 with data.fields=[user_id]. */
@@ -33341,16 +33293,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description user_id of an app user of the console's app; unknown → 20001 with data.fields=[user_id]. */
@@ -33422,16 +33364,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description user_id of an app user of the console's app; unknown → 20001 with data.fields=[user_id]. */
@@ -33757,16 +33689,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description user_id of an app user of the console's app; unknown → 20001 with data.fields=[user_id]. */
@@ -33830,16 +33752,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description user_id of an app user of the console's app; unknown → 20001 with data.fields=[user_id]. */
@@ -33992,16 +33904,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description user_id of an app user of the console's app; unknown → 20001 with data.fields=[user_id]. */
@@ -34068,16 +33970,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description user_id of an app user of the console's app; unknown → 20001 with data.fields=[user_id]. */
@@ -34947,16 +34839,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /**
@@ -35281,16 +35163,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path?: never;
             cookie?: never;
@@ -35881,13 +35753,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36027,13 +35913,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36159,16 +36059,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path?: never;
             cookie?: never;
@@ -36245,16 +36135,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path?: never;
             cookie?: never;
@@ -36441,13 +36321,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36511,13 +36405,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36591,13 +36499,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36686,13 +36608,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -38418,16 +38354,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description Agreement type (privacy, agreement, labor_agreement, sdk_list or collect_list); another value → 20001 with data.fields=[type]. */
@@ -39731,16 +39657,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path?: never;
             cookie?: never;
@@ -39881,16 +39797,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path?: never;
             cookie?: never;
@@ -40255,16 +40161,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description Template code (code of GET /admin/v1/notify-channels); not a template code of the app → 20001 with data.fields=[code]. */
@@ -40373,16 +40269,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description Template code (code of GET /admin/v1/notify-channels); not a template code of the app → 20001 with data.fields=[code]. */
@@ -40532,16 +40418,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description Template code (code of GET /admin/v1/notify-channels); not a template code of the app → 20001 with data.fields=[code]. */
@@ -40667,16 +40543,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description Template code (code of GET /admin/v1/notify-channels); not a template code of the app → 20001 with data.fields=[code]. */
@@ -40922,16 +40788,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description Client platform of the row, one the console may save (ios, android or harmony); another value → 20001 with data.fields=[platform]. */
@@ -41103,16 +40959,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /**
@@ -41184,16 +41030,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /**
@@ -41646,13 +41482,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -42045,16 +41895,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description The pay order (pay_orders.id) as a list row carries it; unknown or of another app → 20001 with data.fields=[pay_order_id]. */
@@ -42744,6 +42584,30 @@ export interface operations {
                  *     without comparing the body (04 §5「幂等」).
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
+                 */
+                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description The reconciliation difference (recon_diffs.id) as a list row carries it; unknown, of another app or of source R4 → 20001 with data.fields=[recon_diff_id]. */
@@ -42823,16 +42687,6 @@ export interface operations {
             header: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
@@ -42934,16 +42788,6 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
-                /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
                  *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
@@ -43000,16 +42844,6 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
-                /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
                  *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
@@ -43065,16 +42899,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description The reconciliation difference (recon_diffs.id) as a list row carries it; unknown, of another app or of source R4 → 20001 with data.fields=[recon_diff_id]. */
@@ -43239,13 +43063,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -43416,13 +43254,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -43680,13 +43532,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -43846,16 +43712,6 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
-                /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
                  *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
@@ -43930,16 +43786,6 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
-                /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
                  *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
@@ -44001,16 +43847,6 @@ export interface operations {
             header: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
@@ -44399,13 +44235,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -44485,16 +44335,6 @@ export interface operations {
             header: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
@@ -44663,16 +44503,6 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
-                /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
                  *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
@@ -44735,16 +44565,6 @@ export interface operations {
             header: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
@@ -44811,13 +44631,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -45135,16 +44969,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description The bill month (settle_bills.bill_id, YYYY-MM); not matching the pattern, or no bill of the app → 20001 with data.fields=[bill_id]. */
@@ -45200,16 +45024,6 @@ export interface operations {
             header: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
@@ -45371,16 +45185,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description The settlement batch (settle_batches.batch_id) as a bill detail carries it; unknown or of another app → 20001 with data.fields=[batch_id]. */
@@ -45429,16 +45233,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description The settlement batch (settle_batches.batch_id) as a bill detail carries it; unknown or of another app → 20001 with data.fields=[batch_id]. */
@@ -45488,16 +45282,6 @@ export interface operations {
             header?: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
             path: {
                 /** @description The settlement batch (settle_batches.batch_id) as a bill detail carries it; unknown or of another app → 20001 with data.fields=[batch_id]. */
@@ -45756,16 +45540,6 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
-                /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
                  *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
@@ -45849,16 +45623,6 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
-                /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
                  *     the first result (拍板第二批 TRADE-22). On the four sensitive operations
@@ -45940,16 +45704,6 @@ export interface operations {
             header: {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
-                /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
-                 */
-                "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
                  * @description Required on operations marked I (04 §6); missing → 20001. Same key while processing →
                  *     40901; same key with another body → 20901; a retry after a timeout reuses the key and gets
@@ -46118,13 +45872,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -46514,13 +46282,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -46684,13 +46466,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -46845,13 +46641,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -47003,13 +46813,27 @@ export interface operations {
                 /** @description Client-generated trace id, echoed as `trace_id` when well-formed. */
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
-                 * @description step_up_token from POST /admin/v1/auth/step-up, whose tier the operation checks (BR-ID-34;
-                 *     tier per permission point in GET /admin/v1/me/permissions). Missing, expired or of a lower
-                 *     tier than the operation needs → 10003 with data.tier (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds: code=0 and, for an operation whose answer
+                 *     carries an `outcome`, an outcome other than rejected. After a definite rejection or failure
+                 *     it is not spent and can be sent again until its expire_at; an answer of code=0 with
+                 *     outcome=rejected (POST /admin/v1/payout-batches refused with payout_disabled, say) is such
+                 *     a definite rejection, so the token is not spent and the same operation may be retried with
+                 *     it. When the outcome is unknown, it stays held until it expires and cannot be sent again; a
+                 *     new verification is needed (see POST /admin/v1/auth/step-up). Transitional until B1-18l:
+                 *     the current server still uses the token up on every HTTP 2xx answer with code=0,
+                 *     outcome=rejected included; the rule above is the contract and B1-18l brings the server to
+                 *     it.
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
