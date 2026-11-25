@@ -1185,3 +1185,9 @@ approvals:
     granted: true
     date: '2026-11-25'
     note: '编排会话按 规划/11 §7.1 第 5 行例外决定（实现轮次属门禁流程小改动），D10-3033，先例第 175、180、183、188、193 条。原因：码评审 r2（couli-runs/CT-06zzzzzzzf/review-codex.json）两条 S1 都是门禁工具在 I/O 出错时放行（磁盘满时人工核停链失效；旁路记录读错误时 fail 被洗成 pass），本机磁盘仅余约 30G，写满可能发生；本单修的是「被移出的 S0 / S1 被洗成 pass」，各线在其落地前靠 D10-2954 人工自查顶着，不宜久拖。计数：实现 3 / 3 已满，码评审 2 / 3。开时主干末条 193，无别的 approvals PR 在开（D10-3033：ops 先开，fe 的 F1-07ee 条目在后）。'
+  - id: 195
+    row: 4
+    title: 'B1-22zd 任务专属一次性追加（D10-2970 第 3 条 / D10-2974）：写规则测试增量 1 次（Codex）+ 规则测试评审增量 1 轮（独立 Claude）+ 实现 r4 1 次（Opus）+ Codex 资金评审 r5 1 轮——范围写死为「后台告警做成持久记录」：union 独写、只追加的 union_auth_alerts（规划 couli#31 BR-ID-24 细则「后台告警的持久记录」、04 §3.2），与 hour_alert_key / alert_stage / notify_logs 同一事务写入、同一次授权同一节点恰好一条、日志只是通知，修 money r3 / r4 的两条 S1；不扩到别的行为'
+    granted: true
+    date: '2026-11-25'
+    note: '负责人 2026-11-25 同意取「后台告警做成持久记录」（编排会话「都按建议办」，D10-2970 第 3 条），编排 D10-2974 派 be 报 approvals。原因：B1-22zd 写测 / 规则测试评审 / 实现 / 码评审都已用满，money r3、r4（窄评审，第 172 条）仍各 2 条 S1，根因是日志写在事务外、做不到恰好一次。做法 couli-runs/B1-22zd/persistent-alert-plan.md，新规则测试要点 persistent-alert-tests.md，台账补丁 5。money r5 仍有 S0 / S1 即停，不再追加，编排转负责人。编号合并时取下一个。'
