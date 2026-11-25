@@ -49520,6 +49520,7 @@ components:
         - system:ledger
         - system:settlement
         - system:self_service
+        - system:ops_command
     AdminAuditLogListItem:
       type: object
       additionalProperties: false
