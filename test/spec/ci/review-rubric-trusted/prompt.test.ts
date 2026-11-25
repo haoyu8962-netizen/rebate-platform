@@ -13,13 +13,28 @@ function ruleSection(heading: RegExp): string {
 it('[AC-CT-06zzzzzzzg#4] companion tests still need to detect wrong implementations', () => {
   const companionContext = 'Task kind: companion test task (test-change, no implementation paths)';
   const redFirstExemption =
-    /\bred[- ]first\b[`*_]*\s+(?:is (?:not (?:required|applicable)|waived)|does not apply)|\b(?:no|skip|waive|exempt(?:ed)? from|not subject to|do not (?:apply|require|enforce)(?: the)?) [`*_]*red[- ]first\b|不(?:按|要求|走|做|适用)先红|先红(?:豁免|不适用|不作要求)/i;
+    /\bred[- ]first\b[`*_]*\s+(?:is (?:not (?:required|applicable)|waived)|does not apply)|\bno [`*_]*red[- ]first\b(?![\s`*_]+(?:exemptions?|waivers?)\b)|\b(?:skip|waive|exempt(?:ed)? from|not subject to|do not (?:apply|require|enforce)(?: the)?) [`*_]*red[- ]first\b|不(?:按|要求|走|做|适用)先红|先红(?:豁免|不适用|不作要求)/gi;
+  const negatedPrefix =
+    /\b(?:not|never|no|cannot|\w+n['’]t)(?:\s+[`*_]*[\w'-]+[`*_]*){0,3}[\s`*_]*$/i;
+  function waivesRedFirst(sentence: string): boolean {
+    return [...sentence.matchAll(redFirstExemption)].some(
+      ({ index }) => !negatedPrefix.test(sentence.slice(0, index)),
+    );
+  }
+
   const keepsRedFirst = [
     `When the review context says \`${companionContext}\`, the implementation is already on main and the tests are green there.`,
     'Its rule tests must go red first on the base; nothing else is required.',
     'Use the D10-2317 mutation probe to check whether the tests catch a wrong implementation.',
   ].join(' ');
-  expect(keepsRedFirst).not.toMatch(redFirstExemption);
+  expect(keepsRedFirst.split(/[.!?。！？]/).some(waivesRedFirst)).toBe(false);
+  for (const sentence of [
+    'Companion test tasks are not exempt from red-first',
+    'Do not skip red-first',
+    'There is no red-first exemption',
+  ]) {
+    expect(waivesRedFirst(sentence), sentence).toBe(false);
+  }
 
   const rule = ruleSection(/companion test|伴随测试/i);
   const sentences = rule.split(/[.!?。！？]/);
@@ -27,8 +42,7 @@ it('[AC-CT-06zzzzzzzg#4] companion tests still need to detect wrong implementati
   expect(trigger ?? '').toMatch(/\b(?:review )?context\b|(?:评审)?上下文/i);
   expect(rule).toMatch(/main(?:line| branch)?\b|主干/i);
   expect(rule).toMatch(/\b(?:green|pass(?:ing)?)\b|为绿|通过/i);
-  const waivesRedFirst = sentences.some((sentence) => redFirstExemption.test(sentence));
-  expect(waivesRedFirst, rule).toBe(true);
+  expect(sentences.some(waivesRedFirst), rule).toBe(true);
   expect(rule).toMatch(/mutation probe|变异探针/i);
   expect(rule).toMatch(/wrong implementation|incorrect implementation|错误实现/i);
   expect(rule).toMatch(/D10-2317/);

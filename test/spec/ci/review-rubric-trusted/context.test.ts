@@ -83,6 +83,12 @@ it.each(wrappers)('[AC-CT-06zzzzzzzg#1] $script labels companion tasks', LONG, (
     { type: 'test-change', paths: [LEDGER, TEST_SCOPE, 'src/a.ts'], companion: false },
     { type: 'test-change', paths: [LEDGER, 'test/spec/demo/sibling.test.ts'], companion: false },
     { type: 'impl', paths: [LEDGER, TEST_SCOPE], companion: false },
+    { type: 'test-change', paths: [LEDGER, TEST_SCOPE, 'ops/tasks/OTHER.yaml'], companion: false },
+    {
+      type: 'test-change',
+      paths: [LEDGER, 'test/spec/demo/companion-x.test.ts'],
+      companion: false,
+    },
   ];
 
   for (const { type, paths, companion } of cases) {
