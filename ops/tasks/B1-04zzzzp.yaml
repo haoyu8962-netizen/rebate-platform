@@ -3,7 +3,8 @@ repo: rebate-platform
 title: 淘宝用户授权服务端真实闭环（接手 B1-04zzzzn）：备案尝试先落单（app.union_filing_attempts），重复备案查回只收库里对得上的历史绑定，结局未知的更早尝试只告警，签发与提交共用就绪与联盟账号一致检查
 type: impl
 # 2026-11-25 w1 入账（编排 D10-3175：B1-04zzzzn Codex 调用 10 / 10 熔断，开接手单，旧单同 PR 置 void；负责人依据 approvals 206 第 ⑤ 件 / 208）。
-#   带入 B1-04zzzzn 分支（已变基到主干，头 121229330，与 820c6529c 逐文件 patch-id 一致）的规则测试（最新 f5cc6e4f3）与实现 r1–r6，原样不改；本单第一步是在干净输入上的全量资金评审。
+#   带入 B1-04zzzzn 的规则测试提交与实现提交（头 820c6529c，原样不重写；w1 在 D10-3173 ① 时另做过一份变基副本 121229330，逐文件 patch-id 一致，用哪份由编排定）。本单第一步是在干净输入上的 Codex 全量资金评审（常规第 1 轮）。
+#   计数如实：B1-04zzzzn 的第 208 条（D10-3129）一次性写测 1、规则测试评审 1、实现 1 均已用掉（[AC-B1-04zzzzn#22]、spec-test r5 pass、实现 r6），资金评审 1 轮（r5）结论由 D10-3173 作废；Codex 调用 10 / 10 熔断（D10-3175）。
 # 现行口径（只写结论）：① 新表 app.union_filing_attempts（迁移号 land 时取主干下一个空号，现为 0155）：调 publisher.info.save 前独立事务落尝试并提交，save 成功 → saved（与绑定同事务）、明确拒绝 → rejected、
 #   回「重复」→ duplicate（都记 finished_at）；进程中断 / 传输超时 → 结局留空；couli_app 只 SELECT、INSERT、UPDATE(outcome, finished_at)。表名带 union_ 前缀，tools/ci/lint-migrations.test.ts 资金 / 归属表清单只加一行。
 # ② 重复备案查回的编号只在库里同一（应用、用户、平台、联盟账号）有该编号的历史绑定时接受；否则不写绑定、答 50001：有更早且结局未知的尝试 → duplicate_after_unknown_attempt 告警带 earlier_attempt_id，
