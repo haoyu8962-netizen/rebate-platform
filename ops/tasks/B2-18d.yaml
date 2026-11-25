@@ -298,4 +298,5 @@ modify_existing:
 accept:
   - 'pnpm verify'
   - 'test/spec/settlement/bill-follow-union/**'
-status: todo
+status: done
+pr: 794
