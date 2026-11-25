@@ -8,7 +8,7 @@ type: impl
 refs: [BR-AI-16]
 refs_hash:
   BR-AI-16: dbd76c5b95b5
-deps: [B3-09m]
+deps: [B3-09o]
 paths:
   - 'apps/api/src/modules/content/domain/config-registry.ts'
   - 'apps/api/src/modules/content/domain/config-registry.test.ts'
