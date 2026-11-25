@@ -1,0 +1,36 @@
+id: QA-13d
+repo: rebate-platform
+title: '后端五个进程接崩溃上报（@sentry/core + 自写最小 Node 接入 → GlitchTip）：DSN 未配置不初始化；上报前按白名单去掉个人信息与凭据；payout 只许内网上报地址'
+type: impl
+# 2026-11-26 w1 入账（编排 D10-3243 / D10-3244；取代 QA-13b，同 PR 置 void；依赖 QA-13c 装好 @sentry/core）。依据 01 F-OBS-01、02「崩溃」行、10 AC-S1-134 的后端部分；D10-3242 的要求不变。
+# 范围：api / worker / admin / payout / stream 五个进程（都经 apps/api/src/entry.ts runEntry 启动）在启动时初始化一次，未处理异常、未处理拒绝与 logger.error 级的错误上报。
+# SDK：只用 @sentry/core（ServerRuntimeClient、initAndBind、createTransport、事件信封、createStackParser、dedupe / linkedErrors 集成）；不装 @sentry/node，不接管 OpenTelemetry，
+#   不开性能追踪、会话回放、profile。自写最小 Node 接入：① fetch 传输（包 createTransport，发 envelope 接口）；② Node 栈行解析器（core 不带）；③ 进程钩子；④ 初始化与配置；⑤ beforeSend 白名单。
+# 配置：新增可选环境变量 CRASH_REPORT_DSN（照 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT 的写法做形状校验）；未配置 → 完全不初始化、不报错、不影响启动。environment 取 appEnv，release 取构建已有版本号（没有就不设）。
+#   DSN 只从环境变量读，不进仓库、不进日志（照现有 redaction）。
+# 白名单（F-OBS-01）：不带请求体、响应体、请求头（含 authorization、cookie、签名头）与 URL 查询串；URL 只留路径模板；用户标识最多 user_id 的哈希，不设手机号、昵称；
+#   异常消息、extra、contexts、breadcrumbs 经 platform/logging/redaction.ts 同一套 SENSITIVE_KEYS / redactText（手机号、证件号、卡号、收款账号、姓名、token、密钥等）；
+#   推广 URL、口令、推广位、渠道标识不进附加信息（02 §12.6）。breadcrumbs 关或只留白名单字段。
+# payout 进程没有公网出站：只在 DSN 主机为内网地址（私有网段 IPv4 或运维给定的内网主机名后缀）时初始化，否则不初始化并打一条 warn。
+# 进程钩子（D10-3244 ②）：不改变现有 uncaughtException / unhandledRejection 的退出行为，只在其前上报、有超时上限；上报失败（服务不可达、超时）不得影响业务请求与进程退出逻辑。
+# 实现方单测（D10-3244 ①）：自写的栈行解析与 fetch 传输各有单测。
+# 规则测试钉：① 未配置 DSN 不初始化、不影响启动；② 一次受控异常上报的事件序列化里不含明文手机号、证件号、卡号、支付宝登录号、token、authorization 头与请求体；
+#   ③ payout 遇公网 DSN 不初始化；④ 上报失败（不可达 / 超时）不影响业务请求与进程退出行为；⑤ 初始化参数快照（F-OBS-01）。上报走假传输或注入 fetch，测试不联网。
+# staging 验收由 ops 在本单合并后做：触发受控异常、走 SDK 真实路径（envelope 接口，这台 GlitchTip 尚未用 envelope 实测）、核堆栈可读且无明文个人信息（D10-3242 / D10-3244），不在本单验收里。
+refs: []
+refs_hash: {}
+deps: [QA-13c]
+paths:
+  - 'apps/api/src/modules/platform/crash-report/**'
+  - 'apps/api/src/modules/platform/config/config.ts'
+  - 'apps/api/src/modules/platform/config/config.test.ts'
+  - 'apps/api/src/modules/platform/index.ts'
+  - 'apps/api/src/entry.ts'
+test_paths:
+  - 'test/spec/platform/crash-report/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/crash-report/**'
+status: todo
