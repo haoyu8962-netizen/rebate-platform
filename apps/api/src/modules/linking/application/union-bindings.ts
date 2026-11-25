@@ -688,7 +688,10 @@ export function createUnionBindings(options: UnionBindingsOptions): UnionBinding
     } catch (error) {
       // r5 (D10-2972): the save was answered "duplicate" but its read-back failed in transport: the
       // same refusal as an unverified read-back id (50001, nothing written), warned the same way.
-      if (error instanceof UnionError && error.duplicateConfirmed) {
+      // r6 (D10-3129 ⑤): the call layer's time limit can end the call first (GovernanceError), so
+      // the adapter's duplicateConfirmed error never comes up: this request's own attempt already
+      // committed as 'duplicate' is the same fact, whatever the error.
+      if ((error instanceof UnionError && error.duplicateConfirmed) || filing.duplicateSettled()) {
         await duplicateRefused(trx, appId, userId, platform, accountId, filing.current(), {
           client,
           method,

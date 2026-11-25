@@ -28,7 +28,7 @@ const SCOPE = {
   traceId: 'synthetic-trace',
 } as const;
 
-async function scripted(refuseLock = false) {
+async function scripted(refuseLock = false, updated = 1n) {
   const queries: string[] = [];
   const driver = new DummyDriver();
   const connection = await driver.acquireConnection();
@@ -37,7 +37,10 @@ async function scripted(refuseLock = false) {
     if (refuseLock && query.sql.includes('pg_advisory_lock(')) {
       throw Object.assign(new Error('synthetic lock timeout'), { code: '55P03' });
     }
-    return { rows: [], numAffectedRows: 1n };
+    return {
+      rows: [],
+      numAffectedRows: query.sql.startsWith('update "union_filing_attempts"') ? updated : 1n,
+    };
   };
   driver.acquireConnection = async () => connection;
   const db = new Kysely<DB>({
@@ -125,6 +128,24 @@ it.each([
     await recorder.requestEnded(stored);
     expect(count(UPDATE)).toBe(1 + rewrites);
     expect(count(UNLOCK)).toBe(1);
+    await db.destroy();
+  },
+);
+
+it.each([
+  { outcome: 'duplicate', updated: 1n, settled: true },
+  { outcome: 'duplicate', updated: 0n, settled: false },
+  { outcome: 'rejected', updated: 1n, settled: false },
+] as const)(
+  '[AC-B1-04zzzzn#22] 本次尝试已落库为 duplicate 才算已确认重复（$outcome，更新 $updated 行）',
+  async ({ outcome, updated, settled }) => {
+    const { db, recorder } = await scripted(false, updated);
+    await recorder.started();
+    expect(recorder.duplicateSettled()).toBe(false);
+    await recorder.settled(outcome);
+    expect(recorder.duplicateSettled()).toBe(settled);
+    recorder.done();
+    await recorder.requestEnded(false);
     await db.destroy();
   },
 );

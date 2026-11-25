@@ -378,12 +378,14 @@ class ComposedShopOpen extends ShopOpenService {
       }
       // The state is written only through the transaction that stores the result.
       if (mode !== 'transactional' || executor === null) throw new ShopEntryNeedsAuthState();
+      // r6 (D10-3129 ⑤): the account selected and checked above, never selected again.
       const issued = await issueTaobaoAuthState({ config, pids, clock, appEnv, authApps }, db, {
         appId,
         caller,
         userId,
         code,
         linkId: null,
+        accountId,
       });
       refuse(issued.code, issued.data);
     }

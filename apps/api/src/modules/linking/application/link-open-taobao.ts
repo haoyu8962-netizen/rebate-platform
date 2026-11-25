@@ -271,8 +271,11 @@ export interface TaobaoAuthIssueDeps {
  * answers 10001; a device without an app client has no authorization path (50301).
  * B1-04zzzzn r5 (D10-2972): no state the bindings submission would refuse — the real filing adapter
  * not ready, or the union account this issuance uses not the inviter code's — answers the same code
- * with auth_unavailable before anything is written. `accountId` is the account the caller selected;
- * a caller that names none (the shop entry) gets the one its reads select (binding → authAccountId).
+ * with auth_unavailable before anything is written. `accountId` is the account the caller selected
+ * and checked the site authorization of (r6, D10-3129 ⑤: both entries pass it; the issuance never
+ * selects one again, so both checks are on the same account). The type keeps it optional only for
+ * a frozen rule test's call that names none (with no readiness check wired); while the readiness
+ * check is wired, a call without it issues nothing (auth_unavailable), it is not looked up.
  */
 export async function issueTaobaoAuthState(
   deps: TaobaoAuthIssueDeps,
@@ -290,15 +293,8 @@ export async function issueTaobaoAuthState(
   const { appId, caller, userId, code } = input;
   const reads = createUnionAuthReads({ db: executor, config, appEnv, pids, clock });
   const ready = authApps.taobaoFilingReadyFor;
-  if (ready !== undefined) {
-    const accountId =
-      input.accountId ??
-      (await reads.authAccountId(
-        appId,
-        PLATFORM,
-        (await reads.binding(appId, userId, PLATFORM)).accountId,
-      ));
-    if (!ready(accountId)) return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
+  if (ready !== undefined && (input.accountId === undefined || !ready(input.accountId))) {
+    return { kind: 'refused', code, data: { reason: 'auth_unavailable' } };
   }
   if (caller.deviceId === null || caller.userId !== userId) {
     return { kind: 'refused', code: 10001 };

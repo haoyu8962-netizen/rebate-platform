@@ -53,6 +53,11 @@ export interface FilingAttempt {
 export type FilingRecorder = NonNullable<BindReq['filing']> & {
   /** The attempt this recorder inserted; null while the save was never about to be sent. */
   current(): FilingAttempt | null;
+  /**
+   * r6 (D10-3129 ⑤): true once this request's own attempt was written 'duplicate' (the save was
+   * answered "already filed" and that outcome committed), whatever happened to the read-back after.
+   */
+  duplicateSettled(): boolean;
   /** 'saved' on the binding's transaction (before its savepoint), written once. */
   markSaved(trx: Transaction<DB>): Promise<void>;
   /**
@@ -153,6 +158,7 @@ export function createFilingRecorder(
   let adapterDone = false;
   let released = false;
   let savedOnTrx = false;
+  let duplicateWritten = false;
 
   const warn = (event: string, error: unknown, fields: Record<string, string> = {}) => {
     logger.warn(
@@ -185,12 +191,14 @@ export function createFilingRecorder(
     const current = attempt;
     if (current === null) return;
     try {
-      await (lock?.conn ?? db)
+      const written = await (lock?.conn ?? db)
         .updateTable('union_filing_attempts')
         .set({ outcome, finished_at: clock.now() })
         .where('id', '=', current.id)
         .where('outcome', 'is', null)
-        .execute();
+        .executeTakeFirst();
+      // Outside any transaction: a row updated here is committed.
+      if (outcome === 'duplicate' && written.numUpdatedRows === 1n) duplicateWritten = true;
     } catch (error) {
       // The outcome stays unknown; the filing's own answer still goes up unchanged.
       warn('linking.bindings.filing_outcome_unrecorded', error, { outcome });
@@ -240,6 +248,7 @@ export function createFilingRecorder(
       void releaseWhenOver();
     },
     current: () => attempt,
+    duplicateSettled: () => duplicateWritten,
     async markSaved(trx) {
       const current = attempt;
       if (current === null) return;
