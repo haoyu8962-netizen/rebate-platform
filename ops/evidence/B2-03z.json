@@ -1,0 +1,72 @@
+{
+  "risk_note": "RV2 by path (infra/staging is not on the risk-map whitelist). Docs only: infra/staging/README.md section 1.10 gets one appended correction line saying rebate.taobao.compare_rate_ratio_bp is registered (config.business), never read by a quote (D10-641), so it needs no value, and the two requirements above (quote fails without it; configure before going live) do not apply to it, only to tech_fee_bp. No existing README line changed (frozen [AC-B1-04zze#4] / [AC-B1-04zze#6] keep every original line of 1.10 in order); no code, config registry, seed or test changed (ledger patch 1, D10-2984).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 (full) pass, no findings, validator moved 0 entries (couli-runs/B2-03z/review-codex.json). RV2 so the money checklist is mandatory; all items n/a for a docs-only change."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (test/spec/ops/staging-readme-compare-rate/readme.test.ts, 3 cases). Attempt 1 returned blocked: the original plan (rewrite three README lines) conflicts with frozen [AC-B1-04zze#6]; orchestrator D10-2984 chose append-only (ledger patch 1, #726). Attempt 2 pins the appended line; red 3 / 3. Spec-test r1 by an independent Claude (approvals 36) pass; one out-of-scope S2 noted the worktree ledger predates patch 1 (the implementation brief stated patch 1 explicitly). Test machine: verify:fast exit 0; --tests on this task's dir plus the frozen staging-readme-wording dir 9 / 9 green."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/ops/staging-readme-compare-rate/readme.test.ts > [AC-B2-03z#1] 1.10 末尾仅一行说明淘宝比价比例键已登记、报价不读（D10-641）、切 live 前不用配",
+    "test/spec/ops/staging-readme-compare-rate/readme.test.ts > [AC-B2-03z#2] 追加说明明确上文缺项时报价失败的要求对淘宝比价比例键不适用",
+    "test/spec/ops/staging-readme-compare-rate/readme.test.ts > [AC-B2-03z#3] 追加说明解除淘宝比价比例键的两项 live 前配置要求，保留技术服务费的要求"
+  ],
+  "task": "B2-03z",
+  "spec_commit": "54aa20190f119bef8cd16be4b58281aea22caf1a",
+  "spec_ref": "081b17766395bc9b55b28eb9f8b9fdae4459b99e",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "54aa20190f119bef8cd16be4b58281aea22caf1a",
+      "tree": "6e489dbe63e6bad0a7bacc334f39d69de5eefd20",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-25T04:30:44Z",
+      "finished_at": "2026-11-25T04:30:49Z",
+      "red_tests": [
+        "test/spec/ops/staging-readme-compare-rate/readme.test.ts > [AC-B2-03z#1] 1.10 末尾仅一行说明淘宝比价比例键已登记、报价不读（D10-641）、切 live 前不用配",
+        "test/spec/ops/staging-readme-compare-rate/readme.test.ts > [AC-B2-03z#2] 追加说明明确上文缺项时报价失败的要求对淘宝比价比例键不适用",
+        "test/spec/ops/staging-readme-compare-rate/readme.test.ts > [AC-B2-03z#3] 追加说明解除淘宝比价比例键的两项 live 前配置要求，保留技术服务费的要求"
+      ],
+      "expected": ["test/spec/ops/staging-readme-compare-rate/readme.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "d7890ce5ab3de899c57cd29f295ca3a6bf2533d4f264061c1ecffc62fd239c25"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "8e75466e758631947f4107b3961f503a5ed5af26",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
