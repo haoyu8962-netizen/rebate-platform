@@ -224,7 +224,7 @@ enums:
     description: 推广位状态；只有 pending→active（启用，须花卷云忽略确认与截图）、active→retired（停用）；三种状态都在白名单里，不可删除
     values:
       pending: 已登记、未启用（只有本状态可修改）
-      active: 启用中，可用于转链；同一 app × platform × pid_scene 至多一条
+      active: 启用中，可用于转链；同一 app × platform × 联盟账号 × pid_scene 至多一条
       retired: 已停用，停止新转链，仍留在白名单
   product_pool_status:
     source: 规划/04 §3.2 product_pools；规划/01 F-ADM-10（CT-07d，取值是编排者默认）

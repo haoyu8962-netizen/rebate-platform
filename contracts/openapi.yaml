@@ -51858,10 +51858,11 @@ components:
         - share
     AdminOrderSceneBasis:
       type: string
-      description: What buy_type was decided from (contracts/enums/trade.yaml scene_basis; BR-ATTR-09).
+      description: What buy_type was decided from (contracts/enums/trade.yaml scene_basis; BR-ATTR-09); link is the server-registered link record (Pinduoduo single PID).
       enum:
         - pid
         - param
+        - link
         - fallback
     AdminOrderUserBasis:
       type: string
