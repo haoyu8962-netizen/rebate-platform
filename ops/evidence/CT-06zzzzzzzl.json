@@ -1,0 +1,133 @@
+{
+  "risk_note": "RV2 by path (tools/guard). Gate tooling only, no money moves (owner D10-3129 ④, ops/approvals.yaml id 206 ④, AGENTS.md §9 narrow exception; orchestrator D10-3135 / D10-3170 / D10-3220). Takes over CT-06zzzzzzze (void). test-guard's registration and option check is rewritten on the repository's typescript (lockfile version, nothing installed): what is Vitest's test API is decided by binding (imports from vitest, renamed and namespace imports, undeclared globals, aliases and .extend), chain members are a closed list, the role of each argument by its syntax and declaration, option keys and values cell by cell; unknown members, the API used as a value and registrations without a readable callback are refused; the line rules are unchanged. typescript is loaded on first use inside test-guard.ts (createRequire, no top-level import), a load failure throws; the static import chains of tools/ci/evidence-check.ts, tools/lib/task-file.ts and tools/guard/lib/test-blocks.ts do not reach typescript (pinned by implementer unit tests). On every test file of the tree the new check reports 0 findings. Third-class gate change: merge under ops/approvals.yaml id 16 after the orchestrator checks the diff.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Two Codex money rounds. r1 (full) fail: S1 test-guard.ts:681 a same-file function with overload signatures refused as a callback — fixed in implementation r2; S1 test-guard.ts:976 a file with a syntax error keeps the line rules' findings besides the one unreadable report — not changed, by the ledger's ⑤ (\"the current line rules are unchanged\") and orchestrator D10-3220, written in the review facts; three S2 (a write through a non-null assertion, a direct re-export from vitest, a .fails chain through a type assertion) fixed in r2. r2 (incremental) pass, one S2 (an options method used as a template tag, logged FU-TESTGUARD-TAGGED-OPTIONS-METHOD). The validator moved 0 findings out of scope in both rounds (D10-2954). The reviewed tree is the committed one; on the test machine verify:fast exit 0 (fast2) and the rule-test directory with the test-guard and guard-cli unit tests green (tests2)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests: the 10 of CT-06zzzzzzze carried over unchanged (reviewed there, pass) and 22 new ones by Codex (one write-test attempt, red1 passed, all 22 red). Spec-test r1 by an independent Claude pass with no findings; the reviewer listed one S2 under out_of_scope (forbidden members and value use pinned only with the it root), covered by implementer unit tests with describe / suite / test and a namespace root. That round's brief did not carry the decision table (it was against the ledger notes and the current code); the code reviews' briefs did."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#1] checks all four test APIs in unit, rule, integration, funds and attribution files",
+    "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#2] requires a literal false instead of a false-valued expression or shorthand",
+    "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#3] checks quoted and computed literal option keys",
+    "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#4] checks the final call in test modifier chains",
+    "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#5] follows extended test functions when they receive named options",
+    "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#6] checks an imported test function with the existing custom-call shape",
+    "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#7] reads named options declared as a local object literal",
+    "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#8] refuses unreadable options from spreads and external variables",
+    "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#9] refuses the fails modifier on its own and in a modifier chain",
+    "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#10] preserves timeout options and the existing retry scopes",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#1] checks the registration after a typed or tagged table",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#2] reads options before a same-file named callback",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#3] resolves options and callbacks in the scope of the registration",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#4] still checks registrations after an apostrophe in JSX text",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#5] reads an option key with a comment before its colon",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#6] flags a multiline fails chain and ignores sample text and data",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#7] checks a registration made directly through a derived API",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#8] follows Vitest imports and aliases by binding",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#9] uses custom-call rules for non-Vitest bindings",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#10] recognizes the allowed modifiers and hook calls",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#11] flags forbidden dot and bracket modifiers without a call",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#12] flags unknown chain members and dynamic subscripts",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#13] flags test APIs used as values outside supported aliases",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#14] requires a readable callback for each test or suite registration",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#15] preserves existing registration shapes with a callback",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#16] checks only local const options that stay readable at all uses",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#17] reports unreadable arguments and spreads by file type",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#18] flags unreadable test option properties and non-literal values",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#19] checks custom calls with literal titles, options and callbacks",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#20] reports a syntax error once and stops checking options",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#21] deduplicates by line and rule and keeps legacy line checks",
+    "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#22] requires a literal zero for retry in readable options"
+  ],
+  "task": "CT-06zzzzzzzl",
+  "spec_commit": "2f985c13f878ffc03463c2991488705cab7e5576",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "2f985c13f878ffc03463c2991488705cab7e5576",
+      "tree": "5efb5520b90b876e3989266aa3c2810a03f27603",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-25T21:37:54Z",
+      "finished_at": "2026-11-25T21:37:58Z",
+      "red_tests": [
+        "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#1] checks all four test APIs in unit, rule, integration, funds and attribution files",
+        "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#2] requires a literal false instead of a false-valued expression or shorthand",
+        "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#3] checks quoted and computed literal option keys",
+        "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#4] checks the final call in test modifier chains",
+        "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#5] follows extended test functions when they receive named options",
+        "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#6] checks an imported test function with the existing custom-call shape",
+        "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#7] reads named options declared as a local object literal",
+        "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#8] refuses unreadable options from spreads and external variables",
+        "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#9] refuses the fails modifier on its own and in a modifier chain",
+        "test/spec/ci/test-guard-option-skip/options.test.ts > [AC-CT-06zzzzzzze#10] preserves timeout options and the existing retry scopes",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#1] checks the registration after a typed or tagged table",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#2] reads options before a same-file named callback",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#3] resolves options and callbacks in the scope of the registration",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#4] still checks registrations after an apostrophe in JSX text",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#5] reads an option key with a comment before its colon",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#6] flags a multiline fails chain and ignores sample text and data",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#7] checks a registration made directly through a derived API",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#8] follows Vitest imports and aliases by binding",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#9] uses custom-call rules for non-Vitest bindings",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#10] recognizes the allowed modifiers and hook calls",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#11] flags forbidden dot and bracket modifiers without a call",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#12] flags unknown chain members and dynamic subscripts",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#13] flags test APIs used as values outside supported aliases",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#14] requires a readable callback for each test or suite registration",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#15] preserves existing registration shapes with a callback",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#16] checks only local const options that stay readable at all uses",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#17] reports unreadable arguments and spreads by file type",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#18] flags unreadable test option properties and non-literal values",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#19] checks custom calls with literal titles, options and callbacks",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#20] reports a syntax error once and stops checking options",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#21] deduplicates by line and rule and keeps legacy line checks",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts > [AC-CT-06zzzzzzzl#22] requires a literal zero for retry in readable options"
+      ],
+      "expected": [
+        "test/spec/ci/test-guard-option-skip/options.test.ts",
+        "test/spec/ci/test-guard-option-skip/registrations.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "663e2205e6e0ff4cacfe5cdd1f5533bdf1fba0dec55d686ee516e8a354af4213"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "61174d14f81a091b89a39f7d8b4b05f5fab7c16b",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
