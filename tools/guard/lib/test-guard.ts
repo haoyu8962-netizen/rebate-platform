@@ -1,6 +1,7 @@
 // Static checks on test files, vitest configs and package scripts
 // (规划/11 §2.3 step 5, §4.1, §4.2, §4.3; conventions C5).
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import type { Change } from '../../lib/git.ts';
 import type { ProtectedConfig, ProtectedHit } from './protected.ts';
@@ -24,16 +25,6 @@ const SKIP_OR_ONLY = /\.\s*(skip|only|skipIf|runIf|todo)\b(?=\s*[(.`])/;
 const X_PREFIXED = /(?<![\w$.])(xit|xtest|xdescribe|fit|fdescribe)\s*\(/;
 const RETRY_KEY = /\bretry\s*:\s*([^\s,})]+)/;
 const RETRY_SHORTHAND = /[{,]\s*retry\s*[,}]/;
-// Vitest's test API: the options object (with `retry`) is the second argument of these calls,
-// of their modifier chains (`.concurrent`, `.each(table)`, `.for(cases)`, `.skipIf(c)`, …) and
-// of the test functions made from them with `.extend(...)`.
-const TEST_API_ROOTS = ['it', 'test', 'describe', 'suite'];
-const CALL_ROOT = /(?<![\w$.])([A-Za-z_$][\w$]*)((?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*(?=[(`])/g;
-const EXTENDED_TEST =
-  /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*\.\s*extend\b/g;
-const NOT_A_CALLEE = new Set(['if', 'for', 'while', 'switch', 'catch', 'function', 'return']);
-const RETRY_PROPERTY = /^(?:retry|'retry'|"retry"|\[\s*(['"`])retry\1\s*\])\s*(?::([\s\S]*))?$/;
-const FUNCTION_LITERAL = /^(?:async\b|function\b|\(|[A-Za-z_$][\w$]*\s*=>)/;
 // Funds and attribution test files keep the plain line rule: no `retry` key anywhere in the file
 // (规划/11 §4.2「守卫禁止 vitest 配置和资金、归属测试文件里出现 retry」). Other test files may
 // use `retry` as an ordinary field name; there only Vitest's retry option is refused.
@@ -287,123 +278,688 @@ function partStart(text: string, from: number, to: number): number {
   return Math.min(i, to);
 }
 
-/** Names that call Vitest's test API: the roots and every `const x = <one of them>.extend(…)`. */
-function testApiNames(text: string): Set<string> {
-  const names = new Set(TEST_API_ROOTS);
-  for (let grew = true; grew;) {
-    grew = false;
-    EXTENDED_TEST.lastIndex = 0;
-    for (let m = EXTENDED_TEST.exec(text); m !== null; m = EXTENDED_TEST.exec(text)) {
-      const [, name = '', base = ''] = m;
-      if (names.has(base) && !names.has(name)) {
-        names.add(name);
-        grew = true;
-      }
-    }
+// Test registrations and their options, read on the syntax tree (CT-06zzzzzzzl; D10-3129 ④,
+// D10-3143, D10-3170). Vitest 5 reads a second argument that is an object as the options and one
+// that is a function as the callback; a registration without a callback is a todo; the options
+// skip / only / todo / fails take effect, a suite passing them on to its tests. The guard follows
+// the test API by binding (imports from vitest, undeclared globals, const aliases), lets through
+// only the forms it can read and reports every other one: a forbidden option or modifier, an
+// unknown chain member, the API used as a value it cannot follow, options or a callback it cannot
+// read. Options it cannot read are reported as no-retry and no-skip-only, in funds and
+// attribution files (whose retry stays with the line rule) as no-skip-only only. typescript is
+// loaded on first use: tools/guard/lib/checks.ts imports this file, and the guard entry points
+// that import checks.ts must not load typescript at start (D10-3143).
+
+/** What an expression is in terms of Vitest's test API. */
+type ApiKind =
+  | 'test' // registers a test or suite when called: it, test.concurrent, it.each(rows), …
+  | 'namespace' // import * as v from 'vitest'
+  | 'table' // .each / .for: called (or tagged) with a table, gives a registration function
+  | 'condition' // .skipIf / .runIf: called with a condition, gives a registration function
+  | 'derive' // .extend / .override / .scoped: called, gives a registration function
+  | 'hook' // .beforeEach and the other hooks
+  | 'unknown' // a member the guard does not know
+  | 'registration' // the result of a registration
+  | 'none';
+
+/** Kinds whose values the guard has to follow wherever they go. */
+const TRACKED = new Set<ApiKind>(['test', 'namespace', 'table', 'condition', 'derive']);
+const TEST_API_ROOTS = new Set(['it', 'test', 'describe', 'suite']);
+const FLAG_OPTIONS = new Set(['skip', 'only', 'todo', 'fails']);
+const FLAG_MEMBERS = new Set(['skip', 'only', 'todo', 'fails', 'skipIf', 'runIf']);
+// Members that give the same kind of registration function back (the flags are reported).
+const CHAIN_MEMBERS = new Set([
+  'concurrent',
+  'sequential',
+  'shuffle',
+  'describe',
+  'suite',
+  'skip',
+  'only',
+  'todo',
+  'fails',
+]);
+const TABLE_MEMBERS = new Set(['each', 'for']);
+const CONDITION_MEMBERS = new Set(['skipIf', 'runIf']);
+const DERIVE_MEMBERS = new Set(['extend', 'override', 'scoped']);
+const HOOK_MEMBERS = new Set([
+  'beforeEach',
+  'afterEach',
+  'beforeAll',
+  'afterAll',
+  'aroundEach',
+  'aroundAll',
+]);
+
+let typescriptModule: unknown;
+
+/** The typescript package of the repository, loaded on first use; a failure is thrown. */
+function loadTypeScript(): unknown {
+  if (typescriptModule === undefined) {
+    typescriptModule = createRequire(import.meta.url)('typescript');
   }
-  return names;
+  return typescriptModule;
 }
 
-/** Every call in `text`: its root identifier and the parentheses of the last call of its chain. */
-function callsIn(text: string): { root: string; open: number; close: number }[] {
-  const out: { root: string; open: number; close: number }[] = [];
-  const member = /^\.\s*[A-Za-z_$][\w$]*\s*/;
-  CALL_ROOT.lastIndex = 0;
-  for (let m = CALL_ROOT.exec(text); m !== null; m = CALL_ROOT.exec(text)) {
-    const root = m[1] ?? '';
-    if (NOT_A_CALLEE.has(root)) continue;
-    let i = m.index + m[0].length;
-    for (;;) {
-      const tagged = text[i] === '`';
-      const end = tagged ? skipTemplate(text, i) : text[i] === '(' ? skipBalanced(text, i) : -1;
-      if (end === -1) break;
-      const next = skipSpace(text, end);
-      if (text[next] === '(' || text[next] === '`') {
-        i = next;
-        continue;
-      }
-      const chained = member.exec(text.slice(next, next + 200));
-      if (chained !== null && /[(`]/.test(text[next + chained[0].length] ?? '')) {
-        i = next + chained[0].length;
-        continue;
-      }
-      if (!tagged) out.push({ root, open: i, close: end });
-      break;
-    }
-  }
-  return out;
-}
-
-/** Offset of the `{` of `const <name> = { … }` (also let / var, with a type annotation), or -1. */
-function localObjectLiteral(text: string, name: string): number {
-  const escaped = name.replace(/\$/g, '\\$');
-  const m = new RegExp(`\\b(?:const|let|var)\\s+${escaped}\\s*(?::[^=;]*)?=\\s*(?=\\{)`).exec(text);
-  return m === null ? -1 : m.index + m[0].length;
+function scriptKindName(file: string): 'TSX' | 'JSX' | 'JS' | 'TS' {
+  if (/\.[cm]?tsx$/.test(file)) return 'TSX';
+  if (/\.[cm]?jsx$/.test(file)) return 'JSX';
+  if (/\.[cm]?js$/.test(file)) return 'JS';
+  return 'TS';
 }
 
 /**
- * Vitest retry options in a test file that is not a funds or attribution test: a `retry` key
- * (other than an explicit 0) in the options object, the second argument of a test API call;
- * options the guard cannot read (a spread, a variable that is not an object literal of this
- * file); and the same `retry` key in a call shaped like a custom test function (title literal,
- * options object, function literal).
+ * no-skip-only and no-retry findings of the test registrations of one test file (see above);
+ * `funds`: a funds or attribution test file.
  */
-function retryOptionFindings(file: string, text: string): Finding[] {
+function registrationFindings(file: string, text: string, funds: boolean): Finding[] {
+  const ts = loadTypeScript() as typeof import('typescript');
+  type Node = import('typescript').Node;
+  type Expression = import('typescript').Expression;
+  type Identifier = import('typescript').Identifier;
+  type CallExpression = import('typescript').CallExpression;
+  type ObjectLiteralExpression = import('typescript').ObjectLiteralExpression;
+  type PropertyName = import('typescript').PropertyName;
+  type TsSymbol = import('typescript').Symbol;
+  type PropertyAccess = import('typescript').PropertyAccessExpression;
+  type ElementAccess = import('typescript').ElementAccessExpression;
+  type Access = PropertyAccess | ElementAccess;
+  type Named =
+    | { kind: 'function' | 'mutable' | 'other' }
+    | { kind: 'options'; object: ObjectLiteralExpression };
+
   const findings: Finding[] = [];
-  const report = (offset: number, message: string): void => {
-    findings.push({ file, line: lineOfOffset(text, offset), rule: 'no-retry', message });
+  // A program of this one file (no lib, no other files): the compiler binds every name to its
+  // declaration in scope, so the guard does not keep scopes of its own.
+  const name = `/${file}`;
+  const source = ts.createSourceFile(
+    name,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind[scriptKindName(file)],
+  );
+  const host: import('typescript').CompilerHost = {
+    getSourceFile: (fileName) => (fileName === name ? source : undefined),
+    getDefaultLibFileName: () => '/lib.d.ts',
+    writeFile: () => undefined,
+    getCurrentDirectory: () => '/',
+    getCanonicalFileName: (fileName) => fileName,
+    useCaseSensitiveFileNames: () => true,
+    getNewLine: () => '\n',
+    fileExists: (fileName) => fileName === name,
+    readFile: () => undefined,
   };
-  const checkOptions = (open: number, strict: boolean): void => {
-    const close = skipBalanced(text, open);
-    if (close === -1) return;
-    for (const [from, to] of splitTopLevel(text, open + 1, close - 1) ?? []) {
-      const start = partStart(text, from, to);
-      const property = text.slice(start, to).trim();
-      if (strict && property.startsWith('...')) {
-        report(start, 'test options must not spread another object, so that retry can be checked');
+  const program = ts.createProgram({
+    rootNames: [name],
+    options: {
+      noLib: true,
+      noResolve: true,
+      noEmit: true,
+      allowJs: true,
+      jsx: ts.JsxEmit.Preserve,
+      target: ts.ScriptTarget.Latest,
+      moduleDetection: ts.ModuleDetectionKind.Force,
+      types: [],
+    },
+    host,
+  });
+  const lineAt = (position: number): number =>
+    source.getLineAndCharacterOfPosition(position).line + 1;
+  const syntax = program.getSyntacticDiagnostics(source);
+  if (syntax.length > 0) {
+    findings.push({
+      file,
+      line: lineAt(syntax[0]?.start ?? 0),
+      rule: 'no-skip-only',
+      message: 'the file cannot be parsed, so its test registrations cannot be checked',
+    });
+    return findings;
+  }
+  const checker = program.getTypeChecker();
+
+  const skipOnly = (node: Node, why: string): void => {
+    findings.push({
+      file,
+      line: lineAt(node.getStart(source)),
+      rule: 'no-skip-only',
+      message: `tests must not be skipped, focused or left as todo (${why})`,
+    });
+  };
+  const noRetry = (node: Node, why: string): void => {
+    findings.push({
+      file,
+      line: lineAt(node.getStart(source)),
+      rule: 'no-retry',
+      message: `tests must not use retry (${why})`,
+    });
+  };
+  const unreadable = (node: Node, why: string): void => {
+    if (!funds) noRetry(node, why);
+    skipOnly(node, why);
+  };
+
+  const unwrap = (expression: Expression): Expression => {
+    let e = expression;
+    while (
+      ts.isParenthesizedExpression(e) ||
+      ts.isNonNullExpression(e) ||
+      ts.isAsExpression(e) ||
+      ts.isSatisfiesExpression(e) ||
+      ts.isTypeAssertionExpression(e) ||
+      ts.isExpressionWithTypeArguments(e)
+    ) {
+      e = e.expression;
+    }
+    return e;
+  };
+  const isFunctionLiteral = (e: Expression): boolean =>
+    ts.isArrowFunction(e) || ts.isFunctionExpression(e);
+  const inTypeNode = (node: Node): boolean => {
+    for (let n = node; n.parent !== undefined; n = n.parent) {
+      if (ts.isTypeNode(n.parent) && !ts.isExpressionWithTypeArguments(n.parent)) return true;
+    }
+    return false;
+  };
+  const isReexport = (node: import('typescript').ExportSpecifier): boolean =>
+    node.parent.parent.moduleSpecifier !== undefined;
+  /** The symbol of the value an identifier refers to. */
+  const valueSymbol = (id: Identifier): TsSymbol | undefined => {
+    const parent = id.parent;
+    if (ts.isShorthandPropertyAssignment(parent) && parent.name === id) {
+      return checker.getShorthandAssignmentValueSymbol(parent);
+    }
+    if (ts.isExportSpecifier(parent)) {
+      return isReexport(parent) ? undefined : checker.getExportSpecifierLocalTargetSymbol(parent);
+    }
+    return checker.getSymbolAtLocation(id);
+  };
+  const isConstDeclaration = (node: import('typescript').VariableDeclaration): boolean => {
+    const list = node.parent;
+    return (
+      ts.isVariableDeclarationList(list) &&
+      (list.flags & ts.NodeFlags.BlockScoped) === ts.NodeFlags.Const
+    );
+  };
+  const isExported = (node: import('typescript').VariableDeclaration): boolean => {
+    const statement = node.parent.parent;
+    return (
+      ts.isVariableStatement(statement) &&
+      statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) === true
+    );
+  };
+  /** The initializer of `const <name> = …` (not exported), the one alias form the guard follows. */
+  const aliasInitializer = (node: Node): Expression | undefined =>
+    ts.isVariableDeclaration(node) &&
+    ts.isIdentifier(node.name) &&
+    isConstDeclaration(node) &&
+    !isExported(node)
+      ? node.initializer
+      : undefined;
+  const memberName = (e: Access): string | null => {
+    if (ts.isPropertyAccessExpression(e)) {
+      return ts.isPrivateIdentifier(e.name) ? null : e.name.text;
+    }
+    const argument = unwrap(e.argumentExpression);
+    return ts.isStringLiteralLike(argument) ? argument.text : null;
+  };
+  const memberKind = (base: ApiKind, member: string | null): ApiKind => {
+    if (base === 'namespace') {
+      if (member === null) return 'unknown';
+      return TEST_API_ROOTS.has(member) ? 'test' : 'none';
+    }
+    if (base === 'test') {
+      if (member === null) return 'unknown';
+      if (CHAIN_MEMBERS.has(member)) return 'test';
+      if (TABLE_MEMBERS.has(member)) return 'table';
+      if (CONDITION_MEMBERS.has(member)) return 'condition';
+      if (DERIVE_MEMBERS.has(member)) return 'derive';
+      if (HOOK_MEMBERS.has(member)) return 'hook';
+      return 'unknown';
+    }
+    return TRACKED.has(base) ? 'unknown' : 'none';
+  };
+  const either = (a: ApiKind, b: ApiKind): ApiKind => {
+    if (TRACKED.has(a)) return a;
+    return TRACKED.has(b) ? b : 'none';
+  };
+  const isLogical = (kind: import('typescript').SyntaxKind): boolean =>
+    kind === ts.SyntaxKind.BarBarToken ||
+    kind === ts.SyntaxKind.QuestionQuestionToken ||
+    kind === ts.SyntaxKind.AmpersandAmpersandToken;
+
+  const declarationKinds = new Map<Node, ApiKind>();
+  const identifierKind = (id: Identifier): ApiKind => {
+    const symbol = valueSymbol(id);
+    const declarations = symbol?.declarations ?? [];
+    const [declaration] = declarations;
+    // No declaration at all: Vitest's globals.
+    if (declaration === undefined) return TEST_API_ROOTS.has(id.text) ? 'test' : 'none';
+    if (declarations.length > 1) return 'none';
+    const known = declarationKinds.get(declaration);
+    if (known !== undefined) return known;
+    declarationKinds.set(declaration, 'none'); // a cycle of aliases is no test API
+    let kind: ApiKind = 'none';
+    if (
+      ts.isImportSpecifier(declaration) ||
+      ts.isNamespaceImport(declaration) ||
+      ts.isImportClause(declaration)
+    ) {
+      const specifier = ts.findAncestor(declaration, ts.isImportDeclaration)?.moduleSpecifier;
+      if (specifier !== undefined && ts.isStringLiteral(specifier) && specifier.text === 'vitest') {
+        if (!ts.isImportSpecifier(declaration)) kind = 'namespace';
+        else if (TEST_API_ROOTS.has((declaration.propertyName ?? declaration.name).text)) {
+          kind = 'test';
+        }
+      }
+    } else {
+      const initializer = aliasInitializer(declaration);
+      if (initializer !== undefined) {
+        const aliased = apiKind(initializer);
+        kind = aliased === 'registration' ? 'none' : aliased;
+      }
+    }
+    declarationKinds.set(declaration, kind);
+    return kind;
+  };
+  const expressionKinds = new Map<Node, ApiKind>();
+  const apiKind = (expression: Expression): ApiKind => {
+    const e = unwrap(expression);
+    const known = expressionKinds.get(e);
+    if (known !== undefined) return known;
+    let kind: ApiKind = 'none';
+    if (ts.isIdentifier(e)) {
+      kind = identifierKind(e);
+    } else if (ts.isPropertyAccessExpression(e) || ts.isElementAccessExpression(e)) {
+      kind = memberKind(apiKind(e.expression), memberName(e));
+    } else if (ts.isCallExpression(e)) {
+      const callee = apiKind(e.expression);
+      if (callee === 'table' || callee === 'condition' || callee === 'derive') kind = 'test';
+      else if (callee === 'test') kind = 'registration';
+    } else if (ts.isTaggedTemplateExpression(e)) {
+      const tag = apiKind(e.tag);
+      if (tag === 'table') kind = 'test';
+      else if (tag === 'test') kind = 'registration';
+    } else if (ts.isConditionalExpression(e)) {
+      kind = either(apiKind(e.whenTrue), apiKind(e.whenFalse));
+    } else if (ts.isBinaryExpression(e) && isLogical(e.operatorToken.kind)) {
+      kind = either(apiKind(e.left), apiKind(e.right));
+    } else if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+      kind = either('none', apiKind(e.right));
+    }
+    expressionKinds.set(e, kind);
+    return kind;
+  };
+
+  // ---- names given as the second or third argument of a registration ----
+  let identifiersByText: Map<string, Identifier[]> | null = null;
+  const identifiersNamed = (text: string): Identifier[] => {
+    if (identifiersByText === null) {
+      const index = new Map<string, Identifier[]>();
+      const collect = (node: Node): void => {
+        if (ts.isIdentifier(node)) {
+          const list = index.get(node.text);
+          if (list === undefined) index.set(node.text, [node]);
+          else list.push(node);
+        }
+        ts.forEachChild(node, collect);
+      };
+      collect(source);
+      identifiersByText = index;
+    }
+    return identifiersByText.get(text) ?? [];
+  };
+  const isAssignmentOperator = (kind: import('typescript').SyntaxKind): boolean =>
+    kind >= ts.SyntaxKind.FirstAssignment && kind <= ts.SyntaxKind.LastAssignment;
+  /** Whether `p` wraps `n` without changing its value: (n), n!, n as T, n satisfies T, <T>n. */
+  const isTypeWrapper = (p: Node, n: Node): boolean =>
+    (ts.isParenthesizedExpression(p) ||
+      ts.isNonNullExpression(p) ||
+      ts.isAsExpression(p) ||
+      ts.isSatisfiesExpression(p) ||
+      ts.isTypeAssertionExpression(p) ||
+      ts.isExpressionWithTypeArguments(p)) &&
+    p.expression === n;
+  /** Whether `node` is written: assigned (also inside a destructuring target), ++/--, deleted. */
+  const isWritten = (node: Node): boolean => {
+    for (let n = node; ;) {
+      const p = n.parent;
+      if (isTypeWrapper(p, n)) {
+        n = p;
         continue;
       }
-      const retry = RETRY_PROPERTY.exec(property);
-      if (retry === null || (retry[2] !== undefined && isZeroLiteral(retry[2].trim()))) continue;
-      report(start, 'tests must not use retry');
+      if (
+        ts.isParenthesizedExpression(p) ||
+        ts.isArrayLiteralExpression(p) ||
+        ts.isObjectLiteralExpression(p) ||
+        ts.isSpreadElement(p) ||
+        ts.isSpreadAssignment(p) ||
+        ts.isShorthandPropertyAssignment(p) ||
+        (ts.isPropertyAssignment(p) && p.initializer === n)
+      ) {
+        n = p;
+        continue;
+      }
+      if (ts.isBinaryExpression(p)) {
+        return p.left === n && isAssignmentOperator(p.operatorToken.kind);
+      }
+      if (ts.isPrefixUnaryExpression(p) || ts.isPostfixUnaryExpression(p)) {
+        return (
+          p.operator === ts.SyntaxKind.PlusPlusToken || p.operator === ts.SyntaxKind.MinusMinusToken
+        );
+      }
+      if (ts.isForInStatement(p) || ts.isForOfStatement(p)) return p.initializer === n;
+      return ts.isDeleteExpression(p);
     }
   };
-  const api = testApiNames(text);
-  for (const call of callsIn(text)) {
-    const parts = splitTopLevel(text, call.open + 1, call.close - 1);
-    if (parts === null) continue;
-    const args = parts
-      .map(([from, to]) => ({ from: partStart(text, from, to), to }))
-      .filter(({ from, to }) => text.slice(from, to).trim() !== '');
-    const [first, second, third] = args;
-    if (second === undefined) continue;
-    const isFunction = (arg: { from: number; to: number } | undefined): boolean =>
-      arg !== undefined && FUNCTION_LITERAL.test(text.slice(arg.from, arg.to).trim());
-    const isObject = text[second.from] === '{';
-    if (!api.has(call.root)) {
-      // A custom test function the guard cannot trace (for example an imported one).
-      if (isObject && /^['"`]/.test(text[first?.from ?? -1] ?? '') && isFunction(third)) {
-        checkOptions(second.from, false);
+  /**
+   * A use of named options that leaves them as declared: the second argument of a registration,
+   * a property read (not written, not called), a copy `{ ...X }`, a type `typeof X`.
+   */
+  const leavesOptionsAlone = (ref: Identifier): boolean => {
+    if (inTypeNode(ref)) return true;
+    let n: Node = ref;
+    for (;;) {
+      const up = n.parent;
+      const wraps =
+        (ts.isParenthesizedExpression(up) ||
+          ts.isAsExpression(up) ||
+          ts.isSatisfiesExpression(up) ||
+          ts.isNonNullExpression(up) ||
+          ts.isTypeAssertionExpression(up)) &&
+        up.expression === n;
+      if (!wraps) break;
+      n = up;
+    }
+    const p = n.parent;
+    if (ts.isCallExpression(p)) return p.arguments[1] === n && apiKind(p.expression) === 'test';
+    if (ts.isSpreadAssignment(p)) return true;
+    if (
+      (ts.isPropertyAccessExpression(p) || ts.isElementAccessExpression(p)) &&
+      p.expression === n
+    ) {
+      let read: Node = p;
+      while (isTypeWrapper(read.parent, read)) read = read.parent;
+      const called = ts.isCallExpression(read.parent) && read.parent.expression === read;
+      return !called && !isWritten(p);
+    }
+    return false;
+  };
+  const OTHER: Named = { kind: 'other' };
+  const namedValues = new Map<TsSymbol, Named>();
+  const resolveName = (id: Identifier): Named => {
+    const symbol = checker.getSymbolAtLocation(id);
+    const declarations = symbol?.declarations ?? [];
+    if (symbol === undefined || declarations.length === 0) return OTHER;
+    const known = namedValues.get(symbol);
+    if (known !== undefined) return known;
+    let named: Named = OTHER;
+    const [declaration] = declarations;
+    if (declarations.every(ts.isFunctionDeclaration)) {
+      // A function of this file, maybe with overload signatures: exactly one has a body.
+      if (declarations.filter((d) => d.body !== undefined).length === 1) {
+        named = { kind: 'function' };
       }
-      continue;
+    } else if (
+      declaration !== undefined &&
+      declarations.length === 1 &&
+      ts.isVariableDeclaration(declaration) &&
+      ts.isIdentifier(declaration.name) &&
+      declaration.initializer !== undefined
+    ) {
+      const initializer = unwrap(declaration.initializer);
+      const isConst = isConstDeclaration(declaration);
+      if (isFunctionLiteral(initializer)) {
+        if (isConst) named = { kind: 'function' };
+      } else if (ts.isObjectLiteralExpression(initializer)) {
+        const declared = declaration.name;
+        const harmless = (ref: Identifier): boolean =>
+          ref === declared || valueSymbol(ref) !== symbol || leavesOptionsAlone(ref);
+        const stable =
+          isConst && !isExported(declaration) && identifiersNamed(declared.text).every(harmless);
+        named = stable ? { kind: 'options', object: initializer } : { kind: 'mutable' };
+      }
     }
-    if (isObject) {
-      checkOptions(second.from, true);
-      continue;
+    namedValues.set(symbol, named);
+    return named;
+  };
+  const isReadableCallback = (argument: Expression | undefined): boolean => {
+    if (argument === undefined) return false;
+    const e = unwrap(argument);
+    if (isFunctionLiteral(e)) return true;
+    return ts.isIdentifier(e) && resolveName(e).kind === 'function';
+  };
+
+  // ---- options objects ----
+  const propertyKey = (key: PropertyName): string | null => {
+    if (ts.isPrivateIdentifier(key)) return null;
+    if (!ts.isComputedPropertyName(key)) return key.text;
+    const e = unwrap(key.expression);
+    return ts.isStringLiteralLike(e) || ts.isNumericLiteral(e) ? e.text : null;
+  };
+  /**
+   * The options of a registration (`strict`), or of a custom test call the guard cannot trace,
+   * where a spread or computed key is passed over as on main.
+   */
+  const checkOptions = (object: ObjectLiteralExpression, strict: boolean): void => {
+    for (const property of object.properties) {
+      if (ts.isSpreadAssignment(property)) {
+        if (strict) unreadable(property, 'the options spread another object');
+        continue;
+      }
+      const key = propertyKey(property.name);
+      if (key === null) {
+        if (strict) unreadable(property, 'an options key is computed');
+        continue;
+      }
+      if (
+        key === '__proto__' &&
+        ts.isPropertyAssignment(property) &&
+        !ts.isComputedPropertyName(property.name)
+      ) {
+        if (strict) unreadable(property, 'the options set their prototype');
+        continue;
+      }
+      const value = ts.isPropertyAssignment(property) ? unwrap(property.initializer) : undefined;
+      if (FLAG_OPTIONS.has(key) && value?.kind !== ts.SyntaxKind.FalseKeyword) {
+        skipOnly(property, `the option ${key} is not the literal false`);
+      }
+      const zero = value !== undefined && ts.isNumericLiteral(value) && value.text === '0';
+      if (key === 'retry' && !funds && !zero) noRetry(property, 'the option retry is not 0');
     }
-    // (title, fn) and (title, fn, timeout) carry no options; (title, x, () => {}) does.
-    if (isFunction(second) || !isFunction(third)) continue;
-    const name = text.slice(second.from, second.to).trim();
-    const literal = /^[A-Za-z_$][\w$]*$/.test(name) ? localObjectLiteral(text, name) : -1;
-    if (literal === -1) {
-      report(
-        second.from,
-        'test options must be an object literal written in this file, so that retry can be checked',
+  };
+
+  // ---- calls ----
+  const checkRegistration = (call: CallExpression): void => {
+    const args = call.arguments;
+    const spread = args.find((a) => ts.isSpreadElement(a));
+    if (spread !== undefined) {
+      unreadable(spread, 'the arguments of the registration are spread');
+      return;
+    }
+    const [, second, third] = args;
+    if (second === undefined) {
+      skipOnly(call, 'the registration has no callback, so it is a todo');
+      return;
+    }
+    const value = unwrap(second);
+    if (isFunctionLiteral(value)) return; // (title, callback[, timeout])
+    let options: ObjectLiteralExpression | null = null;
+    if (ts.isObjectLiteralExpression(value)) {
+      options = value;
+    } else if (ts.isIdentifier(value)) {
+      const named = resolveName(value);
+      if (named.kind === 'function') return;
+      if (named.kind === 'mutable') {
+        unreadable(second, `the options ${value.text} can change after their declaration`);
+        return;
+      }
+      if (named.kind === 'options') options = named.object;
+    }
+    if (options === null) {
+      if (third === undefined) {
+        skipOnly(second, 'the callback cannot be read, and a registration without one is a todo');
+      } else {
+        unreadable(second, 'the options cannot be read');
+      }
+      return;
+    }
+    checkOptions(options, true);
+    if (!isReadableCallback(third)) {
+      skipOnly(call, 'no readable callback follows the options, so the registration is a todo');
+    }
+  };
+  /** A custom test function the guard cannot trace: (title literal, { … }, function literal). */
+  const checkCustomCall = (call: CallExpression): void => {
+    const [title, options, callback] = call.arguments;
+    if (title === undefined || options === undefined || callback === undefined) return;
+    const t = unwrap(title);
+    const o = unwrap(options);
+    if (
+      (ts.isStringLiteralLike(t) || ts.isTemplateExpression(t)) &&
+      ts.isObjectLiteralExpression(o) &&
+      isFunctionLiteral(unwrap(callback))
+    ) {
+      checkOptions(o, false);
+    }
+  };
+  /** Whether a member access is (through further members and calls) the callee of a call. */
+  const inCalleeChain = (node: Node): boolean => {
+    for (let n = node; ;) {
+      const p = n.parent;
+      if (ts.isCallExpression(p)) return p.expression === n;
+      if (ts.isTaggedTemplateExpression(p)) return p.tag === n;
+      const continues =
+        ((ts.isPropertyAccessExpression(p) || ts.isElementAccessExpression(p)) &&
+          p.expression === n) ||
+        isTypeWrapper(p, n);
+      if (!continues) return false;
+      n = p;
+    }
+  };
+  const checkMember = (node: Access): void => {
+    const base = apiKind(node.expression);
+    const member = memberName(node);
+    if (base === 'test' && member !== null && FLAG_MEMBERS.has(member)) {
+      skipOnly(node, `.${member} on the test API`);
+    } else if (TRACKED.has(base) && memberKind(base, member) === 'unknown') {
+      skipOnly(
+        node,
+        member === null
+          ? 'a computed member of the test API'
+          : `.${member} is not a member of the test API the guard knows`,
       );
-    } else {
-      checkOptions(literal, true);
+    } else if (member === 'fails' && inCalleeChain(node)) {
+      skipOnly(node, '.fails in a call chain');
     }
-  }
+  };
+  /** Whether an identifier refers to a value here (not a declared name, key, label or type). */
+  const isReference = (id: Identifier): boolean => {
+    const p = id.parent;
+    if (ts.isPropertyAccessExpression(p)) return p.expression === id;
+    if (ts.isShorthandPropertyAssignment(p)) return p.name === id;
+    if (ts.isExportSpecifier(p)) return !isReexport(p);
+    if (
+      ts.isQualifiedName(p) ||
+      ts.isImportSpecifier(p) ||
+      ts.isImportClause(p) ||
+      ts.isNamespaceImport(p) ||
+      ts.isImportEqualsDeclaration(p) ||
+      ts.isNamespaceExport(p) ||
+      ts.isLabeledStatement(p) ||
+      ts.isBreakOrContinueStatement(p) ||
+      ts.isMetaProperty(p) ||
+      ts.isJsxAttribute(p) ||
+      ts.isJsxOpeningElement(p) ||
+      ts.isJsxSelfClosingElement(p) ||
+      ts.isJsxClosingElement(p)
+    ) {
+      return false;
+    }
+    if (ts.isBindingElement(p) && p.propertyName === id) return false;
+    return !('name' in p && p.name === id);
+  };
+  /** The expression `e` is the callee, base, operand or branch of, or null. */
+  const enclosingUse = (e: Expression): Expression | null => {
+    const p = e.parent;
+    if (
+      ts.isParenthesizedExpression(p) ||
+      ts.isNonNullExpression(p) ||
+      ts.isAsExpression(p) ||
+      ts.isSatisfiesExpression(p) ||
+      ts.isTypeAssertionExpression(p) ||
+      ts.isExpressionWithTypeArguments(p) ||
+      ts.isPropertyAccessExpression(p) ||
+      ts.isElementAccessExpression(p) ||
+      ts.isCallExpression(p)
+    ) {
+      return p.expression === e ? p : null;
+    }
+    if (ts.isTaggedTemplateExpression(p)) return p.tag === e ? p : null;
+    if (ts.isConditionalExpression(p)) return p.condition === e ? null : p;
+    if (ts.isBinaryExpression(p)) {
+      if (isLogical(p.operatorToken.kind)) return p;
+      return p.operatorToken.kind === ts.SyntaxKind.CommaToken && p.right === e ? p : null;
+    }
+    return null;
+  };
+  /**
+   * A reference to the test API must end in a call the guard reads (a registration, a hook) or
+   * be the initializer of a const alias, whose own references are checked in turn.
+   */
+  const checkReference = (id: Identifier): void => {
+    if (!isReference(id) || !TRACKED.has(identifierKind(id)) || inTypeNode(id)) return;
+    let top: Expression = id;
+    for (let up = enclosingUse(top); up !== null; up = enclosingUse(top)) top = up;
+    if (!TRACKED.has(apiKind(top))) return;
+    if (aliasInitializer(top.parent) === top) return;
+    skipOnly(id, 'the test API is used as a value the guard cannot follow');
+  };
+
+  /**
+   * `export { it } from 'vitest'`, `export * as v from 'vitest'`, `export * from 'vitest'`: the
+   * test API passed on to another file without a local name, which the guard cannot follow.
+   */
+  const checkVitestReexport = (node: import('typescript').ExportDeclaration): void => {
+    const specifier = node.moduleSpecifier;
+    if (
+      node.isTypeOnly ||
+      specifier === undefined ||
+      !ts.isStringLiteral(specifier) ||
+      specifier.text !== 'vitest'
+    ) {
+      return;
+    }
+    const clause = node.exportClause;
+    if (clause === undefined || ts.isNamespaceExport(clause)) {
+      skipOnly(node, 'the test API is exported to another file the guard cannot follow');
+      return;
+    }
+    for (const element of clause.elements) {
+      const imported = element.propertyName ?? element.name;
+      if (!element.isTypeOnly && TEST_API_ROOTS.has(imported.text)) {
+        skipOnly(element, 'the test API is exported to another file the guard cannot follow');
+      }
+    }
+  };
+
+  const visit = (node: Node): void => {
+    if (ts.isExportDeclaration(node)) checkVitestReexport(node);
+    if (ts.isCallExpression(node)) {
+      const callee = apiKind(node.expression);
+      if (callee === 'test') checkRegistration(node);
+      else if (callee === 'none') checkCustomCall(node);
+    } else if (ts.isTaggedTemplateExpression(node) && apiKind(node.tag) === 'test') {
+      skipOnly(node, 'a registration with a template has no callback, so it is a todo');
+    }
+    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+      checkMember(node);
+    } else if (ts.isIdentifier(node)) {
+      checkReference(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
   return findings;
 }
 
@@ -459,9 +1015,16 @@ function scanTestFile(file: string, text: string): Finding[] {
       }
     }
   });
-  if (strictRetry) return findings;
-  // Stable sort: findings of one line keep the order in which the rules are listed above.
-  return [...findings, ...retryOptionFindings(file, text)].sort((a, b) => a.line - b.line);
+  // A registration finding is kept only when no finding of its line has its rule yet; the stable
+  // sort keeps the line rules first within a line, in the order they are listed above.
+  const seen = new Set(findings.map((f) => `${f.line} ${f.rule}`));
+  for (const finding of registrationFindings(file, text, strictRetry)) {
+    const key = `${finding.line} ${finding.rule}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    findings.push(finding);
+  }
+  return findings.sort((a, b) => a.line - b.line);
 }
 
 function scanVitestConfig(file: string, text: string): Finding[] {

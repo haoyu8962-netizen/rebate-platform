@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { repoRoot } from '../../lib/paths.ts';
 import { cleanupFixtures, makeTree } from './fixture-kit.ts';
@@ -14,6 +17,7 @@ import {
   scanTree,
   testTitles,
 } from './test-guard.ts';
+import { listTreeFiles } from './tree.ts';
 
 afterAll(cleanupFixtures);
 
@@ -109,10 +113,11 @@ describe('test files', () => {
       expect(scanFile(file, fx.OPTIONS_VARIABLE_RETRY).map((f) => `${f.line}:${f.rule}`)).toEqual([
         '1:no-retry',
       ]);
+      // Options the guard cannot read: no-retry and no-skip-only (CT-06zzzzzzzl).
       expect(
         scanFile(file, fx.OPTIONS_VARIABLE_IMPORTED).map((f) => `${f.line}:${f.rule}`),
-      ).toEqual(['2:no-retry']);
-      expect(rules(file, fx.OPTIONS_SPREAD)).toEqual(['no-retry']);
+      ).toEqual(['2:no-retry', '2:no-skip-only']);
+      expect(rules(file, fx.OPTIONS_SPREAD)).toEqual(['no-retry', 'no-skip-only']);
     });
   });
 
@@ -449,4 +454,102 @@ describe('[CT-06zzzm] Codex r1: comments and strings, commented timeouts', () =>
       ]);
     }
   });
+});
+
+describe('[CT-06zzzzzzzl] test registrations and options read on the syntax tree', () => {
+  it.each(fx.REGISTRATION_CASES)('%s', (_name, file, source, findings) => {
+    const found = scanFile(file, source).map((f) => `${f.line}:${f.rule}`);
+    expect(found.sort(), source).toEqual([...findings].sort());
+  });
+
+  it('keeps one finding per line and rule, the line rules first', () => {
+    const flagged = "const policy = { skip: true, retry: 2 };\nit('s', { skip: true }, () => {});";
+    expect(scanFile(fx.FUNDS_TEST_FILE, flagged).map((f) => `${f.line}:${f.rule}`)).toEqual([
+      '1:no-retry',
+      '2:no-skip-only',
+    ]);
+    expect(scanFile(fx.FUNDS_TEST_FILE, `\n${fx.SKIPPED_TEST}`)).toEqual([
+      {
+        file: fx.FUNDS_TEST_FILE,
+        line: 2,
+        rule: 'no-skip-only',
+        message: 'tests must not be skipped, focused or left as todo',
+      },
+    ]);
+  });
+
+  it('says why a registration is reported', () => {
+    const [finding] = scanFile(fx.UNIT_TEST_FILE, "it('s', { todo: true }, () => {});");
+    expect(finding?.message).toContain('the option todo is not the literal false');
+  });
+});
+
+describe('[CT-06zzzzzzzl] typescript is loaded only to scan test files', () => {
+  const root = repoRoot();
+  const guardFile = join(root, 'tools/guard/lib/test-guard.ts');
+  // The same reading as couli-runs/OPS-lane/CT-06zzzzzzze-redo/closure.mjs.
+  const RELATIVE_IMPORT = /(?:from\s*|import\s*\(\s*|import\s+)['"](\.[^'"]+)['"]/g;
+  const TYPESCRIPT = /(['"])typescript\1/;
+  const STATIC_IMPORT = /^\s*import\b[^;]*?['"]typescript['"]/m;
+  const read = (file: string): string => readFileSync(file, 'utf8');
+
+  /** The files reached from `entry` by relative imports. */
+  function importClosure(entry: string): string[] {
+    const seen = new Set<string>();
+    const queue = [join(root, entry)];
+    for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
+      if (seen.has(file) || !existsSync(file)) continue;
+      seen.add(file);
+      for (const m of readFileSync(file, 'utf8').matchAll(RELATIVE_IMPORT)) {
+        queue.push(resolve(dirname(file), m[1] ?? ''));
+      }
+    }
+    return [...seen];
+  }
+
+  it('evidence-check, task-file and test-blocks reach no file that uses typescript', () => {
+    for (const entry of [
+      'tools/ci/evidence-check.ts',
+      'tools/lib/task-file.ts',
+      'tools/guard/lib/test-blocks.ts',
+    ]) {
+      const files = importClosure(entry);
+      expect(files, entry).toContain(join(root, entry));
+      const users = files.filter((file) => file !== guardFile && TYPESCRIPT.test(read(file)));
+      expect(users, entry).toEqual([]);
+      const imports = files.filter((file) => STATIC_IMPORT.test(read(file)));
+      expect(imports, entry).toEqual([]);
+    }
+  });
+
+  it('test-guard.ts names typescript only inside functions', () => {
+    const ts = createRequire(import.meta.url)('typescript') as typeof import('typescript');
+    const source = ts.createSourceFile(guardFile, read(guardFile), ts.ScriptTarget.Latest, true);
+    const named: { line: number; inFunction: boolean }[] = [];
+    const visit = (node: import('typescript').Node): void => {
+      if (ts.isStringLiteralLike(node) && node.text === 'typescript') {
+        named.push({
+          line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
+          inFunction: ts.findAncestor(node.parent, ts.isFunctionLike) !== undefined,
+        });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    expect(named.length).toBeGreaterThan(0);
+    expect(named.filter((n) => !n.inFunction)).toEqual([]);
+  });
+});
+
+describe('[CT-06zzzzzzzl] the test files of this repository', () => {
+  it('have no registration the guard reports', () => {
+    const root = repoRoot();
+    const testFile = /\.(test|spec)\.[cm]?[jt]sx?$/;
+    const files = listTreeFiles(root).files.filter((f) => testFile.test(f));
+    expect(files.length).toBeGreaterThan(1000);
+    const found = scanTree(root, files)
+      .filter((f) => f.rule === 'no-skip-only' || f.rule === 'no-retry')
+      .map((f) => `${f.file}:${f.line}: [${f.rule}] ${f.message}`);
+    expect(found).toEqual([]);
+  }, 600_000);
 });
