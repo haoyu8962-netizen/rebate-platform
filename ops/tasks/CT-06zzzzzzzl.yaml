@@ -27,4 +27,5 @@ tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/test-guard-option-skip/**'
-status: todo
+status: done
+pr: 825
