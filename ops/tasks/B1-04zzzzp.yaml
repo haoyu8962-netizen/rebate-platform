@@ -1,0 +1,39 @@
+id: B1-04zzzzp
+repo: rebate-platform
+title: 淘宝用户授权服务端真实闭环（接手 B1-04zzzzn）：备案尝试先落单（app.union_filing_attempts），重复备案查回只收库里对得上的历史绑定，结局未知的更早尝试只告警，签发与提交共用就绪与联盟账号一致检查
+type: impl
+# 2026-11-25 w1 入账（编排 D10-3175：B1-04zzzzn Codex 调用 10 / 10 熔断，开接手单，旧单同 PR 置 void；负责人依据 approvals 206 第 ⑤ 件 / 208）。
+#   带入 B1-04zzzzn 的规则测试提交与实现提交（头 820c6529c，原样不重写；w1 在 D10-3173 ① 时另做过一份变基副本 121229330，逐文件 patch-id 一致，用哪份由编排定）。本单第一步是在干净输入上的 Codex 全量资金评审（常规第 1 轮）。
+#   计数如实：B1-04zzzzn 的第 208 条（D10-3129）一次性写测 1、规则测试评审 1、实现 1 均已用掉（[AC-B1-04zzzzn#22]、spec-test r5 pass、实现 r6），资金评审 1 轮（r5）结论由 D10-3173 作废；Codex 调用 10 / 10 熔断（D10-3175）。
+# 现行口径（只写结论）：① 新表 app.union_filing_attempts（迁移号 land 时取主干下一个空号，现为 0155）：调 publisher.info.save 前独立事务落尝试并提交，save 成功 → saved（与绑定同事务）、明确拒绝 → rejected、
+#   回「重复」→ duplicate（都记 finished_at）；进程中断 / 传输超时 → 结局留空；couli_app 只 SELECT、INSERT、UPDATE(outcome, finished_at)。表名带 union_ 前缀，tools/ci/lint-migrations.test.ts 资金 / 归属表清单只加一行。
+# ② 重复备案查回的编号只在库里同一（应用、用户、平台、联盟账号）有该编号的历史绑定时接受；否则不写绑定、答 50001：有更早且结局未知的尝试 → duplicate_after_unknown_attempt 告警带 earlier_attempt_id，
+#   无 → duplicate_unverified；查回失败（立即抛错或被治理层单次请求时限取消）照此判，更早那条尝试不改（D10-2872 / D10-2972 / D10-3129）。告警与日志不含凭证、token、邀请码、淘宝 user_id / 昵称。
+# ③ 「真实淘宝备案已就绪」（用户 OAuth 配置、邀请码、邀请码所属账号 = 本次选用联盟账号）在写 state 前、消费 state 前判，签发（打开链接、商品详情进店，经共用 issueTaobaoAuthState 传已选账号）与提交共用；
+#   不就绪答原码 + auth_unavailable、不写也不消费 state。issueTaobaoAuthState 的 accountId 类型上仍可选（冻结 auth-url.test.ts:76 不传），接了就绪检查而没传账号 → auth_unavailable。
+# 不在本单：长期未完成尝试的巡检（FU-FILING-ATTEMPT-PATROL）；换应用旧 state（FU-TAOBAO-OAUTH-APP-ROTATION）；淘宝接口实测（FU-TB-05-DUP-LOOKUP）；尝试表 state 外键约束 app / user（已登 FU）。
+refs: [BR-ID-17, BR-ATTR-05]
+refs_hash:
+  BR-ID-17: ba4ebcc6279a
+  BR-ATTR-05: 655fe77b6d9b
+deps: []
+paths:
+  - 'apps/api/src/modules/linking/{application/{union-auth-state,union-auth-url,link-open-taobao,union-binding-exchanger,union-bindings,union-filing-attempts,shop-open,shop-open.test}.ts,infra/{auth-apps,auth-apps.test,union-filing-attempts.test}.ts,linking.module.ts}'
+  - 'apps/api/src/modules/union/{union.module.ts,domain/types.ts,application/governed-adapter.ts}'
+  - 'apps/api/src/modules/union/infra/taobao/{taobao-adapter.ts,site-oauth.ts,user-oauth.ts,user-oauth.test.ts,publisher.ts,publisher.test.ts}'
+  - 'apps/api/src/modules/platform/config/{taobao-oauth.ts,taobao-oauth.test.ts,config.ts,index.ts}'
+  - '.env.example'
+  - 'db/migrations/*_union-filing-attempts.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+  - 'tools/ci/lint-migrations.test.ts' # 只在资金 / 归属表期望清单加 'union_filing_attempts'（附注 B1-04zzzzn），不改别的断言
+test_paths:
+  - 'test/spec/linking/taobao-user-auth/**'
+  - 'test/spec/db/union-filing-attempts/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/linking/taobao-user-auth/**'
+  - 'test/spec/db/union-filing-attempts/**'
+status: todo
