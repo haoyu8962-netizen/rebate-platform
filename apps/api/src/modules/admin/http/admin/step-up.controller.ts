@@ -114,14 +114,14 @@ export class AdminStepUpController {
     @Res({ passthrough: true }) reply: HeaderReply,
   ): Promise<StepUpResponse> {
     reply.header('Cache-Control', 'no-store');
-    // The contract made `tier` optional (CT-24zzv); until the service reads `method`, a body
-    // without `tier` is refused as before (20001 [tier]).
-    const { tier } = request.body;
-    if (tier === undefined) {
-      const { statusCode, body } = fieldsErrorEnvelope(['tier'], request.id);
+    // The verification method is `method`, or its legacy name `tier` (CT-24zzv); when both are
+    // sent and differ, `method` wins and is the only one verified. Neither → 20001 [method].
+    const method = request.body.method ?? request.body.tier;
+    if (method === undefined) {
+      const { statusCode, body } = fieldsErrorEnvelope(['method'], request.id);
       throw new HttpException(body, statusCode);
     }
-    const result = await this.stepUp.stepUp(caller(request), tier, request.body.code);
+    const result = await this.stepUp.stepUp(caller(request), method, request.body.code);
     if (result.code !== 0) throw failure(result, request.id);
     return { code: 0, msg: '', data: { ...result.grant }, trace_id: request.id };
   }

@@ -3161,10 +3161,15 @@ export interface paths {
          * @description Returns a step_up_token (BR-ID-34 二次验证分三档): `method=totp` with the current
          *     authenticator code, `method=sms` with the code sent by POST /admin/v1/auth/step-up/sms-codes
          *     (`tier` is the legacy name of `method` and is still accepted; one of them is required,
-         *     neither → 20001 with `data.fields=[method]`). sudo and strict do not differ by method: the
-         *     token serves any one sudo or strict operation of this account and admin session; the
-         *     response's `tier` echoes the method (record only). A successful verification also starts
-         *     the session's 180-minute sudo window again. The console sends the token as the
+         *     neither → 20001 with `data.fields=[method]`; when both are sent and differ, `method` is
+         *     used and only it is verified). sudo and strict do not differ by method; the response's
+         *     `tier` echoes the method (record only). The token is valid for 5 minutes from the
+         *     successful verification (`expire_at` is that moment plus 5 minutes). No operation is named
+         *     at issue: a live token that no operation has used yet serves any one sudo or strict
+         *     operation of this account and admin session; the first time a strict operation takes it,
+         *     the token is bound to that operation, and from then on only the same operation may retry
+         *     with it until `expire_at`. A successful verification also starts the session's
+         *     180-minute sudo window again. The console sends the token as the
          *     `X-Step-Up-Token` request header of the admin operation that answered 10003 (`data.tier`
          *     = sudo or strict, the tier that operation needs) and replays that request; the header is
          *     never put in the body. Which operations need which tier is marked by `x-step-up` and
@@ -3172,20 +3177,19 @@ export interface paths {
          *     `method=sms` on an account without a registered verify phone is 10003 with
          *     `data.reason=verify_phone_missing`. A wrong code is 20002 without a reason; an expired
          *     or voided SMS code is 20003.
-         *     Token use (BR-ID-08 「只能用于 1 次成功的业务请求」 as the admin side follows it): a token
-         *     is spent only by one business success of an operation that checks it (HTTP 2xx with
-         *     `code=0`); after that a request with it is 10003. When such a request is refused or fails,
-         *     the server may release the token, and the token may then be reused until `expire_at`, but
-         *     this is not guaranteed: for example, it cannot be reused when the outcome of the commit is
-         *     unknown or when the release could not be recorded. The caller may replay the request with
-         *     the same token; after an answer of 10003 it must obtain a new token before submitting
-         *     again, through a new verification, and the caller decides whether to ask again at once or
-         *     to let the administrator start the operation again; it must not assume that the token can
-         *     still be used. While one request holds the token,
-         *     another request with it is 10003. An operation that needs no step-up ignores a token sent
-         *     with it. Not fixed by BR-ID-34 and left open here: whether wrong step-up codes count
-         *     towards the login-failure lock, and the token lifetime (the response carries `expire_at`;
-         *     the server decides).
+         *     Token use (BR-ID-34 「验证结果只能用于一次成功的操作」; BR-ID-08 「只能用于 1 次成功的业务请求」
+         *     as the admin side follows it): a token is spent by one business success of an operation
+         *     that checks it (HTTP 2xx with `code=0`); after that a request with it is 10003. After a
+         *     definite rejection or failure of that operation the token is not spent, and the request may
+         *     be sent again with it until `expire_at`. When the outcome is unknown (for example, the
+         *     result of the commit is not known, or the token's state could not be recorded), the token
+         *     stays held until it expires: a request with it is 10003 and a new verification is needed.
+         *     After an answer of 10003 the caller must obtain a new token through a new verification
+         *     before submitting again, and decides whether to ask again at once or to let the
+         *     administrator start the operation again; it must not assume that the token can still be
+         *     used. While one request holds the token, another request with it is 10003. An operation
+         *     that needs no step-up ignores a token sent with it. Not fixed by BR-ID-34 and left open
+         *     here: whether wrong step-up codes count towards the login-failure lock.
          */
         post: operations["adminStepUp"];
         delete?: never;
@@ -3209,11 +3213,16 @@ export interface paths {
          *     「暂无权限」 page (BR-ID-34 细则「首次绑定身份验证器」). Permission keys are values of
          *     contracts/enums/admin.yaml `admin_permission`; clients ignore a key they do not know.
          *     Each entry carries its step-up annotation (04 §11 step-up column): `step_up_tier` is the
-         *     tier every step-up operation of that point needs (null = none needs one), and
-         *     `step_up_operations` lists the operations whose tier differs from it (e.g. only executing a
-         *     payout batch under `payout.execute` is strict; only unfreezing under `risk.freeze` is sudo;
-         *     under `config.business` and `switch.all` the operation is the configuration key or switch
-         *     name, e.g. `payout.single_cap_fen` strict). Tiers are sudo and strict (BR-ID-34 二次验证分三档);
+         *     highest tier among the operations of that point (null = none needs one) and is display
+         *     only: whether an operation needs a verification is decided by that operation's own
+         *     `x-step-up` and its 10003 answer, and the console must not block an operation in advance
+         *     because of this field. `step_up_operations` lists the step-up operations whose tier
+         *     differs from it; operations that need none are not listed (under `fund.adjust`, rejecting
+         *     or withdrawing an adjustment needs no verification although `step_up_tier` is strict).
+         *     Examples of listed operations: only executing a payout batch under `payout.execute` is
+         *     strict; only unfreezing under `risk.freeze` is sudo; under `config.business` and
+         *     `switch.all` the operation is the configuration key or switch name, e.g.
+         *     `payout.single_cap_fen` strict. Tiers are sudo and strict (BR-ID-34 二次验证分三档);
          *     operation keys come from specs/permissions.yaml (B1-18). `verify_phone_masked` is null when
          *     no verify phone is registered: the SMS method is not offered (03 §9.2).
          */
@@ -16038,11 +16047,11 @@ export interface components {
         /**
          * @description Second-factor method of an admin step-up (enum admin_step_up_method, BR-ID-34 第二因子):
          *     totp = authenticator code, sms = SMS code to the registered verify phone. The step_up_token
-         *     does not depend on it: any token of the session serves a sudo or strict operation.
+         *     does not depend on it: an unused token of the session serves a sudo or strict operation.
          * @enum {string}
          */
         AdminStepUpMethod: "totp" | "sms";
-        /** @description One of `method` or its legacy name `tier` is required (neither → 20001 [method]). `tier` is the legacy name of `method` (the second-factor method), still accepted. */
+        /** @description One of `method` or its legacy name `tier` is required (neither → 20001 [method]). `tier` is the legacy name of `method` (the second-factor method), still accepted. When both are sent and differ, `method` is used and only it is verified. */
         AdminStepUpRequest: {
             tier?: components["schemas"]["AdminStepUpMethod"];
             method?: components["schemas"]["AdminStepUpMethod"];
@@ -23440,15 +23449,20 @@ export interface components {
         AdminBlockedRequestIdFilter: components["schemas"]["Id"];
         /**
          * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-         *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-         *     account and admin session serves either tier (the token is not tiered). A sudo operation
-         *     does not read it within 180 minutes of the session's last second-factor verification; a
-         *     strict operation always needs it. Missing, expired, used or of another session → 10003
-         *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-         *     optional). Only on admin console operations; app operations use StepUpToken.
-         *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-         *     error it is released and can be sent again until its expire_at (see POST
-         *     /admin/v1/auth/step-up).
+         *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+         *     from the successful verification that issued it (its expire_at). A live token of this
+         *     account and admin session that no operation has used yet serves either tier (the token is
+         *     not tiered). The first time a strict operation takes the token, the token is bound to that
+         *     operation: from then on only the same operation may retry with it until its expire_at. A
+         *     sudo operation does not read it within 180 minutes of the session's last second-factor
+         *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+         *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+         *     20001; that is why the header is optional). Only on admin console operations; app
+         *     operations use StepUpToken.
+         *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+         *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+         *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+         *     verification is needed (see POST /admin/v1/auth/step-up).
          */
         AdminStepUpToken: string;
         /** @description Template code (code of GET /admin/v1/notify-channels); not a template code of the app → 20001 with data.fields=[code]. */
@@ -31323,15 +31337,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -31992,15 +32011,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32123,15 +32147,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32683,15 +32712,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32759,15 +32793,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -32815,15 +32854,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -35652,15 +35696,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -35801,15 +35850,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36198,15 +36252,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36271,15 +36330,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36354,15 +36418,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -36452,15 +36521,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -41315,15 +41389,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -42407,15 +42486,20 @@ export interface operations {
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -42874,15 +42958,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -43054,15 +43143,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -43321,15 +43415,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -44013,15 +44112,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -44398,15 +44502,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -45628,15 +45737,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
                 /**
@@ -46027,15 +46141,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -46200,15 +46319,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -46364,15 +46488,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
@@ -46525,15 +46654,20 @@ export interface operations {
                 "X-Trace-Id"?: components["parameters"]["TraceId"];
                 /**
                  * @description step_up_token from POST /admin/v1/auth/step-up (BR-ID-34 二次验证分三档), listed only on
-                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. Any live, unused token of this
-                 *     account and admin session serves either tier (the token is not tiered). A sudo operation
-                 *     does not read it within 180 minutes of the session's last second-factor verification; a
-                 *     strict operation always needs it. Missing, expired, used or of another session → 10003
-                 *     with data.tier = the tier the operation needs (not 20001; that is why the header is
-                 *     optional). Only on admin console operations; app operations use StepUpToken.
-                 *     Spent only when this operation succeeds (HTTP 2xx with code=0); after a rejection or an
-                 *     error it is released and can be sent again until its expire_at (see POST
-                 *     /admin/v1/auth/step-up).
+                 *     operations marked `x-step-up: sudo` or `x-step-up: strict`. It is valid for 5 minutes
+                 *     from the successful verification that issued it (its expire_at). A live token of this
+                 *     account and admin session that no operation has used yet serves either tier (the token is
+                 *     not tiered). The first time a strict operation takes the token, the token is bound to that
+                 *     operation: from then on only the same operation may retry with it until its expire_at. A
+                 *     sudo operation does not read it within 180 minutes of the session's last second-factor
+                 *     verification; a strict operation always needs it. Missing, expired, used, bound to another
+                 *     operation or of another session → 10003 with data.tier = the tier the operation needs (not
+                 *     20001; that is why the header is optional). Only on admin console operations; app
+                 *     operations use StepUpToken.
+                 *     The token is spent when the operation succeeds (HTTP 2xx with code=0). After a definite
+                 *     rejection or failure it is not spent and can be sent again until its expire_at. When the
+                 *     outcome is unknown, it stays held until it expires and cannot be sent again; a new
+                 *     verification is needed (see POST /admin/v1/auth/step-up).
                  */
                 "X-Step-Up-Token"?: components["parameters"]["AdminStepUpToken"];
             };
