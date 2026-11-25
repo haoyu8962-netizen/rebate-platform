@@ -1,0 +1,30 @@
+id: CT-06zzzzzzzk
+repo: rebate-platform
+title: CT-06zzzzzzzk：证据门禁里 review_type 为 spec-test 的条目不能顶替必需的代码评审——判必需评审方与独立 Claude 替补时只看代码评审条目（从 CT-06zzzzzzzh 拆出的 ③，D10-3108）
+type: guard-change
+# 2026-11-25 ops 入账（编排 D10-3108）。第三类门禁改动，合并照 approvals 16。从 CT-06zzzzzzzh 台账补丁 1 的 ③ 拆出：CT-06zzzzzzzh 暂停（码评审三轮 fail，S1 都在缺省关的绑定开关后面），③ 是现行漏洞、不陪着等。
+# 起因（CT-06zzzzzzzh Codex money r1 S1-③，原文 couli-runs/CT-06zzzzzzzh/attempts/6/review-codex.json）：tools/ci/evidence-check.ts 非换家分支（主干 :1720-1740）找必需评审方条目用
+#   reviews.find(reviewer === …)、替补池用全部 claude-independent 条目，都不看 review_type。reviewer 为 codex 或 claude-independent、review_type 为 spec-test 的通过条目
+#   因此能顶替必需的代码评审：证据里没有任何 money / general / contract 条目也放行。
+# 做法（只改 evidence-check 的这一处判定与它的工具测试）：非换家分支里，必需评审方的条目与独立 Claude 替补池都只取 review_type 不是 spec-test 的条目；
+#   spec-test 条目照旧按现有规则逐条核（不放宽、不新增），spec_test_review 字段照旧单独核。
+#   不带任何开关；不带 CT-06zzzzzzzh 的绑定逻辑（commit / tree、评审后覆盖、post_review_commits、按类型取最后一轮、review_type 枚举）；换家分支（:1588-1700）不动。
+#   实现从 task/CT-06zzzzzzzh 工作区摘 ③ 那几行（codeReview 判定、standInPool、find 加条件）；不改 codex-run / claude-run / 校验器 / README。必须改别处才能生效就停下报编排。
+# 在途影响（D10-3049，ops 2026-11-25 扫过）：1113 份证据模板 + 36 个远端分支，无一份只靠 spec-test 条目顶替代码评审，0 张受影响。
+# 规则测试至少钉：① 实现方 claude、reviews 里只有 reviewer codex、review_type spec-test 的通过条目、没有代码评审 → 拒（点名缺 codex 评审）；
+#   ② 同上但只有 claude-independent 的 spec-test 通过条目 → 不算替补，拒；③ 有合格的 codex money 通过条目、另有 spec-test 条目 → 照旧过；
+#   ④ 有合格的 claude-independent money 通过条目替补（Codex 不可用，第 36 条）→ 照旧过。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ci/evidence-check{,.test}.ts'
+  - 'ops/tasks/CT-06zzzzzzzk.yaml'
+test_paths:
+  - 'test/spec/ci/evidence-spec-test-not-code-review/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/evidence-spec-test-not-code-review/**'
+status: todo
