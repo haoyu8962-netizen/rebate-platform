@@ -36,4 +36,5 @@ accept:
   - 'pnpm verify:fast'
   - 'test/spec/linking/taobao-user-auth/**'
   - 'test/spec/db/union-filing-attempts/**'
-status: todo
+status: done
+pr: 814
