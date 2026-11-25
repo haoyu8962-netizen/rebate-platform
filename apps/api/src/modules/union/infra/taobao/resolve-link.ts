@@ -2,7 +2,7 @@
 // https://item.taobao.com/item.htm?id=<数字> 与 https://detail.tmall.com/item.htm?id=<数字>。
 // 主机按 B1-07d 规范化（小写、去掉末尾一个「.」）后须恰为这两个之一；只认 https、不带用户信息、
 // 不写端口、路径恰为 /item.htm、查询参数 id 只出现一次且为 1–20 位纯数字。其余一律不认（返回 null），
-// 由调用方照旧抛 adapter_unimplemented。推广链、淘口令、m.tb.cn 与手机页不在本段（D10-2683）。
+// 由调用方转大淘客 parse-content（B1-04zzzzo，见 parse-content.ts；没有大淘客来源则 adapter_unimplemented）。
 // 纯函数：不读时钟、不联网。
 
 const ITEM_HOSTS: ReadonlySet<string> = new Set(['item.taobao.com', 'detail.tmall.com']);

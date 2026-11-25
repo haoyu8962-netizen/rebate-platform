@@ -3,6 +3,8 @@
 // repository holds only `source: synthetic` samples; real recordings live in the private repo.
 // Nothing here listens on a port or opens a socket: the client hands every request to an
 // injected transport, and the file replay is such a transport backed by the recording files.
+// B1-04zzzzo: UnionTransportRequest.archiveOmitParams (archive summary only) plays no part in
+// replay matching; see createUnionFileReplay.
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
@@ -62,6 +64,14 @@ export interface UnionTransportRequest {
    * archive.ts ArchiveBodyLookupError.
    */
   readonly archiveBody?: (body: string) => string | Promise<string>;
+  /**
+   * B1-04zzzzo: parameter names (query string and form body alike) the archiving transport drops
+   * from the stored request summary (e.g. the 大淘客 parse-content `content`, a user's raw 淘口令).
+   * Read only by the archiving transport: the URL and body sent upstream, and the signature, still
+   * carry every parameter. Absent or empty: the summary is exactly as before. File replay ignores
+   * it (see the note above createUnionFileReplay).
+   */
+  readonly archiveOmitParams?: readonly string[];
 }
 
 export interface UnionTransportResponse {
@@ -361,6 +371,11 @@ function matches(envelope: RecordingEnvelope, request: UnionTransportRequest): b
  * matching or cancellation, so a mismatched or aborted load still counts. The same
  * <platform>/<scenario> is listed again whenever its files changed. Once any non-probe source
  * was loaded the report stays ineligible as acceptance evidence (规划/11 §4.5).
+ * B1-04zzzzo: request.archiveOmitParams is ignored here. Matching compares the request as sent
+ * (URL and body, which still carry every parameter), never an archived request summary, so a
+ * parameter left out of union_raw_payloads.request_summary neither loosens nor breaks a match.
+ * Archive rows are not a replay source: a summary with `omitted_params` is incomplete by design and
+ * must not be turned into a recording.
  */
 export function createUnionFileReplay(options: UnionFileReplayOptions): UnionFileReplay {
   const { directory, clock } = options;

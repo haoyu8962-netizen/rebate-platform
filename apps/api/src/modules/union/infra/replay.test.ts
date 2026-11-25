@@ -209,3 +209,22 @@ describe('union file replay report', () => {
     });
   }, 30_000);
 });
+
+describe('union file replay and archiveOmitParams', () => {
+  it('[AC-B1-04zzzzo-UNIT#3] matches on the request as sent: archiveOmitParams neither loosens nor breaks matching', async () => {
+    await withRecordings(async (root, write) => {
+      await write('synthetic-omit', metadata('synthetic'));
+      const replay = createUnionFileReplay({ directory: root, clock: new FixedClock(instant) });
+      const omit = ['synthetic-input', 'content'];
+      await expect(
+        replay.transport({ ...replayRequest('synthetic-omit'), archiveOmitParams: omit }),
+      ).resolves.toEqual({ status: 202, headers: {}, body: 'synthetic-output' });
+      await expect(
+        replay.transport({
+          ...replayRequest('synthetic-omit', 'synthetic-other-input'),
+          archiveOmitParams: omit,
+        }),
+      ).rejects.toMatchObject({ code: 'recording_mismatch' });
+    });
+  });
+});

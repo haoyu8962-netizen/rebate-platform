@@ -355,3 +355,69 @@ it('[AC-B1-04zzu-UNIT#1] archiveBody 返回 Promise：存它给出的正文；�
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain('2900000000000001077');
   }
 });
+
+it('[AC-B1-04zzzzo-UNIT#1] archiveOmitParams：点名参数不进摘要（查询串与表单体），另记 omitted_params；缺省或空数组时摘要逐字节不变', () => {
+  const get: UnionTransportRequest = {
+    platform: 'taobao',
+    method: 'GET',
+    url: 'https://unit.invalid/parse?appKey=k1&content=%EF%BF%A5Unit01%EF%BF%A5&version=v1',
+    headers: {},
+    archive: { appId: 'unit-app', kind: 'query' },
+  };
+  const omitted = requestSummary({ ...get, archiveOmitParams: ['content'] });
+  expect(omitted).toEqual({
+    method: 'GET',
+    url: 'https://unit.invalid/parse',
+    omitted_params: ['content'],
+    params: { version: 'v1' },
+  });
+  expect(JSON.stringify(omitted)).not.toMatch(/Unit01|"content"\s*:/u);
+
+  const form: UnionTransportRequest = {
+    ...get,
+    method: 'POST',
+    url: 'https://unit.invalid/parse?q=1',
+    headers: { 'content-type': 'application/x-www-form-urlencoded;charset=utf-8' },
+    body: 'content=%EF%BF%A5Unit02%EF%BF%A5&page=2',
+  };
+  expect(requestSummary({ ...form, archiveOmitParams: ['content', 'q', 'content'] })).toEqual({
+    method: 'POST',
+    url: 'https://unit.invalid/parse',
+    omitted_params: ['content', 'q'],
+    params: { page: '2' },
+  });
+
+  for (const request of [get, form, base, { ...base, body: 'not json' }]) {
+    const before = JSON.stringify(requestSummary(request));
+    expect(JSON.stringify(requestSummary({ ...request, archiveOmitParams: [] }))).toBe(before);
+    expect(JSON.stringify(requestSummary({ ...request, archiveOmitParams: ['absent'] }))).toBe(
+      before,
+    );
+  }
+  expect(JSON.stringify(requestSummary(get))).toBe(
+    '{"method":"GET","url":"https://unit.invalid/parse","params":{"content":"￥Unit01￥","version":"v1"}}',
+  );
+});
+
+it('[AC-B1-04zzzzo-UNIT#2] archiveOmitParams 只影响存下的摘要：inner 收到的请求原样（URL 与体不变）', async () => {
+  const { db, statements } = fakeDb();
+  const clock = new FixedClock('2026-10-15T00:00:00.000Z');
+  const inner = vi.fn(async () => ({ status: 200, headers: {}, body: '{}' }));
+  const wrapped = createArchivingTransport(inner, {
+    db,
+    clock,
+    logger: { warn: vi.fn(), error: vi.fn() },
+  });
+  const request: UnionTransportRequest = {
+    platform: 'taobao',
+    method: 'GET',
+    url: 'https://unit.invalid/parse?content=Unit03&version=v1',
+    headers: {},
+    archive: { appId: 'unit-app', kind: 'query' },
+    archiveOmitParams: ['content'],
+  };
+  await wrapped(request);
+  expect(inner).toHaveBeenCalledWith(request);
+  expect(statements).toHaveLength(1);
+  expect(JSON.stringify(statements[0]!.parameters)).not.toContain('Unit03');
+});
