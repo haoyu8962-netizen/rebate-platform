@@ -1,8 +1,8 @@
 // Unit tests of the detail gate (F1-07ee r6, BR-FUND-06): a detail read never shows over a newer
 // write answer. A read sent before a write's success answer is dropped when it comes back late
 // (its success and its failure alike), and so is any answer with a smaller row_version; the page
-// keeps the write's detail and the entries that detail gives. The result-unknown prompt offers
-// 【关闭】 only while a detail read by the page is shown.
+// keeps the write's detail and the entries that detail gives. The result-unknown prompt never
+// offers 【关闭】; it offers 【放弃这次提交】 only while a detail read by the page is shown (r7).
 import { cleanup, render, screen } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -18,9 +18,12 @@ const ORDER_ID = '0b9d3c1e-1a2b-4c3d-8e9f-001122334455';
 const clock = { now: () => Date.parse('2026-11-25T02:00:00.000Z') };
 const everything: AccessControl = { isSuper: true, can: () => true, stepUpTier: () => null };
 const noMarker: OrderMarker = {
+  orderId: ORDER_ID,
   scope: { page: markerPageOf(ORDER_ID), account: 'admin-1' },
   left: undefined,
   present: undefined,
+  sending: false,
+  drops: 0,
 };
 const e = ordersTexts.writes.entries;
 
@@ -126,6 +129,7 @@ it('[AC-F1-07ee-UNIT#14] 写成功后晚到的旧读取被丢弃：页面保持�
       clock,
       onSaved: () => {},
       onConflict: () => {},
+      locked: false,
     }),
   );
   expect(screen.getByRole('button', { name: e.unhold })).toBeDefined();
@@ -155,18 +159,19 @@ it('[AC-F1-07ee-UNIT#15] 写成功后晚到的旧读取失败也不清掉写返�
   expect(p.shown()).toBe(v9);
 });
 
-it('[AC-F1-07ee-UNIT#16] 遗留的结果未知提示：详情未读到（读取中或读取失败）时不给【关闭】，读到并显示后才给', () => {
+it('[AC-F1-07ee-UNIT#16] 遗留的结果未知提示：从不给【关闭】；详情未读到（读取中或读取失败）时不给【放弃这次提交】，读到并显示后才给', () => {
   const left = {
     page: markerPageOf(ORDER_ID),
     unknown: true as const,
     at: '2026-11-25T01:59:00.000Z',
   };
   const marker: OrderMarker = { ...noMarker, left, present: left };
-  const close = ordersTexts.writes.pendingPrompt.close;
+  const abandon = ordersTexts.writes.pendingPrompt.abandon;
   render(createElement(UnknownWritePrompt, { marker, order: undefined }));
   expect(screen.getByText(ordersTexts.writes.pendingPrompt.notice)).toBeDefined();
   expect(screen.queryAllByRole('button')).toEqual([]);
   cleanup();
   render(createElement(UnknownWritePrompt, { marker, order: v7 }));
-  expect(screen.getByRole('button', { name: close })).toBeDefined();
+  expect(screen.getByRole('button', { name: abandon })).toBeDefined();
+  expect(screen.queryByRole('button', { name: '关闭' })).toBeNull();
 });

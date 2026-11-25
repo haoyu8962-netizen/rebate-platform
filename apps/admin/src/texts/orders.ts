@@ -386,14 +386,24 @@ export const ordersTexts = {
       reasonInvalid: '请填写指派原因（5–200 字）',
       stepUpOperation: '指定归属',
     },
-    /** F1-07ee: an order write whose result is unknown (the marker of this account). */
+    /**
+     * F1-07ee: an order write whose result is unknown (the marker of this account). A marker left
+     * before the page opened is never closed here; it can only be given up with 【放弃这次提交】,
+     * confirmed, after which the page reads the order again (r7).
+     */
     pendingPrompt: {
       notice: '这一订单上次的操作结果未知',
       moment: (time: string): string => `结果未知的时间：${time}（北京时间）。`,
-      check: '请先重新打开本页读取订单、核对是否已生效，核对后点【关闭】再操作。',
+      check: '请先核对本页显示的订单是否已是操作后的结果；要继续操作，点【放弃这次提交】。',
+      waiting: '这次提交还在等待服务端回答，请稍候。',
       statusUnknown:
         '订单当前状态本端无法识别，暂不能重试；请稍后重新打开本页，状态可识别后再处理。',
-      close: '关闭',
+      abandon: '放弃这次提交',
+      abandonTitle: '放弃这次提交？',
+      abandonConfirm:
+        '放弃只是不再等待，这次提交仍可能在稍后生效；继续操作前请以重新读取的订单详情为准',
+      abandonOk: '确认放弃',
+      abandonCancel: '继续等待',
     },
     result: {
       held: '已暂停结算，页面已按服务端返回的订单更新。',

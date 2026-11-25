@@ -1,19 +1,32 @@
-// Unit tests of the order write marker (F1-07ee r5): the result-unknown marker of an order is the
-// one of components/unknown-marker (this tab, this account, no body), held from sending until a
-// definite answer of that very request; a marker left before the page opened blocks new writes
-// and shows only a read-only prompt (its 【关闭】 only once the page's own read is shown); an
-// unknown status never opens a dialog or offers 【重试】; the detail page has no reread button.
-import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
+// Unit tests of the order write marker (F1-07ee r5–r7): the result-unknown marker of an order is
+// the one of components/unknown-marker (this tab, this account, no body), held from sending until
+// a definite answer of that very request; a marker left before the page opened blocks new writes
+// and shows only a read-only prompt, never with 【关闭】: 【放弃这次提交】 (confirmed) only once the
+// page's own read is shown and no write of the order is waiting for its answer in this tab; once
+// the left marker goes, the page reads the detail once again and offers no entry until that read
+// is shown; an unknown status never opens a dialog or offers 【重试】; no reread button.
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { createElement } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { clearUnknown, readUnknown } from '../../../components/unknown-marker/index.ts';
+import { subscribeMarkers } from '../../../components/unknown-marker/marker.ts';
 import type { AccessControl } from '../../../providers/access-control/index.ts';
 import { AdminApiError, type AdminApiErrorDetails } from '../../../providers/data/index.ts';
 import { ordersTexts } from '../../../texts/orders.ts';
 import type { OrderDetail } from '../model.ts';
 import { OrderDetailPage } from '../OrderDetailPage.tsx';
 import { markerPageOf } from './model.ts';
+import { subscribeWrites, writePending } from './openWrites.ts';
 import { OrderWrites, UnknownWritePrompt } from './OrderWrites.tsx';
 import { useOrderMarker } from './useOrderMarker.ts';
 import { useOrderWrite } from './useOrderWrite.tsx';
@@ -168,7 +181,7 @@ it('[AC-F1-07ee-UNIT#8] 结果未知的写只给发起账号留标记：换账�
   expect(other.result.current.present).toBeUndefined();
 });
 
-it('[AC-F1-07ee-UNIT#9] 刷新（重新挂载）后同一账号仍看到标记，写入口全部不出、只有只读提示', async () => {
+it('[AC-F1-07ee-UNIT#9] 刷新（重新挂载）后同一账号仍看到标记，写入口全部不出、只有只读提示（无【关闭】，给【放弃这次提交】）', async () => {
   const write = writeHook();
   await settle();
   answers.push(NETWORK);
@@ -191,6 +204,7 @@ it('[AC-F1-07ee-UNIT#9] 刷新（重新挂载）后同一账号仍看到标记�
       clock,
       onSaved: () => {},
       onConflict: () => {},
+      locked: false,
     }),
   );
   for (const name of Object.values(ordersTexts.writes.entries))
@@ -199,8 +213,9 @@ it('[AC-F1-07ee-UNIT#9] 刷新（重新挂载）后同一账号仍看到标记�
   render(createElement(UnknownWritePrompt, { marker, order: order() }));
   expect(screen.getByText(ordersTexts.writes.pendingPrompt.notice)).toBeDefined();
   expect(screen.queryByRole('button', { name: ordersTexts.writes.retry })).toBeNull();
+  expect(screen.queryByRole('button', { name: '关闭' })).toBeNull();
   expect(
-    screen.getByRole('button', { name: ordersTexts.writes.pendingPrompt.close }),
+    screen.getByRole('button', { name: ordersTexts.writes.pendingPrompt.abandon }),
   ).toBeDefined();
   expect(custom).toHaveBeenCalledTimes(1);
 });
@@ -225,6 +240,7 @@ it('[AC-F1-07ee-UNIT#10] 状态未知时不开弹窗、不给重试，只显示�
       clock,
       onSaved: () => {},
       onConflict: () => {},
+      locked: false,
     }),
   );
   expect(screen.queryByRole('dialog')).toBeNull();
@@ -281,12 +297,17 @@ it('[AC-F1-07ee-UNIT#12] 发送中就留标记：答复前重新挂载也不给�
   const remounted = renderHook(() => useOrderMarker(ORDER_ID));
   await settle();
   expect(remounted.result.current.left).toBeDefined();
+  // Still waiting for its answer: no 【放弃这次提交】 for it (r7).
+  expect(remounted.result.current.sending).toBe(true);
+  expect(remounted.result.current.drops).toBe(0);
   await act(async () => {
     answer({ data: order() });
     await Promise.resolve();
   });
   await waitFor(() => expect(remounted.result.current.left).toBeUndefined());
   expect(readUnknown({ page: PAGE, account: 'admin-1' })).toBeUndefined();
+  expect(remounted.result.current.sending).toBe(false);
+  expect(remounted.result.current.drops).toBe(1);
 });
 
 it('[AC-F1-07ee-UNIT#13] 未知展示状态显示 UNKNOWN、上报一次，不给写入口与【同步此单】，页面只 GET 一次详情', async () => {
@@ -318,4 +339,349 @@ it('[AC-F1-07ee-UNIT#13] 未知展示状态显示 UNKNOWN、上报一次，不�
   } finally {
     window.removeEventListener('couli.admin.diagnostic', listener);
   }
+});
+
+// ---- r7 (approvals 209, D10-3129 ②, D10-3169): 【放弃这次提交】 and the reread after a drop ----
+
+const p = ordersTexts.writes.pendingPrompt;
+const e = ordersTexts.writes.entries;
+const SCOPE = { page: PAGE, account: 'admin-1' };
+const v7 = order();
+const v8held = order({
+  row_version: 8,
+  flags: { locked: false, status_locked: false, rights_pending: false, hold: true },
+  hold_reason: 'CS',
+});
+
+/** An answer the test gives by hand (no timer). */
+function controlled(): {
+  readonly answer: () => Promise<unknown>;
+  readonly resolve: (value: unknown) => void;
+  readonly reject: (cause: unknown) => void;
+} {
+  let resolve: (value: unknown) => void = () => {};
+  let reject: (cause: unknown) => void = () => {};
+  const promise = new Promise<unknown>((ok, no) => {
+    resolve = ok;
+    reject = no;
+  });
+  return { answer: () => promise, resolve, reject };
+}
+function networkError(): AdminApiError {
+  return new AdminApiError({
+    code: -1,
+    msg: '',
+    data: null,
+    httpStatus: 0,
+    kind: 'network',
+  });
+}
+function apiError(code: number, httpStatus: number): AdminApiError {
+  return new AdminApiError({ code, msg: '', data: null, httpStatus, kind: 'api' });
+}
+
+function renderPage() {
+  return render(
+    createElement(
+      MemoryRouter,
+      null,
+      createElement(OrderDetailPage, { access: everything, orderId: ORDER_ID, clock }),
+    ),
+  );
+}
+/** The write entries now rendered (none while locked). */
+function entriesShown(): string[] {
+  return Object.values(e).filter((name) => screen.queryByRole('button', { name }) !== null);
+}
+function gets(): number {
+  return custom.mock.calls.filter(([request]) => request.method === 'get').length;
+}
+/** The detail of the page is shown (its sub-order id appears in the header and the body). */
+async function detailShown(): Promise<void> {
+  expect((await screen.findAllByText('SUB-1')).length).toBeGreaterThan(0);
+}
+
+/**
+ * A write sent by an earlier mount of the page (甲类): its dialog went before the answer, the
+ * request is still open. Returns how to answer it.
+ */
+async function earlierWriteInFlight() {
+  const write = writeHook();
+  await settle();
+  const post = controlled();
+  answers.push(post.answer);
+  await act(async () => {
+    write.result.current.submit({ note: '核对' });
+    await Promise.resolve();
+  });
+  write.unmount();
+  expect(readUnknown(SCOPE)).toBeDefined();
+  expect(writePending(ORDER_ID)).toBe(true);
+  return post;
+}
+
+/** A marker left with nothing open for it any more (a reload, or the write became unknown). */
+async function leftMarker(): Promise<void> {
+  const write = writeHook();
+  await settle();
+  answers.push(NETWORK);
+  await act(async () => {
+    write.result.current.submit({ note: '核对' });
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(write.result.current.phase).toBe('unknown'));
+  write.unmount();
+  expect(readUnknown(SCOPE)).toBeDefined();
+  expect(writePending(ORDER_ID)).toBe(false);
+}
+
+async function openAbandon(): Promise<HTMLElement> {
+  const button = await screen.findByRole('button', { name: p.abandon });
+  await act(async () => {
+    fireEvent.click(button);
+  });
+  const dialogs = await screen.findAllByRole('dialog', { name: p.abandonTitle });
+  return dialogs[dialogs.length - 1]!;
+}
+
+it('[AC-F1-07ee-UNIT#17] A2/A3 遗留标记 + 详情已显示：无【关闭】，有【放弃这次提交】；二次确认写明仍可能稍后生效；【继续等待】什么都不变', async () => {
+  await leftMarker();
+  answers.push(() => Promise.resolve({ data: v7 }));
+  renderPage();
+  await detailShown();
+  expect(await screen.findByRole('button', { name: p.abandon })).toBeDefined();
+  expect(screen.queryByRole('button', { name: '关闭' })).toBeNull();
+  expect(entriesShown()).toEqual([]);
+
+  const dialog = await openAbandon();
+  expect(within(dialog).getByText(p.abandonConfirm)).toBeDefined();
+  expect(p.abandonConfirm).toContain('仍可能在稍后生效');
+  expect(readUnknown(SCOPE), 'nothing dropped before the confirmation').toBeDefined();
+  await act(async () => {
+    fireEvent.click(within(dialog).getByRole('button', { name: p.abandonCancel }));
+  });
+  expect(readUnknown(SCOPE), 'kept after 【继续等待】').toBeDefined();
+  expect(entriesShown()).toEqual([]);
+  expect(screen.getByRole('button', { name: p.abandon })).toBeDefined();
+  expect(gets()).toBe(1);
+});
+
+it('[AC-F1-07ee-UNIT#18] A4 【确认放弃】：标记清、详情恰多读一次；重读回答前没有任何写入口，回答后按新详情出现', async () => {
+  await leftMarker();
+  answers.push(() => Promise.resolve({ data: v7 }));
+  renderPage();
+  await detailShown();
+  const reread = controlled();
+  answers.push(reread.answer);
+  const dialog = await openAbandon();
+  await act(async () => {
+    fireEvent.click(within(dialog).getByRole('button', { name: p.abandonOk }));
+  });
+  expect(readUnknown(SCOPE)).toBeUndefined();
+  await waitFor(() => expect(gets()).toBe(2));
+  // The reread has no answer yet: locked, the earlier detail is not shown as the current one.
+  expect(entriesShown()).toEqual([]);
+  expect(screen.getByText(ordersTexts.detail.loading)).toBeDefined();
+  expect(screen.queryByRole('button', { name: p.abandon })).toBeNull();
+  await act(async () => {
+    reread.resolve({ data: v8held });
+    await Promise.resolve();
+  });
+  expect(await screen.findByRole('button', { name: e.unhold })).toBeDefined();
+  expect(screen.queryByRole('button', { name: e.hold })).toBeNull();
+  expect(gets()).toBe(2);
+});
+
+it('[AC-F1-07ee-UNIT#19] A1 详情读取中、读取失败时都没有【放弃这次提交】', async () => {
+  await leftMarker();
+  const first = controlled();
+  answers.push(first.answer);
+  renderPage();
+  expect(await screen.findByText(p.notice)).toBeDefined();
+  expect(screen.getByText(ordersTexts.detail.loading)).toBeDefined();
+  expect(screen.queryByRole('button', { name: p.abandon })).toBeNull();
+  await act(async () => {
+    first.reject(networkError());
+    await Promise.resolve();
+  });
+  expect(await screen.findByText(ordersTexts.detail.loadFailedTitle)).toBeDefined();
+  expect(screen.getByText(p.notice)).toBeDefined();
+  expect(screen.queryByRole('button', { name: p.abandon })).toBeNull();
+  expect(entriesShown()).toEqual([]);
+});
+
+it('[AC-F1-07ee-UNIT#20] A5/A9 旧实例请求在途时重新挂载：无写入口、无【放弃这次提交】；旧请求变成结果未知后才出现', async () => {
+  const post = await earlierWriteInFlight();
+  answers.push(() => Promise.resolve({ data: v7 }));
+  renderPage();
+  await detailShown();
+  expect(await screen.findByText(p.notice)).toBeDefined();
+  expect(screen.getByText((text) => text.includes(p.waiting))).toBeDefined();
+  expect(screen.queryByRole('button', { name: p.abandon })).toBeNull();
+  expect(entriesShown()).toEqual([]);
+  await act(async () => {
+    post.reject(networkError());
+    await Promise.resolve();
+  });
+  expect(await screen.findByRole('button', { name: p.abandon })).toBeDefined();
+  expect(readUnknown(SCOPE)).toBeDefined();
+  expect(entriesShown()).toEqual([]);
+  expect(gets()).toBe(1);
+});
+
+it('[AC-F1-07ee-UNIT#21] A6 旧请求成功（版本 8、已暂停）：自动重读恰一次；重读回答前无写入口；回答后入口是【恢复结算】', async () => {
+  const post = await earlierWriteInFlight();
+  answers.push(() => Promise.resolve({ data: v7 }));
+  renderPage();
+  await detailShown();
+  expect(screen.getByText(ordersTexts.flags.noHold)).toBeDefined();
+  expect(entriesShown()).toEqual([]);
+  const reread = controlled();
+  answers.push(reread.answer);
+  await act(async () => {
+    post.resolve({ data: v8held });
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(readUnknown(SCOPE)).toBeUndefined());
+  await waitFor(() => expect(gets()).toBe(2));
+  expect(entriesShown()).toEqual([]);
+  expect(screen.getByText(ordersTexts.detail.loading)).toBeDefined();
+  expect(
+    screen.queryByText(ordersTexts.flags.noHold),
+    'the version 7 detail is not shown',
+  ).toBeNull();
+  await act(async () => {
+    reread.resolve({ data: v8held });
+    await Promise.resolve();
+  });
+  expect(await screen.findByRole('button', { name: e.unhold })).toBeDefined();
+  expect(screen.queryByRole('button', { name: e.hold })).toBeNull();
+  expect(screen.queryByText(ordersTexts.flags.noHold)).toBeNull();
+  await settle();
+  expect(gets()).toBe(2);
+});
+
+it('[AC-F1-07ee-UNIT#22] A6 旧请求 20902 或明确拒绝：同样自动重读恰一次，重读显示后写入口才出现', async () => {
+  for (const cause of [apiError(20902, 409), apiError(42901, 429)]) {
+    const post = await earlierWriteInFlight();
+    answers.push(() => Promise.resolve({ data: v7 }));
+    renderPage();
+    await detailShown();
+    expect(entriesShown()).toEqual([]);
+    const reread = controlled();
+    answers.push(reread.answer);
+    await act(async () => {
+      post.reject(cause);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(readUnknown(SCOPE)).toBeUndefined());
+    await waitFor(() => expect(gets()).toBe(2));
+    expect(entriesShown()).toEqual([]);
+    await act(async () => {
+      reread.resolve({ data: v7 });
+      await Promise.resolve();
+    });
+    expect(await screen.findByRole('button', { name: e.hold })).toBeDefined();
+    await settle();
+    expect(gets()).toBe(2);
+    cleanup();
+    custom.mockClear();
+    answers.length = 0;
+  }
+});
+
+it('[AC-F1-07ee-UNIT#23] A7 重读失败：读取失败态、无写入口；【重试】成功后写入口才出现', async () => {
+  const post = await earlierWriteInFlight();
+  answers.push(() => Promise.resolve({ data: v7 }));
+  renderPage();
+  await detailShown();
+  answers.push(NETWORK);
+  await act(async () => {
+    post.resolve({ data: v8held });
+    await Promise.resolve();
+  });
+  expect(await screen.findByText(ordersTexts.detail.loadFailedTitle)).toBeDefined();
+  expect(entriesShown()).toEqual([]);
+  expect(gets()).toBe(2);
+  answers.push(() => Promise.resolve({ data: v8held }));
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: ordersTexts.retry }));
+  });
+  expect(await screen.findByRole('button', { name: e.unhold })).toBeDefined();
+  expect(gets()).toBe(3);
+});
+
+it('[AC-F1-07ee-UNIT#24] A8 标记消失时首次读取还在途：那次回答不采用，以重发的回答为准', async () => {
+  const post = await earlierWriteInFlight();
+  const first = controlled();
+  answers.push(first.answer);
+  renderPage();
+  await waitFor(() => expect(gets()).toBe(1));
+  const reread = controlled();
+  answers.push(reread.answer);
+  await act(async () => {
+    post.resolve({ data: v8held });
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(gets()).toBe(2));
+  // The first read (sent before the write took effect) answers with version 7: dropped.
+  await act(async () => {
+    first.resolve({ data: v7 });
+    await Promise.resolve();
+  });
+  expect(screen.queryByText('SUB-1')).toBeNull();
+  expect(screen.getByText(ordersTexts.detail.loading)).toBeDefined();
+  expect(entriesShown()).toEqual([]);
+  await act(async () => {
+    reread.resolve({ data: v8held });
+    await Promise.resolve();
+  });
+  expect(await screen.findByRole('button', { name: e.unhold })).toBeDefined();
+  expect(screen.queryByRole('button', { name: e.hold })).toBeNull();
+  expect(gets()).toBe(2);
+});
+
+it('[AC-F1-07ee-UNIT#26] 回答到达时先动标记、后结束在途：任何通知时刻都不出现「标记还在且不在途」', async () => {
+  for (const settleWith of [
+    (post: ReturnType<typeof controlled>) => post.resolve({ data: v8held }),
+    (post: ReturnType<typeof controlled>) => post.reject(apiError(42901, 429)),
+    (post: ReturnType<typeof controlled>) => post.reject(apiError(20902, 409)),
+  ]) {
+    const post = await earlierWriteInFlight();
+    const seen: { readonly marked: boolean; readonly pending: boolean }[] = [];
+    const record = () =>
+      seen.push({ marked: readUnknown(SCOPE) !== undefined, pending: writePending(ORDER_ID) });
+    const offMarkers = subscribeMarkers(record);
+    const offWrites = subscribeWrites(record);
+    try {
+      await act(async () => {
+        settleWith(post);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(writePending(ORDER_ID)).toBe(false));
+    } finally {
+      offMarkers();
+      offWrites();
+    }
+    expect(seen).toEqual([
+      { marked: false, pending: true },
+      { marked: false, pending: false },
+    ]);
+  }
+});
+
+it('[AC-F1-07ee-UNIT#27] A10 旧实例收到 10001：标记留下、不重读；之后与 A2 相同，只给【放弃这次提交】', async () => {
+  const post = await earlierWriteInFlight();
+  answers.push(() => Promise.resolve({ data: v7 }));
+  renderPage();
+  await detailShown();
+  expect(screen.queryByRole('button', { name: p.abandon })).toBeNull();
+  await act(async () => {
+    post.reject(apiError(10001, 401));
+    await Promise.resolve();
+  });
+  expect(await screen.findByRole('button', { name: p.abandon })).toBeDefined();
+  expect(readUnknown(SCOPE)).toBeDefined();
+  expect(entriesShown()).toEqual([]);
+  expect(gets()).toBe(1);
 });

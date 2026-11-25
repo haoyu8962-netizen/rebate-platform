@@ -12,6 +12,10 @@
 // a page remounted or reloaded meanwhile finds it and offers no new submission (OrderWrites). A
 // definite answer releases only this hook's hold; an ended session (10001) leaves it in place. No
 // body is kept outside this hook: a remount never restores a form.
+// From sending until any answer (or the deadline) the request also counts as open for the order
+// (./openWrites.ts, memory only): a page opened again meanwhile does not offer 【放弃这次提交】.
+// The marker is moved first and the open count ends after it, so no moment shows the marker still
+// kept while no request of the order is open.
 import type { Schema } from '@couli/contracts-ts';
 import { useDataProvider } from '@refinedev/core';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
@@ -33,6 +37,7 @@ import {
   type SentWrite,
   type WritePhase,
 } from './model.ts';
+import { beginWrite } from './openWrites.ts';
 
 export type { WritePhase };
 
@@ -83,6 +88,7 @@ export function useOrderWrite<B>(options: {
     busy.current = true;
     // In flight counts as open: a remount before the answer must not offer a second submission.
     marker.mark();
+    const ended = beginWrite(orderId);
     last.current = sent;
     setPhase('sending');
     setError(undefined);
@@ -101,18 +107,21 @@ export function useOrderWrite<B>(options: {
       );
       busy.current = false;
       marker.clear();
+      ended();
       onDone({ kind: 'saved', order: response.data });
     } catch (cause) {
       busy.current = false;
       const failure = writeFailureOf(cause);
       if (failure.kind === 'unknown') {
         // The marker stays held (marked before sending) until a definite answer.
+        ended();
         setPhase('unknown');
         return;
       }
       // A definite answer to this very request; an ended session settles nothing.
       if (endsSession(cause)) marker.leave();
       else marker.clear();
+      ended();
       if (failure.kind === 'conflict') onDone({ kind: 'conflict' });
       else if (failure.kind === 'stepUp') setPhase('verifying');
       else {

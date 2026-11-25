@@ -11,10 +11,14 @@
 // one's ratio, settlement state and forfeit mark; it shows no amount (amounts stay in 「分佣快照」).
 // A display_status this console does not know shows order_status.UNKNOWN (BR-TEXT-05), and every
 // unknown code is reported once (enum name and code only). An order write whose result is unknown
-// (the marker of this account, ./detail-writes/) shows its read-only prompt above the detail; it is
-// checked by opening the page again (no reread button on the page). The detail is read when the
-// page opens and once after 20902; no read ever shows over a newer write (./detail-writes/
-// detailGate.ts, BR-FUND-06).
+// (the marker of this account, ./detail-writes/) shows its read-only prompt above the detail and
+// no write entry; it offers 【放弃这次提交】 (confirmed) once the page's own read is shown and no
+// write of the order is waiting for its answer in this tab, never a 【关闭】 or a reread button.
+// The detail is read when the page opens, once after 20902, and once each time a marker left
+// before opening goes (its request got a definite answer in this tab, or it was given up): from
+// that very render until that read is shown the write entries stay locked and the earlier detail
+// is not shown as the current one (a read sent before it went is dropped). No read ever shows
+// over a newer write (./detail-writes/detailGate.ts, BR-FUND-06).
 import { ArrowLeftOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons';
 import { beneficiary_role } from '@couli/contracts-ts';
 import { useDataProvider } from '@refinedev/core';
@@ -103,6 +107,12 @@ function OrderDetailContent({
   const sync = useSyncRequest();
   const [notice, setNotice] = useState<SyncNotice>();
   const marker = useOrderMarker(orderId);
+  // How many times the left marker went (useOrderMarker); a read is sent for each count.
+  const drops = marker.drops;
+  // The count at which the read now shown was sent (its detail, or a newer write's, is shown),
+  // and the count of the last read that got an answer at all.
+  const [readDrops, setReadDrops] = useState(drops);
+  const [answeredDrops, setAnsweredDrops] = useState(drops);
   // One gate per mount: which read or write answer the page may still show.
   const [gate] = useState(createDetailGate);
 
@@ -118,11 +128,15 @@ function OrderDetailContent({
         // A newer write answer is shown already: the page keeps it (BR-FUND-06).
         if (gate.takeRead(ticket, response.data)) setOrder(response.data);
         setStatus('ready');
+        setReadDrops(drops);
+        setAnsweredDrops(drops);
       },
       (cause: unknown) => {
         if (!current) return;
+        setAnsweredDrops(drops);
         if (!gate.takeRead(ticket, undefined)) {
           setStatus('ready');
+          setReadDrops(drops);
           return;
         }
         setOrder(undefined);
@@ -130,10 +144,20 @@ function OrderDetailContent({
         setStatus(kind === 'invalid' ? 'missing' : kind);
       },
     );
+    // A new count drops the read under way (sent before the marker went) and reads once again.
     return () => {
       current = false;
     };
-  }, [getProvider, orderId, attempt, permitted, gate]);
+  }, [getProvider, orderId, attempt, permitted, gate, drops]);
+
+  // Write entries are offered only once the read sent after the last drop is shown (with the
+  // three other conditions: shown, known statuses, no left marker — ./detail-writes/).
+  const locked = drops !== readDrops;
+  // Until the read sent after the last drop answers, the earlier detail is not the current one.
+  const view: LoadStatus =
+    status !== 'forbidden' && (answeredDrops !== drops || (status === 'ready' && locked))
+      ? 'loading'
+      : status;
 
   const retry = () => {
     setStatus('loading');
@@ -206,6 +230,7 @@ function OrderDetailContent({
             clock={clock}
             onSaved={saved}
             onConflict={conflicted}
+            locked={locked}
           />
         )}
         {/* BR-TEXT-05: no write action, 【同步此单】 included, for a status this console does not know. */}
@@ -227,7 +252,7 @@ function OrderDetailContent({
   );
 
   let body: ReactElement;
-  if (status === 'loading') {
+  if (view === 'loading') {
     body = (
       <Card>
         <Typography.Text type="secondary" role="status">
@@ -235,19 +260,19 @@ function OrderDetailContent({
         </Typography.Text>
       </Card>
     );
-  } else if (status === 'missing') {
+  } else if (view === 'missing') {
     body = (
       <Card>
         <Result status="404" title={t.missingTitle} subTitle={t.missingDescription} />
       </Card>
     );
-  } else if (status === 'forbidden') {
+  } else if (view === 'forbidden') {
     body = (
       <Card>
         <Result status="403" title={t.forbiddenTitle} subTitle={t.forbiddenDescription} />
       </Card>
     );
-  } else if (status === 'failed' || order === undefined) {
+  } else if (view === 'failed' || order === undefined) {
     body = (
       <Card>
         <Result
@@ -279,7 +304,7 @@ function OrderDetailContent({
           onClose={() => setNotice(undefined)}
         />
       )}
-      <UnknownWritePrompt marker={marker} order={status === 'ready' ? order : undefined} />
+      <UnknownWritePrompt marker={marker} order={view === 'ready' && !locked ? order : undefined} />
       {body}
     </Flex>
   );
