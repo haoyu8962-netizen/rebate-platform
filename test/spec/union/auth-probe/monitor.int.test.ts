@@ -130,6 +130,9 @@ it('[AC-S1-64#1] 08:59 属前一巡检日；09:00 命中 d14，随后 d7、d1、
     ['d1', 'UNION_AUTH_EXPIRING', 2],
     ['expired', 'UNION_AUTH_EXPIRED', 2],
   ]);
+  for (const [queue, name, payload] of jobs(h, a.id).filter(([, n]) => n === 'alert_log')) {
+    await h.monitor.handle({ id: randomUUID(), queue, name, payload, attempt: 1 });
+  }
   expect(logs(h, 'union_auth_expiring')).toHaveLength(3);
   expect(logs(h, 'union_auth_expired')).toEqual([
     expect.objectContaining({
@@ -333,6 +336,9 @@ for (const expiresAt of ['2027-02-01T00:00:00Z', null]) {
       last_probe_error: 'classified-invalid',
     });
     expect(plans(h).map((p) => p.code)).toEqual(['UNION_AUTH_EXPIRED']);
+    for (const [queue, name, payload] of jobs(h, a.id).filter(([, n]) => n === 'alert_log')) {
+      await h.monitor.handle({ id: randomUUID(), queue, name, payload, attempt: 1 });
+    }
     expect(logs(h, 'union_auth_expired')).toEqual([expect.objectContaining({ cause: 'probe' })]);
     expect(await bindings()).toEqual(before);
   });
@@ -364,6 +370,9 @@ it('[AC-S1-65#2] 任一联盟调用失效立即置位，不写 last_probe，账�
   });
   expect(await stored(h, other.id)).toEqual(other);
   expect(plans(h)).toHaveLength(1);
+  for (const [queue, name, payload] of jobs(h, a.id).filter(([, n]) => n === 'alert_log')) {
+    await h.monitor.handle({ id: randomUUID(), queue, name, payload, attempt: 1 });
+  }
   expect(logs(h, 'union_auth_expired')).toEqual([expect.objectContaining({ cause: 'call' })]);
   expect(h.probe).not.toHaveBeenCalled();
   expect(await bindings()).toEqual(before);
@@ -485,6 +494,9 @@ it('[AC-S1-64#14] 未配置号码只后台告警且阶段前移，后来配号�
   await h.monitor.dailyCheck();
   expect(await stored(h, a.id)).toMatchObject({ alert_stage: 'd14', auth_status: 'expiring' });
   expect(plans(h)).toEqual([]);
+  for (const [queue, name, payload] of jobs(h, a.id).filter(([, n]) => n === 'alert_log')) {
+    await h.monitor.handle({ id: randomUUID(), queue, name, payload, attempt: 1 });
+  }
   expect(logs(h, 'union_auth_alert_phones_missing')).toHaveLength(1);
   expect(logs(h, 'union_auth_expiring')).toEqual([
     expect.objectContaining({

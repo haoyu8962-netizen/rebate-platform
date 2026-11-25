@@ -10,7 +10,6 @@ import { FixedClock } from '../../../../apps/api/src/modules/platform/clock/cloc
 import type { FieldCrypto, JobQueue } from '../../../../apps/api/src/modules/platform/index.ts';
 import {
   createSiteAuthMonitor,
-  type SiteAuthMonitor,
   type SiteAuthMonitorOptions,
   type SiteAuthProbe,
   type SiteAuthRefresher,
@@ -81,32 +80,7 @@ export function harness(db: Kysely<DB>, at = NOW) {
     alerts: { plan, deliver },
   };
   // Construct outside any rejection assertion, before SQL using the B1-22a schema.
-  const rawMonitor = createSiteAuthMonitor(options);
-  const executed = new WeakSet<Parameters<JobQueue['send']>>();
-
-  function runAlertLogsAfter<Args extends unknown[]>(run: (...args: Args) => Promise<void>) {
-    return async (...args: Args) => {
-      const firstCall = send.mock.calls.length;
-      await run.apply(rawMonitor, args);
-      for (const call of send.mock.calls.slice(firstCall)) {
-        const [queue, name, payload] = call;
-        if (name !== 'alert_log' || executed.has(call)) continue;
-        executed.add(call);
-        await rawMonitor.handle({ id: randomUUID(), queue, name, payload, attempt: 1 });
-      }
-    };
-  }
-
-  const monitor: SiteAuthMonitor = {
-    dailyCheck: runAlertLogsAfter(rawMonitor.dailyCheck),
-    probeRetry: runAlertLogsAfter(rawMonitor.probeRetry),
-    expiryDue: runAlertLogsAfter(rawMonitor.expiryDue),
-    reportAuthFailure: runAlertLogsAfter(rawMonitor.reportAuthFailure),
-    deliverAlerts: runAlertLogsAfter(rawMonitor.deliverAlerts),
-    seed: runAlertLogsAfter(rawMonitor.seed),
-    handle: runAlertLogsAfter(rawMonitor.handle),
-    heal: runAlertLogsAfter(rawMonitor.heal),
-  };
+  const monitor = createSiteAuthMonitor(options);
   return {
     db,
     appId,
