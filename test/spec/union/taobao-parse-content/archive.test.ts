@@ -12,6 +12,7 @@ import {
 } from '../dataoke-core/kit.ts';
 import { ctx, detailSetup, unionFailure } from '../taobao-goods/kit.ts';
 import { archiveDatabase, onlyArchiveOf, payloadText } from '../taobao-order-archive/kit.ts';
+import { enableThirdPartyParse } from './settings.ts';
 
 const parsePath = '/api/tb-service/parse-content';
 const goodsId = '9007199254740993123';
@@ -43,7 +44,10 @@ function setup(parseReply: ReturnType<typeof response>) {
     logger: { warn: vi.fn(), error: vi.fn() },
   });
   const dataoke = setupDataoke({ clock, transport });
-  const taobao = detailSetup([{ item_id: itemId }], { orderSource: dataoke.client });
+  const taobao = detailSetup([{ item_id: itemId }], {
+    orderSource: dataoke.client,
+    ...enableThirdPartyParse(ctx.appId),
+  });
   return { database, upstream, taobao };
 }
 

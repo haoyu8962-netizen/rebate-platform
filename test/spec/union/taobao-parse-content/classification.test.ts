@@ -3,6 +3,7 @@ import type { UnionErrorCode } from '../../../../apps/api/src/modules/union/doma
 import type { UnionTransportResponse } from '../../../../apps/api/src/modules/union/infra/replay.ts';
 import { response, setup as setupDataoke } from '../dataoke-core/kit.ts';
 import { ctx, detailSetup, unionFailure } from '../taobao-goods/kit.ts';
+import { enableThirdPartyParse } from './settings.ts';
 
 const token = '￥SyntheticNoGoods01￥';
 
@@ -18,7 +19,10 @@ it('[AC-B1-04zzzzo#10] 仅成功码且无商品数据视为未识别，网关业
   for (const [reply, code] of cases) {
     const dataoke = setupDataoke();
     dataoke.transport.mockResolvedValue(reply);
-    const taobao = detailSetup([], { orderSource: dataoke.client });
+    const taobao = detailSetup([], {
+      orderSource: dataoke.client,
+      ...enableThirdPartyParse(ctx.appId),
+    });
 
     await unionFailure(() => taobao.adapter.resolveLink(token, ctx), code);
 

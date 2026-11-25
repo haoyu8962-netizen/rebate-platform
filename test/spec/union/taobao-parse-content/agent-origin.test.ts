@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { ok, setup as setupDataoke } from '../dataoke-core/kit.ts';
 import { ctx, DETAIL, detailSetup, formOf, sent, unionFailure } from '../taobao-goods/kit.ts';
+import { enableThirdPartyParse } from './settings.ts';
 
 const goodsId = '9007199254740993123';
 const itemId = 'Synthetic-AgentItem01';
@@ -13,7 +14,10 @@ it.each([
 ])('[AC-B1-04zzzzo#11] Agent 的 %s 不走大淘客，商品页仍可官方直查', async (_kind, raw) => {
   const dataoke = setupDataoke();
   dataoke.transport.mockResolvedValue(ok({ goodsId }));
-  const taobao = detailSetup([{ item_id: itemId }], { orderSource: dataoke.client });
+  const taobao = detailSetup([{ item_id: itemId }], {
+    orderSource: dataoke.client,
+    ...enableThirdPartyParse(ctx.appId),
+  });
   const agentContext = { ...ctx, origin: 'agent' } as const;
 
   // 主干会拒绝普通来源的推广链，让失败落在请求次数断言上。

@@ -29,7 +29,8 @@ import {
   unionFailure,
   withStatus,
 } from '../taobao-goods/kit.ts';
-import { dtkRow, query, search, searchData, setup as searchSetup } from '../taobao-search/kit.ts';
+import { dtkRow, query, searchData, searched, truthfulTop } from '../taobao-search/kit.ts';
+import { enableThirdPartyParse } from './settings.ts';
 
 // 合成夹具，字段按任务书构造。真实样本仍待 FU-PARSE-CONTENT-SAMPLES。
 const parsePath = '/api/tb-service/parse-content';
@@ -58,7 +59,10 @@ function setupParsedLink(
 ) {
   const dataoke = setupDataoke();
   dataoke.transport.mockResolvedValue(parseReply);
-  const taobao = setupTaobao(() => detailReply, { orderSource: dataoke.client });
+  const taobao = setupTaobao(() => detailReply, {
+    orderSource: dataoke.client,
+    ...enableThirdPartyParse(ctx.appId),
+  });
   return { dataoke, taobao };
 }
 
@@ -205,12 +209,24 @@ it.each(['item.taobao.com', 'detail.tmall.com'])(
 it('[AC-B1-04zzzzo#7] 大淘客搜索预热缓存后，同一短链两次解析各取本次联盟原串且保留搜索缓存', async () => {
   const cachedItemId = 'Synthetic-FromSearch';
   let returnedItemId = cachedItemId;
-  const harness = searchSetup({
-    data: () => searchData([dtkRow(1, { goodsId })], 1),
-    available: (id) => (id === goodsId ? returnedItemId : undefined),
-  });
-  const { adapter, dataokeTransport, taobaoTransport } = harness;
-  const { items } = await search(harness, query, ctx);
+  const dataoke = setupDataoke();
+  const dataokeTransport = dataoke.transport.mockResolvedValue(
+    dataokeOk(searchData([dtkRow(1, { goodsId })], 1)),
+  );
+  const { adapter, transport: taobaoTransport } = setupTaobao(
+    (form) => {
+      if (form['method'] !== DETAIL) return errorBody('synthetic-unexpected-method');
+      return truthfulTop((form['item_id'] ?? '').split(','), (id) =>
+        id === goodsId ? returnedItemId : undefined,
+      );
+    },
+    {
+      orderSource: dataoke.client,
+      searchSource: 'dataoke',
+      ...enableThirdPartyParse(ctx.appId),
+    },
+  );
+  const { items } = await searched(() => adapter.searchItems(query, ctx));
   expect(items).toMatchObject([{ item_id: cachedItemId }]);
   expect(dataokeTransport).toHaveBeenCalledTimes(1);
   expect(taobaoTransport).toHaveBeenCalledTimes(1);
@@ -232,7 +248,7 @@ it('[AC-B1-04zzzzo#7] 大淘客搜索预热缓存后，同一短链两次解析�
     });
   }
 
-  const searchAfterResolve = await search(harness, query, ctx);
+  const searchAfterResolve = await searched(() => adapter.searchItems(query, ctx));
   expect(searchAfterResolve.items).toMatchObject([{ item_id: cachedItemId }]);
   expect(taobaoTransport).toHaveBeenCalledTimes(3);
 });

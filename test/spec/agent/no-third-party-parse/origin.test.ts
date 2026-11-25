@@ -15,10 +15,12 @@ import {
 import { bridge } from '../../../../packages/contracts-ts/src/index.ts';
 import { ok, setup as setupDataoke } from '../../union/dataoke-core/kit.ts';
 import { detailSetup } from '../../union/taobao-goods/kit.ts';
+import { enableThirdPartyParse } from '../../union/taobao-parse-content/settings.ts';
 import { output, request, TOKEN } from '../stream-assembly/kit.ts';
 import { Logs, ManualTime } from '../stream-mount/kit.ts';
 
 const shortLink = 'https://s.click.taobao.com/t?e=SyntheticAgent';
+const appId = 'synthetic-agent-app';
 
 function fixture() {
   const db = new Kysely<DB>({
@@ -32,12 +34,15 @@ function fixture() {
   const time = new ManualTime();
   const dataoke = setupDataoke();
   dataoke.transport.mockResolvedValue(ok({ goodsId: '9007199254740993123' }));
-  const taobao = detailSetup([], { orderSource: dataoke.client });
+  const settings = enableThirdPartyParse(appId);
+  const taobao = detailSetup([], { orderSource: dataoke.client, ...settings });
   expect(taobao.adapter.resolveLink).toBeTypeOf('function');
   const resolveLink = vi.spyOn(taobao.adapter, 'resolveLink');
   const config: AgentStreamAssemblyDeps['config'] = {
-    configValue: async (_appId, key) =>
-      key === 'parse.tpwd.enabled' ? { value: true, version: 1 } : null,
+    configValue: async (brand, key) =>
+      key === 'parse.tpwd.enabled'
+        ? { value: true, version: 1 }
+        : settings.config.configValue(brand, key),
   };
   const deps: AgentStreamAssemblyDeps = {
     db,
@@ -86,7 +91,7 @@ function fixture() {
   };
   const context: ToolContext = {
     subject: {
-      appId: 'synthetic-agent-app',
+      appId,
       traceId: 'synthetic-agent-trace',
       deviceId: 'synthetic-agent-device',
       deviceHash: 'synthetic-agent-device-hash',
