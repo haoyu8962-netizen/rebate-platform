@@ -50,7 +50,7 @@ import {
   type JobQueue,
   type RootLogger,
 } from '../../platform/index.ts';
-import { alertHoursOf, sendHourAlerts } from '../auth-expiry/hour-alerts.ts';
+import { alertHoursOf, FIRST_SCHEDULE, sendHourAlerts } from '../auth-expiry/hour-alerts.ts';
 import { SiteReauthError, type ReauthMode, type SiteReauth } from '../auth-expiry/reauth.ts';
 import {
   DEFAULT_ALERT_DAYS,
@@ -510,6 +510,8 @@ export class AdminUnionAccounts {
           },
           hours,
           clock: this.#clock,
+          // First schedule of a new authorization (money r2 S1-②, B1-22ze): see reauth.ts.
+          catchUp: FIRST_SCHEDULE,
         });
       } catch (error) {
         this.#logger?.warn?.(

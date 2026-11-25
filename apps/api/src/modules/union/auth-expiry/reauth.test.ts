@@ -4,6 +4,8 @@
 // 错实现下怎么红：小时配置在写凭据的事务之前（或之内）读、读失败让 finish 抛错——首条用例里 callback
 // 会拒绝、事务不提交、会话被改成 finalize_failed，红；配置读取或入队失败不吞掉（抛给回调）也红；
 // 小时任务在提交之前排、或排程的延迟不按注入 Clock 算，第二条红。
+// r3（Codex money r2 S1-②）：新授权首次排程不补「提交时已到点、未到期」的最小有效节点（照旧当已过跳过，
+// 只排 h1），第三条红；把更大的已到节点也补、或已到点的节点带延迟排，同样红。
 import type { DB } from '@couli/db';
 import {
   Kysely,
@@ -27,7 +29,14 @@ const SESSION = '00000000-0000-4000-8000-000000000002';
 const HOUR = 3_600_000;
 const NOW = Date.parse('2026-11-24T01:30:00.000Z');
 
-function setup(hours: () => Promise<{ value: unknown; version: number } | null>) {
+function setup(
+  hours: () => Promise<{ value: unknown; version: number } | null>,
+  timing: { readonly expiresInMs: number; readonly afterCommitMs: number } = {
+    expiresInMs: 24 * HOUR,
+    afterCommitMs: 0,
+  },
+) {
+  let committed = false;
   const order: string[] = [];
   const statements: { sql: string; params: readonly unknown[] }[] = [];
   const ends = { commit: 0, rollback: 0 };
@@ -82,6 +91,7 @@ function setup(hours: () => Promise<{ value: unknown; version: number } | null>)
     beginTransaction: async () => undefined,
     commitTransaction: async () => {
       ends.commit += 1;
+      committed = true;
       order.push('commit');
     },
     rollbackTransaction: async () => {
@@ -102,7 +112,11 @@ function setup(hours: () => Promise<{ value: unknown; version: number } | null>)
   const warns: string[] = [];
   const reauth = createSiteReauth({
     db,
-    clock: new FixedClock(new Date(NOW)),
+    // NOW inside the transaction; afterCommitMs later once it committed (a slow lock or commit).
+    clock:
+      timing.afterCommitMs === 0
+        ? new FixedClock(new Date(NOW))
+        : { now: () => new Date(committed ? NOW + timing.afterCommitMs : NOW) },
     crypto: { encrypt: (text: string) => `c:${text.length}` } as unknown as FieldCrypto,
     auditWriter: () => ({ append: async () => undefined }) as unknown as UnionAuditWriter,
     config: {
@@ -118,7 +132,7 @@ function setup(hours: () => Promise<{ value: unknown; version: number } | null>)
         exchange: async () => ({
           accessToken: 'access',
           refreshToken: null,
-          expiresAt: new Date(NOW + 24 * HOUR),
+          expiresAt: new Date(NOW + timing.expiresInMs),
         }),
       },
     },
@@ -167,5 +181,22 @@ it('[B1-22ze][BR-ID-24] 重新授权：配置可读时小时任务在提交之�
     [1, 23 * 3600, null],
   ]);
   expect(run.order.indexOf(`send:${JOB_HOUR_ALERT}`)).toBeGreaterThan(run.order.indexOf('commit'));
+  expect(run.warns).toEqual([]);
+});
+
+it('[B1-22ze][BR-ID-24] 重新授权首次排程：提交时已到点、未到期的最小有效节点立即入队，后续节点照节点时刻排', async () => {
+  // Total 6 h + 200 ms: h6 is live, due at NOW + 200 ms; the commit ends at NOW + 800 ms.
+  const run = setup(async () => ({ value: [6, 1], version: 1 }), {
+    expiresInMs: 6 * HOUR + 200,
+    afterCommitMs: 800,
+  });
+  const outcome = await run.reauth.callback({ state: 'state-1', code: 'code-1', error: null });
+  expect(outcome.status).toBe('succeeded');
+  const hourSends = run.sends.filter(([, name]) => name === JOB_HOUR_ALERT);
+  // h6 at once (no delay), h1 delayed to its node: NOW + 5 h + 200 ms, from NOW + 800 ms.
+  expect(hourSends.map(([, , p, o]) => [p['hours'], o.delaySeconds])).toEqual([
+    [6, undefined],
+    [1, Math.ceil((5 * HOUR + 200 - 800) / 1000)],
+  ]);
   expect(run.warns).toEqual([]);
 });

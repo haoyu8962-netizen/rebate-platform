@@ -141,10 +141,8 @@ export interface SiteAuthAlertPlanInput {
   /**
    * expired only: the instant the account entered expired, the same value the persistent alert
    * (union_auth_alerts.entered_at and alert_key) is written with; null for an EXPIRING alert.
-   * The SMS dedupe key of an expired alert is to carry this instant (money r1 S1-①, B1-22ze).
-   * TODO(规划/11 §3.2): notification's createSiteAuthAlertPort still keys an expired alert by its
-   * own clock.now() — blocked on notification/site-auth-alert/service.ts being outside B1-22ze's
-   * paths (one change there: key by plan.enteredAt when given).
+   * The SMS dedupe key of an expired alert carries this instant (notification's
+   * siteAuthAlertKey keys by plan.enteredAt when given; money r1 / r2 S1-①, B1-22ze).
    */
   enteredAt: Date | null;
 }

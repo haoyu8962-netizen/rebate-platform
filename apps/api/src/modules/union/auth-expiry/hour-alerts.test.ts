@@ -7,9 +7,12 @@
 // 或格式不对的键当成已处理、节点 7 与 h1 前缀相同被误认，任一都会让最后一条红。
 // B1-22ze r2（Codex money r1 S1-②）：延迟按调用前（如事务开头）取的旧时刻算、而不是每次 send 前用注入
 // Clock 重算（h6 晚 30 秒）、发送途中已到点的节点不即时发、到期后仍排，任一都会让最末一条红。
+// B1-22ze r3（Codex money r2 S1-②）：FIRST_SCHEDULE 下提交时已到点、未到期的最小有效节点不即时发（只排 h1）、
+// 把更大的已到节点也发、已到节点带延迟发、到期后仍发，任一都会让最末一条红。
 import { expect, it } from 'vitest';
 import type { JobQueue } from '../../platform/index.ts';
 import {
+  FIRST_SCHEDULE,
   HOUR_JOB_MAX_DELAY_SECONDS,
   JOB_HOUR_ALERT,
   UNION_AUTH_QUEUE,
@@ -260,4 +263,51 @@ it('[B1-22ze][BR-ID-24] 每次入队前用注入 Clock 重算延迟：事务与�
     clock: moving(expiresMs - HOUR - 1000, expiresMs),
   });
   expect(gone.calls).toEqual([]);
+});
+
+it('[B1-22ze][BR-ID-24] 新授权首次排程（FIRST_SCHEDULE）：等锁提交时已到点、未到期的最小有效节点立即入队，更大的不补，后续照节点时刻排', async () => {
+  // Manual entry at 10:59:59.800 (+08:00) expiring 17:00:00: total 6 h + 200 ms, h6 at 11:00:00.
+  const renewed = Date.parse('2026-11-22T02:59:59.800Z');
+  const expires = Date.parse('2026-11-22T09:00:00.000Z');
+  const t = {
+    appId: 'unit-app',
+    unionAccountId: 'unit-account',
+    expiresAt: new Date(expires),
+    renewedAt: new Date(renewed),
+  };
+  const committedAt = Date.parse('2026-11-22T03:00:00.600Z');
+  const first = recorder();
+  await sendHourAlerts(first.queue, {
+    trx: null,
+    target: t,
+    hours: [6, 1],
+    clock: fixed(committedAt),
+    catchUp: FIRST_SCHEDULE,
+  });
+  expect(first.calls.map(([, , p, o]) => [p['hours'], o.delaySeconds, o.singletonKey])).toEqual([
+    [6, undefined, hourAlertKey(t, 6)],
+    [1, Math.ceil((expires - HOUR - committedAt) / 1000), hourAlertKey(t, 1)],
+  ]);
+
+  // Both nodes already due (sent much later, still before the expiry): only the smallest, at once.
+  const late = recorder();
+  await sendHourAlerts(late.queue, {
+    trx: null,
+    target: t,
+    hours: [6, 1],
+    clock: fixed(expires - 30 * 60_000),
+    catchUp: FIRST_SCHEDULE,
+  });
+  expect(late.calls.map(([, , p, o]) => [p['hours'], o.delaySeconds])).toEqual([[1, undefined]]);
+
+  // Past the expiry: nothing (expiry_due and the daily check handle it).
+  const after = recorder();
+  await sendHourAlerts(after.queue, {
+    trx: null,
+    target: t,
+    hours: [6, 1],
+    clock: fixed(expires),
+    catchUp: FIRST_SCHEDULE,
+  });
+  expect(after.calls).toEqual([]);
 });

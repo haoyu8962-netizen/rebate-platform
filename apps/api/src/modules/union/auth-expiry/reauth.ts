@@ -48,7 +48,7 @@ import {
 } from '../../platform/index.ts';
 import { isRegisteredPlatform, type RegisteredPlatform } from '../domain/types.ts';
 import type { UnionAuditWriter } from '../pids/service.ts';
-import { alertHoursOf, sendHourAlerts } from './hour-alerts.ts';
+import { alertHoursOf, FIRST_SCHEDULE, sendHourAlerts } from './hour-alerts.ts';
 
 export type ReauthMode = 'oauth' | 'manual' | 'none';
 
@@ -369,6 +369,9 @@ export function createSiteReauth(options: SiteReauthOptions): SiteReauth {
         },
         hours,
         clock,
+        // First schedule of a new authorization (money r2 S1-②, B1-22ze): a node that became due
+        // while the transaction waited (lock, commit) is sent at once, not skipped.
+        catchUp: FIRST_SCHEDULE,
       });
     } catch (error) {
       options.logger?.warn(

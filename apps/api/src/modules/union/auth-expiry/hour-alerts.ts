@@ -6,7 +6,8 @@
 // (auth_expires_at − N hours), instead of waiting for the daily check. Planned by whoever writes a
 // new authorization: the re-authorization callback (./reauth.ts), the manual credential entry
 // (../application/admin-accounts.ts) and a successful refresh, each after its commit and best
-// effort; then as a backfill by each daily check and each heal (every five minutes) for the nodes
+// effort (the first two also send at once the smallest node already due by then, FIRST_SCHEDULE);
+// then as a backfill by each daily check and each heal (every five minutes) for the nodes
 // falling before the next check, plus the smallest node already due whose job was lost (the
 // account's hour_alert_key shows neither it nor a smaller node handled), sent at once.
 //
@@ -74,10 +75,19 @@ export function hourNodeHandled(mark: string | null, expiresMs: number, hours: n
 }
 
 /**
+ * The catchUp of the first schedule of a new authorization (re-authorization callback, manual
+ * entry; money r2 S1-②, B1-22ze): no node of it can have been handled yet, so the smallest live
+ * node already due at the send (a slow lock or commit after the new expiry was taken) is sent at
+ * once. A same-expiry mark left by an earlier authorization is checked by the job itself under
+ * the row lock (hourNodeHandled in ./service.ts).
+ */
+export const FIRST_SCHEDULE: { readonly doneMark: null } = Object.freeze({ doneMark: null });
+
+/**
  * Sends the hour jobs of the live nodes whose instant is after the Clock's time at the call (and at
  * or before `untilMs` when given, and within the queue's largest delay: a later node is left to the
  * daily backfill), skipping keys already in `sent` (one run never sends a key twice). With `catchUp`
- * (the daily backfill and heal) the smallest live node already due before the expiry is sent at
+ * (the daily backfill and heal; FIRST_SCHEDULE for a new authorization) the smallest live node already due before the expiry is sent at
  * once unless the account's hour_alert_key shows it or a smaller node handled (hourNodeHandled);
  * larger due nodes never are.
  *
