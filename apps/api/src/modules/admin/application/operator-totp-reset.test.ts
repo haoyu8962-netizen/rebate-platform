@@ -210,8 +210,14 @@ it('[AC-B1-34t] a failing voiding write rolls the reset and its audit back', asy
 
 it('[AC-B1-34t] inspect reads the binding state by app and login name, null when unknown', async () => {
   const f = setup([rows(row()), rows(row({ totp_bound_at: null })), rows()]);
-  expect(await f.useCase.inspect({ appId: APP, loginName: LOGIN })).toEqual({ totpBound: true });
-  expect(await f.useCase.inspect({ appId: APP, loginName: LOGIN })).toEqual({ totpBound: false });
+  expect(await f.useCase.inspect({ appId: APP, loginName: LOGIN })).toEqual({
+    totpBound: true,
+    snapshot: { rowVersion: 3, totpBoundAtMs: BOUND.getTime() },
+  });
+  expect(await f.useCase.inspect({ appId: APP, loginName: LOGIN })).toEqual({
+    totpBound: false,
+    snapshot: { rowVersion: 3, totpBoundAtMs: null },
+  });
   expect(await f.useCase.inspect({ appId: APP, loginName: 'missing' })).toBeNull();
   expect(f.sqls[0]).toContain('where "app_id" = $1 and "login_name" = $2');
   expect(f.sqls[0]).not.toContain('for update');
@@ -305,4 +311,68 @@ it('[AC-B1-34t] the line editor splits every byte apart, erases code points, abo
   expect(steps.slice(0, -1).every((step) => step.done === undefined)).toBe(true);
   const aborted = createTerminalLineEditor();
   expect(aborted.feed(utf8('原因\u0003')).done).toBeNull();
+});
+
+const REBOUND = new Date('2026-11-25T02:30:00.000Z');
+
+async function previewSnapshot(useCase: ReturnType<typeof setup>['useCase']) {
+  const snapshot = (await useCase.inspect({ appId: APP, loginName: LOGIN }))?.snapshot;
+  if (snapshot === undefined) throw new Error('inspect returned no snapshot');
+  return snapshot;
+}
+
+it.each([
+  // Unbound at the preview, then the owner binds a new authenticator (bindTotp keeps row_version).
+  ['unbound → bound', row({ totp_bound_at: null }), row({ totp_bound_at: REBOUND })],
+  // Bound at the preview, then unbound (e.g. a super admin's HTTP reset bumped row_version).
+  ['bound → unbound', row(), row({ totp_bound_at: null, row_version: 4 })],
+  // Bound at the preview, then a new authenticator bound after a reset in between.
+  ['bound → rebound', row(), row({ totp_bound_at: REBOUND, row_version: 4 })],
+  // Same binding, another write on the row (row_version only).
+  ['row_version only', row(), row({ row_version: 4 })],
+] as const)(
+  '[AC-B1-34t] a row changed after the preview (%s) is state_changed: not written, audited or voided',
+  async (_label, previewed, locked) => {
+    const f = setup([rows(previewed), rows(locked)]);
+    const expected = await previewSnapshot(f.useCase);
+    expect(await f.useCase.reset({ ...REQUEST, expected })).toEqual({
+      kind: 'state_changed',
+    });
+    // inspect + the lock, no update.
+    expect(f.sqls).toHaveLength(2);
+    expect(f.sqls.some((sql) => sql.startsWith('update'))).toBe(false);
+    expect(f.events).toEqual(['begin', 'rollback']);
+    expect(f.appendAction).not.toHaveBeenCalled();
+    expect(f.voidBefore).not.toHaveBeenCalled();
+    expect(f.voidedAt()).toBeNull();
+  },
+);
+
+it('[AC-B1-34t] an unchanged row since the preview is reset as usual', async () => {
+  const f = setup([rows(row()), rows(row()), updated(1n)]);
+  const expected = await previewSnapshot(f.useCase);
+  expect(await f.useCase.reset({ ...REQUEST, expected })).toEqual({
+    kind: 'reset',
+  });
+  expect(f.appendAction).toHaveBeenCalledOnce();
+  expect(f.voidBefore).toHaveBeenCalledOnce();
+});
+
+it('[AC-B1-34t] an unchanged unbound row since the preview is still already_unbound', async () => {
+  const f = setup([rows(row({ totp_bound_at: null })), rows(row({ totp_bound_at: null }))]);
+  const expected = await previewSnapshot(f.useCase);
+  expect(await f.useCase.reset({ ...REQUEST, expected })).toEqual({
+    kind: 'already_unbound',
+  });
+});
+
+it('[AC-B1-34t] a leading byte order mark is kept, so a BOM-prefixed yes is not yes', () => {
+  const editor = createTerminalLineEditor();
+  const step = editor.feed(Uint8Array.of(0xef, 0xbb, 0xbf, ...utf8('yes\r')));
+  expect(step.done).toBe('\uFEFFyes');
+  expect(step.done).not.toBe('yes');
+  // Split over chunks as well.
+  const split = createTerminalLineEditor();
+  expect(split.feed(Uint8Array.of(0xef, 0xbb)).done).toBeUndefined();
+  expect(split.feed(Uint8Array.of(0xbf, ...utf8('yes\n'))).done).toBe('\uFEFFyes');
 });

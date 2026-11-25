@@ -9,6 +9,11 @@
 //      statement in id order (SELECT … FOR UPDATE), then judged: no such account → unknown; not a
 //      super admin → not_super; another super admin of the app that is usable (status active and an
 //      authenticator bound, D10-2947 ①) → another_usable_super: that one resets it over HTTP;
+//      the request carries the preview the owner confirmed (inspect's snapshot: row_version and
+//      totp_bound_at) and the locked row differs from it → state_changed: nothing is written,
+//      audited or voided, the owner reruns and confirms what is there now (B1-34t r3, money r2 S1:
+//      the owner binding a new authenticator while the command waits for the reason or the yes
+//      must not lose it; bindTotp leaves row_version alone, hence totp_bound_at as well);
 //      the target's authenticator already unbound (totp_bound_at null) → already_unbound: nothing is
 //      written, audited or voided (D10-2999 ②), so a rerun after a reset whose result the owner never
 //      saw leaves the binding ticket issued since then working; once the owner has bound a new
@@ -23,15 +28,18 @@
 //   5. the account's voiding instant (Redis, ../infra/admin-revocations.ts) at the Clock instant:
 //      every admin_token, login ticket and step-up token issued before it stops working. A failing
 //      write throws and rolls 3 and 4 back, as the HTTP reset does.
-// A refusal and already_unbound write nothing and void nothing (the transaction rolls back).
+// A refusal, already_unbound and state_changed write nothing and void nothing (the transaction
+// rolls back).
 // The voiding stays inside the transaction, before the commit (as the HTTP reset): when the commit
 // then fails, sessions are void while the authenticator is still bound — the stricter side; a rerun
 // finds the row still bound and completes the reset (D10-2999 ①, FU-ADMIN-CREDENTIAL-VERSION-PG). A super admin row created after the lock (only the
 // bootstrap creates one, and only when there is none) is not seen; promoting an account to super
 // admin is not an operation of this code base.
 //
-// inspect reads the target's binding state (no lock) for the command's echo before the owner
-// confirms; reset judges again on the locked rows, so what changed meanwhile counts.
+// inspect reads the target's binding state and its snapshot (no lock) for the command's echo before
+// the owner confirms; reset judges again on the locked rows and, given the snapshot, refuses when
+// the row changed meanwhile. Without a snapshot (callers other than the command) the locked state
+// alone is judged.
 //
 // Pure module (no decorators, erasable syntax, type-only imports from the platform barrel).
 import type { AuditSystemActor } from '@couli/contracts-ts';
@@ -46,14 +54,31 @@ export interface OperatorTotpResetTarget {
   readonly loginName: string;
 }
 
+/** What the owner saw before confirming: compared with the locked row (money r2 S1). */
+export interface OperatorTotpResetSnapshot {
+  readonly rowVersion: number;
+  /** totp_bound_at in epoch milliseconds; null when unbound. */
+  readonly totpBoundAtMs: number | null;
+}
+
+export interface OperatorTotpResetPreview {
+  readonly totpBound: boolean;
+  /** Always set by createOperatorTotpReset; optional so that injected fakes may leave it out. */
+  readonly snapshot?: OperatorTotpResetSnapshot;
+}
+
 export interface OperatorTotpResetRequest extends OperatorTotpResetTarget {
   readonly reason: string;
+  /** The snapshot from inspect; when set, a locked row that differs is state_changed. */
+  readonly expected?: OperatorTotpResetSnapshot;
 }
 
 export type OperatorTotpResetResult =
   | { readonly kind: 'reset' }
   /** The target's authenticator was already unbound: nothing written (D10-2999 ②). */
   | { readonly kind: 'already_unbound' }
+  /** The locked row differs from the confirmed preview: nothing written (money r2 S1). */
+  | { readonly kind: 'state_changed' }
   | {
       readonly kind: 'refused';
       readonly reason: 'unknown' | 'not_super' | 'another_usable_super' | 'invalid_reason';
@@ -62,7 +87,7 @@ export type OperatorTotpResetResult =
 type Refusal = Extract<OperatorTotpResetResult, { kind: 'refused' }>['reason'];
 
 export interface OperatorTotpReset {
-  inspect(target: OperatorTotpResetTarget): Promise<{ readonly totpBound: boolean } | null>;
+  inspect(target: OperatorTotpResetTarget): Promise<OperatorTotpResetPreview | null>;
   reset(request: OperatorTotpResetRequest): Promise<OperatorTotpResetResult>;
 }
 
@@ -95,6 +120,7 @@ class NothingWritten extends Error {
   }
 }
 const refused = (reason: Refusal) => new NothingWritten({ kind: 'refused', reason });
+const boundAtMs = (value: Date | null): number | null => (value === null ? null : value.getTime());
 
 export function createOperatorTotpReset(deps: OperatorTotpResetDeps): OperatorTotpReset {
   const { db, clock, audit, revocations } = deps;
@@ -102,11 +128,15 @@ export function createOperatorTotpReset(deps: OperatorTotpResetDeps): OperatorTo
     async inspect(target) {
       const row = await db
         .selectFrom('admin_users')
-        .select(['totp_bound_at'])
+        .select(['totp_bound_at', 'row_version'])
         .where('app_id', '=', target.appId)
         .where('login_name', '=', target.loginName)
         .executeTakeFirst();
-      return row === undefined ? null : { totpBound: row.totp_bound_at !== null };
+      if (row === undefined) return null;
+      return {
+        totpBound: row.totp_bound_at !== null,
+        snapshot: { rowVersion: row.row_version, totpBoundAtMs: boundAtMs(row.totp_bound_at) },
+      };
     },
 
     async reset(request) {
@@ -137,6 +167,14 @@ export function createOperatorTotpReset(deps: OperatorTotpResetDeps): OperatorTo
               row.totp_bound_at !== null,
           );
           if (usable) throw refused('another_usable_super');
+          const expected = request.expected;
+          if (
+            expected !== undefined &&
+            (expected.rowVersion !== target.row_version ||
+              expected.totpBoundAtMs !== boundAtMs(target.totp_bound_at))
+          ) {
+            throw new NothingWritten({ kind: 'state_changed' });
+          }
           if (target.totp_bound_at === null) throw new NothingWritten({ kind: 'already_unbound' });
 
           const now = clock.now();
@@ -188,9 +226,11 @@ export interface TerminalLineStep {
  * character whose bytes the terminal splits over two chunks (an SSH paste of a Chinese reason)
  * comes out whole once its last byte arrives, never as replacement characters. Backspace erases one
  * character (code point); other control characters are ignored; what follows Enter is dropped.
+ * A byte order mark is kept as a character of the line, not swallowed.
  */
 export function createTerminalLineEditor(): { feed(chunk: Uint8Array): TerminalLineStep } {
-  const decoder = new TextDecoder('utf-8');
+  // ignoreBOM: a leading U+FEFF stays in the line, so「\uFEFFyes」is not the confirmation (money r2 S2).
+  const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
   let value = '';
   let closed = false;
   return {

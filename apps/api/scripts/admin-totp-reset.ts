@@ -17,6 +17,10 @@
 // 不改行、不写审计、不推进作废时刻，提示「已是未绑定，未做任何改动」，退出码 7（编排裁定 D10-2999 ②）；上一次
 // 重置之后本人已拿到的绑定票据照常可用。本人在那之后已经绑定了新验证器、又需要重置的，是新的一次重置，照常执行。
 //
+// 确认期间状态变化：回显时读到的账号快照（row_version 与验证器绑定时刻）随重置请求带进事务，锁行后与之不同
+// （例如负责人输入原因与 yes 期间，本人在浏览器绑定了新验证器）就不改行、不写审计、不推进作废时刻，提示「确认期间
+// 账号状态已变化，未做任何改动，请重新运行」，退出码 8（B1-34t 实现 r3，money r2 S1）；重跑时按新的回显再确认。
+//
 // 重置之后的登录路径：账号密码（及 IP 白名单）→ 绑定新验证器（重新生成密钥），两步完成才签发 admin_token，
 // 与契约的登录流程一致；已登记验证手机号的账号在登录第二步改走短信属于二次验证线的后续
 // （FU-B134T-SMS-LOGIN-AFTER-RESET，D10-2999 ③），本命令不涉及。
@@ -29,7 +33,10 @@
 //   1 其他失败（配置、连接、作废写入、提交等；事务内的失败整笔回滚，重跑即可）；
 //   2 参数或输入不合法（缺 --app / --login、不是交互终端、原因不合法）；
 //   3 同应用另有可用超管；4 未输入 yes；5 找不到该账号；6 该账号不是超管；
-//   7 该账号的验证器已是未绑定，未做任何改动。
+//   7 该账号的验证器已是未绑定，未做任何改动；
+//   8 回显之后、确认期间账号状态已变化，未做任何改动，请重新运行。
+//
+// 确认只认精确的 yes：终端字节按 UTF-8 流式解码且保留开头的 U+FEFF（ignoreBOM），带 BOM 的「yes」不算确认。
 //
 // 只组装 @couli/db、platform 与 admin/ 的纯模块，不 import Nest、不跑 dist。日志（pino）写到 stderr。
 // 导入本文件不启动入口（规则测试注入 terminal 与 useCase 调 runAdminTotpResetCommand）。
@@ -62,6 +69,7 @@ export const TOTP_RESET_EXIT = Object.freeze({
   unknown: 5,
   notSuper: 6,
   alreadyUnbound: 7,
+  stateChanged: 8,
 });
 
 export interface AdminTotpResetTerminal {
@@ -155,7 +163,12 @@ export async function runAdminTotpResetCommand(
     return TOTP_RESET_EXIT.notConfirmed;
   }
 
-  const result = await useCase.reset({ ...target, reason });
+  // The snapshot of what was echoed goes with the request (money r2 S1); absent only from fakes.
+  const result = await useCase.reset(
+    state.snapshot === undefined
+      ? { ...target, reason }
+      : { ...target, reason, expected: state.snapshot },
+  );
   if (result.kind === 'reset') {
     terminal.write(
       '已重置：验证器已清除，之前签发的登录凭证全部作废，已写审计。该账号下次登录：账号密码 → 绑定新验证器。',
@@ -167,6 +180,10 @@ export async function runAdminTotpResetCommand(
       '该账号的身份验证器已是未绑定，未做任何改动（没有写审计，已有的登录凭证不受影响）。',
     );
     return TOTP_RESET_EXIT.alreadyUnbound;
+  }
+  if (result.kind === 'state_changed') {
+    terminal.write('确认期间账号状态已变化，未做任何改动，请重新运行。');
+    return TOTP_RESET_EXIT.stateChanged;
   }
   const [code, message] = REFUSALS[result.reason];
   terminal.write(message);
