@@ -41,7 +41,7 @@ it('[AC-B1-34t#12] 运维重置作废旧会话、登录票据和二次验证令�
     const otherSession = await signedIn(f, other);
     const pending = await login(f, target);
     const principal = { appId, adminId: target.id, sessionId: randomUUID() };
-    const tier = 'totp';
+    const tier = 'totp' as const;
     const grant = await createAdminStepUpTokens({ clock: f.clock, redis: stepUpRedis }).issue({
       ...principal,
       tier,
