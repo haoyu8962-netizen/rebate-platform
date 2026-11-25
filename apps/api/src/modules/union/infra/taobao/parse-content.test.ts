@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { UnionError } from '../../domain/types.ts';
 import {
   DATAOKE_PARSE_CONTENT_ARCHIVE_OMIT,
@@ -9,7 +9,12 @@ import {
   parseContentArchiveBody,
   parseContentGoodsId,
   parseContentParameters,
+  THIRD_PARTY_PARSE_KEY,
+  thirdPartyParseEnabled,
+  type ThirdPartyParseConfig,
 } from './parse-content.ts';
+
+type ConfigRead = ThirdPartyParseConfig['configValue'];
 
 function codeOf(run: () => unknown): string | undefined {
   try {
@@ -99,4 +104,38 @@ it('[AC-B1-04zzzzo-UNIT#5] 归档应答白名单：只留 code、data.goodsId �
   expect(parseContentArchiveBody('{"code":{"x":1},"data":"s"}')).toBe('{}');
   expect(parseContentArchiveBody('not json ￥UnitEcho02￥')).toBe('');
   expect(parseContentArchiveBody('[1]')).toBe('');
+});
+
+it('第三方口令解析开关：未注入读取器即关', async () => {
+  await expect(thirdPartyParseEnabled(undefined, 'app-a')).resolves.toBe(false);
+});
+
+it('第三方口令解析开关：只有 { value: true } 才开，按品牌与键读', async () => {
+  const configValue = vi.fn<ConfigRead>(async () => ({ value: true, version: 1 }));
+  await expect(thirdPartyParseEnabled({ configValue }, 'app-a')).resolves.toBe(true);
+  expect(configValue).toHaveBeenCalledWith('app-a', THIRD_PARTY_PARSE_KEY);
+  expect(THIRD_PARTY_PARSE_KEY).toBe('parse.third_party.enabled');
+});
+
+it.each([
+  ['缺省', null],
+  ['undefined 应答', undefined],
+  ['false', { value: false, version: 1 }],
+  ['null 值', { value: null, version: 1 }],
+  ["'true' 字符串", { value: 'true', version: 1 }],
+  ["'on' 字符串", { value: 'on', version: 1 }],
+  ['数字 1', { value: 1, version: 1 }],
+  ['数组 [true]', { value: [true], version: 1 }],
+  ['缺 value 字段', { version: 1 }],
+  ['裸 true（形状不对）', true],
+])('第三方口令解析开关：%s → 关', async (_label, answer) => {
+  const configValue = vi.fn<ConfigRead>(async () => answer as never);
+  await expect(thirdPartyParseEnabled({ configValue }, 'app-a')).resolves.toBe(false);
+});
+
+it('第三方口令解析开关：读失败 → 关（不抛）', async () => {
+  const configValue = vi.fn<ConfigRead>(async () => {
+    throw new Error('db down');
+  });
+  await expect(thirdPartyParseEnabled({ configValue }, 'app-a')).resolves.toBe(false);
 });

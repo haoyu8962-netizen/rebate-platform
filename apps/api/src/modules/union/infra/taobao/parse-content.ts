@@ -11,7 +11,12 @@
 // - 归档 kind = query（适配器挂）。请求摘要不留 content（archiveOmitParams，用户粘贴的淘口令原文不入库）；
 //   应答正文按白名单改写后再存（parseContentArchiveBody）：只留外层 code、data.goodsId 与 data 里 TOP
 //   error_response 的 code / sub_code；msg（可能回显原文）、pid、commission*、url、originInfo 等一律不存。
+// - 第三方口令解析开关（BR-AI-04 细则，D10-2958 / approvals 183）：按调用方品牌（ctx.appId）读
+//   parse.third_party.enabled，值严格为布尔 true 才开；缺省、读不到（读失败）、null、false、字符串、数字、
+//   未注入读取器一律关。该键不进配置注册表；开关不得用直接改库打开，启用须负责人 + 法务定后另开单登注册表
+//   并列入隐私政策第三方共享清单。
 // TODO(规划/11 §4.5): goodsId 字段位置与 25003 语义待真实样本核对 — blocked on FU-PARSE-CONTENT-SAMPLES
+import type { ContentReader } from '../../../content/index.ts';
 import { UnionError, type UnionErrorCode } from '../../domain/types.ts';
 import type { DataokeCodeMap, DataokeParameters } from '../dataoke/dataoke-client.ts';
 
@@ -34,6 +39,35 @@ export const DATAOKE_PARSE_CONTENT_MISSING_DATA: UnionErrorCode = 'link_unrecogn
 
 /** 归档请求摘要里不留的参数（DataokeRequestOptions.archiveOmitParams）：content 是用户输入原文。 */
 export const DATAOKE_PARSE_CONTENT_ARCHIVE_OMIT: readonly string[] = Object.freeze(['content']);
+
+/** 第三方口令解析开关的配置键（按品牌读；不进配置注册表）。 */
+export const THIRD_PARTY_PARSE_KEY = 'parse.third_party.enabled';
+
+/** 按品牌读配置的端口（形状照 content 模块的 ContentReader）。 */
+export interface ThirdPartyParseConfig {
+  readonly configValue: ContentReader['configValue'];
+}
+
+/**
+ * 该品牌是否开了第三方口令解析：只有读到 { value: true }（严格布尔 true）才算开。未注入读取器、键缺省、
+ * 读失败、应答形状不对、值为 null / false / 'true' / 1 等一律关（不抛、不告警）。
+ */
+export async function thirdPartyParseEnabled(
+  config: ThirdPartyParseConfig | undefined,
+  appId: string,
+): Promise<boolean> {
+  if (config === undefined) return false;
+  let answer: unknown;
+  try {
+    answer = await config.configValue(appId, THIRD_PARTY_PARSE_KEY);
+  } catch {
+    return false;
+  }
+  if (typeof answer !== 'object' || answer === null || !Object.hasOwn(answer, 'value')) {
+    return false;
+  }
+  return (answer as { readonly value: unknown }).value === true;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

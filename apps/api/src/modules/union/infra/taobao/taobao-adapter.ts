@@ -58,6 +58,11 @@
 // B1-04zzzzo r2（D10-2917）：ctx.origin === 'agent'（BR-AI-04）时商品页以外的输入同样 adapter_unimplemented，
 // 不调 parse-content、不取大淘客凭据；商品页官方直查照常。parse-content 的归档请求摘要不留 content，
 // 应答只存白名单字段；成功码但 data 缺失 / null → link_unrecognized（见 parse-content.ts）。
+// B1-04zzzzo r3（BR-AI-04 细则，D10-2958 / approvals 183）：推广链 / 淘口令 / m.tb.cn 先按 ctx.appId 读品牌开关
+// parse.third_party.enabled（options.config，严格布尔 true 才开；缺省、读不到、非 true、未注入 config 一律关
+// → adapter_unimplemented，不取大淘客凭据、不发请求、不告警）。开时顺序为「官方淘宝口令解析 → 不可用 / 无权限
+// 才降级大淘客 parse-content」；官方淘宝口令解析尚未实现，恒视为不可用。商品页 item.htm 官方直查不读开关。
+// 生产装配尚未注入开关读取器，故生产恒关；启用单负责接线（FU，见 review-spec-test-r4 范围外 S2）。
 import { systemScheduler, type Clock, type Scheduler } from '../../../platform/index.ts';
 import type {
   TaobaoPriceOptions,
@@ -215,6 +220,8 @@ import {
   parseContentArchiveBody,
   parseContentGoodsId,
   parseContentParameters,
+  thirdPartyParseEnabled,
+  type ThirdPartyParseConfig,
 } from './parse-content.ts';
 import { parseTaobaoItemLink } from './resolve-link.ts';
 import { unwrapTaobaoResponse, type TaobaoSubCodeMap, type TaobaoWarning } from './response.ts';
@@ -342,6 +349,13 @@ export interface TaobaoAdapterOptions {
    * do not change. Without it the refund archive is the body as received (B1-04zzc #11).
    */
   readonly ownOrders?: TaobaoOwnOrderReader;
+  /**
+   * B1-04zzzzo r3 (BR-AI-04, D10-2958): per-brand config reads for resolveLink's third-party parse
+   * switch parse.third_party.enabled (see parse-content.ts). Only a strict boolean true turns the
+   * 大淘客 parse-content fallback on; without it the switch is off (the production assembly does not
+   * inject it yet, so production stays off).
+   */
+  readonly config?: ThirdPartyParseConfig;
   /** B1-04z: punishment mapping and slot-filter warnings (see punishments.ts). */
   readonly punishWarn?: (event: TaobaoPunishWarning) => void;
 }
@@ -407,6 +421,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   readonly #priceSettings: TaobaoPriceSettingsReader | undefined;
   readonly #priceWarn: ((event: TaobaoPriceWarningEvent) => void) | undefined;
   readonly #orderSource: DataokeClient | undefined;
+  readonly #config: ThirdPartyParseConfig | undefined;
   readonly #convertSource: TaobaoConvertSource;
   readonly #searchSource: TaobaoSearchSource;
   readonly #searchSlot: TaobaoSearchSlotReader | undefined;
@@ -482,6 +497,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     this.#priceSettings = options.priceSettings;
     this.#priceWarn = options.priceWarn;
     this.#orderSource = options.orderSource;
+    this.#config = options.config;
     // B1-04zzt：只有注入了大淘客客户端才声明（不发请求）；没有时属性缺省。
     if (options.orderSource !== undefined) this.shopConvertSources = SHOP_CONVERT_SOURCES;
     // 只有明确的 'dataoke' 打开大淘客转链；缺省与其他值一律是 baichuan（行为不变）。
@@ -586,8 +602,9 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     }
   }
 
-  // 端口方法：resolveLink 商品页 item.htm?id= 直查（B1-04zzzzk），其余有 orderSource 时经大淘客
-  // parse-content（B1-04zzzzo），没有则 adapter_unimplemented，不取凭据、不发请求
+  // 端口方法：resolveLink 商品页 item.htm?id= 直查（B1-04zzzzk），其余有 orderSource 且品牌开关
+  // parse.third_party.enabled 严格为 true 时经大淘客 parse-content（B1-04zzzzo），否则 adapter_unimplemented，
+  // 不取凭据、不发请求
   // （convert 见 B1-04d，searchItems 见 B1-04zh / B1-04zx，listOrders 见 B1-04f）。
 
   /**
@@ -993,8 +1010,10 @@ export class TaobaoUnionAdapter implements UnionAdapter {
    * with its numeric id. B1-04zzzzo: anything else, with an orderSource, → one 大淘客 parse-content
    * (see parse-content.ts) for data.goodsId, then one item.info.upgrade.get with that goodsId. Either
    * way the item_id is this response's first row as returned (BR-PROD-05), never from #itemIdCache.
-   * Without an orderSource, or for the Agent chain (ctx.origin 'agent', BR-AI-04): unimplemented
-   * before credentials or transport (frozen [AC-B1-04j#30]).
+   * Without an orderSource, for the Agent chain (ctx.origin 'agent', BR-AI-04), or unless the
+   * brand's parse.third_party.enabled is strictly true: unimplemented before credentials or
+   * transport (frozen [AC-B1-04j#30]). When on, the official Taobao parse comes first and 大淘客 is
+   * only its fallback; the official parse is not implemented yet and always counts as unavailable.
    */
   async resolveLink(raw: string, ctx: CallCtx): Promise<ResolvedLink> {
     const linkId = parseTaobaoItemLink(raw);
@@ -1003,6 +1022,13 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     if (ctx.origin === 'agent') throw unimplemented('resolveLink');
     const source = this.#orderSource;
     if (source === undefined) throw unimplemented('resolveLink');
+    // 品牌开关（D10-2958）：严格 true 才开；关时不取凭据、不发请求、不告警。
+    if (!(await thirdPartyParseEnabled(this.#config, ctx.appId))) {
+      throw unimplemented('resolveLink');
+    }
+    // 先官方淘宝口令解析；不可用 / 无权限才降级到大淘客（本降级仅在品牌开关为 true 时发生）。
+    const official = this.#officialParse();
+    if (official !== null) return this.#resolveItemId(official, ctx);
     const parameters = parseContentParameters(raw);
     const data = await source.request('GET', DATAOKE_PARSE_CONTENT_PATH, parameters, {
       version: DATAOKE_PARSE_CONTENT_VERSION,
@@ -1015,6 +1041,14 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     });
     // 只取 goodsId；它不是凑狸口径 item_id（D10-504），必须再经 upgrade.get 换本次原串。
     return this.#resolveItemId(parseContentGoodsId(data), ctx);
+  }
+
+  /**
+   * 官方淘宝口令解析：尚未实现，恒视为不可用（返回 null → 调用方降级）。不发请求、不取凭据。
+   * TODO(规划/11 §4.5): 官方淘宝口令解析 — blocked on 淘宝口令权限包与录制（followups F-31，见 parsing 模块）
+   */
+  #officialParse(): string | null {
+    return null;
   }
 
   /** One item.info.upgrade.get for `id`; the first row's item_id as returned, else link_unrecognized. */
