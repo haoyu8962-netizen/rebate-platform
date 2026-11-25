@@ -9,8 +9,7 @@ type: impl
 #    [AC-B1-25c#8] 不登：新规则按 up{job=…} 判、不引用 pg_up / redis_up，#8 钉的「pg_up == 0 恰好一条、redis_up 相关只有 CouliRedisDown 一条」照旧成立（编排 D10-2959 预计两条都要改，核实后只有 #7 会红）。
 # ② WECOM-TIMEOUT-DUP 取乙（D10-2959）：超时照旧重试、接受同一次请求里的偶发重复（群机器人无幂等键；告警漏一条比多一条代价大），冻结 [AC-B1-25c#5] 不改。
 #    新增：infra/monitoring/forwarder/webhook.ts 按（Alertmanager 的 groupKey, status firing / resolved）记 30 分钟，期间同组同状态再送到一律回 200 且不推送，
-#    只挡 Alertmanager 层面的重复送达；记忆只放进程内存（不落盘、不跨进程），按时间淘汰，条数设上限防无限增长。
-#    infra/staging/README.md 告警一节的已知行为补一句：转发器重启后去重记忆清空，重启后 30 分钟内同一告警可能再收到一次。
+#    只挡 Alertmanager 层面的重复送达；记忆只放进程内存（不落盘、不跨进程），按时间淘汰，条数设上限防无限增长。infra/staging/README.md 告警一节的已知行为补一句：转发器重启后去重记忆清空，重启后 30 分钟内同一告警可能再收到一次。
 #    台账补丁 1（编排 D10-3010，Codex money r1 的 S1）：同组同状态且组内告警实例集合不变才算重复——键加上实例集合摘要（各告警 fingerprint / 标签 + startsAt + 各自状态，排序后摘要），只改注解文字的重投照旧挡；组里新增或减少实例照推；fingerprint 只进内存键，不进消息与日志。title 里的「（告警组, 状态）」按此理解。
 # ③ SPEC-R2：只加两条用例——推送成功路径的日志不出现 Webhook 地址；第二个 vmagent 用独立的 -remoteWrite.tmpDataPath（现实现已满足：vmagent-exporters.args:7 与 vmagent.args:5）。
 # staging 部署仍等群机器人地址（负责人提供）；本单只做代码与测试。
@@ -37,4 +36,5 @@ tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/platform/alerting-wecom/**'
-status: todo
+status: done
+pr: 753
