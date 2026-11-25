@@ -1,0 +1,99 @@
+id: B1-34s
+repo: rebate-platform
+title: '工作日日历两键（calendar.cn_holidays.<年>、calendar.cn_makeup_workdays.<年>，2026–2030 共十个字面量键）登进 content 配置注册表，后台可写并逐项校验'
+type: impl
+# 2026-11-25 be 入账（编排 D10-2944 / D10-2946；范围 couli-runs/CAL-1125/scope.md，探针 couli-runs/CAL-1125/probe.out）。
+# 背景：申诉期限（BR-ID-36）、注销到期告警与个人信息副本（BR-ID-27 / BR-ID-40）、提现审核期限（BR-WDR-26 细则「工作日日历」）都按年读这两键，但它们不在注册表，后台配置接口 20001 拒写，ops 无法按国办通知录入（D10-2632 ③、D10-2942）。
+# ① 注册：config-registry.ts 追加十个字面量键 calendar.cn_holidays.2026–2030、calendar.cn_makeup_workdays.2026–2030（值类型 object、权限 config.general、adminEditable、不播种）；仍不认前缀，2031 起另加一行代码。
+# ② 逐项校验（新）：这十个键写入值须为数组，每项为字符串 YYYY-MM-DD 且是真实日期、年份等于键名里的年、不重复；空数组允许。不合格 → 现有 20001（单条 fields=['value']、批量 fields=[key]），不新增错误码。校验放 content/domain（注册表规格上的可选逐项校验），其它键行为不变。
+# ③ 不做：节假日与补班日跨键不相交（读侧已定节假日优先，risk/domain/appeal-deadline.ts）；缺键或非法时读方静默退回只跳周末——现状不改，年底未写入的告警登 FU-CALENDAR-YEAR-MISSING-ALERT。不动契约（后台配置接口通用、AdminConfigValueType 已含 object）；后台中文标签另开 fe 小单。
+# 风险级照 risk-map：content = RV2（D10-2946）。
+# 资金类判定（D10-2950）：test/spec/content/config-settle/ 两块（registry.test.ts [AC-F1-02zj#2]、writes.int.test.ts [AC-F1-02zj#13]）的目录段含关键词 settle，tools/lib/task-file.ts isMoneyOrAttributionTest（MONEY_TEST_DIR_KEYWORDS 含 'settle'，:216-252）判为资金 / 归属测试——只走 rule_change；改动只在整表清单 / 计数末尾多日历十键、不动任何 settle.* 期望值；待负责人确认（编排已核内容、建议同意，D10-2953），确认前不 land。其余 8 块不含关键词。
+# 与 B3-09n（agent.models 列进后台配置列表，agent 线在途）改同一批注册表冻结块（[AC-F1-10e#1/#3/#10/#56/#57/#58]、config-settle 两块、invite-reward 两块）：后 land 的一张在先合并的期望清单上再追加，modify_existing 的块前后以 land 时主干为准。
+# 冻结用例（探针 couli-runs/CAL-1125/probe.out：test/spec/content + subsidy-itemized + risk-flags + content 单测，7028 条只红 13）：10 块钉注册表全集 / 顺序 / 计数的规则测试登 modify_existing（全在 test/spec/content，无资金 / 归属目录，同 B3-09n 那 10 块）；另 3 条实现方单测（config-registry.test.ts、config-item-admin.test.ts）随实现改。
+refs: [BR-ID-36, BR-ID-27, BR-WDR-26]
+refs_hash:
+  BR-ID-36: 1518efdd5860
+  BR-ID-27: b6a7f00720b4
+  BR-WDR-26: 158db40de631
+deps: []
+paths:
+  - 'apps/api/src/modules/content/domain/config-registry.ts'
+  - 'apps/api/src/modules/content/domain/config-registry.test.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.ts'
+  - 'apps/api/src/modules/content/application/config-item-admin.test.ts'
+test_paths:
+  - 'test/spec/content/config-calendar/**'
+  - 'test/spec/content/config-items/registry.test.ts'
+  - 'test/spec/content/config-items/read.int.test.ts'
+  - 'test/spec/content/config-settle/registry.test.ts'
+  - 'test/spec/content/config-settle/writes.int.test.ts'
+  - 'test/spec/content/invite-reward-config/registry.test.ts'
+  - 'test/spec/content/invite-reward-eligibility/registry.test.ts'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/content/**'
+modify_existing:
+  - file: 'test/spec/content/config-items/registry.test.ts'
+    test: '[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 agent.page_guide.routes、external_hosts，不多不少不重复'
+    reason: rule_change
+    br: [BR-WDR-26, BR-ID-36, BR-ID-27]
+    ruling: D10-2946
+    note: 'B1-34s：工作日日历十键（calendar.cn_holidays.2026–2030、calendar.cn_makeup_workdays.2026–2030）登进注册表、不播种——块内期望全集并入这十键（未播种名单），其余键与断言不动'
+  - file: 'test/spec/content/config-items/registry.test.ts'
+    test: '[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 object）'
+    reason: rule_change
+    br: [BR-WDR-26, BR-ID-36, BR-ID-27]
+    ruling: D10-2946
+    note: 'B1-34s：日历十键无种子行，块内计数多减 10；其余断言不动'
+  - file: 'test/spec/content/config-items/registry.test.ts'
+    test: '[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加在裁定 14 之后，逐键值类型、options、权限点、可改标记）'
+    reason: rule_change
+    br: [BR-WDR-26, BR-ID-36, BR-ID-27]
+    ruling: D10-2946
+    note: 'B1-34s：日历十键追加在注册表末尾（agent.examples 之后）——块内期望的整表清单 / 计数在末尾多这十项（未写过的 value=null、version=0），其余键、顺序与断言不动'
+  - file: 'test/spec/content/config-items/registry.test.ts'
+    test: '[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登记（紧接 settle.* 之后、其后是 eligibility_days、payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项，逐键值类型、options、权限点、可改标记）'
+    reason: rule_change
+    br: [BR-WDR-26, BR-ID-36, BR-ID-27]
+    ruling: D10-2946
+    note: 'B1-34s：日历十键追加在注册表末尾（agent.examples 之后）——块内期望的整表清单 / 计数在末尾多这十项（未写过的 value=null、version=0），其余键、顺序与断言不动'
+  - file: 'test/spec/content/config-items/registry.test.ts'
+    test: '[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接 ip_window_hours 登记、其后紧接 payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项（按登记顺序，逐键值类型、options、权限点、可改标记；options 为 null、config.business、可改）'
+    reason: rule_change
+    br: [BR-WDR-26, BR-ID-36, BR-ID-27]
+    ruling: D10-2946
+    note: 'B1-34s：日历十键追加在注册表末尾（agent.examples 之后）——块内期望的整表清单 / 计数在末尾多这十项（未写过的 value=null、version=0），其余键、顺序与断言不动'
+  - file: 'test/spec/content/config-settle/registry.test.ts'
+    test: '[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行为保持不变'
+    reason: rule_change
+    br: [BR-WDR-26, BR-ID-36, BR-ID-27]
+    ruling: D10-2946
+    note: 'B1-34s：日历十键追加在注册表末尾（agent.examples 之后）——块内期望的整表清单 / 计数在末尾多这十项（未写过的 value=null、version=0），其余键、顺序与断言不动'
+  - file: 'test/spec/content/invite-reward-config/registry.test.ts'
+    test: '[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后'
+    reason: rule_change
+    br: [BR-WDR-26, BR-ID-36, BR-ID-27]
+    ruling: D10-2946
+    note: 'B1-34s：日历十键追加在注册表末尾（agent.examples 之后）——块内期望的整表清单 / 计数在末尾多这十项（未写过的 value=null、version=0），其余键、顺序与断言不动'
+  - file: 'test/spec/content/invite-reward-eligibility/registry.test.ts'
+    test: '[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天数紧接 IP 窗口，其后紧接 payout.* 八项、risk.withdraw.* 六项、withdraw.auto_payout.* 十七项、payout.auto_enable_check.* 四项、rank.cache_ttl_seconds、search.* 两项、retention.* 七项、tax.* 三项、feed.fallback_pool_id 与 pool.* 两项'
+    reason: rule_change
+    br: [BR-WDR-26, BR-ID-36, BR-ID-27]
+    ruling: D10-2946
+    note: 'B1-34s：日历十键追加在注册表末尾（agent.examples 之后）——块内期望的整表清单 / 计数在末尾多这十项（未写过的 value=null、version=0），其余键、顺序与断言不动'
+  - file: 'test/spec/content/config-items/read.int.test.ts'
+    test: '[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 value=null、version=0、无作者与时间'
+    reason: rule_change
+    br: [BR-WDR-26, BR-ID-36, BR-ID-27]
+    ruling: D10-2946
+    note: 'B1-34s：日历十键追加在注册表末尾（agent.examples 之后）——块内期望的整表清单 / 计数在末尾多这十项（未写过的 value=null、version=0），其余键、顺序与断言不动'
+  - file: 'test/spec/content/config-settle/writes.int.test.ts'
+    test: '[AC-F1-02zj#13] GET 配置列表包含全部 16 项，enum 选项按契约返回'
+    reason: rule_change
+    br: [BR-WDR-26, BR-ID-36, BR-ID-27]
+    ruling: D10-2946
+    note: 'B1-34s：日历十键追加在注册表末尾（agent.examples 之后）——块内期望的整表清单 / 计数在末尾多这十项（未写过的 value=null、version=0），其余键、顺序与断言不动'
+status: todo
