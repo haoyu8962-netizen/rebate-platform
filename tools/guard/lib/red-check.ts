@@ -86,6 +86,10 @@
 // and judged on its own (CT-06zzz, D10-586, after B1-08zh). It makes a file judged as a whole only
 // when a module of the file's closure explicitly imports it (mayImportRuleTest); a kit that loads
 // by a computed name no longer counts as reading it. Helpers, fixtures and data files stay as above.
+// So does a frozen rule-test file left out of the expected list because every change lies in its
+// declared modify_existing blocks (modifiedOnlyFiles; CT-06zzzzzzzj, D10-3128, after B1-18l, whose
+// refusals.int.test.ts made seven files reached through admin/auth/kit.ts's createRequire judged
+// as a whole); files left out for another reason stay test-support files.
 //
 // Declared exemptions (CT-06r; orchestrator ruling of 2026-10-18 21:5x after B2-01l): a file that
 // existed at the base, whose code outside the tests is unchanged and whose tests compare cleanly,
@@ -1025,7 +1029,17 @@ export function ruleTestBaselines(
     }
   }
   // CT-06zzz: the expected files are judged on their own, so they are not helpers of each other.
+  // CT-06zzzzzzzj (D10-3128, after B1-18l): nor is a changed frozen rule-test file left out of the
+  // expected list because every change against its base lies in its declared modify_existing
+  // blocks (modifiedOnlyFiles, D10-701 ②): it is a rule-test file, not a helper, fixture or data
+  // file, so only an explicit import of it counts (mayImportRuleTest). A file left out otherwise
+  // (renamedOnlyFiles, outsideOnlyFiles, mixedOnlyFiles) and every real support file are judged
+  // as before (mayReadSupport).
   const judged = new Set(expected);
+  const leftOutCandidates = [...support].filter(
+    (s) => !judged.has(s) && RULE_TEST_FILE.test(s) && matchesAny(s, scope),
+  );
+  for (const r of modifiedOnlyFiles(leftOutCandidates, read, declarations)) judged.add(r.file);
   // Test code only: implementation modules do not read test-support files.
   const follow = (p: string): boolean =>
     p.startsWith('test/') || p.startsWith('packages/testing/') || matchesAny(p, scope);
