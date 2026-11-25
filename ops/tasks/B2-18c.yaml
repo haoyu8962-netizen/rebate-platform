@@ -4,6 +4,7 @@ title: 'B2-18c（test-change，D10-2428）：删除 test/spec/ledger/recon-outco
 type: test-change
 # 2026-11-22 funds 入账（编排 D10-2415 / D10-2428；负责人 2026-11-21 同意整份删除，D10-2425 (a)）。门禁不认在 task/ 分支上删除冻结文件（evidence-check：declared in modify_existing, but removed or renamed），所以拆成本单：非 task 分支、不带证据文件，只删这一个文件，PR 说明逐条写 19 条（[AC-B2-09h#17 / #18 / #19 / #21–#29 / #34–#40]）各由 test/spec/settlement/bill-follow-union/** 的哪条用例取代；标签由编排按 D10-2425 (a) 核后加。
 # 时序（D10-2428）：PR 等 B2-18 的规则测试过 spec-test、实现过 money、测试机全量绿之后才开；本单先合、B2-18 的任务 PR 紧跟，背靠背，中间不夹别的单（需要时由编排设一次主干冻结包住两张）。同目录的 close / reader / concurrency / idempotency 与 kit 不动（读口与结案写口保留，FU-B2-18-RETIRE-UNION-CONCLUSION）。
+# 2026-11-25（funds，编排 D10-3066）：B2-18 已置 void 并入 B2-18d；上文各处的 B2-18 现指 B2-18d（本单仍先于它合并、背靠背）。
 refs: []
 refs_hash: {}
 deps: []

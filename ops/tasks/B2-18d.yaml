@@ -1,0 +1,301 @@
+id: B2-18d
+repo: rebate-platform
+title: 'B2-18d：settlement 月结校验跟随联盟（接手 B2-18）——基数不等按 R7 以联盟结算数据重生成分佣快照再校验，一致进批次候选不开差错单；仍不一致或重生成失败告警工程、保持 WAITING、不以旧快照入账；一次出账重生成成功的单上限 500、超出的留到下一次补充；月结与补充登记联盟差错改接账本只写登记口'
+type: impl
+# 2026-11-25 funds 入账（编排 D10-3066：接手 B2-18，B2-18 置 void 并入本单）。来由：B2-18 的 Codex 调用已到每任务 10 次的防失控上限（规划/11 §2.5），规则测试评审与资金评审都起不来；照工具给的出路换单，不动熔断，先例 B2-04rd → B2-04re。规划/05 B2-18 行；负责人依据不变：2026-11-21「账单金额不一致以联盟为准、系统自动跟随」与 2026-11-25 对资金评审第 5 轮两条 S1「按建议办」（approvals 第 186 条）。资金单（RV2）：Claude 实现、独立方写规则测试、Codex 规则测试评审与资金评审；常规计数，approvals 第 196 条随 B2-18 作废不再用。
+# 范围 = B2-18 现有全部（其补丁 1 之后的 ①②）+ 两处新增。① 联盟结算基数 ≠ 分佣快照当前版本基数：按 BR-FUND-01 R7（BR-CALC-02）以联盟结算数据重生成分佣快照版本后再校验一次，一致即进批次候选、不开差错单；重生成只追加一个金额版本，比例与受益人不动。② 重生成后仍不一致、重生成失败、或联盟结算佣金为 0 而快照基数 > 0：告警工程、不进财务待办，订单保持 WAITING，不以旧快照入账。月结判定与补充发起不读「结论为以联盟为准视为一致」的旧差错结论（D10-2415）。
+# ③ 一次出账的重生成上限（BR-FUND-04 ④ 与细则，SPEC_REF 1025764be5af；D10-2982 ①）：一次出账里重生成成功、订单键锁留到提交的单最多 500 张（技术常量，留只供测试注入的入口、不接进生产装配）；超出的不重算、不入批、不登记差错单、不发工程告警、保持 WAITING，下一次补充接着处理。口径七处照 D10-3046：取锁后重读已相符或已变成别的结果且没写东西的回滚放锁、不占名额；名额满时凡要进取锁那条路的都留下；被留下的单不进逐单结果与任何现有计数；留下的张数只打一条 warn 级日志事件（不借现有计数列，D10-2987 / D10-2988）；「不取锁」指不为重生成取锁、不把锁留到提交，补充里 B2-04re 的分块重读不在此列；补充里先比金额后剔除在批单的顺序不动。
+# ④ 登记口改接（D10-2982 ②）：月结与补充登记 union_mismatch 的两处生产装配从 registerReconDiff 改接账本的 registerReconDiffWriteOnly（B2-02zf，#747）；重放不新增差错单、不回读。
+# 带过来的：task/B2-18 上的 9 个规则测试提交（头 4f604735d；test/spec/settlement/bill-follow-union/ 的 [AC-B2-18#1]–[#44] 与已登记的冻结用例改动，标题里的 AC-B2-18 编号不改；最后一次的先红 red/10 PASS）作本单的规则测试基线，不重写；未提交的实现第 5 次（快照 couli-runs/B2-18/impl-r5.patch 与 impl-r5-untracked.tar）在实现轮接着改；B2-18 的 43 条 modify_existing 逐条原样搬到本单（来历见 B2-18 的补丁 2–5：D10-2425 / D10-2521 / D10-2600 / D10-2618 / D10-2646，负责人均已确认；金额期望值都不动）。
+# B2-18 名下已有的评审（事实，供第一轮全量规则测试评审参照，细目写在评审书里）：规则测试评审 5 轮（Codex），最后一轮评到写测第 8 次；写测第 9 次（[AC-B2-18#35]–[#44]：上限与只写登记口）还没有评过。资金评审 5 轮（Codex），第 5 轮 fail、两条 S1 即 ③④ 的来由。
+# 时序：B2-18c（整份删除 recon-outcome/monthly.int.test.ts 的 19 条）仍先于本单合并、背靠背，其文中的 B2-18 现指本单。不在本单：ESTIMATED 先按单号补拉（FU-B2-18B-REPULL-BY-ORDER，期间照旧登记 union_mismatch）；「待下次重算」数的账单列、接口与页面（另开单）；账单详情显示与超宽限期提示（FU-B2-18-BILL-COUNTS-CONTRACT）；旧结论读口与字段的清退（FU-B2-18-RETIRE-UNION-CONCLUSION）。
+refs: [BR-FUND-04, BR-FUND-09]
+refs_hash:
+  BR-FUND-04: faf2ddd22d5b
+  BR-FUND-09: 891062fdd62b
+deps: [B2-02zf]
+paths:
+  - 'apps/api/src/modules/settlement/**'
+  - 'apps/api/src/modules/commission/**'
+  - 'apps/api/src/modules/union/**'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/settlement/bill-follow-union/**'
+  - 'test/spec/settlement/bill/{validation,batches}.int.test.ts'
+  - 'test/spec/settlement/supplement/{validation,idempotency,switch}.int.test.ts'
+  - 'test/spec/settlement/admin-settle-commands/supplement.int.test.ts'
+  - 'test/spec/settlement/bill-unsettled-count/{assembly,bill-job,concurrency,idempotency,supplement}.int.test.ts'
+  - 'test/spec/settlement/bill-ports/source.int.test.ts'
+  - 'test/spec/settlement/worker/module.int.test.ts'
+  - 'test/spec/settlement/worker-catchup/recover.int.test.ts'
+impl: claude
+tester: claude-independent
+modify_existing:
+  - file: 'test/spec/settlement/bill/validation.int.test.ts'
+    test: '[AC-B2-04n#9] 金额一致性：一致'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '期望不变；六行共用一个回调，回调因超容差两行改了写法，门禁要求整张表登记（D10-2521 ④）'
+  - file: 'test/spec/settlement/bill/validation.int.test.ts'
+    test: '[AC-B2-04n#9] 金额一致性：换算后向下取整仍一致'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '期望不变；与「一致」那一行同理——六行共用的回调被改，整张表登记（D10-2521 ④）'
+  - file: 'test/spec/settlement/bill/validation.int.test.ts'
+    test: '[AC-B2-04n#9] 金额一致性：正差恰等容差'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '期望不变；与「一致」那一行同理——六行共用的回调被改，整张表登记（D10-2521 ④）'
+  - file: 'test/spec/settlement/bill/validation.int.test.ts'
+    test: '[AC-B2-04n#9] 金额一致性：负差恰等容差'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '期望不变；与「一致」那一行同理——六行共用的回调被改，整张表登记（D10-2521 ④）'
+  - file: 'test/spec/settlement/bill/validation.int.test.ts'
+    test: '[AC-B2-04n#9] 金额一致性：正差超过容差一分'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。超容差不再登记 settle_amount_mismatch：diffs 由 1 张改为 0 张、registerDiff 不被调用；逐单结果仍是金额不一致'
+  - file: 'test/spec/settlement/bill/validation.int.test.ts'
+    test: '[AC-B2-04n#9] 金额一致性：负差超过容差一分'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。与「正差超过容差一分」那一行同样改：不再登记 settle_amount_mismatch，diffs 由 1 张改为 0 张、registerDiff 不被调用'
+  - file: 'test/spec/settlement/bill/validation.int.test.ts'
+    test: '[AC-B2-04n#10] 使用最大分佣版本，结算零佣金是有数据而非应结未结'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。结算佣金为 0 而快照基数 850：不再登记 settle_amount_mismatch；按 D10-2415 ④(i) 不作废、不重生成、不进批次；「有数据而非应结未结」的其余断言不动'
+  - file: 'test/spec/settlement/bill/batches.int.test.ts'
+    test: '[AC-B2-04n#18] credit.enabled=off 不生成任何批次，仍保存逐单校验、差错与暂缓'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。bad 单（结算 9000、基数 850）不再登记 settle_amount_mismatch：diffs 与 error_count 各再减 1（B2-18a 已先去掉应结未结那张）；逐单结果仍含 amount_mismatch、held_count 不动'
+  - file: 'test/spec/settlement/bill/batches.int.test.ts'
+    test: '[AC-B2-04n#18] credit.enabled=undefined 不生成任何批次，仍保存逐单校验、差错与暂缓'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。bad 单（结算 9000、基数 850）不再登记 settle_amount_mismatch：diffs 与 error_count 各再减 1（B2-18a 已先去掉应结未结那张）；逐单结果仍含 amount_mismatch、held_count 不动'
+  - file: 'test/spec/settlement/bill/batches.int.test.ts'
+    test: '[AC-B2-04n#19] 超过 JS 安全整数的联盟佣金合计用十进制整数串持久化，无一分钱丢失'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。两单原靠 unionAuthoritative 进合计；结论不再读后，把两单的夹具改为金额一致（快照基数与结算额换算相等），保留「超安全整数的合计按十进制串持久化」的原意，合计期望值 18014398509481987 不改'
+  - file: 'test/spec/settlement/supplement/validation.int.test.ts'
+    test: '[AC-B2-04r#4] 仍不一致的不入批且同账单同单差错不重复；补充时新发现的不一致按目标账单月登记'
+    retitle_to: '[AC-B2-04r#4] 仍不一致的不入批、不登记差错单（B2-18）'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。仍不一致的不入批不变；不再登记 settle_amount_mismatch（各处 diffs 张数相应减少、登记内容的断言去掉）；逐单结果 amount_mismatch 不动'
+  - file: 'test/spec/settlement/supplement/validation.int.test.ts'
+    test: '[AC-B2-04r#28] 补充前已追加分佣快照 v2：联盟仍按 v1 结算的按当前版本判不一致，不入批'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。按当前版本判不一致、不入批不变；不再登记 settle_amount_mismatch（expected 1700 / actual 850 那张）'
+  - file: 'test/spec/settlement/supplement/idempotency.int.test.ts'
+    test: '[AC-B2-04r#24] 明细实际写入后故障整体回滚，不留补充批次、差错或完成的任务行；同键重试可生成'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。故障回滚后重试：late 单不再登记差错单，diffs 由 before + 1 改为 before + 0；不留补充批次与任务行、同键重试可生成的断言不动'
+  - file: 'test/spec/settlement/supplement/switch.int.test.ts'
+    test: '[AC-B2-04r#16] 开关 off 期间账单只留校验结果；打开后对该账单发起补充，候选与补记项入批，差错不重复'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意。开关 off 期间 bad 单不再登记差错单（before.diffs 由 1 改为 0）；逐单结果 amount_mismatch 与打开后候选、补记项入批的断言不动'
+  - file: 'test/spec/settlement/admin-settle-commands/supplement.int.test.ts'
+    test: '[AC-B2-09f#29] 校验范围：只看所发起平台和本应用的子订单；hold、维权中的单不入批；金额不符的单不入批且登记 R1 差错 settle_amount_mismatch，账期为账单月；已入账子订单上开着的补记义务生成受益人明细（order_count 不计）；差错数与暂缓数不回写账单（D10-280 ③）'
+    retitle_to: '[AC-B2-09f#29] 校验范围：只看所发起平台和本应用的子订单；hold、维权中的单不入批；金额不符的单不入批、不登记差错单（B2-18）；已入账子订单上开着的补记义务生成受益人明细（order_count 不计）；差错数与暂缓数不回写账单（D10-280 ③）'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2425
+    note: '负责人 2026-11-21 同意不登记差错单。编排 D10-2521 ②：只换夹具——金额不符的那单的联盟结算佣金改为 0（结算佣金为 0 而基数 > 0：不重生成、告警、不入批），「不入批」的 order_count 与明细断言、金额期望值一字不动；差错单由 1 张改为 0 张；「后台补充重生成后入批」由新用例 [AC-B2-18#16] 钉'
+  - file: 'test/spec/settlement/bill/validation.int.test.ts'
+    test: '[AC-B2-04n#12] 以联盟为准只豁免金额差异，不能越过 hold 或缺结算数据'
+    retitle_to: '[AC-B2-04n#12] 以联盟为准的结论不再豁免金额差异（B2-18），也不能越过 hold 或缺结算数据'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2600
+    note: '负责人 2026-11-22 对话确认（D10-2600）。月结判定不再读「以联盟为准」结论（D10-2415 ③）：unionAuthoritative 为 true 而金额不一致的那一单不再进批次（夹具不注入重生成端口，按重生成失败处理）；hold 与缺结算数据不被越过的断言不动；金额期望值不动'
+  - file: 'test/spec/settlement/supplement/validation.int.test.ts'
+    test: '[AC-B2-04r#3] 金额不一致经差错结论「以联盟为准」后进入补充批次，B_settle 取联盟结算额换算'
+    retitle_to: '[AC-B2-04r#3] 金额不一致不登记差错单；差错结论「以联盟为准」不再使其进入补充批次（B2-18）'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2600
+    note: '负责人 2026-11-22 对话确认（D10-2600）。「结论以联盟为准后进补充批次」的路径取消——夹具不注入重生成端口，该单按重生成失败处理、补充发起仍不入批、不登记差错单；按联盟结算额换算入批的断言由本单新目录用生产装配的用例接替（[AC-B2-18#16]、[#21]、[#34]）'
+  - file: 'test/spec/settlement/bill-ports/source.int.test.ts'
+    test: '[AC-B2-04zd#6] unionAuthoritative 只取差错结论读口（同一事务、本 app、本单键）；closed 差错单不冒充以联盟为准'
+    retitle_to: '[AC-B2-04zd#6] 来源读口不再调用差错结论读口（B2-18）：unionAuthoritative 恒为 false，closed 差错单也不冒充以联盟为准'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2646
+    note: '负责人 2026-11-22 对话确认（D10-2646）。月结与补充不再读「以联盟为准」结论（D10-2415 ③）：来源读口不再调用差错结论读口——断言由「据结论标 true、读口被调用」改为「恒 false、读口不被调用」；不涉及金额期望值'
+  - file: 'test/spec/settlement/worker/module.int.test.ts'
+    test: '[AC-B2-04ze#25] 装配的处理器：账单日快照已完成时 bill 经生产 readSource（联盟为准读口取本平台订单键）生成账单，应结未结只计数、不登记差错单（B2-18a），settle_jobs 记 (bill, 平台, D 00:00 +08:00) done；credit.enabled 未设（缺省 off）不生成批次、不读归属'
+    retitle_to: '[AC-B2-04ze#25] 装配的处理器：账单日快照已完成时 bill 经生产 readSource（不再调用联盟为准读口，B2-18）生成账单，应结未结只计数、不登记差错单（B2-18a），settle_jobs 记 (bill, 平台, D 00:00 +08:00) done；credit.enabled 未设（缺省 off）不生成批次、不读归属'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2646
+    note: '负责人 2026-11-22 对话确认（D10-2646）。装配的出账处理器不再调用联盟为准读口：该读口的调用清单由恰一次改为空；账单、计数、settle_jobs 等其余断言不动；不涉及金额期望值'
+  - file: 'test/spec/settlement/worker-catchup/recover.int.test.ts'
+    test: '[AC-B2-04zg#10] 账单日 bill 全失败（进死信、settle_jobs failed，CouliSettleBillJobFailed 计 1）→ 次日补出账再投同一期；补跑仍失败照旧是同一行 failed（告警计数仍 1）、不生成账单；之后补跑成功生成 2032-06，failed 清零，不再补送'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2646
+    note: '负责人 2026-11-22 对话确认（D10-2646）：这条容灾用例不得削弱，只换故障注入点。原来靠「联盟为准读口抛错」让出账失败，该读口已不在出账路径上；改为让出账来源读口读取联盟结算记录（order_settlements）的那次读取失败——每次出账都要先读范围内订单的联盟结算记录才能判候选与应结未结（BR-FUND-04 ④），是出账必经的现行读取，补出账的调度本身不读它。「全失败进死信 → 次日补跑仍失败 → 之后补跑成功」的全部断言一字不改'
+  - file: 'test/spec/settlement/bill-unsettled-count/assembly.int.test.ts'
+    test: '[AC-B2-18a#17] 生产装配的 bill（credit.enabled 未设（缺省 off））：两单应结未结 → settle_bills.unsettled_count 2、error_count 只含 VOID 对上联盟结算的 1 单，registerDiff 只以 union_mismatch 调用一次、从不以 settle_missing 调用；订单行一字不动'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/assembly.int.test.ts'
+    test: '[AC-B2-18a#17] 生产装配的 bill（credit.enabled=on）：两单应结未结 → settle_bills.unsettled_count 2、error_count 只含 VOID 对上联盟结算的 1 单，registerDiff 只以 union_mismatch 调用一次、从不以 settle_missing 调用；订单行一字不动'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/bill-job.int.test.ts'
+    test: '[AC-B2-18a#1] 账单日任务遇应结未结：不调 registerDiff、不登记任何差错单、不计 error_count；逐单结果仍是 missing_settlement 交给 saveValidations；订单事实不动'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/bill-job.int.test.ts'
+    test: '[AC-B2-18a#2] 混合账单：候选、金额不一致、应结未结、暂缓（hold 有数据、维权无数据）、状态不符各一单——error_count 只含金额不一致与状态不符（2），unsettled_count 只含应结未结（1），held_count 2，差错单恰为那两类，候选、批次、合计一分不变，amount_mismatch_count 不写'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数；本块另把「登记 settle_amount_mismatch 并计 error_count」改为不登记、不计（手工组装的 kit 没有重生成端口，按失败计入 amount_mismatch_count）。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/bill-job.int.test.ts'
+    test: '[AC-B2-18a#3] 入账开关关着的平台照样计应结未结：credit.enabled.taobao=off、jd 未设，两平台按平台累加进同一账单，不生成批次、不登记差错单'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/bill-job.int.test.ts'
+    test: '[AC-B2-18a#4] 各平台任务在账单行上串行、按平台累加：淘宝 1 单、京东 2 单应结未结并发出账 → unsettled_count 3，error_count 只含京东金额不一致 1 单'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数；本块另把「登记 settle_amount_mismatch 并计 error_count」改为不登记、不计（手工组装的 kit 没有重生成端口，按失败计入 amount_mismatch_count）。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/bill-job.int.test.ts'
+    test: '[AC-B2-18a#5] 迁移前已有的账单行（新列为 NULL）读取不报错、按 0 起累加：另一平台已出账的行上淘宝 2 单应结未结 → unsettled_count 2，error_count、held_count 照原值累加'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/bill-job.int.test.ts'
+    test: '[AC-B2-18a#6] 范围边界照旧：只有 settle_period 等于账单月才计；早于账单月仍无数据的不在本账单、不计；晚于账单月排除；截点取生成开始时刻（含等号），之后才取得的结算数据不算有数据'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/bill-job.int.test.ts'
+    test: '[AC-B2-18a#18] 出过主批次而本平台没有应结未结：unsettled_count 落 0（不是 NULL）——只有候选（一单 1000 分、一单零基数且联盟明确结算 0 分——0 分是有结…；error_count、held_count 同时断言，amount_mismatch_count 仍 NULL'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/bill-job.int.test.ts'
+    test: '[AC-B2-18a#18] 出过主批次而本平台没有应结未结：unsettled_count 落 0（不是 NULL）——入账开关关着（credit.enabled.taobao=off），一单有结算…；error_count、held_count 同时断言，amount_mismatch_count 仍 NULL'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/bill-job.int.test.ts'
+    test: '[AC-B2-18a#18] 出过主批次而本平台没有应结未结：unsettled_count 落 0（不是 NULL）——只有暂缓单（hold 有数据、维权中无数据）；error_count、held_count 同时断言，amount_mismatch_count 仍 NULL'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/bill-job.int.test.ts'
+    test: '[AC-B2-18a#18] 出过主批次而本平台没有应结未结：unsettled_count 落 0（不是 NULL）——范围内一单都没有（只有早于账单月无数据、晚于账单月的单）；error_count、held_count 同时断言，amount_mismatch_count 仍 NULL'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/concurrency.int.test.ts'
+    test: '[AC-B2-18a#19] 账单行已存在（pdd 已出账：error 1、held 1、unsettled 2），taobao 持账单行锁时 jd 在锁上等待，放行后两平台都出账：unsettled_count 6、error_count 3、held_count 4（原值加两平台各自的数，三列都不丢），批次与差错单各平台各一份'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数；本块另把「登记 settle_amount_mismatch 并计 error_count」改为不登记、不计（手工组装的 kit 没有重生成端口，按失败计入 amount_mismatch_count）。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/concurrency.int.test.ts'
+    test: '[AC-B2-18a#19] 账单行已存在（pdd 已出账：error 1、held 1、unsettled 2），jd 持账单行锁时 taobao 在锁上等待，放行后两平台都出账：unsettled_count 6、error_count 3、held_count 4（原值加两平台各自的数，三列都不丢），批次与差错单各平台各一份'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数；本块另把「登记 settle_amount_mismatch 并计 error_count」改为不登记、不计（手工组装的 kit 没有重生成端口，按失败计入 amount_mismatch_count）。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/idempotency.int.test.ts'
+    test: '[AC-B2-18a#7] 同一平台同一账单重复投递：同 run_at 重放、另一 run_at 再投都答 duplicate，unsettled_count 不重复累加'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/idempotency.int.test.ts'
+    test: '[AC-B2-18a#8] 两个独立运行器并发同键：只生成一份任务与批次，union_mismatch 差错单恰一张、不重复，不登记 settle_missing；unsettled_count 只累加一次'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/idempotency.int.test.ts'
+    test: '[AC-B2-18a#9] 明细写入后故障整事务回滚：不留账单计数与差错单；原键重试后 union_mismatch 恰一张、unsettled_count 1，不多计'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/idempotency.int.test.ts'
+    test: '[AC-B2-18a#22] 计数与出账同一事务：写入应结未结数的那条 SQL 执行之后、提交之前故障 → 账单三个计数、合计、任务完成状态、批次、明细与差错单全部回到跑之前；原键重试后计数各累加一次、差错单与批次各一份'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/supplement.int.test.ts'
+    test: '[AC-B2-18a#10] 补充发起遇应结未结：不登记差错单（registerDiff 未被调用），不改账单的 unsettled_count / error_count / held_count，订单仍无结算数据就仍是 missing_settlement'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/supplement.int.test.ts'
+    test: '[AC-B2-18a#11] 账单日应结未结、联盟结算数据后到：补充批次把它作为候选入批（B_settle 850），账单的 unsettled_count 不回改（仍 1），全程没有差错单可关'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/supplement.int.test.ts'
+    test: '[AC-B2-18a#20] 账单月 M 计过应结未结、结算数据在 M 账单日之后才到、没有对 M 发起补充：M+1 账单日任务把它收进 M+1 的主批次（B_settle 850），settle_period 仍是 M；M 账单三个计数保持出账时的值，M+1 不把它计为应结未结，两期都没有它的差错单'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/supplement.int.test.ts'
+    test: '[AC-B2-18a#21] 应结未结的单结算数据后到、已对 M 发起补充并入批且已入账：M+1 账单日任务不再把它作为子订单入批（逐单结果 already_credited），全程只有补充批次那一个明细；M 计数不回改，M+1 不计它为应结未结'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+  - file: 'test/spec/settlement/bill-unsettled-count/supplement.int.test.ts'
+    test: '[AC-B2-18a#23] 补充发起不写账单计数：发起期间经执行器的语句里没有任何写 settle_bills 的（unsettled_count / error_count / held_count 都不碰），账单行与三个计数一字不动；补充仍把后到的单入批、不登记差错单'
+    reason: rule_change
+    br: [BR-FUND-04]
+    ruling: D10-2521
+    note: '编排 D10-2521 ①（口径取甲；负责人 2026-11-22 对话确认，D10-2600）：amount_mismatch_count 与 unsettled_count 同一口径，账单日任务跑完落具体数（没有时为 0），原断言的 NULL 相应改为具体数。不涉及金额期望值；这批改动单独成一个提交'
+accept:
+  - 'pnpm verify'
+  - 'test/spec/settlement/bill-follow-union/**'
+status: todo
