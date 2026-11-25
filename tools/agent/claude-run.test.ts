@@ -864,6 +864,11 @@ it(
     expect(prompt).toContain('frozen later');
     expect(prompt).not.toContain('frozen kept');
     expect(prompt).not.toContain('- Task kind: companion test task');
+    // codex money review r2 S1: the round number, but no ordinary incremental context.
+    expect(prompt).toContain('### Review round (data; exemption confirmation round)');
+    expect(prompt).toContain('- This review round: 1 (earlier usable spec-test outputs found: 0');
+    expect(prompt).not.toContain('Previous review round');
+    expect(prompt).not.toContain('git-diff-since-previous.patch');
   },
 );
 

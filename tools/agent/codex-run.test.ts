@@ -3284,7 +3284,30 @@ it(
     expect(readJson(metaFile)).toMatchObject({
       confirm_round: true,
       confirm_baseline: ledgerBase,
+      review_scope: 'full',
+      full_reason: 'confirmation-round',
+      previous_output: null,
     });
+    // codex money review r2 S1: the confirmation round keeps its round number and the ledger
+    // delta, but carries none of the ordinary incremental context: no scope hint, no previous
+    // review JSON (whose open findings would count against this round), no increment.
+    const prompt2 = observedArgv(fx).at(-1) ?? '';
+    expect(prompt2).toContain(`${CONFIRM_LINE}\n`);
+    expect(prompt2).toContain('- Declarations added or changed this round: 4 entries');
+    expect(prompt2).toContain('- This review round: 2 (earlier usable spec-test outputs found: 1');
+    expect(prompt2).toContain('### Review round (data; exemption confirmation round)');
+    for (const absent of [
+      'Previous review round',
+      'incremental rules of REVIEW.md apply',
+      'Increment to review',
+      'Head commit at the previous round',
+      'Previous review JSON',
+      'Files changed since the previous round',
+      'Exemption confirmation rounds skipped as baseline',
+      'Previous review output',
+    ]) {
+      expect(prompt2, absent).not.toContain(absent);
+    }
     writeFileSync(join(fx.worktree, 'src', 'a.ts'), 'export const a = 3;\n');
 
     // Round 3: an ordinary incremental review. Its baseline is round 1 (attempts/1), not the

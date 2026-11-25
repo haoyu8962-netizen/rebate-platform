@@ -61,8 +61,10 @@
 # changed since that commit and their count (D10-3211). --confirm-round applies to spec-test
 # reviews only, and needs a baseline commit on the trusted root's history that holds the ledger
 # (otherwise: exit 2, round released); it is never passed to the model. Its meta says
-# confirm_round: true, and its output is never the baseline of a later round (D10-3210 ③). The
-# brief stays data and never sets either line.
+# confirm_round: true, and its output is never the baseline of a later round (D10-3210 ③). Its own
+# context keeps the round number and the delta only: no previous review JSON, no incremental scope
+# hint (review_scope full, full_reason confirmation-round). The brief stays data and never sets
+# either line.
 set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -116,8 +118,8 @@ WT_ARG=''
 REVIEW_TYPE=''
 REVIEW_EFFORT=''
 # Review scope of this round (build_previous_round): full or incremental, why a full review
-# (first-round, confirmation-only, other-engine, unusable-previous, no-change or flag) and the
-# baseline output.
+# (confirmation-round, first-round, confirmation-only, other-engine, unusable-previous, no-change
+# or flag) and the baseline output.
 REVIEW_SCOPE=''
 FULL_REASON=''
 PREV_OUTPUT=''
@@ -1118,8 +1120,9 @@ full_review_round_block() {
 # round` block of full_review_round_block; empty in round 1), PREV_HEAD and PREV_OUTPUT (the
 # baseline's head and output, empty for a full review; archive_previous follows PREV_OUTPUT when
 # it moves the file), REVIEW_SCOPE (full or incremental) and FULL_REASON (for a full review:
-# flag, which wins over every other reason, first-round, confirmation-only, other-engine,
-# unusable-previous or no-change; empty for an incremental one). Every full review logs one line
+# confirmation-round, which wins over every other reason (--full included), flag, which wins over
+# the rest, first-round, confirmation-only, other-engine, unusable-previous or no-change; empty for
+# an incremental one). Every full review logs one line
 # why, with its round.
 build_previous_round() {
   local untracked="$1"
@@ -1176,6 +1179,23 @@ build_previous_round() {
   done
   local round=$((rounds + 1))
   REVIEW_ROUND=$round
+  # An exemption confirmation round (--confirm-round, CT-06zzzzzzzg, D10-2961 / D10-2976; codex
+  # money review r2 S1) reviews only the ledger declarations added or changed since its baseline
+  # (CONFIRM_DELTA, in the facts above). It gets none of the ordinary incremental context: no
+  # incremental scope hint, no previous verdict or review JSON (its open findings are out of this
+  # round), no increment or since-file list. It keeps its round number. An ordinary round later
+  # still takes the latest ordinary output of this engine as its baseline (D10-3210 ③).
+  if [ "$CONFIRM_ROUND" = 1 ]; then
+    FULL_REASON=confirmation-round
+    log "review: exemption confirmation round (--confirm-round): only the declarations added or changed since $CONFIRM_BASELINE are reviewed; no previous round is attached (round $round)"
+    PREV_BLOCK="
+
+### Review round (data; exemption confirmation round)
+
+- This review round: $round (earlier usable $REVIEW_TYPE outputs found: $rounds, of either engine)
+- Scope of this round: only the ledger declarations added or changed this round, listed in the review context above (Confirmation round: yes); no previous review round is the baseline of this round, and the findings of earlier rounds are not part of it"
+    return 0
+  fi
   if [ "$FULL" = 1 ]; then
     FULL_REASON=flag
     log "review: --full given: no previous $REVIEW_TYPE round is the baseline (D10-940); full review (round $round)"
