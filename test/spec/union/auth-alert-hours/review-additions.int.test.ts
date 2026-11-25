@@ -135,10 +135,15 @@ it('[AC-B1-22zd#12] 未配置告警手机号时 h6 照常进入 expiring，重�
   h.clock.set(new Date(expiry.getTime() - 6 * HOUR_MS));
   await h.monitor.handle(job);
   expect(await stored(h, id)).toMatchObject({ auth_status: 'expiring', alert_stage: 'none' });
+  expect(backendAlerts()).toEqual([]);
+  const logJobs = () => h.send.mock.calls.filter(([, name]) => name === 'alert_log');
+  expect(logJobs()).toHaveLength(1);
+  await h.monitor.handle(received(logJobs()[0]!));
   const firstAlerts = backendAlerts();
   expect(firstAlerts).toMatchObject([{ app_id: h.appId, stage: 'h6', phones_configured: false }]);
 
   await createSiteAuthMonitor(h.options).handle({ ...job, attempt: 2 });
+  expect(logJobs()).toHaveLength(1);
   expect(backendAlerts()).toEqual(firstAlerts);
   expect(plans(h, id).flatMap((plan) => plan.phoneIds)).toEqual([]);
   expect((await outbox(h)).filter((row) => row.channel === 'sms')).toEqual([]);

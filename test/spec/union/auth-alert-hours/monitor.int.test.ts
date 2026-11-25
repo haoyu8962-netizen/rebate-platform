@@ -83,6 +83,9 @@ it('[AC-B1-22zd#3] h6 和 h1 到点各提醒一次，保留日阶段，重投去
   await h.monitor.dailyCheck();
   expect(await stored(h, id)).toMatchObject({ auth_status: 'expiring', alert_stage: 'none' });
   expect(await outbox(h)).toEqual(queued);
+  for (const job of h.send.mock.calls.filter(([, name]) => name === 'alert_log')) {
+    await h.monitor.handle(received(job));
+  }
   const backendAlerts = h.lines
     .map((line) => JSON.parse(line) as Record<string, unknown>)
     .filter((line) => line['union_account_id'] === id && line['msg'] === 'union_auth_expiring');
