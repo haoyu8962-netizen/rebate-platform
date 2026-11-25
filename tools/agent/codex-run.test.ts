@@ -579,7 +579,7 @@ it(
     expect(res.stderr).toContain('ENOSPC');
     expect(res.stderr).toContain('meta.json was not updated');
     // The metadata of the start stays as it was (not rewritten into a pass); the output is kept.
-    expect(readJson(join(fx.run, 'meta.json'))['exit_code']).toBeUndefined();
+    expect(readJson(join(fx.run, 'meta.json'))['exit_code']).toBeNull();
     expect(existsSync(join(fx.run, 'review-codex.json'))).toBe(true);
     expect(existsSync(join(fx.run, 'review-codex.json.rejected'))).toBe(false);
   },
