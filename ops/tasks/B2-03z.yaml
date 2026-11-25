@@ -1,6 +1,6 @@
 id: B2-03z
 repo: rebate-platform
-title: B2-03z：staging README 1.10 末尾追加一行纠正说明——rebate.taobao.compare_rate_ratio_bp 已登记、报价不读（D10-641），不用配，上文两句要求对它不适用（FU-COMPARE-RATE-KEY-REMOVE 缩小为只改文档，D10-2945 / D10-2959 / D10-2984）
+title: B2-03z：staging README 改正 rebate.taobao.compare_rate_ratio_bp 的说明——已登记、报价不读（D10-641），切 live 前不用配（FU-COMPARE-RATE-KEY-REMOVE 缩小为只改文档，D10-2945 / D10-2959）
 type: impl
 # 2026-11-25 ops 入账（编排 D10-2945：第 6 项缩小为只改 infra/staging/README.md 那三行，同意不去键、D10-641 不推翻；D10-2959：不等 B1-25d、先入账）。
 # 起因：infra/staging/README.md 1.10 一节三处把 rebate.taobao.compare_rate_ratio_bp 写成「切 live 前必须配」——:362 配置键表的说明行、:365「tech_fee_bp 与
