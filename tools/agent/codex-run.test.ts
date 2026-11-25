@@ -3001,6 +3001,11 @@ function commitConfirmLedger(fx: Fixture, title: string, entries: readonly Confi
     cpSync(join(TOOLS_DIR, 'guard', 'lib'), join(fx.trusted, 'tools', 'guard', 'lib'), {
       recursive: true,
     });
+    // The trusted validator reads the rule-test locations from the protected-path list.
+    cpSync(
+      join(TOOLS_DIR, 'guard', 'protected-paths.json'),
+      join(fx.trusted, 'tools', 'guard', 'protected-paths.json'),
+    );
   }
   mkdirSync(join(fx.trusted, 'ops', 'tasks'), { recursive: true });
   writeFileSync(join(fx.trusted, CONFIRM_LEDGER), confirmLedgerYaml(title, entries));
