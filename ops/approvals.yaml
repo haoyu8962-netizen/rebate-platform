@@ -1263,3 +1263,9 @@ approvals:
     granted: true
     date: '2026-11-25'
     note: '负责人依据第 206 条 ①（D10-3129）。原因：第 201 条那一轮 Codex 码评审（couli-runs/CT-06zzzzzzzf/review-codex.json，增量）S1：validate-output.ts:718 写回评审时经 tools/lib/fsx.ts:26 的 writeFileAtomic，writeSync 不核返回字节数，磁盘将满时短写后照样 fsync + rename，评审原文被截断、旁路记录哈希对不上，违反台账补丁 1「不得改坏已写出的评审原文」；移出 0 条，其中 S0 / S1 0 条。计数：实现与码评审常规 3 / 3 已满，第 194、201 条的一次性轮次已用完；本条的两次照先例不 bump。与第 206 条同一张 PR。'
+  - id: 208
+    row: 4
+    title: 'B1-04zzzzn 任务专属一次性追加（D10-3129，负责人 2026-11-25「都按建议办」第 ⑤ 件，第 206 条）：写规则测试增量 1 次（Codex）+ 规则测试评审增量 1 轮（独立 Claude，照第 19 条）+ 实现 1 次 + Codex 资金评审 1 轮——范围写死为 Codex money r4（couli-runs/B1-04zzzzn/review-money-codex-r4.json）两条 S1：① save 已确认「重复」而查回被受治理调用层的时限先结束（GovernanceError(timeout)）时，绑定用例改看本次备案记录器已落库的 duplicate 结局，照发带更早结局未知尝试编号的 duplicate_after_unknown_attempt（无则 duplicate_unverified），答复仍 50001、不写绑定；规则测试补一例真经治理层时限的查回（不是桩立即抛错）；② 进店入口 shop-open.ts 把已选定的 accountId 传进 issueTaobaoAuthState、该参数改必填（台账补丁 2 已把 shop-open.ts 与其单测加进 paths）。止损：这一轮资金评审仍有属实 S1 → 暂停、登 FU，不再要轮次。'
+    granted: true
+    date: '2026-11-25'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-3129；方向由负责人 2026-11-25 定（第 206 条第 ⑤ 件）。原因：approvals 191 一轮走完后 Codex money r4（常规第 3 轮）两条 S1，w1 核源码成立，按 191 止损暂停（D10-3046）；写测 3 / 3、规则测试评审 2 / 2、实现 3 / 3、资金评审 3 / 3 均已满。写测作者为 Codex，按第 19 条由独立 Claude 评审。不动迁移。开时主干末条 207。'
