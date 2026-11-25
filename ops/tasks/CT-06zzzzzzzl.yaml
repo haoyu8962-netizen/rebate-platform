@@ -1,0 +1,30 @@
+id: CT-06zzzzzzzl
+repo: rebate-platform
+title: CT-06zzzzzzzl：test-guard 用语法树认测试登记与选项（接手 CT-06zzzzzzze）——选项里的 skip / only / todo / fails、.fails 修饰、没有回调的登记、被当值用的测试 API、不认识的链成员一律报 no-skip-only；认得的写法才放行（D10-3129 ④ / D10-3170）
+type: guard-change
+# 2026-11-26 ops 入账（编排 D10-3135 同意开接手单、D10-3170 认可方案并定甲乙丙；负责人 D10-3129 ④，ops/approvals.yaml 第 206 条 ④，AGENTS.md §9 窄例外）。门禁工具第三类改动，合并照第 16 条由编排核 diff 后加 owner 标签。
+# 来由：CT-06zzzzzzze 三轮 Codex 码评审都 fail（9 条发现），根因四类——分不清代码与非代码、认不准哪次调用是登记、认不准参数是选项还是回调、同名变量不看作用域；都出在逐字读源码，换单用语法分析重做。归类、主干 5641 个测试文件的写法普查、判定表、原型与 64 个场景在 couli-runs/OPS-lane/CT-06zzzzzzze-redo/（takeover-plan.md §3 是判定表）。
+# 做法（只改 test-guard 与它的单测 / 夹具）：retryOptionFindings 那段换成按判定表的实现——仓库已有的 typescript（版本照锁文件，不新装不升级）出语法树，每个文件一个只含它自己的 Program，名字指哪个声明交给编译器解析，不手写作用域。
+#   ① 什么是测试 API 按绑定定：从 vitest 导入的 it / test / describe / suite（含改名导入、命名空间导入）、没有声明的这四个名字、以它们为初始值的变量（别名、.extend）；本地同名函数、参数、别的模块导入的不是。
+#   ② 链成员是封闭名单：修饰、表（each / for）、派生（extend / override / scoped）、钩子；skip / only / todo / fails / skipIf / runIf（点号或字面量下标，调用与否）报；计算下标与不认识的成员报（丙）；测试 API 被解构、赋给已有变量、传参、放进对象或数组、导出，报（乙）。
+#   ③ 登记的参数：第二个是函数字面量或本文件声明的函数 → 回调；是对象字面量，或本文件 const 对象字面量且该名字别处只作登记的第二个参数、读属性、对象展开 → 选项；let / var / 导出 / 别处另有用法、导入、参数、调用等其他表达式、参数展开 → 报读不了；少于两个参数、选项后没有读得出的回调 → 报（Vitest 把没有回调的登记记为 todo，甲）。
+#   ④ 选项对象：四个键（裸键、引号键、字面量计算键）的值不是字面量 false 就报；retry 口径同主干（字面量 0 放行，资金 / 归属文件仍走整行规则）；展开、非字面量计算键、__proto__ 报读不了。读不了在非资金文件报 no-retry 与 no-skip-only 各一条，资金 / 归属文件报 no-skip-only 一条。
+#   ⑤ 根不是测试 API 的调用照主干现行口径（标题字面量、对象字面量、函数字面量三者齐才看对象里的键），另加调用链上的 .fails 报；语法错误的文件报一条，不退回逐字扫描；现行整行规则不改，同一行同一规则只留一条。
+# 边界（D10-3143 / D10-3170）：typescript 只在 tools/guard/lib/test-guard.ts 里、扫描测试文件时才加载（不写顶层 import；checks.ts 静态引用 test-guard.ts，red-check.ts、path-guard.ts 等守卫入口都引用 checks.ts），加载失败抛错不降级；不改 test-blocks、red-check、evidence-check、task-file、checks。实现方单测须钉：tools/ci/evidence-check.ts、tools/lib/task-file.ts、tools/guard/lib/test-blocks.ts 的静态引用链到不了 typescript，test-guard.ts 没有顶层 typescript 引用；主干全仓报告数与改前相同（原型实测 0 条）。若必须改 paths 以外的文件才能生效，停下报编排。
+# 带过来的：task/CT-06zzzzzzze 上的规则测试提交 2ba20ed7a（test/spec/ci/test-guard-option-skip/options.test.ts，[AC-CT-06zzzzzzze#1]–[#10]，标题编号不改；规则测试评审 1 轮 pass）作本单规则测试基线，不重写；FU-TESTGUARD-FN-REF-SKIP 并入本单；CT-06zzzzzzze 未提交的实现不带。
+# 规则测试要补（同一目录，新标题用 AC-CT-06zzzzzzzl）：判定表逐格——九条评审发现各一例；①–⑤ 每格报与不报各至少一例（单元、规则测试、资金 / 归属文件按格分布）；主干现有的四种链与三种参数形状不报。写不出的格在输出里说明，不臆造 Vitest 行为（依据 vitest 5.0.5 的参数解析，行号见 takeover-plan.md §3）。
+# 残余（不在本单）：别的文件里定义的包装函数与选项（导入的选项一律报读不了，导入的测试函数只走 ⑤）；回调体内的运行时跳过；vitest 配置里 tags 自带的 skip（保护路径）。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/guard/lib/test-guard{,.test,.fixtures}.ts'
+  - 'ops/tasks/CT-06zzzzzzzl.yaml'
+test_paths:
+  - 'test/spec/ci/test-guard-option-skip/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/test-guard-option-skip/**'
+status: todo

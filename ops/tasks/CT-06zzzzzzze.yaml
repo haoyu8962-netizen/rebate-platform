@@ -21,6 +21,7 @@ type: guard-change
 # 规则测试至少钉：① it / test / describe / suite 各带 { skip: true }、{ only: true }、{ todo: true }、{ fails: true } 都报 no-skip-only（单元测试、规则测试、
 #   资金 / 归属测试文件各至少一例）；② `{ skip: false }` 等字面量 false 不报；③ 引号键、计算键、.each 链、.extend 测试函数都抓到；④ 展开选项与外来变量照旧拒；
 #   ⑤ it.fails / test.fails 报；⑥ 现有 retry 用例与普通 { timeout } 选项不受影响。
+# 2026-11-26 置 void（ops，编排 D10-3135 / D10-3170）：并入 CT-06zzzzzzzl——三轮码评审都 fail、实现与码评审计数用完，根因在逐字读源码的做法（D10-3056 暂停），负责人 D10-3129 ④ 取用语法分析重做；规则测试提交 2ba20ed7a 与 FU-TESTGUARD-FN-REF-SKIP 由 CT-06zzzzzzzl 带走，未提交的实现不带。
 refs: []
 refs_hash: {}
 deps: []
@@ -34,4 +35,4 @@ tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/test-guard-option-skip/**'
-status: todo
+status: void
