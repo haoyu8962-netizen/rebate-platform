@@ -2155,6 +2155,20 @@ export interface UnionAccounts {
   updated_at: Generated<Timestamp>;
 }
 
+export interface UnionAuthAlerts {
+  alert_key: string;
+  app_id: string;
+  auth_expires_at: Timestamp | null;
+  cause: string | null;
+  created_at: Generated<Timestamp>;
+  entered_at: Timestamp | null;
+  id: string;
+  phones_configured: boolean;
+  platform: string;
+  stage: string;
+  union_account_id: string;
+}
+
 export interface UnionAuthSessions {
   app_id: string;
   auth_app_refs: Json | null;
@@ -2572,6 +2586,7 @@ export interface DB {
   sync_cursors: SyncCursors;
   tax_ytd: TaxYtd;
   union_accounts: UnionAccounts;
+  union_auth_alerts: UnionAuthAlerts;
   union_auth_sessions: UnionAuthSessions;
   union_binding_conflicts: UnionBindingConflicts;
   union_bindings: UnionBindings;
