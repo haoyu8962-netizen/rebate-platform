@@ -20,6 +20,12 @@
 // - 暂缓：hold、快照 1200、结算 1000（金额不符也不比较、不重生成）。
 // - 应结未结：快照 1000、没有联盟结算（settle_period = 账单月）。
 // - 偏差版本（#47）：端口按 1000 + 7 = 1007 估值写 v2 → 基数 1007 ≠ B_settle 1000，复核不一致。
+// - B2-18d 写测第 2 次（任务书 §21.1 第 2 条；规则测试评审第 2 轮第 2 条 S1，BR-FUND-04 ④、BR-FUND-09 R1、D10-3046
+//   (2)(3)）：tail() 尾部、名额用完之后另加——只在维权中（rights_pending、未 hold；./kit.ts seedOrder 的 rightsPending，
+//   与 ./bill-day.int.test.ts [AC-B2-18#5] 同一造法）、快照 1200、结算 1000（金额本来超差）的一张：照常暂缓（deferred），
+//   不比较、不重生成；联盟有结算而我方已作废（./kit.ts voidOrder，同 ./register-write-only.int.test.ts [AC-B2-18#43]）、
+//   快照 1000、结算 1000 的一张：照常登记一张 union_mismatch（unexpected_settlement）。两张都不计入 deferred_count；
+//   最后仍保留一张真正超额的 x1（排在这两张之后）。
 import { randomUUID } from 'node:crypto';
 import { createTestDatabase } from '@couli/db/testing';
 import { addFen } from '@couli/money';
@@ -57,6 +63,7 @@ import {
   splitOf,
   versionRows,
   versionsOf,
+  voidOrder,
   within,
   type App,
   type Direct,
@@ -117,9 +124,9 @@ function regeneratedRows(a: App, o: Seeded) {
 }
 
 /**
- * 名额（上限 2）在序号 01 用完之后的来源尾部（评审第 1 条）：
+ * 名额（上限 2）在序号 01 用完之后的来源尾部（评审第 1 条；第 2 轮第 2 条加 07、08）：
  * 00 r0、01 r1（重生成会成功，用完名额）；02 x0（超额，留下）；03 相符；04 零结算而正基数；05 暂缓；06 应结未结；
- * 07 x1（超额，留下）。只做搭建。
+ * 07 只在维权中（未 hold，金额超差）；08 联盟有结算而我方已作废；09 x1（超额，留下）。只做搭建。
  */
 interface Tail {
   readonly r0: Seeded;
@@ -129,6 +136,8 @@ interface Tail {
   readonly zero: Seeded;
   readonly held: Seeded;
   readonly unsettled: Seeded;
+  readonly rights: Seeded;
+  readonly voided: Seeded;
   readonly x1: Seeded;
 }
 
@@ -162,12 +171,28 @@ async function tail(a: App): Promise<Tail> {
     people: EXAMPLE_PEOPLE,
     subOrderId: key(6, 'unsettled'),
   });
-  const x1 = await mismatching(a, key(7, 'excess'));
-  return { r0, r1, x0, matching, zero, held, unsettled, x1 };
+  // 只在维权中、没有 hold（rights_pending = true、hold = false）；快照 1200、结算 1000，金额本来超差。
+  const rights = await seedOrder(a, {
+    snapshotN: 1200n,
+    settleFen: 1000n,
+    rightsPending: true,
+    people: EXAMPLE_PEOPLE,
+    subOrderId: key(7, 'rights'),
+  });
+  // 联盟有结算（STATEMENT seq 1 结算 1000）而我方已作废（自拟：快照 1000，同 [AC-B2-18#43]）。
+  const voided = await seedOrder(a, {
+    snapshotN: 1000n,
+    settleFen: 1000n,
+    people: EXAMPLE_PEOPLE,
+    subOrderId: key(8, 'void'),
+  });
+  await voidOrder(a, voided);
+  const x1 = await mismatching(a, key(9, 'excess'));
+  return { r0, r1, x0, matching, zero, held, unsettled, rights, voided, x1 };
 }
 
 function tailOrders(t: Tail): Seeded[] {
-  return [t.r0, t.r1, t.x0, t.matching, t.zero, t.held, t.unsettled, t.x1];
+  return [t.r0, t.r1, t.x0, t.matching, t.zero, t.held, t.unsettled, t.rights, t.voided, t.x1];
 }
 
 /** 从另一条连接逐张探订单键锁（取数）。 */
@@ -189,6 +214,8 @@ function tailNamed(t: Tail): [string, Seeded][] {
     ['zero', t.zero],
     ['held', t.held],
     ['unsettled', t.unsettled],
+    ['rights', t.rights],
+    ['voided', t.voided],
     ['x1', t.x1],
   ];
 }
@@ -202,10 +229,15 @@ const TAIL_LOCKS = {
   zero: true,
   held: true,
   unsettled: true,
+  rights: true,
+  voided: true,
   x1: true,
 };
 
-/** 逐单结果：名额满后的四张照常各按本分支；超额的 x0、x1 不在逐单结果里。 */
+/**
+ * 逐单结果：名额满后的六张（相符、零结算、暂缓、应结未结、只在维权中、我方作废）照常各按本分支；超额的 x0、x1 不在
+ * 逐单结果里。
+ */
 const TAIL_RESULTS = {
   r0: 'candidate',
   r1: 'candidate',
@@ -214,11 +246,28 @@ const TAIL_RESULTS = {
   zero: 'amount_mismatch',
   held: 'deferred',
   unsettled: 'missing_settlement',
+  rights: 'deferred',
+  voided: 'unexpected_settlement',
   x1: 'not in results',
 };
 
+/** 我方作废那张登记出来的 union_mismatch 应有的形状（BR-FUND-09；同 ./register-write-only.int.test.ts）。 */
+function unionMismatchOf(a: App, o: Seeded) {
+  return {
+    app_id: a.appId,
+    type: 'union_mismatch',
+    source: 'R1',
+    period: a.period,
+    ref_type: 'order',
+    ref_id: o.orderKey,
+    dedupe_key: null,
+    resolution: null,
+    status: 'open',
+  };
+}
+
 it(
-  '[AC-B2-18#45] 月结名额用完之后的分类（上限注入 2；评审第 1 条，D10-3046 (2)(3)）：来源顺序 r0、r1（重生成成功，用完名额）、x0（超额）、金额相符、零结算而正基数（结算 0 / 基数 1000）、暂缓（hold，金额也不符）、应结未结、x1（超额）——端口只为 r0、r1 调用；相符的照常入批（b_settle 1000）；零结算的告警一次、不重生成、不入批、计 amount_mismatch_count 1；暂缓的计 held_count 1、应结未结的计 unsettled_count 1，两张都不重生成、不入批；这四张都在逐单结果里（candidate / amount_mismatch / deferred / missing_settlement）、都不计入 deferred_count；x0、x1 版本原样、不入批、不告警、不在逐单结果里；settle_regeneration_deferred 恰一条（run bill、deferred_count 2 = 超额张数）；提交前订单键锁只剩 r0、r1；不登记差错单',
+  '[AC-B2-18#45] 月结名额用完之后的分类（上限注入 2；评审第 1 条，D10-3046 (2)(3)）：来源顺序 r0、r1（重生成成功，用完名额）、x0（超额）、金额相符、零结算而正基数（结算 0 / 基数 1000）、暂缓（hold，金额也不符）、应结未结、只在维权中（未 hold，金额也不符）、联盟有结算而我方作废、x1（超额）——端口只为 r0、r1 调用；相符的照常入批（b_settle 1000）；零结算的告警一次、不重生成、不入批、计 amount_mismatch_count 1；暂缓与只在维权中的计 held_count 2、应结未结的计 unsettled_count 1，这三张都不重生成、不入批；作废单登记恰一张 union_mismatch、计 error_count 1；这六张都在逐单结果里（candidate / amount_mismatch / deferred / missing_settlement / deferred / unexpected_settlement）、都不计入 deferred_count；x0、x1 版本原样、不入批、不告警、不在逐单结果里；settle_regeneration_deferred 恰一条（run bill、deferred_count 2 = 超额张数）；提交前订单键锁只剩 r0、r1；除作废单那张外不登记差错单（第 2 轮评审第 2 条加只在维权中与作废单）',
   async () => {
     const a = await app(pools.db);
     const t = await tail(a);
@@ -229,6 +278,8 @@ it(
       held: await versionsOf(a, t.held),
       unsettled: await versionsOf(a, t.unsettled),
       matching: await versionsOf(a, t.matching),
+      rights: await versionsOf(a, t.rights),
+      voided: await versionsOf(a, t.voided),
     };
     const regen = refreshRegeneration(a);
     const probes: { seen?: Record<string, boolean | string> } = {};
@@ -292,6 +343,24 @@ it(
       settle_commission_fen: null,
     });
     expect(await itemsFor(a, t.unsettled)).toEqual([]);
+    // 只在维权中（未 hold）：照常暂缓——不比较、不重生成、不入批、不告警、保持 WAITING。
+    expect(await versionsOf(a, t.rights)).toEqual(before.rights);
+    expect(await orderRow(a, t.rights)).toMatchObject({
+      rebate_status: 'WAITING',
+      hold: false,
+      rights_pending: true,
+      commission_version: 1,
+    });
+    expect(await itemsFor(a, t.rights)).toEqual([]);
+    expect(alertsFor(d.lines, t.rights)).toEqual([]);
+    // 我方作废、联盟有结算：不比金额、不重生成、不入批、不告警，照常登记 union_mismatch（见下面差错单）。
+    expect(await versionsOf(a, t.voided)).toEqual(before.voided);
+    expect(await orderRow(a, t.voided)).toMatchObject({
+      rebate_status: 'VOID',
+      commission_version: 1,
+    });
+    expect(await itemsFor(a, t.voided)).toEqual([]);
+    expect(alertsFor(d.lines, t.voided)).toEqual([]);
     // 超额的 x0、x1：什么都没动。
     expect(await versionsOf(a, t.x0)).toEqual(before.x0);
     expect(await versionsOf(a, t.x1)).toEqual(before.x1);
@@ -304,14 +373,15 @@ it(
       expect(alertsFor(d.lines, o)).toEqual([]);
     }
     expect(allAlerts(d.lines)).toHaveLength(1);
-    // 逐单结果：除 x0、x1 外六张都在，结果各按本分支。
+    // 逐单结果：除 x0、x1 外八张都在（第 2 轮评审第 2 条加只在维权中与作废单两张），结果各按本分支。
     const results = resultsOf(d);
     const byName = Object.fromEntries(
       tailNamed(t).map(([name, o]) => [name, results.get(o.orderId) ?? 'not in results']),
     );
     expect(byName).toEqual(TAIL_RESULTS);
-    expect(d.saved).toHaveLength(6);
-    // 账单：主批次三张（r0、r1、相符），合计 1000 × 3 = 3000；计数只反映零结算、暂缓、应结未结各 1。
+    expect(d.saved).toHaveLength(8);
+    // 账单：主批次三张（r0、r1、相符），合计 1000 × 3 = 3000；计数只反映零结算（amount_mismatch 1）、暂缓与只在
+    // 维权中（held 2）、应结未结（unsettled 1）与作废单（error 1）。
     const splits = [t.r0, t.r1, t.matching].map((o) => splitOf(o, 1000n));
     const sum = (xs: readonly bigint[]) => xs.reduce((x, y) => addFen(x, y), 0n);
     expect(await billRow(a)).toMatchObject({
@@ -321,12 +391,13 @@ it(
       platform_retained_fen: sum(splits.map((x) => x.retain)),
     });
     expect(await countsOf(a)).toEqual({
-      error_count: 0,
-      held_count: 1,
+      error_count: 1,
+      held_count: 2,
       unsettled_count: 1,
       amount_mismatch_count: 1,
     });
-    expect(await diffsOf(a)).toEqual([]);
+    // 差错单恰一张：作废单的 union_mismatch（BR-FUND-09）；名额满后的金额超差单不登记。
+    expect(await diffsOf(a)).toEqual([expect.objectContaining(unionMismatchOf(a, t.voided))]);
     // 留下事件只数超额的两张。
     expect(deferredSummary(d.lines, tailOrders(t))).toEqual({
       events: [
@@ -349,7 +420,7 @@ it(
 );
 
 it(
-  '[AC-B2-18#46] 补充名额用完之后的分类（上限注入 2，与 #45 同构，走补充命令；评审第 1 条，D10-3046 (2)(3)）：端口只为 r0、r1 调用；r0、r1 重生成 v2（基数 1000）与金额相符的单入补充批次；零结算而正基数的告警一次、不重生成、不入批；暂缓与应结未结的不重生成、不入批；这四张都在逐单结果里（candidate / amount_mismatch / deferred / missing_settlement）、都不计入 deferred_count；x0、x1 版本原样、不入批、不告警、不在逐单结果里；settle_regeneration_deferred 恰一条（run supplement、deferred_count 2 = 超额张数）；补充不写账单计数列（账单行一字不动）；提交前订单键锁只剩 r0、r1；不登记差错单',
+  '[AC-B2-18#46] 补充名额用完之后的分类（上限注入 2，与 #45 同构，走补充命令；评审第 1 条，D10-3046 (2)(3)）：端口只为 r0、r1 调用；r0、r1 重生成 v2（基数 1000）与金额相符的单入补充批次；零结算而正基数的告警一次、不重生成、不入批；暂缓、只在维权中（未 hold）与应结未结的不重生成、不入批；作废单（联盟有结算）登记恰一张 union_mismatch；这六张都在逐单结果里（candidate / amount_mismatch / deferred / missing_settlement / deferred / unexpected_settlement）、都不计入 deferred_count；x0、x1 版本原样、不入批、不告警、不在逐单结果里；settle_regeneration_deferred 恰一条（run supplement、deferred_count 2 = 超额张数）；补充不写账单计数列（账单行一字不动）；提交前订单键锁只剩 r0、r1；除作废单那张外不登记差错单（第 2 轮评审第 2 条加只在维权中与作废单）',
   async () => {
     const a = await app(pools.db);
     await legacyBill(a.db, a.appId, { billId: a.period, platformOrderCounts: { taobao: 0 } });
@@ -362,6 +433,8 @@ it(
       held: await versionsOf(a, t.held),
       unsettled: await versionsOf(a, t.unsettled),
       matching: await versionsOf(a, t.matching),
+      rights: await versionsOf(a, t.rights),
+      voided: await versionsOf(a, t.voided),
     };
     const regen = refreshRegeneration(a);
     const probes: { seen?: Record<string, boolean | string> } = {};
@@ -417,6 +490,24 @@ it(
     expect(await itemsFor(a, t.held)).toEqual([]);
     expect(await versionsOf(a, t.unsettled)).toEqual(before.unsettled);
     expect(await itemsFor(a, t.unsettled)).toEqual([]);
+    // 只在维权中（未 hold）：照常暂缓——不比较、不重生成、不入批、不告警。
+    expect(await versionsOf(a, t.rights)).toEqual(before.rights);
+    expect(await orderRow(a, t.rights)).toMatchObject({
+      rebate_status: 'WAITING',
+      hold: false,
+      rights_pending: true,
+      commission_version: 1,
+    });
+    expect(await itemsFor(a, t.rights)).toEqual([]);
+    expect(alertsFor(d.lines, t.rights)).toEqual([]);
+    // 我方作废、联盟有结算：不重生成、不入批、不告警，照常登记 union_mismatch（见下面差错单）。
+    expect(await versionsOf(a, t.voided)).toEqual(before.voided);
+    expect(await orderRow(a, t.voided)).toMatchObject({
+      rebate_status: 'VOID',
+      commission_version: 1,
+    });
+    expect(await itemsFor(a, t.voided)).toEqual([]);
+    expect(alertsFor(d.lines, t.voided)).toEqual([]);
     expect(await versionsOf(a, t.x0)).toEqual(before.x0);
     expect(await versionsOf(a, t.x1)).toEqual(before.x1);
     for (const o of [t.x0, t.x1]) {
@@ -433,10 +524,11 @@ it(
       tailNamed(t).map(([name, o]) => [name, results.get(o.orderId) ?? 'not in results']),
     );
     expect(byName).toEqual(TAIL_RESULTS);
-    expect(d.saved).toHaveLength(6);
-    // 补充不写账单计数列（[AC-B2-18a#23] 的口径）；不登记差错单。
+    expect(d.saved).toHaveLength(8);
+    // 补充不写账单计数列（[AC-B2-18a#23] 的口径：暂缓、作废单都不回写 held_count / error_count）；差错单恰一张：
+    // 作废单的 union_mismatch（BR-FUND-09），名额满后的金额超差单不登记。
     expect(await billRow(a)).toEqual(billBefore);
-    expect(await diffsOf(a)).toEqual([]);
+    expect(await diffsOf(a)).toEqual([expect.objectContaining(unionMismatchOf(a, t.voided))]);
     expect(deferredSummary(d.lines, tailOrders(t))).toEqual({
       events: [
         {

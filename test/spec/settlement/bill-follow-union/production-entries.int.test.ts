@@ -52,12 +52,16 @@ import {
   errorText,
   itemsFor,
   itemsOf,
+  onFirstItemWrite,
+  orderKeyFree,
+  orderKeyLocks,
   orderRow,
   placedIn,
   reconDiffsReadFault,
   seedMany,
   seedOrder,
   splitOf,
+  traceStatements,
   unionConclusion,
   versionRows,
   withSupplementAdmin,
@@ -201,15 +205,18 @@ it(
 );
 
 it(
-  '[AC-B2-18#49] 生产账单日的缺省上限是 500（评审第 2 条；worker 生产装配、不注入上限）：501 张重生成会成功的单（自拟：快照 1200、联盟结算 1000）——只有来源顺序前 500 张推进到 v2（基数 1000）并入主批次（b_settle 1000），最后一张版本原样（只有 v1 基数 1200）、保持 WAITING、不入批；settle_regeneration_deferred 恰一条（run bill、deferred_count 1、不带订单号与 alert）；不告警、不登记差错单、四个计数都为 0',
+  '[AC-B2-18#49] 生产账单日的缺省上限是 500（评审第 2 条；worker 生产装配、不注入上限）：501 张重生成会成功的单（自拟：快照 1200、联盟结算 1000）——只有来源顺序前 500 张推进到 v2（基数 1000）并入主批次（b_settle 1000），最后一张版本原样（只有 v1 基数 1200）、保持 WAITING、不入批；settle_regeneration_deferred 恰一条（run bill、deferred_count 1、不带订单号与 alert）；不告警、不登记差错单、四个计数都为 0；worker 所用执行器上的语句里第 501 张的订单键一次都没出现在取订单键锁的语句里，前 500 张的首尾两张各取过（B2-18d 第 2 轮评审第 1 条，D10-3046 (7)）',
   async () => {
     const base = fixture(s, AT_BILL_DAY);
     const a = await billDayApp(base);
     const orders = await seedMany(a, { count: 501, snapshotN: 1200n, settleFen: 1000n });
     const first = orders[0]!;
     const last = orders[500]!;
+    // B2-18d 第 2 轮评审第 1 条：worker 的数据库句柄先经 traceStatements 记下每条语句（照 ./regen-cap.int.test.ts
+    // [AC-B2-18#36]）。
+    const traced = traceStatements(a.db);
 
-    const billed = await billVia(a, a.db, LARGE_RUN_MS);
+    const billed = await billVia(a, traced.db, LARGE_RUN_MS);
 
     expect(shown(billed.outcome)).toBe('ok');
     const versions = await versionByOrder(a);
@@ -255,12 +262,20 @@ it(
       unsettled_count: 0,
       amount_mismatch_count: 0,
     });
+    // 被留下的第 501 张没有为重生成取订单键锁（月结里没有分块重读，任何取锁语句里都不该有它）；前 500 张的首尾两张
+    // 各取过（证明记录装在 worker 出账所用的执行器上）。
+    expect(traced.statements.length).toBeGreaterThan(0);
+    expect({
+      first: orderKeyLocks(traced.statements, first) >= 1,
+      lastRegenerated: orderKeyLocks(traced.statements, orders[499]!) >= 1,
+      deferred: orderKeyLocks(traced.statements, last),
+    }).toEqual({ first: true, lastRegenerated: true, deferred: 0 });
   },
   TIMEOUT,
 );
 
 it(
-  '[AC-B2-18#50] 后台补充的缺省上限也是 500（评审第 2 条；真实后台生产入口、不注入上限；账单 2026-09 已出过结果、没有草稿批次）：501 张重生成会成功的单（自拟：快照 1200、联盟结算 1000）——请求 200；只有来源顺序前 500 张推进到 v2（基数 1000）并入一个补充批次（b_settle 1000），最后一张版本原样、保持 WAITING、不入批；settle_regeneration_deferred 恰一条（run supplement、deferred_count 1、不带订单号与 alert）；不告警、不登记差错单、账单行不回写',
+  '[AC-B2-18#50] 后台补充的缺省上限也是 500（评审第 2 条；真实后台生产入口、不注入上限；账单 2026-09 已出过结果、没有草稿批次）：501 张重生成会成功的单（自拟：快照 1200、联盟结算 1000）——请求 200；只有来源顺序前 500 张推进到 v2（基数 1000）并入一个补充批次（b_settle 1000），最后一张版本原样、保持 WAITING、不入批；settle_regeneration_deferred 恰一条（run supplement、deferred_count 1、不带订单号与 alert）；不告警、不登记差错单、账单行不回写；补充提交之前（第一条写批次明细的语句执行完、在逐单处理之后）从另一个连接 pg_try_advisory_xact_lock 探：第 501 张的订单键能取到，前 500 张的首尾两张取不到（B2-18d 第 2 轮评审第 1 条，D10-3046 (7)：既有分块重读放掉的锁不算，看的是提交前持有的）',
   async () => {
     const f = fixture(s);
     const a = await supplementApp(f);
@@ -271,8 +286,21 @@ it(
     const seen: { outcome?: Outcome<{ statusCode: number; body: string }>; lines: LogLine[] } = {
       lines: [],
     };
+    // B2-18d 第 2 轮评审第 1 条：既有的分块重读（B2-04re）会对全部候选短暂取订单键锁再回滚到保存点放掉，所以不按「语句
+    // 里没出现」判，而是在提交之前从另一个连接探。时点：后台入口所用执行器上第一条写批次明细（INSERT
+    // settle_batch_items）的语句执行完、结果交回之前（./kit.ts onFirstItemWrite）——写明细在逐单处理与保存逐单结果
+    // 之后、完成任务行与提交之前，确定、不靠时序。探测走套件的单连接池 holder（与后台入口的连接池不同），每次探测
+    // 有界（OBSERVE_STATEMENT_MS）。
+    const probes: { seen?: Record<string, boolean | string> } = {};
+    const hook = onFirstItemWrite(f.db, async () => {
+      probes.seen = {
+        first: await orderKeyFree(f.s.holder(), first),
+        lastRegenerated: await orderKeyFree(f.s.holder(), orders[499]!),
+        deferred: await orderKeyFree(f.s.holder(), last),
+      };
+    });
 
-    await withSupplementAdmin(f, async (h) => {
+    await withSupplementAdmin({ ...f, db: hook.db }, async (h) => {
       seen.lines = h.lines;
       seen.outcome = await within(
         h.supplement(SUPPLEMENT_BILL, { platform: TAOBAO }),
@@ -323,6 +351,9 @@ it(
     expect(allAlerts(seen.lines)).toEqual([]);
     expect(await diffsOf(a)).toEqual([]);
     expect((await everything(f)).bills).toEqual(billsBefore);
+    // 提交之前那一刻：重生成成功的单持锁到提交（取不到），被留下的第 501 张不持锁（能取到）；时点确实到过一次。
+    expect({ fired: hook.fired, errors: hook.errors }).toEqual({ fired: 1, errors: [] });
+    expect(probes.seen).toEqual({ first: false, lastRegenerated: false, deferred: true });
   },
   TIMEOUT,
 );

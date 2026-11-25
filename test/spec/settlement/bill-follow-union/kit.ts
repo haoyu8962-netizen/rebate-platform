@@ -2299,3 +2299,50 @@ export function reconDiffInsertsOf(
     forOrder: inserts.filter((s) => parametersText(s.parameters).includes(o.orderKey)).length,
   };
 }
+
+// ---------------------------------------------------------------------------------------------
+// B2-18d 写测第 2 次追加（任务书 §21，规则测试评审第 2 轮两条 S1）：只新增，以上导出不变；只做搭建与取数，不 expect。
+
+/**
+ * 在这条执行器上挂一个「提交之前」的确定时点（§21.1 第 1 条，后台补充经生产入口时用）：第一条写批次明细的语句
+ * （INSERT settle_batch_items，同 itemWriteFault 的判据）在 PostgreSQL 执行完、结果交回之前，await action() 一次
+ * （只这一次）。写明细在补充的逐单处理与保存逐单结果之后、完成任务行与提交之前（bill/supplement/command.ts generate：
+ * 逐单循环 → saveValidations → 拆批 → 写 settle_batches / settle_batch_items → completeSettleJob → 提交），所以此刻
+ * 补充事务还开着、该留到提交的订单键锁都还在。action 自身的错误吞下并记在 errors（不让它冒充补充失败）；不改语句、
+ * 不注入故障。没有任何明细写入（比如一张候选都没有）时 action 不会跑，fired 为 0。
+ */
+export function onFirstItemWrite(db: Kysely<DB>, action: () => Promise<void>) {
+  const pending = new Set<QueryId>();
+  const state = { armed: true, fired: 0 };
+  const errors: string[] = [];
+  const hooked = db.withPlugin({
+    transformQuery(args) {
+      if (state.armed) {
+        const compiled = new PostgresQueryCompiler().compileQuery(args.node, args.queryId);
+        if (ITEMS_INSERT.test(compiled.sql)) {
+          state.armed = false;
+          pending.add(args.queryId);
+        }
+      }
+      return args.node;
+    },
+    async transformResult(args) {
+      if (pending.delete(args.queryId)) {
+        state.fired += 1;
+        try {
+          await action();
+        } catch (error) {
+          errors.push(errorText(error));
+        }
+      }
+      return args.result;
+    },
+  });
+  return {
+    db: hooked,
+    errors,
+    get fired() {
+      return state.fired;
+    },
+  };
+}

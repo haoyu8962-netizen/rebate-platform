@@ -475,15 +475,17 @@ it(
 );
 
 it(
-  '[AC-B2-18#39] 缺省上限是 500（不注入 regenerationCap）：一次月结里 501 张重生成会成功的单（自拟：快照 1200、联盟结算 1000）——重生成成功恰 500 张（来源顺序前 500 张，各 v2 基数 1000、入批），留下恰 1 张（来源顺序最后一张：版本原样、不入批）；settle_regeneration_deferred 一条，deferred_count 1；不告警、不登记差错单、计数全 0',
+  '[AC-B2-18#39] 缺省上限是 500（不注入 regenerationCap）：一次月结里 501 张重生成会成功的单（自拟：快照 1200、联盟结算 1000）——重生成成功恰 500 张（来源顺序前 500 张，各 v2 基数 1000、入批），留下恰 1 张（来源顺序最后一张：版本原样、不入批）；settle_regeneration_deferred 一条，deferred_count 1；不告警、不登记差错单、计数全 0；出账所用执行器上的语句里第 501 张的订单键一次都没出现在取订单键锁的语句里，前 500 张的首尾两张各取过（B2-18d 第 2 轮评审第 1 条，D10-3046 (7)）',
   async () => {
     const a = await app(pools.db);
     const orders = await seedMany(a, { count: 501, snapshotN: 1200n, settleFen: 1000n });
     const last = orders[500]!;
     const regen = refreshRegeneration(a);
     const d = directAssembly(a, { regenerateSnapshot: regen.port });
+    // B2-18d 第 2 轮评审第 1 条：出账所用的执行器先经 traceStatements 记下每条语句（照 [AC-B2-18#36]）。
+    const traced = traceStatements(a.db);
 
-    const outcome = await runBill(a, d);
+    const outcome = await runBill(a, d, traced.db);
 
     expect(shown(outcome)).toBe('ok');
     expect(regen.calls).toEqual(orders.slice(0, 500).map((o) => o.orderId));
@@ -523,6 +525,14 @@ it(
       unsettled_count: 0,
       amount_mismatch_count: 0,
     });
+    // 被留下的第 501 张没有为重生成取订单键锁（月结里没有分块重读，任何取锁语句里都不该有它）；前 500 张的首尾两张
+    // 各取过（证明记录装在出账所用的执行器上）。
+    expect(traced.statements.length).toBeGreaterThan(0);
+    expect({
+      first: orderKeyLocks(traced.statements, orders[0]!) >= 1,
+      lastRegenerated: orderKeyLocks(traced.statements, orders[499]!) >= 1,
+      deferred: orderKeyLocks(traced.statements, last),
+    }).toEqual({ first: true, lastRegenerated: true, deferred: 0 });
   },
   TIMEOUT,
 );
