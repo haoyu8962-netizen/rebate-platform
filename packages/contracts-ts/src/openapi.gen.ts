@@ -9426,9 +9426,14 @@ export interface paths {
          *     processing stays as it is); a linked difference of any other type keeps its status and
          *     every other column (it is concluded through its own operation, e.g. a restore). A
          *     reversal, in the same transaction, sends an adjusted difference its original linked back
-         *     to processing, except when the app already has another unresolved (open / processing)
-         *     `ledger_mismatch` difference on the same ref: the reversal still succeeds and that
-         *     difference stays adjusted. Withdrawal holds are neither released nor added. Writes an
+         *     to processing, except when that difference is a `ledger_mismatch` whose `ref_type` is
+         *     not `order` and the app already has another `ledger_mismatch` difference with the same
+         *     `ref_id`, a `ref_type` other than `order` and status open or processing, i.e. exactly
+         *     when sending it back would violate the unresolved internal difference key
+         *     (`recon_diffs_unresolved_internal_key`): the reversal still succeeds and that difference
+         *     stays adjusted. In every other case (e.g. a difference registered per sub-order, with
+         *     `ref_type` `order`) it goes back to processing as usual. Withdrawal holds are neither
+         *     released nor added. Writes an
          *     audit record (action adjustment_create or adjustment_reverse, with the `adjust_id`, the
          *     `user_id`, the direction, amount and reason code, `available` before and after and, for
          *     a reversal, the original; no personal data). What the member sees (one ADMIN_ADJUST line
