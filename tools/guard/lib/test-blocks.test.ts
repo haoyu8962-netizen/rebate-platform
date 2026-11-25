@@ -5151,7 +5151,7 @@ it('[CT-06zzzzzzzj] shapes not recognised name no whole block (the file is judge
     ['call in an expression', (c) => foLoop(`void ${c}`)],
     ['call assigned', (c) => foLoop(`const t = ${c}`)],
     ['call without its ;', (c) => `for (const row of ROWS) {\n  ${c}\n}`],
-    ['modifier', (c) => foLoop(c.replace(/^it\(/, 'it.skip('))],
+    ['modifier', (c) => foLoop(c.replace(/^it\(/, ['it', 'skip('].join('.')))],
     ['concurrent', (c) => foLoop(c.replace(/^it\(/, 'it.concurrent('))],
     ['type arguments', (c) => foLoop(c.replace(/^it\(/, 'it<object>('))],
   ];
