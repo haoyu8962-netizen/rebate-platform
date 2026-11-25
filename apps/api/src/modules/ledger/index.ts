@@ -31,6 +31,7 @@ export type { LedgerAssetSnapshotWorkerOptions } from './asset-snapshot.module.t
 export {
   registerReconDiff,
   registerReconDiffOnce,
+  // B2-02zf (D10-2982 ②): write-only registration, conflict → inserted false, no read-back.
   registerReconDiffWriteOnly,
   getReconDiffs,
 } from './application/recon-diffs.ts';

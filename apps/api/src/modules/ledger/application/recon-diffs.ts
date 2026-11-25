@@ -195,15 +195,47 @@ export async function registerReconDiffOnce(
   return { row: existing, inserted: false };
 }
 
+/**
+ * B2-02zf (D10-2982 ②): write-only registration. Same checks (checkInput) and the same single
+ * INSERT … ON CONFLICT DO NOTHING (insertReconDiffIfAbsent) as registerReconDiffOnce, with the same
+ * row; it only tells whether this call inserted the row. On a conflict under any unique key it
+ * returns inserted = false at once and never reads the existing row: the only statement it sends
+ * on recon_diffs is that INSERT, on the caller's transaction. A concurrent uncommitted conflicting
+ * insert is waited for (its commit → false, its rollback → this insert goes through, true).
+ *
+ * Difference from registerReconDiffOnce: under the unresolved unique key (B2-02zc), when the
+ * conflicting unresolved ticket is concluded by a concurrent transaction after the INSERT,
+ * registerReconDiffOnce finds no row on its read-back and throws; this function returns
+ * inserted = false. For the monthly bill-day job and the admin supplement registering
+ * union_mismatch (their wiring is switched over by B2-18).
+ */
 export async function registerReconDiffWriteOnly(
   trx: Transaction<DB>,
   input: RegisterReconDiffInput,
   dependencies: { readonly clock: Clock },
 ): Promise<{ readonly inserted: boolean }> {
-  void trx;
-  void input;
-  void dependencies;
-  throw new Error('NotImplemented: registerReconDiffWriteOnly');
+  checkInput(input);
+  const now = dependencies.clock.now();
+  const inserted = await insertReconDiffIfAbsent(trx, {
+    id: newUuidV7(now),
+    app_id: input.appId,
+    type: input.type,
+    source: input.source,
+    period: input.period,
+    ref_type: input.refType,
+    ref_id: input.refId,
+    expected_fen: input.expectedFen,
+    actual_fen: input.actualFen,
+    diff_fen: input.diffFen,
+    status: 'open',
+    handler_id: null,
+    closed_at: null,
+    dedupe_key: input.dedupeKey,
+    resolution: input.resolution,
+    created_at: now,
+    updated_at: now,
+  });
+  return { inserted: inserted !== undefined };
 }
 
 /** Uses the supplied connection/snapshot and never locks or writes. */
