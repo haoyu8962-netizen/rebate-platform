@@ -1185,12 +1185,45 @@ const dataCopyRegistrants: AdminDataCopyRegistrants = {
   names: (db, appId, adminIds) => createAdminDisplayNameReader(db).displayNames(appId, adminIds),
 };
 
+/**
+ * `keys` of config_items in one statement on `handle`: one snapshot, so a batch save is seen whole
+ * or not at all (BR-WDR-30 可追溯; B1-34s D10-3001 for a year's two calendar keys). The same rows
+ * content's configValue reads; an absent key has no entry.
+ */
+async function readConfigItems(
+  handle: Kysely<Database>,
+  appId: string,
+  keys: readonly string[],
+): Promise<Map<string, { value: unknown; version: number }>> {
+  if (keys.length === 0) return new Map();
+  const rows = await handle
+    .withSchema('app')
+    .selectFrom('config_items')
+    .select(['key', 'value', 'version'])
+    .where('app_id', '=', appId)
+    .where('key', 'in', [...keys])
+    .execute();
+  return new Map(rows.map((row) => [row.key, { value: row.value, version: row.version }]));
+}
+
+/**
+ * B1-34s (D10-3002): the working-day calendar port of risk's resolveWorkingDayDeadline and
+ * identity's readers on `db` — content's cached configValue, and the year's two keys in one
+ * statement (configValues) so the deadline never mixes an old and a new key of a batch save.
+ */
+function workdayCalendarConfig(db: Kysely<Database>, clock: Clock) {
+  const reader = createContentReader({ db, clock });
+  return {
+    configValue: (appId: string, key: string) => reader.configValue(appId, key),
+    configValues: (appId: string, keys: readonly string[]) => readConfigItems(db, appId, keys),
+  };
+}
+
 const deletionCalendarConfig = {
   inject: [CLOCK, { token: DB, optional: true }],
   useFactory: (clock: Clock, db?: Kysely<Database>): DeletionCalendarConfigReader => {
     if (db === undefined) return { configValue: () => Promise.resolve(null) };
-    const reader = createContentReader({ db, clock });
-    return { configValue: (appId, key) => reader.configValue(appId, key) };
+    return workdayCalendarConfig(db, clock);
   },
 };
 
@@ -3934,8 +3967,15 @@ function riskModule(identity: DynamicModule, contentReader: SharedContentReader)
     appeals: {
       config: {
         inject: [CLOCK],
-        useFactory: (clock: Clock) => (handle: Kysely<Database>) =>
-          createContentReader({ db: handle, clock }),
+        // B1-34s (D10-3002): the appeal deadline reads a year's two calendar keys in one statement.
+        useFactory: (clock: Clock) => (handle: Kysely<Database>) => {
+          const reader = createContentReader({ db: handle, clock });
+          return {
+            configValue: (appId: string, key: string) => reader.configValue(appId, key),
+            configValues: (appId: string, keys: readonly string[]) =>
+              readConfigItems(handle, appId, keys),
+          };
+        },
       },
       orders: appealOrderReader,
     },
@@ -4431,9 +4471,11 @@ function withdrawRuleOptions(
   const reverify: ReverifyGatePort = createReverifyGate({ clock });
   const realname = createRealnameReader(crypto);
   const payoutLogger = logger.child({ module: 'payout' });
-  const config: PayoutConfigPort = {
+  const config: PayoutConfigPort & Pick<AutoPayoutPorts['config'], 'configValues'> = {
     configValue: (appId, key, handle) =>
       createContentReader({ db: handle, clock }).configValue(appId, key),
+    // B1-34s (D10-3002): readReviewCalendars reads a year's two calendar keys in one statement.
+    configValues: (appId, keys, handle) => readConfigItems(handle, appId, keys),
   };
   return {
     clock,
@@ -4588,17 +4630,7 @@ function autoPayoutPorts(deps: {
         createContentReader({ db: handle, clock }).configValue(appId, key),
       // The decision's group in one statement: one snapshot of config_items, so a batch save is
       // seen whole or not at all (BR-WDR-30 可追溯). The same rows content's configValue reads.
-      async configValues(appId, keys, handle) {
-        if (keys.length === 0) return new Map();
-        const rows = await handle
-          .withSchema('app')
-          .selectFrom('config_items')
-          .select(['key', 'value', 'version'])
-          .where('app_id', '=', appId)
-          .where('key', 'in', [...keys])
-          .execute();
-        return new Map(rows.map((row) => [row.key, { value: row.value, version: row.version }]));
-      },
+      configValues: (appId, keys, handle) => readConfigItems(handle, appId, keys),
     },
     risk: createRiskStateBatchReader({ db }),
     appeal: createAppealPrevStateReader(),
@@ -5056,10 +5088,7 @@ export class AppModule {
                 // B1-27c (BR-ID-40 细则「企业微信会话交付的下载」「重新登记与登记人停用」): admin's reads
                 // of the registrants and content's working-day calendar.
                 dataCopyRegistrants,
-                dataCopyCalendar: (db, clock) => {
-                  const reader = createContentReader({ db, clock });
-                  return { configValue: (appId, key) => reader.configValue(appId, key) };
-                },
+                dataCopyCalendar: (db, clock) => workdayCalendarConfig(db, clock),
               }),
             ]
           : []),

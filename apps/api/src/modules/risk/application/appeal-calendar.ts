@@ -17,7 +17,7 @@ import type { RateLimitConfigReader } from './rate-limit.ts';
 export interface AppealCalendarOptions {
   readonly appId: string;
   readonly clock: Clock;
-  readonly config: RateLimitConfigReader;
+  readonly config: RateLimitConfigReader & Pick<WorkingDayCalendarReader, 'configValues'>;
   readonly logger: Pick<RootLogger, 'warn'>;
 }
 
@@ -52,11 +52,24 @@ interface CalendarSource {
 }
 
 async function readYear(source: CalendarSource, year: number): Promise<AppealCalendarYear | null> {
+  const holidaysKey = `calendar.cn_holidays.${year}`;
+  const makeupKey = `calendar.cn_makeup_workdays.${year}`;
   try {
-    const [holidays, makeup] = await Promise.all([
-      source.config.configValue(source.appId, `calendar.cn_holidays.${year}`),
-      source.config.configValue(source.appId, `calendar.cn_makeup_workdays.${year}`),
-    ]);
+    let holidays: { readonly value: unknown } | null;
+    let makeup: { readonly value: unknown } | null;
+    if (source.config.configValues !== undefined) {
+      // B1-34s (D10-3001): both keys from one statement, taken as one saved state; a key the
+      // batch read does not return is unconfigured (never read again on its own, which could pair
+      // an old value of one key with a new value of the other).
+      const rows = await source.config.configValues(source.appId, [holidaysKey, makeupKey]);
+      holidays = rows.get(holidaysKey) ?? null;
+      makeup = rows.get(makeupKey) ?? null;
+    } else {
+      [holidays, makeup] = await Promise.all([
+        source.config.configValue(source.appId, holidaysKey),
+        source.config.configValue(source.appId, makeupKey),
+      ]);
+    }
     if (holidays === null || makeup === null) return null;
     const holidayDates = datesOf(holidays.value, year);
     const makeupDates = datesOf(makeup.value, year);
@@ -110,6 +123,15 @@ export async function resolveAppealDeadline(options: AppealCalendarOptions): Pro
 /** B1-15f: the configuration port of resolveWorkingDayDeadline (RateLimitConfigReader fits it). */
 export interface WorkingDayCalendarReader {
   configValue(appId: string, key: string): Promise<{ readonly value: unknown } | null>;
+  /**
+   * B1-34s (D10-3001 / D10-3002): when given, the year's two keys are read in one statement (one
+   * snapshot of config_items, so a batch save is seen whole or not at all); absent keys have no
+   * entry. Without it each key is read once on its own.
+   */
+  configValues?(
+    appId: string,
+    keys: readonly string[],
+  ): Promise<ReadonlyMap<string, { readonly value: unknown }>>;
 }
 
 export interface WorkingDayDeadlineOptions {

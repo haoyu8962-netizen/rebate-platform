@@ -192,11 +192,21 @@ function datesOf(value: unknown, year: number): string[] | null {
 /**
  * The calendar years a deadline from `from` may reach (BR-WDR-26), read through `config` on
  * `handle`; an unreadable year counts weekends only (warned `workday_calendar_unconfigured`).
- * Shared by W1 (switch off) and the automatic decision (B2-11c).
+ * Shared by W1 (switch off) and the automatic decision (B2-11c). B1-34s (D10-3001): with the
+ * port's `configValues` a year's two keys come from one statement and are taken as one saved
+ * state (a key it does not return is unconfigured, never read again on its own); without it each
+ * key is read once.
  */
 export async function readReviewCalendars(
   options: {
-    config: WithdrawRulesOptions['config'];
+    config: WithdrawRulesOptions['config'] & {
+      /** Same shape as AutoPayoutConfigPort.configValues (declared here: no import cycle). */
+      configValues?(
+        appId: string,
+        keys: readonly string[],
+        handle: Kysely<DB>,
+      ): Promise<ReadonlyMap<string, { value: unknown }>>;
+    };
     logger: { warn(fields: Record<string, unknown>, message: string): void };
   },
   handle: Kysely<DB>,
@@ -209,16 +219,18 @@ export async function readReviewCalendars(
   for (const year of years) {
     let read: WorkdayCalendarYear | null = null;
     try {
-      const holidays = await options.config.configValue(
-        appId,
-        CALENDAR_KEYS.holidays(year),
-        handle,
-      );
-      const makeup = await options.config.configValue(
-        appId,
-        CALENDAR_KEYS.makeupWorkdays(year),
-        handle,
-      );
+      const holidaysKey = CALENDAR_KEYS.holidays(year);
+      const makeupKey = CALENDAR_KEYS.makeupWorkdays(year);
+      let holidays: { value: unknown } | null;
+      let makeup: { value: unknown } | null;
+      if (options.config.configValues !== undefined) {
+        const rows = await options.config.configValues(appId, [holidaysKey, makeupKey], handle);
+        holidays = rows.get(holidaysKey) ?? null;
+        makeup = rows.get(makeupKey) ?? null;
+      } else {
+        holidays = await options.config.configValue(appId, holidaysKey, handle);
+        makeup = await options.config.configValue(appId, makeupKey, handle);
+      }
       const holidayDates = holidays === null ? null : datesOf(holidays.value, year);
       const makeupDates = makeup === null ? null : datesOf(makeup.value, year);
       if (holidayDates !== null && makeupDates !== null) {
