@@ -3,6 +3,8 @@
 // step of the submission fails (kit fault: the audit insert or the in-app message insert → 50001), the
 // diff rows and the link rows roll back with everything else; the same Idempotency-Key then takes
 // effect once. Covers a new decrease and the reversal of an increase (a decrease of the balance).
+// #35, #36 (§11.1, D10-3205): the same with the fault on this task's own two writes (the link row,
+// the diff's status; kit-fault.ts), so money committed apart from them is seen.
 import { expect, it } from 'vitest';
 import {
   answer,
@@ -25,6 +27,7 @@ import {
   diffNow,
   diffRef,
   expectNowAdjusted,
+  expectNowProcessing,
   expectSentBack,
   expectationOf,
   fileOk,
@@ -36,11 +39,15 @@ import {
   seedTicket,
   tick,
 } from './kit.ts';
+import { armed, type WritePoint } from './kit-fault.ts';
 import { holdLinks } from './kit-more.ts';
 
 const s = suite();
 
 const POINTS: readonly FaultPoint[] = ['audit', 'inbox'];
+
+/** The two writes this task adds (kit-fault.ts): the link row and the diff's status. */
+const WRITES: readonly WritePoint[] = ['link', 'diff'];
 
 /** What another connection holds while the request runs. */
 type Holder = 'diff' | 'member' | 'links';
@@ -220,6 +227,103 @@ it('[AC-B2-17#33] 红冲的写钱与关联行标记、差错单退回同一事�
       const replay = await h.create(body, { key });
       expect(replay.body, `${holder}：重放`).toBe(sent.body);
       expect(await footprint(f), `${holder}：重放不留痕`).toEqual(after);
+      tick(f);
+    }
+  });
+});
+
+it('[AC-B2-17#35] 新单写关联行（INSERT adjustment_recon_diffs）或写差错单状态（UPDATE recon_diffs：置 adjusted / 置 processing）失败一次 → 50001，调账单、凭证、分录、余额、事件、站内信、通知日志、审计、关联表、差错单与提现冻结都与发请求前相同，幂等记录不留；同一 Idempotency-Key 重发一次生效（没有名单 → adjusted，名单 U1、U2 → processing，一行关联），再重放同一应答、不再留痕', async () => {
+  const f = fixture(s);
+  const { fixture: entry, fault } = armed(f);
+  await withAdjustAdmin(entry, async (h) => {
+    await schemaReady(f.db);
+    const userId = await member(f, { available: 3000n });
+    const other = await member(f, { available: 3000n });
+    for (const point of WRITES) {
+      for (const listed of [false, true]) {
+        const label = `${point} ${listed ? '名单 U1、U2' : '没有名单'}`;
+        const diff = await seedTicket(f, listed ? { users: [userId, other] } : {});
+        const filing = { userId, direction: 'decrease', refs: [diffRef(diff)] } as const;
+        const expectation = await expectationOf(f, h, filing);
+        const before = await footprint(f);
+        const key = newKey();
+        const tripped = fault.tripped;
+        fault.point = point;
+        const sent = await h.create(fixBody(filing), { key });
+        const hit = fault.tripped;
+        fault.point = null;
+        expect(hit, `${label}：这一写入必须在提交里执行`).toBe(tripped + 1);
+        await answer(sent, 50001);
+        expect(await footprint(f), `${label}：失败不留痕`).toEqual(before);
+
+        const retried = await h.create(fixBody(filing), { key });
+        const done = await expectAdjusted(f, retried, expectation);
+        if (listed) await expectNowProcessing(f, diff);
+        else await expectNowAdjusted(f, diff, h.maker.id);
+        const links = (await linksOf(f)).filter((row) => row.recon_diff_id === diff.id);
+        expect(links, label).toEqual([linkOf(f, done.row.adjust_id, diff.id, userId)]);
+
+        const after = await footprint(f);
+        const replay = await h.create(fixBody(filing), { key });
+        expect(replay.body, `${label}：重放`).toBe(retried.body);
+        expect(await footprint(f), `${label}：重放不留痕`).toEqual(after);
+        tick(f);
+      }
+    }
+  });
+});
+
+it('[AC-B2-17#36] 红冲写关联行标记（UPDATE adjustment_recon_diffs 的 reversed_by_adjust_id）或差错单退回（UPDATE recon_diffs）失败一次 → 50001，红冲单、凭证、分录、余额、事件、站内信、通知日志、审计、关联表（仍未红冲）、差错单（仍 adjusted）与提现冻结都与发请求前相同，幂等记录不留；同一 key 重发一次生效：整笔冲回 300、关联行写上红冲单号、差错单退回 processing，再重放同一应答、不再留痕', async () => {
+  const f = fixture(s);
+  const { fixture: entry, fault } = armed(f);
+  await withAdjustAdmin(entry, async (h) => {
+    await schemaReady(f.db);
+    const userId = await member(f, { available: 3000n });
+    for (const point of WRITES) {
+      const diff = await seedTicket(f);
+      const original = await fileOk(f, h, { userId, refs: [diffRef(diff)], amount: 300n });
+      const filedAt = f.clock.now();
+      const adjusted = await diffNow(f, diff.id);
+      expect(adjusted.status).toBe('adjusted');
+      tick(f);
+
+      const note = `整笔冲回（${point} 写入失败后重发）`;
+      const body = { reverses_adjust_id: original.row.adjust_id, note };
+      const money = await moneyOf(f, userId);
+      const before = await footprint(f);
+      const key = newKey();
+      const tripped = fault.tripped;
+      fault.point = point;
+      const sent = await h.create(body, { key });
+      const hit = fault.tripped;
+      fault.point = null;
+      expect(hit, `${point}：这一写入必须在红冲里执行`).toBe(tripped + 1);
+      await answer(sent, 50001);
+      expect(await footprint(f), `${point}：失败不留痕`).toEqual(before);
+
+      const retried = await h.create(body, { key });
+      const reversal = await expectAdjusted(f, retried, {
+        caller: h.maker,
+        userId,
+        direction: 'decrease',
+        amount: 300n,
+        reason: original.row.reason_code,
+        contra: original.row.contra_subject,
+        refs: [],
+        note: body.note,
+        reverses: original.row,
+        before: money,
+      });
+      await expectSentBack(f, adjusted);
+      const id = original.row.adjust_id;
+      const mark = reversal.row.adjust_id;
+      const links = (await linksOf(f)).filter((row) => row.recon_diff_id === diff.id);
+      expect(links, point).toEqual([linkOf(f, id, diff.id, userId, mark, filedAt)]);
+
+      const after = await footprint(f);
+      const replay = await h.create(body, { key });
+      expect(replay.body, `${point}：重放`).toBe(retried.body);
+      expect(await footprint(f), `${point}：重放不留痕`).toEqual(after);
       tick(f);
     }
   });
