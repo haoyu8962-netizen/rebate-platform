@@ -131,3 +131,21 @@ it('[AC-B3-09m#23] 活进程未调模型，释放预占且成本保持 null', as
   expect(settled).toMatchObject({ costMfen: null, settled: true });
   expect(await dayRow(pg.db)).toMatchObject({ actual_mfen: 0n, reserved_mfen: 0n });
 });
+
+it('[AC-B3-09m#46] 已提交累计离日预算只差 1 mfen 时仍受理，达到上限后熔断', async () => {
+  const budget = booking(pg.db);
+  const limit = { budgetMfen: 1_000n };
+  const used = await budget.reserve({ ...limit, reserveMfen: 700n });
+  await budget.settle({ ...limit, runId: used.runId, live: { spentMfen: 699n, calls: 1 } });
+  await budget.reserve({ ...limit, reserveMfen: 300n });
+  expect(await dayRow(pg.db)).toMatchObject({ actual_mfen: 699n, reserved_mfen: 300n });
+
+  const admitted = await budget.reserve({ ...limit, reserveMfen: 1n });
+  expect(admitted.exhausted).toBe(false);
+  expect(await reservationRow(pg.db, admitted.runId)).toMatchObject({ reserved_mfen: 1n });
+
+  const blocked = await budget.reserve({ ...limit, reserveMfen: 1n });
+  expect(blocked.exhausted).toBe(true);
+  expect(await reservationRow(pg.db, blocked.runId)).toBeUndefined();
+  expect(await dayRow(pg.db)).toMatchObject({ actual_mfen: 699n, reserved_mfen: 301n });
+});

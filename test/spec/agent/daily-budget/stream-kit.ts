@@ -58,6 +58,7 @@ interface MountOptions {
   readonly answer?: VendorTransport['send'];
   readonly tools?: OrchestratorTools;
   readonly failPriceRead?: boolean;
+  readonly failConfigValuesByKey?: typeof DAILY | typeof RESERVE;
 }
 
 export async function mountBudget(db: Kysely<DB>, options: MountOptions = {}) {
@@ -86,21 +87,29 @@ export async function mountBudget(db: Kysely<DB>, options: MountOptions = {}) {
       clock: f.time.clock,
       logger: f.logs.logger,
       consentReader: bindConsentReader(await loadConsentReader(), db),
-      contentReader: options.failPriceRead
-        ? {
-            ...content,
-            configValue: failPrice(content.configValue),
-            freshConfigValue: failPrice(content.freshConfigValue),
-            ...(configValuesByKey === undefined
-              ? {}
-              : {
-                  async configValuesByKey(key: string) {
-                    if (key === MODELS) throw new Error('fixture: agent.models read failed');
-                    return configValuesByKey(key);
-                  },
-                }),
-          }
-        : content,
+      contentReader: {
+        ...content,
+        ...(options.failPriceRead
+          ? {
+              configValue: failPrice(content.configValue),
+              freshConfigValue: failPrice(content.freshConfigValue),
+            }
+          : {}),
+        ...(configValuesByKey === undefined ||
+        (!options.failPriceRead && options.failConfigValuesByKey === undefined)
+          ? {}
+          : {
+              async configValuesByKey(key: string) {
+                if (
+                  (options.failPriceRead && key === MODELS) ||
+                  key === options.failConfigValuesByKey
+                ) {
+                  throw new Error(`fixture: ${key} read failed`);
+                }
+                return configValuesByKey(key);
+              },
+            }),
+      },
       assembly: () => {
         const assembly = f.build();
         return options.tools === undefined ? assembly : { ...assembly, tools: options.tools };
