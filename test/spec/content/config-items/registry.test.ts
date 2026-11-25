@@ -274,6 +274,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...AUTO_CORRECT,
         ...DEFAULT_WORD,
         ...AGENT_A10,
+        ...calendarKeys.map((key) => ({ key })),
       ].map((entry) => entry.key),
     ),
   );
