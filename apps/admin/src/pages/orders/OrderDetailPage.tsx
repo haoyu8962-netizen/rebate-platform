@@ -336,21 +336,15 @@ function DetailBody({ order }: { readonly order: OrderDetail }): ReactElement {
     />
   );
 
-  // BR-TEXT-05: a code this console does not know shows order_status.UNKNOWN, the raw code (when
-  // there is one) only as a small secondary line; the same judgment as the write entries'.
+  // BR-TEXT-05 / BR-TEXT-12: a code this console does not know shows only order_status.UNKNOWN
+  // (「状态更新中」), never the raw code; the raw code is left to the diagnostic report (the console
+  // has no channel for it yet, FU-ADMIN-DIAG-REPORT-CHANNEL). Same judgment as the write entries'.
   const unknownCodes = new Set(unknownCodesOf(order).map((unknown) => unknown.enum));
-  const unknownStatus = (raw: string | null): ReactNode => (
-    <Flex vertical gap={2} align="flex-start">
-      <Tag style={{ marginInlineEnd: 0 }}>{t.status.unknownDisplay}</Tag>
-      {raw === null ? null : (
-        <span style={{ ...code, color: token.colorTextSecondary, wordBreak: 'break-all' }}>
-          {raw}
-        </span>
-      )}
-    </Flex>
+  const unknownStatus: ReactNode = (
+    <Tag style={{ marginInlineEnd: 0 }}>{t.status.unknownDisplay}</Tag>
   );
   const status = (kind: 'platform_status' | 'rebate_status', value: string): ReactNode =>
-    unknownCodes.has(kind) ? unknownStatus(value) : <StatusTag kind={kind} code={value} />;
+    unknownCodes.has(kind) ? unknownStatus : <StatusTag kind={kind} code={value} />;
 
   const statusItems: Items = [
     {
@@ -368,7 +362,7 @@ function DetailBody({ order }: { readonly order: OrderDetail }): ReactElement {
       label: t.status.displayStatus,
       // Any status unknown to this console: the user-side display is unknown too (null included).
       children: !knownStatuses(order) ? (
-        unknownStatus(order.display_status)
+        unknownStatus
       ) : order.display_status === null ? (
         dash
       ) : (

@@ -897,26 +897,44 @@ function statusCell(label: string): HTMLElement {
   return valueRow.children[index] as HTMLElement;
 }
 
-it('[AC-F1-07ee-UNIT#31] 状态区按 BR-TEXT-05：不认识的平台状态 / 返利状态显示 UNKNOWN 文案（原始编码只作次要信息），有不认识的状态时用户侧显示也是 UNKNOWN（含 null）；全部认识时照旧', async () => {
+it('[AC-F1-07ee-UNIT#31] 状态区按 BR-TEXT-05 / BR-TEXT-12：不认识的平台状态 / 返利状态 / 用户侧显示只显示 order_status.UNKNOWN 的「状态更新中」，状态区各格都不出现原始编码；有不认识的状态时用户侧显示也是「状态更新中」（含 null）；全部认识时照旧', async () => {
   const s = ordersTexts.detail.status;
+  const cells = () => [s.platformStatus, s.rebateStatus, s.displayStatus].map(statusCell);
+  const noRawCode = (raw: string) => {
+    for (const cell of cells()) expect(cell.textContent).not.toContain(raw);
+  };
+
   answers.push(() => Promise.resolve({ data: { ...unowned, platform_status: 'DELIVERED_V2' } }));
   renderPage();
   await detailShown();
   let platform = statusCell(s.platformStatus);
   expect(within(platform).getByText(s.unknownDisplay)).toBeDefined();
-  expect(platform.textContent).toBe(`${s.unknownDisplay}DELIVERED_V2`);
+  expect(platform.textContent).toBe(s.unknownDisplay);
   expect(within(statusCell(s.displayStatus)).getByText(s.unknownDisplay)).toBeDefined();
-  expect(statusCell(s.displayStatus).textContent).not.toBe(ordersTexts.dash);
+  expect(statusCell(s.displayStatus).textContent).toBe(s.unknownDisplay);
   expect(within(statusCell(s.rebateStatus)).queryByText(s.unknownDisplay)).toBeNull();
+  noRawCode('DELIVERED_V2');
   cleanup();
 
   answers.push(() => Promise.resolve({ data: order({ rebate_status: 'PAUSED_V2' }) }));
   renderPage();
   await detailShown();
   expect(within(statusCell(s.rebateStatus)).getByText(s.unknownDisplay)).toBeDefined();
-  expect(statusCell(s.rebateStatus).textContent).toContain('PAUSED_V2');
+  expect(statusCell(s.rebateStatus).textContent).toBe(s.unknownDisplay);
   expect(within(statusCell(s.platformStatus)).queryByText(s.unknownDisplay)).toBeNull();
   expect(within(statusCell(s.displayStatus)).getByText(s.unknownDisplay)).toBeDefined();
+  expect(statusCell(s.displayStatus).textContent).toBe(s.unknownDisplay);
+  noRawCode('PAUSED_V2');
+  cleanup();
+
+  answers.push(() => Promise.resolve({ data: order({ display_status: 'WAITING_V2' }) }));
+  renderPage();
+  await detailShown();
+  expect(within(statusCell(s.displayStatus)).getByText(s.unknownDisplay)).toBeDefined();
+  expect(statusCell(s.displayStatus).textContent).toBe(s.unknownDisplay);
+  expect(within(statusCell(s.platformStatus)).queryByText(s.unknownDisplay)).toBeNull();
+  expect(within(statusCell(s.rebateStatus)).queryByText(s.unknownDisplay)).toBeNull();
+  noRawCode('WAITING_V2');
   cleanup();
 
   // All known: as before (null display shows the dash, a known one its code).

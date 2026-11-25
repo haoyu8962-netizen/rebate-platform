@@ -226,8 +226,11 @@ export const ordersTexts = {
       statusLockNote: '订单失效或结算至余额后自动锁定；已锁定：订单状态不再随联盟同步更新',
       attributionLock: '归属锁定 locked',
       attributionLockNote: '找回通过或指定归属后显示「归属已锁定」',
-      /** BR-TEXT-05: a display_status this console does not know (order_status.UNKNOWN). */
-      unknownDisplay: '未知状态 UNKNOWN',
+      /**
+       * The text of order_status.UNKNOWN (BR-TEXT-02 last row, BR-TEXT-12): shown for any status
+       * code this console does not know (BR-TEXT-05), without the raw code.
+       */
+      unknownDisplay: '状态更新中',
     },
 
     basic: {
