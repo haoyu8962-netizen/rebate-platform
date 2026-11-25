@@ -8,6 +8,8 @@ type: impl
 # 不做（写死）：抽屉里的入口（FU-F107EE-DRAWER-ENTRY，deps F1-07edb）；改已归属订单的归属（BR-FUND-01 R14，已归属订单不出现改给他人的入口）；批量暂扣、重新分佣、手动锁定；列表页行内写入口；不改 contracts/**、components/**、App.tsx 路由，不加依赖。
 # 冻结用例（D10-1733 通例：后单加写入口，前单「无写入口」类冻结块改为恰等于已落地入口，严格相等；无权限点角色仍无入口）：admin-orders 的 LIST#6、DETAIL#5、BROWSER#2 三块是超管视角、断言没有这些入口——只在这三块内把期望改为「超管恰见本单入口」，块外辅助（orders-helpers.ts readOnly）不动、新断言写在本单测试目录的 kit 里；其余断言不动。先红 / --related 若列出别的冻结用例要改，先报编排补登。
 # 与 F1-07edb（暂停中）共改 apps/admin/src/texts/orders.ts，谁后落地谁变基解冲突。
+# 补丁 1（2026-11-25，D10-3028；负责人答「去掉刷新再做」）：详情页不做页内【刷新】——D10-2936 / approvals 182 里「详情加只读【刷新】」一项作废；「结果未知」后的核对走重新打开页面，结果未知标记跨重载保留照旧；20902 冲突后自动重读一次详情照旧。
+# 补丁 1 补一条：任何读取结果都不得覆盖比它新的写入结果（BR-FUND-06）。未知状态的诊断上报不在本单（后台现无诊断上报通道，FU-ADMIN-DIAG-REPORT-CHANNEL，归编排排）。
 refs: [BR-FUND-06, BR-ATTR-20, BR-ATTR-31, BR-ID-34, BR-TEXT-05]
 refs_hash:
   BR-FUND-06: f903ec00076a
