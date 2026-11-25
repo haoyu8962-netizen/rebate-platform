@@ -131,3 +131,11 @@ export async function waitsForInsert(
   }
   return false;
 }
+
+export function billDifference() {
+  return difference({
+    refId: `taobao:synthetic-${randomUUID()}`,
+    dedupeKey: null,
+    resolution: null,
+  });
+}
