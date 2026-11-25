@@ -367,6 +367,7 @@ live 下 api 用真实返利报价器（B2-03d / B2-03n），它读下面三个�
 - 拼多多商品另读 `union.pdd.self_buy_factor_bp`、`union.pdd.account_level_factor_bp` 两个系数键（万分之一整数）：种子里已有（`db/seeds/0002_commission-rules.sql`），但只是待核实的占位值；而且这两个键还不在 config 登记表里，后台改不了，要改得走登记任务（FU-PDD-FACTOR-REGISTRY）。
 - 报价要求有一条已发布的分佣规则版本：种子里已有一条（`db/seeds/0002_commission-rules.sql`），部署时种子会写入，不用另发布。
 - `tech_fee_bp` 与 `rebate.taobao.compare_rate_ratio_bp` 现在可以经后台（config.business，B2-03t 已登记）修改：在后台改好取值后再切 live。
+- 纠正（D10-641）：`rebate.taobao.compare_rate_ratio_bp` 已登记（config.business），但报价器不读它，实际不用配；上文「缺任何一项时报价失败」对该键不适用；上文「先在 staging 配好，再切 live」与「在后台改好取值后再切 live」对该键也不适用，只对 `tech_fee_bp` 成立，`tech_fee_bp` 仍须按上文配好再切 live。
 
 ### 1.11 测试手机号与固定验证码（只在 staging）
 
