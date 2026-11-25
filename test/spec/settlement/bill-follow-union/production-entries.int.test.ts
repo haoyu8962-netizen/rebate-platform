@@ -45,6 +45,7 @@ import {
   basesOf,
   batchesOf,
   byRole,
+  chunkRecheckBoundary,
   countsOf,
   creditOn,
   deferredSummary,
@@ -275,7 +276,7 @@ it(
 );
 
 it(
-  '[AC-B2-18#50] 后台补充的缺省上限也是 500（评审第 2 条；真实后台生产入口、不注入上限；账单 2026-09 已出过结果、没有草稿批次）：501 张重生成会成功的单（自拟：快照 1200、联盟结算 1000）——请求 200；只有来源顺序前 500 张推进到 v2（基数 1000）并入一个补充批次（b_settle 1000），最后一张版本原样、保持 WAITING、不入批；settle_regeneration_deferred 恰一条（run supplement、deferred_count 1、不带订单号与 alert）；不告警、不登记差错单、账单行不回写；补充提交之前（第一条写批次明细的语句执行完、在逐单处理之后）从另一个连接 pg_try_advisory_xact_lock 探：第 501 张的订单键能取到，前 500 张的首尾两张取不到（B2-18d 第 2 轮评审第 1 条，D10-3046 (7)：既有分块重读放掉的锁不算，看的是提交前持有的）',
+  '[AC-B2-18#50] 后台补充的缺省上限也是 500（评审第 2 条；真实后台生产入口、不注入上限；账单 2026-09 已出过结果、没有草稿批次）：501 张重生成会成功的单（自拟：快照 1200、联盟结算 1000）——请求 200；只有来源顺序前 500 张推进到 v2（基数 1000）并入一个补充批次（b_settle 1000），最后一张版本原样、保持 WAITING、不入批；settle_regeneration_deferred 恰一条（run supplement、deferred_count 1、不带订单号与 alert）；不告警、不登记差错单、账单行不回写；补充提交之前（第一条写批次明细的语句执行完、在逐单处理之后）从另一个连接 pg_try_advisory_xact_lock 探：第 501 张的订单键能取到，前 500 张的首尾两张取不到（B2-18d 第 2 轮评审第 1 条，D10-3046 (7)：既有分块重读放掉的锁不算，看的是提交前持有的）；补充所用执行器的语句里，以最后一条 RELEASE SAVEPOINT couli_supplement_lock_chunk（既有分块重读结束）为界，界后第 501 张没有再取订单键锁、前 500 张首尾两张界后各取过、第 501 张界前取过（B2-18d 第 3 轮评审第 1 条）',
   async () => {
     const f = fixture(s);
     const a = await supplementApp(f);
@@ -292,7 +293,11 @@ it(
     // 之后、完成任务行与提交之前，确定、不靠时序。探测走套件的单连接池 holder（与后台入口的连接池不同），每次探测
     // 有界（OBSERVE_STATEMENT_MS）。
     const probes: { seen?: Record<string, boolean | string> } = {};
-    const hook = onFirstItemWrite(f.db, async () => {
+    // B2-18d 第 3 轮评审第 1 条（D10-3046 (7)）：后台入口所用执行器先经 traceStatements 记下每条语句（取锁语句按
+    // orderKeyLocks 的口径认），再在其上挂探锁时点。界 = 最后一条 RELEASE SAVEPOINT couli_supplement_lock_chunk
+    // （./kit.ts chunkRecheckBoundary；既有分块重读全部结束之后才进逐单循环，bill/supplement/command.ts generate）。
+    const traced = traceStatements(f.db);
+    const hook = onFirstItemWrite(traced.db, async () => {
       probes.seen = {
         first: await orderKeyFree(f.s.holder(), first),
         lastRegenerated: await orderKeyFree(f.s.holder(), orders[499]!),
@@ -354,6 +359,18 @@ it(
     // 提交之前那一刻：重生成成功的单持锁到提交（取不到），被留下的第 501 张不持锁（能取到）；时点确实到过一次。
     expect({ fired: hook.fired, errors: hook.errors }).toEqual({ fired: 1, errors: [] });
     expect(probes.seen).toEqual({ first: false, lastRegenerated: false, deferred: true });
+    // 分块重读结束之后（界后）没有再为被留下的第 501 张取订单键锁；前 500 张的首尾两张界后各取过（为重生成，留到
+    // 提交）；界前第 501 张取过（分块重读确实锁过它，断言不是空过）。找不到界就失败。
+    const boundary = chunkRecheckBoundary(traced.statements);
+    expect(boundary).toBeGreaterThanOrEqual(0);
+    const chunked = traced.statements.slice(0, boundary + 1);
+    const afterChunks = traced.statements.slice(boundary + 1);
+    expect({
+      first: orderKeyLocks(afterChunks, first) >= 1,
+      lastRegenerated: orderKeyLocks(afterChunks, orders[499]!) >= 1,
+      deferredAfter: orderKeyLocks(afterChunks, last),
+      deferredInChunks: orderKeyLocks(chunked, last) >= 1,
+    }).toEqual({ first: true, lastRegenerated: true, deferredAfter: 0, deferredInChunks: true });
   },
   TIMEOUT,
 );

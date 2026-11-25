@@ -24,8 +24,9 @@
 //   (2)(3)）：tail() 尾部、名额用完之后另加——只在维权中（rights_pending、未 hold；./kit.ts seedOrder 的 rightsPending，
 //   与 ./bill-day.int.test.ts [AC-B2-18#5] 同一造法）、快照 1200、结算 1000（金额本来超差）的一张：照常暂缓（deferred），
 //   不比较、不重生成；联盟有结算而我方已作废（./kit.ts voidOrder，同 ./register-write-only.int.test.ts [AC-B2-18#43]）、
-//   快照 1000、结算 1000 的一张：照常登记一张 union_mismatch（unexpected_settlement）。两张都不计入 deferred_count；
-//   最后仍保留一张真正超额的 x1（排在这两张之后）。
+//   快照 1200、结算 1000（金额超差；B2-18d 写测第 3 次由 1000 改为 1200，规则测试评审第 3 轮第 2 条 S1）的一张：
+//   照常登记一张 union_mismatch（unexpected_settlement）。两张都不计入 deferred_count；最后仍保留一张真正超额的 x1
+//   （排在这两张之后）。
 import { randomUUID } from 'node:crypto';
 import { createTestDatabase } from '@couli/db/testing';
 import { addFen } from '@couli/money';
@@ -126,7 +127,7 @@ function regeneratedRows(a: App, o: Seeded) {
 /**
  * 名额（上限 2）在序号 01 用完之后的来源尾部（评审第 1 条；第 2 轮第 2 条加 07、08）：
  * 00 r0、01 r1（重生成会成功，用完名额）；02 x0（超额，留下）；03 相符；04 零结算而正基数；05 暂缓；06 应结未结；
- * 07 只在维权中（未 hold，金额超差）；08 联盟有结算而我方已作废；09 x1（超额，留下）。只做搭建。
+ * 07 只在维权中（未 hold，金额超差）；08 联盟有结算而我方已作废（金额超差，第 3 轮第 2 条）；09 x1（超额，留下）。只做搭建。
  */
 interface Tail {
   readonly r0: Seeded;
@@ -179,9 +180,10 @@ async function tail(a: App): Promise<Tail> {
     people: EXAMPLE_PEOPLE,
     subOrderId: key(7, 'rights'),
   });
-  // 联盟有结算（STATEMENT seq 1 结算 1000）而我方已作废（自拟：快照 1000，同 [AC-B2-18#43]）。
+  // 联盟有结算（STATEMENT seq 1 结算 1000）而我方已作废（自拟：快照 1200、结算 1000 → B_settle 1000 ≠ 1200，金额超差；
+  // B2-18d 第 3 轮评审第 2 条：满额后金额超差的作废单也不能被计作待重算，仍登记 union_mismatch）。
   const voided = await seedOrder(a, {
-    snapshotN: 1000n,
+    snapshotN: 1200n,
     settleFen: 1000n,
     people: EXAMPLE_PEOPLE,
     subOrderId: key(8, 'void'),
@@ -267,7 +269,7 @@ function unionMismatchOf(a: App, o: Seeded) {
 }
 
 it(
-  '[AC-B2-18#45] 月结名额用完之后的分类（上限注入 2；评审第 1 条，D10-3046 (2)(3)）：来源顺序 r0、r1（重生成成功，用完名额）、x0（超额）、金额相符、零结算而正基数（结算 0 / 基数 1000）、暂缓（hold，金额也不符）、应结未结、只在维权中（未 hold，金额也不符）、联盟有结算而我方作废、x1（超额）——端口只为 r0、r1 调用；相符的照常入批（b_settle 1000）；零结算的告警一次、不重生成、不入批、计 amount_mismatch_count 1；暂缓与只在维权中的计 held_count 2、应结未结的计 unsettled_count 1，这三张都不重生成、不入批；作废单登记恰一张 union_mismatch、计 error_count 1；这六张都在逐单结果里（candidate / amount_mismatch / deferred / missing_settlement / deferred / unexpected_settlement）、都不计入 deferred_count；x0、x1 版本原样、不入批、不告警、不在逐单结果里；settle_regeneration_deferred 恰一条（run bill、deferred_count 2 = 超额张数）；提交前订单键锁只剩 r0、r1；除作废单那张外不登记差错单（第 2 轮评审第 2 条加只在维权中与作废单）',
+  '[AC-B2-18#45] 月结名额用完之后的分类（上限注入 2；评审第 1 条，D10-3046 (2)(3)）：来源顺序 r0、r1（重生成成功，用完名额）、x0（超额）、金额相符、零结算而正基数（结算 0 / 基数 1000）、暂缓（hold，金额也不符）、应结未结、只在维权中（未 hold，金额也不符）、联盟有结算而我方作废（快照 1200、结算 1000，金额也超差）、x1（超额）——端口只为 r0、r1 调用；相符的照常入批（b_settle 1000）；零结算的告警一次、不重生成、不入批、计 amount_mismatch_count 1；暂缓与只在维权中的计 held_count 2、应结未结的计 unsettled_count 1，这三张都不重生成、不入批；作废单登记恰一张 union_mismatch、计 error_count 1；这六张都在逐单结果里（candidate / amount_mismatch / deferred / missing_settlement / deferred / unexpected_settlement）、都不计入 deferred_count；x0、x1 版本原样、不入批、不告警、不在逐单结果里；settle_regeneration_deferred 恰一条（run bill、deferred_count 2 = 超额张数）；提交前订单键锁只剩 r0、r1；除作废单那张外不登记差错单（第 2 轮评审第 2 条加只在维权中与作废单）',
   async () => {
     const a = await app(pools.db);
     const t = await tail(a);
@@ -420,7 +422,7 @@ it(
 );
 
 it(
-  '[AC-B2-18#46] 补充名额用完之后的分类（上限注入 2，与 #45 同构，走补充命令；评审第 1 条，D10-3046 (2)(3)）：端口只为 r0、r1 调用；r0、r1 重生成 v2（基数 1000）与金额相符的单入补充批次；零结算而正基数的告警一次、不重生成、不入批；暂缓、只在维权中（未 hold）与应结未结的不重生成、不入批；作废单（联盟有结算）登记恰一张 union_mismatch；这六张都在逐单结果里（candidate / amount_mismatch / deferred / missing_settlement / deferred / unexpected_settlement）、都不计入 deferred_count；x0、x1 版本原样、不入批、不告警、不在逐单结果里；settle_regeneration_deferred 恰一条（run supplement、deferred_count 2 = 超额张数）；补充不写账单计数列（账单行一字不动）；提交前订单键锁只剩 r0、r1；除作废单那张外不登记差错单（第 2 轮评审第 2 条加只在维权中与作废单）',
+  '[AC-B2-18#46] 补充名额用完之后的分类（上限注入 2，与 #45 同构，走补充命令；评审第 1 条，D10-3046 (2)(3)）：端口只为 r0、r1 调用；r0、r1 重生成 v2（基数 1000）与金额相符的单入补充批次；零结算而正基数的告警一次、不重生成、不入批；暂缓、只在维权中（未 hold）与应结未结的不重生成、不入批；作废单（联盟有结算；快照 1200、结算 1000，金额也超差）登记恰一张 union_mismatch；这六张都在逐单结果里（candidate / amount_mismatch / deferred / missing_settlement / deferred / unexpected_settlement）、都不计入 deferred_count；x0、x1 版本原样、不入批、不告警、不在逐单结果里；settle_regeneration_deferred 恰一条（run supplement、deferred_count 2 = 超额张数）；补充不写账单计数列（账单行一字不动）；提交前订单键锁只剩 r0、r1；除作废单那张外不登记差错单（第 2 轮评审第 2 条加只在维权中与作废单）',
   async () => {
     const a = await app(pools.db);
     await legacyBill(a.db, a.appId, { billId: a.period, platformOrderCounts: { taobao: 0 } });

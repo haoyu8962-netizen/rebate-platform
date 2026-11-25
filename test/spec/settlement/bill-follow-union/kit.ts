@@ -2346,3 +2346,20 @@ export function onFirstItemWrite(db: Kysely<DB>, action: () => Promise<void>) {
     },
   };
 }
+
+// ---------------------------------------------------------------------------------------------
+// B2-18d 写测第 3 次追加（任务书 §23.1 第 1 条，规则测试评审第 3 轮第 1 条 S1）：只新增，以上导出不变；只做取数，不 expect。
+
+/** 后台补充既有分块重读（B2-04re，bill/supplement/command.ts LOCK_SAVEPOINT）每块收尾的那条语句。 */
+const CHUNK_RELEASE = /^release savepoint couli_supplement_lock_chunk$/i;
+
+/**
+ * 既有分块重读与之后各阶段的分界：语句序列里最后一条 `RELEASE SAVEPOINT couli_supplement_lock_chunk` 的下标；
+ * 找不到时为 -1（由用例断言失败，不退回别的判据）。不匹配 couli_supplement_gate_recheck 等别的保存点。
+ */
+export function chunkRecheckBoundary(statements: readonly TracedStatement[]): number {
+  for (let i = statements.length - 1; i >= 0; i -= 1) {
+    if (CHUNK_RELEASE.test(statements[i]!.sql.trim())) return i;
+  }
+  return -1;
+}
