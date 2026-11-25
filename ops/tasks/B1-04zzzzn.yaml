@@ -10,6 +10,7 @@ type: impl
 # ③（补丁 1，D10-2872 撤回 D10-2850 / 2851 的「结局未知尝试作凭据」）重复备案查回只接受库里同一（应用、用户、平台、联盟账号）对得上的历史绑定；存在结局未知的尝试而本次 save 回「重复」时不写绑定、失败、发带尝试标识且区别于 duplicate_unverified 的告警；就绪判断补「选用联盟账号 = 邀请码所属账号」。
 # ④ 「真实淘宝备案适配器已就绪」检查挪到消费 state 之前：未就绪返回 auth_unavailable、不消费 state（与冻结 [AC-B1-06h#10/#11] 同向）。
 # 迁移按两段：实现写迁移与代码（不手改 db/schema.sql、db.gen.ts）→ 编排在测试机 LAN 快照回填 schema.sql / db.gen.ts → 实现照快照补类型。探针（couli-runs/B1-04zzzzn/probe）：只加此表时 test/spec 冻结用例零改动，红的只有迁移格式（Up 标记、SET LOCAL 超时）与上述清单一行。
+# 补丁 2（D10-3129，负责人 11-25「都按建议办」第 ⑤ 件）：paths 加 linking/application/shop-open.ts 与 shop-open.test.ts——进店入口把已选定的 accountId 传进 issueTaobaoAuthState、该参数改必填（money r4 S1-②）；查回被治理层时限先结束时改看备案记录器已落库的 duplicate 结局照发带编号告警（S1-①）。
 # 不在本单：长期未完成尝试的巡检告警（FU-FILING-ATTEMPT-PATROL）；换应用旧 state（FU-TAOBAO-OAUTH-APP-ROTATION）；淘宝接口行为实测（FU-TB-05-DUP-LOOKUP）。
 refs: [BR-ID-17, BR-ATTR-05]
 refs_hash:
@@ -17,7 +18,7 @@ refs_hash:
   BR-ATTR-05: 655fe77b6d9b
 deps: []
 paths:
-  - 'apps/api/src/modules/linking/{application/{union-auth-state,union-auth-url,link-open-taobao,union-binding-exchanger,union-bindings,union-filing-attempts}.ts,infra/{auth-apps,auth-apps.test,union-filing-attempts.test}.ts,linking.module.ts}'
+  - 'apps/api/src/modules/linking/{application/{union-auth-state,union-auth-url,link-open-taobao,union-binding-exchanger,union-bindings,union-filing-attempts,shop-open,shop-open.test}.ts,infra/{auth-apps,auth-apps.test,union-filing-attempts.test}.ts,linking.module.ts}'
   - 'apps/api/src/modules/union/{union.module.ts,domain/types.ts,application/governed-adapter.ts}'
   - 'apps/api/src/modules/union/infra/taobao/{taobao-adapter.ts,site-oauth.ts,user-oauth.ts,user-oauth.test.ts,publisher.ts,publisher.test.ts}'
   - 'apps/api/src/modules/platform/config/{taobao-oauth.ts,taobao-oauth.test.ts,config.ts,index.ts}'
