@@ -1,0 +1,25 @@
+id: CT-01f
+repo: rebate-platform
+title: '契约枚举：scene_basis 加 link（拼多多单推广位 A′，buy_type 按服务端登记的 link 判）；openapi AdminOrderSceneBasis 同步；union_pid_status 唯一性说明更正为含联盟账号；生成物同步'
+type: contract
+# 2026-11-25 be 入账（拼多多单推广位 A′ 拆单第一张，负责人 2026-11-25 同意 D10-2970 第 6 条；编排 D10-2974 / D10-3025 / D10-3036；方案 couli-runs/PDD-lane/pid-consolidation-plan.md「A′ 定稿」④ 第 3 条；规划 couli#31：04 §2.3 scene_basis 加 link、BR-ATTR-09）。
+# 只改契约：contracts/enums/trade.yaml scene_basis 加 link（中文「服务端登记的转链记录」，位于 param 与 fallback 之间）；openapi AdminOrderSceneBasis 枚举同步（全文件只此一处）；contracts/oasdiff-accepted.txt 登记响应枚举加值；contracts/enums/admin.yaml union_pid_status 的 active 说明「同一 app × platform × pid_scene 至多一条」更正为含联盟账号（与迁移 0093 的部分唯一键一致）；pnpm codegen 生成物。不改服务端、表结构与三端；orders.scene_basis 的 CHECK 与按 link 判 buy_type 归实现①（另一张单）。
+# 探针 couli-runs/CT-01f/probe2.out（test/spec/contracts、test/spec/orders、packages/contracts-ts/src、apps/api/src/contract.test.ts，468 文件 / 4832 条全绿）：不撞冻结用例；后台订单浏览器用例（test/spec/frontend/admin-orders）实现时以 --browser 再核。占契约槽，排在 CT-24zzv、B1-34t 之后（D10-3036）。
+refs: [BR-ATTR-09, BR-ATTR-08]
+refs_hash:
+  BR-ATTR-09: 6f3cf4fa26ba
+  BR-ATTR-08: ae1e71cb81e0
+deps: []
+paths:
+  - 'contracts/{openapi.yaml,oasdiff-accepted.txt,enums/trade.yaml,enums/admin.yaml}'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/{validation/route-schemas.gen.ts,validation/signing-routes.gen.ts,http/auth-routes.gen.ts}'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/scene-basis-link/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/contracts/scene-basis-link/**'
+status: todo
