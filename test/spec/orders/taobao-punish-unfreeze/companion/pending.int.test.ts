@@ -5,7 +5,9 @@
 //   金额列不变（hold 不判，D10-3221 另登 FU-PUNISH-UNMAPPED-HOLD-SCOPE）；都不交写入方，只多一条对应原因的
 //   open 待处理，该类告警一条。
 // - 同键（app、平台、子订单、原因）已有别的来源的 open 记录：原记录的原值（raw_status、raw_payload_id、created_at、
-//   order_id、原说明）保留，表外值 2、7 的完整来源标记各并进说明一次；重复信号不重复追加。
+//   order_id、原说明）保留，表外值 2、7 的完整来源标记各并进说明一次；重复信号不重复追加。普通订单首次同步
+//   留下的存量形状（order_id 与说明均为 NULL，原码与 raw_payload_id 非空）同样：原值保留，2 的完整来源标记
+//   写进说明一次，重复不追加（#14）。
 // - 订单后入库：order_id 为 null 的 open 记录在同一信号再来时补成我方订单；已有关联（非 null）的不改。
 // - 两个窗口（注入时钟不同）先后或并发处理同一信号：detected_at 取较晚的，不回退。
 // - 待处理写入第一条就失败：该类别照样一条 warn，原错误外抛，库里不留半截。
@@ -432,4 +434,80 @@ it('[AC-B1-04zzac#7] 真实库表：窗口里第一条待处理写入就失败�
   expect(await pendingOf(h.db, appId)).toEqual([]);
   expect(f.rightsRecord).not.toHaveBeenCalled();
   await expectUntouched(appId, [order], trailBefore);
+});
+
+it('[AC-B1-04zzac#14] 同键已有普通订单首次同步留下的存量 open UNMAPPED_STATUS 记录（order_id 与说明均为 NULL，原码与 raw_payload_id 非空）：送入表外值 2 及其重复信号，仍只一条 open，原码、raw_payload_id、created_at 与 order_id（NULL）保留，2 的完整来源标记写进说明一次，重复不追加', async () => {
+  const appId = newAppId();
+  const sub = orderNo();
+  await h.db
+    .insertInto('order_sync_pending')
+    .values({
+      app_id: appId,
+      platform: 'taobao',
+      sub_order_id: sub,
+      order_id: null,
+      reason: 'UNMAPPED_STATUS',
+      raw_status: OTHER_RAW,
+      raw_payload_id: OTHER_PAYLOAD_ID,
+      detail: null,
+      detected_at: EARLIER,
+      status: 'open',
+      created_at: EARLIER,
+    })
+    .execute();
+  const original = await pendingOf(h.db, appId);
+  expect(original).toHaveLength(1);
+  expect([original[0]!.order_id, original[0]!.detail]).toEqual([null, null]);
+  const kept = {
+    id: original[0]!.id,
+    app_id: appId,
+    platform: 'taobao',
+    sub_order_id: sub,
+    order_id: null,
+    reason: 'UNMAPPED_STATUS',
+    raw_status: OTHER_RAW,
+    raw_payload_id: OTHER_PAYLOAD_ID,
+    status: 'open',
+    created_at: EARLIER,
+    detected_at: new Date(NOW),
+    resolved_by: null,
+    resolved_at: null,
+  };
+  const f2 = dbHandler(h.db, [[unfreezeRow(sub, { punish_status: '2' })]]);
+  /** The one open record: the original columns kept, and how often each full mark is in detail. */
+  async function expectOne(): Promise<PendingRow[]> {
+    const rows = await pendingOf(h.db, appId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject(kept);
+    const detail = rows[0]!.detail ?? '';
+    expect([count(detail, MARK_OF_2), count(detail, MARK_OF_7)]).toEqual([1, 0]);
+    return rows;
+  }
+
+  // Value 2 once: the mark goes into the null detail.
+  const first = await settle(handlePunishWindow(job(PUNISH_JOB, windowOf(appId)), f2.deps));
+  expect(first.status).toBe('fulfilled');
+  const after = await expectOne();
+
+  // Its repeats: the window again, and the production recorder directly.
+  const again = await settle(handlePunishWindow(job(PUNISH_JOB, windowOf(appId), 2), f2.deps));
+  expect(again.status).toBe('fulfilled');
+  const direct = await settle(
+    createPunishPendingRecorder({ db: h.db }).record({
+      app_id: appId,
+      platform: 'taobao',
+      sub_order_id: sub,
+      reason: 'UNMAPPED_STATUS',
+      raw_status: '2',
+      detected_at: new Date(NOW),
+    }),
+  );
+  expect(direct.status).toBe('fulfilled');
+  expect(await expectOne()).toEqual(after);
+
+  expect(f2.rightsRecord).not.toHaveBeenCalled();
+  expect(await rightsOf(h.db, appId)).toEqual([]);
+  const warns = linesOf(f2.logger.warn, UNMAPPED_EVENT);
+  expect(warns).toHaveLength(2);
+  expect(warns.map((w) => w[UNMAPPED_COUNT])).toEqual([1, 1]);
 });

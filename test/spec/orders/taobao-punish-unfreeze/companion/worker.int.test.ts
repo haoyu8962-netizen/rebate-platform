@@ -4,7 +4,8 @@
 // 写入，消费一页数据：两张已付款未收货订单（platform_status PAID、rebate_status ESTIMATED）分别收到 punish_status
 // 1（解冻）与 2（表外值）。跑完读回：两张订单的 platform_status、rebate_status 与金额列不变（hold 不判，D10-3221
 // 另登 FU-PUNISH-UNMAPPED-HOLD-SCOPE）；各写一条对应原因的 open 待处理；没有处罚写入（rights.record 没被调用、
-// order_rights 无新行），没有状态迁移，没有点名它们的失效 / 处罚事件。
+// order_rights 无新行），没有状态迁移，没有点名它们的失效 / 处罚事件（事件表里没有，任务执行期间经
+// events.publish 替身新增的调用里，payload 点名这两张订单的也没有失效 / 处罚类事件）。
 // 本文件的库里只有一个淘宝联盟账号（可查账号按全库唯一一行判定），所以只有一条用例。会抛的调用先 settle 再判。
 import { randomUUID } from 'node:crypto';
 import { createTestDatabase, type TestDatabase } from '@couli/db/testing';
@@ -15,6 +16,7 @@ import type { OrderSyncRuntimeDeps } from '../../../../../apps/api/src/modules/o
 import {
   FixedClock,
   createRootLogger,
+  type EventBus,
   type JobHandler,
 } from '../../../../../apps/api/src/modules/platform/index.ts';
 import type {
@@ -46,6 +48,7 @@ import {
   UNMAPPED_COUNT,
   UNMAPPED_EVENT,
   job,
+  leaves,
 } from '../kit.ts';
 
 let database: TestDatabase | undefined;
@@ -152,6 +155,7 @@ it('[AC-B1-04zzac#13] 生产 worker 注册的 punish.window 处理器：两张�
   const record = vi.fn<RightsCommandPort['record']>(async () => ({ kind: 'applied' }));
   const lines: string[] = [];
   const register = vi.fn<(queue: string, handler: JobHandler) => void>();
+  const publish = vi.fn<EventBus['publish']>();
   const deps: OrderSyncRuntimeDeps = {
     db: h.db,
     clock: new FixedClock(NOW),
@@ -169,7 +173,7 @@ it('[AC-B1-04zzac#13] 生产 worker 注册的 punish.window 处理器：两张�
       start: vi.fn(async () => undefined),
       stop: vi.fn(async () => undefined),
     },
-    events: { publish: vi.fn() },
+    events: { publish },
     endpoints: [taobaoEndpoint],
     registry: {
       registrations: () => [],
@@ -193,6 +197,7 @@ it('[AC-B1-04zzac#13] 生产 worker 注册的 punish.window 处理器：两张�
   const before = await trailOf(h.db, appId, orders);
   expect(await rightsOf(h.db, appId)).toEqual([]);
   expect(await pendingOf(h.db, appId)).toEqual([]);
+  const publishesBefore = publish.mock.calls.length;
 
   const out = await settle(
     handler(job(PUNISH_JOB, { ...windowOf(appId), union_account_id: accountId })),
@@ -216,6 +221,21 @@ it('[AC-B1-04zzac#13] 生产 worker 注册的 punish.window 处理器：两张�
   expect(after.history).toEqual([]);
   const eventTexts = after.events.map((e) => `${e.name} ${JSON.stringify(e.payload)}`);
   expect(eventTexts.filter((text) => /invalid|punish/i.test(text))).toEqual([]);
+
+  // Nor through the events.publish stand-in during the run: of the calls added while the job ran,
+  // those whose payload names either order (order_id or sub_order_id) carry no invalid / punish
+  // event (e.g. order.invalidated, or an order.updated moving it to INVALID / VOID).
+  const markers = orders.flatMap((o) => [o.order_id, o.sub_order_id]);
+  const names = (leaf: string) => markers.some((m) => leaf.includes(m));
+  const naming = publish.mock.calls
+    .slice(publishesBefore)
+    .map(([, event]) => event)
+    .filter((event) => leaves(event.payload).some(names));
+  expect(
+    naming
+      .map((event) => `${event.name} ${leaves(event.payload).join(' ')}`)
+      .filter((text) => /invalid|punish|void|claw/i.test(text)),
+  ).toEqual([]);
 
   // One open record each, of the matching reason, by the production recorder.
   const pending = await pendingOf(h.db, appId);
