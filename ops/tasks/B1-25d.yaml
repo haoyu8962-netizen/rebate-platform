@@ -1,0 +1,39 @@
+id: B1-25d
+repo: rebate-platform
+title: B1-25d：告警组件三条后续——exporter 自身抓不到也告警（宕机组）、转发器按（告警组, 状态）30 分钟去重挡 Alertmanager 的重复送达（超时照旧重试）、补两条 B1-25c 规格评审 r2 的用例（FU-B1-25C-EXPORTER-DOWN / WECOM-TIMEOUT-DUP / SPEC-R2，D10-2959）
+type: impl
+# 2026-11-25 ops 入账（编排 D10-2945 / D10-2959；入账前报 couli-runs/OPS-lane/D10-2945/item7-pre-ledger.md）。非资金：只动监控组件，不碰金额与账务。
+# ① EXPORTER-DOWN：pg_exporter / redis_exporter 自己挂掉时 pg_up / redis_up 序列消失，现有规则不报。在 infra/monitoring/rules/outage.yaml 的 couli-outage 组
+#    补「exporter 抓取失败」告警：第二个 vmagent 对 couli-pg / couli-redis 两个抓取任务写的 up{job="couli-pg|couli-redis"} == 0，for 2m，severity critical，
+#    中文 summary 写明是 exporter 抓不到（区别于 PG / Redis 本身连不上）。冻结 [AC-B1-25c#7] 照实改期望（见 modify_existing note），不用绕开匹配的写法。
+#    [AC-B1-25c#8] 不登：新规则按 up{job=…} 判、不引用 pg_up / redis_up，#8 钉的「pg_up == 0 恰好一条、redis_up 相关只有 CouliRedisDown 一条」照旧成立（编排 D10-2959 预计两条都要改，核实后只有 #7 会红）。
+# ② WECOM-TIMEOUT-DUP 取乙（D10-2959）：超时照旧重试、接受同一次请求里的偶发重复（群机器人无幂等键；告警漏一条比多一条代价大），冻结 [AC-B1-25c#5] 不改。
+#    新增：infra/monitoring/forwarder/webhook.ts 按（Alertmanager 的 groupKey, status firing / resolved）记 30 分钟，期间同组同状态再送到一律回 200 且不推送，
+#    只挡 Alertmanager 层面的重复送达；记忆只放进程内存（不落盘、不跨进程），按时间淘汰，条数设上限防无限增长。
+#    infra/staging/README.md 告警一节的已知行为补一句：转发器重启后去重记忆清空，重启后 30 分钟内同一告警可能再收到一次。
+# ③ SPEC-R2：只加两条用例——推送成功路径的日志不出现 Webhook 地址；第二个 vmagent 用独立的 -remoteWrite.tmpDataPath（现实现已满足：vmagent-exporters.args:7 与 vmagent.args:5）。
+# staging 部署仍等群机器人地址（负责人提供）；本单只做代码与测试。
+refs: [BR-WDR-24]
+refs_hash:
+  BR-WDR-24: 356b5d012a5d
+deps: [B1-25c]
+paths:
+  - 'infra/monitoring/forwarder/**'
+  - 'infra/monitoring/rules/outage.yaml'
+  - 'infra/staging/README.md'
+  - 'ops/tasks/B1-25d.yaml'
+test_paths:
+  - 'test/spec/platform/alerting-wecom/**'
+modify_existing:
+  - file: 'test/spec/platform/alerting-wecom/monitoring.test.ts'
+    test: '[AC-B1-25c#7] 宕机组按抓取失败覆盖 api、worker、admin 三个应用任务'
+    reason: rule_change
+    br: [BR-WDR-24]
+    ruling: D10-2959
+    note: '改前钉：outage.yaml 里所有 up == 0 规则按 job 选中的抓取任务恰好是 couli-api / couli-worker / couli-admin。改后钉：这三个应用任务仍须全部覆盖；另外只多认第二个 vmagent 的两个 exporter 抓取任务 couli-pg、couli-redis（exporter 自身抓不到的告警，FU-B1-25C-EXPORTER-DOWN），不许覆盖其余任何任务；每条仍须是 == 0、for 与 severity 照现有检查。'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/platform/alerting-wecom/**'
+status: todo
