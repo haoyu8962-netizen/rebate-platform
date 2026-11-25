@@ -9,11 +9,12 @@
 // not visible order (20001) shows nothing of it. 【返回】 goes to the list with its conditions (the
 // list address, F1-07ed). 「分佣明细」 (F1-07ed) groups the snapshot's beneficiaries by role with each
 // one's ratio, settlement state and forfeit mark; it shows no amount (amounts stay in 「分佣快照」).
-// 【刷新】 (F1-07ee r5, BR-TEXT-05) rereads the detail once with the same GET and sends nothing
-// else; it stays while a status is one this console does not know. Such a display_status shows
-// order_status.UNKNOWN, and every unknown code is reported once (enum name and code only). An
-// order write whose result is unknown (the marker of this account, ./detail-writes/) shows its
-// read-only prompt above the detail.
+// A display_status this console does not know shows order_status.UNKNOWN (BR-TEXT-05), and every
+// unknown code is reported once (enum name and code only). An order write whose result is unknown
+// (the marker of this account, ./detail-writes/) shows its read-only prompt above the detail; it is
+// checked by opening the page again (no reread button on the page). The detail is read when the
+// page opens and once after 20902; no read ever shows over a newer write (./detail-writes/
+// detailGate.ts, BR-FUND-06).
 import { ArrowLeftOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons';
 import { beneficiary_role } from '@couli/contracts-ts';
 import { useDataProvider } from '@refinedev/core';
@@ -46,6 +47,7 @@ import {
   subReasonLabel,
   unknownCodesOf,
 } from './detail-writes/model.ts';
+import { createDetailGate } from './detail-writes/detailGate.ts';
 import { OrderWrites, UnknownWritePrompt } from './detail-writes/OrderWrites.tsx';
 import { useOrderMarker } from './detail-writes/useOrderMarker.ts';
 import { FlagTags, StatusTag } from './parts.tsx';
@@ -100,24 +102,29 @@ function OrderDetailContent({
   const [attempt, setAttempt] = useState(0);
   const sync = useSyncRequest();
   const [notice, setNotice] = useState<SyncNotice>();
-  const [refreshing, setRefreshing] = useState(false);
   const marker = useOrderMarker(orderId);
+  // One gate per mount: which read or write answer the page may still show.
+  const [gate] = useState(createDetailGate);
 
   useEffect(() => {
     if (!permitted) return undefined;
     let current = true;
     const custom = getProvider().custom;
     if (custom === undefined) throw new Error('Missing custom data provider');
+    const ticket = gate.read();
     custom<OrderDetail>({ url: orderUrl(orderId), method: 'get' }).then(
       (response) => {
         if (!current) return;
-        setRefreshing(false);
-        setOrder(response.data);
+        // A newer write answer is shown already: the page keeps it (BR-FUND-06).
+        if (gate.takeRead(ticket, response.data)) setOrder(response.data);
         setStatus('ready');
       },
       (cause: unknown) => {
         if (!current) return;
-        setRefreshing(false);
+        if (!gate.takeRead(ticket, undefined)) {
+          setStatus('ready');
+          return;
+        }
         setOrder(undefined);
         const kind = failureOf(cause);
         setStatus(kind === 'invalid' ? 'missing' : kind);
@@ -126,19 +133,12 @@ function OrderDetailContent({
     return () => {
       current = false;
     };
-  }, [getProvider, orderId, attempt, permitted]);
+  }, [getProvider, orderId, attempt, permitted, gate]);
 
   const retry = () => {
     setStatus('loading');
     setAttempt((value) => value + 1);
   };
-  // 【刷新】: the same GET once more, the shown detail stays until its answer; no write is sent.
-  const refresh = () => {
-    if (refreshing) return;
-    setRefreshing(true);
-    setAttempt((value) => value + 1);
-  };
-
   // BR-TEXT-05: each unknown status code is reported once (enum name and code only).
   useEffect(() => {
     if (order !== undefined) reportUnknownCodes(unknownCodesOf(order));
@@ -164,9 +164,13 @@ function OrderDetailContent({
   };
 
   // F1-07ee writes: a success shows the detail of the response as it is (nothing derived here);
-  // 20902 shows the message and reads the detail once again, without resending the write.
+  // 20902 shows the message and reads the detail once again, without resending the write. Any
+  // read sent before a success answer can no longer show over it (detailGate).
   const saved = (updated: OrderDetail, text: string) => {
-    setOrder(updated);
+    if (gate.takeWrite(updated)) {
+      setOrder(updated);
+      setStatus('ready');
+    }
     setNotice({ id: nextNoticeId(), type: 'success', text });
   };
   const conflicted = (text: string) => {
@@ -213,16 +217,6 @@ function OrderDetailContent({
             onClick={() => void syncThisOrder(order)}
           >
             {ordersTexts.sync.thisOrderEntry}
-          </Button>
-        )}
-        {order === undefined || status !== 'ready' ? null : (
-          <Button
-            icon={<ReloadOutlined aria-hidden />}
-            disabled={refreshing}
-            aria-busy={refreshing || undefined}
-            onClick={refresh}
-          >
-            {t.refresh}
           </Button>
         )}
         <Button icon={<ArrowLeftOutlined aria-hidden />} onClick={back}>

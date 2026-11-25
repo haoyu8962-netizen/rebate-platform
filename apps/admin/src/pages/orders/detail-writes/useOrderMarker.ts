@@ -3,9 +3,9 @@
 // another account signing in to this tab never sees it, and it survives a reload of the tab.
 // - `left`: a marker that was already there when the page opened (or the account became known),
 //   i.e. a write sent by an earlier mount or before a reload whose answer this page never saw.
-//   While it stays, no write entry is offered; only the prompt with the moment, the read-only
-//   【刷新】 and 【关闭】 (after checking the reread detail) are. A definite answer that request
-//   still gets in this tab, or 【关闭】, drops it.
+//   While it stays, no write entry is offered; only the prompt with the moment and 【关闭】
+//   (once the detail read by the page is shown; it is checked by opening the page again) are. A
+//   definite answer that request still gets in this tab, or 【关闭】, drops it.
 // - `present`: any marker of the order right now (this page's own open write included).
 import { useEffect, useState } from 'react';
 import {

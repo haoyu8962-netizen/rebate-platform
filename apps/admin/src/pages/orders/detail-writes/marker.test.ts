@@ -1,17 +1,9 @@
 // Unit tests of the order write marker (F1-07ee r5): the result-unknown marker of an order is the
 // one of components/unknown-marker (this tab, this account, no body), held from sending until a
 // definite answer of that very request; a marker left before the page opened blocks new writes
-// and shows only a read-only prompt; an unknown status never opens a dialog or offers 【重试】;
-// 【刷新】 of the detail sends one GET and nothing else.
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  renderHook,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+// and shows only a read-only prompt (its 【关闭】 only once the page's own read is shown); an
+// unknown status never opens a dialog or offers 【重试】; the detail page has no reread button.
+import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -297,9 +289,8 @@ it('[AC-F1-07ee-UNIT#12] 发送中就留标记：答复前重新挂载也不给�
   expect(readUnknown({ page: PAGE, account: 'admin-1' })).toBeUndefined();
 });
 
-it('[AC-F1-07ee-UNIT#13] 详情【刷新】只重新 GET 一次详情，不发任何写请求；未知展示状态显示 UNKNOWN', async () => {
+it('[AC-F1-07ee-UNIT#13] 未知展示状态显示 UNKNOWN、上报一次，不给写入口与【同步此单】，页面只 GET 一次详情', async () => {
   answers.push(() => Promise.resolve({ data: order({ display_status: 'SETTLING_V2' }) }));
-  answers.push(() => Promise.resolve({ data: order() }));
   const reports: unknown[] = [];
   const listener = (event: Event) => reports.push((event as CustomEvent).detail);
   window.addEventListener('couli.admin.diagnostic', listener);
@@ -311,21 +302,16 @@ it('[AC-F1-07ee-UNIT#13] 详情【刷新】只重新 GET 一次详情，不发�
         createElement(OrderDetailPage, { access: everything, orderId: ORDER_ID, clock }),
       ),
     );
-    const refresh = await screen.findByRole('button', { name: ordersTexts.detail.refresh });
-    expect(screen.getByText(ordersTexts.detail.status.unknownDisplay)).toBeDefined();
+    expect(await screen.findByText(ordersTexts.detail.status.unknownDisplay)).toBeDefined();
     expect(reports).toEqual([
       { event: 'unknown_code', enum: 'display_status', code: 'SETTLING_V2' },
     ]);
-    // Unknown status: no write entry and no 【同步此单】, the read-only 【刷新】 stays.
+    // Unknown status: no write entry and no 【同步此单】.
     expect(screen.queryByRole('button', { name: ordersTexts.sync.thisOrderEntry })).toBeNull();
-    fireEvent.click(refresh);
-    await waitFor(() => expect(custom).toHaveBeenCalledTimes(2));
-    await waitFor(() =>
-      expect(screen.queryByText(ordersTexts.detail.status.unknownDisplay)).toBeNull(),
-    );
-    expect(custom.mock.calls.map(([request]) => request.method)).toEqual(['get', 'get']);
+    for (const name of Object.values(ordersTexts.writes.entries))
+      expect(screen.queryByRole('button', { name })).toBeNull();
+    expect(custom.mock.calls.map(([request]) => request.method)).toEqual(['get']);
     expect(custom.mock.calls.map(([request]) => request.url)).toEqual([
-      `/admin/v1/orders/${ORDER_ID}`,
       `/admin/v1/orders/${ORDER_ID}`,
     ]);
     expect(reports).toHaveLength(1);

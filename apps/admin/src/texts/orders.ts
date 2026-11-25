@@ -229,8 +229,6 @@ export const ordersTexts = {
       /** BR-TEXT-05: a display_status this console does not know (order_status.UNKNOWN). */
       unknownDisplay: '未知状态 UNKNOWN',
     },
-    /** F1-07ee: rereads this order once (GET only, nothing is sent). */
-    refresh: '刷新',
 
     basic: {
       title: '基本信息',
@@ -392,8 +390,9 @@ export const ordersTexts = {
     pendingPrompt: {
       notice: '这一订单上次的操作结果未知',
       moment: (time: string): string => `结果未知的时间：${time}（北京时间）。`,
-      check: '请先点【刷新】重新读取订单、核对是否已生效，核对后点【关闭】再操作。',
-      statusUnknown: '订单当前状态本端无法识别，暂不能重试；请点【刷新】，状态可识别后再处理。',
+      check: '请先重新打开本页读取订单、核对是否已生效，核对后点【关闭】再操作。',
+      statusUnknown:
+        '订单当前状态本端无法识别，暂不能重试；请稍后重新打开本页，状态可识别后再处理。',
       close: '关闭',
     },
     result: {
