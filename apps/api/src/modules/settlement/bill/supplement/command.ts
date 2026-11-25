@@ -7,7 +7,7 @@ import {
   transitionSettleBatch,
   type BillValidationResult,
 } from '@couli/domain';
-import { applyReserve, parseFen, subFen } from '@couli/money';
+import { parseFen, subFen } from '@couli/money';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import { pino, type Logger } from 'pino';
 import { lockOrderKey } from '../../../orders/index.ts';
@@ -15,13 +15,14 @@ import { newUuidV7 } from '../../../platform/index.ts';
 import { lockCreditGateExclusive } from '../../batch/credit-gate.ts';
 import { decidingSettlement, latestSeqWithin } from '../../settlements/index.ts';
 import {
-  registerAmountMismatch,
-  unionConclusionApplies,
+  createFollowUnion,
+  logRegenerationDeferred,
+  regenerationCapOf,
+  regenerationQuota,
+} from '../follow-union.ts';
+import {
   type BillJobDependencies,
   type BillReconDiffInput,
-  type BillSnapshot,
-  type BillSnapshotSelection,
-  type BillSourceOrder,
   type BillSourceRow,
   type BillSourceSelection,
   type BillValidation,
@@ -35,17 +36,22 @@ import {
 } from '../settle-job.ts';
 
 // 补充批次（BR-FUND-04 ⑧⑨⑫）：finance 对同一月结账单发起补充校验与批次，流程同账单日任务
-// （逐单校验、差错单经 ledger registerReconDiff、DRAFT 只经 settle-batch transition()、补记项只进
+// （逐单校验、union_mismatch 差错单经登记端口（生产为 ledger registerReconDiffWriteOnly）、DRAFT 只经 settle-batch transition()、补记项只进
 // 其订单平台的批次），kind = supplement，单独确认。step-up、HTTP 与审计归 B2-09。
 // 补充批次不是账单生成：不等资产快照（③ 属账单日任务）。
 // 应结未结（missing_settlement）不登记差错单（2026-11-21 起）；补充轮不写 settle_bills 的任何计数列。
+// B2-18（BR-FUND-04 ④、BR-FUND-01 R7）：金额不一致同账单日任务，在补充事务里按联盟结算数据追加一个金额
+// 版本再校验（../follow-union.ts）：一致进补充批次；仍不一致、重生成失败、端口未注入、零结算的告警工程、
+// 不入批、保持 WAITING；不登记差错单，也不回写账单的 amount_mismatch_count。「以联盟为准」结论不再读。
+// B2-18d（BR-FUND-04 ④「一次出账的重生成上限」）：一次补充与账单日任务同一个上限与同一段判断（../follow-union.ts）；
+// 名额已满时被留下的单不入批、不登记、不进逐单结果，只打一条 settle_regeneration_deferred（run = supplement）。
 
 /**
- * 与账单日任务同一组端口（不含资产快照读口）。logger 供任务键顺延时打一行 warn；
- * 生产装配（B2-09）应传根 logger 的 child，未传时退回一个只打 warn 以上的 pino 实例。
+ * 与账单日任务同一组端口（不含资产快照读口）。logger 供任务键顺延时打一行 warn、金额不一致未解决时打一行
+ * error 级告警工程（B2-18）；生产装配（B2-09）应传根 logger 的 child，未传时退回一个只打 warn 以上的 pino 实例。
  */
-export type SupplementDependencies = Omit<BillJobDependencies, 'snapshotStatus'> & {
-  readonly logger?: Pick<Logger, 'warn'>;
+export type SupplementDependencies = Omit<BillJobDependencies, 'snapshotStatus' | 'logger'> & {
+  readonly logger?: Pick<Logger, 'warn' | 'error'>;
   /**
    * B2-04re：候选订单键锁的分块大小（每块：保存点 → 块内按订单键升序取订单键锁 → 经来源读口再读一次 →
    * 回滚到保存点放掉这一块的订单键锁）。只供测试注入；生产不传，取实现里的默认常量。
@@ -255,12 +261,6 @@ function chunks<T>(rows: readonly T[], size: number): T[][] {
   return out;
 }
 
-/** BR-CALC-02：B = max(0, floor(max(0,N) × (10000 − reserve_bp) / 10000) − tlj_deduct_fen)。 */
-function convertBase(commissionFen: bigint, reserveBp: number, tljDeductFen: bigint): bigint {
-  const afterReserve = applyReserve(commissionFen, BigInt(reserveBp)).after_reserve_fen;
-  return afterReserve > tljDeductFen ? subFen(afterReserve, tljDeductFen) : 0n;
-}
-
 function diffInput(
   appId: string,
   billId: string,
@@ -290,7 +290,8 @@ function isRejected(error: unknown): boolean {
 
 export function createSupplementCommand(dependencies: SupplementDependencies): SupplementCommand {
   const deps = dependencies;
-  const logger: Pick<Logger, 'warn'> = deps.logger ?? pino({ level: 'warn' });
+  const logger: Pick<Logger, 'warn' | 'error'> = deps.logger ?? pino({ level: 'warn' });
+  const followUnion = createFollowUnion(deps);
 
   /** 同账单日任务的取法（BR-FUND-04 ③：默认 24，取值 22–28）。 */
   async function readBillDay(appId: string): Promise<number> {
@@ -335,19 +336,6 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
     // credit.enabled.<platform> 默认 off（BR-CALC-03）；只认明确的 on。
     const enabled = await deps.config.get(appId, `credit.enabled.${platform}`);
     return enabled === 'on' || enabled === true;
-  }
-
-  async function readSnapshotOrThrow(
-    trx: Transaction<DB>,
-    selection: BillSnapshotSelection,
-  ): Promise<BillSnapshot> {
-    const snapshot = await deps.readSnapshot(trx, selection);
-    if (snapshot === null) {
-      throw new Error(
-        `settlement supplement: commission snapshot v${String(selection.commissionVersion)} missing`,
-      );
-    }
-    return snapshot;
   }
 
   /** 锁住目标账单行（同账单的补充与账单日任务在此串行）；前置条件不成立抛 SupplementRejected。 */
@@ -435,6 +423,7 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
     jobRunAt: SupplementJobRunAt,
     target: Target,
     now: Date,
+    regenerationCap: number,
   ): Promise<SupplementResult> {
     if (!(await creditEnabled(appId, platform))) {
       throw new SupplementRejectedError('credit_disabled');
@@ -472,24 +461,14 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
     };
     // 截点固定在发起那一刻（now 由入口取一次）：等锁期间 Clock 往前走也不改截点，本函数不再读 Clock。
     const cutoffMs = now.getTime();
-    const facts = (
-      order: BillSourceOrder,
-      snapshots: readonly { commission_version: number; base_fen: bigint }[],
-    ) => ({
-      rebate_status: order.rebateStatus,
-      settle_period: order.settlePeriod,
-      hold: order.hold,
-      rights_pending: order.rightsPending,
-      snapshots,
-      union_authoritative: order.unionAuthoritative,
-    });
     // 两个数不是同一条记录（B2-04zp，BR-FUND-09）：金额、来源、取得时间看决定金额的 chosen；settle_seq 看
     // 截点内整单最大 seq。R5 与 R5a 比的是整单最大 seq（BR-FUND-04 ⑦），记成 chosen.seq 的话，STATEMENT
     // 之后再来一条 API 的单每轮都会被 settlement_changed 跳过，永远入不了账。
-    // 先不读快照判范围与类别（占位快照只用来区分「需要比金额」），再按需读当前版本快照复核。
     const preliminaryOf = (row: BillSourceRow) => {
       const chosen = decidingSettlement(row.settlements, cutoffMs);
       const order = row.order;
+      // 先不读快照判范围与类别（占位快照与 union_authoritative=true 只用来区分「需要比金额」，不是差错单结论），
+      // 金额由 follow-union 按当前版本快照复核。
       const preliminary = classifySettlementBillOrder({
         bill_period: billId,
         generation_started_at: now,
@@ -497,7 +476,11 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
           order === null
             ? null
             : {
-                ...facts(order, [{ commission_version: 0, base_fen: 0n }]),
+                rebate_status: order.rebateStatus,
+                settle_period: order.settlePeriod,
+                hold: order.hold,
+                rights_pending: order.rightsPending,
+                snapshots: [{ commission_version: 0, base_fen: 0n }],
                 union_authoritative: true,
               },
         settlement:
@@ -558,6 +541,10 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
     const candidates = new Map<string, CandidateFacts>();
     const credited: CreditedFacts[] = [];
     let heldCount = 0;
+    // BR-FUND-04 ④ 重生成上限：本次补充的名额与被留下的张数（同账单日任务，见 ../job.ts）。分块重读（上面
+    // lockAndReread）已回滚放掉了它取的全部订单键锁；被留下的单在这之后不再取锁。
+    const quota = regenerationQuota(regenerationCap);
+    let regenerationDeferred = 0;
 
     for (const row of rows) {
       const { chosen, preliminary } = preliminaryOf(row);
@@ -565,72 +552,64 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
       if (preliminary === null) continue;
 
       let result: BillValidationResult = preliminary;
+      let settleSeq = chosen === null ? null : latestSeqWithin(row.settlements, cutoffMs, chosen);
+      // 决定金额那条结算记录的佣金：锁前取 chosen；锁后重判时取锁后重读到的（r2，资金评审 r1 第 3 条）。
+      let decidingFen: bigint | null = chosen === null ? null : chosen.commissionFen;
+      let judged = false;
       if (order !== null && preliminary === 'candidate' && chosen !== null) {
-        const snapshotSelection = {
-          appId,
-          orderId: order.orderId,
-          commissionVersion: order.commissionVersion,
-        };
-        const snapshot = await readSnapshotOrThrow(trx, snapshotSelection);
-        const tlj = await deps.readTljDeductFen(trx, snapshotSelection);
-        const bSettle = convertBase(chosen.commissionFen, snapshot.reserveBp, tlj);
-        const final = classifySettlementBillOrder({
-          bill_period: billId,
-          generation_started_at: now,
-          order: {
-            ...facts(order, [
-              { commission_version: order.commissionVersion, base_fen: snapshot.baseFen },
-            ]),
-            union_authoritative: unionConclusionApplies(order, snapshot.baseFen, bSettle),
-          },
-          settlement: {
-            source: chosen.source,
-            created_at: chosen.createdAt,
-            settle_commission_fen: chosen.commissionFen,
-            b_settle_fen: bSettle,
-          },
-          match_tolerance_fen: toleranceFen,
-        });
-        if (final === null) throw new Error('settlement supplement: classification changed scope');
-        result = final;
-        if (result === 'candidate') {
+        // B2-18：金额比较与「跟随联盟」重生成，与补充批次同一事务；不登记差错单。
+        const outcome = await followUnion.check(
+          trx,
+          { appId, billId, now, toleranceFen, run: 'supplement', logger, quota },
+          row,
+          order,
+          chosen,
+        );
+        if (outcome.kind === 'candidate') {
+          judged = true;
+          result = 'candidate';
+          settleSeq = outcome.settleSeq;
           candidates.set(row.orderKey, {
             orderId: order.orderId,
-            settleSeq: latestSeqWithin(row.settlements, cutoffMs, chosen),
-            bSettleFen: bSettle,
+            settleSeq: outcome.settleSeq,
+            bSettleFen: outcome.bSettleFen,
           });
+        } else if (outcome.kind === 'mismatch') {
+          // 告警已由 follow-union 打出；不入批、保持 WAITING；补充轮不回写账单计数列。
+          judged = true;
+          result = 'amount_mismatch';
+        } else if (outcome.kind === 'regeneration_deferred') {
+          // 名额已满（D10-3046 (2)(3)）：不重算、不入批、不登记差错单、不告警、保持 WAITING、不进逐单结果。
+          regenerationDeferred += 1;
+          continue;
         } else {
-          // 同账单同单同金额的差错由 registerReconDiff 的业务键去重，不重复登记（D10-506 ③）。
-          await registerAmountMismatch(
-            deps,
-            trx,
-            diffInput(
-              appId,
-              billId,
-              'settle_amount_mismatch',
-              row.orderKey,
-              snapshot.baseFen,
-              bSettle,
-            ),
-          );
+          // 锁后重读到订单已不在候选范围（例如同步期间被 hold、转为 VOID）：按重读结果走下面与锁前同一组分支
+          // （r2，资金评审 r1 第 3 条），不比较金额。
+          if (outcome.result === null) continue;
+          result = outcome.result;
+          settleSeq = outcome.settleSeq;
+          decidingFen = outcome.commissionFen;
         }
-      } else if (preliminary === 'missing_settlement') {
+      }
+      if (judged) {
+        // 候选 / 金额不一致已在上面处理完。
+      } else if (result === 'missing_settlement') {
         // BR-FUND-04 ④（2026-11-21）：仍无联盟结算数据的只是「应结未结」，不登记差错单；补充轮也不改
         // 账单的 unsettled_count（那是出账当时的数，与 error_count 同一性质）。逐单结果照旧记录。
-      } else if (preliminary === 'unexpected_settlement' && chosen !== null) {
+      } else if (result === 'unexpected_settlement' && decidingFen !== null) {
         // BR-FUND-09：联盟有结算而我方 ESTIMATED / VOID / CLAWED_BACK 或无单，登记联盟差错。
         await deps.registerDiff(
           trx,
-          diffInput(appId, billId, 'union_mismatch', row.orderKey, 0n, chosen.commissionFen),
+          diffInput(appId, billId, 'union_mismatch', row.orderKey, 0n, decidingFen),
           { clock: deps.clock },
         );
-      } else if (preliminary === 'deferred') {
+      } else if (result === 'deferred') {
         heldCount += 1;
-      } else if (preliminary === 'already_credited' && order !== null && chosen !== null) {
+      } else if (result === 'already_credited' && order !== null && settleSeq !== null) {
         credited.push({
           orderKey: row.orderKey,
           orderId: order.orderId,
-          settleSeq: latestSeqWithin(row.settlements, cutoffMs, chosen),
+          settleSeq,
         });
       }
 
@@ -638,9 +617,14 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
         orderKey: row.orderKey,
         orderId: order === null ? null : order.orderId,
         result,
-        settleSeq: chosen === null ? null : latestSeqWithin(row.settlements, cutoffMs, chosen),
+        settleSeq,
       });
     }
+    logRegenerationDeferred(
+      logger,
+      { appId, billId, platform, run: 'supplement' },
+      regenerationDeferred,
+    );
 
     await deps.saveValidations(trx, selection, validations);
 
@@ -754,12 +738,16 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
     requestedAt: Date,
     target: Target,
   ): Promise<SupplementResult> {
+    // 先于任何读写（也先于失败时记 failed 的那一步）：非正整数的上限抛 RangeError，缺省与注入同一段校验。
+    const regenerationCap = regenerationCapOf(deps.regenerationCap);
     const now = deps.clock.now();
     const jobRunAt = supplementJobRunAt(requestedAt, await readBillDay(appId));
     try {
       return await db
         .transaction()
-        .execute((trx) => generate(trx, appId, platform, requestedAt, jobRunAt, target, now));
+        .execute((trx) =>
+          generate(trx, appId, platform, requestedAt, jobRunAt, target, now, regenerationCap),
+        );
     } catch (error) {
       // 前置条件拒绝不写任何表；其余错误时生成事务已整体回滚，另起事务把该键记为 failed，
       // 同键重试经 RETRY 重跑。
@@ -781,11 +769,12 @@ export function createSupplementCommand(dependencies: SupplementDependencies): S
       });
     },
     async launchInTransaction(trx, input) {
+      const regenerationCap = regenerationCapOf(deps.regenerationCap);
       const now = deps.clock.now();
       const { appId, platform, requestedAt, billId } = input;
       const jobRunAt = supplementJobRunAt(requestedAt, await readBillDay(appId));
       const target = { billId, refusePendingDraft: true };
-      return generate(trx, appId, platform, requestedAt, jobRunAt, target, now);
+      return generate(trx, appId, platform, requestedAt, jobRunAt, target, now, regenerationCap);
     },
     recheckCurrentBill(db, input) {
       return execute(db, input.appId, input.platform, input.requestedAt, { billId: null });

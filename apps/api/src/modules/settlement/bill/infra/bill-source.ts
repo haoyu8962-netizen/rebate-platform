@@ -2,7 +2,9 @@
 // Read only, on the job's transaction: the app / platform's orders with every order_settlements row,
 // plus settlement rows without an order (order = null). Scope, cut-off and the greatest seq stay
 // with the bill job; nothing the job has to judge is filtered out here.
-// unionAuthoritative comes only from ledger's recon diff conclusion port (never from a closed status).
+// B2-18 (D10-2415 ③, D10-2567): the recon diff 「以联盟为准」 conclusion is no longer an input of the
+// bill or the supplement. The reader never calls the conclusion port it may still be given (kept until
+// FU-B2-18-RETIRE-UNION-CONCLUSION) and never reads recon_diffs; unionAuthoritative is always false.
 //
 // settlement reads orders / order_keys / order_settlements on the caller's transaction, as the
 // credit store does (credit-store.ts). UNATTRIBUTED orders are not one of the bill's six results
@@ -21,13 +23,14 @@ import type {
 
 /**
  * Structurally ledger's readUnionAuthoritativeOrderKeys (a Map with the concluded amounts, D10-506).
- * A plain Set of keys carries no amounts: the order is then flagged without unionConclusions.
+ * B2-18: still part of the shape (the assemblies and frozen kits pass it) but never called; the bill
+ * no longer reads conclusions.
  */
 export interface BillSourceDependencies {
-  readUnionAuthoritative(
+  readonly readUnionAuthoritative: (
     db: Kysely<DB>,
     selection: { readonly appId: string; readonly orderKeys: readonly string[] },
-  ): Promise<ReadonlySet<string> | ReadonlyMap<string, readonly BillUnionConclusion[]>>;
+  ) => Promise<ReadonlySet<string> | ReadonlyMap<string, readonly BillUnionConclusion[]>>;
 }
 
 type BillRebateStatus = BillSourceOrder['rebateStatus'];
@@ -135,6 +138,8 @@ function settlementFact(row: SourceFactRow): SettlementFact {
 export function createBillSourceReader(
   dependencies: BillSourceDependencies,
 ): BillJobDependencies['readSource'] {
+  // B2-18: the conclusion port is not used (see the header).
+  void dependencies;
   return async (trx, input) => {
     // FU-B204ZD-SNAPSHOT: orders and order_settlements in ONE statement, so both come from the same
     // snapshot even on a READ COMMITTED transaction with other statements before this one (an
@@ -190,16 +195,9 @@ export function createBillSourceReader(
       });
     }
 
-    const orderKeys = [...facts.values()].map((fact) => fact.key).sort(compareText);
-    const authoritative =
-      orderKeys.length === 0
-        ? new Set<string>()
-        : await dependencies.readUnionAuthoritative(trx, { appId: input.appId, orderKeys });
-
     const rows: BillSourceRow[] = [];
     for (const [orderId, entry] of byOrder) {
       const fact = facts.get(orderId);
-      const conclusions = authoritative instanceof Map ? authoritative.get(entry.key) : undefined;
       rows.push({
         orderKey: entry.key,
         order:
@@ -212,8 +210,7 @@ export function createBillSourceReader(
                 hold: fact.row.hold,
                 rightsPending: fact.row.rights_pending,
                 commissionVersion: fact.row.commission_version,
-                unionAuthoritative: authoritative.has(entry.key),
-                ...(conclusions === undefined ? {} : { unionConclusions: conclusions }),
+                unionAuthoritative: false,
               },
         settlements: entry.settlements,
       });

@@ -264,8 +264,8 @@ import {
   readForfeitAmount,
   readPersonalDataCopyLedgerEntries,
   readUnionAuthoritativeOrderKeys,
-  registerReconDiff,
   registerReconDiffOnce,
+  registerReconDiffWriteOnly,
   type EarningsSummaryDependencies,
   type WalletLedgerDependencies,
   type WalletSummaryDependencies,
@@ -2351,6 +2351,21 @@ const orderEstimateSource = {
 };
 
 /**
+ * B2-18 (BR-FUND-04 ④, BR-FUND-01 R7): commission's estimates refresh with an explicit value over
+ * the entry's clock, for settlement's bill / supplement snapshot regeneration. The caller (settlement)
+ * holds the order key lock and has moved orders.commission_version; commission writes that version's
+ * totals and amount rows on the caller's transaction. Building reads nothing.
+ */
+function commissionRefresh(clock: Clock) {
+  const estimates = createCommissionEstimates({ clock, ...orderEstimateSource });
+  return (
+    trx: Transaction<Database>,
+    ref: { readonly appId: string; readonly orderId: string; readonly attrAt: Date },
+    value: { readonly commissionFen: bigint },
+  ): Promise<void> => estimates.refresh(trx, ref, value);
+}
+
+/**
  * B2-09gd: the scene of an order's pid for an R12's snapshot, on the restore's transaction. orders
  * keeps no union_account_id, so the pid is looked up by app and platform; none, or two accounts
  * with different scenes, is null (the scene cannot be read).
@@ -4149,7 +4164,7 @@ function settlementWorkerModule(): DynamicModule {
     appendBeneficiaryEvent,
     readUnionAuthoritative: readUnionAuthoritativeOrderKeys,
     snapshotStatus: getAssetSnapshotStatus,
-    registerDiff: registerReconDiff,
+    registerDiff: registerReconDiffWriteOnly,
     readOrderNets: getOrderNets,
     // D10-587: the bus publishes account.went_negative, the hook lifts NEGATIVE_BALANCE.
     ledger: (clock, eventBus) =>
@@ -4179,6 +4194,9 @@ function settlementWorkerModule(): DynamicModule {
       }),
     // B2-09zb (D10-780): the audit of candidates superseded by a newer commission_version.
     systemAudit: (clock) => createSystemAuditWriter({ clock, sensitiveKeys: SENSITIVE_KEYS }),
+    // B2-18 (BR-FUND-04 ④, BR-FUND-01 R7): the bill job's snapshot regeneration writes the new
+    // amount version through commission's estimates refresh (same order read as the rebate port's).
+    regenerationRefresh: commissionRefresh,
   };
   // B2-04zzl: only this entry consumes order.blacklist_hit_after_credit.
   return SettlementModule.forWorker(ports, { blacklistReview: true, orderAppealRestore: true });
@@ -5385,8 +5403,11 @@ export class AppModule {
                 snapshotStatus: getAssetSnapshotStatus,
                 readSnapshot: readCommissionSnapshot,
                 readTljDeductFen,
-                registerDiff: registerReconDiff,
+                registerDiff: registerReconDiffWriteOnly,
+                // Kept in the shape; the supplement never calls it (B2-18, D10-2415 ③).
                 readUnionAuthoritative: readUnionAuthoritativeOrderKeys,
+                // B2-18: the supplement's snapshot regeneration (commission's estimates refresh).
+                regenerationRefresh: commissionRefresh,
                 // B2-09g: the account-appeal restore (order.restore, step-up totp): identity's
                 // users row lock and deletion status, commission's attribution read and event
                 // writer, the ledger with the negative-balance recovery of payout. B2-09ga
