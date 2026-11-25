@@ -17,8 +17,9 @@
 // The detail is read when the page opens, once after 20902, and once each time a marker left
 // before opening goes (its request got a definite answer in this tab, or it was given up): from
 // that very render until that read is shown the write entries stay locked and the earlier detail
-// is not shown as the current one (a read sent before it went is dropped). No read ever shows
-// over a newer write (./detail-writes/detailGate.ts, BR-FUND-06).
+// is not shown as the current one (a read sent before it went is dropped), and 【同步此单】 is not
+// shown either until that read is shown (it stays as it was while the marker is there). No read
+// ever shows over a newer write (./detail-writes/detailGate.ts, BR-FUND-06).
 import { ArrowLeftOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons';
 import { beneficiary_role } from '@couli/contracts-ts';
 import { useDataProvider } from '@refinedev/core';
@@ -175,9 +176,10 @@ function OrderDetailContent({
     void navigate(`/orders${query === undefined ? '' : searchOf(query)}`, { state });
   };
 
-  // 【同步此单】 (F1-07eb, CT-24n): sends at once { platform, order_nos: [this sub-order] }.
+  // 【同步此单】 (F1-07eb, CT-24n): sends at once { platform, order_nos: [this sub-order] }; only
+  // while the detail is shown and no reread after a drop is waiting (the write entries' gate).
   const syncThisOrder = async (shown: OrderDetail) => {
-    if (sync.busy) return;
+    if (view !== 'ready' || sync.busy) return;
     const outcome = await sync.send({ platform: shown.platform, order_nos: [shown.sub_order_id] });
     if (outcome === undefined) return;
     const text =
@@ -233,8 +235,9 @@ function OrderDetailContent({
             locked={locked}
           />
         )}
-        {/* BR-TEXT-05: no write action, 【同步此单】 included, for a status this console does not know. */}
-        {order === undefined || status !== 'ready' || !knownStatuses(order) ? null : (
+        {/* BR-TEXT-05: no write action, 【同步此单】 included, for a status this console does not know;
+            none either until the read sent after the last drop is shown (`view`, approvals 209). */}
+        {order === undefined || view !== 'ready' || !knownStatuses(order) ? null : (
           <Button
             icon={<SyncOutlined aria-hidden />}
             disabled={sync.busy}

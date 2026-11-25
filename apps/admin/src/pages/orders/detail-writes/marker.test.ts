@@ -4,7 +4,8 @@
 // and shows only a read-only prompt, never with 【关闭】: 【放弃这次提交】 (confirmed) only once the
 // page's own read is shown and no write of the order is waiting for its answer in this tab; once
 // the left marker goes, the page reads the detail once again and offers no entry until that read
-// is shown; an unknown status never opens a dialog or offers 【重试】; no reread button.
+// is shown (【同步此单】 included, r8); an unknown status never opens a dialog or offers 【重试】;
+// no reread button.
 import {
   act,
   cleanup,
@@ -684,4 +685,64 @@ it('[AC-F1-07ee-UNIT#27] A10 旧实例收到 10001：标记留下、不重读；
   expect(readUnknown(SCOPE)).toBeDefined();
   expect(entriesShown()).toEqual([]);
   expect(gets()).toBe(1);
+});
+
+it('[AC-F1-07ee-UNIT#28] A11 遗留标记消失后重读回答前：没有【同步此单】、不发 order-syncs；标记还在时与重读显示后都有', async () => {
+  const syncEntry = () => screen.queryByRole('button', { name: ordersTexts.sync.thisOrderEntry });
+  const syncPosts = () =>
+    custom.mock.calls.filter(([request]) => request.url === '/admin/v1/order-syncs').length;
+  // The marker goes in either way: the earlier mount's request succeeds, or it is given up.
+  const drops: readonly ((reread: ReturnType<typeof controlled>) => Promise<void>)[] = [
+    async (reread) => {
+      const post = await earlierWriteInFlight();
+      answers.push(() => Promise.resolve({ data: v7 }));
+      renderPage();
+      await detailShown();
+      // The left marker is still there: 【同步此单】 as before (r5 on).
+      expect(syncEntry(), 'shown while the marker is there').not.toBeNull();
+      answers.push(reread.answer);
+      await act(async () => {
+        post.resolve({ data: v8held });
+        await Promise.resolve();
+      });
+    },
+    async (reread) => {
+      await leftMarker();
+      answers.push(() => Promise.resolve({ data: v7 }));
+      renderPage();
+      await detailShown();
+      expect(await screen.findByRole('button', { name: p.abandon })).toBeDefined();
+      expect(syncEntry(), 'shown while the marker is there').not.toBeNull();
+      answers.push(reread.answer);
+      const dialog = await openAbandon();
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole('button', { name: p.abandonOk }));
+      });
+    },
+  ];
+  for (const drop of drops) {
+    const reread = controlled();
+    await drop(reread);
+    await waitFor(() => expect(readUnknown(SCOPE)).toBeUndefined());
+    await waitFor(() => expect(gets()).toBe(2));
+    // The reread has no answer yet: no 【同步此单】 (nor any write entry), nothing synced.
+    expect(screen.getByText(ordersTexts.detail.loading)).toBeDefined();
+    expect(syncEntry(), 'no 【同步此单】 before the reread is shown').toBeNull();
+    expect(entriesShown()).toEqual([]);
+    expect(syncPosts()).toBe(0);
+    await act(async () => {
+      reread.resolve({ data: v8held });
+      await Promise.resolve();
+    });
+    expect(
+      await screen.findByRole('button', { name: ordersTexts.sync.thisOrderEntry }),
+    ).toBeDefined();
+    expect(screen.getByRole('button', { name: e.unhold })).toBeDefined();
+    expect(syncPosts()).toBe(0);
+    await settle();
+    expect(gets()).toBe(2);
+    cleanup();
+    custom.mockClear();
+    answers.length = 0;
+  }
 });
