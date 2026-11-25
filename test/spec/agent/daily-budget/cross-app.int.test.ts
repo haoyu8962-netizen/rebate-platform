@@ -6,7 +6,6 @@ import { searchTools } from '../stream-model-prereq/kit.ts';
 import {
   LEVEL,
   consent,
-  fileText,
   message,
   newMember,
   openAgent,
@@ -75,7 +74,7 @@ it('[AC-B3-09m#29] 全平台按最小预算和最大预占熔断新 run，之前
     const blocked = doneView(await send(rig, caller, two, message(QUERY)), 'budget');
     expect(rig.transport).toHaveBeenCalledTimes(1);
     expect(blocked.frames.some((frame) => frame.data['type'] === 'product_list')).toBe(true);
-    expect(blocked.text).toContain(fileText('agent.degraded'));
+    expect(blocked.text).toContain('合成文案:agent.degraded');
     expect(await reservationRow(pg.db, blocked.runId)).toBeUndefined();
     expect(await runRow(pg.db, blocked.runId)).toMatchObject({ cost_mfen: null });
     hold.resolve();
