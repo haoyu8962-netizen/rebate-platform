@@ -10,6 +10,7 @@ type: test-change
 # 做法：只新增 test/spec/settlement/bill-unsettled-count/companion/ 下的文件（现有 kit 与辅助文件只读引用，不改任何冻结文件，不改实现）；三处各至少一条，金额与计数写具体数。
 # 实现已在主干（#524），新用例在主干上应为绿；有牙由探针清单证明（D10-2264）：P1 把计数的写入挪到出账事务之外、P2 在迁移之后追加一条回填语句、P3 进批时改写订单行 settle_period，
 #   每个探针杀到哪几条写进 PR 正文与证据。不登 red_exempt。spec-test 由 Codex 做；本机不跑 vitest，走测试机 --tests（D10-2404）。
+# 2026-11-26 补丁 1（funds，编排 D10-3291，取代 D10-2449 (一) 里的这一项）：② 撤掉，探针 P2 不做；本单只做 ①③，探针 P1、P3。理由：迁移 0154 已合并，db/migrations 是只增不改的保护路径，改它过不了 protected-paths；规则测试库从已迁移到最新的模板克隆、只能以业务角色连接，「升级后两列仍为 NULL」的实测做不了，静态白名单只能再钉一遍这份已冻结的文件，后来的新迁移它也管不到。标题按门禁保留原文。
 refs: [BR-FUND-04, BR-FUND-09]
 refs_hash:
   BR-FUND-04: faf2ddd22d5b
