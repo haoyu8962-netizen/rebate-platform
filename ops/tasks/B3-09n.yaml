@@ -5,6 +5,7 @@ type: impl
 # 2026-11-25 agent 线入账（D10-2848 改判甲、D10-2849 同意范围与「kit.ts 一字不动、只在用例块内补期望值」、D10-2861 核过探针放行；探针 couli-runs/B3-09m/kit-probe/：--early shape 0、content 全绿）。B3-09m 把 agent.models 放在 LOOKUP_ONLY；本单只把它列进列表，负责人填单价前必须能在后台看到。
 # 只做：config-registry.ts 挪一项 + 实现单测 config-registry.test.ts 长度 189 → 190、Agent 键为日历十键之前的 27 项（原 26）、[AC-B3-09m#u5] 改为列出；10 条冻结用例块内期望值只多 agent.models 一项（无种子键清单也多这一项，[AC-F1-10e#3] 计数多减 1）。不改 test/spec/content/config-items/kit.ts 与任何块外代码；[AC-F1-10e#10] 块内对 agent.models 写出其「未写过」期望值（kit 的 unwritten 查不到它）。B3-09o 合并后开工。
 # 台账补丁 1（2026-11-26，D10-3339 / D10-3340）：title 写的「10 条」是入账时的数，已入账任务的 title 门禁不许改（ledger-overwrite），照原样留着——本单冻结用例块内改动实为 11 条（10 条全量键序块 + 下面 ② 这一条）。① 数字照 B1-34s #821 落地后的主干更正（入账时写的「长度 180 / Agent 尾 27」是旧主干的数）。② 加第 11 条 modify_existing：B3-09m 重写规则测试时钉了当时的现状 test/spec/agent/daily-budget/config.test.ts [AC-B3-09m#36]「configRegistry() 不含 agent.models」，随 B3-09o #877 进主干；D10-2848 已把「列出」留给后续单，本单即那张后续单——块内只把这一句改为「含」，「按键能查到、类型 object」不动；该目录不属资金 / 归属测试（isMoneyOrAttributionTest 判 false）。③ [AC-F1-10e#10] 照 B1-34s 改后的块结构给 agent.models 写出「未写过」期望。④ config-settle 两块（[AC-F1-02zj#2]、[AC-F1-02zj#13]，目录段含 settle、门禁判资金 / 归属测试）的同类改动负责人 2026-11-25 已同意：ops/approvals.yaml 第 185 条 ⑨（D10-2970），边界是只让配置全集清单与计数认新键、不动任何 settle.* 期望值。⑤ paths 加实现方单测 application/config-item-admin.test.ts：[AC-F1-02zj#11] 写死列表 total 189，本单后 190（只改这个数；不是冻结用例）。探针 couli-runs/B3-09n/probe/：--early shape 0（11 条），测试机 311 个文件除这条单测外全绿、未见第 12 处冻结用例。
+# 台账补丁 2（2026-11-26）：test_paths 加一个新规则测试文件 test/spec/content/config-items/agent-models-listed.test.ts。原因：写测第 1 次只改了 modify_existing 登记的 11 块，red-check 把这类块全部排除在先红之外（D10-701：不跑、不判），verify-container --red 以「本单没有新增规则测试文件、无可先红」退出 2（tools/ops/verify-container.sh:644），先红这一关过不去。新文件用本单自己的 AC 编号钉新行为：agent.models 在 configRegistry() 列表里、紧跟 agent.budget.reserve_mfen_per_run、其后是 agent.context.max_turns、恰好一次；列出的条目是 object / config.business / 可改 / options 为 null、不是开关键。11 块的改法不变。
 # 与 B1-34s（工作日日历十键登进注册表，be 线，D10-2946 / D10-2950）改同一批注册表冻结块：后 land 的一张在先合并的期望清单上再追加，modify_existing 的块前后以 land 时主干为准。
 refs: [BR-AI-16]
 refs_hash:
@@ -22,6 +23,7 @@ test_paths:
   - 'test/spec/content/config-settle/registry.test.ts'
   - 'test/spec/content/invite-reward-config/registry.test.ts'
   - 'test/spec/agent/daily-budget/config.test.ts'
+  - 'test/spec/content/config-items/agent-models-listed.test.ts'
 impl: claude
 tester: codex
 accept:
