@@ -2520,7 +2520,7 @@ it(
     expect(after(tc, '--cap-drop')).toEqual(['ALL']);
     // No output mount, no database address, its own container name; the compiler command.
     expect(tc.some((a) => a.endsWith(':/out'))).toBe(false);
-    expect(tc.some((a) => a.startsWith('TEST_PG_ADMIN_URL'))).toBe(false);
+    expect(tc.some((a) => /^TEST_PG_[A-Z_]*=/u.test(a))).toBe(false);
     expect(after(tc, '--name')[0]).toMatch(/-run-tsc-ct-06zzzzzz-1-\d+$/u);
     expect(tc.join(' ')).toContain('./node_modules/.bin/tsc -b --pretty false test');
 
