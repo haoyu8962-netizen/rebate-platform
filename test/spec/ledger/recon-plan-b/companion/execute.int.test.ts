@@ -14,6 +14,7 @@ import {
   type AdjustFixture,
   type Adjusted,
   type AdminCaller,
+  type Direction,
   type Ref,
 } from '../../admin-adjustments/kit.ts';
 import {
@@ -92,4 +93,49 @@ it('[AC-B2-17b#4] 同一差错单先给会员 1 以 OTHER 调减 120 分，再�
 
 it('[AC-B2-17b#5] 同一差错单先给会员 1 以 PAYOUT_RECOVERY 调减 10000 分，再给会员 2 以 RECON_FIX 调减 250 分，第二笔结案且两行关联均有效', async () => {
   await checkDifferentReasons('PAYOUT_RECOVERY', 'RECON_FIX');
+});
+
+async function checkOppositeDirections(
+  firstDirection: Direction,
+  secondDirection: Direction,
+): Promise<void> {
+  const f = fixture(s);
+  await schemaReady(f.db);
+  await withAdjustAdmin(f, async (h) => {
+    const firstUser = await member(f, { available: 5_000n });
+    const secondUser = await member(f, { available: 5_000n });
+    const closer = await h.caller([ADJUST]);
+    const opened = await seedTicket(f, { users: [firstUser, secondUser] });
+    const refs = [diffRef(opened)];
+
+    const first = await fileOk(f, h, {
+      userId: firstUser,
+      direction: firstDirection,
+      amount: 100n,
+      refs,
+    });
+    const processing = await expectNowProcessing(f, opened);
+    const firstLink = linkOf(f, first.row.adjust_id, opened.id, firstUser);
+    expect(await linksOf(f)).toEqual([firstLink]);
+    tick(f);
+
+    const second = await fileOk(f, h, {
+      caller: closer,
+      userId: secondUser,
+      direction: secondDirection,
+      amount: 100n,
+      refs,
+    });
+    await expectNowAdjusted(f, processing, closer.id);
+    const secondLink = linkOf(f, second.row.adjust_id, opened.id, secondUser);
+    expect(await linksOf(f)).toEqual(sortedLinks([firstLink, secondLink]));
+  });
+}
+
+it('[AC-B2-17b#6] 同一差错单先给会员 1 调增 100 分，差错单进入 processing，再给会员 2 调减 100 分，第二笔结案且两行关联均有效', async () => {
+  await checkOppositeDirections('increase', 'decrease');
+});
+
+it('[AC-B2-17b#7] 同一差错单先给会员 1 调减 100 分，差错单进入 processing，再给会员 2 调增 100 分，第二笔结案且两行关联均有效', async () => {
+  await checkOppositeDirections('decrease', 'increase');
 });

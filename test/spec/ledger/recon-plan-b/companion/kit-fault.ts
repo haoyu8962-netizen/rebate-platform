@@ -1,3 +1,4 @@
+// 故障夹具在后台入口所用 Kysely 句柄的查询转换层计数和注入失败，直接用数据库驱动、另建连接池或由触发器间接写入时均无法计数或注入失败。
 import { PostgresQueryCompiler, type KyselyPlugin } from 'kysely';
 import type { AdjustFixture, AdminSent } from '../../admin-adjustments/kit.ts';
 import type { WritePoint } from '../kit-fault.ts';
