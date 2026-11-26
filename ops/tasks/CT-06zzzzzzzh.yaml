@@ -22,7 +22,7 @@ type: guard-change
 #   REVIEW_BINDING_ENABLED = false（缺省关；第三类保护路径，改它须走 PR 与负责人标签；打开须等另一张门禁单落地、并在一张真实任务上走通后由编排裁定）；checkEvidence 输入加可选 reviewBinding（缺省取该常量，只供测试打开，CLI 不暴露）。关着时落地行为与本单之前逐项相同，README 写明现状为关；③ 的过渡点改由那张门禁单定。
 #   不挂开关、落地即生效（money r1 的 S1-③④⑤ 与 S2，补现行校验的漏洞）：③ 有实现改动时必需的代码评审（money / general / contract）须至少一条合格通过，review_type 为 spec-test 的条目不能顶替；④ 逐条核代码评审条目的 reviewer / engine / model，不合格的条目不计入任何判定；
 #   ⑤ 登记为评审后整理的提交按完整文件清单核允许类别（台账等不在类别内即拒）；S2 斜杠分不清正则还是除法时按逐字相同判。缺省关与 ③④⑤ 由实现方单测钉；规则测试只把入口 checkEvidence 显式传 reviewBinding: true（写测第 3 次只改这一处，另补「缺省关时缺 commit / tree 照旧过」一条）。
-#   money r1 的 S1-①②（变基后绑定失效、工作区评审只记 HEAD）另开门禁单，本单仍不改 codex-run / claude-run / scripts。
+# 2026-11-26 置 void（ops，编排 D10-3108 / D10-3250）：并入 CT-06zzzzzzzi——它接手 money r1 S1-①② 与本单的绑定机制；3 个规则测试提交与未提交的实现 r1–r4 由它带走（快照留 couli-runs/CT-06zzzzzzzh/）；码评审三轮都 fail，r3 两条 S1 进它的实现必满足项；approvals 第 200 条随本单停用。
 refs: []
 refs_hash: {}
 deps: []
@@ -37,4 +37,4 @@ tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/evidence-review-binding/**'
-status: todo
+status: void
