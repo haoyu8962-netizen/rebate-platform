@@ -14,6 +14,7 @@ type: impl
 # 冻结用例改动只有入口层三处（编排 D10-3315 (2) 核对放行并向负责人报告）：改的是「live 凭据从哪来」（环境变量 → KMS），把实现对齐 BR-WDR-13，不改请求参数、金额、状态、打款行为。冻结夹具 entry-kit.ts 不改，新夹具放新文件。
 # 2026-11-26 补丁 1（funds，编排 D10-3317 更正 D10-3315 (2)）：[AC-B2-06f#13] 的凭据对象多出三个证书序列号、连着 live 请求带序列号这一行为变化，改按第三类等负责人确认（连同生产 live 的三处变化：请求带两个序列号、应答核 alipay_cert_sn 并用证书公钥验签、密钥来自 KMS）；[AC-B2-06f#12] 的 4 行与 [AC-B2-06i#10] 仍由编排核对放行。不挡开工。
 # 在途单交叠（D10-3312）：落地排在 QA-13d 之后、谁后落谁变基；B2-11za（payout/infra/**）以后变基。不带迁移、不动契约。
+# 2026-11-27 补丁 3（funds，编排 D10-3379，更正 D10-3365 ①）：撤掉补丁 2 登的两条 red_exempt——red_exempt 只适用于基线上已有、未改动的用例，本任务新写的用例必须先红（red-check.ts 文件头）；[AC-B2-06j#11]（KMS 齐备只缺 appId / 网关即拒绝启动）、[#12]（payout 以外的入口不读打款条目，BR-WDR-13）在主干上本就成立、做不到先红，不进本单规则测试：改为实现必满足项（实现方单测钉住、资金评审点名），落地后由伴随测试单 B2-06ja（test-change，探针 P1 / P2）补成规则测试。
 refs: [BR-WDR-13, BR-WDR-14]
 refs_hash:
   BR-WDR-13: 11b5c3e1a9b3
@@ -30,13 +31,6 @@ test_paths:
   - 'test/spec/payout/alipay-cert-kms/**' # 新目录
   - 'test/spec/payout/entry/entry.test.ts'
   - 'test/spec/payout/query-recovery-wiring/entry.test.ts'
-red_exempt:
-  - file: test/spec/payout/alipay-cert-kms/entry.test.ts
-    test: '[AC-B2-06j#11] prod + live、KMS 四个条目齐备：缺 ALIPAY_APP_ID 或 ALIPAY_GATEWAY_URL（未设或空白）即拒绝启动'
-    reason: '守护性用例，新旧实现下都成立（主干缺 appId / 网关本来就拒绝启动）；防的错误实现见规则测试评审 r1 S1-2：有了 KMS 之后不再校验这两个环境变量'
-  - file: test/spec/payout/alipay-cert-kms/other-entries.test.ts
-    test: '[AC-B2-06j#12] prod、PAYOUT_MODE=live：payout 以外的入口不读 couli/prod/payout/ 下的任何 KMS 条目'
-    reason: '守护性用例，新旧实现下都成立（主干别的入口本来就不读打款条目）；防的错误实现见规则测试评审 r1 S1-3：读打款条目的一步不按入口判（BR-WDR-13）'
 impl: claude
 tester: codex
 modify_existing:
