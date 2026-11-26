@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { expect, it } from 'vitest';
 import { darkBlocks, leaves, serializedExports } from './dark-kit.ts';
 import {
@@ -197,7 +198,7 @@ it('[AC-CT-11bv#1] v0.5.2 → v0.5.3 只改七个浅色取值，不加不删键�
     const after = record(actual.get(key));
     expect(after, key).toEqual(upgradedTo053(key, token));
     expect(after.dark, `${key} dark`).toEqual(token.dark);
-    if (after.value !== token.value) changed.push(key);
+    if (!isDeepStrictEqual(after.value, token.value)) changed.push(key);
   }
   expect(changed.sort()).toEqual(Object.keys(v053Values).sort());
   expect(Object.keys(v053Descriptions).every((key) => actual.has(key))).toBe(true);
