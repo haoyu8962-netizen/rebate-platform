@@ -263,11 +263,11 @@ export const tokenValues = {
         subtle: '#FBEFE8',
       },
       background: {
-        canvas: '#F2EEE6',
+        canvas: '#F6F5F3',
         'admin-canvas': '#F6F3ED',
         surface: '#FFFFFF',
-        muted: '#EFEAE2',
-        placeholder: '#E9E2D9',
+        muted: '#F2F1EF',
+        placeholder: '#EBEAE7',
       },
       text: {
         primary: '#28251F',
@@ -289,7 +289,7 @@ export const tokenValues = {
       status: {
         pending: {
           text: '#655E57',
-          background: '#EFEAE2',
+          background: '#F2F1EF',
         },
         success: {
           text: '#26735B',
@@ -305,7 +305,7 @@ export const tokenValues = {
         },
       },
       border: {
-        subtle: '#E4DED5',
+        subtle: '#E6E5E3',
         control: '#8A8177',
         active: '#28251F',
       },
@@ -315,7 +315,7 @@ export const tokenValues = {
       source: {
         text: '#655E57',
         background: '#FFFFFF',
-        border: '#E4DED5',
+        border: '#E6E5E3',
       },
       platform: {
         tag: {
@@ -336,7 +336,7 @@ export const tokenValues = {
             text: '#FFFFFF',
           },
           disabled: {
-            background: '#E9E2D9',
+            background: '#EBEAE7',
             text: '#655E57',
           },
         },

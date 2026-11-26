@@ -171,7 +171,7 @@ it('rejects dark on other token types and invalid dark values', () => {
 });
 
 it('exports resolved light and dark values from the committed theme', () => {
-  expect(tokenValues.light.color.background.canvas).toBe('#F2EEE6');
+  expect(tokenValues.light.color.background.canvas).toBe('#F6F5F3');
   expect(tokenValues.dark.color.background.canvas).toBe('#171513');
   expect(tokenValues.dark.space['4']).toBe(tokenValues.light.space['4']);
 });

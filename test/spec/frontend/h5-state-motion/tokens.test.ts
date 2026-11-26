@@ -1,4 +1,5 @@
-// DSX-48 (编排 D10-838): design tokens v0.5.2 and its motion group in the contracts snapshot and in
+// DSX-48 (编排 D10-838): design tokens v0.5.3 and its motion group (15 tokens, introduced in v0.5.2
+// and unchanged in v0.5.3) in the contracts snapshot and in
 // the generated files of @couli/ui-tokens. Values come from expected.ts (hand written from the
 // planning change note), never from the generator.
 //
@@ -67,7 +68,7 @@ function occurrences(text: string, part: string): number {
 // That every v0.5.1 token is kept and only the motion group is new is checked once, in
 // test/spec/frontend/ui-tokens/upgrade.test.ts ([AC-DSX-48-UPGRADE#1]); the byte-for-byte copy of
 // the planning file in snapshot.test.ts ([AC-CT-11a#1]). This case pins the motion values by hand.
-it('[AC-DSX-48-TOKENS#1] 契约令牌整份升到 0.5.2：metadata 其余字段不变，motion 组 15 个令牌的类型与取值正确', () => {
+it('[AC-DSX-48-TOKENS#1] 契约令牌整份升到 0.5.3：metadata 其余字段不变，motion 组 15 个令牌的类型与取值正确', () => {
   const current = requiredJson(CONTRACT);
   const previous = requiredJson(PREVIOUS_SNAPSHOT);
   const metadata = record(current.metadata, 'metadata');
@@ -88,7 +89,7 @@ it('[AC-DSX-48-TOKENS#1] 契约令牌整份升到 0.5.2：metadata 其余字段�
   }
 });
 
-it('[AC-DSX-48-TOKENS#2] contracts/README 的 design-tokens.json 行改记 0.5.2 与来源提交 c98ae93f…', () => {
+it('[AC-DSX-48-TOKENS#2] contracts/README 的 design-tokens.json 行改记 0.5.3 与来源提交 c404003b…', () => {
   const readme = requiredText('contracts/README.md');
   const delivered = readme.split('## 以后会放在这里的文件')[0] ?? '';
   const rows = delivered

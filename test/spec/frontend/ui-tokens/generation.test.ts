@@ -37,9 +37,9 @@ it('[AC-CT-11a#4] 代表值覆盖新背景、语义颜色、字号、字体、�
   // Expected values copied verbatim from planning variables.css at the pinned source commit
   // (kit.ts sourceCommit()).
   for (const [name, value] of Object.entries({
-    '--color-background-canvas': '#F2EEE6',
+    '--color-background-canvas': '#F6F5F3',
     '--color-background-admin-canvas': '#F6F3ED',
-    '--color-background-placeholder': '#E9E2D9',
+    '--color-background-placeholder': '#EBEAE7',
     '--color-rebate-text': '#A83B1F',
     '--color-price-text': '#28251F',
     '--color-status-pending-text': '#655E57',
@@ -96,7 +96,7 @@ it('[AC-CT-11a#6] Tailwind 4 主题使用有效命名空间并引用全部令牌
     // v0.5.2 (DSX-48): easings feed Tailwind 4's ease-* utilities.
     namespace.cubicBezier = '--ease-';
     expect(type).toBeDefined();
-    expect(branch).toBe('0.5.2');
+    expect(branch).toBe('0.5.3');
     // Tailwind 4 has no theme namespace for plain numbers or durations (duration-* takes numbers).
     if (type !== 'number' && type !== 'duration')
       expect(alias.startsWith(namespace[type!]!), alias).toBe(true);

@@ -7,6 +7,10 @@ type: impl
 # 只做（写死）：① contracts/design-tokens.json 按 couli c404003 的 design/tokens/design-tokens.json 逐字节复制（不手改；不合 prettier 时照 D10-675 / CT-11ba 已有的逐字快照忽略）；contracts/README.md 该行改版本号与来源提交。② pnpm codegen 重生成 packages/ui-tokens 生成物（tokens.gen.css、tailwind.gen.css、theme.gen.ts 等），不手改生成物；packages/ui-tokens/src/index.test.ts 里钉 canvas 旧值的单测随值改。③ 冻结测试 test/spec/frontend/ui-tokens/**：kit.ts 的版本钉值与来源提交换成 0.5.3 / c404003bbecd…，新增逐字夹具 design-tokens.c404003.json、variables.c404003.css（规划仓库 design/tokens/ 逐字副本），下列 7 块只改钉值（版本号、来源提交、夹具名、[AC-CT-11a#4] 里 canvas / placeholder 两个代表值），不放宽、不删断言；可新增一条「v0.5.2 → v0.5.3 只改 7 个取值、不加不删键」的升级用例。照 CT-11ba / CT-11bt 先例，由新鲜独立 Claude 改测试，Codex 只读复审；旧夹具 c98ae93 是否删掉随测试作者判断，删则在 PR 正文列出。④ 截图基准 test/spec/frontend/visual-baseline/__baselines__/：在测试机 browser 跑一次比对，取报告 images/ 里的新截图，只重录差异超阈值的那几张（预计 H5 七页浅色；深色不应变）；后台四张浅色：admin-canvas 不变，后台页面底不应变，但 border.subtle 与 background.muted 后台也在用，边框与弱底色可能有像素差——有变化先报编排，不直接重录。⑤ 人工看一遍 H5 首页、列表、订单页（测试机 browser 截图），附在 PR 正文。
 # 不做：不改任何令牌取值以外的 H5 / 后台代码；不改 lint-style-web 规则测试（里面的十六进制只是待检样例）；不加依赖。
 # 落地方式（请编排定，见入账 PR 正文）：甲（拟用）照 CT-11bt / CT-11bu 先例走非 task 分支、台账同 PR，由负责人按 #24 核钉值与基准图的 before / after 后加 owner-approved 标签——冻结改动只是令牌版本钉值与截图，没有对应的 BR，modify_existing 的四种 reason（rule_change 要 br、tighten_only、flake_fix、ruling_correction）都不贴切；乙 走 task 分支，modify_existing 登这 7 块，reason 待编排定。改 contracts/ 落地时占契约槽。非资金、非归属；Codex contract 评审。排在 F1-07ee r7 之后。
+# 台账补登（2026-11-27，随本单 PR；编排 D10-3362 / D10-3369）：
+#   ① 7 块里 [AC-CT-11bt-BRANCH#1] 标题改为「只认 0.5.3 一个版本，固定夹具存在且与钉值对应」——照字面写成「0.5.2 / 0.5.3 两个版本」会与「拒绝 0.5.2」的断言自相矛盾；[AC-CT-11ba#1] 对 v0.4.0 逐叶整值比对，0.5.3 改了 v0.4.0 已有的令牌，块内加了写死的 0.5.3 变更表（7 个取值 + 4 条 description 原文），其余叶子仍整值比对。新增 [AC-CT-11bv#1]（0.5.2 → 0.5.3 只改 7 个取值、不加删键、深色与 admin-canvas 不变）。
+#   ② 摸底漏登、Codex 复审 r1 指出：test/spec/frontend/h5-state-motion/expected.ts:7–8 的 TOKENS_VERSION / DESIGN_SOURCE_COMMIT（支撑文件）改为 0.5.3 / c404003bbecdff2c67f3e744d81a5ee92e5043ce；tokens.test.ts 的 [AC-DSX-48-TOKENS#1]「契约令牌整份升到 0.5.3：…」、[AC-DSX-48-TOKENS#2]「contracts/README 的 design-tokens.json 行改记 0.5.3 与来源提交 c404003b…」两块断言不动、只随之改标题（原标题里写 0.5.2 / c98ae93f…）。
+#   ③ 截图基准未重录（D10-3369 取乙）：测试机 --browser 不导出 test/.tmp/visual-baseline/，拿不到差异清单与新图；比对只报告不挡。登 FU-CT11BV-REBASELINE：ops 加导出后在同一头上重跑 --browser，H5 浅色照 D10-3145 重录、后台四张或深色超阈值先报编排，H5 首页 / 列表 / 订单页人工看图随之做。
 refs: []
 refs_hash: {}
 deps: [CT-11bu]
@@ -17,6 +21,8 @@ paths:
   - 'test/spec/frontend/visual-baseline/__baselines__/**'
 test_paths:
   - 'test/spec/frontend/ui-tokens/**'
+  - 'test/spec/frontend/h5-state-motion/expected.ts'
+  - 'test/spec/frontend/h5-state-motion/tokens.test.ts'
 impl: claude
 tester: claude-independent
 accept:
