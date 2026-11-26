@@ -1,0 +1,57 @@
+id: B2-06j
+repo: rebate-platform
+title: 'B2-06j：打款的支付宝通道支持证书加签，prod + live 的应用私钥与三张证书改从 KMS 取（入口强制证书模式；通道保留公钥模式，resolvePayoutMode 不动）'
+type: impl
+# 2026-11-26 funds 线入账（编排 D10-3308 ⑥ / D10-3311 / D10-3315；现状核查 FUNDS-quote/payout-alipay-cert-status-20261126.md，冻结用例盘点 couli-runs/B2-06j/frozen-inventory.md）。
+# 现状（主干）：live 只读四个环境变量（payout-mode.ts），通道是公钥模式——证书序列号是可选字段、live 配置不带（alipay-channel.ts），应答用配置的公钥验签；payout 没有 KMS 引用，platform/kms 的密钥名清单没有打款的。
+#   BR-WDR-13：「只有 payout 进程能读取打款通道密钥（……KMS，仅 prod）」；支付宝对资金支出类接口要求证书加签。收款侧已做（B1-30a、B2-15k），照它的做法。
+# 做法（D10-3315）：① 通道把证书模式做成新增的一种配置——给了应用证书序列号、根证书序列号与支付宝公钥证书序列号即走证书模式：转账与查询请求都带 app_cert_sn、alipay_root_cert_sn 并参与加签；
+#   应答必须带 alipay_cert_sn 且等于配置值，再用支付宝公钥证书里的公钥验签，不带 / 不等 / 验签不过与现有验签失败同样处理（结果 unknown、不暂停队列、不重发转账只查询，BR-WDR-14）。不给时仍是现在的公钥模式，行为一字不变。
+#   ② resolvePayoutMode 不动（同步纯函数、仍认四个名字）。③ 入口在 APP_ENV=prod 且 PAYOUT_MODE=live 时从 KMS 读四件（应用私钥、应用公钥证书、支付宝公钥证书、支付宝根证书），由证书算出三个序列号与支付宝公钥，
+#   appId 与网关仍取环境变量；live 一律以证书模式建通道；KMS 不可用或缺任何一件即拒绝启动；环境变量里若仍带 ALIPAY_APP_PRIVATE_KEY / ALIPAY_PUBLIC_KEY，忽略其值并打一条只含变量名的 warn，不拒绝启动（D10-3315 (3)）。
+#   dry_run 不读 KMS（[AC-B1-30a#83] 不动）。④ platform/kms 的密钥名清单加四项。规则测试与实现只用假通道 / 假 KMS 与测试内自签的证书，不依赖真实证书；证书模式的新行为全部写成新规则测试，不借改旧用例带进来。
+# 实现必满足项：运行体与通道不得拒绝公钥模式的凭据对象（强制只放在入口）——channel/**、entry/mode.test.ts、entry/assembly.test.ts 等冻结用例一条不动；入账后先在临时工作树探一遍确认。
+# 冻结用例改动只有入口层三处（编排 D10-3315 (2) 核对放行并向负责人报告）：改的是「live 凭据从哪来」（环境变量 → KMS），把实现对齐 BR-WDR-13，不改请求参数、金额、状态、打款行为。冻结夹具 entry-kit.ts 不改，新夹具放新文件。
+# 在途单交叠（D10-3312）：落地排在 QA-13d 之后、谁后落谁变基；B2-11za（payout/infra/**）以后变基。不带迁移、不动契约。
+refs: [BR-WDR-13, BR-WDR-14]
+refs_hash:
+  BR-WDR-13: 11b5c3e1a9b3
+  BR-WDR-14: 6328f3cda2e6
+deps: [B2-06f, B1-30a]
+paths:
+  - 'apps/api/src/modules/payout/infra/channels/**'
+  - 'apps/api/src/modules/payout/payout-{mode,runtime}*.ts'
+  - 'apps/api/src/modules/payout/index.ts'
+  - 'apps/api/src/modules/platform/kms/**'
+  - 'apps/api/src/modules/platform/index.ts'
+  - 'apps/api/src/entry.ts'
+test_paths:
+  - 'test/spec/payout/alipay-cert-kms/**' # 新目录
+  - 'test/spec/payout/entry/entry.test.ts'
+  - 'test/spec/payout/query-recovery-wiring/entry.test.ts'
+impl: claude
+tester: codex
+modify_existing:
+  - file: 'test/spec/payout/entry/entry.test.ts'
+    test: '[AC-B2-06f#12] APP_ENV=prod、PAYOUT_MODE=live、$name=$value：缺凭证即启动失败'
+    reason: rule_change
+    br: [BR-WDR-13]
+    ruling: D10-3315
+    note: 'BR-WDR-13：打款通道密钥在 prod 只从 KMS 取。原来钉「四个环境变量缺任一个即拒绝启动」；改后 ALIPAY_APP_PRIVATE_KEY、ALIPAY_PUBLIC_KEY 不再从环境变量读，这两个名字的 4 行移出本表（缺 KMS 条目 / KMS 不可用即拒绝启动由新目录的用例钉），ALIPAY_APP_ID、ALIPAY_GATEWAY_URL 的 4 行与断言不变'
+  - file: 'test/spec/payout/entry/entry.test.ts'
+    test: '[AC-B2-06f#13] APP_ENV=prod、PAYOUT_MODE=live、凭证齐全：以 live 与注入的凭证启动，先注册后启动队列，日志不含私钥'
+    reason: rule_change
+    br: [BR-WDR-13]
+    ruling: D10-3315
+    note: 'BR-WDR-13：live 凭据的来源由环境变量改为 KMS（假 KMS 夹具，放新文件）。语义不变——凭据齐全即以 live 启动、把读到的凭据原样交给运行体、先注册后启动队列、日志不含私钥；交给运行体的凭据对象多出三个证书序列号'
+  - file: 'test/spec/payout/query-recovery-wiring/entry.test.ts'
+    test: '[AC-B2-06i#10] dry_run 和 live 都启动恢复：入口不看模式'
+    reason: rule_change
+    br: [BR-WDR-13]
+    ruling: D10-3315
+    note: 'BR-WDR-13：live 那一行原来只靠四个环境变量启动，改后入口要读 KMS；只把夹具换成带假 KMS 的，断言与期望值未改'
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/alipay-cert-kms/**'
+status: todo
+pr: null
