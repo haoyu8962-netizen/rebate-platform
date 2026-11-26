@@ -14,7 +14,7 @@ function budget(): RunCallBudget {
   };
 }
 
-it.each(['timeout', 'server'] as const)(
+it.each(['timeout', 'server', 'rate_limited', 'malformed'] as const)(
   '[AC-B3-09m#42] 主模型请求发出后以 %s 失败且没有用量，按最坏成本计并阻止备用调用',
   async (kind) => {
     const rig = setup({ steps: { [FLASH]: [fail(kind)], [PLUS]: [ok(20, 10)] } });
@@ -37,4 +37,21 @@ it('[AC-B3-09m#43] 厂商失败响应带用量时按回报的用量记成本', a
   expect(outcome).toMatchObject({ kind: 'degraded', reason: 'models_failed' });
   expect(rig.transport.calls.map((call) => call.model)).toEqual([FLASH]);
   expect(run).toMatchObject({ spentMfen: 6n, calls: 1 });
+});
+
+it('[AC-B3-09m#47] 主模型挂起至单次调用超时，按最坏成本计并阻止备用调用', async () => {
+  const attemptTimeoutMs = 3_000;
+  const rig = setup({
+    attemptTimeoutMs,
+    steps: { [FLASH]: [{ t: 'hang' }], [PLUS]: [ok(20, 10)] },
+  });
+  const run = budget();
+  const [outcome] = await Promise.all([
+    rig.router().complete(chatInput(), { ...ctx(), budget: run }),
+    rig.scheduler.advance(attemptTimeoutMs + 1),
+  ]);
+
+  expect(rig.transport.calls.map((call) => call.model)).toEqual([FLASH]);
+  expect(outcome).toMatchObject({ kind: 'degraded', reason: 'budget' });
+  expect(run).toMatchObject({ spentMfen: 5_000n, calls: 1 });
 });
