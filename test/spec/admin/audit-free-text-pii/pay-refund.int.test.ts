@@ -18,7 +18,7 @@ import { expectRedacted, sampleA } from './kit.ts';
 
 const s = suite();
 
-it('[AC-B2-02ze#3] 退款备注里写了邮箱、18 位身份证（末位 X）、空格分组且过 Luhn 的银行卡号、手机号：退款照常建单，pay_refund_create 审计全文不含任何一项明文；备注仍在（说明文字保留，手机 138****5678、证件 1****************X、卡号只露末 4 位；同长同分组但不过 Luhn 的对照号原样）；退款单 id、out_refund_no、支付单 id、金额与原因码原样', async () => {
+it('[AC-B2-02ze#3] 退款备注里写了邮箱、18 位身份证（末位 X）、空格分组且过 Luhn 的银行卡号、手机号：退款照常建单，pay_refund_create 审计全文不含任何一项明文；备注仍在（说明文字保留，邮箱 al***@example.com、手机 138****5678、证件 1****************X、卡号只露末 4 位；同长同分组但不过 Luhn 的对照号按兜底也只留末四位，B2-02zg D10-3266）；退款单 id、out_refund_no、支付单 id、金额与原因码原样', async () => {
   const f = await fixture(s);
   const { channels } = refundChannels(f);
   const { kit } = await refundJobs(f, channels);
