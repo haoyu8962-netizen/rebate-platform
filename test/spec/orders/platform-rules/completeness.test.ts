@@ -24,14 +24,15 @@ import {
 it('[AC-B1-08za#1] 每个已登记平台在 PLATFORM_RULES 里恰有一份、键齐全无多余；类型层缺平台或缺键即编译失败', () => {
   for (const platform of REGISTERED_PLATFORMS) {
     const rules = rulesOf(platform);
-    expect(Object.keys(rules).sort()).toEqual([...RULE_KEYS].sort());
-    for (const key of RULE_KEYS) expect(rules[key], `${platform}.${key}`).not.toBeUndefined();
+    expect(Object.keys(rules).sort()).toEqual([...RULE_KEYS, 'missingLinkBuyTypeBasis'].sort());
+    for (const key of [...RULE_KEYS, 'missingLinkBuyTypeBasis'] as const)
+      expect(rules[key], `${platform}.${key}`).not.toBeUndefined();
   }
   expect(Object.keys(PLATFORM_RULES).sort()).toEqual([...REGISTERED_PLATFORMS].sort());
   // Type layer: a registered platform without an entry, or an entry without a key, does not compile.
   const table: Readonly<Record<RegisteredPlatform, PlatformRules>> = PLATFORM_RULES;
   expect(table).toBe(PLATFORM_RULES);
-  expectTypeOf<keyof PlatformRules>().toEqualTypeOf<RuleKey>();
+  expectTypeOf<keyof PlatformRules>().toEqualTypeOf<RuleKey | 'missingLinkBuyTypeBasis'>();
   expectTypeOf<PlatformRules['attribution']['kind']>().toEqualTypeOf<'attr_code' | 'relation_id'>();
   expectTypeOf<PlatformRules['parseLinkCode']>().toEqualTypeOf<
     (params: UnionOrderAttrParams) => string | null
