@@ -41,6 +41,15 @@ export interface AccountBalances {
   version: ColumnType<bigint, bigint, bigint>;
 }
 
+export interface AdjustmentReconDiffs {
+  adjust_id: string;
+  app_id: string;
+  created_at: Timestamp;
+  recon_diff_id: string;
+  reversed_by_adjust_id: string | null;
+  user_id: string;
+}
+
 export interface AdminAdjustments {
   adjust_id: string;
   amount_fen: ColumnType<bigint, bigint, bigint> | null;
@@ -1823,6 +1832,7 @@ export interface ReconDiffs {
   expected_fen: ColumnType<bigint, bigint, bigint>;
   handler_id: string | null;
   id: string;
+  involved_user_ids: string[] | null;
   period: string;
   ref_id: string;
   ref_type: string;
@@ -2448,6 +2458,7 @@ export interface WithdrawHolds {
 
 export interface DB {
   account_balances: AccountBalances;
+  adjustment_recon_diffs: AdjustmentReconDiffs;
   admin_adjustments: AdminAdjustments;
   admin_dashboard_days: AdminDashboardDays;
   admin_permissions: AdminPermissions;

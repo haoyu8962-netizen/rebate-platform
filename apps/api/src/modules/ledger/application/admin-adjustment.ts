@@ -13,8 +13,17 @@
 //
 // Order of checks after the route schema and the guard (contract): the body (refs by reason code,
 // note, contra subject) → the member / the original (unknown or of another app) → the linked
-// documents (adjust_ref_invalid) → an original already reversed (20902 admin_adjustment) → the
+// documents (adjust_ref_invalid; B2-17: also a recon diff of type union_mismatch / channel_mismatch)
+// → a linked ledger_mismatch recon diff no longer open / processing or already linked to the member
+// by an unreversed form (20902 recon_diff, B2-17) / an original already reversed (20902 admin_adjustment) → the
 // guards (reverse_not_allowed, adjust_user_deleted).
+//
+// B2-17 (BR-FUND-24 ⑨, 细则「对外差错单的调账」; adjustment-recon-links.ts): the linked recon diff rows
+// are locked (ascending id) before the member's rows — a new form's from its refs, a reversal's from
+// the original's unreversed link rows — and in the same transaction the form writes its link rows
+// and the diffs' status (adjusted / processing), a reversal marks the links and sends adjusted diffs
+// back to processing. Only ledger_mismatch diffs take these steps (positive list, task §16.3); a
+// linked diff of another type is only checked to exist in the app and is left as it is.
 import type { Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import { buildVouchers } from '@couli/domain';
@@ -35,10 +44,23 @@ import {
   findReversalOf,
   insertApprovedAdjustment,
   pageAdminAdjustments,
-  readReconDiffSources,
   type AdminAdjustmentRow,
   type AdminAdjustmentRowWithReversal,
 } from '../infra/admin-adjustments-store.ts';
+import {
+  adjustmentReconStore,
+  type AdjustmentReconStore,
+  type LockedReconDiff,
+} from '../infra/adjustment-recon-diffs-store.ts';
+import {
+  linkedDiffIds,
+  personMayLink,
+  planBDiffIds,
+  planNewFormDiffs,
+  writeNewFormDiffs,
+  writeReversalDiffs,
+  type DiffPlanItem,
+} from './adjustment-recon-links.ts';
 import type { AccountBalance, Ledger, PostingEntry } from './ledger.ts';
 
 export type AdminAdjustmentDirection = 'increase' | 'decrease';
@@ -159,6 +181,8 @@ export interface AdminAdjustmentCreateDeps {
   /** The entry's ledger with its event bus and payout's recovery hook (D10-587). */
   readonly ledger: Ledger;
   readonly ports: AdminAdjustmentPorts;
+  /** B2-17: the link table and the linked diffs' locks and writes (default: the database). */
+  readonly reconLinks?: AdjustmentReconStore;
 }
 
 /** A read refusal: 20001 with data.fields (thrown for the controller's error envelope). */
@@ -367,13 +391,16 @@ function fieldsRefusal(fields: readonly string[], traceId: string, reason?: stri
   };
 }
 
-function conflictRefusal(traceId: string): Refusal {
+function conflictRefusal(
+  traceId: string,
+  resource: 'admin_adjustment' | 'recon_diff' = 'admin_adjustment',
+): Refusal {
   return {
     status: 409,
     envelope: {
       code: 20902,
       msg: CONFLICT_MESSAGE,
-      data: { resource: 'admin_adjustment' },
+      data: { resource },
       trace_id: traceId,
     },
   };
@@ -484,7 +511,9 @@ function checkNewBody(body: AdminAdjustmentNewInput, traceId: string): Refusal |
 
 /**
  * BR-FUND-24 ③: every linked document is of the app and, for a withdrawal or a deletion, of the
- * member; a difference is not of source R4. Returns the cash subject of the (one) withdrawal.
+ * member; a difference is not of source R4 nor (B2-17, ⑨) of type union_mismatch /
+ * channel_mismatch. `diffs` are the app's linked differences as read under their row locks.
+ * Returns the cash subject of the (one) withdrawal.
  */
 async function checkRefs(
   deps: AdminAdjustmentCreateDeps,
@@ -492,23 +521,19 @@ async function checkRefs(
   appId: string,
   userId: string,
   refs: readonly AdminAdjustmentRef[],
+  diffs: ReadonlyMap<string, LockedReconDiff>,
 ): Promise<{ readonly ok: false } | { readonly ok: true; readonly cashSubject: string | null }> {
   const idsOf = (type: AdminAdjustmentRefType) =>
     refs.filter((ref) => ref.ref_type === type).map((ref) => ref.ref_id);
-  const diffs = idsOf('recon_diff');
+  const diffIds = idsOf('recon_diff');
   const withdrawals = idsOf('withdrawal');
   const deletions = idsOf('account_deletion');
   const orders = idsOf('order');
-  if ([...diffs, ...withdrawals, ...deletions].some((id) => !UUID.test(id))) return { ok: false };
+  if ([...diffIds, ...withdrawals, ...deletions].some((id) => !UUID.test(id))) return { ok: false };
 
-  const diffSources = await readReconDiffSources(
-    trx,
-    appId,
-    diffs.map((id) => id.toLowerCase()),
-  );
-  for (const id of diffs) {
-    const source = diffSources.get(id.toLowerCase());
-    if (source === undefined || source === 'R4') return { ok: false };
+  for (const id of diffIds) {
+    const diff = diffs.get(id.toLowerCase());
+    if (diff === undefined || !personMayLink(diff)) return { ok: false };
   }
   let cashSubject: string | null = null;
   if (withdrawals.length > 0) {
@@ -552,17 +577,30 @@ async function submit(
 ): Promise<HandlerResult> {
   const { appId, adminId, traceId } = request;
   const body = request.body;
+  const store = deps.reconLinks ?? adjustmentReconStore;
   let plan: Plan;
   let balance: AccountBalance | undefined;
+  /** A new form's linked diffs and their writes (B2-17); empty for a reversal. */
+  let diffItems: readonly DiffPlanItem[] = [];
 
   if (body.kind === 'new') {
     const checked = checkNewBody(body, traceId);
     if ('status' in checked) return checked;
     if (!UUID.test(checked.userId)) return fieldsRefusal(['user_id'], traceId);
+    // 9.4: the linked diff rows (ascending id) before the member's rows; read under the locks.
+    const diffIds = linkedDiffIds(checked.refs);
+    const diffs = await store.lockDiffs(trx, appId, diffIds);
     const member = await lockMember(deps, trx, appId, checked.userId);
     if (!member.locked) return fieldsRefusal(['user_id'], traceId);
-    const refs = await checkRefs(deps, trx, appId, checked.userId, checked.refs);
+    const refs = await checkRefs(deps, trx, appId, checked.userId, checked.refs, diffs);
     if (!refs.ok) return fieldsRefusal(['refs'], traceId, 'adjust_ref_invalid');
+    // ⑨ (positive list, §16.3): only the ledger_mismatch diffs take part — each still open /
+    // processing and not yet the member's (decided before any write); other types are left as is.
+    const planB = planBDiffIds(diffIds, diffs);
+    const active = await store.activeLinks(trx, appId, planB);
+    const decided = planNewFormDiffs(planB, diffs, active, checked.userId);
+    if (!decided.ok) return conflictRefusal(traceId, 'recon_diff');
+    diffItems = decided.items;
     const status = await deps.ports.userStatus(trx, { appId, userIds: [checked.userId] });
     // A member in deletion takes no new manual form (D10-590 ④); a deleted one none at all.
     if ((status.get(checked.userId) ?? 'none') !== 'none') {
@@ -582,6 +620,8 @@ async function submit(
     const originalId = body.reversesAdjustId.toLowerCase();
     const first = await findAdminAdjustment(trx, appId, originalId);
     if (first === undefined) return fieldsRefusal(['reverses_adjust_id'], traceId);
+    // 9.4: the diffs of the original's unreversed link rows (ascending id) before the member.
+    await store.lockDiffs(trx, appId, await store.linkedDiffIds(trx, appId, originalId));
     const member = await lockMember(deps, trx, appId, first.user_id);
     // Re-read under the member's lock: a concurrent reversal has committed or not.
     const original = await findAdminAdjustment(trx, appId, originalId);
@@ -682,6 +722,25 @@ async function submit(
     at: now,
     voucherId: posted.voucherId,
   });
+
+  // B2-17: the link rows and the diffs' status, on the same transaction as everything else.
+  if (plan.original === null) {
+    await writeNewFormDiffs(store, trx, {
+      appId,
+      adjustId,
+      userId: plan.userId,
+      handlerId: adminId,
+      at: now,
+      items: diffItems,
+    });
+  } else {
+    await writeReversalDiffs(store, trx, {
+      appId,
+      originalId: plan.original.adjust_id,
+      reversalId: adjustId,
+      at: now,
+    });
+  }
 
   await deps.auditOn(trx).append({
     appId,

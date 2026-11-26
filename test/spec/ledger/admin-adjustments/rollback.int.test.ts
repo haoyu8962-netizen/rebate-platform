@@ -39,8 +39,8 @@ it('[AC-B2-12c#27] 调减提交时写审计或写站内信失败 → 50001，整
   const f = fixture(s);
   await withAdjustAdmin(f, async (h) => {
     const userId = await member(f, { available: 3000n });
-    const diff: Ref = { ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id };
     for (const point of POINTS) {
+      const diff: Ref = { ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id };
       const body = newForm({
         userId,
         direction: 'decrease',

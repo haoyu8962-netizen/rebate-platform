@@ -5,6 +5,10 @@
 //   level), voucher (②) or order (③④⑤⑧⑨, order_key); ref_id `<invariant>:<entity id>`;
 //   dedupe_key `R3:<D>:<invariant>:<entity id>`; expected / actual / diff from the detail's paired
 //   amounts (diff = expected − actual), else 0 / 0 / 0; the detail kept in resolution;
+// - B2-17 (⑭, task §16.2 / D10-3237 (二)): the diff is registered with involved_user_ids = the
+//   involved users of the group (the ones held below), and for a sub-order group (ref_type order)
+//   also every beneficiary of that sub-order (BR-FUND-24 细则「按子订单登记的差异为该子订单的全部
+//   受益人」); lower case, unique, ascending; NULL when there is none. The holds are unchanged;
 // - for a non pay- difference, in the same transaction and only when that call inserted the diff,
 //   one withdraw_holds row per involved user through the injected payout port (reason
 //   ledger_mismatch, source_ref `recon_diff:<id>`, created_by system); a difference whose users
@@ -288,9 +292,28 @@ async function involvedUsers(trx: Transaction<DB>, group: DiffGroup): Promise<st
     const keys = group.refId.slice(group.invariant.length + 1);
     candidates.push(...(await orderBeneficiaries(trx, group.appId, [keys])));
   }
-  return [
-    ...new Set(candidates.filter((id) => UUID.test(id)).map((id) => id.toLowerCase())),
-  ].sort();
+  return userList(candidates);
+}
+
+/** Lower case, unique, ascending; only well-formed user ids are kept. */
+function userList(ids: readonly string[]): string[] {
+  return [...new Set(ids.filter((id) => UUID.test(id)).map((id) => id.toLowerCase()))].sort();
+}
+
+/**
+ * B2-17 (task §16.2, D10-3237 (二)): the involved_user_ids registered with the diff. For a
+ * sub-order group it is `held` ∪ every beneficiary on the sub-order's vouchers; for any other
+ * group it is `held` itself. `held` (involvedUsers) stays the list of users the holds are added for.
+ */
+async function registeredUsers(
+  trx: Transaction<DB>,
+  group: DiffGroup,
+  held: readonly string[],
+): Promise<string[]> {
+  if (group.refType !== 'order') return [...held];
+  const orderKey = group.refId.slice(group.invariant.length + 1);
+  const beneficiaries = await orderBeneficiaries(trx, group.appId, [orderKey]);
+  return userList([...held, ...beneficiaries]);
 }
 
 function validateInput(input: DailyCheckExecutionInput): void {
@@ -377,6 +400,11 @@ export function createDailyCheckExecutor(
     const first = group.rows[0]!;
     const holdable = group.rows.some((row) => !isPayFile(row.file));
     const outcome = await db.transaction().execute(async (trx) => {
+      // B2-17 (⑭, D10-2417; §16.2): the list goes into the INSERT (couli_app has no UPDATE on
+      // involved_user_ids); NULL when empty. Only `users` (involvedUsers) is held below; a
+      // sub-order group's list also names the sub-order's other beneficiaries.
+      const users = await involvedUsers(trx, group);
+      const listed = await registeredUsers(trx, group, users);
       const registration = await registerReconDiffOnce(
         trx,
         {
@@ -389,13 +417,13 @@ export function createDailyCheckExecutor(
           ...amountsOf(detailOf(first)),
           dedupeKey: `R3:${accountingDate}:${group.refId}`,
           resolution: resolutionOf(accountingDate, group),
+          involvedUserIds: listed.length === 0 ? null : listed,
         },
         { clock },
       );
       const held: string[] = [];
       let unresolved = false;
       if (registration.inserted && holdable) {
-        const users = await involvedUsers(trx, group);
         unresolved = users.length === 0;
         for (const userId of users) {
           await holds.add(trx, {

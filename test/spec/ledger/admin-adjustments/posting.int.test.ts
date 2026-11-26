@@ -63,14 +63,15 @@ it.each(CASES)(
     const f = fixture(s);
     await withAdjustAdmin(f, async (h) => {
       const userId = await member(f, { available: 3000n });
-      const diff = await seedReconDiff(f);
-      const refs: Ref[] = [{ ref_type: 'recon_diff', ref_id: diff.id }];
+      const withdrawals: Ref[] = [];
       if (c.channel !== null) {
         const withdrawalId = await seedWithdrawal(f, userId, { channel: c.channel });
-        refs.unshift({ ref_type: 'withdrawal', ref_id: withdrawalId });
+        withdrawals.push({ ref_type: 'withdrawal', ref_id: withdrawalId });
       }
       const filed: Adjusted[] = [];
       for (const [direction, amount] of STEPS) {
+        const diff = await seedReconDiff(f);
+        const refs: Ref[] = [...withdrawals, { ref_type: 'recon_diff', ref_id: diff.id }];
         const note = `${c.reason} ${direction} 核对说明`;
         const before = await moneyOf(f, userId);
         const sent = await h.create(

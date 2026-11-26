@@ -32,12 +32,7 @@ it('[AC-B2-12c#6] 契约示例：available 3000 以 PAYOUT_RECOVERY 调减 10000
   await withAdjustAdmin(f, async (h) => {
     const userId = await member(f, { available: 3000n });
     const withdrawalId = await seedWithdrawal(f, userId, { channel: 'alipay' });
-    const diff = await seedReconDiff(f, {
-      source: 'R2',
-      type: 'channel_mismatch',
-      ref_type: 'withdrawal',
-      ref_id: withdrawalId,
-    });
+    const diff = await seedReconDiff(f);
     const refs = [
       { ref_type: 'withdrawal', ref_id: withdrawalId },
       { ref_type: 'recon_diff', ref_id: diff.id },
@@ -133,9 +128,10 @@ it('[AC-B2-12c#8] 只在跨过 0 时发 account.went_negative：调减到正好 
   const f = fixture(s);
   await withAdjustAdmin(f, async (h) => {
     const userId = await member(f, { available: 500n });
-    const diff = await seedReconDiff(f);
-    const refs = [{ ref_type: 'recon_diff', ref_id: diff.id }] as const;
-    const decrease = (amount: bigint) =>
+    const first = [{ ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id }] as const;
+    const second = [{ ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id }] as const;
+    const third = [{ ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id }] as const;
+    const decrease = (amount: bigint, refs: typeof first) =>
       h.create(
         newForm({
           userId,
@@ -147,7 +143,7 @@ it('[AC-B2-12c#8] 只在跨过 0 时发 account.went_negative：调减到正好 
           contra: 'MKT_EXPENSE',
         }),
       );
-    const expectation = (amount: bigint, available: bigint) => ({
+    const expectation = (amount: bigint, available: bigint, refs: typeof first) => ({
       caller: h.maker,
       userId,
       direction: 'decrease' as const,
@@ -159,14 +155,14 @@ it('[AC-B2-12c#8] 只在跨过 0 时发 account.went_negative：调减到正好 
       before: { available, frozen: 0n },
     });
 
-    await expectAdjusted(f, await decrease(500n), expectation(500n, 500n));
+    await expectAdjusted(f, await decrease(500n, first), expectation(500n, 500n, first));
     expect(await moneyOf(f, userId)).toEqual({ available: 0n, frozen: 0n });
     expect(await wentNegative(f, userId)).toEqual([]);
 
-    await expectAdjusted(f, await decrease(1n), expectation(1n, 0n));
+    await expectAdjusted(f, await decrease(1n, second), expectation(1n, 0n, second));
     expect(await wentNegative(f, userId)).toHaveLength(1);
 
-    await expectAdjusted(f, await decrease(300n), expectation(300n, -1n));
+    await expectAdjusted(f, await decrease(300n, third), expectation(300n, -1n, third));
     expect(await moneyOf(f, userId)).toEqual({ available: -301n, frozen: 0n });
     expect(await wentNegative(f, userId)).toHaveLength(1);
   });

@@ -237,6 +237,8 @@ it('classifies every table of db/schema.sql: the funds and attribution tables an
     'union_filing_attempts',
     'admin_adjustments',
     'bad_debt_writeoffs',
+    // B2-17: adjustment ↔ recon diff links (adjust prefix, BR-FUND-24 ⑨; D10-3185).
+    'adjustment_recon_diffs',
     'beneficiary_credits',
     'settle_adjust_batches',
     'settle_adjustments',

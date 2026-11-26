@@ -1,5 +1,5 @@
-// B2-12c: ledger's reads and writes of app.admin_adjustments (04 §3.2; ledger is its single writer)
-// and the read of its own app.recon_diffs for the linked differences of a manual adjustment.
+// B2-12c: ledger's reads and writes of app.admin_adjustments (04 §3.2; ledger is its single writer).
+// The linked recon differences are read under their row locks (B2-17, adjustment-recon-diffs-store.ts).
 // Every query is scoped by app_id. `reversed_by` is derived from the reversal row (unique on
 // (app_id, reverses_adjust_id)); the original row is never updated by a reversal.
 import type { DB } from '@couli/db';
@@ -156,23 +156,4 @@ export async function insertApprovedAdjustment(
     })
     .returningAll()
     .executeTakeFirstOrThrow();
-}
-
-/** The app's recon differences among `ids` with their source (non-uuid IDs are skipped). */
-export async function readReconDiffSources(
-  trx: Executor,
-  appId: string,
-  ids: readonly string[],
-): Promise<ReadonlyMap<string, string>> {
-  const result = new Map<string, string>();
-  if (ids.length === 0) return result;
-  const rows = await trx
-    .withSchema('app')
-    .selectFrom('recon_diffs')
-    .select(['id', 'source'])
-    .where('app_id', '=', appId)
-    .where('id', '=', sql<string>`ANY(${ids}::uuid[])`)
-    .execute();
-  for (const row of rows) result.set(row.id, row.source);
-  return result;
 }

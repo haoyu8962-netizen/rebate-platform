@@ -25630,9 +25630,16 @@ paths:
         another app is 20001 with `data.fields=[user_id]`; an unknown `reverses_adjust_id` or one
         of another app is 20001 with `data.fields=[reverses_adjust_id]`; a `ref_id` that names
         nothing of the app, a `recon_diff` of source R4 (a 收款对账 difference never leads to a
-        balance adjustment, BR-PAY-07; see AdminReconDiffIdPath), or a `withdrawal` or
-        `account_deletion` of another member, is 20001 with `data.fields=[refs]` and
-        `data.reason=adjust_ref_invalid` → an original already reversed
+        balance adjustment, BR-PAY-07; see AdminReconDiffIdPath), a `recon_diff` of type
+        `union_mismatch` or `channel_mismatch` (a person never files an adjustment linking a union
+        or channel reconciliation difference, whatever the reason code, BR-FUND-24 ⑨), or a
+        `withdrawal` or `account_deletion` of another member, is 20001 with `data.fields=[refs]`
+        and `data.reason=adjust_ref_invalid` → a linked `recon_diff` of type `ledger_mismatch` no
+        longer open / processing (adjusted, written off or closed), or one on which the member
+        already has an executed, unreversed adjustment, is 20902 with `data.resource=recon_diff`
+        and nothing is written
+        (BR-FUND-24 ⑨: the linked differences are locked in the same transaction; at most one
+        executed, unreversed adjustment per difference and member); an original already reversed
         is 20902 with `data.resource=admin_adjustment` (a form can be reversed once, BR-FUND-16;
         the console refreshes and shows 已红冲; the unique constraint on `reverses_adjust_id`
         answers the same under a race) → the guards, each refusal 20001: an original that is not
@@ -25649,8 +25656,21 @@ paths:
         USER_BALANCE.available, a decrease the other way round. The voucher uniq_key is
         `ADJ:{adjust_id}`, and `ADJ:{original adjust_id}:REVERSE` for a reversal, posted with the
         reversal templates of specs/ledger-rules.md §5. A decrease, a reversal included, may take
-        `available` below 0 (BR-FUND-24 ⑤, BR-FUND-10); `frozen` is never written. Linking a
-        difference does not change its status: it is closed through its own operations. Writes an
+        `available` below 0 (BR-FUND-24 ⑤, BR-FUND-10); `frozen` is never written. Each linked
+        difference of type `ledger_mismatch`, open or processing, moves in the same transaction
+        (BR-FUND-24 ⑨): to adjusted (the handler being the caller) when every member it involves
+        now has an executed, unreversed adjustment on it, otherwise to processing (one still
+        processing stays as it is); a linked difference of any other type keeps its status and
+        every other column (it is concluded through its own operation, e.g. a restore). A
+        reversal, in the same transaction, sends an adjusted difference its original linked back
+        to processing, except when that difference is a `ledger_mismatch` whose `ref_type` is
+        not `order` and the app already has another `ledger_mismatch` difference with the same
+        `ref_id`, a `ref_type` other than `order` and status open or processing, i.e. exactly
+        when sending it back would violate the unresolved internal difference key
+        (`recon_diffs_unresolved_internal_key`): the reversal still succeeds and that difference
+        stays adjusted. In every other case (e.g. a difference registered per sub-order, with
+        `ref_type` `order`) it goes back to processing as usual. Withdrawal holds are neither
+        released nor added. Writes an
         audit record (action adjustment_create or adjustment_reverse, with the `adjust_id`, the
         `user_id`, the direction, amount and reason code, `available` before and after and, for
         a reversal, the original; no personal data). What the member sees (one ADMIN_ADJUST line

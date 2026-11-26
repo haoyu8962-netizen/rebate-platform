@@ -33,6 +33,8 @@ it('[AC-B2-12c#29] 每张调减单给会员一条站内信 BALANCE_ADJUSTED（�
   await withAdjustAdmin(f, async (h) => {
     const userId = await member(f, { available: 3000n });
     const diff: Ref = { ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id };
+    const secondDiff: Ref = { ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id };
+    const thirdDiff: Ref = { ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id };
     const withdrawal: Ref = { ref_type: 'withdrawal', ref_id: await seedWithdrawal(f, userId) };
     const notes = ['内部说明甲：差错单核对', '内部说明乙：重复出款', '内部说明丙：企业微信沟通'];
 
@@ -59,7 +61,7 @@ it('[AC-B2-12c#29] 每张调减单给会员一条站内信 BALANCE_ADJUSTED（�
           direction: 'decrease',
           amount: 120n,
           reason: 'RECON_FIX',
-          refs: [diff],
+          refs: [secondDiff],
           note: notes[0]!,
           contra: 'COMMISSION_REVENUE',
         }),
@@ -73,7 +75,7 @@ it('[AC-B2-12c#29] 每张调减单给会员一条站内信 BALANCE_ADJUSTED（�
           direction: 'decrease',
           amount: 10_000n,
           reason: 'PAYOUT_RECOVERY',
-          refs: [withdrawal, diff],
+          refs: [withdrawal, thirdDiff],
           note: notes[1]!,
         }),
       ),

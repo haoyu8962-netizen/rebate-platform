@@ -2672,6 +2672,22 @@ CREATE TABLE app.account_balances (
 
 
 --
+-- Name: adjustment_recon_diffs; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.adjustment_recon_diffs (
+    app_id text NOT NULL,
+    adjust_id uuid NOT NULL,
+    recon_diff_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    reversed_by_adjust_id uuid,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT adjustment_recon_diffs_app_id_check CHECK ((app_id <> ''::text)),
+    CONSTRAINT adjustment_recon_diffs_reversed_by_check CHECK ((reversed_by_adjust_id <> adjust_id))
+);
+
+
+--
 -- Name: admin_adjustments; Type: TABLE; Schema: app; Owner: -
 --
 
@@ -6098,6 +6114,7 @@ CREATE TABLE app.recon_diffs (
     resolution jsonb,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
+    involved_user_ids uuid[],
     CONSTRAINT recon_diffs_dedupe_key_check CHECK ((dedupe_key <> ''::text)),
     CONSTRAINT recon_diffs_period_check CHECK ((period ~ '^[0-9]{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?$'::text)),
     CONSTRAINT recon_diffs_ref_id_check CHECK ((ref_id <> ''::text)),
@@ -7575,6 +7592,14 @@ ALTER TABLE ONLY public.pgmigrations ALTER COLUMN id SET DEFAULT nextval('public
 
 ALTER TABLE ONLY app.account_balances
     ADD CONSTRAINT account_balances_pkey PRIMARY KEY (account_id);
+
+
+--
+-- Name: adjustment_recon_diffs adjustment_recon_diffs_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.adjustment_recon_diffs
+    ADD CONSTRAINT adjustment_recon_diffs_pkey PRIMARY KEY (adjust_id, recon_diff_id);
 
 
 --
@@ -9682,6 +9707,13 @@ ALTER TABLE ONLY public.pgmigrations
 
 
 --
+-- Name: adjustment_recon_diffs_active_key; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE UNIQUE INDEX adjustment_recon_diffs_active_key ON app.adjustment_recon_diffs USING btree (app_id, recon_diff_id, user_id) WHERE (reversed_by_adjust_id IS NULL);
+
+
+--
 -- Name: admin_adjustments_account_closed_pending_key; Type: INDEX; Schema: app; Owner: -
 --
 
@@ -10907,6 +10939,13 @@ CREATE UNIQUE INDEX recon_channel_out_biz_no_key ON app.recon_channel USING btre
 
 
 --
+-- Name: recon_diffs_app_id_id_key; Type: INDEX; Schema: app; Owner: -
+--
+
+CREATE UNIQUE INDEX recon_diffs_app_id_id_key ON app.recon_diffs USING btree (app_id, id);
+
+
+--
 -- Name: recon_diffs_dedupe_key_key; Type: INDEX; Schema: app; Owner: -
 --
 
@@ -11878,6 +11917,38 @@ CREATE TRIGGER withdrawals_out_biz_no_fixed BEFORE UPDATE OF out_biz_no ON app.w
 
 ALTER TABLE ONLY app.account_balances
     ADD CONSTRAINT account_balances_account_fkey FOREIGN KEY (app_id, account_id) REFERENCES app.ledger_accounts(app_id, id);
+
+
+--
+-- Name: adjustment_recon_diffs adjustment_recon_diffs_adjust_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.adjustment_recon_diffs
+    ADD CONSTRAINT adjustment_recon_diffs_adjust_fkey FOREIGN KEY (app_id, adjust_id) REFERENCES app.admin_adjustments(app_id, adjust_id);
+
+
+--
+-- Name: adjustment_recon_diffs adjustment_recon_diffs_diff_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.adjustment_recon_diffs
+    ADD CONSTRAINT adjustment_recon_diffs_diff_fkey FOREIGN KEY (app_id, recon_diff_id) REFERENCES app.recon_diffs(app_id, id);
+
+
+--
+-- Name: adjustment_recon_diffs adjustment_recon_diffs_reversed_by_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.adjustment_recon_diffs
+    ADD CONSTRAINT adjustment_recon_diffs_reversed_by_fkey FOREIGN KEY (app_id, reversed_by_adjust_id) REFERENCES app.admin_adjustments(app_id, adjust_id);
+
+
+--
+-- Name: adjustment_recon_diffs adjustment_recon_diffs_user_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.adjustment_recon_diffs
+    ADD CONSTRAINT adjustment_recon_diffs_user_fkey FOREIGN KEY (app_id, user_id) REFERENCES app.users(app_id, id);
 
 
 --
@@ -13893,6 +13964,21 @@ GRANT UPDATE(negative_since) ON TABLE app.account_balances TO couli_app;
 --
 
 GRANT UPDATE(version) ON TABLE app.account_balances TO couli_app;
+
+
+--
+-- Name: TABLE adjustment_recon_diffs; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT ON TABLE app.adjustment_recon_diffs TO couli_app;
+GRANT SELECT ON TABLE app.adjustment_recon_diffs TO couli_readonly;
+
+
+--
+-- Name: COLUMN adjustment_recon_diffs.reversed_by_adjust_id; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(reversed_by_adjust_id) ON TABLE app.adjustment_recon_diffs TO couli_app;
 
 
 --

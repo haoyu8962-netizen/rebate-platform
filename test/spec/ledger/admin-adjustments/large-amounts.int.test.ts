@@ -91,13 +91,14 @@ it('[AC-B2-12c#40] 超过 2^31 的整数分：调增 4294967297、调减 6442450
     carries(upSent, UP, 1000n, 4_294_968_297n);
 
     const downNote = '大额多记冲减';
+    const downDiff: Ref = { ref_type: 'recon_diff', ref_id: (await seedReconDiff(f)).id };
     const downSent = await h.create(
       newForm({
         userId,
         direction: 'decrease',
         amount: DOWN,
         reason: 'OTHER',
-        refs: [diff],
+        refs: [downDiff],
         note: downNote,
         contra: 'UNION_RECEIVABLE',
         platform: 'jd',
@@ -111,7 +112,7 @@ it('[AC-B2-12c#40] 超过 2^31 的整数分：调增 4294967297、调减 6442450
       reason: 'OTHER',
       contra: 'UNION_RECEIVABLE',
       platform: 'jd',
-      refs: [diff],
+      refs: [downDiff],
       note: downNote,
       before: { available: 4_294_968_297n, frozen: 0n },
     });
