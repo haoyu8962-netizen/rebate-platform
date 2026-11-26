@@ -1,0 +1,31 @@
+id: B1-01zzy
+repo: rebate-platform
+title: infra/staging README 补「带需要停后台的迁移（目前只有 0157）时的手工部署顺序」：先停 admin、再部署、失败拉回；回退不回退数据库、回退后暂停人工调账（FU-DEPLOY-0157-ADMIN-QUIESCE，D10-3296）
+type: impl
+# 2026-11-26 ops 入账（编排 D10-3251 → D10-3293 → D10-3296 取乙）。来由：B2-17 资金评审 r2 的 S0——发布带 0157（adjustment_recon_diffs 存量回填）的版本时，
+#   回填提交之后、旧版后台被换掉之前，旧版后台若再执行人工调账，那张调账单没有关联行、也不在回填里。迁移文件头已写明部署顺序（提交 c0737ffaa）。
+# 不改 deploy.sh（D10-3296）：自动化「迁移前停 admin」要放弃 B1-01zc 冻结的「迁移成功前不碰任何运行中的进程」并改 4 个冻结文件，不划算；
+#   以后出现第二条需要停后台的迁移时再考虑，届时按 rule_change 走并报负责人。
+# 做法：只改 infra/staging/README.md，新增文字、不改已有句子：
+#   ① 第 3 节（部署）在步骤列表之后加一段：带需要停后台的迁移（目前只有 0157）时，部署前先手工 `docker compose stop admin`（节点上 compose 目录内，
+#      等在途请求结束，stop_grace_period 30s），再跑 `deploy.sh <标签>`，部署失败（迁移、种子或切换失败）则 `docker compose start admin` 把旧版后台拉回；
+#      admin 停机约为迁移加切换的时间；0157 文件头另要求部署前先查会让回填失败的重复调账组，照文件头的查询处理。不得新增以「2.」开头的行（冻结的
+#      [AC-B1-01zzn-README#1] 要求第 3 节只有一个第 2 步）。
+#   ② 第 4 节（回退）加一条：迁移不随回退撤销，带 0157 的版本回退到旧版后，暂停人工调账（POST /admin/v1/adjustments），直到再次前进到含 0157 的版本。
+#   与迁移文件头、couli-runs/P0-1122/prod-min-checklist.md 第九节三处口径一致。
+# 规则测试至少钉：第 3 节含 0157、`docker compose stop admin` 出现在 `deploy.sh` 之前、失败时 `docker compose start admin`；第 4 节含「回退后暂停人工调账直到再次前进」；
+#   现有 README 规则测试不受影响。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'infra/staging/README.md'
+  - 'ops/tasks/B1-01zzy.yaml'
+test_paths:
+  - 'test/spec/infra/staging-quiesce-admin/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/infra/staging-quiesce-admin/**'
+status: todo
