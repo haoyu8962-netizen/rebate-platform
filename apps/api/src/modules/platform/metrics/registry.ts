@@ -26,6 +26,7 @@ import { CREDIT_POSTCHECK_GAUGE, type CreditPostcheckSnapshot } from './credit-p
 import { DASHBOARD_DAY_LAG_GAUGE, type DashboardDayLagSnapshot } from './dashboard-day-lag.ts';
 import type { FundMetricsSnapshot } from './fund.ts';
 import { pddServiceFeeMissingTotal } from './pdd-service-fee.ts';
+import type { ChannelMismatchSnapshot, SettleBillMismatchSnapshot } from './recon-mismatch.ts';
 import { serviceFeeMissingSamples } from './service-fee-missing.ts';
 import { REVIEW_OVERDUE_GAUGE, type ReviewOverdueSnapshot } from './review-overdue.ts';
 import { WATER_LOW_GAUGE, type WaterLowSnapshot } from './water-low.ts';
@@ -59,6 +60,8 @@ export interface MetricsRegistryOptions {
   readonly collectWaterStale?: () => Promise<WaterStaleSnapshot>;
   /** The open post-credit diffs gauge (B2-02v). Used only on 'worker'; called once per render(). */
   readonly collectCreditPostcheck?: () => Promise<CreditPostcheckSnapshot>;
+  readonly collectChannelMismatch?: () => Promise<ChannelMismatchSnapshot>;
+  readonly collectSettleBillMismatch?: () => Promise<SettleBillMismatchSnapshot>;
   /** The payout failure gauges (B2-09zj). Used only on 'worker'; called once per render(). */
   readonly collectWithdrawalFail?: () => Promise<WithdrawalFailSnapshot>;
   /** The workbench daily row lag gauge (B1-34q). Used only on 'worker'; called once per render(). */

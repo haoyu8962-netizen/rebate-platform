@@ -36,6 +36,11 @@ export { cacheWaterStaleCollector } from './water-stale.ts';
 export type { WaterStaleSnapshot } from './water-stale.ts';
 export { cacheCreditPostcheckCollector } from './credit-postcheck.ts';
 export type { CreditPostcheckSnapshot } from './credit-postcheck.ts';
+export {
+  cacheChannelMismatchCollector,
+  cacheSettleBillMismatchCollector,
+} from './recon-mismatch.ts';
+export type { ChannelMismatchSnapshot, SettleBillMismatchSnapshot } from './recon-mismatch.ts';
 export { cacheWithdrawalFailCollector } from './withdrawal-fail.ts';
 export type { WithdrawalFailSnapshot } from './withdrawal-fail.ts';
 // B1-34q (D10-1464 ①): the workbench daily row lag gauge.

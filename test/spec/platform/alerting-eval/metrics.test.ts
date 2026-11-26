@@ -58,6 +58,10 @@ async function exportedMetrics(entry: Entry): Promise<Set<string>> {
     collectAgentTraceMissing: async () => ({ missingRuns: { 'fixture-app': 1 } }),
     collectWaterStale: async () => ({ waterStale: { 'fixture-app': 1 } }),
     collectCreditPostcheck: async () => ({ open: { 'fixture-app': 1 } }),
+    collectChannelMismatch: async () => ({ open: { 'fixture-app': 1 } }),
+    collectSettleBillMismatch: async () => ({
+      bills: { 'fixture-app': { amountMismatch: 1, generatedAtSeconds: 1_800_000_000 } },
+    }),
     collectDashboardDayLag: async () => ({ lagDays: { 'fixture-app': 1 } }),
     collectWithdrawalFail: async () => ({
       w6Today: { 'fixture-app': 1 },
