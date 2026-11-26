@@ -43,5 +43,5 @@ modify_existing:
     br: [BR-AI-16]
     ruling: D10-2884
     note: 'B3-09m 预算全平台最保守值（D10-2858 / D10-2864 S1-1）：contentReaderFor 返回对象末尾追加 configValuesByKey: configValuesByKeyOf(handle)，import 括号内加 configValuesByKeyOf；与生产 app.module agentReaders 同形；只按 token 纯插入（compareSupportFile 本地自查 0 处拒收，couli-runs/B3-09m/kit-probe/probe2.mts），既有方法与断言不动。'
-status: todo
-pr: null
+status: done
+pr: 877
