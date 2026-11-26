@@ -16,26 +16,32 @@
 //   arrays; a sensitive key below it is still replaced whole). Each string (and number, then
 //   written as its text when anything was masked) in free text goes through redactFreeText:
 //   normalise first, then mask (D10-3266).
-//     1. Normalise: each character to its Unicode NFKC form (full-width digits, letters, ＠ and
-//        ． become ASCII; ①, ⑩, ㎡ expand to their characters). On the normalised text, every
+//     1. Normalise: each user-perceived character (a grapheme cluster: a base character with
+//        the combining marks after it, so e + U+0301 is one character, é) to its Unicode NFKC
+//        form (full-width digits, letters, ＠ and ． become ASCII; ①, ⑩, ㎡ expand to their
+//        characters). On the normalised text, every
 //        white space (\s: space, tab, line breaks, U+2028 / U+2029, NBSP, U+202F, ideographic
 //        space…) and every dash or minus (\p{Pd} and U+2212) is a separator. `/ . , _` are no
 //        separators.
 //     2. E-mail-shaped text: an "@" with non-blank text on both sides. Each side runs from the
 //        "@" up to white space, another "@", ASCII `, ; : ! ? ( ) [ ] { } " ' < > = & | \ /` or
 //        any other (non-ASCII) punctuation (，。、；：（）「」【】《》！？…); dots at the end of the right side
-//        are sentence punctuation, not part of it. A right side shaped like a domain (labels of
+//        are sentence punctuation, not part of it. On the left side an apostrophe with a character
+//        of the address before it belongs to the address (mary.o'connor@…); one with white space,
+//        punctuation or the start of the text before it is a quote and ends the side. A right side shaped like a domain (labels of
 //        letters, digits, marks and "-" joined by ".", the last one two or more letters or
 //        xn--…) is shown as written and the left side keeps its first 2 characters (1 when it
-//        has 2, none when it has 1) followed by 「***」: zhangsan@example.com → zh***@example.com.
+//        has 2, none when it has 1; characters counted as grapheme clusters of the normalised
+//        text) followed by 「***」: zhangsan@example.com → zh***@example.com.
 //        Any other right side: the whole piece but "@" is starred (alice@localhost →
 //        *****@*********).
 //     3. Digit runs (outside e-mail-shaped text): ASCII digits with any number of separators
-//        between two digits, maybe followed (after separators) by X / x that no letter or digit
-//        follows. On the digits (and the X), separators taken out, in this order:
-//          - with an X: 17 digits + X with a correct GB 11643 check character → identity number;
-//            anything else of 11 or more digits → the fallback (the X counts as its last
-//            character);
+//        between two digits, maybe followed (after separators) by X / x (see below for when). On
+//        the digits (and the X), separators taken out, in this order:
+//          - with an X: 17 digits + X with a correct GB 11643 check character → identity number,
+//            whatever follows the X (证件11010519491231002X已核); anything else of 11 or more
+//            digits with an X that no ASCII letter or digit follows → the fallback (the X counts
+//            as its last character);
 //          - 11 digits 1[3-9]…, or 86 followed by them → mobile, 3 + 4: the 4 digits after the
 //            first 3 of the number starred (138****5678; the 86 prefix kept);
 //          - 18 digits with a correct check digit, or 15 digits whose 7th–12th are a real date
@@ -111,7 +117,9 @@ function redactPhones(text: string): string {
 // ------------------------------------------------------------------------------------------
 // Free text (rules 1–4 of the header).
 
-/** The original text by code point, its NFKC form by code point, and where each came from. */
+/**
+ * The original text by grapheme cluster, its NFKC form by code point, and where each came from.
+ */
 interface Normalised {
   readonly source: readonly string[];
   readonly chars: readonly string[];
@@ -119,8 +127,10 @@ interface Normalised {
   readonly starts: readonly number[];
 }
 
+const GRAPHEMES = new Intl.Segmenter('und', { granularity: 'grapheme' });
+
 function normalise(text: string): Normalised {
-  const source = Array.from(text);
+  const source = Array.from(GRAPHEMES.segment(text), (part) => part.segment);
   const chars: string[] = [];
   const starts: number[] = [];
   for (const char of source) {
@@ -139,7 +149,7 @@ const ASCII_STOP = /^[\s,;:!?()[\]{}"'<>=&|\\/]$/u;
 const PUNCTUATION = /^\p{P}$/u;
 /** Labels joined by dots; the last of two or more letters, or Punycode. */
 const DOMAIN = /^(?:[\p{L}\p{N}\p{M}-]+\.)+(?:\p{L}{2,}|xn--[A-Za-z0-9-]+)$/iu;
-const LETTER_OR_DIGIT = /^[\p{L}\p{N}]$/u;
+const ASCII_LETTER_OR_DIGIT = /^[0-9A-Za-z]$/;
 const MOBILE = /^(?:86)?1[3-9][0-9]{9}$/;
 const FALLBACK_MIN = 11;
 const CARD_MIN = 13;
@@ -152,6 +162,13 @@ function endsSide(char: string): boolean {
   return (
     char === '@' || ASCII_STOP.test(char) || (char.codePointAt(0)! > 0x7f && PUNCTUATION.test(char))
   );
+}
+
+/** Rule 2: the left side goes on past `chars[at - 1]` (the character just left of the side). */
+function leftGoesOn(chars: readonly string[], at: number, floor: number): boolean {
+  const char = chars[at - 1]!;
+  if (char !== "'") return !endsSide(char);
+  return at - 1 > floor && !endsSide(chars[at - 2]!);
 }
 
 function passesLuhn(digits: string): boolean {
@@ -223,7 +240,7 @@ function maskEmails(chars: readonly string[], masks: (string | undefined)[], tak
   for (let at = 0; at < chars.length; at += 1) {
     if (chars[at] !== '@') continue;
     let left = at;
-    while (left > floor && !endsSide(chars[left - 1]!)) left -= 1;
+    while (left > floor && leftGoesOn(chars, left, floor)) left -= 1;
     let right = at + 1;
     while (right < chars.length && !endsSide(chars[right]!)) right += 1;
     // Dots at the end are sentence punctuation (alice@example.com. → the address ends at com).
@@ -231,10 +248,14 @@ function maskEmails(chars: readonly string[], masks: (string | undefined)[], tak
     if (left === at || right === at + 1) continue;
     for (let p = left; p < right; p += 1) taken[p] = true;
     if (DOMAIN.test(chars.slice(at + 1, right).join(''))) {
-      const length = at - left;
-      const shown = length >= 3 ? 2 : length === 2 ? 1 : 0;
-      masks[left + shown] = '***';
-      for (let p = left + shown + 1; p < at; p += 1) masks[p] = '';
+      // Counted in user-perceived characters of the normalised text (b + U+0301 is one).
+      const local = Array.from(GRAPHEMES.segment(chars.slice(left, at).join('')), (part) =>
+        Array.from(part.segment),
+      );
+      const shown = local.length >= 3 ? 2 : local.length === 2 ? 1 : 0;
+      const kept = left + local.slice(0, shown).reduce((total, part) => total + part.length, 0);
+      masks[kept] = '***';
+      for (let p = kept + 1; p < at; p += 1) masks[p] = '';
     } else {
       for (let p = left; p < right; p += 1) if (p !== at) masks[p] = '*';
     }
@@ -261,12 +282,12 @@ function maskRuns(chars: readonly string[], masks: (string | undefined)[], taken
     const last = positions[positions.length - 1]!;
     let x = last + 1;
     while (free(x) && SEPARATOR.test(chars[x]!)) x += 1;
-    if (
-      free(x) &&
-      (chars[x] === 'X' || chars[x] === 'x') &&
-      !(free(x + 1) && LETTER_OR_DIGIT.test(chars[x + 1]!))
-    ) {
-      positions.push(x);
+    if (free(x) && (chars[x] === 'X' || chars[x] === 'x')) {
+      const digits = positions.map((at) => chars[at]!).join('');
+      const identity = digits.length === 17 && isIdentity18(digits + chars[x]!);
+      if (identity || !(free(x + 1) && ASCII_LETTER_OR_DIGIT.test(chars[x + 1]!))) {
+        positions.push(x);
+      }
     }
     const run = positions.map((at) => chars[at]!).join('');
     for (const index of hiddenOfRun(run)) masks[positions[index]!] = '*';

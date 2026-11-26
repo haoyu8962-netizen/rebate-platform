@@ -251,3 +251,35 @@ it('[AC-B2-02zg-REDACT#11] 位置映射 反例：没有打码的兼容字符、�
     '（备注：面积120㎡，手机138****5678）',
   );
 });
+
+// 证件号紧跟说明文字。Wrong: the X taken in only when no letter at all follows it (汉字 counted as a
+// letter) — the 17 digits fall back alone and 1002 shows next to the X (*************1002X已核);
+// or the X refused whatever follows it — 1234567890123XYZ in #9 masks 012X.
+it('[AC-B2-02zg-REDACT#12] 校验位对的 17 位数字 + X / x 不论后面跟什么都按证件首 1 末 1，后面的说明原样；不是证件的 X 只在后面不紧跟 ASCII 字母或数字时并入兜底', () => {
+  expect(redactFreeText('证件11010519491231002X已核')).toBe(`证件1${'*'.repeat(16)}X已核`);
+  expect(redactFreeText('证件 11010519491231002x号码')).toBe(`证件 1${'*'.repeat(16)}x号码`);
+  expect(redactFreeText('证件 11010519491231002XAB')).toBe(`证件 1${'*'.repeat(16)}XAB`);
+  expect(redactFreeText('单号12345678901X已核')).toBe(`单号${'*'.repeat(8)}901X已核`);
+  expect(redactFreeText('备查 11010519491231003X已核')).toBe(`备查 ${'*'.repeat(14)}003X已核`);
+});
+
+// 本地部分里的撇号。Wrong: every apostrophe ending the left side — o'connor only (mary.o'co***); or
+// none — the quote opening '…' joins the address and is kept as one of its first 2 characters.
+it('[AC-B2-02zg-REDACT#13] 邮箱左边界：本地部分内部的撇号属于地址；前面是空白、标点或开头的撇号是引号，不并入', () => {
+  expect(redactFreeText("驳回 mary.o'connor@example.com 已核")).toBe('驳回 ma***@example.com 已核');
+  expect(redactFreeText("备注 o'brien@example.com。")).toBe("备注 o'***@example.com。");
+  expect(redactFreeText("'mary.o'connor@example.com'")).toBe("'ma***@example.com'");
+  expect(redactFreeText("见 'alice@example.com' 与 ''bob@example.org")).toBe(
+    "见 'al***@example.com' 与 ''bo***@example.org",
+  );
+});
+
+// 组合字符。Wrong: NFKC code point by code point — e + U+0301 counted as two characters (e***@…,
+// ab***@…); or the whole text rewritten in its composed form where nothing is masked.
+it('[AC-B2-02zg-REDACT#14] 归一按字素：基字符与后随组合符一起 NFKC、算一个字符，邮箱前缀保留长度按它算；没打码的组合序列原样', () => {
+  expect(redactFreeText('收款 é@example.com 已核')).toBe('收款 ***@example.com 已核');
+  expect(redactFreeText('收款 ab́@x.com')).toBe('收款 a***@x.com');
+  expect(redactFreeText('收款 josé@example.com')).toBe('收款 jo***@example.com');
+  const kept = 'café 1234567890 ñ';
+  expect(redactFreeText(kept)).toBe(kept);
+});
