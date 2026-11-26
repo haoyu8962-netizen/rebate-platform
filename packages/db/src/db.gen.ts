@@ -131,6 +131,22 @@ export interface AdminUsers {
   verify_phone_set_at: Timestamp | null;
 }
 
+export interface AgentBudgetDays {
+  actual_mfen: Generated<ColumnType<bigint, bigint, bigint>>;
+  alert_100_at: Timestamp | null;
+  alert_80_at: Timestamp | null;
+  day: Timestamp;
+  reserved_mfen: Generated<ColumnType<bigint, bigint, bigint>>;
+}
+
+export interface AgentBudgetReservations {
+  day: Timestamp;
+  price_version: string | null;
+  reserved_mfen: ColumnType<bigint, bigint, bigint>;
+  run_id: string;
+  settled_at: Timestamp | null;
+}
+
 export interface AgentCards {
   app_id: string;
   card_id: string;
@@ -2464,6 +2480,8 @@ export interface DB {
   admin_permissions: AdminPermissions;
   admin_union_auth_sessions: AdminUnionAuthSessions;
   admin_users: AdminUsers;
+  agent_budget_days: AgentBudgetDays;
+  agent_budget_reservations: AgentBudgetReservations;
   agent_cards: AgentCards;
   agent_clarify_asks: AgentClarifyAsks;
   agent_messages: AgentMessages;
