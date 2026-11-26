@@ -1359,3 +1359,9 @@ approvals:
     granted: true
     date: '2026-11-26'
     note: '依据：编排 D10-3290（取代第 222 条止损里「仍有属实 S1 即记 FU、不挡上线、#589 留 draft、停在分支」一句，只此一次）。原因：第 222 条那一轮（实现 r4 + 资金评审 r4，--full 全面审，couli-runs/F1-08atb/review-money-r4.json）评审方确认 r3 那条已关、提现四页与调账五种写入的标记处理都核过，剩 1 条 S1（useAdjustmentWrite.tsx:367，20901 且该请求体曾未知时调 mark() 把已关闭的提示写回）；该写法出自 r4 任务书照搬单槽时代的规则。评审为增量，基线是 r4 评审的头 dddfbebbd938。止损：这一轮再 fail，无论剩什么都停在分支、#589 留 draft、转 FU，不再追加。'
+  - id: 224
+    row: 4
+    title: 'QA-13d 任务专属一次性追加（D10-3297）：实现 1 次（r4）——范围写死为 Codex 资金评审 r2（couli-runs/QA-13d/review-money-codex-r2.json）的 S1 + S2：① CRASH_REPORT_DSN 规范化不再对路径前缀逐段套字符白名单，沿用 URL 解析器给出的 pathname（规范编码形式），只拒解析失败与空 / 非数字项目号，无效 DSN 仍按规则测试 [AC-QA-13d#1] 以 ConfigError 拒绝启动、不引用原值；② scrubText 补 access_token= / api_key= / secret= / token= 键值形式（大小写不敏感，值到空白或 & 为止）；各补实现方单测。资金评审用常规第 3 轮（code 3 / 3，增量），不在本条；r3 仍有属实 S1 即停报，不再追加。'
+    granted: true
+    date: '2026-11-26'
+    note: '编排会话按 规划/11 §7.1 第 5 行例外决定，D10-3297；保命四件套之崩溃上报（D10-2593 / D10-2599），台账 QA-13d（补丁 1 #853）。原因：Codex money r2 一条 S1（带百分号编码的合法 DSN 路径前缀被拒、进程以 config_invalid 退出）与一条 S2（异常文本里 access_token= 形式的令牌未脱敏），w1 核源码属实；实现 3 / 3 已用满。规则测试不改：[AC-QA-13d#1] 钉的是无效 DSN 以 ConfigError 拒绝启动，本条只修白名单误拒。开时主干末条 223。'
