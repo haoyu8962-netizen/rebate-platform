@@ -452,6 +452,48 @@ it('[AC-F1-08atb-UNIT#15] C6: an enveloped 5xx, 【关闭】, then the edited bo
   expect(readUnknown(SCOPE)).toBeUndefined();
 });
 
+it('[AC-F1-08atb-UNIT#17] money r4 S1: the first body and the edited body both answered an enveloped 5xx under one key, 【关闭】, then the edited body refused 20901: the prompt does not come back; without 【关闭】 the 20901 keeps the first body’s marker', async () => {
+  const first = await mountedSms();
+  await submitSms(first.hook, '880');
+  await verified(first.hook, SERVER_ERROR);
+  expect(readUnknown(SCOPE)?.at).toBe(AT_5XX);
+  now = AT + 60_000;
+  await submitSms(first.hook, '900');
+  await verified(first.hook, SERVER_ERROR);
+  expect(readUnknown(SCOPE)?.at, 'the edited body joined the marker').toBe(AT_5XX);
+  act(() => clearUnknown(SCOPE));
+  expect(readUnknown(SCOPE)).toBeUndefined();
+  now = AT + 120_000;
+  await submitSms(first.hook, '900');
+  await verified(first.hook, fail(KEY_CONFLICT));
+  const writes = writesSent();
+  expect(writes.map((w) => w.body)).toEqual([
+    { amount: '880' },
+    { amount: '900' },
+    { amount: '900' },
+  ]);
+  expect(new Set(writes.map((w) => w.key)).size, 'one key throughout').toBe(1);
+  expect(first.failed).toHaveBeenCalledTimes(3);
+  expect(readUnknown(SCOPE), '20901 settles the edited body: nothing written back').toBeUndefined();
+  first.hook.unmount();
+  custom.mockClear();
+
+  // Without 【关闭】: the edited body's 20901 releases only its own holding; the first body's
+  // marker stays at the moment it entered the unknown state.
+  now = AT;
+  const second = await mountedSms();
+  await submitSms(second.hook, '880');
+  await verified(second.hook, SERVER_ERROR);
+  now = AT + 60_000;
+  await submitSms(second.hook, '900');
+  await verified(second.hook, SERVER_ERROR);
+  now = AT + 120_000;
+  await submitSms(second.hook, '900');
+  await verified(second.hook, fail(KEY_CONFLICT));
+  expect(new Set(writesSent().map((w) => w.key)).size).toBe(1);
+  expect(readUnknown(SCOPE)).toEqual({ page: 'adjustments', unknown: true, at: AT_5XX });
+});
+
 it('[AC-F1-08atb-UNIT#16] C7: an answer coming after the dialog was left acts on the handle of its own (key, body): the first body settled drops the marker, the edited body settled keeps it', async () => {
   // The first body's replay answered after unmount.
   const first = await mounted();

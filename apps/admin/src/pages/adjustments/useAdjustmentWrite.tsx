@@ -360,11 +360,17 @@ export function useAdjustmentWrite<
         if (!alive.current) return;
       } else {
         // A settled refusal settles the submission; an ended session (10001) settles nothing.
-        // Money r2 S1: a 20901 (this key with another body) after an undetermined answer of this
-        // submission settles nothing about it: its marker stays and it is given up with the key
-        // (no handle is left to release it; only 【关闭】 drops it).
+        // Money r4 S1 (D10-3290): a 20901 says the key is bound to another body, so this body was
+        // never executed under it — settled for this submission even after a 5xx of it: only its
+        // own holding goes; another body's submission under the key keeps its marker (given up
+        // with the key, only 【关闭】 drops it). With no other body sent under the key the 20901
+        // contradicts itself: after an undetermined answer of this submission its marker stays.
+        // Another body sent under this key: its own entry in the table.
+        const otherBodySent = Array.from(submissions.keys()).some(
+          (other) => other !== id && other.startsWith(`${key}\0`),
+        );
         if (endsSession(cause)) handle.sessionEnded();
-        else if (keyConflict(cause) && submission.uncertain) handle.mark();
+        else if (keyConflict(cause) && submission.uncertain && !otherBodySent) handle.mark();
         else handle.clear();
         forget();
         if (!alive.current) return;
