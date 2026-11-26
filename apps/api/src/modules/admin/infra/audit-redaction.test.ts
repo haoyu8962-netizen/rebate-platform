@@ -178,7 +178,7 @@ it('[AC-B2-02zg-REDACT#6] 邮箱右边界：句末句点、半角 , ; : ! ? ) ] 
       '(alice@example.com) [alice@example.com] {alice@example.com}',
       '(al***@example.com) [al***@example.com] {al***@example.com}',
     ],
-    ['"alice@example.com" \'alice@example.com\'!', '"al***@example.com" \'al***@example.com\'!'],
+    ['"alice@example.com" \'alice@example.com\'!', '"al***@example.com" \'a***@example.com\'!'],
     ['邮箱 alice@example.com。', '邮箱 al***@example.com。'],
     ['账号「alice@example.com」、《ab@x.com》？', '账号「al***@example.com」、《a***@x.com》？'],
     ['邮箱（ａｌｉｃｅ＠ｅｘａｍｐｌｅ．ｃｏｍ）。', '邮箱（ａｌ***＠ｅｘａｍｐｌｅ．ｃｏｍ）。'],
@@ -263,15 +263,50 @@ it('[AC-B2-02zg-REDACT#12] 校验位对的 17 位数字 + X / x 不论后面跟�
   expect(redactFreeText('备查 11010519491231003X已核')).toBe(`备查 ${'*'.repeat(14)}003X已核`);
 });
 
-// 本地部分里的撇号。Wrong: every apostrophe ending the left side — o'connor only (mary.o'co***); or
-// none — the quote opening '…' joins the address and is kept as one of its first 2 characters.
-it('[AC-B2-02zg-REDACT#13] 邮箱左边界：本地部分内部的撇号属于地址；前面是空白、标点或开头的撇号是引号，不并入', () => {
+// 本地部分的左边界。Wrong: an apostrophe ending the left side (or ending it unless a character of the
+// address is on both sides) — o'connor / o''connor only (mary.o'co***, mary.o''co***), connor only
+// after a run of quotes; or a listed stop (white space, CJK, full-width punctuation, ( [ { < " : ; ,)
+// taken into the address — its first kept characters would be the stop, not the address.
+it('[AC-B2-02zg-REDACT#13] 邮箱左边界：从 @ 向左到空白、CJK、全角标点或 ( [ { < " : ; , 为止；撇号（不论几个、在不在开头）、点、加号、下划线、连字符都算本地部分', () => {
   expect(redactFreeText("驳回 mary.o'connor@example.com 已核")).toBe('驳回 ma***@example.com 已核');
-  expect(redactFreeText("备注 o'brien@example.com。")).toBe("备注 o'***@example.com。");
-  expect(redactFreeText("'mary.o'connor@example.com'")).toBe("'ma***@example.com'");
-  expect(redactFreeText("见 'alice@example.com' 与 ''bob@example.org")).toBe(
-    "见 'al***@example.com' 与 ''bo***@example.org",
+  expect(redactFreeText("驳回 mary.o''connor@example.com 已核")).toBe(
+    '驳回 ma***@example.com 已核',
   );
+  expect(redactFreeText("驳回 o'''brien@example.com")).toBe("驳回 o'***@example.com");
+  expect(redactFreeText("备注 o'brien@example.com。")).toBe("备注 o'***@example.com。");
+  expect(redactFreeText("见 'alice@example.com' 与 ''bob@example.org")).toBe(
+    "见 'a***@example.com' 与 ''***@example.org",
+  );
+  expect(redactFreeText('见 "alice@example.com" 与 \u201cbob@example.org\u201d')).toBe(
+    '见 "al***@example.com" 与 \u201cbo***@example.org\u201d',
+  );
+  expect(redactFreeText('邮箱alice@example.com，账号：bob@example.org；<carol@example.cn>')).toBe(
+    '邮箱al***@example.com，账号：bo***@example.org；<ca***@example.cn>',
+  );
+  expect(
+    redactFreeText('a:bob@x.com a;bob@x.com a,bob@x.com [bob@x.com] {bob@x.com} 「bob@x.com」'),
+  ).toBe('a:bo***@x.com a;bo***@x.com a,bo***@x.com [bo***@x.com] {bo***@x.com} 「bo***@x.com」');
+  expect(redactFreeText('邮箱 _a-b.c+d@example.com')).toBe('邮箱 _a***@example.com');
+});
+
+// 18 位证件后的 X。Wrong: an X after white space taken into a complete 18-digit identity number — the
+// 19 characters fall back and 239 X shows (***************239 X先生); or a glued X taken in.
+it('[AC-B2-02zg-REDACT#15] 去分隔 ≥ 17 位：18 位纯数字校验通过即按证件首 1 末 1，其后的 X（隔空白或紧贴）都不并入', () => {
+  expect(redactFreeText('证件 110105199003071239 X先生已核')).toBe(
+    `证件 1${'*'.repeat(16)}9 X先生已核`,
+  );
+  expect(redactFreeText('证件 110105199003071239X先生')).toBe(`证件 1${'*'.repeat(16)}9X先生`);
+  expect(redactFreeText('证件 1101 0519 9003 0712 39 x')).toBe(`证件 1*** **** **** **** *9 x`);
+});
+
+// 17 位 + X。Wrong: the X looked for only right after the digits — 17 digits fall back alone and
+// 1002 shows (*************1002 X); or an 18-digit check run before the 17 + X one taking the X
+// only through the fallback (*************002 X).
+it('[AC-B2-02zg-REDACT#16] 17 位数字后紧贴或隔一个空白的 X / x 合成 18 位校验通过即并入，按证件首 1 末 1；合成不过的走兜底', () => {
+  expect(redactFreeText('11010519491231002 X')).toBe(`1${'*'.repeat(16)} X`);
+  expect(redactFreeText('证件 11010519491231002 XAB')).toBe(`证件 1${'*'.repeat(16)} XAB`);
+  expect(redactFreeText('证件 11010519491231002x')).toBe(`证件 1${'*'.repeat(16)}x`);
+  expect(redactFreeText('备查 11010519491231003 X')).toBe(`备查 ${'*'.repeat(14)}003 X`);
 });
 
 // 组合字符。Wrong: NFKC code point by code point — e + U+0301 counted as two characters (e***@…,

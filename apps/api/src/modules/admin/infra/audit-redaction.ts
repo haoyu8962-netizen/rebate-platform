@@ -23,12 +23,13 @@
 //        white space (\s: space, tab, line breaks, U+2028 / U+2029, NBSP, U+202F, ideographic
 //        space…) and every dash or minus (\p{Pd} and U+2212) is a separator. `/ . , _` are no
 //        separators.
-//     2. E-mail-shaped text: an "@" with non-blank text on both sides. Each side runs from the
-//        "@" up to white space, another "@", ASCII `, ; : ! ? ( ) [ ] { } " ' < > = & | \ /` or
-//        any other (non-ASCII) punctuation (，。、；：（）「」【】《》！？…); dots at the end of the right side
-//        are sentence punctuation, not part of it. On the left side an apostrophe with a character
-//        of the address before it belongs to the address (mary.o'connor@…); one with white space,
-//        punctuation or the start of the text before it is a quote and ends the side. A right side shaped like a domain (labels of
+//     2. E-mail-shaped text: an "@" with non-blank text on both sides. The left side runs from
+//        the "@" leftwards up to (not including) white space, another "@", a CJK character, any
+//        non-ASCII punctuation (，。、；：（）「」【】《》！？“”…) or ASCII `( [ { < " : ; ,`; everything
+//        else, apostrophes (any number, also a leading one), dots, "+", "_", "-" included, belongs
+//        to it ('alice@… → 'a***@…). The right side runs from the "@" up to white space, another
+//        "@", ASCII `, ; : ! ? ( ) [ ] { } " ' < > = & | \ /` or any non-ASCII punctuation; dots
+//        at its end are sentence punctuation, not part of it. A right side shaped like a domain (labels of
 //        letters, digits, marks and "-" joined by ".", the last one two or more letters or
 //        xn--…) is shown as written and the left side keeps its first 2 characters (1 when it
 //        has 2, none when it has 1; characters counted as grapheme clusters of the normalised
@@ -38,14 +39,16 @@
 //     3. Digit runs (outside e-mail-shaped text): ASCII digits with any number of separators
 //        between two digits, maybe followed (after separators) by X / x (see below for when). On
 //        the digits (and the X), separators taken out, in this order:
-//          - with an X: 17 digits + X with a correct GB 11643 check character → identity number,
-//            whatever follows the X (证件11010519491231002X已核); anything else of 11 or more
-//            digits with an X that no ASCII letter or digit follows → the fallback (the X counts
-//            as its last character);
+//          - 18 digits with a correct check digit → identity number; what follows (an X too,
+//            glued or after white space: 110105199003071239 X先生) is not part of it;
+//          - else 17 digits followed directly, or after one separator, by X / x, with a correct
+//            GB 11643 check character → identity number with the X, whatever follows the X
+//            (证件11010519491231002X已核);
+//          - else 11 or more digits followed (after separators) by an X that no ASCII letter or
+//            digit follows → the fallback, the X counted as its last character;
 //          - 11 digits 1[3-9]…, or 86 followed by them → mobile, 3 + 4: the 4 digits after the
 //            first 3 of the number starred (138****5678; the 86 prefix kept);
-//          - 18 digits with a correct check digit, or 15 digits whose 7th–12th are a real date
-//            19YY-MM-DD → identity number, first 1 + last 1 (1****************X, 1*************2);
+//          - 15 digits whose 7th–12th are a real date 19YY-MM-DD → identity number, first 1 + last 1 (1****************X, 1*************2);
 //          - 13–19 digits passing Luhn → card, only the last 4 shown;
 //          - otherwise 11 or more digits → the fallback, only the last 4 characters shown (order
 //            numbers, references, numbers failing Luhn or a check, digits glued to letters, a uuid
@@ -144,8 +147,11 @@ function normalise(text: string): Normalised {
 /** Rule 1: white space and dashes (U+2212 included) are separators; nothing else is. */
 const SEPARATOR = /^[\s\p{Pd}\u2212]$/u;
 const DIGIT = /^[0-9]$/;
-/** Rule 2: where a side of an e-mail-shaped piece ends (besides "@"). */
+/** Rule 2: where the right side of an e-mail-shaped piece ends (besides "@"). */
 const ASCII_STOP = /^[\s,;:!?()[\]{}"'<>=&|\\/]$/u;
+/** Rule 2: where the left side ends (besides "@" and non-ASCII punctuation). */
+const LEFT_STOP =
+  /^[\s([{<":;,\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]$/u;
 const PUNCTUATION = /^\p{P}$/u;
 /** Labels joined by dots; the last of two or more letters, or Punycode. */
 const DOMAIN = /^(?:[\p{L}\p{N}\p{M}-]+\.)+(?:\p{L}{2,}|xn--[A-Za-z0-9-]+)$/iu;
@@ -164,11 +170,10 @@ function endsSide(char: string): boolean {
   );
 }
 
-/** Rule 2: the left side goes on past `chars[at - 1]` (the character just left of the side). */
-function leftGoesOn(chars: readonly string[], at: number, floor: number): boolean {
-  const char = chars[at - 1]!;
-  if (char !== "'") return !endsSide(char);
-  return at - 1 > floor && !endsSide(chars[at - 2]!);
+/** Rule 2: `char` is part of the left side of an e-mail-shaped piece. */
+function inLeftSide(char: string): boolean {
+  if (char === '@' || LEFT_STOP.test(char)) return false;
+  return !(char.codePointAt(0)! > 0x7f && PUNCTUATION.test(char));
 }
 
 function passesLuhn(digits: string): boolean {
@@ -216,10 +221,9 @@ function hiddenOfRun(chars: string): number[] {
   const digits = withX ? chars.slice(0, -1) : chars;
   const identity = range(1, chars.length - 1);
   const tailOnly = range(0, chars.length - SHOWN);
-  if (withX) {
-    if (chars.length === 18 && isIdentity18(chars)) return identity;
-    return digits.length >= FALLBACK_MIN ? tailOnly : [];
-  }
+  // An X is only taken in by maskRuns as an identity number's check character or as the last
+  // character of the fallback.
+  if (withX) return isIdentity18(chars) ? identity : tailOnly;
   if (MOBILE.test(digits)) {
     const start = digits.length - 11;
     return range(start + 3, start + 7);
@@ -240,7 +244,7 @@ function maskEmails(chars: readonly string[], masks: (string | undefined)[], tak
   for (let at = 0; at < chars.length; at += 1) {
     if (chars[at] !== '@') continue;
     let left = at;
-    while (left > floor && leftGoesOn(chars, left, floor)) left -= 1;
+    while (left > floor && inLeftSide(chars[left - 1]!)) left -= 1;
     let right = at + 1;
     while (right < chars.length && !endsSide(chars[right]!)) right += 1;
     // Dots at the end are sentence punctuation (alice@example.com. → the address ends at com).
@@ -264,6 +268,35 @@ function maskEmails(chars: readonly string[], masks: (string | undefined)[], tak
   }
 }
 
+const isX = (char: string | undefined): boolean => char === 'X' || char === 'x';
+
+/**
+ * Rule 3: the position of the X / x taken into the run whose digits are at `positions`, if any.
+ * In this order: 18 digits that are an identity number take none; 17 digits take an X right
+ * after them or after one separator when the 18 characters are an identity number; otherwise an
+ * X after any separators is taken (into the fallback) unless an ASCII letter or digit follows it.
+ */
+function xAfter(
+  chars: readonly string[],
+  positions: readonly number[],
+  free: (p: number) => boolean,
+): number | undefined {
+  const digits = positions.map((at) => chars[at]!).join('');
+  if (digits.length === 18 && isIdentity18(digits)) return undefined;
+  const last = positions[positions.length - 1]!;
+  if (digits.length === 17) {
+    for (const x of [last + 1, last + 2]) {
+      if (x === last + 2 && !(free(last + 1) && SEPARATOR.test(chars[last + 1]!))) break;
+      if (free(x) && isX(chars[x]) && isIdentity18(digits + chars[x]!)) return x;
+    }
+  }
+  if (digits.length < FALLBACK_MIN) return undefined;
+  let x = last + 1;
+  while (free(x) && SEPARATOR.test(chars[x]!)) x += 1;
+  if (!free(x) || !isX(chars[x])) return undefined;
+  return free(x + 1) && ASCII_LETTER_OR_DIGIT.test(chars[x + 1]!) ? undefined : x;
+}
+
 /** Rule 3 on the normalised characters outside e-mail-shaped pieces. */
 function maskRuns(chars: readonly string[], masks: (string | undefined)[], taken: boolean[]) {
   const free = (p: number): boolean => p < chars.length && !taken[p];
@@ -279,16 +312,8 @@ function maskRuns(chars: readonly string[], masks: (string | undefined)[], taken
       if (DIGIT.test(chars[q]!)) positions.push(q);
       q += 1;
     }
-    const last = positions[positions.length - 1]!;
-    let x = last + 1;
-    while (free(x) && SEPARATOR.test(chars[x]!)) x += 1;
-    if (free(x) && (chars[x] === 'X' || chars[x] === 'x')) {
-      const digits = positions.map((at) => chars[at]!).join('');
-      const identity = digits.length === 17 && isIdentity18(digits + chars[x]!);
-      if (identity || !(free(x + 1) && ASCII_LETTER_OR_DIGIT.test(chars[x + 1]!))) {
-        positions.push(x);
-      }
-    }
+    const xAt = xAfter(chars, positions, free);
+    if (xAt !== undefined) positions.push(xAt);
     const run = positions.map((at) => chars[at]!).join('');
     for (const index of hiddenOfRun(run)) masks[positions[index]!] = '*';
     p = positions[positions.length - 1]! + 1;
