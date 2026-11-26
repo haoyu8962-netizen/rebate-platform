@@ -30,7 +30,11 @@ it.each(NON_PROD)(
   },
 );
 
-it.each(CREDENTIAL_NAMES.flatMap((name) => [undefined, '  '].map((value) => ({ name, value }))))(
+it.each(
+  CREDENTIAL_NAMES.filter(
+    (name) => name === 'ALIPAY_APP_ID' || name === 'ALIPAY_GATEWAY_URL',
+  ).flatMap((name) => [undefined, '  '].map((value) => ({ name, value }))),
+)(
   '[AC-B2-06f#12] APP_ENV=prod、PAYOUT_MODE=live、$name=$value：缺凭证即启动失败',
   async ({ name, value }) => {
     const f = await fixture({ appEnv: 'prod', env: { ...liveEnv(), [name]: value } });
@@ -40,12 +44,13 @@ it.each(CREDENTIAL_NAMES.flatMap((name) => [undefined, '  '].map((value) => ({ n
 );
 
 it('[AC-B2-06f#13] APP_ENV=prod、PAYOUT_MODE=live、凭证齐全：以 live 与注入的凭证启动，先注册后启动队列，日志不含私钥', async () => {
-  const f = await fixture({ appEnv: 'prod', env: liveEnv() });
+  const { EXPECTED_CREDENTIALS, kmsFixture } = await import('../alipay-cert-kms/entry-kit.ts');
+  const f = await kmsFixture();
   await f.run();
-  expect(f.start.mock.calls).toStrictEqual([[{ mode: 'live', credentials: LIVE_CREDENTIALS }]]);
+  expect(f.start.mock.calls).toStrictEqual([[{ mode: 'live', credentials: EXPECTED_CREDENTIALS }]]);
   expect(f.order).toEqual(['payout-start', 'queue-start']);
   await expectServedThenStopped(f);
-  expect(f.lines.join('\n')).not.toContain(LIVE_CREDENTIALS.privateKey);
+  expect(f.lines.join('\n')).not.toContain(EXPECTED_CREDENTIALS.privateKey);
 });
 
 it.each(['LIVE', 'sandbox', 'production'])(
