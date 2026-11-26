@@ -18,7 +18,11 @@ import { useDataProvider } from '@refinedev/core';
 import { Alert, Button, Flex, Modal, Table, Typography, theme, type TableColumnsType } from 'antd';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
-import { endsSession, useUnknownMarker } from '../../components/unknown-marker/index.ts';
+import {
+  endsSession,
+  keyConflict,
+  useUnknownMarker,
+} from '../../components/unknown-marker/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { withdrawalsTexts } from '../../texts/withdrawals.ts';
 import { executeFailure, keepsUnknown, verifyAgain } from './DetailPayoutActions.tsx';
@@ -247,8 +251,8 @@ export function BatchPayout(props: BatchPayoutProps): ReactElement {
     }
   };
 
+  /** No settled answer (the page is shown): locked, only 【重试】 or 【去列表核对】. */
   const unknown = () => {
-    if (!uncertainRef.current) marker.mark();
     uncertainRef.current = true;
     setPhase('unknown');
   };
@@ -259,6 +263,10 @@ export function BatchPayout(props: BatchPayoutProps): ReactElement {
     stepUpToken: string,
     sent: readonly WithdrawalRow[],
   ): Promise<void> => {
+    // F1-08atb: the marker follows every answer whether or not the page is still shown; only the
+    // dialog (state, callbacks) waits for `alive`.
+    // F1-08atb money r1 S1-1: the request goes out — noted as this submission's (no marker yet).
+    marker.begin();
     try {
       const response = await customOf()<PayoutBatchResult>({
         url: PAYOUT_BATCHES_URL,
@@ -266,14 +274,14 @@ export function BatchPayout(props: BatchPayoutProps): ReactElement {
         payload: body,
         meta: { stepUpToken, idempotencyKey: key },
       });
-      if (!alive.current) return;
       const answer = response.data as Partial<PayoutBatchResult> | undefined;
       if (
         answer?.outcome === 'executed' &&
         Array.isArray(answer.paying) &&
         Array.isArray(answer.left)
       ) {
-        if (uncertainRef.current) marker.clear();
+        marker.clear();
+        if (!alive.current) return;
         forget();
         setNotice(undefined);
         setResult(answer as PayoutBatchResult);
@@ -284,38 +292,52 @@ export function BatchPayout(props: BatchPayoutProps): ReactElement {
       }
       if (answer?.outcome === 'rejected') {
         // 整批拒绝已确定：显示原因全文、解锁，勾选保留；下一次执行是新操作，换新键。
-        if (uncertainRef.current) marker.clear();
+        marker.clear();
+        if (!alive.current) return;
         forget();
         setNotice(refusedText(answer as PayoutBatchResult));
         setPhase('edit');
         return;
       }
       // An answer that does not say what happened is no answer: stay locked.
+      marker.mark();
+      if (!alive.current) return;
       setNotice(undefined);
       unknown();
     } catch (cause) {
-      if (!alive.current) return;
       if (verifyAgain(cause)) {
-        // 凭证未被接受：重新验证后以新凭证、原幂等键与原请求体再发。
+        // 凭证未被接受：重新验证后以新凭证、原幂等键与原请求体再发。先前未知的仍未知。
+        if (uncertainRef.current) marker.mark();
+        if (!alive.current) return;
         setAgain(true);
         setPhase('verify');
         return;
       }
       if (uncertainRef.current && keepsUnknown(cause)) {
+        marker.mark();
+        if (!alive.current) return;
         setNotice(executeFailure(cause));
         setPhase('unknown');
         return;
       }
       if (isSettledRejection(cause)) {
         // A settled refusal settles an unknown submission; an ended session (10001) settles nothing.
-        if (endsSession(cause)) marker.leave();
-        else marker.clear();
+        // F1-08atb money r2 S1: a 20901 (this key with another body) after an undetermined answer
+        // under the key settles nothing about it: the marker stays, given up with the key.
+        if (endsSession(cause)) marker.sessionEnded();
+        else if (uncertainRef.current && keyConflict(cause)) {
+          marker.mark();
+          marker.leave();
+        } else marker.clear();
+        if (!alive.current) return;
         forget();
         setNotice(executeFailure(cause));
         setPhase('edit');
         return;
       }
       // 网络错误、无法解析、40901（同键仍在处理）、5xx：结果未知，锁定。
+      marker.mark();
+      if (!alive.current) return;
       setNotice(undefined);
       unknown();
     }

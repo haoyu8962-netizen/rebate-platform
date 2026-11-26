@@ -17,7 +17,11 @@ import { useDataProvider } from '@refinedev/core';
 import { Alert, Button, Descriptions, Flex, Input, Modal, Typography, theme } from 'antd';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { StepUpModal, type StepUpResult } from '../../components/step-up/index.ts';
-import { endsSession, useUnknownMarker } from '../../components/unknown-marker/index.ts';
+import {
+  endsSession,
+  keyConflict,
+  useUnknownMarker,
+} from '../../components/unknown-marker/index.ts';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { AdminApiError } from '../../providers/data/index.ts';
 import { stepUpTexts } from '../../texts/step-up.ts';
@@ -292,6 +296,10 @@ function DetailExecute({ item, access, clock, onChanged }: DetailPayoutActionsPr
     key: string,
     stepUpToken: string,
   ): Promise<void> => {
+    // F1-08atb: the marker follows every answer whether or not the detail is still shown; only
+    // the dialog waits for `alive`.
+    // F1-08atb money r1 S1-1: the request goes out — noted as this submission's (no marker yet).
+    marker.begin();
     try {
       const response = await customOf()<PayoutBatchResult>({
         url: PAYOUT_BATCHES_URL,
@@ -299,10 +307,10 @@ function DetailExecute({ item, access, clock, onChanged }: DetailPayoutActionsPr
         payload: body,
         meta: { stepUpToken, idempotencyKey: key },
       });
-      if (!alive.current) return;
       const answer = response.data as Partial<PayoutBatchResult> | undefined;
       if (answer?.outcome === 'executed') {
-        if (uncertainRef.current) marker.clear();
+        marker.clear();
+        if (!alive.current) return;
         forget();
         setNotice(undefined);
         setResult(answer as PayoutBatchResult);
@@ -312,38 +320,51 @@ function DetailExecute({ item, access, clock, onChanged }: DetailPayoutActionsPr
       }
       if (answer?.outcome === 'rejected') {
         // 整批拒绝已确定：显示原因、解锁；下一次执行是新操作，换新键。
-        if (uncertainRef.current) marker.clear();
+        marker.clear();
+        if (!alive.current) return;
         forget();
         setNotice(refusedText(answer as PayoutBatchResult));
         setPhase('edit');
         return;
       }
       // An answer that does not say what happened is no answer: stay locked.
-      if (!uncertainRef.current) marker.mark();
+      marker.mark();
+      if (!alive.current) return;
       uncertainRef.current = true;
       setPhase('unknown');
     } catch (cause) {
-      if (!alive.current) return;
       if (verifyAgain(cause)) {
+        // An earlier unknown send of this key stays unknown.
+        if (uncertainRef.current) marker.mark();
+        if (!alive.current) return;
         setAgain(true);
         setPhase('verify');
         return;
       }
       if (uncertainRef.current && keepsUnknown(cause)) {
+        marker.mark();
+        if (!alive.current) return;
         setNotice(executeFailure(cause));
         setPhase('unknown');
         return;
       }
       if (isSettledRejection(cause)) {
         // A settled refusal settles an unknown submission; an ended session (10001) settles nothing.
-        if (endsSession(cause)) marker.leave();
-        else marker.clear();
+        // F1-08atb money r2 S1: a 20901 (this key with another body) after an undetermined answer
+        // under the key settles nothing about it: the marker stays, given up with the key.
+        if (endsSession(cause)) marker.sessionEnded();
+        else if (uncertainRef.current && keyConflict(cause)) {
+          marker.mark();
+          marker.leave();
+        } else marker.clear();
+        if (!alive.current) return;
         forget();
         setNotice(executeFailure(cause));
         setPhase('edit');
         return;
       }
-      if (!uncertainRef.current) marker.mark();
+      marker.mark();
+      if (!alive.current) return;
       uncertainRef.current = true;
       setNotice(undefined);
       setPhase('unknown');
@@ -650,6 +671,10 @@ function DetailManualPaid({
   };
 
   const send = async (body: ManualPayload, key: string, stepUpToken: string): Promise<void> => {
+    // F1-08atb: the marker follows every answer whether or not the detail is still shown; only
+    // the dialog waits for `alive`.
+    // F1-08atb money r1 S1-1: the request goes out — noted as this submission's (no marker yet).
+    marker.begin();
     try {
       const response = await customOf()<ManualAnswer>({
         url: MANUAL_PAID_URL,
@@ -657,44 +682,56 @@ function DetailManualPaid({
         payload: body,
         meta: { stepUpToken, idempotencyKey: key },
       });
-      if (!alive.current) return;
       const items: unknown = (response.data as { items?: unknown } | undefined)?.items;
       if (!Array.isArray(items)) {
-        if (!uncertainRef.current) marker.mark();
+        marker.mark();
+        if (!alive.current) return;
         uncertainRef.current = true;
         setPhase('unknown');
         return;
       }
+      marker.clear();
+      if (!alive.current) return;
       const id = body.items[0]?.withdrawal_id;
       const mine = (items as ManualResult[]).find((line) => line.withdrawal_id === id);
-      if (uncertainRef.current) marker.clear();
       forget();
       setNotice(undefined);
       setResult(mine ?? 'none');
       setPhase('done');
       onChanged();
     } catch (cause) {
-      if (!alive.current) return;
       if (verifyAgain(cause)) {
+        // An earlier unknown send of this key stays unknown.
+        if (uncertainRef.current) marker.mark();
+        if (!alive.current) return;
         setAgain(true);
         setPhase('verify');
         return;
       }
       if (uncertainRef.current && keepsUnknown(cause)) {
+        marker.mark();
+        if (!alive.current) return;
         setNotice(manualFailure(cause));
         setPhase('unknown');
         return;
       }
       if (isSettledRejection(cause)) {
         // A settled refusal settles an unknown submission; an ended session (10001) settles nothing.
-        if (endsSession(cause)) marker.leave();
-        else marker.clear();
+        // F1-08atb money r2 S1: a 20901 (this key with another body) after an undetermined answer
+        // under the key settles nothing about it: the marker stays, given up with the key.
+        if (endsSession(cause)) marker.sessionEnded();
+        else if (uncertainRef.current && keyConflict(cause)) {
+          marker.mark();
+          marker.leave();
+        } else marker.clear();
+        if (!alive.current) return;
         forget();
         setNotice(manualFailure(cause));
         setPhase('edit');
         return;
       }
-      if (!uncertainRef.current) marker.mark();
+      marker.mark();
+      if (!alive.current) return;
       uncertainRef.current = true;
       setNotice(undefined);
       setPhase('unknown');

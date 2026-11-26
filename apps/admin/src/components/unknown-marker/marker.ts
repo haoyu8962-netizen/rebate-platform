@@ -94,11 +94,9 @@ export function markUnknown(scope: MarkerScope, clock: MarkerClock): void {
   changed();
 }
 
-/** Drops the marker of `scope` whatever holds it (the prompt's 【关闭】 by hand). */
-export function clearUnknown(scope: MarkerScope): void {
-  const key = keyOf(scope);
+/** Drops the stored marker of `key` and its holders (【关闭】, or the last holder settled). */
+function drop(key: string): void {
   const area = storage();
-  if (key === undefined) return;
   holders.delete(key);
   if (area === undefined) return;
   try {
@@ -108,6 +106,32 @@ export function clearUnknown(scope: MarkerScope): void {
     return;
   }
   changed();
+}
+
+/**
+ * How often 【关闭】 dropped the marker of a key in this run (only in memory). A submission notes
+ * it when its request goes out; a different count when its answer comes means the prompt was
+ * closed while it was under way (F1-08atb).
+ */
+const closes = new Map<string, number>();
+
+/** The number of 【关闭】 on the prompt of `scope` so far in this run (0 without a key). */
+export function closesOf(scope: MarkerScope): number {
+  const key = keyOf(scope);
+  return key === undefined ? 0 : (closes.get(key) ?? 0);
+}
+
+/**
+ * The prompt's 【关闭】 by hand: drops the marker of `scope` and every holder it stood for (unknown,
+ * given up, or left before a reload). F1-08atb: a submission still under way at that moment is
+ * not written back here and keeps its claim: it holds the marker afresh (holdUnknown) only when
+ * its own answer leaves the result unknown or ends the session (10001), at that answer's moment.
+ */
+export function clearUnknown(scope: MarkerScope): void {
+  const key = keyOf(scope);
+  if (key === undefined) return;
+  closes.set(key, (closes.get(key) ?? 0) + 1);
+  drop(key);
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -177,5 +201,6 @@ export function releaseUnknown(scope: MarkerScope, holder: object): void {
     return;
   }
   if (holding.holders.size > 0) return;
-  clearUnknown(scope);
+  // The last holder settled: not a 【关闭】, so no submission under way gains a claim from it.
+  drop(key);
 }

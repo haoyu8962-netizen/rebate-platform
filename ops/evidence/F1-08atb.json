@@ -1,0 +1,108 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-unknown-marker-multi-submit/adjustment-retry.test.ts > [AC-F1-08atb-ADJUST-RETRY#1] 新建调账结果未知后重试，在途时离页，收到成功即清标记，重新登录无提示",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/adjustment-retry.test.ts > [AC-F1-08atb-ADJUST-RETRY#2] 新建调账重试在途时离页，回来关闭旧提示后收到 10001，重新登录显示该笔及会话失效时刻",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/adjustment-retry.test.ts > [AC-F1-08atb-ADJUST-RETRY#3] 新建调账结果未知后重试，在途时离页，收到确定拒绝即清标记，重新登录无提示",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/adjustment.test.ts > [AC-F1-08atb-ADJUST#1] 新建调账 A 提交在途时离页，返回关闭旧提示后 A 断网；新建调账 B 成功后仍保留 A 的结果未知标记",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/auto-payout.test.ts > [AC-F1-08atb-AUTO#1] 设置保存 A 在途离页，返回提交 B 后关闭旧提示；A 和 B 均成功时重新登录无提示，A 断网而 B 成功时重新登录仍提示 A 及断网时刻",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/auto-payout.test.ts > [AC-F1-08atb-AUTO#2] 两笔保存均在途时关闭旧提示，两笔先后进入未知；A 确定拒绝时 B 的标记仍在，B 成功后才清除",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/auto-payout.test.ts > [AC-F1-08atb-AUTO#3] 保存 A 在途离页，返回关闭旧提示后收到 10001；重新登录仍提示 A 及会话过期时刻",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/batch-payout.test.ts > [AC-F1-08atb-BATCH#1] 批量打款在途时离开提现审核，回来关闭旧提示后断网，重新登录显示该笔及断网时刻",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/close-while-pending.test.ts > [AC-F1-08atb-CLOSE#1] 自动到账设置保存仍在途时关闭旧提示，回答前存储为空且不再弹提示，断网后才登记",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/detail-payout.test.ts > [AC-F1-08atb-DETAIL#1] 详情页执行打款在途时离页，返回提现审核关闭旧提示后断网，重新登录显示该笔及断网时刻",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/detail-payout.test.ts > [AC-F1-08atb-DETAIL#2] 详情页手动成功在途时离页，返回提现审核关闭旧提示后断网，重新登录显示该笔及断网时刻",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/manual-paid-retry.test.ts > [AC-F1-08atb-MANUAL-RETRY#1] 批量手动打款结果未知后重试，在途时离页，收到成功即清标记，重新登录无提示",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/manual-paid-retry.test.ts > [AC-F1-08atb-MANUAL-RETRY#2] 批量手动打款重试在途时离页，回来关闭旧提示后收到 10001，重新登录显示该笔及会话失效时刻",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/manual-paid-retry.test.ts > [AC-F1-08atb-MANUAL-RETRY#3] 批量手动打款结果未知后重试，在途时离页，收到确定拒绝即清标记，重新登录无提示",
+    "test/spec/frontend/admin-unknown-marker-multi-submit/manual-paid.test.ts > [AC-F1-08atb-MANUAL#1] 批量手动打款 A 提交在途时离页，返回关闭旧提示后 A 断网；另一张单 B 录入成功后仍保留 A 的结果未知标记"
+  ],
+  "risk_note": "F1-08atb. apps/admin only (components/unknown-marker, pages/adjustments, pages/withdrawals). The result-unknown marker is held per submission: a settled answer releases only its own holding, the 关闭 prompt drops what it stood for without taking the claim from a submission still in flight; on 调账 the holder is bound to (Idempotency-Key, body), so a same-key same-body replay with a settled answer releases the original submission, and a 20901 releases only the refused body when another body holds the key. Stored marker stays {page, unknown, at}. No contract, money computation or db change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 5,
+      "note": "Codex money rounds as run (wrapper log first line / meta review_scope): r1 full fail (2 S1); r2 incremental fail (1 S1); r3 incremental fail (1 S1); paused 2026-11-22 (D10-2664, PR left draft). Restarted by D10-3166 ③ / D10-3172 (approvals 222): implementation r4, marker held per (Idempotency-Key, body); r4 full (--full, D10-3203 rule) fail (1 S1: a 20901 re-wrote a closed prompt, a rule carried over from the single-slot design in the r4 task); D10-3290 (approvals 223, last round): r5 incremental on dddfbebbd938 pass, no findings. couli-runs/F1-08atb/review-money-r5.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "rule tests by Codex (ledger tester codex), 2 rounds; spec-test reviews by an independent Claude (claude-run.sh, approvals 19 / 36): r1 full fail (3 S1: BatchPayout / DetailPayoutActions, ManualPaid and the adjustment retry paths uncovered) → r2 incremental pass.",
+    "model": "claude-opus-5-5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-08atb",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "spec_commit": "df0f6e753c480a429c99b7d9f617219e2291826d",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "df0f6e753c480a429c99b7d9f617219e2291826d",
+      "tree": "22c3e6291228c4871ab096efb7ba284792f9668b",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-26T07:39:23Z",
+      "finished_at": "2026-11-26T07:39:59Z",
+      "red_tests": [
+        "test/spec/frontend/admin-unknown-marker-multi-submit/adjustment-retry.test.ts > [AC-F1-08atb-ADJUST-RETRY#1] 新建调账结果未知后重试，在途时离页，收到成功即清标记，重新登录无提示",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/adjustment-retry.test.ts > [AC-F1-08atb-ADJUST-RETRY#2] 新建调账重试在途时离页，回来关闭旧提示后收到 10001，重新登录显示该笔及会话失效时刻",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/adjustment-retry.test.ts > [AC-F1-08atb-ADJUST-RETRY#3] 新建调账结果未知后重试，在途时离页，收到确定拒绝即清标记，重新登录无提示",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/adjustment.test.ts > [AC-F1-08atb-ADJUST#1] 新建调账 A 提交在途时离页，返回关闭旧提示后 A 断网；新建调账 B 成功后仍保留 A 的结果未知标记",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/auto-payout.test.ts > [AC-F1-08atb-AUTO#1] 设置保存 A 在途离页，返回提交 B 后关闭旧提示；A 和 B 均成功时重新登录无提示，A 断网而 B 成功时重新登录仍提示 A 及断网时刻",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/auto-payout.test.ts > [AC-F1-08atb-AUTO#2] 两笔保存均在途时关闭旧提示，两笔先后进入未知；A 确定拒绝时 B 的标记仍在，B 成功后才清除",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/auto-payout.test.ts > [AC-F1-08atb-AUTO#3] 保存 A 在途离页，返回关闭旧提示后收到 10001；重新登录仍提示 A 及会话过期时刻",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/batch-payout.test.ts > [AC-F1-08atb-BATCH#1] 批量打款在途时离开提现审核，回来关闭旧提示后断网，重新登录显示该笔及断网时刻",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/close-while-pending.test.ts > [AC-F1-08atb-CLOSE#1] 自动到账设置保存仍在途时关闭旧提示，回答前存储为空且不再弹提示，断网后才登记",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/detail-payout.test.ts > [AC-F1-08atb-DETAIL#1] 详情页执行打款在途时离页，返回提现审核关闭旧提示后断网，重新登录显示该笔及断网时刻",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/detail-payout.test.ts > [AC-F1-08atb-DETAIL#2] 详情页手动成功在途时离页，返回提现审核关闭旧提示后断网，重新登录显示该笔及断网时刻",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/manual-paid-retry.test.ts > [AC-F1-08atb-MANUAL-RETRY#1] 批量手动打款结果未知后重试，在途时离页，收到成功即清标记，重新登录无提示",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/manual-paid-retry.test.ts > [AC-F1-08atb-MANUAL-RETRY#2] 批量手动打款重试在途时离页，回来关闭旧提示后收到 10001，重新登录显示该笔及会话失效时刻",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/manual-paid-retry.test.ts > [AC-F1-08atb-MANUAL-RETRY#3] 批量手动打款结果未知后重试，在途时离页，收到确定拒绝即清标记，重新登录无提示",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/manual-paid.test.ts > [AC-F1-08atb-MANUAL#1] 批量手动打款 A 提交在途时离页，返回关闭旧提示后 A 断网；另一张单 B 录入成功后仍保留 A 的结果未知标记"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-unknown-marker-multi-submit/adjustment-retry.test.ts",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/adjustment.test.ts",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/auto-payout.test.ts",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/batch-payout.test.ts",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/close-while-pending.test.ts",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/detail-payout.test.ts",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/manual-paid-retry.test.ts",
+        "test/spec/frontend/admin-unknown-marker-multi-submit/manual-paid.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "1acae65ba9e8d2417cb0fe6bfcf663ef486243789388dbc1da7beeb2d4f64d6d"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f5e49004a847c92c5bccc489899ed2626368934d",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}

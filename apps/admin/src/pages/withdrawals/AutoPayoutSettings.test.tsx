@@ -600,7 +600,7 @@ it('[F1-08ap-UNIT-MONEY#8] 【刷新核对】 reading a moved version of a key s
   expect(batchCalls(calls), 'nothing resent').toHaveLength(1);
 });
 
-it('[F1-08ap-UNIT-MONEY#9] 【关闭】 on the prompt of an earlier submission while a new save is under way or unknown does not lose the new marker (super and config.business alike)', async () => {
+it('[F1-08ap-UNIT-MONEY#9] 【关闭】 on the prompt of an earlier submission while a new save is under way leaves nothing stored until the save is answered; its unknown answer then holds the marker at that moment (super and config.business alike; F1-08atb)', async () => {
   const EARLIER = Date.parse('2001-02-03T03:00:00.000Z');
   for (const account of [SUPER, BUSINESS]) {
     const scope = { page: MARKER_PAGE, account: account.adminId };
@@ -625,25 +625,29 @@ it('[F1-08ap-UNIT-MONEY#9] 【关闭】 on the prompt of an earlier submission w
       new Date(EARLIER).toISOString(),
     );
 
-    // 【关闭】 while the save is under way: the new submission's marker is written again.
+    // 【关闭】 while the save is under way: the marker goes and is not written back before an answer.
     await act(async () => {
       fireEvent.click(close);
     });
-    await waitFor(() => expect(readUnknown(scope), account.adminId).toEqual(EXPECTED_MARKER));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(readUnknown(scope), `${account.adminId}: nothing before the answer`).toBeUndefined();
+    expect(screen.queryByText(withdrawalsTexts.unknownMarker.notice)).toBeNull();
 
-    // The connection then drops: result unknown, the marker there.
+    // The connection then drops: result unknown, the marker held afresh at this moment.
     await act(async () => {
       pending.reject(new TypeError('connection reset'));
     });
     await waitFor(() => expect(within(panel).getAllByText(t.unknownTitle).length).toBe(1));
     expect(readUnknown(scope), account.adminId).toEqual(EXPECTED_MARKER);
+    expect(Object.keys(readUnknown(scope) ?? {}).sort()).toEqual(['at', 'page', 'unknown']);
 
-    // Dropped again while unknown (e.g. a prompt's 【关闭】 elsewhere): written again.
+    // 【关闭】 again while the save is unknown (no longer under way): it stays gone.
     await act(async () => {
       clearUnknown(scope);
     });
-    expect(readUnknown(scope), account.adminId).toEqual(EXPECTED_MARKER);
-    expect(Object.keys(readUnknown(scope) ?? {}).sort()).toEqual(['at', 'page', 'unknown']);
+    expect(readUnknown(scope), account.adminId).toBeUndefined();
     expect(batchCalls(calls), 'nothing resent').toHaveLength(1);
     cleanup();
     vi.unstubAllGlobals();
