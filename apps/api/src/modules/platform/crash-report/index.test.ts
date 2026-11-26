@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { loadConfig } from '../config/config.ts';
+import { loadConfig, parseCrashReportDsn, type CrashReportConfig } from '../config/config.ts';
 import { createRootLogger } from '../logging/logger.ts';
 import { isPrivateIPv4Host, startCrashReporting, type CrashProcess } from './index.ts';
 
@@ -96,45 +96,57 @@ it('[AC-QA-13d#3] only private-range IPv4 literals count', () => {
   }
 });
 
-it('[AC-QA-13d#1] a hand-built config with a DSN the SDK would refuse is disabled, DSN not logged', async () => {
-  const { logger, lines } = memoryLogger();
-  const proc = fakeProcess();
-  const config = loadConfig({ APP_ENV: 'test' });
-  const dsn = `https://${KEY}-x@glitchtip.unit.test/3`;
-  const reporter = await startCrashReporting({
-    entry: 'api',
-    config: { ...config, crashReport: { dsn } },
-    logger,
-    process: proc,
-  });
-  expect(reporter.enabled).toBe(false);
-  expect(proc.hooks()).toBe(0);
-  expect(lines).toHaveLength(1);
-  expect(JSON.parse(lines[0] ?? '{}')).toMatchObject({ variable: 'CRASH_REPORT_DSN' });
-  expect(lines.join('\n')).not.toContain(KEY);
-});
+function parsed(dsn: string): CrashReportConfig {
+  const result = parseCrashReportDsn(dsn);
+  if (result === undefined) throw new Error('not a DSN');
+  return result;
+}
+
+const PUBLIC = `https://${KEY}@glitchtip.unit.test/3`;
+const REFUSED = `https://${KEY}-x@glitchtip.unit.test/3`;
+const PREFIXED = 'https://glitchtip.unit.test/ops/api/3/envelope/';
 
 it.each([
-  [
-    'a %20 prefix',
-    ' http://unitPayoutPublicKey@10.4.0.9/error tracking/3 ',
-    'http://10.4.0.9/error%20tracking/api/3/envelope/',
-  ],
-  [
-    'a multi-level prefix',
-    'http://unitPayoutPublicKey@10.4.0.9:9000/ops/glitch-tip/3/',
-    'http://10.4.0.9:9000/ops/glitch-tip/api/3/envelope/',
-  ],
-  ['no prefix', 'http://unitPayoutPublicKey@10.4.0.9/3', 'http://10.4.0.9/api/3/envelope/'],
+  ['a DSN the SDK would refuse', { ...parsed(PUBLIC), dsn: REFUSED }],
+  ['an endpoint that disagrees with its DSN', { ...parsed(PUBLIC), envelopeEndpoint: PREFIXED }],
+  ['a host that disagrees with its DSN', { ...parsed(PUBLIC), host: '10.0.0.1' }],
+] as const)(
+  '[AC-QA-13d#1] a hand-built config with %s is disabled, DSN not logged',
+  async (_name: string, crashReport: CrashReportConfig) => {
+    const { logger, lines } = memoryLogger();
+    const proc = fakeProcess();
+    const config = loadConfig({ APP_ENV: 'test' });
+    const reporter = await startCrashReporting({
+      entry: 'payout',
+      config: { ...config, crashReport },
+      logger,
+      process: proc,
+    });
+    expect(reporter.enabled).toBe(false);
+    expect(proc.hooks()).toBe(0);
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0] ?? '{}')).toMatchObject({
+      variable: 'CRASH_REPORT_DSN',
+      reason: 'dsn_malformed',
+    });
+    expect(lines.join('\n')).not.toContain(KEY);
+  },
+);
+
+it.each([
+  ['no trailing slash', ` http://${KEY}@10.4.0.9/3 `, 'http://10.4.0.9/api/3/envelope/'],
+  ['a trailing slash', `http://${KEY}@10.4.0.9:9000/3/`, 'http://10.4.0.9:9000/api/3/envelope/'],
 ])(
-  '[AC-QA-13d#1] payout with %s: accepted by config and SDK, private host, envelope path kept',
+  "[AC-QA-13d#1] payout with %s: accepted, private host, posts to the config layer's endpoint",
   async (_name: string, dsn: string, endpoint: string) => {
     const { logger, lines } = memoryLogger();
     const calls: string[] = [];
     const proc = fakeProcess();
+    const config = loadConfig({ APP_ENV: 'test', CRASH_REPORT_DSN: dsn });
+    expect(config.crashReport?.envelopeEndpoint).toBe(endpoint);
     const reporter = await startCrashReporting({
       entry: 'payout',
-      config: loadConfig({ APP_ENV: 'test', CRASH_REPORT_DSN: dsn }),
+      config,
       logger,
       fetch: (input) => {
         calls.push(String(input));
@@ -144,12 +156,12 @@ it.each([
     });
     try {
       expect(reporter.enabled).toBe(true);
-      reporter.captureException(new Error('unit payout prefix capture'));
+      reporter.captureException(new Error('unit payout endpoint capture'));
       await reporter.flush(1_000);
     } finally {
       await reporter.close(500);
     }
-    expect(calls).toEqual([endpoint]);
+    expect(calls).toEqual([config.crashReport?.envelopeEndpoint]);
     expect(lines.filter((line) => (JSON.parse(line) as { level: number }).level >= 40)).toEqual([]);
   },
 );

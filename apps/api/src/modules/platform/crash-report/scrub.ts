@@ -49,6 +49,13 @@ const BASIC_TEXT =
 // Credentials written as key=value (`access_token=…`, `api_key=…`, `secret=…`, `token=…`, any case,
 // also as the tail of a longer key such as refresh_token): the whole value, up to a blank or `&`.
 const TOKEN_PAIR_TEXT = /(?<![A-Za-z0-9])(access_token|api_key|secret|token)=[^\s&]+/gi;
+// The same keys written as JSON (`"access_token":"…"`, blanks around the colon, any case, also
+// refresh_token / client_secret): the whole quoted value, escaped quotes included. A second form
+// covers JSON quoted once more inside a string (`\"token\":\"…\"`).
+const TOKEN_JSON_TEXT =
+  /(?<![A-Za-z0-9])(access_token|api_key|secret|token)("\s*:\s*")(?:[^"\\]|\\.)*/gi;
+const TOKEN_JSON_ESCAPED_TEXT =
+  /(?<![A-Za-z0-9])(access_token|api_key|secret|token)(\\"\s*:\s*\\")(?:[^"\\]|\\(?!")[^"])*/gi;
 
 /** Free text: no credential, promotion URL, 口令 or 推广位, then redaction.ts's personal-data net. */
 export function scrubText(value: string): string {
@@ -58,6 +65,8 @@ export function scrubText(value: string): string {
       .replace(AUTH_HEADER_TEXT, `$1$2${REDACTED}`)
       .replace(BEARER_TEXT, `$1${REDACTED}`)
       .replace(BASIC_TEXT, `$1${REDACTED}`)
+      .replace(TOKEN_JSON_TEXT, `$1$2${REDACTED}`)
+      .replace(TOKEN_JSON_ESCAPED_TEXT, `$1$2${REDACTED}`)
       .replace(TOKEN_PAIR_TEXT, `$1=${REDACTED}`)
       .replace(URL_TEXT, REDACTED)
       .replace(WWW_TEXT, REDACTED)

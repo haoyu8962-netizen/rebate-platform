@@ -63,3 +63,35 @@ it('[AC-QA-13d#2] words that only look like the keys stay readable', () => {
   expect(scrubText('secret rotation failed')).toBe('secret rotation failed');
   expect(scrubText('mytoken=visible')).toBe('mytoken=visible');
 });
+
+it.each([
+  [`上游认证失败 {"access_token":"${TOKEN}"}`, '{"access_token":"[REDACTED]"}'],
+  [`{"api_key" : "${TOKEN}","status":401}`, '{"api_key" : "[REDACTED]","status":401}'],
+  [`{"Secret":"${TOKEN}"}`, '{"Secret":"[REDACTED]"}'],
+  [`{"TOKEN":  "${TOKEN}"}`, '{"TOKEN":  "[REDACTED]"}'],
+  [`{"refresh_token":"${TOKEN}","ttl":60}`, '{"refresh_token":"[REDACTED]","ttl":60}'],
+  [`{"client_secret":"a\\"${TOKEN}"}`, '{"client_secret":"[REDACTED]"}'],
+  [`body={\\"token\\":\\"${TOKEN}\\"}`, 'body={\\"token\\":\\"[REDACTED]\\"}'],
+])(
+  '[AC-QA-13d#2] scrubText replaces the whole quoted JSON value of the credential key in %s',
+  (text, kept) => {
+    const scrubbed = scrubText(text);
+    expect(scrubbed).toContain(kept);
+    expect(scrubbed).not.toContain(TOKEN);
+  },
+);
+
+it('[AC-QA-13d#2] an exception message carrying JSON credentials leaves the event without the token', () => {
+  const value = `上游认证失败 {"access_token":"${TOKEN}","code":401}`;
+  const event = scrubEvent({ exception: { values: [{ type: 'Error', value }] } });
+  expect(event.exception?.values?.[0]?.value).toBe(
+    '上游认证失败 {"access_token":"[REDACTED]","code":401}',
+  );
+  expect(JSON.stringify(event)).not.toContain(TOKEN);
+});
+
+it('[AC-QA-13d#2] JSON keys that only look like the credential keys stay readable', () => {
+  expect(scrubText('{"mytoken":"visible","tokens":"also"}')).toBe(
+    '{"mytoken":"visible","tokens":"also"}',
+  );
+});

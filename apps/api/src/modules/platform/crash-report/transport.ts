@@ -1,5 +1,6 @@
 // fetch transport of crash reporting (QA-13d ①): createTransport around one POST to the envelope
-// endpoint derived from the DSN (`<scheme>://<host>[:<port>][/<prefix>]/api/<project>/envelope/`),
+// endpoint the config layer derived from the DSN (`<scheme>://<host>[:<port>]/api/<project>/envelope/`,
+// CrashReportConfig.envelopeEndpoint; nothing here parses the DSN),
 // authenticated with the DSN's public key in the X-Sentry-Auth header (never in the URL). Redirects
 // are never followed (payout: no hop may leave the internal network). Each send has a time limit.
 // A failed send (unreachable, time-out, non-2xx, a fetch that throws) is swallowed with one warn
@@ -11,6 +12,7 @@ import {
   type TransportMakeRequestResponse,
   type TransportRequest,
 } from '@sentry/core';
+import type { CrashReportConfig } from '../config/config.ts';
 import type { RootLogger } from '../logging/logger.ts';
 
 export type TransportFetch = (
@@ -23,32 +25,11 @@ export const SEND_TIMEOUT_MS = 5_000;
 
 const SDK_CLIENT = 'couli-crash-report/1.0';
 
-export interface EnvelopeTarget {
-  /** The envelope endpoint, without query string. */
-  readonly endpoint: string;
-  readonly publicKey: string;
-}
-
-/** The endpoint and public key of `dsn`; undefined for anything that is not a DSN. */
-export function envelopeTarget(dsn: string): EnvelopeTarget | undefined {
-  // Parsed here rather than with makeDsn, which writes a malformed DSN to the console.
-  let url: URL;
-  try {
-    url = new URL(dsn);
-  } catch {
-    return undefined;
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
-  const publicKey = decodeURIComponent(url.username);
-  const segments = url.pathname.split('/').filter((segment) => segment !== '');
-  const projectId = segments.pop() ?? '';
-  if (publicKey === '' || url.hostname === '' || !/^\d+$/.test(projectId)) return undefined;
-  const prefix = segments.map((segment) => `/${segment}`).join('');
-  return {
-    endpoint: `${url.protocol}//${url.host}${prefix}/api/${projectId}/envelope/`,
-    publicKey,
-  };
-}
+/**
+ * Where and as whom envelopes are sent: the config layer's parsed DSN (parseCrashReportDsn,
+ * CrashReportConfig). The transport never parses the DSN itself (D10-3319).
+ */
+export type EnvelopeTarget = Pick<CrashReportConfig, 'envelopeEndpoint' | 'publicKey'>;
 
 export interface FetchTransportSettings {
   readonly target: EnvelopeTarget;
@@ -86,7 +67,7 @@ export function envelopeSender(
   };
   return async (request) => {
     try {
-      const response = await settings.fetch(target.endpoint, {
+      const response = await settings.fetch(target.envelopeEndpoint, {
         method: 'POST',
         body: request.body as NonNullable<RequestInit['body']>,
         headers: {

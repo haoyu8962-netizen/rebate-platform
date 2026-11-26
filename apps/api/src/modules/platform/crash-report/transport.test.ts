@@ -1,16 +1,11 @@
 import { createEnvelope, type EventEnvelope } from '@sentry/core';
 import { expect, it } from 'vitest';
+import { parseCrashReportDsn, type CrashReportConfig } from '../config/config.ts';
 import { createRootLogger } from '../logging/logger.ts';
-import {
-  envelopeSender,
-  envelopeTarget,
-  makeFetchTransport,
-  type EnvelopeTarget,
-  type TransportFetch,
-} from './transport.ts';
+import { envelopeSender, makeFetchTransport, type TransportFetch } from './transport.ts';
 
 const KEY = 'unitTestPublicKeyPlaceholder';
-const DSN = `https://${KEY}@glitchtip.unit.test:8443/prefix/7`;
+const DSN = `https://${KEY}@glitchtip.unit.test:8443/7`;
 
 interface Call {
   readonly url: string;
@@ -39,24 +34,31 @@ function recordingFetch(answer: (call: Call) => Promise<Response> | Response): {
   return { fetch, calls };
 }
 
-function targetOf(dsn: string): EnvelopeTarget {
-  const target = envelopeTarget(dsn);
+/** The config layer's parsed DSN: the transport's only source of endpoint and key. */
+function targetOf(dsn: string): CrashReportConfig {
+  const target = parseCrashReportDsn(dsn);
   if (target === undefined) throw new Error('not a DSN');
   return target;
 }
 
-it('[AC-QA-13d#5] the envelope endpoint keeps scheme, host, port and prefix, without query string', () => {
-  expect(envelopeTarget(DSN)).toEqual({
-    endpoint: 'https://glitchtip.unit.test:8443/prefix/api/7/envelope/',
+it('[AC-QA-13d#5] the config layer gives the envelope endpoint: scheme, host, port, no query string', () => {
+  expect(targetOf(DSN)).toMatchObject({
+    envelopeEndpoint: 'https://glitchtip.unit.test:8443/api/7/envelope/',
     publicKey: KEY,
   });
-  expect(envelopeTarget(`http://${KEY}@10.1.2.3/12`)?.endpoint).toBe(
+  expect(targetOf(`http://${KEY}@10.1.2.3/12/`).envelopeEndpoint).toBe(
     'http://10.1.2.3/api/12/envelope/',
   );
-  expect(envelopeTarget('https://glitchtip.unit.test/7')).toBeUndefined();
-  expect(envelopeTarget(`https://${KEY}@glitchtip.unit.test/abc`)).toBeUndefined();
-  expect(envelopeTarget(`ftp://${KEY}@glitchtip.unit.test/7`)).toBeUndefined();
-  expect(envelopeTarget('not a url')).toBeUndefined();
+});
+
+it("[AC-QA-13d#5] the transport posts to the config layer's envelopeEndpoint verbatim", async () => {
+  for (const dsn of [DSN, `http://${KEY}@10.1.2.3:9000/3`, `http://${KEY}@10.1.2.3:9000/3/`]) {
+    const target = targetOf(dsn);
+    const { logger } = memoryLogger();
+    const { fetch, calls } = recordingFetch(() => new Response('{}', { status: 200 }));
+    await envelopeSender({ target, fetch, logger })({ body: 'b' });
+    expect(calls.map((call) => call.url)).toEqual([target.envelopeEndpoint]);
+  }
 });
 
 it('[AC-QA-13d#5] one POST with the body, X-Sentry-Auth carrying the key, no redirect following, a signal', async () => {
@@ -67,7 +69,7 @@ it('[AC-QA-13d#5] one POST with the body, X-Sentry-Auth carrying the key, no red
   expect(response.statusCode).toBe(200);
   expect(calls).toHaveLength(1);
   const call = calls[0];
-  expect(call?.url).toBe('https://glitchtip.unit.test:8443/prefix/api/7/envelope/');
+  expect(call?.url).toBe('https://glitchtip.unit.test:8443/api/7/envelope/');
   expect(call?.init?.method).toBe('POST');
   expect(call?.init?.body).toBe('envelope-body');
   expect(call?.init?.redirect).toBe('manual');

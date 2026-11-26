@@ -19,14 +19,14 @@ import {
   type SeverityLevel,
 } from '@sentry/core';
 import { ServerRuntimeClient, type ServerRuntimeClientOptions } from '@sentry/core/server';
-import { normalizeCrashReportDsn } from '../config/config.ts';
+import { parseCrashReportDsn, type CrashReportConfig } from '../config/config.ts';
 import type { AppConfig } from '../config/index.ts';
 import type { EntryName } from '../entries.ts';
 import type { RootLogger } from '../logging/index.ts';
 import { hookLogger, installProcessHooks, type LogLevelName } from './hooks.ts';
 import { scrubEvent, scrubText } from './scrub.ts';
 import { nodeStackLineParser } from './stack-parser.ts';
-import { makeFetchTransport, envelopeTarget } from './transport.ts';
+import { makeFetchTransport } from './transport.ts';
 
 /** How envelopes are sent: globalThis.fetch in production; tests inject one (never the network). */
 export type CrashFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -124,12 +124,19 @@ export function isPrivateIPv4Host(host: string): boolean {
   return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 }
 
-function hostOf(dsn: string): string {
-  try {
-    return new URL(dsn).hostname;
-  } catch {
-    return '';
-  }
+/**
+ * True when `settings` is exactly what parseCrashReportDsn makes of its own dsn: a hand-built
+ * config whose fields disagree with each other (or with the config layer) is refused rather than
+ * reconciled, so the endpoint, key, host and SDK DSN can only ever come from one parse.
+ */
+function isParsedForm(settings: CrashReportConfig): boolean {
+  const parsed = parseCrashReportDsn(settings.dsn);
+  if (parsed === undefined) return false;
+  const keys = Object.keys(parsed) as (keyof CrashReportConfig)[];
+  return (
+    Object.keys(settings).length === keys.length &&
+    keys.every((key) => settings[key] === parsed[key])
+  );
 }
 
 function describeEscaped(error: unknown): string {
@@ -209,15 +216,14 @@ export async function startCrashReporting(options: CrashReportOptions): Promise<
   const { entry, config, logger } = options;
   const settings = config.crashReport;
   if (settings === undefined || settings.dsn === '') return DISABLED;
-  // One normalised DSN (loadConfig already normalised it; a hand-built config is normalised here):
-  // the payout host check, the envelope endpoint and the SDK all use this one string.
-  const dsn = normalizeCrashReportDsn(settings.dsn);
-  const target = dsn === undefined ? undefined : envelopeTarget(dsn);
-  if (dsn === undefined || target === undefined) {
+  // The one parsed DSN of the config layer (parseCrashReportDsn): the payout host check, the
+  // transport and the SDK all read these fields; nothing here derives a field of its own (the
+  // config layer's parser only confirms a hand-built object is its own output).
+  if (!isParsedForm(settings)) {
     warnDisabled(logger, entry, 'dsn_malformed');
     return DISABLED;
   }
-  if (entry === 'payout' && !isPrivateIPv4Host(hostOf(dsn))) {
+  if (entry === 'payout' && !isPrivateIPv4Host(settings.host)) {
     // payout has no public egress (ADR-0001 §4.2 #20); neither the DSN nor its host is logged.
     warnDisabled(logger, entry, 'payout_dsn_host_not_private_ipv4');
     return DISABLED;
@@ -226,7 +232,7 @@ export async function startCrashReporting(options: CrashReportOptions): Promise<
   // sendDefaultPii is no longer in the 11.x option types, but it is still set (false) so that no
   // default personal data is ever collected; the allowlist in beforeSend applies regardless.
   const clientOptions: ServerRuntimeClientOptions & { readonly sendDefaultPii: false } = {
-    dsn,
+    dsn: settings.dsn,
     environment: config.appEnv,
     ...(config.deployVersion === undefined ? {} : { release: config.deployVersion }),
     sendDefaultPii: false,
@@ -240,7 +246,7 @@ export async function startCrashReporting(options: CrashReportOptions): Promise<
     integrations: [dedupeIntegration(), linkedErrorsIntegration()],
     stackParser,
     transport: makeFetchTransport({
-      target,
+      target: settings,
       fetch: options.fetch ?? globalThis.fetch,
       logger,
     }),

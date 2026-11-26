@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { readAgentUserHashConfig } from './agent-user-hash.ts';
-import { ConfigError, loadConfig, normalizeCrashReportDsn } from './config.ts';
+import { ConfigError, loadConfig, normalizeCrashReportDsn, parseCrashReportDsn } from './config.ts';
 
 /** Synthetic AGENT_USER_HASH_KEY for prod inputs (B3-09j: prod refuses to start without it). */
 const AGENT_KEY = 'unit-test-agent-user-hash-key';
@@ -369,46 +369,63 @@ describe('CRASH_REPORT_DSN', () => {
 
   it('[AC-QA-13d#1] set: the DSN as given when already normal', () => {
     const config = loadConfig({ APP_ENV: 'local', CRASH_REPORT_DSN: DSN });
-    expect(config.crashReport).toEqual({ dsn: DSN });
+    expect(config.crashReport).toEqual({
+      dsn: DSN,
+      origin: 'https://glitchtip.unit.test',
+      host: 'glitchtip.unit.test',
+      projectId: '5',
+      publicKey: '0123456789abcdef0123456789abcdef',
+      envelopeEndpoint: 'https://glitchtip.unit.test/api/5/envelope/',
+    });
   });
 
   it('[AC-QA-13d#1] set: blanks, a trailing slash and a default port are normalised away', () => {
     for (const [value, normal] of [
       [` ${DSN}\n`, DSN],
       [`${DSN}/`, DSN],
-      [
-        'HTTPS://unitDsnKey@GlitchTip.Unit.Test:443/prefix/5',
-        'https://unitDsnKey@glitchtip.unit.test/prefix/5',
-      ],
+      ['HTTPS://unitDsnKey@GlitchTip.Unit.Test:443/5', 'https://unitDsnKey@glitchtip.unit.test/5'],
       ['http://unitDsnKey@10.1.2.3:8000/5', 'http://unitDsnKey@10.1.2.3:8000/5'],
     ] as const) {
-      expect(loadConfig({ APP_ENV: 'local', CRASH_REPORT_DSN: value }).crashReport).toEqual({
-        dsn: normal,
-      });
+      expect(loadConfig({ APP_ENV: 'local', CRASH_REPORT_DSN: value }).crashReport?.dsn).toBe(
+        normal,
+      );
       expect(normalizeCrashReportDsn(value)).toBe(normal);
     }
   });
 
-  it("[AC-QA-13d#1] a path prefix is kept in the URL parser's encoded form", () => {
-    for (const [value, normal] of [
-      [
-        'https://unitDsnKey@glitchtip.unit.test/error%20tracking/3',
-        'https://unitDsnKey@glitchtip.unit.test/error%20tracking/3',
-      ],
-      [
-        'https://unitDsnKey@glitchtip.unit.test/error tracking/3',
-        'https://unitDsnKey@glitchtip.unit.test/error%20tracking/3',
-      ],
-      [
-        'http://unitDsnKey@10.1.2.3:8000/ops/glitch-tip/v1/3/',
-        'http://unitDsnKey@10.1.2.3:8000/ops/glitch-tip/v1/3',
-      ],
-      ['https://unitDsnKey@glitchtip.unit.test/3', 'https://unitDsnKey@glitchtip.unit.test/3'],
+  it('[AC-QA-13d#1] the path is exactly /<project id>, with or without one trailing slash', () => {
+    for (const [value, endpoint] of [
+      ['https://unitDsnKey@glitchtip.unit.test/3', 'https://glitchtip.unit.test/api/3/envelope/'],
+      ['https://unitDsnKey@glitchtip.unit.test/3/', 'https://glitchtip.unit.test/api/3/envelope/'],
+      ['http://unitDsnKey@10.1.2.3:8000/3/', 'http://10.1.2.3:8000/api/3/envelope/'],
     ] as const) {
-      expect(normalizeCrashReportDsn(value)).toBe(normal);
-      expect(loadConfig({ APP_ENV: 'local', CRASH_REPORT_DSN: value }).crashReport).toEqual({
-        dsn: normal,
-      });
+      const parsed = parseCrashReportDsn(value);
+      expect(parsed?.projectId).toBe('3');
+      expect(parsed?.envelopeEndpoint).toBe(endpoint);
+      expect(parsed?.dsn).toBe(value.replace(/\/$/, ''));
+      expect(loadConfig({ APP_ENV: 'local', CRASH_REPORT_DSN: value }).crashReport).toEqual(parsed);
+    }
+  });
+
+  it('[AC-QA-13d#1] a DSN with any path prefix is refused naming only the variable', () => {
+    for (const value of [
+      'https://unitDsnKey@glitchtip.unit.test/error%20tracking/3',
+      'https://unitDsnKey@glitchtip.unit.test/error tracking/3',
+      'http://unitDsnKey@10.1.2.3:8000/ops/glitch-tip/v1/3/',
+      'https://unitDsnKey@glitchtip.unit.test/prefix/3',
+      'https://unitDsnKey@glitchtip.unit.test//3',
+      'https://unitDsnKey@glitchtip.unit.test/ops//glitch-tip/3',
+      'https://unitDsnKey@glitchtip.unit.test/%33',
+      'https://unitDsnKey@glitchtip.unit.test/3//',
+      'https://unitDsnKey@glitchtip.unit.test/',
+    ]) {
+      expect(parseCrashReportDsn(value)).toBeUndefined();
+      expect(normalizeCrashReportDsn(value)).toBeUndefined();
+      const problems = problemsOf({ APP_ENV: 'local', CRASH_REPORT_DSN: value });
+      expect(problems).toHaveLength(1);
+      expect(problems[0]?.startsWith('CRASH_REPORT_DSN:')).toBe(true);
+      expect(problems.join('\n')).not.toContain('unitDsnKey');
+      expect(problems.join('\n')).not.toContain('glitchtip.unit.test');
     }
   });
 
