@@ -3,8 +3,8 @@
 
 /** What the process hooks see of the process. */
 export interface HookedProcess {
-  on(event: string, listener: (...args: never[]) => void): unknown;
-  off(event: string, listener: (...args: never[]) => void): unknown;
+  on(event: string, listener: (value: unknown) => void): unknown;
+  off(event: string, listener: (value: unknown) => void): unknown;
   exit(code?: number): unknown;
   readonly stderr?: { write(chunk: string): unknown };
 }

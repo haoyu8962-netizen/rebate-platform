@@ -57,7 +57,9 @@ export interface FetchTransportSettings {
   readonly timeoutMs?: number;
 }
 
-function rateLimitHeaders(response: Response): TransportMakeRequestResponse['headers'] {
+function rateLimitHeaders(
+  response: Response,
+): NonNullable<TransportMakeRequestResponse['headers']> {
   return {
     'x-sentry-rate-limits': response.headers.get('x-sentry-rate-limits'),
     'retry-after': response.headers.get('retry-after'),
@@ -86,7 +88,7 @@ export function envelopeSender(
     try {
       const response = await settings.fetch(target.endpoint, {
         method: 'POST',
-        body: request.body as RequestInit['body'],
+        body: request.body as NonNullable<RequestInit['body']>,
         headers: {
           ...extraHeaders,
           'content-type': 'application/x-sentry-envelope',

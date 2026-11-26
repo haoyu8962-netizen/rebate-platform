@@ -1,7 +1,7 @@
 // Crash reporting of the five backend processes (api / stream / admin / worker / payout) to
 // GlitchTip (QA-13d; 01 F-OBS-01, 02 §13 崩溃行, §12.6): @sentry/core plus a minimal Node
 // integration of our own (fetch transport, Node stack-line parser, process hooks, start-up,
-// beforeSend allowlist). No @sentry/node, no OpenTelemetry takeover, no tracing / replay / profiles.
+// beforeSend allowlist). Core package only: no Node SDK, no tracing takeover, no replay / profiles.
 // CRASH_REPORT_DSN unset → nothing is created and no process hook is installed. payout reports only
 // to an internal DSN host.
 import { inspect } from 'node:util';
@@ -32,8 +32,8 @@ export type CrashFetch = (input: string | URL | Request, init?: RequestInit) => 
 
 /** The process whose uncaughtException / unhandledRejection hooks are installed. */
 export interface CrashProcess {
-  on(event: string, listener: (...args: never[]) => void): unknown;
-  off(event: string, listener: (...args: never[]) => void): unknown;
+  on(event: string, listener: (value: unknown) => void): unknown;
+  off(event: string, listener: (value: unknown) => void): unknown;
   exit(code?: number): unknown;
   /** Where an escaped error is written before the exit, as Node does (the real process's stderr). */
   readonly stderr?: { write(chunk: string): unknown };
@@ -210,7 +210,9 @@ export async function startCrashReporting(options: CrashReportOptions): Promise<
     return DISABLED;
   }
   const stackParser = createStackParser(nodeStackLineParser);
-  const clientOptions: ServerRuntimeClientOptions = {
+  // sendDefaultPii is no longer in the 11.x option types, but it is still set (false) so that no
+  // default personal data is ever collected; the allowlist in beforeSend applies regardless.
+  const clientOptions: ServerRuntimeClientOptions & { readonly sendDefaultPii: false } = {
     dsn: settings.dsn,
     environment: config.appEnv,
     ...(config.deployVersion === undefined ? {} : { release: config.deployVersion }),

@@ -134,7 +134,10 @@ it('[AC-QA-13d#5] makeFetchTransport sends serialized envelopes through createTr
     headers: { 'user-agent': 'sentry.javascript.core', authorization: 'never' },
   });
   const item: EventEnvelope[1][number] = [{ type: 'event' }, { message: 'unit-event' }];
-  const envelope = createEnvelope<EventEnvelope>({}, [item]);
+  const envelope = createEnvelope<EventEnvelope>(
+    { event_id: 'unit-event-id', sent_at: new Date(0).toISOString() },
+    [item],
+  );
   await transport.send(envelope);
   expect(await transport.flush(1_000)).toBe(true);
   expect(calls).toHaveLength(1);
