@@ -15,6 +15,11 @@
 // nothing is stored by it. A 10001 answering a send during which 【关闭】 was pressed holds the
 // marker at the clock's now even if this submission had never marked: 【关闭】 does not take away
 // the claim of a submission that was under way while the prompt stood.
+// F1-08atb money r3 S1 (D10-3166 ③ / D10-3172): the holding is a MarkerHandle — one submission,
+// one holder for the handle's whole life. The hook's own methods work on a default handle that is
+// replaced after clear() / leave() / sessionEnded() (the next mark() is a new submission, as
+// before); open() gives a page an independent handle, so a page whose submission is (key, body)
+// (调账) can keep several and settle each with its own answer.
 import { useActiveAuthProvider } from '@refinedev/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminApiError } from '../../providers/data/index.ts';
@@ -73,10 +78,37 @@ const KEY_CONFLICT = 20901;
  * Whether an answer to a write is 20901 (the same Idempotency-Key with another body). F1-08atb
  * money r2 S1: it says nothing about the submission stored under that key, so after an
  * undetermined answer under the key the earlier submission stays unknown — its marker is kept
- * (mark(), then leave() as the key is dropped), never released by this answer.
+ * (mark(); its handle goes with the key), never released by this answer.
  */
 export function keyConflict(cause: unknown): boolean {
   return cause instanceof AdminApiError && cause.kind === 'api' && cause.code === KEY_CONFLICT;
+}
+
+export interface MarkerHandle {
+  /**
+   * This submission's request goes out (a first send or a resend): notes the account it goes out
+   * under and the count of 【关闭】 so far; nothing is stored.
+   */
+  begin(): void;
+  /**
+   * This submission's result is unknown (now, by the clock): it holds the marker; an existing
+   * marker of the page keeps its earlier moment and this submission joins it. Again while it
+   * still holds: nothing changes. Dropped meanwhile by 【关闭】: held afresh at now.
+   */
+  mark(): void;
+  /**
+   * This submission got a settled answer: it releases only its own holding; the marker goes
+   * when no other submission holds it. Without a mark() of it: nothing changes. The holder stays
+   * the same: a later mark() of this handle is the same submission holding again.
+   */
+  clear(): void;
+  /**
+   * An answer of this submission ended the session (10001), which settles nothing: when it had
+   * marked its result unknown, or 【关闭】 was pressed while its request (begin()) was under way,
+   * it holds the marker — afresh at now if 【关闭】 dropped it meanwhile — and is given up: the
+   * holding stays until 【关闭】 and every later call of this handle changes nothing.
+   */
+  sessionEnded(): void;
 }
 
 export interface UnknownMarkerControl {
@@ -114,6 +146,104 @@ export interface UnknownMarkerControl {
    * 【关闭】 dropped it meanwhile — and is given up as with leave(); otherwise nothing is kept.
    */
   sessionEnded(): void;
+  /**
+   * A handle of one more submission, independent of the default one above and of every other
+   * handle: its own holder, request under way and mark before the account was known.
+   */
+  open(): MarkerHandle;
+}
+
+/** One submission's handle with its giving up (the hook's leave() of the default handle). */
+interface Handle extends MarkerHandle {
+  leave(): void;
+}
+
+/** The refs a handle reads at call time (the page's current scope and clock). */
+interface HandleContext {
+  readonly scope: { readonly current: MarkerScope };
+  readonly clock: { readonly current: MarkerClock };
+  /**
+   * Handles that marked before the account was known, with the moment of that mark: kept for
+   * the account once it is, each by its own holder at its own moment.
+   */
+  readonly waiting: Map<HandleState, number>;
+}
+
+interface HandleState {
+  /** This submission as a holder of the marker (the same for the handle's whole life). */
+  readonly holder: object;
+  /** The scope it marked under (undefined: it does not hold). */
+  held: MarkerScope | undefined;
+  /**
+   * Its request under way (begin()): the scope it was sent under and the count of 【关闭】 at that
+   * moment; undefined once it was settled or given up.
+   */
+  flight: { scope: MarkerScope; closes: number } | undefined;
+  /** Given up (leave() / sessionEnded()): a holding it has stays, nothing it does changes it. */
+  left: boolean;
+}
+
+function createHandle(context: HandleContext): Handle {
+  const state: HandleState = { holder: {}, held: undefined, flight: undefined, left: false };
+  const { waiting } = context;
+  const mark = () => {
+    if (state.left || waiting.has(state)) return;
+    // The scope the submission first marked under (the account that made it), else the one its
+    // request went out under, else the current.
+    const flown = state.flight?.scope;
+    const target =
+      state.held ?? (flown?.account !== undefined ? flown : undefined) ?? context.scope.current;
+    if (target.account === undefined) {
+      waiting.set(state, context.clock.current.now());
+      return;
+    }
+    // Idempotent while this holder holds the stored marker; held afresh once 【关闭】 dropped it.
+    holdUnknown(target, context.clock.current, state.holder);
+    state.held = target;
+  };
+  const leave = () => {
+    // The holding stays among the marker's holders for good (a mark still waiting for the
+    // account is kept for it as well).
+    state.left = true;
+    state.held = undefined;
+    state.flight = undefined;
+  };
+  return {
+    begin() {
+      if (state.left) return;
+      const target = state.held ?? context.scope.current;
+      state.flight = { scope: target, closes: closesOf(target) };
+    },
+    mark,
+    clear() {
+      if (state.left) return;
+      waiting.delete(state);
+      const held = state.held;
+      state.held = undefined;
+      state.flight = undefined;
+      if (held !== undefined) releaseUnknown(held, state.holder);
+    },
+    leave,
+    sessionEnded() {
+      if (state.left) return;
+      const flight = state.flight;
+      // 【关闭】 while this request was under way: the prompt it stood behind is gone, so the
+      // session ending now leaves this submission's result for the prompt after signing in.
+      const closedMeanwhile = flight !== undefined && closesOf(flight.scope) !== flight.closes;
+      if (state.held !== undefined || waiting.has(state) || closedMeanwhile) mark();
+      leave();
+    },
+  };
+}
+
+/** Keeps every mark made before the account was known, the earliest first (its moment wins). */
+function keepWaiting(waiting: Map<HandleState, number>, scope: MarkerScope): void {
+  const marks = Array.from(waiting).sort((a, b) => a[1] - b[1]);
+  waiting.clear();
+  for (const [state, at] of marks) {
+    holdUnknown(scope, { now: () => at }, state.holder);
+    if (!state.left) state.held = scope;
+  }
 }
 
 /**
@@ -125,89 +255,54 @@ export function useUnknownMarker(page: string, clock: MarkerClock): UnknownMarke
   const scope = useMemo<MarkerScope>(() => ({ page, account }), [page, account]);
   const scopeRef = useRef(scope);
   const clockRef = useRef(clock);
-  /**
-   * Marked before the account was known: kept once it is, at the moment of the mark, by `holder`;
-   * `held`: still this instance's submission (false once left).
-   */
-  const pendingRef = useRef<{ at: number; holder: object; held: boolean } | undefined>(undefined);
-  /** The current submission of this instance as a holder of the marker. */
-  const holderRef = useRef<object>({});
-  /** The scope the current submission marked under (undefined: it has not marked). */
-  const heldRef = useRef<MarkerScope | undefined>(undefined);
-  /**
-   * The current submission's request under way (begin()): the scope it was sent under and the
-   * count of 【关闭】 at that moment; undefined once its submission was settled or given up.
-   */
-  const flightRef = useRef<{ scope: MarkerScope; closes: number } | undefined>(undefined);
+  /** Marks made before the account was known, by handle (see HandleContext). */
+  const waitingRef = useRef<Map<HandleState, number> | undefined>(undefined);
+  /** The handle of the hook's own methods: the current submission; replaced once it is done. */
+  const defaultRef = useRef<Handle | undefined>(undefined);
   useEffect(() => {
     scopeRef.current = scope;
     clockRef.current = clock;
   }, [scope, clock]);
 
   useEffect(() => {
-    const pending = pendingRef.current;
-    if (pending === undefined || scope.account === undefined) return;
-    pendingRef.current = undefined;
-    holdUnknown(scope, { now: () => pending.at }, pending.holder);
-    if (pending.held) heldRef.current = scope;
+    const waiting = waitingRef.current;
+    if (waiting === undefined || waiting.size === 0 || scope.account === undefined) return;
+    keepWaiting(waiting, scope);
   }, [scope]);
 
   return useMemo<UnknownMarkerControl>(() => {
-    const mark = () => {
-      if (pendingRef.current?.held === true) return;
-      // The scope the submission first marked under (the account that made it), else the one its
-      // request went out under, else the current.
-      const flown = flightRef.current?.scope;
-      const target =
-        heldRef.current ?? (flown?.account !== undefined ? flown : undefined) ?? scopeRef.current;
-      if (target.account === undefined) {
-        pendingRef.current = {
-          at: clockRef.current.now(),
-          holder: holderRef.current,
-          held: true,
-        };
-        return;
-      }
-      // Idempotent while this holder holds the stored marker; held afresh once 【关闭】 dropped it.
-      holdUnknown(target, clockRef.current, holderRef.current);
-      heldRef.current = target;
-    };
-    const leave = () => {
-      // The old holder stays among the marker's holders for good; the next mark() is new.
-      const pending = pendingRef.current;
-      if (pending !== undefined) pendingRef.current = { ...pending, held: false };
-      heldRef.current = undefined;
-      flightRef.current = undefined;
-      holderRef.current = {};
+    const open = (): Handle =>
+      createHandle({
+        scope: scopeRef,
+        clock: clockRef,
+        waiting: (waitingRef.current ??= new Map<HandleState, number>()),
+      });
+    const current = (): Handle => (defaultRef.current ??= open());
+    /** The default handle is done: the next mark() is a new submission. */
+    const renew = () => {
+      defaultRef.current = open();
     };
     return {
       scope,
       begin() {
-        const target = heldRef.current ?? scopeRef.current;
-        flightRef.current = { scope: target, closes: closesOf(target) };
+        current().begin();
       },
-      mark,
+      mark() {
+        current().mark();
+      },
       clear() {
-        const pending = pendingRef.current;
-        if (pending?.held === true) pendingRef.current = undefined;
-        const held = heldRef.current;
-        const holder = holderRef.current;
-        heldRef.current = undefined;
-        flightRef.current = undefined;
-        // Each submission is its own holder: the next one never shares this holding.
-        holderRef.current = {};
-        if (held !== undefined) releaseUnknown(held, holder);
+        current().clear();
+        renew();
       },
-      leave,
+      leave() {
+        current().leave();
+        renew();
+      },
       sessionEnded() {
-        const flight = flightRef.current;
-        // 【关闭】 while this request was under way: the prompt it stood behind is gone, so the
-        // session ending now leaves this submission's result for the prompt after signing in.
-        const closedMeanwhile = flight !== undefined && closesOf(flight.scope) !== flight.closes;
-        if (heldRef.current !== undefined || pendingRef.current?.held === true || closedMeanwhile)
-          mark();
-        leave();
+        current().sessionEnded();
+        renew();
       },
+      open,
     };
   }, [scope]);
 }

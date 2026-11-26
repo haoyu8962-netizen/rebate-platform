@@ -1,5 +1,6 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { StepUpModalProps } from '../../components/step-up/index.ts';
 import { clearUnknown, markUnknown, readUnknown } from '../../components/unknown-marker/index.ts';
 import { AdminApiError, type AdminApiErrorDetails } from '../../providers/data/index.ts';
 import { useAdjustmentWrite } from './useAdjustmentWrite.tsx';
@@ -296,4 +297,197 @@ it('[AC-F1-08atb-UNIT#11] an enveloped 5xx, then the same body under the same ke
   expect(readUnknown(SCOPE)?.at).toBe('2026-11-18T04:01:00.000Z');
   await submit(second.hook);
   expect(readUnknown(SCOPE)).toBeUndefined();
+});
+
+// F1-08atb money r3 S1 (state table §10 C4–C7): a submission is (Idempotency-Key, body). The sms
+// tier (adminCreateAdjustment) below: every submission sends a code first, the verification is
+// driven through the props of the returned StepUpModal.
+type Amount = { amount: string };
+const CODE_SENT = () => Promise.resolve({ data: {} });
+const VERIFY_EXPIRED = fail({ code: 10003, httpStatus: 403 });
+const PHONE_MISSING = fail({
+  code: 10003,
+  httpStatus: 403,
+  data: { reason: 'verify_phone_missing' },
+});
+
+async function mountedSms() {
+  const failed = vi.fn();
+  const hook = renderHook(() =>
+    useAdjustmentWrite<Amount, { id: string }>({
+      operation: 'create',
+      url: '/admin/v1/adjustments',
+      onDone: () => {},
+      onFailed: failed,
+      clock,
+    }),
+  );
+  await act(async () => {});
+  return { hook, failed };
+}
+type SmsHook = Awaited<ReturnType<typeof mountedSms>>['hook'];
+
+function modal(hook: SmsHook): StepUpModalProps {
+  return hook.result.current.stepUp.props as StepUpModalProps;
+}
+/** Submits `amount`: the code goes out and the verification opens (nothing written yet). */
+async function submitSms(hook: SmsHook, amount: string) {
+  answers.push(CODE_SENT);
+  await act(async () => {
+    hook.result.current.submit({ amount });
+  });
+  expect(modal(hook).open, 'the verification is open').toBe(true);
+}
+/** Passes the open verification: the write goes out and gets `reply`. */
+async function verified(hook: SmsHook, reply: () => Promise<unknown>) {
+  answers.push(reply);
+  await act(async () => {
+    modal(hook).onVerified('token');
+  });
+}
+/** The writes sent (the code requests carry no Idempotency-Key). */
+function writesSent(): { key: string; body: unknown }[] {
+  return custom.mock.calls.flatMap((call) => {
+    const request = (
+      call as unknown as [{ payload?: unknown; meta?: { idempotencyKey: string } }]
+    )[0];
+    return request.meta === undefined
+      ? []
+      : [{ key: request.meta.idempotencyKey, body: request.payload }];
+  });
+}
+const AT_5XX = '2026-11-18T04:00:00.000Z';
+
+it('[AC-F1-08atb-UNIT#12] C4: an enveloped 5xx, the body edited and submitted but the verification cancelled (nothing sent), then the first body replayed under its key and settled: the marker goes', async () => {
+  const { hook } = await mountedSms();
+  await submitSms(hook, '880');
+  await verified(hook, SERVER_ERROR);
+  expect(readUnknown(SCOPE)?.at).toBe(AT_5XX);
+  now = AT + 60_000;
+  await submitSms(hook, '900');
+  act(() => modal(hook).onClose());
+  expect(modal(hook).open).toBe(false);
+  expect(readUnknown(SCOPE)?.at, 'cancelling the edited body changes nothing').toBe(AT_5XX);
+  await submitSms(hook, '880');
+  await verified(hook, DONE);
+  const writes = writesSent();
+  expect(writes.map((w) => w.body)).toEqual([{ amount: '880' }, { amount: '880' }]);
+  expect(writes[1]?.key).toBe(writes[0]?.key);
+  expect(readUnknown(SCOPE), 'the replay settled the first submission').toBeUndefined();
+});
+
+it('[AC-F1-08atb-UNIT#13] C5: an enveloped 5xx, the edited body sent and refused 10403 before the replay, then the first body replayed and settled: the marker goes', async () => {
+  const { hook, failed } = await mountedSms();
+  await submitSms(hook, '880');
+  await verified(hook, SERVER_ERROR);
+  now = AT + 60_000;
+  await submitSms(hook, '900');
+  await verified(hook, fail(FORBIDDEN));
+  expect(failed.mock.calls[1]?.[1], 'the key is still unknown').toBe(true);
+  expect(readUnknown(SCOPE)?.at, 'the refusal of the edited body keeps the marker').toBe(AT_5XX);
+  await submitSms(hook, '880');
+  await verified(hook, DONE);
+  const writes = writesSent();
+  expect(writes.map((w) => w.body)).toEqual([
+    { amount: '880' },
+    { amount: '900' },
+    { amount: '880' },
+  ]);
+  expect(new Set(writes.map((w) => w.key)).size, 'one key throughout').toBe(1);
+  expect(readUnknown(SCOPE)).toBeUndefined();
+});
+
+it('[AC-F1-08atb-UNIT#14] C5: the edited body answered 10003 (no verify phone: the marker stays, nothing more is sent), or 10003 verification expired and, verified again, still the edited body refused 10403: the first body replayed and settled drops the marker', async () => {
+  // 10003 verify_phone_missing on the edited body: it settles nothing; this dialog sends nothing
+  // more (phoneMissing), so the first submission's marker stays until 【关闭】.
+  const first = await mountedSms();
+  await submitSms(first.hook, '880');
+  await verified(first.hook, SERVER_ERROR);
+  now = AT + 60_000;
+  await submitSms(first.hook, '900');
+  await verified(first.hook, PHONE_MISSING);
+  expect(first.hook.result.current.phoneMissing).toBe(true);
+  expect(readUnknown(SCOPE)?.at).toBe(AT_5XX);
+  first.hook.unmount();
+  act(() => clearUnknown(SCOPE));
+  custom.mockClear();
+
+  // 10003 verification expired on the edited body: verified again, the edited body goes again.
+  now = AT;
+  const second = await mountedSms();
+  await submitSms(second.hook, '880');
+  await verified(second.hook, SERVER_ERROR);
+  now = AT + 60_000;
+  await submitSms(second.hook, '900');
+  answers.push(VERIFY_EXPIRED, CODE_SENT);
+  await act(async () => {
+    modal(second.hook).onVerified('token');
+  });
+  expect(modal(second.hook).open, 'verify again').toBe(true);
+  expect(readUnknown(SCOPE)?.at).toBe(AT_5XX);
+  await verified(second.hook, fail(FORBIDDEN));
+  expect(readUnknown(SCOPE)?.at).toBe(AT_5XX);
+  await submitSms(second.hook, '880');
+  await verified(second.hook, DONE);
+  const writes = writesSent();
+  expect(writes.map((w) => w.body)).toEqual([
+    { amount: '880' },
+    { amount: '900' },
+    { amount: '900' },
+    { amount: '880' },
+  ]);
+  expect(new Set(writes.map((w) => w.key)).size).toBe(1);
+  expect(readUnknown(SCOPE)).toBeUndefined();
+});
+
+it('[AC-F1-08atb-UNIT#15] C6: an enveloped 5xx, 【关闭】, then the edited body refused 20901: the prompt does not come back', async () => {
+  const { hook, failed } = await mountedSms();
+  await submitSms(hook, '880');
+  await verified(hook, SERVER_ERROR);
+  act(() => clearUnknown(SCOPE));
+  now = AT + 60_000;
+  await submitSms(hook, '900');
+  await verified(hook, fail(KEY_CONFLICT));
+  expect(failed).toHaveBeenCalledTimes(2);
+  expect(readUnknown(SCOPE)).toBeUndefined();
+});
+
+it('[AC-F1-08atb-UNIT#16] C7: an answer coming after the dialog was left acts on the handle of its own (key, body): the first body settled drops the marker, the edited body settled keeps it', async () => {
+  // The first body's replay answered after unmount.
+  const first = await mounted();
+  answers.push(SERVER_ERROR, fail(FORBIDDEN));
+  await submit(first.hook);
+  await submit(first.hook, 'edited');
+  let answer: () => void = () => {};
+  answers.push(
+    () =>
+      new Promise<unknown>((resolve) => {
+        answer = () => resolve({ data: { id: 'adj_1' } });
+      }),
+  );
+  await submit(first.hook);
+  first.hook.unmount();
+  expect(readUnknown(SCOPE)?.at).toBe('2026-11-18T04:00:00.000Z');
+  await act(async () => {
+    answer();
+  });
+  expect(readUnknown(SCOPE), 'the first submission settled').toBeUndefined();
+
+  // The edited body's success answered after unmount: the first submission is still unknown.
+  const second = await mounted();
+  answers.push(SERVER_ERROR);
+  await submit(second.hook);
+  answers.push(
+    () =>
+      new Promise<unknown>((resolve) => {
+        answer = () => resolve({ data: { id: 'adj_1' } });
+      }),
+  );
+  now = AT + 60_000;
+  await submit(second.hook, 'edited');
+  second.hook.unmount();
+  await act(async () => {
+    answer();
+  });
+  expect(readUnknown(SCOPE)?.at).toBe('2026-11-18T04:00:00.000Z');
 });

@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { clearUnknown, readUnknown } from './marker.ts';
+import { clearUnknown, readUnknown, subscribeMarkers } from './marker.ts';
 import { useUnknownMarker } from './useUnknownMarker.ts';
 
 // F1-08at: the hook as one long-lived dialog instance uses it (ManualPaid on 提现审核, the detail's
@@ -207,4 +207,100 @@ it('[AC-F1-08atb-UNIT#4] a first send under way at 【关闭】 (begin, never ma
   act(() => plain.result.current.begin());
   act(() => plain.result.current.sessionEnded());
   expect(readUnknown(SCOPE)).toBeUndefined();
+});
+
+it('[AC-F1-08atb-UNIT#17] independent handles each hold and release only their own; marked before the account is known, each is kept at its own moment (the earlier wins)', async () => {
+  const hook = await mounted();
+  const one = hook.result.current.open();
+  const two = hook.result.current.open();
+  act(() => one.mark());
+  now = T2;
+  act(() => two.mark());
+  act(() => hook.result.current.mark());
+  expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:05:06.000Z');
+  act(() => one.clear());
+  act(() => one.clear());
+  expect(readUnknown(SCOPE)?.at, 'two and the default handle still hold it').toBe(
+    '2001-02-03T04:05:06.000Z',
+  );
+  act(() => hook.result.current.clear());
+  expect(readUnknown(SCOPE)?.at, 'two still holds it').toBe('2001-02-03T04:05:06.000Z');
+  // The same handle marks again (the same submission): it holds again, then settles.
+  act(() => one.mark());
+  act(() => two.clear());
+  expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:05:06.000Z');
+  act(() => one.clear());
+  expect(readUnknown(SCOPE)).toBeUndefined();
+  cleanup();
+
+  // The account not known yet: each handle (and the default one) waits with its own moment.
+  let answer: (value: unknown) => void = () => {};
+  identity = new Promise((resolve) => {
+    answer = resolve;
+  });
+  const waiting = renderHook(() => useUnknownMarker('withdrawals', clock));
+  const first = waiting.result.current.open();
+  const second = waiting.result.current.open();
+  now = T2;
+  act(() => second.mark());
+  now = T1;
+  act(() => first.mark());
+  now = T3;
+  act(() => waiting.result.current.mark());
+  act(() => second.mark());
+  expect(readUnknown(SCOPE)).toBeUndefined();
+  await act(async () => {
+    answer({ admin_id: 'admin-1' });
+  });
+  expect(readUnknown(SCOPE)?.at, 'the earliest mark').toBe('2001-02-03T04:05:06.000Z');
+  act(() => first.clear());
+  act(() => waiting.result.current.clear());
+  expect(readUnknown(SCOPE)?.at, 'the second still holds it').toBe('2001-02-03T04:05:06.000Z');
+  act(() => second.clear());
+  expect(readUnknown(SCOPE)).toBeUndefined();
+});
+
+it('[AC-F1-08atb-UNIT#18] the use without begin() (订单详情): mark() before sending, mark() again on 【重试】 keeps the moment, clear() releases only its own, leave() keeps it until clearUnknown; every change is announced; three items stored', async () => {
+  const events = vi.fn();
+  const unsubscribe = subscribeMarkers(events);
+  try {
+    const page = await mounted();
+    const other = await mounted();
+    act(() => page.result.current.mark());
+    expect(events).toHaveBeenCalledTimes(1);
+    const stored = window.sessionStorage.getItem('couli.admin.unknown-marker:withdrawals:admin-1');
+    expect(Object.keys(JSON.parse(stored ?? '{}') as object).sort()).toEqual([
+      'at',
+      'page',
+      'unknown',
+    ]);
+    now = T2;
+    act(() => page.result.current.mark());
+    expect(readUnknown(SCOPE)?.at, '【重试】 keeps the moment').toBe('2001-02-03T04:05:06.000Z');
+    act(() => other.result.current.mark());
+    act(() => other.result.current.clear());
+    expect(readUnknown(SCOPE)?.at, 'the other releases only its own').toBe(
+      '2001-02-03T04:05:06.000Z',
+    );
+    act(() => page.result.current.clear());
+    expect(readUnknown(SCOPE)).toBeUndefined();
+    expect(events).toHaveBeenCalledTimes(2);
+
+    // 10001 on the order page: leave(); the marker stays until 【关闭】.
+    now = T3;
+    act(() => page.result.current.mark());
+    act(() => page.result.current.leave());
+    act(() => page.result.current.clear());
+    expect(readUnknown(SCOPE)?.at).toBe('2001-02-03T04:08:06.000Z');
+    act(() => other.result.current.mark());
+    act(() => clearUnknown(SCOPE));
+    expect(readUnknown(SCOPE)).toBeUndefined();
+    expect(events).toHaveBeenCalledTimes(4);
+    // After clearUnknown a release of an old holder does nothing and announces nothing.
+    act(() => other.result.current.clear());
+    expect(readUnknown(SCOPE)).toBeUndefined();
+    expect(events).toHaveBeenCalledTimes(4);
+  } finally {
+    unsubscribe();
+  }
 });
