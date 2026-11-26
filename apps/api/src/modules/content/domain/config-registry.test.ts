@@ -28,7 +28,7 @@ function spec(key: string) {
 
 it('[AC-F1-02zj#2] settle.* items are appended after the 29 earlier items, editable config.business', () => {
   const registry = configRegistry();
-  expect(registry).toHaveLength(189);
+  expect(registry).toHaveLength(190);
   expect(registry[28]!.key).toBe('external_hosts');
   expect(registry.slice(29, 45).map((entry) => entry.key)).toStrictEqual(SETTLE_KEYS);
   for (const entry of registry.slice(29, 45)) {
@@ -144,6 +144,7 @@ const AGENT_A10: readonly (readonly [string, string, string, unknown])[] = [
   ['agent.safety.timeout_ms', 'number', 'config.risk', [1, 2147483647]],
   ['agent.daily_budget_fen', 'number', 'config.business', [0, 2147483647]],
   ['agent.budget.reserve_mfen_per_run', 'number', 'config.business', [0, 2147483647]],
+  ['agent.models', 'object', 'config.business', null],
   ['agent.context.max_turns', 'number', 'config.general', [0, 2147483647]],
   ['agent.context.max_chars', 'number', 'config.general', [1, 2147483647]],
   ['agent.orders.default_span_days', 'number', 'config.general', [1, 2147483647]],
@@ -164,7 +165,7 @@ const CALENDAR_KEYS = [2026, 2027, 2028, 2029, 2030].flatMap((year) => [
   `calendar.cn_makeup_workdays.${year}`,
 ]);
 
-it('[AC-B1-22y#1] the Agent keys are the 26 items before the 10 calendar keys, editable, with their type, point and bounds or options', () => {
+it('[AC-B1-22y#1] the Agent keys are the 27 items before the 10 calendar keys, editable, with their type, point and bounds or options', () => {
   const registry = configRegistry();
   expect(
     registry
@@ -259,10 +260,12 @@ it('[AC-B1-34s#2] a calendar value is a list of distinct real dates of the key o
   expect(configValueFits(spec('agent.whitelist_user_ids'), { a: 1 })).toBe(true);
 });
 
-it('[AC-B3-09m#u5] agent.models is looked up by key as a business object, not listed', () => {
+it('[AC-B3-09m#u5] agent.models is looked up by key as a business object and listed right after agent.budget.reserve_mfen_per_run', () => {
   const found = configItemSpecOf('agent.models');
   expect(found).toMatchObject({ key: 'agent.models', valueType: 'object' });
   expect(configValueFits(found!, { 'qwen-flash-2026-09-01': { version: 'v1' } })).toBe(true);
   expect(configValueFits(found!, 'prices')).toBe(false);
-  expect(configRegistry().some((entry) => entry.key === 'agent.models')).toBe(false);
+  const keys = configRegistry().map((entry) => entry.key);
+  expect(keys.indexOf('agent.models')).toBe(keys.indexOf('agent.budget.reserve_mfen_per_run') + 1);
+  expect(configRegistry()[keys.indexOf('agent.models')]).toBe(found);
 });

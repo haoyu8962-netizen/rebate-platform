@@ -92,5 +92,5 @@ it('[AC-B3-09m#36] agent.models 按键登记为对象配置', () => {
     key: 'agent.models',
     valueType: 'object',
   });
-  expect(configRegistry().map((entry) => entry.key)).not.toContain('agent.models');
+  expect(configRegistry().map((entry) => entry.key)).toContain('agent.models');
 });
