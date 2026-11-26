@@ -1,0 +1,21 @@
+id: F1-07eeb
+repo: rebate-platform
+title: 'F1-07eeb：订单详情实现方单测 [AC-F1-07ee-UNIT#24] 去掉对真实计时的依赖（FU-ADMIN-MARKER-UNIT24-FLAKY，D10-3328 / D10-3378）'
+type: impl
+# 2026-11-27 fe 入账（编排 D10-3328 登的跟进项，排在 CT-11bv 之后）。来由：主干 35deac5a2（#589）push 与 #891 的 verify-unit 两次红在同一条实现方单测
+# apps/admin/src/pages/orders/detail-writes/marker.test.ts [AC-F1-07ee-UNIT#24]「expected 1 to be 2」：旧请求的回答使遗留标记消失后，用默认 1 秒的 waitFor 等第二次详情 GET，
+# 负载下超时（同一代码别的运行都绿，D10-3328 / D10-3378 判偶发）。
+# 只做（写死）：这一条单测改为不依赖真实计时——显式等到第二次详情请求发出（例如在 mock 的 custom 里第二次 GET 进来时兑现一个 Promise，测试 await 它）再往下断言；
+# 断言的内容与顺序不变（两次 GET、第一次回答被丢弃、读取中不出写入口、重读回答后出【恢复结算】），不改别的用例、不改实现代码、不改规则测试。
+# 不是冻结块（实现方单测），无 modify_existing。非资金写入逻辑改动；只动测试文件。没有规则测试改动，所以无 test_paths、tester none；评审照 RV1 由 Codex 码评审。
+refs: [BR-FUND-06]
+refs_hash:
+  BR-FUND-06: f903ec00076a
+deps: [F1-07ee]
+paths:
+  - 'apps/admin/src/pages/orders/detail-writes/marker.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
