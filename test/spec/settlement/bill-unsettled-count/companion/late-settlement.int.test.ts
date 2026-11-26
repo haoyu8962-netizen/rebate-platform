@@ -2,6 +2,8 @@
 // 账单月、结算数据在上一期账单日之后才取得的 WAITING 单，本期账单日任务把它收进本期主批次；任务跑完后库里的
 // app.orders 行逐列不变（settle_period 仍是原月，不改成账单月），同批的本期候选与本期应结未结的单也逐列不变；
 // 上一期账单行不因本期任务而变，本期不把它计为应结未结。
+// 第 2 次写测（规则测试评审第 1 轮第 2 条）：后到的结算记录按来源 STATEMENT 与 API 各走一遍（BR-FUND-09 R1：
+// 无 STATEMENT 时取最新 API 定金额），钉住「只对 API 结算的跨月候选改写订单行」的实现。
 // 走生产装配：../../bill-follow-union/kit.ts 的 withWorker（app.module 在 worker 入口交给
 // SettlementModule.forWorker 的端口 → settle 处理器，真实账单任务与生产 readSource）、seedOrder（真实 orders 行与
 // 分佣快照 v1）、settleLater（结算记录后到并跟上订单行）。夹具只读 import，不改。顶层 it()，不套 describe。
@@ -39,9 +41,9 @@ const CURRENT = '2032-06-20T10:00:00+08:00';
 /** 上一期账单日之后、本期账单日（2032-07-24）之前才取得的联盟结算数据。 */
 const ARRIVED = '2032-07-02T10:00:00+08:00';
 
-it(
-  '[AC-B2-18aa#2] 生产装配的账单日任务：settle_period 2032-05、结算数据 07-02 才到的 WAITING 单进 2032-06 主批次（settle_seq 1、b_settle 1000），任务后从库里重读该订单行逐列不变（settle_period 仍 2032-05、仍 WAITING），同批本期候选与本期应结未结单的行也逐列不变；2032-05 账单行不变，2032-06 应结未结只计本期那 1 单',
-  async () => {
+it.each([{ source: 'STATEMENT' as const }, { source: 'API' as const }])(
+  '[AC-B2-18aa#2] 生产装配的账单日任务（后到结算记录来源 $source）：settle_period 2032-05、结算数据 07-02 才到的 WAITING 单进 2032-06 主批次（settle_seq 1、b_settle 1000），任务 done，任务后从库里重读该订单行逐列不变（settle_period 仍 2032-05、仍 WAITING），同批本期候选与本期应结未结单的行也逐列不变；2032-05 账单行不变，2032-06 应结未结只计本期那 1 单',
+  async ({ source }) => {
     const a = await app(pools.db, { at: new Date(EARLY) });
     await creditOn(a);
     // 上一期的单：确认收货在 2032-05，上一期账单日时没有结算数据（计过应结未结），07-02 联盟结算 1000。
@@ -50,7 +52,16 @@ it(
       { ...a, period: PREVIOUS_MONTH },
       { snapshotN: 1000n, settleFen: null, people: EXAMPLE_PEOPLE },
     );
-    await settleLater({ ...a, at: new Date(ARRIVED) }, late, { seq: 1, fen: 1000n });
+    await settleLater({ ...a, at: new Date(ARRIVED) }, late, { seq: 1, source, fen: 1000n });
+    // 该单唯一的结算记录就是本轮参数的来源（API 时金额由这条 API 记录决定）。
+    expect(
+      await a.db
+        .selectFrom('order_settlements')
+        .select(['seq', 'source', 'settle_commission_fen'])
+        .where('app_id', '=', a.appId)
+        .where('order_id', '=', late.orderId)
+        .execute(),
+    ).toEqual([{ seq: 1, source, settle_commission_fen: 1000n }]);
     // 本期的单：一单已有结算 1000（候选），一单截至生成开始仍无结算数据（应结未结）。
     const current = { ...a, at: new Date(CURRENT) };
     const good = await seedOrder(current, {
