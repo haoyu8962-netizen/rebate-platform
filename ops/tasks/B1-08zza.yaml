@@ -1,0 +1,29 @@
+id: B1-08zza
+repo: rebate-platform
+title: 'B1-08zza：拼多多订单 buy_type 按我方登记的转链记录判（PDD A′ 实现 ①）——回传 custom_parameters 的 lk 在 links 里找到且用户、商品、时序都对得上则按该链接 pid_scene 映射、scene_basis=link，否则 self / fallback；orders.scene_basis 的 CHECK 加 link'
+type: impl
+# 2026-11-26 be 入账（PDD A′ 拆单第 4 张「实现单 ① orders」；负责人 2026-11-25 同意 A′，D10-2970 第 6 条；编排 D10-2974 / D10-3025 / D10-3264；方案 couli-runs/PDD-lane/pid-consolidation-plan.md「A′ 定稿」②④；规划 couli#31 已在 SPEC_REF：BR-ATTR-08 拼多多按链接判、BR-ATTR-09 scene_basis 加 link；契约 CT-01f #766 已合并）。
+# ① 流水线 ④（orders/application/pipeline-port.ts:311 classifyBuyType）对拼多多改为：同一事务内按 (app_id, lk) 经 linking 的 index.ts 出口提供的只读端口（现有 application/order-link-reader.ts 即 ⑤ 来源回填所用的那支，扩展或并列一个按 lk 取链接的读法）读 links（不直读对方表），把 {user_id, platform, raw_item_id, product_key, created_at, pid_scene} 交给 orders/domain 的纯函数判定——ⓐ 链接 user_id = 本单按 uid 归属的用户、ⓑ 链接 platform=pdd 且 goods_sign 相等（不等时再比 product_key，两者都不等才算对不上）、ⓒ 链接创建时刻 ≤ 订单付款时刻，全满足则 buy_type 取 pid_scene 映射（self_buy / agent / taolijin → self、share → share）、scene_basis=link；lk 缺失、查不到或任一项对不上 → buy_type=self、scene_basis=fallback。回传 sc 只作排查字段。⑤ 来源回填（BR-ATTR-15 exact）沿用同一次查询结果，不再查第二遍。domain/attribution.ts 加拼多多分支（平台规则新开关，替代 pdd.ts 的 sceneParamFallback 对拼多多的作用）。淘宝、京东行为不变。
+# ② 迁移只增：替换 orders.scene_basis 的 CHECK 加 link（orders 为分区表，父表上 DROP + ADD CONSTRAINT … NOT VALID 再 VALIDATE，写法实现定；orders 不是 union_ 表，预计不算门禁改动，入账后探针核 squawk 与 APPROVED_GUARD_CHANGES）；旧值不改、旧订单不回填；迁移号 land 前取主干下一个空号；快照由 be 在 couli-ci 重生成。
+# ③ CT-01f 规则测试评审 st2 留下的 S2 并入本单：订单表 CHECK 认 link；按 link 判定；人工认领 / 改归属时保留原 scene_basis（不被改写成别的值）——具体落点探针定。
+# 此时仍是四推广位，规则对四推广位同样成立（link 的 pid_scene 与推广位场景一致），可先于实现 ②（单推广位取位、三处场景核对、必带 lk）上线；不在本单：getActivePid 单推广位、link-registration / link-open-conversion / pdd-authority 的场景核对、拼多多必带 lk、catalog 查询位、ops 退役推广位。冻结用例清单入账后探针定，撞了按 modify_existing 补登（属归属类，只走 rule_change，负责人确认）。
+refs: [BR-ATTR-08, BR-ATTR-09]
+refs_hash:
+  BR-ATTR-08: ae1e71cb81e0
+  BR-ATTR-09: 6f3cf4fa26ba
+deps: [CT-01f]
+paths:
+  - 'apps/api/src/modules/orders/**'
+  - 'apps/api/src/modules/linking/index.ts'
+  - 'apps/api/src/modules/linking/application/order-link-reader{,.test}.ts'
+  - 'apps/api/src/app.module.ts'
+  - 'db/{migrations/**,schema.sql}'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/orders/pdd-buy-type-by-link/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/pdd-buy-type-by-link/**'
+status: todo
