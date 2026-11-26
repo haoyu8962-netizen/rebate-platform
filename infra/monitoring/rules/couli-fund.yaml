@@ -20,6 +20,11 @@
 # the longest run of consecutive W6 in the W5 / W6 sequence whose last W6 is within the last 24 hours,
 # counted whole (not cut at the day). Two rules: the ratio (above 2 % with at least 20 in the day) and
 # the run (3 or more), so the run still alerts on a day short of 20.
+# Reconciliation mismatches (B2-09zn; D10-3308, D10-3360): the worker exports, per app_id, the
+# unresolved (open or processing) channel_mismatch recon diffs of the payout channel reconciliation,
+# and the latest generated monthly bill's amount_mismatch_count with its generation time in Unix
+# seconds. The bill count is the one of its bill day and does not drop once the orders are handled,
+# so its rule only fires within 3 days (259200 seconds) of generation.
 groups:
   - name: couli-fund-orders
     rules:
@@ -79,6 +84,15 @@ groups:
         annotations:
           summary: 'Beneficiary shares held for 30 days without a risk decision'
           description: 'Shares whose latest event is held, 30 x 24 hours after their first held event (BR-CALC-13 FUND-17). A person decides; the share stays held, nothing is credited or forfeited automatically.'
+      - alert: CouliSettleBillAmountMismatch
+        expr: 'couli_settle_bill_amount_mismatch > 0 and on (app_id) (time() - couli_settle_bill_generated_timestamp_seconds) < 259200'
+        for: '5m'
+        labels:
+          severity: critical
+          fund: 'true'
+        annotations:
+          summary: 'The latest monthly bill has orders that still do not match the union after regeneration'
+          description: 'couli_settle_bill_amount_mismatch is the amount_mismatch_count of the latest generated monthly bill of an app: orders whose amounts still differ from the union after the bill was regenerated from the union data. It is the count as of the bill day and does not drop once they are handled. This alert only fires within 3 days (259200 seconds) of the bill generation and then clears by itself; after that, the bill page of the admin console is the reference.'
   - name: couli-fund-payout
     rules:
       - alert: CouliWithdrawalResultUnknown
@@ -126,6 +140,15 @@ groups:
         annotations:
           summary: 'A credit voucher does not match its commission snapshot; the withdrawals of the account are on hold'
           description: 'couli_credit_postcheck_mismatch_open counts the unresolved (open or processing) post-credit confirmation diffs of an app (BR-FUND-19): the voucher amount differs from the share recomputed from the commission snapshot, and the account that received it had its withdrawals put on hold. On the admin console, check the recon diff (差错单, ledger_mismatch, ref_id credit_postcheck:<voucher id>) against the voucher and the snapshot; closing the diff releases the withdrawal hold of that account. Apps without such diffs have no sample.'
+      - alert: CouliPayoutReconDiffOpen
+        expr: 'couli_payout_recon_diff_open > 0'
+        for: '5m'
+        labels:
+          severity: critical
+          fund: 'true'
+        annotations:
+          summary: 'Payout channel reconciliation found diffs that are not resolved yet'
+          description: 'couli_payout_recon_diff_open counts the unresolved (open or processing) channel_mismatch recon diffs (差错单) of an app that the payout channel reconciliation registered. On the admin console, check each diff against the channel record and resolve it; apps without such diffs have no sample.'
       - alert: CouliWithdrawalFailRatioHigh
         expr: 'couli_withdrawals_w6_today / couli_withdrawals_w5w6_today > 0.02 and couli_withdrawals_w5w6_today >= 20'
         for: '5m'

@@ -20,7 +20,7 @@ import {
   startDeletionExpiry,
   startPayoutVerifyRecheck,
 } from './modules/identity/index.ts';
-import { readCreditPostcheckOpen } from './modules/ledger/index.ts';
+import { readChannelMismatchOpen, readCreditPostcheckOpen } from './modules/ledger/index.ts';
 import {
   type AppConfig,
   type Clock,
@@ -77,10 +77,12 @@ import {
 } from './modules/payout/index.ts';
 import {
   cacheAutoPayoutCollector,
+  cacheChannelMismatchCollector,
   cacheCreditPostcheckCollector,
   cacheDashboardDayLagCollector,
   cacheFundCollector,
   cacheReviewOverdueCollector,
+  cacheSettleBillMismatchCollector,
   cacheWaterLowCollector,
   cacheWaterStaleCollector,
   cacheWithdrawalFailCollector,
@@ -90,16 +92,18 @@ import {
   type AgentTraceMissingSnapshot,
   type AutoPayoutCapFenOf,
   type AutoPayoutDailySnapshot,
+  type ChannelMismatchSnapshot,
   type CreditPostcheckSnapshot,
   type DashboardDayLagSnapshot,
   type FundMetricsSnapshot,
   type ReviewOverdueSnapshot,
+  type SettleBillMismatchSnapshot,
   type WaterLowSnapshot,
   type WaterStaleSnapshot,
   type WithdrawalFailSnapshot,
   type TaobaoSearchMetricsSnapshot,
 } from './modules/platform/metrics/index.ts';
-import { readSettlementFundMetrics } from './modules/settlement/index.ts';
+import { readSettleBillMismatch, readSettlementFundMetrics } from './modules/settlement/index.ts';
 import {
   armRedisGeneration,
   redisGenerationRenewalToken,
@@ -327,7 +331,10 @@ function startGenerationRenewal(
  * `collectAgentTraceMissing` (runs missing their card trace, agent's read-only port) and, since
  * B2-09ze, `collectWaterStale` (Alipay withdrawals waiting without a fresh W, per app, payout's
  * read-only port) and, since B2-02v, `collectCreditPostcheck` (unresolved post-credit confirmation
- * diffs per app, ledger's read-only port) and, since B2-09zj, `collectWithdrawalFail` (today's W6
+ * diffs per app, ledger's read-only port) and, since B2-09zn, `collectChannelMismatch` (unresolved
+ * channel_mismatch recon diffs per app, ledger's read-only port) and `collectSettleBillMismatch` (the
+ * latest generated bill's mismatch count and generation time per app, settlement's read-only port)
+ * and, since B2-09zj, `collectWithdrawalFail` (today's W6
  * and W5 + W6 and the longest run of W6 ending in the last 24 hours, per app, payout's read-only
  * port) and, since B1-34q, `collectDashboardDayLag` (days the workbench's daily rows lag behind the
  * newest due day, per app with an admin account, read-only SQL in platform/metrics). Since B1-04zy
@@ -390,6 +397,8 @@ async function openMetrics(
         readonly collectAgentTraceMissing: () => Promise<AgentTraceMissingSnapshot>;
         readonly collectWaterStale: () => Promise<WaterStaleSnapshot>;
         readonly collectCreditPostcheck: () => Promise<CreditPostcheckSnapshot>;
+        readonly collectChannelMismatch: () => Promise<ChannelMismatchSnapshot>;
+        readonly collectSettleBillMismatch: () => Promise<SettleBillMismatchSnapshot>;
         readonly collectWithdrawalFail: () => Promise<WithdrawalFailSnapshot>;
         readonly collectDashboardDayLag: () => Promise<DashboardDayLagSnapshot>;
       }
@@ -610,6 +619,17 @@ async function start(
           // 30 seconds; a failed read fails the scrape (no 0 in its place) and is read again next time.
           collectCreditPostcheck: cacheCreditPostcheckCollector(
             () => readCreditPostcheckOpen(dbHandles.db),
+            clock,
+          ),
+          // The channel recon diff gauge (B2-09zn): ledger's read-only port, cached 30 seconds; a
+          // failed read fails the scrape (no 0 in its place) and is read again next time.
+          collectChannelMismatch: cacheChannelMismatchCollector(
+            () => readChannelMismatchOpen(dbHandles.db),
+            clock,
+          ),
+          // The latest-bill gauges (B2-09zn): settlement's read-only port, cached the same way.
+          collectSettleBillMismatch: cacheSettleBillMismatchCollector(
+            () => readSettleBillMismatch(dbHandles.db),
             clock,
           ),
           // The payout failure gauges (B2-09zj; BR-WDR-24): payout's read-only port, cached the
