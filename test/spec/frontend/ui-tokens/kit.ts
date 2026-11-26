@@ -5,22 +5,22 @@ import { expect } from 'vitest';
 const moduleUrl = import.meta.url;
 export const ROOT = new URL('../../../../', moduleUrl);
 
-// CT-11bu (D10-965): contracts/design-tokens.json metadata.version must be '0.5.2' (DSX-48),
-// pinned to planning c98ae93. Any other version fails.
+// CT-11bv (D10-3141): contracts/design-tokens.json metadata.version must be '0.5.3',
+// pinned to planning c404003. Any other version (including 0.5.2) fails.
 export interface Pin {
-  version: '0.5.2';
+  version: '0.5.3';
   commit: string;
   json: string;
   css: string;
 }
 
 export const PINS: Readonly<Record<Pin['version'], Pin>> = {
-  // 0.5.2: JSON and CSS are copied byte for byte from this planning commit (design/tokens/).
-  '0.5.2': {
-    version: '0.5.2',
-    commit: 'c98ae93f5daf3b8d04671ee903b8f28fd805b72f',
-    json: 'design-tokens.c98ae93.json',
-    css: 'variables.c98ae93.css',
+  // 0.5.3: JSON and CSS are copied byte for byte from this planning commit (design/tokens/).
+  '0.5.3': {
+    version: '0.5.3',
+    commit: 'c404003bbecdff2c67f3e744d81a5ee92e5043ce',
+    json: 'design-tokens.c404003.json',
+    css: 'variables.c404003.css',
   },
 };
 
