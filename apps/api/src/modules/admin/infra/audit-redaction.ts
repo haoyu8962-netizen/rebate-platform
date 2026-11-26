@@ -76,3 +76,11 @@ export function redactSnapshot(value: Snapshot, sensitiveKeys: readonly string[]
   // A non-null input maps to a non-null output.
   return visit(value) as Snapshot;
 }
+
+/**
+ * B2-02zg skeleton (D10-3279): masks the personal data in one free-text value (normalise first, then
+ * mask; see the task brief). Not implemented yet.
+ */
+export function redactFreeText(_text: string): string {
+  throw new Error('NotImplemented: redactFreeText (B2-02zg)');
+}
