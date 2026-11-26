@@ -1,0 +1,27 @@
+id: B1-04zzad
+repo: rebate-platform
+title: 'B1-04zzad：淘宝违规解冻信号的告警规则——couli-fund.yaml 加一条读待处理 open 数里 reason="UNFREEZE_SIGNAL" 序列的资金告警（FU-B1-04ZZAB-UNFREEZE-ALERT-RULE）'
+type: impl
+# 2026-11-26 funds 线入账（编排 D10-3308 / D10-3311 ①：现在就单独入账做，纯规则 + 一条规则测试；B1-04zzab 已合并 #528）。
+# 来由：B1-04zzab 把淘宝违规接口的解冻信号（punish_status = 1）记成 app.order_sync_pending 里 reason = UNFREEZE_SIGNAL 的 open 待处理记录并打日志，但没有告警规则——
+#   infra/monitoring/rules/couli-fund.yaml 现在只有读 reason="UNMAPPED_STATUS"（CouliOrderStatusUnmapped）与 "ORDER_ROW_INVALID"（CouliOrderRowInvalid，B1-04zv）的两条；解冻信号落了记录没人被叫到。
+# 现状（主干 6ae4f898b）：指标 couli_order_sync_pending_open 已按 reason 分组导出（orders/application/metrics-read.ts 的 readOrderSyncPendingOpen，从 open 的待处理记录数出来），UNFREEZE_SIGNAL 是合法 reason；不需要新指标、不动任何应用代码。
+# 做法：只在 couli-fund.yaml 的 couli-fund-orders 组加一条规则（照 CouliOrderRowInvalid：expr 为 couli_order_sync_pending_open{reason="UNFREEZE_SIGNAL"} > 0、for 5m、severity critical、fund 'true'、有 summary）；
+#   规则测试一个新文件（先例 test/spec/orders/row-quarantine/alert-rule.test.ts 的 [AC-B1-04zv#16]）：恰好一条规则读 UNFREEZE_SIGNAL 序列、表达式 / for / labels / summary 逐项对，且原有两条规则不变。
+# 冻结用例：test/spec/platform/fund-metrics/rules.test.ts 的 [AC-B1-01zzi#4] / [#5] 只验结构与 UNMAPPED_STATUS 那一条，读下来不受影响；其余引用规则文件的测试（alerting-eval、alerting/routing 等）入账后先在临时工作树加规则探一遍，
+#   有红的按清单类报编排核后再以台账补丁登记 modify_existing（D10-3311）。不带迁移、不动契约。本机不跑 vitest，走测试机。
+refs: [BR-FUND-02]
+refs_hash:
+  BR-FUND-02: f287247d4d07
+deps: [B1-04zzab]
+paths:
+  - 'infra/monitoring/rules/couli-fund.yaml'
+test_paths:
+  - 'test/spec/orders/taobao-punish-unfreeze/alert-rule.test.ts' # 新文件
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/taobao-punish-unfreeze/alert-rule.test.ts'
+status: todo
+pr: null
