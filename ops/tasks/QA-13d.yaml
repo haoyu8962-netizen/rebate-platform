@@ -12,6 +12,7 @@ type: impl
 #   异常消息、extra、contexts、breadcrumbs 经 platform/logging/redaction.ts 同一套 SENSITIVE_KEYS / redactText（手机号、证件号、卡号、收款账号、姓名、token、密钥等）；
 #   推广 URL、口令、推广位、渠道标识不进附加信息（02 §12.6）。breadcrumbs 关或只留白名单字段。
 # payout 进程没有公网出站：只在 DSN 主机为内网地址（私有网段 IPv4 或运维给定的内网主机名后缀）时初始化，否则不初始化并打一条 warn。
+# 补丁 1（D10-3283，money r1 S1）：payout 只认私网 IPv4 字面量的 DSN 主机，「或运维给定的内网主机名后缀」作废——只看名字不看解析结果挡不住内部 DNS 漏配回落公网，staging DSN 本即 IP；配了主机名按配置错处理（不初始化、只报变量名与原因、不影响启动）；要用主机名另开单做「解析后全在私网」。
 # 进程钩子（D10-3244 ②）：不改变现有 uncaughtException / unhandledRejection 的退出行为，只在其前上报、有超时上限；上报失败（服务不可达、超时）不得影响业务请求与进程退出逻辑。
 # 实现方单测（D10-3244 ①）：自写的栈行解析与 fetch 传输各有单测。
 # 规则测试钉：① 未配置 DSN 不初始化、不影响启动；② 一次受控异常上报的事件序列化里不含明文手机号、证件号、卡号、支付宝登录号、token、authorization 头与请求体；
