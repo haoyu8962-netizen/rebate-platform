@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { readAgentUserHashConfig } from './agent-user-hash.ts';
-import { ConfigError, loadConfig } from './config.ts';
+import { ConfigError, loadConfig, normalizeCrashReportDsn } from './config.ts';
 
 /** Synthetic AGENT_USER_HASH_KEY for prod inputs (B3-09j: prod refuses to start without it). */
 const AGENT_KEY = 'unit-test-agent-user-hash-key';
@@ -367,24 +367,38 @@ describe('CRASH_REPORT_DSN', () => {
     expect('crashReport' in loadConfig({ APP_ENV: 'local' })).toBe(false);
   });
 
-  it('[AC-QA-13d#1] set: the DSN as given and the internal host suffixes in lower case', () => {
-    const config = loadConfig({
-      APP_ENV: 'local',
-      CRASH_REPORT_DSN: DSN,
-      CRASH_REPORT_INTERNAL_HOST_SUFFIXES: '.Corp.Internal, .lan',
-    });
-    expect(config.crashReport).toEqual({
-      dsn: DSN,
-      internalHostSuffixes: ['.corp.internal', '.lan'],
-    });
+  it('[AC-QA-13d#1] set: the DSN as given when already normal', () => {
+    const config = loadConfig({ APP_ENV: 'local', CRASH_REPORT_DSN: DSN });
+    expect(config.crashReport).toEqual({ dsn: DSN });
   });
 
-  it('[AC-QA-13d#1] a malformed DSN or suffix list is refused without echoing it', () => {
+  it('[AC-QA-13d#1] set: blanks, a trailing slash and a default port are normalised away', () => {
+    for (const [value, normal] of [
+      [` ${DSN}\n`, DSN],
+      [`${DSN}/`, DSN],
+      [
+        'HTTPS://unitDsnKey@GlitchTip.Unit.Test:443/prefix/5',
+        'https://unitDsnKey@glitchtip.unit.test/prefix/5',
+      ],
+      ['http://unitDsnKey@10.1.2.3:8000/5', 'http://unitDsnKey@10.1.2.3:8000/5'],
+    ] as const) {
+      expect(loadConfig({ APP_ENV: 'local', CRASH_REPORT_DSN: value }).crashReport).toEqual({
+        dsn: normal,
+      });
+      expect(normalizeCrashReportDsn(value)).toBe(normal);
+    }
+  });
+
+  it('[AC-QA-13d#1] a malformed DSN is refused naming only the variable', () => {
     for (const [name, value] of [
       ['CRASH_REPORT_DSN', 'https://:secret@unit-dsn-a.test/5'],
       ['CRASH_REPORT_DSN', 'https://0123abcd:pass@unit-dsn-b.test/5'],
       ['CRASH_REPORT_DSN', 'https://0123abcd@unit-dsn-c.test/5?x=1'],
-      ['CRASH_REPORT_INTERNAL_HOST_SUFFIXES', 'unit-suffix-d.test'],
+      ['CRASH_REPORT_DSN', 'https://01-23abcd@unit-dsn-d.test/5'],
+      ['CRASH_REPORT_DSN', 'https://0123abcd@unit-dsn-e.test/5#frag'],
+      ['CRASH_REPORT_DSN', 'ftp://0123abcd@unit-dsn-f.test/5'],
+      ['CRASH_REPORT_DSN', 'https://0123abcd@unit-dsn-g.test/project'],
+      ['CRASH_REPORT_DSN', '   '],
     ] as const) {
       const problems = problemsOf({ APP_ENV: 'local', [name]: value });
       expect(problems).toHaveLength(1);

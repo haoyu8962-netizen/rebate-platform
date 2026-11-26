@@ -144,3 +144,35 @@ it('[AC-QA-13d#5] makeFetchTransport sends serialized envelopes through createTr
   expect(String(calls[0]?.init?.body)).toContain('unit-event');
   expect(new Headers(calls[0]?.init?.headers).get('authorization')).toBeNull();
 });
+
+it('[AC-QA-13d#4] a 429 hands Retry-After and X-Sentry-Rate-Limits to the SDK, which then holds back', async () => {
+  const { logger, lines } = memoryLogger();
+  const { fetch, calls } = recordingFetch(
+    () =>
+      new Response('{}', {
+        status: 429,
+        headers: { 'retry-after': '300', 'x-sentry-rate-limits': '300:error:organization' },
+      }),
+  );
+  const response = await envelopeSender({ target: targetOf(DSN), fetch, logger })({ body: 'b' });
+  expect(response).toEqual({
+    statusCode: 429,
+    headers: { 'retry-after': '300', 'x-sentry-rate-limits': '300:error:organization' },
+  });
+  expect(calls[0]?.init?.redirect).toBe('manual');
+  expect(lines).toHaveLength(1);
+
+  const transport = makeFetchTransport({ target: targetOf(DSN), fetch, logger })({
+    url: 'ignored',
+    recordDroppedEvent: () => undefined,
+  });
+  const envelopeOf = (id: string): EventEnvelope =>
+    createEnvelope<EventEnvelope>({ event_id: id, sent_at: new Date(0).toISOString() }, [
+      [{ type: 'event' }, { message: id }],
+    ]);
+  await transport.send(envelopeOf('unit-limited-1'));
+  await transport.send(envelopeOf('unit-limited-2'));
+  expect(await transport.flush(1_000)).toBe(true);
+  // One call from the direct send above, one from the transport; the second event is held back.
+  expect(calls).toHaveLength(2);
+});

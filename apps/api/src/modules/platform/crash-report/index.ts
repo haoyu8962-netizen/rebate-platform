@@ -3,7 +3,7 @@
 // integration of our own (fetch transport, Node stack-line parser, process hooks, start-up,
 // beforeSend allowlist). Core package only: no Node SDK, no tracing takeover, no replay / profiles.
 // CRASH_REPORT_DSN unset → nothing is created and no process hook is installed. payout reports only
-// to an internal DSN host.
+// to a DSN host that is a private-range IPv4 literal.
 import { inspect } from 'node:util';
 import {
   Scope,
@@ -19,6 +19,7 @@ import {
   type SeverityLevel,
 } from '@sentry/core';
 import { ServerRuntimeClient, type ServerRuntimeClientOptions } from '@sentry/core/server';
+import { normalizeCrashReportDsn } from '../config/config.ts';
 import type { AppConfig } from '../config/index.ts';
 import type { EntryName } from '../entries.ts';
 import type { RootLogger } from '../logging/index.ts';
@@ -88,7 +89,7 @@ export interface CrashReportOptions {
 }
 
 export interface CrashReporter {
-  /** True only when a client was created (DSN configured; payout: internal DSN host only). */
+  /** True only when a client was created (DSN configured and accepted; payout: private IPv4 host). */
   readonly enabled: boolean;
   /** Reports one error; never throws and never waits for the transport. Undefined when disabled. */
   captureException(error: unknown, context?: CrashCaptureContext): string | undefined;
@@ -109,21 +110,18 @@ const DISABLED: CrashReporter = Object.freeze({
   close: async () => undefined,
 });
 
-/** 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16. */
-function isPrivateIPv4(host: string): boolean {
+/**
+ * payout's rule (D10-3283): the DSN host is a private-range IPv4 literal (10.0.0.0/8, 172.16.0.0/12,
+ * 192.168.0.0/16). Any host name, whatever it is called, is refused: its resolution could leave the
+ * internal network. `host` is a URL hostname (the parser already canonicalised IPv4 forms).
+ */
+export function isPrivateIPv4Host(host: string): boolean {
   const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
   if (match === null) return false;
   const octets = match.slice(1).map(Number);
   if (octets.some((octet) => octet > 255)) return false;
   const [a = -1, b = -1] = octets;
   return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
-}
-
-/** payout's rule: a private-range IPv4 address or a host under an operator-given internal suffix. */
-export function isInternalHost(host: string, suffixes: readonly string[] = []): boolean {
-  const name = host.toLowerCase();
-  if (isPrivateIPv4(name)) return true;
-  return suffixes.some((suffix) => name.length > suffix.length && name.endsWith(suffix));
 }
 
 function hostOf(dsn: string): string {
@@ -194,6 +192,15 @@ function scopeOf(entry: EntryName, context: CrashCaptureContext | undefined): Sc
   return scope;
 }
 
+/** One warn line naming only the variable and the reason (never the DSN or its host). */
+function warnDisabled(logger: RootLogger, entry: EntryName, reason: string): void {
+  try {
+    logger.warn({ entry, variable: 'CRASH_REPORT_DSN', reason }, 'crash_report_disabled');
+  } catch {
+    // A broken logger never stops the start-up.
+  }
+}
+
 /**
  * Starts crash reporting of one entry, once, at process start (runEntry). Never throws for an
  * unconfigured or refused DSN: it returns a disabled reporter instead.
@@ -202,18 +209,24 @@ export async function startCrashReporting(options: CrashReportOptions): Promise<
   const { entry, config, logger } = options;
   const settings = config.crashReport;
   if (settings === undefined || settings.dsn === '') return DISABLED;
-  const target = envelopeTarget(settings.dsn);
-  if (target === undefined) return DISABLED;
-  if (entry === 'payout' && !isInternalHost(hostOf(settings.dsn), settings.internalHostSuffixes)) {
+  // One normalised DSN (loadConfig already normalised it; a hand-built config is normalised here):
+  // the payout host check, the envelope endpoint and the SDK all use this one string.
+  const dsn = normalizeCrashReportDsn(settings.dsn);
+  const target = dsn === undefined ? undefined : envelopeTarget(dsn);
+  if (dsn === undefined || target === undefined) {
+    warnDisabled(logger, entry, 'dsn_malformed');
+    return DISABLED;
+  }
+  if (entry === 'payout' && !isPrivateIPv4Host(hostOf(dsn))) {
     // payout has no public egress (ADR-0001 §4.2 #20); neither the DSN nor its host is logged.
-    logger.warn({ entry }, 'crash_report_disabled_public_dsn_host');
+    warnDisabled(logger, entry, 'payout_dsn_host_not_private_ipv4');
     return DISABLED;
   }
   const stackParser = createStackParser(nodeStackLineParser);
   // sendDefaultPii is no longer in the 11.x option types, but it is still set (false) so that no
   // default personal data is ever collected; the allowlist in beforeSend applies regardless.
   const clientOptions: ServerRuntimeClientOptions & { readonly sendDefaultPii: false } = {
-    dsn: settings.dsn,
+    dsn,
     environment: config.appEnv,
     ...(config.deployVersion === undefined ? {} : { release: config.deployVersion }),
     sendDefaultPii: false,
@@ -234,6 +247,12 @@ export async function startCrashReporting(options: CrashReportOptions): Promise<
     beforeSend: (event) => scrubEvent(event) as typeof event,
   };
   const client = initAndBind(ServerRuntimeClient, clientOptions);
+  if (client.getDsn() === undefined) {
+    // The SDK refused the DSN (it then has no transport): not enabled, nothing left bound.
+    if (getClient() === client) getCurrentScope().setClient(undefined);
+    warnDisabled(logger, entry, 'dsn_refused_by_sdk');
+    return DISABLED;
+  }
   let open = true;
 
   const capture = (error: unknown, hint: EventHint, scope: Scope): string | undefined => {

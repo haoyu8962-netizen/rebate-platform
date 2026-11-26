@@ -100,7 +100,9 @@ export function envelopeSender(
       response.body?.cancel().catch(() => undefined);
       if (response.status < 200 || response.status >= 300) {
         warn({ status: response.status });
-        return { statusCode: response.status };
+        // Retry-After / X-Sentry-Rate-Limits of a 429 (or any refusal) reach the SDK's rate limiter;
+        // a 3xx stays an unfollowed failure.
+        return { statusCode: response.status, headers: rateLimitHeaders(response) };
       }
       return { statusCode: response.status, headers: rateLimitHeaders(response) };
     } catch (error) {

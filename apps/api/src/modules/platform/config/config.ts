@@ -100,43 +100,46 @@ const envSchema = z.object({
     .regex(/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/, 'must be a service name ([A-Za-z0-9_.-], 1–128)')
     .optional(),
   // QA-13d (01 F-OBS-01, 02 §13 崩溃行): crash reporting of every entry to GlitchTip. Unset = nothing
-  // is initialised. A DSN `<http(s)>://<public key>@<host>[:<port>][/<prefix>]/<project id>`; the
-  // message never repeats the value (the DSN is never logged).
+  // is initialised. A DSN `<http(s)>://<public key>@<host>[:<port>][/<prefix>]/<project id>`,
+  // surrounding blanks ignored; loadConfig hands on the normalised form (normalizeCrashReportDsn).
+  // The message never repeats the value (the DSN is never logged).
   CRASH_REPORT_DSN: z
     .string()
     .refine(
-      isCrashReportDsn,
+      (value) => normalizeCrashReportDsn(value) !== undefined,
       'must be an http(s) DSN <scheme>://<public key>@<host>/<numeric project id>',
-    )
-    .optional(),
-  // Host-name suffixes (comma-separated, each starting with a dot) that count as internal for the
-  // payout entry's crash reporting, besides private-range IPv4 addresses. Unset = none.
-  CRASH_REPORT_INTERNAL_HOST_SUFFIXES: z
-    .string()
-    .regex(
-      /^\s*\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\s*(?:,\s*\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\s*)*$/,
-      'must be comma-separated host-name suffixes, each starting with a dot',
     )
     .optional(),
 });
 
-/** QA-13d: http(s), public key, no password, a host, a numeric project id, no query or fragment. */
-function isCrashReportDsn(value: string): boolean {
+/** The shape the crash-report SDK parses a DSN with (@sentry/core makeDsn); kept in step with it. */
+const SDK_DSN_SHAPE =
+  /^(?:(\w+):)\/\/(?:(\w+)(?::(\w+)?)?@)((?:\[[:.%\w]+\]|[\w.-]+))(?::(\d+))?\/(.+)/;
+
+/**
+ * QA-13d: the one form of CRASH_REPORT_DSN every consumer uses (the payout host check, the envelope
+ * endpoint and the SDK): blanks trimmed, rebuilt from its URL parts as
+ * `<http(s)>://<public key>@<host>[:<port>][/<prefix>]/<project id>`. Undefined for anything else
+ * (no password, query or fragment; a word-character public key; a numeric project id), so the SDK
+ * never refuses (and never prints) a DSN that passed here.
+ */
+export function normalizeCrashReportDsn(value: string): string | undefined {
   let url: URL;
   try {
-    url = new URL(value);
+    url = new URL(value.trim());
   } catch {
-    return false;
+    return undefined;
   }
-  return (
-    (url.protocol === 'http:' || url.protocol === 'https:') &&
-    url.hostname !== '' &&
-    url.username !== '' &&
-    url.password === '' &&
-    url.search === '' &&
-    url.hash === '' &&
-    /^(?:\/[^/]+)*\/\d+\/?$/.test(url.pathname)
-  );
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+  if (!/^\w+$/.test(url.username) || url.password !== '') return undefined;
+  if (url.search !== '' || url.hash !== '' || url.hostname === '') return undefined;
+  const segments = url.pathname.replace(/\/$/, '').split('/').slice(1);
+  const projectId = segments.pop() ?? '';
+  if (!/^\d+$/.test(projectId)) return undefined;
+  if (segments.some((segment) => !/^[\w.~-]+$/.test(segment))) return undefined;
+  const prefix = segments.map((segment) => `/${segment}`).join('');
+  const dsn = `${url.protocol}//${url.username}@${url.host}${prefix}/${projectId}`;
+  return SDK_DSN_SHAPE.test(dsn) ? dsn : undefined;
 }
 
 /** B1-31: http(s), a non-empty host, no username / password (the value is never echoed). */
@@ -360,9 +363,9 @@ export interface AppConfig {
    */
   readonly tracing?: TracingConfig | undefined;
   /**
-   * CRASH_REPORT_DSN / CRASH_REPORT_INTERNAL_HOST_SUFFIXES (QA-13d, 01 F-OBS-01): crash reporting of
-   * every entry to GlitchTip. Present only when the DSN is set; a hand-built config without it
-   * initialises nothing and installs no hook.
+   * CRASH_REPORT_DSN (QA-13d, 01 F-OBS-01): crash reporting of every entry to GlitchTip. Present
+   * only when the DSN is set (normalised); a hand-built config without it initialises nothing and
+   * installs no hook.
    */
   readonly crashReport?: CrashReportConfig | undefined;
   /**
@@ -380,11 +383,9 @@ export interface AppConfig {
   readonly payChannels?: PayChannelsConfig | null | undefined;
 }
 
-/** Crash reporting (QA-13d): the DSN, and the host suffixes payout treats as internal. */
+/** Crash reporting (QA-13d): the DSN, normalised (normalizeCrashReportDsn). */
 export interface CrashReportConfig {
   readonly dsn: string;
-  /** Lower case, each starting with a dot; empty when unset. */
-  readonly internalHostSuffixes: readonly string[];
 }
 
 /** Where the internal /metrics listener binds (B1-01zzh). */
@@ -679,11 +680,8 @@ export function loadConfig(
       ? {}
       : {
           crashReport: {
-            dsn: values.CRASH_REPORT_DSN,
-            internalHostSuffixes: (values.CRASH_REPORT_INTERNAL_HOST_SUFFIXES ?? '')
-              .split(',')
-              .map((suffix) => suffix.trim().toLowerCase())
-              .filter((suffix) => suffix !== ''),
+            // Validated by the schema above, so never the fallback.
+            dsn: normalizeCrashReportDsn(values.CRASH_REPORT_DSN) ?? '',
           },
         }),
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.

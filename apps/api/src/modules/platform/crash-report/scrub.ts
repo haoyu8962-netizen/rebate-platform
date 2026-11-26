@@ -2,7 +2,8 @@
 // rebuilt from allowlisted fields only. No request / response body, no headers or cookies, no query
 // string; the URL is at most a path template. extra, breadcrumb data and caller contexts keep only
 // link_id / platform / step / result, at every depth (a nested object is filtered the same way).
-// Free text (exception messages, breadcrumb messages, kept values) goes through redaction.ts's
+// Free text (exception messages, breadcrumb messages, kept values) loses credentials written into
+// it (authorization / cookie header values, Bearer / Basic tokens), goes through redaction.ts's
 // redactText and loses promotion URLs, 口令 and 推广位 ids. The user is at most a one-way hash of
 // its id. Exception types, stack frames, level, environment and release stay readable.
 import { createHash } from 'node:crypto';
@@ -34,12 +35,24 @@ const WWW_TEXT = /\bwww\.[^\s"'<>]+/gi;
 const TKL_MARK = '[￥¥$€£₤₳₴₸₹₱₲₵₡₮₭₦¢฿]';
 const TKL_TEXT = new RegExp(`${TKL_MARK}\\s*[A-Za-z0-9]{4,32}\\s*${TKL_MARK}`, 'g');
 const PID_TEXT = /\bmm_\d+_\d+_\d+\b/g;
+// Credentials written into free text (an exception message such as `Authorization: Bearer …`):
+// the whole value of an authorization / cookie header (to the line end or closing quote), then a Bearer token or Basic
+// credentials standing on their own.
+const AUTH_HEADER_TEXT =
+  /\b((?:proxy-)?authorization|(?:set-)?cookie|x-api-key|x-auth-token)(["']?\s*[:=]\s*["']?)[^\r\n"'}]+/gi;
+const BEARER_TEXT = /\b(Bearer\s+)[\w.~+/=:-]+/gi;
+// Basic credentials are base64: a digit, `+` / `/` or mixed case (so `Basic validation` stays).
+const BASIC_TEXT =
+  /\b(Basic\s+)(?=[A-Za-z0-9+/]*(?:[0-9+/]|[A-Z][A-Za-z0-9+/]*[a-z]|[a-z][A-Za-z0-9+/]*[A-Z]))[A-Za-z0-9+/]{8,}={0,2}/g;
 
-/** Free text: no promotion URL, 口令 or 推广位, then redaction.ts's personal-data net. */
+/** Free text: no credential, promotion URL, 口令 or 推广位, then redaction.ts's personal-data net. */
 export function scrubText(value: string): string {
   const text = value.length > MAX_TEXT ? value.slice(0, MAX_TEXT) : value;
   return redactText(
     text
+      .replace(AUTH_HEADER_TEXT, `$1$2${REDACTED}`)
+      .replace(BEARER_TEXT, `$1${REDACTED}`)
+      .replace(BASIC_TEXT, `$1${REDACTED}`)
       .replace(URL_TEXT, REDACTED)
       .replace(WWW_TEXT, REDACTED)
       .replace(TKL_TEXT, REDACTED)
