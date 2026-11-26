@@ -356,3 +356,44 @@ it('[AC-B2-02ze-R4#3] money r2 第 3 条 反例：@ 后在出现「.」之前碰
   const kept = '转给财务@张三处理。价格@3.5元，@所有人 请核对；写成 alice@例子。中国 的不认';
   expect(redactFreeText(kept)).toBe(kept);
 });
+
+// r5（D10-3166 ②，有限清单）：Codex money r3 三条 S0。错实现下怎么红见各条注释。
+// 错实现（手机号左边界越过加号 / 86 前缀去看前面的字母）下，正例原样返回「WhatsApp+8613812345679」而红。
+it('[AC-B2-02ze-R5#1] money r3 S0-1：带 + / ＋ / 86 前缀的手机号以前缀为左边界，紧邻的字母不阻止打码', () => {
+  expect(redactFreeText('WhatsApp+8613812345679 待复核')).toBe('WhatsApp138****5679 待复核');
+  expect(redactFreeText('WhatsApp＋8613812345679 待复核')).toBe('WhatsApp138****5679 待复核');
+  expect(redactFreeText('WhatsApp8613812345679 待复核')).toBe('WhatsApp138****5679 待复核');
+  expect(redactFreeText('tel+13812345678')).toBe('tel138****5678');
+});
+
+it('[AC-B2-02ze-R5#1] money r3 S0-1 反例：号码右边紧贴字母（单号里的一段）仍不当手机号', () => {
+  const kept = '单号 SN8613812345679A，W2026112187654322ABC';
+  expect(redactFreeText(kept)).toBe(kept);
+});
+
+// 错实现（顶级域名后紧跟 @ 即拒绝整个候选）下，正例原样返回 alice@example.cn 而红。
+it('[AC-B2-02ze-R5#2] money r3 S0-2：顶级域名后紧跟 @ 时邮箱在 @ 前截止，前面的完整地址照常打码', () => {
+  const masked = redactFreeText('收款邮箱 alice@example.cn@财务 请复核');
+  expect(masked).toBe('收款邮箱 a***@***.cn@财务 请复核');
+  expect(masked).not.toContain('alice');
+  expect(masked).not.toContain('example');
+  expect(redactFreeText('alice@例子.中国@财务')).toBe('a***@***.中国@财务');
+});
+
+it('[AC-B2-02ze-R5#2] money r3 S0-2 反例：单字母顶级域名后紧跟 @ 仍不当邮箱', () => {
+  const kept = '写成 alice@example.c@财务 的不认';
+  expect(redactFreeText(kept)).toBe(kept);
+});
+
+// 错实现（扫描不认全角 Ｘ，只把前 17 位交给识别器）下，正例原样返回全角证件号而红。
+it('[AC-B2-02ze-R5#3] money r3 S0-3：全角数字加全角 Ｘ / ｘ 的 18 位证件号先归一再判，首 1 末 1', () => {
+  expect(redactFreeText('证件号 １１０１０５１９４９１２３１００２Ｘ 不符')).toBe(
+    '证件号 1****************X 不符',
+  );
+  expect(redactFreeText('１１０１０５１９４９１２３１００２ｘ')).toBe('1****************x');
+});
+
+it('[AC-B2-02ze-R5#3] money r3 S0-3 反例：全角写法但校验位错（应为 X，前 17 位末位改 3）的 18 位原样', () => {
+  const kept = '证件号 １１０１０５１９４９１２３１００３Ｘ 不符';
+  expect(redactFreeText(kept)).toBe(kept);
+});

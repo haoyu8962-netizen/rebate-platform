@@ -2,6 +2,21 @@
 // personal data out of the append-only audit_logs when a caller forgot, and masks the personal
 // data an operator types into the free text of an audited operation (B2-02ze).
 //
+// Free-text masking is a CLOSED LIST of fixed formats (B2-02ze r5, D10-3166 ②, D10-2418 first
+// option); nothing outside it is recognised, and the review judges against it only:
+//   1. mainland mobile numbers: 11 digits 1[3-9]…, optionally prefixed + / ＋ / 86 / 0086, common
+//      separators between groups (rule 3 below); a prefixed number is bounded by its prefix, so a
+//      letter right before the prefix does not stop it (WhatsApp+8613812345679 → WhatsApp138****5679);
+//   2. identity numbers: 18 characters with a valid GB 11643 check character (X / x / Ｘ / ｘ), or
+//      15 digits with a real date; half- and full-width digits alike, normalised before the check;
+//   3. bank cards / payee accounts: 13–19 digits passing Luhn, in any separator form;
+//   4. Alipay accounts: in the form of a mobile number (as 1) or of an e-mail address (rule 1
+//      below; an address ends at an "@" right after its last label: alice@example.cn@财务 →
+//      a***@***.cn@财务).
+// Known residual risk, accepted: other personal data typed as free text (names, addresses, other
+// formats) is not recognised; audit logs are readable only by authorised back-office staff and
+// revealing is controlled separately.
+//
 // - Key names are normalised the way platform logging does it (lower case, non-alphanumerics
 //   dropped). A key is sensitive when its normalised name equals one of the given names, or
 //   CONTAINS one of AUDIT_SENSITIVE_FRAGMENTS (so totp_secret, totp_secret_cipher,
@@ -34,15 +49,16 @@
 //        in any mix — a class, not a list (B2-02ze money r1 / r2): any white space (every Unicode
 //        space separator, U+00A0, U+2007, U+202F, ideographic space; tab, line breaks), any dash
 //        (\p{Pd}: -, ‐, –, —, ―, －…), slash (/ ／), dot (. ．), comma, underscore and middle dots
-//        (· ・); an optional leading "+" and an optional trailing X / x. The digits between separators are the run's groups. Only what
+//        (· ・); an optional leading "+" / "＋" and an optional trailing X / x / Ｘ / ｘ. The digits between separators are the run's groups. Only what
 //        is recognisably personal is masked (负责人 2026-11-21 「订单号不是敏感信息，不打码」,
 //        D10-2354; the earlier 「宁可多脱敏」 is void). Prefixes and separators around a run do not
 //        decide anything: card:6259651208437736, cardNo6259651208437736 and 6259651208437736 are
 //        judged alike. The recognisers, on the digits of a span with its separators taken out:
 //          - a mainland mobile number (11 digits 1[3-9]…, optionally preceded by 86 or 0086),
 //            unless a letter, digit or hyphen touches the span from outside the run (the
-//            boundary of the structured rule below; tel:13812345678 is masked): BR-ID-33 3 + 4,
-//            the 4 in the middle hidden, the country prefix (and "+") dropped → 138****5678;
+//            boundary of the structured rule below; tel:13812345678 is masked; with a country
+//            prefix only the end is checked, the prefix being its start, r5): BR-ID-33 3 + 4,
+//            the 4 in the middle hidden, the country prefix (and "+" / "＋") dropped → 138****5678;
 //          - an identity number: 18 characters (17 digits then a digit or X / x) whose last one
 //            is the GB 11643 check character of the first 17 (weights 7 9 10 5 8 4 2 1 6 3 7 9
 //            10 5 8 4 2, sum mod 11 → 1 0 X 9 8 7 6 5 4 3 2), or 15 digits whose 7th–12th
@@ -157,10 +173,18 @@ const TOP_LABEL =
   `|[${WESTERN}]{2,}(?![${WESTERN}\\p{M}@])` +
   `|${OTHER_LETTER}{2,}(?!${OTHER_LETTER}|[\\p{M}@])` +
   `|[${WESTERN}]{2,}?(?=${NEXT_ADDRESS})` +
-  `|${OTHER_LETTER}{2,}?(?=${NEXT_ADDRESS}))`;
+  `|${OTHER_LETTER}{2,}?(?=${NEXT_ADDRESS})` +
+  // r5 S0 (alice@example.cn@财务): when no next address follows, an "@" right after the last label
+  // ends the address there; the address before it is masked as usual.
+  `|[${WESTERN}]{2,}(?=@)` +
+  `|${OTHER_LETTER}{2,}(?=@))`;
 const EMAIL = new RegExp(`${LOCAL}@(?:${LABEL}${LABEL_DOT})+${TOP_LABEL}`, 'gu');
 const UUID = /([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})/;
 const DIGIT = '[0-9\\uFF10-\\uFF19]';
+/** A leading plus, half- or full-width (＋). */
+const PLUS = '[+\\uFF0B]';
+/** A trailing check character X / x, half- or full-width (Ｘ ｘ; r5 S0). */
+const CHECK_X = '[Xx\\uFF38\\uFF58]';
 /**
  * A class, not a list (B2-02ze money r2): any white space (\s with every Unicode space separator:
  * U+00A0, U+2007, U+202F, ideographic space, tab, line breaks…), any dash (\p{Pd}), slash, dot,
@@ -168,7 +192,7 @@ const DIGIT = '[0-9\\uFF10-\\uFF19]';
  */
 const SEPARATOR = '[\\s\\p{Zs}\\p{Pd}/.\\uFF0E\\uFF0F,_\\u00B7\\u30FB]';
 /** Any number of separators, in any mix, may stand between two digits. */
-const DIGIT_RUN = new RegExp(`\\+?${DIGIT}(?:${SEPARATOR}*${DIGIT})*[Xx]?`, 'gu');
+const DIGIT_RUN = new RegExp(`${PLUS}?${DIGIT}(?:${SEPARATOR}*${DIGIT})*${CHECK_X}?`, 'gu');
 const MOBILE = /^(?:0086|86)?(1[3-9][0-9]{9})$/;
 /** A letter, digit or hyphen right next to a mobile number makes it part of something else. */
 const TOUCHING = /[0-9A-Za-z\uFF10-\uFF19-]/;
@@ -183,10 +207,10 @@ function maskEmail(address: string, tld: string): string {
   return `${String.fromCodePoint(address.codePointAt(0)!)}***@***.${tld}`;
 }
 
-/** Full-width digits to ASCII; everything else but digits and X dropped. */
+/** Full-width digits and Ｘ / ｘ to ASCII; everything else but digits and X dropped. */
 function digitsOf(run: string): string {
   return run
-    .replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xff10 + 0x30))
+    .replace(/[０-９Ｘｘ]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xff10 + 0x30))
     .replace(/[^0-9Xx]/g, '');
 }
 
@@ -241,7 +265,7 @@ function range(from: number, to: number): number[] {
  * one that matches never stops another from being checked (B2-02ze money r2). Null when none
  * matches.
  */
-function judge(chars: string, mobileAllowed: boolean): Verdict | null {
+function judge(chars: string, mobileAllowed: boolean, prefixedAllowed: boolean): Verdict | null {
   const hidden: number[] = [];
   const dropped: number[] = [];
   let mobile = false;
@@ -252,8 +276,10 @@ function judge(chars: string, mobileAllowed: boolean): Verdict | null {
   }
   // A trailing X is no digit of a card, mobile or 15-digit number: it stays.
   const digits = chars.replace(/[Xx]$/, '');
-  const number = mobileAllowed ? MOBILE.exec(digits) : null;
-  if (number !== null) {
+  const number = MOBILE.exec(digits);
+  // A number written with its country prefix (86 / 0086) is bounded by the prefix: a letter
+  // right before the prefix does not stop it (r5 S0, WhatsApp+8613812345679).
+  if (number !== null && (digits.length === 11 ? mobileAllowed : prefixedAllowed)) {
     const prefix = digits.length - 11;
     dropped.push(...range(0, prefix));
     hidden.push(...range(prefix + 3, prefix + 7));
@@ -279,7 +305,7 @@ function judge(chars: string, mobileAllowed: boolean): Verdict | null {
  * the others stay; a run nothing recognises is not changed.
  */
 function maskRun(run: string, offset: number, text: string): string {
-  const plus = run.startsWith('+');
+  const plus = run.startsWith('+') || run.startsWith('\uFF0B');
   const body = plus ? run.slice(1) : run;
   const touchesStart = TOUCHING.test(text.charAt(plus ? offset : offset - 1));
   const touchesEnd = TOUCHING.test(text.charAt(offset + run.length));
@@ -308,8 +334,9 @@ function maskRun(run: string, offset: number, text: string): string {
       const group = groups[j]!;
       for (let c = group.first; c <= group.last; c += 1) chars += cells[c]!.char;
       if (chars.replace(/[Xx]$/, '').length > CARD_MAX) break;
-      const mobileAllowed = (i > 0 || !touchesStart) && (j < groups.length - 1 || !touchesEnd);
-      const verdict = judge(chars, mobileAllowed);
+      const endFree = j < groups.length - 1 || !touchesEnd;
+      const mobileAllowed = (i > 0 || !touchesStart) && endFree;
+      const verdict = judge(chars, mobileAllowed, endFree);
       if (verdict === null) continue;
       const base = groups[i]!.first;
       for (const position of verdict.hidden) hidden.add(cells[base + position]!.at);
@@ -388,12 +415,4 @@ export function redactSnapshot(value: Snapshot, sensitiveKeys: readonly string[]
   };
   // A non-null input maps to a non-null output.
   return visit(value, false) as Snapshot;
-}
-
-/**
- * B2-02zg skeleton (D10-3279): masks the personal data in one free-text value (normalise first, then
- * mask; see the task brief). Not implemented yet.
- */
-export function redactFreeText(_text: string): string {
-  throw new Error('NotImplemented: redactFreeText (B2-02zg)');
 }
