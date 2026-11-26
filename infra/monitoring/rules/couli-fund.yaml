@@ -41,6 +41,15 @@ groups:
         annotations:
           summary: 'Order rows the union mapper refused are waiting for a person'
           description: 'Open order_sync_pending rows with reason ORDER_ROW_INVALID (BR-CALC-03, D10-570): the row was not stored and no amount was read as 0, the other rows of the window went on. A later good row of the same order resolves it; a row:<hash> key has no order number and is only resolved by hand. The archived page is raw_payload_id.'
+      - alert: CouliOrderUnfreezeSignal
+        expr: 'couli_order_sync_pending_open{reason="UNFREEZE_SIGNAL"} > 0'
+        for: '5m'
+        labels:
+          severity: critical
+          fund: 'true'
+        annotations:
+          summary: 'Unfreeze signals from the Taobao violation API are waiting for a person'
+          description: 'Open app.order_sync_pending rows with reason UNFREEZE_SIGNAL (BR-FUND-02, B1-04zzab): a punish_status 1 unfreeze signal is only recorded, the order is not changed automatically. A person checks these rows and resolves them.'
   - name: couli-fund-settlement
     rules:
       - alert: CouliSettleBillJobFailed
