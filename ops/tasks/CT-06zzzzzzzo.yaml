@@ -1,0 +1,32 @@
+id: CT-06zzzzzzzo
+repo: rebate-platform
+title: CT-06zzzzzzzo：测试机 --browser 导出截图比对报告——容器里的 test/.tmp/visual-baseline/（summary-*.json 与 actual / diff 图）拷到 browser/<n>/out/visual-baseline/，只加导出、不改任何判定（D10-3369）
+type: guard-change
+# 2026-11-27 ops 入账（编排 D10-3369，FU-CT11BV-REBASELINE 的前提）。第三类保护路径 tools/**：任务 PR 的批准标签由负责人加，可与 CT-06zzzzzzzn 一起报负责人；
+#   排在 CT-06zzzzzzzn 之后开工（两单都改 tools/ops/verify-container.sh，那张落地后本单再派写测）。
+# 起因（fe 11-27 06:42，CT-11bv 第 4 步）：visual-baseline 的用例只断言「超阈值标记与数值一致、报告写出了」，差异百分比与 actual / diff 图写在容器里的
+#   test/.tmp/visual-baseline/（test/spec/frontend/visual-baseline/compare.ts 的 REPORT_DIR；CI 把它上传为 visual-baseline-report-*），
+#   verify-container 的 --browser 只导出 out/screenshots/ 与 vitest 报告，跑完容器即删，所以测试机上拿不到超阈值清单与可用来重录基准的新图；宿主不跑 vitest（D10-2404）。
+# 做法：tools/ops/verify-image/entrypoint.sh 的 browser 模式在浏览器项目跑完后（不论用例结果），若 /work/repo/test/.tmp/visual-baseline/ 存在就整个拷到
+#   /out/visual-baseline/（只拷普通文件，不跟随符号链接）；tools/ops/verify-container.sh 的 --browser 日志加一行导出摘要（文件数、summary-*.json 数），
+#   result.json 加 visual_baseline { files, summaries }（目录不存在记 0，不算失败）。不改退出码、不改「没有截图即失败」等现有判定、不改 compare.ts 与阈值、不碰基准图。
+#   tools/ops/README.md（或 verify-container 头注释）补一句导出位置。镜像按 entrypoint.sh 的哈希自动重建（lan-run 已有逻辑）。
+# 规则测试至少钉：① 容器里有 test/.tmp/visual-baseline/ 时，browser/<n>/out/visual-baseline/ 下逐文件同名同内容；② 没有该目录时照旧、记 0、退出码不变；
+#   ③ 用例失败（非 0）时照样导出；④ 导出不改变 --browser 的退出码与「没有截图即失败」的判定；⑤ 符号链接不被跟随。用现有测试夹具的假 docker，不真起容器。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/verify-image/entrypoint.sh'
+  - 'tools/ops/verify-container.sh'
+  - 'tools/ops/verify-container.test.ts'
+  - 'tools/ops/README.md'
+  - 'ops/tasks/CT-06zzzzzzzo.yaml'
+test_paths:
+  - 'test/spec/ci/browser-visual-export/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/browser-visual-export/**'
+status: todo
