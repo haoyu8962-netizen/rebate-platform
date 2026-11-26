@@ -27,8 +27,16 @@ it('[AC-B1-08zza#18] 订单约束接收 link、拒绝未知值，后台指派保
     platform_status: 'INVALID',
   });
   // 漏改 CHECK 时插入会被库拒绝，放开整个 CHECK 时未知值会写入成功。
-  await expect(seeded).resolves.toMatchObject({ scene_basis: 'link', user_basis: null });
-  const order = await seeded;
+  // 写库结果先收成值再断言：被 CHECK 拒绝时收到 23514，红在断言上（D10-3288）。
+  const inserted = await seeded.then(
+    (row) => ({ outcome: 'ok' as const, row }),
+    (error: { code?: unknown }) => ({ outcome: error.code, row: undefined }),
+  );
+  expect(inserted).toMatchObject({
+    outcome: 'ok',
+    row: { scene_basis: 'link', user_basis: null },
+  });
+  const order = inserted.row as NonNullable<typeof inserted.row>;
   const invalid = h.db
     .updateTable('orders')
     .set({ scene_basis: 'unknown-scene-basis' })
@@ -49,9 +57,14 @@ it('[AC-B1-08zza#18] 订单约束接收 link、拒绝未知值，后台指派保
 it('[AC-B1-08zza#19] 找回通过只写用户依据 claim，保留订单的 link 与 buy_type', async () => {
   const f = await claimFixture(h);
   const seeded = f.order({ scene_basis: 'link', buy_type: 'share', platform: 'pdd' });
-  await expect(seeded).resolves.toMatchObject({ user_id: null, scene_basis: 'link' });
+  // 写库结果先收成值再断言：被 CHECK 拒绝时收到 23514，红在断言上（D10-3288）。
+  const inserted = await seeded.then(
+    (row) => ({ outcome: 'ok' as const, row }),
+    (error: { code?: unknown }) => ({ outcome: error.code, row: undefined }),
+  );
+  expect(inserted).toMatchObject({ outcome: 'ok', row: { user_id: null, scene_basis: 'link' } });
   const claim = await f.claim({ platform: 'pdd', order_no_type: 'sub' });
-  const item = await f.item(claim, await seeded);
+  const item = await f.item(claim, inserted.row as NonNullable<typeof inserted.row>);
   expect(success(await f.review('approve', item)).status).toBe('approved');
 
   // 错把找回用户依据覆盖到场景依据，或把原链接分类重判成兜底，会改变订单原值。
