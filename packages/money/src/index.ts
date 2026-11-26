@@ -9,6 +9,7 @@ export { addFen, subFen, type SubFenOptions } from './add-sub.ts';
 export { floorToStepFen } from './floor-to-step.ts';
 export { formatYuan, formatYuanAdmin, formatYuanRange } from './display.ts';
 export { InvalidAmount, InvalidRatio } from './errors.ts';
+export { callCostMfen, tokensWithinMfen } from './mfen.ts';
 export { mulBpBpFloor } from './mul-bp-bp.ts';
 
 /** Result of splitByBp: one floor amount per input ratio (same order) and what is left. */

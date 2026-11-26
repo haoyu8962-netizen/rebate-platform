@@ -11,6 +11,7 @@
 // 时间只取注入的 Scheduler（单调毫秒）与 Clock（计量时刻）。规则测试在 test/spec/agent/model-routing/。
 // 不在本段：路由文件与同意厂商清单文件及其 CI 校验、done / error 帧（B3-03）、日预算记账（B3-09）。
 import type { BreakerPolicy, Clock, Scheduler } from '../../../platform/index.ts';
+import type { ModelPrices } from '../../budget/index.ts';
 import type { UsageSink, VendorGateway, VendorId, VendorUsage } from '../vendors/index.ts';
 import type { ChatInput, ModelErrorKind, ModelEvent } from '../openai-compat/index.ts';
 import type { DegradeReason } from '../degraded/index.ts';
@@ -131,13 +132,33 @@ export interface ModelRouterOptions {
    */
   readonly billable?: boolean;
   readonly onAlert?: (alert: RouterAlert) => void;
+  /**
+   * B3-09m (BR-AI-16 细则「已花 U 怎么累加」): a vendor's reported usage costing more than the
+   * call's worst case W is booked as is and logged here once (warn agent.budget_usage_over_worst).
+   */
+  readonly budgetLogger?: { warn(obj: object, msg: string): void };
 }
 
 export type RouterChatInput = Omit<ChatInput, 'vendor' | 'model'>;
 
+/**
+ * B3-09m · BR-AI-16: one run's model spending, in process memory only. reserveMfen is the run's
+ * reservation R (its spending cap), prices the one unit-price entry set fixed at admission;
+ * spentMfen (U) and calls are updated by the router after each call that was sent: by the
+ * vendor's usage when reported, by the call's worst case W when the result is unknown; a request
+ * that was never sent adds nothing.
+ */
+export interface RunCallBudget {
+  readonly reserveMfen: bigint;
+  readonly prices: ModelPrices;
+  spentMfen: bigint;
+  calls: number;
+}
+
 export interface RouterContext {
   readonly clock: RunModelClock;
   readonly signal: AbortSignal;
+  readonly budget?: RunCallBudget;
 }
 
 export interface ModelRouter {

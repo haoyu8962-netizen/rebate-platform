@@ -580,3 +580,201 @@ it('[AC-B3-05n][BR-AI-14] 登记意图后用户中途停止本轮（降级路径
   expect(routeDegradedIntent(late!, 'earnings_query')).toBe(false);
   expect(routed.traces[0]?.intent).toBe('order_query');
 });
+
+// B3-09m · BR-AI-16 (D10-3116): a degraded model call after content was delivered.
+function deliveredThenDegraded(reason: 'budget' | 'models_failed' | 'model_timeout') {
+  const notice: UnnumberedCard = {
+    type: 'notice',
+    schema_version: 1,
+    data: { level: 'info', text_key: 'agent.degraded.empty', actions: [] },
+    fallback_text: '合成卡',
+  };
+  const rounds: ModelOutcome[] = [
+    modelRound([
+      { t: 'text_delta', text: '合成说明。' },
+      { t: 'tool_call', index: 0, call: call('a', 'search_products', '{"q":"合成"}') },
+      { t: 'done', reason: 'tool_calls' },
+    ]),
+    { kind: 'degraded', reason, attempts: [] },
+  ];
+  const execute = vi.fn(async (): Promise<ToolOutcome> => ({
+    kind: 'ok',
+    modelView: {},
+    cards: [notice],
+  }));
+  const degraded = vi.fn<AgentRunBodyDeps['degraded']['run']>(async () => ({
+    kind: 'done',
+    finishReason: 'fallback',
+  }));
+  const deps: AgentRunBodyDeps = { ...baseDeps(rounds, execute), degraded: { run: degraded } };
+  return { deps, execute, degraded };
+}
+
+it('[AC-B3-09m#u9] 已出内容后预算降级：保留已出的文字与卡，再走无模型降级，以 budget 收尾', async () => {
+  const { deps, execute, degraded } = deliveredThenDegraded('budget');
+  degraded.mockImplementation(async (_request, ctx) => {
+    ctx.text('合成文案:agent.degraded');
+    return { kind: 'done', finishReason: 'budget' };
+  });
+  const out = context();
+  const cards: UnnumberedCard[] = [];
+  out.ctx.card = async (card) => {
+    cards.push(card);
+  };
+  expect(await createAgentRunBody(deps)(input())(out.ctx)).toEqual({
+    kind: 'done',
+    finishReason: 'budget',
+  });
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(degraded).toHaveBeenCalledTimes(1);
+  expect(degraded.mock.calls[0]?.[0].reason).toBe('budget');
+  // What the model round delivered stays, in order, before the no-model path's output.
+  expect(out.texts.join('')).toBe('合成说明。合成文案:agent.degraded');
+  expect(cards.map((card) => card.fallback_text)).toEqual(['合成卡']);
+});
+
+it('[AC-B3-09o#u5] 已出内容后预算降级：护栏里未结的尾句先写出，再交给无模型降级', async () => {
+  const rounds: ModelOutcome[] = [
+    modelRound([
+      { t: 'text_delta', text: '合成说明没有句号' },
+      { t: 'tool_call', index: 0, call: call('a', 'search_products', '{"q":"合成"}') },
+      { t: 'done', reason: 'tool_calls' },
+    ]),
+    { kind: 'degraded', reason: 'budget', attempts: [] },
+  ];
+  const execute = vi.fn(async (): Promise<ToolOutcome> => ({
+    kind: 'ok',
+    modelView: {},
+    cards: [
+      {
+        type: 'notice',
+        schema_version: 1,
+        data: { level: 'info', text_key: 'agent.degraded.empty', actions: [] },
+        fallback_text: '合成卡',
+      },
+    ],
+  }));
+  const out = context();
+  const order: string[] = [];
+  out.ctx.text = (text) => {
+    out.texts.push(text);
+    order.push(`text:${text}`);
+  };
+  const degraded = vi.fn<AgentRunBodyDeps['degraded']['run']>(async () => {
+    order.push('degraded');
+    return { kind: 'done', finishReason: 'budget' };
+  });
+  const deps: AgentRunBodyDeps = { ...baseDeps(rounds, execute), degraded: { run: degraded } };
+  expect(await createAgentRunBody(deps)(input())(out.ctx)).toEqual({
+    kind: 'done',
+    finishReason: 'budget',
+  });
+  expect(out.texts.join('')).toBe('合成说明没有句号');
+  expect(order.at(-1)).toBe('degraded');
+  expect(degraded).toHaveBeenCalledTimes(1);
+});
+
+it('[AC-B3-09o#u6] 模板回复的 run 遇预算降级不走无模型降级，照旧以模板收尾（budget）', async () => {
+  const rounds: ModelOutcome[] = [
+    modelRound([
+      { t: 'tool_call', index: 0, call: call('a', 'search_rules', '{"q":"合成"}') },
+      { t: 'done', reason: 'tool_calls' },
+    ]),
+    { kind: 'degraded', reason: 'budget', attempts: [] },
+  ];
+  const execute = vi.fn(async (): Promise<ToolOutcome> => ({
+    kind: 'ok',
+    modelView: {},
+    cards: [],
+  }));
+  const degraded = vi.fn<AgentRunBodyDeps['degraded']['run']>(async () => ({
+    kind: 'done',
+    finishReason: 'budget',
+  }));
+  const base = baseDeps(rounds, execute);
+  const deps: AgentRunBodyDeps = {
+    ...base,
+    tools: {
+      ...base.tools,
+      definitions: async () => [
+        { name: 'search_rules', description: 'synthetic', parameters: { type: 'object' } },
+      ],
+    },
+    degraded: { run: degraded },
+  };
+  const out = context();
+  expect(await createAgentRunBody(deps)(input())(out.ctx)).toEqual({
+    kind: 'done',
+    finishReason: 'budget',
+  });
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(degraded).not.toHaveBeenCalled();
+});
+
+it('[AC-B3-09o#u7] 已出商品卡后预算降级：core 不对无模型降级再出的同一商品卡去重（钉住现状）', async () => {
+  const product: UnnumberedCard = {
+    type: 'notice',
+    schema_version: 1,
+    data: { level: 'info', text_key: 'agent.degraded.empty', actions: [] },
+    fallback_text: '合成同一商品',
+  };
+  const rounds: ModelOutcome[] = [
+    modelRound([
+      { t: 'tool_call', index: 0, call: call('a', 'search_products', '{"q":"合成"}') },
+      { t: 'done', reason: 'tool_calls' },
+    ]),
+    { kind: 'degraded', reason: 'budget', attempts: [] },
+  ];
+  const execute = vi.fn(async (): Promise<ToolOutcome> => ({
+    kind: 'ok',
+    modelView: {},
+    cards: [product],
+  }));
+  const degraded = vi.fn<AgentRunBodyDeps['degraded']['run']>(async (_request, ctx) => {
+    await ctx.card(product);
+    return { kind: 'done', finishReason: 'budget' };
+  });
+  const deps: AgentRunBodyDeps = { ...baseDeps(rounds, execute), degraded: { run: degraded } };
+  const out = context();
+  const cards: UnnumberedCard[] = [];
+  out.ctx.card = async (card) => {
+    cards.push(card);
+  };
+  expect(await createAgentRunBody(deps)(input())(out.ctx)).toEqual({
+    kind: 'done',
+    finishReason: 'budget',
+  });
+  expect(cards.map((card) => card.fallback_text)).toEqual(['合成同一商品', '合成同一商品']);
+});
+
+it.each(['models_failed', 'model_timeout'] as const)(
+  '[AC-B3-09m#u10] 已出内容后非预算降级（%s）仍以 stop 收尾',
+  async (reason) => {
+    const { deps, execute, degraded } = deliveredThenDegraded(reason);
+    const out = context();
+    expect(await createAgentRunBody(deps)(input())(out.ctx)).toEqual({
+      kind: 'done',
+      finishReason: 'stop',
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(degraded).not.toHaveBeenCalled();
+  },
+);
+
+it('[AC-B3-09m#u11] 未出内容时预算降级仍走无模型降级路径', async () => {
+  const deps: AgentRunBodyDeps = {
+    ...baseDeps([{ kind: 'degraded', reason: 'budget', attempts: [] }], vi.fn()),
+    degraded: {
+      run: vi.fn<AgentRunBodyDeps['degraded']['run']>(async () => ({
+        kind: 'done',
+        finishReason: 'budget',
+      })),
+    },
+  };
+  const out = context();
+  expect(await createAgentRunBody(deps)(input())(out.ctx)).toEqual({
+    kind: 'done',
+    finishReason: 'budget',
+  });
+  expect(deps.degraded.run).toHaveBeenCalledTimes(1);
+});

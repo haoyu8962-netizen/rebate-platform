@@ -5,6 +5,7 @@ import {
   errorCode,
   isRecord,
   malformed,
+  markNotSent,
   ModelProtocolError,
   tokenCount,
 } from './errors.ts';
@@ -115,129 +116,146 @@ export function createHttpTransport(input: HttpTransportOptions): VendorTranspor
   return Object.freeze({
     billable: true,
     async send(request, inputSignal) {
-      const signal = inputSignal ?? new AbortController().signal;
-      checkSignal(signal);
-      if (request.vendor !== options.vendor) {
-        throw new ModelProtocolError('bad_request', 'Request vendor does not match transport');
-      }
-      const shape = fromVendorRequest(request);
-      if (shape.params.stream !== true) throw malformed();
-      let body: string;
+      // B3-09o · BR-AI-16 细则「请求根本没发出去，不计」：在调用 options.fetch 之前抛出的错
+      // （已中止、请求形状不对、凭据读不到）都登记为没发出；调用 fetch 之后的任何失败都不登记。
+      const handoff = { fetched: false };
       try {
-        body = JSON.stringify({
-          ...shape.params,
-          model: shape.model,
-          messages: shape.messages,
-          tools: shape.tools,
-        });
-      } catch {
-        throw malformed();
-      }
-      let key: string;
-      try {
-        key = options.apiKey();
-        if (typeof key !== 'string' || key.trim() === '' || /\s/.test(key)) throw malformed();
-      } catch {
-        throw new ModelProtocolError('auth', 'Model credential unavailable');
-      }
-      const response = await network(
-        () =>
-          options.fetch(url, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${key}`,
-              'Content-Type': 'application/json',
-              Accept: 'text/event-stream',
-            },
-            body,
-            signal,
-            redirect: 'error',
-          }),
-        signal,
-      );
-      if (response.status < 200 || response.status >= 300) {
-        const text = await network(() => response.text(), signal);
-        let errorBody: unknown = null;
-        try {
-          errorBody = JSON.parse(text) as unknown;
-        } catch {
-          // 非 JSON 正文也按状态码分类。
-        }
-        const code = errorCode(errorBody);
-        // 厂商码只保留短标识符，并剔除回显的当前凭据。
-        const vendorCode =
-          code !== null && /^[A-Za-z0-9_.-]{1,80}$/.test(code) && !code.includes(key) ? code : null;
-        const kind = classifyFailure(
-          options.vendor,
-          { status: response.status, body: errorBody },
-          options.quirks,
-        );
-        throw new ModelProtocolError(kind, 'Model endpoint rejected request', {
-          status: response.status,
-          vendorCode,
-        });
-      }
-      if (response.body === null) throw malformed();
-      const iterator = response.body[Symbol.asyncIterator]();
-      const chunks: unknown[] = [];
-      const parser = createSseChunkParser((chunk) => {
-        chunks.push(chunk);
-      });
-      const decoder = new TextDecoder('utf-8', { fatal: true });
-      let bytes = 0;
-      let secretTail = '';
-      let exhausted = false;
-      try {
-        while (!parser.finished) {
-          const part = await network(() => iterator.next(), signal);
-          if (part.done) {
-            exhausted = true;
-            break;
-          }
-          bytes += part.value.byteLength;
-          if (bytes > 16 * 1024 * 1024) throw malformed();
-          let text: string;
-          try {
-            text = decoder.decode(part.value, { stream: true });
-          } catch {
-            throw malformed();
-          }
-          const overlap = secretTail + text;
-          if (overlap.includes(key)) throw malformed();
-          secretTail = key.length > 1 ? overlap.slice(-(key.length - 1)) : '';
-          parser.push(text);
-        }
-        if (!parser.finished) {
-          let tail: string;
-          try {
-            tail = decoder.decode();
-          } catch {
-            throw malformed();
-          }
-          parser.push(tail);
-          parser.end();
-        }
-        checkSignal(signal);
-        if (!parser.finished) throw malformed();
-        const events = assembleChunks(chunks);
-        // JSON 转义不能成为凭据进入返回值/录制的旁路。
-        if (containsSecret(chunks, key)) throw malformed();
-        return { chunks, usage: usageOf(events) };
+        return await sendHttp(options, url, request, inputSignal, handoff);
       } catch (error) {
-        if (error instanceof ModelProtocolError) {
-          // 即使参数 JSON 无效或流被中止，已解析的用量也交给上层计量。
-          throw new ModelProtocolError(error.kind, error.message, {
-            status: error.status,
-            vendorCode: error.vendorCode,
-            usage: usageFromChunks(chunks),
-          });
-        }
+        if (!handoff.fetched) markNotSent(error);
         throw error;
-      } finally {
-        if (!exhausted) close(iterator);
       }
     },
   } satisfies VendorTransport);
+}
+
+async function sendHttp(
+  options: HttpTransportOptions,
+  url: string,
+  request: Parameters<VendorTransport['send']>[0],
+  inputSignal: Parameters<VendorTransport['send']>[1],
+  handoff: { fetched: boolean },
+): Promise<VendorResponse> {
+  const signal = inputSignal ?? new AbortController().signal;
+  checkSignal(signal);
+  if (request.vendor !== options.vendor) {
+    throw new ModelProtocolError('bad_request', 'Request vendor does not match transport');
+  }
+  const shape = fromVendorRequest(request);
+  if (shape.params.stream !== true) throw malformed();
+  let body: string;
+  try {
+    body = JSON.stringify({
+      ...shape.params,
+      model: shape.model,
+      messages: shape.messages,
+      tools: shape.tools,
+    });
+  } catch {
+    throw malformed();
+  }
+  let key: string;
+  try {
+    key = options.apiKey();
+    if (typeof key !== 'string' || key.trim() === '' || /\s/.test(key)) throw malformed();
+  } catch {
+    throw new ModelProtocolError('auth', 'Model credential unavailable');
+  }
+  const response = await network(() => {
+    handoff.fetched = true;
+    return options.fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body,
+      signal,
+      redirect: 'error',
+    });
+  }, signal);
+  if (response.status < 200 || response.status >= 300) {
+    const text = await network(() => response.text(), signal);
+    let errorBody: unknown = null;
+    try {
+      errorBody = JSON.parse(text) as unknown;
+    } catch {
+      // 非 JSON 正文也按状态码分类。
+    }
+    const code = errorCode(errorBody);
+    // 厂商码只保留短标识符，并剔除回显的当前凭据。
+    const vendorCode =
+      code !== null && /^[A-Za-z0-9_.-]{1,80}$/.test(code) && !code.includes(key) ? code : null;
+    const kind = classifyFailure(
+      options.vendor,
+      { status: response.status, body: errorBody },
+      options.quirks,
+    );
+    throw new ModelProtocolError(kind, 'Model endpoint rejected request', {
+      status: response.status,
+      vendorCode,
+    });
+  }
+  if (response.body === null) throw malformed();
+  const iterator = response.body[Symbol.asyncIterator]();
+  const chunks: unknown[] = [];
+  const parser = createSseChunkParser((chunk) => {
+    chunks.push(chunk);
+  });
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  let bytes = 0;
+  let secretTail = '';
+  let exhausted = false;
+  try {
+    while (!parser.finished) {
+      const part = await network(() => iterator.next(), signal);
+      if (part.done) {
+        exhausted = true;
+        break;
+      }
+      bytes += part.value.byteLength;
+      if (bytes > 16 * 1024 * 1024) throw malformed();
+      let text: string;
+      try {
+        text = decoder.decode(part.value, { stream: true });
+      } catch {
+        throw malformed();
+      }
+      const overlap = secretTail + text;
+      if (overlap.includes(key)) throw malformed();
+      secretTail = key.length > 1 ? overlap.slice(-(key.length - 1)) : '';
+      parser.push(text);
+    }
+    if (!parser.finished) {
+      let tail: string;
+      try {
+        tail = decoder.decode();
+      } catch {
+        throw malformed();
+      }
+      parser.push(tail);
+      parser.end();
+    }
+    checkSignal(signal);
+    if (!parser.finished) throw malformed();
+    const events = assembleChunks(chunks);
+    // JSON 转义不能成为凭据进入返回值/录制的旁路。
+    if (containsSecret(chunks, key)) throw malformed();
+    return { chunks, usage: usageOf(events) };
+  } catch (error) {
+    if (error instanceof ModelProtocolError) {
+      // 即使参数 JSON 无效或流被中止，已解析的用量也交给上层计量。
+      throw new ModelProtocolError(error.kind, error.message, {
+        status: error.status,
+        vendorCode: error.vendorCode,
+        usage: usageFromChunks(chunks),
+      });
+    }
+    throw error;
+  } finally {
+    if (!exhausted) close(iterator);
+  }
 }
 
 function containsSecret(value: unknown, key: string): boolean {

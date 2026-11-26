@@ -526,7 +526,14 @@ const REGISTRY: readonly ConfigItemSpec[] = Object.freeze([
 const VISIBLE: readonly ConfigItemSpec[] = Object.freeze(
   REGISTRY.filter((entry) => !isDedicatedConfigKey(entry.key)),
 );
-const BY_KEY = new Map(VISIBLE.map((entry) => [entry.key, entry]));
+// B3-09m (BR-AI-16): agent.models, the model price table ({<model snapshot>: {in_mfen_per_m,
+// out_mfen_per_m, version}}), is an item for lookups, type checks and changes, but is not in the
+// configRegistry() list: the list's order and length are frozen by earlier rule tests
+// (AC-F1-02zj#2, AC-F1-02zn#2); listing it is left to a follow-up task (D10-2848).
+const LOOKUP_ONLY: readonly ConfigItemSpec[] = Object.freeze([
+  spec('agent.models', 'object', 'config.business'),
+]);
+const BY_KEY = new Map([...VISIBLE, ...LOOKUP_ONLY].map((entry) => [entry.key, entry]));
 
 /** Every registered configuration item, in registry (list) order. */
 export function configRegistry(): readonly ConfigItemSpec[] {

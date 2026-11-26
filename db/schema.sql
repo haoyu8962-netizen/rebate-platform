@@ -2846,6 +2846,49 @@ CREATE TABLE app.admin_users (
 
 
 --
+-- Name: agent_budget_days; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.agent_budget_days (
+    day date NOT NULL,
+    actual_mfen bigint DEFAULT 0 NOT NULL,
+    reserved_mfen bigint DEFAULT 0 NOT NULL,
+    alert_80_at timestamp with time zone,
+    alert_100_at timestamp with time zone,
+    CONSTRAINT agent_budget_days_actual_mfen_check CHECK ((actual_mfen >= 0)),
+    CONSTRAINT agent_budget_days_reserved_mfen_check CHECK ((reserved_mfen >= 0))
+);
+
+
+--
+-- Name: TABLE agent_budget_days; Type: COMMENT; Schema: app; Owner: -
+--
+
+COMMENT ON TABLE app.agent_budget_days IS 'BR-AI-16 (取甲): platform-wide budget per Asia/Shanghai natural day, mfen; all of a run''s cost goes to its admission day; reserved = outstanding per-run reservations, actual = settled runs (live normal finish books actual spend, any other finish books the full reservation); alert_80_at / alert_100_at are best-effort claim markers, not a breaker input';
+
+
+--
+-- Name: agent_budget_reservations; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.agent_budget_reservations (
+    run_id uuid NOT NULL,
+    day date NOT NULL,
+    reserved_mfen bigint NOT NULL,
+    price_version text,
+    settled_at timestamp with time zone,
+    CONSTRAINT agent_budget_reservations_reserved_mfen_check CHECK ((reserved_mfen >= 0))
+);
+
+
+--
+-- Name: TABLE agent_budget_reservations; Type: COMMENT; Schema: app; Owner: -
+--
+
+COMMENT ON TABLE app.agent_budget_reservations IS 'BR-AI-16 (取甲): per-run reservation taken at admission (admission day, reserved mfen = the run''s spending cap, the one unit-price version fixed for the run); settled_at set exactly once by the run''s finalization, which releases the reservation and books actual spend (live normal finish) or the full reservation (any other finish) to the admission day';
+
+
+--
 -- Name: agent_cards; Type: TABLE; Schema: app; Owner: -
 --
 
@@ -7680,6 +7723,22 @@ ALTER TABLE ONLY app.admin_users
 
 ALTER TABLE ONLY app.admin_users
     ADD CONSTRAINT admin_users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: agent_budget_days agent_budget_days_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.agent_budget_days
+    ADD CONSTRAINT agent_budget_days_pkey PRIMARY KEY (day);
+
+
+--
+-- Name: agent_budget_reservations agent_budget_reservations_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.agent_budget_reservations
+    ADD CONSTRAINT agent_budget_reservations_pkey PRIMARY KEY (run_id);
 
 
 --
@@ -14326,6 +14385,57 @@ GRANT UPDATE(locked_until) ON TABLE app.admin_users TO couli_app;
 
 GRANT UPDATE(display_name) ON TABLE app.admin_users TO couli_app;
 GRANT SELECT(display_name) ON TABLE app.admin_users TO couli_readonly;
+
+
+--
+-- Name: TABLE agent_budget_days; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT ON TABLE app.agent_budget_days TO couli_app;
+GRANT SELECT ON TABLE app.agent_budget_days TO couli_readonly;
+
+
+--
+-- Name: COLUMN agent_budget_days.actual_mfen; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(actual_mfen) ON TABLE app.agent_budget_days TO couli_app;
+
+
+--
+-- Name: COLUMN agent_budget_days.reserved_mfen; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(reserved_mfen) ON TABLE app.agent_budget_days TO couli_app;
+
+
+--
+-- Name: COLUMN agent_budget_days.alert_80_at; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(alert_80_at) ON TABLE app.agent_budget_days TO couli_app;
+
+
+--
+-- Name: COLUMN agent_budget_days.alert_100_at; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(alert_100_at) ON TABLE app.agent_budget_days TO couli_app;
+
+
+--
+-- Name: TABLE agent_budget_reservations; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT ON TABLE app.agent_budget_reservations TO couli_app;
+GRANT SELECT ON TABLE app.agent_budget_reservations TO couli_readonly;
+
+
+--
+-- Name: COLUMN agent_budget_reservations.settled_at; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT UPDATE(settled_at) ON TABLE app.agent_budget_reservations TO couli_app;
 
 
 --

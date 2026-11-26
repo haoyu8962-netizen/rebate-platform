@@ -1,5 +1,5 @@
 export type * from './types.ts';
-export { ModelProtocolError, classifyFailure } from './errors.ts';
+export { ModelProtocolError, classifyFailure, markNotSent, wasNotSent } from './errors.ts';
 export {
   quirksFor,
   assertPinnedModel,

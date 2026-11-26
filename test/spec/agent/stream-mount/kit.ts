@@ -20,7 +20,10 @@ import type { DB } from '@couli/db';
 import { sql, type Kysely } from 'kysely';
 import { expect } from 'vitest';
 
-import { createContentReader } from '../../../../apps/api/src/modules/content/index.ts';
+import {
+  createContentReader,
+  configValuesByKeyOf,
+} from '../../../../apps/api/src/modules/content/index.ts';
 import type {
   AiConsentReader,
   AiConsentReaderOptions,
@@ -265,6 +268,7 @@ export function contentReaderFor(db: Kysely<DB>, clock: Clock): AgentContentRead
     configValue: (appId, key) => shared.configValue(appId, key),
     freshConfigValue: (appId, key) =>
       createContentReader({ db: handle, clock }).configValue(appId, key),
+    configValuesByKey: configValuesByKeyOf(handle),
   };
 }
 

@@ -17,6 +17,42 @@ import { dailyUsage, isRunning, lockSession, lockSubjects, readRun, remaining } 
 import type { RunRow, SessionRow } from './store.ts';
 import { errorCode, retryable, TransactionFailure, unavailable } from './transaction.ts';
 import type { Queries, Transactions } from './transaction.ts';
+import { countBudgetAlert, createDailyBudgetOn } from '../../budget/index.ts';
+import type { BudgetSettlement } from '../../budget/index.ts';
+import type { QuotaLimitsSource } from './limits.ts';
+
+/**
+ * B3-09m · BR-AI-16 (取甲): what the live process knows of its run's model spending, handed to
+ * the terminal transaction with the live run fields: U and the number of calls sent (in process
+ * memory only), and the platform-wide budget in force at the settlement for the alert check
+ * (absent: it could not be read, no alert check this time).
+ */
+export interface LiveRunBudget {
+  readonly spentMfen: bigint;
+  readonly calls: number;
+  readonly budgetMfen?: bigint;
+}
+
+/**
+ * LiveRunFields plus the run's budget detail (B3-09m). `traceMissing`: the live process settles
+ * its run but the trace recorder has no run fields (the body never started); intent and
+ * input_passed then stay as they are, while the budget is still settled from the live detail.
+ */
+export interface BudgetedRunFields extends LiveRunFields {
+  readonly budget?: LiveRunBudget;
+  readonly traceMissing?: true;
+}
+
+const budgetLimits = new WeakMap<QuotaLimitsSource, () => Promise<bigint>>();
+
+/**
+ * B3-09m (9.3 ④): the platform-wide daily budget (mfen) for the alert check of a settlement
+ * without live detail (another request, the sweeper, crash recovery), registered by the runtime
+ * that built the PG ports with this limits source. Unregistered or failing: no alert check.
+ */
+export function attachBudgetLimit(limits: QuotaLimitsSource, read: () => Promise<bigint>): void {
+  budgetLimits.set(limits, read);
+}
 
 export class HoldRequired extends Error {
   readonly runId: string;
@@ -51,6 +87,26 @@ function result(
 }
 
 export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
+  // B3-09m: the run's reservation is settled here, in the terminal transaction (alerts logged
+  // through the ports' logger, counted in the process counter).
+  const dailyBudget = createDailyBudgetOn({
+    clock: deps.clock,
+    ...(deps.logger === undefined ? {} : { logger: deps.logger }),
+    onAlert: countBudgetAlert,
+  });
+
+  /** The registered budget limit for a settlement without live detail; undefined on failure. */
+  async function budgetLimit(): Promise<bigint | undefined> {
+    const read = budgetLimits.get(deps.limits);
+    if (read === undefined) return undefined;
+    try {
+      return await read();
+    } catch {
+      deps.logger?.warn({}, 'agent.budget_limit_unread');
+      return undefined;
+    }
+  }
+
   /** F2–F6: caller already owns the session, run and entire union of quota subject locks. */
   async function finalizeRun(
     q: Queries,
@@ -60,7 +116,8 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
     limits: AdmissionLimits,
     live?: EndingMemo,
     reply?: RunReply,
-    fields?: LiveRunFields,
+    fields?: BudgetedRunFields,
+    budgetMfen?: bigint,
   ): Promise<FinalizeOutcome> {
     let row = initial;
     try {
@@ -117,13 +174,19 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
           : sql`end_draft`;
       // B3-08t (BR-AI-19 细则「运行级字段」, BR-AI-05 ⑤): intent and input_passed of the process that
       // ran the run, in this UPDATE (model / model_snapshot stay as admission wrote them).
-      const run = runFieldsSql(fields);
+      const run = runFieldsSql(fields?.traceMissing === true ? undefined : fields);
+      // B3-09m · BR-AI-16 (取甲): the run's reservation is settled in this terminal transaction (it
+      // commits or rolls back with final_event), at most once (settled_at IS NULL). The live
+      // process books its U; any other finalizer has no live detail and books the full R.
+      const settled = await dailyBudget.settle(q, settlementOf(row.id, fields?.budget, budgetMfen));
+      const cost = runCostSql(settled);
       await q.query(sql`UPDATE app.agent_runs SET
         settle_result = ${refunded ? 'refunded' : 'counted'}, settled_at = ${now},
         final_event = ${JSON.stringify(stored)}::jsonb, end_draft = ${endDraft},
         ended_at = GREATEST(${now}, accepted_at),
         finish_reason = COALESCE(finish_reason, ${frame.event === 'done' ? frame.data.finish_reason : 'error'}),
-        intent = ${run.intent}, input_passed = ${run.inputPassed}
+        intent = ${run.intent}, input_passed = ${run.inputPassed},
+        cost_mfen = ${cost.costMfen}, price_version = ${cost.priceVersion}
         WHERE app_id = ${row.app_id} AND id = ${row.id} AND final_event IS NULL`);
       // B3-08zc (BR-AI-19 细则「助手回复落库」): the reply of the process that ran the run, in this
       // same transaction — committed with the terminal state or not at all.
@@ -178,9 +241,13 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
     runId: string,
     live?: EndingMemo,
     reply?: RunReply,
-    fields?: LiveRunFields,
+    fields?: BudgetedRunFields,
   ): Promise<FinalizeOutcome> {
     const step = live ? 'settle' : 'finalize';
+    // B3-09m (9.3 ④): without the live detail the alert check uses the registered budget, read
+    // like the limits before any connection is leased.
+    const liveBudget = live ? fields?.budget : undefined;
+    const budgetMfen = liveBudget === undefined ? await budgetLimit() : undefined;
     for (let attempt = 0; ; attempt += 1) {
       try {
         let info!: RunRow;
@@ -212,6 +279,7 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
               live,
               live ? reply : undefined,
               live ? fields : undefined,
+              budgetMfen,
             );
           },
           async (q) => {
@@ -243,7 +311,7 @@ export function createFinalization(deps: PgRunDeps, transaction: Transactions) {
     runId: string,
     live: EndingMemo,
     reply?: RunReply,
-    fields?: LiveRunFields,
+    fields?: BudgetedRunFields,
   ) {
     const out = await independent(runId, live, reply, fields);
     if (out.kind === 'held') throw new AdmissionHeldError(out.reason);
@@ -267,4 +335,38 @@ export function runFieldsSql(fields: LiveRunFields | undefined) {
     return { intent: sql`intent`, inputPassed: sql`input_passed` };
   }
   return { intent: sql`${fields.intent}`, inputPassed: sql`${fields.inputPassed}` };
+}
+
+/**
+ * B3-09m: the daily budget's settlement for this finalization. With the live detail (the process
+ * that ran the run) its U and calls; without it (another request, the sweeper, crash recovery)
+ * live = null, so the full reservation is booked. Exported for its unit test only.
+ */
+export function settlementOf(
+  runId: string,
+  budget: LiveRunBudget | undefined,
+  budgetMfen: bigint | undefined,
+): BudgetSettlement {
+  const limit = budget?.budgetMfen ?? budgetMfen;
+  return {
+    runId,
+    live: budget === undefined ? null : { spentMfen: budget.spentMfen, calls: budget.calls },
+    ...(limit === undefined ? {} : { budgetMfen: limit }),
+  };
+}
+
+/**
+ * B3-09m: cost_mfen / price_version of the F5 UPDATE. A settled reservation with a cost writes the
+ * cost and the reservation's one price version; otherwise (no reservation, already settled, or no
+ * model call: null cost) both columns stay as they are. Exported for its unit test only.
+ */
+export function runCostSql(settled: {
+  readonly costMfen: bigint | null;
+  readonly priceVersion: string | null;
+  readonly settled: boolean;
+}) {
+  if (!settled.settled || settled.costMfen === null) {
+    return { costMfen: sql`cost_mfen`, priceVersion: sql`price_version` };
+  }
+  return { costMfen: sql`${settled.costMfen}`, priceVersion: sql`${settled.priceVersion}` };
 }

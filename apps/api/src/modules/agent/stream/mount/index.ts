@@ -57,6 +57,13 @@
 //   results store is also the body's delivery receipt port (core recordDelivered of written
 //   product cards); failures are logged and never end the run. No model transport is ever
 //   called. seams are test seams only (production passes none).
+//   B3-09m (BR-AI-16 取甲; rule tests test/spec/agent/daily-budget/**): with seams.modelRouting the
+//   route, prompt and model come from the budgeted model path (./budget.ts): the platform-wide
+//   daily budget is reserved in the admission transaction, each model call is checked against
+//   the run's reservation before it goes out, and the run's spend is settled in the terminal
+//   transaction (cost_mfen / price_version). Its alerts go to the runtime's logger (pino events
+//   agent.budget_80 / agent.budget_100 / agent.budget_price_missing) and the process counter.
+//   Without it (production today) nothing above changes and no budget row is touched.
 //   B3-08q (BR-AI-19; rule tests test/spec/agent/trace-persist/**): the core's tool calls
 //   (AgentRunBodyDeps.trace, the RunTraceSink) are written to app.agent_tool_calls by
 //   agent/store/results createPgAgentTraceWriter (obtained at build), after the run's body settled
@@ -123,6 +130,7 @@ import {
 } from '../../orchestrator/index.ts';
 import type { AgentRunBodyDeps } from '../../orchestrator/core/ports.ts';
 import { createRunModelClock, type ResolvedRoute } from '../../model-gateway/routing/index.ts';
+import type { VendorGateway } from '../../model-gateway/vendors/index.ts';
 import { createAgentRedactor } from '../../preprocess/redact/index.ts';
 import { agentSessionDefaults, createPgAgentSessionStore } from '../../store/index.ts';
 import { createPgAgentTraceWriter } from '../../store/results/index.ts';
@@ -167,6 +175,9 @@ import { createStreamAgentBody } from './agent-body.ts';
 import { agentEmptyReplyCounter } from './empty-reply-counter.ts';
 import { createRunTraceRecorder } from './trace.ts';
 import { createTraceRedoQueue, unrefScheduler } from './trace-retry.ts';
+import { createBudgetedModelPath } from './budget.ts';
+import { attachBudgetLimit } from '../pg/finalize.ts';
+import type { BudgetedRunFields } from '../pg/finalize.ts';
 import { deliveryReceiptOf } from '../pg/deliveries.ts';
 import { createAgentHistoryRuntime } from './history.ts';
 import type { AgentHistoryHttp } from '../../http/history.ts';
@@ -244,6 +255,12 @@ export interface AgentStreamRuntimeDeps {
 export interface AgentStreamSeams {
   readonly inputCheck?: InputCheckPort;
   readonly tools?: OrchestratorTools;
+  readonly modelRouting?: {
+    readonly gateway: VendorGateway;
+    readonly route: (appId: string) => Promise<ResolvedRoute>;
+    readonly prompt: AgentRunBodyDeps['prompt'];
+    readonly review?: AgentRunBodyDeps['review'];
+  };
   /** The RunManager's scheduler (the system scheduler otherwise). */
   readonly schedule?: Scheduler;
 }
@@ -407,6 +424,23 @@ export function createAgentStreamRuntime(
     texts,
     ...(deps.signals === undefined ? {} : { signals: deps.signals }),
   });
+  // B3-09m · BR-AI-16: the budgeted model path, only with a model gateway (the test seam today).
+  const modelRouting = seams?.modelRouting;
+  const budgeted =
+    modelRouting === undefined
+      ? undefined
+      : createBudgetedModelPath({
+          gateway: modelRouting.gateway,
+          route: modelRouting.route,
+          content: contentReader,
+          clock,
+          scheduler,
+          logger,
+          attemptTimeoutMs: timings.runMaxMs,
+        });
+  // A settlement without live detail (a stale run, the recovery finalizer) checks the alerts
+  // against the platform-wide budget too.
+  if (budgeted !== undefined) attachBudgetLimit(limits, budgeted.budgetLimit);
   // B3-03j: the business assembly is built once, with nothing running (no query, no timer).
   // B3-08k: the context keeps the handle for agent's own stores; content's reads are contentReader.
   const business = deps.assembly?.({ db: deps.db, clock, logger, scheduler, contentReader });
@@ -424,14 +458,19 @@ export function createAgentStreamRuntime(
     // B3-08t: the terminal transaction also writes the run's intent, input_passed and model use.
     admission: {
       admit: (request, currentLimits) => pg.admission.admit(request, currentLimits),
-      settle: (ticket, outcome, currentLimits, reply) =>
-        pg.admission.settle(
-          ticket,
-          outcome,
-          currentLimits,
-          reply,
-          trace.settleFields(ticket.runId),
-        ),
+      settle: async (ticket, outcome, currentLimits, reply) => {
+        const live = trace.settleFields(ticket.runId);
+        // B3-09m: this process settles its own run, so its spend goes along even when the trace
+        // has no run fields (the body never started); intent / input_passed then stay.
+        const budget = await budgeted?.settleFields(ticket.runId);
+        const fields: BudgetedRunFields | undefined =
+          budget === undefined
+            ? live
+            : live === undefined
+              ? { intent: null, inputPassed: false, traceMissing: true, budget }
+              : { ...live, budget };
+        return pg.admission.settle(ticket, outcome, currentLimits, reply, fields);
+      },
     },
     registry: pg.registry,
     clock,
@@ -462,19 +501,27 @@ export function createAgentStreamRuntime(
       throw new Error('No model tool display in this runtime');
     },
   };
-  const route = async (): Promise<ResolvedRoute> => ({
+  const noModelRoute = async (): Promise<ResolvedRoute> => ({
     mode: 'no_model',
     attempts: [],
     dropped: [],
   });
-  const prompt = { current: async () => null };
-  const model: AgentRunBodyDeps['model'] = {
+  const route = modelRouting?.route ?? noModelRoute;
+  // B3-09m: on the budgeted path the budget verdict comes before the prompt (./budget.ts).
+  const prompt: AgentRunBodyDeps['prompt'] =
+    modelRouting === undefined || budgeted === undefined
+      ? { current: async () => null }
+      : budgeted.prompt(modelRouting.prompt);
+  const model: AgentRunBodyDeps['model'] = budgeted?.model ?? {
     complete: async () => {
-      await route();
+      await noModelRoute();
       return { kind: 'degraded', reason: 'route_no_model', attempts: [] };
     },
   };
-  const modelClock = () => createRunModelClock(timings.runMaxMs);
+  // B3-09o · BR-AI-14 细则「无模型降级」: on the budgeted path the run's model clock starts from its
+  // app's agent.model_timeout_ms (read with the plan, default 8,000 ms); the whole-run limit
+  // (runMaxMs) only bounds the run. Without a model gateway nothing changes.
+  const modelClock = () => budgeted?.modelClock() ?? createRunModelClock(timings.runMaxMs);
   const errorMsg = async (_appId: string, code: number) => texts.errorMsg(code);
   const fallbackReview: AgentRunBodyDeps['review'] = { review: async () => 'timeout' };
   // B3-05o: with a business assembly the body is built by createStreamAgentBody (./agent-body.ts),
@@ -489,7 +536,7 @@ export function createAgentStreamRuntime(
           model,
           modelClock,
           trace: trace.sink,
-          review: fallbackReview,
+          review: modelRouting?.review ?? fallbackReview,
           texts: runTexts,
           prompt,
           route,
@@ -500,7 +547,7 @@ export function createAgentStreamRuntime(
           modelClock,
           prompt,
           inputCheck: seams?.inputCheck ?? business.safety?.inputCheck ?? failClosedInputCheck(),
-          review: business.safety?.review ?? fallbackReview,
+          review: modelRouting?.review ?? business.safety?.review ?? fallbackReview,
           trace: trace.sink,
           route,
           errorMsg,
@@ -524,13 +571,17 @@ export function createAgentStreamRuntime(
       admit: (request, currentLimits) => {
         // A request already checking consent when shutdown starts cannot enter admission.
         if (stopping) return Promise.reject(new Error('Agent stream is stopping'));
-        return pg.admission.admit(request, currentLimits);
+        if (budgeted === undefined) return pg.admission.admit(request, currentLimits);
+        return budgeted.admit(request, (budgetedRequest) =>
+          pg.admission.admit(budgetedRequest, currentLimits),
+        );
       },
     },
     runs,
     cancel: pg.cancel,
     limits,
-    body: (input) => trace.body(input, body(input)),
+    body: (input) =>
+      trace.body(input, budgeted === undefined ? body(input) : budgeted.bind(input, body(input))),
     redactor: createAgentRedactor(),
     labels,
     settings: agentHttpDefaults(),
