@@ -69,13 +69,56 @@ export function memoryLogger(entry: string): {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The envelope endpoint (https://develop.sentry.dev/sdk/overview/#parsing-the-dsn): a DSN
+// `<scheme>://<public key>@<host>[/<prefix>]/<project id>` is sent to
+// `<scheme>://<host>[/<prefix>]/api/<project id>/envelope/` with POST (auth may ride in the query
+// string or a header). The old `/api/<project id>/store/` endpoint is not it.
+
+/** The envelope endpoint of `dsn`, without query string. */
+export function envelopeEndpoint(dsn: string): string {
+  const url = new URL(dsn);
+  const segments = url.pathname.split('/').filter((segment) => segment !== '');
+  const project = segments.pop() ?? '';
+  const prefix = segments.map((segment) => `/${segment}`).join('');
+  return `${url.protocol}//${url.host}${prefix}/api/${project}/envelope/`;
+}
+
+/** `url` without query string and fragment; empty when it is not a URL. */
+export function endpointOf(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+  } catch {
+    return '';
+  }
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return '';
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 // The fake fetch of the transport.
 
 /**
- * ok: 200; error: 500; fail: rejects like an unreachable server; throw: throws synchronously;
- * hang: never answers (rejects only when the caller aborts its signal, as fetch does).
+ * ok: 200 for a POST to the envelope endpoint, 404 for anything else; error: 500; fail: rejects
+ * like an unreachable server; throw: throws synchronously; hang: never answers (rejects only when
+ * the caller aborts its signal, as fetch does); redirect: answers 307 to `redirectTo` and then
+ * behaves as fetch does with the request's redirect option (follow: the same request again, to the
+ * Location; manual: the 307 response itself; error: rejects).
  */
-export type FetchMode = 'ok' | 'error' | 'fail' | 'throw' | 'hang';
+export type FetchMode = 'ok' | 'error' | 'fail' | 'throw' | 'hang' | 'redirect';
+
+export interface FakeFetchOptions {
+  /** Only a POST to this DSN's envelope endpoint answers 200; without it any /api/<n>/envelope/. */
+  readonly dsn?: string;
+  /** Where mode `redirect` points (Location of the 307). */
+  readonly redirectTo?: string;
+}
 
 export interface SentRequest {
   readonly url: string;
@@ -83,6 +126,12 @@ export interface SentRequest {
   readonly headers: Readonly<Record<string, string>>;
   /** The decoded (decompressed) body as text. */
   readonly body: Promise<string>;
+  /** The request's redirect option (`follow` when not given, as in fetch). */
+  readonly redirect: string;
+  /** The status answered; 0 when none was (fail, throw, hang). */
+  readonly status: number;
+  /** True for the second request fetch itself makes when it follows a redirect. */
+  readonly followed: boolean;
 }
 
 function decompress(bytes: Buffer, encoding: string): Buffer {
@@ -119,29 +168,67 @@ export interface FakeFetch {
   mode: FetchMode;
 }
 
-/** A fetch that records every call (in `requests`, and as `fetch` in `log` when given). */
-export function fakeFetch(mode: FetchMode = 'ok', log?: string[]): FakeFetch {
+/**
+ * A fetch that records every call (in `requests`, and as `fetch` in `log` when given). It answers
+ * 200 only to a POST to the envelope endpoint (of `options.dsn` when given): a wrong project id,
+ * the old store endpoint or another method gets 404.
+ */
+export function fakeFetch(
+  mode: FetchMode = 'ok',
+  log?: string[],
+  options: FakeFetchOptions = {},
+): FakeFetch {
   const state: { mode: FetchMode } = { mode };
   const requests: SentRequest[] = [];
+  const accepts = (url: string, method: string): boolean => {
+    if (method.toUpperCase() !== 'POST') return false;
+    if (options.dsn !== undefined) return endpointOf(url) === envelopeEndpoint(options.dsn);
+    return /^https?:\/\/[^/]+(?:\/[^/]+)*\/api\/\d+\/envelope\/$/.test(endpointOf(url));
+  };
   const fetch: CrashFetch = (input, init) => {
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : {}));
     const url = input instanceof Request ? input.url : String(input);
     const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+    const redirect = init?.redirect ?? (input instanceof Request ? input.redirect : 'follow');
     const body = bodyOf(input, init, headers.get('content-encoding') ?? '');
     body.catch(() => undefined);
-    requests.push({ url, method, headers: Object.fromEntries(headers.entries()), body });
-    log?.push('fetch');
-    if (state.mode === 'throw') throw new TypeError('qa13d fake fetch: thrown synchronously');
+    const record = (to: string, status: number, followed: boolean): void => {
+      const sentHeaders = Object.fromEntries(headers.entries());
+      requests.push({ url: to, method, headers: sentHeaders, body, redirect, status, followed });
+      log?.push('fetch');
+    };
+    if (state.mode === 'throw') {
+      record(url, 0, false);
+      throw new TypeError('qa13d fake fetch: thrown synchronously');
+    }
     if (state.mode === 'fail') {
+      record(url, 0, false);
       return Promise.reject(new TypeError('fetch failed: connect ECONNREFUSED (qa13d fake)'));
     }
     if (state.mode === 'hang') {
+      record(url, 0, false);
       return new Promise<Response>((_resolve, reject) => {
         const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
         signal?.addEventListener('abort', () => reject(signal.reason as Error));
       });
     }
-    return Promise.resolve(new Response('{}', { status: state.mode === 'error' ? 500 : 200 }));
+    const target = options.redirectTo;
+    if (state.mode === 'redirect' && target !== undefined && hostOf(url) !== hostOf(target)) {
+      record(url, 307, false);
+      if (redirect === 'error') {
+        return Promise.reject(new TypeError('fetch failed: unexpected redirect (qa13d fake)'));
+      }
+      if (redirect === 'manual') {
+        return Promise.resolve(new Response(null, { status: 307, headers: { location: target } }));
+      }
+      // follow: what fetch does by itself — the same POST again, now to the Location.
+      const followedStatus = accepts(target, method) ? 200 : 404;
+      record(target, followedStatus, true);
+      return Promise.resolve(new Response('{}', { status: followedStatus }));
+    }
+    const status = state.mode === 'error' ? 500 : accepts(url, method) ? 200 : 404;
+    record(url, status, false);
+    return Promise.resolve(new Response('{}', { status }));
   };
   return {
     fetch,

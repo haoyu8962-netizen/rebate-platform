@@ -5,7 +5,15 @@
 // authorization / cookie / signature headers, request or response body, URL query string, the
 // concrete URL path (only the route template may leave), the raw user_id, nickname; nor a promotion
 // URL, 口令, 推广位 or relation id (01 F-OBS-01; 02 §13 崩溃行, §12.6「崩溃上报的面包屑与附加信息只记
-// link_id、平台、步骤与结果」). The user identifier is at most a hash of user_id.
+// link_id、平台、步骤与结果」). The outgoing event is also checked by structure: event.request keeps
+// only method and url, and url is at most the given route template; the response (body and all) is
+// gone; extra and breadcrumb data keep only link_id / platform / step / result, so an unknown
+// business field does not leave either; user is exactly { id: <agreed hash of user_id> }.
+//
+// The agreed user hash (the specs say only「user_id 的哈希」; this test fixes it so a reversible
+// encoding cannot pass): SHA-256 over the UTF-8 bytes of the user_id as the canonical lowercase
+// UUID text (hyphens kept), written as 64 lowercase hex digits — no salt, no truncation.
+import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import {
   startCrashReporting,
@@ -48,6 +56,28 @@ const PROMO_URL = 'https://s.click.taobao.com/t?e=qa13dPromoMarker';
 const TKL = '￥Qa13dTkl8x￥';
 const PID = 'mm_1234_5678_9013';
 const RELATION = 'qa13dRelation2718';
+/** Innocent-looking values under keys outside every allowlist (not on any sensitive-key list). */
+const EXTRA_UNKNOWN = 'qa13dOrderRemarkPlain';
+const CRUMB_UNKNOWN = 'qa13dCrumbNotePlain';
+const RESPONSE_UNKNOWN = 'qa13dRespSummaryPlain';
+const ROUTE = '/v1/orders/:order_id/claims';
+
+/** 02 §12.6: breadcrumbs and extra record only these. */
+const ALLOWED_DATA_KEYS: readonly string[] = ['link_id', 'platform', 'step', 'result'];
+/** The fields of a breadcrumb itself (Sentry event payloads, breadcrumbs interface). */
+const BREADCRUMB_FIELDS: readonly string[] = [
+  'type',
+  'category',
+  'level',
+  'message',
+  'timestamp',
+  'data',
+];
+
+/** The agreed user identifier (see the head comment). */
+function userHash(userId: string): string {
+  return createHash('sha256').update(userId, 'utf8').digest('hex');
+}
 
 /** Values that must not leave the process, by name (the failure lists the names that did). */
 const SECRETS: Readonly<Record<string, string>> = {
@@ -72,6 +102,9 @@ const SECRETS: Readonly<Record<string, string>> = {
   tkl: 'Qa13dTkl8x',
   pid: PID,
   relationId: RELATION,
+  extraUnknownField: EXTRA_UNKNOWN,
+  breadcrumbUnknownField: CRUMB_UNKNOWN,
+  responseUnknownField: RESPONSE_UNKNOWN,
 };
 
 function leaked(text: string): string[] {
@@ -99,6 +132,7 @@ const EXTRA: Readonly<Record<string, unknown>> = {
   note: `call ${PHONE} card ${CARD} id ${ID_NO}`,
   token: TOKEN,
   alipay_logon_id: ALIPAY,
+  order_remark: EXTRA_UNKNOWN,
 };
 
 const USER: Readonly<Record<string, unknown>> = {
@@ -113,7 +147,15 @@ const BREADCRUMBS: readonly CrashBreadcrumb[] = [
   {
     category: 'link',
     message: `open ${PROMO_URL} with ${TKL}`,
-    data: { link_id: 'L123', url: PROMO_URL, pid: PID, relation_id: RELATION, tkl: TKL },
+    data: {
+      link_id: 'L123',
+      platform: 'taobao',
+      url: PROMO_URL,
+      pid: PID,
+      relation_id: RELATION,
+      tkl: TKL,
+      coupon_note: CRUMB_UNKNOWN,
+    },
   },
   {
     type: 'http',
@@ -126,7 +168,7 @@ const BREADCRUMBS: readonly CrashBreadcrumb[] = [
 const REQUEST: CrashRequest = {
   method: 'POST',
   url: `https://api.example.test/v1/orders/${ORDER_ID}/claims?token=${QUERY}&phone=${PHONE}`,
-  route: '/v1/orders/:order_id/claims',
+  route: ROUTE,
   headers: {
     authorization: `Bearer ${BEARER}`,
     cookie: `sid=${COOKIE}`,
@@ -137,7 +179,10 @@ const REQUEST: CrashRequest = {
   cookies: { sid: COOKIE },
   query_string: `token=${QUERY}&phone=${PHONE}`,
   data: { note: BODY, phone: PHONE, payee_account: ALIPAY },
-  response: { status_code: 500, body: { detail: RESPONSE, token: TOKEN } },
+  response: {
+    status_code: 500,
+    body: { detail: RESPONSE, token: TOKEN, summary: RESPONSE_UNKNOWN },
+  },
 };
 
 const FULL_CONTEXT: CrashCaptureContext = {
@@ -213,36 +258,80 @@ it('[AC-QA-13d#2] the exception message keeps its text and readable stack but no
   expect(leaked(text)).toEqual([]);
 });
 
-it('[AC-QA-13d#2] the user identifier is at most a hash of user_id: no raw id, phone, nickname or e-mail', async () => {
+/** The breadcrumbs of an event, whether sent as a list or as { values: [...] }. */
+function breadcrumbsOf(event: SentEvent | undefined): Readonly<Record<string, unknown>>[] {
+  const crumbs: unknown = event?.breadcrumbs;
+  const values: unknown = (crumbs as { values?: unknown } | undefined)?.values;
+  if (Array.isArray(crumbs)) return crumbs.map(recordOf);
+  if (Array.isArray(values)) return values.map(recordOf);
+  return [];
+}
+
+function recordOf(value: unknown): Readonly<Record<string, unknown>> {
+  if (typeof value !== 'object' || value === null) return {};
+  return value as Readonly<Record<string, unknown>>;
+}
+
+/** `<where>.<key>` for every key of `record` outside `allowed`. */
+function keysOutside(
+  where: string,
+  record: unknown,
+  allowed: readonly string[],
+): readonly string[] {
+  if (record === undefined || record === null) return [];
+  if (typeof record !== 'object') return [`${where} (not an object)`];
+  return Object.keys(record)
+    .filter((key) => !allowed.includes(key))
+    .map((key) => `${where}.${key}`);
+}
+
+it('[AC-QA-13d#2] the user identifier is exactly the agreed SHA-256 hash of user_id: no raw id, phone, nickname or e-mail', async () => {
   const { text, events } = await reportOnce({ user: USER });
   expect(events).toHaveLength(1);
   const user = events[0]?.user ?? {};
-  expect(Object.keys(user).filter((key) => key !== 'id')).toEqual([]);
-  const id = user['id'] ?? 'no id';
-  expect(typeof id).toBe('string');
-  expect(String(id)).not.toContain(USER_ID);
-  expect(String(id)).not.toContain(USER_ID.replaceAll('-', ''));
+  expect(Object.keys(user)).toEqual(['id']);
+  const id = String(user['id'] ?? 'no id');
+  // A reversible encoding (Base64, Base64url, hex of the text) decodes back to the user_id.
+  const decodings = [
+    Buffer.from(id, 'base64').toString('utf8'),
+    Buffer.from(id, 'base64url').toString('utf8'),
+    Buffer.from(id, 'hex').toString('utf8'),
+  ];
+  expect(decodings.filter((decoded) => decoded.includes(USER_ID))).toEqual([]);
+  expect(id).not.toBe(Buffer.from(USER_ID, 'utf8').toString('base64'));
+  expect(id).toMatch(/^[0-9a-f]{64}$/);
+  expect(id).toBe(userHash(USER_ID));
   expect(leaked(text)).toEqual([]);
 });
 
-it('[AC-QA-13d#2] request information keeps no headers, cookies, body, response body, query string or concrete path', async () => {
+it('[AC-QA-13d#2] request information keeps only method and the route template; the response is dropped whole', async () => {
   const { text, events } = await reportOnce({ request: REQUEST });
   expect(events).toHaveLength(1);
-  const request = events[0]?.request ?? {};
-  expect(request['data']).toBeUndefined();
-  expect(request['cookies']).toBeUndefined();
-  expect(request['query_string']).toBeUndefined();
-  expect(Object.keys((request['headers'] as object | undefined) ?? {})).toEqual([]);
-  expect(String(request['url'] ?? '')).not.toContain('?');
+  const event = events[0];
+  const request = event?.request ?? {};
+  expect(keysOutside('request', request, ['method', 'url'])).toEqual([]);
+  expect([undefined, ROUTE]).toContain(request['url']);
+  // The response (Sentry's contexts.response) keeps at most its status code, never a body.
+  const response = event?.contexts?.['response'];
+  expect(keysOutside('contexts.response', response, ['status_code'])).toEqual([]);
   expect(leaked(text)).toEqual([]);
 });
 
-it('[AC-QA-13d#2] extra, contexts, tags and breadcrumbs carry no promotion URL, 口令, 推广位 or relation id', async () => {
+it('[AC-QA-13d#2] extra and breadcrumbs keep only link_id / platform / step / result; no promotion URL, 口令, 推广位 or relation id anywhere', async () => {
   const { text, events } = await reportOnce(
     PROMOTION_CONTEXT,
     new Error('qa13d-boom link open failed'),
   );
   expect(events).toHaveLength(1);
-  expect(exceptionText(events[0])).toContain('qa13d-boom');
+  const event = events[0];
+  expect(exceptionText(event)).toContain('qa13d-boom');
+  const outside = [
+    ...keysOutside('extra', event?.extra, ALLOWED_DATA_KEYS),
+    ...breadcrumbsOf(event).flatMap((crumb, index) => [
+      ...keysOutside(`breadcrumbs[${index}]`, crumb, BREADCRUMB_FIELDS),
+      ...keysOutside(`breadcrumbs[${index}].data`, crumb['data'], ALLOWED_DATA_KEYS),
+    ]),
+  ];
+  expect(outside).toEqual([]);
   expect(leaked(text)).toEqual([]);
 });

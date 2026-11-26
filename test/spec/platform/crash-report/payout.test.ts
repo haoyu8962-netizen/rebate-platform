@@ -2,9 +2,13 @@
 // is internal. A public host (name or address, including addresses just outside the private ranges
 // and names that merely contain a private address) → not initialised (no client, no hook, nothing
 // sent) and exactly one warn line, not quoting the DSN; a private-range IPv4 host (10/8,
-// 172.16/12, 192.168/16) → initialised and reports to that host. The other entries are not
-// restricted. Reports go to a fake fetch; nothing reaches the network.
-import { expect, it } from 'vitest';
+// 172.16/12, 192.168/16) → initialised and reports to that host, with POST to its envelope endpoint.
+// An internal host that answers 307 pointing at a public host never makes payout send there: the
+// fake fetch follows the redirect itself exactly when the request lets fetch follow (redirect
+// `follow`, the default), so either payout does not follow it or every hop it makes is checked and a
+// public one refused. The other entries are not restricted. Reports go to a fake fetch; nothing
+// reaches the network.
+import { afterEach, beforeEach, expect, it } from 'vitest';
 import { startCrashReporting } from '../../../../apps/api/src/modules/platform/crash-report/index.ts';
 import {
   DSN_VAR,
@@ -13,11 +17,29 @@ import {
   WARN,
   configOf,
   dsnFor,
+  endpointOf,
+  envelopeEndpoint,
+  failureText,
   fakeFetch,
   memoryLogger,
   sentEvents,
+  settle,
+  sleep,
   type Entry,
 } from './kit.ts';
+
+const unhandled: unknown[] = [];
+const recordUnhandled = (reason: unknown): void => void unhandled.push(reason);
+beforeEach(() => {
+  unhandled.length = 0;
+  process.on('unhandledRejection', recordUnhandled);
+});
+afterEach(() => {
+  process.off('unhandledRejection', recordUnhandled);
+});
+
+/** Where the redirect of the internal GlitchTip points: a public host's envelope endpoint. */
+const PUBLIC_REDIRECT = 'https://glitchtip.example.com/api/3/envelope/';
 
 const PUBLIC_HOSTS = [
   'glitchtip.example.com',
@@ -69,12 +91,13 @@ it.each(PUBLIC_HOSTS.map((host) => [host]))(
 it.each(INTERNAL_HOSTS.map((host) => [host]))(
   '[AC-QA-13d#3] payout with a private-range DSN host %s: initialised, reports to that host',
   async (host: string) => {
+    const dsn = dsnFor(host, 'http');
     const { logger, records } = memoryLogger('payout');
-    const transport = fakeFetch();
+    const transport = fakeFetch('ok', undefined, { dsn });
     const fake = new FakeProcess();
     const reporter = await startCrashReporting({
       entry: 'payout',
-      config: configOf({ [DSN_VAR]: dsnFor(host, 'http') }),
+      config: configOf({ [DSN_VAR]: dsn }),
       logger,
       fetch: transport.fetch,
       process: fake,
@@ -88,6 +111,13 @@ it.each(INTERNAL_HOSTS.map((host) => [host]))(
     }
     expect(transport.requests.length).toBeGreaterThan(0);
     expect(transport.requests.every((request) => new URL(request.url).host === host)).toBe(true);
+    const sent = transport.requests.map((request) => ({
+      method: request.method,
+      endpoint: endpointOf(request.url),
+      status: request.status,
+    }));
+    const expected = { method: 'POST', endpoint: `http://${host}/api/3/envelope/`, status: 200 };
+    expect(sent).toEqual(sent.map(() => expected));
     const events = await sentEvents(transport.requests);
     const values = events.map((event) => event.exception?.values?.[0]?.value);
     expect(values).toEqual(['qa13d payout internal capture']);
@@ -95,14 +125,54 @@ it.each(INTERNAL_HOSTS.map((host) => [host]))(
   },
 );
 
+it.each(['172.20.0.5:8000', '10.1.2.3'].map((host) => [host]))(
+  '[AC-QA-13d#3] payout with a private-range DSN host %s answering 307 to a public host: nothing is sent there',
+  async (host: string) => {
+    const dsn = dsnFor(host, 'http');
+    const { logger } = memoryLogger('payout');
+    const transport = fakeFetch('redirect', undefined, { dsn, redirectTo: PUBLIC_REDIRECT });
+    const reporter = await startCrashReporting({
+      entry: 'payout',
+      config: configOf({ [DSN_VAR]: dsn }),
+      logger,
+      fetch: transport.fetch,
+      process: new FakeProcess(),
+    });
+    try {
+      expect(reporter.enabled).toBe(true);
+      const captured = await settle(() =>
+        reporter.captureException(new Error('qa13d payout redirected capture')),
+      );
+      expect(failureText(captured)).toBe('returned');
+      const flushed = await settle(() => reporter.flush(1_000));
+      expect(failureText(flushed)).toBe('returned');
+    } finally {
+      const closed = await settle(() => reporter.close(500));
+      expect(failureText(closed)).toBe('returned');
+    }
+    // The first request went to the internal envelope endpoint and got the 307 …
+    expect(transport.requests[0]?.method).toBe('POST');
+    expect(endpointOf(transport.requests[0]?.url ?? '')).toBe(envelopeEndpoint(dsn));
+    // … and no request, followed by fetch or made again by payout, reached another host.
+    const elsewhere = transport.requests
+      .filter((request) => new URL(request.url).host !== host)
+      .map((request) => `${request.followed ? 'followed by fetch' : 'sent'}: ${request.url}`);
+    expect(elsewhere).toEqual([]);
+    await sleep(50);
+    expect(unhandled).toEqual([]);
+  },
+  15_000,
+);
+
 it.each((['api', 'stream', 'admin', 'worker'] as const).map((entry) => [entry]))(
   '[AC-QA-13d#3] %s is not restricted: a public DSN host is initialised and reported to',
   async (entry: Entry) => {
     const { logger } = memoryLogger(entry);
-    const transport = fakeFetch();
+    const dsn = dsnFor('glitchtip.example.com');
+    const transport = fakeFetch('ok', undefined, { dsn });
     const reporter = await startCrashReporting({
       entry,
-      config: configOf({ [DSN_VAR]: dsnFor('glitchtip.example.com') }),
+      config: configOf({ [DSN_VAR]: dsn }),
       logger,
       fetch: transport.fetch,
       process: new FakeProcess(),
@@ -118,5 +188,8 @@ it.each((['api', 'stream', 'admin', 'worker'] as const).map((entry) => [entry]))
     expect(events).toHaveLength(1);
     const url = new URL(transport.requests[0]?.url ?? 'http://none');
     expect(url.host).toBe('glitchtip.example.com');
+    expect(transport.requests.map((request) => request.status)).toEqual(
+      transport.requests.map(() => 200),
+    );
   },
 );

@@ -5,13 +5,24 @@
 // fake fetch (never the network), keeps itself alive as the worker entry does, then lets an error
 // escape: `uncaught` throws from a timer, `rejection` leaves a rejected promise unhandled.
 // stdout lines (written synchronously, so none is lost on exit):
+//   load-failed <json>           loading the modules failed (exit status 4)
+//   setup-failed <json>          startCrashReporting threw or rejected (exit status 3)
+//     <json> = { stage, name, message, code?, stack }: the original error, so the parent can
+//     rethrow it with its own type (a NotImplemented skeleton, a missing module and a TypeError
+//     stay distinguishable from a failed exit-behaviour assertion)
 //   armed enabled=<true|false>   crash reporting started
-//   setup-failed <message>       starting it failed (exit status 3)
 //   crash-at <epoch ms>          the error is about to escape
 //   fetch                        the fake fetch was called
+//   event <json>                 the event items of that request: [{ type, value }] per exception
+//   sent                         the fake fetch's answer (200) is handed back to the caller
+//   exit <code>                  the process's 'exit' event
 // Import only the types of this file (`import type`): importing it for real would run it.
 import { writeSync } from 'node:fs';
-import type { CrashFetch } from '../../../../apps/api/src/modules/platform/crash-report/index.ts';
+import { gunzipSync, inflateSync } from 'node:zlib';
+import type {
+  CrashFetch,
+  CrashReporter,
+} from '../../../../apps/api/src/modules/platform/crash-report/index.ts';
 import type { RootLogger } from '../../../../apps/api/src/modules/platform/logging/index.ts';
 
 type ConfigModule = typeof import('../../../../apps/api/src/modules/platform/config/config.ts');
@@ -22,11 +33,48 @@ const CRASH_MODULE = '../../../../apps/api/src/modules/platform/crash-report/ind
 
 /** How the error escapes. */
 export type ChildCrash = 'uncaught' | 'rejection';
-/** ok: 200; fail: rejects like an unreachable server; hang: never answers (until aborted). */
-export type ChildTransport = 'ok' | 'fail' | 'hang';
+/**
+ * ok: 200 at once; slow: 200 after SLOW_MS; fail: rejects like an unreachable server; hang: never
+ * answers (until aborted).
+ */
+export type ChildTransport = 'ok' | 'slow' | 'fail' | 'hang';
+/** The delay of the `slow` transport. */
+const SLOW_MS = 300;
+
+/** What a failed load or start-up reports to the parent. */
+export interface ChildFailure {
+  readonly stage: 'load' | 'start';
+  readonly name: string;
+  readonly message: string;
+  readonly code?: string;
+  readonly stack: string;
+}
+
+/** One exception of a sent event, as the `event` line lists it. */
+export interface ChildException {
+  readonly type?: string;
+  readonly value?: string;
+}
+
+interface EventItem {
+  readonly exception?: { readonly values?: readonly ChildException[] };
+}
 
 function say(line: string): void {
   writeSync(1, `${line}\n`);
+}
+
+function failureJson(stage: ChildFailure['stage'], error: unknown): string {
+  const failure = error instanceof Error ? error : new Error(String(error));
+  const code = (failure as { code?: unknown }).code;
+  const report: ChildFailure = {
+    stage,
+    name: failure.name,
+    message: failure.message,
+    ...(typeof code === 'string' ? { code } : {}),
+    stack: failure.stack ?? '',
+  };
+  return JSON.stringify(report);
 }
 
 /** A logger that writes nothing (the parent reads only the lines above). */
@@ -48,38 +96,109 @@ function quietLogger(): RootLogger {
   return logger as unknown as RootLogger;
 }
 
+function parse(text: string | undefined): unknown {
+  try {
+    return JSON.parse(text ?? '') as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Says the event items of one envelope body. */
+function sayEvents(bytes: Buffer, encoding: string): void {
+  let raw = bytes;
+  try {
+    if (encoding.includes('gzip') || (raw[0] === 0x1f && raw[1] === 0x8b)) raw = gunzipSync(raw);
+    else if (encoding.includes('deflate')) raw = inflateSync(raw);
+  } catch {
+    say('event-undecodable');
+    return;
+  }
+  const lines = raw.toString('utf8').split('\n');
+  for (let index = 1; index < lines.length; index += 2) {
+    const header = parse(lines[index]) as { type?: unknown } | undefined;
+    if (header?.type !== 'event') continue;
+    const event = parse(lines[index + 1]) as EventItem | undefined;
+    const values = (event?.exception?.values ?? []).map(({ type, value }) => ({ type, value }));
+    say(`event ${JSON.stringify(values)}`);
+  }
+}
+
+/** Reads the body synchronously when it is bytes or text, else asynchronously. */
+function readBody(body: unknown, encoding: string): void {
+  if (body === undefined || body === null) return;
+  if (typeof body === 'string') {
+    sayEvents(Buffer.from(body, 'utf8'), encoding);
+  } else if (body instanceof ArrayBuffer) {
+    sayEvents(Buffer.from(body), encoding);
+  } else if (ArrayBuffer.isView(body)) {
+    sayEvents(Buffer.from(body.buffer, body.byteOffset, body.byteLength), encoding);
+  } else {
+    new Response(body as BodyInit).arrayBuffer().then(
+      (buffer) => {
+        sayEvents(Buffer.from(buffer), encoding);
+      },
+      () => {
+        say('event-undecodable');
+      },
+    );
+  }
+}
+
 function childFetch(transport: string): CrashFetch {
   return (_input, init) => {
     say('fetch');
+    readBody(init?.body, new Headers(init?.headers).get('content-encoding') ?? '');
     if (transport === 'fail') return Promise.reject(new TypeError('fetch failed (qa13d child)'));
     if (transport === 'hang') {
       return new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(new Error('aborted (qa13d child)')));
       });
     }
-    return Promise.resolve(new Response('{}', { status: 200 }));
+    const delay = transport === 'slow' ? SLOW_MS : 0;
+    return new Promise<Response>((resolve) => {
+      setTimeout(() => {
+        say('sent');
+        resolve(new Response('{}', { status: 200 }));
+      }, delay);
+    });
   };
 }
 
-async function arm(transport: string, dsn: string): Promise<void> {
+interface Loaded {
+  readonly config: ConfigModule;
+  readonly crashReport: CrashModule;
+}
+
+async function load(): Promise<Loaded> {
   const config = (await import(new URL(CONFIG_MODULE, import.meta.url).href)) as ConfigModule;
   const crashReport = (await import(new URL(CRASH_MODULE, import.meta.url).href)) as CrashModule;
-  const reporter = await crashReport.startCrashReporting({
+  return { config, crashReport };
+}
+
+/** async: a synchronous throw of startCrashReporting becomes a rejection here. */
+async function arm(loaded: Loaded, transport: string, dsn: string): Promise<CrashReporter> {
+  return loaded.crashReport.startCrashReporting({
     entry: 'worker',
-    config: config.loadConfig({ APP_ENV: 'test', CRASH_REPORT_DSN: dsn }),
+    config: loaded.config.loadConfig({ APP_ENV: 'test', CRASH_REPORT_DSN: dsn }),
     logger: quietLogger(),
     fetch: childFetch(transport),
   });
-  say(`armed enabled=${String(reporter.enabled)}`);
 }
 
 const [crash = 'uncaught', transport = 'ok', dsn = ''] = process.argv.slice(2);
-try {
-  await arm(transport, dsn);
-} catch (error) {
-  say(`setup-failed ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(3);
-}
+process.on('exit', (code) => {
+  say(`exit ${String(code)}`);
+});
+const loaded = await load().catch((error: unknown) => {
+  say(`load-failed ${failureJson('load', error)}`);
+  return process.exit(4);
+});
+const reporter = await arm(loaded, transport, dsn).catch((error: unknown) => {
+  say(`setup-failed ${failureJson('start', error)}`);
+  return process.exit(3);
+});
+say(`armed enabled=${String(reporter.enabled)}`);
 // Keeps the process alive as the worker and payout entries do.
 setInterval(() => undefined, 2 ** 30);
 setTimeout(() => {
