@@ -27,6 +27,10 @@
 // - B1-18c（BR-CALC-18、BR-CALC-25）：orders.subsidy_commission_fen 写适配器给的补贴类佣金（没给为 NULL），快照入参取
 //   同一个值；判定阶段读 union.<platform>.subsidy_itemized（注入 subsidyItemized 端口，未注入时本事务读该 App 的
 //   config_items，未设值按 true），为 false 时随 INSERT 置 credit_requires_settle=true。不设 hold、不改 N。
+// - B1-08zzc（BR-ATTR-02、D10-3355）：① 经 pids.slotCandidates 取按本平台推广位键命中的行（淘宝：登记行 adzone =
+//   订单 adzone_id，由 union 从 mm_ 末段或纯数字取；京东、拼多多：pid 等值）。候选行带 site_id（淘宝）时再核对订单
+//   site_id：相等的那行命中；订单缺 site_id → PID_NOT_OURS；都不等 → SITE_MISMATCH（先于无付款时间与同步起点），
+//   丢弃计数首次写入时发一条 P1 日志告警。候选为空 → PID_NOT_OURS。
 // 日志只打平铺字段（platform、app_id、reason、outcome），不打子订单号与买家参数。
 import { accountingDate } from '@couli/domain';
 import type { DB } from '@couli/db';
@@ -77,12 +81,21 @@ import type {
   OrderPipelineContext,
   OrderPipelineDeps,
   OrderPipelineResult,
+  PidRow,
 } from './pipeline-types.ts';
 import type { OrderUpdateDeps } from './update-step.ts';
 
 export type { OrderPipeline, OrderPipelineContext, OrderPipelinePort } from './pipeline-types.ts';
 
-export type DropReason = 'PID_NOT_OURS' | 'NO_PAY_TIME' | 'BEFORE_SYNC_START';
+export type DropReason = 'PID_NOT_OURS' | 'SITE_MISMATCH' | 'NO_PAY_TIME' | 'BEFORE_SYNC_START';
+
+/** ① App 归属的结果：命中的那一行（后续 pid_scene 取它）、淘宝媒体不符、不是本 App 的推广位。 */
+type SlotMatch =
+  | { readonly kind: 'hit'; readonly row: PidRow }
+  | { readonly kind: 'site_mismatch' }
+  | { readonly kind: 'not_ours' };
+
+const NOT_OURS: SlotMatch = { kind: 'not_ours' };
 
 const NO_PARAMS: UnionOrderAttrParams = {
   relation_id: null,
@@ -93,7 +106,6 @@ const NO_PARAMS: UnionOrderAttrParams = {
 /** 首次入库不写 rebate_status（settlement 是唯一写者），本次处理前即库默认值。 */
 const IMPORTED_REBATE_STATUS = 'UNATTRIBUTED';
 
-// TODO(规划/11 §4.5): 淘宝 SITE_MISMATCH 判定 — blocked on 淘宝订单映射（无 site_id）。
 export function createOrderPipeline(
   deps: OrderPipelineDeps & {
     /** B2-04zj：更新步用的同一个 rebate 对象；settlements 见 OrderUpdateDeps。 */
@@ -115,6 +127,25 @@ export function createOrderPipeline(
   const subsidyItemized = deps.subsidyItemized ?? readSubsidyItemized;
   const onBlacklistHit = deps.rebate.onBlacklistHit;
 
+  /** 写丢弃键并计数；返回是否首次写入（同一子订单同一原因只计一次）。 */
+  async function countDrop(
+    trx: Transaction<DB>,
+    order: UnionOrder & { sub_order_id: string },
+    ctx: OrderPipelineContext,
+    reason: DropReason,
+    attrAt: Date | null,
+  ): Promise<boolean> {
+    // 待编排裁定 2：无 attr_at 的丢弃按 Clock.now() 的 +08:00 日计数。
+    const date = accountingDate(attrAt ?? deps.clock.now());
+    return recordDrop(trx, {
+      app_id: ctx.app_id,
+      platform: order.platform,
+      sub_order_id: order.sub_order_id,
+      reason,
+      date,
+    });
+  }
+
   async function drop(
     trx: Transaction<DB>,
     order: UnionOrder & { sub_order_id: string },
@@ -122,16 +153,57 @@ export function createOrderPipeline(
     reason: DropReason,
     attrAt: Date | null,
   ): Promise<OrderPipelineResult> {
-    // 待编排裁定 2：无 attr_at 的丢弃按 Clock.now() 的 +08:00 日计数。
-    const date = accountingDate(attrAt ?? deps.clock.now());
-    await recordDrop(trx, {
-      app_id: ctx.app_id,
-      platform: order.platform,
-      sub_order_id: order.sub_order_id,
-      reason,
-      date,
-    });
+    await countDrop(trx, order, ctx, reason, attrAt);
     return { kind: 'dropped', reason };
+  }
+
+  /**
+   * BR-ATTR-02：淘宝 adzone 命中而 site_id 不符 → 不入库、照 PID_NOT_OURS 计数，并发 P1（订单模块现有的日志告警出口）。
+   * 告警只在该子订单首次记这条丢弃时发，重拉同一单不重复；字段只有平台、App 与原因，不含订单号、金额、会员标识。
+   */
+  async function dropSiteMismatch(
+    trx: Transaction<DB>,
+    order: UnionOrder & { sub_order_id: string },
+    ctx: OrderPipelineContext,
+    platform: RegisteredPlatform,
+    attrAt: Date | null,
+  ): Promise<OrderPipelineResult> {
+    const first = await countDrop(trx, order, ctx, 'SITE_MISMATCH', attrAt);
+    if (first) {
+      log?.error(
+        { alert: 'P1', platform, app_id: ctx.app_id, reason: 'SITE_MISMATCH', outcome: 'dropped' },
+        'taobao order adzone registered under another site_id',
+      );
+    }
+    return { kind: 'dropped', reason: 'SITE_MISMATCH' };
+  }
+
+  /**
+   * ① App 归属（BR-ATTR-02）：推广位命中本 App、本联盟账号的 union_pids（pending / active / retired 都算）。
+   * 候选行带 site_id（淘宝的推广位键含媒体）→ 命中取 site_id 与订单相等的那一行；都不带（京东、拼多多）→ 取首行。
+   */
+  async function matchSlot(
+    order: UnionOrder,
+    ctx: OrderPipelineContext,
+    platform: RegisteredPlatform,
+    slot: string | null,
+  ): Promise<SlotMatch> {
+    if (slot === null || slot === '') return NOT_OURS;
+    const key = { appId: ctx.app_id, platform, unionAccountId: ctx.union_account_id };
+    if (deps.pids.slotCandidates !== undefined) {
+      const rows = await deps.pids.slotCandidates({ ...key, slot });
+      const first = rows[0];
+      if (first === undefined) return NOT_OURS;
+      if (rows.every((row) => row.site_id === null)) return { kind: 'hit', row: first };
+      // 订单缺 site_id 不猜，按不命中处理。
+      const site = order.site_id ?? null;
+      if (site === null || site === '') return NOT_OURS;
+      const hit = rows.find((row) => row.site_id === site);
+      return hit === undefined ? { kind: 'site_mismatch' } : { kind: 'hit', row: hit };
+    }
+    const rows = await deps.pids.find({ ...key, pid: slot });
+    const row = rows[0];
+    return row === undefined ? NOT_OURS : { kind: 'hit', row };
   }
 
   /** BR-ATTR-01：开启乱序判定（attr.mtime_ordering）而平台没有返回修改时间。 */
@@ -202,19 +274,13 @@ export function createOrderPipeline(
     platform: RegisteredPlatform,
   ): Promise<OrderPipelineResult> {
     const attrAt = order.deposit_paid_at ?? order.paid_at ?? null;
-    // ① App 归属（BR-ATTR-02）：推广位命中本 App 的 union_pids（pending / active / retired 都算）。
+    // ① App 归属（BR-ATTR-02）：判定顺序 PID_NOT_OURS → SITE_MISMATCH → 无付款时间 → 同步起点（D10-3355）。
+    // orders.pid 仍写订单推广位（slot），不因匹配方式改写。
     const slot = order.promotion_slot ?? null;
-    const pidRows =
-      slot === null || slot === ''
-        ? []
-        : await deps.pids.find({
-            appId: ctx.app_id,
-            platform,
-            unionAccountId: ctx.union_account_id,
-            pid: slot,
-          });
-    const pidRow = pidRows[0];
-    if (pidRow === undefined) return drop(trx, order, ctx, 'PID_NOT_OURS', attrAt);
+    const match = await matchSlot(order, ctx, platform, slot);
+    if (match.kind === 'not_ours') return drop(trx, order, ctx, 'PID_NOT_OURS', attrAt);
+    if (match.kind === 'site_mismatch') return dropSiteMismatch(trx, order, ctx, platform, attrAt);
+    const pidRow = match.row;
     // 归因时点（BR-ATTR-25）：COALESCE(deposit_paid_at, paid_at)；都空不入库。京东 15 待付款是常态，只记丢弃。
     if (attrAt === null) {
       if (!isAwaitingPaymentDrop(platform, order.raw_status ?? null)) {

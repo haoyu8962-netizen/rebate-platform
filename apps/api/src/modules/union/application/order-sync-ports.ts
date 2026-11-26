@@ -13,6 +13,10 @@
 //   without a query; zero or several rows answer null and log one error per platform per instance.
 // - createUnionOrderReaders: the attribution pipeline's raw-row readers (union_pids by its four
 //   keys, any status; union_accounts.sync_start_at by App and id). Decisions stay in orders.
+//   B1-08zzc: slotCandidates returns the rows whose platform slot key equals the order's slot
+//   (BR-ATTR-02, D10-3355): Taobao compares the registered row's adzone (last segment of
+//   mm_<a>_<b>_<c>, or the all-digit pid itself) with the order's adzone_id and returns site_id for
+//   orders to check; JD / PDD compare pid exactly, as find does. Same App, same account, any status.
 // - createGovernedSyncAdapter: createGovernedAdapter plus the offline breaker state, for the
 //   worker's own governance set (its breakers and quota are per process, 待裁定 6).
 // Logs carry flat fields only (platform, reason, rows); never credentials or order data.
@@ -133,6 +137,17 @@ export function createUnionSyncAccess(options: UnionSyncAccessOptions): UnionSyn
   };
 }
 
+/** Taobao PID storage forms (D10-3355): CLI mm_<member>_<site>_<adzone>; admin API the bare adzone. */
+const TAOBAO_MM_PID = /^mm_\d+_\d+_(\d+)$/;
+const DIGITS = /^\d+$/;
+
+/** The adzone of a registered Taobao pid: mm_ form → last segment, all digits → itself, else none. */
+export function taobaoAdzoneOf(pid: string): string | null {
+  const mm = TAOBAO_MM_PID.exec(pid);
+  if (mm !== null) return mm[1] ?? null;
+  return DIGITS.test(pid) ? pid : null;
+}
+
 export interface UnionOrderReaders {
   readonly pids: {
     find(input: {
@@ -141,6 +156,12 @@ export interface UnionOrderReaders {
       unionAccountId: string;
       pid: string;
     }): Promise<readonly { pid_scene: string; status: string; site_id: string | null }[]>;
+    slotCandidates(input: {
+      appId: string;
+      platform: RegisteredPlatform;
+      unionAccountId: string;
+      slot: string;
+    }): Promise<readonly { pid_scene: string; status: string; site_id: string | null }[]>;
   };
   readonly accounts: {
     syncStartAt(input: { appId: string; unionAccountId: string }): Promise<Date | null>;
@@ -148,19 +169,36 @@ export interface UnionOrderReaders {
 }
 
 export function createUnionOrderReaders(db: Kysely<DB>): UnionOrderReaders {
+  const find: UnionOrderReaders['pids']['find'] = async (input) =>
+    await db
+      .withSchema('app')
+      .selectFrom('union_pids')
+      .select(['pid_scene', 'status', 'site_id'])
+      .where('app_id', '=', input.appId)
+      .where('platform', '=', input.platform)
+      .where('union_account_id', '=', input.unionAccountId)
+      .where('pid', '=', input.pid)
+      .orderBy('id')
+      .execute();
   return {
     pids: {
-      async find(input) {
-        return await db
+      find,
+      async slotCandidates(input) {
+        const { appId, platform, unionAccountId, slot } = input;
+        if (platform !== 'taobao')
+          return await find({ appId, platform, unionAccountId, pid: slot });
+        const rows = await db
           .withSchema('app')
           .selectFrom('union_pids')
-          .select(['pid_scene', 'status', 'site_id'])
-          .where('app_id', '=', input.appId)
-          .where('platform', '=', input.platform)
-          .where('union_account_id', '=', input.unionAccountId)
-          .where('pid', '=', input.pid)
+          .select(['pid', 'pid_scene', 'status', 'site_id'])
+          .where('app_id', '=', appId)
+          .where('platform', '=', 'taobao')
+          .where('union_account_id', '=', unionAccountId)
           .orderBy('id')
           .execute();
+        return rows
+          .filter((row) => taobaoAdzoneOf(row.pid) === slot)
+          .map(({ pid_scene, status, site_id }) => ({ pid_scene, status, site_id }));
       },
     },
     accounts: {

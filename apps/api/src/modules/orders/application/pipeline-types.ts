@@ -71,6 +71,18 @@ export interface OrderPipelineDeps {
       unionAccountId: string;
       pid: string;
     }): Promise<readonly PidRow[]>;
+    /**
+     * B1-08zzc（BR-ATTR-02、D10-3355）：订单推广位按本平台的推广位键命中的 union_pids 行（本 App、本联盟账号，
+     * pending / active / retired 都算，按 id 排序）。平台差异在 union：淘宝取登记行的 adzone（mm_ 末段或纯数字）
+     * 等于订单 adzone_id 的行，行带 site_id，由流水线再核对订单 site_id；京东、拼多多按 pid 等值，行的 site_id 为空。
+     * 生产装配（worker-runtime 的 pids: readers.pids）都带它；只给 find 的测试替身沿用 find 的等值匹配。
+     */
+    slotCandidates?(input: {
+      appId: string;
+      platform: RegisteredPlatform;
+      unionAccountId: string;
+      slot: string;
+    }): Promise<readonly PidRow[]>;
   };
   readonly accounts: {
     syncStartAt(input: { appId: string; unionAccountId: string }): Promise<Date | null>;
