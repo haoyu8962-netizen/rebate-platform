@@ -26,6 +26,16 @@
 //   credential) is appended, all in one transaction on the account row locked FOR UPDATE. The union
 //   is not called; the next daily probe checks the new credential.
 //
+// B1-22zd (BR-ID-24 细则「授权时长与续期」「记录与显示」; D10-2585, D10-2587, D10-2758; contract
+// CT-24ha): list rows carry auth_refreshable from re_expires_in_s of the account's current
+// credential (> 0 true, = 0 false; the key is omitted when unknown: NULL, a manual credential or no
+// credential — omitted and null mean the same in the contract); the raw durations never leave this
+// module. putCredential judges auth_status with the skip rule (the new authorization lasts from now
+// to its expiry; nodes whose lead is not below that are skipped, hour nodes count too) and, when a
+// queue is handed in, sends the hour alert jobs of the new authorization after its transaction
+// committed (best effort: a failed send, e.g. a queue that is not running, never undoes the entry; it
+// is one warn line `union_auth_hour_schedule_failed` and the daily check backfills the jobs).
+//
 // Plain credentials, codes, states and tokens never reach errors, audit rows, responses or logs.
 // Time comes only from the injected Clock. Pure module (no decorators, erasable syntax).
 import { createHash } from 'node:crypto';
@@ -33,15 +43,21 @@ import type { Schema } from '@couli/contracts-ts';
 import type { DB } from '@couli/db';
 import type { Kysely, Selectable } from 'kysely';
 import type { ContentReader } from '../../content/index.ts';
-import { newUuidV7, type Clock, type FieldCrypto, type RootLogger } from '../../platform/index.ts';
+import {
+  newUuidV7,
+  type Clock,
+  type FieldCrypto,
+  type JobQueue,
+  type RootLogger,
+} from '../../platform/index.ts';
+import { alertHoursOf, FIRST_SCHEDULE, sendHourAlerts } from '../auth-expiry/hour-alerts.ts';
 import { SiteReauthError, type ReauthMode, type SiteReauth } from '../auth-expiry/reauth.ts';
 import {
   DEFAULT_ALERT_DAYS,
   DEFAULT_PROBE_TIME,
+  authStatusAt,
   parseAlertDays,
   parseProbeCron,
-  remainingDays,
-  statusFor,
 } from '../auth-expiry/schedule.ts';
 import { decodeAlertPhones } from '../auth-expiry/service.ts';
 import { validAdminUnionReason } from '../domain/admin-reason.ts';
@@ -83,7 +99,9 @@ export interface AdminUnionAccountsOptions {
   /** Overrides of MANUAL_KEY_VALIDITY_DAYS per platform (whole days ≥ 1). */
   readonly keyValidityDays?: ManualKeyValidity;
   /** Receives one flat error line when union.auth_alert_phones cannot be read. */
-  readonly logger?: Pick<RootLogger, 'error'>;
+  readonly logger?: Pick<RootLogger, 'error'> & Partial<Pick<RootLogger, 'warn'>>;
+  /** Sends the hour alert jobs of a manually entered credential; absent → the daily backfill. */
+  readonly queue?: Pick<JobQueue, 'send'>;
 }
 
 /** Refusal mapped to 20001 with data.fields (and data.reason=manual_mode when set). */
@@ -179,7 +197,19 @@ function optionalReason(value: unknown): string | null {
   return value;
 }
 
-function toAccount(row: AccountRow, mode: ReauthMode, phones: boolean): AdminUnionAccount {
+/** auth_refreshable of a current credential's re_expires_in_s; undefined when unknown. */
+function refreshable(reExpiresIn: number | null | undefined): boolean | undefined {
+  if (reExpiresIn === null || reExpiresIn === undefined) return undefined;
+  return reExpiresIn > 0;
+}
+
+function toAccount(
+  row: AccountRow,
+  mode: ReauthMode,
+  phones: boolean,
+  reExpiresIn: number | null = null,
+): AdminUnionAccount {
+  const authRefreshable = refreshable(reExpiresIn);
   return {
     union_account_id: row.id,
     platform: row.platform as AdminUnionAccount['platform'],
@@ -196,6 +226,7 @@ function toAccount(row: AccountRow, mode: ReauthMode, phones: boolean): AdminUni
     last_probe_error: row.last_probe_error,
     alert_phones_configured: phones,
     reauth_mode: mode,
+    ...(authRefreshable === undefined ? {} : { auth_refreshable: authRefreshable }),
   };
 }
 
@@ -207,7 +238,8 @@ export class AdminUnionAccounts {
   readonly #auditWriter: (db: Kysely<DB>) => UnionAuditWriter;
   readonly #reauth: SiteReauth | null;
   readonly #validity: Readonly<Record<RegisteredPlatform, number>>;
-  readonly #logger: Pick<RootLogger, 'error'> | undefined;
+  readonly #logger: (Pick<RootLogger, 'error'> & Partial<Pick<RootLogger, 'warn'>>) | undefined;
+  readonly #queue: Pick<JobQueue, 'send'> | undefined;
 
   constructor(options: AdminUnionAccountsOptions) {
     this.#db = options.db;
@@ -218,18 +250,28 @@ export class AdminUnionAccounts {
     this.#reauth = options.reauth;
     this.#validity = { ...MANUAL_KEY_VALIDITY_DAYS, ...options.keyValidityDays };
     this.#logger = options.logger;
+    this.#queue = options.queue;
   }
 
   async list(appId: string): Promise<AdminUnionAccount[]> {
     const db = this.#database();
+    // One statement: each account row with its current credential (left join), so the expiry and
+    // auth_refreshable always come from the same authorization (never two reads around a renewal).
     const rows = await db
       .withSchema('app')
-      .selectFrom('union_accounts')
-      .select(ACCOUNT_COLUMNS)
-      .where('app_id', '=', appId)
-      .orderBy('platform')
-      .orderBy('account_name')
-      .orderBy('id')
+      .selectFrom('union_accounts as a')
+      .leftJoin('union_credentials as c', (join) =>
+        join
+          .onRef('c.app_id', '=', 'a.app_id')
+          .onRef('c.union_account_id', '=', 'a.id')
+          .on('c.is_current', '=', true),
+      )
+      .select(ACCOUNT_COLUMNS.map((column) => `a.${column}` as const))
+      .select('c.re_expires_in_s')
+      .where('a.app_id', '=', appId)
+      .orderBy('a.platform')
+      .orderBy('a.account_name')
+      .orderBy('a.id')
       .execute();
     const phones = await this.#phonesConfigured(appId);
     const modes = new Map<string, Promise<ReauthMode>>();
@@ -242,7 +284,9 @@ export class AdminUnionAccounts {
       return mode;
     };
     const items: AdminUnionAccount[] = [];
-    for (const row of rows) items.push(toAccount(row, await modeOf(row.platform), phones));
+    for (const row of rows) {
+      items.push(toAccount(row, await modeOf(row.platform), phones, row.re_expires_in_s));
+    }
     return items;
   }
 
@@ -377,6 +421,7 @@ export class AdminUnionAccounts {
     const estimated = given === null;
     const expiresAt = given ?? dateAt(now, now.getTime() + validityDays * DAY_MS);
     const authStatus = await this.#statusFor(actor.appId, expiresAt, now);
+    const queue = this.#queue;
 
     await db.transaction().execute(async (trx) => {
       const tx = trx.withSchema('app');
@@ -451,6 +496,31 @@ export class AdminUnionAccounts {
       });
     });
 
+    // After the commit, read and send in one failure-isolated step (as reauth.ts, money r1 S1-④).
+    if (queue !== undefined) {
+      try {
+        const hours = await alertHoursOf(this.#reader(), actor.appId);
+        await sendHourAlerts(queue, {
+          trx: null,
+          target: {
+            appId: actor.appId,
+            unionAccountId: account.id,
+            expiresAt,
+            renewedAt: now,
+          },
+          hours,
+          clock: this.#clock,
+          // First schedule of a new authorization (money r2 S1-②, B1-22ze): see reauth.ts.
+          catchUp: FIRST_SCHEDULE,
+        });
+      } catch (error) {
+        this.#logger?.warn?.(
+          { app_id: actor.appId, union_account_id: account.id, error_name: errorName(error) },
+          'union_auth_hour_schedule_failed',
+        );
+      }
+    }
+
     const row = await this.#account(actor.appId, account.id);
     if (row === undefined) throw new Error('union account disappeared after the credential entry');
     return toAccount(row, 'manual', await this.#phonesConfigured(actor.appId));
@@ -502,13 +572,22 @@ export class AdminUnionAccounts {
     }
   }
 
-  /** active / expiring for a new expiry, as the B1-22b daily check judges it. */
+  /**
+   * active / expiring for a new authorization from `now` to `expiresAt`, as the daily check judges
+   * it (B1-22b; B1-22zd skip rule, hour nodes included).
+   */
   async #statusFor(appId: string, expiresAt: Date, now: Date): Promise<'active' | 'expiring'> {
     const reader = this.#reader();
     const days = parseAlertDays((await reader.configValue(appId, KEY_DAYS))?.value ?? null);
     const time = parseProbeCron((await reader.configValue(appId, KEY_CRON))?.value ?? null);
-    const left = remainingDays(expiresAt.getTime(), now.getTime(), time ?? DEFAULT_PROBE_TIME);
-    return statusFor(left, days ?? DEFAULT_ALERT_DAYS);
+    return authStatusAt({
+      expiresMs: expiresAt.getTime(),
+      renewedMs: now.getTime(),
+      nowMs: now.getTime(),
+      days: days ?? DEFAULT_ALERT_DAYS,
+      hours: await alertHoursOf(reader, appId),
+      probeTime: time ?? DEFAULT_PROBE_TIME,
+    });
   }
 
   /**

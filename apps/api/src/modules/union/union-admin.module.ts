@@ -21,6 +21,9 @@
 // with only APP_CONFIG, CLOCK, ROOT_LOGGER, DB and FIELD_CRYPTO supplied: any further dependency of
 // it must be a provider of this module. Without a database (isolated HTTP unit tests) or the
 // field cipher the routes still register and every call fails closed (50001).
+// B1-22zd: JOB_QUEUE (optional) goes to the re-authorization sessions and the manual credential
+// entry, which send the hour alert jobs of a new authorization (auth-expiry/hour-alerts.ts); without
+// it the worker's daily check backfills them.
 //
 // Also compiled by the `test` project: a class decorator only (no parameter decorators or
 // parameter properties; dependencies are injected through factories).
@@ -33,6 +36,7 @@ import {
   CLOCK,
   DB,
   FIELD_CRYPTO,
+  JOB_QUEUE,
   ROOT_LOGGER,
   TaobaoStartupError,
   kmsAccessOf,
@@ -41,6 +45,7 @@ import {
   type AuditPort,
   type Clock,
   type FieldCrypto,
+  type JobQueue,
   type RootLogger,
   type TaobaoAppCredentials,
 } from '../platform/index.ts';
@@ -137,6 +142,7 @@ export class UnionAdminModule {
             ROOT_LOGGER,
             { token: DB, optional: true },
             { token: FIELD_CRYPTO, optional: true },
+            { token: JOB_QUEUE, optional: true },
           ],
           useFactory: async (
             appConfig: AppConfig,
@@ -144,6 +150,7 @@ export class UnionAdminModule {
             logger: RootLogger,
             db?: Kysely<Database>,
             crypto?: FieldCrypto,
+            queue?: JobQueue,
           ): Promise<AdminUnionAccounts> => {
             const auditWriter = (trx: Kysely<Database>) => options.auditWriter(trx, clock);
             const reauth =
@@ -162,6 +169,8 @@ export class UnionAdminModule {
                       logger,
                       await siteOAuthWiring(appConfig, logger),
                     ),
+                    ...(queue === undefined ? {} : { queue }),
+                    logger,
                   });
             return new AdminUnionAccounts({
               db,
@@ -171,6 +180,7 @@ export class UnionAdminModule {
               auditWriter,
               reauth,
               logger,
+              ...(queue === undefined ? {} : { queue }),
             });
           },
         },

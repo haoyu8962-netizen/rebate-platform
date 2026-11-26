@@ -106,6 +106,9 @@ it('[AC-S1-64#32] 短信故障不丢后台告警，不回滚 expired，失败记
   await monitor.expiryDue(h.appId, a.id, EXPIRES);
   await monitor.deliverAlerts(h.appId, a.id);
   expect(await stored(h, a.id)).toMatchObject({ auth_status: 'expired', alert_stage: 'expired' });
+  for (const [queue, name, payload] of jobs(h, a.id).filter(([, n]) => n === 'alert_log')) {
+    await monitor.handle({ id: randomUUID(), queue, name, payload, attempt: 1 });
+  }
   expect(logs(h, 'union_auth_expired')).toHaveLength(1);
   expect((await notifications(h.db, h.appId)).map((r) => r.status)).toEqual(['failed', 'failed']);
   expect(send).toHaveBeenCalledTimes(2);

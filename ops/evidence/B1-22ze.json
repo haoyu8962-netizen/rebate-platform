@@ -1,0 +1,241 @@
+{
+  "risk_note": "B1-22ze (union, RV2; BR-ID-24; takes over B1-22zd, D10-3121 / D10-3123). Hour alert nodes union.auth_alert_hours with the skip rule (lead time >= total authorization length), hour jobs scheduled on reauthorization / manual credentials / refresh and backfilled daily, the five Taobao durations recorded on union_credentials (migration 0156), auth_refreshable on the admin account rows (CT-24ha). Backend alerts become a persistent record: union_auth_alerts (migration 0156, unique (app_id, union_account_id, stage, alert_key), append-only trigger, app role INSERT / SELECT) written in the same transaction as hour_alert_key / alert_stage / notify_logs; the original log line is printed by an alert_log job (queue union-auth, payload ids only) enqueued in that transaction only when the insert returns a row — log at least once, record exactly once. Expired SMS dedupe key takes the same entered-at instant as the record (notification/site-auth-alert, ledger patch 2, D10-3164). tools/ci/lint-migrations.test.ts expected funds set gains union_auth_alerts (ledger patch 1, D10-3125, precedent #2932). Migration renumbered 0155 -> 0156 after main took 0155 (B1-04zzzzp), SQL unchanged, snapshot regenerated (main copy byte-identical).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27). Under B1-22ze: r1 (full) fail 4 S1 (entered-at instant read twice; hour job delay from the transaction start; time read before the row lock; a config read failure blocked reauthorization) -> implementation r2; r2 fail 2 S1 (the notification planner still read its own clock for the expired dedupe key; the first schedule skipped an hour node already due at commit) -> ledger patch 2 (D10-3164) and implementation r3; r3 pass, no findings. No finding was moved to out_of_scope in any round (D10-2954). Before the takeover, B1-22zd had money r1-r4 by Codex, all fail; the two S1 of r3 / r4 (backend alert log written outside the transaction) are what the persistent record fixes (couli-runs/B1-22zd/review-money-r{1..4}.json). After r3 passed, the only changes are rule tests and data: write-test 3 (kit.ts back to main byte for byte; the four monitor.int.test.ts blocks each gain the step that runs this round's alert_log jobs, D10-3197 / D10-3238), the migration renumbered 0155 -> 0156 and the snapshot regenerated on the rebased main; the implementation source is unchanged since r3."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex. Under B1-22ze: r1 (full) fail 2 S1 + 1 S2 -> write-test 2; r2 (incremental) pass; write-test 3 (kit.ts back to main: the harness wrapper of D10-3074 cannot pass the support-file pure-insertion rule; the same owner-approved step, D10-3129 (3), moved into the four monitor.int.test.ts blocks, D10-3197; approvals 216) -> r3 (incremental) pass, no findings. Validator moved 0 in every round (one reviewer-listed out_of_scope S2 on notification quiet hours). Under B1-22zd before the takeover: r1 fail 3 S1, r2 pass, r3 pass."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/union/auth-alert-hours/durations.int.test.ts > [AC-B1-22zd#6] 淘宝回调保留五项整数，换授权时缺省、非整数、负数逐列落 null，日志与审计无时长或令牌",
+    "test/spec/union/auth-alert-hours/durations.int.test.ts > [AC-B1-22zd#7] 列表取当前凭据的 true、false 或未知，手工录入和无凭据也是未知",
+    "test/spec/union/auth-alert-hours/monitor.int.test.ts > [AC-B1-22zd#1] 24 小时授权的日节点全部跳过，总时长未知的同到期账户仍提醒 d1",
+    "test/spec/union/auth-alert-hours/monitor.int.test.ts > [AC-B1-22zd#1] 7 天等于 d7 提前量时跳过，多一分钟的授权仍到 d7",
+    "test/spec/union/auth-alert-hours/monitor.int.test.ts > [AC-B1-22zd#3] h6 和 h1 到点各提醒一次，保留日阶段，重投去重，随后巡检仍为 expiring",
+    "test/spec/union/auth-alert-hours/monitor.int.test.ts > [AC-B1-22zd#4] 到期时刻变更后，旧授权的 h6 任务到点空转",
+    "test/spec/union/auth-alert-hours/monitor.int.test.ts > [AC-B1-22zd#4] 小时任务迟至到期时刻交付时直接过期，只计划 EXPIRED",
+    "test/spec/union/auth-alert-hours/monitor.int.test.ts > [AC-B1-22zd#5] h1 已计划时，迟到的 h6 不补发",
+    "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#14] h6 提交前故障全部回滚，重投告警和日志任务各一条（配置手机号 false）",
+    "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#14] h6 提交前故障全部回滚，重投告警和日志任务各一条（配置手机号 true）",
+    "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#15] 有手机号时提交成功但回执丢失，重投保留已提交的告警、短信和任务",
+    "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#16] 小时节点并发与重投去重，h1 和重新授权后的 h6 各自另记",
+    "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#17] 持久告警已存在时插入冲突不再排日志任务",
+    "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#18] 日节点的短信登记失败时告警、日阶段、短信和日志任务一起回滚",
+    "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#18] 日节点的日志入队失败时告警、日阶段、短信和日志任务一起回滚",
+    "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#19] 同一到期时刻恢复后再次失效，两条告警按进入失效时刻区分",
+    "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#22] 重新授权后的 d14 按新到期时刻另记告警并排日志任务",
+    "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#20] 告警表只追加，应用角色只可插入和读取，列只记录告警事实",
+    "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#21] 日志端两次失败后由队列重投，告警记录保持原样",
+    "test/spec/union/auth-alert-hours/review-additions.int.test.ts > [AC-B1-22zd#9] 回调的新授权恰好 24 小时，跳过 h24，旧 h24 任务到点空转",
+    "test/spec/union/auth-alert-hours/review-additions.int.test.ts > [AC-B1-22zd#10] 刷新后的授权恰好 6 小时，只排 h1，先前排好的 h6 到点空转",
+    "test/spec/union/auth-alert-hours/review-additions.int.test.ts > [AC-B1-22zd#11] 巡检补排遇到 6 小时授权只排 h1，先前排好的 h6 到点空转",
+    "test/spec/union/auth-alert-hours/review-additions.int.test.ts > [AC-B1-22zd#12] 未配置告警手机号时 h6 照常进入 expiring，重投只保留一条后台告警",
+    "test/spec/union/auth-alert-hours/review-additions.int.test.ts > [AC-B1-22zd#13] 联盟调用已判授权失效，未到期的 h6 任务不恢复状态也不计划提醒",
+    "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 回调成功和手工换凭据都按各自到期时刻排默认 6、1 小时的单例任务",
+    "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 配置含非法值 0 时整组回退到默认值",
+    "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 配置含非法值 721 时整组回退到默认值",
+    "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 配置含非法值 1.5 时整组回退到默认值",
+    "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 配置含非法值 6 时整组回退到默认值",
+    "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 自定义 [3] 只排 3 小时节点，重复值合并且 720 小时可用，空数组关闭",
+    "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 手工录入的小时节点严格小于授权总时长，恰好 1 小时不排任何节点",
+    "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 已有刷新端口成功返回新到期时刻后，小时节点按新授权重排",
+    "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 超过 30 天未排的小时节点在进入窗口后由每日巡检按到点时刻补排",
+    "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#5] 巡检只补排下次巡检前的小时节点，处理后已发的 d1 阶段保持不变",
+    "test/spec/union/auth-alert-hours/schema.int.test.ts > [AC-B1-22zd#8] 凭据时长列是可空整数且拒绝负数，账号阶段约束继续拒绝 h6",
+    "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts > [AC-B1-22zd#23] 新授权恰好 24 小时，旧 h24 等于新授权总时长，小时任务不写告警也不排日志任务",
+    "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts > [AC-B1-22zd#23] 重新授权改变到期时刻，旧 h6 已失效，小时任务不写告警也不排日志任务",
+    "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts > [AC-B1-22zd#24] 刷新返回新有效期后授权总时长恰好 6 小时，旧 h6 到点不写告警也不排日志任务",
+    "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts > [AC-B1-22zd#24] 巡检补排后授权总时长恰好 6 小时，旧 h6 到点不写告警也不排日志任务",
+    "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts > [AC-B1-22zd#25] 授权已被联盟判为失效，旧 h6 不写告警也不排日志任务",
+    "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts > [AC-B1-22zd#25] 更小的 h1 已发出，旧 h6 不写告警也不排日志任务"
+  ],
+  "modify_existing": [
+    {
+      "file": "test/spec/db/union/auth-expiry/auth-expiry.int.test.ts",
+      "test": "[AC-B1-22a#2] reminder stages accept configurable days 1–999 and reject malformed values on insert/update",
+      "reason": "rule_change",
+      "br": ["BR-ID-24"],
+      "before": "it('[AC-B1-22a#2] reminder stages accept configurable days 1–999 and reject malformed values on insert/update', async () => {\n  for (const value of ['none', 'expired', 'd1', 'd7', 'd14', 'd30', 'd999', 'd2', 'd10', 'd100'])\n    expect(await sqlState(insertRow(app, 'union_accounts', { alert_stage: value })), value).toBe(\n      'no error',\n    );\n  const row = await insertRow(app, 'union_accounts', {}, ['alert_stage']);\n  expect(row['alert_stage']).toBe('none');\n  for (const value of ['d30', 'd999', 'd1', 'expired', 'none']) {\n    const changed = await sql<{ alert_stage: string }>`\n      UPDATE app.union_accounts SET alert_stage = ${value}\n      WHERE id = ${row['id']} RETURNING alert_stage\n    `.execute(app);\n    expect(changed.rows).toEqual([{ alert_stage: value }]);\n  }\n  for (const value of [\n    'd0',\n    'd',\n    'd1000',\n    'd014',\n    'D14',\n    'expiring',\n    '',\n    'd-1',\n    'd 7',\n    'd7\\n',\n    'xd7',\n  ]) {\n    expect(await sqlState(insertRow(app, 'union_accounts', { alert_stage: value })), value).toBe(\n      '23514',\n    );\n    expect(\n      await sqlState(\n        sql`\n      UPDATE app.union_accounts SET alert_stage = ${value} WHERE id = ${row['id']}\n    `.execute(app),\n      ),\n      value,\n    ).toBe('23514');\n  }\n  // Regression: changing reminder encoding must not widen auth_status.\n  for (const auth_status of ['active', 'expiring', 'expired'])\n    expect(await sqlState(insertRow(app, 'union_accounts', { auth_status }))).toBe('no error');\n  for (const auth_status of ['none', 'pending', 'd30', 'ACTIVE', ''])\n    expect(await sqlState(insertRow(app, 'union_accounts', { auth_status }))).toBe('23514');\n  // Freeze the existing credential column contract, independently of regenerated snapshots.\n  const credentialColumns = [\n    ['id', 'uuid', false, false],\n    ['app_id', 'text', false, false],\n    ['union_account_id', 'uuid', false, false],\n    ['access_token_cipher', 'bytea', false, false],\n    ['refresh_token_cipher', 'bytea', true, false],\n    ['expires_at', 'timestamptz', true, false],\n    ['is_current', 'bool', false, false],\n    ['created_at', 'timestamptz', false, true],\n    ['updated_at', 'timestamptz', false, true],\n  ] as const;\n  expect(await columns(app, 'union_credentials')).toEqual(\n    credentialColumns.map(([name, type, nullable, defaulted]) => ({\n      name,\n      type,\n      nullable,\n      defaulted,\n    })),\n  );\n  const credential = await insertRow(app, 'union_credentials', { expires_at: EXPIRES });\n  expect(\n    (\n      await sql<Record<string, unknown>>`\n    SELECT * FROM app.union_credentials WHERE id = ${credential['id']}\n  `.execute(app)\n    ).rows,\n  ).toEqual([credential]);\n});",
+      "after": "it('[AC-B1-22a#2] reminder stages accept configurable days 1–999 and reject malformed values on insert/update', async () => {\n  for (const value of ['none', 'expired', 'd1', 'd7', 'd14', 'd30', 'd999', 'd2', 'd10', 'd100'])\n    expect(await sqlState(insertRow(app, 'union_accounts', { alert_stage: value })), value).toBe(\n      'no error',\n    );\n  const row = await insertRow(app, 'union_accounts', {}, ['alert_stage']);\n  expect(row['alert_stage']).toBe('none');\n  for (const value of ['d30', 'd999', 'd1', 'expired', 'none']) {\n    const changed = await sql<{ alert_stage: string }>`\n      UPDATE app.union_accounts SET alert_stage = ${value}\n      WHERE id = ${row['id']} RETURNING alert_stage\n    `.execute(app);\n    expect(changed.rows).toEqual([{ alert_stage: value }]);\n  }\n  for (const value of [\n    'd0',\n    'd',\n    'd1000',\n    'd014',\n    'D14',\n    'expiring',\n    '',\n    'd-1',\n    'd 7',\n    'd7\\n',\n    'xd7',\n  ]) {\n    expect(await sqlState(insertRow(app, 'union_accounts', { alert_stage: value })), value).toBe(\n      '23514',\n    );\n    expect(\n      await sqlState(\n        sql`\n      UPDATE app.union_accounts SET alert_stage = ${value} WHERE id = ${row['id']}\n    `.execute(app),\n      ),\n      value,\n    ).toBe('23514');\n  }\n  // Regression: changing reminder encoding must not widen auth_status.\n  for (const auth_status of ['active', 'expiring', 'expired'])\n    expect(await sqlState(insertRow(app, 'union_accounts', { auth_status }))).toBe('no error');\n  for (const auth_status of ['none', 'pending', 'd30', 'ACTIVE', ''])\n    expect(await sqlState(insertRow(app, 'union_accounts', { auth_status }))).toBe('23514');\n  // Freeze the existing credential column contract, independently of regenerated snapshots.\n  const credentialColumns = [\n    ['id', 'uuid', false, false],\n    ['app_id', 'text', false, false],\n    ['union_account_id', 'uuid', false, false],\n    ['access_token_cipher', 'bytea', false, false],\n    ['refresh_token_cipher', 'bytea', true, false],\n    ['expires_at', 'timestamptz', true, false],\n    ['is_current', 'bool', false, false],\n    ['created_at', 'timestamptz', false, true],\n    ['updated_at', 'timestamptz', false, true],\n    ['re_expires_in_s', 'int4', true, false],\n    ['r1_expires_in_s', 'int4', true, false],\n    ['r2_expires_in_s', 'int4', true, false],\n    ['w1_expires_in_s', 'int4', true, false],\n    ['w2_expires_in_s', 'int4', true, false],\n  ] as const;\n  expect(await columns(app, 'union_credentials')).toEqual(\n    credentialColumns.map(([name, type, nullable, defaulted]) => ({\n      name,\n      type,\n      nullable,\n      defaulted,\n    })),\n  );\n  const credential = await insertRow(app, 'union_credentials', { expires_at: EXPIRES });\n  expect(\n    (\n      await sql<Record<string, unknown>>`\n    SELECT * FROM app.union_credentials WHERE id = ${credential['id']}\n  `.execute(app)\n    ).rows,\n  ).toEqual([credential]);\n});",
+      "mutation": [
+        {
+          "mutant": "reverse check, the implementation put back to the old rule: apps/api/src/modules/union/**, notification/site-auth-alert, db/schema.sql and db.gen.ts as at the merge base, the five-duration migration removed, with the head rule tests; this block fails on the credential column list (test machine, verify-container --tests, run couli-runs/B1-22ze/tests/5: the only failed test)",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/union/auth-probe/atomicity.int.test.ts",
+      "test": "[AC-S1-64#32] 短信故障不丢后台告警，不回滚 expired，失败记录不自动重发",
+      "reason": "rule_change",
+      "br": ["BR-ID-24"],
+      "before": "it('[AC-S1-64#32] 短信故障不丢后台告警，不回滚 expired，失败记录不自动重发', async () => {\n  const h = harness(database(), EXPIRES);\n  const a = await account(h);\n  const send = vi.fn<TemplateSmsSender['send']>(async () => 'rejected');\n  const real = createSiteAuthAlertPort({\n    db: h.db,\n    clock: h.clock,\n    logger: h.logger,\n    sms: { send },\n  });\n  const monitor = createSiteAuthMonitor({ ...h.options, alerts: real });\n  await monitor.expiryDue(h.appId, a.id, EXPIRES);\n  await monitor.deliverAlerts(h.appId, a.id);\n  await monitor.expiryDue(h.appId, a.id, EXPIRES);\n  await monitor.deliverAlerts(h.appId, a.id);\n  expect(await stored(h, a.id)).toMatchObject({ auth_status: 'expired', alert_stage: 'expired' });\n  expect(logs(h, 'union_auth_expired')).toHaveLength(1);\n  expect((await notifications(h.db, h.appId)).map((r) => r.status)).toEqual(['failed', 'failed']);\n  expect(send).toHaveBeenCalledTimes(2);\n});",
+      "after": "it('[AC-S1-64#32] 短信故障不丢后台告警，不回滚 expired，失败记录不自动重发', async () => {\n  const h = harness(database(), EXPIRES);\n  const a = await account(h);\n  const send = vi.fn<TemplateSmsSender['send']>(async () => 'rejected');\n  const real = createSiteAuthAlertPort({\n    db: h.db,\n    clock: h.clock,\n    logger: h.logger,\n    sms: { send },\n  });\n  const monitor = createSiteAuthMonitor({ ...h.options, alerts: real });\n  await monitor.expiryDue(h.appId, a.id, EXPIRES);\n  await monitor.deliverAlerts(h.appId, a.id);\n  await monitor.expiryDue(h.appId, a.id, EXPIRES);\n  await monitor.deliverAlerts(h.appId, a.id);\n  expect(await stored(h, a.id)).toMatchObject({ auth_status: 'expired', alert_stage: 'expired' });\n  for (const [queue, name, payload] of jobs(h, a.id).filter(([, n]) => n === 'alert_log')) {\n    await monitor.handle({ id: randomUUID(), queue, name, payload, attempt: 1 });\n  }\n  expect(logs(h, 'union_auth_expired')).toHaveLength(1);\n  expect((await notifications(h.db, h.appId)).map((r) => r.status)).toEqual(['failed', 'failed']);\n  expect(send).toHaveBeenCalledTimes(2);\n});",
+      "mutation": [
+        {
+          "mutant": "the new implementation with the alert_log job printing nothing (alertLogLines returns [] in apps/api/src/modules/union/auth-expiry/alert-log.ts): the log line the block asserts after running this round's alert_log jobs is missing and the block fails (test machine, verify-container --tests test/spec/union/auth-probe, run couli-runs/B1-22ze/tests/9: failed exactly atomicity [AC-S1-64#32] and the four declared monitor blocks, [AC-S1-65#1] on both rows). With the whole implementation put back to the merge base these blocks stay green (run tests/5): the old rule printed the log directly and the added step then runs no job, so the step only matters under the new rule",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/union/auth-probe/monitor.int.test.ts",
+      "test": "[AC-S1-64#1] 08:59 属前一巡检日；09:00 命中 d14，随后 d7、d1、到期各提醒一次",
+      "reason": "rule_change",
+      "br": ["BR-ID-24"],
+      "before": "it('[AC-S1-64#1] 08:59 属前一巡检日；09:00 命中 d14，随后 d7、d1、到期各提醒一次', async () => {\n  const h = harness(database(), '2026-12-16T00:59:00.000Z');\n  const a = await account(h);\n  await h.monitor.dailyCheck();\n  expect(plans(h)).toEqual([]);\n  expect((await stored(h, a.id)).auth_status).toBe('active');\n  for (const [time, stage, status] of [\n    [NOW, 'd14', 'expiring'],\n    ['2026-12-23T01:00:00.000Z', 'd7', 'expiring'],\n    ['2026-12-29T01:00:00.000Z', 'd1', 'expiring'],\n    [EXPIRES, 'expired', 'expired'],\n  ] as const) {\n    h.clock.set(time);\n    await h.monitor.dailyCheck();\n    await h.monitor.dailyCheck();\n    expect(await stored(h, a.id)).toMatchObject({ alert_stage: stage, auth_status: status });\n  }\n  expect(plans(h).map((p) => [p.stage, p.code, p.phoneIds.length])).toEqual([\n    ['d14', 'UNION_AUTH_EXPIRING', 2],\n    ['d7', 'UNION_AUTH_EXPIRING', 2],\n    ['d1', 'UNION_AUTH_EXPIRING', 2],\n    ['expired', 'UNION_AUTH_EXPIRED', 2],\n  ]);\n  expect(logs(h, 'union_auth_expiring')).toHaveLength(3);\n  expect(logs(h, 'union_auth_expired')).toEqual([\n    expect.objectContaining({\n      level: 50,\n      platform: 'taobao',\n      union_account_id: a.id,\n      stage: 'expired',\n      auth_expires_at: EXPIRES,\n      phones_configured: true,\n      cause: 'time',\n    }),\n  ]);\n});",
+      "after": "it('[AC-S1-64#1] 08:59 属前一巡检日；09:00 命中 d14，随后 d7、d1、到期各提醒一次', async () => {\n  const h = harness(database(), '2026-12-16T00:59:00.000Z');\n  const a = await account(h);\n  await h.monitor.dailyCheck();\n  expect(plans(h)).toEqual([]);\n  expect((await stored(h, a.id)).auth_status).toBe('active');\n  for (const [time, stage, status] of [\n    [NOW, 'd14', 'expiring'],\n    ['2026-12-23T01:00:00.000Z', 'd7', 'expiring'],\n    ['2026-12-29T01:00:00.000Z', 'd1', 'expiring'],\n    [EXPIRES, 'expired', 'expired'],\n  ] as const) {\n    h.clock.set(time);\n    await h.monitor.dailyCheck();\n    await h.monitor.dailyCheck();\n    expect(await stored(h, a.id)).toMatchObject({ alert_stage: stage, auth_status: status });\n  }\n  expect(plans(h).map((p) => [p.stage, p.code, p.phoneIds.length])).toEqual([\n    ['d14', 'UNION_AUTH_EXPIRING', 2],\n    ['d7', 'UNION_AUTH_EXPIRING', 2],\n    ['d1', 'UNION_AUTH_EXPIRING', 2],\n    ['expired', 'UNION_AUTH_EXPIRED', 2],\n  ]);\n  for (const [queue, name, payload] of jobs(h, a.id).filter(([, n]) => n === 'alert_log')) {\n    await h.monitor.handle({ id: randomUUID(), queue, name, payload, attempt: 1 });\n  }\n  expect(logs(h, 'union_auth_expiring')).toHaveLength(3);\n  expect(logs(h, 'union_auth_expired')).toEqual([\n    expect.objectContaining({\n      level: 50,\n      platform: 'taobao',\n      union_account_id: a.id,\n      stage: 'expired',\n      auth_expires_at: EXPIRES,\n      phones_configured: true,\n      cause: 'time',\n    }),\n  ]);\n});",
+      "mutation": [
+        {
+          "mutant": "the new implementation with the alert_log job printing nothing (alertLogLines returns [] in apps/api/src/modules/union/auth-expiry/alert-log.ts): the log line the block asserts after running this round's alert_log jobs is missing and the block fails (test machine, verify-container --tests test/spec/union/auth-probe, run couli-runs/B1-22ze/tests/9: failed exactly atomicity [AC-S1-64#32] and the four declared monitor blocks, [AC-S1-65#1] on both rows). With the whole implementation put back to the merge base these blocks stay green (run tests/5): the old rule printed the log directly and the added step then runs no job, so the step only matters under the new rule",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/union/auth-probe/monitor.int.test.ts",
+      "test": "[AC-S1-65#1] 探测授权失效立即 expired，空到期时间也只靠探测（${expiresAt}）",
+      "reason": "rule_change",
+      "br": ["BR-ID-24"],
+      "before": "it(`[AC-S1-65#1] 探测授权失效立即 expired，空到期时间也只靠探测（${expiresAt}）`, async () => {\n    const h = harness(database());\n    const a = await account(h, { auth_expires_at: expiresAt });\n    const bindings = await activeBinding(h, a.id);\n    const before = await bindings();\n    h.probe.mockResolvedValue({ kind: 'auth_invalid', error: 'classified-invalid' });\n    await h.monitor.dailyCheck();\n    await h.monitor.dailyCheck();\n    expect(await stored(h, a.id)).toMatchObject({\n      auth_status: 'expired',\n      alert_stage: 'expired',\n      last_probe_at: h.clock.now(),\n      last_probe_ok: false,\n      last_probe_error: 'classified-invalid',\n    });\n    expect(plans(h).map((p) => p.code)).toEqual(['UNION_AUTH_EXPIRED']);\n    expect(logs(h, 'union_auth_expired')).toEqual([expect.objectContaining({ cause: 'probe' })]);\n    expect(await bindings()).toEqual(before);\n  });",
+      "after": "it(`[AC-S1-65#1] 探测授权失效立即 expired，空到期时间也只靠探测（${expiresAt}）`, async () => {\n    const h = harness(database());\n    const a = await account(h, { auth_expires_at: expiresAt });\n    const bindings = await activeBinding(h, a.id);\n    const before = await bindings();\n    h.probe.mockResolvedValue({ kind: 'auth_invalid', error: 'classified-invalid' });\n    await h.monitor.dailyCheck();\n    await h.monitor.dailyCheck();\n    expect(await stored(h, a.id)).toMatchObject({\n      auth_status: 'expired',\n      alert_stage: 'expired',\n      last_probe_at: h.clock.now(),\n      last_probe_ok: false,\n      last_probe_error: 'classified-invalid',\n    });\n    expect(plans(h).map((p) => p.code)).toEqual(['UNION_AUTH_EXPIRED']);\n    for (const [queue, name, payload] of jobs(h, a.id).filter(([, n]) => n === 'alert_log')) {\n      await h.monitor.handle({ id: randomUUID(), queue, name, payload, attempt: 1 });\n    }\n    expect(logs(h, 'union_auth_expired')).toEqual([expect.objectContaining({ cause: 'probe' })]);\n    expect(await bindings()).toEqual(before);\n  });",
+      "mutation": [
+        {
+          "mutant": "the new implementation with the alert_log job printing nothing (alertLogLines returns [] in apps/api/src/modules/union/auth-expiry/alert-log.ts): the log line the block asserts after running this round's alert_log jobs is missing and the block fails (test machine, verify-container --tests test/spec/union/auth-probe, run couli-runs/B1-22ze/tests/9: failed exactly atomicity [AC-S1-64#32] and the four declared monitor blocks, [AC-S1-65#1] on both rows). With the whole implementation put back to the merge base these blocks stay green (run tests/5): the old rule printed the log directly and the added step then runs no job, so the step only matters under the new rule",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/union/auth-probe/monitor.int.test.ts",
+      "test": "[AC-S1-65#2] 任一联盟调用失效立即置位，不写 last_probe，账号/app 隔离且不重发",
+      "reason": "rule_change",
+      "br": ["BR-ID-24"],
+      "before": "it('[AC-S1-65#2] 任一联盟调用失效立即置位，不写 last_probe，账号/app 隔离且不重发', async () => {\n  const h = harness(database());\n  const a = await account(h);\n  const other = await account(h, { platform: 'jd' });\n  const bindings = await activeBinding(h, a.id);\n  const before = await bindings();\n  const failure = {\n    appId: h.appId,\n    platform: 'taobao' as const,\n    unionAccountId: a.id,\n    error: 'invalid',\n  };\n  await h.monitor.reportAuthFailure({ ...failure, appId: 'other-tenant' });\n  await h.monitor.reportAuthFailure({ ...failure, platform: 'pdd' });\n  expect(await stored(h, a.id)).toEqual(a);\n  await h.monitor.reportAuthFailure(failure);\n  await h.monitor.reportAuthFailure(failure);\n  expect(await stored(h, a.id)).toMatchObject({\n    auth_status: 'expired',\n    alert_stage: 'expired',\n    last_probe_at: null,\n    last_probe_ok: null,\n    last_probe_error: null,\n  });\n  expect(await stored(h, other.id)).toEqual(other);\n  expect(plans(h)).toHaveLength(1);\n  expect(logs(h, 'union_auth_expired')).toEqual([expect.objectContaining({ cause: 'call' })]);\n  expect(h.probe).not.toHaveBeenCalled();\n  expect(await bindings()).toEqual(before);\n});",
+      "after": "it('[AC-S1-65#2] 任一联盟调用失效立即置位，不写 last_probe，账号/app 隔离且不重发', async () => {\n  const h = harness(database());\n  const a = await account(h);\n  const other = await account(h, { platform: 'jd' });\n  const bindings = await activeBinding(h, a.id);\n  const before = await bindings();\n  const failure = {\n    appId: h.appId,\n    platform: 'taobao' as const,\n    unionAccountId: a.id,\n    error: 'invalid',\n  };\n  await h.monitor.reportAuthFailure({ ...failure, appId: 'other-tenant' });\n  await h.monitor.reportAuthFailure({ ...failure, platform: 'pdd' });\n  expect(await stored(h, a.id)).toEqual(a);\n  await h.monitor.reportAuthFailure(failure);\n  await h.monitor.reportAuthFailure(failure);\n  expect(await stored(h, a.id)).toMatchObject({\n    auth_status: 'expired',\n    alert_stage: 'expired',\n    last_probe_at: null,\n    last_probe_ok: null,\n    last_probe_error: null,\n  });\n  expect(await stored(h, other.id)).toEqual(other);\n  expect(plans(h)).toHaveLength(1);\n  for (const [queue, name, payload] of jobs(h, a.id).filter(([, n]) => n === 'alert_log')) {\n    await h.monitor.handle({ id: randomUUID(), queue, name, payload, attempt: 1 });\n  }\n  expect(logs(h, 'union_auth_expired')).toEqual([expect.objectContaining({ cause: 'call' })]);\n  expect(h.probe).not.toHaveBeenCalled();\n  expect(await bindings()).toEqual(before);\n});",
+      "mutation": [
+        {
+          "mutant": "the new implementation with the alert_log job printing nothing (alertLogLines returns [] in apps/api/src/modules/union/auth-expiry/alert-log.ts): the log line the block asserts after running this round's alert_log jobs is missing and the block fails (test machine, verify-container --tests test/spec/union/auth-probe, run couli-runs/B1-22ze/tests/9: failed exactly atomicity [AC-S1-64#32] and the four declared monitor blocks, [AC-S1-65#1] on both rows). With the whole implementation put back to the merge base these blocks stay green (run tests/5): the old rule printed the log directly and the added step then runs no job, so the step only matters under the new rule",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/union/auth-probe/monitor.int.test.ts",
+      "test": "[AC-S1-64#14] 未配置号码只后台告警且阶段前移，后来配号不补发该节点",
+      "reason": "rule_change",
+      "br": ["BR-ID-24"],
+      "before": "it('[AC-S1-64#14] 未配置号码只后台告警且阶段前移，后来配号不补发该节点', async () => {\n  const h = harness(database());\n  h.settings.delete('union.auth_alert_phones');\n  const a = await account(h);\n  await h.monitor.dailyCheck();\n  expect(await stored(h, a.id)).toMatchObject({ alert_stage: 'd14', auth_status: 'expiring' });\n  expect(plans(h)).toEqual([]);\n  expect(logs(h, 'union_auth_alert_phones_missing')).toHaveLength(1);\n  expect(logs(h, 'union_auth_expiring')).toEqual([\n    expect.objectContaining({\n      level: 40,\n      phones_configured: false,\n      stage: 'd14',\n      union_account_id: a.id,\n    }),\n  ]);\n  h.settings.set('union.auth_alert_phones', {\n    cipher: h.crypto.encrypt(JSON.stringify(PHONES), 'union.auth_alert_phones'),\n  });\n  await h.monitor.dailyCheck();\n  expect(plans(h)).toEqual([]);\n});",
+      "after": "it('[AC-S1-64#14] 未配置号码只后台告警且阶段前移，后来配号不补发该节点', async () => {\n  const h = harness(database());\n  h.settings.delete('union.auth_alert_phones');\n  const a = await account(h);\n  await h.monitor.dailyCheck();\n  expect(await stored(h, a.id)).toMatchObject({ alert_stage: 'd14', auth_status: 'expiring' });\n  expect(plans(h)).toEqual([]);\n  for (const [queue, name, payload] of jobs(h, a.id).filter(([, n]) => n === 'alert_log')) {\n    await h.monitor.handle({ id: randomUUID(), queue, name, payload, attempt: 1 });\n  }\n  expect(logs(h, 'union_auth_alert_phones_missing')).toHaveLength(1);\n  expect(logs(h, 'union_auth_expiring')).toEqual([\n    expect.objectContaining({\n      level: 40,\n      phones_configured: false,\n      stage: 'd14',\n      union_account_id: a.id,\n    }),\n  ]);\n  h.settings.set('union.auth_alert_phones', {\n    cipher: h.crypto.encrypt(JSON.stringify(PHONES), 'union.auth_alert_phones'),\n  });\n  await h.monitor.dailyCheck();\n  expect(plans(h)).toEqual([]);\n});",
+      "mutation": [
+        {
+          "mutant": "the new implementation with the alert_log job printing nothing (alertLogLines returns [] in apps/api/src/modules/union/auth-expiry/alert-log.ts): the log line the block asserts after running this round's alert_log jobs is missing and the block fails (test machine, verify-container --tests test/spec/union/auth-probe, run couli-runs/B1-22ze/tests/9: failed exactly atomicity [AC-S1-64#32] and the four declared monitor blocks, [AC-S1-65#1] on both rows). With the whole implementation put back to the merge base these blocks stay green (run tests/5): the old rule printed the log directly and the added step then runs no job, so the step only matters under the new rule",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "task": "B1-22ze",
+  "spec_commit": "63a67fc5e33fd072d02bca6e067ce7a5dde127c9",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "63a67fc5e33fd072d02bca6e067ce7a5dde127c9",
+      "tree": "8e9e8d54fb26c3e101ae127b601513d49be92174",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-25T23:37:04Z",
+      "finished_at": "2026-11-25T23:37:14Z",
+      "red_tests": [
+        "test/spec/union/auth-alert-hours/durations.int.test.ts > [AC-B1-22zd#6] 淘宝回调保留五项整数，换授权时缺省、非整数、负数逐列落 null，日志与审计无时长或令牌",
+        "test/spec/union/auth-alert-hours/durations.int.test.ts > [AC-B1-22zd#7] 列表取当前凭据的 true、false 或未知，手工录入和无凭据也是未知",
+        "test/spec/union/auth-alert-hours/monitor.int.test.ts > [AC-B1-22zd#1] 24 小时授权的日节点全部跳过，总时长未知的同到期账户仍提醒 d1",
+        "test/spec/union/auth-alert-hours/monitor.int.test.ts > [AC-B1-22zd#1] 7 天等于 d7 提前量时跳过，多一分钟的授权仍到 d7",
+        "test/spec/union/auth-alert-hours/monitor.int.test.ts > [AC-B1-22zd#3] h6 和 h1 到点各提醒一次，保留日阶段，重投去重，随后巡检仍为 expiring",
+        "test/spec/union/auth-alert-hours/monitor.int.test.ts > [AC-B1-22zd#4] 到期时刻变更后，旧授权的 h6 任务到点空转",
+        "test/spec/union/auth-alert-hours/monitor.int.test.ts > [AC-B1-22zd#4] 小时任务迟至到期时刻交付时直接过期，只计划 EXPIRED",
+        "test/spec/union/auth-alert-hours/monitor.int.test.ts > [AC-B1-22zd#5] h1 已计划时，迟到的 h6 不补发",
+        "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#14] h6 提交前故障全部回滚，重投告警和日志任务各一条（配置手机号 false）",
+        "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#14] h6 提交前故障全部回滚，重投告警和日志任务各一条（配置手机号 true）",
+        "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#15] 有手机号时提交成功但回执丢失，重投保留已提交的告警、短信和任务",
+        "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#16] 小时节点并发与重投去重，h1 和重新授权后的 h6 各自另记",
+        "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#17] 持久告警已存在时插入冲突不再排日志任务",
+        "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#18] 日节点的短信登记失败时告警、日阶段、短信和日志任务一起回滚",
+        "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#18] 日节点的日志入队失败时告警、日阶段、短信和日志任务一起回滚",
+        "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#19] 同一到期时刻恢复后再次失效，两条告警按进入失效时刻区分",
+        "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#22] 重新授权后的 d14 按新到期时刻另记告警并排日志任务",
+        "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#20] 告警表只追加，应用角色只可插入和读取，列只记录告警事实",
+        "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts > [AC-B1-22zd#21] 日志端两次失败后由队列重投，告警记录保持原样",
+        "test/spec/union/auth-alert-hours/review-additions.int.test.ts > [AC-B1-22zd#9] 回调的新授权恰好 24 小时，跳过 h24，旧 h24 任务到点空转",
+        "test/spec/union/auth-alert-hours/review-additions.int.test.ts > [AC-B1-22zd#10] 刷新后的授权恰好 6 小时，只排 h1，先前排好的 h6 到点空转",
+        "test/spec/union/auth-alert-hours/review-additions.int.test.ts > [AC-B1-22zd#11] 巡检补排遇到 6 小时授权只排 h1，先前排好的 h6 到点空转",
+        "test/spec/union/auth-alert-hours/review-additions.int.test.ts > [AC-B1-22zd#12] 未配置告警手机号时 h6 照常进入 expiring，重投只保留一条后台告警",
+        "test/spec/union/auth-alert-hours/review-additions.int.test.ts > [AC-B1-22zd#13] 联盟调用已判授权失效，未到期的 h6 任务不恢复状态也不计划提醒",
+        "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 回调成功和手工换凭据都按各自到期时刻排默认 6、1 小时的单例任务",
+        "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 配置含非法值 0 时整组回退到默认值",
+        "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 配置含非法值 721 时整组回退到默认值",
+        "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 配置含非法值 1.5 时整组回退到默认值",
+        "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 配置含非法值 6 时整组回退到默认值",
+        "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 自定义 [3] 只排 3 小时节点，重复值合并且 720 小时可用，空数组关闭",
+        "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 手工录入的小时节点严格小于授权总时长，恰好 1 小时不排任何节点",
+        "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 已有刷新端口成功返回新到期时刻后，小时节点按新授权重排",
+        "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#2] 超过 30 天未排的小时节点在进入窗口后由每日巡检按到点时刻补排",
+        "test/spec/union/auth-alert-hours/scheduling.int.test.ts > [AC-B1-22zd#5] 巡检只补排下次巡检前的小时节点，处理后已发的 d1 阶段保持不变",
+        "test/spec/union/auth-alert-hours/schema.int.test.ts > [AC-B1-22zd#8] 凭据时长列是可空整数且拒绝负数，账号阶段约束继续拒绝 h6",
+        "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts > [AC-B1-22zd#23] 新授权恰好 24 小时，旧 h24 等于新授权总时长，小时任务不写告警也不排日志任务",
+        "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts > [AC-B1-22zd#23] 重新授权改变到期时刻，旧 h6 已失效，小时任务不写告警也不排日志任务",
+        "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts > [AC-B1-22zd#24] 刷新返回新有效期后授权总时长恰好 6 小时，旧 h6 到点不写告警也不排日志任务",
+        "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts > [AC-B1-22zd#24] 巡检补排后授权总时长恰好 6 小时，旧 h6 到点不写告警也不排日志任务",
+        "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts > [AC-B1-22zd#25] 授权已被联盟判为失效，旧 h6 不写告警也不排日志任务",
+        "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts > [AC-B1-22zd#25] 更小的 h1 已发出，旧 h6 不写告警也不排日志任务"
+      ],
+      "expected": [
+        "test/spec/union/auth-alert-hours/durations.int.test.ts",
+        "test/spec/union/auth-alert-hours/monitor.int.test.ts",
+        "test/spec/union/auth-alert-hours/persistent-alerts.int.test.ts",
+        "test/spec/union/auth-alert-hours/review-additions.int.test.ts",
+        "test/spec/union/auth-alert-hours/scheduling.int.test.ts",
+        "test/spec/union/auth-alert-hours/schema.int.test.ts",
+        "test/spec/union/auth-alert-hours/skipped-persistent-alerts.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "71f35170b969c24968fad02bebac10be48cf78c7a4d35c0f0beaf03da60ad640"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "012db6195a8d2f51c5ebb4ab55c94194c564db6f",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}

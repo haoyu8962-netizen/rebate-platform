@@ -6720,9 +6720,46 @@ CREATE TABLE app.union_accounts (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     auth_expires_estimated boolean DEFAULT false NOT NULL,
+    hour_alert_key text,
     CONSTRAINT union_accounts_alert_stage_check CHECK (((alert_stage = ANY (ARRAY['none'::text, 'expired'::text])) OR (alert_stage ~ '^d[1-9][0-9]{0,2}$'::text))),
     CONSTRAINT union_accounts_auth_status_check CHECK ((auth_status = ANY (ARRAY['active'::text, 'expiring'::text, 'expired'::text])))
 );
+
+
+--
+-- Name: COLUMN union_accounts.hour_alert_key; Type: COMMENT; Schema: app; Owner: -
+--
+
+COMMENT ON COLUMN app.union_accounts.hour_alert_key IS 'BR-ID-24: last hour alert node handled, <auth_expires_at epoch ms>:h<N>; written by the hour job only';
+
+
+--
+-- Name: union_auth_alerts; Type: TABLE; Schema: app; Owner: -
+--
+
+CREATE TABLE app.union_auth_alerts (
+    id uuid NOT NULL,
+    app_id text NOT NULL,
+    union_account_id uuid NOT NULL,
+    platform text NOT NULL,
+    stage text NOT NULL,
+    alert_key text NOT NULL,
+    auth_expires_at timestamp with time zone,
+    entered_at timestamp with time zone,
+    phones_configured boolean NOT NULL,
+    cause text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT union_auth_alerts_cause_check CHECK ((cause = ANY (ARRAY['time'::text, 'probe'::text, 'call'::text]))),
+    CONSTRAINT union_auth_alerts_expired_check CHECK ((((stage = 'expired'::text) = (cause IS NOT NULL)) AND ((stage = 'expired'::text) = (entered_at IS NOT NULL)))),
+    CONSTRAINT union_auth_alerts_stage_check CHECK ((stage ~ '^(d[0-9]+|h[0-9]+|expired)$'::text))
+);
+
+
+--
+-- Name: TABLE union_auth_alerts; Type: COMMENT; Schema: app; Owner: -
+--
+
+COMMENT ON TABLE app.union_auth_alerts IS 'BR-ID-24: backend alert of the site authorization, one row per account, node and authorization; append-only';
 
 
 --
@@ -6825,8 +6862,25 @@ CREATE TABLE app.union_credentials (
     expires_at timestamp with time zone,
     is_current boolean NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    re_expires_in_s integer,
+    r1_expires_in_s integer,
+    r2_expires_in_s integer,
+    w1_expires_in_s integer,
+    w2_expires_in_s integer,
+    CONSTRAINT union_credentials_r1_expires_in_s_check CHECK ((r1_expires_in_s >= 0)),
+    CONSTRAINT union_credentials_r2_expires_in_s_check CHECK ((r2_expires_in_s >= 0)),
+    CONSTRAINT union_credentials_re_expires_in_s_check CHECK ((re_expires_in_s >= 0)),
+    CONSTRAINT union_credentials_w1_expires_in_s_check CHECK ((w1_expires_in_s >= 0)),
+    CONSTRAINT union_credentials_w2_expires_in_s_check CHECK ((w2_expires_in_s >= 0))
 );
+
+
+--
+-- Name: COLUMN union_credentials.re_expires_in_s; Type: COMMENT; Schema: app; Owner: -
+--
+
+COMMENT ON COLUMN app.union_credentials.re_expires_in_s IS 'BR-ID-24: Taobao re_expires_in seconds of this authorization (> 0 renewable); NULL unknown';
 
 
 --
@@ -9300,6 +9354,22 @@ ALTER TABLE ONLY app.union_accounts
 
 
 --
+-- Name: union_auth_alerts union_auth_alerts_alert_key; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_auth_alerts
+    ADD CONSTRAINT union_auth_alerts_alert_key UNIQUE (app_id, union_account_id, stage, alert_key);
+
+
+--
+-- Name: union_auth_alerts union_auth_alerts_pkey; Type: CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_auth_alerts
+    ADD CONSTRAINT union_auth_alerts_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: union_auth_sessions union_auth_sessions_pkey; Type: CONSTRAINT; Schema: app; Owner: -
 --
 
@@ -11747,6 +11817,13 @@ CREATE TRIGGER share_materials_append_only BEFORE DELETE OR UPDATE ON app.share_
 
 
 --
+-- Name: union_auth_alerts union_auth_alerts_append_only; Type: TRIGGER; Schema: app; Owner: -
+--
+
+CREATE TRIGGER union_auth_alerts_append_only BEFORE DELETE OR UPDATE ON app.union_auth_alerts FOR EACH ROW EXECUTE FUNCTION app.reject_update_delete();
+
+
+--
 -- Name: union_auth_sessions union_auth_sessions_no_rewrite; Type: TRIGGER; Schema: app; Owner: -
 --
 
@@ -13169,6 +13246,14 @@ ALTER TABLE ONLY app.tax_ytd
 
 ALTER TABLE ONLY app.union_accounts
     ADD CONSTRAINT union_accounts_auth_renewed_by_fkey FOREIGN KEY (app_id, auth_renewed_by) REFERENCES app.admin_users(app_id, id);
+
+
+--
+-- Name: union_auth_alerts union_auth_alerts_account_fkey; Type: FK CONSTRAINT; Schema: app; Owner: -
+--
+
+ALTER TABLE ONLY app.union_auth_alerts
+    ADD CONSTRAINT union_auth_alerts_account_fkey FOREIGN KEY (app_id, platform, union_account_id) REFERENCES app.union_accounts(app_id, platform, id);
 
 
 --
@@ -18568,6 +18653,14 @@ GRANT SELECT ON TABLE app.union_accounts TO couli_readonly;
 
 
 --
+-- Name: TABLE union_auth_alerts; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT,INSERT ON TABLE app.union_auth_alerts TO couli_app;
+GRANT SELECT ON TABLE app.union_auth_alerts TO couli_readonly;
+
+
+--
 -- Name: TABLE union_auth_sessions; Type: ACL; Schema: app; Owner: -
 --
 
@@ -18668,6 +18761,41 @@ GRANT SELECT(created_at) ON TABLE app.union_credentials TO couli_readonly;
 
 GRANT UPDATE(updated_at) ON TABLE app.union_credentials TO couli_app;
 GRANT SELECT(updated_at) ON TABLE app.union_credentials TO couli_readonly;
+
+
+--
+-- Name: COLUMN union_credentials.re_expires_in_s; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT(re_expires_in_s) ON TABLE app.union_credentials TO couli_readonly;
+
+
+--
+-- Name: COLUMN union_credentials.r1_expires_in_s; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT(r1_expires_in_s) ON TABLE app.union_credentials TO couli_readonly;
+
+
+--
+-- Name: COLUMN union_credentials.r2_expires_in_s; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT(r2_expires_in_s) ON TABLE app.union_credentials TO couli_readonly;
+
+
+--
+-- Name: COLUMN union_credentials.w1_expires_in_s; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT(w1_expires_in_s) ON TABLE app.union_credentials TO couli_readonly;
+
+
+--
+-- Name: COLUMN union_credentials.w2_expires_in_s; Type: ACL; Schema: app; Owner: -
+--
+
+GRANT SELECT(w2_expires_in_s) ON TABLE app.union_credentials TO couli_readonly;
 
 
 --

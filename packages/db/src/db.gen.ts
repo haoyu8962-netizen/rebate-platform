@@ -2140,6 +2140,10 @@ export interface UnionAccounts {
   auth_renewed_by: string | null;
   auth_status: string;
   created_at: Generated<Timestamp>;
+  /**
+   * BR-ID-24: last hour alert node handled, <auth_expires_at epoch ms>:h<N>; written by the hour job only
+   */
+  hour_alert_key: string | null;
   id: string;
   last_probe_at: Timestamp | null;
   last_probe_error: string | null;
@@ -2149,6 +2153,20 @@ export interface UnionAccounts {
   status: string;
   sync_start_at: Timestamp | null;
   updated_at: Generated<Timestamp>;
+}
+
+export interface UnionAuthAlerts {
+  alert_key: string;
+  app_id: string;
+  auth_expires_at: Timestamp | null;
+  cause: string | null;
+  created_at: Generated<Timestamp>;
+  entered_at: Timestamp | null;
+  id: string;
+  phones_configured: boolean;
+  platform: string;
+  stage: string;
+  union_account_id: string;
 }
 
 export interface UnionAuthSessions {
@@ -2206,9 +2224,17 @@ export interface UnionCredentials {
   expires_at: Timestamp | null;
   id: string;
   is_current: boolean;
+  r1_expires_in_s: number | null;
+  r2_expires_in_s: number | null;
+  /**
+   * BR-ID-24: Taobao re_expires_in seconds of this authorization (> 0 renewable); NULL unknown
+   */
+  re_expires_in_s: number | null;
   refresh_token_cipher: Buffer | null;
   union_account_id: string;
   updated_at: Generated<Timestamp>;
+  w1_expires_in_s: number | null;
+  w2_expires_in_s: number | null;
 }
 
 export interface UnionFilingAttempts {
@@ -2560,6 +2586,7 @@ export interface DB {
   sync_cursors: SyncCursors;
   tax_ytd: TaxYtd;
   union_accounts: UnionAccounts;
+  union_auth_alerts: UnionAuthAlerts;
   union_auth_sessions: UnionAuthSessions;
   union_binding_conflicts: UnionBindingConflicts;
   union_bindings: UnionBindings;

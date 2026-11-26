@@ -5,7 +5,8 @@
 //   channel sms, code = template, status queued, planned_at = Clock). dedupe_key =
 //   `union_auth:<union_account_id>:<auth_expires_at ISO | none>:<stage>:<phoneId>`, and for stage
 //   `expired` one more segment, the ISO instant the account entered expired (D10-179: a later
-//   re-entry alerts again, a rerun of the same entry does not). ON CONFLICT (app_id, dedupe_key)
+//   re-entry alerts again, a rerun of the same entry does not) — plan.enteredAt when the caller
+//   gives it (B1-22ze: the same instant as union's persistent alert), else the Clock reading. ON CONFLICT (app_id, dedupe_key)
 //   DO NOTHING: a repeat or a concurrent plan adds nothing; the count of new rows is returned.
 // - deliver(appId, unionAccountId, phones): the deliverable rows of exactly that account and
 //   app — queued, or claims left unconfirmed for 10 minutes. Per row: claim and commit first
@@ -40,6 +41,12 @@ export interface SiteAuthAlertPlan {
   stage: string;
   code: 'UNION_AUTH_EXPIRING' | 'UNION_AUTH_EXPIRED';
   phoneIds: readonly string[];
+  /**
+   * expired only: the instant the account entered expired, as the caller recorded it (B1-22ze:
+   * union writes its persistent alert with the same instant). When given, the expired dedupe key
+   * carries it; absent or null, the key carries this port's own Clock reading as before.
+   */
+  enteredAt?: Date | null;
 }
 export interface SiteAuthAlertPort {
   plan(trx: Transaction<DB>, plan: SiteAuthAlertPlan): Promise<number>;
@@ -128,7 +135,8 @@ const KEY_SHAPE = new RegExp(
 export function siteAuthAlertKey(plan: SiteAuthAlertPlan, phoneId: string, now: Date): string {
   const expires = plan.authExpiresAt === null ? 'none' : plan.authExpiresAt.toISOString();
   const base = `${KEY_PREFIX}:${plan.unionAccountId}:${expires}:${plan.stage}:${phoneId}`;
-  return plan.stage === 'expired' ? `${base}:${now.toISOString()}` : base;
+  if (plan.stage !== 'expired') return base;
+  return `${base}:${(plan.enteredAt ?? now).toISOString()}`;
 }
 
 interface ParsedKey {

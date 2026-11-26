@@ -188,6 +188,11 @@ it('[AC-B1-22a#2] reminder stages accept configurable days 1–999 and reject ma
     ['is_current', 'bool', false, false],
     ['created_at', 'timestamptz', false, true],
     ['updated_at', 'timestamptz', false, true],
+    ['re_expires_in_s', 'int4', true, false],
+    ['r1_expires_in_s', 'int4', true, false],
+    ['r2_expires_in_s', 'int4', true, false],
+    ['w1_expires_in_s', 'int4', true, false],
+    ['w2_expires_in_s', 'int4', true, false],
   ] as const;
   expect(await columns(app, 'union_credentials')).toEqual(
     credentialColumns.map(([name, type, nullable, defaulted]) => ({
