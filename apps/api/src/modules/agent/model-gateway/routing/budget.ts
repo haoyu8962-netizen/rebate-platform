@@ -2,7 +2,8 @@
 // router's per-call budget check. Before a call: the request as it will be sent (with its
 // max_tokens), its UTF-8 body bytes and the run's allowance (budget/index.ts callAllowance); no
 // allowance, or non-text content in the request, and the call is not made (the run ends by
-// budget). After it: the spend is added to the run's in-memory U exactly once.
+// budget). After it: the spend is added to the run's in-memory U once (a W booking may be
+// corrected once by late usage, see chargeFor).
 import { callCostMfen } from '@couli/money';
 
 import { callAllowance, type ModelPrice } from '../../budget/index.ts';
@@ -130,7 +131,13 @@ function usageCost(usage: unknown, price: ModelPrice): bigint | null {
   return callCostMfen(BigInt(input), BigInt(output), price.inMfenPerM, price.outMfenPerM);
 }
 
-/** One call's charge to the run's U, applied at most once (whichever end comes first). */
+/**
+ * One call's charge to the run's U. B3-09o (money review r1 S0): the call's booking is a small
+ * state: not booked / not sent (final) / booked by usage (final) / booked at W. Booked at W may be
+ * corrected once by a later event of the same call that carries valid usage (the router's timeout
+ * branch and the transport's usage-carrying error race; neither order is guaranteed), so U holds 0,
+ * W or one usage cost for the call and `calls` counts it at most once.
+ */
 export interface CallCharge {
   /** The request is about to be handed to the gateway. */
   dispatched(): void;
@@ -143,51 +150,90 @@ export interface CallCharge {
   failed(error: unknown): void;
 }
 
+type ChargeState = 'none' | 'unsent' | 'usage' | 'worst';
+
 export function chargeFor(
   budget: RunCallBudget,
   planned: BudgetedRequest,
   logger?: { warn(obj: object, msg: string): void },
 ): CallCharge {
   let dispatched = false;
-  let done = false;
-  const add = (cost: bigint) => {
-    done = true;
+  let state: ChargeState = 'none';
+  const warnOver = (cost: bigint, late: boolean) => {
+    if (cost <= planned.worstMfen) return;
+    // 细则: the premise failed; booked as reported, not capped, one warn line.
+    logger?.warn(
+      {
+        cost_mfen: cost.toString(),
+        worst_mfen: planned.worstMfen.toString(),
+        ...(late ? { late: true } : {}),
+      },
+      'agent.budget_usage_over_worst',
+    );
+  };
+  const book = (cost: bigint, next: 'usage' | 'worst') => {
+    state = next;
     budget.spentMfen += cost;
     budget.calls += 1;
   };
-  const byUsage = (usage: unknown): boolean => {
-    const cost = usageCost(usage, planned.price);
-    if (cost === null) return false;
-    if (cost > planned.worstMfen) {
-      // 细则: the premise failed; booked as reported, not capped, one warn line.
+  /**
+   * Usage reported after the call was booked at W: rebook it at the usage cost, as reported (up or
+   * down, not capped; D10-3330). `calls` already counts this call.
+   */
+  const correct = (cost: bigint) => {
+    if (budget.spentMfen < planned.worstMfen) {
+      // Cannot happen (U only grows and this call added W); keep W rather than drive U negative.
       logger?.warn(
-        { cost_mfen: cost.toString(), worst_mfen: planned.worstMfen.toString() },
-        'agent.budget_usage_over_worst',
+        { spent_mfen: budget.spentMfen.toString(), worst_mfen: planned.worstMfen.toString() },
+        'agent.budget_charge_correction_skipped',
       );
+      return;
     }
-    add(cost);
-    return true;
+    state = 'usage';
+    budget.spentMfen = budget.spentMfen - planned.worstMfen + cost;
+    warnOver(cost, true);
   };
+  /** Usage cost from an event, or null when it carries none that is valid. */
+  const costOf = (usage: unknown) => usageCost(usage, planned.price);
   return {
     dispatched() {
       dispatched = true;
     },
     answered(usage) {
-      if (done) return;
-      if (!byUsage(usage)) add(planned.worstMfen);
+      if (state === 'unsent' || state === 'usage') return;
+      const cost = costOf(usage);
+      if (state === 'worst') {
+        if (cost !== null) correct(cost);
+        return;
+      }
+      if (cost === null) {
+        book(planned.worstMfen, 'worst');
+        return;
+      }
+      warnOver(cost, false);
+      book(cost, 'usage');
     },
     failed(error) {
-      if (done) return;
-      const usage =
-        typeof error === 'object' && error !== null ? (error as { usage?: unknown }).usage : null;
-      if (byUsage(usage)) return;
+      if (state === 'unsent' || state === 'usage') return;
+      const cost = costOf(
+        typeof error === 'object' && error !== null ? (error as { usage?: unknown }).usage : null,
+      );
+      if (state === 'worst') {
+        if (cost !== null) correct(cost);
+        return;
+      }
+      if (cost !== null) {
+        warnOver(cost, false);
+        book(cost, 'usage');
+        return;
+      }
       // Never sent, not charged: the gateway refuses before the transport with VendorError, or
       // the transport failed before handing the request to its HTTP client (B3-09o: wasNotSent).
       if (!dispatched || error instanceof VendorError || wasNotSent(error)) {
-        done = true;
+        state = 'unsent';
         return;
       }
-      add(planned.worstMfen);
+      book(planned.worstMfen, 'worst');
     },
   };
 }
