@@ -1,0 +1,28 @@
+id: CT-06zzzzzzzm
+repo: rebate-platform
+title: 'test-change（FU-CT06G-CONFIRM-ROUND-SPEC-GAPS）：CT-06zzzzzzzg 规则测试评审末轮两条缺口补到规则测试层——确认轮的台账增量按基线算、不按上一版提交算；带合法基线时非 spec-test 类型照样被拒、轮次退回'
+type: test-change
+# 2026-11-26 ops 入账（编排 D10-3231 定「落地后以 test-change 伴随单补成规则测试」、D10-3249 ② 排期；CT-06zzzzzzzg 已合并 #831）。走 D10-2264：非 task 分支的 test-change PR + 探针清单。
+# 来由：CT-06zzzzzzzg 规则测试评审增量（approvals 第 215 条那一轮，原文 couli-runs/CT-06zzzzzzzg/review-claude-independent.json）fail 的两条 S1，当时转为实现必满足项 + 实现方单测：
+#   ① [AC-CT-06zzzzzzzg#9] 的基线恰是当前台账的上一版提交，「拿当前台账与上一版提交比、不看基线」的错误实现也能过；
+#   ② [AC-CT-06zzzzzzzg#3] 不给基线、没有可信台账历史，基线检查先退 2，省掉 review-type 检查的错误实现也能过。
+# 做法：只新增 test/spec/ci/review-rubric-trusted/companion/ 下的文件（现有 context.test.ts / prompt.test.ts 与 tools/agent/testing/fixture.ts 只读引用，不改任何冻结文件，不改实现）；两个包装 codex-run.sh / claude-run.sh 都要覆盖。
+#   新用例 ①：基线 → 中间一版提交（只放新增的声明）→ 当前台账（只放改动的声明，另改标题）；确认轮上下文里新增与改动两组键都在、未变与已删的键都不在、条数对。
+#   新用例 ②：给合法基线（可信根的提交、台账在、在 HEAD 的祖先上）与可信台账历史，review-type 为缺省、general、money、contract 时带 --confirm-round <基线> 都退 2、code 轮次退回（outcome refused）、不起模型（无 argv.nul）。
+# 实现已在主干（#831），新用例在主干上应为绿；有牙由探针清单证明（D10-2264），探针只在临时游离 worktree 上改、不提交，测试机 --tests 跑：
+#   P1 codex-run.sh resolve_confirm_delta 把基线那一版换成可信根里台账的上一版提交（git log -n2 -- 台账）——须杀 ①、现有 [#9] 仍绿；
+#   P2 删去 run_task 里「--confirm-round 只给 spec-test」那一处检查——须杀 ②、现有 [#3] 仍绿。每个探针杀到哪几条写进 PR 正文与证据。不登 red_exempt。
+# 规则测试由 Codex 写；规则测试评审由独立 Claude（claude-run.sh，第 36 条），按 review-spec-test.md「伴随测试单」一节评。不挡上线，门禁测试。
+refs: []
+refs_hash: {}
+deps: [CT-06zzzzzzzg]
+paths:
+  - 'test/spec/ci/review-rubric-trusted/companion/**'
+test_paths:
+  - 'test/spec/ci/review-rubric-trusted/companion/**' # 新目录
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/review-rubric-trusted/**'
+status: todo
