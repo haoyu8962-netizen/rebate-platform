@@ -26,6 +26,7 @@ export const rules: PlatformRules = {
   // TODO(规划/11 §4.5): 京东订单商品键的 jdMode — blocked on 京东订单映射
   // 端口入参没有 App，读不到 App 级 product_key.jd.mode，不猜模式：京东不推商品键（跳过 ②）。
   pushesProductKey: false,
+  missingLinkBuyTypeBasis: null,
   // 02 §7.1、CAP-JD-07：单窗 ≤1 小时，不按 scene 分路。
   syncWindowCapMs: 60 * 60_000,
   itemIdField: 'itemId',

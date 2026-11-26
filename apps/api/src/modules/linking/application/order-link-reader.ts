@@ -4,6 +4,7 @@
 // link without a product all read as null. Read only.
 import type { DB } from '@couli/db';
 import type { Kysely } from 'kysely';
+import { LINK_CODE } from '../infra/link-code.ts';
 
 /** Linking-owned read port for the shared order projection (HTTP and B3-08). */
 export interface OrderLinkProducts {
@@ -30,13 +31,38 @@ export interface OrderAttributionLink {
   readonly agent_session_id: string | null;
 }
 
-export function readOrderAttributionLink(
+const ATTRIBUTION_LINK_COLUMNS = [
+  'link_id',
+  'user_id',
+  'platform',
+  'raw_item_id',
+  'product_key',
+  'created_at',
+  'pid_scene',
+  'scene',
+  'agent_session_id',
+] as const;
+
+/**
+ * B1-08zza (BR-ATTR-08 pdd single slot): the link one App registered under an lk, as stored, for
+ * orders' buy_type decision and its exact source match. Looked up by (app_id, lk) only (unique
+ * links_app_id_lk_key): platform, owner, item and time are returned for orders to judge. An lk
+ * outside [0-9a-z]{1,16} names no link and reads as null without a query; otherwise one SELECT on
+ * the handle given (orders passes its pipeline transaction), no cache, no write.
+ */
+export async function readOrderAttributionLink(
   db: Kysely<DB>,
   scope: OrderAttributionLinkScope,
 ): Promise<OrderAttributionLink | null> {
-  void db;
-  void scope;
-  throw new Error('NotImplemented: readOrderAttributionLink');
+  if (typeof scope.lk !== 'string' || !LINK_CODE.test(scope.lk)) return null;
+  const row = await db
+    .withSchema('app')
+    .selectFrom('links')
+    .select(ATTRIBUTION_LINK_COLUMNS)
+    .where('app_id', '=', scope.appId)
+    .where('lk', '=', scope.lk)
+    .executeTakeFirst();
+  return row ?? null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

@@ -42,13 +42,52 @@ export interface LinkBuyTypeDecision {
   readonly scene_basis: 'link' | 'fallback';
 }
 
+/** BR-ATTR-08 场景取值（推广位或参数）→ buy_type：share → share，其余 → self。 */
+const SCENES: ReadonlyMap<string, 'self' | 'share'> = new Map([
+  ['self_buy', 'self'],
+  ['agent', 'self'],
+  ['share', 'share'],
+  ['taolijin', 'self'],
+]);
+
+/** pid_scene 是否是 BR-ATTR-08 写明的取值（四个场景或 fallback）；其余（如 query）由调用方告警。 */
+export function isKnownPidScene(pidScene: string): boolean {
+  return SCENES.has(pidScene) || pidScene === 'fallback';
+}
+
+const LINK_FALLBACK: LinkBuyTypeDecision = { buy_type: 'self', scene_basis: 'fallback' };
+
+/** Two item identifiers name the same item only when both are present and equal. */
+function sameItemId(a: string | null, b: string | null): boolean {
+  return a !== null && a !== '' && a === b;
+}
+
+/**
+ * BR-ATTR-08（拼多多单推广位）：按本 App 登记的 link 判 buy_type。三项同时满足才按 link 的 pid_scene 映射
+ * （scene_basis=link）：ⓐ link.user_id 等于本单按 uid 归属的用户（两侧都要非空）；ⓑ link 与订单同平台，且
+ * goods_sign 相等、不等时 product_key 相等（两侧都要非空）；ⓒ link.created_at ≤ 订单付款时刻（同刻算有效，
+ * 付款时刻为空不算）。pid_scene 映射：share → share；self_buy / agent / taolijin / fallback → self；空或未写明
+ * 的取值不映射。link 为空（无 lk、查不到）或任一项对不上 → self / fallback。回传的 sc 不参与。
+ */
 export function classifyBuyTypeByLink(
   order: BuyTypeLinkOrder,
   link: BuyTypeLinkFacts | null,
 ): LinkBuyTypeDecision {
-  void order;
-  void link;
-  throw new Error('NotImplemented: classifyBuyTypeByLink');
+  if (link === null) return LINK_FALLBACK;
+  if (order.user_id === null || link.user_id === null || link.user_id !== order.user_id) {
+    return LINK_FALLBACK;
+  }
+  if (link.platform !== order.platform) return LINK_FALLBACK;
+  const sameItem =
+    sameItemId(order.goods_sign, link.raw_item_id) ||
+    sameItemId(order.product_key, link.product_key);
+  if (!sameItem) return LINK_FALLBACK;
+  if (order.paid_at === null || link.created_at.getTime() > order.paid_at.getTime()) {
+    return LINK_FALLBACK;
+  }
+  const pidScene = link.pid_scene;
+  if (pidScene === null || !isKnownPidScene(pidScene)) return LINK_FALLBACK;
+  return { buy_type: SCENES.get(pidScene) ?? 'self', scene_basis: 'link' };
 }
 
 // B1-08za：订单参数的解析器移到 platform-rules/params.ts（按平台的取值在 platform-rules/<platform>.ts），
@@ -88,19 +127,6 @@ export function resolveBinding(rows: readonly BindingRow[], attrAt: Date): Bindi
   if (users.size > 1) return { kind: 'conflict', user_id: null };
   const [userId] = users;
   return { kind: 'matched', user_id: userId! };
-}
-
-/** BR-ATTR-08 场景取值（推广位或参数）→ buy_type：share → share，其余 → self。 */
-const SCENES: ReadonlyMap<string, 'self' | 'share'> = new Map([
-  ['self_buy', 'self'],
-  ['agent', 'self'],
-  ['share', 'share'],
-  ['taolijin', 'self'],
-]);
-
-/** pid_scene 是否是 BR-ATTR-08 写明的取值（四个场景或 fallback）；其余（如 query）由调用方告警。 */
-export function isKnownPidScene(pidScene: string): boolean {
-  return SCENES.has(pidScene) || pidScene === 'fallback';
 }
 
 /**

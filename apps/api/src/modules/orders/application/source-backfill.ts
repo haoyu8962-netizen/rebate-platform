@@ -66,6 +66,11 @@ export interface BackfillOrderSourceInput {
    * 库内为空再取本次报文。是否把 none 留作待补由调用方判定（domain/source-shop.ts），本函数语义不变。
    */
   readonly shopId: string | null;
+  /**
+   * B1-08zza：调用方已在本事务按订单 lk 读过的 link（属于其他平台或查不到为 null）。给出时 ① exact 用它、不再调
+   * linkByCode（开关关着时照旧不看 exact）；未给（undefined）时照旧按开关自己反查。
+   */
+  readonly exactLink?: ExactLink | null;
 }
 
 const NO_PARAMS: UnionOrderAttrParams = {
@@ -96,7 +101,9 @@ export async function backfillOrderSource(
     config === null ? (ports.clickCode?.(platform) ?? false) : config.clickCodeEnabled;
   let exactLink: ExactLink | null = null;
   const lookup = ports.linkByCode;
-  if (clickCodeEnabled && lookup !== undefined) {
+  if (clickCodeEnabled && input.exactLink !== undefined) {
+    exactLink = input.exactLink;
+  } else if (clickCodeEnabled && lookup !== undefined) {
     const lk = parseLinkCode(platform, input.order.attr_params ?? NO_PARAMS);
     if (lk !== null) exactLink = await lookup.call(ports, { appId, platform, lk });
   }

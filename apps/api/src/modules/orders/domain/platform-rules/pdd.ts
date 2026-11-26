@@ -22,6 +22,9 @@ export const rules: PlatformRules = {
   },
   // BR-ATTR-08 ②：推广位 fallback 时读 custom_parameters.sc。
   sceneParamFallback: true,
+  // BR-ATTR-08 拼多多单推广位（D10-2970 第 6 条；过渡口径 D10-3278）：带 lk 按登记的 link 判；完全缺 lk 时
+  // 按推广位判（pid），实现 ② 切为 self。
+  missingLinkBuyTypeBasis: 'pid',
   // BR-CALC-03：promotion_amount 含软件服务费，N = 佣金 − 服务费；服务费缺失不得按 0 处理（D10-42 / D10-66）。
   serviceFeeDeducted: true,
   taolijinPidScene: false,

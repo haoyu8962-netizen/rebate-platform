@@ -335,6 +335,7 @@ import {
   blockForBan,
   restoreAfterUnban,
   createOrderLinkReader,
+  readOrderAttributionLink,
   createPendingAttemptStore,
   createUnionAuthReads,
   type UnionAuthReads,
@@ -2149,6 +2150,8 @@ function orderSyncPorts(
     bindings: (db) => createOrderBindingReader(db),
     quota,
     sources: (db, clock, logger) => orderSourcePorts(db, clock, logger),
+    // B1-08zza (BR-ATTR-08): linking's lk read for the pdd buy_type decision, on the pipeline's trx.
+    buyTypeLink: readOrderAttributionLink,
     snapshots: (db, clock, logger) => orderSnapshotPort(db, clock, logger),
     platformRestore: (clock) => orderPlatformRestorePort(clock),
     rebate,
