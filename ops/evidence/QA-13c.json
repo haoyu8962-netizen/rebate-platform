@@ -1,0 +1,46 @@
+{
+  "task": "QA-13c",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "spec_commit": "491c5ee3710e6b4023f787b2c31cda27b91295eb",
+  "red_tests": [],
+  "risk_note": "Dependency-only change (apps/api/package.json dependencies, pnpm-lock.yaml; class-2 protected path, owner label needed). Prerequisite of QA-13d crash reporting (保命四件套, D10-2593 / D10-2599). One package is exact-pinned: @sentry/core 11.12.0 (MIT, published 2026-11-10, older than 7 days; ADR-0001 §2), whose only dependency is @sentry/conventions 0.32.0 (MIT, no dependencies). pnpm-lock.yaml gains exactly these two entries (+17 / -0). Neither has a preinstall / install / postinstall script. Replaces QA-13a: every @sentry/node 11.x release depends on @sentry/bundler-plugins, which pulls sentry@0.49.0 (Sentry CLI, FSL-1.1-Apache-2.0, not on the license whitelist); orchestrator D10-3243 / D10-3244 chose @sentry/core only with a hand-written minimal Node integration in QA-13d; the ADR-0001 line 38 deviation (@sentry/node 11.x) is recorded by the orchestrator in a planning-repo ADR note. pnpm-workspace.yaml minimumReleaseAge 10080 is in force. Installed with pnpm --filter @couli/api add @sentry/core@11.12.0 --save-exact (pnpm 10.33.1). No code, scripts or other manifest change. verify:fast in the test-machine container exit 0; the full verify was not run for a dependency-only change, and CI verify-int is the check (D10-319).",
+  "runs": [],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex dependency review via tools/agent/codex-run.sh (approvals 27, orchestrator D10-3245; checklist as precedent B1-31a): exact version, licenses (both MIT), no install lifecycle scripts, lockfile additions only from this tree. r1 pass, no findings, no out-of-scope; validator moved 0. couli-runs/QA-13c/review-money-codex-r1.json."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 0,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "deps task, tester none (ledger QA-13c, as precedent B1-31a / F1-06t): no rule tests"
+  },
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f9ca8c2c9d53d160b2cbabf8ff41edd97eec1437",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
