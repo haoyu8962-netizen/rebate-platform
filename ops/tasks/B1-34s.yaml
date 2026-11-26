@@ -96,4 +96,5 @@ modify_existing:
     br: [BR-WDR-26, BR-ID-36, BR-ID-27]
     ruling: D10-2946
     note: 'B1-34s：日历十键追加在注册表末尾（agent.examples 之后）——块内期望的整表清单 / 计数在末尾多这十项（未写过的 value=null、version=0），其余键、顺序与断言不动'
-status: todo
+status: done
+pr: 821
