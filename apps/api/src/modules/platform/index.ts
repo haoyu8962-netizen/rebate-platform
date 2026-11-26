@@ -3,6 +3,17 @@ export * from './clock/index.ts';
 export * from './config/index.ts';
 export * from './logging/index.ts';
 export * from './tracing/index.ts';
+// QA-13d: crash reporting of the five processes (GlitchTip through @sentry/core).
+export { startCrashReporting } from './crash-report/index.ts';
+export type {
+  CrashBreadcrumb,
+  CrashCaptureContext,
+  CrashFetch,
+  CrashProcess,
+  CrashReporter,
+  CrashReportOptions,
+  CrashRequest,
+} from './crash-report/index.ts';
 export * from './idempotency/index.ts';
 export {
   registerIdempotencyEntryObserver,
