@@ -55,6 +55,8 @@ import {
   activeTracing,
   startTracing,
   type TracingHandle,
+  startCrashReporting,
+  type CrashReporter,
 } from './modules/platform/index.ts';
 import {
   orderSyncToken,
@@ -906,15 +908,25 @@ export async function runEntry(entry: EntryName): Promise<void> {
   // Tracing stops with the entry: after the entry's close on a signal (watchSignals), after a
   // startup failure's cleanup, or right away with COULI_EXIT_AFTER_INIT — never while it serves.
   let tracing: TracingHandle | undefined;
+  // QA-13d: crash reporting starts once, before the application / worker context is built (so a
+  // failed start-up is reported through logger.fatal); it is flushed and closed with the entry.
+  // Unset CRASH_REPORT_DSN: nothing is created. It never throws and never delays the exit beyond
+  // its own time limits.
+  let crashReporter: CrashReporter | undefined;
   const signals = watchSignals(logger, !config.exitAfterInit, async () => {
     await tracing?.shutdown();
+    await crashReporter?.close();
   });
   try {
     handles = createDbHandles(connections, { logger });
     if (maintConnection !== null) maintHandle = createMaintDbHandle(maintConnection, { logger });
+    crashReporter = await startCrashReporting({ entry, config, logger });
     tracing = await startTracing({ entry, config, logger });
     await start(entry, config, logger, handles, maintHandle, connections.redisUrl, signals);
-    if (config.exitAfterInit) await tracing.shutdown();
+    if (config.exitAfterInit) {
+      await tracing.shutdown();
+      await crashReporter.close();
+    }
   } catch (error) {
     signals.fail();
     try {
@@ -927,6 +939,7 @@ export async function runEntry(entry: EntryName): Promise<void> {
       // B1-31b: a startup that failed before startTracing returned (createDbHandles threw) still
       // flushes the tracing main.<entry>.ts booted; nothing is started here.
       await (tracing ?? activeTracing())?.shutdown();
+      await crashReporter?.close();
     }
   }
 }

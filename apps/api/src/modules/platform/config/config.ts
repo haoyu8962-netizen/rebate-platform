@@ -99,7 +99,45 @@ const envSchema = z.object({
     .string()
     .regex(/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/, 'must be a service name ([A-Za-z0-9_.-], 1–128)')
     .optional(),
+  // QA-13d (01 F-OBS-01, 02 §13 崩溃行): crash reporting of every entry to GlitchTip. Unset = nothing
+  // is initialised. A DSN `<http(s)>://<public key>@<host>[:<port>][/<prefix>]/<project id>`; the
+  // message never repeats the value (the DSN is never logged).
+  CRASH_REPORT_DSN: z
+    .string()
+    .refine(
+      isCrashReportDsn,
+      'must be an http(s) DSN <scheme>://<public key>@<host>/<numeric project id>',
+    )
+    .optional(),
+  // Host-name suffixes (comma-separated, each starting with a dot) that count as internal for the
+  // payout entry's crash reporting, besides private-range IPv4 addresses. Unset = none.
+  CRASH_REPORT_INTERNAL_HOST_SUFFIXES: z
+    .string()
+    .regex(
+      /^\s*\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\s*(?:,\s*\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\s*)*$/,
+      'must be comma-separated host-name suffixes, each starting with a dot',
+    )
+    .optional(),
 });
+
+/** QA-13d: http(s), public key, no password, a host, a numeric project id, no query or fragment. */
+function isCrashReportDsn(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  return (
+    (url.protocol === 'http:' || url.protocol === 'https:') &&
+    url.hostname !== '' &&
+    url.username !== '' &&
+    url.password === '' &&
+    url.search === '' &&
+    url.hash === '' &&
+    /^(?:\/[^/]+)*\/\d+\/?$/.test(url.pathname)
+  );
+}
 
 /** B1-31: http(s), a non-empty host, no username / password (the value is never echoed). */
 function isTraceEndpoint(value: string): boolean {
@@ -322,6 +360,12 @@ export interface AppConfig {
    */
   readonly tracing?: TracingConfig | undefined;
   /**
+   * CRASH_REPORT_DSN / CRASH_REPORT_INTERNAL_HOST_SUFFIXES (QA-13d, 01 F-OBS-01): crash reporting of
+   * every entry to GlitchTip. Present only when the DSN is set; a hand-built config without it
+   * initialises nothing and installs no hook.
+   */
+  readonly crashReport?: CrashReportConfig | undefined;
+  /**
    * QUEUE_CONCURRENCY_<Q> / QUEUE_DB_BUDGET (./queue-concurrency.ts, B1-01zzk): the worker's
    * per-queue concurrency overrides (only lower than ENTRY_PLAN) and its shared budget of handler
    * calls running at once. Present only when one of them is set; a hand-built config without it
@@ -334,6 +378,13 @@ export interface AppConfig {
    * channel, the payment module's factory fails closed. Never holds a key.
    */
   readonly payChannels?: PayChannelsConfig | null | undefined;
+}
+
+/** Crash reporting (QA-13d): the DSN, and the host suffixes payout treats as internal. */
+export interface CrashReportConfig {
+  readonly dsn: string;
+  /** Lower case, each starting with a dot; empty when unset. */
+  readonly internalHostSuffixes: readonly string[];
 }
 
 /** Where the internal /metrics listener binds (B1-01zzh). */
@@ -620,6 +671,19 @@ export function loadConfig(
             ...(values.OTEL_SERVICE_NAME === undefined
               ? {}
               : { serviceName: values.OTEL_SERVICE_NAME }),
+          },
+        }),
+    // Only present when configured (QA-13d), so the documented shape of an unconfigured result is
+    // unchanged.
+    ...(values.CRASH_REPORT_DSN === undefined
+      ? {}
+      : {
+          crashReport: {
+            dsn: values.CRASH_REPORT_DSN,
+            internalHostSuffixes: (values.CRASH_REPORT_INTERNAL_HOST_SUFFIXES ?? '')
+              .split(',')
+              .map((suffix) => suffix.trim().toLowerCase())
+              .filter((suffix) => suffix !== ''),
           },
         }),
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.

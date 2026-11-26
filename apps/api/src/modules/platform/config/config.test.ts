@@ -359,3 +359,38 @@ describe('readTrustedProxies', () => {
     ).toEqual(['10.0.0.0/8', '198.51.100.1/32', '::1/128']);
   });
 });
+
+describe('CRASH_REPORT_DSN', () => {
+  const DSN = 'https://0123456789abcdef0123456789abcdef@glitchtip.unit.test/5';
+
+  it('[AC-QA-13d#1] unset: no crashReport key at all', () => {
+    expect('crashReport' in loadConfig({ APP_ENV: 'local' })).toBe(false);
+  });
+
+  it('[AC-QA-13d#1] set: the DSN as given and the internal host suffixes in lower case', () => {
+    const config = loadConfig({
+      APP_ENV: 'local',
+      CRASH_REPORT_DSN: DSN,
+      CRASH_REPORT_INTERNAL_HOST_SUFFIXES: '.Corp.Internal, .lan',
+    });
+    expect(config.crashReport).toEqual({
+      dsn: DSN,
+      internalHostSuffixes: ['.corp.internal', '.lan'],
+    });
+  });
+
+  it('[AC-QA-13d#1] a malformed DSN or suffix list is refused without echoing it', () => {
+    for (const [name, value] of [
+      ['CRASH_REPORT_DSN', 'https://:secret@unit-dsn-a.test/5'],
+      ['CRASH_REPORT_DSN', 'https://0123abcd:pass@unit-dsn-b.test/5'],
+      ['CRASH_REPORT_DSN', 'https://0123abcd@unit-dsn-c.test/5?x=1'],
+      ['CRASH_REPORT_INTERNAL_HOST_SUFFIXES', 'unit-suffix-d.test'],
+    ] as const) {
+      const problems = problemsOf({ APP_ENV: 'local', [name]: value });
+      expect(problems).toHaveLength(1);
+      expect(problems[0]?.startsWith(`${name}:`)).toBe(true);
+      expect(problems.join('\n')).not.toContain(value);
+      expect(problems.join('\n')).not.toContain('unit-');
+    }
+  });
+});
