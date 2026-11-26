@@ -1,0 +1,38 @@
+id: CT-24zzw
+repo: rebate-platform
+title: '契约：后台分佣规则版本七个操作（planned）——/admin/v1/commission-rules 列表、详情、起草、校验、试算、发布、撤销；不新增错误码，20001 加 reason commission_rule_invalid，20902 加 resource commission_rule_version / commission_rule_trial 与四个 reason'
+type: contract
+# 2026-11-27 funds 线入账（编排 D10-3358 ⑤ / D10-3371 / D10-3373；来由 Gemini T05 对账 2.2：服务层 B2-03k 已做完，后台没有 HTTP 入口；BR-CALC-22 写明上线前由超管在后台发布首个正式版本）。
+# 草案全文 couli-runs/FUNDS-quote/commission-rules-contract-draft-20261127.md（编排核过）。七个操作都挂 /admin/v1/commission-rules，x-auth admin，权限点 config.business，不带 x-step-up（BR-CALC-22：2026-11-23 起发布不做二次验证），
+#   四个写操作不带 Idempotency-Key（照页面配置、风控规则先例），全部标 x-implementation: planned（后端单 B2-03l 落地时去掉；B2-03l deps B1-18l，另入账）。
+#   校验是 GET …/validation，200 返回 valid 与问题清单（问题带 platform / level / order_type）；试算返回试算号、样本窗口、到期时间与各平台现行 / 草稿的对比金额（_fen int64、_bp int32）；发布请求体只有 trial_id；列表与详情的版本头带 in_effect。
+# 错误码不新增（error-codes.yaml 文件头：码值只照 08 §13.11 分配）。服务层诊断码的对应：版本 / 基准版本 / 试算号不存在或不匹配 → 20001 data.fields；内容不合规 → 20001 data.reason=commission_rule_invalid；
+#   状态不对、基准版本已变（base_version_changed）、已生效不能撤销（already_effective）→ 20902 data.resource=commission_rule_version；试算过期（trial_expired）、样本已变（trial_sample_changed）→ 20902 data.resource=commission_rule_trial；
+#   试算因样本数据算不了 → 50001（D10-3373 ②）。status 字段与 enums/fund.yaml 已有的 commission_rule_status 绑定（conformance.ts 的 ENUM_BINDINGS 登记）。规划侧同步（04 §6.6、08 §13.11）由编排排，FU-PLAN-COMMISSION-RULES-ADMIN-API。
+# 入账前只读盘点过：新操作不带 x-step-up、不新增权限点，不碰 [AC-CT-24zzv#1] 的档位白名单与 admin_permission 计数；planned-operations 生成物与三个路由生成物要重新生成；后台文案不进 contracts/texts。
+#   盘点是静态读的，开工后 pnpm contracts:check 与测试机若有冻结用例变红，停下按清单类报编排、台账补丁登记。占用契约槽：开工前看槽、落地后公告还槽。
+refs: [BR-CALC-22, BR-CALC-11, BR-CALC-06, BR-CALC-07]
+refs_hash:
+  BR-CALC-22: 2655002e85fb
+  BR-CALC-11: 32a4bb92195a
+  BR-CALC-06: 8cc9b9a9afc7
+  BR-CALC-07: dabd48fba586
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/admin-commission-rules/**' # 新目录
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'pnpm contracts:check'
+  - 'test/spec/contracts/admin-commission-rules/**'
+status: todo
+pr: null
