@@ -1,0 +1,30 @@
+id: B1-08zzc
+repo: rebate-platform
+title: 淘宝订单推广位匹配按 BR-ATTR-02 的 (platform, union_account_id, site_id, adzone_id) 核对——真实回包只有数字 adzone_id 与 site_id 也能命中登记的 mm_ pid；adzone 命中而 site 不符的不入库（SITE_MISMATCH）并发 P1 告警
+type: impl
+# 2026-11-27 w1 入账（编排 D10-3338 S0：Gemini T05 对账线索，编排已核主干 77e25c407 属实；w1 在主干 83582c2c8 复核同样成立）。归属类，RV2，Codex 资金评审。负责人淘宝真实下单测试排在本单落地之后。
+# 现状：union/infra/taobao/orders.ts:1076 的 promotion_slot 只取 adzone_id 数字（:529 adzoneOf），:1099 已映射 site_id；orders/application/pipeline-port.ts:205–216 拿 promotion_slot 经
+#   union/application/order-sync-ports.ts:152–161 对 union_pids.pid 做等值查询，而淘宝 pid 存的是 mm_<会员>_<site>_<adzone>（union/pids/service.ts:204 / :271–279）——真实淘宝订单全部按 PID_NOT_OURS 丢弃；
+#   pipeline-port.ts:95 的 TODO（「无 site_id」）前提已不成立。
+# 做法：只改淘宝的匹配，京东 / 拼多多原样不动。淘宝：在本 App、本联盟账号的 union_pids（pending / active / retired 都算）里找 pid 第三段 = 订单 adzone_id 的记录——
+#   有且其 site_id = 订单 site_id → 命中（与现在相同的后续步骤）；有但 site_id 都不等 → 不入库，reason='SITE_MISMATCH'（照 PID_NOT_OURS 同样写 order_sync_drop_keys / order_sync_drops 计数）并发一条 P1 告警
+#   （照现有订单告警出口，告警不含订单号、金额与会员标识以外的个人信息）；一条都没有 → PID_NOT_OURS。订单 site_id 缺失按不命中处理（PID_NOT_OURS），不猜。
+# promotion_slot 的取值与淘宝订单映射（taobao-orders 冻结用例钉 promotion_slot = adzone_id）不改；drop 原因列是自由文本，不需要迁移。
+# 规则测试钉：① 真实回包形状（数字 adzone_id + site_id）命中登记的 mm_<a>_<site>_<adzone> pid，订单入库且归属正确；② adzone 命中、site 不符 → SITE_MISMATCH 丢弃、计数、恰一条 P1 告警；
+#   ③ adzone 不命中 → PID_NOT_OURS；④ 订单缺 site_id → PID_NOT_OURS；⑤ retired / pending 的 pid 照样命中；⑥ 跨 App / 跨联盟账号的同号 pid 不命中；⑦ 京东、拼多多的匹配行为不变（各一例）。
+# 协调：be 的 B1-08zza 也改 pipeline-port.ts（④ classifyBuyType），本单只动 ① App 归属那段；谁后落地谁变基，冲突只在同文件不同函数。
+refs: [BR-ATTR-02]
+refs_hash:
+  BR-ATTR-02: c496154f5bcf
+deps: []
+paths:
+  - 'apps/api/src/modules/orders/application/{pipeline-port,pipeline-port.test,pipeline-types}.ts'
+  - 'apps/api/src/modules/union/application/{order-sync-ports,order-sync-ports.test}.ts'
+test_paths:
+  - 'test/spec/orders/taobao-slot-match/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/taobao-slot-match/**'
+status: todo
