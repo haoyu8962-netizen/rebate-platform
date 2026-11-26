@@ -1,0 +1,37 @@
+id: CT-06zzzzzzzn
+repo: rebate-platform
+title: CT-06zzzzzzzn（FU-SPEC-HANDBACK-TSC + FU-RED-TYPECHECK-NEW-SPEC）：先红在 red-check 之后加一步类型检查（tsc -b test），规则测试有类型错误即先红失败并点名文件与 TS 报错（D10-3332 ⑥ / D10-3356）
+type: guard-change
+# 2026-11-27 ops 入账（编排 D10-3332 ⑥、D10-3356）。第三类保护路径 tools/**：任务 PR 的批准标签由负责人加，land 前报编排转负责人。
+# 起因：先红（verify-container.sh --red）只跑用例、不做类型检查——B1-18l 实现 1 时红的 23 条 + 17 处 TS 报错都是规则测试自己写错（D10-3332），
+#   CT-06zzzzzzzj 的 TS2379 也是先红与规则测试评审都过了、到实现后的 --fast 才红（FU-RED-TYPECHECK-NEW-SPEC）。
+# 入账前已在测试机验证（couli-runs/OPS-lane/TSC-RED-PROBE/，借现有 --fast-part base 的第一步 pnpm run typecheck = tsc -b）：
+#   (a) B1-18l 规则测试提交 5ee78d1f4（只有规则测试与骨架、没有实现，即先红那一刻的树）上 typecheck 退出 2，报出的 17 处 TS 报错与
+#       B1-18l/impl1-tsc-errors.txt 逐条相同（6 个文件）；(b) 干净树（主干 9fbac3f9c + CT-06zzzzzzzm 伴随测试）上 typecheck 0、其余九步全过。
+#   typecheck 一步约 3.5–4 分钟（couli-ci2）。
+# 做法：tools/ops/verify-container.sh 的 --red 在 red-check（与 evidence-check --early）之后，在同一快照、同一离线容器里跑 `tsc -b test`
+#   （test/tsconfig.json 引用各包，只做类型检查，产物留在容器内）；退出非 0 即先红失败——red 的退出码改为非 0（类型检查失败与红用例不足
+#   要能区分：result.json 加 typecheck { exit_code, errors: [{ file, line, col, code }] }，日志末尾一行摘要点名文件与 TS 编号）；
+#   red-check 本身失败或环境错误时照旧以 red-check 的退出码为准，不再跑类型检查。--tests / --fast / 其他模式不变。
+#   tools/ops/README（或 tools/agent/README 先红一节）补一句：先红含类型检查，写测交回后类型错误在先红就拦下。
+# 不在本单：verify:fast 的内容、tsconfig 与 vitest 配置（第二类）、codex-run / post-run（类型检查放在测试机的先红里，不在本机跑 tsc）。
+# 规则测试至少钉：① 新规则测试文件有类型错误、用例本身照常红 → 先红失败，result.json typecheck.exit_code 非 0、errors 点名该文件与 TS 编号；
+#   ② 规则测试类型正确 → 先红照旧通过，typecheck.exit_code 0；③ red-check 失败时以 red-check 的退出码为准、不跑类型检查；
+#   ④ 其他模式（--tests、--fast）不跑这一步。用 verify-container 现有测试夹具的假 docker / 假命令，不真起容器。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ops/verify-container.sh'
+  - 'tools/ops/verify-container.test.ts'
+  - 'tools/ops/README.md'
+  - 'tools/agent/README.md'
+  - 'ops/tasks/CT-06zzzzzzzn.yaml'
+test_paths:
+  - 'test/spec/ci/red-typecheck/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/red-typecheck/**'
+status: todo
