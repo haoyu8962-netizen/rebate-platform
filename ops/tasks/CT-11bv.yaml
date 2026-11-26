@@ -29,7 +29,8 @@ accept:
   - 'pnpm verify'
   - 'pnpm contracts:check'
   - 'test/spec/frontend/ui-tokens/**'
-status: todo
+status: done
+pr: 891
 # 要改的冻结块（逐字标题，照 D10-1733 严格相等；改法均为换钉值，见上文 ③）：
 #   snapshot.test.ts：[AC-CT-11a#1] 契约完整保留固定规划版本的令牌、metadata 与 schemaVersion；[AC-CT-11a#2] README 已交付清单同一行记录令牌版本与完整来源提交；[AC-CT-11bt-BRANCH#1] 只认 0.5.1 / 0.5.2 两个版本，两版本固定夹具并存且与钉值对应（标题里的版本号要随之改名）
 #   generation.test.ts：[AC-CT-11a#4] 代表值覆盖新背景、语义颜色、字号、字体、单位、阴影和焦点；[AC-CT-11a#6] Tailwind 4 主题使用有效命名空间并引用全部令牌，不能自引用
