@@ -12,13 +12,14 @@
 //     stay distinguishable from a failed exit-behaviour assertion)
 //   armed enabled=<true|false>   crash reporting started
 //   crash-at <epoch ms>          the error is about to escape
-//   fetch                        the fake fetch was called
-//   event <json>                 the event items of that request: [{ type, value }] per exception
+//   fetch                        the fake fetch was called (fetch(url, init) or fetch(request))
+//   event <json>                 the event items of that request: [{ type, value }] per exception,
+//                                said once the body is decoded, before the fake answers
 //   sent                         the fake fetch's answer (200) is handed back to the caller
 //   exit <code>                  the process's 'exit' event
 // Import only the types of this file (`import type`): importing it for real would run it.
 import { writeSync } from 'node:fs';
-import { gunzipSync, inflateSync } from 'node:zlib';
+import { gunzipSync, inflateRawSync, inflateSync } from 'node:zlib';
 import type {
   CrashFetch,
   CrashReporter,
@@ -104,12 +105,21 @@ function parse(text: string | undefined): unknown {
   }
 }
 
+/** `deflate` content: zlib-wrapped, or raw as some servers and clients send it. */
+function inflateDeflate(bytes: Buffer): Buffer {
+  try {
+    return inflateSync(bytes);
+  } catch {
+    return inflateRawSync(bytes);
+  }
+}
+
 /** Says the event items of one envelope body. */
 function sayEvents(bytes: Buffer, encoding: string): void {
   let raw = bytes;
   try {
     if (encoding.includes('gzip') || (raw[0] === 0x1f && raw[1] === 0x8b)) raw = gunzipSync(raw);
-    else if (encoding.includes('deflate')) raw = inflateSync(raw);
+    else if (encoding.includes('deflate')) raw = inflateDeflate(raw);
   } catch {
     say('event-undecodable');
     return;
@@ -124,44 +134,57 @@ function sayEvents(bytes: Buffer, encoding: string): void {
   }
 }
 
-/** Reads the body synchronously when it is bytes or text, else asynchronously. */
-function readBody(body: unknown, encoding: string): void {
-  if (body === undefined || body === null) return;
-  if (typeof body === 'string') {
-    sayEvents(Buffer.from(body, 'utf8'), encoding);
-  } else if (body instanceof ArrayBuffer) {
-    sayEvents(Buffer.from(body), encoding);
-  } else if (ArrayBuffer.isView(body)) {
-    sayEvents(Buffer.from(body.buffer, body.byteOffset, body.byteLength), encoding);
-  } else {
-    new Response(body as BodyInit).arrayBuffer().then(
-      (buffer) => {
-        sayEvents(Buffer.from(buffer), encoding);
-      },
-      () => {
-        say('event-undecodable');
-      },
-    );
+/** The body bytes of one call: from init.body when given, else from the Request object. */
+async function bodyBytes(
+  input: string | URL | Request,
+  init: RequestInit | undefined,
+): Promise<Buffer> {
+  if (init?.body !== undefined && init.body !== null) {
+    return Buffer.from(await new Response(init.body).arrayBuffer());
   }
+  if (input instanceof Request) return Buffer.from(await input.clone().arrayBuffer());
+  return Buffer.alloc(0);
 }
 
+/** Reads the whole body (whatever its kind) and says its event items. */
+async function sayBody(
+  input: string | URL | Request,
+  init: RequestInit | undefined,
+  encoding: string,
+): Promise<void> {
+  let bytes: Buffer;
+  try {
+    bytes = await bodyBytes(input, init);
+  } catch {
+    say('event-undecodable');
+    return;
+  }
+  sayEvents(bytes, encoding);
+}
+
+/**
+ * Accepts `fetch(url, init)` as well as `fetch(request)` (init, when given, wins, as in fetch):
+ * body, content-encoding and signal are read from either. The event is decoded (its `event` line
+ * said) before the fake answers, fails or starts hanging.
+ */
 function childFetch(transport: string): CrashFetch {
-  return (_input, init) => {
+  return async (input, init) => {
     say('fetch');
-    readBody(init?.body, new Headers(init?.headers).get('content-encoding') ?? '');
-    if (transport === 'fail') return Promise.reject(new TypeError('fetch failed (qa13d child)'));
+    const fromRequest = input instanceof Request ? input : undefined;
+    const headers = new Headers(init?.headers ?? fromRequest?.headers);
+    const signal = init?.signal ?? fromRequest?.signal;
+    await sayBody(input, init, headers.get('content-encoding') ?? '');
+    if (transport === 'fail') throw new TypeError('fetch failed (qa13d child)');
     if (transport === 'hang') {
       return new Promise<Response>((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => reject(new Error('aborted (qa13d child)')));
+        if (signal?.aborted === true) reject(new Error('aborted (qa13d child)'));
+        signal?.addEventListener('abort', () => reject(new Error('aborted (qa13d child)')));
       });
     }
     const delay = transport === 'slow' ? SLOW_MS : 0;
-    return new Promise<Response>((resolve) => {
-      setTimeout(() => {
-        say('sent');
-        resolve(new Response('{}', { status: 200 }));
-      }, delay);
-    });
+    await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    say('sent');
+    return new Response('{}', { status: 200 });
   };
 }
 

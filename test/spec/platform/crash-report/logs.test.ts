@@ -10,6 +10,14 @@
 // event of that Error, with the personal data in its message removed. When sending then fails
 // (unreachable, throwing fetch, no answer) the log call still returns at once without throwing, its
 // line is still written, and nothing ends up as an unhandled rejection.
+//
+// [AC-QA-13d#4] The repository's error lines mostly carry no Error object, only flat fields, and are
+// reported all the same: the queue executor's `logger.error(failure, 'job_failed_final')` with
+// failure = { queue, jobId, attempt, jobName } (platform/queue/executor.ts) and the HTTP fallback's
+// `logger.error({ trace_id, error_class, stack }, 'unhandled_error')` (platform/http/
+// global-errors.ts). Each sends exactly one event marked as that error (the event's text holds the
+// log message, its level, when set, is error or fatal), scrubbed: the personal data in the logged
+// stack does not leave. The log call itself returns at once and its line is written.
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { startCrashReporting } from '../../../../apps/api/src/modules/platform/crash-report/index.ts';
 import type { RootLogger } from '../../../../apps/api/src/modules/platform/logging/logger.ts';
@@ -123,6 +131,70 @@ it.each([['root'], ['child']] as const)(
       await reporter.close(300);
     }
     expect(failed).toEqual([]);
+    await sleep(50);
+    expect(unhandled).toEqual([]);
+  },
+  15_000,
+);
+
+type Shape = 'job_failed_final' | 'unhandled_error';
+
+/** Logs one error line of `shape` as the repository does (no Error object among the fields). */
+function logShape(target: RootLogger, shape: Shape): void {
+  if (shape === 'job_failed_final') {
+    // platform/queue/executor.ts: { ...fields, jobName }, fields = { queue, jobId, attempt }.
+    const failure = {
+      queue: 'qa13d-settle',
+      jobId: '0190f3a2-1111-7aaa-8bbb-cccccccccccc',
+      attempt: 5,
+      jobName: 'qa13d-settle-run',
+    };
+    target.error(failure, 'job_failed_final');
+    return;
+  }
+  // platform/http/global-errors.ts #unhandled: the class name and the stack as plain strings.
+  const stack = new TypeError(`qa13d-unhandled payee phone ${PHONE} missing`).stack;
+  target.error(
+    { trace_id: 'qa13d-trace-unhandled', error_class: 'TypeError', stack },
+    'unhandled_error',
+  );
+}
+
+const SHAPE_CASES = (['job_failed_final', 'unhandled_error'] as const).flatMap((shape) =>
+  (['root', 'child'] as const).map((which) => [shape, which] as const),
+);
+
+it.each(SHAPE_CASES)(
+  '[AC-QA-13d#4] an error line of shape %s without an Error object on the %s logger sends one scrubbed event marked as that error',
+  async (shape: Shape, which: 'root' | 'child') => {
+    const { logger, lines } = memoryLogger('worker');
+    const transport = fakeFetch('ok', undefined, { dsn: PUBLIC_DSN });
+    const reporter = await startCrashReporting({
+      entry: 'worker',
+      config: configOf({ [DSN_VAR]: PUBLIC_DSN }),
+      logger,
+      fetch: transport.fetch,
+      process: new FakeProcess(),
+    });
+    try {
+      expect(reporter.enabled).toBe(true);
+      const target: RootLogger = which === 'root' ? logger : logger.child({ module: 'queue' });
+      const before = lines.length;
+      const began = performance.now();
+      const logged = await settle(() => logShape(target, shape));
+      expect(failureText(logged)).toBe('returned');
+      expect(performance.now() - began).toBeLessThan(250);
+      expect(lines.slice(before).some((line) => line.includes(shape))).toBe(true);
+      await reporter.flush(2_000);
+    } finally {
+      await reporter.close(1_000);
+    }
+    const events = await sentEvents(transport.requests);
+    const marked = events.filter((event) => JSON.stringify(event).includes(shape));
+    expect(marked).toHaveLength(1);
+    expect([undefined, 'error', 'fatal']).toContain(marked[0]?.['level']);
+    expect(transport.requests.every((request) => request.status === 200)).toBe(true);
+    expect(await sentText(transport.requests)).not.toContain(PHONE);
     await sleep(50);
     expect(unhandled).toEqual([]);
   },

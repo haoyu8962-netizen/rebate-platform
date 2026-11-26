@@ -71,8 +71,10 @@ export function memoryLogger(entry: string): {
 // ---------------------------------------------------------------------------------------------
 // The envelope endpoint (https://develop.sentry.dev/sdk/overview/#parsing-the-dsn): a DSN
 // `<scheme>://<public key>@<host>[/<prefix>]/<project id>` is sent to
-// `<scheme>://<host>[/<prefix>]/api/<project id>/envelope/` with POST (auth may ride in the query
-// string or a header). The old `/api/<project id>/store/` endpoint is not it.
+// `<scheme>://<host>[/<prefix>]/api/<project id>/envelope/` with POST, authenticated with the DSN's
+// public key: `sentry_key=<public key>` in the query string or in the `X-Sentry-Auth` header
+// (`Sentry sentry_version=7, sentry_key=<public key>, …`). The old `/api/<project id>/store/`
+// endpoint is not it.
 
 /** The envelope endpoint of `dsn`, without query string. */
 export function envelopeEndpoint(dsn: string): string {
@@ -101,23 +103,58 @@ function hostOf(url: string): string {
   }
 }
 
+/** The public key of `dsn` (the user part of the DSN URL). */
+export function publicKeyOf(dsn: string): string {
+  try {
+    return decodeURIComponent(new URL(dsn).username);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * The public key a request authenticates with: `sentry_key` in the query string, else in the
+ * `X-Sentry-Auth` header; undefined when neither carries one.
+ */
+export function sentKeyOf(url: string, headers: Headers): string | undefined {
+  let fromQuery: string | null = null;
+  try {
+    fromQuery = new URL(url).searchParams.get('sentry_key');
+  } catch {
+    fromQuery = null;
+  }
+  if (fromQuery !== null && fromQuery !== '') return fromQuery;
+  const header = headers.get('x-sentry-auth') ?? '';
+  const fromHeader = /(?:^|[\s,])sentry_key=([^,\s]+)/.exec(header)?.[1];
+  return fromHeader === undefined || fromHeader === '' ? undefined : fromHeader;
+}
+
 // ---------------------------------------------------------------------------------------------
 // The fake fetch of the transport.
 
 /**
- * ok: 200 for a POST to the envelope endpoint, 404 for anything else; error: 500; fail: rejects
- * like an unreachable server; throw: throws synchronously; hang: never answers (rejects only when
- * the caller aborts its signal, as fetch does); redirect: answers 307 to `redirectTo` and then
- * behaves as fetch does with the request's redirect option (follow: the same request again, to the
- * Location; manual: the 307 response itself; error: rejects).
+ * ok: 200 for an authenticated POST to the envelope endpoint, 401 for one without the public key,
+ * 404 for anything else; error: 500; fail: rejects like an unreachable server; throw: throws
+ * synchronously; hang: never answers (rejects only when the caller aborts its signal, as fetch
+ * does); redirect: answers `redirectStatus` (default 307) to `redirectTo` and then behaves as fetch
+ * does with the request's redirect option (follow: a second request to the Location — the same
+ * POST for 307 / 308, a GET without body for 303 and for a POST answered 301 / 302; manual: the
+ * redirect response itself; error: rejects).
  */
 export type FetchMode = 'ok' | 'error' | 'fail' | 'throw' | 'hang' | 'redirect';
 
+export type RedirectStatus = 301 | 302 | 303 | 307 | 308;
+
 export interface FakeFetchOptions {
-  /** Only a POST to this DSN's envelope endpoint answers 200; without it any /api/<n>/envelope/. */
+  /**
+   * Only a POST to this DSN's envelope endpoint, carrying this DSN's public key, answers 200;
+   * without it any /api/<n>/envelope/ carrying PUBLIC_KEY.
+   */
   readonly dsn?: string;
-  /** Where mode `redirect` points (Location of the 307). */
+  /** Where mode `redirect` points (its Location). */
   readonly redirectTo?: string;
+  /** The status of mode `redirect`; 307 when not given. */
+  readonly redirectStatus?: RedirectStatus;
 }
 
 export interface SentRequest {
@@ -128,7 +165,7 @@ export interface SentRequest {
   readonly body: Promise<string>;
   /** The request's redirect option (`follow` when not given, as in fetch). */
   readonly redirect: string;
-  /** The status answered; 0 when none was (fail, throw, hang). */
+  /** The status answered (401: no or wrong public key); 0 when none was (fail, throw, hang). */
   readonly status: number;
   /** True for the second request fetch itself makes when it follows a redirect. */
   readonly followed: boolean;
@@ -170,8 +207,10 @@ export interface FakeFetch {
 
 /**
  * A fetch that records every call (in `requests`, and as `fetch` in `log` when given). It answers
- * 200 only to a POST to the envelope endpoint (of `options.dsn` when given): a wrong project id,
- * the old store endpoint or another method gets 404.
+ * 200 only to a POST to the envelope endpoint (of `options.dsn` when given) that carries the DSN's
+ * public key (query string `sentry_key` or `X-Sentry-Auth` header): a wrong project id, the old
+ * store endpoint or another method gets 404; the right endpoint without the key (or with another
+ * key) gets 401.
  */
 export function fakeFetch(
   mode: FetchMode = 'ok',
@@ -180,10 +219,14 @@ export function fakeFetch(
 ): FakeFetch {
   const state: { mode: FetchMode } = { mode };
   const requests: SentRequest[] = [];
-  const accepts = (url: string, method: string): boolean => {
-    if (method.toUpperCase() !== 'POST') return false;
+  const expectedKey = options.dsn === undefined ? PUBLIC_KEY : publicKeyOf(options.dsn);
+  const isEndpoint = (url: string): boolean => {
     if (options.dsn !== undefined) return endpointOf(url) === envelopeEndpoint(options.dsn);
     return /^https?:\/\/[^/]+(?:\/[^/]+)*\/api\/\d+\/envelope\/$/.test(endpointOf(url));
+  };
+  const statusFor = (url: string, method: string, headers: Headers): number => {
+    if (method.toUpperCase() !== 'POST' || !isEndpoint(url)) return 404;
+    return sentKeyOf(url, headers) === expectedKey ? 200 : 401;
   };
   const fetch: CrashFetch = (input, init) => {
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : {}));
@@ -192,9 +235,22 @@ export function fakeFetch(
     const redirect = init?.redirect ?? (input instanceof Request ? input.redirect : 'follow');
     const body = bodyOf(input, init, headers.get('content-encoding') ?? '');
     body.catch(() => undefined);
-    const record = (to: string, status: number, followed: boolean): void => {
+    const record = (
+      to: string,
+      status: number,
+      followed: boolean,
+      sent: { method: string; body: Promise<string> } = { method, body },
+    ): void => {
       const sentHeaders = Object.fromEntries(headers.entries());
-      requests.push({ url: to, method, headers: sentHeaders, body, redirect, status, followed });
+      requests.push({
+        url: to,
+        method: sent.method,
+        headers: sentHeaders,
+        body: sent.body,
+        redirect,
+        status,
+        followed,
+      });
       log?.push('fetch');
     };
     if (state.mode === 'throw') {
@@ -214,19 +270,28 @@ export function fakeFetch(
     }
     const target = options.redirectTo;
     if (state.mode === 'redirect' && target !== undefined && hostOf(url) !== hostOf(target)) {
-      record(url, 307, false);
+      const redirectStatus = options.redirectStatus ?? 307;
+      record(url, redirectStatus, false);
       if (redirect === 'error') {
         return Promise.reject(new TypeError('fetch failed: unexpected redirect (qa13d fake)'));
       }
       if (redirect === 'manual') {
-        return Promise.resolve(new Response(null, { status: 307, headers: { location: target } }));
+        return Promise.resolve(
+          new Response(null, { status: redirectStatus, headers: { location: target } }),
+        );
       }
-      // follow: what fetch does by itself — the same POST again, now to the Location.
-      const followedStatus = accepts(target, method) ? 200 : 404;
-      record(target, followedStatus, true);
+      // follow: what fetch does by itself (WHATWG fetch, HTTP-redirect fetch step 12) — 307 / 308
+      // repeat the same POST with its body; 303, and 301 / 302 after a POST, send a GET without it.
+      const upper = method.toUpperCase();
+      const becomesGet =
+        ((redirectStatus === 301 || redirectStatus === 302) && upper === 'POST') ||
+        (redirectStatus === 303 && upper !== 'GET' && upper !== 'HEAD');
+      const sent = becomesGet ? { method: 'GET', body: Promise.resolve('') } : { method, body };
+      const followedStatus = statusFor(target, sent.method, headers);
+      record(target, followedStatus, true, sent);
       return Promise.resolve(new Response('{}', { status: followedStatus }));
     }
-    const status = state.mode === 'error' ? 500 : accepts(url, method) ? 200 : 404;
+    const status = state.mode === 'error' ? 500 : statusFor(url, method, headers);
     record(url, status, false);
     return Promise.resolve(new Response('{}', { status }));
   };

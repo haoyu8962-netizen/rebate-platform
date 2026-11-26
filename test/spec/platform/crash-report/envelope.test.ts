@@ -1,14 +1,17 @@
 // [AC-QA-13d#5] Reports go to GlitchTip's envelope endpoint, derived from the DSN (task: fetch 传输
 // 包 createTransport，发 envelope 接口): every request is a POST to
-// `<scheme>://<host>[:<port>]/api/<project id>/envelope/` (authentication may ride in the query
-// string or a header), and it carries the event. The fake fetch answers 200 only there: a wrong
-// project id, the old `/api/<project id>/store/` endpoint or another method gets 404, so "sent
-// successfully" means sent to the right place. The expected endpoints are written out by hand.
+// `<scheme>://<host>[:<port>]/api/<project id>/envelope/`, authenticated with the DSN's public key
+// (`sentry_key` in the query string or in the X-Sentry-Auth header), and it carries the event. The
+// fake fetch answers 200 only there: a wrong project id, the old `/api/<project id>/store/` endpoint
+// or another method gets 404, a request without the key (or with another one) 401, so "sent
+// successfully" means sent to the right place, authenticated. The expected endpoints are written
+// out by hand.
 import { expect, it } from 'vitest';
 import { startCrashReporting } from '../../../../apps/api/src/modules/platform/crash-report/index.ts';
 import {
   DSN_VAR,
   FakeProcess,
+  PUBLIC_KEY,
   configOf,
   dsnFor,
   endpointOf,
@@ -72,5 +75,19 @@ it.each(CASES)(
     }
     statuses.push((await transport.fetch(endpoint, { method: 'GET' })).status);
     expect(statuses).toEqual([404, 404, 404, 404]);
+    // … and 200 there only with this DSN's public key, in the query string or in X-Sentry-Auth.
+    const auth = `Sentry sentry_version=7, sentry_key=${PUBLIC_KEY}, sentry_client=qa13d/fake`;
+    const otherKey = 'feedfacefeedfacefeedfacefeedface';
+    async function post(url: string, headers: Record<string, string> = {}): Promise<number> {
+      const response = await transport.fetch(url, { method: 'POST', body: '{}', headers });
+      return response.status;
+    }
+    const authStatuses = [
+      await post(endpoint),
+      await post(`${endpoint}?sentry_key=${otherKey}`),
+      await post(`${endpoint}?sentry_version=7&sentry_key=${PUBLIC_KEY}`),
+      await post(endpoint, { 'X-Sentry-Auth': auth }),
+    ];
+    expect(authStatuses).toEqual([401, 401, 200, 200]);
   },
 );

@@ -6,14 +6,16 @@
 // concrete URL path (only the route template may leave), the raw user_id, nickname; nor a promotion
 // URL, 口令, 推广位 or relation id (01 F-OBS-01; 02 §13 崩溃行, §12.6「崩溃上报的面包屑与附加信息只记
 // link_id、平台、步骤与结果」). The outgoing event is also checked by structure: event.request keeps
-// only method and url, and url is at most the given route template; the response (body and all) is
-// gone; extra and breadcrumb data keep only link_id / platform / step / result, so an unknown
-// business field does not leave either; user is exactly { id: <agreed hash of user_id> }.
+// only method and url, and url is at most the given route template; the response body is neither
+// in a top-level event.response nor in contexts.response (at most a status code stays); extra and
+// breadcrumb data keep only link_id / platform / step / result, so an unknown business field does
+// not leave either, and a nested object or list under one of those keys carries no promotion URL,
+// 口令, 推广位 or relation id out either.
 //
-// The agreed user hash (the specs say only「user_id 的哈希」; this test fixes it so a reversible
-// encoding cannot pass): SHA-256 over the UTF-8 bytes of the user_id as the canonical lowercase
-// UUID text (hyphens kept), written as 64 lowercase hex digits — no salt, no truncation.
-import { createHash } from 'node:crypto';
+// The user (the specs say only「用户标识最多 user_id 的哈希」, no algorithm): it may be left out; when
+// sent it holds at most `id`, and that id is not the plain user_id, phone or nickname, nor a
+// reversible encoding of them (Base64, Base64url, hex of the text, hex / Base64 of the UUID bytes,
+// changed case or hyphens).
 import { expect, it } from 'vitest';
 import {
   startCrashReporting,
@@ -37,6 +39,8 @@ import {
 const DSN = dsnFor('glitchtip.example.test');
 
 const USER_ID = '0190f3a2-7c4e-7d1a-9b2c-3d4e5f60718a';
+/** The same UUID without hyphens (the hex of its 16 bytes). */
+const USER_ID_COMPACT = USER_ID.replaceAll('-', '');
 const ORDER_ID = '0190f3a2-0d0d-7e0e-8f0f-a1b2c3d4e5f6';
 const PHONE = '13912345678';
 const ID_NO = '11010519491231002X';
@@ -74,11 +78,6 @@ const BREADCRUMB_FIELDS: readonly string[] = [
   'data',
 ];
 
-/** The agreed user identifier (see the head comment). */
-function userHash(userId: string): string {
-  return createHash('sha256').update(userId, 'utf8').digest('hex');
-}
-
 /** Values that must not leave the process, by name (the failure lists the names that did). */
 const SECRETS: Readonly<Record<string, string>> = {
   phone: PHONE,
@@ -88,6 +87,7 @@ const SECRETS: Readonly<Record<string, string>> = {
   realName: REAL_NAME,
   nickname: NICK,
   userId: USER_ID,
+  userIdCompact: USER_ID_COMPACT,
   pathId: ORDER_ID,
   token: TOKEN,
   bearer: BEARER,
@@ -285,35 +285,99 @@ function keysOutside(
     .map((key) => `${where}.${key}`);
 }
 
-it('[AC-QA-13d#2] the user identifier is exactly the agreed SHA-256 hash of user_id: no raw id, phone, nickname or e-mail', async () => {
-  const { text, events } = await reportOnce({ user: USER });
-  expect(events).toHaveLength(1);
-  const user = events[0]?.user ?? {};
-  expect(Object.keys(user)).toEqual(['id']);
-  const id = String(user['id'] ?? 'no id');
-  // A reversible encoding (Base64, Base64url, hex of the text) decodes back to the user_id.
+/** Plain values a user id could be read back to. */
+const USER_PLAIN: Readonly<Record<string, string>> = {
+  userId: USER_ID,
+  userIdCompact: USER_ID_COMPACT,
+  phone: PHONE,
+  nickname: NICK,
+};
+
+/** The names of the plain values `id` holds as is or decodes back to (empty: none). */
+function reversibleTo(id: string): string[] {
   const decodings = [
+    id,
+    id.toLowerCase(),
+    id.toLowerCase().replaceAll('-', ''),
     Buffer.from(id, 'base64').toString('utf8'),
     Buffer.from(id, 'base64url').toString('utf8'),
     Buffer.from(id, 'hex').toString('utf8'),
+    Buffer.from(id, 'base64').toString('hex'),
+    Buffer.from(id, 'base64url').toString('hex'),
   ];
-  expect(decodings.filter((decoded) => decoded.includes(USER_ID))).toEqual([]);
-  expect(id).not.toBe(Buffer.from(USER_ID, 'utf8').toString('base64'));
-  expect(id).toMatch(/^[0-9a-f]{64}$/);
-  expect(id).toBe(userHash(USER_ID));
+  return Object.entries(USER_PLAIN)
+    .filter(([, plain]) => decodings.some((decoded) => decoded.includes(plain)))
+    .map(([name]) => name);
+}
+
+it('[AC-QA-13d#2] the user may be left out; when sent it holds at most an id that is no plain or reversibly encoded user_id, phone or nickname', async () => {
+  const { text, events } = await reportOnce({ user: USER });
+  expect(events).toHaveLength(1);
+  const user: unknown = events[0]?.user;
+  expect(keysOutside('user', user, ['id'])).toEqual([]);
+  const id: unknown = recordOf(user)['id'];
+  expect(['undefined', 'string']).toContain(typeof id);
+  expect(reversibleTo(typeof id === 'string' ? id : '')).toEqual([]);
   expect(leaked(text)).toEqual([]);
 });
 
-it('[AC-QA-13d#2] request information keeps only method and the route template; the response is dropped whole', async () => {
-  const { text, events } = await reportOnce({ request: REQUEST });
+/** A response context the caller hands over, body and headers included. */
+const RESPONSE_CONTEXT: Readonly<Record<string, unknown>> = {
+  status_code: 500,
+  body: { detail: RESPONSE, summary: RESPONSE_UNKNOWN },
+  data: { detail: RESPONSE, token: TOKEN },
+  headers: { 'set-cookie': `sid=${COOKIE}` },
+};
+
+it('[AC-QA-13d#2] request information keeps only method and the route template; no response body in event.response or contexts.response', async () => {
+  const { text, events } = await reportOnce({
+    request: REQUEST,
+    contexts: { response: RESPONSE_CONTEXT },
+  });
   expect(events).toHaveLength(1);
   const event = events[0];
   const request = event?.request ?? {};
   expect(keysOutside('request', request, ['method', 'url'])).toEqual([]);
   expect([undefined, ROUTE]).toContain(request['url']);
-  // The response (Sentry's contexts.response) keeps at most its status code, never a body.
-  const response = event?.contexts?.['response'];
-  expect(keysOutside('contexts.response', response, ['status_code'])).toEqual([]);
+  // The response, whether as a top-level event field or as Sentry's contexts.response, keeps at
+  // most its status code: no body, data or headers.
+  const outside = [
+    ...keysOutside('response', event?.['response'], ['status_code']),
+    ...keysOutside('contexts.response', event?.contexts?.['response'], ['status_code']),
+  ];
+  expect(outside).toEqual([]);
+  expect(leaked(text)).toEqual([]);
+});
+
+/** Allowlisted keys holding nested objects and lists with promotion data inside. */
+const NESTED_CONTEXT: CrashCaptureContext = {
+  extra: {
+    link_id: 'L123',
+    platform: ['taobao', PROMO_URL],
+    step: { name: 'open', tkl: TKL },
+    result: { status: 'failed', promotion_url: PROMO_URL, pid: PID, relation_id: RELATION },
+  },
+  breadcrumbs: [
+    {
+      category: 'link',
+      message: 'open',
+      data: {
+        link_id: 'L123',
+        platform: { name: 'taobao', url: PROMO_URL },
+        step: ['open', TKL],
+        result: { status: 'failed', detail: { url: PROMO_URL, pid: PID, relation_id: RELATION } },
+      },
+    },
+  ],
+};
+
+it('[AC-QA-13d#2] nested objects and lists under link_id / platform / step / result carry no promotion URL, 口令, 推广位 or relation id out', async () => {
+  const { text, events } = await reportOnce(
+    NESTED_CONTEXT,
+    new Error('qa13d-boom nested link open failed'),
+  );
+  expect(events).toHaveLength(1);
+  expect(exceptionText(events[0])).toContain('qa13d-boom');
   expect(leaked(text)).toEqual([]);
 });
 

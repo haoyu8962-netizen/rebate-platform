@@ -3,10 +3,11 @@
 // and names that merely contain a private address) → not initialised (no client, no hook, nothing
 // sent) and exactly one warn line, not quoting the DSN; a private-range IPv4 host (10/8,
 // 172.16/12, 192.168/16) → initialised and reports to that host, with POST to its envelope endpoint.
-// An internal host that answers 307 pointing at a public host never makes payout send there: the
-// fake fetch follows the redirect itself exactly when the request lets fetch follow (redirect
-// `follow`, the default), so either payout does not follow it or every hop it makes is checked and a
-// public one refused. The other entries are not restricted. Reports go to a fake fetch; nothing
+// An internal host that answers a redirect (301 / 302 / 303 / 307 / 308; 307 and 308 keep the POST
+// and its body) pointing at a public host never makes payout send there: the fake fetch follows the
+// redirect itself exactly when the request lets fetch follow (redirect `follow`, the default), so
+// either payout does not follow it or every hop it makes is checked and a public one refused; the
+// public host receives not a single request. The other entries are not restricted. Reports go to a fake fetch; nothing
 // reaches the network.
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { startCrashReporting } from '../../../../apps/api/src/modules/platform/crash-report/index.ts';
@@ -26,6 +27,7 @@ import {
   settle,
   sleep,
   type Entry,
+  type RedirectStatus,
 } from './kit.ts';
 
 const unhandled: unknown[] = [];
@@ -125,12 +127,22 @@ it.each(INTERNAL_HOSTS.map((host) => [host]))(
   },
 );
 
-it.each(['172.20.0.5:8000', '10.1.2.3'].map((host) => [host]))(
-  '[AC-QA-13d#3] payout with a private-range DSN host %s answering 307 to a public host: nothing is sent there',
-  async (host: string) => {
+const REDIRECT_STATUSES: readonly RedirectStatus[] = [301, 302, 303, 307, 308];
+
+const REDIRECT_CASES = ['172.20.0.5:8000', '10.1.2.3'].flatMap((host) =>
+  REDIRECT_STATUSES.map((status) => [host, status] as const),
+);
+
+it.each(REDIRECT_CASES)(
+  '[AC-QA-13d#3] payout with a private-range DSN host %s answering %s to a public host: nothing is sent there',
+  async (host: string, redirectStatus: RedirectStatus) => {
     const dsn = dsnFor(host, 'http');
     const { logger } = memoryLogger('payout');
-    const transport = fakeFetch('redirect', undefined, { dsn, redirectTo: PUBLIC_REDIRECT });
+    const transport = fakeFetch('redirect', undefined, {
+      dsn,
+      redirectTo: PUBLIC_REDIRECT,
+      redirectStatus,
+    });
     const reporter = await startCrashReporting({
       entry: 'payout',
       config: configOf({ [DSN_VAR]: dsn }),
@@ -150,10 +162,12 @@ it.each(['172.20.0.5:8000', '10.1.2.3'].map((host) => [host]))(
       const closed = await settle(() => reporter.close(500));
       expect(failureText(closed)).toBe('returned');
     }
-    // The first request went to the internal envelope endpoint and got the 307 …
+    // The first request went to the internal envelope endpoint and got the redirect …
     expect(transport.requests[0]?.method).toBe('POST');
     expect(endpointOf(transport.requests[0]?.url ?? '')).toBe(envelopeEndpoint(dsn));
-    // … and no request, followed by fetch or made again by payout, reached another host.
+    expect(transport.requests[0]?.status).toBe(redirectStatus);
+    // … and no request (POST or GET), followed by fetch or made again by payout, reached another
+    // host.
     const elsewhere = transport.requests
       .filter((request) => new URL(request.url).host !== host)
       .map((request) => `${request.followed ? 'followed by fetch' : 'sent'}: ${request.url}`);
