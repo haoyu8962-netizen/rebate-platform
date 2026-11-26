@@ -1,11 +1,12 @@
-// DSX-48 / DSX-108: the motion group of design tokens v0.5.2, written out by hand from
+// DSX-48 / DSX-108: the motion group of the design tokens (its 15 tokens were introduced in v0.5.2
+// and are unchanged in v0.5.3), written out by hand from
 // docs/changes/20261107-Web动效令牌.md §1 and 规划/03 §10.6 (planning repository at SPEC_REF), not
 // read from the generator or the implementation snapshot. No Node or DOM imports: the Node,
 // jsdom and browser rule tests all read it.
 
 /** Token version and the planning commit the contracts snapshot is copied from. */
-export const TOKENS_VERSION = '0.5.2';
-export const DESIGN_SOURCE_COMMIT = 'c98ae93f5daf3b8d04671ee903b8f28fd805b72f';
+export const TOKENS_VERSION = '0.5.3';
+export const DESIGN_SOURCE_COMMIT = 'c404003bbecdff2c67f3e744d81a5ee92e5043ce';
 /**
  * The previous snapshot (v0.5.1). Kept under test/spec/frontend/ui-tokens/fixtures as the base of
  * the upgrade check there ([AC-DSX-48-UPGRADE#1]) and of the generator probes here (TOKENS#4).
