@@ -30,6 +30,13 @@ test_paths:
   - 'test/spec/payout/alipay-cert-kms/**' # 新目录
   - 'test/spec/payout/entry/entry.test.ts'
   - 'test/spec/payout/query-recovery-wiring/entry.test.ts'
+red_exempt:
+  - file: test/spec/payout/alipay-cert-kms/entry.test.ts
+    test: '[AC-B2-06j#11] prod + live、KMS 四个条目齐备：缺 ALIPAY_APP_ID 或 ALIPAY_GATEWAY_URL（未设或空白）即拒绝启动'
+    reason: '守护性用例，新旧实现下都成立（主干缺 appId / 网关本来就拒绝启动）；防的错误实现见规则测试评审 r1 S1-2：有了 KMS 之后不再校验这两个环境变量'
+  - file: test/spec/payout/alipay-cert-kms/other-entries.test.ts
+    test: '[AC-B2-06j#12] prod、PAYOUT_MODE=live：payout 以外的入口不读 couli/prod/payout/ 下的任何 KMS 条目'
+    reason: '守护性用例，新旧实现下都成立（主干别的入口本来就不读打款条目）；防的错误实现见规则测试评审 r1 S1-3：读打款条目的一步不按入口判（BR-WDR-13）'
 impl: claude
 tester: codex
 modify_existing:
