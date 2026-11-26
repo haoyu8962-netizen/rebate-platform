@@ -81,6 +81,11 @@ it('[AC-B2-02zg#14] 邮箱紧邻中文标点（，。、；：（）「」【】
     ['是 a@x.com？', '是 ***@x.com？'],
     ['alice@example.com，bob@example.org。', 'al***@example.com，bo***@example.org。'],
     ['邮箱(alice@example.com),已核', '邮箱(al***@example.com),已核'],
+    // 写测 3 (review r2, D10-3284): English text, ASCII punctuation right after the address.
+    ['Confirmed alice@example.com.', 'Confirmed al***@example.com.'],
+    ['Confirmed alice@example.com, thanks', 'Confirmed al***@example.com, thanks'],
+    ['Account (alice@example.com) confirmed', 'Account (al***@example.com) confirmed'],
+    ['Account "alice@example.com" confirmed', 'Account "al***@example.com" confirmed'],
   ] as const) {
     expect(redactFreeText(written), written).toBe(masked);
   }
