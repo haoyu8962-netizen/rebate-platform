@@ -3,10 +3,11 @@ repo: rebate-platform
 title: CT-06zzzzzzzi：代码评审按「实现路径内容摘要」绑定被评审的内容——评审包装在评审前后对工作区算摘要写进 meta，evidence-check 在落地头上按台账自己展开路径复算，与 commit / tree 并存；把绑定接进落地流程（CT-06zzzzzzzh money r1 的 S1-①②，D10-3013 / D10-3015）
 type: guard-change
 # 2026-11-25 ops 入账（编排 D10-3013 拆出、D10-3015 定认法）。负责人 2026-11-25 同意 FU-EVIDENCE-REVIEW-TREE-BINDING（ops/approvals.yaml 第 185 条 ⑩），本单是它接进落地流程的部分；第三类门禁改动，合并照第 16 条。
-# 起因（couli-runs/CT-06zzzzzzzh/review-codex.json S1-①②）：① 落地前 scripts/rebase-verify.sh 把任务变基到最新主干，评审绑定的提交不再是落地头的祖先；scripts/pr-and-land.sh 写的 reviews 条目没有 commit / tree。
-#   ② 码评审时实现常在工作区未提交，meta 只记 head_before，记下的不是被评审的内容。方案比较见 couli-runs/OPS-lane/CT-06zzzzzzzi/plan.md（取摘要不取 patch-id：落地文件与被评审文件逐字相同才认，CI 只凭落地头的树能复算）。
-# 做法：
-#   ① 摘要 reviewed_paths_digest = sha256（实现路径下每个文件按路径排序的「path<TAB>blob」行，删除记「path<TAB>-」）；实现路径与 CT-06zzzzzzzh 同一口径（台账 paths 展开后减台账文件、ops/evidence/**、第一类规则测试资产），复用它的函数。
+# 台账补丁 1（2026-11-26 ops，编排 D10-3108 / D10-3250）：接手 CT-06zzzzzzzh（置 void），其绑定机制（commit / tree、评审后覆盖、post_review_commits、过渡、开关 REVIEW_BINDING_ENABLED 缺省关）与它台账补丁 1 里不挂开关的 ④（逐条核 reviewer / engine / model）、S2（有除号的行逐字比）并入本单，③ 已由 CT-06zzzzzzzk 落地；deps 去掉 zzzzzzzh。方案 couli-runs/OPS-lane/CT-06zzzzzzzi/takeover-plan.md。
+#   带过来：task/CT-06zzzzzzzh 的 3 个规则测试提交（test/spec/ci/evidence-review-binding/，[AC-CT-06zzzzzzzh#1]–[#11] 标题编号不改、不重评）与未提交的实现 r1–r4；过渡锚点改为本单（REVIEW_BINDING_TASK 与规则测试里三处 GATE 机械更正为 CT-06zzzzzzzi，单独提交、排在实现前）。
+#   zzzzzzzh 码评审 r3 两条 S1 为实现必满足项 + 实现方单测：开关开时主评审方与独立 Claude 替补按类型合并取最后一轮；review_type 须在 money / general / contract 内（伴随规则测试登 FU，开开关前补）。开任务 PR 前扫在途证据报受影响张数，有受影响即停（D10-3250）。
+# 起因（couli-runs/CT-06zzzzzzzh/review-codex.json S1-①②）：① 落地前变基后评审绑定的提交不再是落地头的祖先，scripts/pr-and-land.sh 写的 reviews 条目没有 commit / tree；② 码评审时实现常在工作区未提交，meta 只记 head_before。方案比较见 couli-runs/OPS-lane/CT-06zzzzzzzi/plan.md（取摘要不取 patch-id：落地文件与被评审文件逐字相同才认，CI 只凭落地头的树能复算）。
+# 做法：① 摘要 reviewed_paths_digest = sha256（实现路径下每个文件按路径排序的「path<TAB>blob」行，删除记「path<TAB>-」）；实现路径与 CT-06zzzzzzzh 同一口径（台账 paths 展开后减台账文件、ops/evidence/**、第一类规则测试资产），复用它的函数。
 #   ② codex-run.sh / claude-run.sh 的 review 模式：评审前对任务 worktree 算摘要（含未提交、未跟踪；不 add、不写 index），与路径清单一起写进 meta.json；评审结束再算一次，不一致即判位置变化（exit 12）。meta.ts 认这两个新字段。
 #   ③ evidence-check：reviews 的代码评审条目给 commit / tree 或 reviewed_paths_digest 之一即可；同一条两样都给时两样都要核过，不许「有一样对上就算」。
 #      (a) 摘要的路径集合由 evidence-check 按台账自己展开，不采信条目里自带的路径清单——条目清单只作对照，与展开结果不一致即拒。
@@ -14,11 +15,10 @@ type: guard-change
 #   ④ 仍受 CT-06zzzzzzzh 的开关 REVIEW_BINDING_ENABLED 管（缺省关）；本单不打开它。本单落地并在一张真实任务上走通后，再报编排裁定开关。
 #   ⑤ README 证据一节写摘要的算法、字段与「两样都给时都要核」。
 #   couli-runs 下的运维脚本（不入库，随本单由 ops 改并留 .bak）：pr-and-land.sh 从该轮评审 meta 带出 reviewed_paths_digest（及 commit / tree）写进 reviews 条目；rebase-verify.sh 变基后、生成证据前本地复算，不等即停下报，不自动重评。
-# 规则测试至少钉：未提交 / 未跟踪的实现文件计入摘要；删除的文件计入；评审后改实现文件摘要变；变基到只改 README 的主干后摘要不变、落地过；主干改了同一实现文件后不等、须覆盖；
-#   只凭落地头的树能复算同一值；条目自带路径清单与台账展开不一致 → 拒（a）；摘要不等且整理提交改了实现路径、未按 post_review_commits 登记 → 拒（b）；commit / tree 与摘要都给、其中一样不符 → 拒。
+# 规则测试至少钉：未提交 / 未跟踪的实现文件计入摘要；删除的文件计入；评审后改实现文件摘要变；变基到只改 README 的主干后摘要不变、落地过；主干改了同一实现文件后不等、须覆盖；只凭落地头的树能复算同一值；条目自带路径清单与台账展开不一致 → 拒（a）；摘要不等且整理提交改了实现路径、未按 post_review_commits 登记 → 拒（b）；commit / tree 与摘要都给、其中一样不符 → 拒。
 refs: []
 refs_hash: {}
-deps: [CT-06zzzzzzzh]
+deps: []
 paths:
   - 'tools/agent/codex-run.sh'
   - 'tools/agent/codex-run.test.ts'
@@ -30,9 +30,11 @@ paths:
   - 'ops/tasks/CT-06zzzzzzzi.yaml'
 test_paths:
   - 'test/spec/ci/review-paths-digest/**'
+  - 'test/spec/ci/evidence-review-binding/**'
 impl: claude
 tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/review-paths-digest/**'
+  - 'test/spec/ci/evidence-review-binding/**'
 status: todo
