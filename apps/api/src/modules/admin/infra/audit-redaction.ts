@@ -3,7 +3,7 @@
 // data an operator types into the free text of an audited operation (B2-02ze).
 //
 // Free-text masking is a CLOSED LIST of fixed formats (B2-02ze r5, D10-3166 ②, D10-2418 first
-// option); nothing outside it is recognised, and the review judges against it only:
+// option); nothing outside it is recognised:
 //   1. mainland mobile numbers: 11 digits 1[3-9]…, optionally prefixed + / ＋ / 86 / 0086, common
 //      separators between groups (rule 3 below); a prefixed number is bounded by its prefix, so a
 //      letter right before the prefix does not stop it (WhatsApp+8613812345679 → WhatsApp138****5679);
