@@ -33,5 +33,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-unknown-marker-multi-submit/**'
-status: todo
-pr: null
+status: done
+pr: 589
