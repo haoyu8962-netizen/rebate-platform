@@ -1,0 +1,36 @@
+id: B2-09zn
+repo: rebate-platform
+title: 'B2-09zn：两个只读资金指标与告警——未解决的通道对账差错单数、最近一期账单的仍不一致数（各一个 worker gauge + 一条 couli-fund 规则；不动对账、月结与记账代码）'
+type: impl
+# 2026-11-26 funds 线入账（编排 D10-3308 / D10-3311 ②⑤：取甲——只在指标采集里加两个从库里读数的 gauge + 各一条规则；不碰 payout/jobs/recon-job.ts、settlement/bill/follow-union.ts 与记账代码）。
+# 来由：① 通道对账（R2）登记差错单时只打一条 warn 日志 payout_recon_diff（recon-job.ts 的 PAYOUT_RECON_DIFF_ALERT，注释写「the alert rule is another task's」），没有任何指标，规则文件全部基于 worker 的 /metrics，
+#   所以对账出了差错没人被叫到（D10-3162 的最简原则「同一单多条成功流水 → 告警、冻结、转人工」缺告警这一环）；② 月结「跟随联盟重生成」后仍不一致 / 重生成失败只打 error 日志
+#   settle_amount_mismatch_unresolved（follow-union.ts），库里有 settle_bills.amount_mismatch_count（B2-18a / B2-18d），同样没有指标与规则（FU-B2-18-BILL-COUNTS-CONTRACT 里的监控规则那一小块）。
+# 做法（照 B2-02v 的 couli_credit_postcheck_mismatch_open 先例）：ledger 出一个只读口——按 app_id 数 app.recon_diffs 里 type = channel_mismatch、status 为 open / processing 的行；settlement 的指标读口加一项——
+#   每个 app 最近一期（bill_id 最大、已出账）账单的 amount_mismatch_count；platform/metrics 各登记一个 gauge（按 app_id，没有行的 app 不出序列），entry.ts 的资金指标采集接上；
+#   couli-fund.yaml 各加一条规则（> 0、for 5m、fund 'true'；severity 写进任务书）。读失败照先例让抓取失败、不当成 0。两个读口都只 SELECT，不开事务、不加锁。
+# 冻结用例：test/spec/platform/fund-metrics/rules.test.ts 的允许清单类用例（[AC-B1-01zzi#6] 一类）与 test/spec/platform/alerting-eval/metrics.test.ts 要加新指标名（tighten_only，B2-02v / B2-09zj 先例）；
+#   确切清单入账后先在临时工作树上探一遍，按清单类报编排核后以台账补丁登记 modify_existing（D10-3311）。deps 写 B1-04zzad：两张都改 couli-fund.yaml，排在它之后免得撞。
+# 在途单交叠（已报编排）：apps/api/src/entry.ts 与 platform/metrics 还有 be 的 B2-02zd、w1 的 QA-13d 在动；落地前变基，冲突只取各自的行。不带迁移、不动契约。
+refs: [BR-WDR-23, BR-FUND-04]
+refs_hash:
+  BR-WDR-23: 92950f49116f
+  BR-FUND-04: faf2ddd22d5b
+deps: [B1-04zzad]
+paths:
+  - 'apps/api/src/modules/ledger/application/channel-mismatch-open-read*.ts'
+  - 'apps/api/src/modules/ledger/index.ts'
+  - 'apps/api/src/modules/settlement/application/metrics-read*.ts'
+  - 'apps/api/src/modules/platform/metrics/**'
+  - 'apps/api/src/modules/platform/index.ts'
+  - 'apps/api/src/entry.ts'
+  - 'infra/monitoring/rules/couli-fund.yaml'
+test_paths:
+  - 'test/spec/platform/metrics/recon-mismatch/**' # 新目录
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/metrics/recon-mismatch/**'
+status: todo
+pr: null
