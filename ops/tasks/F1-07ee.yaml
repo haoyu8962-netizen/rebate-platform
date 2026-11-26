@@ -53,4 +53,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-orders-writes/**'
-status: todo
+status: done
+pr: 842
