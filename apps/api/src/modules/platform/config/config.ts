@@ -121,7 +121,8 @@ const SDK_DSN_SHAPE =
  * endpoint and the SDK): blanks trimmed, rebuilt from its URL parts as
  * `<http(s)>://<public key>@<host>[:<port>][/<prefix>]/<project id>`. Undefined for anything else
  * (no password, query or fragment; a word-character public key; a numeric project id), so the SDK
- * never refuses (and never prints) a DSN that passed here.
+ * never refuses (and never prints) a DSN that passed here. The prefix is kept as the URL parser
+ * encodes it (`/error%20tracking`), with no character list of its own: the SDK takes any path.
  */
 export function normalizeCrashReportDsn(value: string): string | undefined {
   let url: URL;
@@ -136,7 +137,6 @@ export function normalizeCrashReportDsn(value: string): string | undefined {
   const segments = url.pathname.replace(/\/$/, '').split('/').slice(1);
   const projectId = segments.pop() ?? '';
   if (!/^\d+$/.test(projectId)) return undefined;
-  if (segments.some((segment) => !/^[\w.~-]+$/.test(segment))) return undefined;
   const prefix = segments.map((segment) => `/${segment}`).join('');
   const dsn = `${url.protocol}//${url.username}@${url.host}${prefix}/${projectId}`;
   return SDK_DSN_SHAPE.test(dsn) ? dsn : undefined;

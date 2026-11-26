@@ -389,6 +389,29 @@ describe('CRASH_REPORT_DSN', () => {
     }
   });
 
+  it("[AC-QA-13d#1] a path prefix is kept in the URL parser's encoded form", () => {
+    for (const [value, normal] of [
+      [
+        'https://unitDsnKey@glitchtip.unit.test/error%20tracking/3',
+        'https://unitDsnKey@glitchtip.unit.test/error%20tracking/3',
+      ],
+      [
+        'https://unitDsnKey@glitchtip.unit.test/error tracking/3',
+        'https://unitDsnKey@glitchtip.unit.test/error%20tracking/3',
+      ],
+      [
+        'http://unitDsnKey@10.1.2.3:8000/ops/glitch-tip/v1/3/',
+        'http://unitDsnKey@10.1.2.3:8000/ops/glitch-tip/v1/3',
+      ],
+      ['https://unitDsnKey@glitchtip.unit.test/3', 'https://unitDsnKey@glitchtip.unit.test/3'],
+    ] as const) {
+      expect(normalizeCrashReportDsn(value)).toBe(normal);
+      expect(loadConfig({ APP_ENV: 'local', CRASH_REPORT_DSN: value }).crashReport).toEqual({
+        dsn: normal,
+      });
+    }
+  });
+
   it('[AC-QA-13d#1] a malformed DSN is refused naming only the variable', () => {
     for (const [name, value] of [
       ['CRASH_REPORT_DSN', 'https://:secret@unit-dsn-a.test/5'],

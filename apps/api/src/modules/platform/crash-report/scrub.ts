@@ -3,9 +3,10 @@
 // string; the URL is at most a path template. extra, breadcrumb data and caller contexts keep only
 // link_id / platform / step / result, at every depth (a nested object is filtered the same way).
 // Free text (exception messages, breadcrumb messages, kept values) loses credentials written into
-// it (authorization / cookie header values, Bearer / Basic tokens), goes through redaction.ts's
-// redactText and loses promotion URLs, 口令 and 推广位 ids. The user is at most a one-way hash of
-// its id. Exception types, stack frames, level, environment and release stay readable.
+// it (authorization / cookie header values, Bearer / Basic tokens, token=… pairs), goes through
+// redaction.ts's redactText and loses promotion URLs, 口令 and 推广位 ids. The user is at most a
+// one-way hash of its id. Exception types, stack frames, level, environment and release stay
+// readable.
 import { createHash } from 'node:crypto';
 import type { Breadcrumb, Event, Exception, StackFrame } from '@sentry/core';
 import { REDACTED, redactPath, redactText } from '../logging/redaction.ts';
@@ -45,6 +46,10 @@ const BEARER_TEXT = /\b(Bearer\s+)[\w.~+/=:-]+/gi;
 const BASIC_TEXT =
   /\b(Basic\s+)(?=[A-Za-z0-9+/]*(?:[0-9+/]|[A-Z][A-Za-z0-9+/]*[a-z]|[a-z][A-Za-z0-9+/]*[A-Z]))[A-Za-z0-9+/]{8,}={0,2}/g;
 
+// Credentials written as key=value (`access_token=…`, `api_key=…`, `secret=…`, `token=…`, any case,
+// also as the tail of a longer key such as refresh_token): the whole value, up to a blank or `&`.
+const TOKEN_PAIR_TEXT = /(?<![A-Za-z0-9])(access_token|api_key|secret|token)=[^\s&]+/gi;
+
 /** Free text: no credential, promotion URL, 口令 or 推广位, then redaction.ts's personal-data net. */
 export function scrubText(value: string): string {
   const text = value.length > MAX_TEXT ? value.slice(0, MAX_TEXT) : value;
@@ -53,6 +58,7 @@ export function scrubText(value: string): string {
       .replace(AUTH_HEADER_TEXT, `$1$2${REDACTED}`)
       .replace(BEARER_TEXT, `$1${REDACTED}`)
       .replace(BASIC_TEXT, `$1${REDACTED}`)
+      .replace(TOKEN_PAIR_TEXT, `$1=${REDACTED}`)
       .replace(URL_TEXT, REDACTED)
       .replace(WWW_TEXT, REDACTED)
       .replace(TKL_TEXT, REDACTED)

@@ -113,3 +113,43 @@ it('[AC-QA-13d#1] a hand-built config with a DSN the SDK would refuse is disable
   expect(JSON.parse(lines[0] ?? '{}')).toMatchObject({ variable: 'CRASH_REPORT_DSN' });
   expect(lines.join('\n')).not.toContain(KEY);
 });
+
+it.each([
+  [
+    'a %20 prefix',
+    ' http://unitPayoutPublicKey@10.4.0.9/error tracking/3 ',
+    'http://10.4.0.9/error%20tracking/api/3/envelope/',
+  ],
+  [
+    'a multi-level prefix',
+    'http://unitPayoutPublicKey@10.4.0.9:9000/ops/glitch-tip/3/',
+    'http://10.4.0.9:9000/ops/glitch-tip/api/3/envelope/',
+  ],
+  ['no prefix', 'http://unitPayoutPublicKey@10.4.0.9/3', 'http://10.4.0.9/api/3/envelope/'],
+])(
+  '[AC-QA-13d#1] payout with %s: accepted by config and SDK, private host, envelope path kept',
+  async (_name: string, dsn: string, endpoint: string) => {
+    const { logger, lines } = memoryLogger();
+    const calls: string[] = [];
+    const proc = fakeProcess();
+    const reporter = await startCrashReporting({
+      entry: 'payout',
+      config: loadConfig({ APP_ENV: 'test', CRASH_REPORT_DSN: dsn }),
+      logger,
+      fetch: (input) => {
+        calls.push(String(input));
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      },
+      process: proc,
+    });
+    try {
+      expect(reporter.enabled).toBe(true);
+      reporter.captureException(new Error('unit payout prefix capture'));
+      await reporter.flush(1_000);
+    } finally {
+      await reporter.close(500);
+    }
+    expect(calls).toEqual([endpoint]);
+    expect(lines.filter((line) => (JSON.parse(line) as { level: number }).level >= 40)).toEqual([]);
+  },
+);
