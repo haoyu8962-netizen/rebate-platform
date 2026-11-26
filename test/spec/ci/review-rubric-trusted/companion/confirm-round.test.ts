@@ -162,6 +162,8 @@ it.each(wrappers)(
     const added = declarations('added');
     const changed = declarations('changed', 2);
     const worktreeOnly = declarations('worktreeOnly');
+    // Comparing with the first ledger revision would count the retained group as added.
+    commitLedger(fx, 'First ledger', [original, removed]);
     const baseline = commitLedger(fx, 'Baseline ledger', [original, retained, removed]);
     // A comparison with the immediately preceding commit would miss the added group.
     commitLedger(fx, 'Intermediate ledger', [original, retained, removed, added]);
