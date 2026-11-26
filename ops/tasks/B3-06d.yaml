@@ -1,0 +1,31 @@
+id: B3-06d
+repo: rebate-platform
+title: 'B5 出站过滤补条一（BR-AI-06 细则补条）：不带单位的价格、价格区间、金额式空白不跨换行与行末数字串、大写角位、复制 / 口令之后的裸串、缓冲上限默认值与线性时间；评测判分器同口径'
+type: impl
+# 2026-11-27 agent 线入账（D10-2592 / D10-2596 ④ B5；范围 couli-runs/AGENT-lane/b5-scope-1127.md，裁定 D10-3347；docs/changes/20261112-Agent模型路径与缺口补全.md §2.7、§3.2 B5；05 B3-06 行「在代码仓库另开任务」）。B5 拆两张：本单是纯函数与判分器；禁用词丢句、命中类型 banned_word（迁移）、读 agent.guard.buffer_max_chars 归 B3-06e，本单落地后再入账。
+# 只做（口径照 D10-3347）：① 触发词「券后 到手价 到手 原价 售价 现价 特价 价格 低至 仅需」之后（可隔水平空白与冒号）紧跟的数字算金额命中——只换数字、触发词保留（读法甲，「券后 29.9」→「券后见卡片」）；② 金额命中前紧挨「数字 + 连接符（- ~ ～ 到 至）」时前一个数字并入；
+#   ③ 金额式里的空白只指空格、制表符、全角空格；一行以数字（含小数点、货币符号）结尾时这串数字留到下一段，能组成金额则换行并进命中一起替换，组不成连换行原样下发（「省⏎3件」不再算命中）；④ 角位清单含「壹…玖」与「兩」；
+#   ⑤ 同一 run 的文字出现过「复制」或「口令」之后，再出现的 8–14 位、同时含字母与数字的裸串按口令删；⑥ 为等「复制…打开」或保留末尾数字串而扣住的内容到上限（过滤器参数，默认 2000 字符）按一句处理——整串 ASCII 不切的那种照现状不加上限；三种扣住对没有句末符的长串都须线性时间（主干现有平方级慢例：「 1 2 3」后接 32,000 个字母约 8.7 秒）；
+#   ⑦ 判分器 packages/evals/src/grade.ts 对应 ① ③ ⑤ 三处同口径；grade.ts 里 banned_word_in_text 的 TODO 注释改指 FU-EVALS-BANNED-WORD-STAT。
+# 不做：禁用词、filter_hits 取值、读配置键（B3-06e）；判分器的禁用词统计（FU-EVALS-BANNED-WORD-STAT）；模型给的检索词不加新检查项（q_short 仍走现有 filterSegment，新金额式随之生效）；三端客户端兜底、后台页面、契约、迁移。评审范围外的发现一律 out_of_scope（D10-2596）。
+# 冻结用例：入账前探针 couli-runs/B3-06d/probe/（基 2f3d8a9a3 + 原型四个文件）——evidence-check --early problems 0；测试机 --tests 487 个文件 5570 条全绿（test/spec/agent 全部、test/spec/evals* 七个目录、agent 模块单测；属性测试按默认次数），没有冻结用例块要改，本单不带 modify_existing。规则测试全部是新目录下的新文件（可先红；--red 读主干台账，入账前跑不了）。
+refs: [BR-AI-06]
+refs_hash:
+  BR-AI-06: bf97647decbd
+deps: [B3-06a, B3-06b, B3-05s, B3-01c]
+paths:
+  - 'apps/api/src/modules/agent/guard/filter.ts'
+  - 'apps/api/src/modules/agent/guard/buffer.ts'
+  - 'apps/api/src/modules/agent/guard/output-guard.ts'
+  - 'apps/api/src/modules/agent/guard/index.ts'
+  - 'apps/api/src/modules/agent/guard/*.test.ts'
+  - 'packages/evals/src/grade.ts'
+  - 'packages/evals/src/grade.test.ts'
+test_paths:
+  - 'test/spec/agent/output-guard-addenda/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/output-guard-addenda/**'
+status: todo
