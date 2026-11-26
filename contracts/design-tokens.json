@@ -2,8 +2,8 @@
   "schemaVersion": "couli.tokens.v1",
   "metadata": {
     "name": "凑狸",
-    "version": "0.5.2",
-    "date": "2026-11-07",
+    "version": "0.5.3",
+    "date": "2026-11-25",
     "status": "project baseline",
     "theme": "light",
     "modes": [
@@ -12,7 +12,7 @@
     ],
     "darkThemePhase": "MVP",
     "colorSpace": "sRGB",
-    "description": "当前项目使用的品牌与界面基线；2026-10-04 按设计方向第三轮调整 App 页面底、返利强调、平台来源标签与图片占位（docs/changes/20261004-设计方向第三轮.md）；2026-10-18 v0.4.0 按 00 D35 给每个颜色与阴影令牌补深色取值（dark 字段，value 仍为浅色）并新增组件令牌 T1–T12（docs/changes/20261018-深色令牌进唯一源.md）；2026-11-05 v0.5.0 按商品详情 v3 新增标题前平台文字标签的四个实底色 color.platform.tag.*（淘宝、天猫、京东、拼多多）与主图浮层控件底 color.overlay.on-image（docs/changes/20261105-商品详情v3定稿.md）；同日 v0.5.1 补平台文字标签圆角 radius.tag 与店铺头像圆角 radius.avatar（只加键，不改已有值）。已应用于根目录品牌配置、交付素材与品牌预览，不代表原生接入、Icon Composer 或真机验收完成。App 图标外观变体独立于 UI 主题。；2026-11-07 v0.5.2 新增 Web 动效令牌 motion.*（时长、缓动、轻提示停留、骨架微光与防闪、减弱动态替代；只供 H5 与管理后台，原生三端按平台默认动效、不读这些数，00 D37、编排裁定 D10-837；docs/changes/20261107-Web动效令牌.md）（只加键，不改已有值）",
+    "description": "当前项目使用的品牌与界面基线；2026-10-04 按设计方向第三轮调整 App 页面底、返利强调、平台来源标签与图片占位（docs/changes/20261004-设计方向第三轮.md）；2026-10-18 v0.4.0 按 00 D35 给每个颜色与阴影令牌补深色取值（dark 字段，value 仍为浅色）并新增组件令牌 T1–T12（docs/changes/20261018-深色令牌进唯一源.md）；2026-11-05 v0.5.0 按商品详情 v3 新增标题前平台文字标签的四个实底色 color.platform.tag.*（淘宝、天猫、京东、拼多多）与主图浮层控件底 color.overlay.on-image（docs/changes/20261105-商品详情v3定稿.md）；同日 v0.5.1 补平台文字标签圆角 radius.tag 与店铺头像圆角 radius.avatar（只加键，不改已有值）。已应用于根目录品牌配置、交付素材与品牌预览，不代表原生接入、Icon Composer 或真机验收完成。App 图标外观变体独立于 UI 主题。；2026-11-07 v0.5.2 新增 Web 动效令牌 motion.*（时长、缓动、轻提示停留、骨架微光与防闪、减弱动态替代；只供 H5 与管理后台，原生三端按平台默认动效、不读这些数，00 D37、编排裁定 D10-837；docs/changes/20261107-Web动效令牌.md）（只加键，不改已有值）；2026-11-25 v0.5.3 App 页面底 color.background.canvas 由 #F2EEE6 改为近中性暖白 #F6F5F3，同一层级的浅色一起改为同色调的近中性值：background.muted 与 status.pending.background #F2F1EF、background.placeholder 与 button.primary.disabled.background #EBEAE7、border.subtle 与 source.border #E6E5E3（负责人 2026-11-25 在六个候选里选定，docs/changes/20261125-App页面底改近中性.md）；深色取值与 admin-canvas 不变；只改取值、不加键，用补丁号以免占用 DSX-02 预留的 v0.6.0",
     "cssFontBase": 16,
     "sources": [
       "https://developer.apple.com/design/human-interface-guidelines/color",
@@ -29,7 +29,7 @@
           "type": "color",
           "value": "#C44820",
           "dark": "#C44820",
-          "description": "狸橙；主要行动底色与品牌图形，不用于米白上的普通小字"
+          "description": "狸橙；主要行动底色与品牌图形，不用于页面底上的普通小字"
         },
         "emphasis": {
           "type": "color",
@@ -53,9 +53,9 @@
       "background": {
         "canvas": {
           "type": "color",
-          "value": "#F2EEE6",
+          "value": "#F6F5F3",
           "dark": "#171513",
-          "description": "App 页面背景（暖米白）；2026-10-04 由 #F6F3ED 调整，管理后台用 admin-canvas"
+          "description": "App 页面背景（近中性暖白）；2026-11-25 由 #F2EEE6 调整（2026-10-04 曾由 #F6F3ED 调为 #F2EEE6），管理后台用 admin-canvas"
         },
         "admin-canvas": {
           "type": "color",
@@ -71,13 +71,13 @@
         },
         "muted": {
           "type": "color",
-          "value": "#EFEAE2",
+          "value": "#F2F1EF",
           "dark": "#2F2B27",
           "description": "次要分组背景"
         },
         "placeholder": {
           "type": "color",
-          "value": "#E9E2D9",
+          "value": "#EBEAE7",
           "dark": "#36312C",
           "description": "商品图与配图位的占位底；真实素材容器另加 border.subtle 描边，不承载文字"
         }
@@ -121,7 +121,7 @@
           "type": "color",
           "value": "#A83B1F",
           "dark": "#F29A6E",
-          "description": "返利金额与其标签词（预估返、推广收益）的强调文字，用于白底、米白底与 rebate.background 上"
+          "description": "返利金额与其标签词（预估返、推广收益）的强调文字，用于白底、页面底与 rebate.background 上"
         },
         "background": {
           "type": "color",
@@ -154,7 +154,7 @@
           },
           "background": {
             "type": "color",
-            "value": "#EFEAE2",
+            "value": "#F2F1EF",
             "dark": "#2F2B27",
             "description": "「预估中」「等待结算」状态标签的中性浅底；不能配完成对勾"
           }
@@ -205,7 +205,7 @@
       "border": {
         "subtle": {
           "type": "color",
-          "value": "#E4DED5",
+          "value": "#E6E5E3",
           "dark": "#3A3530",
           "description": "仅限装饰分隔，不单独承担必要控件边界"
         },
@@ -213,7 +213,7 @@
           "type": "color",
           "value": "#8A8177",
           "dark": "#8C8278",
-          "description": "必要控件边界，已验证对白色与米白至少 3:1"
+          "description": "必要控件边界，已验证对白色与 App / 后台页面底至少 3:1"
         },
         "active": {
           "type": "color",
@@ -245,7 +245,7 @@
         },
         "border": {
           "type": "color",
-          "value": "#E4DED5",
+          "value": "#E6E5E3",
           "dark": "#3A3530",
           "description": "平台来源标签 1 单位描边；装饰性，来源含义由文字承担"
         }
@@ -311,7 +311,7 @@
           "disabled": {
             "background": {
               "type": "color",
-              "value": "#E9E2D9",
+              "value": "#EBEAE7",
               "dark": "#36312C",
               "description": "主按钮禁用底色"
             },
