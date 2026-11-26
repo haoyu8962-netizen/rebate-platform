@@ -36,6 +36,16 @@
 #              red/<n>/evidence-shape.err, and the log ends with `evidence shape: N problem(s)`
 #              (only `evidence shape: not checked (exit X)` when it could not run). It never
 #              changes the exit code. --dry-run prints its arguments as `evidence_shape`.
+#              Then, only when red-check passed (CT-06zzzzzzzn, D10-3332 ⑥ / D10-3356), the same
+#              snapshot is type-checked with `tsc -b test` in a container set up as the offline
+#              red group (same image, --network none, same hardening, memory limit, Node heap and
+#              time limit): any compiler exit other than 0 fails the red run (exit 1), located
+#              errors or not (137 killed, 124 time limit, a global TS5083 alike). The compiler
+#              output goes to red/<n>/typecheck.txt and the log; result.json gets typecheck
+#              { exit_code (the compiler's), errors: every `path(line,col): error TSnnnn` in order,
+#              continuation lines joined to their message } (null when it did not run), and the
+#              log ends with one line naming each file and TS code. When red-check rejects the
+#              run, or fails to run, nothing is compiled and the exit code stays red-check's.
 #   --related  the tests related to the branch's source changes, on the PR head (CT-06zzzzv,
 #              FU-RED-RUNS-TEST-GUARD, D10-1292 step 1, round 2 D10-1337; --red is unchanged): the
 #              files changed from the branch point with --base (default as for --red) to the
@@ -146,14 +156,16 @@
 #     additionally mounts its own output directory (reports only);
 #   - planning text for guards and tools tests comes from a read-only, single-commit
 #     snapshot of the planning repository at SPEC_REF, mounted at /spec.
-# Exit code = the exit code of the script run (124 = time limit); --red: red-check's. Exit code
+# Exit code = the exit code of the script run (124 = time limit); --red: red-check's, or 1 when
+# red-check passed and the type check of the rule tests did not (CT-06zzzzzzzn). Exit code
 # 2 = usage or infrastructure error (no result.json is written in that case).
 #
 # Output: <runs>/<id>/{verify,verify-fast,red,related,browser,int-shard,fast-part}/<n>/log.txt and
 #   result.json
 #   { mode: container, script: verify|verify:fast|red|related|browser|int-shard|fast-part, exit_code, commit, tree,
-#     prop_seed, prop_runs, started_at, finished_at }  — red adds red_tests, expected and reports
-#     (path + sha256); related writes related.json beside it; browser leaves its screenshots and
+#     prop_seed, prop_runs, started_at, finished_at }  — red adds red_tests, expected, reports
+#     (path + sha256) and typecheck { exit_code, errors } (null: not run); related writes
+#     related.json beside it; browser leaves its screenshots and
 #     report in out/. --tests writes <runs>/<id>/tests/<n>/{files.txt,plan.json,log.txt,out/,
 #     tests.json} and no result.json.
 # `tree` is the git tree of the work tree as verified (uncommitted changes included). The tree
@@ -1336,10 +1348,13 @@ write_result() {
     "$MODE" "$SCRIPT" "$1" "$COMMIT" "$TREE" "$PROP_SEED_VALUE" "${PROP_RUNS:-null}" "$STARTED_AT" "$(now_utc)" "$RESULT_EXTRA" >"$tmp"
   if [ "$SCRIPT" = red ] && [ -f "$VDIR/red-check.json" ]; then
     # The red tests, the expected files and the exported reports with their sha256 (evidence).
+    # CT-06zzzzzzzn: typecheck { exit_code, errors } of the type check of the rule tests (from
+    # typecheck.json, written by red_typecheck_record); null when it did not run (red-check
+    # rejected the run).
     node -e '
       const fs = require("node:fs");
       const crypto = require("node:crypto");
-      const [file, check, outDir] = process.argv.slice(1);
+      const [file, check, outDir, typecheck] = process.argv.slice(1);
       const result = JSON.parse(fs.readFileSync(file, "utf8"));
       const red = JSON.parse(fs.readFileSync(check, "utf8"));
       result.red_tests = red.red ?? [];
@@ -1348,8 +1363,9 @@ write_result() {
         path: `out/${f}`,
         sha256: crypto.createHash("sha256").update(fs.readFileSync(`${outDir}/${f}`)).digest("hex"),
       }));
+      result.typecheck = fs.existsSync(typecheck) ? JSON.parse(fs.readFileSync(typecheck, "utf8")) : null;
       fs.writeFileSync(file, JSON.stringify(result, null, 2) + "\n");
-    ' "$tmp" "$VDIR/red-check.json" "$VDIR/out" || die "cannot record the red run in result.json"
+    ' "$tmp" "$VDIR/red-check.json" "$VDIR/out" "$VDIR/typecheck.json" || die "cannot record the red run in result.json"
   fi
   if [ "$SCRIPT" = int-shard ]; then int_shard_record "$tmp" "$1"; fi
   if [ "$SCRIPT" = fast-part ]; then fast_steps_record "$tmp" "$1"; fi
@@ -1472,12 +1488,19 @@ int_shard_record() {
 # CT-06zzzzzz (D10-2341): after red-check, the trusted evidence-check --early on the commit of the
 # run's snapshot (shape_args_for); its JSON to evidence-shape.json, its stderr to
 # evidence-shape.err (never to the log: money-codex r1 S1), one summary line at the end of the log.
-# Whatever it says or however it fails, the exit code of the red run stays red-check's.
+# Whatever it says or however it fails, it never changes the exit code of the red run.
+# CT-06zzzzzzzn (D10-3356): it runs before the type check of the rule tests, but its lines are only
+# kept here (SHAPE_NOTE, SHAPE_LINE) and written by evidence_shape_report after the type check, so
+# the log still ends with `evidence shape: …` unless the type check rejected the run (then its
+# summary is the last line).
+SHAPE_NOTE=''
+SHAPE_LINE=''
 evidence_shape() {
   local out="$VDIR/evidence-shape.json" err="$VDIR/evidence-shape.err" erc=0 n=''
+  SHAPE_NOTE=''
   if [ "${#SHAPE_ARGS[@]}" = 0 ]; then
     : >"$out" || true
-    step "evidence shape: not checked (no commit to check in $WT)"
+    SHAPE_LINE="evidence shape: not checked (no commit to check in $WT)"
     return 0
   fi
   (cd "$TRUSTED" && node tools/ci/evidence-check.ts "${SHAPE_ARGS[@]}") >"$out" 2>"$err" || erc=$?
@@ -1491,14 +1514,19 @@ evidence_shape() {
   fi
   if [ -n "$n" ]; then
     if [ -n "$SHAPE_SPEC" ]; then
-      printf '[verify-container %s] evidence-check --early checked %s, a commit of the snapshot tree on HEAD %s (snapshot: uncommitted changes)\n' \
-        "$(now_utc)" "$SHAPE_SPEC" "$head" >>"$LOG"
+      SHAPE_NOTE="evidence-check --early checked $SHAPE_SPEC, a commit of the snapshot tree on HEAD $head (snapshot: uncommitted changes)"
     fi
-    step "evidence shape: $n problem(s)"
+    SHAPE_LINE="evidence shape: $n problem(s)"
   else
     : >"$out" || true
-    step "evidence shape: not checked (exit $erc)"
+    SHAPE_LINE="evidence shape: not checked (exit $erc)"
   fi
+}
+evidence_shape_report() {
+  if [ -n "$SHAPE_NOTE" ]; then
+    printf '[verify-container %s] %s\n' "$(now_utc)" "$SHAPE_NOTE" >>"$LOG"
+  fi
+  if [ -n "$SHAPE_LINE" ]; then step "$SHAPE_LINE"; fi
 }
 
 finish() {
@@ -1512,7 +1540,6 @@ finish() {
   if [ "$HOST_SVC" = 1 ]; then
     svc_redact || die "cannot remove the one-shot password from the run's log and reports (no result is written)"
   fi
-  if [ "$SCRIPT" = red ]; then evidence_shape; fi
   write_result "$1"
   # --int-shard: the recorded exit code (2 when a run that exited 0 left a report missing).
   if [ -n "$INT_SHARD_RC" ]; then set -- "$INT_SHARD_RC"; fi
@@ -1655,6 +1682,8 @@ PG_NAME="$PREFIX-pg-$TAG"
 REDIS_NAME="$PREFIX-redis-$TAG"
 VERIFY_NAME="$PREFIX-run-$TAG"
 RED_DB_NAME="$PREFIX-run-db-$TAG"
+# CT-06zzzzzzzn: the container of the type check of --red (after red-check).
+TYPECHECK_NAME="$PREFIX-run-tsc-$TAG"
 FETCH_NAME="$PREFIX-fetch-$TAG"
 STORE_LOCK="$RUNS/lock/verify-store-$LOCK_HASH"
 LABELS=(--label "couli.verify=1" --label "couli.task=$ID")
@@ -1682,9 +1711,9 @@ EXT_PROXY="$VDIR/services-proxy.cjs"
 cleanup() {
   # Signals do not reach processes inside a container: remove them explicitly.
   if [ "$HOST_SVC" = 1 ]; then
-    timeout -k 5 120 docker rm -f -v "$VERIFY_NAME" "$RED_DB_NAME" "$FETCH_NAME" "$PG_NAME" "$REDIS_NAME" >/dev/null 2>&1 || true
+    timeout -k 5 120 docker rm -f -v "$VERIFY_NAME" "$RED_DB_NAME" "$TYPECHECK_NAME" "$FETCH_NAME" "$PG_NAME" "$REDIS_NAME" >/dev/null 2>&1 || true
   else
-    docker rm -f -v "$VERIFY_NAME" "$RED_DB_NAME" "$FETCH_NAME" "$PG_NAME" "$REDIS_NAME" >/dev/null 2>&1 || true
+    docker rm -f -v "$VERIFY_NAME" "$RED_DB_NAME" "$TYPECHECK_NAME" "$FETCH_NAME" "$PG_NAME" "$REDIS_NAME" >/dev/null 2>&1 || true
   fi
   if [ "$net_created" -eq 1 ]; then docker network rm "$NET" >/dev/null 2>&1 || true; fi
   if [ "$store_locked" -eq 1 ]; then rmdir "$STORE_LOCK" 2>/dev/null || true; fi
@@ -1880,7 +1909,7 @@ svc_run() {
     # The caller's stderr is the log: the reason is recorded here, the run stops in finish (or,
     # for a red group, at its missing report).
     printf '[verify-container %s] %s\n' "$(now_utc)" "the container exceeded the host-side limit of ${limit}s; removing it" >>"$LOG"
-    svc_docker 120 rm -f -v "$VERIFY_NAME" "$RED_DB_NAME" >/dev/null 2>>"$LOG" ||
+    svc_docker 120 rm -f -v "$VERIFY_NAME" "$RED_DB_NAME" "$TYPECHECK_NAME" >/dev/null 2>>"$LOG" ||
       printf '[verify-container %s] %s\n' "$(now_utc)" "docker rm of the timed-out containers failed or timed out" >>"$LOG"
     SVC_RUN_TIMED_OUT=1
     SVC_RUN_LIMIT="$limit"
@@ -2406,6 +2435,140 @@ if [ "$SCRIPT" = red ] || [ "$SCRIPT" = tests ]; then
   }
 fi
 
+# CT-06zzzzzzzn (FU-SPEC-HANDBACK-TSC + FU-RED-TYPECHECK-NEW-SPEC, D10-3332 ⑥ / D10-3356): --red
+# only. Vitest strips types, so a rule test with a TypeScript error can run red, be handed back and
+# only fail `pnpm run typecheck` later. After red-check passed (and after the evidence shape check),
+# the same snapshot (/src) is type-checked with `tsc -b test` in a container set up as the red run's
+# offline group: the same image, `--network none`, the same hardening, memory limit and Node heap,
+# its own copy and offline install (as the entrypoint's prepare_repo; *.tsbuildinfo excluded, so
+# nothing is skipped), then the compiler under the same time limit as each red container
+# (VERIFY_TIMEOUT_SECS, default and at most 3600 s; the install is outside it, as in the
+# entrypoint). `pnpm run typecheck` (tsc -b, the test project included) took 219–231 s on the test
+# machine (couli-ci2, 2026-11-27), so 3600 s leaves about 15 times that. Only the compiler writes
+# to stdout (the host keeps it in typecheck.txt); the rest goes to stderr (the log). The exit code
+# is the compiler's (124: time limit; 137: killed, e.g. by the memory limit; an install that fails
+# exits with its own code and says so on stderr).
+IFS= read -r -d '' TYPECHECK_SH <<'SH' || true
+set -euo pipefail
+limit="${VERIFY_TIMEOUT_SECS:?VERIFY_TIMEOUT_SECS is required}"
+mkdir -p "$HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
+mkdir -p /work/repo
+tar -C /src \
+  --exclude=node_modules --exclude=.git --exclude=dist --exclude=.turbo --exclude=.tmp \
+  --exclude='*.tsbuildinfo' \
+  -cf - . | tar -C /work/repo -xf -
+cd /work/repo
+echo "[typecheck] pnpm install --offline --frozen-lockfile" >&2
+irc=0
+pnpm install --offline --frozen-lockfile --store-dir /store >&2 || irc=$?
+if [ "$irc" -ne 0 ]; then
+  echo "[typecheck] the offline install failed (exit ${irc}): the compiler did not run" >&2
+  exit "$irc"
+fi
+echo "[typecheck] tsc --build --pretty false test (limit ${limit}s)" >&2
+started=$(date +%s)
+rc=0
+timeout --signal=TERM --kill-after=10 "$limit" ./node_modules/.bin/tsc -b --pretty false test || rc=$?
+elapsed=$(( $(date +%s) - started ))
+# `timeout` reports 137 when the compiler ignored TERM and had to be killed.
+if [ "$rc" -eq 137 ] && [ "$elapsed" -ge "$limit" ]; then rc=124; fi
+echo "[typecheck] tsc exited ${rc} after ${elapsed}s" >&2
+exit "$rc"
+SH
+
+# <compiler output> <exit code> <typecheck.json>: writes { exit_code, errors } (errors: every
+# located diagnostic `path(line,col): error TSnnnn: message` in order, { file, line, col, code,
+# message }; indented continuation lines join the message of the diagnostic above, never a new
+# entry; a path under /work/repo/ is made repository-relative) and prints three lines: `ok` or
+# `fail`, the number of located errors, then the log line. Any exit code other than 0 fails the
+# run, located errors or not (rule test review r1 S1); so does exit 0 with a located error (fail
+# closed). The output is
+# written by the compiler over untrusted files: control characters never reach the log line.
+red_typecheck_record() {
+  node -e '
+    const fs = require("node:fs");
+    const [textFile, rcText, outFile] = process.argv.slice(1);
+    const exitCode = Number(rcText);
+    if (!Number.isInteger(exitCode)) throw new Error("bad exit code " + rcText);
+    const text = fs.existsSync(textFile) ? fs.readFileSync(textFile, "utf8") : "";
+    const located = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/;
+    const globalRe = /^error (TS\d+): /;
+    const errors = [];
+    const globals = [];
+    let last = null;
+    for (const raw of text.split(/\r?\n/)) {
+      const line = raw.replace(/\x1b\[[0-9;]*m/g, "");
+      const m = located.exec(line);
+      if (m) {
+        let file = m[1].replace(/\\/g, "/");
+        if (file.startsWith("/work/repo/")) file = file.slice("/work/repo/".length);
+        last = { file, line: Number(m[2]), col: Number(m[3]), code: m[4], message: m[5] };
+        errors.push(last);
+      } else if (last !== null && /^\s+\S/.test(line)) {
+        last.message += "\n" + line.trim();
+      } else {
+        last = null;
+        const g = globalRe.exec(line);
+        if (g && !globals.includes(g[1])) globals.push(g[1]);
+      }
+    }
+    fs.writeFileSync(outFile, JSON.stringify({ exit_code: exitCode, errors }, null, 2) + "\n");
+    const clean = (s) => s.replace(/[\x00-\x1f\x7f]/g, "?");
+    if (exitCode === 0 && errors.length === 0) {
+      process.stdout.write("ok\n0\ntype check (tsc -b test): passed (exit 0)\n");
+      process.exit(0);
+    }
+    const head = `red run rejected: the rule tests do not type-check (tsc -b test exit ${exitCode}`;
+    let tail;
+    if (errors.length > 0) {
+      const shown = errors.slice(0, 20).map((e) => `${clean(e.file)}(${e.line},${e.col}) ${e.code}`);
+      const more = errors.length > shown.length ? `; … ${errors.length - shown.length} more in result.json` : "";
+      tail = `, ${errors.length} error(s)): ${shown.join("; ")}${more}`;
+    } else {
+      const why = exitCode === 124 ? "the time limit" : exitCode === 137 ? "killed, e.g. by the memory limit" : "no file location";
+      const g = globals.length > 0 ? `; global: ${globals.join(", ")}` : "";
+      tail = `, no located error: ${why}${g}; see the compiler output above)`;
+    }
+    process.stdout.write(`fail\n${errors.length}\n${head}${tail}\n`);
+  ' "$1" "$2" "$3"
+}
+
+# --red, once red-check passed: the type check above; its output into the log, typecheck.json for
+# result.json, one line with its outcome. Sets TC_OK (1 passed, 0 rejected) and TC_SUMMARY.
+TC_OK=1
+TC_SUMMARY=''
+red_typecheck() {
+  local out="$VDIR/typecheck.txt" tc_rc=0 record count
+  step "type-checking the rule tests (tsc -b test) in $IMAGE, no network (limit ${TIMEOUT_SECS}s)"
+  svc_run docker run --rm --name "$TYPECHECK_NAME" "${LABELS[@]}" "${HARDEN[@]}" ${MEMORY_ARGS[@]+"${MEMORY_ARGS[@]}"} "${TMPFS[@]}" \
+    --network none \
+    -v "$SRC:/src:ro" \
+    -v "$STORE_VOL:/store:ro" \
+    --tmpfs "/store/v10/projects:rw,nosuid,uid=1000,gid=1000,mode=0755" \
+    "${NODE_HEAP[@]}" -e "VERIFY_TIMEOUT_SECS=$TIMEOUT_SECS" \
+    "$IMAGE" bash -c "$TYPECHECK_SH" couli-typecheck >"$out" 2>>"$LOG" </dev/null || tc_rc=$?
+  if [ "$SVC_RUN_TIMED_OUT" = 1 ]; then
+    die "the type-check container exceeded the host-side limit of ${SVC_RUN_LIMIT}s (no result is written), see $LOG"
+  fi
+  cat "$out" >>"$LOG" 2>/dev/null || true
+  record="$(red_typecheck_record "$out" "$tc_rc" "$VDIR/typecheck.json" 2>>"$LOG")" ||
+    die "cannot record the type check of the rule tests (exit $tc_rc), see $LOG"
+  count="$(printf '%s\n' "$record" | sed -n '2p')"
+  TC_SUMMARY="$(printf '%s\n' "$record" | sed -n '3p')"
+  [[ "$count" =~ ^[0-9]+$ ]] && [ -n "$TC_SUMMARY" ] ||
+    die "cannot record the type check of the rule tests (exit $tc_rc), see $LOG"
+  case "$(printf '%s\n' "$record" | sed -n '1p')" in
+    ok) TC_OK=1 ;;
+    fail) TC_OK=0 ;;
+    *) die "cannot record the type check of the rule tests (exit $tc_rc), see $LOG" ;;
+  esac
+  if [ "$TC_OK" = 1 ]; then
+    step "$TC_SUMMARY"
+  else
+    step "type check (tsc -b test): exit $tc_rc, $count located error(s)"
+  fi
+}
+
 if [ "$SCRIPT" = red ]; then
   # Groups of the plan (tools/ops/red-plan.ts) in at most two containers (red_part, red_container
   # above): the integration groups with the one-shot services, the others with no network.
@@ -2446,6 +2609,25 @@ if [ "$SCRIPT" = red ]; then
     --expected-list "$VDIR/expected.txt" ${red_base[@]+"${red_base[@]}"} --root /work/repo --json) \
     >"$VDIR/red-check.json" 2>>"$LOG" || rc=$?
   [ "$rc" = 0 ] || [ "$rc" = 1 ] || die "red-check failed to run (exit $rc), see $LOG"
+  evidence_shape
+  # CT-06zzzzzzzn: the type check only when red-check passed; otherwise the exit code stays
+  # red-check's and nothing is compiled. The host services (integration groups) are done by now:
+  # stopped first, so they are not idle through the compile and nothing is logged after its line.
+  if [ "$rc" = 0 ]; then
+    if [ "$SVC_ACTIVE" = 1 ]; then
+      stop_host_services || die "the host services of this run could not be removed, see $LOG (no result is written)"
+    fi
+    red_typecheck
+  else
+    step "type check (tsc -b test): not run (red-check did not pass)"
+  fi
+  evidence_shape_report
+  # A rejected type check fails the red run (exit 1, as a red-check rejection); its summary, naming
+  # the files and TS codes, is the last line of the log.
+  if [ "$rc" = 0 ] && [ "$TC_OK" != 1 ]; then
+    step "$TC_SUMMARY"
+    rc=1
+  fi
   finish "$rc"
 fi
 
