@@ -96,5 +96,5 @@ modify_existing:
     br: [BR-AI-16]
     ruling: D10-3339
     note: 'B3-09n：agent.models 列进后台配置列表——块内「configRegistry() 不含 agent.models」一句改为「含」，按键能查到、类型为 object 的断言不动；title 写「10 条」，连本条实为 11 条（D10-3339 / D10-3340）'
-status: todo
-pr: null
+status: done
+pr: 881
