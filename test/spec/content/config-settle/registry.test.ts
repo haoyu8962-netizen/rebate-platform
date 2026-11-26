@@ -180,6 +180,7 @@ it('[AC-F1-02zj#2] 16 项按裁定顺序追加；原 29 项及其无 range 行�
     'agent.safety.timeout_ms',
     'agent.daily_budget_fen',
     'agent.budget.reserve_mfen_per_run',
+    'agent.models',
     'agent.context.max_turns',
     'agent.context.max_chars',
     'agent.orders.default_span_days',

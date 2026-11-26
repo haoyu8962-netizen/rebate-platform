@@ -184,6 +184,7 @@ it('[AC-F1-02zn#2] 五项按指定顺序追加在 SETTLE 之后', () => {
     'agent.safety.timeout_ms',
     'agent.daily_budget_fen',
     'agent.budget.reserve_mfen_per_run',
+    'agent.models',
     'agent.context.max_turns',
     'agent.context.max_chars',
     'agent.orders.default_span_days',

@@ -198,6 +198,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...AUTO_CORRECT_UNSEEDED,
         ...DEFAULT_WORD_UNSEEDED,
         ...AGENT_A10_UNSEEDED,
+        'agent.models',
         ...calendarKeys,
       ]),
     ]),
@@ -225,6 +226,7 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
     ...AUTO_CORRECT_UNSEEDED,
     ...DEFAULT_WORD_UNSEEDED,
     ...AGENT_A10_UNSEEDED,
+    'agent.models',
     ...calendarKeys,
   ]) {
     expect(seeds, key).not.toContain(key);
@@ -273,7 +275,11 @@ it('[AC-F1-10e#1] 裁定 14：注册表恰好是种子里全部非开关键加 a
         ...SERVICE_FEE_BP,
         ...AUTO_CORRECT,
         ...DEFAULT_WORD,
-        ...AGENT_A10,
+        ...AGENT_A10.flatMap((entry) =>
+          entry.key === 'agent.budget.reserve_mfen_per_run'
+            ? [entry, { ...entry, key: 'agent.models' }]
+            : [entry],
+        ),
         ...calendarKeys.map((key) => ({ key })),
       ].map((entry) => entry.key),
     ),
@@ -333,7 +339,8 @@ it('[AC-F1-10e#3] 裁定 14：值类型取种子值的 JSON 类型（数组记 o
       AUTO_CORRECT_UNSEEDED.length -
       DEFAULT_WORD_UNSEEDED.length -
       AGENT_A10_UNSEEDED.length -
-      10,
+      10 -
+      1,
   );
   expect(registered('agent.page_guide.routes').valueType).toBe('object');
 });
@@ -492,7 +499,11 @@ it('[AC-F1-10e#56] BR-FUND-04 细则 settle.* 一组 16 键整组登记（追加
     ...SERVICE_FEE_BP,
     ...AUTO_CORRECT,
     ...DEFAULT_WORD,
-    ...AGENT_A10,
+    ...AGENT_A10.flatMap((entry) =>
+      entry.key === 'agent.budget.reserve_mfen_per_run'
+        ? [entry, { ...entry, key: 'agent.models' }]
+        : [entry],
+    ),
   ].map((e) => e.key);
   const calendarKeys = [2026, 2027, 2028, 2029, 2030].flatMap((year) => [
     `calendar.cn_holidays.${year}`,
@@ -573,7 +584,11 @@ it('[AC-F1-10e#57] BR-INV-24 细则 growth.invite_reward.* 一组 5 键整组登
     ...SERVICE_FEE_BP,
     ...AUTO_CORRECT,
     ...DEFAULT_WORD,
-    ...AGENT_A10,
+    ...AGENT_A10.flatMap((entry) =>
+      entry.key === 'agent.budget.reserve_mfen_per_run'
+        ? [entry, { ...entry, key: 'agent.models' }]
+        : [entry],
+    ),
   ];
   const calendarKeys = [2026, 2027, 2028, 2029, 2030].flatMap((year) => [
     `calendar.cn_holidays.${year}`,
@@ -663,7 +678,11 @@ it('[AC-F1-10e#58] BR-INV-24 细则 growth.invite_reward.eligibility_days 紧接
       ...SERVICE_FEE_BP,
       ...AUTO_CORRECT,
       ...DEFAULT_WORD,
-      ...AGENT_A10,
+      ...AGENT_A10.flatMap((entry) =>
+        entry.key === 'agent.budget.reserve_mfen_per_run'
+          ? [entry, { ...entry, key: 'agent.models' }]
+          : [entry],
+      ),
     ]
       .map((entry) => entry.key)
       .concat(calendarKeys),

@@ -250,7 +250,9 @@ it('[AC-F1-02zx#2] 六项邀请奖励配置连续位于 growth 组，资格天�
     ...SERVICE_FEE_BP_KEYS,
     ...AUTO_CORRECT_KEYS,
     ...DEFAULT_WORD_KEYS,
-    ...AGENT_A10_KEYS,
+    ...AGENT_A10_KEYS.flatMap((key) =>
+      key === 'agent.budget.reserve_mfen_per_run' ? [key, 'agent.models'] : [key],
+    ),
     ...[2026, 2027, 2028, 2029, 2030].flatMap((year) => [
       `calendar.cn_holidays.${year}`,
       `calendar.cn_makeup_workdays.${year}`,

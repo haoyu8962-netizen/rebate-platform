@@ -86,7 +86,20 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
   expect(items.map(normalized)).toStrictEqual([
     ...configRegistry()
       .filter((spec) => !calendarKeys.includes(spec.key))
-      .map((spec) => unwritten(spec.key)),
+      .map((spec) => {
+        if (spec.key !== 'agent.models') return unwritten(spec.key);
+        return {
+          key: 'agent.models',
+          value: null,
+          value_type: 'object',
+          options: null,
+          permission: 'config.business',
+          admin_editable: true,
+          version: 0,
+          updated_by: null,
+          updated_at: null,
+        };
+      }),
     ...unwrittenCalendar,
   ]);
   // F1-02zt：过渡已收紧, EXPECTED + settle.* + invite; B2-06bz: + the eight payout.* keys;
@@ -142,7 +155,11 @@ it('[AC-F1-10e#10] 列表按注册表顺序列出每个配置项，未写过的 
     ...SERVICE_FEE_BP,
     ...AUTO_CORRECT,
     ...DEFAULT_WORD,
-    ...AGENT_A10,
+    ...AGENT_A10.flatMap((entry) =>
+      entry.key === 'agent.budget.reserve_mfen_per_run'
+        ? [entry, { ...entry, key: 'agent.models' }]
+        : [entry],
+    ),
   ];
   const tailKeys = [...tail.map((entry) => entry.key), ...calendarKeys];
   expect(items).toHaveLength(expectedNow().length + tailKeys.length);
