@@ -106,7 +106,44 @@ it('[AC-F1-07e-BROWSER#1] 1440 订单列表筛选、表格及只读入口可见�
 
 it('[AC-F1-07e-BROWSER#2] 1440 详情各区块和两个锁定标记可见，截图 admin-order-detail', async () => {
   await page.viewport(1440, 1360);
-  const marker = await show(ROUTE);
+  const { expectWriteEntries } = await import('../admin-orders-writes/kit.ts');
+  const { detail } = await import('./orders-fixtures.ts');
+  const server = createServer(undefined, detail({ reason: 'REFUND' }));
+  const marker = document.createElement('span');
+  marker.hidden = true;
+  marker.dataset['pending'] = '0';
+  document.body.append(marker);
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const response = server.fetch(input, init);
+    marker.dataset['pending'] = String(server.pending);
+    try {
+      return await response;
+    } finally {
+      marker.dataset['pending'] = String(server.pending);
+    }
+  };
+  auth = harness().create();
+  await signIn(auth);
+  window.history.replaceState(null, '', ROUTE);
+  const container = document.createElement('div');
+  document.body.append(container);
+  root = createRoot(container);
+  root.render(
+    createAdminShell({
+      router: 'browser',
+      authProvider: auth,
+      permissionsProvider: async () => ({ isSuper: true, permissions: [] }),
+      account: { username: 'ops-yi', displayName: '超管' },
+      environment: 'test',
+      onLogout: () => {},
+      dataProvider: createDataProvider({
+        baseUrl: BASE_URL,
+        fetch,
+        getToken: () => 'example-admin-token',
+        onError: () => {},
+      }),
+    }),
+  );
   const main = page.getByRole('main');
   await expect.element(main.getByText('分佣快照', { exact: true }), FIRST).toBeVisible();
   await expect.element(main).toMatchTextContent(NUMBER);
@@ -120,9 +157,7 @@ it('[AC-F1-07e-BROWSER#2] 1440 详情各区块和两个锁定标记可见，截�
   await expect.element(main).toMatchTextContent('60.00%');
   await expect.element(main.getByRole('button', { name: /返回/ })).toBeVisible();
   await expect.element(main).not.toMatchTextContent('原始报文');
-  await expect
-    .element(main.getByRole('button', { name: /暂停结算|恢复结算|指定归属/ }))
-    .not.toBeInTheDocument();
+  expectWriteEntries(server, ['原因细分']);
   await screenshot('admin-order-detail', marker);
 });
 

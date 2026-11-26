@@ -2,12 +2,24 @@
 // design/specs/admin-order-detail.md; 01 F-ADM-05, F1-07e): GET /admin/v1/orders/{order_id} only
 // (a direct address never reads the list) with the status card (both lock marks side by side),
 // basic and attribution information, the commission snapshot, the status history and the link
-// records. 【同步此单】 (F1-07eb, CT-24n) asks a manual sync of this sub-order; the other write
-// buttons (hold / unhold, assign) come with a later contract and the raw union payload has no
-// permission point yet, so neither is rendered. An unknown or
+// records. 【同步此单】 (F1-07eb, CT-24n) asks a manual sync of this sub-order; 【暂停结算】 /
+// 【恢复结算】, 【原因细分】 and 【指定归属】 (F1-07ee, ./detail-writes/) each show with their own
+// permission point and replace the detail with the one the server answers; the raw union payload
+// has no permission point yet, so it is not rendered. An unknown or
 // not visible order (20001) shows nothing of it. 【返回】 goes to the list with its conditions (the
 // list address, F1-07ed). 「分佣明细」 (F1-07ed) groups the snapshot's beneficiaries by role with each
 // one's ratio, settlement state and forfeit mark; it shows no amount (amounts stay in 「分佣快照」).
+// A display_status this console does not know shows order_status.UNKNOWN (BR-TEXT-05), and every
+// unknown code is reported once (enum name and code only). An order write whose result is unknown
+// (the marker of this account, ./detail-writes/) shows its read-only prompt above the detail and
+// no write entry; it offers 【放弃这次提交】 (confirmed) once the page's own read is shown and no
+// write of the order is waiting for its answer in this tab, never a 【关闭】 or a reread button.
+// The detail is read when the page opens, once after 20902, and once each time a marker left
+// before opening goes (its request got a definite answer in this tab, or it was given up): from
+// that very render until that read is shown the write entries stay locked and the earlier detail
+// is not shown as the current one (a read sent before it went is dropped), and 【同步此单】 is not
+// shown either until that read is shown (it stays as it was while the marker is there). No read
+// ever shows over a newer write (./detail-writes/detailGate.ts, BR-FUND-06).
 import { ArrowLeftOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons';
 import { beneficiary_role } from '@couli/contracts-ts';
 import { useDataProvider } from '@refinedev/core';
@@ -31,7 +43,17 @@ import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import type { AccessControl } from '../../providers/access-control/index.ts';
 import { PlannedPage, usePlanned } from '../../components/planned/index.ts';
+import { CONSOLE_CLOCK, type MarkerClock } from '../../components/unknown-marker/index.ts';
 import { ordersTexts } from '../../texts/orders.ts';
+import {
+  knownStatuses,
+  reportUnknownCodes,
+  subReasonLabel,
+  unknownCodesOf,
+} from './detail-writes/model.ts';
+import { createDetailGate } from './detail-writes/detailGate.ts';
+import { OrderWrites, UnknownWritePrompt } from './detail-writes/OrderWrites.tsx';
+import { useOrderMarker } from './detail-writes/useOrderMarker.ts';
 import { FlagTags, StatusTag } from './parts.tsx';
 import { nextNoticeId, noticeOf, useSyncRequest, type SyncNotice } from './sync.ts';
 import {
@@ -59,6 +81,8 @@ type LoadStatus = 'loading' | 'ready' | 'failed' | 'missing' | 'forbidden';
 export interface OrderDetailPageProps {
   readonly access: AccessControl;
   readonly orderId: string;
+  /** Injected clock (AGENTS.md §4 rule 5) of the write marker; the console's default if left out. */
+  readonly clock?: MarkerClock | undefined;
 }
 
 /** GET /admin/v1/orders/{order_id} not live yet (planned): the placeholder, no read (D10-284). */
@@ -67,7 +91,11 @@ export function OrderDetailPage(props: OrderDetailPageProps): ReactElement {
   return planned ? <PlannedPage title={t.title} /> : <OrderDetailContent {...props} />;
 }
 
-function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactElement {
+function OrderDetailContent({
+  access,
+  orderId,
+  clock = CONSOLE_CLOCK,
+}: OrderDetailPageProps): ReactElement {
   const getProvider = useDataProvider();
   const navigate = useNavigate();
   const location = useLocation();
@@ -78,34 +106,67 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
   const [attempt, setAttempt] = useState(0);
   const sync = useSyncRequest();
   const [notice, setNotice] = useState<SyncNotice>();
+  const marker = useOrderMarker(orderId);
+  // How many times the left marker went (useOrderMarker); a read is sent for each count.
+  const drops = marker.drops;
+  // The count at which the read now shown was sent (its detail, or a newer write's, is shown),
+  // and the count of the last read that got an answer at all.
+  const [readDrops, setReadDrops] = useState(drops);
+  const [answeredDrops, setAnsweredDrops] = useState(drops);
+  // One gate per mount: which read or write answer the page may still show.
+  const [gate] = useState(createDetailGate);
 
   useEffect(() => {
     if (!permitted) return undefined;
     let current = true;
     const custom = getProvider().custom;
     if (custom === undefined) throw new Error('Missing custom data provider');
+    const ticket = gate.read();
     custom<OrderDetail>({ url: orderUrl(orderId), method: 'get' }).then(
       (response) => {
         if (!current) return;
-        setOrder(response.data);
+        // A newer write answer is shown already: the page keeps it (BR-FUND-06).
+        if (gate.takeRead(ticket, response.data)) setOrder(response.data);
         setStatus('ready');
+        setReadDrops(drops);
+        setAnsweredDrops(drops);
       },
       (cause: unknown) => {
         if (!current) return;
+        setAnsweredDrops(drops);
+        if (!gate.takeRead(ticket, undefined)) {
+          setStatus('ready');
+          setReadDrops(drops);
+          return;
+        }
         setOrder(undefined);
         const kind = failureOf(cause);
         setStatus(kind === 'invalid' ? 'missing' : kind);
       },
     );
+    // A new count drops the read under way (sent before the marker went) and reads once again.
     return () => {
       current = false;
     };
-  }, [getProvider, orderId, attempt, permitted]);
+  }, [getProvider, orderId, attempt, permitted, gate, drops]);
+
+  // Write entries are offered only once the read sent after the last drop is shown (with the
+  // three other conditions: shown, known statuses, no left marker — ./detail-writes/).
+  const locked = drops !== readDrops;
+  // Until the read sent after the last drop answers, the earlier detail is not the current one.
+  const view: LoadStatus =
+    status !== 'forbidden' && (answeredDrops !== drops || (status === 'ready' && locked))
+      ? 'loading'
+      : status;
 
   const retry = () => {
     setStatus('loading');
     setAttempt((value) => value + 1);
   };
+  // BR-TEXT-05: each unknown status code is reported once (enum name and code only).
+  useEffect(() => {
+    if (order !== undefined) reportUnknownCodes(unknownCodesOf(order));
+  }, [order]);
 
   const back = () => {
     const query = backQueryOf(location.state);
@@ -114,9 +175,10 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
     void navigate(`/orders${query === undefined ? '' : searchOf(query)}`, { state });
   };
 
-  // 【同步此单】 (F1-07eb, CT-24n): sends at once { platform, order_nos: [this sub-order] }.
+  // 【同步此单】 (F1-07eb, CT-24n): sends at once { platform, order_nos: [this sub-order] }; only
+  // while the detail is shown and no reread after a drop is waiting (the write entries' gate).
   const syncThisOrder = async (shown: OrderDetail) => {
-    if (sync.busy) return;
+    if (view !== 'ready' || sync.busy) return;
     const outcome = await sync.send({ platform: shown.platform, order_nos: [shown.sub_order_id] });
     if (outcome === undefined) return;
     const text =
@@ -124,6 +186,21 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
         ? { type: 'error' as const, text: thisOrderRejectedText(outcome.fields) }
         : noticeOf(outcome);
     setNotice(text === undefined ? undefined : { id: nextNoticeId(), ...text });
+  };
+
+  // F1-07ee writes: a success shows the detail of the response as it is (nothing derived here);
+  // 20902 shows the message and reads the detail once again, without resending the write. Any
+  // read sent before a success answer can no longer show over it (detailGate).
+  const saved = (updated: OrderDetail, text: string) => {
+    if (gate.takeWrite(updated)) {
+      setOrder(updated);
+      setStatus('ready');
+    }
+    setNotice({ id: nextNoticeId(), type: 'success', text });
+  };
+  const conflicted = (text: string) => {
+    setNotice({ id: nextNoticeId(), type: 'warning', text });
+    retry();
   };
 
   const code = { fontFamily: token.fontFamilyCode } as const;
@@ -147,6 +224,19 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
       </Flex>
       <Flex gap={8} wrap>
         {order === undefined || status !== 'ready' ? null : (
+          <OrderWrites
+            order={order}
+            access={access}
+            marker={marker}
+            clock={clock}
+            onSaved={saved}
+            onConflict={conflicted}
+            locked={locked}
+          />
+        )}
+        {/* BR-TEXT-05: no write action, 【同步此单】 included, for a status this console does not know;
+            none either until the read sent after the last drop is shown (`view`, approvals 209). */}
+        {order === undefined || view !== 'ready' || !knownStatuses(order) ? null : (
           <Button
             icon={<SyncOutlined aria-hidden />}
             disabled={sync.busy}
@@ -164,7 +254,7 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
   );
 
   let body: ReactElement;
-  if (status === 'loading') {
+  if (view === 'loading') {
     body = (
       <Card>
         <Typography.Text type="secondary" role="status">
@@ -172,19 +262,19 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
         </Typography.Text>
       </Card>
     );
-  } else if (status === 'missing') {
+  } else if (view === 'missing') {
     body = (
       <Card>
         <Result status="404" title={t.missingTitle} subTitle={t.missingDescription} />
       </Card>
     );
-  } else if (status === 'forbidden') {
+  } else if (view === 'forbidden') {
     body = (
       <Card>
         <Result status="403" title={t.forbiddenTitle} subTitle={t.forbiddenDescription} />
       </Card>
     );
-  } else if (status === 'failed' || order === undefined) {
+  } else if (view === 'failed' || order === undefined) {
     body = (
       <Card>
         <Result
@@ -216,6 +306,7 @@ function OrderDetailContent({ access, orderId }: OrderDetailPageProps): ReactEle
           onClose={() => setNotice(undefined)}
         />
       )}
+      <UnknownWritePrompt marker={marker} order={view === 'ready' && !locked ? order : undefined} />
       {body}
     </Flex>
   );
@@ -245,8 +336,15 @@ function DetailBody({ order }: { readonly order: OrderDetail }): ReactElement {
     />
   );
 
-  const status = (kind: DictKind, value: string | null): ReactNode =>
-    value === null ? dash : <StatusTag kind={kind} code={value} />;
+  // BR-TEXT-05 / BR-TEXT-12: a code this console does not know shows only order_status.UNKNOWN
+  // (「状态更新中」), never the raw code; the raw code is left to the diagnostic report (the console
+  // has no channel for it yet, FU-ADMIN-DIAG-REPORT-CHANNEL). Same judgment as the write entries'.
+  const unknownCodes = new Set(unknownCodesOf(order).map((unknown) => unknown.enum));
+  const unknownStatus: ReactNode = (
+    <Tag style={{ marginInlineEnd: 0 }}>{t.status.unknownDisplay}</Tag>
+  );
+  const status = (kind: 'platform_status' | 'rebate_status', value: string): ReactNode =>
+    unknownCodes.has(kind) ? unknownStatus : <StatusTag kind={kind} code={value} />;
 
   const statusItems: Items = [
     {
@@ -262,12 +360,14 @@ function DetailBody({ order }: { readonly order: OrderDetail }): ReactElement {
     {
       key: 'display',
       label: t.status.displayStatus,
-      children:
-        order.display_status === null ? (
-          dash
-        ) : (
-          <Tag style={{ marginInlineEnd: 0, ...code }}>{order.display_status}</Tag>
-        ),
+      // Any status unknown to this console: the user-side display is unknown too (null included).
+      children: !knownStatuses(order) ? (
+        unknownStatus
+      ) : order.display_status === null ? (
+        dash
+      ) : (
+        <Tag style={{ marginInlineEnd: 0, ...code }}>{order.display_status}</Tag>
+      ),
     },
     {
       key: 'holdRights',
@@ -336,7 +436,7 @@ function DetailBody({ order }: { readonly order: OrderDetail }): ReactElement {
     statusItems.push({
       key: 'holdReason',
       label: t.status.holdReason,
-      children: status('hold_reason', order.hold_reason),
+      children: <StatusTag kind="hold_reason" code={order.hold_reason} />,
     });
 
   const b = t.basic;
@@ -383,6 +483,14 @@ function DetailBody({ order }: { readonly order: OrderDetail }): ReactElement {
       children: `${order.is_presale ? b.presaleYes : b.presaleNo} / ${beijingTime(order.deposit_paid_at)}`,
     },
     { key: 'reason', label: b.reason, children: mono(order.reason) },
+    {
+      key: 'reasonSub',
+      label: t.reasonSub,
+      children:
+        order.reason_sub === undefined || order.reason_sub === null
+          ? dash
+          : subReasonLabel(order.reason_sub),
+    },
   ];
 
   const a = t.attribution;

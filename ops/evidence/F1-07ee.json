@@ -1,0 +1,193 @@
+{
+  "red_tests": [
+    "test/spec/frontend/admin-orders-writes/assign.test.ts > [AC-F1-07ee-ASSIGN#1] 指派带详情锁定值、空的期望归属和 200 字原因，无 10003 时直接显示新归属",
+    "test/spec/frontend/admin-orders-writes/assign.test.ts > [AC-F1-07ee-ASSIGN#2] 第一次不带令牌，收到 10003 后经动态码验证，原请求体带新令牌重发一次",
+    "test/spec/frontend/admin-orders-writes/assign.test.ts > [AC-F1-07ee-ASSIGN#3] 20001 target_banned 提示封禁并保留未归因",
+    "test/spec/frontend/admin-orders-writes/assign.test.ts > [AC-F1-07ee-ASSIGN#4] 20001 target_deleting 提示注销处理中并保留未归因",
+    "test/spec/frontend/admin-orders-writes/assign.test.ts > [AC-F1-07ee-ASSIGN#5] 20001 target_deleted 提示已注销并保留未归因",
+    "test/spec/frontend/admin-orders-writes/assign.test.ts > [AC-F1-07ee-ASSIGN#6] 原因只有 4 字时不发指定归属请求，满 5 字可提交",
+    "test/spec/frontend/admin-orders-writes/conflict.test.ts > [AC-F1-07ee-CONFLICT#1] 暂停收到订单冲突，提示变更且只重读一次详情",
+    "test/spec/frontend/admin-orders-writes/conflict.test.ts > [AC-F1-07ee-CONFLICT#2] 指派收到归属冲突，只读取一次已被他人指派的最新详情",
+    "test/spec/frontend/admin-orders-writes/conflict.test.ts > [AC-F1-07ee-CONFLICT#3] 恢复收到订单冲突，只重读一次并显示最新订单",
+    "test/spec/frontend/admin-orders-writes/conflict.test.ts > [AC-F1-07ee-CONFLICT#4] 原因细分收到版本冲突，重读一次且不自动重提",
+    "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#1] order.hold 按暂停标志只显示暂停或恢复，order.claim 单独开放原因细分",
+    "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#2] order.assign 可指派未归因的作废单，已归属订单即便超管也不能改给他人",
+    "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#3] 只有 order.view 的详情及超管列表均无本单写入口，超管打开未归因详情才见指定归属",
+    "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#4] 已作废的暂停单保留暂停标记，系统未映射待处理未关闭时禁用恢复",
+    "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#5] 客户端未知订单状态隐藏写入口，已知状态的同权限详情显示写入口",
+    "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#6] 预估状态的未暂停订单向 order.hold 开放暂停结算",
+    "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#7] 平台状态已知但返利状态未知时，超管看不到写入口且不发写请求",
+    "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#8] 持 order.claim 时原因细分只对有契约子原因的父原因开放",
+    "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#9] order.hold 不能指定归属，order.assign 不能暂停或恢复结算",
+    "test/spec/frontend/admin-orders-writes/hold.test.ts > [AC-F1-07ee-HOLD#1] 暂停只提供风控和客服原因，提交当前版本，状态卡以成功响应为准",
+    "test/spec/frontend/admin-orders-writes/hold.test.ts > [AC-F1-07ee-HOLD#2] 先填备注仍须选原因，清空备注也不可提交",
+    "test/spec/frontend/admin-orders-writes/hold.test.ts > [AC-F1-07ee-HOLD#3] 备注最多 200 字且 200 字可完整提交",
+    "test/spec/frontend/admin-orders-writes/hold.test.ts > [AC-F1-07ee-HOLD#4] 持任一 risk.* 且无 order.claim 时无需选原因，提交 RISK",
+    "test/spec/frontend/admin-orders-writes/hold.test.ts > [AC-F1-07ee-HOLD#5] 有 order.claim 且无 risk.* 时无需选原因，config.risk 不影响提交 CS",
+    "test/spec/frontend/admin-orders-writes/hold.test.ts > [AC-F1-07ee-HOLD#6] 同时有两类权限或两类都没有时须选风控或客服，超管同样必选",
+    "test/spec/frontend/admin-orders-writes/reason.test.ts > [AC-F1-07ee-REASON#1] 退款只可选两个退款子原因或无，按当前版本提交并显示更新后的子原因",
+    "test/spec/frontend/admin-orders-writes/reason.test.ts > [AC-F1-07ee-REASON#2] 维权只可选售后退款或无，选无向接口发送 none 并清掉原子原因",
+    "test/spec/frontend/admin-orders-writes/reason.test.ts > [AC-F1-07ee-REASON#3] 处罚原因只提供契约中的十二项处罚子原因和无",
+    "test/spec/frontend/admin-orders-writes/unhold.test.ts > [AC-F1-07ee-UNHOLD#1] 恢复提交新选的原因、备注和当前版本，成功后按响应显示未暂停",
+    "test/spec/frontend/admin-orders-writes/unhold.test.ts > [AC-F1-07ee-UNHOLD#2] 系统待处理关闭后可以打开恢复弹窗，原因必选，备注须有 1–200 字",
+    "test/spec/frontend/admin-orders-writes/unhold.test.ts > [AC-F1-07ee-UNHOLD#3] 预估状态的暂停单可恢复，持 risk.freeze 也须手选恢复原因",
+    "test/spec/frontend/admin-orders-writes/unknown.test.ts > [AC-F1-07ee-UNKNOWN#1] 暂停网络断开时锁定原因和备注，手动原体重试收到成功才结束",
+    "test/spec/frontend/admin-orders-writes/unknown.test.ts > [AC-F1-07ee-UNKNOWN#2] 恢复超时后只能用原说明、原因和版本重试",
+    "test/spec/frontend/admin-orders-writes/unknown.test.ts > [AC-F1-07ee-UNKNOWN#3] 原因细分收到 503 保留选择，手动原体重试成功后更新详情",
+    "test/spec/frontend/admin-orders-writes/unknown.test.ts > [AC-F1-07ee-UNKNOWN#4] 指派结果未知时锁定 UID 和原因，原体重试明确被拒后可以修改"
+  ],
+  "risk_note": "F1-07ee. apps/admin only (pages/orders/OrderDetailPage.tsx, pages/orders/detail-writes/, texts/orders.ts). Full order detail page write entries (hold / unhold, reason-sub, assign) by permission point; result-unknown writes lock and allow only the same-body retry; the order result-unknown marker blocks new writes after a reload, offers a confirmed 放弃这次提交 only while no write of the order is in flight, and the page rereads before unlocking once the marker goes; unknown status codes show 状态更新中 and hide every write entry. 3 frozen blocks changed as rule_change (D10-1733) with the reverse check. No contract, money computation or db change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 8,
+      "note": "Codex money rounds as run (wrapper log first line / meta review_scope): r1 full fail (6 S1); r2 output rejected by the validator, counted as a round (couli-runs/F1-07ee/review-money-r2.rejected.json); r3 incremental fail (4 S1); r4 incremental fail (2 S1, approvals 198 said full, ran incremental); r5 incremental fail (1 S1, approvals 209 said full, ran incremental); r6 full (--full, D10-3203) fail (3 S1: two fixed in r9, one moved to FU-F107EE-ASSIGN-TARGET-PRECHECK by D10-3234); r7 incremental fail (1 S1, wording); r8 incremental (previous head f5ccb41e2e68) pass, no findings. Scope rulings D10-3028, D10-3129 ②, D10-3169, D10-3201, D10-3203, D10-3234, D10-3247; one-off approvals 182 / 198 / 209 / 213 / 218 / 220. A one-line type fix after r9 (hold_reason row back to StatusTag, same rendering as r8) was committed on its own and accepted by D10-3247, not counted as an implementation round. couli-runs/F1-07ee/review-money-r8.json"
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "rule tests by Codex (ledger tester codex), 2 rounds; spec-test reviews by an independent Claude (claude-run.sh, approvals 19 / 36): r1 full fail (3 S1: unhold under ESTIMATED, unknown rebate_status, reason without sub-reasons) → r2 incremental pass (2 S2).",
+    "model": "claude-opus-5-5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/admin-orders/list.test.ts",
+      "test": "[AC-F1-07e-LIST#6] 行操作名含订单号，使用 order_id 进入详情，超管也无未接入写操作",
+      "retitle_to": "[AC-F1-07e-LIST#6] 行操作名含订单号，使用 order_id 进入详情，超管只见已接入的写操作",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07e-LIST#6] 行操作名含订单号，使用 order_id 进入详情，超管也无未接入写操作',\n  async () => {\n    const { server } = await mount(createServer(), '/orders', { isSuper: true, permissions: [] });\n    await loaded();\n    readOnly(server);\n    await openDetail();\n    await waitFor(() => expect(window.location.pathname).toBe(ROUTE));\n    await waitFor(() => expect(mainElement().textContent).toContain('分佣快照'));\n    expect(server.requests('GET', DETAIL)).toHaveLength(1);\n    readOnly(server);\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07e-LIST#6] 行操作名含订单号，使用 order_id 进入详情，超管只见已接入的写操作',\n  async () => {\n    const { expectWriteEntries } = await import('../admin-orders-writes/kit.ts');\n    const { detail } = await import('./orders-fixtures.ts');\n    const serverWithRefund = createServer(undefined, detail({ reason: 'REFUND' }));\n    const { server } = await mount(serverWithRefund, '/orders', { isSuper: true, permissions: [] });\n    await loaded();\n    readOnly(server);\n    expectWriteEntries(server, []);\n    await openDetail();\n    await waitFor(() => expect(window.location.pathname).toBe(ROUTE));\n    await waitFor(() => expect(mainElement().textContent).toContain('分佣快照'));\n    expect(server.requests('GET', DETAIL)).toHaveLength(1);\n    expectWriteEntries(server, ['原因细分']);\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 2ce272a04afd 的树上跑；couli-runs/F1-07ee/tests/1 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-FUND-06", "BR-ATTR-31"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders/detail.test.ts",
+      "test": "[AC-F1-07e-DETAIL#5] 状态历史和转链记录展示每条时间及契约内容，不渲染原始报文或写操作",
+      "retitle_to": "[AC-F1-07e-DETAIL#5] 状态历史和转链记录展示每条时间及契约内容，不渲染原始报文，写操作只有已接入的入口",
+      "reason": "rule_change",
+      "before": "it(\n  '[AC-F1-07e-DETAIL#5] 状态历史和转链记录展示每条时间及契约内容，不渲染原始报文或写操作',\n  async () => {\n    const { server } = await mount(createServer(), ROUTE, { isSuper: true, permissions: [] });\n    await loaded();\n    const history = section('状态历史');\n    for (const text of [\n      'P2',\n      'PAID',\n      'sync',\n      '01:06',\n      'R3',\n      'UNATTRIBUTED',\n      'ESTIMATED',\n      'claim',\n      '09:30',\n      'R5',\n      'WAITING',\n      'CREDITED',\n      'system',\n      '12:15',\n    ])\n      expect(history.textContent).toContain(text);\n    const logs = section('转链记录');\n    const records = within(logs).queryAllByRole('row');\n    const opened = records.find((node) => node.textContent?.includes('open'));\n    const converted = records.find((node) => node.textContent?.includes('convert'));\n    expect(opened).toBeDefined();\n    expect(converted).toBeDefined();\n    expect(opened!.textContent).toContain('detail');\n    expect(opened!.textContent).toContain('2026-10-07');\n    expect(opened!.textContent).toContain('01:04');\n    expect(converted!.textContent).toContain('search');\n    expect(converted!.textContent).toContain('01:03');\n    readOnly(server);\n  },\n  FLOW_TIMEOUT,\n);",
+      "after": "it(\n  '[AC-F1-07e-DETAIL#5] 状态历史和转链记录展示每条时间及契约内容，不渲染原始报文，写操作只有已接入的入口',\n  async () => {\n    const { expectWriteEntries } = await import('../admin-orders-writes/kit.ts');\n    const { server } = await mount(createServer(undefined, detail({ reason: 'REFUND' })), ROUTE, {\n      isSuper: true,\n      permissions: [],\n    });\n    await loaded();\n    const history = section('状态历史');\n    for (const text of [\n      'P2',\n      'PAID',\n      'sync',\n      '01:06',\n      'R3',\n      'UNATTRIBUTED',\n      'ESTIMATED',\n      'claim',\n      '09:30',\n      'R5',\n      'WAITING',\n      'CREDITED',\n      'system',\n      '12:15',\n    ])\n      expect(history.textContent).toContain(text);\n    const logs = section('转链记录');\n    const records = within(logs).queryAllByRole('row');\n    const opened = records.find((node) => node.textContent?.includes('open'));\n    const converted = records.find((node) => node.textContent?.includes('convert'));\n    expect(opened).toBeDefined();\n    expect(converted).toBeDefined();\n    expect(opened!.textContent).toContain('detail');\n    expect(opened!.textContent).toContain('2026-10-07');\n    expect(opened!.textContent).toContain('01:04');\n    expect(converted!.textContent).toContain('search');\n    expect(converted!.textContent).toContain('01:03');\n    expectWriteEntries(server, ['原因细分']);\n  },\n  FLOW_TIMEOUT,\n);",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 2ce272a04afd 的树上跑；couli-runs/F1-07ee/tests/1 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-FUND-06", "BR-ATTR-31"]
+    },
+    {
+      "file": "test/spec/frontend/admin-orders/pages.browser.test.ts",
+      "test": "[AC-F1-07e-BROWSER#2] 1440 详情各区块和两个锁定标记可见，截图 admin-order-detail",
+      "reason": "rule_change",
+      "before": "it('[AC-F1-07e-BROWSER#2] 1440 详情各区块和两个锁定标记可见，截图 admin-order-detail', async () => {\n  await page.viewport(1440, 1360);\n  const marker = await show(ROUTE);\n  const main = page.getByRole('main');\n  await expect.element(main.getByText('分佣快照', { exact: true }), FIRST).toBeVisible();\n  await expect.element(main).toMatchTextContent(NUMBER);\n  await expect.element(main.getByText('基本信息', { exact: true })).toBeVisible();\n  await expect.element(main.getByText('归属信息', { exact: true })).toBeVisible();\n  await expect.element(main.getByText('状态历史', { exact: true })).toBeVisible();\n  await expect.element(main.getByText('转链记录', { exact: true })).toBeVisible();\n  await expect.element(main.getByText('已锁定', { exact: true })).toBeVisible();\n  await expect.element(main.getByText('归属已锁定', { exact: true })).toBeVisible();\n  await expect.element(main).toMatchTextContent('12.34%');\n  await expect.element(main).toMatchTextContent('60.00%');\n  await expect.element(main.getByRole('button', { name: /返回/ })).toBeVisible();\n  await expect.element(main).not.toMatchTextContent('原始报文');\n  await expect\n    .element(main.getByRole('button', { name: /暂停结算|恢复结算|指定归属/ }))\n    .not.toBeInTheDocument();\n  await screenshot('admin-order-detail', marker);\n});",
+      "after": "it('[AC-F1-07e-BROWSER#2] 1440 详情各区块和两个锁定标记可见，截图 admin-order-detail', async () => {\n  await page.viewport(1440, 1360);\n  const { expectWriteEntries } = await import('../admin-orders-writes/kit.ts');\n  const { detail } = await import('./orders-fixtures.ts');\n  const server = createServer(undefined, detail({ reason: 'REFUND' }));\n  const marker = document.createElement('span');\n  marker.hidden = true;\n  marker.dataset['pending'] = '0';\n  document.body.append(marker);\n  const fetch: typeof globalThis.fetch = async (input, init) => {\n    const response = server.fetch(input, init);\n    marker.dataset['pending'] = String(server.pending);\n    try {\n      return await response;\n    } finally {\n      marker.dataset['pending'] = String(server.pending);\n    }\n  };\n  auth = harness().create();\n  await signIn(auth);\n  window.history.replaceState(null, '', ROUTE);\n  const container = document.createElement('div');\n  document.body.append(container);\n  root = createRoot(container);\n  root.render(\n    createAdminShell({\n      router: 'browser',\n      authProvider: auth,\n      permissionsProvider: async () => ({ isSuper: true, permissions: [] }),\n      account: { username: 'ops-yi', displayName: '超管' },\n      environment: 'test',\n      onLogout: () => {},\n      dataProvider: createDataProvider({\n        baseUrl: BASE_URL,\n        fetch,\n        getToken: () => 'example-admin-token',\n        onError: () => {},\n      }),\n    }),\n  );\n  const main = page.getByRole('main');\n  await expect.element(main.getByText('分佣快照', { exact: true }), FIRST).toBeVisible();\n  await expect.element(main).toMatchTextContent(NUMBER);\n  await expect.element(main.getByText('基本信息', { exact: true })).toBeVisible();\n  await expect.element(main.getByText('归属信息', { exact: true })).toBeVisible();\n  await expect.element(main.getByText('状态历史', { exact: true })).toBeVisible();\n  await expect.element(main.getByText('转链记录', { exact: true })).toBeVisible();\n  await expect.element(main.getByText('已锁定', { exact: true })).toBeVisible();\n  await expect.element(main.getByText('归属已锁定', { exact: true })).toBeVisible();\n  await expect.element(main).toMatchTextContent('12.34%');\n  await expect.element(main).toMatchTextContent('60.00%');\n  await expect.element(main.getByRole('button', { name: /返回/ })).toBeVisible();\n  await expect.element(main).not.toMatchTextContent('原始报文');\n  expectWriteEntries(server, ['原因细分']);\n  await screenshot('admin-order-detail', marker);\n});",
+      "mutation": [
+        {
+          "mutant": "实现为主干版本（不含本单实现），即在规则测试提交 2ce272a04afd 的树上跑；couli-runs/F1-07ee/browser/19 中本块失败（反向验证本身，不是另跑的探针）",
+          "result": "killed"
+        }
+      ],
+      "br": ["BR-FUND-06", "BR-ATTR-31"]
+    }
+  ],
+  "task": "F1-07ee",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "spec_commit": "c48cfeff1c897cea784879de445286a0c2247d18",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c48cfeff1c897cea784879de445286a0c2247d18",
+      "tree": "c3358a0919e7577e62197a44c8b3da1394f0ec92",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-26T01:45:13Z",
+      "finished_at": "2026-11-26T01:45:34Z",
+      "red_tests": [
+        "test/spec/frontend/admin-orders-writes/assign.test.ts > [AC-F1-07ee-ASSIGN#1] 指派带详情锁定值、空的期望归属和 200 字原因，无 10003 时直接显示新归属",
+        "test/spec/frontend/admin-orders-writes/assign.test.ts > [AC-F1-07ee-ASSIGN#2] 第一次不带令牌，收到 10003 后经动态码验证，原请求体带新令牌重发一次",
+        "test/spec/frontend/admin-orders-writes/assign.test.ts > [AC-F1-07ee-ASSIGN#3] 20001 target_banned 提示封禁并保留未归因",
+        "test/spec/frontend/admin-orders-writes/assign.test.ts > [AC-F1-07ee-ASSIGN#4] 20001 target_deleting 提示注销处理中并保留未归因",
+        "test/spec/frontend/admin-orders-writes/assign.test.ts > [AC-F1-07ee-ASSIGN#5] 20001 target_deleted 提示已注销并保留未归因",
+        "test/spec/frontend/admin-orders-writes/assign.test.ts > [AC-F1-07ee-ASSIGN#6] 原因只有 4 字时不发指定归属请求，满 5 字可提交",
+        "test/spec/frontend/admin-orders-writes/conflict.test.ts > [AC-F1-07ee-CONFLICT#1] 暂停收到订单冲突，提示变更且只重读一次详情",
+        "test/spec/frontend/admin-orders-writes/conflict.test.ts > [AC-F1-07ee-CONFLICT#2] 指派收到归属冲突，只读取一次已被他人指派的最新详情",
+        "test/spec/frontend/admin-orders-writes/conflict.test.ts > [AC-F1-07ee-CONFLICT#3] 恢复收到订单冲突，只重读一次并显示最新订单",
+        "test/spec/frontend/admin-orders-writes/conflict.test.ts > [AC-F1-07ee-CONFLICT#4] 原因细分收到版本冲突，重读一次且不自动重提",
+        "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#1] order.hold 按暂停标志只显示暂停或恢复，order.claim 单独开放原因细分",
+        "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#2] order.assign 可指派未归因的作废单，已归属订单即便超管也不能改给他人",
+        "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#3] 只有 order.view 的详情及超管列表均无本单写入口，超管打开未归因详情才见指定归属",
+        "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#4] 已作废的暂停单保留暂停标记，系统未映射待处理未关闭时禁用恢复",
+        "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#5] 客户端未知订单状态隐藏写入口，已知状态的同权限详情显示写入口",
+        "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#6] 预估状态的未暂停订单向 order.hold 开放暂停结算",
+        "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#7] 平台状态已知但返利状态未知时，超管看不到写入口且不发写请求",
+        "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#8] 持 order.claim 时原因细分只对有契约子原因的父原因开放",
+        "test/spec/frontend/admin-orders-writes/entry.test.ts > [AC-F1-07ee-ENTRY#9] order.hold 不能指定归属，order.assign 不能暂停或恢复结算",
+        "test/spec/frontend/admin-orders-writes/hold.test.ts > [AC-F1-07ee-HOLD#1] 暂停只提供风控和客服原因，提交当前版本，状态卡以成功响应为准",
+        "test/spec/frontend/admin-orders-writes/hold.test.ts > [AC-F1-07ee-HOLD#2] 先填备注仍须选原因，清空备注也不可提交",
+        "test/spec/frontend/admin-orders-writes/hold.test.ts > [AC-F1-07ee-HOLD#3] 备注最多 200 字且 200 字可完整提交",
+        "test/spec/frontend/admin-orders-writes/hold.test.ts > [AC-F1-07ee-HOLD#4] 持任一 risk.* 且无 order.claim 时无需选原因，提交 RISK",
+        "test/spec/frontend/admin-orders-writes/hold.test.ts > [AC-F1-07ee-HOLD#5] 有 order.claim 且无 risk.* 时无需选原因，config.risk 不影响提交 CS",
+        "test/spec/frontend/admin-orders-writes/hold.test.ts > [AC-F1-07ee-HOLD#6] 同时有两类权限或两类都没有时须选风控或客服，超管同样必选",
+        "test/spec/frontend/admin-orders-writes/reason.test.ts > [AC-F1-07ee-REASON#1] 退款只可选两个退款子原因或无，按当前版本提交并显示更新后的子原因",
+        "test/spec/frontend/admin-orders-writes/reason.test.ts > [AC-F1-07ee-REASON#2] 维权只可选售后退款或无，选无向接口发送 none 并清掉原子原因",
+        "test/spec/frontend/admin-orders-writes/reason.test.ts > [AC-F1-07ee-REASON#3] 处罚原因只提供契约中的十二项处罚子原因和无",
+        "test/spec/frontend/admin-orders-writes/unhold.test.ts > [AC-F1-07ee-UNHOLD#1] 恢复提交新选的原因、备注和当前版本，成功后按响应显示未暂停",
+        "test/spec/frontend/admin-orders-writes/unhold.test.ts > [AC-F1-07ee-UNHOLD#2] 系统待处理关闭后可以打开恢复弹窗，原因必选，备注须有 1–200 字",
+        "test/spec/frontend/admin-orders-writes/unhold.test.ts > [AC-F1-07ee-UNHOLD#3] 预估状态的暂停单可恢复，持 risk.freeze 也须手选恢复原因",
+        "test/spec/frontend/admin-orders-writes/unknown.test.ts > [AC-F1-07ee-UNKNOWN#1] 暂停网络断开时锁定原因和备注，手动原体重试收到成功才结束",
+        "test/spec/frontend/admin-orders-writes/unknown.test.ts > [AC-F1-07ee-UNKNOWN#2] 恢复超时后只能用原说明、原因和版本重试",
+        "test/spec/frontend/admin-orders-writes/unknown.test.ts > [AC-F1-07ee-UNKNOWN#3] 原因细分收到 503 保留选择，手动原体重试成功后更新详情",
+        "test/spec/frontend/admin-orders-writes/unknown.test.ts > [AC-F1-07ee-UNKNOWN#4] 指派结果未知时锁定 UID 和原因，原体重试明确被拒后可以修改"
+      ],
+      "expected": [
+        "test/spec/frontend/admin-orders-writes/assign.test.ts",
+        "test/spec/frontend/admin-orders-writes/conflict.test.ts",
+        "test/spec/frontend/admin-orders-writes/entry.test.ts",
+        "test/spec/frontend/admin-orders-writes/hold.test.ts",
+        "test/spec/frontend/admin-orders-writes/reason.test.ts",
+        "test/spec/frontend/admin-orders-writes/unhold.test.ts",
+        "test/spec/frontend/admin-orders-writes/unknown.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "31c4f9b7e87192415c18fdd99f0f7ec85e0531a71c667d31d6e25d0e90a97ccd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "48413cff9f96320c7c7d179c3d65713ab84227dd",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "289843f2b0baa46dbee279d1735322a558a2cb25",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}

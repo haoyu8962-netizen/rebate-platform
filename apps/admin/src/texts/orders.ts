@@ -226,6 +226,11 @@ export const ordersTexts = {
       statusLockNote: '订单失效或结算至余额后自动锁定；已锁定：订单状态不再随联盟同步更新',
       attributionLock: '归属锁定 locked',
       attributionLockNote: '找回通过或指定归属后显示「归属已锁定」',
+      /**
+       * The text of order_status.UNKNOWN (BR-TEXT-02 last row, BR-TEXT-12): shown for any status
+       * code this console does not know (BR-TEXT-05), without the raw code.
+       */
+      unknownDisplay: '状态更新中',
     },
 
     basic: {
@@ -312,6 +317,113 @@ export const ordersTexts = {
       scene: '场景 scene',
       note: '本单转链的最近 50 条记录，新的在前',
       empty: '暂无转链记录',
+    },
+
+    /** Sub-reason row of 「基本信息」 (F1-07ee). */
+    reasonSub: '子原因 reason_sub',
+  },
+
+  /**
+   * Write entries of the full detail page (F1-07ee): 【暂停结算】 / 【恢复结算】 (order.hold),
+   * 【原因细分】 (order.claim), 【指定归属】 (order.assign, unattributed orders only).
+   */
+  writes: {
+    entries: {
+      hold: '暂停结算',
+      unhold: '恢复结算',
+      reasonSub: '原因细分',
+      assign: '指定归属',
+    },
+    unholdBlocked: '系统未映射状态的待处理记录关闭前不能恢复结算',
+    cancel: '取消',
+    retry: '重试',
+    submit: {
+      hold: '确认暂停',
+      unhold: '确认恢复',
+      reasonSub: '确认保存',
+      assign: '确认指派',
+    },
+    hold: {
+      holdIntro: '暂停后本单不会入账，返利状态不变；之后可由有权限的人恢复结算。',
+      unholdIntro: '恢复后本单按原流程继续结算。',
+      holdReason: '暂停原因',
+      unholdReason: '恢复原因',
+      derived: (reason: string): string => `${reason}（按当前账号的权限确定）`,
+      reasonRequired: '请选择原因',
+      note: '说明',
+      notePlaceholder: '写明本次处理的依据，1–200 字，写入审计',
+      noteRequired: '请填写说明（1–200 字）',
+    },
+    reasonSub: {
+      intro: '只改说明文字，不改金额与状态；App 端会展示给用户。',
+      current: (reason: string): string => `原因码 ${reason}`,
+      field: '子原因',
+      none: '无',
+      names: {
+        VIOLATION_PROMO: '违规推广',
+        SHOP_TK: '店铺淘宝客',
+        INSITE_PROMO: '站内推广',
+        PROXY_BUY: '违规代购',
+        FAKE_TRADE: '虚假交易',
+        INSITE_RESALE: '站内二次售卖',
+        OVER_LIMIT: '累计超出上限',
+        MARKET_DISRUPT: '扰乱市场秩序',
+        MULTI_TRADE_ABNORMAL: '多笔交易异常',
+        SINGLE_TRADE_ABNORMAL: '单笔交易异常',
+        RISK_ORDER: '风险订单',
+        PUNISH_ORDER: '处罚订单',
+        IN_SALE: '售中退款',
+        AFTER_SETTLE: '结算后退款',
+        AFTER_SALE: '售后退款',
+      } as Readonly<Record<string, string>>,
+      label: (name: string | undefined, code: string): string =>
+        name === undefined ? code : `${name} ${code}`,
+    },
+    assign: {
+      intro: '只对没有归属用户的订单指派；指派后归属锁定，写入审计。',
+      user: '目标用户 UID',
+      userPlaceholder: '目标用户的 UID',
+      userInvalid: '请填写正确的 UID',
+      reason: '指派原因',
+      reasonPlaceholder: '写明核实依据，5–200 字，写入审计',
+      reasonInvalid: '请填写指派原因（5–200 字）',
+      stepUpOperation: '指定归属',
+    },
+    /**
+     * F1-07ee: an order write whose result is unknown (the marker of this account). A marker left
+     * before the page opened is never closed here; it can only be given up with 【放弃这次提交】,
+     * confirmed, after which the page reads the order again (r7).
+     */
+    pendingPrompt: {
+      notice: '这一订单上次的操作结果未知',
+      moment: (time: string): string => `结果未知的时间：${time}（北京时间）。`,
+      check: '请先核对本页显示的订单是否已是操作后的结果；要继续操作，点【放弃这次提交】。',
+      waiting: '这次提交还在等待服务端回答，请稍候。',
+      statusUnknown:
+        '订单当前状态本端无法识别，暂不能重试；请稍后重新打开本页，状态可识别后再处理。',
+      abandon: '放弃这次提交',
+      abandonTitle: '放弃这次提交？',
+      abandonConfirm:
+        '放弃只是不再等待，这次提交仍可能在稍后生效；继续操作前请以重新读取的订单详情为准',
+      abandonOk: '确认放弃',
+      abandonCancel: '继续等待',
+    },
+    result: {
+      held: '已暂停结算，页面已按服务端返回的订单更新。',
+      unheld: '已恢复结算，页面已按服务端返回的订单更新。',
+      reasonSubSet: '原因细分已保存，页面已按服务端返回的订单更新。',
+      assigned: '已指定归属，页面已按服务端返回的订单更新。',
+      conflict: '这一订单已被他人处理，已重新读取最新详情；请核对后再操作。',
+      unknown: '结果未知：网络中断、超时或服务异常。输入已锁定，只能点【重试】按原内容重新提交。',
+      forbidden: '当前账号没有这一操作的权限点，请联系超管。',
+      rateLimited: '操作太频繁，请稍后再试。',
+      targetBanned: '该账号已封禁，不能作为归属对象。',
+      targetDeleting: '该账号正在注销，不能作为归属对象。',
+      targetDeleted: '该账号已注销，不能作为归属对象。',
+      unknownUser: '找不到这个 UID 对应的用户，请核对后再试。',
+      invalid: '提交的内容不符合要求，请核对后再试。',
+      stepUpFailed: '二次验证未完成，未提交。',
+      failed: '提交失败，请稍后再试。',
     },
   },
 };
