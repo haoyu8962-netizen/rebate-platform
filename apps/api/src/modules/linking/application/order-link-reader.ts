@@ -13,6 +13,32 @@ export interface OrderLinkProducts {
   ): Promise<ReadonlyMap<string, string | null>>;
 }
 
+export interface OrderAttributionLinkScope {
+  readonly appId: string;
+  readonly lk: string;
+}
+
+export interface OrderAttributionLink {
+  readonly link_id: string;
+  readonly user_id: string | null;
+  readonly platform: string;
+  readonly raw_item_id: string | null;
+  readonly product_key: string | null;
+  readonly created_at: Date;
+  readonly pid_scene: string | null;
+  readonly scene: string;
+  readonly agent_session_id: string | null;
+}
+
+export function readOrderAttributionLink(
+  db: Kysely<DB>,
+  scope: OrderAttributionLinkScope,
+): Promise<OrderAttributionLink | null> {
+  void db;
+  void scope;
+  throw new Error('NotImplemented: readOrderAttributionLink');
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export function createOrderLinkReader(db: Kysely<DB>): OrderLinkProducts {

@@ -23,6 +23,8 @@ export type ClaimAuthRule = 'relation_id' | 'filing' | null;
 /** 商品 ID 字段名：the UnionOrder field that carries the platform item id (orders.raw_item_id). */
 export type ItemIdField = Exclude<keyof ItemRef, 'platform'>;
 
+export type MissingLinkBuyTypeBasis = 'pid' | 'self';
+
 export interface PlatformRules {
   /** 归因参数解析. */
   readonly attribution: AttributionRule;
@@ -30,6 +32,8 @@ export interface PlatformRules {
   readonly parseLinkCode: (params: UnionOrderAttrParams) => string | null;
   /** 购买场景回退（BR-ATTR-08 ②）：pid_scene=fallback reads custom_parameters.sc. */
   readonly sceneParamFallback: boolean;
+  /** 启用按链接判定的平台配置此字段；值决定订单完全缺少 lk 时的判定依据。 */
+  readonly missingLinkBuyTypeBasis?: MissingLinkBuyTypeBasis;
   /** 服务费入基数（BR-CALC-03）：N = commission − the order's service fee (missing fee → pending). */
   readonly serviceFeeDeducted: boolean;
   /** 淘礼金推广位场景：the promotion slot's scene decides the rebate mode (unknown scene → skip). */

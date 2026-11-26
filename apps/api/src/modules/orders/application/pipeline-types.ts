@@ -1,9 +1,11 @@
 import type { DB } from '@couli/db';
 import type { OrderPlatformState } from '@couli/domain';
 import type { Kysely, Selectable, Transaction } from 'kysely';
+import type { readOrderAttributionLink } from '../../linking/index.ts';
 import type { Clock, EventBus } from '../../platform/index.ts';
 import type { RegisteredPlatform, RejectedOrderRow, UnionOrder } from '../../union/index.ts';
 import type { BindingRow } from '../domain/attribution.ts';
+import type { PlatformRules } from '../domain/platform-rules/index.ts';
 import type { OrderBlacklistDeps, OrderBlacklistRebatePort } from './blacklist-step.ts';
 import type { StatusMap } from '../domain/status-map.ts';
 import type { CommissionSnapshotPort, SnapshotOutcome } from './commission-snapshot-step.ts';
@@ -49,6 +51,10 @@ export interface OrderPipelineResult {
 
 export interface OrderPipelineDeps {
   readonly sources?: OrderSourcePorts;
+  /** 流水线事务内读取本 App 登记的短码链接。 */
+  readonly readBuyTypeLink?: typeof readOrderAttributionLink;
+  /** 未注入时使用订单平台规则表。 */
+  readonly buyTypeRules?: (platform: RegisteredPlatform) => PlatformRules;
   /**
    * 事件总线（B1-08i，02 §11）：领域事件 order.created 与告警事件 order.illegal_transition、
    * order.attr_binding_conflict 都经它、与本次写库同一事务入队，入队失败整事务回滚。

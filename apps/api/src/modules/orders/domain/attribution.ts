@@ -20,6 +20,37 @@ export interface BuyTypeDecision {
   readonly scene_basis: 'pid' | 'param' | 'fallback';
 }
 
+export interface BuyTypeLinkFacts {
+  readonly user_id: string | null;
+  readonly platform: string;
+  readonly raw_item_id: string | null;
+  readonly product_key: string | null;
+  readonly created_at: Date;
+  readonly pid_scene: string | null;
+}
+
+export interface BuyTypeLinkOrder {
+  readonly user_id: string | null;
+  readonly platform: RegisteredPlatform;
+  readonly goods_sign: string | null;
+  readonly product_key: string | null;
+  readonly paid_at: Date | null;
+}
+
+export interface LinkBuyTypeDecision {
+  readonly buy_type: BuyTypeDecision['buy_type'];
+  readonly scene_basis: 'link' | 'fallback';
+}
+
+export function classifyBuyTypeByLink(
+  order: BuyTypeLinkOrder,
+  link: BuyTypeLinkFacts | null,
+): LinkBuyTypeDecision {
+  void order;
+  void link;
+  throw new Error('NotImplemented: classifyBuyTypeByLink');
+}
+
 // B1-08za：订单参数的解析器移到 platform-rules/params.ts（按平台的取值在 platform-rules/<platform>.ts），
 // 这里按原名再导出。
 export { JD_SUB_UNION, parseJsonObject } from './platform-rules/params.ts';

@@ -172,8 +172,15 @@ export type {
   LinkConvertUrlParser,
 } from './application/link-convert.ts';
 export type { LinkConvertPorts } from './linking.module.ts';
-export { createOrderLinkReader } from './application/order-link-reader.ts';
-export type { OrderLinkProducts } from './application/order-link-reader.ts';
+export {
+  createOrderLinkReader,
+  readOrderAttributionLink,
+} from './application/order-link-reader.ts';
+export type {
+  OrderAttributionLink,
+  OrderAttributionLinkScope,
+  OrderLinkProducts,
+} from './application/order-link-reader.ts';
 // Task B1-08m: the open attempts port of orders' pending-track cards (BR-ATTR-21): the user's
 // attempts with their open log's facts and later authorization, and the one dismissed_at write.
 export { createPendingAttemptStore } from './application/pending-attempts.ts';
