@@ -1,0 +1,22 @@
+id: B2-02zg
+repo: rebate-platform
+title: 'B2-02zg（接手 B2-02ze）：审计自由文本个人信息脱敏重做——先归一再打码：认得出的手机号 / 身份证 / 银行卡 / 邮箱按 BR-ID-33 默认形状打码，认不出类型的去分隔连续 ≥ 11 位数字一律只留末四位'
+type: impl
+# 2026-11-26 be 入账（编排 D10-3264 / D10-3266：接手 B2-02ze，B2-02ze 置 void 并入；B2-02zf 编号已被 funds 用，取下一个空号）。来由：B2-02ze 逐格式写正则 + 边界判断，实现 5 次、资金评审 4 轮都收不拢（每轮出一种新录入变体，money r4 原文 couli-runs/B2-02ze/review-money-r4-codex.json）；可行性页 couli-runs/B2-02ze/redesign-feasibility.md 取甲。常规计数（写测 3、规则测试评审 2、实现 3、资金评审 3）；approvals 第 221 条随 B2-02ze 作废。
+# 口径（D10-3266，编排定）：此前 D10-2328 / D10-2354 / D10-2384「单号 / 参考号在自由文本里保持原样」作废，改为归一后去分隔连续 ≥ 11 位数字（可带末位 X）一律打码；BR-ID-33 默认形状不变（手机 3+4、证件首 1 末 1、支付宝邮箱 @ 前留 2 位与域名、卡号尾号后 4），不涉规划变更。结构化字段（订单号、幂等键、金额、单号）照旧原样。
+# 写死三件：① 归一 = NFKC + 把 Unicode 各类横线 / 减号 / 空白（含 NBSP、U+2212、全角空格）统一成一种分隔；分隔符集合只含空白与横线类，/ . , _ 不算分隔；② 「邮箱形」= 归一后 @ 两侧都有非空白字符的最小片段，@ 后像域名的按细则形状、不像的整段打码；③ 打码结果映射回原文位置：按归一前后的位置表逐字符映射，兼容字符展开的情况给用例。
+# 带过来的：task/B2-02ze 分支（主干重建后只含脱敏一半：规则测试 test/spec/admin/audit-free-text-pii/** 与 audit-redaction{,.test}.ts 实现 r5，头 29e9b6fbd）；规则测试按新口径重写（约 20 处「保持原样」反例改正例、加归一类用例），实现方单测随实现改。二次验证令牌一半已随 B2-02zeb #527 合并，不在本单。评审口径只写评审书、不进代码注释。
+refs: [BR-ID-33]
+refs_hash:
+  BR-ID-33: 01b25f773b29
+deps: []
+paths:
+  - 'apps/api/src/modules/admin/infra/audit-redaction{,.test}.ts'
+test_paths:
+  - 'test/spec/admin/audit-free-text-pii/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/admin/audit-free-text-pii/**'
+status: todo
