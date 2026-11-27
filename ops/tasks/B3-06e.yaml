@@ -13,7 +13,7 @@ type: impl
 refs: [BR-AI-06, BR-TEXT-13]
 refs_hash:
   BR-AI-06: bf97647decbd
-  BR-TEXT-13: 225ce1a6f17e
+  BR-TEXT-13: 0170cefbc162
 deps: [B3-06a, B3-06b, B3-06c, B3-05s, B3-01c, B3-08t, F1-02r]
 paths:
   - 'apps/api/src/modules/agent/guard/{filter,buffer,output-guard,index}.ts'
