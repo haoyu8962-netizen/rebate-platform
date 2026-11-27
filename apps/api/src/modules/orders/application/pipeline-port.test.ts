@@ -18,7 +18,7 @@ import type { UnionOrder } from '../../union/index.ts';
 import type { PlatformStatusEvent, StatusMap } from '../domain/status-map.ts';
 import type { CommissionSnapshotPort } from './commission-snapshot-step.ts';
 import { createOrderPipeline } from './pipeline-port.ts';
-import type { OrderPipelineContext, OrderPipelineDeps, PidRow } from './pipeline-types.ts';
+import type { OrderPipelineContext, OrderPipelineDeps, SlotPidRow } from './pipeline-types.ts';
 import type { OrderSettlementRecordsPort } from './update-step.ts';
 
 const NOW = '2026-10-17T17:30:00.000Z'; // +08:00 日 2026-10-18
@@ -34,7 +34,10 @@ interface Statement {
 }
 
 /** dropKeyInserted：丢弃键 INSERT 回 1 行（首次写入）；缺省 0 行（DummyDriver 原样，视为已记过）。 */
-function recordingDb(dropKeyInserted = false): { db: Kysely<DB>; statements: Statement[] } {
+function recordingDb(
+  dropKeyInserted = false,
+  failCommit = false,
+): { db: Kysely<DB>; statements: Statement[] } {
   const statements: Statement[] = [];
   const mark = (sql: string): Promise<void> => {
     statements.push({ sql, parameters: [] });
@@ -61,6 +64,10 @@ function recordingDb(dropKeyInserted = false): { db: Kysely<DB>; statements: Sta
       return mark('begin');
     }
     override commitTransaction(): Promise<void> {
+      if (failCommit) {
+        statements.push({ sql: 'commit failed', parameters: [] });
+        return Promise.reject(new Error('unit: connection lost before commit'));
+      }
       return mark('commit');
     }
     override rollbackTransaction(): Promise<void> {
@@ -494,15 +501,21 @@ it('[AC-B2-04zj#U14] P12 结算额为 0 不回退预估；无结算额才取预�
 
 // —— B1-08zzc：淘宝推广位按 adzone + site_id 匹配（BR-ATTR-02、D10-3355）——
 // 两种存法（mm_ / 纯数字）取 adzone 在 union 的 slotCandidates 里做（见 order-sync-ports.test.ts）；这里替身直接给候选行。
+// r2（D10-3406）：候选行带登记 pid，淘宝命中后 orders.pid 写它；SITE_MISMATCH 的 P1 在事务提交成功之后才发。
 
 const TB_CTX: OrderPipelineContext = { ...ctx, platform: 'taobao' };
 
-function tbRow(site_id: string, pid_scene = 'self_buy', status = 'active'): PidRow {
-  return { site_id, pid_scene, status };
+function tbRow(
+  site_id: string,
+  pid_scene = 'self_buy',
+  status = 'active',
+  pid = `mm_1001_${site_id}_2002`,
+): SlotPidRow {
+  return { pid, site_id, pid_scene, status };
 }
 
-function slotSetup(rows: readonly PidRow[], dropKeyInserted = false) {
-  const { db, statements } = recordingDb(dropKeyInserted);
+function slotSetup(rows: readonly SlotPidRow[], dropKeyInserted = false, failCommit = false) {
+  const { db, statements } = recordingDb(dropKeyInserted, failCommit);
   const slotCandidates = vi.fn<NonNullable<OrderPipelineDeps['pids']['slotCandidates']>>(() =>
     Promise.resolve(rows),
   );
@@ -510,7 +523,16 @@ function slotSetup(rows: readonly PidRow[], dropKeyInserted = false) {
   const syncStartAt = vi.fn<OrderPipelineDeps['accounts']['syncStartAt']>(() =>
     Promise.resolve(at('2026-10-01T00:00:00.000Z')),
   );
-  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  // 告警打出时在语句流里记一笔，用来核对它与 commit 的先后。
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn((fields: unknown) => {
+      if ((fields as { alert?: string } | undefined)?.alert === 'P1') {
+        statements.push({ sql: 'P1 alert', parameters: [] });
+      }
+    }),
+  };
   const pipeline = createOrderPipeline({
     db,
     clock: new FixedClock(NOW),
@@ -537,12 +559,18 @@ const ordersInsert = (statements: Statement[]) =>
   statements.find((s) => s.sql.startsWith('insert into "app"."orders"'));
 const dropKeyInsert = (statements: Statement[]) =>
   statements.find((s) => s.sql.startsWith('insert into "app"."order_sync_drop_keys"'));
+/** orders INSERT 里 "pid" 列的值。 */
+const insertedPid = (statements: Statement[]): unknown => {
+  const insert = ordersInsert(statements);
+  const columns = /\(([^)]*)\) values/.exec(insert?.sql ?? '')?.[1]?.split(', ') ?? [];
+  return insert?.parameters[columns.indexOf('"pid"')];
+};
 
 it.each([
   { first: 'share', hit: 'self_buy', expected: 'self', absent: 'share' },
   { first: 'self_buy', hit: 'share', expected: 'share', absent: 'self' },
 ])(
-  '[AC-B1-08zzc#u1] 同 adzone 多行：取 site_id 相等的那行（$hit），不沿用首行；orders.pid 仍写报文推广位',
+  '[AC-B1-08zzc#u1] 同 adzone 多行：取 site_id 相等的那行（$hit），不沿用首行；orders.pid 写该行登记的 pid',
   async ({ first, hit, expected, absent }) => {
     const t = slotSetup([tbRow('3002', first, 'pending'), tbRow('3001', hit)]);
     await expect(t.pipeline.process(taobaoOrder(), TB_CTX)).resolves.toMatchObject({
@@ -552,9 +580,8 @@ it.each([
     const params = insert?.parameters ?? [];
     expect(params).toContain(expected);
     expect(params).not.toContain(absent);
-    // "pid" 列的值仍是报文 promotion_slot（adzone_id），不改写成登记的 pid。
-    const columns = /\(([^)]*)\) values/.exec(insert?.sql ?? '')?.[1]?.split(', ') ?? [];
-    expect(params[columns.indexOf('"pid"')]).toBe('2002');
+    // r2（D10-3406）："pid" 列写命中行登记的 pid 原值，不是报文的 adzone_id。
+    expect(insertedPid(t.statements)).toBe('mm_1001_3001_2002');
     expect(t.slotCandidates.mock.calls).toEqual([
       [{ appId: APP, platform: 'taobao', unionAccountId: 'unit-account', slot: '2002' }],
     ]);
@@ -635,7 +662,9 @@ it('[AC-B1-08zzc#u4] 候选按本 App、本联盟账号读取；京东、拼多�
   ]);
 
   for (const platform of ['jd', 'pdd'] as const) {
-    const other = slotSetup([{ pid_scene: 'share', status: 'retired', site_id: null }]);
+    const other = slotSetup([
+      { pid: '1001_2002', pid_scene: 'share', status: 'retired', site_id: null },
+    ]);
     const incoming = order({ platform, promotion_slot: '1001_2002' });
     await expect(other.pipeline.process(incoming, { ...ctx, platform })).resolves.toMatchObject({
       kind: 'inserted',
@@ -644,6 +673,8 @@ it('[AC-B1-08zzc#u4] 候选按本 App、本联盟账号读取；京东、拼多�
       [{ appId: APP, platform, unionAccountId: 'unit-account', slot: '1001_2002' }],
     ]);
     expect(ordersInsert(other.statements)?.parameters).toContain('share');
+    // 京东、拼多多不变：orders.pid 写订单推广位。
+    expect(insertedPid(other.statements)).toBe('1001_2002');
   }
 });
 
@@ -658,4 +689,38 @@ it('[AC-B1-08zzc#u5] 只注入 find 的替身：沿用推广位等值匹配', as
   expect(find.mock.calls).toEqual([
     [{ appId: APP, platform: 'taobao', unionAccountId: 'unit-account', pid: '2002' }],
   ]);
+});
+
+it.each([
+  { label: 'mm_ 登记', pid: 'mm_1001_3001_2002' },
+  { label: '纯数字登记', pid: '2002' },
+])(
+  '[AC-B1-08zzc#u11] 淘宝首次入库（$label）：orders.pid 写命中行登记的 pid 原值',
+  async ({ pid }) => {
+    const t = slotSetup([tbRow('3001', 'taolijin', 'active', pid)]);
+    await expect(t.pipeline.process(taobaoOrder(), TB_CTX)).resolves.toMatchObject({
+      kind: 'inserted',
+    });
+    expect(insertedPid(t.statements)).toBe(pid);
+  },
+);
+
+it('[AC-B1-08zzc#u12] SITE_MISMATCH：提交失败不发 P1；提交成功后才发一次，且在 commit 之后', async () => {
+  const rows = [tbRow('3001')];
+  const incoming = taobaoOrder({ site_id: '3003' });
+
+  const failed = slotSetup(rows, true, true);
+  await expect(failed.pipeline.process(incoming, TB_CTX)).rejects.toThrow('connection lost');
+  expect(dropKeyInsert(failed.statements)).toBeDefined();
+  expect(failed.p1()).toEqual([]);
+
+  const ok = slotSetup(rows, true);
+  await expect(ok.pipeline.process(incoming, TB_CTX)).resolves.toEqual({
+    kind: 'dropped',
+    reason: 'SITE_MISMATCH',
+  });
+  expect(ok.p1()).toHaveLength(1);
+  const marks = ok.statements.map((statement) => statement.sql);
+  expect(marks.indexOf('P1 alert')).toBeGreaterThan(marks.indexOf('commit'));
+  expect(marks.indexOf('commit')).toBeGreaterThan(-1);
 });

@@ -17,8 +17,8 @@ import {
   createGovernedSyncAdapter,
   createUnionOrderReaders,
   createUnionSyncAccess,
-  taobaoAdzoneOf,
 } from './order-sync-ports.ts';
+import { taobaoAdzoneOf } from '../infra/taobao/orders.ts';
 
 const handles: Kysely<DB>[] = [];
 afterEach(async () => {
@@ -161,14 +161,6 @@ it('[AC-B1-08n#u6] createGovernedSyncAdapter 保留治理包装、只暴露离�
   ).toThrow(expect.objectContaining({ code: 'invalid_endpoint' }));
 });
 
-it('[AC-B1-08zzc#u6] 登记行的 adzone：mm_ 取最后一段，纯数字取其本身，其他形式没有', () => {
-  expect(taobaoAdzoneOf('mm_1001_3001_2002')).toBe('2002');
-  expect(taobaoAdzoneOf('2002')).toBe('2002');
-  for (const other of ['mm_1001_2002', 'mm_a_3001_2002', 'slot-ours', 'x_2002', '', '2002 ']) {
-    expect(taobaoAdzoneOf(other)).toBeNull();
-  }
-});
-
 /** Compile-only database that answers the Taobao union_pids SELECT with the given rows. */
 function answering(rows: readonly Record<string, unknown>[]) {
   const compiled: { sql: string; parameters: readonly unknown[] }[] = [];
@@ -222,8 +214,8 @@ it('[AC-B1-08zzc#u7] slotCandidates 淘宝：只读本 App、淘宝、本联盟�
       slot: '2002',
     }),
   ).toEqual([
-    { pid_scene: 'scene-1', status: 'retired', site_id: '3001' },
-    { pid_scene: 'scene-2', status: 'retired', site_id: '3002' },
+    { pid: 'mm_1001_3001_2002', pid_scene: 'scene-1', status: 'retired', site_id: '3001' },
+    { pid: '2002', pid_scene: 'scene-2', status: 'retired', site_id: '3002' },
   ]);
   expect(compiled).toEqual([
     {
@@ -238,13 +230,26 @@ it('[AC-B1-08zzc#u7] slotCandidates 淘宝：只读本 App、淘宝、本联盟�
 it.each(['jd', 'pdd'] as const)(
   '[AC-B1-08zzc#u8] slotCandidates %s：与 find 同一条等值查询，不取末段',
   async (platform) => {
-    const { db, compiled } = answering([]);
+    const { db, compiled } = answering([
+      { pid_scene: 'self_buy', status: 'active', site_id: null },
+    ]);
     const readers = createUnionOrderReaders(db);
     const key = { appId: 'app-a', platform, unionAccountId: 'acc-a' };
-    expect(await readers.pids.slotCandidates({ ...key, slot: '1001_2002' })).toEqual([]);
+    // 等值命中：行的 pid 就是订单推广位本身。
+    expect(await readers.pids.slotCandidates({ ...key, slot: '1001_2002' })).toEqual([
+      { pid: '1001_2002', pid_scene: 'self_buy', status: 'active', site_id: null },
+    ]);
     await readers.pids.find({ ...key, pid: '1001_2002' });
     expect(compiled).toHaveLength(2);
     expect(compiled[0]).toEqual(compiled[1]);
     expect(compiled[0]?.parameters).toEqual(['app-a', platform, 'acc-a', '1001_2002']);
   },
 );
+
+it('[AC-B1-08zzc#u18] slotKey：淘宝给与适配器推广位筛选同一个 taobaoAdzoneOf，京东、拼多多为 null（等值）', () => {
+  const { db } = answering([]);
+  const readers = createUnionOrderReaders(db);
+  expect(readers.pids.slotKey('taobao')).toBe(taobaoAdzoneOf);
+  expect(readers.pids.slotKey('jd')).toBeNull();
+  expect(readers.pids.slotKey('pdd')).toBeNull();
+});

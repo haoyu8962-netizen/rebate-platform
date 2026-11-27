@@ -17,6 +17,10 @@
 //   (BR-ATTR-02, D10-3355): Taobao compares the registered row's adzone (last segment of
 //   mm_<a>_<b>_<c>, or the all-digit pid itself) with the order's adzone_id and returns site_id for
 //   orders to check; JD / PDD compare pid exactly, as find does. Same App, same account, any status.
+//   r2 (D10-3406): the adzone rule is infra/taobao/orders.ts taobaoAdzoneOf (also the adapter's
+//   slot filter); each row carries its stored pid, which orders writes to orders.pid on a hit.
+//   slotKey hands orders that same function for Taobao (null for JD / PDD, pid equality), so the
+//   update step compares a stored pid with the order's slot without its own copy of the rule.
 // - createGovernedSyncAdapter: createGovernedAdapter plus the offline breaker state, for the
 //   worker's own governance set (its breakers and quota are per process, 待裁定 6).
 // Logs carry flat fields only (platform, reason, rows); never credentials or order data.
@@ -30,6 +34,7 @@ import {
   type UnionAdapter,
   type UnionEndpoint,
 } from '../domain/types.ts';
+import { taobaoAdzoneOf } from '../infra/taobao/orders.ts';
 import { governAdapter, type GovernedAdapterOptions } from './governed-adapter.ts';
 
 export interface UnionSyncAccount {
@@ -137,17 +142,6 @@ export function createUnionSyncAccess(options: UnionSyncAccessOptions): UnionSyn
   };
 }
 
-/** Taobao PID storage forms (D10-3355): CLI mm_<member>_<site>_<adzone>; admin API the bare adzone. */
-const TAOBAO_MM_PID = /^mm_\d+_\d+_(\d+)$/;
-const DIGITS = /^\d+$/;
-
-/** The adzone of a registered Taobao pid: mm_ form → last segment, all digits → itself, else none. */
-export function taobaoAdzoneOf(pid: string): string | null {
-  const mm = TAOBAO_MM_PID.exec(pid);
-  if (mm !== null) return mm[1] ?? null;
-  return DIGITS.test(pid) ? pid : null;
-}
-
 export interface UnionOrderReaders {
   readonly pids: {
     find(input: {
@@ -161,7 +155,11 @@ export interface UnionOrderReaders {
       platform: RegisteredPlatform;
       unionAccountId: string;
       slot: string;
-    }): Promise<readonly { pid_scene: string; status: string; site_id: string | null }[]>;
+    }): Promise<
+      readonly { pid: string; pid_scene: string; status: string; site_id: string | null }[]
+    >;
+    /** Registered pid → the order's slot key: Taobao taobaoAdzoneOf; JD / PDD null (pid equality). */
+    slotKey(platform: RegisteredPlatform): ((pid: string) => string | null) | null;
   };
   readonly accounts: {
     syncStartAt(input: { appId: string; unionAccountId: string }): Promise<Date | null>;
@@ -183,10 +181,14 @@ export function createUnionOrderReaders(db: Kysely<DB>): UnionOrderReaders {
   return {
     pids: {
       find,
+      slotKey: (platform) => (platform === 'taobao' ? taobaoAdzoneOf : null),
       async slotCandidates(input) {
         const { appId, platform, unionAccountId, slot } = input;
-        if (platform !== 'taobao')
-          return await find({ appId, platform, unionAccountId, pid: slot });
+        if (platform !== 'taobao') {
+          // pid equality: every row's pid is the slot itself.
+          const rows = await find({ appId, platform, unionAccountId, pid: slot });
+          return rows.map((row) => ({ pid: slot, ...row }));
+        }
         const rows = await db
           .withSchema('app')
           .selectFrom('union_pids')
@@ -198,7 +200,7 @@ export function createUnionOrderReaders(db: Kysely<DB>): UnionOrderReaders {
           .execute();
         return rows
           .filter((row) => taobaoAdzoneOf(row.pid) === slot)
-          .map(({ pid_scene, status, site_id }) => ({ pid_scene, status, site_id }));
+          .map(({ pid, pid_scene, status, site_id }) => ({ pid, pid_scene, status, site_id }));
       },
     },
     accounts: {

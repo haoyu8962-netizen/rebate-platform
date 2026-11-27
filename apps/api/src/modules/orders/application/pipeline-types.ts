@@ -27,6 +27,11 @@ export interface PidRow {
   readonly site_id: string | null;
 }
 
+/** B1-08zzc r2（D10-3406）：slotCandidates 的行另带登记的 pid 原值；淘宝命中后 orders.pid 写它。 */
+export interface SlotPidRow extends PidRow {
+  readonly pid: string;
+}
+
 export interface ImportedOrder {
   readonly app_id: string;
   readonly order_id: string;
@@ -76,13 +81,20 @@ export interface OrderPipelineDeps {
      * pending / active / retired 都算，按 id 排序）。平台差异在 union：淘宝取登记行的 adzone（mm_ 末段或纯数字）
      * 等于订单 adzone_id 的行，行带 site_id，由流水线再核对订单 site_id；京东、拼多多按 pid 等值，行的 site_id 为空。
      * 生产装配（worker-runtime 的 pids: readers.pids）都带它；只给 find 的测试替身沿用 find 的等值匹配。
+     * 每行带登记的 pid 原值（京东、拼多多即推广位本身），淘宝命中后写进 orders.pid（r2，D10-3406）。
      */
     slotCandidates?(input: {
       appId: string;
       platform: RegisteredPlatform;
       unionAccountId: string;
       slot: string;
-    }): Promise<readonly PidRow[]>;
+    }): Promise<readonly SlotPidRow[]>;
+    /**
+     * B1-08zzc r2（D10-3355 / D10-3406）：本平台「登记 pid → 订单推广位键」的函数，平台差异在 union：淘宝为 union 的
+     * taobaoAdzoneOf（mm_<a>_<b>_<c> 取 <c>、纯数字取其本身，与适配器推广位筛选同一个函数）；null = 推广位与登记
+     * pid 等值（京东、拼多多）。更新步据此判「推广位变了」与未归因时 orders.pid 写什么；未提供按 null。
+     */
+    slotKey?(platform: RegisteredPlatform): ((pid: string) => string | null) | null;
   };
   readonly accounts: {
     syncStartAt(input: { appId: string; unionAccountId: string }): Promise<Date | null>;
@@ -137,4 +149,50 @@ export interface OrderPipelinePort {
 export interface OrderPipeline extends OrderPipelinePort {
   process(order: UnionOrder, ctx: OrderPipelineContext): Promise<OrderPipelineResult>;
   quarantine(rows: readonly RejectedOrderRow[], ctx: OrderPipelineContext): Promise<void>;
+}
+
+/** ① App 归属的结果：命中的那一行（带其登记 pid，后续 pid_scene 取它）、淘宝媒体不符、不是本 App 的推广位。 */
+export type SlotMatch =
+  | { readonly kind: 'hit'; readonly row: SlotPidRow }
+  | { readonly kind: 'site_mismatch' }
+  | { readonly kind: 'not_ours' };
+
+const NOT_OURS: SlotMatch = { kind: 'not_ours' };
+
+/**
+ * ① App 归属（BR-ATTR-02、D10-3355）：推广位命中本 App、本联盟账号的 union_pids（pending / active / retired 都算）。
+ * 候选行带 site_id（淘宝的推广位键含媒体）→ 命中取 site_id 与订单相等的那一行，订单缺 site_id 不猜按不命中，
+ * 都不等为 site_mismatch；都不带（京东、拼多多）→ 取首行。首次入库与更新步（未归因订单推广位变化）共用。
+ * 端口只给 find 的替身按等值匹配，命中行的 pid 即推广位本身。
+ */
+export async function matchOrderSlot(
+  pids: OrderPipelineDeps['pids'],
+  input: {
+    readonly appId: string;
+    readonly platform: RegisteredPlatform;
+    readonly unionAccountId: string;
+    readonly slot: string | null;
+    readonly siteId: string | null;
+  },
+): Promise<SlotMatch> {
+  const { slot } = input;
+  if (slot === null || slot === '') return NOT_OURS;
+  const key = {
+    appId: input.appId,
+    platform: input.platform,
+    unionAccountId: input.unionAccountId,
+  };
+  if (pids.slotCandidates !== undefined) {
+    const rows = await pids.slotCandidates({ ...key, slot });
+    const first = rows[0];
+    if (first === undefined) return NOT_OURS;
+    if (rows.every((row) => row.site_id === null)) return { kind: 'hit', row: first };
+    const site = input.siteId;
+    if (site === null || site === '') return NOT_OURS;
+    const hit = rows.find((row) => row.site_id === site);
+    return hit === undefined ? { kind: 'site_mismatch' } : { kind: 'hit', row: hit };
+  }
+  const rows = await pids.find({ ...key, pid: slot });
+  const row = rows[0];
+  return row === undefined ? NOT_OURS : { kind: 'hit', row: { ...row, pid: slot } };
 }
