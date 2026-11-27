@@ -16,7 +16,9 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { readFastParts, verifyFastSteps } from '../ci/fast-parts.ts';
 import { readIntShards } from '../ci/int-shards.ts';
+import { matchesAny } from '../lib/glob.ts';
 import { repoRoot } from '../lib/paths.ts';
+import { loadRedProjects } from './red-plan.ts';
 import {
   CLI_TIMEOUT,
   fixtureGit,
@@ -1924,6 +1926,10 @@ it(
     expect(log.at(-2)).toContain(
       `checked ${planned}, a commit of the snapshot tree on HEAD ${head}`,
     );
+    // CT-06zzzzzzzn: the type check ran after red-check (the stub compiler prints nothing and
+    // exits 0), its line comes before the evidence shape lines.
+    expect(result['typecheck']).toEqual({ exit_code: 0, errors: [] });
+    expect(log.at(-3)).toMatch(/type check \(tsc -b test\): passed \(exit 0\)$/u);
   },
   JUDGE_TIMEOUT,
 );
@@ -1942,6 +1948,10 @@ it(
     ]);
     expect(log.at(-1)).toMatch(/evidence shape: not checked \(exit 2\)$/u);
     expect(log.some((line) => line.includes('cannot read'))).toBe(false);
+    // CT-06zzzzzzzn: red-check rejected the run, so nothing was compiled.
+    expect(readJson(join(vdir, 'result.json'))).toMatchObject({ exit_code: 1, typecheck: null });
+    expect(log.at(-2)).toMatch(/type check \(tsc -b test\): not run \(red-check did not pass\)$/u);
+    expect(existsSync(join(vdir, 'typecheck.txt'))).toBe(false);
   },
   JUDGE_TIMEOUT,
 );
@@ -2285,3 +2295,290 @@ it(
   },
   JUDGE_TIMEOUT * 2,
 );
+
+// --- CT-06zzzzzzzn (FU-SPEC-HANDBACK-TSC + FU-RED-TYPECHECK-NEW-SPEC, D10-3356): --red type check --
+// The rule tests in test/spec/ci/red-typecheck cover the verdict; these cover the parser on its own
+// (red_typecheck_record, cut out of the script) and the container the type check runs in.
+
+/** Runs red_typecheck_record of the script on `output` and `exitCode`. */
+function typecheckRecord(name: string, output: string, exitCode: number) {
+  const text = readFileSync(SCRIPT, 'utf8');
+  const start = text.indexOf('red_typecheck_record() {');
+  const fn = text.slice(start, text.indexOf('\n}\n', start) + 3);
+  const dir = join(base, `typecheck-record-${name}`);
+  writeFiles(dir, { 'out.txt': output });
+  const res = spawnSync(
+    'bash',
+    [
+      '-c',
+      `${fn}red_typecheck_record "$1" "$2" "$3"`,
+      'record',
+      join(dir, 'out.txt'),
+      String(exitCode),
+      join(dir, 'typecheck.json'),
+    ],
+    { encoding: 'utf8' },
+  );
+  const [verdict, count, summary] = res.stdout.split('\n');
+  return {
+    status: res.status,
+    stderr: res.stderr,
+    verdict,
+    count,
+    summary: summary ?? '',
+    json: readJson(join(dir, 'typecheck.json')),
+  };
+}
+
+it('[CT-06zzzzzzzn] typecheck record: every located error in order, continuations joined', () => {
+  const rec = typecheckRecord(
+    'located',
+    [
+      '[typecheck] noise that is not a diagnostic',
+      "test/spec/a/one.test.ts(4,9): error TS2322: Type '{ value: string; }' is not assignable.",
+      "  Types of property 'value' are incompatible.",
+      "    Type 'string' is not assignable to type 'number'.",
+      '/work/repo/test/spec/b/two.test.ts(3,30): error TS2345: Argument of type number.',
+      '\u001b[91mtest/spec/c/three.test.ts(1,1): error TS2304: Cannot find name x.\u001b[0m',
+      '',
+    ].join('\n'),
+    2,
+  );
+  expect(rec.status, rec.stderr).toBe(0);
+  expect(rec.verdict).toBe('fail');
+  expect(rec.count).toBe('3');
+  expect(rec.json).toEqual({
+    exit_code: 2,
+    errors: [
+      {
+        file: 'test/spec/a/one.test.ts',
+        line: 4,
+        col: 9,
+        code: 'TS2322',
+        message:
+          "Type '{ value: string; }' is not assignable.\nTypes of property 'value' are incompatible.\nType 'string' is not assignable to type 'number'.",
+      },
+      {
+        file: 'test/spec/b/two.test.ts',
+        line: 3,
+        col: 30,
+        code: 'TS2345',
+        message: 'Argument of type number.',
+      },
+      {
+        file: 'test/spec/c/three.test.ts',
+        line: 1,
+        col: 1,
+        code: 'TS2304',
+        message: 'Cannot find name x.',
+      },
+    ],
+  });
+  expect(rec.summary).toBe(
+    'red run rejected: the rule tests do not type-check (tsc -b test exit 2, 3 error(s)): test/spec/a/one.test.ts(4,9) TS2322; test/spec/b/two.test.ts(3,30) TS2345; test/spec/c/three.test.ts(1,1) TS2304',
+  );
+});
+
+it('[CT-06zzzzzzzn] typecheck record: any exit but 0 fails; 0 passes only without errors', () => {
+  const killed = typecheckRecord('killed', '', 137);
+  expect([killed.verdict, killed.count]).toEqual(['fail', '0']);
+  expect(killed.json).toEqual({ exit_code: 137, errors: [] });
+  expect(killed.summary).toContain('exit 137, no located error: killed, e.g. by the memory limit');
+  const late = typecheckRecord('late', '', 124);
+  expect(late.verdict).toBe('fail');
+  expect(late.summary).toContain('exit 124, no located error: the time limit');
+  const globalOnly = typecheckRecord(
+    'global',
+    "error TS5083: Cannot read file 'test/tsconfig.json'.\n",
+    1,
+  );
+  expect(globalOnly.verdict).toBe('fail');
+  expect(globalOnly.json).toEqual({ exit_code: 1, errors: [] });
+  expect(globalOnly.summary).toContain('global: TS5083');
+  const clean = typecheckRecord('clean', '', 0);
+  expect([clean.verdict, clean.count, clean.summary]).toEqual([
+    'ok',
+    '0',
+    'type check (tsc -b test): passed (exit 0)',
+  ]);
+  expect(clean.json).toEqual({ exit_code: 0, errors: [] });
+  // Fail closed: a located error with exit 0 still fails.
+  const odd = typecheckRecord('odd', 'test/spec/x.test.ts(2,3): error TS2322: Bad.\n', 0);
+  expect([odd.verdict, odd.count]).toEqual(['fail', '1']);
+  // At most 20 named on the log line; all of them in typecheck.json.
+  const lines = Array.from({ length: 25 }, (_, i) => `t/m.ts(${i + 1},1): error TS2322: Bad.`);
+  const many = typecheckRecord('many', lines.join('\n'), 2);
+  expect((many.json['errors'] as unknown[]).length).toBe(25);
+  expect(many.summary).toContain('t/m.ts(20,1) TS2322; … 5 more in result.json');
+  expect(many.summary).not.toContain('(21,1)');
+});
+
+/**
+ * A docker stub that records its calls: the red container gets the canned report, the type check
+ * prints `stdout` and exits with `exit`.
+ */
+const TYPECHECK_DOCKER = String.raw`
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const cfg = JSON.parse(fs.readFileSync(process.env.TC_UNIT_CONFIG, 'utf8'));
+fs.appendFileSync(cfg.calls, JSON.stringify({
+  args,
+  redCheck: fs.existsSync(cfg.vdir + '/red-check.json'),
+  shape: fs.existsSync(cfg.vdir + '/evidence-shape.json'),
+}) + '\n');
+if (args[0] === 'run' && args.at(-1) === 'red') {
+  const out = args.find((a) => a.endsWith(':/out'));
+  fs.copyFileSync(cfg.report, out.slice(0, -':/out'.length) + '/spec-unit.json');
+  process.exit(0);
+}
+if (args[0] === 'run' && args.at(-1) === 'couli-typecheck') {
+  fs.writeSync(1, cfg.stdout);
+  process.exit(cfg.exit);
+}
+process.exit(0);
+`;
+
+it(
+  '[CT-06zzzzzzzn] --red: the type check runs after red-check in a container like the offline red group; a time-limit exit fails the run and ends the log',
+  () => {
+    const fx = shapeFixture('typecheck-container', true);
+    const runsDir = join(fx.root, 'runs');
+    const vdir = join(runsDir, SHAPE_TASK, 'red', '1');
+    const calls = join(fx.root, 'calls.jsonl');
+    writeFiles(fx.root, {
+      'bin/docker': '#!/bin/sh\nexec node "${0%/*}/docker.cjs" "$@"\n',
+      'bin/docker.cjs': TYPECHECK_DOCKER,
+      'report.json': JSON.stringify({
+        testResults: [
+          {
+            name: `${RUN_ROOT}/${SHAPE_NEW}`,
+            assertionResults: [
+              {
+                fullName: SHAPE_TITLE,
+                status: 'failed',
+                failureMessages: ['AssertionError: expected 1 to be 2'],
+              },
+            ],
+          },
+        ],
+      }),
+      'config.json': JSON.stringify({
+        calls,
+        vdir,
+        report: join(fx.root, 'report.json'),
+        stdout: '',
+        exit: 124,
+      }),
+    });
+    chmodSync(join(fx.root, 'bin', 'docker'), 0o755);
+    const res = spawnSync(
+      'bash',
+      [SCRIPT, SHAPE_TASK, '--worktree', fx.repo, '--red', '--base', fx.base],
+      {
+        encoding: 'utf8',
+        timeout: CLI_TIMEOUT,
+        env: {
+          ...process.env,
+          PATH: `${join(fx.root, 'bin')}:${process.env['PATH'] ?? ''}`,
+          COULI_RUNS: runsDir,
+          COULI_TRUSTED_ROOT: repoRoot(),
+          COULI_VERIFY_HOST_SERVICES: '',
+          COULI_VERIFY_MEMORY: '3g',
+          COULI_VERIFY_TIMEOUT_SECS: '900',
+          TC_UNIT_CONFIG: join(fx.root, 'config.json'),
+        },
+      },
+    );
+    expect(res.status, res.stderr).toBe(1);
+    const recorded = readFileSync(calls, 'utf8')
+      .split('\n')
+      .filter((l) => l !== '')
+      .map((l) => JSON.parse(l) as { args: string[]; redCheck: boolean; shape: boolean });
+    const runAt = (last: string) =>
+      recorded.findIndex((c) => c.args[0] === 'run' && c.args.at(-1) === last);
+    const redAt = runAt('red');
+    const tcAt = runAt('couli-typecheck');
+    expect(redAt).toBeGreaterThanOrEqual(0);
+    expect(tcAt).toBeGreaterThan(redAt);
+    expect(recorded.filter((c) => c.args.at(-1) === 'couli-typecheck')).toHaveLength(1);
+    const red = recorded[redAt]?.args ?? [];
+    const tc = recorded[tcAt]?.args ?? [];
+    expect(recorded[tcAt]).toMatchObject({ redCheck: true, shape: true });
+    const after = (args: string[], flag: string) =>
+      args.flatMap((a, i) => (args[i - 1] === flag ? [a] : []));
+    // Same snapshot, no network, the same memory, heap and time limit as the red container.
+    expect(after(tc, '--network')).toEqual(['none']);
+    expect(after(tc, '-v').filter((v) => v.endsWith(':/src:ro'))).toEqual(
+      after(red, '-v').filter((v) => v.endsWith(':/src:ro')),
+    );
+    expect(after(tc, '--memory')).toEqual(['3g']);
+    expect(after(tc, '--memory-swap')).toEqual(['3g']);
+    expect(after(tc, '--memory')).toEqual(after(red, '--memory'));
+    expect(after(tc, '-e')).toEqual(
+      expect.arrayContaining(['VERIFY_TIMEOUT_SECS=900', 'NODE_OPTIONS=--max-old-space-size=8192']),
+    );
+    expect(after(red, '-e')).toEqual(expect.arrayContaining(['VERIFY_TIMEOUT_SECS=900']));
+    for (const flag of ['--read-only', '--init', '--security-opt']) expect(tc).toContain(flag);
+    expect(after(tc, '--cap-drop')).toEqual(['ALL']);
+    // No output mount, no database address, its own container name; the compiler command.
+    expect(tc.some((a) => a.endsWith(':/out'))).toBe(false);
+    expect(tc.some((a) => /^TEST_PG_[A-Z_]*=/u.test(a))).toBe(false);
+    expect(after(tc, '--name')[0]).toMatch(/-run-tsc-ct-06zzzzzz-1-\d+$/u);
+    expect(tc.join(' ')).toContain('./node_modules/.bin/tsc -b --pretty false test');
+
+    expect(readJson(join(vdir, 'result.json'))).toMatchObject({
+      exit_code: 1,
+      typecheck: { exit_code: 124, errors: [] },
+    });
+    expect(existsSync(join(vdir, 'typecheck.txt'))).toBe(true);
+    const log = readFileSync(join(vdir, 'log.txt'), 'utf8').trimEnd().split('\n');
+    expect(log.at(-1)).toMatch(
+      /red run rejected: the rule tests do not type-check \(tsc -b test exit 124, no located error: the time limit; see the compiler output above\)$/u,
+    );
+    const shapeAt = log.length - 2;
+    expect(log[shapeAt]).toMatch(/evidence shape: \d+ problem\(s\)$/u);
+    const tcLines = log.filter((line) => line.includes('type check (tsc -b test): '));
+    expect(tcLines).toHaveLength(1);
+    expect(tcLines[0]).toMatch(/type check \(tsc -b test\): exit 124, 0 located error\(s\)$/u);
+    expect(log.indexOf(tcLines[0] ?? '')).toBeLessThan(shapeAt);
+  },
+  JUDGE_TIMEOUT,
+);
+
+/** The concrete file names a rule-test include glob takes: braces expanded, wildcards filled in. */
+function sampleFiles(glob: string): string[] {
+  const brace = /\{([^{}]*)\}/u.exec(glob);
+  if (brace !== null) {
+    return (brace[1] ?? '').split(',').flatMap((alt) => sampleFiles(glob.replace(brace[0], alt)));
+  }
+  return [glob.replaceAll('**/', 'frontend/').replaceAll('*', 'example')];
+}
+
+it('[CT-06zzzzzzzn] --red type check: tsc -b test takes every rule test the red run runs under test/, .browser.test.tsx included', () => {
+  // Codex review r1 S1: a .browser.test.tsx rule test that nothing imports must still be compiled.
+  const tsconfig = JSON.parse(readFileSync(join(repoRoot(), 'test', 'tsconfig.json'), 'utf8')) as {
+    include: string[];
+    exclude?: string[];
+  };
+  const compiled = (file: string) =>
+    matchesAny(file, tsconfig.include) && !matchesAny(file, tsconfig.exclude ?? []);
+  // The browser rule tests: the include of test/vitest.browser.config.ts, mirrored by spec-browser.
+  const browserConfig = readFileSync(join(repoRoot(), 'test', 'vitest.browser.config.ts'), 'utf8');
+  const browserInclude = JSON.parse(
+    (/^const INCLUDE = (\[.*\]);$/mu.exec(browserConfig)?.[1] ?? '[]').replaceAll("'", '"'),
+  ) as string[];
+  const projects = loadRedProjects().filter((p) => p.dir === 'test');
+  expect(projects.find((p) => p.name === 'spec-browser')?.include).toEqual(browserInclude);
+  const browserFiles = browserInclude.flatMap(sampleFiles);
+  expect(browserFiles).toEqual(
+    expect.arrayContaining([
+      'spec/frontend/example.browser.test.ts',
+      'spec/frontend/example.browser.test.tsx',
+    ]),
+  );
+  const notCompiled = [
+    ...browserFiles,
+    ...projects.flatMap((p) => p.include.flatMap(sampleFiles)),
+  ].filter((file) => !compiled(file));
+  expect(notCompiled).toEqual([]);
+});
