@@ -148,7 +148,7 @@ groups:
           fund: 'true'
         annotations:
           summary: 'Payout channel reconciliation found diffs that are not resolved yet'
-          description: 'couli_payout_recon_diff_open counts the unresolved (open or processing) channel_mismatch recon diffs of an app that the payout channel reconciliation registered (BR-WDR-23); the withdrawals of the member concerned stay on hold while a diff is unresolved. This alert does not tell how to handle a diff: that depends on its case under BR-WDR-23. In particular, a diff where the withdrawal is recorded as paid and the channel bill shows no payment or a smaller amount is a system anomaly for engineering to handle case by case: do not close it on the admin console, the diff and the hold stay until engineering has resolved it. Apps without such diffs have no sample.'
+          description: 'couli_payout_recon_diff_open counts the unresolved (open or processing) channel_mismatch recon diffs of an app that the payout channel reconciliation registered (BR-WDR-23). This alert does not tell how to handle a diff: that depends on its case under BR-WDR-23. In particular, a diff where the withdrawal is recorded as paid and the channel bill shows no payment or a smaller amount is a system anomaly for engineering to handle case by case: do not close it on the admin console, the diff and the hold stay until engineering has resolved it. Apps without such diffs have no sample.'
       - alert: CouliWithdrawalFailRatioHigh
         expr: 'couli_withdrawals_w6_today / couli_withdrawals_w5w6_today > 0.02 and couli_withdrawals_w5w6_today >= 20'
         for: '5m'
