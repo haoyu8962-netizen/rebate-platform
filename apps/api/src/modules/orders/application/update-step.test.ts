@@ -14,9 +14,11 @@ import {
 import { expect, it, vi } from 'vitest';
 import { FixedClock } from '../../platform/index.ts';
 import type { UnionOrder } from '../../union/index.ts';
+import type { LinkLogCandidate } from '../domain/source-backfill.ts';
 import type { PlatformStatusEvent, StatusMap } from '../domain/status-map.ts';
 import type { CommissionSnapshotPort } from './commission-snapshot-step.ts';
 import type { OrderPipelineContext, OrderPipelineDeps, SlotPidRow } from './pipeline-types.ts';
+import type { OrderSourcePorts } from './source-backfill.ts';
 import {
   createOrderUpdateStep,
   type OrderSettlementRecordsPort,
@@ -908,8 +910,8 @@ it('[AC-B1-08zzc#u19] 淘宝未归因、adzone 未变而登记 pid 已改（mm_ 
   const set = setValues(calls);
   expect(set.get('pid')).toBe('2002');
   expect(set.get('user_id')).toBe(owner);
-  expect(find.mock.calls.map(([input]) => input.pid)).toContain('2002');
-  expect(find.mock.calls.map(([input]) => input.pid)).not.toContain('mm_1001_3001_2002');
+  // B1-08zze（D10-3485）：场景取命中行，不再按写入后的 pid 二次查。
+  expect(find).not.toHaveBeenCalled();
   expect(create.mock.calls).toHaveLength(1);
   expect(create.mock.calls[0]?.[1]).toMatchObject({
     ownerUserId: owner,
@@ -919,6 +921,113 @@ it('[AC-B1-08zzc#u19] 淘宝未归因、adzone 未变而登记 pid 已改（mm_ 
   const warns = vi.mocked(d.logger!.warn).mock.calls.map(([fields]) => fields as object);
   expect(warns).not.toContainEqual(expect.objectContaining({ outcome: 'pid_kept' }));
 });
+
+/** 同一用户、同一商品的两次点击：较早的淘礼金、较晚的分享（② product 按订单推广位场景取其一）。 */
+function sceneClicks(user: string): LinkLogCandidate[] {
+  const click = (id: bigint, scene: string, iso: string): LinkLogCandidate => ({
+    id,
+    link_id: `019a0000-0000-7000-8000-0000000000${id.toString().padStart(2, '0')}`,
+    user_id: user,
+    platform: 'taobao',
+    product_key: 'taobao:unit-item',
+    shop_id: null,
+    event: 'open',
+    result_code: 0,
+    pid_scene: scene,
+    scene,
+    agent_session_id: null,
+    created_at: at(iso),
+  });
+  return [
+    click(11n, 'taolijin', '2026-10-14T00:00:00.000Z'),
+    click(12n, 'share', '2026-10-15T10:00:00.000Z'),
+  ];
+}
+
+it.each([{ withSources: true }, { withSources: false }])(
+  '[AC-B1-08zze#u1] 淘宝未归因重跑命中淘礼金行、之后端口再查会给分享场景：回填与首次快照仍用命中行场景，候选只查一次、不按 pid 再查（withSources=$withSources）',
+  async ({ withSources }) => {
+    const owner = '019a0000-0000-7000-8000-000000000042';
+    const row = {
+      ...current,
+      platform: 'taobao',
+      user_id: null,
+      rebate_status: 'UNATTRIBUTED',
+      pid: 'mm_1001_3001_2002',
+      buy_type: 'self',
+      source_match: null,
+      shop_id: null,
+    } as Row;
+    const { db, calls } = scriptedDb(
+      () => 1n,
+      () => row,
+    );
+    const hit: SlotPidRow = {
+      pid: '2002',
+      pid_scene: 'taolijin',
+      status: 'active',
+      site_id: '3001',
+    };
+    // 命中之后登记行被改成分享场景：任何二次查询（候选或按 pid）都会给 share。
+    const slotCandidates = vi
+      .fn<NonNullable<OrderPipelineDeps['pids']['slotCandidates']>>(() =>
+        Promise.resolve([{ ...hit, pid_scene: 'share' }]),
+      )
+      .mockImplementationOnce(() => Promise.resolve([hit]));
+    const find = vi.fn<OrderPipelineDeps['pids']['find']>(() =>
+      Promise.resolve([{ pid_scene: 'share', status: 'active', site_id: '3001' }]),
+    );
+    const create = vi.fn<CommissionSnapshotPort['create']>(() =>
+      Promise.resolve({ kind: 'created' as const }),
+    );
+    const linkLogs = vi.fn<OrderSourcePorts['linkLogs']>(() => Promise.resolve(sceneClicks(owner)));
+    const productKey = vi.fn<OrderSourcePorts['productKey']>(() =>
+      Promise.resolve('taobao:unit-item'),
+    );
+    const { d } = withBus([], {
+      pids: { find, slotCandidates, slotKey: () => tbSlotKey },
+      bindings: {
+        findByRelation: () =>
+          Promise.resolve([
+            {
+              user_id: owner,
+              bound_at: at('2026-10-01T00:00:00.000Z'),
+              released_at: null,
+              cooldown_until: null,
+            },
+          ]),
+      },
+      snapshots: { create },
+      ...(withSources ? { sources: { linkLogs, productKey } } : {}),
+    });
+    const changed = incoming({
+      platform: 'taobao',
+      raw_status: 'received',
+      promotion_slot: '2002',
+      site_id: '3001',
+      attr_params: { relation_id: 'unit-relation', sub_union_id: null, custom_parameters: null },
+    });
+    const { outcome } = await run(db, d, row, changed, { ...ctx, platform: 'taobao' });
+    expect(outcome).toEqual({ kind: 'updated', order_id: current.order_id });
+    const set = setValues(calls);
+    expect(set.get('pid')).toBe('2002');
+    expect(set.get('user_id')).toBe(owner);
+    expect(slotCandidates).toHaveBeenCalledTimes(1);
+    expect(find).not.toHaveBeenCalled();
+    expect(create.mock.calls).toHaveLength(1);
+    expect(create.mock.calls[0]?.[1]).toMatchObject({ ownerUserId: owner, rebateMode: 'none' });
+    const warns = vi.mocked(d.logger!.warn).mock.calls.map(([fields]) => fields as object);
+    expect(warns).not.toContainEqual(expect.objectContaining({ outcome: 'pid_kept' }));
+    if (withSources) {
+      expect(linkLogs).toHaveBeenCalledTimes(1);
+      expect(set.get('source_match')).toBe('product');
+      expect(set.get('source_scene')).toBe('taolijin');
+      expect(set.get('link_id')).toBe('019a0000-0000-7000-8000-000000000011');
+    } else {
+      expect(set.has('source_match')).toBe(false);
+    }
+  },
+);
 
 it.each([
   { label: 'mm_ 登记', hit: 'mm_1001_3001_2002' },

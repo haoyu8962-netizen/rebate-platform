@@ -11,7 +11,7 @@
 //   （UNMAPPED_STATUS）08 未写该事件，只告警进待处理。
 // - 未归因（user_id 为空，含 VOID 的 R3b）每次重跑用户归属：命中且 locked=false 才写 user_id、user_basis=param。
 // - ⑤ 来源回填（B1-08j，BR-ATTR-15）：本次写 user_id、库内 source_match 为空且注入 sources 时，按订单推广位
-//   （本次 UPDATE 将写入的 pid——未归因重跑写入本次报文的推广位，未改时即原值——经 pids 端口取首行 pid_scene；
+//   （淘宝未归因重跑命中时取命中行的 pid_scene；否则按本次 UPDATE 将写入的 pid 经 pids 端口取首行 pid_scene；
 //   推广位为空、端口未注入或查不到 → 场景未知：② product / ③ shop 不跨场景匹配，① exact 照常，否则 none，
 //   并在写后告警；只有推广位本身是 fallback 才不限场景，D10-60）、current.shop_id 与本次报文匹配，四列并入
 //   同一条 CAS UPDATE（WHERE 另加 source_match IS NULL）；端口抛错整事务回滚。不改 product_key。
@@ -61,6 +61,8 @@
 //   同一匹配（matchOrderSlot：本 App、本联盟账号、site_id + adzone）重新取命中行，其 pid 与库内不同才写（r3，
 //   D10-3454：登记 pid 在未归因期间被改时快照取新登记的场景）；找不到保留 current.pid 并告警（不把裸 adzone
 //   写进 orders.pid）。京东、拼多多（无键函数）照旧等值比较、未归因时写本次报文推广位。
+//   命中时（B1-08zze，D10-3485）命中行的 pid_scene 即本次已知场景：⑤ 来源回填与 ⑥ 首次快照（含未注入 sources）
+//   都复用它，不再按 pid 或 adzone 二次查 union_pids——两次查询之间后台改登记行也不丢场景。
 // 日志只打平铺字段（platform、app_id、reason、outcome、rule、event），不打子订单号与买家参数。
 import type { DB } from '@couli/db';
 import type { OrderPlatformState } from '@couli/domain';
@@ -501,7 +503,7 @@ export function createOrderUpdateStep(
     let pidSceneMissing = false;
     /** 淘宝未归因订单重新匹配找不到命中行（保留 current.pid）时的原因；null = 没有这种情况。 */
     let pidUnmatched: 'not_ours' | 'site_mismatch' | null = null;
-    /** 已为来源回填查过的订单推广位场景（undefined = 本次还没查）。 */
+    /** 本次已知的订单推广位场景：淘宝未归因重跑命中行的，或来源回填查过的（undefined = 本次还没有）。 */
     let knownPidScene: string | null | undefined;
     // B1-08p 店铺：只空 → 非空（口径 2）。
     const shop = incomingShopId(incoming);
@@ -512,7 +514,7 @@ export function createOrderUpdateStep(
       if (slotKeyOf !== null && deps.pids !== undefined) {
         // r3（D10-3454，BR-CALC-19 / BR-ATTR-15）：未归因重跑一律按本次报文的 site_id + adzone 用首次入库同一匹配
         // 重新取命中行——登记 pid 在未归因期间可能被改（如 mm_ → 纯数字），库内旧 pid 已查不到场景。命中且与库内
-        // pid 不同才写；找不到保留库内 pid（下面告警），不写裸 adzone。后续场景以写入后的 pid 取。
+        // pid 不同才写；找不到保留库内 pid（下面告警），不写裸 adzone。命中时场景取命中行（B1-08zze）。
         pidWrite = {};
         const match = await matchOrderSlot(deps.pids, {
           appId: current.app_id,
@@ -522,7 +524,11 @@ export function createOrderUpdateStep(
           siteId: incoming.site_id ?? null,
         });
         if (match.kind !== 'hit') pidUnmatched = match.kind;
-        else if (match.row.pid !== current.pid) pidWrite = { pid: match.row.pid };
+        else {
+          // B1-08zze（D10-3485）：命中行的场景就是本次已知场景，回填与首次快照复用，不再二次查 union_pids。
+          knownPidScene = match.row.pid_scene;
+          if (match.row.pid !== current.pid) pidWrite = { pid: match.row.pid };
+        }
       }
       Object.assign(set, {
         ...pidWrite,
@@ -546,7 +552,10 @@ export function createOrderUpdateStep(
         if (deps.sources !== undefined && current.source_match === null) {
           // 推广位以本次写入后的为准：set 里有 pid（未归因重跑写入本次报文的推广位）就用它，否则是原值。
           const orderPid = set.pid !== undefined ? set.pid : current.pid;
-          const pidScene = await orderPidScene(current, orderPid, ctx, platform);
+          const pidScene =
+            knownPidScene !== undefined
+              ? knownPidScene
+              : await orderPidScene(current, orderPid, ctx, platform);
           knownPidScene = pidScene;
           pidSceneMissing = pidScene === null;
           const source = await backfillOrderSource(deps.sources, {
