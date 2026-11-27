@@ -95,7 +95,8 @@ export function runBrowser(root: string, projectExit: number, screenshot = true)
   cpSync(join(OPS_DIR, 'verify-image'), join(trustedOps, 'verify-image'), { recursive: true });
   writeFiles(worktree, {
     'package.json': '{"name":"browser-fixture","private":true,"packageManager":"pnpm@11.0.0"}\n',
-    'pnpm-lock.yaml': "lockfileVersion: '9.0'\npackages:\n  playwright@1.60.0: {}\n",
+    'pnpm-lock.yaml':
+      "lockfileVersion: '9.0'\npackages:\n  playwright@1.60.0:\n    resolution: {integrity: sha512-x}\n",
     'pnpm-workspace.yaml': 'packages: []\n',
     'test/package.json': '{"name":"browser-fixture-tests","private":true}\n',
   });
