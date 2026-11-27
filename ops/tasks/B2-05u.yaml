@@ -9,6 +9,7 @@ type: impl
 #   黑名单判定、按收款账号的日次数与并发锁仍用真实账号（所以不在 identity 的读口里返回空）。配置值的解析复用 identity 绑定侧现成的那一份（非空、取值合法、不重复，否则退回默认并告警），经 identity/index.ts 导出，不另写。
 #   已创建的提现单、审核、打款、重试都不看这个开关，不动；规则判定的纯函数（payout/domain）不动。不带迁移。
 # 契约只改说明文字（借契约槽，实现开工前登槽，与 CT-24zzw 错开）：error-codes.yaml 30305 的含义补「或已绑定的收款方式已被关闭」、来源加 BR-WDR-02；openapi 两个接口说明各补半句；形状、错误码、枚举不变，生成物重出。
+# 2026-11-27 补丁 1（funds）：paths 加 apps/api/src/app.module.ts。实现第 1 次让 payout/application/withdraw-rules.ts 直接 import identity/index.ts，冻结用例 [AC-B2-08c#wiring]（规划/02 §4.1、D10-456 ④：payout 的申请与规则源码不导入 identity）在测试机上红了——上面第 9 行「经 identity/index.ts 导出」是 funds 入账时写错的做法。改为照现成的装配方式：解析函数仍只在 identity 一份，由 app.module 在装配提现规则时交给 payout（payout 只认结构化的端口，不 import identity）；app.module 只加这一处装配，别的不动。
 # 不加新文案（会员看到的仍是「请先绑定收款账号」）；单独的提示语登 FU-WDR-CLOSED-METHOD-HINT，上线后。现有规则测试若有因多读一个配置键或契约说明变化而变红的，停下按清单类报编排、台账补丁登记。
 refs: [BR-WDR-02, BR-WDR-03]
 refs_hash:
@@ -19,6 +20,7 @@ paths:
   - 'apps/api/src/modules/payout/application/withdraw-rules*.ts'
   - 'apps/api/src/modules/identity/application/payout-account*.ts'
   - 'apps/api/src/modules/identity/index.ts'
+  - 'apps/api/src/app.module.ts' # 补丁 1：只在提现规则的装配处把 identity 的解析函数交给 payout
   - 'contracts/error-codes.yaml'
   - 'contracts/openapi.yaml'
   - 'packages/contracts-ts/**'
