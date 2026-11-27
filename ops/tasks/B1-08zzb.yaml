@@ -1,0 +1,18 @@
+id: B1-08zzb
+repo: rebate-platform
+title: 门禁：tools/ci/lint-migrations.ts APPROVED_GUARD_CHANGES 登记 B1-08zza 的 orders_scene_basis_check 重建迁移（0159_orders-scene-basis-link.sql，文件名 + sha256），[AC-CT-06d#1] 期望同步
+type: guard-change
+# 2026-11-27 入账（be 线，编排 D10-3353 ② / D10-3384；先例 B2-04rc、B1-22e）。B1-08zza 把归属表 orders 的 scene_basis CHECK 按同名 NOT VALID 重建为含 link（BR-ATTR-09），验证在下一个迁移 0160。
+# 做法：只加一条 '<文件名>': '<sha256>'，不改判定逻辑；哈希取 B1-08zza 资金评审 r2 pass（头 1d692ebfc）后的文件字节；迁移号以 land 时主干下一个空号为准，改号须重登。第三类保护路径，按 approvals #24 由编排在 landing 时加标签；先于 B1-08zza 合并。
+refs: []
+refs_hash: {}
+deps: [B1-08zza]
+paths:
+  - 'tools/ci/lint-migrations.ts'
+  - 'test/spec/db/lint-migrations/guard-approvals.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
