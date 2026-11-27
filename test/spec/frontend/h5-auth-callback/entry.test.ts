@@ -129,7 +129,18 @@ it.each([
   expect(replace.mock.calls).toEqual(target === null ? [] : [[target]]);
   if (target !== null) expect(replaceState).toHaveBeenCalledBefore(replace);
 
-  expect(document.body.textContent?.trim()).toBe(PROMPT);
+  const links = document.body.querySelectorAll('a');
+  if (target === null) {
+    expect(links).toHaveLength(0);
+    expect(document.body.textContent?.trim()).toBe(PROMPT);
+  } else {
+    expect(links).toHaveLength(1);
+    expect(links[0]?.textContent?.trim()).toBe('返回凑狸');
+    expect(links[0]?.getAttribute('href')).toBe(target);
+    const bodyWithoutLink = document.body.cloneNode(true) as HTMLElement;
+    bodyWithoutLink.querySelector('a')?.remove();
+    expect(bodyWithoutLink.textContent?.trim()).toBe(PROMPT);
+  }
   expect(JSON.stringify(history.state) ?? '').not.toMatch(/Fixture(?:Code|State|Detail|\/Code)/);
   for (const [name, call] of Object.entries(forbidden)) expect(call, name).not.toHaveBeenCalled();
   for (const log of logs) expect(log).not.toHaveBeenCalled();

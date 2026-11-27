@@ -1,0 +1,121 @@
+{
+  "red_tests": [
+    "test/spec/frontend/h5-auth-callback-return/entry.test.ts > [AC-F1-11da#1] 授权成功回调 仅在生成深链时显示可点的返回链接",
+    "test/spec/frontend/h5-auth-callback-return/entry.test.ts > [AC-F1-11da#1] 授权出错回调 仅在生成深链时显示可点的返回链接"
+  ],
+  "risk_note": "F1-11da. apps/h5/src/entries/auth-callback only (index.html, main.ts): when callbackTarget gives a target, a clickable 「返回凑狸」 link with that exact deep link is placed right after the prompt (from an inert <template>, href set with setAttribute, no innerHTML), then location.replace runs as before; no target, no link. callback.ts whitelist unchanged; no requests, storage, cookies or logging. Frozen [AC-F1-11d#8] changed only in its body-text assertion, as registered in the ledger's modify_existing (rule_change BR-ID-17, ruling D10-3567). No contract, money or db change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex code review r1 (general, RV1, full scope) pass with no findings, out_of_scope 0. couli-runs/F1-11da/review-r1.json. Test machine: --tests green (4 files, 53 tests: the new rule-test dir, the frozen h5-auth-callback dir, entry unit tests); verify:fast see couli-runs/F1-11da/pc-fast2.out."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "rule tests by Codex (ledger tester codex), 1 round; spec-test review by an independent Claude (claude-run.sh, approvals 19 / 36): r1 full pass; 1 S2 moved out of scope (link after the prompt and click not prevented: left to the device test with Android 甲, and written into the implementation task).",
+    "model": "claude-opus-5-5"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/frontend/h5-auth-callback/entry.test.ts",
+      "test": "[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（?code=FixtureCode&state=FixtureState）",
+      "reason": "rule_change",
+      "before": "it.each([\n  [\n    '?code=FixtureCode&state=FixtureState',\n    'couli://auth/taobao?code=FixtureCode&state=FixtureState',\n  ],\n  [\n    '?error=denied&error_description=FixtureDetail&state=FixtureState',\n    'couli://auth/taobao?state=FixtureState&error=1',\n  ],\n  ['?code=Fixture%2FCode&state=FixtureState', null],\n])('[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（%s）', async (search, target) => {\n  const { addressBar, replaceState, replace, forbidden, logs } = observeBrowser(search);\n  await openEntry();\n\n  expect(replaceState).toHaveBeenCalledTimes(1);\n  expect(addressBar.pathname).toBe(PATH);\n  expect(addressBar.search).toBe('');\n  expect(replace.mock.calls).toEqual(target === null ? [] : [[target]]);\n  if (target !== null) expect(replaceState).toHaveBeenCalledBefore(replace);\n\n  expect(document.body.textContent?.trim()).toBe(PROMPT);\n  expect(JSON.stringify(history.state) ?? '').not.toMatch(/Fixture(?:Code|State|Detail|\\/Code)/);\n  for (const [name, call] of Object.entries(forbidden)) expect(call, name).not.toHaveBeenCalled();\n  for (const log of logs) expect(log).not.toHaveBeenCalled();\n});\n// .each row 1 of 3: [\n    '?code=FixtureCode&state=FixtureState',\n    'couli://auth/taobao?code=FixtureCode&state=FixtureState',\n  ]",
+      "after": "it.each([\n  [\n    '?code=FixtureCode&state=FixtureState',\n    'couli://auth/taobao?code=FixtureCode&state=FixtureState',\n  ],\n  [\n    '?error=denied&error_description=FixtureDetail&state=FixtureState',\n    'couli://auth/taobao?state=FixtureState&error=1',\n  ],\n  ['?code=Fixture%2FCode&state=FixtureState', null],\n])('[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（%s）', async (search, target) => {\n  const { addressBar, replaceState, replace, forbidden, logs } = observeBrowser(search);\n  await openEntry();\n\n  expect(replaceState).toHaveBeenCalledTimes(1);\n  expect(addressBar.pathname).toBe(PATH);\n  expect(addressBar.search).toBe('');\n  expect(replace.mock.calls).toEqual(target === null ? [] : [[target]]);\n  if (target !== null) expect(replaceState).toHaveBeenCalledBefore(replace);\n\n  const links = document.body.querySelectorAll('a');\n  if (target === null) {\n    expect(links).toHaveLength(0);\n    expect(document.body.textContent?.trim()).toBe(PROMPT);\n  } else {\n    expect(links).toHaveLength(1);\n    expect(links[0]?.textContent?.trim()).toBe('返回凑狸');\n    expect(links[0]?.getAttribute('href')).toBe(target);\n    const bodyWithoutLink = document.body.cloneNode(true) as HTMLElement;\n    bodyWithoutLink.querySelector('a')?.remove();\n    expect(bodyWithoutLink.textContent?.trim()).toBe(PROMPT);\n  }\n  expect(JSON.stringify(history.state) ?? '').not.toMatch(/Fixture(?:Code|State|Detail|\\/Code)/);\n  for (const [name, call] of Object.entries(forbidden)) expect(call, name).not.toHaveBeenCalled();\n  for (const log of logs) expect(log).not.toHaveBeenCalled();\n});\n// .each row 1 of 3: [\n    '?code=FixtureCode&state=FixtureState',\n    'couli://auth/taobao?code=FixtureCode&state=FixtureState',\n  ]",
+      "br": ["BR-ID-17"],
+      "mutation": [
+        {
+          "mutant": "reverse check (old behaviour put back): main's apps/h5/src/entries/auth-callback (no link) restored on the task head in a probe worktree; verify-container --tests test/spec/frontend/h5-auth-callback/entry.test.ts on the test machine (F1-11da tests/2, tree 47e0b58418af): the two [AC-F1-11d#8] rows with a target red, the no-target row and the other 2 tests green (5 tests, 2 failed)",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/frontend/h5-auth-callback/entry.test.ts",
+      "test": "[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（?error=denied&error_description=FixtureDetail&state=FixtureState）",
+      "reason": "rule_change",
+      "before": "it.each([\n  [\n    '?code=FixtureCode&state=FixtureState',\n    'couli://auth/taobao?code=FixtureCode&state=FixtureState',\n  ],\n  [\n    '?error=denied&error_description=FixtureDetail&state=FixtureState',\n    'couli://auth/taobao?state=FixtureState&error=1',\n  ],\n  ['?code=Fixture%2FCode&state=FixtureState', null],\n])('[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（%s）', async (search, target) => {\n  const { addressBar, replaceState, replace, forbidden, logs } = observeBrowser(search);\n  await openEntry();\n\n  expect(replaceState).toHaveBeenCalledTimes(1);\n  expect(addressBar.pathname).toBe(PATH);\n  expect(addressBar.search).toBe('');\n  expect(replace.mock.calls).toEqual(target === null ? [] : [[target]]);\n  if (target !== null) expect(replaceState).toHaveBeenCalledBefore(replace);\n\n  expect(document.body.textContent?.trim()).toBe(PROMPT);\n  expect(JSON.stringify(history.state) ?? '').not.toMatch(/Fixture(?:Code|State|Detail|\\/Code)/);\n  for (const [name, call] of Object.entries(forbidden)) expect(call, name).not.toHaveBeenCalled();\n  for (const log of logs) expect(log).not.toHaveBeenCalled();\n});\n// .each row 2 of 3: [\n    '?error=denied&error_description=FixtureDetail&state=FixtureState',\n    'couli://auth/taobao?state=FixtureState&error=1',\n  ]",
+      "after": "it.each([\n  [\n    '?code=FixtureCode&state=FixtureState',\n    'couli://auth/taobao?code=FixtureCode&state=FixtureState',\n  ],\n  [\n    '?error=denied&error_description=FixtureDetail&state=FixtureState',\n    'couli://auth/taobao?state=FixtureState&error=1',\n  ],\n  ['?code=Fixture%2FCode&state=FixtureState', null],\n])('[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（%s）', async (search, target) => {\n  const { addressBar, replaceState, replace, forbidden, logs } = observeBrowser(search);\n  await openEntry();\n\n  expect(replaceState).toHaveBeenCalledTimes(1);\n  expect(addressBar.pathname).toBe(PATH);\n  expect(addressBar.search).toBe('');\n  expect(replace.mock.calls).toEqual(target === null ? [] : [[target]]);\n  if (target !== null) expect(replaceState).toHaveBeenCalledBefore(replace);\n\n  const links = document.body.querySelectorAll('a');\n  if (target === null) {\n    expect(links).toHaveLength(0);\n    expect(document.body.textContent?.trim()).toBe(PROMPT);\n  } else {\n    expect(links).toHaveLength(1);\n    expect(links[0]?.textContent?.trim()).toBe('返回凑狸');\n    expect(links[0]?.getAttribute('href')).toBe(target);\n    const bodyWithoutLink = document.body.cloneNode(true) as HTMLElement;\n    bodyWithoutLink.querySelector('a')?.remove();\n    expect(bodyWithoutLink.textContent?.trim()).toBe(PROMPT);\n  }\n  expect(JSON.stringify(history.state) ?? '').not.toMatch(/Fixture(?:Code|State|Detail|\\/Code)/);\n  for (const [name, call] of Object.entries(forbidden)) expect(call, name).not.toHaveBeenCalled();\n  for (const log of logs) expect(log).not.toHaveBeenCalled();\n});\n// .each row 2 of 3: [\n    '?error=denied&error_description=FixtureDetail&state=FixtureState',\n    'couli://auth/taobao?state=FixtureState&error=1',\n  ]",
+      "br": ["BR-ID-17"],
+      "mutation": [
+        {
+          "mutant": "reverse check (old behaviour put back): main's apps/h5/src/entries/auth-callback (no link) restored on the task head in a probe worktree; verify-container --tests test/spec/frontend/h5-auth-callback/entry.test.ts on the test machine (F1-11da tests/2, tree 47e0b58418af): the two [AC-F1-11d#8] rows with a target red, the no-target row and the other 2 tests green (5 tests, 2 failed)",
+          "result": "killed"
+        }
+      ]
+    },
+    {
+      "file": "test/spec/frontend/h5-auth-callback/entry.test.ts",
+      "test": "[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（?code=Fixture%2FCode&state=FixtureState）",
+      "reason": "rule_change",
+      "before": "it.each([\n  [\n    '?code=FixtureCode&state=FixtureState',\n    'couli://auth/taobao?code=FixtureCode&state=FixtureState',\n  ],\n  [\n    '?error=denied&error_description=FixtureDetail&state=FixtureState',\n    'couli://auth/taobao?state=FixtureState&error=1',\n  ],\n  ['?code=Fixture%2FCode&state=FixtureState', null],\n])('[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（%s）', async (search, target) => {\n  const { addressBar, replaceState, replace, forbidden, logs } = observeBrowser(search);\n  await openEntry();\n\n  expect(replaceState).toHaveBeenCalledTimes(1);\n  expect(addressBar.pathname).toBe(PATH);\n  expect(addressBar.search).toBe('');\n  expect(replace.mock.calls).toEqual(target === null ? [] : [[target]]);\n  if (target !== null) expect(replaceState).toHaveBeenCalledBefore(replace);\n\n  expect(document.body.textContent?.trim()).toBe(PROMPT);\n  expect(JSON.stringify(history.state) ?? '').not.toMatch(/Fixture(?:Code|State|Detail|\\/Code)/);\n  for (const [name, call] of Object.entries(forbidden)) expect(call, name).not.toHaveBeenCalled();\n  for (const log of logs) expect(log).not.toHaveBeenCalled();\n});\n// .each row 3 of 3: ['?code=Fixture%2FCode&state=FixtureState', null]",
+      "after": "it.each([\n  [\n    '?code=FixtureCode&state=FixtureState',\n    'couli://auth/taobao?code=FixtureCode&state=FixtureState',\n  ],\n  [\n    '?error=denied&error_description=FixtureDetail&state=FixtureState',\n    'couli://auth/taobao?state=FixtureState&error=1',\n  ],\n  ['?code=Fixture%2FCode&state=FixtureState', null],\n])('[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（%s）', async (search, target) => {\n  const { addressBar, replaceState, replace, forbidden, logs } = observeBrowser(search);\n  await openEntry();\n\n  expect(replaceState).toHaveBeenCalledTimes(1);\n  expect(addressBar.pathname).toBe(PATH);\n  expect(addressBar.search).toBe('');\n  expect(replace.mock.calls).toEqual(target === null ? [] : [[target]]);\n  if (target !== null) expect(replaceState).toHaveBeenCalledBefore(replace);\n\n  const links = document.body.querySelectorAll('a');\n  if (target === null) {\n    expect(links).toHaveLength(0);\n    expect(document.body.textContent?.trim()).toBe(PROMPT);\n  } else {\n    expect(links).toHaveLength(1);\n    expect(links[0]?.textContent?.trim()).toBe('返回凑狸');\n    expect(links[0]?.getAttribute('href')).toBe(target);\n    const bodyWithoutLink = document.body.cloneNode(true) as HTMLElement;\n    bodyWithoutLink.querySelector('a')?.remove();\n    expect(bodyWithoutLink.textContent?.trim()).toBe(PROMPT);\n  }\n  expect(JSON.stringify(history.state) ?? '').not.toMatch(/Fixture(?:Code|State|Detail|\\/Code)/);\n  for (const [name, call] of Object.entries(forbidden)) expect(call, name).not.toHaveBeenCalled();\n  for (const log of logs) expect(log).not.toHaveBeenCalled();\n});\n// .each row 3 of 3: ['?code=Fixture%2FCode&state=FixtureState', null]",
+      "br": ["BR-ID-17"],
+      "mutation": [
+        {
+          "mutant": "mutant: the link is also shown when callbackTarget gives null (main.ts: showReturnLink('couli://auth/taobao') after replaceState when target === null); verify-container --tests test/spec/frontend/h5-auth-callback/entry.test.ts (F1-11da tests/3, tree 2013cd84c295): only the no-target [AC-F1-11d#8] row red (5 tests, 1 failed); the expectation of this row is unchanged, it is registered with the shared table body",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "task": "F1-11da",
+  "spec_ref": "b3b8ff548af95078a744803e9d7461ee269ad448",
+  "spec_commit": "bbac544072e0ec2de9653c838c31235253dacdcc",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "bbac544072e0ec2de9653c838c31235253dacdcc",
+      "tree": "8ff231c446b0395e8ce40ef07bee5d787f718b44",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-27T16:03:00Z",
+      "finished_at": "2026-11-27T16:04:42Z",
+      "red_tests": [
+        "test/spec/frontend/h5-auth-callback-return/entry.test.ts > [AC-F1-11da#1] 授权成功回调 仅在生成深链时显示可点的返回链接",
+        "test/spec/frontend/h5-auth-callback-return/entry.test.ts > [AC-F1-11da#1] 授权出错回调 仅在生成深链时显示可点的返回链接"
+      ],
+      "expected": ["test/spec/frontend/h5-auth-callback-return/entry.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "4e15525b5a8fa9d4d2dcf396692810b8c1ddf3b9cbafd5e87d80438e470ad634"
+        }
+      ],
+      "typecheck": {
+        "exit_code": 0,
+        "errors": []
+      }
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "4331b805a8b36183d2a4faa9499801e62db16a97",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
