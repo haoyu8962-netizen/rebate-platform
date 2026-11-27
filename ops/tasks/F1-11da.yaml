@@ -20,7 +20,8 @@ tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/frontend/h5-auth-callback-return/**'
-status: todo
+status: done
+pr: 973
 modify_existing:
   - file: 'test/spec/frontend/h5-auth-callback/entry.test.ts'
     test: '[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（?code=FixtureCode&state=FixtureState）'
