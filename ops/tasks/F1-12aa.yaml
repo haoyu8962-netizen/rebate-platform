@@ -1,0 +1,18 @@
+id: F1-12aa
+repo: rebate-platform
+title: H5 收益页单测 [AC-F1-12a-UNIT#5] 负载下撞 5 秒默认超时（FU-H5-EARNINGS-UNIT5-TIMEOUT）——缩短等待链（userEvent 不插定时器延迟），断言不变
+type: impl
+# 2026-11-28 入账（前端线 fe；编排 D10-3629 / D10-3631）。主干 842f1d14bcdf 的 verify-unit 里 apps/h5 earnings-page.test.tsx「[AC-F1-12a-UNIT#5] 切回取过的平台时重取返回 30701」5282ms 撞 5000ms 默认超时（无断言失败；那次 jsdom 环境占 64%）；测试机平时这个文件两条合计 0.4–0.8 秒，负载下见过 2.7 秒。
+# 查因：查询客户端已是 retry: false（没有重试退避）；这条用 userEvent.setup() 缺省 delay，每次点击之间插 setTimeout，加上 mount → 切平台 → 切回三段 findBy / waitFor，负载下累积。
+# 只做（写死）：只改 apps/h5/src/entries/app/pages/earnings/earnings-page.test.tsx——[AC-F1-12a-UNIT#5]（同文件用同一写法的 [AC-F1-12a-UNIT#6] 一并）改为 userEvent.setup({ delay: null })，去掉可证明多余的等待；断言内容、顺序与标题不变。仍不够才给这一条单独设超时（it 的第三个参数），不改全局 testTimeout、vitest 配置。
+# 不做：同次日志 [AC-B2-18d-UNIT#4]（apps/api/src/modules/settlement/bill/follow-union.test.ts，5066ms）在资金模块（RV2，funds 线），不在本单，另报编排。
+refs: []
+refs_hash: {}
+deps: [F1-12a]
+paths:
+  - 'apps/h5/src/entries/app/pages/earnings/earnings-page.test.tsx'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
