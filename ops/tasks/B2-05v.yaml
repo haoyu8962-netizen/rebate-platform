@@ -1,0 +1,28 @@
+id: B2-05v
+repo: rebate-platform
+title: 'B2-05v：提现建单的锁内复核补全（FU-WDR-LOCKED-RECHECK-56）——锁内显式重判收款账号与实名（BR-WDR-03 ⑤⑥），锁外第一轮读到的收款账号与锁内不同时整笔回滚重试（BR-WDR-07 ④），方式上限与风险标签随之按锁内账号算'
+type: impl
+# 2026-11-27 funds 线入账（编排 D10-3494；B2-05u 已合并 #964）。核对记录 couli-runs/FUNDS-quote/audits/wdr-locked-recheck-20261127.md（独立子代理只读核、编排自核关键行）。
+# 规则（07_WDR BR-WDR-07 ④）：锁内重新执行 BR-WDR-03 的 ⑤⑥⑦⑧⑩⑪⑫；⑤⑥ 在锁内重读当前收款账号与实名、重取收款人快照，重取的账号与 ③ 所锁的不同时整笔回滚重试。
+# 现状（主干 withdraw-apply.ts 与 payout/domain/withdraw-locked.ts）：锁内只判 ⑦⑧⑩⑪⑫；⑤ 只有「快照读不到 → 30305」与 B2-05u 补的「方式已关闭 → 30305」；⑥ 锁内重读已算出实名与姓名一致两个量但没人看（各写路径同锁 users 行，暂不可利用，属防御缺失）；
+#   缺口：锁外第一轮读到的账号 A 与锁内账号 B 不比较——第一轮到拿 users 锁之间会员换绑，单按 B 建，但 ⑨ 的方式单笔上限按 A 的方式算、风险标签按 A 的 HMAC 算后入单不再重算（影响 BR-WDR-30 自动到账判定）。
+# 做法：① 锁内按 ④ 的顺序在 ⑦ 之前显式重判 ⑤⑥（码值与锁外同：实名 30304、收款账号 30305、姓名不一致 30307），判定放在锁内复核的纯函数里；② 锁内的收款账号（HMAC 与方式）与第一轮所读不同 → 整笔回滚、从第一轮重跑，
+#   重跑后 ⑨ 与风险标签自然按当前账号算；重跑次数上限与用尽后的返回码写进任务书前先报编排定。不改锁顺序，不改 ③a 黑名单只在第一轮判的口径，不带迁移，不动契约。
+# 冻结用例：test/spec/payout/apply/** 里钉「锁内只判 ⑦⑧⑩⑪⑫」的用例若因规则已改（D10-192 加 ⑤⑥）而红，入账后先在临时工作树上探一遍，按清单报编排核后以台账补丁登 modify_existing（rule_change，BR-WDR-07）。
+refs: [BR-WDR-07, BR-WDR-03]
+refs_hash:
+  BR-WDR-07: 3eaedce150d8
+  BR-WDR-03: c1b5f37a0dd1
+deps: [B2-05u]
+paths:
+  - 'apps/api/src/modules/payout/application/withdraw-apply*.ts'
+  - 'apps/api/src/modules/payout/domain/withdraw-locked*.ts'
+test_paths:
+  - 'test/spec/payout/locked-recheck/**' # 新目录
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/locked-recheck/**'
+status: todo
+pr: null
