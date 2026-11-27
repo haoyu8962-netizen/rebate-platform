@@ -1,0 +1,29 @@
+id: CT-17l
+repo: rebate-platform
+title: '契约小单 0a（TB-WEBCODE-AUTH）：导出组件白名单（安卓 3 个 Activity、鸿蒙 EntryAbility）、三端共用的淘宝 web_code 回跳解析向量、两个文案键（「正在确认授权结果」与晚到回跳提示）；openapi 与错误码不改'
+type: contract
+# 2026-11-27 be 入账（编排 D10-3567；依据 couli-runs/NATIVE/TB-WEBCODE-AUTH/scope.md「二、契约改动草案」C2 / C3 / C4；C1 apps.json 说明、C5 openapi / 错误码、C6 分端 redirect 都不做）。契约槽排在 CT-26zs 之后。
+# ① specs/client-security-baseline.yaml exported_components_allowed（现为 []，CSB-09）登记 source own：android com.couli.app.MainActivity、com.couli.app.clipboard.ShareReceiverActivity、com.couli.app.inbound.InboundSchemeActivity，harmony EntryAbility；每条 {platform, component, purpose, source}，删掉对应 TODO。② 新增三端共用的回跳解析向量（暂名 specs/webcode-callback-vectors.json，名字由编排定）：couli://auth/taobao?code=…&state=… → 成功；?state=…&error=1 → 未完成；缺 state、state 0 或 129 字符、code 4097 字符、重复键、非法百分号编码、带 fragment / 端口 / userinfo、host 或 path 不对、scheme 不对 → 丢弃；额外键 → 忽略；上限照契约 state 1..128、code 1..4096。
+# ③ contracts/texts.default.json 新键 auth.confirming「正在确认授权结果」（原文 08 BR-ID-17 细则）与晚到 / 冷启动回跳绑定成功但不重放 open 的提示（键名与措辞按 BR-TEXT 规则起草、走 Jev 判断，编排回写 08 BR-TEXT-14 表后再进契约，逐字照 08）；fund-term-keys 归 ordinary；重生成 content 与 contracts-ts 生成物。
+refs: [BR-ID-17, BR-TEXT-12, BR-TEXT-14]
+refs_hash:
+  BR-ID-17: ba4ebcc6279a
+  BR-TEXT-12: d27e4b39c11e
+  BR-TEXT-14: e029c2349c51
+deps: []
+paths:
+  - 'specs/client-security-baseline.yaml'
+  - 'specs/webcode-callback-vectors.json'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'packages/contracts-ts/**'
+test_paths:
+  - 'test/spec/contracts/webcode-auth-0a/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/contracts/webcode-auth-0a/**'
+status: todo
+pr: null
