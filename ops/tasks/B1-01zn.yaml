@@ -7,7 +7,7 @@ type: test-change
 # 新测试对现有实现应为绿；若发现实现不符，停下报告、另立实现任务。分工同 B1-01zm（Claude 编写，Codex 对抗评审 + Claude 新子代理评审）。
 refs: [BR-ID-33]
 refs_hash:
-  BR-ID-33: ad5c7e1b8578
+  BR-ID-33: 86d06b8e0154
 deps: [B1-01a]
 paths:
   - 'test/spec/platform/crypto/buffer-pool*'

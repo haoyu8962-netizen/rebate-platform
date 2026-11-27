@@ -11,7 +11,7 @@ type: contract
 refs: [BR-AI-04, BR-AI-06, BR-AI-24]
 refs_hash:
   BR-AI-04: 7a3d1028368d
-  BR-AI-06: bf97647decbd
+  BR-AI-06: 78bc68c7d6b9
   BR-AI-24: e6144dd5290b
 contract_sections: ['8.1', '8.2', '8.3']
 deps: []

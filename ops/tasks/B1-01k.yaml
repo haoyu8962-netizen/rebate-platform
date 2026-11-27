@@ -8,7 +8,7 @@ type: impl
 # SPEC_REF 826f86e：BR-ID-33 细则新增的三段（G-87、G-71、G-82）不涉及密钥接线，范围不变。
 refs: [BR-ID-33]
 refs_hash:
-  BR-ID-33: ad5c7e1b8578
+  BR-ID-33: 86d06b8e0154
 deps: [B1-01a, B1-01b]
 paths:
   - 'apps/api/src/modules/platform/config/**'

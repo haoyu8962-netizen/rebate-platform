@@ -9,7 +9,7 @@ type: contract
 refs: [BR-TEXT-14, BR-ID-33]
 refs_hash:
   BR-TEXT-14: e029c2349c51
-  BR-ID-33: ad5c7e1b8578
+  BR-ID-33: 86d06b8e0154
 deps: []
 paths:
   - 'contracts/texts.default.json'

@@ -10,7 +10,7 @@ type: impl
 refs: [BR-ATTR-30, BR-ID-33]
 refs_hash:
   BR-ATTR-30: 127b5a4a8c63
-  BR-ID-33: ad5c7e1b8578
+  BR-ID-33: 86d06b8e0154
 deps: [CT-24d, B1-10c]
 paths:
   - 'apps/api/src/modules/orders/**'

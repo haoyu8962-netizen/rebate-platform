@@ -7,7 +7,7 @@ type: impl
 # 服务端代调（检索词由代码从用户原话取）的不变；前 8 个码点、为空不出的取值不变；冻结用例 [AC-B3-05o#48]–[#53] 不动，只新增命中时的规则测试。排在 AI 助手线在途单之后。
 refs: [BR-AI-06, BR-TEXT-22]
 refs_hash:
-  BR-AI-06: bf97647decbd
+  BR-AI-06: 78bc68c7d6b9
   BR-TEXT-22: d4b16e1c123a
 deps: [B3-05p]
 paths:
