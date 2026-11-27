@@ -12,12 +12,13 @@
 //   U+202F, ideographic space, tab included) is one separator. `/ . , _` are no separators.
 // - Recognised types, BR-ID-33 default shapes: mobile 3 + 4 (138****5678), identity number first 1 +
 //   last 1 (1****************X), card only its last four.
-// - E-mail-shaped text in free text (写测 4, 负责人 2026-11-27, 编排 D10-3427 ④ / D10-3428; the 细则
-//   「收款账号的脱敏格式」 two-character shape stays for structured payout fields only): everything from
-//   the "@" leftwards up to white space or the start of the text becomes 「***」 whole; "@" and a
-//   recognised domain are shown, what follows the domain stays (zhangsan@example.com →
-//   ***@example.com); with no recognised domain the "@" and its right side up to white space or the
-//   end go too, only 「***」 is left.
+// - "@" in free text (写测 5, 负责人 2026-11-27 15:00, 编排 D10-3479 / D10-3481; supersedes 写测 4's
+//   「@ 与认得出的域名照常显示」; the 细则 「收款账号的脱敏格式」 two-character shape stays for
+//   structured payout fields only): every run of non-white-space characters that holds an "@"
+//   (full-width ＠ included, judged after NFKC) becomes 「***」 whole, from the white space before it
+//   or the start of the text to the white space after it or the end — the domain is not shown, and
+//   Chinese, punctuation or digits glued to the address go with it (zhangsan@example.com → ***).
+//   White space is every Unicode white space (line breaks included). Runs without "@" as before.
 // - Anything else: separators taken out, a run of 11 or more digits (maybe a final X / x) shows only
 //   its last four — order numbers, references, numbers failing Luhn, identity numbers with a wrong
 //   check character or no date, long digit runs glued to letters. Fewer than 11 digits stay.
@@ -62,13 +63,13 @@ export const ID_OLD_MASKED = /旧证件 1\*+2，/;
 /** 15 digits, 7th–12th 871345 (month 13, no date): the fallback, only 5123 shows. */
 export const ID_OLD_BAD_DATE = '440301871345123';
 export const EMAIL = 'alice.w@example.com';
-/** The local part up to the white space before it as 「***」 whole, "@" and the domain as written. */
-export const EMAIL_MASK = '***@example.com';
+/** The whole run with the "@" (white space to white space) as 「***」: no domain shown (D10-3479). */
+export const EMAIL_MASK = '***';
 /** An address with a plus tag and a sub-domain. */
 export const EMAIL_PLUS = 'bob.lee+refund@mail.corp.example.cn';
-export const EMAIL_PLUS_MASK = '***@mail.corp.example.cn';
+export const EMAIL_PLUS_MASK = '***';
 export const EMAIL_C = 'carol.z@example.org';
-export const EMAIL_C_MASK = '***@example.org';
+export const EMAIL_C_MASK = '***';
 
 /** 16-digit card grouped by spaces (Luhn total 60); its digits; its last four. */
 export const CARD_SPACED = '6222 0371 9584 7364';
@@ -187,6 +188,7 @@ export function sampleA(tag: string): Sample {
     plain: [
       EMAIL,
       'alice.w',
+      'example.com',
       ID_X,
       CARD_SPACED,
       CARD_SPACED_DIGITS,
@@ -230,6 +232,8 @@ export function sampleB(tag: string): Sample {
       EMAIL_PLUS,
       'bob.lee',
       '+refund',
+      'mail.corp.example.cn',
+      'example.cn',
       ID_DIGITS,
       ID_OLD,
       CARD_HYPHEN,
@@ -279,6 +283,7 @@ export function sampleC(tag: string): Sample {
     plain: [
       EMAIL_C,
       'carol.z',
+      'example.org',
       ID_X,
       CARD_PLAIN,
       CARD_PLAIN_NOT_LUHN,
@@ -345,11 +350,13 @@ export function sampleD(tag: string): Sample {
       EMAIL_FULL,
       'ｚｈａｎｇｓａｎ',
       'zhangsan',
+      'ｅｘａｍｐｌｅ',
+      'example.com',
     ],
     freePlain: [],
     cards: [CARD_SPACED_DIGITS, CARD_SPACED_NOT_LUHN_DIGITS],
     idTails: ['002X', '002 X'],
-    kept: [opening, '全角手机', '面积 ㎡ 号①，', `路径 ${SLASHED}，`, CLOSING],
+    kept: [opening, '全角手机', '面积 ㎡ 号①，', '邮箱 *** 已核，', `路径 ${SLASHED}，`, CLOSING],
     shapes: [],
     squeezedShapes: [
       /全角手机138\*{4}5678,卡号/u,
@@ -358,7 +365,7 @@ export function sampleD(tag: string): Sample {
       /,证件1\*{16}X,手机/u,
       /,手机139\*{4}1111备注,面积/u,
       /,订单\*+5678,邮箱/u,
-      /,邮箱\*{3}@example\.com已核,路径/u,
+      /,邮箱\*{3}已核,路径/u,
     ],
   };
 }
@@ -423,11 +430,11 @@ function runsOf8(digits: string): string[] {
 
 /**
  * BR-ID-33 on one audit record (normalise, then mask; D10-3266): none of the sample's plain values
- * anywhere in it (of an e-mail the full address and the local part); in no leaf, with its non-digits
+ * anywhere in it (of an e-mail the full address, the local part and the domain); in no leaf, with its non-digits
  * taken out, a run of 8 or more digits of a card or long number (a regrouped number is still the
  * number); the free text is still there (at least one leaf with its opening) and each such leaf
  * holds none of the free-only plain values, keeps the non-personal words, the numbers too short to be
- * masked, the mobile, identity and e-mail masks (an e-mail's local part 「***」 whole), shows of each card or long number only its last
+ * masked, the mobile, identity and e-mail masks (the whole run with the "@" 「***」), shows of each card or long number only its last
  * four digits, and holds no identity number's last four characters. Returns those leaves.
  */
 export function expectRedacted(record: AuditRecord, sample: Sample): Leaf[] {

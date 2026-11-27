@@ -3,18 +3,17 @@
 // rules are restated in ./normalize-then-mask.test.ts). This file adds what review r1 found missing:
 //   S1-① line breaks are white space too (\n, \r, \r\n, U+2028, U+2029): a grouped long number split
 //        over lines is still one run;
-//   S1-② an e-mail address right next to Chinese (or ASCII) punctuation (写测 4, 负责人 2026-11-27,
-//        编排 D10-3427 ④ / D10-3428: no longer the 细则 two-character shape in free text): from the
-//        "@" leftwards up to white space or the start everything — Chinese and punctuation glued to
-//        the address included — becomes 「***」 whole; "@" and a recognised domain are shown, the
-//        punctuation after the domain stays as written; with no recognised domain the "@" and its
-//        right side up to white space or the end go too;
+//   S1-② an e-mail address right next to Chinese (or ASCII) punctuation (写测 5, 负责人 2026-11-27
+//        15:00, 编排 D10-3479 / D10-3481; supersedes 写测 4's 「@ 与认得出的域名照常显示」): the whole run
+//        of non-white-space characters holding the "@" — Chinese and punctuation glued to the address
+//        on either side included — becomes 「***」, from the white space before it or the start to the
+//        white space after it or the end; no domain is shown;
 //   S1-③ the fallback's final x may be lower case (and written after a separator or full width): only
 //        the last four characters show, as with X;
 //   S1-④ the mapping back: a compatibility character NFKC expands into several digits is masked or kept
-//        digit by digit of the normalised text (neither kept whole nor masked whole), and an e-mail's
-//        "@", domain and what follows are the original characters at their original places, the
-//        text left of the "@" up to white space 「***」.
+//        digit by digit of the normalised text (neither kept whole nor masked whole), and around a run
+//        holding a full-width ＠ (masked whole as 「***」) the white space and the text before and after
+//        are the original characters at their original places.
 // For a card, the fallback and grouped numbers the tests compare `squeezed` text (NFKC, white space and
 // dashes taken out) and only ask which digits show, as in normalize-then-mask.test.ts. Function under
 // test: redactFreeText (apps/api/src/modules/admin/infra/audit-redaction.ts). All samples are
@@ -32,21 +31,20 @@ function expectMasked(written: string, shape: string): string {
 }
 
 /**
- * `before` (empty or ending in white space) + `local` (everything from there up to the "@") +
- * `domain` (the "@" and the domain) + `after` redacted: starts with `before` and ends with `domain`
- * + `after` exactly as written (original characters, original places), with 「***」 (as stars, half
- * or full width) and nothing else in between.
+ * `before` (empty or ending in white space) + `run` (the non-white-space run holding the "@") +
+ * `after` (empty or starting with white space) redacted: starts with `before` and ends with `after`
+ * exactly as written (original characters, original places), with 「***」 (as stars, half or full
+ * width) and nothing else in between.
  */
-function expectEmail(before: string, local: string, domain: string, after: string): void {
-  const written = `${before}${local}${domain}${after}`;
+function expectWholeRun(before: string, run: string, after: string): void {
+  const written = `${before}${run}${after}`;
   const out = redactFreeText(written);
-  const head = before;
-  const tail = `${domain}${after}`;
   const message = `${written} → ${out}`;
-  expect(out.startsWith(head), message).toBe(true);
-  expect(out.endsWith(tail), message).toBe(true);
-  expect(out.length, message).toBeGreaterThanOrEqual(head.length + tail.length);
-  expect(out.slice(head.length, out.length - tail.length).normalize('NFKC'), message).toBe('***');
+  expect(out.startsWith(before), message).toBe(true);
+  expect(out.endsWith(after), message).toBe(true);
+  expect(out.length, message).toBeGreaterThanOrEqual(before.length + after.length);
+  const middle = out.slice(before.length, out.length - after.length);
+  expect(middle.normalize('NFKC'), message).toBe('***');
 }
 
 it('[AC-B2-02zg#13] 归一 · 换行也是空白：\\n、\\r、\\r\\n、U+2028、U+2029 分隔的分组长数字照样连成一串判——过 Luhn 的卡号只留末 4、认不出的只留末四位、手机号 3+4、证件首 1 末 1；换行与空格、制表符、NBSP、横线混用同样；两行各不足 11 位、连起来 ≥ 11 位的按兜底只留末四位', () => {
@@ -68,31 +66,29 @@ it('[AC-B2-02zg#13] 归一 · 换行也是空白：\\n、\\r、\\r\\n、U+2028�
   expectMasked('138 \n1234\r\n 5678', '138\\*{4}5678');
 });
 
-it('[AC-B2-02zg#14] 邮箱紧邻中文标点（，。、；：（）「」【】《》！？）或 ASCII 标点：@ 左到空白或文本开头为止整段换成「***」（紧贴地址左侧的中文与标点一起遮，不再按位数留前 2 位），@ 与域名照常显示，域名之后的标点原样保留', () => {
+it('[AC-B2-02zg#14] 邮箱紧邻中文标点（，。、；：（）「」【】《》！？）或 ASCII 标点：含 @ 的片段从前一个空白或文本开头到后一个空白或文本结尾整段换成「***」——紧贴地址两侧的中文与标点一起遮，@ 与域名都不显示；片段外以空白隔开的文字原样', () => {
   for (const [written, masked] of [
-    ['邮箱 alice@example.com，已核', '邮箱 ***@example.com，已核'],
-    ['邮箱（alice@example.com）已核', '***@example.com）已核'],
-    ['收款账号 alice@example.com。', '收款账号 ***@example.com。'],
-    ['邮箱：alice@example.com；已核', '***@example.com；已核'],
-    ['账号「alice@example.com」已核', '***@example.com」已核'],
-    ['【bob.lee+refund@mail.corp.example.cn】已核', '***@mail.corp.example.cn】已核'],
-    ['《zhangsan@example.com》、备用', '***@example.com》、备用'],
-    ['确认 ab@x.com！', '确认 ***@x.com！'],
-    ['是 a@x.com？', '是 ***@x.com？'],
-    ['邮箱(alice@example.com),已核', '***@example.com),已核'],
+    ['邮箱 alice@example.com，已核', '邮箱 ***'],
+    ['邮箱（alice@example.com）已核', '***'],
+    ['收款账号 alice@example.com。', '收款账号 ***'],
+    ['邮箱：alice@example.com；已核', '***'],
+    ['账号「alice@example.com」已核', '***'],
+    ['【bob.lee+refund@mail.corp.example.cn】已核', '***'],
+    ['《zhangsan@example.com》、备用', '***'],
+    ['确认 ab@x.com！', '确认 ***'],
+    ['是 a@x.com？', '是 ***'],
+    ['邮箱(alice@example.com),已核', '***'],
     // 写测 3 (review r2, D10-3284): English text, ASCII punctuation right after the address.
-    ['Confirmed alice@example.com.', 'Confirmed ***@example.com.'],
-    ['Confirmed alice@example.com, thanks', 'Confirmed ***@example.com, thanks'],
-    ['Account (alice@example.com) confirmed', 'Account ***@example.com) confirmed'],
-    ['Account "alice@example.com" confirmed', 'Account ***@example.com" confirmed'],
+    ['Confirmed alice@example.com.', 'Confirmed ***'],
+    ['Confirmed alice@example.com, thanks', 'Confirmed *** thanks'],
+    ['Account (alice@example.com) confirmed', 'Account *** confirmed'],
+    ['Account "alice@example.com" confirmed', 'Account *** confirmed'],
+    // Two addresses joined by 「，」 with no white space between: one run, one 「***」 (D10-3481).
+    ['alice@example.com，bob@example.org。', '***'],
+    ['联系 alice@example.com，bob@example.org。', '联系 ***'],
   ] as const) {
     expect(redactFreeText(written), written).toBe(masked);
   }
-  // Two addresses joined by 「，」 with no white space between: whether the second one's 「***」
-  // stops where the first address ends or runs back to the start is not fixed by D10-3427 ④; either
-  // way neither local part shows and the second domain and the closing 「。」 stay.
-  const two = redactFreeText('alice@example.com，bob@example.org。');
-  expect(['***@example.com，***@example.org。', '***@example.org。'], two).toContain(two);
 });
 
 it('[AC-B2-02zg#15] 兜底的末位小写 x：校验位错的 18 位证件号末位小写 x（连写、前带空格 / NBSP / 横线 / 分组、全角 ｘ）与大写 X 同样只留末四字符（003x）；认不出类型的 ≥ 11 位数字带末位 x 同样', () => {
@@ -136,32 +132,32 @@ it('[AC-B2-02zg#16] 位置映射 · 兼容字符展开：打码按归一后的�
   expect(redactFreeText('ﬃ㍻㍿ 手机 13812345678，㍿㍿ 证件 11010519491231002X 已核')).toBe(
     `ﬃ㍻㍿ 手机 138****5678，㍿㍿ 证件 1${'*'.repeat(16)}X 已核`,
   );
+  // 「alice@example.com，㍻」 is one run holding an "@": 「***」 whole (写测 5, D10-3479).
   expect(redactFreeText('㍻㍿ 邮箱 alice@example.com，㍻ 手机 13900001111 已核')).toBe(
-    '㍻㍿ 邮箱 ***@example.com，㍻ 手机 139****1111 已核',
+    '㍻㍿ 邮箱 *** 手机 139****1111 已核',
   );
 });
 
-it('[AC-B2-02zg#17] 位置映射 · 邮箱回写不改原文字符：全角（或半角全角混写）的邮箱打码后，＠ / @、域名（含全角 ．）与其后的文字都是原文原位置上的字符，@ 左到空白或文本开头整段换成「***」（不论 @ 前几位，紧贴的「邮箱（」一起遮）', () => {
-  expectEmail('收款账号 ', 'ａｌｉｃｅ', '＠ｅｘａｍｐｌｅ．ｃｏｍ', ' 已核');
-  expectEmail('收款账号 ', 'zhangsan', '＠ｅｘａｍｐｌｅ.com', ' 已核');
-  expectEmail('收款账号 ', 'ｚｈａｎｇｓａｎ', '@example.com', ' 已核');
-  expectEmail('收款账号 ', 'ａｂ', '＠ｘ．ｃｏｍ', ' 已核');
-  expectEmail('收款账号 ', 'ａ', '＠ｘ．ｃｏｍ', ' 已核');
-  expectEmail('', '邮箱（ａｌｉｃｅ．ｗ', '＠ｅｘａｍｐｌｅ．ｃｎ', '），已核');
-  expectEmail('收款\u{3000}', '用户ａｌｉｃｅ', '＠ｅｘａｍｐｌｅ．ｃｏｍ', '，已核');
+it('[AC-B2-02zg#17] 位置映射 · 全角邮箱整段遮不改片段外的原文字符：全角（或半角全角混写）、含 ＠ / @ 的片段归一后认出 @，从空白到空白整段换成「***」（不论 @ 前几位，紧贴的「邮箱（」「），已核」一起遮，域名含全角 ．不显示）；片段前后的空白（含全角空格 U+3000）与文字都是原文原位置上的字符', () => {
+  expectWholeRun('收款账号 ', 'ａｌｉｃｅ＠ｅｘａｍｐｌｅ．ｃｏｍ', ' 已核');
+  expectWholeRun('收款账号 ', 'zhangsan＠ｅｘａｍｐｌｅ.com', ' 已核');
+  expectWholeRun('收款账号 ', 'ｚｈａｎｇｓａｎ@example.com', ' 已核');
+  expectWholeRun('收款账号 ', 'ａｂ＠ｘ．ｃｏｍ', ' 已核');
+  expectWholeRun('收款账号 ', 'ａ＠ｘ．ｃｏｍ', ' 已核');
+  expectWholeRun('', '邮箱（ａｌｉｃｅ．ｗ＠ｅｘａｍｐｌｅ．ｃｎ），已核', '');
+  expectWholeRun('收款\u{3000}', '用户ａｌｉｃｅ＠ｅｘａｍｐｌｅ．ｃｏｍ，已核', '');
+  expectWholeRun('说明：\u{3000}', 'ａｌｉｃｅ＠ｅｘａｍｐｌｅ．ｃｏｍ', '\u{3000}（已核）');
 });
 
-it('[AC-B2-02zg#19] 邮箱整段遮（编排 D10-3427 ④，评审 r3 / r4 样例）：@ 左紧贴中文、中文加数字、撇号时，@ 左到空白或文本开头整段换成「***」，@ 与认得出的域名照常显示、其后原样；域名后紧跟「-待核」时，认得出域名则 @ 与域名照常显示、「-待核」原样，认不出则 @ 与右侧到文本结尾一起换掉、整段只剩「***」', () => {
+it('[AC-B2-02zg#19] 邮箱整段遮（编排 D10-3479 / D10-3481，评审 r3 / r4 样例）：@ 左紧贴中文、中文加数字、撇号时，含 @ 的片段从空白到空白整段换成「***」，@ 与域名都不显示；域名后紧跟「-待核」（横线不是片段边界）时连「-待核」一起换掉，整段只剩「***」', () => {
   for (const [written, masked] of [
-    ['收款账号 用户@example.com 待核', '收款账号 ***@example.com 待核'],
-    ['欧阳明2026@example.com', '***@example.com'],
-    ["mary.o''connor@example.com", '***@example.com'],
-    ["备注 mary.o''connor@example.com，已核", '备注 ***@example.com，已核'],
+    ['收款账号 用户@example.com 待核', '收款账号 *** 待核'],
+    ['欧阳明2026@example.com', '***'],
+    ["mary.o''connor@example.com", '***'],
+    ["备注 mary.o''connor@example.com，已核", '备注 ***'],
+    ['收款账号 用户@example.com-待核', '收款账号 ***'],
+    ['收款账号 用户@公司.example.cn-待核', '收款账号 ***'],
   ] as const) {
     expect(redactFreeText(written), written).toBe(masked);
   }
-  // Whether example.com-待核 is a recognised domain is the domain test's (unchanged by D10-3427 ④);
-  // the two outcomes the brief allows.
-  const glued = redactFreeText('收款账号 用户@example.com-待核');
-  expect(['收款账号 ***@example.com-待核', '收款账号 ***'], glued).toContain(glued);
 });

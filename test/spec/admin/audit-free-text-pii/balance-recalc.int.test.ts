@@ -24,7 +24,7 @@ const s = suite();
 /** A 13-digit amount in fen (not a phone, not a card: a structured *_fen value). */
 const BIG = 1_234_567_890_123n;
 
-it('[AC-B2-02ze#6] 余额重算的原因里写了带加号与子域的邮箱、校验位正确的 18 位纯数字身份证、日期合法的 15 位老身份证、连字符分组且过 Luhn 的卡号、手机号：重算照常成功，recon_diff_balance_recalc 审计全文不含任何一项明文；原因仍在（说明文字保留，邮箱 @ 前整段遮成 ***@mail.corp.example.cn、手机 139****1111、两种证件都只留首末各 1 位、卡号只露末 4 位；校验位错的 18 位号与日期不合法的 15 位号按兜底只留末四位，B2-02zg D10-3266）；13 位金额（含负数）、差错单与会员 id 原样', async () => {
+it('[AC-B2-02ze#6] 余额重算的原因里写了带加号与子域的邮箱、校验位正确的 18 位纯数字身份证、日期合法的 15 位老身份证、连字符分组且过 Luhn 的卡号、手机号：重算照常成功，recon_diff_balance_recalc 审计全文不含任何一项明文；原因仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 139****1111、两种证件都只留首末各 1 位、卡号只露末 4 位；校验位错的 18 位号与日期不合法的 15 位号按兜底只留末四位，B2-02zg D10-3266）；13 位金额（含负数）、差错单与会员 id 原样', async () => {
   const f = fixture(s);
   await withRecalcAdmin(f, async (h) => {
     const m = await plainMember(f, BIG);
