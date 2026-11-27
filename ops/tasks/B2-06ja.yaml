@@ -1,0 +1,28 @@
+id: B2-06ja
+repo: rebate-platform
+title: 'test-change（B2-06j 伴随测试单）：打款证书模式 + KMS 的四条实现必满足项补到规则测试层——KMS 齐备仍校验 appId / 网关、只有 payout 入口读打款条目、应用私钥与应用证书不成对即拒绝启动、根证书只取 RSA 签名的那几张'
+type: test-change
+# 2026-11-27 funds 线入账（编排 D10-3379 定、D10-3421 / D10-3465 / D10-3521 补；B2-06j 已合并 #943）。走 D10-2264：非 task 分支的 test-change PR + 探针清单。
+# 来由：B2-06j 有四条要求当时做不到先红或夹具测不出，转为实现必满足项、只由实现方单元测试钉着，资金评审点名：
+#   ① KMS 配置与四个条目都齐备时，ALIPAY_APP_ID 或 ALIPAY_GATEWAY_URL 未设 / 只含空白仍拒绝启动（规则测试评审 r1 S1-2）；② 读打款的四个 KMS 条目只发生在 payout 入口，api / worker / admin / stream 入口
+#     在 prod + PAYOUT_MODE=live、条目齐备时也一个都不读（r1 S1-3，BR-WDR-13）；③ 应用私钥与应用公钥证书不是一对时拒绝启动、错误只列两个逻辑条目名（资金评审 r1 S1）；
+#   ④ 支付宝根证书文件是多张拼接的，根证书序列号只取 RSA 签名的那几张——现有夹具两张都是 RSA，漏掉这一步的实现测不出（规则测试评审 r2 范围外 S2）。
+# 做法：只新增 test/spec/payout/alipay-cert-kms/companion/ 下的文件（现有 cert-kit.ts / entry-kit.ts 只读引用，不改任何冻结文件，不改实现）。密钥与证书在运行时生成（④ 的夹具里加一张非 RSA 签名的自签证书），只用假通道与假 KMS。
+# 实现已在主干（#943），新用例在主干上应为绿；有牙由探针清单证明，探针只在临时游离 worktree 上改实现、不提交，测试机 --tests 跑：P1 KMS 可用时跳过 appId / 网关校验 → 须杀 ①；
+#   P2 把读打款条目挪进各入口共用的步骤 → 须杀 ②；P3 去掉私钥与证书的配对检查 → 须杀 ③；P4 入口改用「不筛签名算法、逐张都取」的根证书序列号 → 须杀 ④。每个探针杀到哪几条写进 PR 正文与证据；杀不到的照实报。不登 red_exempt。
+# 规则测试由 Codex 写（照 risk-map）；规则测试评审由独立 Claude（claude-run.sh，第 36 条），按 review-spec-test.md「伴随测试单」一节评。本机不跑 vitest，走测试机 --tests（D10-2404）。
+refs: [BR-WDR-13]
+refs_hash:
+  BR-WDR-13: 11b5c3e1a9b3
+deps: [B2-06j]
+paths:
+  - 'test/spec/payout/alipay-cert-kms/companion/**'
+test_paths:
+  - 'test/spec/payout/alipay-cert-kms/companion/**' # 新目录
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/alipay-cert-kms/**'
+status: todo
+pr: null
