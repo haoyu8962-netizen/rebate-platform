@@ -1,5 +1,6 @@
-// B2-05u implementer unit tests (task brief §9.4): the closed-method check of readWithdrawInput.
-// Fake ports only: no database, no listener.
+// B2-05u implementer unit tests (task brief §9.4, impl 2): the closed-method check of
+// readWithdrawInput over the open-method port. Fake ports only (a fake parser and default set,
+// nothing of identity): no database, no listener.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +11,7 @@ import { FixedClock } from '../../platform/index.ts';
 import {
   createWithdrawRules,
   readWithdrawInput,
+  type OpenPayoutMethodsPort,
   type WithdrawRulesOptions,
 } from './withdraw-rules.ts';
 
@@ -19,7 +21,25 @@ const HMAC = 'a'.repeat(64);
 
 type Method = 'alipay' | 'bank_card' | 'wechat';
 
-function fixture(method: Method, values: ReadonlyMap<string, unknown> = new Map()) {
+/** A fake port: any non-empty array of strings is valid, everything else is invalid. */
+function fakePort(): OpenPayoutMethodsPort {
+  return {
+    key: METHODS_KEY,
+    defaults: new Set(['alipay', 'bank_card']),
+    parse: vi.fn((value: unknown) =>
+      Array.isArray(value) && value.length > 0 && value.every((v) => typeof v === 'string')
+        ? new Set<string>(value as string[])
+        : null,
+    ),
+  };
+}
+
+function fixture(
+  method: Method,
+  values: ReadonlyMap<string, unknown> = new Map(),
+  // null = the port is not handed in (a hand-built assembly).
+  port: OpenPayoutMethodsPort | null = fakePort(),
+) {
   const clock = new FixedClock('2026-10-01T04:00:00.000Z');
   const handle = Object.freeze({ fixture: 'caller-handle' }) as unknown as Kysely<DB>;
   const options: WithdrawRulesOptions = {
@@ -82,6 +102,7 @@ function fixture(method: Method, values: ReadonlyMap<string, unknown> = new Map(
         net_fen: input.amountFen,
       })),
     },
+    ...(port === null ? {} : { openPayoutMethods: port }),
   };
   return { handle, options };
 }
@@ -141,7 +162,7 @@ it('[AC-B2-05u#4] 方式关闭时只把规则用的方式置空：黑名单与�
   );
 });
 
-// §9.4 ②: an already created withdrawal never looks at the switch. The only reader of the key in
+// §9.4 ②: an already created withdrawal never looks at the switch. The only reader of the port in
 // the payout module is readOpenPayoutMethods, called only by readWithdrawInput.
 it('[AC-B2-05u#7] payout 模块里只有 readWithdrawInput 读 withdraw.payout_methods', () => {
   const root = fileURLToPath(new URL('..', import.meta.url));
@@ -155,7 +176,7 @@ it('[AC-B2-05u#7] payout 模块里只有 readWithdrawInput 读 withdraw.payout_m
   };
   walk(root);
   const marker =
-    /withdraw\.payout_methods|PAYOUT_METHODS_KEY|parsePayoutMethods|DEFAULT_PAYOUT_METHODS|readOpenPayoutMethods/;
+    /withdraw\.payout_methods|openPayoutMethods|OpenPayoutMethodsPort|readOpenPayoutMethods/;
   const readers = files
     .filter((file) => marker.test(readFileSync(file, 'utf8')))
     .map((file) => relative(root, file).split('\\').join('/'));
@@ -164,9 +185,50 @@ it('[AC-B2-05u#7] payout 模块里只有 readWithdrawInput 读 withdraw.payout_m
   const source = readFileSync(join(root, 'application/withdraw-rules.ts'), 'utf8');
   const calls = [...source.matchAll(/await readOpenPayoutMethods\(/g)].map((m) => m.index);
   expect(calls).toHaveLength(1);
+  const portReads = [...source.matchAll(/options\.openPayoutMethods/g)].map((m) => m.index);
+  expect(portReads).toHaveLength(1);
   const start = source.indexOf('export async function readWithdrawInput(');
   const end = source.indexOf('\nexport ', start + 1);
   expect(start).toBeGreaterThan(-1);
-  expect(calls[0]).toBeGreaterThan(start);
-  expect(calls[0]).toBeLessThan(end);
+  for (const at of [...calls, ...portReads]) {
+    expect(at).toBeGreaterThan(start);
+    expect(at).toBeLessThan(end);
+  }
+  // 规划/02 §4.1: nothing in payout imports identity, the switch's parser included.
+  expect(source).not.toMatch(/from\s*'[^']*\/identity\//);
+});
+
+it('[AC-B2-05u#wiring] 开放方式端口没交进来时不读该配置键，规则用真实方式', async () => {
+  const f = fixture('wechat', new Map([[METHODS_KEY, ['alipay']]]), null);
+  const input = await readWithdrawInput(f.handle, actor, true, f.options);
+  expect(input.payout_method).toBe('wechat');
+  expect(f.options.config.configValue).not.toHaveBeenCalledWith(
+    actor.appId,
+    METHODS_KEY,
+    expect.anything(),
+  );
+  expect(f.options.logger.warn).not.toHaveBeenCalled();
+});
+
+it('[AC-B2-05u#wiring] app.module 的提现规则装配处交了开放方式端口（identity 的键、默认集合与解析函数）', () => {
+  const file = fileURLToPath(new URL('../../../app.module.ts', import.meta.url));
+  const source = readFileSync(file, 'utf8');
+  const start = source.indexOf('function withdrawRuleOptions(');
+  expect(start).toBeGreaterThan(-1);
+  const end = source.indexOf('\n}\n', start);
+  const body = source.slice(start, end);
+  expect(body).toContain('subject: createWithdrawSubjectReader()');
+  expect(body).toMatch(
+    /openPayoutMethods:\s*\{\s*key:\s*PAYOUT_METHODS_KEY,\s*defaults:\s*DEFAULT_PAYOUT_METHODS,\s*parse:\s*parsePayoutMethods,?\s*\}/,
+  );
+  // The three come from identity's index.ts, and both the rules and the application use it.
+  const identityImport = source.match(
+    /import \{([^}]*)\} from '\.\/modules\/identity\/index\.ts';/,
+  );
+  expect(identityImport).not.toBeNull();
+  for (const name of ['DEFAULT_PAYOUT_METHODS', 'PAYOUT_METHODS_KEY', 'parsePayoutMethods']) {
+    expect(identityImport?.[1]).toMatch(new RegExp(`\\b${name}\\b`));
+  }
+  expect(source).toMatch(/createWithdrawRules\(withdrawRuleOptions\(/);
+  expect(source).toMatch(/const rules = withdrawRuleOptions\(/);
 });

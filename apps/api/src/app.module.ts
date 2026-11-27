@@ -244,6 +244,9 @@ import {
   type PersonalDataCopySources,
   createReverifyGate,
   readDeletionRequestOwners,
+  DEFAULT_PAYOUT_METHODS,
+  PAYOUT_METHODS_KEY,
+  parsePayoutMethods,
 } from './modules/identity/index.ts';
 import {
   EarningsSummaryModule,
@@ -4508,6 +4511,12 @@ function withdrawRuleOptions(
       identityKey: createRealnameIdentityKeyReader(),
       logger: payoutLogger,
     }),
+    // B2-05u (BR-WDR-02 细则「关闭某方式后」): withdraw.payout_methods through identity's one parser.
+    openPayoutMethods: {
+      key: PAYOUT_METHODS_KEY,
+      defaults: DEFAULT_PAYOUT_METHODS,
+      parse: parsePayoutMethods,
+    },
   };
 }
 
