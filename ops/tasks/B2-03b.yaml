@@ -12,7 +12,7 @@ type: impl
 refs: [BR-CALC-17, BR-CALC-20]
 refs_hash:
   BR-CALC-17: '69e927588925'
-  BR-CALC-20: d760cf4e71d1
+  BR-CALC-20: 1fef916eff18
 deps: [B2-01c]
 paths:
   - 'apps/api/src/modules/union/domain/quote-n.ts'

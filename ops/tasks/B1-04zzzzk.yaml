@@ -14,7 +14,7 @@ type: impl
 #   经 getItem 带到 parsing 的 ProductRef.shopType；union 领域类型只加一个可选字段，京东 / 拼多多映射不动，不改契约形状。
 refs: [BR-PROD-03, BR-PROD-05, BR-PROD-10]
 refs_hash:
-  BR-PROD-03: 7769390bcd28
+  BR-PROD-03: 103a31348f69
   BR-PROD-05: 692dcc678e1e
   BR-PROD-10: 619f14ca3641
 deps: [B1-07d]

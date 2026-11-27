@@ -8,14 +8,14 @@ refs: [BR-AI-01, BR-AI-02, BR-AI-04, BR-AI-05, BR-AI-07, BR-AI-19, BR-FUND-17, B
 refs_hash:
   BR-AI-01: 654d69df14f4
   BR-AI-02: 40bc4f6f4109
-  BR-AI-04: 34cc76da510c
+  BR-AI-04: 7a3d1028368d
   BR-AI-05: 2ac35e2cd8ef
-  BR-AI-07: a704165181b4
+  BR-AI-07: 008ba010d26b
   BR-AI-19: 3c0c40a3ed93
   BR-FUND-17: 02ee5b1ae349
   BR-FUND-18: c7ebd23ee75e
   BR-TEXT-06: e03024b45543
-  BR-TEXT-22: 8a3aa03c38b2
+  BR-TEXT-22: d4b16e1c123a
 deps: []
 paths:
   - 'apps/api/src/modules/agent/tools/**'

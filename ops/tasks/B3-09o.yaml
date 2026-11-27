@@ -12,8 +12,8 @@ type: impl
 # 风险级 RV2（动迁移、packages/money、content 注册表），评审 money；迁移号取 land 时主干下一个空号（D10-2828 / D10-2829；现为 0155），生成物走 LAN-DB-SNAPSHOT，land 前测试机五段全量（D10-2398）。paths 照 B3-09m 补丁 2 / 4 / 5 / 7 的范围原样带入（同目录成对的文件并成花括号写法，范围不变），另加 model-gateway/openai-compat 的 errors.ts、transport.ts 与 index.ts（口径 ①：路由要从传输层得知「没发出」，index.ts 只加导出）。agent.models 留 LOOKUP_ONLY，列进后台配置列表归 B3-09n。生产装配现仍是 no_model，预算要到 B3-03k 接上模型网关才生效。
 refs: [BR-AI-16, BR-AI-14]
 refs_hash:
-  BR-AI-16: dbd76c5b95b5
-  BR-AI-14: a24a409d186b
+  BR-AI-16: ccd19b96b346
+  BR-AI-14: baabccb5a4f1
 deps: [B3-08t]
 paths:
   - 'apps/api/src/modules/agent/budget/**'

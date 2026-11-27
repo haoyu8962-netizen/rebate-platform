@@ -15,7 +15,7 @@ type: impl
 # 2026-11-27 补丁 2（funds，编排 D10-3360）：第二个指标取乙——settle_bills.amount_mismatch_count 只由账单日任务写、补充批次不回写，处置完不回落；多导出同标签的出账时间 gauge couli_settle_bill_generated_timestamp_seconds（generated_at 的秒数），规则写「不一致数 > 0 且出账后 3 天内、for 5m」，3 天写死在规则里；amount_mismatch_count 为 NULL 的账单不出序列。允许清单由两个名字改为三个。新读口另起函数、经 settlement/index.ts 导出（现有 readSettlementFundMetrics 的返回被冻结用例 fund-metrics/ports.int.test.ts 整体比对，不能加项），paths 加这一个文件。
 refs: [BR-WDR-23, BR-FUND-04]
 refs_hash:
-  BR-WDR-23: 92950f49116f
+  BR-WDR-23: c138aadb4c1a
   BR-FUND-04: faf2ddd22d5b
 deps: [B1-04zzad]
 paths:

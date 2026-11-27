@@ -17,7 +17,7 @@ type: test-change
 refs: [BR-FUND-24, BR-FUND-19]
 refs_hash:
   BR-FUND-24: 7cca08c02491
-  BR-FUND-19: f72aa79561bc
+  BR-FUND-19: 1d2880a5a146
 deps: [F1-08ee]
 paths:
   - 'test/spec/frontend/admin-recon-adjust-restore/eeb/**'

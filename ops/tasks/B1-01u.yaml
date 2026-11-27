@@ -8,7 +8,7 @@ type: impl
 # 契约补充写在新规则测试文件头。
 refs: [BR-ID-33]
 refs_hash:
-  BR-ID-33: 01b25f773b29
+  BR-ID-33: ad5c7e1b8578
 deps: [B1-01o]
 paths:
   - 'apps/api/src/modules/platform/logging/**'

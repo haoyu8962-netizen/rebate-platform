@@ -6,7 +6,7 @@ type: impl
 # 冻结测试 test/spec/platform/http/no-store/** 只对 /__no_store/anonymous 断言匿名不加，本规则只认分享页两条路由模板，不冲突；no-store.ts 头注「名称、签名、语义是契约」按新增函数扩展，不改既有导出的语义。
 refs: [BR-ATTR-10]
 refs_hash:
-  BR-ATTR-10: 0ef7e9245dba
+  BR-ATTR-10: a49eb8013b1b
 deps: [B1-15u, B1-01zzq]
 paths:
   - 'apps/api/src/modules/platform/http/no-store.ts'

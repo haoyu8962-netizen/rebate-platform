@@ -10,7 +10,7 @@ type: impl
 # G-87、G-71、G-82），都不涉及字段加密，本任务范围与规则测试不变（只同步 refs_hash）。
 refs: [BR-ID-33]
 refs_hash:
-  BR-ID-33: 01b25f773b29
+  BR-ID-33: ad5c7e1b8578
 deps: []
 paths:
   - 'apps/api/src/modules/platform/crypto/**'

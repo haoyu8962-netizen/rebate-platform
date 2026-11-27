@@ -7,7 +7,7 @@ type: impl
 # 本线技术取舍：B1-27a 在 admin-realname-correction.ts 里自写的失效（逐行 is_current=false、不写变更行）换成 identity 的 createPayoutAccountInvalidation().invalidate(trx, {appId, userId, operator: 'admin:<id>', now})，仍在覆盖实名的同一事务、用户行锁之内；审计与事件里的 payout_accounts_invalidated 取返回的 retired；计次排除与首次重绑不计次已由 B2-05j 落地（payout-account.ts），本任务不改；不改 GET /v1/me/payout-account 的响应形状。
 refs: [BR-WDR-02]
 refs_hash:
-  BR-WDR-02: b8ce66617ed9
+  BR-WDR-02: 578bf800894a
 deps: [B1-27a, B2-05j]
 paths:
   - 'apps/api/src/modules/identity/application/admin-realname-correction.ts'

@@ -6,7 +6,7 @@ type: impl
 refs: [BR-ID-24, BR-ATTR-08]
 refs_hash:
   BR-ID-24: 3c3ffd8471cd
-  BR-ATTR-08: ae1e71cb81e0
+  BR-ATTR-08: dc141d8f939f
 deps: [B1-22g, B1-22h, B1-22d]
 paths:
   - 'apps/api/src/modules/union/**'

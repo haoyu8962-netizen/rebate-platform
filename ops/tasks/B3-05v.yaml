@@ -14,7 +14,7 @@ type: impl
 refs: [BR-AI-15, BR-TEXT-22]
 refs_hash:
   BR-AI-15: d3070a739c03
-  BR-TEXT-22: 8a3aa03c38b2
+  BR-TEXT-22: d4b16e1c123a
 deps: [B3-05u, CT-26zq]
 paths:
   - 'apps/api/src/modules/agent/orchestrator/deterministic/**'

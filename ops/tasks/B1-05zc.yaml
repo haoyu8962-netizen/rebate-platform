@@ -8,7 +8,7 @@ refs: [BR-PRICE-07, BR-CALC-16, BR-TEXT-03]
 refs_hash:
   BR-PRICE-07: 945b25cfcca0
   BR-CALC-16: 608d5607c3fb
-  BR-TEXT-03: e5d9ad000f4c
+  BR-TEXT-03: 168b81b94a42
 deps: []
 paths:
   - 'apps/api/src/modules/catalog/domain/card{.ts,.test.ts}'

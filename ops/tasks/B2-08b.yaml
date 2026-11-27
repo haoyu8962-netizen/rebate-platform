@@ -7,7 +7,7 @@ type: impl
 refs: [BR-WDR-20, BR-ID-25]
 refs_hash:
   BR-WDR-20: 3127fc4b4b65
-  BR-ID-25: e6c03645af46
+  BR-ID-25: 69554a09956e
 deps: [B2-08a]
 paths:
   - 'apps/api/src/modules/payout/application/tax-ytd*.ts'

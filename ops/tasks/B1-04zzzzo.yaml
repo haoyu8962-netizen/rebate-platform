@@ -16,7 +16,7 @@ type: impl
 #   缺省 / 非 true 即关 → 推广链 / 淘口令 / m.tb.cn 维持 adapter_unimplemented（→ 30132）、不取大淘客凭据、不发请求；开 → 只在官方口令解析失败 / 无权限后降级调 parse-content（官方淘宝口令解析至今未实现、恒不可用，parsing.ts TODO）；origin=agent 一律不调；请求只带链接或口令原文。 不得用直接改库打开；启用须负责人 + 法务定后另开单登注册表并列入隐私政策第三方共享清单。
 refs: [BR-PROD-03, BR-PROD-05, BR-PROD-10]
 refs_hash:
-  BR-PROD-03: 7769390bcd28
+  BR-PROD-03: 103a31348f69
   BR-PROD-05: 692dcc678e1e
   BR-PROD-10: 619f14ca3641
 deps: []

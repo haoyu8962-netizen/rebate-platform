@@ -12,7 +12,7 @@ type: impl
 # 「schema_url 与 mobile_url 归因是否一致」属 CAP-PDD-11 真实下单待测，记 FU-PDD-SCHEME-ATTR-VERIFY，不在本单。
 refs: [BR-ATTR-27]
 refs_hash:
-  BR-ATTR-27: f908d845271a
+  BR-ATTR-27: 0b0571f78586
 deps: []
 paths:
   - 'apps/api/src/modules/linking/**'

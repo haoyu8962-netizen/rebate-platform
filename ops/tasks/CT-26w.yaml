@@ -7,7 +7,7 @@ type: contract
 refs: [BR-TEXT-01, BR-TEXT-13]
 refs_hash:
   BR-TEXT-01: bd01f7448472
-  BR-TEXT-13: 225ce1a6f17e
+  BR-TEXT-13: 0170cefbc162
 deps: []
 paths:
   - 'contracts/texts.default.json'

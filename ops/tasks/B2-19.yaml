@@ -11,9 +11,9 @@ type: impl
 # paths 按任务行先列全，开工前先只读盘点（代码落点、种子与默认值落点、受影响冻结用例），再以补丁收窄或补登 modify_existing；是否拆单同时定。两平台各用一笔真实已结算订单实测（09 V-49、V-50）是上线前事项，不在本单验收内。验收指向 10 AC-S2-115。
 refs: [BR-FUND-02, BR-FUND-09, BR-CALC-03]
 refs_hash:
-  BR-FUND-02: f287247d4d07
+  BR-FUND-02: e33b5a1ec5af
   BR-FUND-09: 891062fdd62b
-  BR-CALC-03: 64770116e2de
+  BR-CALC-03: b31d25415476
 deps: []
 paths:
   - 'apps/api/src/modules/union/infra/pdd/**'

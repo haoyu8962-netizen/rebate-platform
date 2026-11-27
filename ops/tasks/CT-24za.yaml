@@ -8,11 +8,11 @@ type: contract
 # 授权边界：本契约只核销「付款方侧失败经 W9 退回、支付宝账单显示成功」的原单；不调账、不恢复订单、不重算余额缓存、不触碰 payout.queue_paused；终态单不可再改（BR-WDR-23 末句）。
 refs: [BR-WDR-23, BR-WDR-08, BR-WDR-09, BR-WDR-17, BR-FUND-19]
 refs_hash:
-  BR-WDR-23: 92950f49116f
+  BR-WDR-23: c138aadb4c1a
   BR-WDR-08: 91b013262446
   BR-WDR-09: 68225c9af85f
   BR-WDR-17: 25dba2f638b0
-  BR-FUND-19: f72aa79561bc
+  BR-FUND-19: 1d2880a5a146
 contract_sections: ['11.1']
 deps: [CT-24w]
 paths:
