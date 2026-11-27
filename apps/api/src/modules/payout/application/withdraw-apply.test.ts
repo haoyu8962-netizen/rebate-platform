@@ -1,8 +1,25 @@
 import type { DB } from '@couli/db';
-import type { Kysely } from 'kysely';
-import { expect, it, vi } from 'vitest';
+import {
+  DummyDriver,
+  Kysely,
+  PostgresAdapter,
+  PostgresIntrospector,
+  PostgresQueryCompiler,
+  type CompiledQuery,
+  type QueryResult,
+} from 'kysely';
+import { afterEach, expect, it, vi } from 'vitest';
+import type { Ledger } from '../../ledger/index.ts';
+import { FixedClock } from '../../platform/index.ts';
 import { reviewDeadline } from '../domain/review-deadline.ts';
-import { CALENDAR_KEYS, readReviewCalendars } from './withdraw-apply.ts';
+import {
+  CALENDAR_KEYS,
+  createWithdrawApply,
+  readReviewCalendars,
+  type WithdrawApplyResult,
+  type WithdrawPayeeSnapshot,
+} from './withdraw-apply.ts';
+import type { OpenPayoutMethodsPort, WithdrawRulesOptions } from './withdraw-rules.ts';
 
 const APP_ID = 'calendar_unit';
 // Only passed through to the port.
@@ -160,4 +177,221 @@ it('[AC-B1-34s#7] without a batch read each key of the year is read once on the 
     [APP_ID, CALENDAR_KEYS.holidays(2026), HANDLE],
     [APP_ID, CALENDAR_KEYS.makeupWorkdays(2026), HANDLE],
   ]);
+});
+
+// B2-05u (Codex money review r1 S1; BR-WDR-07 ④ re-runs BR-WDR-03 ⑤ under the locks): the
+// open-method set is read again under the member's locks. A scripted database records every
+// statement; the ports are fakes (nothing of identity).
+const METHODS_KEY = 'withdraw.payout_methods';
+const APPLY_ACTOR = {
+  appId: 'b2_05u_apply_unit',
+  userId: '00000000-0000-7000-8000-000000000001',
+  deviceId: 'device-1',
+};
+const PAYEE_HMAC = 'a'.repeat(64);
+const applyHandles: Kysely<DB>[] = [];
+afterEach(async (): Promise<void> => {
+  await Promise.all(applyHandles.splice(0).map((db) => db.destroy()));
+});
+
+type ConfigRead = (
+  appId: string,
+  key: string,
+  handle: Kysely<DB>,
+) => Promise<{ value: unknown; version: number } | null>;
+
+/**
+ * `methods[i]` is the open set the i-th read of withdraw.payout_methods returns (the last one
+ * repeats): the first pass reads it once, the locked re-read once more.
+ */
+async function applyHarness(methods: readonly (readonly string[])[]) {
+  const statements: string[] = [];
+  const driver = new DummyDriver();
+  const connection = await driver.acquireConnection();
+  connection.executeQuery = async <R>(query: CompiledQuery): Promise<QueryResult<R>> => {
+    statements.push(query.sql);
+    return {
+      rows: [],
+      numAffectedRows: query.sql.startsWith('insert') ? 1n : undefined,
+    } as QueryResult<R>;
+  };
+  driver.acquireConnection = async (): Promise<typeof connection> => connection;
+  const db = new Kysely<DB>({
+    dialect: {
+      createDriver: () => driver,
+      createAdapter: () => new PostgresAdapter(),
+      createIntrospector: (handle) => new PostgresIntrospector(handle),
+      createQueryCompiler: () => new PostgresQueryCompiler(),
+    },
+  });
+  applyHandles.push(db);
+  const clock = new FixedClock('2026-10-01T04:00:00.000Z');
+  let methodReads = 0;
+  const configValue = vi.fn<ConfigRead>(
+    (_appId, key): Promise<{ value: unknown; version: number } | null> => {
+      if (key !== METHODS_KEY) return Promise.resolve(null);
+      const value = methods[Math.min(methodReads, methods.length - 1)];
+      methodReads += 1;
+      return Promise.resolve({ value, version: 1 });
+    },
+  );
+  const port: OpenPayoutMethodsPort = {
+    key: METHODS_KEY,
+    defaults: new Set(['alipay', 'bank_card']),
+    parse: (value: unknown): ReadonlySet<string> | null =>
+      Array.isArray(value) ? new Set<string>(value as string[]) : null,
+  };
+  const rules: WithdrawRulesOptions = {
+    clock,
+    logger: { warn: vi.fn() },
+    config: { configValue },
+    risk: {
+      read: vi.fn(
+        async (): Promise<Map<string, { state: 'normal'; frozen_until: null }>> =>
+          new Map([[APPLY_ACTOR.userId, { state: 'normal' as const, frozen_until: null }]]),
+      ),
+    },
+    appeal: { read: vi.fn(async (): Promise<null> => null) },
+    blocklist: { read: vi.fn(async (): Promise<null> => null) },
+    reverify: { check: vi.fn(async (): Promise<null> => null) },
+    realname: {
+      read: vi.fn(async (): Promise<'verified'> => 'verified' as const),
+      verified: vi.fn(
+        async (): Promise<{
+          name: string;
+          birth_date: string;
+          provider: string;
+          verified_at: Date;
+        }> => ({
+          name: '阿·甲',
+          birth_date: '1990-01-01',
+          provider: 'synthetic',
+          verified_at: clock.now(),
+        }),
+      ),
+    },
+    subject: {
+      read: vi.fn(
+        async (): Promise<{ payout_method: 'alipay'; payee_name: string; payee_hmac: string }> => ({
+          payout_method: 'alipay' as const,
+          payee_name: '阿·甲',
+          payee_hmac: PAYEE_HMAC,
+        }),
+      ),
+    },
+    laborAgreementSigned: vi.fn(async (): Promise<boolean> => true),
+    ledger: {
+      getBalances: vi.fn(async (): ReturnType<Ledger['getBalances']> => [
+        {
+          app_id: APPLY_ACTOR.appId,
+          user_id: APPLY_ACTOR.userId,
+          account_id: 'account-1',
+          available_fen: 10000n,
+          frozen_fen: 0n,
+          version: 1n,
+          negative_since: null,
+        },
+      ]),
+    },
+    holds: { read: vi.fn(async (): Promise<[]> => []) },
+    usage: {
+      read: vi.fn(
+        async (): Promise<{
+          daily_count: number;
+          monthly_count: number;
+          payee_daily_count: number;
+          payee_daily_other_users: number;
+          monthly_amount_fen: bigint;
+        }> => ({
+          daily_count: 0,
+          monthly_count: 0,
+          payee_daily_count: 0,
+          payee_daily_other_users: 0,
+          monthly_amount_fen: 0n,
+        }),
+      ),
+    },
+    selfPurchase: {
+      read: vi.fn(async (): Promise<{ count: number; amount_fen: bigint }> => ({
+        count: 0,
+        amount_fen: 0n,
+      })),
+    },
+    feeTax: {
+      calculate: vi.fn(
+        async (
+          _handle: Kysely<DB>,
+          input: { amountFen: bigint },
+        ): Promise<{ fee_fen: bigint; tax_fen: bigint; net_fen: bigint }> => ({
+          fee_fen: 0n,
+          tax_fen: 0n,
+          net_fen: input.amountFen,
+        }),
+      ),
+    },
+    openPayoutMethods: port,
+  };
+  const lockBalances = vi.fn(
+    async (): Promise<{ user_id: string; account_id: string; available_fen: bigint }[]> => [
+      { user_id: APPLY_ACTOR.userId, account_id: 'account-1', available_fen: 10000n },
+    ],
+  );
+  const post = vi.fn(async (): Promise<void> => undefined);
+  const ledger = { lockBalances, post } as unknown as Ledger;
+  const lockUsersForUpdate = vi.fn(
+    async (): Promise<ReadonlySet<string>> => new Set([APPLY_ACTOR.userId]),
+  );
+  const snapshot: WithdrawPayeeSnapshot = {
+    payout_method: 'alipay',
+    payee_name: '阿·甲',
+    payee_account_cipher: Buffer.from('cipher'),
+    payee_hmac: PAYEE_HMAC,
+    bank_name: null,
+    account: '13800138000',
+  };
+  const service = createWithdrawApply({
+    rules,
+    ledger,
+    lockUsersForUpdate,
+    snapshot: { read: vi.fn(async (): Promise<WithdrawPayeeSnapshot> => snapshot) },
+    outBizNo: (): string => `W${'A'.repeat(20)}`,
+  });
+  const apply = (): Promise<WithdrawApplyResult> =>
+    db
+      .transaction()
+      .execute((trx): Promise<WithdrawApplyResult> =>
+        service.apply(trx, { ...APPLY_ACTOR, amountFen: 1000n, stepUpValid: true }),
+      );
+  const methodReadCount = (): number =>
+    configValue.mock.calls.filter(([, key]) => key === METHODS_KEY).length;
+  return { apply, statements, post, lockUsersForUpdate, methodReadCount };
+}
+
+const insertsWithdrawal = (statements: readonly string[]): boolean =>
+  statements.some((text) => text.startsWith('insert into "app"."withdrawals"'));
+
+it('[AC-B2-05u#2] 初判时支付宝开放、锁内重读时已只开放银行卡：返回 30305，不建提现单、不写冻结凭证', async () => {
+  const h = await applyHarness([['alipay', 'bank_card'], ['bank_card']]);
+  expect(await h.apply()).toStrictEqual({ code: 30305, data: {} });
+  // Refused under the locks (the first pass passed): the open set was read twice.
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(1);
+  expect(h.methodReadCount()).toBe(2);
+  expect(insertsWithdrawal(h.statements)).toBe(false);
+  expect(h.post).not.toHaveBeenCalled();
+});
+
+it('[AC-B2-05u#2] 初判与锁内重读时支付宝都开放：照常建 PENDING_REVIEW 提现单并写冻结凭证', async () => {
+  const h = await applyHarness([['alipay', 'bank_card']]);
+  const result = await h.apply();
+  expect(result).toMatchObject({
+    code: 0,
+    data: { status: 'PENDING_REVIEW', amount_fen: 1000, payout_channel: 'alipay' },
+  });
+  expect(h.methodReadCount()).toBe(2);
+  expect(insertsWithdrawal(h.statements)).toBe(true);
+  expect(h.post).toHaveBeenCalledTimes(1);
+  expect(h.post).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ appId: APPLY_ACTOR.appId, bizType: 'withdrawal' }),
+  );
 });

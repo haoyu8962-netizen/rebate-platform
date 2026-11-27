@@ -12,6 +12,8 @@
 //                ③ pg_advisory_xact_lock(hashtext(app_id || ':' || payee_hmac)::bigint) on the
 //                payee HMAC of the snapshot (BR-WDR-07 ③);
 //   re-check     ④ BR-WDR-03 ⑦⑧⑩⑪⑫ again over reads made under the locks (validateLockedWithdrawal);
+//                B2-05u: before them ⑤ on the rule chain's payout method read under the locks — a
+//                method the app closed after the first pass refuses 30305 (BR-WDR-02 细则);
 //   amounts      ⑤ fee_fen / tax_fen from the FeeTaxCalculator (fee_rule_id / tax_rule_version
 //                fixed with them), net_fen = amount − fee − tax (@couli/money);
 //   insert       ⑥ PENDING_REVIEW with the payee snapshot, income_type SERVICE_FEE, out_biz_no
@@ -389,6 +391,9 @@ export function createWithdrawApply(options: WithdrawApplyOptions): WithdrawAppl
         trx,
       );
       const locked = await readWithdrawInput(trx, actor, command.stepUpValid, rules);
+      // ④ re-runs ⑤ before ⑦ (B2-05u): the open-method set read under the locks no longer holds
+      // the bound method (closed since the first pass), so no usable account (BR-WDR-02 细则).
+      if (locked.payout_method === null) return refuse({ code: 30305, data: {} });
       const again = validateLockedWithdrawal(locked, amount);
       if (again !== null) return refuse(again);
       // Build the row. One clock reading serves the locked quote and the row's created_at, so the
