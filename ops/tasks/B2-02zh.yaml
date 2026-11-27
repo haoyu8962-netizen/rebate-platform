@@ -16,5 +16,5 @@ tester: none
 accept:
   - 'pnpm verify'
   - 'test/spec/admin/audit-free-text-pii/**'
-status: todo
-pr: null
+status: done
+pr: 971
