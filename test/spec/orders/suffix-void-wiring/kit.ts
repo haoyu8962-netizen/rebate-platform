@@ -41,7 +41,7 @@ export interface TaobaoApp {
 async function seedTaobaoApp(db: Kysely<DB>): Promise<TaobaoApp> {
   const a = await account(db, { platform: 'taobao' });
   const owner = await user(db, a.app_id);
-  await pid(db, a);
+  await pid(db, a, { pid: '2002' });
   await level(db, a.app_id, owner.id, 'L1', BEFORE);
   await seedVersion(db, a.app_id, version());
   const relationId = `rel-${randomUUID().slice(0, 8)}`;
@@ -91,6 +91,8 @@ export async function world(db: Kysely<DB>) {
         modified_at: at('2026-10-20T03:00:00.000Z'),
         raw_payload_id: `${100 + sequence}`,
         ...patch,
+        promotion_slot: '2002',
+        site_id: 'site-ours',
       });
       const result = await capture(() =>
         r.pipeline.process(incoming, {
