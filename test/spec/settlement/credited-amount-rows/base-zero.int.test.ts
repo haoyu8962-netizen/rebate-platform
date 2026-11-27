@@ -63,6 +63,40 @@ async function baseZeroCredited(w: Worker) {
 it(
   '[AC-B2-04zk#9][BR-CALC-15][BR-CALC-27][BR-FUND-08] 基数为 0 的已入账单（快照预留 10000 bp，N 1000、B 0、booked 0 / 1000）维权部分成功（应扣 4.00 元 → N_new 600、B_new 0）：仍是 R9、保持 CREDITED，commission_version 1 → 2 与 booked 0 / 600 同一条带 commission_version = 1 乐观锁的 UPDATE；v2 会员行 0 / 0，四段 600 / 600 / 0 / 0 / 0 / 600；只有平台扣回 400，会员无凭证；v1 行不动',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     const traced = tracing(p.db);
     await withRights(traced.db, async (r) => {
       const z = await baseZeroCredited(r.w);
@@ -132,6 +166,40 @@ it(
 it(
   '[AC-B2-04zk#10][BR-FUND-08][BR-CALC-15][BR-FUND-01] 0 < N_new 而 B_new = 0 的维权（R8 BASE_ZERO，转 CLAWED_BACK、booked 0 / 1）不推版本、不写行：先应扣 4.00 元推到 v2 的单再应扣 5.99 元，版本停在 2、没有 v3、没有写版本的语句，扣回 270 / 329；直接从入账应扣 9.99 元的单版本仍 1、只有 v1，扣回 450 / 549；两单的已有版本行都不动',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     const traced = tracing(p.db);
     await withRights(traced.db, async (r) => {
       // After a partial rights deduction pushed v2.

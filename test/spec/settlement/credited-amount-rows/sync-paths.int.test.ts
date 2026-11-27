@@ -36,6 +36,40 @@ const p = databaseFixture(createTestDatabase);
 it(
   '[AC-B2-04zk#5][BR-FUND-09][BR-CALC-15][BR-CALC-27][BR-FUND-08] R10（新结算 800）只由 orders 推到 v2 一次，v2 = 720 / 360、四段 800 / 80 / 720 / 360 / 0 / 440；之后维权应扣 2.00 元（N_new = 800 − 200 = 600）由 apply 推到 v3 一次，v3 = 540 / 270、四段 600 / 60 / 540 / 270 / 0 / 330；扣回 90 / 110，booked 540 / 600；v1、v2 不动',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     const traced = tracing(p.db);
     await withRights(traced.db, async (r) => {
       const c = await creditedOrder(p.db, r.w);
@@ -107,6 +141,40 @@ it(
 it(
   '[AC-B2-04zk#6][BR-FUND-01][BR-FUND-08][BR-CALC-15][BR-CALC-27] 维权应扣 4.00 元由 apply 推到 v2（540 / 270）之后，退款数量增加并同步新结算 500（R9，N_new 取新结算额）：版本只由 orders 推一次到 v3，apply 不再推；v3 = 450 / 225、四段 500 / 50 / 450 / 225 / 0 / 275；扣回 45 / 55 键 C3，booked 450 / 500；v1、v2 不动',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     const traced = tracing(p.db);
     await withRights(traced.db, async (r) => {
       const c = await creditedOrder(p.db, r.w);

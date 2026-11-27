@@ -26,6 +26,29 @@ it.each([
   async ({ status, expected }) => {
     const f = await fixture(db, status);
     try {
+      const { seedPddLink } = await import('../pdd-link-fixture/seed.ts');
+      await seedPddLink(db, {
+        app_id: f.appId,
+        user_id: f.owner,
+        lk: 'b108zzf',
+        raw_item_id: 'b108zzf-goods-sign',
+        pid_scene: 'share',
+        created_at: new Date('2026-10-01T00:00:00.000Z'),
+      });
+      Object.assign(f.incoming, {
+        goods_sign: 'b108zzf-goods-sign',
+        attr_params: {
+          relation_id: null,
+          sub_union_id: null,
+          custom_parameters: JSON.stringify({
+            ...(JSON.parse(f.incoming.attr_params?.custom_parameters ?? '{}') as Record<
+              string,
+              unknown
+            >),
+            lk: 'b108zzf',
+          }),
+        },
+      });
       const rules = version();
       await seedVersion(db, f.appId, rules);
       await f.process();
@@ -56,6 +79,29 @@ it.each([
 it('[AC-B1-08w#7] 空规则库留下待处理，发布版本后生产 snapshot-retry 生成快照并关闭原行', async () => {
   const f = await fixture(db);
   try {
+    const { seedPddLink } = await import('../pdd-link-fixture/seed.ts');
+    await seedPddLink(db, {
+      app_id: f.appId,
+      user_id: f.owner,
+      lk: 'b108zzf',
+      raw_item_id: 'b108zzf-goods-sign',
+      pid_scene: 'share',
+      created_at: new Date('2026-10-01T00:00:00.000Z'),
+    });
+    Object.assign(f.incoming, {
+      goods_sign: 'b108zzf-goods-sign',
+      attr_params: {
+        relation_id: null,
+        sub_union_id: null,
+        custom_parameters: JSON.stringify({
+          ...(JSON.parse(f.incoming.attr_params?.custom_parameters ?? '{}') as Record<
+            string,
+            unknown
+          >),
+          lk: 'b108zzf',
+        }),
+      },
+    });
     await f.process();
     expect(await f.splits()).toEqual([]);
     const pending = await f.pending();
@@ -95,6 +141,29 @@ it('[AC-B1-08w#7] 空规则库留下待处理，发布版本后生产 snapshot-r
 it('[AC-B1-08w#8] 生产更新步骤在规则恢复后使用真实快照端口处置 pending', async () => {
   const f = await fixture(db);
   try {
+    const { seedPddLink } = await import('../pdd-link-fixture/seed.ts');
+    await seedPddLink(db, {
+      app_id: f.appId,
+      user_id: f.owner,
+      lk: 'b108zzf',
+      raw_item_id: 'b108zzf-goods-sign',
+      pid_scene: 'share',
+      created_at: new Date('2026-10-01T00:00:00.000Z'),
+    });
+    Object.assign(f.incoming, {
+      goods_sign: 'b108zzf-goods-sign',
+      attr_params: {
+        relation_id: null,
+        sub_union_id: null,
+        custom_parameters: JSON.stringify({
+          ...(JSON.parse(f.incoming.attr_params?.custom_parameters ?? '{}') as Record<
+            string,
+            unknown
+          >),
+          lk: 'b108zzf',
+        }),
+      },
+    });
     await f.process();
     expect(await f.splits()).toEqual([]);
     const pending = await f.pending();

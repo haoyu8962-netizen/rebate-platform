@@ -138,6 +138,40 @@ async function expectNoSideEffects(appId: string, before: SideRows): Promise<voi
 it(
   '[AC-B1-18k#3][BR-CALC-15][BR-CALC-27][BR-FUND-01] VOID：预估 1000 的单经 worker 的维权同步写入方部分维权成功（应扣 400，R7）→ v2 base 600、本人 300，订单佣金列仍 1000；平台失效（拼多多 4，R6 → VOID，不推版本）；再 N 不变、补贴 200 → 350 → commission_version 3，v3 (user_id, role, base_fen, amount_fen) 与 v2 整行相同（600 / 300，不是 1000 / 500），合计行补贴 350、① 950 ② 350 ③ 600 ④ 650；仍 VOID、reason 不变，无分录、通知、补差候选、扣回',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     const writers = vi.spyOn(rightsSync, 'createRightsSyncWriter');
     try {
       await withRule(p.db, async (w) => {
