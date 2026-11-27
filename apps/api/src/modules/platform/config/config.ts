@@ -99,7 +99,63 @@ const envSchema = z.object({
     .string()
     .regex(/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/, 'must be a service name ([A-Za-z0-9_.-], 1–128)')
     .optional(),
+  // QA-13d (01 F-OBS-01, 02 §13 崩溃行): crash reporting of every entry to GlitchTip. Unset = nothing
+  // is initialised. A DSN `<http(s)>://<public key>@<host>[:<port>]/<project id>` with no path
+  // prefix (D10-3319), surrounding blanks ignored; loadConfig hands on the one parsed form
+  // (parseCrashReportDsn). The message never repeats the value (the DSN is never logged).
+  CRASH_REPORT_DSN: z
+    .string()
+    .refine(
+      (value) => parseCrashReportDsn(value) !== undefined,
+      'must be an http(s) DSN <scheme>://<public key>@<host>/<numeric project id>, no path prefix',
+    )
+    .optional(),
 });
+
+/** The shape the crash-report SDK parses a DSN with (@sentry/core makeDsn); kept in step with it. */
+const SDK_DSN_SHAPE =
+  /^(?:(\w+):)\/\/(?:(\w+)(?::(\w+)?)?@)((?:\[[:.%\w]+\]|[\w.-]+))(?::(\d+))?\/(.+)/;
+
+/** The only path a CRASH_REPORT_DSN may have: `/<project id>`, one optional trailing slash. */
+const CRASH_REPORT_DSN_PATH = /^\/(\d+)\/?$/;
+
+/**
+ * QA-13d: the one parsed form of CRASH_REPORT_DSN, derived here and nowhere else (D10-3319). The
+ * payout host check, the transport (envelope endpoint, public key) and the SDK (dsn) all read this
+ * one object; nothing downstream parses the DSN again. Accepted: blanks trimmed, http(s), a
+ * word-character public key, no password, query or fragment, and a path of exactly `/<numeric
+ * project id>` (`/3` or `/3/`). Any path prefix (empty segments, %XX, several levels) is refused,
+ * so the SDK never refuses (and never prints) a DSN that passed here.
+ */
+export function parseCrashReportDsn(value: string): CrashReportConfig | undefined {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+  if (!/^\w+$/.test(url.username) || url.password !== '') return undefined;
+  if (url.search !== '' || url.hash !== '' || url.hostname === '') return undefined;
+  const projectId = CRASH_REPORT_DSN_PATH.exec(url.pathname)?.[1];
+  if (projectId === undefined) return undefined;
+  const origin = `${url.protocol}//${url.host}`;
+  const dsn = `${url.protocol}//${url.username}@${url.host}/${projectId}`;
+  if (!SDK_DSN_SHAPE.test(dsn)) return undefined;
+  return Object.freeze({
+    dsn,
+    origin,
+    host: url.hostname,
+    projectId,
+    publicKey: url.username,
+    envelopeEndpoint: `${origin}/api/${projectId}/envelope/`,
+  });
+}
+
+/** The normalised DSN string of parseCrashReportDsn; undefined for anything it refuses. */
+export function normalizeCrashReportDsn(value: string): string | undefined {
+  return parseCrashReportDsn(value)?.dsn;
+}
 
 /** B1-31: http(s), a non-empty host, no username / password (the value is never echoed). */
 function isTraceEndpoint(value: string): boolean {
@@ -322,6 +378,12 @@ export interface AppConfig {
    */
   readonly tracing?: TracingConfig | undefined;
   /**
+   * CRASH_REPORT_DSN (QA-13d, 01 F-OBS-01): crash reporting of every entry to GlitchTip. Present
+   * only when the DSN is set (normalised); a hand-built config without it initialises nothing and
+   * installs no hook.
+   */
+  readonly crashReport?: CrashReportConfig | undefined;
+  /**
    * QUEUE_CONCURRENCY_<Q> / QUEUE_DB_BUDGET (./queue-concurrency.ts, B1-01zzk): the worker's
    * per-queue concurrency overrides (only lower than ENTRY_PLAN) and its shared budget of handler
    * calls running at once. Present only when one of them is set; a hand-built config without it
@@ -334,6 +396,20 @@ export interface AppConfig {
    * channel, the payment module's factory fails closed. Never holds a key.
    */
   readonly payChannels?: PayChannelsConfig | null | undefined;
+}
+
+/** Crash reporting (QA-13d): the one parsed CRASH_REPORT_DSN (parseCrashReportDsn builds it). */
+export interface CrashReportConfig {
+  /** The normalised DSN handed to the SDK: `<scheme>://<public key>@<host>[:<port>]/<project id>`. */
+  readonly dsn: string;
+  /** `<scheme>://<host>[:<port>]`. */
+  readonly origin: string;
+  /** The URL hostname (IPv4 literals already canonical): what payout's private-network check reads. */
+  readonly host: string;
+  readonly projectId: string;
+  readonly publicKey: string;
+  /** `<origin>/api/<project id>/envelope/`: the only URL the transport posts to. */
+  readonly envelopeEndpoint: string;
 }
 
 /** Where the internal /metrics listener binds (B1-01zzh). */
@@ -621,6 +697,14 @@ export function loadConfig(
               ? {}
               : { serviceName: values.OTEL_SERVICE_NAME }),
           },
+        }),
+    // Only present when configured (QA-13d), so the documented shape of an unconfigured result is
+    // unchanged.
+    ...(values.CRASH_REPORT_DSN === undefined
+      ? {}
+      : {
+          // Validated by the schema above (same function), so never undefined here.
+          crashReport: parseCrashReportDsn(values.CRASH_REPORT_DSN),
         }),
     // Only present when configured, so the documented shape of an unconfigured result is unchanged.
     ...(queueLimits === null ? {} : { queueLimits }),

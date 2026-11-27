@@ -1,0 +1,380 @@
+// Crash reporting of the five backend processes (api / stream / admin / worker / payout) to
+// GlitchTip (QA-13d; 01 F-OBS-01, 02 §13 崩溃行, §12.6): @sentry/core plus a minimal Node
+// integration of our own (fetch transport, Node stack-line parser, process hooks, start-up,
+// beforeSend allowlist). Core package only: no Node SDK, no tracing takeover, no replay / profiles.
+// CRASH_REPORT_DSN unset → nothing is created and no process hook is installed. payout reports only
+// to a DSN host that is a private-range IPv4 literal.
+import { inspect } from 'node:util';
+import {
+  Scope,
+  createStackParser,
+  dedupeIntegration,
+  getClient,
+  getCurrentScope,
+  initAndBind,
+  linkedErrorsIntegration,
+  type Breadcrumb,
+  type Event,
+  type EventHint,
+  type SeverityLevel,
+} from '@sentry/core';
+import { ServerRuntimeClient, type ServerRuntimeClientOptions } from '@sentry/core/server';
+import { parseCrashReportDsn, type CrashReportConfig } from '../config/config.ts';
+import type { AppConfig } from '../config/index.ts';
+import type { EntryName } from '../entries.ts';
+import type { RootLogger } from '../logging/index.ts';
+import { hookLogger, installProcessHooks, type LogLevelName } from './hooks.ts';
+import { scrubEvent, scrubText } from './scrub.ts';
+import { nodeStackLineParser } from './stack-parser.ts';
+import { makeFetchTransport } from './transport.ts';
+
+/** How envelopes are sent: globalThis.fetch in production; tests inject one (never the network). */
+export type CrashFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+/** The process whose uncaughtException / unhandledRejection hooks are installed. */
+export interface CrashProcess {
+  on(event: string, listener: (value: unknown) => void): unknown;
+  off(event: string, listener: (value: unknown) => void): unknown;
+  exit(code?: number): unknown;
+  /** Where an escaped error is written before the exit, as Node does (the real process's stderr). */
+  readonly stderr?: { write(chunk: string): unknown };
+}
+
+/** One breadcrumb handed to captureException; only allowlisted fields may be reported. */
+export interface CrashBreadcrumb {
+  readonly type?: string;
+  readonly category?: string;
+  readonly level?: string;
+  readonly message?: string;
+  readonly data?: Readonly<Record<string, unknown>>;
+}
+
+/** What the caller knows about the HTTP request; only method, route template and status may leave. */
+export interface CrashRequest {
+  readonly method?: string;
+  /** The concrete URL, possibly with ids and a query string (never reported as is). */
+  readonly url?: string;
+  /** The route template, e.g. `/v1/orders/:order_id`. */
+  readonly route?: string;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly cookies?: Readonly<Record<string, string>>;
+  readonly query_string?: string;
+  readonly data?: unknown;
+  readonly response?: {
+    readonly status_code?: number;
+    readonly body?: unknown;
+  };
+}
+
+/** Optional context of one captured error (scrubbed by the allowlist before it is sent). */
+export interface CrashCaptureContext {
+  readonly extra?: Readonly<Record<string, unknown>>;
+  readonly contexts?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  readonly tags?: Readonly<Record<string, string>>;
+  /** At most a hash of `id` (the user_id) is reported. */
+  readonly user?: Readonly<Record<string, unknown>>;
+  readonly breadcrumbs?: readonly CrashBreadcrumb[];
+  readonly request?: CrashRequest;
+}
+
+export interface CrashReportOptions {
+  readonly entry: EntryName;
+  /** From loadConfig: the DSN is read here, never from process.env. */
+  readonly config: AppConfig;
+  readonly logger: RootLogger;
+  /** The transport's fetch; globalThis.fetch when absent. */
+  readonly fetch?: CrashFetch;
+  /** Whose hooks are installed; the real process when absent. */
+  readonly process?: CrashProcess;
+}
+
+export interface CrashReporter {
+  /** True only when a client was created (DSN configured and accepted; payout: private IPv4 host). */
+  readonly enabled: boolean;
+  /** Reports one error; never throws and never waits for the transport. Undefined when disabled. */
+  captureException(error: unknown, context?: CrashCaptureContext): string | undefined;
+  /** Waits at most timeoutMs for pending sends; never rejects. */
+  flush(timeoutMs: number): Promise<boolean>;
+  /** Flushes (bounded), removes the process hooks and stops reporting; never rejects. */
+  close(timeoutMs?: number): Promise<void>;
+}
+
+const CLOSE_TIMEOUT_MS = 2_000;
+const MAX_BREADCRUMBS = 50;
+const LEVELS = new Set<string>(['fatal', 'error', 'warning', 'log', 'info', 'debug']);
+
+const DISABLED: CrashReporter = Object.freeze({
+  enabled: false,
+  captureException: () => undefined,
+  flush: async () => true,
+  close: async () => undefined,
+});
+
+/**
+ * payout's rule (D10-3283): the DSN host is a private-range IPv4 literal (10.0.0.0/8, 172.16.0.0/12,
+ * 192.168.0.0/16). Any host name, whatever it is called, is refused: its resolution could leave the
+ * internal network. `host` is a URL hostname (the parser already canonicalised IPv4 forms).
+ */
+export function isPrivateIPv4Host(host: string): boolean {
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (match === null) return false;
+  const octets = match.slice(1).map(Number);
+  if (octets.some((octet) => octet > 255)) return false;
+  const [a = -1, b = -1] = octets;
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
+/**
+ * True when `settings` is exactly what parseCrashReportDsn makes of its own dsn: a hand-built
+ * config whose fields disagree with each other (or with the config layer) is refused rather than
+ * reconciled, so the endpoint, key, host and SDK DSN can only ever come from one parse.
+ */
+function isParsedForm(settings: CrashReportConfig): boolean {
+  const parsed = parseCrashReportDsn(settings.dsn);
+  if (parsed === undefined) return false;
+  const keys = Object.keys(parsed) as (keyof CrashReportConfig)[];
+  return (
+    Object.keys(settings).length === keys.length &&
+    keys.every((key) => settings[key] === parsed[key])
+  );
+}
+
+function describeEscaped(error: unknown): string {
+  try {
+    const text = error instanceof Error ? (error.stack ?? String(error)) : inspect(error);
+    return `${text}\n`;
+  } catch {
+    return 'Uncaught error\n';
+  }
+}
+
+function firstError(fields: Record<string, unknown>): Error | undefined {
+  for (const key of ['err', 'error']) {
+    const value = fields[key];
+    if (value instanceof Error) return value;
+  }
+  for (const value of Object.values(fields)) if (value instanceof Error) return value;
+  return undefined;
+}
+
+/** The scope of one captured error: the caller's context, scrubbed later by beforeSend. */
+function scopeOf(entry: EntryName, context: CrashCaptureContext | undefined): Scope {
+  const scope = new Scope();
+  scope.setTag('entry', entry);
+  if (context === undefined) return scope;
+  if (context.tags !== undefined) scope.setTags({ ...context.tags });
+  if (context.extra !== undefined) scope.setExtras({ ...context.extra });
+  for (const [name, value] of Object.entries(context.contexts ?? {})) {
+    scope.setContext(name, { ...value });
+  }
+  const id = context.user?.['id'];
+  if (typeof id === 'string' || typeof id === 'number') scope.setUser({ id: String(id) });
+  for (const crumb of context.breadcrumbs ?? []) {
+    const breadcrumb: Breadcrumb = {};
+    if (crumb.type !== undefined) breadcrumb.type = crumb.type;
+    if (crumb.category !== undefined) breadcrumb.category = crumb.category;
+    if (crumb.level !== undefined && LEVELS.has(crumb.level)) {
+      breadcrumb.level = crumb.level as SeverityLevel;
+    }
+    if (crumb.message !== undefined) breadcrumb.message = crumb.message;
+    if (crumb.data !== undefined) breadcrumb.data = { ...crumb.data };
+    scope.addBreadcrumb(breadcrumb, MAX_BREADCRUMBS);
+  }
+  const request = context.request;
+  if (request !== undefined) {
+    // Only the method and the route template; the concrete URL never leaves (scrub.ts again).
+    const route = request.route;
+    const status = request.response?.status_code;
+    scope.addEventProcessor((event) => {
+      event.request = {
+        ...(request.method === undefined ? {} : { method: request.method }),
+        ...(route === undefined ? {} : { url: route }),
+      };
+      if (typeof status === 'number') {
+        event.contexts = { ...event.contexts, response: { status_code: status } };
+      }
+      return event;
+    });
+  }
+  return scope;
+}
+
+/** One warn line naming only the variable and the reason (never the DSN or its host). */
+function warnDisabled(logger: RootLogger, entry: EntryName, reason: string): void {
+  try {
+    logger.warn({ entry, variable: 'CRASH_REPORT_DSN', reason }, 'crash_report_disabled');
+  } catch {
+    // A broken logger never stops the start-up.
+  }
+}
+
+/**
+ * Starts crash reporting of one entry, once, at process start (runEntry). Never throws for an
+ * unconfigured or refused DSN: it returns a disabled reporter instead.
+ */
+export async function startCrashReporting(options: CrashReportOptions): Promise<CrashReporter> {
+  const { entry, config, logger } = options;
+  const settings = config.crashReport;
+  if (settings === undefined || settings.dsn === '') return DISABLED;
+  // The one parsed DSN of the config layer (parseCrashReportDsn): the payout host check, the
+  // transport and the SDK all read these fields; nothing here derives a field of its own (the
+  // config layer's parser only confirms a hand-built object is its own output).
+  if (!isParsedForm(settings)) {
+    warnDisabled(logger, entry, 'dsn_malformed');
+    return DISABLED;
+  }
+  if (entry === 'payout' && !isPrivateIPv4Host(settings.host)) {
+    // payout has no public egress (ADR-0001 §4.2 #20); neither the DSN nor its host is logged.
+    warnDisabled(logger, entry, 'payout_dsn_host_not_private_ipv4');
+    return DISABLED;
+  }
+  const stackParser = createStackParser(nodeStackLineParser);
+  // sendDefaultPii is no longer in the 11.x option types, but it is still set (false) so that no
+  // default personal data is ever collected; the allowlist in beforeSend applies regardless.
+  const clientOptions: ServerRuntimeClientOptions & { readonly sendDefaultPii: false } = {
+    dsn: settings.dsn,
+    environment: config.appEnv,
+    ...(config.deployVersion === undefined ? {} : { release: config.deployVersion }),
+    sendDefaultPii: false,
+    sendClientReports: false,
+    attachStacktrace: false,
+    maxBreadcrumbs: MAX_BREADCRUMBS,
+    // No span streaming integration (ServerRuntimeClient adds one otherwise): no tracing at all.
+    traceLifecycle: 'static',
+    platform: 'node',
+    runtime: { name: 'node', version: process.version },
+    integrations: [dedupeIntegration(), linkedErrorsIntegration()],
+    stackParser,
+    transport: makeFetchTransport({
+      target: settings,
+      fetch: options.fetch ?? globalThis.fetch,
+      logger,
+    }),
+    beforeSend: (event) => scrubEvent(event) as typeof event,
+  };
+  const client = initAndBind(ServerRuntimeClient, clientOptions);
+  if (client.getDsn() === undefined) {
+    // The SDK refused the DSN (it then has no transport): not enabled, nothing left bound.
+    if (getClient() === client) getCurrentScope().setClient(undefined);
+    warnDisabled(logger, entry, 'dsn_refused_by_sdk');
+    return DISABLED;
+  }
+  let open = true;
+
+  const capture = (error: unknown, hint: EventHint, scope: Scope): string | undefined => {
+    if (!open) return undefined;
+    try {
+      return client.captureException(error, hint, scope);
+    } catch {
+      return undefined;
+    }
+  };
+
+  const captureException = (error: unknown, context?: CrashCaptureContext): string | undefined => {
+    try {
+      const scope = scopeOf(entry, context);
+      return capture(error, { mechanism: { type: 'generic', handled: true } }, scope);
+    } catch {
+      return undefined;
+    }
+  };
+
+  /** An error line without an Error object: one event marked as that logged error. */
+  const captureLogLine = (
+    level: LogLevelName,
+    message: string,
+    fields: Record<string, unknown>,
+  ): void => {
+    const errorClass = fields['error_class'];
+    const stack = fields['stack'];
+    const frames = typeof stack === 'string' ? stackParser(stack) : [];
+    const scope = scopeOf(entry, { extra: fields });
+    scope.setTag('source', 'logger');
+    scope.setTag('log_message', message);
+    const event: Event = {
+      level,
+      exception: {
+        values: [
+          {
+            type:
+              typeof errorClass === 'string' && /^[A-Za-z_$][\w$.]{0,127}$/.test(errorClass)
+                ? errorClass
+                : 'LoggedError',
+            value: message,
+            ...(frames.length > 0 ? { stacktrace: { frames } } : {}),
+            mechanism: { type: 'logger', handled: true, synthetic: true },
+          },
+        ],
+      },
+    };
+    if (open) client.captureEvent(event, {}, scope);
+  };
+
+  const removeLoggerHook = hookLogger(logger, (level, args) => {
+    if (!open) return;
+    const [first, second] = args;
+    const message = typeof second === 'string' ? second : typeof first === 'string' ? first : '';
+    if (first instanceof Error) {
+      const scope = scopeOf(entry, undefined);
+      scope.setTag('source', 'logger');
+      if (message !== '') scope.setTag('log_message', message);
+      scope.setLevel(level);
+      capture(first, { mechanism: { type: 'logger', handled: true } }, scope);
+      return;
+    }
+    const fields =
+      typeof first === 'object' && first !== null ? (first as Record<string, unknown>) : {};
+    const error = firstError(fields);
+    if (error !== undefined) {
+      const scope = scopeOf(entry, { extra: fields });
+      scope.setTag('source', 'logger');
+      if (message !== '') scope.setTag('log_message', message);
+      scope.setLevel(level);
+      capture(error, { mechanism: { type: 'logger', handled: true } }, scope);
+      return;
+    }
+    captureLogLine(level, scrubText(message === '' ? 'logged_error' : message), fields);
+  });
+
+  const flush = async (timeoutMs: number): Promise<boolean> => {
+    try {
+      return await client.flush(timeoutMs);
+    } catch {
+      return false;
+    }
+  };
+
+  const removeProcessHooks = installProcessHooks({
+    process: options.process ?? process,
+    report: (error, kind) => {
+      const scope = scopeOf(entry, undefined);
+      scope.setLevel('fatal');
+      capture(error, { mechanism: { type: `auto.node.${kind}`, handled: false } }, scope);
+    },
+    flush,
+    describe: describeEscaped,
+  });
+
+  let closing: Promise<void> | undefined;
+  const close = (timeoutMs = CLOSE_TIMEOUT_MS): Promise<void> => {
+    closing ??= (async () => {
+      removeProcessHooks();
+      removeLoggerHook();
+      try {
+        await client.close(timeoutMs);
+      } catch {
+        // Closing never fails the caller.
+      }
+      open = false;
+      if (getClient() === client) getCurrentScope().setClient(undefined);
+    })();
+    return closing;
+  };
+
+  return {
+    enabled: true,
+    captureException,
+    flush,
+    close,
+  };
+}
