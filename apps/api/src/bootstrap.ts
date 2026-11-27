@@ -17,6 +17,8 @@ import {
   installMultipartRouteLimits,
 } from './modules/platform/http/multipart-limits.ts';
 import { applyNoStore } from './modules/platform/http/no-store.ts';
+import { installAppH5Cors } from './modules/platform/http/app-h5-cors.ts';
+import { readAppH5Origins } from './modules/content/index.ts';
 import { createValidatorCompiler } from './modules/platform/validation/index.ts';
 import {
   type AppConfig,
@@ -265,6 +267,26 @@ export async function createHttpApp(
     if (entry === 'admin') {
       installAdminCors(server, app.get<AdminHttpPolicy>(ADMIN_HTTP_POLICY));
       await installAdminMultipart(app);
+    }
+    // B1-01zzz: the App's H5 pages call /v1 cross-origin (WebView). Before the checks as well, so
+    // a preflight is answered by origin and a response the checks refuse keeps the CORS headers;
+    // the trusted origins are read afresh per request (content's bridge_origins / h5_base_url).
+    // Without database handles (isolated HTTP unit tests) there is nothing to trust: not installed.
+    const handles = overrides.dbHandles;
+    if (entry === 'api' && handles !== undefined) {
+      const logger = options.logger;
+      installAppH5Cors(server, () =>
+        readAppH5Origins(handles.db).catch((error: unknown) => {
+          logger.warn(
+            {
+              event: 'app_h5_cors_origins_unavailable',
+              error_name: error instanceof Error ? error.name : typeof error,
+            },
+            'trusted H5 origins could not be read; no CORS grant for this request',
+          );
+          return new Set<string>();
+        }),
+      );
     }
     installRequestChecks(server, plan.checks, plan.bufferWhen);
     return app;
