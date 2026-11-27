@@ -2296,6 +2296,129 @@ it(
   JUDGE_TIMEOUT * 2,
 );
 
+// --- CT-06zzzzzzzo (D10-3369): --browser counts the exported screenshot comparison report ---------
+// The stub test container leaves in out/ what the entrypoint would have exported; the host counts
+// out/visual-baseline/ (regular files; summary-*.json at its top) into the log and result.json,
+// and never changes the exit code for it. The rule tests in test/spec/ci/browser-visual-export
+// cover the export itself with the real entrypoint.
+
+function browserWorkspace(name: string): string {
+  const root = JSON.parse(readFileSync(join(repoRoot(), 'package.json'), 'utf8')) as {
+    packageManager: string;
+  };
+  const ws = join(base, name);
+  writeFiles(ws, {
+    'package.json': `${JSON.stringify(
+      { name, private: true, packageManager: root.packageManager, scripts: {} },
+      null,
+      2,
+    )}\n`,
+    'pnpm-workspace.yaml': 'packages: []\n',
+    'pnpm-lock.yaml': "lockfileVersion: '9.0'\npackages:\n  playwright@1.60.0: {}\n",
+  });
+  return ws;
+}
+
+/** The log lines of a --browser run that mention the visual-baseline report. */
+function visualBaselineLines(runsDir: string, id: string, n: number): string[] {
+  return readFileSync(join(runsDir, id, 'browser', String(n), 'log.txt'), 'utf8')
+    .split('\n')
+    .filter((line) => line.includes('visual-baseline exported'));
+}
+
+it(
+  '[CT-06zzzzzzzo] --browser with a report directory: result.json visual_baseline counts its regular files and top-level summaries, the log says so',
+  async () => {
+    const ws = browserWorkspace('browser-visual');
+    const runsDir = join(base, 'browser-visual');
+    const res = await runStubbed(['V1-15', '--worktree', ws, '--browser'], runsDir, {
+      exit: 0,
+      files: {
+        screenshots: { dir: true },
+        'screenshots/page.png': { text: 'png' },
+        'visual-baseline': { dir: true },
+        'visual-baseline/summary-app.json': { text: '{"overThreshold":[]}\n' },
+        'visual-baseline/summary-admin.json': { text: '{"overThreshold":[]}\n' },
+        'visual-baseline/summary-app.txt': { text: 'OK\n' },
+        'visual-baseline/pages': { dir: true },
+        // Below the top: a page entry, not a summary.
+        'visual-baseline/pages/summary-nested.json': { text: '{}\n' },
+        'visual-baseline/pages/account-light.diff.png': { text: 'png' },
+        // A link is not a regular file: never counted.
+        'visual-baseline/summary-linked.json': { symlink: '/etc/hosts' },
+      },
+    });
+    expect(res.timedOut).toBe(false);
+    expect(res.status, res.stderr).toBe(0);
+    expect(testContainer(res.calls)?.args.slice(-2)).toEqual([
+      'couli-verify-entrypoint',
+      'browser',
+    ]);
+    expect(readJson(join(runsDir, 'V1-15', 'browser', '1', 'result.json'))).toMatchObject({
+      script: 'browser',
+      exit_code: 0,
+      visual_baseline: { files: 5, summaries: 2 },
+    });
+    expect(visualBaselineLines(runsDir, 'V1-15', 1)).toEqual([
+      expect.stringMatching(
+        /\] visual-baseline exported: 5 files, 2 summaries \(out\/visual-baseline\)$/u,
+      ),
+    ]);
+  },
+  JUDGE_TIMEOUT,
+);
+
+it(
+  '[CT-06zzzzzzzo] --browser without a report directory (or with a link in its place): visual_baseline 0 and 0, the run keeps its own exit code',
+  async () => {
+    const ws = browserWorkspace('browser-no-visual');
+    const runsDir = join(base, 'browser-no-visual');
+    const args = ['V1-16', '--worktree', ws, '--browser'];
+    const result = (n: number) =>
+      readJson(join(runsDir, 'V1-16', 'browser', String(n), 'result.json'));
+
+    // Green with a screenshot and no report: 0, counts 0 and 0.
+    const green = await runStubbed(args, runsDir, {
+      exit: 0,
+      files: { screenshots: { dir: true }, 'screenshots/page.png': { text: 'png' } },
+    });
+    expect(green.status, green.stderr).toBe(0);
+    expect(result(1)).toMatchObject({
+      exit_code: 0,
+      visual_baseline: { files: 0, summaries: 0 },
+    });
+    expect(visualBaselineLines(runsDir, 'V1-16', 1)).toEqual([
+      expect.stringMatching(/\] visual-baseline exported: 0 files, 0 summaries /u),
+    ]);
+
+    // A failed run without a report: its own exit code, still 0 and 0.
+    const failed = await runStubbed(args, runsDir, { exit: 3, files: {} });
+    expect(failed.status, failed.stderr).toBe(3);
+    expect(result(2)).toMatchObject({
+      exit_code: 3,
+      visual_baseline: { files: 0, summaries: 0 },
+    });
+
+    // out/visual-baseline is a link to a directory with summaries: never followed, 0 and 0.
+    const outside = join(base, 'browser-no-visual-outside');
+    writeFiles(outside, { 'summary-outside.json': '{}\n' });
+    const linked = await runStubbed(args, runsDir, {
+      exit: 0,
+      files: {
+        screenshots: { dir: true },
+        'screenshots/page.png': { text: 'png' },
+        'visual-baseline': { symlink: outside },
+      },
+    });
+    expect(linked.status, linked.stderr).toBe(0);
+    expect(result(3)).toMatchObject({
+      exit_code: 0,
+      visual_baseline: { files: 0, summaries: 0 },
+    });
+  },
+  JUDGE_TIMEOUT * 2,
+);
+
 // --- CT-06zzzzzzzn (FU-SPEC-HANDBACK-TSC + FU-RED-TYPECHECK-NEW-SPEC, D10-3356): --red type check --
 // The rule tests in test/spec/ci/red-typecheck cover the verdict; these cover the parser on its own
 // (red_typecheck_record, cut out of the script) and the container the type check runs in.
