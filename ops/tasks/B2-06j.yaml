@@ -44,8 +44,8 @@ modify_existing:
     test: '[AC-B2-06f#13] APP_ENV=prod、PAYOUT_MODE=live、凭证齐全：以 live 与注入的凭证启动，先注册后启动队列，日志不含私钥'
     reason: rule_change
     br: [BR-WDR-13]
-    ruling: D10-3317
-    note: '待负责人确认（D10-3317：本条按第三类报负责人，确认前编排不加任务 PR 的批准标签）。BR-WDR-13：live 凭据的来源由环境变量改为 KMS（假 KMS 夹具，放新文件）。语义不变——凭据齐全即以 live 启动、把读到的凭据原样交给运行体、先注册后启动队列、日志不含私钥；交给运行体的凭据对象多出三个证书序列号'
+    ruling: D10-3427
+    note: '负责人 2026-11-27 已确认（D10-3427；此前按 D10-3317 作为第三类报负责人）：同意生产 live 的三处变化——请求带 app_cert_sn 与 alipay_root_cert_sn 并参与加签、应答须带 alipay_cert_sn 且等于配置值再验签、应用私钥与三张证书改由 KMS 读——以及本条。BR-WDR-13：live 凭据的来源由环境变量改为 KMS（假 KMS 夹具，放新文件）。语义不变——凭据齐全即以 live 启动、把读到的凭据原样交给运行体、先注册后启动队列、日志不含私钥；交给运行体的凭据对象多出三个证书序列号'
   - file: 'test/spec/payout/query-recovery-wiring/entry.test.ts'
     test: '[AC-B2-06i#10] dry_run 和 live 都启动恢复：入口不看模式'
     reason: rule_change
