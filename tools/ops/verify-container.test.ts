@@ -16,7 +16,9 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { readFastParts, verifyFastSteps } from '../ci/fast-parts.ts';
 import { readIntShards } from '../ci/int-shards.ts';
+import { matchesAny } from '../lib/glob.ts';
 import { repoRoot } from '../lib/paths.ts';
+import { loadRedProjects } from './red-plan.ts';
 import {
   CLI_TIMEOUT,
   fixtureGit,
@@ -2542,3 +2544,41 @@ it(
   },
   JUDGE_TIMEOUT,
 );
+
+/** The concrete file names a rule-test include glob takes: braces expanded, wildcards filled in. */
+function sampleFiles(glob: string): string[] {
+  const brace = /\{([^{}]*)\}/u.exec(glob);
+  if (brace !== null) {
+    return (brace[1] ?? '').split(',').flatMap((alt) => sampleFiles(glob.replace(brace[0], alt)));
+  }
+  return [glob.replaceAll('**/', 'frontend/').replaceAll('*', 'example')];
+}
+
+it('[CT-06zzzzzzzn] --red type check: tsc -b test takes every rule test the red run runs under test/, .browser.test.tsx included', () => {
+  // Codex review r1 S1: a .browser.test.tsx rule test that nothing imports must still be compiled.
+  const tsconfig = JSON.parse(readFileSync(join(repoRoot(), 'test', 'tsconfig.json'), 'utf8')) as {
+    include: string[];
+    exclude?: string[];
+  };
+  const compiled = (file: string) =>
+    matchesAny(file, tsconfig.include) && !matchesAny(file, tsconfig.exclude ?? []);
+  // The browser rule tests: the include of test/vitest.browser.config.ts, mirrored by spec-browser.
+  const browserConfig = readFileSync(join(repoRoot(), 'test', 'vitest.browser.config.ts'), 'utf8');
+  const browserInclude = JSON.parse(
+    (/^const INCLUDE = (\[.*\]);$/mu.exec(browserConfig)?.[1] ?? '[]').replaceAll("'", '"'),
+  ) as string[];
+  const projects = loadRedProjects().filter((p) => p.dir === 'test');
+  expect(projects.find((p) => p.name === 'spec-browser')?.include).toEqual(browserInclude);
+  const browserFiles = browserInclude.flatMap(sampleFiles);
+  expect(browserFiles).toEqual(
+    expect.arrayContaining([
+      'spec/frontend/example.browser.test.ts',
+      'spec/frontend/example.browser.test.tsx',
+    ]),
+  );
+  const notCompiled = [
+    ...browserFiles,
+    ...projects.flatMap((p) => p.include.flatMap(sampleFiles)),
+  ].filter((file) => !compiled(file));
+  expect(notCompiled).toEqual([]);
+});
