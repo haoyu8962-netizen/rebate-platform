@@ -40,6 +40,40 @@ const PUNISH_ROW = { type: 'PUNISH', status: 'SUCCEEDED', platform_rights_no: nu
 it(
   '[AC-B2-04zzr#7] P8 处罚已入账（CREDITED、SETTLED）：同一次同步写恰好一行 (PUNISH, SUCCEEDED)、无单号；R8 照旧：两张 CLAWBACK（PUNISH）各 500、键 P{row_version}、CLAWED_BACK、原因码 PUNISH、platform_status 仍 SETTLED；rights_pending 仍 false',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     await withWorker(p.db, async (w) => {
       const { app, o, read } = await creditedOrder(p.db, w);
 

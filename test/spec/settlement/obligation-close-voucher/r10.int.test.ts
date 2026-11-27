@@ -176,6 +176,40 @@ it(
 it(
   '[AC-B2-04zzb#15] 普通订单同步（无维权记录，组装好的同步 worker，联盟报文带新结算金额、由 recordApi 写记录）：会员入账时冻结后封禁，新结算 600（seq 2）负差 → R10：义务 forfeited / closed_by R10 / closed_ref S2，voucher_id = 本事务平台凭证 {order_key}:PLATFORM:ADJ:2（平台 +100）的 id；另一 app 同样前置、新结算 500 → 平台差额为 0、不写平台凭证，义务 forfeited、voucher_id null、closed_ref S2 兜底',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     await withSync(p.db, async (w) => {
       const linked = await heldThenSynced(p.db, w, 'banned');
       const flat = await heldThenSynced(p.db, w, 'banned');

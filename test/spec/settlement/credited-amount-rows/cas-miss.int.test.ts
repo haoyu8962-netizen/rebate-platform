@@ -72,6 +72,40 @@ function clawbackCasMissesOnce(db: Kysely<DB>) {
 it(
   '[AC-B2-04zk#11][BR-CALC-15][BR-CALC-27][BR-FUND-08] 维权应扣 4.00 元时扣回那条带 commission_version 守卫的 orders CAS 落空一次：要么重读后重算、恰好推一次到 v2，要么整体干净回滚（版本、行、凭证、booked、维权记录都不留）且重投后恰好推一次；最后都是 v2（540 / 270，四段 600 / 60 / 540 / 270 / 0 / 330）一套行、扣回 180 / 220 各一份、booked 540 / 600、事件一条',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     const conflict = clawbackCasMissesOnce(p.db);
     await withRights(conflict.db, async (r) => {
       const c = await creditedOrder(p.db, r.w);

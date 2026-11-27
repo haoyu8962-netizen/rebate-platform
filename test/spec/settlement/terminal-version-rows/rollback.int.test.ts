@@ -162,6 +162,40 @@ async function expectNoSideEffects(appId: string, before: SideRows): Promise<voi
 it(
   '[AC-B1-18k#1][BR-CALC-15][BR-CALC-27][BR-FUND-01] 同一事务：VOID（WAITING 单结算 -100 → BASE_ZERO，v2）后结算 -200，v3 金额行写入失败（只在这次同步里、只对该单 v3 注入）→ 同步报错，订单行整行、v3 金额行与合计行、事件一起回滚；去掉故障后重投同一报文 → 恰好一套完整 v3（一行金额 0 / 0、一行合计 ① -200 ② -200 ④ -200），仍 VOID、reason 不变，不记账、不通知',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     const fault = faultInjector();
     await withRule(fault.db, async (w) => {
       const app = await w.app();
@@ -240,6 +274,40 @@ it(
 it(
   '[AC-B1-18k#3][BR-CALC-15][BR-CALC-27][BR-FUND-01] 同一事务：CLAWED_BACK（补贴 200，入账后结算 0 → R8，v2）后仅补贴 200 → 350，v3 合计行写入失败（只在这次同步里、只对该单 v3 注入）→ 同步报错，订单补贴列、commission_version、v3 金额行与合计行、事件一起回滚；去掉故障后重投同一报文 → 恰好一套完整 v3（份额与 base 同 v2，合计行补贴 350、① 350 ② 350 ④ 350），仍 CLAWED_BACK，余额不变',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     const fault = faultInjector();
     await withRule(fault.db, async (w) => {
       const app = await w.app();

@@ -262,6 +262,40 @@ it(
 it(
   '[AC-B1-18i#1][AC-B1-18i#3][BR-CALC-27][BR-CALC-15] 当前版本合计行补贴为空（B1-18f 加列前写的 v2，N 1200，SQL 造）→ 回退该单分佣快照的补贴 200 参与判定，不按订单列 350、也不按 0：N 不变、报文补贴 200 不 +1；补贴 350 才 +1，v3 份额与 base 同 v2（1200 / 600），合计行补贴 350、① 1550 ② 350 ④ 950，v2 行原样',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../pdd-link-fixture/seed.ts');
+    const records = await import('../../settlement/settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     await withRule(p.db, async (w) => {
       const app = await w.app();
       const o = w.order(app, { subsidy_commission_fen: 200n });
@@ -351,6 +385,40 @@ it(
 it(
   '[AC-B1-18i#1][AC-B1-18i#7][BR-CALC-27][BR-CALC-15][BR-FUND-01] 份额逐项沿用上一版本，不按订单佣金重分：两位受益人（本人 50 %、直推 10 %），经 worker 的维权同步写入方部分维权成功（应扣 400，R7）→ v2 base 600、300 / 60，订单佣金列仍 1000；再 N 不变、补贴 200 → 350 → v3 各受益人 (user_id, role, base_fen, amount_fen) 与 v2 整行相同（不是 1000 / 500 / 100），合计行 ① 950 ② 350 ④ 590；R7 的同 N 判定不误判',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../pdd-link-fixture/seed.ts');
+    const records = await import('../../settlement/settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     const writers = vi.spyOn(rightsSync, 'createRightsSyncWriter');
     try {
       await withRule(p.db, async (w) => {

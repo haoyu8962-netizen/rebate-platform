@@ -17,6 +17,40 @@ const p = databaseFixture(createTestDatabase);
 it(
   '[AC-B2-04zi#31] R10同步沿用订单键→users行→余额行的加锁顺序',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     const trace = tracing(p.db);
     await withSync(trace.db, async (w) => {
       const { o, read } = await credited(trace.db, w);
@@ -51,6 +85,42 @@ for (const sample of [
   it(
     `[AC-B2-04zi#${sample.ac}] R10在${sample.at}按注入Clock记账，历史联盟结算时刻不能改变会计日`,
     async () => {
+      const vitest = await import('vitest');
+      const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+      const records = await import('../settlement-records/kit.ts');
+      const startWorker = records.withWorker;
+      const pddLinkWorker = vitest.vi
+        .spyOn(records, 'withWorker')
+        .mockImplementation((handle, run) =>
+          startWorker(handle, (worker) => {
+            const makeApp = worker.app;
+            worker.app = async () => {
+              const made = await makeApp();
+              await seedPddLink(p.db, {
+                app_id: made.appId,
+                user_id: made.userId,
+                lk: 'b108zzf',
+                raw_item_id: 'b108zzf-goods-sign',
+                pid_scene: 'share',
+                created_at: new Date('2026-10-01T00:00:00.000Z'),
+              });
+              return made;
+            };
+            const makeOrder = worker.order;
+            worker.order = (target, patch = {}) =>
+              makeOrder(target, {
+                goods_sign: 'b108zzf-goods-sign',
+                attr_params: {
+                  relation_id: null,
+                  sub_union_id: null,
+                  custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+                },
+                ...patch,
+              });
+            return run(worker);
+          }),
+        );
+      vitest.onTestFinished(() => pddLinkWorker.mockRestore());
       await withSync(p.db, async (w) => {
         const { o, read } = await credited(p.db, w);
         w.clock.set(sample.start); // Existing report fixture advances exactly one minute.
@@ -124,6 +194,42 @@ for (const sample of [
   it(
     `[AC-B2-04zi#${sample.ac}] N${sample.old}→${sample.next}、reserve=${sample.reserve}：正数部分或原正基数归零走R8`,
     async () => {
+      const vitest = await import('vitest');
+      const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+      const records = await import('../settlement-records/kit.ts');
+      const startWorker = records.withWorker;
+      const pddLinkWorker = vitest.vi
+        .spyOn(records, 'withWorker')
+        .mockImplementation((handle, run) =>
+          startWorker(handle, (worker) => {
+            const makeApp = worker.app;
+            worker.app = async () => {
+              const made = await makeApp();
+              await seedPddLink(p.db, {
+                app_id: made.appId,
+                user_id: made.userId,
+                lk: 'b108zzf',
+                raw_item_id: 'b108zzf-goods-sign',
+                pid_scene: 'share',
+                created_at: new Date('2026-10-01T00:00:00.000Z'),
+              });
+              return made;
+            };
+            const makeOrder = worker.order;
+            worker.order = (target, patch = {}) =>
+              makeOrder(target, {
+                goods_sign: 'b108zzf-goods-sign',
+                attr_params: {
+                  relation_id: null,
+                  sub_union_id: null,
+                  custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+                },
+                ...patch,
+              });
+            return run(worker);
+          }),
+        );
+      vitest.onTestFinished(() => pddLinkWorker.mockRestore());
       await withSync(p.db, async (w) => {
         const { app, o, read } = await credited(p.db, w, {
           n: sample.old,
@@ -165,6 +271,40 @@ for (const sample of [
 it(
   '[AC-B2-04zi#16] 下游发布失败时结算记录、金额版本、booked、凭证、余额与history一起回滚，重投只写一次',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     await withSync(p.db, async (w) => {
       const { o, read } = await credited(p.db, w);
       const moneyBefore = await read.money();
@@ -200,6 +340,40 @@ it(
 it(
   '[AC-B2-04zi#17] 并发同报文只生成seq2及两张调整凭证，另一app的账与义务完全不变',
   async () => {
+    const vitest = await import('vitest');
+    const { seedPddLink } = await import('../../orders/pdd-link-fixture/seed.ts');
+    const records = await import('../settlement-records/kit.ts');
+    const startWorker = records.withWorker;
+    const pddLinkWorker = vitest.vi.spyOn(records, 'withWorker').mockImplementation((handle, run) =>
+      startWorker(handle, (worker) => {
+        const makeApp = worker.app;
+        worker.app = async () => {
+          const made = await makeApp();
+          await seedPddLink(p.db, {
+            app_id: made.appId,
+            user_id: made.userId,
+            lk: 'b108zzf',
+            raw_item_id: 'b108zzf-goods-sign',
+            pid_scene: 'share',
+            created_at: new Date('2026-10-01T00:00:00.000Z'),
+          });
+          return made;
+        };
+        const makeOrder = worker.order;
+        worker.order = (target, patch = {}) =>
+          makeOrder(target, {
+            goods_sign: 'b108zzf-goods-sign',
+            attr_params: {
+              relation_id: null,
+              sub_union_id: null,
+              custom_parameters: JSON.stringify({ app: 'n', uid: 'abcd1234', lk: 'b108zzf' }),
+            },
+            ...patch,
+          });
+        return run(worker);
+      }),
+    );
+    vitest.onTestFinished(() => pddLinkWorker.mockRestore());
     await withSync(p.db, async (w) => {
       const a = await credited(p.db, w);
       const b = await credited(p.db, w);
