@@ -11,6 +11,7 @@ type: guard-change
 #   /out/visual-baseline/（只拷普通文件，不跟随符号链接）；tools/ops/verify-container.sh 的 --browser 日志加一行导出摘要（文件数、summary-*.json 数），
 #   result.json 加 visual_baseline { files, summaries }（目录不存在记 0，不算失败）。不改退出码、不改「没有截图即失败」等现有判定、不改 compare.ts 与阈值、不碰基准图。
 #   tools/ops/README.md（或 verify-container 头注释）补一句导出位置。镜像按 entrypoint.sh 的哈希自动重建（lan-run 已有逻辑）。
+# 台账补丁 1（2026-11-27 ops，编排 D10-3437）：paths 加 tools/agent/README.md——先红一节补一句「调用尚未实现的签名一律经测试 kit 里声明的将来签名类型去调」（FU-RED-TYPECHECK-FUTURE-SIGNATURE，配合 CT-06zzzzzzzn #912 的先红类型检查），只加这一句。
 # 规则测试至少钉：① 容器里有 test/.tmp/visual-baseline/ 时，browser/<n>/out/visual-baseline/ 下逐文件同名同内容；② 没有该目录时照旧、记 0、退出码不变；
 #   ③ 用例失败（非 0）时照样导出；④ 导出不改变 --browser 的退出码与「没有截图即失败」的判定；⑤ 符号链接不被跟随。用现有测试夹具的假 docker，不真起容器。
 refs: []
@@ -21,6 +22,7 @@ paths:
   - 'tools/ops/verify-container.sh'
   - 'tools/ops/verify-container.test.ts'
   - 'tools/ops/README.md'
+  - 'tools/agent/README.md'
   - 'ops/tasks/CT-06zzzzzzzo.yaml'
 test_paths:
   - 'test/spec/ci/browser-visual-export/**'
