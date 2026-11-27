@@ -1,0 +1,20 @@
+id: B2-02zh
+repo: rebate-platform
+title: 审计自由文本脱敏规则测试补样例（FU-B2-02ZG-SPEC-HYPHEN-LOCAL）：含 @ 片段左侧紧贴横线 / 减号、本地部分是手机号、认不出的域名紧贴标点、制表符作片段边界——只新增用例，期望照 BR-ID-33 现行写法
+type: test-change
+# 2026-11-27 be 入账（编排 D10-3580；FU-B2-02ZG-SPEC-HYPHEN-LOCAL，来源 B2-02zg 规则测试评审 r3 / r4 的样例缺口，D10-3444 三类 + D10-3495 两类，当时改作实现必满足项、由实现方单测钉住，B2-02zg #962 已落地）。
+# 只在 test/spec/admin/audit-free-text-pii/ 下新增一个测试文件，不改不删已有用例与断言，不碰实现。期望照 08 BR-ID-33 细则「审计自由文本里的邮箱整段遮」（凡含 @ 的连续非空白片段，前后到 Unicode 空白或首尾整段换成 ***，不显示域名）：例「收款账号 li-wei@example.com 已核」→「收款账号 *** 已核」、「王小明-13812345678@qq.com 已核」→「*** 已核」、「备注−alice@example.com」→「***」、「收款账号 13812345678@qq.com 已核」→「收款账号 *** 已核」、「收款账号 bob.lee@内网，已核」→「收款账号 ***」、「备注 alice@example.com\t已核」→「备注 ***\t已核」。
+# 新样例在主干现行实现上应全绿；任何一条在主干跑红即停下报编排（D10-3580）。B2-02zg 资金评审 r6 的两条 S2（U+0085 未当空白、构造卡号前缀撞证件校验位）不处理，FU 里写明后关闭。
+refs: [BR-ID-33]
+refs_hash:
+  BR-ID-33: a446ae3deba5
+deps: [B2-02zg]
+paths:
+  - 'test/spec/admin/audit-free-text-pii/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+  - 'test/spec/admin/audit-free-text-pii/**'
+status: todo
+pr: null
