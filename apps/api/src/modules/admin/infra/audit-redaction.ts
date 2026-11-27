@@ -23,24 +23,15 @@
 //        white space (\s: space, tab, line breaks, U+2028 / U+2029, NBSP, U+202F, ideographic
 //        space…) and every dash or minus (\p{Pd} and U+2212) is a separator. `/ . , _` are no
 //        separators.
-//     2. E-mail-shaped text (decided before rule 3): an "@" with non-blank text on both sides.
-//        Whether an "@" is e-mail-shaped: its left side runs from the "@" leftwards up to (not
-//        including) white space, another "@", a CJK character, any non-ASCII punctuation
-//        (，。、；：（）「」【】《》！？“”…) or ASCII `( [ { < " : ; ,`; its right side runs from the
-//        "@" up to white space, another "@", ASCII `, ; : ! ? ( ) [ ] { } " ' < > = & | \ /` or any
-//        non-ASCII punctuation, dots at its end being sentence punctuation, not part of it. It is
-//        e-mail-shaped when both sides are non-empty, or when the character right before the "@"
-//        is a CJK character and the right side is shaped like a domain (labels of letters, digits,
-//        marks and "-" joined by ".", the last one two or more letters or xn--…) or starts with an
-//        ASCII one (用户@example.com-待核; its ASCII letters, digits, dots and dashes, without the
-//        dots and dashes at their end). 价格@3.5元 and 用户@内网 are not e-mail-shaped.
-//        How it is masked: everything from the "@" leftwards up to white space or the start of
-//        the text (letters, digits, dashes, CJK, punctuation, quotes, brackets alike) is written
-//        as 「***」 whole. A right side shaped like a domain is then shown as written, and what
-//        follows it stays (邮箱（alice@example.com）已核 → ***@example.com）已核). Any other right
-//        side: the "@" and everything after it up to white space or the end of the text, also
-//        punctuation, go into the 「***」 too (收款账号 bob.lee@内网，已核 → 收款账号 ***).
-//     3. Digit runs (outside e-mail-shaped text): ASCII digits with any number of separators
+//     2. Runs holding an "@" (decided before rule 3): the normalised text is cut at white space
+//        (\s: space, tab, line breaks, U+2028 / U+2029, NBSP, U+202F, ideographic space…) into
+//        runs of non-blank characters. A run holding an "@" (＠ normalises to it) is written as
+//        「***」 whole, whatever is on either side of the "@": letters, digits, dashes, minus
+//        signs, CJK, punctuation, quotes and brackets in the run go with it, and no domain is
+//        shown (邮箱（alice@example.com）已核 → ***, 请 @张三 处理 → 请 *** 处理). The white
+//        space around the run stays as written. Digits in such a run are no mobile, identity
+//        number, card or fallback of their own.
+//     3. Digit runs (outside runs holding an "@"): ASCII digits with any number of separators
 //        between two digits, maybe followed (after separators) by X / x (see below for when). On
 //        the digits (and the X), separators taken out, in this order:
 //          - 18 digits with a correct check digit → identity number; what follows (an X too,
@@ -66,7 +57,7 @@
 //        One star per hidden digit; separators inside a run stay as written.
 //     4. Mapping back: masks are decided on the normalised text and written back character by
 //        character of the original. An original character none of whose normalised characters
-//        is masked stays as written (full-width digits, ＠, the domain, ㎡, ①…); one that is
+//        is masked stays as written (full-width digits, ㎡, ①…); one that is
 //        (partly) masked is written as its normalised characters with the masked ones replaced
 //        (⑩ with its 1 hidden → *0), so no expansion is kept whole across a mask.
 //   Free text that matches nothing is not changed.
@@ -156,14 +147,6 @@ function normalise(text: string): Normalised {
 /** Rule 1: white space and dashes (U+2212 included) are separators; nothing else is. */
 const SEPARATOR = /^[\s\p{Pd}\u2212]$/u;
 const DIGIT = /^[0-9]$/;
-/** Rule 2: where the right side of an e-mail-shaped piece ends (besides "@"). */
-const ASCII_STOP = /^[\s,;:!?()[\]{}"'<>=&|\\/]$/u;
-/** Rule 2: where the left side ends (besides "@" and non-ASCII punctuation). */
-const LEFT_STOP =
-  /^[\s([{<":;,\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]$/u;
-const PUNCTUATION = /^\p{P}$/u;
-/** Labels joined by dots; the last of two or more letters, or Punycode. */
-const DOMAIN = /^(?:[\p{L}\p{N}\p{M}-]+\.)+(?:\p{L}{2,}|xn--[A-Za-z0-9-]+)$/iu;
 const ASCII_LETTER_OR_DIGIT = /^[0-9A-Za-z]$/;
 const MOBILE = /^(?:86)?1[3-9][0-9]{9}$/;
 const FALLBACK_MIN = 11;
@@ -173,22 +156,8 @@ const SHOWN = 4;
 const ID_WEIGHTS = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2] as const;
 const ID_CHECKS = '10X98765432';
 
-function endsSide(char: string): boolean {
-  return (
-    char === '@' || ASCII_STOP.test(char) || (char.codePointAt(0)! > 0x7f && PUNCTUATION.test(char))
-  );
-}
-
-const CJK =
-  /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]$/u;
 const BLANK = /^\s$/u;
 const ID_LENGTH = 18;
-
-/** Rule 2: `char` is part of the left side of an e-mail-shaped piece. */
-function inLeftSide(char: string): boolean {
-  if (char === '@' || LEFT_STOP.test(char)) return false;
-  return !(char.codePointAt(0)! > 0x7f && PUNCTUATION.test(char));
-}
 
 function passesLuhn(digits: string): boolean {
   let total = 0;
@@ -250,53 +219,30 @@ function hiddenOfRun(chars: string): number[] {
 }
 
 /**
- * Rule 2 on the normalised characters: writes the masks of every e-mail-shaped piece into
- * `masks` and marks its positions in `taken`. Runs before rule 3, so the digits of an
- * e-mail-shaped piece (13812345678@qq.com) are no mobile, identity number or fallback.
+ * Rule 2 on the normalised characters: every run of non-blank characters holding an "@" is
+ * written as 「***」 (masks) and marked in `taken`, so rule 3 does not look at its digits.
  */
-function maskEmails(chars: readonly string[], masks: (string | undefined)[], taken: boolean[]) {
-  let floor = 0;
-  for (let at = 0; at < chars.length; at += 1) {
-    if (chars[at] !== '@') continue;
-    // Whether this "@" is e-mail-shaped: the left side and right side of the header.
-    let left = at;
-    while (left > floor && inLeftSide(chars[left - 1]!)) left -= 1;
-    let right = at + 1;
-    while (right < chars.length && !endsSide(chars[right]!)) right += 1;
-    // Dots at the end are sentence punctuation (alice@example.com. → the address ends at com).
-    while (right > at + 1 && chars[right - 1] === '.') right -= 1;
-    if (right === at + 1) continue;
-    const domain = DOMAIN.test(chars.slice(at + 1, right).join(''));
-    const cjkGlued =
-      left === at &&
-      left > floor &&
-      CJK.test(chars[at - 1]!) &&
-      (domain || DOMAIN.test(asciiHead(chars, at + 1, right)));
-    if (left === at && !cjkGlued) continue;
-    // What is starred: from the "@" leftwards everything up to white space or the start.
-    let from = at;
-    while (from > 0 && !BLANK.test(chars[from - 1]!)) from -= 1;
-    // With no domain, the "@" and everything after it up to white space or the end go too.
-    let to = right;
-    if (!domain) {
-      to = at + 1;
-      while (to < chars.length && !BLANK.test(chars[to]!)) to += 1;
+function maskAtRuns(chars: readonly string[], masks: (string | undefined)[], taken: boolean[]) {
+  let from = 0;
+  while (from < chars.length) {
+    if (BLANK.test(chars[from]!)) {
+      from += 1;
+      continue;
     }
-    const hiddenTo = domain ? at : to;
-    for (let p = from; p < to; p += 1) taken[p] = true;
-    masks[from] = '***';
-    for (let p = from + 1; p < hiddenTo; p += 1) masks[p] = '';
-    floor = to;
-    at = to - 1;
+    let to = from;
+    let hasAt = false;
+    while (to < chars.length && !BLANK.test(chars[to]!)) {
+      if (chars[to] === '@') hasAt = true;
+      to += 1;
+    }
+    if (hasAt) {
+      for (let p = from; p < to; p += 1) {
+        taken[p] = true;
+        masks[p] = p === from ? '***' : '';
+      }
+    }
+    from = to;
   }
-}
-
-/** The ASCII letters, digits, dots and dashes starting chars[from, to), less trailing dots / dashes. */
-function asciiHead(chars: readonly string[], from: number, to: number): string {
-  let end = from;
-  while (end < to && /^[0-9A-Za-z.-]$/.test(chars[end]!)) end += 1;
-  while (end > from && (chars[end - 1] === '.' || chars[end - 1] === '-')) end -= 1;
-  return chars.slice(from, end).join('');
 }
 
 const isX = (char: string | undefined): boolean => char === 'X' || char === 'x';
@@ -328,7 +274,7 @@ function xAfter(
   return free(x + 1) && ASCII_LETTER_OR_DIGIT.test(chars[x + 1]!) ? undefined : x;
 }
 
-/** Rule 3 on the normalised characters outside e-mail-shaped pieces. */
+/** Rule 3 on the normalised characters outside runs holding an "@". */
 function maskRuns(chars: readonly string[], masks: (string | undefined)[], taken: boolean[]) {
   const free = (p: number): boolean => p < chars.length && !taken[p];
   let p = 0;
@@ -368,7 +314,7 @@ export function redactFreeText(text: string): string {
   /** Per normalised position: undefined = kept, otherwise what it is written as. */
   const masks: (string | undefined)[] = new Array<string | undefined>(chars.length);
   const taken: boolean[] = new Array<boolean>(chars.length).fill(false);
-  maskEmails(chars, masks, taken);
+  maskAtRuns(chars, masks, taken);
   maskRuns(chars, masks, taken);
   let out = '';
   for (let i = 0; i < source.length; i += 1) {
