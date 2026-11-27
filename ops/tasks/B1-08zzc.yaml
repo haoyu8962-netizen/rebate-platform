@@ -13,7 +13,7 @@ type: impl
 # 规则测试钉：① 真实回包形状（数字 adzone_id + site_id）命中登记的 mm_<a>_<site>_<adzone> pid，订单入库且归属正确；② adzone 命中、site 不符 → SITE_MISMATCH 丢弃、计数、恰一条 P1 告警；
 #   ③ adzone 不命中 → PID_NOT_OURS；④ 订单缺 site_id → PID_NOT_OURS；⑤ retired / pending 的 pid 照样命中；⑥ 跨 App / 跨联盟账号的同号 pid 不命中；⑦ 京东、拼多多的匹配行为不变（各一例）。
 # 协调：be 的 B1-08zza 也改 pipeline-port.ts（④ classifyBuyType），本单只动 ① App 归属那段；谁后落地谁变基，冲突只在同文件不同函数。
-# 补丁 1（D10-3387）：主干冻结的 suffix-void-wiring 两组（[AC-B1-09z#1]–[#7]、[AC-B1-09zd#1]–[#6]，共用 suffix-void-wiring/kit.ts）夹具是淘宝 pid='slot-ours'、订单无 site_id，与本单 ④ 冲突；只把该 kit 的夹具换成真实形状，断言与期望不动。
+# 补丁 1（D10-3387）：主干冻结的 suffix-void-wiring 两组（[AC-B1-09z#1]–[#7]、[AC-B1-09zd#1]–[#6]，共用 suffix-void-wiring/kit.ts）夹具是淘宝 pid='slot-ours'、订单无 site_id，与本单 ④ 冲突；只把该 kit 的夹具换成真实形状，断言与期望不动。补丁 2（D10-3406，money r1）：① union/infra/taobao/orders.ts 的 slotAdzones 同 D10-3355 口径（mm_ 取末段、纯数字取本身），listOrders / listPunishments / official-search 一并；③ 淘宝命中后 orders.pid 写命中行 union_pids.pid 原值（推翻「照主干写 adzone」），下游按 orders.pid 等值查 union_pids 自然对上；② SITE_MISMATCH 的 P1 只在丢弃键首次插入且事务提交后发，回滚重试不重复。
 refs: [BR-ATTR-02]
 refs_hash:
   BR-ATTR-02: c496154f5bcf
@@ -21,6 +21,7 @@ deps: []
 paths:
   - 'apps/api/src/modules/orders/application/{pipeline-port,pipeline-port.test,pipeline-types}.ts'
   - 'apps/api/src/modules/union/application/{order-sync-ports,order-sync-ports.test}.ts'
+  - 'apps/api/src/modules/union/infra/taobao/{orders,orders.test}.ts'
 test_paths:
   - 'test/spec/orders/taobao-slot-match/**'
   - 'test/spec/orders/suffix-void-wiring/kit.ts'
