@@ -23,7 +23,7 @@
 #
 # TODO(规划/06 Q-A5): own_link_hosts 的具体域名 — blocked on 负责人提供正式域名（先空，空时任何 https 入站声明
 #   都不通过 CSB-11）。
-version: '2'
+version: '3'
 rules:
   - id: CSB-01
     title: 证书与主机名校验只用系统默认实现，不得被开关、远程配置或构建类型降级
