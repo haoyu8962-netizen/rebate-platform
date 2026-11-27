@@ -68,6 +68,17 @@ export type {
 } from './payout.module.ts';
 // B2-06f: PAYOUT_MODE and the payout process's runtime (entry.ts resolves and starts it).
 export { resolvePayoutMode } from './payout-mode.ts';
+// B2-06j: prod + live takes the Alipay key and certificates from KMS (certificate mode).
+export {
+  PAYOUT_KMS_SECRETS,
+  PayoutCredentialsUnavailableError,
+  resolvePayoutDecision,
+} from './payout-mode-kms.ts';
+export type {
+  AlipayCertTools,
+  PayoutCredentialsFailure,
+  PayoutDecisionInput,
+} from './payout-mode-kms.ts';
 export type {
   PayoutLiveCredentialEnvName,
   PayoutLiveCredentials,

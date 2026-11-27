@@ -195,12 +195,17 @@ it('[AC-B2-06i#8] metrics 监听期间请求停止：起过的恢复照样先停
 });
 
 it('[AC-B2-06i#10] dry_run 和 live 都启动恢复：入口不看模式', async () => {
-  const runs: readonly { readonly options: FixtureOptions; readonly mode: string }[] = [
+  const { kmsFixture } = await import('../alipay-cert-kms/entry-kit.ts');
+  const runs: readonly {
+    readonly options: FixtureOptions;
+    readonly mode: string;
+    readonly makeFixture?: typeof fixture;
+  }[] = [
     { options: {}, mode: 'dry_run' },
-    { options: { appEnv: 'prod', env: liveEnv() }, mode: 'live' },
+    { options: { appEnv: 'prod', env: liveEnv() }, mode: 'live', makeFixture: kmsFixture },
   ];
-  for (const { options, mode } of runs) {
-    const f = await fixture(options);
+  for (const { options, mode, makeFixture } of runs) {
+    const f = await (makeFixture ?? fixture)(options);
     const recovery = withRecovery(f);
     await f.run();
     expect(f.start.mock.calls[0]?.[0].mode).toBe(mode);

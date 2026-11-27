@@ -24,6 +24,10 @@ export type KmsSecretName =
   | 'pay/alipay/app-cert'
   | 'pay/alipay/public-cert'
   | 'pay/alipay/root-cert'
+  | 'payout/alipay/app-private-key'
+  | 'payout/alipay/app-cert'
+  | 'payout/alipay/public-cert'
+  | 'payout/alipay/root-cert'
   | 'union/pdd/client-secret'
   | 'union/taobao/app-secret'
   | 'union/jd/app-secret'
@@ -40,6 +44,14 @@ export const KMS_SECRETS = Object.freeze({
     alipayAppCert: 'pay/alipay/app-cert',
     alipayPublicCert: 'pay/alipay/public-cert',
     alipayRootCert: 'pay/alipay/root-cert',
+  }),
+  // B2-06j: the payout process's Alipay transfer credentials (certificate mode, prod + live only;
+  // read by the payout entry alone, BR-WDR-13).
+  payout: Object.freeze({
+    alipayAppPrivateKey: 'payout/alipay/app-private-key',
+    alipayAppCert: 'payout/alipay/app-cert',
+    alipayPublicCert: 'payout/alipay/public-cert',
+    alipayRootCert: 'payout/alipay/root-cert',
   }),
   union: Object.freeze({
     pddClientSecret: 'union/pdd/client-secret',

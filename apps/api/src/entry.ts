@@ -50,6 +50,7 @@ import {
   scheduleIdempotencyPurge,
   clockFromConfig,
   isHttpEntry,
+  kmsAccessOf,
   loadConfig,
   loadConnectionConfig,
   activeTracing,
@@ -58,6 +59,7 @@ import {
   startCrashReporting,
   type CrashReporter,
 } from './modules/platform/index.ts';
+import { certSn, publicKeyFromCert, rootCertSn } from './modules/payment/index.ts';
 import {
   orderSyncToken,
   readOrderSyncPendingOpen,
@@ -71,7 +73,7 @@ import {
   readPayoutWaterLow,
   readPayoutWaterStale,
   readPayoutWithdrawalFail,
-  resolvePayoutMode,
+  resolvePayoutDecision,
   type PayoutModeDecision,
   type PayoutRuntime,
 } from './modules/payout/index.ts';
@@ -812,9 +814,18 @@ async function start(
     return;
   }
 
-  // payout: PAYOUT_MODE first (BR-WDR-13: default dry_run; live only in prod with every credential
-  // variable set): a refusal is a ConfigError naming variables only, before anything is built.
-  const decision = resolvePayoutMode(config.appEnv, process.env);
+  // payout: PAYOUT_MODE first (BR-WDR-13: default dry_run; live only in prod), before anything is
+  // built. B2-06j: prod + live reads the Alipay key and certificates from KMS (only here, the payout
+  // entry; certificate mode, serial numbers by payment's cert-sn functions); every other case is
+  // resolvePayoutMode unchanged. A refusal names variables or logical secret names only.
+  const decision = await resolvePayoutDecision({
+    entry,
+    appEnv: config.appEnv,
+    env: process.env,
+    kms: () => kmsAccessOf(config),
+    certs: { certSn, rootCertSn, publicKeyFromCert },
+    logger,
+  });
   // payout: redisUrl is null (it never reads Redis, ADR-0001 §4.2 #20), so no REDIS provider.
   const context = await createWorkerContext(entry, { config, logger, dbHandles, redisUrl });
   const queue = context.get<QueueRuntime>(JOB_QUEUE);

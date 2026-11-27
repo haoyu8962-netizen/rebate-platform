@@ -8,6 +8,15 @@
 // timeout, HTTP error, unparsable or unverified body) are unknown without pausing the queue, a
 // non-success business code is unknown and pauses it. Logs carry out_biz_no, code, sub_code and
 // latency_ms with the logon id masked (first 3 and last 2 kept), never the payee name or the key.
+//
+// B2-06j: two key modes. Certificate mode (all three serial numbers configured: app_cert_sn,
+// alipay_root_cert_sn and the Alipay public-key certificate's alipay_cert_sn) sends app_cert_sn and
+// alipay_root_cert_sn on every request, inside the signed parameters, and accepts a response only
+// when it carries alipay_cert_sn equal to the configured one and its node verifies with the
+// configured Alipay public key (the one inside that certificate); otherwise it is an unverified
+// response like any other (unknown, no pause, no second request, BR-WDR-14). Public-key mode (none
+// of the three) is unchanged. Only some of the three is a configuration error: the constructor
+// throws PayoutChannelNotConfiguredError, so nothing is ever sent.
 import { formatFen } from '@couli/money';
 import type { Logger } from 'pino';
 
@@ -53,6 +62,8 @@ export interface AlipayChannelOptions {
     gatewayUrl: string;
     appCertSn?: string;
     alipayRootCertSn?: string;
+    /** The serial number of the Alipay public-key certificate (B2-06j, certificate mode). */
+    alipayCertSn?: string;
   };
   bizScene: string;
   lists: JudgementLists;
@@ -75,6 +86,30 @@ const TIMEOUT_MS = 10_000;
 const CHINA_OFFSET_MS = 8 * 3_600_000;
 
 type Method = 'transfer' | 'query';
+
+/** Certificate mode's three serial numbers; absent in public-key mode. */
+interface CertSerials {
+  readonly appCertSn: string;
+  readonly alipayRootCertSn: string;
+  readonly alipayCertSn: string;
+}
+
+const given = (value: string | undefined): value is string =>
+  typeof value === 'string' && value !== '';
+
+/**
+ * All three serial numbers → certificate mode; none → public-key mode (null); only some of them
+ * (an empty string counts as not given) → PayoutChannelNotConfiguredError.
+ */
+function certSerialsOf(c: AlipayChannelOptions['credentials']): CertSerials | null {
+  const { appCertSn, alipayRootCertSn, alipayCertSn } = c;
+  const count = [appCertSn, alipayRootCertSn, alipayCertSn].filter(given).length;
+  if (count === 0) return null;
+  if (!given(appCertSn) || !given(alipayRootCertSn) || !given(alipayCertSn)) {
+    throw new PayoutChannelNotConfiguredError();
+  }
+  return { appCertSn, alipayRootCertSn, alipayCertSn };
+}
 
 /** The logon id with the first 3 and last 2 characters kept; shorter ids are fully masked. */
 export function maskLogonId(identity: string): string {
@@ -166,6 +201,7 @@ type Transport = { kind: 'transport'; code: string } | { kind: 'verified'; verif
 export class AlipayChannel implements PayoutChannel {
   private readonly options: AlipayChannelOptions;
   private readonly transport: ChannelTransport;
+  private readonly certSerials: CertSerials | null;
 
   constructor(options: AlipayChannelOptions) {
     const c = options.credentials;
@@ -178,6 +214,7 @@ export class AlipayChannel implements PayoutChannel {
     ) {
       throw new PayoutChannelNotConfiguredError();
     }
+    this.certSerials = certSerialsOf(c);
     this.options = options;
     this.transport = options.transport ?? undiciTransport;
   }
@@ -308,9 +345,12 @@ export class AlipayChannel implements PayoutChannel {
       version: '1.0',
       biz_content: JSON.stringify(bizContent),
     };
-    if (c.appCertSn !== undefined && c.appCertSn !== '') params['app_cert_sn'] = c.appCertSn;
-    if (c.alipayRootCertSn !== undefined && c.alipayRootCertSn !== '')
-      params['alipay_root_cert_sn'] = c.alipayRootCertSn;
+    // Certificate mode: both serial numbers are signed parameters.
+    const serials = this.certSerials;
+    if (serials !== null) {
+      params['app_cert_sn'] = serials.appCertSn;
+      params['alipay_root_cert_sn'] = serials.alipayRootCertSn;
+    }
     params['sign'] = signAlipayParams(params, c.privateKey);
     const body = new URLSearchParams(params).toString();
     let response: { status: number; body: string };
@@ -346,6 +386,14 @@ export class AlipayChannel implements PayoutChannel {
     const text = rawNode(body, name);
     if (typeof sign !== 'string' || text === null) {
       return { kind: 'transport', code: 'UNSIGNED_RESPONSE' };
+    }
+    // Certificate mode: the response names the certificate it was signed with; only the configured
+    // one is accepted (a missing or different serial is an unverified response).
+    if (
+      this.certSerials !== null &&
+      (envelope as Record<string, unknown>)['alipay_cert_sn'] !== this.certSerials.alipayCertSn
+    ) {
+      return { kind: 'transport', code: 'CERT_SN_MISMATCH' };
     }
     if (!verifyAlipayResponse(text, sign, this.options.credentials.alipayPublicKey)) {
       return { kind: 'transport', code: 'SIGNATURE_INVALID' };
