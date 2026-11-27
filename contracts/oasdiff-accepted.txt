@@ -153,3 +153,14 @@ POST /admin/v1/orders/{order_id}/hold added the new `link` enum value to the `da
 POST /admin/v1/orders/{order_id}/unhold added the new `link` enum value to the `data/scene_basis/anyOf[#/components/schemas/AdminOrderSceneBasis]/` response property for the response status `200`
 POST /admin/v1/orders/{order_id}/reason-sub added the new `link` enum value to the `data/scene_basis/anyOf[#/components/schemas/AdminOrderSceneBasis]/` response property for the response status `200`
 POST /admin/v1/orders/{order_id}/reassign added the new `link` enum value to the `data/scene_basis/anyOf[#/components/schemas/AdminOrderSceneBasis]/` response property for the response status `200`
+
+# CT-26zs (D10-3633, under D10-484): JumpStep.type gains mini_program (04 §8.4, BR-ATTR-27; a reserved WeChat
+# mini-program jump step). Response enum addition only. An old client cannot receive it: the server puts a
+# mini_program step into a JumpPlan only for a client version that declares support for it, and only while
+# jump.mini_program.enabled.<platform> is on (04 §10.2, default off); no current code path builds such a step.
+POST /v1/links/convert added the new `mini_program` enum value to the `data/jump/fallbacks/items/type` response property for the response status `200`
+POST /v1/links/convert added the new `mini_program` enum value to the `data/jump/primary/type` response property for the response status `200`
+POST /v1/links/{link_id}/open added the new `mini_program` enum value to the `data/jump/fallbacks/items/type` response property for the response status `200`
+POST /v1/links/{link_id}/open added the new `mini_program` enum value to the `data/jump/primary/type` response property for the response status `200`
+POST /v1/products/{product_key}/shop/open added the new `mini_program` enum value to the `data/jump/fallbacks/items/type` response property for the response status `200`
+POST /v1/products/{product_key}/shop/open added the new `mini_program` enum value to the `data/jump/primary/type` response property for the response status `200`
