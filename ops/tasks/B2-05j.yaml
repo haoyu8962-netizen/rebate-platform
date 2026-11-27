@@ -8,7 +8,7 @@ type: migration
 # 状态备注：等迁移槽；B1-27g 依赖。
 refs: [BR-WDR-02]
 refs_hash:
-  BR-WDR-02: b8ce66617ed9
+  BR-WDR-02: 578bf800894a
 deps: [B1-13e]
 paths:
   - 'db/migrations/**'

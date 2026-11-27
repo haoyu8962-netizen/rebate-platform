@@ -18,7 +18,7 @@ type: impl
 # 2026-11-25 台账补丁（funds，编排 D10-3162）：负责人 2026-11-25 定：移出上线前阻断、上线后再议（D10-3162）。上线前靠事前防重（out_biz_no 幂等、结果未知只查不重提）与初期小额人工核对账兜底；本单不起、状态保持 todo，旧工作树原样留着。
 refs: [BR-WDR-23]
 refs_hash:
-  BR-WDR-23: 92950f49116f
+  BR-WDR-23: c138aadb4c1a
 deps: [B2-07j]
 paths:
   - 'apps/api/src/modules/payout/**'

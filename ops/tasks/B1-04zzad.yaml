@@ -12,7 +12,7 @@ type: impl
 #   有红的按清单类报编排核后再以台账补丁登记 modify_existing（D10-3311）。不带迁移、不动契约。本机不跑 vitest，走测试机。
 refs: [BR-FUND-02]
 refs_hash:
-  BR-FUND-02: f287247d4d07
+  BR-FUND-02: e33b5a1ec5af
 deps: [B1-04zzab]
 paths:
   - 'infra/monitoring/rules/couli-fund.yaml'

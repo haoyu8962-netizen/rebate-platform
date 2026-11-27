@@ -8,7 +8,7 @@ type: impl
 refs: [BR-AI-06, BR-TEXT-22]
 refs_hash:
   BR-AI-06: bf97647decbd
-  BR-TEXT-22: 8a3aa03c38b2
+  BR-TEXT-22: d4b16e1c123a
 deps: [B3-05p]
 paths:
   - 'apps/api/src/modules/agent/orchestrator/**'

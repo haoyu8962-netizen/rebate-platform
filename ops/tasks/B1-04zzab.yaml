@@ -9,7 +9,7 @@ type: impl
 refs: [BR-FUND-22, BR-FUND-02]
 refs_hash:
   BR-FUND-22: 71f9d1a05a10
-  BR-FUND-02: f287247d4d07
+  BR-FUND-02: e33b5a1ec5af
 deps: []
 paths:
   - 'apps/api/src/modules/orders/**'

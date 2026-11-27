@@ -11,7 +11,7 @@ type: impl
 refs: [BR-WATCH-05, BR-PROD-03, BR-TEXT-11]
 refs_hash:
   BR-WATCH-05: 2527ad9787ad
-  BR-PROD-03: 7769390bcd28
+  BR-PROD-03: 103a31348f69
   BR-TEXT-11: 335c82582156
 deps: [B1-17a, B1-17b, CT-22a]
 paths:

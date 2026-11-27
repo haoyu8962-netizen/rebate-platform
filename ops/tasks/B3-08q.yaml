@@ -10,7 +10,7 @@ type: impl
 refs: [BR-AI-19, BR-AI-14]
 refs_hash:
   BR-AI-19: 3c0c40a3ed93
-  BR-AI-14: a24a409d186b
+  BR-AI-14: baabccb5a4f1
 deps: [B3-08m]
 paths:
   - 'apps/api/src/app.module.ts'

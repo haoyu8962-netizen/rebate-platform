@@ -12,7 +12,7 @@ type: impl
 # 不加新文案（会员看到的仍是「请先绑定收款账号」）；单独的提示语登 FU-WDR-CLOSED-METHOD-HINT，上线后。现有规则测试若有因多读一个配置键或契约说明变化而变红的，停下按清单类报编排、台账补丁登记。
 refs: [BR-WDR-02, BR-WDR-03]
 refs_hash:
-  BR-WDR-02: b8ce66617ed9
+  BR-WDR-02: 578bf800894a
   BR-WDR-03: c1b5f37a0dd1
 deps: []
 paths:

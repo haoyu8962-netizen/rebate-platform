@@ -10,8 +10,8 @@ type: impl
 # 风险级 RV2（动迁移、packages/money、content 注册表），评审 money；迁移号取 land 时主干下一个空号（D10-2829；现为 0155），outside_needed 走 LAN-DB-SNAPSHOT，land 前测试机五段全量（D10-2398）。 补丁 3（D10-2848 改判取甲，撤补丁 1）：agent.models 留 LOOKUP_ONLY（按键可查可改，列表暂不显示），列进后台配置列表另开小单（8 条冻结用例 + config-items/kit.ts）；迁移号改 0155（packages/db migrations.test.ts 要求连号）。开工前测试机跑一次 --related，看有没有冻结用例钉着 cost_mfen 为 null / finish_reason 不含 budget，有就先登 modify_existing。B3-03k 重写时 deps 加 B3-09m（D10-2668 ⑤）。 补丁 2：paths 加 config-registry.test.ts。补丁 5（D10-2884 取甲）：app.module.ts 只在 agentReaders 的 AgentContentReader 上接 configValuesByKey（组合根，foreign-db-handoff 允许），冻结夹具 stream-mount/kit.ts 的 contentReaderFor 末尾补同一方法（support 条目，非资金 / 归属目录）。补丁 4（D10-2864）：money r1 S1-1 全平台最保守值要 content 只读读口（按键列出各 app 当前值，content/infra/config-values-by-key*.ts + index.ts 导出，不改任何写路径），另加 stream/pg 两个实现单测。 补丁 6（取甲重做）：撤掉 D10-2858 S0-2 甲（调用完成即入账）、D10-2922 ③（调用前登记、held）、D10-2928（默认输出上限 32768、失败尝试撤登记）与「实际归完成日」「告警恰好一次」的口径；旧分支 task/B3-09m（头 ed747befe94f）只作参考，新实现从主干重起，规则测试重写。 补丁 7（D10-3116）：paths 加 orchestrator/core/run.ts 与同目录单测 run.test.ts——[AC-B3-09m#25] 要求单 run 封顶后已出内容保留、按 budget 收尾；只在降级原因为 budget 时改收尾原因，别的降级原因（已出内容时 stop）一个不改，并由实现方单测钉住。
 refs: [BR-AI-16, BR-AI-14]
 refs_hash:
-  BR-AI-16: dbd76c5b95b5
-  BR-AI-14: a24a409d186b
+  BR-AI-16: ccd19b96b346
+  BR-AI-14: baabccb5a4f1
 deps: [B3-08t]
 paths:
   - 'apps/api/src/modules/agent/budget/**'

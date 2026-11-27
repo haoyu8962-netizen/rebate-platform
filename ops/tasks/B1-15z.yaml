@@ -6,7 +6,7 @@ type: impl
 # 编排裁定 D10-439（2026-10-30 17:46）：BR-ATTR-10 素材图「不写入任何表」指业务表，平台幂等模块按保留期缓存的整份响应不算，同键重放原样返回。规划已回写：couli 提交 8127341（#222）规划/08_业务规则/04_ATTR_订单归属与归因.md 第 413 行「不把图片地址写入任何业务表（平台幂等模块按保留期缓存的整份响应不算…）」；本仓库 SPEC_REF 37808a50 早于该提交，评审读到的 SPEC_REF 版本仍是旧句，以本条为准（编排 D10-441 同意不等 SPEC_REF 推进）。契约 createShare / ShareMaterials 里写 images「not stored」的说明同步补上幂等保留响应的例外（只改描述，不改形状）。
 refs: [BR-ATTR-10]
 refs_hash:
-  BR-ATTR-10: 0ef7e9245dba
+  BR-ATTR-10: a49eb8013b1b
 deps: [B1-15w, B1-22s]
 paths:
   - 'apps/api/src/modules/linking/application/shares.ts'

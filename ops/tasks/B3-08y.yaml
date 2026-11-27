@@ -13,7 +13,7 @@ refs_hash:
   BR-AI-19: 3c0c40a3ed93
   BR-AI-22: d412bc8a631a
   BR-AI-03: 2131432de5c6
-  BR-AI-07: a704165181b4
+  BR-AI-07: 008ba010d26b
 deps: [B3-08q]
 paths:
   - 'apps/api/src/modules/agent/stream/mount/**'

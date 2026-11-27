@@ -8,7 +8,7 @@ type: contract
 refs: [BR-ATTR-09, BR-ATTR-08]
 refs_hash:
   BR-ATTR-09: 6f3cf4fa26ba
-  BR-ATTR-08: ae1e71cb81e0
+  BR-ATTR-08: dc141d8f939f
 deps: []
 paths:
   - 'contracts/{openapi.yaml,oasdiff-accepted.txt,enums/trade.yaml,enums/admin.yaml}'

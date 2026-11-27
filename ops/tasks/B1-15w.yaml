@@ -5,9 +5,9 @@ type: impl
 # 2026-10-30 be 入账（编排 D10-426）。放 linking 模块，照 link-open / link-convert 的登记与转链写法；报价走 catalog 已导出的报价端口（linking/application/link-open-requote.ts 先例），不跨模块读表。淘宝分享赚上线依赖 规划/09 2_TB §2.5 口令生成权限（编排报负责人）；在那之前淘宝分享整次报错，不伪造口令或链接。开工前在 notices 占契约槽。
 refs: [BR-ATTR-10, BR-TEXT-20, BR-PRICE-06, BR-INV-19]
 refs_hash:
-  BR-ATTR-10: 0ef7e9245dba
+  BR-ATTR-10: a49eb8013b1b
   BR-TEXT-20: 0886adee3e80
-  BR-PRICE-06: '2ebe89278bed'
+  BR-PRICE-06: f02f4bf4348e
   BR-INV-19: ae0ccc6cc588
 deps: [CT-15t, B1-15v]
 paths:

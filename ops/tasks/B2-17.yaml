@@ -13,7 +13,7 @@ type: impl
 refs: [BR-FUND-24, BR-WDR-23, BR-WDR-05]
 refs_hash:
   BR-FUND-24: 7cca08c02491
-  BR-WDR-23: 92950f49116f
+  BR-WDR-23: c138aadb4c1a
   BR-WDR-05: 775e11ed8bd8
 deps: []
 paths:

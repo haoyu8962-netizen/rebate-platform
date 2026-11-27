@@ -8,7 +8,7 @@ type: contract
 refs: [BR-WDR-15, BR-TEXT-14]
 refs_hash:
   BR-WDR-15: 086ccaee6316
-  BR-TEXT-14: 4ecb90ade57a
+  BR-TEXT-14: e029c2349c51
 deps: [CT-24zt]
 paths:
   - 'contracts/openapi.yaml'

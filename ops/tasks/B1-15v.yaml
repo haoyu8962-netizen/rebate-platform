@@ -6,7 +6,7 @@ type: impl
 # 新迁移号取入账时主干最大号 + 1（落地前按迁移槽再定）；跑 scripts/remote-snapshot.sh 重生成 db/schema.sql 与 packages/db 的类型。
 refs: [BR-ATTR-10]
 refs_hash:
-  BR-ATTR-10: 0ef7e9245dba
+  BR-ATTR-10: a49eb8013b1b
 deps: [B1-15u]
 paths:
   - 'db/migrations/**'
