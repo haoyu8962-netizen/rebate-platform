@@ -1,0 +1,186 @@
+{
+  "risk_note": "RV2 (B2-06j; orchestrator D10-3308 / D10-3311 / D10-3315 / D10-3317 / D10-3365 / D10-3379 / D10-3421 / D10-3427 / D10-3465; BR-WDR-13, BR-WDR-14). The Alipay payout channel learns certificate signing: with the three certificate serial numbers configured, the transfer and query requests carry app_cert_sn and alipay_root_cert_sn and sign over them, and a success response must carry an alipay_cert_sn equal to the configured one before its signature is verified — a missing or different serial number or a failed signature is a result unknown, which is queried and never resent (BR-WDR-14); with none of the three the channel is the public-key mode of main, unchanged; with only some of them it refuses before sending. In prod with PAYOUT_MODE=live the payout entry takes the application private key and the three certificates from KMS (four logical names under payout/alipay/), the serial numbers and the Alipay public key through the functions the payment module already has (one export line added there, D10-3421), appId and gateway from the environment; KMS not configured, a read failure, a missing secret, one that does not parse, or an application key and certificate that are not one pair refuse the start with the logical names only (never a secret, a certificate or a parser message); the legacy key variables are ignored with one warning; dry_run reads no KMS; only the payout entry reads these secrets (BR-WDR-13). resolvePayoutMode is unchanged. No migration, no contract. The three changes of production live behaviour and [AC-B2-06f#13] were confirmed by the owner on 2026-11-27 (ledger ruling D10-3427). No amount is computed or moved by this task; rule tests and unit tests use a fake channel and a fake KMS only, the key and certificate material of the tests is generated at run time. Pinned by the implementer's unit tests only, to become rule tests in the companion task B2-06ja after this PR (D10-3379): the appId / gateway check with KMS complete, no entry but payout reading the payout secrets, the serial numbers computed by the injected functions only, and the key / certificate pair check (money review r1). modify_existing: three declared rule_change blocks in two frozen files (BR-WDR-13): [AC-B2-06f#13] fails on the old rule (replay on the rule-test head); [AC-B2-06f#12] (a table that lost four rows) and [AC-B2-06i#10] (fixture only) are green on the old rule as well and are each recorded with a real mutant of the task's implementation that they kill, all run on the test machine (orchestrator D10-3134). The sharded run was made on base c2cd08ff98f5; when this evidence was built main had gained 4 more commit(s): 8b2687e13 B1-08zzc：淘宝订单推广位按 BR-ATTR-02 的 (union_account_id, site_id, adzone_id) 匹配——mm_ 取末段 / 纯数字取本身，site 不符 S; 20551d50b chore(ops): B2-09zn done（#936） (#939); fb24be3e5 chore(ops): B2-05u 台账补丁 2——paths 加 withdraw-apply*.ts（锁内复核消费规则用的收款方式；资金评审 r1 S1，BR-WDR-07 ④） (#938); e05a9bb61 chore(ops): F1-08ef 台账补丁 1——deps 加 B1-18lb（服务端 order.restore 改 none 前不落地），更正注释三处（D10-3425 / D10-3467. They change code outside the ledger: apps/api/src/modules/orders/**, apps/api/src/modules/union/**, test/spec/orders/** (15 file(s)); none of these files is changed by this task (no path in common, the rebase is conflict-free). The landed head is rebased over them and that combination was NOT re-run on the test machine (orchestrator D10-3519); the required CI checks, verify-int included, run on the PR head.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex via tools/agent/codex-run.sh, two regular rounds; heads are those before the final rebase onto the main that holds B2-09zn (git range-diff: four commits \"=\", and the first implementation commit differs only in the context lines of one import hunk of apps/api/src/entry.ts, next to which B2-09zn added lines; its added and removed lines are identical). r1 (full, head 41d7017bceba = two rule-test commits plus implementation round 1): fail — S1 1: with the application certificate rotated in KMS and the old private key left, both parse, the process starts, and the next withdrawal spends its one transfer attempt on a request Alipay rejects. Implementation round 2 (1dccbf7c2) compares the public key derived from the private key with the certificate's public key (SPKI DER) at start and refuses when they differ. The test machine then failed the type check of the implementer's new unit test (three callbacks without a return type, TS7024); a mechanical correction of those three lines, +3 / -3, was made outside the counted rounds (429fb33e4, orchestrator D10-3465). r2 (incremental from 41d7017bceba, head 429fb33e41cb): pass, no finding, nothing out of scope; the reviewer states the S1 of r1 closed. The trusted validation moved nothing and recomputed no verdict in either round (couli-runs/B2-06j/review-money-r{1,2}-codex.json). Test machine before the rebase: head 41d7017bceba --tests 291 files / 3790 tests green and --fast exit 0; head 1dccbf7c2 --tests green, --fast exit 2 (the three TS7024); head 429fb33e41cb --tests 291 files / 3790 tests green and --fast exit 0."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (ledger tester codex, tools/agent/codex-run.sh), two counted rounds: [AC-B2-06j#1]–[#10] under test/spec/payout/alipay-cert-kms/ and the three declared blocks of the two frozen files; red on the skeleton (red/3 PASS, 35 red). A first attempt at round 2 was voided and redone (orchestrator D10-3379): it had added two guard tests that are already green on main and so cannot be red first; they became implementation must-haves and go to the companion task B2-06ja. Codex does not review its own tests: a fresh independent Claude (tools/agent/claude-run.sh, approvals 36) reviewed them — r1 fail, S1 3 (the root certificate fixture held a single certificate; nothing pinned the appId / gateway check with KMS complete; nothing pinned that other entries do not read the payout secrets), r2 pass, no finding; one S2 placed out of scope in each round by the reviewer (an unparsable application private key — added to [AC-B2-06j#9] in round 2; a root bundle with a non-RSA certificate — B2-06ja). The ledger declares no red exemption (couli-runs/B2-06j/review-spec-test-r{1,2}-claude-independent.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/payout/entry/entry.test.ts",
+      "test": "[AC-B2-06f#12] APP_ENV=prod、PAYOUT_MODE=live、$name=$value：缺凭证即启动失败",
+      "reason": "rule_change",
+      "before": "it.each(CREDENTIAL_NAMES.flatMap((name) => [undefined, '  '].map((value) => ({ name, value }))))(\n  '[AC-B2-06f#12] APP_ENV=prod、PAYOUT_MODE=live、$name=$value：缺凭证即启动失败',\n  async ({ name, value }) => {\n    const f = await fixture({ appEnv: 'prod', env: { ...liveEnv(), [name]: value } });\n    await f.run();\n    expectRefused(f);\n  },\n);",
+      "after": "it.each(\n  CREDENTIAL_NAMES.filter(\n    (name) => name === 'ALIPAY_APP_ID' || name === 'ALIPAY_GATEWAY_URL',\n  ).flatMap((name) => [undefined, '  '].map((value) => ({ name, value }))),\n)(\n  '[AC-B2-06f#12] APP_ENV=prod、PAYOUT_MODE=live、$name=$value：缺凭证即启动失败',\n  async ({ name, value }) => {\n    const f = await fixture({ appEnv: 'prod', env: { ...liveEnv(), [name]: value } });\n    await f.run();\n    expectRefused(f);\n  },\n);",
+      "br": ["BR-WDR-13"],
+      "mutation": [
+        {
+          "mutant": "Not an old-rule replay: this test is green on the old rule as well (the rule-test head 9125faf7969c without the task's implementation, test machine couli-runs/B2-06j/tests/4) — the block only lost four rows of its table, the four rows left and their assertion did not change. Real mutant M1 of the task's implementation instead (orchestrator D10-3134): apps/api/src/entry.ts, the payout entry swallows a refusal of resolvePayoutDecision and starts in dry_run (.catch(() => ({ mode: 'dry_run' }))). Applied alone to the task's head 429fb33e41cb on a detached scratch worktree, never committed; all four rows of this test then fail with an AssertionError (expectRefused; test machine couli-runs/B2-06j/tests/5, diff in couli-runs/B2-06j/reverse/M1.diff).",
+          "result": "killed"
+        }
+      ],
+      "note": "Table shrink (BR-WDR-13, D10-3315): the rows of ALIPAY_APP_PRIVATE_KEY and ALIPAY_PUBLIC_KEY leave the table, because prod + live no longer reads the key material from the environment (a missing KMS secret is pinned by the new tests [AC-B2-06j#6]–[#9]); the rows of ALIPAY_APP_ID and ALIPAY_GATEWAY_URL and the assertion are those of main."
+    },
+    {
+      "file": "test/spec/payout/entry/entry.test.ts",
+      "test": "[AC-B2-06f#13] APP_ENV=prod、PAYOUT_MODE=live、凭证齐全：以 live 与注入的凭证启动，先注册后启动队列，日志不含私钥",
+      "reason": "rule_change",
+      "before": "it('[AC-B2-06f#13] APP_ENV=prod、PAYOUT_MODE=live、凭证齐全：以 live 与注入的凭证启动，先注册后启动队列，日志不含私钥', async () => {\n  const f = await fixture({ appEnv: 'prod', env: liveEnv() });\n  await f.run();\n  expect(f.start.mock.calls).toStrictEqual([[{ mode: 'live', credentials: LIVE_CREDENTIALS }]]);\n  expect(f.order).toEqual(['payout-start', 'queue-start']);\n  await expectServedThenStopped(f);\n  expect(f.lines.join('\\n')).not.toContain(LIVE_CREDENTIALS.privateKey);\n});",
+      "after": "it('[AC-B2-06f#13] APP_ENV=prod、PAYOUT_MODE=live、凭证齐全：以 live 与注入的凭证启动，先注册后启动队列，日志不含私钥', async () => {\n  const { EXPECTED_CREDENTIALS, kmsFixture } = await import('../alipay-cert-kms/entry-kit.ts');\n  const f = await kmsFixture();\n  await f.run();\n  expect(f.start.mock.calls).toStrictEqual([[{ mode: 'live', credentials: EXPECTED_CREDENTIALS }]]);\n  expect(f.order).toEqual(['payout-start', 'queue-start']);\n  await expectServedThenStopped(f);\n  expect(f.lines.join('\\n')).not.toContain(EXPECTED_CREDENTIALS.privateKey);\n});",
+      "br": ["BR-WDR-13"],
+      "mutation": [
+        {
+          "mutant": "Old rule replayed: the tree of the rule-test commit 9125faf7969c (main's implementation, i.e. prod + live credentials from the four environment variables, plus this task's rule tests and skeleton, without the task's implementation) — this test fails there with an AssertionError (expected [] to strictly equal the live start with the certificate-mode credentials; test machine couli-runs/B2-06j/tests/4).",
+          "result": "killed"
+        }
+      ],
+      "note": "Confirmed by the owner on 2026-11-27 (orchestrator D10-3427 ⑤): in prod + live the application key and the three certificates come from KMS and the channel runs in certificate mode, so the expected credentials are the certificate-mode ones of the fake KMS fixture; the order and log assertions are those of main."
+    },
+    {
+      "file": "test/spec/payout/query-recovery-wiring/entry.test.ts",
+      "test": "[AC-B2-06i#10] dry_run 和 live 都启动恢复：入口不看模式",
+      "reason": "rule_change",
+      "before": "it('[AC-B2-06i#10] dry_run 和 live 都启动恢复：入口不看模式', async () => {\n  const runs: readonly { readonly options: FixtureOptions; readonly mode: string }[] = [\n    { options: {}, mode: 'dry_run' },\n    { options: { appEnv: 'prod', env: liveEnv() }, mode: 'live' },\n  ];\n  for (const { options, mode } of runs) {\n    const f = await fixture(options);\n    const recovery = withRecovery(f);\n    await f.run();\n    expect(f.start.mock.calls[0]?.[0].mode).toBe(mode);\n    expect(recovery.startRecovery).toHaveBeenCalledTimes(1);\n    await expectServedThenStopped(f);\n    expect(recovery.stop).toHaveBeenCalledTimes(1);\n    nextRun();\n  }\n});",
+      "after": "it('[AC-B2-06i#10] dry_run 和 live 都启动恢复：入口不看模式', async () => {\n  const { kmsFixture } = await import('../alipay-cert-kms/entry-kit.ts');\n  const runs: readonly {\n    readonly options: FixtureOptions;\n    readonly mode: string;\n    readonly makeFixture?: typeof fixture;\n  }[] = [\n    { options: {}, mode: 'dry_run' },\n    { options: { appEnv: 'prod', env: liveEnv() }, mode: 'live', makeFixture: kmsFixture },\n  ];\n  for (const { options, mode, makeFixture } of runs) {\n    const f = await (makeFixture ?? fixture)(options);\n    const recovery = withRecovery(f);\n    await f.run();\n    expect(f.start.mock.calls[0]?.[0].mode).toBe(mode);\n    expect(recovery.startRecovery).toHaveBeenCalledTimes(1);\n    await expectServedThenStopped(f);\n    expect(recovery.stop).toHaveBeenCalledTimes(1);\n    nextRun();\n  }\n});",
+      "br": ["BR-WDR-13"],
+      "mutation": [
+        {
+          "mutant": "Not an old-rule replay: this test is green on the old rule as well (couli-runs/B2-06j/tests/4) — only the fixture of its live row changed (the fake KMS fixture; the row's environment still carries the four legacy variables and the assertion only looks at the mode). Real mutant M2 of the task's implementation instead (orchestrator D10-3134): apps/api/src/entry.ts, the payout entry hands no KMS access to the decision (kms: () => null). Applied alone to the task's head 429fb33e41cb on a detached scratch worktree, never committed; this test then fails with an AssertionError (expected undefined to be 'live'; test machine couli-runs/B2-06j/tests/6, diff in couli-runs/B2-06j/reverse/M2.diff).",
+          "result": "killed"
+        }
+      ],
+      "note": "Fixture-only change (BR-WDR-13, D10-3315): the live row is built with the fake KMS fixture because the entry now reads KMS in prod + live; the assertions and expected values are those of main."
+    }
+  ],
+  "task": "B2-06j",
+  "spec_commit": "89b2f28bdd74c4e7767a0ad398d4d62a6a7b1b46",
+  "spec_ref": "f1d6a935d8d82c9d293e846336bd86f427227ac0",
+  "red_tests": [
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#1] transfer 的两个请求证书序列号参与加签，业务字段与公钥模式一致",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#1] query 的两个请求证书序列号参与加签，业务字段与公钥模式一致",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] transfer：证书序列号与签名正确时按原规则判定 success",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] transfer：证书序列号与签名正确时按原规则判定 fail",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] transfer：证书序列号与签名正确时按原规则判定 payer_side",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] transfer：证书序列号与签名正确时按原规则判定 unknown",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] query：证书序列号与签名正确时按原规则判定 success",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] query：证书序列号与签名正确时按原规则判定 fail",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] query：证书序列号与签名正确时按原规则判定 unknown",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#3] transfer：成功应答的证书序列号缺失、不符或用了公钥模式的签名时，结果未知、不暂停、不重发",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#3] query：成功应答的证书序列号缺失、不符或用了公钥模式的签名时，结果未知、不暂停、不重发",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] transfer：只配部分证书序列号 { …(1) }，在发送请求前拒绝",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] transfer：只配部分证书序列号 { …(1) }，在发送请求前拒绝",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] transfer：只配部分证书序列号 { …(1) }，在发送请求前拒绝",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] transfer：只配部分证书序列号 { …(2) }，在发送请求前拒绝",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] transfer：只配部分证书序列号 { …(2) }，在发送请求前拒绝",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] transfer：只配部分证书序列号 { …(2) }，在发送请求前拒绝",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] query：只配部分证书序列号 { …(1) }，在发送请求前拒绝",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] query：只配部分证书序列号 { …(1) }，在发送请求前拒绝",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] query：只配部分证书序列号 { …(1) }，在发送请求前拒绝",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] query：只配部分证书序列号 { …(2) }，在发送请求前拒绝",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] query：只配部分证书序列号 { …(2) }，在发送请求前拒绝",
+    "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] query：只配部分证书序列号 { …(2) }，在发送请求前拒绝",
+    "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#5] prod 的 dry_run 不读密钥，live 只读打款的四个 KMS 条目并注入证书凭据",
+    "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#6] prod + live 没配置 KMS，即使保留旧变量也拒绝启动",
+    "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#7] prod + live 缺 KMS 条目 couli/prod/payout/alipay/app-private-key 时拒绝启动",
+    "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#7] prod + live 缺 KMS 条目 couli/prod/payout/alipay/app-cert 时拒绝启动",
+    "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#7] prod + live 缺 KMS 条目 couli/prod/payout/alipay/public-cert 时拒绝启动",
+    "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#7] prod + live 缺 KMS 条目 couli/prod/payout/alipay/root-cert 时拒绝启动",
+    "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#8] prod + live 的 KMS 条目齐备但读取失败时拒绝启动，日志不带 SDK 原文",
+    "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#9] prod + live 的 couli/prod/payout/alipay/app-private-key 无法解析时拒绝启动，日志不带原文",
+    "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#9] prod + live 的 couli/prod/payout/alipay/app-cert 无法解析时拒绝启动，日志不带原文",
+    "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#9] prod + live 的 couli/prod/payout/alipay/public-cert 无法解析时拒绝启动，日志不带原文",
+    "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#9] prod + live 的 couli/prod/payout/alipay/root-cert 无法解析时拒绝启动，日志不带原文",
+    "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#10] prod + live 忽略旧环境变量的凭据，恰有一条告警列出两个变量名"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "89b2f28bdd74c4e7767a0ad398d4d62a6a7b1b46",
+      "tree": "3c8430f9d309ec5c3e4305f3e48b1e3fc97c16a7",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-27T09:06:36Z",
+      "finished_at": "2026-11-27T09:08:57Z",
+      "red_tests": [
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#1] transfer 的两个请求证书序列号参与加签，业务字段与公钥模式一致",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#1] query 的两个请求证书序列号参与加签，业务字段与公钥模式一致",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] transfer：证书序列号与签名正确时按原规则判定 success",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] transfer：证书序列号与签名正确时按原规则判定 fail",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] transfer：证书序列号与签名正确时按原规则判定 payer_side",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] transfer：证书序列号与签名正确时按原规则判定 unknown",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] query：证书序列号与签名正确时按原规则判定 success",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] query：证书序列号与签名正确时按原规则判定 fail",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#2] query：证书序列号与签名正确时按原规则判定 unknown",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#3] transfer：成功应答的证书序列号缺失、不符或用了公钥模式的签名时，结果未知、不暂停、不重发",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#3] query：成功应答的证书序列号缺失、不符或用了公钥模式的签名时，结果未知、不暂停、不重发",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] transfer：只配部分证书序列号 { …(1) }，在发送请求前拒绝",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] transfer：只配部分证书序列号 { …(1) }，在发送请求前拒绝",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] transfer：只配部分证书序列号 { …(1) }，在发送请求前拒绝",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] transfer：只配部分证书序列号 { …(2) }，在发送请求前拒绝",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] transfer：只配部分证书序列号 { …(2) }，在发送请求前拒绝",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] transfer：只配部分证书序列号 { …(2) }，在发送请求前拒绝",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] query：只配部分证书序列号 { …(1) }，在发送请求前拒绝",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] query：只配部分证书序列号 { …(1) }，在发送请求前拒绝",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] query：只配部分证书序列号 { …(1) }，在发送请求前拒绝",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] query：只配部分证书序列号 { …(2) }，在发送请求前拒绝",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] query：只配部分证书序列号 { …(2) }，在发送请求前拒绝",
+        "test/spec/payout/alipay-cert-kms/channel.test.ts > [AC-B2-06j#4] query：只配部分证书序列号 { …(2) }，在发送请求前拒绝",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#5] prod 的 dry_run 不读密钥，live 只读打款的四个 KMS 条目并注入证书凭据",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#6] prod + live 没配置 KMS，即使保留旧变量也拒绝启动",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#7] prod + live 缺 KMS 条目 couli/prod/payout/alipay/app-private-key 时拒绝启动",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#7] prod + live 缺 KMS 条目 couli/prod/payout/alipay/app-cert 时拒绝启动",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#7] prod + live 缺 KMS 条目 couli/prod/payout/alipay/public-cert 时拒绝启动",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#7] prod + live 缺 KMS 条目 couli/prod/payout/alipay/root-cert 时拒绝启动",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#8] prod + live 的 KMS 条目齐备但读取失败时拒绝启动，日志不带 SDK 原文",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#9] prod + live 的 couli/prod/payout/alipay/app-private-key 无法解析时拒绝启动，日志不带原文",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#9] prod + live 的 couli/prod/payout/alipay/app-cert 无法解析时拒绝启动，日志不带原文",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#9] prod + live 的 couli/prod/payout/alipay/public-cert 无法解析时拒绝启动，日志不带原文",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#9] prod + live 的 couli/prod/payout/alipay/root-cert 无法解析时拒绝启动，日志不带原文",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts > [AC-B2-06j#10] prod + live 忽略旧环境变量的凭据，恰有一条告警列出两个变量名"
+      ],
+      "expected": [
+        "test/spec/payout/alipay-cert-kms/channel.test.ts",
+        "test/spec/payout/alipay-cert-kms/entry.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "d78308491efc1ffcc6485f8f55412b43c383b0bc90375027113f73b2949f688e"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "14d22936bd2b88ec04143ff57b51cc9e8070aaaf",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
