@@ -97,7 +97,7 @@ it('[AC-B2-02zg-REDACT#1] only free-text keys (also nested and suffixed) get the
     out_refund_no: 'RF2026112187654322',
     amount_fen: -1_234_567_890_123,
     refund_fen: '98765432109876',
-    detail: { note: 'a.***@example.com', list: ['6259651208437736', '2026112112345678'] },
+    detail: { note: '***@example.com', list: ['6259651208437736', '2026112112345678'] },
     remarks: ['*********2345', '************7364', 12345],
   });
 });
@@ -132,8 +132,9 @@ it('[AC-B2-02zg-REDACT#3] 归一 反例：「/ . , _」与冒号不是分隔，�
 });
 
 // 要点 2 正例。Wrong: a recogniser missing or its shape changed — the mobile not 3 + 4, the identity
-// number not first 1 + last 1, the card showing more than its last 4, the e-mail not 2 + 「***」.
-it('[AC-B2-02zg-REDACT#4] 认得出的按 BR-ID-33 形状：手机 3+4（含 86 / +86）、身份证首 1 末 1（18 位 X / x / 数字、15 位）、过 Luhn 的卡只留末 4、邮箱留前 2 位 +「***」', () => {
+// number not first 1 + last 1, the card showing more than its last 4, the e-mail's local part not
+// starred whole (zh***@…, a***@…).
+it('[AC-B2-02zg-REDACT#4] 认得出的按 BR-ID-33 形状：手机 3+4（含 86 / +86）、身份证首 1 末 1（18 位 X / x / 数字、15 位）、过 Luhn 的卡只留末 4、邮箱 @ 左到空白整段换成「***」、@ 与域名照常', () => {
   expect(redactFreeText('手机 13812345678，138 1234 5678，+86 138 1234 5678，8613812345678')).toBe(
     '手机 138****5678，138 **** 5678，+86 138 **** 5678，86138****5678',
   );
@@ -149,7 +150,7 @@ it('[AC-B2-02zg-REDACT#4] 认得出的按 BR-ID-33 形状：手机 3+4（含 86 
     redactFreeText(
       '邮箱 zhangsan@example.com ab@x.com a@x.com bob.lee+refund@mail.corp.example.cn',
     ),
-  ).toBe('邮箱 zh***@example.com a***@x.com ***@x.com bo***@mail.corp.example.cn');
+  ).toBe('邮箱 ***@example.com ***@x.com ***@x.com ***@mail.corp.example.cn');
 });
 
 // 要点 2 反例。Wrong: a check skipped (any 18 characters taken for an identity number, any 11 digits
@@ -165,34 +166,37 @@ it('[AC-B2-02zg-REDACT#5] 认得出 反例：校验位错的 18 位、日期不�
 
 // 要点 3 正例（句点并入域名的错实现会红）。Wrong: the right side taken up to white space only, so the
 // sentence's dot / comma / bracket joins the domain — 「example.com.」 is no domain, the piece is
-// starred whole (or the punctuation is lost), not al***@example.com followed by the punctuation.
-it('[AC-B2-02zg-REDACT#6] 邮箱右边界：句末句点、半角 , ; : ! ? ) ] } " \' 与中文标点都不并进地址，域名末尾不许是点', () => {
+// starred whole (or the punctuation is lost), not ***@example.com followed by the punctuation.
+// The left side goes up to white space or the start, so an opening bracket or quote glued to the
+// address is starred with it; two addresses with no white space between become one 「***」.
+it('[AC-B2-02zg-REDACT#6] 邮箱右边界：句末句点、半角 , ; : ! ? ) ] } " \' 与中文标点都不并进地址，域名末尾不许是点；@ 左到空白整段遮', () => {
   for (const [written, masked] of [
-    ['Confirmed alice@example.com.', 'Confirmed al***@example.com.'],
-    ['Confirmed alice@example.com...', 'Confirmed al***@example.com...'],
+    ['Confirmed alice@example.com.', 'Confirmed ***@example.com.'],
+    ['Confirmed alice@example.com...', 'Confirmed ***@example.com...'],
     [
       'alice@example.com, bob@example.org; carol@example.cn:',
-      'al***@example.com, bo***@example.org; ca***@example.cn:',
+      '***@example.com, ***@example.org; ***@example.cn:',
     ],
     [
       '(alice@example.com) [alice@example.com] {alice@example.com}',
-      '(al***@example.com) [al***@example.com] {al***@example.com}',
+      '***@example.com) ***@example.com] ***@example.com}',
     ],
-    ['"alice@example.com" \'alice@example.com\'!', '"al***@example.com" \'a***@example.com\'!'],
-    ['邮箱 alice@example.com。', '邮箱 al***@example.com。'],
-    ['账号「alice@example.com」、《ab@x.com》？', '账号「al***@example.com」、《a***@x.com》？'],
-    ['邮箱（ａｌｉｃｅ＠ｅｘａｍｐｌｅ．ｃｏｍ）。', '邮箱（ａｌ***＠ｅｘａｍｐｌｅ．ｃｏｍ）。'],
+    ['"alice@example.com" \'alice@example.com\'!', '***@example.com" ***@example.com\'!'],
+    ['邮箱 alice@example.com。', '邮箱 ***@example.com。'],
+    ['账号「alice@example.com」、《ab@x.com》？', '***@x.com》？'],
+    ['邮箱（ａｌｉｃｅ＠ｅｘａｍｐｌｅ．ｃｏｍ）。', '***＠ｅｘａｍｐｌｅ．ｃｏｍ）。'],
   ] as const) {
     expect(redactFreeText(written), written).toBe(masked);
   }
 });
 
-// 要点 3 反例。Wrong: a right side that is no domain shown as written, or an "@" next to white
-// space taken as an address.
-it('[AC-B2-02zg-REDACT#7] 邮箱形 反例：@ 后不像域名的整段打码（@ 留着）；@ 一侧是空白的原样', () => {
-  expect(redactFreeText('账号 alice@localhost 已核')).toBe('账号 *****@********* 已核');
-  expect(redactFreeText('转 bob.lee@内网，已核')).toBe('转 *******@**，已核');
-  expect(redactFreeText('写成 alice@example.c 不认')).toBe('写成 *****@********* 不认');
+// 要点 3 反例。Wrong: a right side that is no domain shown as written, starred only up to the
+// first punctuation (转 ***，已核), or with its "@" kept; or an "@" next to white space taken as an
+// address.
+it('[AC-B2-02zg-REDACT#7] 邮箱形 反例：@ 后不像域名的连 @ 与右侧到空白或结尾一起换掉、整段只剩「***」；@ 一侧是空白的原样', () => {
+  expect(redactFreeText('账号 alice@localhost 已核')).toBe('账号 *** 已核');
+  expect(redactFreeText('转 bob.lee@内网，已核')).toBe('转 ***');
+  expect(redactFreeText('写成 alice@example.c 不认')).toBe('写成 *** 不认');
   const kept = '请 @张三 处理，ops @ team，@ 符号单独出现，结尾@';
   expect(redactFreeText(kept)).toBe(kept);
 });
@@ -227,7 +231,7 @@ it('[AC-B2-02zg-REDACT#9] 兜底 反例：< 11 位原样；后面紧跟字母的
 
 // 要点 5 正例。Wrong: masks written at their normalised index in the original (every mask after
 // ㍻ / ㍿ / ﬃ shifted), an expansion kept whole (⑩ shown) or masked whole (its kept 0 lost), or the
-// e-mail rewritten in ASCII (ｚｈ → zh, ＠ → @).
+// e-mail's "@" and domain rewritten in ASCII (＠ → @, ｅｘａｍｐｌｅ → example).
 it('[AC-B2-02zg-REDACT#10] 位置映射：在归一文本上判、逐字符映射回原文；兼容字符展开跨进保留区只露归一后的那几位；全角邮箱回写保留原字符', () => {
   expect(redactFreeText('参考号 2345678⑩123 已核')).toBe('参考号 ********0123 已核');
   expect(redactFreeText('流水 ⑳26112112345678')).toBe('流水 ************5678');
@@ -235,12 +239,10 @@ it('[AC-B2-02zg-REDACT#10] 位置映射：在归一文本上判、逐字符映�
   expect(redactFreeText('ﬃ㍻㍿ 手机 13812345678，㍿ 证件 11010519491231002X')).toBe(
     `ﬃ㍻㍿ 手机 138****5678，㍿ 证件 1${'*'.repeat(16)}X`,
   );
-  expect(redactFreeText('收款 ｚｈａｎｇｓａｎ＠ｅｘａｍｐｌｅ．ｃｏｍ')).toBe(
-    '收款 ｚｈ***＠ｅｘａｍｐｌｅ．ｃｏｍ',
+  expect(redactFreeText('收款 ｚｈａｎｇｓａｎ＠ｅｘａｍｐｌｅ．ｃｏｍ 已核')).toBe(
+    '收款 ***＠ｅｘａｍｐｌｅ．ｃｏｍ 已核',
   );
-  expect(redactFreeText('收款 zhangsan＠ｅｘａｍｐｌｅ.com')).toBe(
-    '收款 zh***＠ｅｘａｍｐｌｅ.com',
-  );
+  expect(redactFreeText('收款 zhangsan＠ｅｘａｍｐｌｅ.com')).toBe('收款 ***＠ｅｘａｍｐｌｅ.com');
 });
 
 // 要点 5 反例。Wrong: the text rewritten in its normalised form even where nothing is masked.
@@ -263,30 +265,28 @@ it('[AC-B2-02zg-REDACT#12] 校验位对的 17 位数字 + X / x 不论后面跟�
   expect(redactFreeText('备查 11010519491231003X已核')).toBe(`备查 ${'*'.repeat(14)}003X已核`);
 });
 
-// 本地部分的左边界。Wrong: an apostrophe ending the left side (or ending it unless a character of the
-// address is on both sides) — o'connor / o''connor only (mary.o'co***, mary.o''co***), connor only
-// after a run of quotes; or a listed stop (white space, CJK, full-width punctuation, ( [ { < " : ; ,)
-// taken into the address — its first kept characters would be the stop, not the address.
-it('[AC-B2-02zg-REDACT#13] 邮箱左边界：从 @ 向左到空白、CJK、全角标点或 ( [ { < " : ; , 为止；撇号（不论几个、在不在开头）、点、加号、下划线、连字符都算本地部分', () => {
-  expect(redactFreeText("驳回 mary.o'connor@example.com 已核")).toBe('驳回 ma***@example.com 已核');
-  expect(redactFreeText("驳回 mary.o''connor@example.com 已核")).toBe(
-    '驳回 ma***@example.com 已核',
-  );
-  expect(redactFreeText("驳回 o'''brien@example.com")).toBe("驳回 o'***@example.com");
-  expect(redactFreeText("备注 o'brien@example.com。")).toBe("备注 o'***@example.com。");
+// 本地部分的左边界。Wrong: the left side ending anywhere but at white space or the start — at an
+// apostrophe (mary.o'***), a quote or bracket (见 '***…, [***…), a colon / semicolon / comma (a:***),
+// full-width punctuation or CJK (邮箱***…) — so that text before it, part of the address or not, is
+// left as written; or the first one or two characters still shown (ma***, o'***, _a***).
+it('[AC-B2-02zg-REDACT#13] 邮箱左边界：从 @ 向左只到空白或文本开头为止，撇号、引号、括号、冒号、分号、逗号、全角标点、点、加号、下划线、连字符都一起换成「***」', () => {
+  expect(redactFreeText("驳回 mary.o'connor@example.com 已核")).toBe('驳回 ***@example.com 已核');
+  expect(redactFreeText("驳回 mary.o''connor@example.com 已核")).toBe('驳回 ***@example.com 已核');
+  expect(redactFreeText("驳回 o'''brien@example.com")).toBe('驳回 ***@example.com');
+  expect(redactFreeText("备注 o'brien@example.com。")).toBe('备注 ***@example.com。');
   expect(redactFreeText("见 'alice@example.com' 与 ''bob@example.org")).toBe(
-    "见 'a***@example.com' 与 ''***@example.org",
+    "见 ***@example.com' 与 ***@example.org",
   );
   expect(redactFreeText('见 "alice@example.com" 与 \u201cbob@example.org\u201d')).toBe(
-    '见 "al***@example.com" 与 \u201cbo***@example.org\u201d',
+    '见 ***@example.com" 与 ***@example.org\u201d',
   );
   expect(redactFreeText('邮箱alice@example.com，账号：bob@example.org；<carol@example.cn>')).toBe(
-    '邮箱al***@example.com，账号：bo***@example.org；<ca***@example.cn>',
+    '***@example.cn>',
   );
   expect(
     redactFreeText('a:bob@x.com a;bob@x.com a,bob@x.com [bob@x.com] {bob@x.com} 「bob@x.com」'),
-  ).toBe('a:bo***@x.com a;bo***@x.com a,bo***@x.com [bo***@x.com] {bo***@x.com} 「bo***@x.com」');
-  expect(redactFreeText('邮箱 _a-b.c+d@example.com')).toBe('邮箱 _a***@example.com');
+  ).toBe('***@x.com ***@x.com ***@x.com ***@x.com] ***@x.com} ***@x.com」');
+  expect(redactFreeText('邮箱 _a-b.c+d@example.com')).toBe('邮箱 ***@example.com');
 });
 
 // 18 位证件后的 X。Wrong: an X after white space taken into a complete 18-digit identity number — the
@@ -309,27 +309,29 @@ it('[AC-B2-02zg-REDACT#16] 17 位数字后紧贴或隔一个空白的 X / x 合�
   expect(redactFreeText('备查 11010519491231003 X')).toBe(`备查 ${'*'.repeat(14)}003 X`);
 });
 
-// 组合字符。Wrong: NFKC code point by code point — e + U+0301 counted as two characters (e***@…,
-// ab***@…); or the whole text rewritten in its composed form where nothing is masked.
-it('[AC-B2-02zg-REDACT#14] 归一按字素：基字符与后随组合符一起 NFKC、算一个字符，邮箱前缀保留长度按它算；没打码的组合序列原样', () => {
-  expect(redactFreeText('收款 é@example.com 已核')).toBe('收款 ***@example.com 已核');
-  expect(redactFreeText('收款 ab́@x.com')).toBe('收款 a***@x.com');
-  expect(redactFreeText('收款 josé@example.com')).toBe('收款 jo***@example.com');
-  const kept = 'café 1234567890 ñ';
+// 组合字符。Wrong: NFKC code point by code point with the mask written per code point — a combining
+// mark of the local part left behind next to the 「***」 (***́@…); or the whole text rewritten in
+// its composed form where nothing is masked.
+it('[AC-B2-02zg-REDACT#14] 归一按字素：基字符与后随组合符一起 NFKC；邮箱 @ 左的组合序列整段换成「***」不留组合符；没打码的组合序列原样', () => {
+  expect(redactFreeText('收款 é@example.com 已核')).toBe('收款 ***@example.com 已核');
+  expect(redactFreeText('收款 ab́@x.com')).toBe('收款 ***@x.com');
+  expect(redactFreeText('收款 josé@example.com')).toBe('收款 ***@example.com');
+  const kept = 'café 1234567890 ñ';
   expect(redactFreeText(kept)).toBe(kept);
 });
 
 // 中文本地部分。Wrong: the left side scanned only up to the first CJK character — it comes out empty,
 // the piece is skipped and 用户@example.com is written as is; or the whole text before the "@"
-// starred across white space (收款账号 lost); or a Latin local part starred whole too (al*** lost).
-it('[AC-B2-02zg-REDACT#17] 邮箱 @ 前紧贴 CJK、域名认得出：@ 前到空白或开头的非空白字符整段换成「***」，@ 与域名照常；拉丁本地部分仍按留位', () => {
+// starred across white space (收款账号 lost); or a Latin local part glued to CJK still shown in part
+// (邮箱al***).
+it('[AC-B2-02zg-REDACT#17] 邮箱 @ 前紧贴 CJK、域名认得出：@ 前到空白或开头的非空白字符整段换成「***」，@ 与域名照常；拉丁本地部分同样整段遮', () => {
   expect(redactFreeText('收款账号 用户@example.com 待核')).toBe('收款账号 ***@example.com 待核');
   expect(redactFreeText('账号用户@example.com')).toBe('***@example.com');
   expect(redactFreeText('用户@example.com')).toBe('***@example.com');
   expect(redactFreeText('备注　账号：张三@example.cn。')).toBe('备注　***@example.cn。');
   expect(redactFreeText('账号 user用户@example.com，已核')).toBe('账号 ***@example.com，已核');
   expect(redactFreeText('邮箱alice@example.com 与 邮箱 bob@example.org')).toBe(
-    '邮箱al***@example.com 与 邮箱 bo***@example.org',
+    '***@example.com 与 邮箱 ***@example.org',
   );
   expect(redactFreeText('a@x.com 用户@example.com')).toBe('***@x.com ***@example.com');
 });
@@ -357,4 +359,79 @@ it('[AC-B2-02zg-REDACT#19] 去分隔 > 18 位：前 18 位校验通过且第 18 
   expect(redactFreeText('证件 1101051990030712392')).toBe(`证件 ${'*'.repeat(15)}2392`);
   expect(redactFreeText('卡 1101 0519 9003 0712 392')).toBe('卡 **** **** **** ***2 392');
   expect(redactFreeText('证件 110105199003071238 2')).toBe(`证件 ${'*'.repeat(15)}238 2`);
+});
+
+// 必满足项（D10-3444）。Wrong, case by case: the left side stopping at a dash (li-***, li−***,
+// 备注-***); the digit rules run before the e-mail rule (138****5678@qq.com); a right side that is no
+// domain starred only up to the punctuation after it (收款账号 ***，已核) or only up to the end of
+// what looked like a domain.
+it('[AC-B2-02zg-REDACT#20] 邮箱整段遮必满足项：横线（含 U+2212）不挡左扫、手机号本地部分按邮箱遮、认不出的域名遮到空白或结尾（标点也遮）', () => {
+  expect(redactFreeText('收款账号 li-wei@example.com 已核')).toBe('收款账号 ***@example.com 已核');
+  expect(redactFreeText('收款账号 li\u2212wei@example.com 已核')).toBe(
+    '收款账号 ***@example.com 已核',
+  );
+  expect(redactFreeText('备注-alice@example.com')).toBe('***@example.com');
+  expect(redactFreeText('收款账号 13812345678@qq.com 已核')).toBe('收款账号 ***@qq.com 已核');
+  expect(redactFreeText('收款账号 bob.lee@内网，已核')).toBe('收款账号 ***');
+  expect(redactFreeText('联系 bob.lee@内网')).toBe('联系 ***');
+});
+
+// 规则 1。Wrong: the left side stopping at anything but white space or the start — another dash
+// (‐ – — －), a digit, a CJK character, a quote or a bracket — so text glued before the address
+// shows; or not stopping at Unicode white space (NBSP, U+202F, U+3000, tab, line breaks), so the
+// text before that white space is starred too.
+it('[AC-B2-02zg-REDACT#21] 邮箱 @ 左只在 Unicode 空白或文本开头停：各类横线、数字、中文、引号、括号一起遮，空白及其前的文字原样', () => {
+  for (const blank of [' ', '\u00a0', '\u202f', '\u3000', '\t', '\n', '\r\n', '\u2028']) {
+    const label = JSON.stringify(blank);
+    expect(
+      redactFreeText(`前${blank}「张\u2010三–2026—x－」li@example.com${blank}已核`),
+      label,
+    ).toBe(`前${blank}***@example.com${blank}已核`);
+  }
+  expect(redactFreeText('（2026）\u201c李\u201d-wei@example.com')).toBe('***@example.com');
+});
+
+// 规则 2 / 3。Wrong: what follows a recognised domain starred too (）已核 lost); or with no recognised
+// domain the 「***」 stopping at a second "@", at punctuation, or leaving the "@" as written.
+// With CJK glued to the "@" and an ASCII domain at the start of a right side that is no domain
+// (example.com-待核): wrong is the piece not taken as e-mail-shaped and written as is.
+it('[AC-B2-02zg-REDACT#22] 认得出的域名之后原样；认不出的从 @ 到空白或结尾整段遮，标点与第二个 @ 也遮', () => {
+  expect(redactFreeText('邮箱（alice@example.com）已核 下一句')).toBe(
+    '***@example.com）已核 下一句',
+  );
+  expect(redactFreeText('邮箱（alice@内网）已核 下一句')).toBe('*** 下一句');
+  expect(redactFreeText('联系 a@b@c，d 已核')).toBe('联系 *** 已核');
+  expect(redactFreeText('联系 ops@localhost。备注')).toBe('联系 ***');
+  expect(redactFreeText('收款账号 用户@example.com-待核')).toBe('收款账号 ***');
+  expect(redactFreeText('收款账号 用户@example.com-待核 下一句')).toBe('收款账号 *** 下一句');
+  expect(redactFreeText('账号用户@mail.example.cn-备注，已核')).toBe('***');
+});
+
+// 规则 5。Wrong: the digit rules (mobile, card, identity number, fallback) run before the e-mail rule
+// or over its characters — the local part shows as 138****5678, ************7364, 1****…9 or the
+// fallback's last four; or the digit rules skipped after the e-mail (the phone after it in clear).
+it('[AC-B2-02zg-REDACT#23] 邮箱先于手机号、证件号、卡号与长数字兜底：本地部分是这些数字时整段遮；邮箱之后的数字照常判', () => {
+  expect(redactFreeText('收款 6222037195847364@bank.cn 已核')).toBe('收款 ***@bank.cn 已核');
+  expect(redactFreeText('收款 110105199003071239@x.com')).toBe('收款 ***@x.com');
+  expect(redactFreeText('收款 2026112112345678@x.com')).toBe('收款 ***@x.com');
+  expect(redactFreeText('收款 １３８１２３４５６７８＠ｑｑ．ｃｏｍ')).toBe(
+    '收款 ***＠ｑｑ．ｃｏｍ',
+  );
+  expect(redactFreeText('13812345678@qq.com 手机 13812345678')).toBe('***@qq.com 手机 138****5678');
+});
+
+// 规则 4。Wrong: the e-mail-shaped test widened with the new mask — an "@" with white space or the
+// start on one side, or one whose left side ends at a stop and whose right side is no domain, now
+// starred.
+it('[AC-B2-02zg-REDACT#24] 邮箱形判定不变：@ 一侧是空白、@ 紧贴括号且域名前无本地部分、紧贴中文而右侧不像域名的都原样', () => {
+  for (const kept of [
+    '请 @张三 处理',
+    'ops @ team',
+    '价格@3.5元',
+    '见（@example.com）',
+    '联系 用户@内网 处理',
+  ]) {
+    expect(redactFreeText(kept), kept).toBe(kept);
+  }
+  expect(redactFreeText('ops@localhost')).toBe('***');
 });

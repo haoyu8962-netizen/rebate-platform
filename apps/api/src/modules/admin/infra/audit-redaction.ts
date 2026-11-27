@@ -23,24 +23,23 @@
 //        white space (\s: space, tab, line breaks, U+2028 / U+2029, NBSP, U+202F, ideographic
 //        space…) and every dash or minus (\p{Pd} and U+2212) is a separator. `/ . , _` are no
 //        separators.
-//     2. E-mail-shaped text: an "@" with non-blank text on both sides. The left side runs from
-//        the "@" leftwards up to (not including) white space, another "@", a CJK character, any
-//        non-ASCII punctuation (，。、；：（）「」【】《》！？“”…) or ASCII `( [ { < " : ; ,`; everything
-//        else, apostrophes (any number, also a leading one), dots, "+", "_", "-" included, belongs
-//        to it ('alice@… → 'a***@…). The right side runs from the "@" up to white space, another
-//        "@", ASCII `, ; : ! ? ( ) [ ] { } " ' < > = & | \ /` or any non-ASCII punctuation; dots
-//        at its end are sentence punctuation, not part of it. A right side shaped like a domain (labels of
-//        letters, digits, marks and "-" joined by ".", the last one two or more letters or
-//        xn--…) is shown as written and the left side keeps its first 2 characters (1 when it
-//        has 2, none when it has 1; characters counted as grapheme clusters of the normalised
-//        text) followed by 「***」: zhangsan@example.com → zh***@example.com.
-//        Any other right side: the whole piece but "@" is starred (alice@localhost →
-//        *****@*********).
-//        When the right side is shaped like a domain but the left side comes out empty because
-//        the character right before the "@" is a CJK character (用户@example.com), the left side
-//        is instead everything non-blank before the "@" up to white space or the start (CJK and
-//        punctuation included), written as 「***」 whole: 收款账号 用户@example.com →
-//        收款账号 ***@example.com.
+//     2. E-mail-shaped text (decided before rule 3): an "@" with non-blank text on both sides.
+//        Whether an "@" is e-mail-shaped: its left side runs from the "@" leftwards up to (not
+//        including) white space, another "@", a CJK character, any non-ASCII punctuation
+//        (，。、；：（）「」【】《》！？“”…) or ASCII `( [ { < " : ; ,`; its right side runs from the
+//        "@" up to white space, another "@", ASCII `, ; : ! ? ( ) [ ] { } " ' < > = & | \ /` or any
+//        non-ASCII punctuation, dots at its end being sentence punctuation, not part of it. It is
+//        e-mail-shaped when both sides are non-empty, or when the character right before the "@"
+//        is a CJK character and the right side is shaped like a domain (labels of letters, digits,
+//        marks and "-" joined by ".", the last one two or more letters or xn--…) or starts with an
+//        ASCII one (用户@example.com-待核; its ASCII letters, digits, dots and dashes, without the
+//        dots and dashes at their end). 价格@3.5元 and 用户@内网 are not e-mail-shaped.
+//        How it is masked: everything from the "@" leftwards up to white space or the start of
+//        the text (letters, digits, dashes, CJK, punctuation, quotes, brackets alike) is written
+//        as 「***」 whole. A right side shaped like a domain is then shown as written, and what
+//        follows it stays (邮箱（alice@example.com）已核 → ***@example.com）已核). Any other right
+//        side: the "@" and everything after it up to white space or the end of the text, also
+//        punctuation, go into the 「***」 too (收款账号 bob.lee@内网，已核 → 收款账号 ***).
 //     3. Digit runs (outside e-mail-shaped text): ASCII digits with any number of separators
 //        between two digits, maybe followed (after separators) by X / x (see below for when). On
 //        the digits (and the X), separators taken out, in this order:
@@ -252,12 +251,14 @@ function hiddenOfRun(chars: string): number[] {
 
 /**
  * Rule 2 on the normalised characters: writes the masks of every e-mail-shaped piece into
- * `masks` and marks its positions in `taken`.
+ * `masks` and marks its positions in `taken`. Runs before rule 3, so the digits of an
+ * e-mail-shaped piece (13812345678@qq.com) are no mobile, identity number or fallback.
  */
 function maskEmails(chars: readonly string[], masks: (string | undefined)[], taken: boolean[]) {
   let floor = 0;
   for (let at = 0; at < chars.length; at += 1) {
     if (chars[at] !== '@') continue;
+    // Whether this "@" is e-mail-shaped: the left side and right side of the header.
     let left = at;
     while (left > floor && inLeftSide(chars[left - 1]!)) left -= 1;
     let right = at + 1;
@@ -266,33 +267,36 @@ function maskEmails(chars: readonly string[], masks: (string | undefined)[], tak
     while (right > at + 1 && chars[right - 1] === '.') right -= 1;
     if (right === at + 1) continue;
     const domain = DOMAIN.test(chars.slice(at + 1, right).join(''));
-    if (left === at && domain && left > floor && CJK.test(chars[at - 1]!)) {
-      // A CJK character glued to the "@": the whole non-blank text before it is starred.
-      while (left > floor && !BLANK.test(chars[left - 1]!)) left -= 1;
-      for (let p = left; p < right; p += 1) taken[p] = true;
-      masks[left] = '***';
-      for (let p = left + 1; p < at; p += 1) masks[p] = '';
-      floor = right;
-      at = right - 1;
-      continue;
+    const cjkGlued =
+      left === at &&
+      left > floor &&
+      CJK.test(chars[at - 1]!) &&
+      (domain || DOMAIN.test(asciiHead(chars, at + 1, right)));
+    if (left === at && !cjkGlued) continue;
+    // What is starred: from the "@" leftwards everything up to white space or the start.
+    let from = at;
+    while (from > 0 && !BLANK.test(chars[from - 1]!)) from -= 1;
+    // With no domain, the "@" and everything after it up to white space or the end go too.
+    let to = right;
+    if (!domain) {
+      to = at + 1;
+      while (to < chars.length && !BLANK.test(chars[to]!)) to += 1;
     }
-    if (left === at) continue;
-    for (let p = left; p < right; p += 1) taken[p] = true;
-    if (domain) {
-      // Counted in user-perceived characters of the normalised text (b + U+0301 is one).
-      const local = Array.from(GRAPHEMES.segment(chars.slice(left, at).join('')), (part) =>
-        Array.from(part.segment),
-      );
-      const shown = local.length >= 3 ? 2 : local.length === 2 ? 1 : 0;
-      const kept = left + local.slice(0, shown).reduce((total, part) => total + part.length, 0);
-      masks[kept] = '***';
-      for (let p = kept + 1; p < at; p += 1) masks[p] = '';
-    } else {
-      for (let p = left; p < right; p += 1) if (p !== at) masks[p] = '*';
-    }
-    floor = right;
-    at = right - 1;
+    const hiddenTo = domain ? at : to;
+    for (let p = from; p < to; p += 1) taken[p] = true;
+    masks[from] = '***';
+    for (let p = from + 1; p < hiddenTo; p += 1) masks[p] = '';
+    floor = to;
+    at = to - 1;
   }
+}
+
+/** The ASCII letters, digits, dots and dashes starting chars[from, to), less trailing dots / dashes. */
+function asciiHead(chars: readonly string[], from: number, to: number): string {
+  let end = from;
+  while (end < to && /^[0-9A-Za-z.-]$/.test(chars[end]!)) end += 1;
+  while (end > from && (chars[end - 1] === '.' || chars[end - 1] === '-')) end -= 1;
+  return chars.slice(from, end).join('');
 }
 
 const isX = (char: string | undefined): boolean => char === 'X' || char === 'x';
