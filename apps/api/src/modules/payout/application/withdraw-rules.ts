@@ -12,6 +12,11 @@ import { isAtLeastAge, samePersonName } from '@couli/domain';
 import { fenToJsonNumber } from '@couli/money';
 import type { Kysely } from 'kysely';
 import type { Logger } from 'pino';
+import {
+  DEFAULT_PAYOUT_METHODS,
+  PAYOUT_METHODS_KEY,
+  parsePayoutMethods,
+} from '../../identity/index.ts';
 import type { Ledger } from '../../ledger/index.ts';
 import type { Clock } from '../../platform/index.ts';
 import type {
@@ -285,6 +290,25 @@ export async function readWithdrawEnabled(
   return DEFAULT_WITHDRAW_LIMITS.enabled;
 }
 
+/**
+ * B2-05u (BR-WDR-02 细则「关闭某方式后」): the open payout methods, withdraw.payout_methods parsed
+ * by identity's one parser. A missing row is the default {alipay, bank_card} without a warning
+ * (like every withdraw.* key here); an invalid value takes the default with withdraw_config_default.
+ * Read only by readWithdrawInput: a withdrawal already created never looks at this switch.
+ */
+export async function readOpenPayoutMethods(
+  handle: Kysely<DB>,
+  appId: string,
+  options: Pick<WithdrawRulesOptions, 'config' | 'logger'>,
+): Promise<ReadonlySet<string>> {
+  const row = await options.config.configValue(appId, PAYOUT_METHODS_KEY, handle);
+  if (row === null) return DEFAULT_PAYOUT_METHODS;
+  const parsed = parsePayoutMethods(row.value);
+  if (parsed !== null) return parsed;
+  options.logger.warn({ app_id: appId, config_key: PAYOUT_METHODS_KEY }, 'withdraw_config_default');
+  return DEFAULT_PAYOUT_METHODS;
+}
+
 /** A hold is in effect while not released and either open-ended or not yet due (BR-WDR-05). */
 export function holdActive(hold: WithdrawHold, now: Date): boolean {
   if (hold.released_at !== null) return false;
@@ -333,6 +357,15 @@ export async function readWithdrawInput(
   });
   const payeeHmac = subject === null ? null : subject.payee_hmac;
   const payoutMethod = subject === null ? null : subject.payout_method;
+  // ⑤ (B2-05u, BR-WDR-02 细则): an account bound to a method the app has since closed counts as no
+  // usable account — only the rule chain's payout_method becomes null (30305 on both endpoints, the
+  // maximum computed as unbound). ③a, the payee's daily counts and the locks keep the real account.
+  const openMethods =
+    subject === null ? null : await readOpenPayoutMethods(handle, actor.appId, options);
+  const ruleMethod =
+    payoutMethod !== null && openMethods !== null && openMethods.has(payoutMethod)
+      ? payoutMethod
+      : null;
   // ③a: one judgement either way. B2-05q (BR-ID-36): a reader with match() also names what hit,
   // so that a refused application can be recorded without judging a second time.
   const blocklistSubject = { ...actor, payeeHmac, payoutMethod, now };
@@ -365,7 +398,7 @@ export async function readWithdrawInput(
     blocklist_hit: matched === null ? null : matched.hit,
     reverify,
     realname_verified: realnameStatus === 'verified' && realname !== null,
-    payout_method: payoutMethod,
+    payout_method: ruleMethod,
     names_match:
       realname !== null && subject !== null && samePersonName(realname.name, subject.payee_name),
     labor_agreement_signed: signed,

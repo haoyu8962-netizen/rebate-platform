@@ -109,6 +109,12 @@ export type {
   LandingRegisterConfigReader,
 } from './ports/landing-invite.ts';
 export { createPayoutAccountService } from './application/payout-account.ts';
+// B2-05u (BR-WDR-02 细则): the one parser of withdraw.payout_methods, for payout's withdrawal input.
+export {
+  DEFAULT_PAYOUT_METHODS,
+  PAYOUT_METHODS_KEY,
+  parsePayoutMethods,
+} from './application/payout-account.ts';
 export type {
   PayoutAccountSubject,
   SaveAlipayCommand,

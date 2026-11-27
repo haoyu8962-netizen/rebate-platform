@@ -3288,7 +3288,8 @@ paths:
         (enum withdraw_condition_reason) and is null otherwise. The re-verification step (BR-WDR-03
         ③b) is not skipped: an account flagged for re-verification on a device not yet re-verified
         gives block_code 10010 with block_reason null; the Reverify page takes the method from
-        GET /v1/me/reverify (BR-WDR-01 细则「位置与返回码」).
+        GET /v1/me/reverify (BR-WDR-01 细则「位置与返回码」). A current account whose payout method
+        withdraw.payout_methods has since closed counts as unbound: block_code 30305 (BR-WDR-02 细则).
       x-auth: login
       x-signed: false
       x-idempotent: false
@@ -3450,7 +3451,8 @@ paths:
         From the single balance (no account type in the body, ADD-06); entry and auth BR-WDR-01,
         check order BR-WDR-03. Not signed the labor agreement → 10004 with
         data.consent_type=labor_agreement. Stopped by a precondition the user must complete (10001,
-        10004 of any consent_type, 10005, 30304 / 30305 / 30307): not replayed; after completing
+        10004 of any consent_type, 10005, 30304 / 30305 / 30307; 30305 also when the bound payout
+        method has been closed in withdraw.payout_methods, BR-WDR-02 细则): not replayed; after completing
         it the user submits again on Withdraw with a new Idempotency-Key. Only 10002 and 10402
         resend with the same key (no step-up, so no 10003: BR-ID-08, BR-WDR-01, D10-1665). When the result is unknown the key is kept: the page waits
         for the user to confirm (same key) or give up (POST /v1/idempotency-keys/abandon); an
