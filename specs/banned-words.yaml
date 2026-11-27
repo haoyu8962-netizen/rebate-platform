@@ -104,6 +104,11 @@ words:
       - order.price_compare.hint
       - order.tag.price_compare
       - order_reason.PRICE_COMPARE.summary
+      # CT-26zs：08 BR-TEXT-12 / BR-TEXT-13（2026-11-26 同类实践对照补缺）
+      - order_detail.price_compare.summary_title
+      - order_detail.price_compare.summary_body
+      - pdd.compare_reminder.scheduled
+      - pdd.compare_reminder.notify_body
     allow_rendered_in: [ORDER_INVALID, CLAWBACK]
     allow_articles:
       - config_key: help_links.price_compare

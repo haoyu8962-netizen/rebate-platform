@@ -11968,16 +11968,47 @@ export interface components {
          *     examples by the contracts-ts consistency test. For a type=sdk step the client acts on
          *     `sdk` only; `value` repeats `sdk.url` (open_by=url) or `sdk.item_id` (open_by=code) for
          *     logs and compatibility.
+         *     The `mini_program` object is required on every type=mini_program step and never present on
+         *     any other type; it follows the same pairing as `sdk` (no top-level oneOf; the schema keeps
+         *     it optional, the server that builds the plan and the contracts-ts consistency test hold
+         *     the pairing; 04 §8.4, BR-ATTR-27). For a type=mini_program step the client acts on
+         *     `mini_program` only; `value` repeats `mini_program.user_name` for logs and compatibility
+         *     and carries no promotion parameter (02 §12.6).
+         *     type=mini_program is reserved: a client decodes an unknown type as UNKNOWN and skips that
+         *     step to the next fallback (04 §5「兼容」, 03 §4.5), and the server sends a type=mini_program
+         *     step only to client versions that declare support for it and only while the emergency
+         *     switch `jump.mini_program.enabled.<platform>` (04 §10.2) is on for that platform; the
+         *     switch is registered per platform with default off.
          */
         JumpStep: {
             /**
              * @description contracts/enums/trade.yaml jump_type.
              * @enum {string}
              */
-            type: "sdk" | "scheme" | "universal_link" | "h5" | "copy_tpwd";
+            type: "sdk" | "scheme" | "universal_link" | "h5" | "copy_tpwd" | "mini_program";
             /** @description URL, scheme or token to execute; produced by the server only. */
             value: string;
             sdk?: components["schemas"]["BaichuanOpen"];
+            mini_program?: components["schemas"]["WechatMiniProgramOpen"];
+        };
+        /**
+         * @description WeChat mini program launch instruction executed through the WeChat SDK (04 §8.4,
+         *     BR-ATTR-27). The server builds it; the client passes it to the SDK unchanged. Present only
+         *     on a type=mini_program step, never on any other type. It carries no `app_id`: the client
+         *     holds the mobile app's AppID from its own SDK registration.
+         */
+        WechatMiniProgramOpen: {
+            /** @description Original ID of the mini program (gh_xxx) the WeChat SDK opens. */
+            user_name: string;
+            /** @description Page path inside the mini program; empty or absent opens its home page. */
+            path?: string;
+            /**
+             * @description Version of the mini program to open; absent means release. Production plans always
+             *     carry release.
+             * @default release
+             * @enum {string}
+             */
+            mini_program_type?: "release";
         };
         /**
          * @description Taobao open instruction executed by the Baichuan SDK (docs/changes/20261003 §1; 03 §4.5).
@@ -14993,6 +15024,23 @@ export interface components {
             config_version?: string;
             /** @description Bridge methods disabled remotely; a call answers 90403 method_disabled (03 §5.3). Trial; default empty array. */
             bridge_disabled_methods?: string[];
+            /**
+             * @description Pinduoduo price-compare-risk local reminder (04 §10.1, BR-TEXT-03). The client uses it
+             *     only to schedule one local notification on the device and to fill the {minutes}
+             *     placeholder of `pdd.compare_reminder.scheduled`; nothing is written to the server. The
+             *     value comes from the configuration key `pdd.compare_reminder.delay_minutes`, whose
+             *     initial value and rules live only in BR-TEXT-03 细则, so neither the contract nor the
+             *     client hard-codes one. Optional: a client keeps reading an older last-good
+             *     configuration without it, and the server omits it until the configuration is
+             *     registered (04 §5「兼容」).
+             */
+            pdd_compare_reminder?: {
+                /**
+                 * Format: int32
+                 * @description Minutes after the user saves the item before the local reminder fires; a positive integer.
+                 */
+                delay_minutes: number;
+            };
         };
         /**
          * @description A replacement image published in the admin console for one platform mark (BR-TEXT-24).

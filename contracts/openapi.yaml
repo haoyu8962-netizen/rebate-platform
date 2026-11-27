@@ -36898,6 +36898,17 @@ components:
         examples by the contracts-ts consistency test. For a type=sdk step the client acts on
         `sdk` only; `value` repeats `sdk.url` (open_by=url) or `sdk.item_id` (open_by=code) for
         logs and compatibility.
+        The `mini_program` object is required on every type=mini_program step and never present on
+        any other type; it follows the same pairing as `sdk` (no top-level oneOf; the schema keeps
+        it optional, the server that builds the plan and the contracts-ts consistency test hold
+        the pairing; 04 §8.4, BR-ATTR-27). For a type=mini_program step the client acts on
+        `mini_program` only; `value` repeats `mini_program.user_name` for logs and compatibility
+        and carries no promotion parameter (02 §12.6).
+        type=mini_program is reserved: a client decodes an unknown type as UNKNOWN and skips that
+        step to the next fallback (04 §5「兼容」, 03 §4.5), and the server sends a type=mini_program
+        step only to client versions that declare support for it and only while the emergency
+        switch `jump.mini_program.enabled.<platform>` (04 §10.2) is on for that platform; the
+        switch is registered per platform with default off.
       additionalProperties: false
       required:
         - type
@@ -36912,12 +36923,43 @@ components:
             - universal_link
             - h5
             - copy_tpwd
+            - mini_program
         value:
           type: string
           minLength: 1
           description: URL, scheme or token to execute; produced by the server only.
         sdk:
           $ref: '#/components/schemas/BaichuanOpen'
+        mini_program:
+          $ref: '#/components/schemas/WechatMiniProgramOpen'
+    WechatMiniProgramOpen:
+      type: object
+      description: |
+        WeChat mini program launch instruction executed through the WeChat SDK (04 §8.4,
+        BR-ATTR-27). The server builds it; the client passes it to the SDK unchanged. Present only
+        on a type=mini_program step, never on any other type. It carries no `app_id`: the client
+        holds the mobile app's AppID from its own SDK registration.
+      additionalProperties: false
+      required:
+        - user_name
+      properties:
+        user_name:
+          type: string
+          pattern: '^gh_[A-Za-z0-9]+$'
+          maxLength: 64
+          description: Original ID of the mini program (gh_xxx) the WeChat SDK opens.
+        path:
+          type: string
+          maxLength: 1024
+          description: Page path inside the mini program; empty or absent opens its home page.
+        mini_program_type:
+          type: string
+          default: release
+          description: |
+            Version of the mini program to open; absent means release. Production plans always
+            carry release.
+          enum:
+            - release
     BaichuanOpen:
       type: object
       description: |
@@ -43335,6 +43377,26 @@ components:
           items:
             type: string
             pattern: '^[a-z][a-zA-Z0-9]*\.[a-z][a-zA-Z0-9]*$'
+        pdd_compare_reminder:
+          type: object
+          description: |
+            Pinduoduo price-compare-risk local reminder (04 §10.1, BR-TEXT-03). The client uses it
+            only to schedule one local notification on the device and to fill the {minutes}
+            placeholder of `pdd.compare_reminder.scheduled`; nothing is written to the server. The
+            value comes from the configuration key `pdd.compare_reminder.delay_minutes`, whose
+            initial value and rules live only in BR-TEXT-03 细则, so neither the contract nor the
+            client hard-codes one. Optional: a client keeps reading an older last-good
+            configuration without it, and the server omits it until the configuration is
+            registered (04 §5「兼容」).
+          additionalProperties: false
+          required:
+            - delay_minutes
+          properties:
+            delay_minutes:
+              type: integer
+              format: int32
+              minimum: 1
+              description: Minutes after the user saves the item before the local reminder fires; a positive integer.
     ConfigPlatformIcon:
       type: object
       description: |

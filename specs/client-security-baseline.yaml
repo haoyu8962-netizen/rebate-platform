@@ -7,7 +7,7 @@
 #   version            每次改动递增
 #   rules              每条 {id, title, waivable, platforms, check, targets}
 #     id               CSB-nn，一经发布不复用、不重排
-#     waivable         CSB-01～07、09～11 一律 false（不可豁免）；CSB-08 本身不检查，写 null（不适用）。
+#     waivable         CSB-01～07、09～12 一律 false（不可豁免）；CSB-08 本身不检查，写 null（不适用）。
 #                      本文件不设 waivers 清单：想改变任何一条，只能先按 00 §8 修改 03 §4.8 与对应 BR，
 #                      由负责人决定（03 §4.8）
 #     check            检查方式（03 §4.8「CI 检查」列的摘要）
@@ -25,7 +25,7 @@
 #   都不通过 CSB-11）。
 # TODO(规划/03 §4.8 CSB-09): exported_components_allowed 的具体组件名 — blocked on 三端工程建立（APP-02、
 #   HM-02）；SDK 带进来的导出组件接入时逐个登记用途，用不到的移除。
-version: '1'
+version: '2'
 rules:
   - id: CSB-01
     title: 证书与主机名校验只用系统默认实现，不得被开关、远程配置或构建类型降级
@@ -114,6 +114,16 @@ rules:
       - Android 入口组件 intent-filter
       - 鸿蒙入口 Ability 深链声明
       - 查询声明
+  - id: CSB-12
+    title: 发布包代码压缩与混淆（三端 Release 产物开启代码压缩与混淆或调试符号剥离；不采纳商用加壳加固，属新增供应商、不在本基线范围；客户端仍遵守 02 §12.6 不放任何秘密）
+    waivable: false
+    platforms: [ios, android, harmony]
+    check: CI 检查 Android Release 构建配置开启 R8 代码与资源压缩（minifyEnabled = true、shrinkResources = true），iOS 与鸿蒙 Release 产物调试符号剥离配置生效；符号映射表仅上传崩溃平台、不打进安装包；预发回归包覆盖混淆构建与崩溃映射验证
+    targets:
+      - Android Release 构建配置（R8 代码压缩 minifyEnabled 与资源压缩 shrinkResources）
+      - iOS Release 构建设置（调试符号剥离、符号表上传崩溃平台供崩溃还原）
+      - 鸿蒙 Release 构建配置（调试符号剥离、符号表上传崩溃平台供崩溃还原）
+      - 预发回归包（混淆构建与崩溃映射验证）
 false_positives: []
 forbidden_schemes:
   - http

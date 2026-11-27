@@ -61,6 +61,9 @@
 # agent.earnings.updated_at 在已有的 agent.earnings. 前缀内归 fund_terms，不再单列。
 # CT-17j：08 BR-TEXT-12 细则未写归类的 step_up.sms.sent_to（BR-TEXT-14 表 C「验证码将发送至 {masked_phone}」）与同组
 # step_up.oauth.*、step_up.summary.* 一样逐键归 ordinary（编排者默认，待规划回写；编排 D10-1729）。
+# CT-26zs：08 BR-TEXT-12 细则「资金术语键」（2026-11-26 同类实践对照补缺）写明：order_detail.price_compare.summary_title /
+# .summary_body、pdd.compare_reminder.scheduled / .notify_body 单列归 fund_terms；share.save_images.partial / .failed、
+# order_detail.price_compare.view_article、pdd.compare_reminder.btn / .no_perm / .notify_title 逐键归 ordinary，不加前缀。
 fund_terms:
   prefixes:
     - order_status.
@@ -161,7 +164,11 @@ fund_terms:
     - no_rebate_hint
     - order.price_compare.hint
     - order.tag.price_compare
+    - order_detail.price_compare.summary_body
+    - order_detail.price_compare.summary_title
     - order_list.deposit_amount
+    - pdd.compare_reminder.notify_body
+    - pdd.compare_reminder.scheduled
     - platform_coming_soon
     - platform_no_rebate
     - rebate_amount_unknown
@@ -781,6 +788,7 @@ ordinary:
     - notify_settings.service_push
     - notify_settings.service_push.desc
     - order_detail.copy.done
+    - order_detail.price_compare.view_article
     - order_detail.view_product
     - order_list.claim_entry
     - order_list.copy_label
@@ -791,6 +799,9 @@ ordinary:
     - order_list.summary
     - payout_account.risk_blocked.desc
     - payout_account.wechat.steps_hint
+    - pdd.compare_reminder.btn
+    - pdd.compare_reminder.no_perm
+    - pdd.compare_reminder.notify_title
     - pdd.parse_failed
     - pending_confirm.abandon
     - pending_confirm.abandon.cancel
@@ -929,6 +940,8 @@ ordinary:
     - share.open_wechat
     - share.retry
     - share.save_images
+    - share.save_images.failed
+    - share.save_images.partial
     - share.saved
     - share.system_share
     - share.wechat_unavailable
