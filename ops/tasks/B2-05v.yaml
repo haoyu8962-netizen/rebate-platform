@@ -10,6 +10,13 @@ type: impl
 #   重跑后 ⑨ 与风险标签自然按当前账号算；重跑次数上限与用尽后的返回码写进任务书前先报编排定。不改锁顺序，不改 ③a 黑名单只在第一轮判的口径，不带迁移，不动契约。
 # 冻结用例：test/spec/payout/apply/** 里钉「锁内只判 ⑦⑧⑩⑪⑫」的用例若因规则已改（D10-192 加 ⑤⑥）而红，入账后先在临时工作树上探一遍，按清单报编排核后以台账补丁登 modify_existing（rule_change，BR-WDR-07）。
 # 2026-11-27 补丁 1（funds，编排 D10-3590）：已定口径——账号不同整笔回滚重跑最多 2 次（共 3 遍），第 3 遍仍不同返回 50001、不建单不冻结、打 warn 工程日志；⑥ 码值与锁外同（30304 / 30305 / 30307）。冻结用例一处：apply/locked.test.ts 的 [AC-B2-05d#30] 钉着「实名未验、姓名不一致时锁内判定仍通过」，与 BR-WDR-07 ④（D10-192 加 ⑤⑥）相反，登 modify_existing；其余待实现后的测试机结果按清单再报。
+# 2026-11-28 补丁 2（funds；Codex 资金评审 r1 fail，S1 两条，都属实）：
+#   S1-1 同一账号换出再换回：第一轮读到账号 A → 会员换绑 B → 本遍算风险标签（identity 读口按「会员当前绑定是否持有该 HMAC」取锚点，此时查不到，payee_prev_other_user 不打）→ 拿 users 锁前又换回 A；
+#     HMAC 与方式都与第一轮相同，比较通过，单带着漏了标签的风险快照建出（影响 BR-WDR-30 自动到账判定）。换绑是「旧行 is_current=false + 插新行」，换回后的绑定是另一行。
+#     补法：identity 的提现读口（当前收款账号、收款人快照）各多带当前绑定行的 id；payout 的比较在 HMAC 与方式之外再比这个 id，不同即整遍回滚重跑。payout 侧端口类型里这个字段是可选的（冻结夹具手工搭的读口不带它，两边都没有时按相同算；只有一边有 → 不同）。
+#   S1-2 50001 的 HTTP 状态：建单用例返回 50001 时，会员端提现控制器把没登记的码兜成 HTTP 403 +「请求未通过」，与 contracts/error-codes.yaml 的 50001 = HTTP 500 不符。补法：控制器的码表登记 50001 → 500「服务端错误」（与 identity 几个控制器同写法）；不落幂等结果的行为不变。
+#   paths 因此加三处：payout/application/withdraw-rules*.ts（读口的端口类型在这里）、identity/ports/withdraw-subject*.ts、payout/http/public/withdrawals.controller*.ts。不带迁移，不动契约，锁顺序不变。
+#   另改正 modify_existing 说明里的一句：锁内只加 ⑤⑥、不加 ④（编排 D10-3594）——先 ⑤ 收款方式为空 30305，后 ⑥ 无当前实名 30304 / 姓名不一致 30307。
 refs: [BR-WDR-07, BR-WDR-03]
 refs_hash:
   BR-WDR-07: 3eaedce150d8
@@ -18,6 +25,9 @@ deps: [B2-05u]
 paths:
   - 'apps/api/src/modules/payout/application/withdraw-apply*.ts'
   - 'apps/api/src/modules/payout/domain/withdraw-locked*.ts'
+  - 'apps/api/src/modules/payout/application/withdraw-rules*.ts' # 补丁 2
+  - 'apps/api/src/modules/identity/ports/withdraw-subject*.ts' # 补丁 2
+  - 'apps/api/src/modules/payout/http/public/withdrawals.controller*.ts' # 补丁 2
 test_paths:
   - 'test/spec/payout/locked-recheck/**' # 新目录
   - 'test/spec/payout/apply/locked.test.ts'
@@ -30,7 +40,7 @@ modify_existing:
     reason: rule_change
     br: [BR-WDR-07]
     ruling: D10-3590
-    note: 'BR-WDR-07 ④（2026-10-23 D10-192 起）锁内重新执行 BR-WDR-03 的 ⑤⑥⑦⑧⑩⑪⑫。原用例把实名未验、姓名不一致也放进「锁内不重判」的一组并期望通过；改后锁内按 ④⑤⑥ 的顺序拒绝：实名失效 30304（D10-3590：⑥ 要比对实名姓名，实名没了按 30304）、收款方式为空 30305、姓名不一致 30307；①–③b、⑥a（劳务协议）、⑨、⑬ 仍不在锁内重判的断言保留。无金额断言改动。'
+    note: 'BR-WDR-07 ④（2026-10-23 D10-192 起）锁内重新执行 BR-WDR-03 的 ⑤⑥⑦⑧⑩⑪⑫。原用例把实名未验、姓名不一致也放进「锁内不重判」的一组并期望通过；改后锁内只加 ⑤⑥、不加 ④（D10-3594）：先 ⑤ 收款方式为空 30305，后 ⑥ 无当前实名（比不了）30304、实名有效而姓名不一致 30307；①–③b、⑥a（劳务协议）、⑨、⑬ 仍不在锁内重判的断言保留。无金额断言改动。'
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/locked-recheck/**'
