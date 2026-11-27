@@ -8,7 +8,7 @@ type: impl
 # 用户侧接口与提现单快照怎样调用这些函数，归 payout / withdrawals 各自的任务。
 refs: [BR-ID-33]
 refs_hash:
-  BR-ID-33: 86d06b8e0154
+  BR-ID-33: a446ae3deba5
 deps: [B1-01c]
 paths:
   - 'apps/api/src/modules/platform/masking/**'

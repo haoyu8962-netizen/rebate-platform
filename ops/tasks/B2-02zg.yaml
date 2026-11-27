@@ -8,7 +8,7 @@ type: impl
 # 带过来的：task/B2-02ze 分支（主干重建后只含脱敏一半：规则测试 test/spec/admin/audit-free-text-pii/** 与 audit-redaction{,.test}.ts 实现 r5，头 29e9b6fbd）；规则测试按新口径重写（约 20 处「保持原样」反例改正例、加归一类用例），实现方单测随实现改。二次验证令牌一半已随 B2-02zeb #527 合并，不在本单。评审口径只写评审书、不进代码注释。
 refs: [BR-ID-33]
 refs_hash:
-  BR-ID-33: 86d06b8e0154
+  BR-ID-33: a446ae3deba5
 deps: []
 paths:
   - 'apps/api/src/modules/admin/infra/audit-redaction{,.test}.ts'

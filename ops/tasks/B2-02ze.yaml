@@ -14,7 +14,7 @@ type: impl
 # 2026-11-26 置 void（be，编排 D10-3264 / D10-3266）：并入 B2-02zg——逐格式识别收不拢（实现 5 次、资金评审 4 轮），改为先归一再打码的接手单；分支与规则测试由 B2-02zg 带走；approvals 第 221 条随本单作废。
 refs: [BR-ID-33, BR-ID-34]
 refs_hash:
-  BR-ID-33: 86d06b8e0154
+  BR-ID-33: a446ae3deba5
   BR-ID-34: 6ed9502449a2
 deps: []
 paths:
