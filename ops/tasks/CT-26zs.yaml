@@ -1,0 +1,40 @@
+id: CT-26zs
+repo: rebate-platform
+title: '契约与规格（2026-11-26 同类实践对照补缺 C1，零破坏增量）：10 个文案键与资金术语 / 「比价」清单、JumpStep.mini_program 预留、/v1/config.pdd_compare_reminder 与开关登记、分享 5 个分步事件与 sdui_card_error block_missing、CSB-12'
+type: contract
+# 2026-11-27 be 入账（编排 D10-3434 / D10-3435；依据 couli docs/changes/20261126-同类实践对照补缺.md §2，范围 couli-runs/CT-26zs/scope.md）。只动契约、规格与生成物，不改服务端逻辑与三端；后端配置登记与 JumpPlan 过滤、后台配置管理排在合并后的下一波。
+# ① 文案：texts.default.json 加 share.save_images.partial / .failed、order_detail.price_compare.summary_title / .summary_body / .view_article、pdd.compare_reminder.btn / .scheduled / .no_perm / .notify_title / .notify_body，默认文案逐字照 08 BR-TEXT-14 表 C；fund-term-keys 资金术语 4 键、普通 6 键（照 BR-TEXT-12 细则清单）；banned-words「比价」allow_keys 增 4 键（BR-TEXT-13）；重生成 content/specs 两个 .gen.ts。
+# ② 外跳与配置：enums/trade.yaml jump_type 加 mini_program；openapi JumpStep type 加 mini_program 与可选 mini_program {user_name, path?, mini_program_type?}，value 重复 user_name，配对约束照 规划/04 §8.4；/v1/config 加可选 pdd_compare_reminder {delay_minutes}（int32 ≥ 1，04 §10.1）；说明登记开关 jump.mini_program.enabled.<platform>（04 §10.2，默认 off）；重生成 packages/contracts-ts 与路由 .gen.ts。 ③ specs/events.yaml：登记 规划/03 §590 的 5 个分享分步事件；sdui_card_error 补 reason=block_missing——须与冻结的 test/spec/contracts/sdui-card-error-page-version/** 兼容，写测前先探针。④ specs/client-security-baseline.yaml：CSB-11 之后登记 CSB-12（原文照 规划/03:633）。动 contracts/ 前登契约槽。C2（CT-18d，media.saveImage 结果升级 + H5 联动）另开，deps 本单。
+refs: [BR-ATTR-27, BR-TEXT-03, BR-TEXT-12, BR-TEXT-13, BR-TEXT-14]
+refs_hash:
+  BR-ATTR-27: 0b0571f78586
+  BR-TEXT-03: 168b81b94a42
+  BR-TEXT-12: d27e4b39c11e
+  BR-TEXT-13: 0170cefbc162
+  BR-TEXT-14: e029c2349c51
+contract_sections: ['8.4', '10.1', '10.2']
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/enums/trade.yaml'
+  - 'contracts/texts.default.json'
+  - 'specs/fund-term-keys.yaml'
+  - 'specs/banned-words.yaml'
+  - 'specs/events.yaml'
+  - 'specs/client-security-baseline.yaml'
+  - 'apps/api/src/modules/content/specs/fund-term-keys.gen.ts'
+  - 'apps/api/src/modules/content/specs/banned-words.gen.ts'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/validation/route-schemas.gen.ts'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/rea-practices-c1/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/contracts/rea-practices-c1/**'
+status: todo
+pr: null
