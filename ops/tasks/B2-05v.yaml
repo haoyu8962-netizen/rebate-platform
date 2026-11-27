@@ -13,7 +13,7 @@ type: impl
 # 2026-11-28 补丁 2（funds；Codex 资金评审 r1 fail，S1 两条，都属实）：
 #   S1-1 同一账号换出再换回：第一轮读到账号 A → 会员换绑 B → 本遍算风险标签（identity 读口按「会员当前绑定是否持有该 HMAC」取锚点，此时查不到，payee_prev_other_user 不打）→ 拿 users 锁前又换回 A；
 #     HMAC 与方式都与第一轮相同，比较通过，单带着漏了标签的风险快照建出（影响 BR-WDR-30 自动到账判定）。换绑是「旧行 is_current=false + 插新行」，换回后的绑定是另一行。
-#     补法：identity 的提现读口（当前收款账号、收款人快照）各多带当前绑定行的 id；payout 的比较在 HMAC 与方式之外再比这个 id，不同即整遍回滚重跑。payout 侧端口类型里这个字段是可选的（冻结夹具手工搭的读口不带它，两边都没有时按相同算；只有一边有 → 不同）。
+#     补法：identity 的提现读口（当前收款账号、收款人快照）各多带当前绑定行的 id；payout 的比较在 HMAC 与方式之外再比这个 id，不同即整遍回滚重跑。payout 侧端口类型里它是可选成员（冻结夹具手工搭的读口不带它：两边都有 id 时才比，任一边没有就只比 HMAC 与方式，D10-3622；落地的做法是当前收款账号读口在 read 的同一条 SELECT 里取 id、经 bindingIdOf 交出，read 的返回值不变，D10-3625 / D10-3636）。
 #   S1-2 50001 的 HTTP 状态：建单用例返回 50001 时，会员端提现控制器把没登记的码兜成 HTTP 403 +「请求未通过」，与 contracts/error-codes.yaml 的 50001 = HTTP 500 不符。补法：控制器的码表登记 50001 → 500「服务端错误」（与 identity 几个控制器同写法）；不落幂等结果的行为不变。
 #   paths 因此加三处：payout/application/withdraw-rules*.ts（读口的端口类型在这里）、identity/ports/withdraw-subject*.ts、payout/http/public/withdrawals.controller*.ts。不带迁移，不动契约，锁顺序不变。
 #   另改正 modify_existing 说明里的一句：锁内只加 ⑤⑥、不加 ④（编排 D10-3594）——先 ⑤ 收款方式为空 30305，后 ⑥ 无当前实名 30304 / 姓名不一致 30307。
@@ -44,5 +44,5 @@ modify_existing:
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/locked-recheck/**'
-status: todo
-pr: null
+status: done
+pr: 992
