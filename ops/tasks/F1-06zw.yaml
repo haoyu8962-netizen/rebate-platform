@@ -1,0 +1,25 @@
+id: F1-06zw
+repo: rebate-platform
+title: 后台 antd 中文化：ConfigProvider 加 locale zhCN、dayjs 设 zh-cn（App.tsx 一处），受影响的后台截图基准同单重录
+type: impl
+# 2026-11-28 入账（前端线 fe；编排 D10-3643 a / D10-3644）。CT-11bvc 新截图里分页显示「20 / page」——apps/admin/src/App.tsx:443 的 ConfigProvider 只给了 theme 与 button、没有 locale，全仓 apps/admin 不引 antd/locale/zh_CN，antd 自带文字（分页、翻页按钮 title、空态、日期占位、确认框缺省按钮）一律英文。
+# 只做（写死）：App.tsx 一处——ConfigProvider 加 locale={zhCN}（antd/locale/zh_CN，antd 自带、不加依赖），同文件引 dayjs/locale/zh-cn 并 dayjs.locale('zh-cn')；不改别的页面与文案键。
+#   冻结用例：找翻页按钮的 19 个目录都写成「Next Page 或 下一页」两种都认，日期占位也两种都认，没找到只认英文的断言——落地前测试机 --fast 全跑核。
+#   截图基准：后台四张（admin-login / dashboard / orders / withdrawals）里随中文化变的，同单照 --browser 新图重录（照 D10-3564：非 task 分支 chore/F1-06zw-antd-zh-cn、编排按 approvals #24 核新旧对比后加 owner 标签）；不变的不动。
+# 不做：筛选标签「平台状态 platform_status」等照画板不改（D10-3644 b）；返利状态遮挡等字典补行后再量（D10-3643 ②）。
+refs: []
+refs_hash: {}
+deps: [CT-11bvc]
+paths:
+  - 'apps/admin/src/App.tsx'
+  - 'test/spec/frontend/visual-baseline/__baselines__/admin-login-light.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/admin-dashboard-light.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/admin-orders-light.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/admin-withdrawals-light.png'
+test_paths:
+  - 'test/spec/frontend/visual-baseline/__baselines__/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
