@@ -1,0 +1,42 @@
+id: F1-11da
+repo: rebate-platform
+title: 淘宝授权回调中转页加可点的【返回凑狸】（链接即本页算出的 couli://auth/taobao 深链），防浏览器拦截自动跳转（D10-3567）
+type: impl
+# 2026-11-27 入账（前端线 fe；编排 D10-3567 一）。F1-11d 的中转页只 location.replace 自动跳深链；有的浏览器会拦截非用户手势的自定义 scheme 跳转，用户只看到「请回到凑狸 App 继续」而回不去。
+# 只做（写死）：callbackTarget 算出目标（非 null）时，页面在提示下加一个可点的链接，文字恰为「返回凑狸」，href 恰为同一目标（couli://auth/taobao?code=…&state=…，出错时 ?state=…&error=1）；自动 location.replace 照旧、先 replaceState 清查询串照旧。
+#   目标为 null（参数缺失或不合白名单）时不加链接，只显示原提示。仍不调接口、不写 storage / cookie、不打日志不埋点；no-referrer 照旧；白名单与透传规则（callback.ts）不改。真机验证随安卓甲（D10-3567）。
+# 冻结 [AC-F1-11d#8] 断言 body 文本恰为提示，加链接后必变——按 D10-3567 改为「提示 + 有目标时恰为【返回凑狸】」，三行逐行登 modify_existing（rule_change，BR-ID-17「三端授权回跳」；D10-3567 更正 D10-2716 ② 的「拉不起 App 时只提示回到 App」）。
+refs: [BR-ID-17]
+refs_hash:
+  BR-ID-17: ba4ebcc6279a
+deps: [F1-11d]
+paths:
+  - 'apps/h5/src/entries/auth-callback/**'
+test_paths:
+  - 'test/spec/frontend/h5-auth-callback-return/**'
+  - 'test/spec/frontend/h5-auth-callback/entry.test.ts'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/frontend/h5-auth-callback-return/**'
+status: todo
+modify_existing:
+  - file: 'test/spec/frontend/h5-auth-callback/entry.test.ts'
+    test: '[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（?code=FixtureCode&state=FixtureState）'
+    reason: rule_change
+    br: [BR-ID-17]
+    ruling: D10-3567
+    note: '有跳转目标时页面另有可点的【返回凑狸】（href 即该目标），body 文本整等改为「提示 + 返回凑狸」；清查询串、只跳一次、不泄露参数、不调接口不打日志的断言不变。'
+  - file: 'test/spec/frontend/h5-auth-callback/entry.test.ts'
+    test: '[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（?error=denied&error_description=FixtureDetail&state=FixtureState）'
+    reason: rule_change
+    br: [BR-ID-17]
+    ruling: D10-3567
+    note: '出错回调同理：有目标 ?state=…&error=1 时另有【返回凑狸】，body 文本整等改为「提示 + 返回凑狸」；其余断言不变。'
+  - file: 'test/spec/frontend/h5-auth-callback/entry.test.ts'
+    test: '[AC-F1-11d#8] 先清除查询串并只显示回 App 提示（?code=Fixture%2FCode&state=FixtureState）'
+    reason: rule_change
+    br: [BR-ID-17]
+    ruling: D10-3567
+    note: '目标为 null 时不加链接，body 仍恰为提示；本行期望不变，随同表其余两行一并登记（表体共用）。'
