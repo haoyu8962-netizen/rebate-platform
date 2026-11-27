@@ -34,4 +34,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/platform/crash-report/**'
-status: todo
+status: done
+pr: 902
