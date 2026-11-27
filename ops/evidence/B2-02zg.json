@@ -1,0 +1,133 @@
+{
+  "risk_note": "B2-02zg (admin audit, RV2; BR-ID-33; takes over B2-02ze). Free text written into audit_logs (operator notes, reject / close reasons, system audit detail) is normalised (NFKC, Unicode dashes / white space) and masked before it is stored: mobile numbers 3+4, identity numbers first 1 + last 1 (18 digits incl. X, 15), cards last 4, other runs of >= 11 digits last 4; any run of non-white-space characters that holds an '@' is replaced whole by '***' with no domain shown (owner 2026-11-27 '验证甲，邮箱乙', orchestrator D10-3479 / D10-3495; planning 08 BR-ID-33 at SPEC_REF b3b8ff548af9). Structured fields and the payout-account display are unchanged. Only apps/api/src/modules/admin/infra/audit-redaction.ts and its unit tests change; rule tests under test/spec/admin/audit-free-text-pii/**.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 6,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27). Under B2-02zg: r1 fail 3 S1, r2 fail 2 S1, r3 fail S0+S1 (regular 3/3); r4 fail 2 S0 (approvals 230, D10-3382); owner chose whole-local-part masking (D10-3427 ④, approvals 233): r5 fail S0+S1+S2; owner changed the rule to masking the whole '@' run without domain ('验证甲，邮箱乙', D10-3479, approvals 235): r6 (incremental) pass, 2 S2 (U+0085 not treated as white space: over-masks; a constructed 19-digit card whose 18-digit prefix passes the identity check digit, unreachable). B2-02ze history (r1-r5) is in its own evidence notes."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 4,
+    "last_verdict": "fail",
+    "note": "Rule tests by an independent Claude (ledger tester claude-independent). r1 (codex, full) fail 4 S1 -> write-test 2; r2 (codex) fail 1 S1 -> write-test 3 (regular rounds used); after the owner's rule changes: write-test 4 (approvals 233) -> r3 (claude-independent, incremental) fail 1 S1 + 1 S2, sample gaps (dash left of '@', mobile local part, unrecognised domain glued to punctuation) moved to the implementation's must-satisfy unit tests by orchestrator ruling D10-3444; write-test 5 (approvals 235) -> r4 (claude-independent, incremental) fail 1 S1 + 1 S2, sample gaps (dash / minus left of '@', tab as a boundary) moved to implementation must-satisfy items by D10-3495; both registered as FU-B2-02ZG-SPEC-HYPHEN-LOCAL (test-change after landing). Money review r6 confirmed those implementation unit tests."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/admin/audit-free-text-pii/adjustment-reject.int.test.ts > [AC-B2-02ze#5] 调账驳回的原因里写了邮箱、18 位身份证（末位 X）、空格分组且过 Luhn 的银行卡号、手机号：驳回照常成功，adjustment_reject 审计全文不含任何一项明文；原因仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 138****5678、证件 1****************X、卡号只露末 4 位；同长同分组但不过 Luhn 的对照号按兜底也只留末四位，B2-02zg D10-3266）；调账单与会员 id 原样",
+    "test/spec/admin/audit-free-text-pii/balance-recalc.int.test.ts > [AC-B2-02ze#6] 余额重算的原因里写了带加号与子域的邮箱、校验位正确的 18 位纯数字身份证、日期合法的 15 位老身份证、连字符分组且过 Luhn 的卡号、手机号：重算照常成功，recon_diff_balance_recalc 审计全文不含任何一项明文；原因仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 139****1111、两种证件都只留首末各 1 位、卡号只露末 4 位；校验位错的 18 位号与日期不合法的 15 位号按兜底只留末四位，B2-02zg D10-3266）；13 位金额（含负数）、差错单与会员 id 原样",
+    "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts > [AC-B2-02zg#13] 归一 · 换行也是空白：\\n、\\r、\\r\\n、U+2028、U+2029 分隔的分组长数字照样连成一串判——过 Luhn 的卡号只留末 4、认不出的只留末四位、手机号 3+4、证件首 1 末 1；换行与空格、制表符、NBSP、横线混用同样；两行各不足 11 位、连起来 ≥ 11 位的按兜底只留末四位",
+    "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts > [AC-B2-02zg#14] 邮箱紧邻中文标点（，。、；：（）「」【】《》！？）或 ASCII 标点：含 @ 的片段从前一个空白或文本开头到后一个空白或文本结尾整段换成「***」——紧贴地址两侧的中文与标点一起遮，@ 与域名都不显示；片段外以空白隔开的文字原样",
+    "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts > [AC-B2-02zg#15] 兜底的末位小写 x：校验位错的 18 位证件号末位小写 x（连写、前带空格 / NBSP / 横线 / 分组、全角 ｘ）与大写 X 同样只留末四字符（003x）；认不出类型的 ≥ 11 位数字带末位 x 同样",
+    "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts > [AC-B2-02zg#16] 位置映射 · 兼容字符展开：打码按归一后的逐位判定——展开成几位数字的字符（⑩ ⑪ ⑫ ⑳）跨在打码区与保留区之间时既不整个保留也不整个遮掉，只露归一后的那几位；展开成多个字的字符（㍻ ㍿ ﬃ）在前时其后各处打码不错位",
+    "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts > [AC-B2-02zg#17] 位置映射 · 全角邮箱整段遮不改片段外的原文字符：全角（或半角全角混写）、含 ＠ / @ 的片段归一后认出 @，从空白到空白整段换成「***」（不论 @ 前几位，紧贴的「邮箱（」「），已核」一起遮，域名含全角 ．不显示）；片段前后的空白（含全角空格 U+3000）与文字都是原文原位置上的字符",
+    "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts > [AC-B2-02zg#19] 邮箱整段遮（编排 D10-3479 / D10-3481，评审 r3 / r4 样例）：@ 左紧贴中文、中文加数字、撇号时，含 @ 的片段从空白到空白整段换成「***」，@ 与域名都不显示；域名后紧跟「-待核」（横线不是片段边界）时连「-待核」一起换掉，整段只剩「***」",
+    "test/spec/admin/audit-free-text-pii/multiline-reason.int.test.ts > [AC-B2-02zg#18] 多行原因落库：换行（LF、CR LF、CR、U+2028）当分隔——跨行的过 Luhn 卡号只留末 4、跨行的不过 Luhn 长号与订单号只留末四位、跨行的手机号 3+4、跨行的证件首 1 末 1、校验位错且小写 x 在下一行的证件号只留 003x、全角括号里的邮箱所在片段从换行到空白整段换成「***」（「邮箱（」「）已核；订单」一起遮、@ 与域名不显示），before.reason 与 after.detail.note 都不以明文落库；说明文字与换行外的行文保留，提现单号与 target 原样",
+    "test/spec/admin/audit-free-text-pii/normalization.int.test.ts > [AC-B2-02zg#12] 系统审计 appendAction 的自由文本先归一再打码：全角数字手机号 3+4、U+2212 分组的卡号与 NBSP / U+202F / 全角空格分组的长数字只留末四位、末位 X 前带空格的证件首 1 末 1、紧跟「-备注」的手机号 3+4、全角订单号只留末四位、含全角 ＠ 的邮箱片段从空白到空白整段遮成 ***（域名不显示），都不以明文落库；兼容字符（㎡、①）与「/」分组的数字原样，说明文字保留；结构化的订单号、退款单号、纯数字幂等键、13 位金额、提现单号与 target 原样",
+    "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#1] 兜底：认不出类型的去分隔连续 ≥ 11 位数字（含末位 X）一律只留末四位——订单号、参考号、12 位与 11 位非手机号、不过 Luhn 的卡形串、20 位参考号（连写与分组）、带字母前缀 / 后缀单号里的长数字段、校验位错的证件号、日期不合法的 15 位号、去横线后的 UUID 长数字",
+    "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#2] 只有空白与横线算分隔：「/ . , _」隔开的数字不连成一串，每段 < 11 位原样；< 11 位的数字串（含空白连起来仍 < 11 位、全角）原样；空白把两段连成 ≥ 11 位时按兜底只留末四位",
+    "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#3] 认得出类型的按 BR-ID-33 默认形状：手机号 3+4（含 +86 / 86 前缀与分组）、身份证首 1 末 1（18 位末位 X / x / 数字、15 位）、银行卡只留末 4；含 @ 的邮箱片段从空白到空白整段换成「***」，@ 与域名都不显示",
+    "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#4] 含 @ 的片段整段遮：不论 @ 前几位（2 位、1 位、大小写与下划线）、@ 后像不像域名，都从空白到空白整段换成「***」、域名不显示；@ 一侧是空白或 @ 两侧不是邮箱（@张三、单独的 @、价格@3.5元、全角 ＠）同样整段遮，单独的 @ 自成一段；片段里的数字（含手机号）随整段一起遮",
+    "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#5] 归一 · 全角：全角数字的手机号、证件号（含全角 Ｘ）、订单号先 NFKC 再判，形状同半角；全角字母加全角 ＠ 的邮箱归一后认出 @，整段换成「***」、全角域名不显示",
+    "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#6] 归一 · 横线：U+2212 减号与其他横线（‐ ‑ ‒ – — ― ﹣ －）当分隔，分组的长数字连成一串判；连续、混用的分隔同样",
+    "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#7] 归一 · 空白：NBSP U+00A0、U+202F、全角空格 U+3000、制表符当分隔，连续、混用同样",
+    "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#8] 归一 · 证件末位 X 前带空白：去分隔后与前 17 位连成 18 位判，校验位对的首 1 末 1，错的按兜底只留末四位（含 X）",
+    "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#9] 归一 · 手机号紧跟或紧接「-备注」：横线是分隔，不挡手机号的边界，照样 3+4，「备注」原样",
+    "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#10] 位置映射：NFKC 展开的兼容字符（㎡ ㎏ ① Ⅻ ﬁ … ™）与全角标点在原文里原样保留，其后的打码落在原来的位置上，不错位",
+    "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#11] 结构化字段（order_id、idempotency_key、*_fen、card_ref、out_refund_no、withdrawal_id、target）照旧原样，不走自由文本规则；同一份快照里的 reason / note / remarks 按兜底只留末四位",
+    "test/spec/admin/audit-free-text-pii/pay-refund.int.test.ts > [AC-B2-02ze#3] 退款备注里写了邮箱、18 位身份证（末位 X）、空格分组且过 Luhn 的银行卡号、手机号：退款照常建单，pay_refund_create 审计全文不含任何一项明文；备注仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 138****5678、证件 1****************X、卡号只露末 4 位；同长同分组但不过 Luhn 的对照号按兜底也只留末四位，B2-02zg D10-3266）；退款单 id、out_refund_no、支付单 id、金额与原因码原样",
+    "test/spec/admin/audit-free-text-pii/recon-close.int.test.ts > [AC-B2-02ze#1] 关差错单的原因里写了邮箱、18 位身份证（末位 X）、空格分组且过 Luhn 的银行卡号、手机号：关闭照常成功，recon_diff_close 审计的 before / after 全文不含任何一项明文；原因仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 138****5678、证件 1****************X、卡号只露末 4 位；同长同分组但不过 Luhn 的对照号按兜底也只留末四位，B2-02zg D10-3266）；差错单 id、状态与解冻数原样",
+    "test/spec/admin/audit-free-text-pii/recon-write-off.int.test.ts > [AC-B2-02ze#2] 差错核销的备注里写了带加号与子域的邮箱、校验位正确的 18 位纯数字身份证、日期合法的 15 位老身份证、连字符分组且过 Luhn 的卡号、手机号：核销照常成功，recon_diff_write_off 审计全文不含任何一项明文；备注仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 139****1111、两种证件都只留首末各 1 位、卡号只露末 4 位；校验位错的 18 位号与日期不合法的 15 位号按兜底只留末四位，B2-02zg D10-3266）；结构化的提现单号与状态原样",
+    "test/spec/admin/audit-free-text-pii/system-audit.int.test.ts > [AC-B2-02ze#7] 系统审计 appendAction 的自由文本（before.reason、嵌套的 after.detail.note）里的邮箱（含 @ 的片段从空白到空白整段遮成「***」、域名不显示）、身份证（18 位末位 X、18 位校验位正确、15 位日期合法，只留首末各 1 位）、过 Luhn 的卡号（19 位、连字符分组、card: 前缀、13 位，只露末 4）、手机号都不以明文落库，说明文字保留；自由文本里的 16 位订单号、13 位参考号、不过 Luhn 的 19 位长号、校验位错的 18 位号、日期不合法的 15 位号、12 位数字、taobao: 与 W…ABC 里的 16 位数字段按兜底只留末四位（B2-02zg D10-3266），uuid、taobao:1234567、W20261121ABC 原样；结构化的订单号（16 位）、提现单号、差错单号、纯数字幂等键（16 位，过 Luhn）、13 位以上金额（数字与整数字符串、含负数）与 target 原样",
+    "test/spec/admin/audit-free-text-pii/withdrawal-reject.int.test.ts > [AC-B2-02ze#4] 提现驳回的备注里写了带加号与子域的邮箱、校验位正确的 18 位纯数字身份证、日期合法的 15 位老身份证、连字符分组且过 Luhn 的卡号、手机号：驳回照常成功，withdrawal_reject 审计全文不含任何一项明文；备注仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 139****1111、两种证件都只留首末各 1 位、卡号只露末 4 位；校验位错的 18 位号与日期不合法的 15 位号按兜底只留末四位，B2-02zg D10-3266）；提现单 id、状态与原因码原样"
+  ],
+  "task": "B2-02zg",
+  "spec_commit": "8324e17fbf2d3a14eccd300cd2dd92bd046c48a9",
+  "spec_ref": "b3b8ff548af95078a744803e9d7461ee269ad448",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "8324e17fbf2d3a14eccd300cd2dd92bd046c48a9",
+      "tree": "337937668be39f0078904fcde2d5dae31573183a",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-27T12:05:42Z",
+      "finished_at": "2026-11-27T12:08:54Z",
+      "red_tests": [
+        "test/spec/admin/audit-free-text-pii/adjustment-reject.int.test.ts > [AC-B2-02ze#5] 调账驳回的原因里写了邮箱、18 位身份证（末位 X）、空格分组且过 Luhn 的银行卡号、手机号：驳回照常成功，adjustment_reject 审计全文不含任何一项明文；原因仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 138****5678、证件 1****************X、卡号只露末 4 位；同长同分组但不过 Luhn 的对照号按兜底也只留末四位，B2-02zg D10-3266）；调账单与会员 id 原样",
+        "test/spec/admin/audit-free-text-pii/balance-recalc.int.test.ts > [AC-B2-02ze#6] 余额重算的原因里写了带加号与子域的邮箱、校验位正确的 18 位纯数字身份证、日期合法的 15 位老身份证、连字符分组且过 Luhn 的卡号、手机号：重算照常成功，recon_diff_balance_recalc 审计全文不含任何一项明文；原因仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 139****1111、两种证件都只留首末各 1 位、卡号只露末 4 位；校验位错的 18 位号与日期不合法的 15 位号按兜底只留末四位，B2-02zg D10-3266）；13 位金额（含负数）、差错单与会员 id 原样",
+        "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts > [AC-B2-02zg#13] 归一 · 换行也是空白：\\n、\\r、\\r\\n、U+2028、U+2029 分隔的分组长数字照样连成一串判——过 Luhn 的卡号只留末 4、认不出的只留末四位、手机号 3+4、证件首 1 末 1；换行与空格、制表符、NBSP、横线混用同样；两行各不足 11 位、连起来 ≥ 11 位的按兜底只留末四位",
+        "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts > [AC-B2-02zg#14] 邮箱紧邻中文标点（，。、；：（）「」【】《》！？）或 ASCII 标点：含 @ 的片段从前一个空白或文本开头到后一个空白或文本结尾整段换成「***」——紧贴地址两侧的中文与标点一起遮，@ 与域名都不显示；片段外以空白隔开的文字原样",
+        "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts > [AC-B2-02zg#15] 兜底的末位小写 x：校验位错的 18 位证件号末位小写 x（连写、前带空格 / NBSP / 横线 / 分组、全角 ｘ）与大写 X 同样只留末四字符（003x）；认不出类型的 ≥ 11 位数字带末位 x 同样",
+        "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts > [AC-B2-02zg#16] 位置映射 · 兼容字符展开：打码按归一后的逐位判定——展开成几位数字的字符（⑩ ⑪ ⑫ ⑳）跨在打码区与保留区之间时既不整个保留也不整个遮掉，只露归一后的那几位；展开成多个字的字符（㍻ ㍿ ﬃ）在前时其后各处打码不错位",
+        "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts > [AC-B2-02zg#17] 位置映射 · 全角邮箱整段遮不改片段外的原文字符：全角（或半角全角混写）、含 ＠ / @ 的片段归一后认出 @，从空白到空白整段换成「***」（不论 @ 前几位，紧贴的「邮箱（」「），已核」一起遮，域名含全角 ．不显示）；片段前后的空白（含全角空格 U+3000）与文字都是原文原位置上的字符",
+        "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts > [AC-B2-02zg#19] 邮箱整段遮（编排 D10-3479 / D10-3481，评审 r3 / r4 样例）：@ 左紧贴中文、中文加数字、撇号时，含 @ 的片段从空白到空白整段换成「***」，@ 与域名都不显示；域名后紧跟「-待核」（横线不是片段边界）时连「-待核」一起换掉，整段只剩「***」",
+        "test/spec/admin/audit-free-text-pii/multiline-reason.int.test.ts > [AC-B2-02zg#18] 多行原因落库：换行（LF、CR LF、CR、U+2028）当分隔——跨行的过 Luhn 卡号只留末 4、跨行的不过 Luhn 长号与订单号只留末四位、跨行的手机号 3+4、跨行的证件首 1 末 1、校验位错且小写 x 在下一行的证件号只留 003x、全角括号里的邮箱所在片段从换行到空白整段换成「***」（「邮箱（」「）已核；订单」一起遮、@ 与域名不显示），before.reason 与 after.detail.note 都不以明文落库；说明文字与换行外的行文保留，提现单号与 target 原样",
+        "test/spec/admin/audit-free-text-pii/normalization.int.test.ts > [AC-B2-02zg#12] 系统审计 appendAction 的自由文本先归一再打码：全角数字手机号 3+4、U+2212 分组的卡号与 NBSP / U+202F / 全角空格分组的长数字只留末四位、末位 X 前带空格的证件首 1 末 1、紧跟「-备注」的手机号 3+4、全角订单号只留末四位、含全角 ＠ 的邮箱片段从空白到空白整段遮成 ***（域名不显示），都不以明文落库；兼容字符（㎡、①）与「/」分组的数字原样，说明文字保留；结构化的订单号、退款单号、纯数字幂等键、13 位金额、提现单号与 target 原样",
+        "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#1] 兜底：认不出类型的去分隔连续 ≥ 11 位数字（含末位 X）一律只留末四位——订单号、参考号、12 位与 11 位非手机号、不过 Luhn 的卡形串、20 位参考号（连写与分组）、带字母前缀 / 后缀单号里的长数字段、校验位错的证件号、日期不合法的 15 位号、去横线后的 UUID 长数字",
+        "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#2] 只有空白与横线算分隔：「/ . , _」隔开的数字不连成一串，每段 < 11 位原样；< 11 位的数字串（含空白连起来仍 < 11 位、全角）原样；空白把两段连成 ≥ 11 位时按兜底只留末四位",
+        "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#3] 认得出类型的按 BR-ID-33 默认形状：手机号 3+4（含 +86 / 86 前缀与分组）、身份证首 1 末 1（18 位末位 X / x / 数字、15 位）、银行卡只留末 4；含 @ 的邮箱片段从空白到空白整段换成「***」，@ 与域名都不显示",
+        "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#4] 含 @ 的片段整段遮：不论 @ 前几位（2 位、1 位、大小写与下划线）、@ 后像不像域名，都从空白到空白整段换成「***」、域名不显示；@ 一侧是空白或 @ 两侧不是邮箱（@张三、单独的 @、价格@3.5元、全角 ＠）同样整段遮，单独的 @ 自成一段；片段里的数字（含手机号）随整段一起遮",
+        "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#5] 归一 · 全角：全角数字的手机号、证件号（含全角 Ｘ）、订单号先 NFKC 再判，形状同半角；全角字母加全角 ＠ 的邮箱归一后认出 @，整段换成「***」、全角域名不显示",
+        "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#6] 归一 · 横线：U+2212 减号与其他横线（‐ ‑ ‒ – — ― ﹣ －）当分隔，分组的长数字连成一串判；连续、混用的分隔同样",
+        "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#7] 归一 · 空白：NBSP U+00A0、U+202F、全角空格 U+3000、制表符当分隔，连续、混用同样",
+        "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#8] 归一 · 证件末位 X 前带空白：去分隔后与前 17 位连成 18 位判，校验位对的首 1 末 1，错的按兜底只留末四位（含 X）",
+        "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#9] 归一 · 手机号紧跟或紧接「-备注」：横线是分隔，不挡手机号的边界，照样 3+4，「备注」原样",
+        "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#10] 位置映射：NFKC 展开的兼容字符（㎡ ㎏ ① Ⅻ ﬁ … ™）与全角标点在原文里原样保留，其后的打码落在原来的位置上，不错位",
+        "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts > [AC-B2-02zg#11] 结构化字段（order_id、idempotency_key、*_fen、card_ref、out_refund_no、withdrawal_id、target）照旧原样，不走自由文本规则；同一份快照里的 reason / note / remarks 按兜底只留末四位",
+        "test/spec/admin/audit-free-text-pii/pay-refund.int.test.ts > [AC-B2-02ze#3] 退款备注里写了邮箱、18 位身份证（末位 X）、空格分组且过 Luhn 的银行卡号、手机号：退款照常建单，pay_refund_create 审计全文不含任何一项明文；备注仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 138****5678、证件 1****************X、卡号只露末 4 位；同长同分组但不过 Luhn 的对照号按兜底也只留末四位，B2-02zg D10-3266）；退款单 id、out_refund_no、支付单 id、金额与原因码原样",
+        "test/spec/admin/audit-free-text-pii/recon-close.int.test.ts > [AC-B2-02ze#1] 关差错单的原因里写了邮箱、18 位身份证（末位 X）、空格分组且过 Luhn 的银行卡号、手机号：关闭照常成功，recon_diff_close 审计的 before / after 全文不含任何一项明文；原因仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 138****5678、证件 1****************X、卡号只露末 4 位；同长同分组但不过 Luhn 的对照号按兜底也只留末四位，B2-02zg D10-3266）；差错单 id、状态与解冻数原样",
+        "test/spec/admin/audit-free-text-pii/recon-write-off.int.test.ts > [AC-B2-02ze#2] 差错核销的备注里写了带加号与子域的邮箱、校验位正确的 18 位纯数字身份证、日期合法的 15 位老身份证、连字符分组且过 Luhn 的卡号、手机号：核销照常成功，recon_diff_write_off 审计全文不含任何一项明文；备注仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 139****1111、两种证件都只留首末各 1 位、卡号只露末 4 位；校验位错的 18 位号与日期不合法的 15 位号按兜底只留末四位，B2-02zg D10-3266）；结构化的提现单号与状态原样",
+        "test/spec/admin/audit-free-text-pii/system-audit.int.test.ts > [AC-B2-02ze#7] 系统审计 appendAction 的自由文本（before.reason、嵌套的 after.detail.note）里的邮箱（含 @ 的片段从空白到空白整段遮成「***」、域名不显示）、身份证（18 位末位 X、18 位校验位正确、15 位日期合法，只留首末各 1 位）、过 Luhn 的卡号（19 位、连字符分组、card: 前缀、13 位，只露末 4）、手机号都不以明文落库，说明文字保留；自由文本里的 16 位订单号、13 位参考号、不过 Luhn 的 19 位长号、校验位错的 18 位号、日期不合法的 15 位号、12 位数字、taobao: 与 W…ABC 里的 16 位数字段按兜底只留末四位（B2-02zg D10-3266），uuid、taobao:1234567、W20261121ABC 原样；结构化的订单号（16 位）、提现单号、差错单号、纯数字幂等键（16 位，过 Luhn）、13 位以上金额（数字与整数字符串、含负数）与 target 原样",
+        "test/spec/admin/audit-free-text-pii/withdrawal-reject.int.test.ts > [AC-B2-02ze#4] 提现驳回的备注里写了带加号与子域的邮箱、校验位正确的 18 位纯数字身份证、日期合法的 15 位老身份证、连字符分组且过 Luhn 的卡号、手机号：驳回照常成功，withdrawal_reject 审计全文不含任何一项明文；备注仍在（说明文字保留，含 @ 的邮箱片段从空白到空白整段遮成 ***、域名不显示，手机 139****1111、两种证件都只留首末各 1 位、卡号只露末 4 位；校验位错的 18 位号与日期不合法的 15 位号按兜底只留末四位，B2-02zg D10-3266）；提现单 id、状态与原因码原样"
+      ],
+      "expected": [
+        "test/spec/admin/audit-free-text-pii/adjustment-reject.int.test.ts",
+        "test/spec/admin/audit-free-text-pii/balance-recalc.int.test.ts",
+        "test/spec/admin/audit-free-text-pii/breaks-punctuation-mapping.test.ts",
+        "test/spec/admin/audit-free-text-pii/multiline-reason.int.test.ts",
+        "test/spec/admin/audit-free-text-pii/normalization.int.test.ts",
+        "test/spec/admin/audit-free-text-pii/normalize-then-mask.test.ts",
+        "test/spec/admin/audit-free-text-pii/pay-refund.int.test.ts",
+        "test/spec/admin/audit-free-text-pii/recon-close.int.test.ts",
+        "test/spec/admin/audit-free-text-pii/recon-write-off.int.test.ts",
+        "test/spec/admin/audit-free-text-pii/system-audit.int.test.ts",
+        "test/spec/admin/audit-free-text-pii/withdrawal-reject.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "4b9fcb1fbecc4871189341ae542d0fe4cee938a9cbfc3842d663dbeecc090819"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "a3320f1333c986103a87f1c47873ec5047a8af7aefb12388b78812adfaf5c780"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "b83544bb5597c540f71ab4ecab1ea5578646d690",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
