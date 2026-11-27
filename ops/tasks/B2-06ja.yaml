@@ -24,5 +24,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/alipay-cert-kms/**'
-status: todo
-pr: null
+status: done
+pr: 972
