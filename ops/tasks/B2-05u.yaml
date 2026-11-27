@@ -15,7 +15,7 @@ type: impl
 refs: [BR-WDR-02, BR-WDR-03]
 refs_hash:
   BR-WDR-02: 578bf800894a
-  BR-WDR-03: c1b5f37a0dd1
+  BR-WDR-03: 15fa0e1361e5
 deps: []
 paths:
   - 'apps/api/src/modules/payout/application/withdraw-rules*.ts'

@@ -8,8 +8,8 @@ type: impl
 # Codex 到 11-17 不可用：规则测试与评审照 approvals 36 由独立 Claude（claude-run.sh，证据记 claude-independent）承担；Opus 实现。
 refs: [BR-TEXT-14, BR-TEXT-12]
 refs_hash:
-  BR-TEXT-14: e029c2349c51
-  BR-TEXT-12: d27e4b39c11e
+  BR-TEXT-14: ba6b92fa997e
+  BR-TEXT-12: e664783657dd
 deps: []
 paths:
   - 'contracts/texts.default.json'
