@@ -1,0 +1,27 @@
+id: B1-08zze
+repo: rebate-platform
+title: 'FU-ORDER-PIDSCENE-REUSE-MATCH：淘宝未归因重跑命中时复用命中行的 pid_scene——来源回填与首次分佣快照不再按 orders.pid 二次查 union_pids，后台在两次查询之间改登记行也不丢淘礼金场景'
+type: impl
+# 2026-11-27 w1 入账（编排 D10-3485：B1-08zzc 资金评审 r3 评审方范围外 S0，w1 核原文属实；B1-08zzc #935 已合并，本单落地后立刻开做、不排到别的单后面）。归属 / 金额类，RV2，Codex 资金评审。
+# 现状：orders/application/update-step.ts（B1-08zzc r3）未归因重跑按本次报文 site_id + adzone 用 matchOrderSlot 重新匹配，命中只取 match.row.pid 写入；随后 orderPidScene 按写入后的 pid
+#   再等值查一次 union_pids 取 pid_scene（来源回填 ⑤ 与首次分佣快照都用它）。若后台在这两次查询之间改了同一登记行的 pid（同站点、同 adzone、同淘礼金场景），第二次查空 →
+#   场景未知 → 首次快照按普通单分佣（BR-CALC-19：淘礼金用户份额应 0；净佣 1000 分、5000 基点时会记 500 分）。
+# 做法：命中时把 match.row.pid_scene 记作本次已知场景（update-step 现有的 knownPidScene），来源回填与首次快照复用这次匹配的场景，不再按 pid 二次查；
+#   未命中（保留 current.pid 并 warn 的分支）与已归因订单、京东拼多多照现状。不改匹配口径（D10-3355）、不改 orders.pid 的写法（D10-3406 / D10-3454）。实现方单测补一例。
+# 规则测试钉：① 未归因淘礼金单补齐 relation_id 的那次同步里，命中之后、取场景之前登记行被改（pid 换写法，场景不变）→ 首次快照仍为淘礼金场景（none、用户份额 0）；
+#   ② 同一情形下来源回填按淘礼金场景走（不当成场景未知、不告警 pid_scene 缺失）；③ 命中行的场景是 share / self_buy 时照该场景，不因复用而错。测试替身在端口层制造「两次查询之间被改」。
+refs: [BR-CALC-19, BR-ATTR-15]
+refs_hash:
+  BR-CALC-19: dc5707a12393
+  BR-ATTR-15: e3d465a124a8
+deps: [B1-08zzc]
+paths:
+  - 'apps/api/src/modules/orders/application/{update-step,update-step.test}.ts'
+test_paths:
+  - 'test/spec/orders/taobao-slot-match/pidscene-reuse/**' # 新目录
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/taobao-slot-match/**'
+status: todo
