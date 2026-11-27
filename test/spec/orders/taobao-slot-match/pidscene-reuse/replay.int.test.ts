@@ -44,6 +44,8 @@ afterAll(async () => {
 
 const RELATION = '987654321098';
 
+type RegistrationUpdate = Partial<Pick<DB['union_pids'], 'pid' | 'pid_scene'>>;
+
 async function prepare(
   tradeId: string,
   options: { pidScene: 'taolijin' | 'share'; withSources: boolean; initialPid?: string },
@@ -175,35 +177,37 @@ async function prepare(
       .execute();
   expect(await readSplits()).toEqual([]);
 
-  async function renamePid(newPid: string) {
+  async function updateRegistration(changes: RegistrationUpdate) {
     await db
       .updateTable('union_pids')
-      .set({ pid: newPid })
+      .set(changes)
       .where('app_id', '=', acc.app_id)
       .where('id', '=', registration.id)
-      .executeTakeFirst();
+      .returning('id')
+      .executeTakeFirstOrThrow();
   }
 
-  async function rerun() {
-    if (initialPid !== FULL_PID) await renamePid(FULL_PID);
+  async function rerun(changes: RegistrationUpdate = { pid: ADZONE }) {
+    if (initialPid !== FULL_PID) await updateRegistration({ pid: FULL_PID });
     find.mockClear();
     slotCandidates.mockClear();
     logger.warn.mockClear();
     slotCandidates.mockImplementationOnce(async (input) => {
       const rows = await readers.pids.slotCandidates(input);
-      // 候选查询已读到完整 PID。后台换成同 adzone 的数字 PID 后，再查完整 PID 会落空。
-      await renamePid(ADZONE);
+      // 候选查询读到了原场景。返回已读候选前，模拟后台提交对同一登记行的改动。
+      await updateRegistration(changes);
       return rows;
     });
     expect(
       await sync(FULL_PID, { relation_id: num(RELATION), modified_time: '2026-10-30 10:50:00' }),
     ).toMatchObject({ ok: true, value: { kind: 'updated', order_id: before.order_id } });
-    expect(slotCandidates).toHaveBeenCalledWith({
+    expect(slotCandidates).toHaveBeenCalledExactlyOnceWith({
       appId: acc.app_id,
       platform: 'taobao',
       unionAccountId: acc.id,
       slot: ADZONE,
     });
+    expect(find).not.toHaveBeenCalled();
     const order = await readOrder();
     expect(order).toMatchObject({
       pid: FULL_PID,
@@ -224,7 +228,7 @@ async function prepare(
     });
   }
 
-  return { addClick, find, logger, readSplits, readTotals, rerun };
+  return { addClick, logger, readSplits, readTotals, rerun };
 }
 
 it('[AC-B1-08zze#1] 淘礼金登记行在重跑命中后改写 PID，未启用来源回填时首次快照仍记 none 和零用户份额', async () => {
@@ -233,7 +237,6 @@ it('[AC-B1-08zze#1] 淘礼金登记行在重跑命中后改写 PID，未启用�
 
   expect(await order.readSplits()).toEqual([{ rebate_mode: 'none', raw_n_fen: 1000n }]);
   expect(await order.readTotals()).toEqual([{ user_share_total_fen: 0n, tlj_redpacket_fen: null }]);
-  expect(order.find).not.toHaveBeenCalled();
 });
 
 it('[AC-B1-08zze#2] 淘礼金登记行改写 PID 后，来源回填与首次快照都按重跑命中的淘礼金场景处理', async () => {
@@ -252,7 +255,6 @@ it('[AC-B1-08zze#2] 淘礼金登记行改写 PID 后，来源回填与首次快�
   expect(order.logger.warn.mock.calls.map(([fields]) => fields)).not.toContainEqual(
     expect.objectContaining({ reason: 'PID_SCENE_NOT_FOUND' }),
   );
-  expect(order.find).not.toHaveBeenCalled();
 });
 
 it('[AC-B1-08zze#3] 重跑命中分享推广位时按分享场景回填来源，并生成普通分佣快照', async () => {
@@ -272,5 +274,20 @@ it('[AC-B1-08zze#3] 重跑命中分享推广位时按分享场景回填来源，
   });
   expect(await order.readSplits()).toEqual([{ rebate_mode: null, raw_n_fen: 1000n }]);
   expect(await order.readTotals()).toEqual([{ user_share_total_fen: 500n, tlj_redpacket_fen: 0n }]);
-  expect(order.find).not.toHaveBeenCalled();
+});
+
+it('[AC-B1-08zze#4] 同一登记行改为分享场景后，来源回填与首次快照仍使用重跑命中时的淘礼金场景', async () => {
+  const order = await prepare('4920000000000000034', { pidScene: 'taolijin', withSources: true });
+  const taolijin = await order.addClick('taolijin');
+  await order.addClick('share', true);
+
+  const updated = await order.rerun({ pid_scene: 'share' });
+  expect(updated).toMatchObject({
+    source_match: 'product',
+    source_scene: taolijin.scene,
+    link_id: taolijin.link_id,
+    agent_session_id: taolijin.agent_session_id,
+  });
+  expect(await order.readSplits()).toEqual([{ rebate_mode: 'none', raw_n_fen: 1000n }]);
+  expect(await order.readTotals()).toEqual([{ user_share_total_fen: 0n, tlj_redpacket_fen: null }]);
 });
