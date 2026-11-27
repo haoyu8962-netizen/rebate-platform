@@ -1,0 +1,23 @@
+id: CT-11bvc
+repo: rebate-platform
+title: 订单查询截图夹具补「同步状态」读口的成功回答，重录 admin-orders-light（FU-ADMIN-ORDERS-STATUS-TAG-CLIP 第 ① 项）
+type: impl
+# 2026-11-28 入账（前端线 fe；编排 D10-3642，照 D10-3564 走非 task 分支 chore/CT-11bvc-orders-sync-fixture、台账同 PR，编排按 approvals #24 核后加 owner 标签）。
+# 来由：CT-11bvb 暂缓的 admin-orders-light——截图夹具 test/spec/frontend/admin-orders/orders-fixtures.ts 的 createServer 不答 GET /admin/v1/order-syncs（订单列表状态条 SyncStatusBar.tsx:51 每次进页读最新一条），状态条走「同步状态读取失败」分支被录进基准。
+# 只做（写死）：orders-fixtures.ts 纯新增一条路由——GET /admin/v1/order-syncs 回一条已完成的同步记录（形状照契约 AdminOrderSyncPage，取值照 admin-orders-sync/fixtures.ts 的样例），不改已有路由与导出；随后 --browser 重录 admin-orders-light.png 一张。
+#   用这个夹具的其他规则测试：admin-orders-standard-b2 的状态条用例经自己的 kit 把 order-syncs 路由给 admin-orders-sync 夹具、失败态用显式 override；admin-orders-standard/tabs.test.ts 只数请求——都不依赖本夹具对 order-syncs 的缺省失败（落地前测试机 --tests 全跑一遍核）。
+# 不做：返利状态标签被【操作】固定列遮挡（第 ② 项先量后改，另单）；admin_dict.rebate_status / platform_status 字典缺口（第 ③ 项，FU-ADMIN-DICT-REBATE-PLATFORM-STATUS，契约线 be）。
+refs: []
+refs_hash: {}
+deps: [CT-11bvb]
+paths:
+  - 'test/spec/frontend/admin-orders/orders-fixtures.ts'
+  - 'test/spec/frontend/visual-baseline/__baselines__/admin-orders-light.png'
+test_paths:
+  - 'test/spec/frontend/admin-orders/orders-fixtures.ts'
+  - 'test/spec/frontend/visual-baseline/__baselines__/admin-orders-light.png'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
