@@ -78,6 +78,17 @@ export interface FeeTaxCalculator {
   }>;
 }
 
+/**
+ * B2-05u (BR-WDR-02 细则「关闭某方式后」): the open-method switch as identity owns it — the key,
+ * the default set and identity's one parser (null = invalid value) — handed in by app.module, so
+ * payout imports nothing of identity (规划/02 §4.1).
+ */
+export interface OpenPayoutMethodsPort {
+  key: string;
+  defaults: ReadonlySet<string>;
+  parse(value: unknown): ReadonlySet<string> | null;
+}
+
 export interface WithdrawRulesOptions {
   clock: Clock;
   logger: Pick<Logger, 'warn'>;
@@ -126,6 +137,11 @@ export interface WithdrawRulesOptions {
     ): Promise<{ count: number; amount_fen: bigint }>;
   };
   feeTax: FeeTaxCalculator;
+  /**
+   * B2-05u: absent only in hand-built assemblies; then the switch is not read and the bound
+   * method is used as it is.
+   */
+  openPayoutMethods?: OpenPayoutMethodsPort;
 }
 
 export interface WithdrawRulesService {
@@ -285,6 +301,27 @@ export async function readWithdrawEnabled(
   return DEFAULT_WITHDRAW_LIMITS.enabled;
 }
 
+/**
+ * B2-05u (BR-WDR-02 细则「关闭某方式后」): the open payout methods, the switch parsed by the port's
+ * parser (identity's one parser, assembled by app.module). A missing row is the port's default set
+ * without a warning (like every withdraw.* key here); an invalid value takes the default with
+ * withdraw_config_default. Read only by readWithdrawInput: a withdrawal already created never
+ * looks at this switch.
+ */
+export async function readOpenPayoutMethods(
+  handle: Kysely<DB>,
+  appId: string,
+  port: OpenPayoutMethodsPort,
+  options: Pick<WithdrawRulesOptions, 'config' | 'logger'>,
+): Promise<ReadonlySet<string>> {
+  const row = await options.config.configValue(appId, port.key, handle);
+  if (row === null) return port.defaults;
+  const parsed = port.parse(row.value);
+  if (parsed !== null) return parsed;
+  options.logger.warn({ app_id: appId, config_key: port.key }, 'withdraw_config_default');
+  return port.defaults;
+}
+
 /** A hold is in effect while not released and either open-ended or not yet due (BR-WDR-05). */
 export function holdActive(hold: WithdrawHold, now: Date): boolean {
   if (hold.released_at !== null) return false;
@@ -333,6 +370,21 @@ export async function readWithdrawInput(
   });
   const payeeHmac = subject === null ? null : subject.payee_hmac;
   const payoutMethod = subject === null ? null : subject.payout_method;
+  // ⑤ (B2-05u, BR-WDR-02 细则): an account bound to a method the app has since closed counts as no
+  // usable account — only the rule chain's payout_method becomes null (30305 on both endpoints, the
+  // maximum computed as unbound). ③a, the payee's daily counts and the locks keep the real account.
+  // Without the port (hand-built assemblies only) the switch is not read: the real method stands.
+  const port = options.openPayoutMethods;
+  const openMethods =
+    subject === null || port === undefined
+      ? null
+      : await readOpenPayoutMethods(handle, actor.appId, port, options);
+  const ruleMethod =
+    payoutMethod === null || port === undefined
+      ? payoutMethod
+      : openMethods !== null && openMethods.has(payoutMethod)
+        ? payoutMethod
+        : null;
   // ③a: one judgement either way. B2-05q (BR-ID-36): a reader with match() also names what hit,
   // so that a refused application can be recorded without judging a second time.
   const blocklistSubject = { ...actor, payeeHmac, payoutMethod, now };
@@ -365,7 +417,7 @@ export async function readWithdrawInput(
     blocklist_hit: matched === null ? null : matched.hit,
     reverify,
     realname_verified: realnameStatus === 'verified' && realname !== null,
-    payout_method: payoutMethod,
+    payout_method: ruleMethod,
     names_match:
       realname !== null && subject !== null && samePersonName(realname.name, subject.payee_name),
     labor_agreement_signed: signed,

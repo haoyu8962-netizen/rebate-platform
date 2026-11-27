@@ -228,7 +228,7 @@ export interface PayoutAccountReader {
 export const PAYOUT_METHODS_KEY = 'withdraw.payout_methods';
 export const CHANGE_LIMIT_KEY = 'withdraw.payout_account_change_per_month';
 /** BR-WDR-02 defaults (D12; ④). */
-const DEFAULT_PAYOUT_METHODS: ReadonlySet<string> = new Set(['alipay', 'bank_card']);
+export const DEFAULT_PAYOUT_METHODS: ReadonlySet<string> = new Set(['alipay', 'bank_card']);
 const DEFAULT_CHANGE_LIMIT = 2;
 const KNOWN_PAYOUT_METHODS: ReadonlySet<string> = new Set(['alipay', 'bank_card', 'wechat']);
 
@@ -278,9 +278,13 @@ export async function readConfig(
   return new Map<string, unknown>(rows.map((row) => [row.key, row.value]));
 }
 
-/** withdraw.payout_methods: a non-empty array of distinct known methods, else the default. */
-export function payoutMethods(config: Config, logger: RootLogger): ReadonlySet<string> {
-  const value = config.get(PAYOUT_METHODS_KEY);
+/**
+ * The one parser of withdraw.payout_methods (BR-WDR-02 细则; B2-05u: the binding / change paths
+ * here and payout's withdrawal input share it through identity's index.ts): the open methods when
+ * the value is a non-empty array of distinct known methods, otherwise null (the caller logs and
+ * takes DEFAULT_PAYOUT_METHODS). Pure: no reads, no logging.
+ */
+export function parsePayoutMethods(value: unknown): ReadonlySet<string> | null {
   if (
     Array.isArray(value) &&
     value.length > 0 &&
@@ -289,6 +293,13 @@ export function payoutMethods(config: Config, logger: RootLogger): ReadonlySet<s
   ) {
     return new Set(value as string[]);
   }
+  return null;
+}
+
+/** withdraw.payout_methods: a non-empty array of distinct known methods, else the default. */
+export function payoutMethods(config: Config, logger: RootLogger): ReadonlySet<string> {
+  const parsed = parsePayoutMethods(config.get(PAYOUT_METHODS_KEY));
+  if (parsed !== null) return parsed;
   logger.warn({ config_key: PAYOUT_METHODS_KEY }, 'payout_account_config_default');
   return DEFAULT_PAYOUT_METHODS;
 }

@@ -624,11 +624,11 @@ codes:
     sources: [BR-ID-01, BR-ID-10, BR-WDR-03, BR-WDR-07]
   - code: 30305
     http: 422
-    meaning: 未绑定收款账号
+    meaning: 未绑定收款账号，或已绑定的收款方式已被关闭（BR-WDR-02 细则）
     action: 跳 PayoutAccount；完成后回到发起页，不重放原请求（只有提现申请会返回这个码，发起页就是 Withdraw）
     retry: 否（绑定后由用户重新提交，用新幂等键，同 30304）
     retry_kind: never
-    sources: [BR-WDR-03, BR-WDR-07]
+    sources: [BR-WDR-02, BR-WDR-03, BR-WDR-07]
   - code: 30306
     http: 422
     meaning: 提现暂停（withdraw.enabled 关闭）
