@@ -1,0 +1,80 @@
+{
+  "risk_note": "RV2 by path (tools/ops, tools/agent/README.md). Gate tooling only, no money moves (orchestrator D10-3369 / D10-3437 / D10-3484 / D10-3500). verify-image/entrypoint.sh browser mode copies the container's test/.tmp/visual-baseline/ (compare.ts REPORT_DIR) to /out/visual-baseline/ after the browser projects run, whatever their result: regular files only, symbolic links neither copied nor followed, a report directory that is itself a link not exported. verify-container.sh --browser logs one summary line (files, summary-*.json) and adds result.json visual_baseline { files, summaries } (0 / 0 when there is no report); exit code and the 'no screenshot means failure' rule are unchanged. tools/agent/README.md gains the one D10-3437 sentence (future-signature types for not-yet-implemented calls under the red type check). Mechanical corrections (D10-3484, not counted): the rule-test fixture lockfile (kit.ts:98) and the implementer's unit-test fixture (verify-container.test.ts:2317) used `playwright@1.60.0: {}`, which verify-container.sh:1651 does not read, so --browser stopped at its precondition (exit 2); both now use the real pnpm-lock shape (`playwright@1.60.0:` plus a resolution line), assertions unchanged. The rule-test line is its own commit before the implementation (7f549f96e, spec_commit), the unit-test line its own commit after it (f16081c6f). C1' differs from db408f6ae, the commit spec-test review r2 read, only by prettier's line break (orchestrator D10-3500: no extra review). Third-class protected paths: the task PR's owner-approved label is decided by the owner.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex money r1 (full) pass, validation ok. Three S2, all on crafted paths only (a test/.tmp that is itself a link, a parent directory name ending in a newline, a file name with a newline); not fixed here, followup FU-VISUAL-EXPORT-CRAFTED-PATHS (orchestrator D10-3500). Test machine on head f16081c6f: --tests (browser-visual-export, red-typecheck, verify-fast-parts, verify-int-shard, evidence-check-early, verify-container.test.ts, ci-int-shards-workflow.test.ts) exit 0; verify:fast exit 0 (couli-runs/CT-06zzzzzzzo/review-codex.json, tests2 / fast2)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (one write, test/spec/ci/browser-visual-export/). Independent Claude review r1 (full) pass; two S2 on fixture robustness went to out_of_scope. r2 (incremental, only the D10-3484 lockfile line) pass. The first red passed for the wrong reason (the precondition exit 2 failed the exit-code assertions); after the correction the red run on the spec_commit tree (red-fix2) is red on the export assertions, type check 0. Followup FU-RED-PRECONDITION-RED."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#1] exports the complete report and preserves the verdict for passing projects with a screenshot",
+    "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#1] exports the complete report and preserves the verdict for a failed project with a screenshot",
+    "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#1] exports the complete report and preserves the verdict for passing projects without a screenshot",
+    "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#1] exports the complete report and preserves the verdict for a failed project without a screenshot",
+    "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#2] records zero files and summaries when the project did not create a report directory",
+    "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#3] omits file, directory and dangling links from the exported report",
+    "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#4] never traverses a report directory that is itself a symbolic link"
+  ],
+  "task": "CT-06zzzzzzzo",
+  "spec_commit": "e6db9eeb6e1a912fd57e59b017f83e98072e05a9",
+  "spec_ref": "f1d6a935d8d82c9d293e846336bd86f427227ac0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "e6db9eeb6e1a912fd57e59b017f83e98072e05a9",
+      "tree": "5c48abeb20556f4cc62523aca041e8c2e2bec872",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-27T08:41:39Z",
+      "finished_at": "2026-11-27T08:43:40Z",
+      "red_tests": [
+        "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#1] exports the complete report and preserves the verdict for passing projects with a screenshot",
+        "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#1] exports the complete report and preserves the verdict for a failed project with a screenshot",
+        "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#1] exports the complete report and preserves the verdict for passing projects without a screenshot",
+        "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#1] exports the complete report and preserves the verdict for a failed project without a screenshot",
+        "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#2] records zero files and summaries when the project did not create a report directory",
+        "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#3] omits file, directory and dangling links from the exported report",
+        "test/spec/ci/browser-visual-export/verify-container.test.ts > [AC-CT-06zzzzzzzo#4] never traverses a report directory that is itself a symbolic link"
+      ],
+      "expected": ["test/spec/ci/browser-visual-export/verify-container.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "941852f652161e717c7429edee145f966ea51de4655d506400274917b05e8cc5"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "bc2b64a62865ca1adb00f20844a79dcefe085baa",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}

@@ -42,6 +42,34 @@ prepare_repo() { # <log tag>
   pnpm install --offline --frozen-lockfile --store-dir /store
 }
 
+# browser (D10-3369): copies the screenshot comparison report the browser tests leave in
+# /work/repo/test/.tmp/visual-baseline to /out/visual-baseline, keeping relative paths. Regular
+# files only: a symbolic link (to a file, a directory or nowhere) is never copied or followed, and
+# a report directory that is itself a link is not exported at all. Absent directory: nothing.
+export_visual_baseline() {
+  local report=/work/repo/test/.tmp/visual-baseline
+  local dest=/out/visual-baseline
+  local file rel
+  # The tests could write to /out as well: whatever they left under that name goes first.
+  rm -rf -- "$dest" || return 1
+  if [ -L "$report" ]; then
+    echo "[browser] visual-baseline: the report directory is a symbolic link, not exported"
+    return 0
+  fi
+  if [ ! -d "$report" ]; then
+    echo "[browser] visual-baseline: no report directory, nothing to export"
+    return 0
+  fi
+  mkdir -p -- "$dest" || return 1
+  # find without -L never follows links; -type f leaves out links and every non-regular file.
+  while IFS= read -r -d '' file; do
+    rel="${file#./}"
+    mkdir -p -- "$dest/$(dirname -- "$rel")" || return 1
+    cp -- "$report/$rel" "$dest/$rel" || return 1
+  done < <(cd "$report" && find . -type f -print0)
+  echo "[browser] visual-baseline: report exported to /out/visual-baseline"
+}
+
 # A plan or project entry: a plain relative path (no `..`, no spaces, no shell syntax).
 plain_path() {
   [[ "$1" =~ ^[A-Za-z0-9_./@-]+$ ]] && [[ "$1" != *..* ]] && [[ "$1" != /* ]]
@@ -149,6 +177,10 @@ case "${1:-}" in
       echo "[browser] ${name}: vitest exited ${p_rc} after ${p_elapsed}s"
       [ "$rc" -ne 0 ] || rc="$p_rc"
     done
+    # D10-3369: whatever the projects' results, export the screenshot comparison report
+    # (test/.tmp/visual-baseline/: summary-*.json, actual and diff images) to /out/visual-baseline.
+    # Export only, never part of the verdict: rc is already recorded and a failed copy only logs.
+    export_visual_baseline || echo "[browser] visual-baseline: export failed (the exit code is unchanged)" >&2
     echo "[browser] exited ${rc} after $(( $(date +%s) - started ))s"
     exit "$rc"
     ;;

@@ -95,10 +95,14 @@
 #              Screenshots and one Vitest JSON report per project are exported to browser/<n>/out/
 #              (screenshots/ — the build smoke's are screenshots/smoke-<entry>.png —,
 #              <project>.vitest-report.json) for comparison with the design boards; the log counts
-#              both kinds. Exit code = the first failing project's (every project still runs), or
-#              1 when all passed but no screenshot was exported. Like --fast an implementer's own
-#              check, never
-#              evidence of verification (tools/ci/evidence-check.ts accepts verify and red only).
+#              both kinds. The screenshot comparison report (test/.tmp/visual-baseline/ of the run:
+#              summary-*.json, actual and diff images; regular files only, links left out) is
+#              exported to browser/<n>/out/visual-baseline/ whatever the results; the log and
+#              result.json (visual_baseline { files, summaries }, 0 and 0 without one) count it,
+#              never the exit code (D10-3369). Exit code = the first failing project's (every
+#              project still runs), or 1 when all passed but no screenshot was exported. Like
+#              --fast an implementer's own check, never evidence of verification
+#              (tools/ci/evidence-check.ts accepts verify and red only).
 #   --int-shard <i|rest>  one segment of `pnpm test:int` as CI runs it (CT-06zzzzzzza, D10-2443 ②
 #              ③): the segments and their commands are those tools/ci/int-shards.ts reads from the
 #              trusted root's .github/workflows/ci.yml (verify-int-<i>: shard i/N of
@@ -166,8 +170,9 @@
 #     prop_seed, prop_runs, started_at, finished_at }  — red adds red_tests, expected, reports
 #     (path + sha256) and typecheck { exit_code, errors } (null: not run); related writes
 #     related.json beside it; browser leaves its screenshots and
-#     report in out/. --tests writes <runs>/<id>/tests/<n>/{files.txt,plan.json,log.txt,out/,
-#     tests.json} and no result.json.
+#     report in out/ and adds visual_baseline { files, summaries } (out/visual-baseline/).
+#     --tests writes <runs>/<id>/tests/<n>/{files.txt,plan.json,log.txt,out/,tests.json} and no
+#     result.json.
 # `tree` is the git tree of the work tree as verified (uncommitted changes included). The tree
 # is exported once into an immutable snapshot and that snapshot is what gets verified, so the
 # hash and the exit code always describe the same files; git-ignored paths never reach it.
@@ -2810,6 +2815,19 @@ if [ "$SCRIPT" = browser ]; then
   # writes below a directory per test file.
   smoke_shots="$( (find "$VDIR/out/screenshots" -maxdepth 1 -type f -name 'smoke-*.png' 2>/dev/null || true) | wc -l | tr -d ' ')"
   step "browser tests exited $rc; screenshots exported: $shots (browser tests $((shots - smoke_shots)), build smoke $smoke_shots; $VDIR/out/screenshots)"
+  # D10-3369: the screenshot comparison report the entrypoint exported (test/.tmp/visual-baseline/
+  # of the run: summary-<name>.json at its top, actual and diff images below) is counted for the
+  # log and result.json only; it never changes the exit code. No directory (or a link): 0 and 0.
+  # The log line carries no other number than the two counts (the rule tests read them from it).
+  vb_dir="$VDIR/out/visual-baseline"
+  vb_files=0
+  vb_summaries=0
+  if [ -d "$vb_dir" ] && [ ! -L "$vb_dir" ]; then
+    vb_files="$( (find "$vb_dir" -type f 2>/dev/null || true) | wc -l | tr -d ' ')"
+    vb_summaries="$( (find "$vb_dir" -maxdepth 1 -type f -name 'summary-*.json' 2>/dev/null || true) | wc -l | tr -d ' ')"
+  fi
+  step "visual-baseline exported: $vb_files files, $vb_summaries summaries (out/visual-baseline)"
+  RESULT_EXTRA+=$',\n  "visual_baseline": { "files": '"$vb_files"', "summaries": '"$vb_summaries"' }'
   if [ "$rc" = 0 ] && [ "$shots" = 0 ]; then
     step "no screenshot was exported to out/screenshots: the browser run counts as failed (exit 1)"
     log "verify-container: no screenshot was exported to $VDIR/out/screenshots"
