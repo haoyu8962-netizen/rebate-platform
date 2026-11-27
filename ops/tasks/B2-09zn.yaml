@@ -52,5 +52,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/platform/metrics/recon-mismatch/**'
-status: todo
-pr: null
+status: done
+pr: 936
