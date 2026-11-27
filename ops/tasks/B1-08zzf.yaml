@@ -3,7 +3,7 @@ repo: rebate-platform
 title: 拼多多缺 lk 切 self 的前置 test-change：冻结规则测试里靠推广位判、没有 lk 的拼多多夹具补 lk 与 links 行（只补业务信息，断言与金额一字不动）
 type: test-change
 # 2026-11-27 be 入账（编排 D10-3475；FU-PDD-NO-LK-SELF-AT-IMPL2；先于 B1-08zzg）。B1-08zzg 把拼多多 missingLinkBuyTypeBasis 由 pid 切 self（BR-ATTR-08 正文「没有 lk 一律 self」，D10-3278 过渡口径退场）后，靠推广位判 share / agent 的拼多多夹具会变 self / fallback。
-# 本单只给这些夹具补上同一笔业务里本该有的 lk（custom_parameters）与对应 links 行（同 App、同用户、同商品、创建不晚于付款、pid_scene 与原推广位场景相同），让判定结果与今天一致；断言、期望值与金额一字不动。任何一块要动断言或期望值就停下单列报编排（D10-3475）。
+# 本单只给这些夹具补上同一笔业务里本该有的 lk（custom_parameters）与对应 links 行（同 App、同用户、同商品、创建不晚于付款、pid_scene 与原推广位场景相同），让判定结果与今天一致；断言、期望值与金额一字不动。任何一块要动断言或期望值就停下单列报编排（D10-3475）。补丁 1（D10-3499）：探针重定 74 块 / 25 文件，逐块登 modify_existing；[AC-B1-08zza#14] 归 B1-08zzg。
 # 范围：旧主干探针（couli-runs/B1-08zza/tests/1，原型一律 self）红 122 块 / 41 文件（orders 18、settlement 22、commission 1）；实际清单在当前主干上以「pdd 规则表切 self」探针重定，modify_existing 以台账补丁逐块登记，逐块按「只补业务信息」报编排核放行（approvals #24 加标签）。支撑文件（kit）只许纯插入，改不了的落到块内。
 refs: [BR-ATTR-08]
 refs_hash:
@@ -13,6 +13,451 @@ paths:
   - 'test/spec/orders/**'
   - 'test/spec/settlement/**'
   - 'test/spec/commission/**'
+modify_existing:
+  - file: 'test/spec/commission/version-rule/credited.int.test.ts'
+    test: '[AC-B2-03s#14][BR-CALC-23][BR-CALC-15][BR-FUND-09][BR-FUND-01] R10：已入账单结算额降到 800：版本 +1，新行等于新应得 400，不是复制；负差即时写 SETTLE_ADJUST（会员 100、平台 100），booked 成对改为 800 / 800，余额 400'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/commission/version-rule/credited.int.test.ts'
+    test: '[AC-B2-03s#15][BR-CALC-15] R10 同值重放：不再推版本，新行只写一次；再变才到 v3，行按再变后的 N'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/orders/snapshot-wiring/flow.int.test.ts'
+    test: '[AC-B1-08w#5] 生产 PAID 入库生成真实快照，直推 normal，历史取 paid_at'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/orders/snapshot-wiring/flow.int.test.ts'
+    test: '[AC-B1-08w#6] 生产 PAID 入库生成真实快照，直推 deleted，历史取 paid_at'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/orders/snapshot-wiring/flow.int.test.ts'
+    test: '[AC-B1-08w#7] 空规则库留下待处理，发布版本后生产 snapshot-retry 生成快照并关闭原行'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/orders/snapshot-wiring/flow.int.test.ts'
+    test: '[AC-B1-08w#8] 生产更新步骤在规则恢复后使用真实快照端口处置 pending'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/orders/subsidy-version/version-basis.int.test.ts'
+    test: '[AC-B1-18i#1][AC-B1-18i#3][BR-CALC-27][BR-CALC-15] 当前版本合计行补贴为空（B1-18f 加列前写的 v2，N 1200，SQL 造）→ 回退该单分佣快照的补贴 200 参与判定，不按订单列 350、也不按 0：N 不变、报文补贴 200 不 +1；补贴 350 才 +1，v3 份额与 base 同 v2（1200 / 600），合计行补贴 350、① 1550 ② 350 ④ 950，v2 行原样'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/orders/subsidy-version/version-basis.int.test.ts'
+    test: '[AC-B1-18i#1][AC-B1-18i#7][BR-CALC-27][BR-CALC-15][BR-FUND-01] 份额逐项沿用上一版本，不按订单佣金重分：两位受益人（本人 50 %、直推 10 %），经 worker 的维权同步写入方部分维权成功（应扣 400，R7）→ v2 base 600、300 / 60，订单佣金列仍 1000；再 N 不变、补贴 200 → 350 → v3 各受益人 (user_id, role, base_fen, amount_fen) 与 v2 整行相同（不是 1000 / 500 / 100），合计行 ① 950 ② 350 ④ 590；R7 的同 N 判定不误判'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/credit-refund-baseline/credit.int.test.ts'
+    test: '[AC-B1-08zi#22] 入账后同步报文带来已退件数增加与新结算 600：同一事务 R9 按 600 扣回，不走 R10；at_credit 不推进'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/credited-amount-rows/atomicity.int.test.ts'
+    test: '[AC-B2-04zk#7][BR-CALC-15][BR-CALC-27][BR-FUND-08] 同事务发布 order.clawed_back 失败：版本、v2 行、扣回凭证、booked、余额、维权记录随行事务一起回滚，任务仍 running；重投后版本只推一次到 v2，行与凭证各一份，事件一条'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/credited-amount-rows/atomicity.int.test.ts'
+    test: '[AC-B2-04zk#8][BR-CALC-15][BR-CALC-27] 另一 app 的同状态已入账单不受影响：本 app 维权应扣 4.00 元推到 v2（540 / 270），另一 app 的单仍是 v1、只有 v1 行、booked 900 / 1000、余额 450、无扣回无维权记录，一行不变'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/credited-amount-rows/base-zero.int.test.ts'
+    test: '[AC-B2-04zk#10][BR-FUND-08][BR-CALC-15][BR-FUND-01] 0 < N_new 而 B_new = 0 的维权（R8 BASE_ZERO，转 CLAWED_BACK、booked 0 / 1）不推版本、不写行：先应扣 4.00 元推到 v2 的单再应扣 5.99 元，版本停在 2、没有 v3、没有写版本的语句，扣回 270 / 329；直接从入账应扣 9.99 元的单版本仍 1、只有 v1，扣回 450 / 549；两单的已有版本行都不动'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/credited-amount-rows/base-zero.int.test.ts'
+    test: '[AC-B2-04zk#9][BR-CALC-15][BR-CALC-27][BR-FUND-08] 基数为 0 的已入账单（快照预留 10000 bp，N 1000、B 0、booked 0 / 1000）维权部分成功（应扣 4.00 元 → N_new 600、B_new 0）：仍是 R9、保持 CREDITED，commission_version 1 → 2 与 booked 0 / 600 同一条带 commission_version = 1 乐观锁的 UPDATE；v2 会员行 0 / 0，四段 600 / 600 / 0 / 0 / 0 / 600；只有平台扣回 400，会员无凭证；v1 行不动'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/credited-amount-rows/cas-miss.int.test.ts'
+    test: '[AC-B2-04zk#11][BR-CALC-15][BR-CALC-27][BR-FUND-08] 维权应扣 4.00 元时扣回那条带 commission_version 守卫的 orders CAS 落空一次：要么重读后重算、恰好推一次到 v2，要么整体干净回滚（版本、行、凭证、booked、维权记录都不留）且重投后恰好推一次；最后都是 v2（540 / 270，四段 600 / 60 / 540 / 270 / 0 / 330）一套行、扣回 180 / 220 各一份、booked 540 / 600、事件一条'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts'
+    test: '[AC-B2-04zk#1][BR-FUND-08][BR-CALC-15][BR-CALC-27] 已入账单维权部分成功（应扣 4.00 元）：commission_version 1 → 2，与 booked 成对值同一条带 commission_version = 1 乐观锁的 UPDATE；v2 按 N_new 600 与快照预留 1000（不是入账后新规则的 5000）重拆：会员 540 / 270，四段 600 / 60 / 540 / 270 / 0 / 330；扣回 180 / 220、booked 540 / 600、RIGHTS_PARTIAL 照旧；v1 行与快照不动'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts'
+    test: '[AC-B2-04zk#2][BR-FUND-08][BR-FUND-06][BR-CALC-15] 维权先成功而无应扣（WAIT_COMMISSION，不扣、不推版本），同一记录后来带回应扣 4.00 元：这次 R9 才推到 v2，行按 N_new 600 重拆（会员 270，四段 600 / 60 / 540 / 270 / 0 / 330），扣回键是同一 R{order_rights.id}'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts'
+    test: '[AC-B2-04zk#3][BR-CALC-15][BR-FUND-08][BR-FUND-06] 同一维权记录重投不再推版本、不再写行（与凭证幂等一致）：已完成的作业重投两次、同一文件重新上传（duplicate_rows 1）都一行不动；之后应扣 0.00 元的新记录规划无变化：版本仍 2，没有 v3，也没有写版本的语句'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/credited-amount-rows/rights-partial.int.test.ts'
+    test: '[AC-B2-04zk#4][BR-FUND-08][BR-CALC-15][BR-FUND-01] 部分维权推到 v2 之后，再来一条全额维权（应扣 12.00 元不低于 booked_n 600）：R8 RIGHTS_FULL 转 CLAWED_BACK、原因 RIGHTS、booked 0 / 0，扣回 270 / 330；版本停在 2，没有 v3、没有 0 行，v1 / v2 行不动'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/credited-amount-rows/sync-paths.int.test.ts'
+    test: '[AC-B2-04zk#5][BR-FUND-09][BR-CALC-15][BR-CALC-27][BR-FUND-08] R10（新结算 800）只由 orders 推到 v2 一次，v2 = 720 / 360、四段 800 / 80 / 720 / 360 / 0 / 440；之后维权应扣 2.00 元（N_new = 800 − 200 = 600）由 apply 推到 v3 一次，v3 = 540 / 270、四段 600 / 60 / 540 / 270 / 0 / 330；扣回 90 / 110，booked 540 / 600；v1、v2 不动'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/credited-amount-rows/sync-paths.int.test.ts'
+    test: '[AC-B2-04zk#6][BR-FUND-01][BR-FUND-08][BR-CALC-15][BR-CALC-27] 维权应扣 4.00 元由 apply 推到 v2（540 / 270）之后，退款数量增加并同步新结算 500（R9，N_new 取新结算额）：版本只由 orders 推一次到 v3，apply 不再推；v3 = 450 / 225、四段 500 / 50 / 450 / 225 / 0 / 275；扣回 45 / 55 键 C3，booked 450 / 500；v1、v2 不动'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/obligation-close-voucher/r10.int.test.ts'
+    test: '[AC-B2-04zzb#15] 普通订单同步（无维权记录，组装好的同步 worker，联盟报文带新结算金额、由 recordApi 写记录）：会员入账时冻结后封禁，新结算 600（seq 2）负差 → R10：义务 forfeited / closed_by R10 / closed_ref S2，voucher_id = 本事务平台凭证 {order_key}:PLATFORM:ADJ:2（平台 +100）的 id；另一 app 同样前置、新结算 500 → 平台差额为 0、不写平台凭证，义务 forfeited、voucher_id null、closed_ref S2 兜底'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/refund-r9-baseline/after-r9.int.test.ts'
+    test: '0 → 作废）'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/refund-r9-baseline/after-r9.int.test.ts'
+    test: '[AC-B2-04zzf#3] R9（已退 1、600）之后新结算 500、已退件数不变：走 R10 SETTLE_ADJUST（ADJ:3 各扣 50），不再记 CLAWBACK / PART_REFUND，order.clawed_back 仍只有 R9 那一条，基线仍为 1'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/refund-r9-baseline/after-r9.int.test.ts'
+    test: '[AC-B2-04zzf#4] R9（已退 1、600）之后再退一件（1 → 2）且新结算 400：比基线 1 仍是增加 → 再走 R9 按 400 各扣 100（新的 C{版本} 键），基线推到 2，at_credit 仍为 0'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/refund-r9-baseline/exits.int.test.ts'
+    test: '[AC-B2-04zzf#5] 已退 0 → 1 且新结算 1200（正差）：R9 跳过只告警、钱不动，但基线推到 1；随后新结算 800、已退件数不变 → R10 ADJ:3 各扣 100，没有 CLAWBACK'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/refund-r9-baseline/exits.int.test.ts'
+    test: '[AC-B2-04zzf#6] 已退 0 → 1 且同额新结算记录（1000、结算时间变）：R9 无变化、钱不动，但基线推到 1；随后新结算 800、已退件数不变 → R10 ADJ:3 各扣 100，没有 CLAWBACK'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/refund-r9-baseline/exits.int.test.ts'
+    test: '[AC-B2-04zzf#7] 已退 0 → 1 而没有新结算记录：等联盟佣金（CLAWBACK_NO_COMMISSION 待处理、告警），基线不推仍为空；随后新结算 600 → 仍按已退件数增加走 R9 各扣 200，此时基线推到 1、待处理关闭'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/refund-r9-baseline/pending-close.int.test.ts'
+    test: '[AC-B2-04zzf#11] 已退 0 → 1 而无新结算记录 → 等联盟佣金、开 CLAWBACK_NO_COMMISSION 待处理；随后同额新结算记录（1000、结算时间变）→ R9 无变化、钱不动，同一次同步关闭待处理、基线推到 1；之后新结算 800 → R10 ADJ:3 各扣 100，不再有待处理'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/refund-r9-baseline/writers.int.test.ts'
+    test: '[AC-B2-04zzf#8a] 已退 0 → 2（全退）且新结算 0：R8 整单扣回（CLAWED_BACK，本人与平台各扣 500），同一次写库基线推到 2，at_credit 仍为 0'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/refund-r9-baseline/writers.int.test.ts'
+    test: '[AC-B2-04zzf#8c] 入账时已退 1（at_credit 1）、新结算 800 且已退件数不变：R10 ADJ:2 各扣 100，基线推到 1；再退一件（1 → 2）且新结算 600 → R9 各扣 100，基线推到 2'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-adjusted-event/publish.int.test.ts'
+    test: '[AC-B2-04zzd#1] 1000→601 三位受益人负差：同步事务发一条 order.settle_adjusted，载荷逐项为订单 id、订单键、settle_seq 2、sub_type SETTLE_DIFF 与本人 -200 / 直推 -40 / 间推 -20（整数分字符串，bucket user_available），平台差不列入，不发 order.clawed_back'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-adjusted-event/publish.int.test.ts'
+    test: '[AC-B2-04zzd#2] 受益人注销处理中（deleting）遇 1000→800：本人 100 记 BAD_DEBT，order.settle_adjusted 仍列入该行，adjust_fen -100、bucket bad_debt；再降到 600 的第二条 settle_seq 3'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-adjusted-event/publish.int.test.ts'
+    test: '[AC-B2-04zzd#3] 受益人已注销（deleted）遇 1000→800：本人 100 记 BAD_DEBT，order.settle_adjusted 列入 adjust_fen -100、bucket bad_debt；再降到 600 的第二条 settle_seq 3'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-adjusted-event/publish.int.test.ts'
+    test: '[AC-B2-04zzd#5] 同事务：order.settle_adjusted 入队时同一事务里已有本次两张 SETTLE_ADJUST 凭证；入队失败 → 整个同步回滚，凭证、余额、订单列、历史、结算记录与事件都不留下；重投后恰好一套凭证、一条事件'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-adjusted-event/publish.int.test.ts'
+    test: '[AC-B2-04zzd#6] 同一结算记录重放（同报文、仅 mtime 变）：不追加凭证，也不再发 order.settle_adjusted，始终只有 settle_seq 2 那一条'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-adjusted-event/routes.int.test.ts'
+    test: '[AC-B2-04zzd#10] 维权等待中（WAIT_COMMISSION）遇正差 1200：留待、不发 order.settle_adjusted；另一单等待中遇 800 负差：维权关闭，同事务发一条 settle_seq 2、本人 -100'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-adjusted-event/routes.int.test.ts'
+    test: '[AC-B2-04zzd#11] 退款数量增加时同步新结算 600：走 R9 不走 R10，不发 order.settle_adjusted；order.clawed_back 载荷逐项为订单 id、订单键、C{版本}、R9、reason PART_REFUND 与本人扣回 200'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-adjusted-event/routes.int.test.ts'
+    test: '[AC-B2-04zzd#7] 正差 1200 只告警、不发 order.settle_adjusted；随后 800 按 booked 1000 负差：只发一条，settle_seq 3、本人 -100'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-adjusted-event/routes.int.test.ts'
+    test: '[AC-B2-04zzd#8] 同额新记录（seq 2、金额 1000）无动作、不发 order.settle_adjusted；随后 800 负差只发一条 settle_seq 3'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-adjusted-event/routes.int.test.ts'
+    test: '[AC-B2-04zzd#9] 结算佣金降到 0 走 R8（CLAWED_BACK、COMMISSION_ZERO）：只发 order.clawed_back，不发 order.settle_adjusted；另一单 1000→800 负差发一条'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/beneficiaries.int.test.ts'
+    test: '[AC-B2-04zi#18] 已到账受益人deleting，1000→800的100分负差记BAD_DEBT，不动用户账户'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/beneficiaries.int.test.ts'
+    test: '[AC-B2-04zi#19] 已到账受益人deleted，1000→800的100分负差记BAD_DEBT，不动用户账户'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/beneficiaries.int.test.ts'
+    test: '[AC-B2-04zi#20] 原暂缓500、现banned：新份额400归平台，义务forfeited/closed_by R10并追加事件'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/beneficiaries.int.test.ts'
+    test: '[AC-B2-04zi#21] 原暂缓500、现deleted：新份额400归平台，义务forfeited/closed_by R10并追加事件'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/beneficiaries.int.test.ts'
+    test: '[AC-B2-04zi#25] frozen受益人净额已由历史调整降到0、没有义务：负差路线新开deferred/R10保留400'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/beneficiaries.int.test.ts'
+    test: '[AC-B2-04zi#26] appealing受益人净额已由历史调整降到0、没有义务：负差路线新开deferred/R10保留400'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/beneficiaries.int.test.ts'
+    test: '[AC-B2-04zi#27] normal受益人净额已由历史调整降到0、没有义务：负差路线新开deferred/R10保留400'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/beneficiaries.int.test.ts'
+    test: '[AC-B2-04zi#32] 已到账后封禁，负差只把净额500扣到新份额400，不能整份没收'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/boundaries.int.test.ts'
+    test: '[AC-B2-04zi#11] N1000→0、reserve=0：正数部分或原正基数归零走R8'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/boundaries.int.test.ts'
+    test: '[AC-B2-04zi#12] N1000→-7、reserve=0：正数部分或原正基数归零走R8'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/boundaries.int.test.ts'
+    test: '[AC-B2-04zi#16] 下游发布失败时结算记录、金额版本、booked、凭证、余额与history一起回滚，重投只写一次'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/boundaries.int.test.ts'
+    test: '[AC-B2-04zi#17] 并发同报文只生成seq2及两张调整凭证，另一app的账与义务完全不变'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/boundaries.int.test.ts'
+    test: '[AC-B2-04zi#28] R10在2026-11-30T15:59:59.999Z按注入Clock记账，历史联盟结算时刻不能改变会计日'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/boundaries.int.test.ts'
+    test: '[AC-B2-04zi#29] R10在2026-11-30T16:00:00.000Z按注入Clock记账，历史联盟结算时刻不能改变会计日'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/boundaries.int.test.ts'
+    test: '[AC-B2-04zi#30] R10在2026-11-30T23:59:59.999Z按注入Clock记账，历史联盟结算时刻不能改变会计日'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/boundaries.int.test.ts'
+    test: '[AC-B2-04zi#31] R10同步沿用订单键→users行→余额行的加锁顺序'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/routing.int.test.ts'
+    test: '[AC-B2-04zi#1] 1000→601：逐分重拆 500→300，平台500→301；available可负、frozen不动，版本金额与booked同步'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/routing.int.test.ts'
+    test: '[AC-B2-04zi#2] 正差1200只告警、不动账或候选；随后800按booked1000扣200，不能按1200扣'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/routing.int.test.ts'
+    test: '[AC-B2-04zi#34] 本人、直推、间推分别扣200/40/20，平台扣139：四张凭证按各自user与role生成，金额版本同为601'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/routing.int.test.ts'
+    test: '[AC-B2-04zi#3] 同额新时间seq无动作；实际降额后同报文与仅mtime重放均不重记、不追加history'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/routing.int.test.ts'
+    test: '[AC-B2-04zi#4] 新结算+预估同时变化走R10不出R9b差错；仅预估变仍只存档并出差错'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/routing.int.test.ts'
+    test: '[AC-B2-04zi#5] 退款数量已增加时同步新结算：R9按新结算600扣回400，不能忽略新佣金等维权'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/routing.int.test.ts'
+    test: '[AC-B2-04zi#7] 已调整到800再有STATEMENT800：后到API0不决定金额、不误走R8'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/routing.int.test.ts'
+    test: '[AC-B2-04zi#8] 等待维权负差关闭、正差继续等待；无维权单同样即时R10'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/snapshot-state.int.test.ts'
+    test: '[AC-B2-04zi#35] R5已没收500后解除封禁，结算1000→800只扣平台200，不恢复受益人份额'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/settle-diff-sync/snapshot-state.int.test.ts'
+    test: '[AC-B2-04zi#36] 入账后新规则预留5000生效，R10仍按快照预留0将用户与平台各扣100'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/sync-order-rights/p7.int.test.ts'
+    test: '[AC-B2-04zzr#1] P7 已入账（CREDITED、SETTLED）：同一次同步写恰好一行 order_rights(INVALID_AFTER_SETTLE, SUCCEEDED)，platform_rights_no = P{这次同步更新写入的 row_version}，与 R8 扣回键同值（R8 后的 row_version 不是键）；R8 照旧：两张 CLAWBACK（FULL）各 500、CLAWED_BACK、原因码 REFUND、platform_status 仍 SETTLED；不因这一行多出第二笔扣回；rights_pending 仍 false'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/sync-order-rights/p7.int.test.ts'
+    test: '[AC-B2-04zzr#2] P7 已入账的重放：同一报文再同步一次、再投递一次都被 content_hash 短路（unchanged）→ order_rights 仍恰好一行（同一单号），扣回凭证仍只一笔，订单列不变'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/sync-order-rights/punish.int.test.ts'
+    test: '[AC-B2-04zzr#7] P8 处罚已入账（CREDITED、SETTLED）：同一次同步写恰好一行 (PUNISH, SUCCEEDED)、无单号；R8 照旧：两张 CLAWBACK（PUNISH）各 500、键 P{row_version}、CLAWED_BACK、原因码 PUNISH、platform_status 仍 SETTLED；rights_pending 仍 false'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/terminal-version-rows/rollback.int.test.ts'
+    test: '[AC-B1-18k#1][BR-CALC-15][BR-CALC-27][BR-FUND-01] 同一事务：VOID（WAITING 单结算 -100 → BASE_ZERO，v2）后结算 -200，v3 金额行写入失败（只在这次同步里、只对该单 v3 注入）→ 同步报错，订单行整行、v3 金额行与合计行、事件一起回滚；去掉故障后重投同一报文 → 恰好一套完整 v3（一行金额 0 / 0、一行合计 ① -200 ② -200 ④ -200），仍 VOID、reason 不变，不记账、不通知'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/terminal-version-rows/rollback.int.test.ts'
+    test: '[AC-B1-18k#3][BR-CALC-15][BR-CALC-27][BR-FUND-01] 同一事务：CLAWED_BACK（补贴 200，入账后结算 0 → R8，v2）后仅补贴 200 → 350，v3 合计行写入失败（只在这次同步里、只对该单 v3 注入）→ 同步报错，订单补贴列、commission_version、v3 金额行与合计行、事件一起回滚；去掉故障后重投同一报文 → 恰好一套完整 v3（份额与 base 同 v2，合计行补贴 350、① 350 ② 350 ④ 350），仍 CLAWED_BACK，余额不变'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/terminal-version-rows/subsidy-repriced.int.test.ts'
+    test: '[AC-B1-18k#3][BR-CALC-15][BR-CALC-27][BR-FUND-01] VOID：预估 1000 的单经 worker 的维权同步写入方部分维权成功（应扣 400，R7）→ v2 base 600、本人 300，订单佣金列仍 1000；平台失效（拼多多 4，R6 → VOID，不推版本）；再 N 不变、补贴 200 → 350 → commission_version 3，v3 (user_id, role, base_fen, amount_fen) 与 v2 整行相同（600 / 300，不是 1000 / 500），合计行补贴 350、① 950 ② 350 ③ 600 ④ 650；仍 VOID、reason 不变，无分录、通知、补差候选、扣回'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/terminal-version-rows/subsidy.int.test.ts'
+    test: '[AC-B1-18k#3][BR-CALC-15][BR-CALC-27] CLAWED_BACK：终态期间结算回正 800（v3 B 800、本人 400，仍终态）后 N 不变、补贴 200 → 350 → commission_version 4，v4 各受益人 (user_id, role, base_fen, amount_fen) 与 v3 整行相同（800 / 400），合计行补贴 350、① 1150 ② 350 ③ 800 ④ 750；状态与 reason 不变，无分录、通知、补差候选、扣回；原样重投不再 +1'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
+  - file: 'test/spec/settlement/terminal-version-rows/subsidy.int.test.ts'
+    test: '[AC-B1-18k#3][BR-CALC-15][BR-CALC-27] VOID：终态期间结算回正 800（v3 B 800、本人 400，仍终态）后 N 不变、补贴 200 → 350 → commission_version 4，v4 各受益人 (user_id, role, base_fen, amount_fen) 与 v3 整行相同（800 / 400），合计行补贴 350、① 1150 ② 350 ③ 800 ④ 750；状态与 reason 不变，无分录、通知、补差候选、扣回；原样重投不再 +1'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3499
+    note: '拼多多缺 lk 切 self（D10-3475）前置：块内给该单 custom_parameters 补 lk、经 test/spec/orders/pdd-link-fixture/seed.ts 插一行同 App 同用户同商品、早于付款、pid_scene 同原推广位场景的 links，判定结果与按推广位判一致；断言、期望值、金额、标题一字不动'
 impl: claude
 tester: none
 accept:
