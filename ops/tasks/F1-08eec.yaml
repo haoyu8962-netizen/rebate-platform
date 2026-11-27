@@ -16,6 +16,7 @@ type: test-change
 # 顺序（同 F1-08anb / D10-2211）：工作分支基在 task/F1-08ee 的实现头上，新用例在实现上为绿；探针：常量表给 ledger_mismatch 或其余类型加上【去调账】、
 # 去掉 R1 / R2 的入口、channel_mismatch 预填原因或多给原因选项等，对应用例须红，探针实测结果写进证据。F1-08ee 实现完成、本单新用例绿且探针杀到之后，
 # F1-08ee 才 land，本单随后变基 land；新块在实现上为绿，标题定稿后台账补丁登 red_exempt（带探针）。tester claude-independent（本单调用数从零算），spec-test 由 Codex 做全量。
+# 2026-11-27 作废（编排 D10-3413 / D10-3415）：本单是 F1-08ee【去调账】的伴随测试，方案 B 取消差错单上的【去调账】（D10-2317 ② / D10-2361）后整单作废；新口径的规则测试归 F1-08ef。旧分支 task/F1-08eec（17340323a）不变基、原样留档。
 refs: [BR-FUND-24, BR-FUND-19, BR-WDR-23, BR-ID-34]
 refs_hash:
   BR-FUND-24: 7cca08c02491
@@ -32,5 +33,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-recon-adjust-restore/eec/**'
-status: todo
+status: void
 pr: null
