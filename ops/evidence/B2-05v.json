@@ -1,0 +1,116 @@
+{
+  "risk_note": "RV2 (B2-05v; orchestrator D10-3494, D10-3590, D10-3594, D10-3619, D10-3622, D10-3625, D10-3636; BR-WDR-07 ④, BR-WDR-03 ⑤⑥). The creation of a withdrawal completes its re-check under the locks (users row, balance row, payee advisory lock). (1) validateLockedWithdrawal (payout/domain/withdraw-locked.ts) judges ⑤ and ⑥ of BR-WDR-03 again before ⑦: no usable payout method 30305; no current real name to compare the payee name with 30304; payee name not the real name 30307 (step ④ is not added as a step of its own, D10-3594); ①, ③, ③a, ③b, ⑥a, ⑨ and ⑬ stay out of the locked chain. (2) The payee account the first, lock-free pass judged is compared with the snapshot read under the locks (payout/application/withdraw-apply.ts): the account HMAC and the payout method, and — when both sides carry it — the id of the binding row. A difference rolls the pass back to its savepoint (the risk-judgement rows and every lock taken since) and runs the whole pass again, three passes at most; a third pass still different answers 50001 with no withdrawal, no freeze, no stored idempotency result and one warn carrying the member id and the pass count only (D10-3590). The method cap ⑨, the blocklist step and the risk-flag snapshot therefore follow the account the withdrawal is created with. (3) The binding row id comes from identity's read ports (identity/ports/withdraw-subject.ts): the current-account reader reads the id in the same SELECT as the account, keeps it in a WeakMap keyed by the object it returned (its answer stays the three fields a frozen test pins) and gives it back through bindingIdOf; the payee snapshot carries binding_id. A rebind retires the row and inserts a new one, so an account rebound away and back between the first pass and the locks is another row and re-runs the pass. payout's port types hold both as optional members and payout imports nothing of identity; app.module is unchanged (it hands the whole reader objects in). With either side lacking an id — hand-built test assemblies only — the HMAC and the method alone are compared (D10-3622); the production wiring is pinned by [AC-B2-05v#11] and [#12], which run through the real AppModule. The id is never stored, logged, published or returned. (4) The member withdrawal controller maps 50001 to HTTP 500 with the public text (it fell through to 403 before). No amount is computed differently and no voucher is written by a new path: a refused or exhausted application creates no withdrawal and freezes nothing; the freeze voucher, the lock order, the fee and tax quote and the idempotency layer are untouched. No migration, no contract change. Behaviour that differs from main beyond the rule tests, stated to the reviewers: the pass savepoint is always taken once the first pass has passed and every refusal under the locks rolls back to it; the risk flags use the account the pass's first pass read; the withdrawal id and t are taken once per application. Pinned by the implementer's unit tests only, to become rule tests after this PR: the locked chain does not re-judge ⑨ and the comparison looks at the method as well as the HMAC (FU-B2-05V-SPEC-LOCKED-METHOD-CAP, rule-test review r1 S2); three passes whose third starts on a row replaced by a new row of the same account answer 50001 (FU-B2-05V-SPEC-FIRST-PASS-ROW, money review r2; orchestrator D10-3636: no further rule-test review round). modify_existing: one declared rule_change block, [AC-B2-05d#30] (BR-WDR-07): the two inputs the rule now refuses under the locks leave the block and it is retitled; it is green on the old rule as well, so it is recorded with a real mutant of the task's implementation that it kills, run on the test machine. Open follow-ups: the two above, FU-WDR-PAYOUT-METHODS-CONFIG-SERIALIZE (from B2-05u). The comment of ledger patch 2 still says \"only one side has an id → different\"; the behaviour is the one described here (D10-3622), the comment is corrected with the done change. The sharded run was made on base c8d061643f3c; when this evidence was built main had gained 5 more commit(s): 07eb5fa9e ops(tasks)：F1-12aa 置 done（#985） (#987); 04b891f97 CT-11bvc：订单查询截图夹具补同步状态读口的成功回答，重录 admin-orders-light (#988); 690169568 ops(tasks): CT-26zs done（#982） (#989); 226d85199 chore(ops): CT-11bvc 置 done（#988）；入账 F1-06zw（后台 antd 中文化，D10-3644） (#991); addd4a836 chore(ops): SPEC_REF → 0dc7e7c5cb6e (planning #40 / #41: BR-TEXT-14 Taobao web_code auth keys, WDR-0. They change code outside the ledger: test/spec/frontend/** (2 file(s)); none of these files is changed by this task (no path in common, the rebase is conflict-free). The landed head is rebased over them and that combination was NOT re-run on the test machine (orchestrator D10-3653); the required CI checks, verify-int included, run on the PR head.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Codex via tools/agent/codex-run.sh, three regular rounds; heads are those before the final rebase (git range-diff: five commits \"=\"). r1 (full, head fa248aba8e72 = rule tests round 1 plus implementation round 1): fail — S1 2. (a) An account rebound away and back between the first pass and the locks has the same HMAC and method, so the pass was not re-run and the withdrawal kept risk flags computed while the member was bound elsewhere (payee_prev_other_user missing). (b) 50001 returned by the use case was answered as HTTP 403 by the member controller, against the error-code contract — the return value had been a detail the lane session added to the rule-test brief without checking the controller. Rule tests round 2 added [AC-B2-05v#11] and [#12] through the real AppModule (orchestrator D10-3619); implementation round 2 (9394ca102286, ledger patch 2 for three paths) added the binding row id and the controller mapping. r2 (incremental, head 9394ca102286): fail — S1 1: the first pass read the account and the binding row id with two SELECTs; a rebind away and back between them made the id that of the new row, the comparison passed and a pass that had started on the old binding created the withdrawal instead of rolling back. The two-SELECT form was the lane session's proposal (a frozen test pins the reader's three-field answer), accepted by the orchestrator in D10-3625 and withdrawn in D10-3636. Implementation round 3 (ef52d778b40f) reads the id in the reader's one SELECT (WeakMap, bindingIdOf). r3 (incremental from 9394ca102286, head ef52d778b40f): pass, no finding, nothing out of scope; the reviewer states the finding of r2 closed. The trusted validation moved nothing and recomputed no verdict in any round (couli-runs/B2-05v/review-money-r{1,2,3}-codex.json). The brief of r2 said the orchestrator had not answered the lane's two corrections; that sentence was untrue (D10-3622 and D10-3625 had been posted and the lane session had not read them) and was corrected in the brief of r3. Test machine before the rebase: head fa248aba8e72 --tests test/spec/payout 268 files / 2745 tests green; heads 9394ca102286 and ef52d778b40f --tests test/spec/payout + test/spec/identity 537 files / 5666 tests green each; verify:fast in four parts exit 0 on all three heads."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (ledger tester codex, tools/agent/codex-run.sh), two counted rounds. Round 1: [AC-B2-05v#1]–[#3] (the pure locked chain) and [#4]–[#10] (integration: rebind before the locks, method cap and risk flags of the new account, three passes → 50001, no stored idempotency result, ⑥ after a re-run) under test/spec/payout/locked-recheck/, and the declared block [AC-B2-05d#30]; red on main (red/1, 10 red). Round 2, after money review r1 (orchestrator D10-3619): [AC-B2-05v#11] and [#12] in production.int.test.ts through the real AppModule with database locks of a second connection as barriers; red on the tree without the implementation (red/2, 12 red; #11 at the risk_flags assertion, #12 at the HTTP status). Codex does not review its own tests: a fresh independent Claude (tools/agent/claude-run.sh, approvals 36) reviewed them — r1 pass, S2 1 (nothing pinned that ⑨ is not re-judged under the locks, nor that the comparison looks at the method: implementation must-haves pinned by unit tests, FU-B2-05V-SPEC-LOCKED-METHOD-CAP); r2 (incremental) pass, no finding — the reviewer checked both barriers against the production code. Nothing out of scope in either round. The ledger declares no red exemption; its one modify_existing entry is the rule_change block recorded below (couli-runs/B2-05v/review-spec-test-r{1,2}-claude-independent.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/payout/apply/locked.test.ts",
+      "test": "[AC-B2-05d#30] 锁内只复核 ⑦⑧⑩⑪⑫，不把步骤 ①–⑥/⑨/⑬ 重插到锁内链",
+      "retitle_to": "[AC-B2-05d#30] 锁内复核 ⑤⑥（实名失效按 30304）与 ⑦⑧⑩⑪⑫，不把步骤 ①–③b/⑥a/⑨/⑬ 重插到锁内链",
+      "reason": "rule_change",
+      "before": "it('[AC-B2-05d#30] 锁内只复核 ⑦⑧⑩⑪⑫，不把步骤 ①–⑥/⑨/⑬ 重插到锁内链', () => {\n  const value = input();\n  value.limits.enabled = false;\n  value.step_up_valid = false;\n  value.risk_state = 'banned';\n  value.blocklist_risk_msg_code = 'SYNTHETIC';\n  value.realname_verified = false;\n  value.names_match = false;\n  value.labor_agreement_signed = false;\n  value.limits.min_amount_fen = 2000n;\n  value.limits.self_purchase_enabled = true;\n  value.limits.self_purchase_min_fen = 10000n;\n  expect(validateLockedWithdrawal(value, 1000n)).toBeNull();\n});",
+      "after": "it('[AC-B2-05d#30] 锁内复核 ⑤⑥（实名失效按 30304）与 ⑦⑧⑩⑪⑫，不把步骤 ①–③b/⑥a/⑨/⑬ 重插到锁内链', () => {\n  const value = input();\n  value.limits.enabled = false;\n  value.step_up_valid = false;\n  value.risk_state = 'banned';\n  value.blocklist_risk_msg_code = 'SYNTHETIC';\n  value.labor_agreement_signed = false;\n  value.limits.min_amount_fen = 2000n;\n  value.limits.self_purchase_enabled = true;\n  value.limits.self_purchase_min_fen = 10000n;\n  expect(validateLockedWithdrawal(value, 1000n)).toBeNull();\n});",
+      "br": ["BR-WDR-07"],
+      "mutation": [
+        {
+          "mutant": "Not an old-rule replay: the changed block is green on the old rule as well (main's validateLockedWithdrawal judges none of the steps the block still lists) — the block only lost the two inputs that the rule now refuses under the locks (realname_verified = false, names_match = false; pinned by the new tests [AC-B2-05v#1]–[#3]) and got its new title. Real mutant M1 of the task's implementation instead: apps/api/src/modules/payout/domain/withdraw-locked.ts, validateLockedWithdrawal re-inserts step ① under the locks (`if (!limits.enabled) return { code: 30306, data: {} };` as its first check). Run on the test machine on a detached scratch worktree of the task head 73032edef8c0, never committed (work/b205v-mutant.sh): test/spec/payout/apply/locked.test.ts with M1 — this test fails with an AssertionError (expected { code: 30306, data: {} } to be null), the file's other tests stay green (couli-runs/B2-05v/tests/4, diff couli-runs/B2-05v/reverse/M1.diff); unmutated the file is green in the task's verification runs.",
+          "result": "killed"
+        }
+      ],
+      "note": "Rule change (BR-WDR-07 ④, in the rule since D10-192 of 2026-10-23; orchestrator D10-3590, D10-3594): under the locks ⑤ and ⑥ of BR-WDR-03 are judged again, so an unverified real name (30304) and a payee name that is not the real name (30307) no longer pass the locked re-check; these two inputs leave the block. The inputs left (master switch off, no step-up, banned, blocklist hit, labor agreement unsigned, amount under the minimum, self-purchase gate unmet) and the assertion (toBeNull) are those of main; the title follows the ledger's retitle_to. No amount assertion changed."
+    }
+  ],
+  "task": "B2-05v",
+  "spec_commit": "802487e9bcb5468b9a2671ed84a1f958b68f3e1c",
+  "spec_ref": "0dc7e7c5cb6ed1b6f1ef0fd73258469c4885935d",
+  "red_tests": [
+    "test/spec/payout/locked-recheck/production.int.test.ts > [AC-B2-05v#11] 真接口提现期间将 A 换成 B 再换回 A，新绑定触发重跑并保存历史风险标签，只建单冻结一次",
+    "test/spec/payout/locked-recheck/production.int.test.ts > [AC-B2-05v#12] 真接口三遍换绑后返回 HTTP 500 与 50001，余额不动，账号稳定后原幂等键可建单",
+    "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#4] 拿锁前由支付宝换绑银行卡，按新快照和新账号风险标签只建单冻结一次，账号稳定时只算一次标签",
+    "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#5] 同一夹具 HMAC 换了收款方式也重跑，按银行卡上限返回 30303，银行卡上限足够时可建单",
+    "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#6] 同方式的账号连续变三次，建单用例返回 50001，回滚资金与风险判定，只打一条脱敏警告",
+    "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#7] 50001 不留下幂等结果，收款账号稳定后原键可建单冻结",
+    "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#8] 前两遍账号变化、第三遍稳定时照常建单，按第三遍账号入库风险标签",
+    "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#9] 换绑重跑后、拿锁前实名失效，锁内 ⑥ 返回 30304，不建单不冻结",
+    "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#10] 换绑重跑后、拿锁前收款人姓名与实名不符，锁内 ⑥ 返回 30307，不建单不冻结",
+    "test/spec/payout/locked-recheck/validation.test.ts > [AC-B2-05v#1] 锁内 ⑤ 无可用收款方式返回 30305，先于实名、姓名和冻结",
+    "test/spec/payout/locked-recheck/validation.test.ts > [AC-B2-05v#2] 锁内 ⑥ 无当前实名返回 30304，先于姓名不一致和冻结",
+    "test/spec/payout/locked-recheck/validation.test.ts > [AC-B2-05v#3] 锁内 ⑥ 实名有效但姓名不一致返回 30307，先于冻结"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "802487e9bcb5468b9a2671ed84a1f958b68f3e1c",
+      "tree": "e64a8e5350408f11b316673e31246baca4d86577",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-27T20:41:14Z",
+      "finished_at": "2026-11-27T20:43:00Z",
+      "red_tests": [
+        "test/spec/payout/locked-recheck/production.int.test.ts > [AC-B2-05v#11] 真接口提现期间将 A 换成 B 再换回 A，新绑定触发重跑并保存历史风险标签，只建单冻结一次",
+        "test/spec/payout/locked-recheck/production.int.test.ts > [AC-B2-05v#12] 真接口三遍换绑后返回 HTTP 500 与 50001，余额不动，账号稳定后原幂等键可建单",
+        "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#4] 拿锁前由支付宝换绑银行卡，按新快照和新账号风险标签只建单冻结一次，账号稳定时只算一次标签",
+        "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#5] 同一夹具 HMAC 换了收款方式也重跑，按银行卡上限返回 30303，银行卡上限足够时可建单",
+        "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#6] 同方式的账号连续变三次，建单用例返回 50001，回滚资金与风险判定，只打一条脱敏警告",
+        "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#7] 50001 不留下幂等结果，收款账号稳定后原键可建单冻结",
+        "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#8] 前两遍账号变化、第三遍稳定时照常建单，按第三遍账号入库风险标签",
+        "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#9] 换绑重跑后、拿锁前实名失效，锁内 ⑥ 返回 30304，不建单不冻结",
+        "test/spec/payout/locked-recheck/retry.int.test.ts > [AC-B2-05v#10] 换绑重跑后、拿锁前收款人姓名与实名不符，锁内 ⑥ 返回 30307，不建单不冻结",
+        "test/spec/payout/locked-recheck/validation.test.ts > [AC-B2-05v#1] 锁内 ⑤ 无可用收款方式返回 30305，先于实名、姓名和冻结",
+        "test/spec/payout/locked-recheck/validation.test.ts > [AC-B2-05v#2] 锁内 ⑥ 无当前实名返回 30304，先于姓名不一致和冻结",
+        "test/spec/payout/locked-recheck/validation.test.ts > [AC-B2-05v#3] 锁内 ⑥ 实名有效但姓名不一致返回 30307，先于冻结"
+      ],
+      "expected": [
+        "test/spec/payout/locked-recheck/production.int.test.ts",
+        "test/spec/payout/locked-recheck/retry.int.test.ts",
+        "test/spec/payout/locked-recheck/validation.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "a8582d710b6c3dca2bb4ad071a77740096d3174d75cc3a50d90a50ad0fdaaa15"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "7301bf4007effb119aed9e7c79eefcf88fc97a5528aa30b588ea69455b3b504e"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "2d9967deba549573aff8b9c9ee848176fa40e10b",
+    "specs": "ccc7253fa17ee10e3629588abeb09e4afb62fa69"
+  }
+}
