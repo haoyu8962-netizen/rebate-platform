@@ -2314,7 +2314,8 @@ function browserWorkspace(name: string): string {
       2,
     )}\n`,
     'pnpm-workspace.yaml': 'packages: []\n',
-    'pnpm-lock.yaml': "lockfileVersion: '9.0'\npackages:\n  playwright@1.60.0: {}\n",
+    'pnpm-lock.yaml':
+      "lockfileVersion: '9.0'\npackages:\n  playwright@1.60.0:\n    resolution: {integrity: sha512-x}\n",
   });
   return ws;
 }
