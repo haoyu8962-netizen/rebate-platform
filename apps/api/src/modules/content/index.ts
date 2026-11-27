@@ -9,6 +9,7 @@ import { CachedContentReader, type ContentReader } from './application/content-r
 import { createKyselyContentStore } from './infra/kysely-content-store.ts';
 
 export type { ConfigValue, ContentConfig, ContentReader } from './application/content-reader.ts';
+export { readAppH5Origins } from './application/app-h5-origins.ts';
 export { configValuesByKeyOf, type ConfigValuesByKey } from './infra/config-values-by-key-of.ts';
 // F1-10b: emergency switch registry (规划/04 §10.2) and the switch read cache lifetime.
 export { switchRegistry, switchSpecOf } from './domain/switch-registry.ts';
