@@ -57,9 +57,10 @@
 //   端口除 change / info 外另带本次报文的来源（映射事件与原始码），settlement 据此区分维权与处罚（P8）。
 // - 淘宝推广位（B1-08zzc r2，BR-ATTR-02 / BR-CALC-19 / BR-ATTR-15，D10-3355 / D10-3406）：orders.pid 存命中行
 //   登记的 pid 原值（mm_ 或纯数字），报文给的是 adzone_id，所以「推广位变了」比的是 current.pid 的 adzone
-//   （pids.slotKey 给的 union taobaoAdzoneOf）与报文推广位：相等即未变，不写 pid。不等且未归因 → 按首次入库
-//   同一匹配（matchOrderSlot：本 App、本联盟账号、site_id + adzone）找命中行写它的 pid；找不到保留 current.pid
-//   并告警（不把裸 adzone 写进 orders.pid）。京东、拼多多（无键函数）照旧等值比较、未归因时写本次报文推广位。
+//   （pids.slotKey 给的 union taobaoAdzoneOf）与报文推广位（只用于参数变化判定与告警）。未归因重跑一律按首次入库
+//   同一匹配（matchOrderSlot：本 App、本联盟账号、site_id + adzone）重新取命中行，其 pid 与库内不同才写（r3，
+//   D10-3454：登记 pid 在未归因期间被改时快照取新登记的场景）；找不到保留 current.pid 并告警（不把裸 adzone
+//   写进 orders.pid）。京东、拼多多（无键函数）照旧等值比较、未归因时写本次报文推广位。
 // 日志只打平铺字段（platform、app_id、reason、outcome、rule、event），不打子订单号与买家参数。
 import type { DB } from '@couli/db';
 import type { OrderPlatformState } from '@couli/domain';
@@ -498,7 +499,7 @@ export function createOrderUpdateStep(
     let backfilled: string | null = null;
     let sourcePending = false;
     let pidSceneMissing = false;
-    /** 淘宝未归因订单推广位变了而找不到命中行（保留 current.pid）时的原因；null = 没有这种情况。 */
+    /** 淘宝未归因订单重新匹配找不到命中行（保留 current.pid）时的原因；null = 没有这种情况。 */
     let pidUnmatched: 'not_ours' | 'site_mismatch' | null = null;
     /** 已为来源回填查过的订单推广位场景（undefined = 本次还没查）。 */
     let knownPidScene: string | null | undefined;
@@ -508,23 +509,20 @@ export function createOrderUpdateStep(
     if (shopWrite !== null) Object.assign(set, { shop_id: shopWrite });
     if (unattributed) {
       let pidWrite: { readonly pid?: string | null } = { pid: slot };
-      if (slotKeyOf !== null) {
-        // 键未变不写 pid；变了按首次入库同一匹配取命中行的登记 pid，找不到保留库内 pid（下面告警）。
+      if (slotKeyOf !== null && deps.pids !== undefined) {
+        // r3（D10-3454，BR-CALC-19 / BR-ATTR-15）：未归因重跑一律按本次报文的 site_id + adzone 用首次入库同一匹配
+        // 重新取命中行——登记 pid 在未归因期间可能被改（如 mm_ → 纯数字），库内旧 pid 已查不到场景。命中且与库内
+        // pid 不同才写；找不到保留库内 pid（下面告警），不写裸 adzone。后续场景以写入后的 pid 取。
         pidWrite = {};
-        if (slotChanged) {
-          const match =
-            deps.pids === undefined
-              ? ({ kind: 'not_ours' } as const)
-              : await matchOrderSlot(deps.pids, {
-                  appId: current.app_id,
-                  platform,
-                  unionAccountId: ctx.union_account_id,
-                  slot,
-                  siteId: incoming.site_id ?? null,
-                });
-          if (match.kind === 'hit') pidWrite = { pid: match.row.pid };
-          else pidUnmatched = match.kind;
-        }
+        const match = await matchOrderSlot(deps.pids, {
+          appId: current.app_id,
+          platform,
+          unionAccountId: ctx.union_account_id,
+          slot,
+          siteId: incoming.site_id ?? null,
+        });
+        if (match.kind !== 'hit') pidUnmatched = match.kind;
+        else if (match.row.pid !== current.pid) pidWrite = { pid: match.row.pid };
       }
       Object.assign(set, {
         ...pidWrite,
@@ -984,7 +982,7 @@ export function createOrderUpdateStep(
     if (pidUnmatched !== null) {
       log?.warn(
         { ...base, reason: pidUnmatched, outcome: 'pid_kept' },
-        'taobao promotion slot changed but matches no registered pid; stored pid kept',
+        'taobao promotion slot matches no registered pid; stored pid kept',
       );
     }
     if (bindingConflict) {

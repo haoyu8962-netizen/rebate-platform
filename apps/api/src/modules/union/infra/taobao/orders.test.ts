@@ -170,6 +170,11 @@ it('[AC-B1-04f-UNIT#7] 推广位：mm_ 形式取最后一段、纯数字取其�
   expect(slotAdzones(null).size).toBe(0);
 });
 
+it('[AC-B1-08zzc#u20] 会员段带前导零的登记（登记入口收 \\d+）照样取到 adzone，adzone 段带前导零仍排除（D10-3454）', () => {
+  expect(taobaoAdzoneOf('mm_01001_3001_2002')).toBe('2002');
+  expect([...slotAdzones(['mm_01001_3001_2002', 'mm_1_2_0345'])]).toEqual(['2002']);
+});
+
 // B1-08zzc：适配器推广位筛选、官方搜索 adzone 与流水线候选 / 更新步推广位键（经 pids.slotKey）共用这一个函数。
 const ADZONE_CASES: readonly (readonly [string, string | null])[] = [
   ['mm_1001_3001_2002', '2002'],
@@ -179,6 +184,10 @@ const ADZONE_CASES: readonly (readonly [string, string | null])[] = [
   ['mm_1001_3001_2002_4004', null],
   ['mm_a_3001_2002', null],
   ['mm_1001_3001_02002', null],
+  ['mm_01001_3001_2002', '2002'],
+  ['mm_1001_03001_2002', '2002'],
+  ['mm_00_0_2002', '2002'],
+  ['mm_1_2_0345', null],
   ['mm_1001_3001_', null],
   ['02002', null],
   ['x_2002', null],

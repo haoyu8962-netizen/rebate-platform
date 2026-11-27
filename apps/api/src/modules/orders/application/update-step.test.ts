@@ -15,6 +15,7 @@ import { expect, it, vi } from 'vitest';
 import { FixedClock } from '../../platform/index.ts';
 import type { UnionOrder } from '../../union/index.ts';
 import type { PlatformStatusEvent, StatusMap } from '../domain/status-map.ts';
+import type { CommissionSnapshotPort } from './commission-snapshot-step.ts';
 import type { OrderPipelineContext, OrderPipelineDeps, SlotPidRow } from './pipeline-types.ts';
 import {
   createOrderUpdateStep,
@@ -781,8 +782,7 @@ it('[AC-B2-04zj#U6] CAS 两次未命中不写记录；整条拒收连 STATEMENT 
 
 // 推广位键函数在生产由 union 给（taobaoAdzoneOf，单测见 union/infra/taobao/orders.test.ts）；这里替身按同一口径。
 const tbSlotKey = (pid: string): string | null =>
-  /^mm_[1-9][0-9]*_[1-9][0-9]*_([1-9][0-9]*)$/.exec(pid)?.[1] ??
-  (/^[1-9][0-9]*$/.test(pid) ? pid : null);
+  /^mm_\d+_\d+_([1-9][0-9]*)$/.exec(pid)?.[1] ?? (/^[1-9][0-9]*$/.test(pid) ? pid : null);
 
 /** orders UPDATE 的 SET 子句里各列的值（列 → 参数）。 */
 function setValues(calls: readonly { sql: string; parameters: readonly unknown[] }[]) {
@@ -831,16 +831,93 @@ it.each([
   { label: 'mm_ 登记', stored: 'mm_1001_3001_2002' },
   { label: '纯数字登记', stored: '2002' },
 ])(
-  '[AC-B1-08zzc#u14] 淘宝未归因、adzone 未变（$label）：不写 pid、不查候选、不告警推广位变化',
+  '[AC-B1-08zzc#u14] 淘宝未归因、adzone 未变且命中行即库内 pid（$label）：重新匹配一次，不写 pid、不告警',
   async ({ stored }) => {
-    const t = await taobaoUnattributed(stored, '2002', []);
+    const rows: SlotPidRow[] = [
+      { pid: stored, pid_scene: 'share', status: 'active', site_id: '3001' },
+    ];
+    const t = await taobaoUnattributed(stored, '2002', rows);
     expect(t.set.has('pid')).toBe(false);
     expect(t.set.has('relation_id')).toBe(true);
-    expect(t.slotCandidates).not.toHaveBeenCalled();
+    expect(t.slotCandidates.mock.calls).toEqual([
+      [{ appId: current.app_id, platform: 'taobao', unionAccountId: 'unit-account', slot: '2002' }],
+    ]);
     expect(t.warns).not.toContainEqual(expect.objectContaining({ outcome: 'pid_changed' }));
     expect(t.warns).not.toContainEqual(expect.objectContaining({ outcome: 'pid_kept' }));
   },
 );
+
+it('[AC-B1-08zzc#u19] 淘宝未归因、adzone 未变而登记 pid 已改（mm_ → 纯数字）：写新登记的 pid，首次快照取其淘礼金场景（D10-3454）', async () => {
+  const owner = '019a0000-0000-7000-8000-000000000042';
+  const row = {
+    ...current,
+    platform: 'taobao',
+    user_id: null,
+    rebate_status: 'UNATTRIBUTED',
+    pid: 'mm_1001_3001_2002',
+  } as Row;
+  const { db, calls } = scriptedDb(
+    () => 1n,
+    () => row,
+  );
+  // 未归因期间登记行由 mm_1001_3001_2002 改成 2002（同账号、同站点、同为 taolijin）；旧 pid 已查不到。
+  const registered: SlotPidRow = {
+    pid: '2002',
+    pid_scene: 'taolijin',
+    status: 'pending',
+    site_id: '3001',
+  };
+  const slotCandidates = vi.fn<NonNullable<OrderPipelineDeps['pids']['slotCandidates']>>(() =>
+    Promise.resolve([registered]),
+  );
+  const find = vi.fn<OrderPipelineDeps['pids']['find']>(({ pid }) =>
+    Promise.resolve(
+      pid === registered.pid
+        ? [{ pid_scene: registered.pid_scene, status: registered.status, site_id: '3001' }]
+        : [],
+    ),
+  );
+  const create = vi.fn<CommissionSnapshotPort['create']>(() =>
+    Promise.resolve({ kind: 'created' as const }),
+  );
+  const { d } = withBus([], {
+    pids: { find, slotCandidates, slotKey: () => tbSlotKey },
+    bindings: {
+      findByRelation: () =>
+        Promise.resolve([
+          {
+            user_id: owner,
+            bound_at: at('2026-10-01T00:00:00.000Z'),
+            released_at: null,
+            cooldown_until: null,
+          },
+        ]),
+    },
+    snapshots: { create },
+  });
+  const changed = incoming({
+    platform: 'taobao',
+    raw_status: 'received',
+    promotion_slot: '2002',
+    site_id: '3001',
+    attr_params: { relation_id: 'unit-relation', sub_union_id: null, custom_parameters: null },
+  });
+  const { outcome } = await run(db, d, row, changed, { ...ctx, platform: 'taobao' });
+  expect(outcome).toEqual({ kind: 'updated', order_id: current.order_id });
+  const set = setValues(calls);
+  expect(set.get('pid')).toBe('2002');
+  expect(set.get('user_id')).toBe(owner);
+  expect(find.mock.calls.map(([input]) => input.pid)).toContain('2002');
+  expect(find.mock.calls.map(([input]) => input.pid)).not.toContain('mm_1001_3001_2002');
+  expect(create.mock.calls).toHaveLength(1);
+  expect(create.mock.calls[0]?.[1]).toMatchObject({
+    ownerUserId: owner,
+    rebateMode: 'none',
+    tljRedpacketFen: null,
+  });
+  const warns = vi.mocked(d.logger!.warn).mock.calls.map(([fields]) => fields as object);
+  expect(warns).not.toContainEqual(expect.objectContaining({ outcome: 'pid_kept' }));
+});
 
 it.each([
   { label: 'mm_ 登记', hit: 'mm_1001_3001_2002' },

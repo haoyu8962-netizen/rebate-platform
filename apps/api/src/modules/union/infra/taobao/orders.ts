@@ -142,6 +142,8 @@ const BEIJING_TEXT = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
 const ABSENT_TEXT = '--';
 const INTEGER_TEXT = /^-?(?:0|[1-9][0-9]*)$/;
 const ID_TEXT = /^(?:0|[1-9][0-9]*)$/;
+/** B1-08zzc（D10-3454）: a member / site segment of a registered mm_ PID — the registration entry's \d+ (leading zeros allowed). */
+const REGISTERED_SEGMENT = /^\d+$/;
 /** B1-04zzh: an adzone id is a positive decimal integer. */
 const ADZONE_TEXT = /^[1-9][0-9]*$/;
 const ADZONE_FIELD = 'adzone_id';
@@ -374,7 +376,9 @@ export function nextTaobaoOrderCursor(
 /**
  * B1-08zzc（BR-ATTR-02、D10-3355）：the adzone id (decimal text) of one registered Taobao PID. Two storage
  * forms: the CLI's mm_<member>_<site>_<adzone> → <adzone>; the admin API's bare adzone (all digits)
- * → itself. Every segment is a plain decimal id (ID_TEXT); any other form has none (null). The one
+ * → itself. The adzone (and the bare form) is a plain decimal id (ID_TEXT, the response's form); the
+ * member and site segments take the registration entry's \d+ (leading zeros allowed, D10-3454);
+ * any other form has none (null). The one
  * rule for the adapter's slot filter (slotAdzones), the official search adzone and the pipeline's
  * slot candidates (order-sync-ports).
  */
@@ -382,7 +386,12 @@ export function taobaoAdzoneOf(pid: string): string | null {
   if (ID_TEXT.test(pid)) return pid;
   const segments = pid.split('_');
   if (segments.length !== 4 || segments[0] !== 'mm') return null;
-  return segments.slice(1).every((segment) => ID_TEXT.test(segment)) ? segments[3]! : null;
+  const [, member, site, adzone] = segments as [string, string, string, string];
+  // 会员段与站点段照登记入口（union/pids/service.ts 的 TAOBAO_PID）收 \d+（允许前导零）；
+  // adzone 段与回包比对，仍按回包口径 ID_TEXT。
+  return REGISTERED_SEGMENT.test(member) && REGISTERED_SEGMENT.test(site) && ID_TEXT.test(adzone)
+    ? adzone
+    : null;
 }
 
 /** adzone ids (decimal text) of the PIDs, each by taobaoAdzoneOf; other forms and non-strings are ignored. */
