@@ -9,7 +9,8 @@
 //   position_index。游标与本次的口径或窗口不符 → invalid_dto（不按游标里的窗口去查）。
 // - has_next 为 true 但 position_index 缺失 / 空串 / 与本次所带相同 → upstream_unavailable（不得不带位点
 //   重拉首页，也不得原地打转）。
-// - 推广位过滤：只留 adzone_id 属于 TaobaoOrderSlotReader 给出的推广位（PID 最后一段）的订单；
+// - 推广位过滤：只留 adzone_id 属于 TaobaoOrderSlotReader 给出的推广位（mm_ 形式取最后一段、纯数字取其本身，
+//   B1-08zzc / D10-3355，taobaoAdzoneOf）的订单；
 //   合法 adzone_id 而不属我方的行计数告警后丢弃。B1-04zzh（D10-692）：读不出推广位（adzone_id 缺失、
 //   不是正整数 / 十进制数字串，或整行不是对象）≠ 别家推广位，按坏行处理（collect 进 rejected，原因只写
 //   adzone_id；不开 collect 跳过并告警），不计入别家；一页 ≥1 行而全部读不出 → upstream_unavailable。
@@ -141,6 +142,8 @@ const BEIJING_TEXT = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
 const ABSENT_TEXT = '--';
 const INTEGER_TEXT = /^-?(?:0|[1-9][0-9]*)$/;
 const ID_TEXT = /^(?:0|[1-9][0-9]*)$/;
+/** B1-08zzc（D10-3454）: a member / site segment of a registered mm_ PID — the registration entry's \d+ (leading zeros allowed). */
+const REGISTERED_SEGMENT = /^\d+$/;
 /** B1-04zzh: an adzone id is a positive decimal integer. */
 const ADZONE_TEXT = /^[1-9][0-9]*$/;
 const ADZONE_FIELD = 'adzone_id';
@@ -370,15 +373,35 @@ export function nextTaobaoOrderCursor(
 // 推广位
 // ---------------------------------------------------------------------------------------------
 
-/** adzone ids (decimal text) of the PIDs: the last "_" segment when it is a plain decimal id. */
+/**
+ * B1-08zzc（BR-ATTR-02、D10-3355）：the adzone id (decimal text) of one registered Taobao PID. Two storage
+ * forms: the CLI's mm_<member>_<site>_<adzone> → <adzone>; the admin API's bare adzone (all digits)
+ * → itself. The adzone (and the bare form) is a plain decimal id (ID_TEXT, the response's form); the
+ * member and site segments take the registration entry's \d+ (leading zeros allowed, D10-3454);
+ * any other form has none (null). The one
+ * rule for the adapter's slot filter (slotAdzones), the official search adzone and the pipeline's
+ * slot candidates (order-sync-ports).
+ */
+export function taobaoAdzoneOf(pid: string): string | null {
+  if (ID_TEXT.test(pid)) return pid;
+  const segments = pid.split('_');
+  if (segments.length !== 4 || segments[0] !== 'mm') return null;
+  const [, member, site, adzone] = segments as [string, string, string, string];
+  // 会员段与站点段照登记入口（union/pids/service.ts 的 TAOBAO_PID）收 \d+（允许前导零）；
+  // adzone 段与回包比对，仍按回包口径 ID_TEXT。
+  return REGISTERED_SEGMENT.test(member) && REGISTERED_SEGMENT.test(site) && ID_TEXT.test(adzone)
+    ? adzone
+    : null;
+}
+
+/** adzone ids (decimal text) of the PIDs, each by taobaoAdzoneOf; other forms and non-strings are ignored. */
 export function slotAdzones(pids: unknown): ReadonlySet<string> {
   const adzones = new Set<string>();
   if (!Array.isArray(pids)) return adzones;
   for (const pid of pids) {
     if (typeof pid !== 'string') continue;
-    const segments = pid.split('_');
-    const last = segments[segments.length - 1]!;
-    if (segments.length >= 2 && ID_TEXT.test(last)) adzones.add(last);
+    const adzone = taobaoAdzoneOf(pid);
+    if (adzone !== null) adzones.add(adzone);
   }
   return adzones;
 }

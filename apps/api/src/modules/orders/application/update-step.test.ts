@@ -15,7 +15,8 @@ import { expect, it, vi } from 'vitest';
 import { FixedClock } from '../../platform/index.ts';
 import type { UnionOrder } from '../../union/index.ts';
 import type { PlatformStatusEvent, StatusMap } from '../domain/status-map.ts';
-import type { OrderPipelineContext } from './pipeline-types.ts';
+import type { CommissionSnapshotPort } from './commission-snapshot-step.ts';
+import type { OrderPipelineContext, OrderPipelineDeps, SlotPidRow } from './pipeline-types.ts';
 import {
   createOrderUpdateStep,
   type OrderSettlementRecordsPort,
@@ -46,11 +47,16 @@ function scriptedDb(
   pendingRows: PendingRow[] = [pendingRow({ inserted: true })],
 ) {
   const log: string[] = [];
+  const calls: { sql: string; parameters: readonly unknown[] }[] = [];
   class ScriptedDriver extends DummyDriver {
     override acquireConnection(): Promise<DatabaseConnection> {
       return Promise.resolve({
-        executeQuery<R>(compiled: { sql: string }): Promise<QueryResult<R>> {
+        executeQuery<R>(compiled: {
+          sql: string;
+          parameters: readonly unknown[];
+        }): Promise<QueryResult<R>> {
           log.push(compiled.sql);
+          calls.push({ sql: compiled.sql, parameters: compiled.parameters });
           if (compiled.sql.startsWith('update "app"."orders"')) {
             return Promise.resolve({ rows: [], numAffectedRows: updatedRows() });
           }
@@ -77,7 +83,7 @@ function scriptedDb(
       createQueryCompiler: () => new PostgresQueryCompiler(),
     },
   });
-  return { db, log };
+  return { db, log, calls };
 }
 
 const map: StatusMap = {
@@ -770,4 +776,222 @@ it('[AC-B2-04zj#U6] CAS 两次未命中不写记录；整条拒收连 STATEMENT 
   await db.transaction().execute((trx) => step.apply(trx, backward, late, ctx));
   expect(order).not.toContain('latestStatementFen');
   expect(recordApi).not.toHaveBeenCalled();
+});
+
+// —— B1-08zzc r2（D10-3355 / D10-3406）：淘宝 orders.pid 存登记 pid 原值，更新时按 adzone 比「推广位变了」——
+
+// 推广位键函数在生产由 union 给（taobaoAdzoneOf，单测见 union/infra/taobao/orders.test.ts）；这里替身按同一口径。
+const tbSlotKey = (pid: string): string | null =>
+  /^mm_\d+_\d+_([1-9][0-9]*)$/.exec(pid)?.[1] ?? (/^[1-9][0-9]*$/.test(pid) ? pid : null);
+
+/** orders UPDATE 的 SET 子句里各列的值（列 → 参数）。 */
+function setValues(calls: readonly { sql: string; parameters: readonly unknown[] }[]) {
+  const update = calls.find((call) => call.sql.startsWith('update "app"."orders"'));
+  if (update === undefined) throw new Error('no orders update');
+  const values = new Map<string, unknown>();
+  const setPart = update.sql.split(' where ')[0] ?? '';
+  for (const [, column, index] of setPart.matchAll(/"(\w+)" = \$(\d+)/g)) {
+    values.set(column!, update.parameters[Number(index) - 1]);
+  }
+  return values;
+}
+
+/** 未归因的淘宝订单（库内 pid = storedPid）收到推广位 slot、site_id = siteId 的报文；候选行由替身给。 */
+async function taobaoUnattributed(
+  storedPid: string | null,
+  slot: string,
+  rows: readonly SlotPidRow[],
+  siteId: string | null = '3001',
+) {
+  const row = { ...current, platform: 'taobao', user_id: null, pid: storedPid } as Row;
+  const { db, calls } = scriptedDb(
+    () => 1n,
+    () => row,
+  );
+  const slotCandidates = vi.fn<NonNullable<OrderPipelineDeps['pids']['slotCandidates']>>(() =>
+    Promise.resolve(rows),
+  );
+  const find = vi.fn<OrderPipelineDeps['pids']['find']>(() => Promise.resolve([]));
+  const slotKey = vi.fn(() => tbSlotKey);
+  const { d } = withBus([], { pids: { find, slotCandidates, slotKey } });
+  const changed = incoming({
+    platform: 'taobao',
+    raw_status: 'received',
+    promotion_slot: slot,
+    site_id: siteId,
+  });
+  const { outcome } = await run(db, d, row, changed, { ...ctx, platform: 'taobao' });
+  expect(outcome).toEqual({ kind: 'updated', order_id: current.order_id });
+  const warns = vi.mocked(d.logger!.warn).mock.calls.map(([fields]) => fields as object);
+  expect(slotKey.mock.calls).toEqual([['taobao']]);
+  return { set: setValues(calls), slotCandidates, warns };
+}
+
+it.each([
+  { label: 'mm_ 登记', stored: 'mm_1001_3001_2002' },
+  { label: '纯数字登记', stored: '2002' },
+])(
+  '[AC-B1-08zzc#u14] 淘宝未归因、adzone 未变且命中行即库内 pid（$label）：重新匹配一次，不写 pid、不告警',
+  async ({ stored }) => {
+    const rows: SlotPidRow[] = [
+      { pid: stored, pid_scene: 'share', status: 'active', site_id: '3001' },
+    ];
+    const t = await taobaoUnattributed(stored, '2002', rows);
+    expect(t.set.has('pid')).toBe(false);
+    expect(t.set.has('relation_id')).toBe(true);
+    expect(t.slotCandidates.mock.calls).toEqual([
+      [{ appId: current.app_id, platform: 'taobao', unionAccountId: 'unit-account', slot: '2002' }],
+    ]);
+    expect(t.warns).not.toContainEqual(expect.objectContaining({ outcome: 'pid_changed' }));
+    expect(t.warns).not.toContainEqual(expect.objectContaining({ outcome: 'pid_kept' }));
+  },
+);
+
+it('[AC-B1-08zzc#u19] 淘宝未归因、adzone 未变而登记 pid 已改（mm_ → 纯数字）：写新登记的 pid，首次快照取其淘礼金场景（D10-3454）', async () => {
+  const owner = '019a0000-0000-7000-8000-000000000042';
+  const row = {
+    ...current,
+    platform: 'taobao',
+    user_id: null,
+    rebate_status: 'UNATTRIBUTED',
+    pid: 'mm_1001_3001_2002',
+    buy_type: 'self',
+  } as Row;
+  const { db, calls } = scriptedDb(
+    () => 1n,
+    () => row,
+  );
+  // 未归因期间登记行由 mm_1001_3001_2002 改成 2002（同账号、同站点、同为 taolijin）；旧 pid 已查不到。
+  const registered: SlotPidRow = {
+    pid: '2002',
+    pid_scene: 'taolijin',
+    status: 'pending',
+    site_id: '3001',
+  };
+  const slotCandidates = vi.fn<NonNullable<OrderPipelineDeps['pids']['slotCandidates']>>(() =>
+    Promise.resolve([registered]),
+  );
+  const find = vi.fn<OrderPipelineDeps['pids']['find']>(({ pid }) =>
+    Promise.resolve(
+      pid === registered.pid
+        ? [{ pid_scene: registered.pid_scene, status: registered.status, site_id: '3001' }]
+        : [],
+    ),
+  );
+  const create = vi.fn<CommissionSnapshotPort['create']>(() =>
+    Promise.resolve({ kind: 'created' as const }),
+  );
+  const { d } = withBus([], {
+    pids: { find, slotCandidates, slotKey: () => tbSlotKey },
+    bindings: {
+      findByRelation: () =>
+        Promise.resolve([
+          {
+            user_id: owner,
+            bound_at: at('2026-10-01T00:00:00.000Z'),
+            released_at: null,
+            cooldown_until: null,
+          },
+        ]),
+    },
+    snapshots: { create },
+  });
+  const changed = incoming({
+    platform: 'taobao',
+    raw_status: 'received',
+    promotion_slot: '2002',
+    site_id: '3001',
+    attr_params: { relation_id: 'unit-relation', sub_union_id: null, custom_parameters: null },
+  });
+  const { outcome } = await run(db, d, row, changed, { ...ctx, platform: 'taobao' });
+  expect(outcome).toEqual({ kind: 'updated', order_id: current.order_id });
+  const set = setValues(calls);
+  expect(set.get('pid')).toBe('2002');
+  expect(set.get('user_id')).toBe(owner);
+  expect(find.mock.calls.map(([input]) => input.pid)).toContain('2002');
+  expect(find.mock.calls.map(([input]) => input.pid)).not.toContain('mm_1001_3001_2002');
+  expect(create.mock.calls).toHaveLength(1);
+  expect(create.mock.calls[0]?.[1]).toMatchObject({
+    ownerUserId: owner,
+    rebateMode: 'none',
+    tljRedpacketFen: null,
+  });
+  const warns = vi.mocked(d.logger!.warn).mock.calls.map(([fields]) => fields as object);
+  expect(warns).not.toContainEqual(expect.objectContaining({ outcome: 'pid_kept' }));
+});
+
+it.each([
+  { label: 'mm_ 登记', hit: 'mm_1001_3001_2002' },
+  { label: '纯数字登记', hit: '2002' },
+])(
+  '[AC-B1-08zzc#u15] 淘宝未归因、adzone 变了且命中（$label）：按 site_id 取命中行，写它登记的 pid 原值',
+  async ({ hit }) => {
+    const rows: SlotPidRow[] = [
+      { pid: 'mm_1001_3002_2002', pid_scene: 'share', status: 'active', site_id: '3002' },
+      { pid: hit, pid_scene: 'taolijin', status: 'retired', site_id: '3001' },
+    ];
+    const t = await taobaoUnattributed('mm_1001_3001_1001', '2002', rows);
+    expect(t.set.get('pid')).toBe(hit);
+    expect(t.slotCandidates.mock.calls).toEqual([
+      [{ appId: current.app_id, platform: 'taobao', unionAccountId: 'unit-account', slot: '2002' }],
+    ]);
+    expect(t.warns).toContainEqual(expect.objectContaining({ outcome: 'pid_changed' }));
+    expect(t.warns).not.toContainEqual(expect.objectContaining({ outcome: 'pid_kept' }));
+  },
+);
+
+it.each([
+  {
+    label: 'site 不符',
+    rows: [{ pid: 'mm_1001_3002_2002', pid_scene: 'share', status: 'active', site_id: '3002' }],
+    site: '3001',
+    reason: 'site_mismatch',
+  },
+  { label: '无候选', rows: [], site: '3001', reason: 'not_ours' },
+  {
+    label: '报文缺 site_id',
+    rows: [{ pid: '2002', pid_scene: 'share', status: 'active', site_id: '3001' }],
+    site: null,
+    reason: 'not_ours',
+  },
+])(
+  '[AC-B1-08zzc#u16] 淘宝未归因、adzone 变了而找不到命中行（$label）：保留库内 pid，不写裸 adzone，告警一条',
+  async ({ rows, site, reason }) => {
+    const t = await taobaoUnattributed('mm_1001_3001_1001', '2002', rows, site);
+    expect(t.set.has('pid')).toBe(false);
+    expect(
+      t.warns.filter((fields) => (fields as { outcome?: string }).outcome === 'pid_kept'),
+    ).toEqual([{ platform: 'taobao', app_id: current.app_id, reason, outcome: 'pid_kept' }]);
+  },
+);
+
+it('[AC-B1-08zzc#u17] 京东、拼多多不变：未归因写本次报文推广位，不查候选', async () => {
+  for (const platform of ['jd', 'pdd'] as const) {
+    const row = { ...current, platform, user_id: null, pid: 'slot-ours' } as Row;
+    const { db, calls } = scriptedDb(
+      () => 1n,
+      () => row,
+    );
+    const slotCandidates = vi.fn<NonNullable<OrderPipelineDeps['pids']['slotCandidates']>>(() =>
+      Promise.resolve([]),
+    );
+    const find = vi.fn<OrderPipelineDeps['pids']['find']>(() => Promise.resolve([]));
+    // union 对京东、拼多多不给键函数（等值）。
+    const { d } = withBus([], { pids: { find, slotCandidates, slotKey: () => null } });
+    const changed = incoming({ platform, raw_status: 'received', promotion_slot: 'slot-new' });
+    await run(db, d, row, changed, { ...ctx, platform });
+    expect(setValues(calls).get('pid')).toBe('slot-new');
+    expect(slotCandidates).not.toHaveBeenCalled();
+
+    // 推广位未变：照旧写同值。
+    const same = scriptedDb(
+      () => 1n,
+      () => row,
+    );
+    await run(same.db, d, row, incoming({ platform, raw_status: 'received' }), {
+      ...ctx,
+      platform,
+    });
+    expect(setValues(same.calls).get('pid')).toBe('slot-ours');
+  }
 });

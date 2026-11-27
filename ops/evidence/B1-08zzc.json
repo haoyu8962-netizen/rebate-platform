@@ -1,0 +1,140 @@
+{
+  "task": "B1-08zzc",
+  "spec_ref": "f1d6a935d8d82c9d293e846336bd86f427227ac0",
+  "spec_commit": "fb4d52937fd9c24bfe566c8fdc41797226ebc58f",
+  "red_tests": [
+    "test/spec/orders/taobao-slot-match/adapter.test.ts > [AC-B1-08zzc#10] 只登记数字 PID 时，淘宝适配器正常拉单并返回数字推广位",
+    "test/spec/orders/taobao-slot-match/adapter.test.ts > [AC-B1-08zzc#11] mm_ 和数字 PID 混登时，淘宝适配器保留两种登记命中的订单",
+    "test/spec/orders/taobao-slot-match/ingestion.int.test.ts > [AC-B1-08zzc#12] 只登记数字 PID 时，淘宝适配器拉到的订单入库并归属本 App 的绑定用户",
+    "test/spec/orders/taobao-slot-match/ingestion.int.test.ts > [AC-B1-08zzc#13] 淘礼金单延迟归属保留登记 PID，首次快照记 none 和零用户分佣",
+    "test/spec/orders/taobao-slot-match/ingestion.int.test.ts > [AC-B1-08zzc#14] SITE_MISMATCH 回滚时无计数和 P1，重试提交后各一次，重拉不重复",
+    "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#1a] 数字 adzone_id 和 site_id 命中 mm_ 推广位",
+    "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#1b] 数字 PID 按独立的 site_id 核对媒体",
+    "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#2] SITE_MISMATCH 丢弃、发一条 P1 并去重计数",
+    "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#3] 同一 site_id 下未命中 adzone 记 PID_NOT_OURS",
+    "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#4] 缺 site_id 的淘宝订单记 PID_NOT_OURS",
+    "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#5] pending 状态的淘宝推广位仍可用于订单归属",
+    "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#5] retired 状态的淘宝推广位仍可用于订单归属",
+    "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#6] 推广位按 App 和联盟账号隔离",
+    "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#7] jd 仍按自身推广位精确匹配，淘宝的媒体要求仅用于淘宝",
+    "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#7] pdd 仍按自身推广位精确匹配，淘宝的媒体要求仅用于淘宝",
+    "test/spec/orders/taobao-slot-match/precedence.int.test.ts > [AC-B1-08zzc#8] 淘宝媒体不符优先于同步起点判定，按归因日计数并发一条 P1",
+    "test/spec/orders/taobao-slot-match/precedence.int.test.ts > [AC-B1-08zzc#9] 同一 App 下京东按数字 positionId、拼多多按完整 PID、淘宝按广告位和媒体匹配"
+  ],
+  "risk_note": "Taobao order promotion-slot matching per BR-ATTR-02 (platform, union_account_id, site_id, adzone_id) (D10-3338 S0, rule D10-3355): in this App and union account, a registered PID's adzone is the last segment of mm_<a>_<b>_<c> (member/site segments as the registration entry, \\d+; adzone as the payload, no leading zero) or the bare digits; a row with that adzone and site_id = the order's site_id is a hit; adzone hits but no site matches -> SITE_MISMATCH (not stored, counted like PID_NOT_OURS, one P1 after commit only, decided before NO_PAY_TIME and BEFORE_SYNC_START); no adzone hit or order without site_id -> PID_NOT_OURS. JD / PDD unchanged. The adapter's slot filter (slotAdzones: listOrders / listPunishments / official search) uses the same function (taobaoAdzoneOf), handed to orders through pids.slotKey (D10-3406). orders.pid of a Taobao hit is the hit row's union_pids.pid, on insert and on update; an unattributed re-sync re-matches by this payload's site_id + adzone and writes the hit row's pid (kept with a warn when nothing hits), so downstream equality lookups (pid_scene, taolijin, first commission snapshot) match (D10-3406 / D10-3454). Frozen support file test/spec/orders/suffix-void-wiring/kit.ts: fixture changed to the real shape by tail-only insertion (ledger patch 1, rule_change BR-ATTR-02, D10-3387). No money arithmetic, no migration, no contract. Recorded out of scope: FU-ORDER-DROP-ALERT-OUTBOX (P1 lost when the COMMIT acknowledgement is lost, needs a table, D10-3454); companion test task B1-08zzd puts the money r2 S0 fixes into rule tests (D10-3454); FU-ORDER-PIDSCENE-REUSE-MATCH (money r3 reviewer out-of-scope S0: an unattributed re-sync keeps only the hit row's pid and re-reads pid_scene by pid, so an admin edit of the same pending row between the two reads loses the taolijin scene; fix = reuse match.row.pid_scene, small implementation task opened right after this lands, D10-3485).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "fb4d52937fd9c24bfe566c8fdc41797226ebc58f",
+      "tree": "402eb8a6eccd1d56e5697174d7100249c35ca4f0",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-27T08:08:53Z",
+      "finished_at": "2026-11-27T08:11:09Z",
+      "red_tests": [
+        "test/spec/orders/taobao-slot-match/adapter.test.ts > [AC-B1-08zzc#10] 只登记数字 PID 时，淘宝适配器正常拉单并返回数字推广位",
+        "test/spec/orders/taobao-slot-match/adapter.test.ts > [AC-B1-08zzc#11] mm_ 和数字 PID 混登时，淘宝适配器保留两种登记命中的订单",
+        "test/spec/orders/taobao-slot-match/ingestion.int.test.ts > [AC-B1-08zzc#12] 只登记数字 PID 时，淘宝适配器拉到的订单入库并归属本 App 的绑定用户",
+        "test/spec/orders/taobao-slot-match/ingestion.int.test.ts > [AC-B1-08zzc#13] 淘礼金单延迟归属保留登记 PID，首次快照记 none 和零用户分佣",
+        "test/spec/orders/taobao-slot-match/ingestion.int.test.ts > [AC-B1-08zzc#14] SITE_MISMATCH 回滚时无计数和 P1，重试提交后各一次，重拉不重复",
+        "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#1a] 数字 adzone_id 和 site_id 命中 mm_ 推广位",
+        "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#1b] 数字 PID 按独立的 site_id 核对媒体",
+        "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#2] SITE_MISMATCH 丢弃、发一条 P1 并去重计数",
+        "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#3] 同一 site_id 下未命中 adzone 记 PID_NOT_OURS",
+        "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#4] 缺 site_id 的淘宝订单记 PID_NOT_OURS",
+        "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#5] pending 状态的淘宝推广位仍可用于订单归属",
+        "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#5] retired 状态的淘宝推广位仍可用于订单归属",
+        "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#6] 推广位按 App 和联盟账号隔离",
+        "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#7] jd 仍按自身推广位精确匹配，淘宝的媒体要求仅用于淘宝",
+        "test/spec/orders/taobao-slot-match/matching.int.test.ts > [AC-B1-08zzc#7] pdd 仍按自身推广位精确匹配，淘宝的媒体要求仅用于淘宝",
+        "test/spec/orders/taobao-slot-match/precedence.int.test.ts > [AC-B1-08zzc#8] 淘宝媒体不符优先于同步起点判定，按归因日计数并发一条 P1",
+        "test/spec/orders/taobao-slot-match/precedence.int.test.ts > [AC-B1-08zzc#9] 同一 App 下京东按数字 positionId、拼多多按完整 PID、淘宝按广告位和媒体匹配"
+      ],
+      "expected": [
+        "test/spec/orders/taobao-slot-match/adapter.test.ts",
+        "test/spec/orders/taobao-slot-match/ingestion.int.test.ts",
+        "test/spec/orders/taobao-slot-match/matching.int.test.ts",
+        "test/spec/orders/taobao-slot-match/precedence.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "d3c007421474bf5026a453f195bdd91394c5e91af584fddc55aaf1f4cc8d9122"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "4924c37d82fb596b5a569751beef8d09466e085209c1b67ded8372d7a817eff9"
+        }
+      ],
+      "typecheck": {
+        "exit_code": 0,
+        "errors": []
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 3,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27). r1 (full) fail: S0 slotAdzones dropped bare-digit PIDs; S1 P1 sent inside the transaction, duplicated on retry; reviewer out-of-scope S0 orders.pid written as adzone so downstream equality lookups miss the taolijin scene -> D10-3406, ledger patch 2 #907 (paths + update path), approvals 232 rule tests [AC-B1-08zzc#10]-[#14], impl r2. r2 (incremental) fail: S0 mm_ member segment with leading zero rejected; reviewer out-of-scope S0 unattributed re-sync re-matched only when the adzone changed; S1 P1 lost when the COMMIT ack is lost -> D10-3454: impl r3 fixes the two S0 (implementer unit tests u19 / u20), S1 to FU-ORDER-DROP-ALERT-OUTBOX. r3 (incremental, base 89cc2ea77 an ancestor) pass, 0 findings, one reviewer out-of-scope S0 -> FU-ORDER-PIDSCENE-REUSE-MATCH (D10-3485); validator moved 0 in every round. One uncounted mechanical correction (D10-3463): unit test u19 row buy_type 'self' per 08 04_ATTR:90 BR-ATTR-08 (taolijin -> self), self and share gave identical results. couli-runs/B1-08zzc/review-money-codex-r{1,2,3}.json. Test machine on cdf62e240: --tests test/spec/{orders,union,commission,settlement} apps/api/src/modules/{orders,union} green (1210 files / 12820 tests); verify:fast exit 0."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 4,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (ledger tester codex), reviewed by fresh independent Claude sessions (approvals 36). r1 fail (1 S1: SITE_MISMATCH before payment time and sync_start_at) -> test 2; r2 pass; r3 (approvals 231, only the frozen kit change) pass; r4 (approvals 232, [#10]-[#14]; first run hit the capacity limit, rerun) pass; validator moved 0 in every round. Frozen support file suffix-void-wiring/kit.ts: tail-only insertion checked locally with main's compareSupportFile (ok); reverse red on the implementation: kit back to the base -> the 13 frozen tests [AC-B1-09z#1]-[#7], [AC-B1-09zd#1]-[#6] all red."
+  },
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "ec57c23358ecd0ea3aa59799e0642c02370094ad",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/orders/suffix-void-wiring/kit.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-ATTR-02"],
+      "before_sha256": "635d36006b2e11710482773d96fa8ab6537aaf8f35331454e3b0d84feee7e0f0",
+      "after_sha256": "86ef3de618e638a65bd4cc29f66a704aa2cc6069fe38b2051338aff49f59d959",
+      "reverse_red": [
+        "test/spec/orders/suffix-void-wiring-r2/switch-values.int.test.ts > [AC-B1-09zd#1] 开关 config_items 为非布尔（字符串 \"true\"）：不算开，尾号命中只记 manual_review、订单照常 ESTIMATED、不作废",
+        "test/spec/orders/suffix-void-wiring-r2/switch-values.int.test.ts > [AC-B1-09zd#2] 开关 config_items 为非布尔（字符串 \"false\"）：不算开，尾号命中只记 manual_review、订单照常 ESTIMATED、不作废",
+        "test/spec/orders/suffix-void-wiring-r2/switch-values.int.test.ts > [AC-B1-09zd#3] 开关 config_items 为非布尔（数字 1）：不算开，尾号命中只记 manual_review、订单照常 ESTIMATED、不作废",
+        "test/spec/orders/suffix-void-wiring-r2/switch-values.int.test.ts > [AC-B1-09zd#4] 开关 config_items 为非布尔（数字 0）：不算开，尾号命中只记 manual_review、订单照常 ESTIMATED、不作废",
+        "test/spec/orders/suffix-void-wiring-r2/switch-values.int.test.ts > [AC-B1-09zd#5] 开关 config_items 为非布尔（对象 {}）：不算开，尾号命中只记 manual_review、订单照常 ESTIMATED、不作废",
+        "test/spec/orders/suffix-void-wiring-r2/switch-values.int.test.ts > [AC-B1-09zd#6] 同一 worker 运行中改开关：false 时一单不作废 → 改 true 后超过配置缓存期的下一单作废 → 改回 false 后超过配置缓存期的第三单不作废（不永久缓存首次读到的值）",
+        "test/spec/orders/suffix-void-wiring/switch.int.test.ts > [AC-B1-09z#1] 开关 config_items=true：淘宝父单号尾号命中 → 作废（VOID / BLACKLIST），risk_hits 记 order_no_suffix 的 void_commission",
+        "test/spec/orders/suffix-void-wiring/switch.int.test.ts > [AC-B1-09z#2] 开关 config_items=false：尾号命中只记待复核（manual_review），订单照常 ESTIMATED、不作废",
+        "test/spec/orders/suffix-void-wiring/switch.int.test.ts > [AC-B1-09z#3] 开关未配置（无 config_items 行，08 默认 false）：同 false，尾号命中只记 manual_review、不作废",
+        "test/spec/orders/suffix-void-wiring/switch.int.test.ts > [AC-B1-09z#4] 渠道维度命中不受开关影响：开关 false 时渠道命中照样作废（尾号不命中）",
+        "test/spec/orders/suffix-void-wiring/switch.int.test.ts > [AC-B1-09z#5] 渠道维度命中不受开关影响：开关 true 时渠道命中同样作废（尾号不命中）",
+        "test/spec/orders/suffix-void-wiring/switch.int.test.ts > [AC-B1-09z#6] 渠道维度命中不受开关影响：未配置开关、尾号与渠道同时命中 → 作废；渠道记 void_commission，尾号只记 manual_review",
+        "test/spec/orders/suffix-void-wiring/switch.int.test.ts > [AC-B1-09z#7] 开关按订单所属 App 读：同一 worker 里 A 开（true）、B 未配置、C 关（false），各自尾号命中只有 A 作废"
+      ],
+      "note": "put back to the base on the implementation (temporary worktree, test machine --tests of the two suffix-void-wiring directories): all 13 red by assertion (couli-runs/B1-08zzc/rr.out)"
+    }
+  ]
+}

@@ -11,6 +11,7 @@ import {
   parseTaobaoOrderBody,
   planTaobaoOrders,
   slotAdzones,
+  taobaoAdzoneOf,
   taobaoJsonHasDuplicateKeys,
   taobaoOrderArchiveBody,
   taobaoOrderCursor,
@@ -162,11 +163,50 @@ it('[AC-B1-04f-UNIT#6] 北京时间文本：往返一致，非法日期为 null'
   expect(beijingMs('2028-02-29 08:00:00')).toBe(Date.parse('2028-02-29T00:00:00Z'));
 });
 
-it('[AC-B1-04f-UNIT#7] 推广位：只取 PID 最后一段的十进制 adzone，其余忽略', () => {
+it('[AC-B1-04f-UNIT#7] 推广位：mm_ 形式取最后一段、纯数字取其本身（D10-3355），其余忽略', () => {
   expect([
-    ...slotAdzones(['mm_1_2_345', 'mm_1_2_x', 'plain', 'mm_1_2_', 'mm_1_2_0345', 7]),
-  ]).toEqual(['345']);
+    ...slotAdzones(['mm_1_2_345', 'mm_1_2_x', 'plain', 'mm_1_2_', 'mm_1_2_0345', 7, '678', 'a_9']),
+  ]).toEqual(['345', '678']);
   expect(slotAdzones(null).size).toBe(0);
+});
+
+it('[AC-B1-08zzc#u20] 会员段带前导零的登记（登记入口收 \\d+）照样取到 adzone，adzone 段带前导零仍排除（D10-3454）', () => {
+  expect(taobaoAdzoneOf('mm_01001_3001_2002')).toBe('2002');
+  expect([...slotAdzones(['mm_01001_3001_2002', 'mm_1_2_0345'])]).toEqual(['2002']);
+});
+
+// B1-08zzc：适配器推广位筛选、官方搜索 adzone 与流水线候选 / 更新步推广位键（经 pids.slotKey）共用这一个函数。
+const ADZONE_CASES: readonly (readonly [string, string | null])[] = [
+  ['mm_1001_3001_2002', '2002'],
+  ['2002', '2002'],
+  ['0', '0'],
+  ['mm_1001_2002', null],
+  ['mm_1001_3001_2002_4004', null],
+  ['mm_a_3001_2002', null],
+  ['mm_1001_3001_02002', null],
+  ['mm_01001_3001_2002', '2002'],
+  ['mm_1001_03001_2002', '2002'],
+  ['mm_00_0_2002', '2002'],
+  ['mm_1_2_0345', null],
+  ['mm_1001_3001_', null],
+  ['02002', null],
+  ['x_2002', null],
+  ['MM_1001_3001_2002', null],
+  ['slot-ours', null],
+  ['2002 ', null],
+  ['', null],
+];
+
+it('[AC-B1-08zzc#u9] taobaoAdzoneOf：mm_<a>_<b>_<c> 取 <c>，纯数字取其本身，其他形式没有', () => {
+  for (const [pid, adzone] of ADZONE_CASES) expect(taobaoAdzoneOf(pid), pid).toBe(adzone);
+});
+
+it('[AC-B1-08zzc#u10] slotAdzones：只登记纯数字、只登记 mm_、两种混登都取到 adzone，去重', () => {
+  expect([...slotAdzones(['2002'])]).toEqual(['2002']);
+  expect([...slotAdzones(['mm_1001_3001_2002'])]).toEqual(['2002']);
+  expect([
+    ...slotAdzones(['mm_1001_3001_2002', '3002', '2002', 'mm_1001_2002', 'x_4002', 'mm_1_2_5002']),
+  ]).toEqual(['2002', '3002', '5002']);
 });
 
 function fullRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
