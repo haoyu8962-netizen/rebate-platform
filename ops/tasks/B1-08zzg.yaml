@@ -4,7 +4,7 @@ title: 拼多多单推广位与必带 lk（PDD A′ 实现 ②）：各 scene �
 type: impl
 # 2026-11-27 be 入账（编排 D10-3338 / D10-3472 / D10-3475；范围 couli-runs/PDD-lane/impl2-scope.md；方案页 A′ 定稿 ④ 第 5 步）。deps B1-08zzf（夹具补 lk 先落）。规则 BR-ATTR-08（拼多多只用一个推广位、按我方登记的链接判、没有 lk 一律 self）。
 # ① 取位：getActivePid 由平台规则表新字段决定，拼多多各转链 scene 与 query 共用同一 active 推广位，不按 pid_scene 过滤；京东、淘宝不变，不写平台字面量。② 拼多多去掉「推广位行 pid_scene = 请求 scene」核对（link-open-conversion、pdd-authority、link-registration、link-open-pdd-auth、link-open-requote 等），links.pid_scene 仍记请求的 scene。③ 拼多多转链不看 attr.click_code.pdd、一律发号带 lk，取不到 lk 不转链按 paused；no_rebate 照旧不带用户归因参数。④ catalog 查询与转链共用该推广位。⑤ orders 规则表拼多多 missingLinkBuyTypeBasis 切 self（D10-3278 过渡口径退场）。
-# ⑥ 必满足（D10-3475 ⒝，资金评审书点名）：回溯快照（app.module readOrderPidScene → createRestoreSnapshot，B2-09gd）不得再按订单 pid 反查场景，拼多多改用订单已落的判定（buy_type / scene_basis）。约 14 个冻结用例（link-code / bindings-pdd-* / catalog 取位）实现前探针定、台账补丁登 modify_existing。预计无迁移；若要，取主干下一个空号（0162 之后）。上线门槛（四推广位期间「分享单落 self」比例）登 followups，上线前须负责人定，不挡入账。
+# ⑥ 必满足（D10-3475 ⒝，资金评审书点名）：回溯快照（app.module readOrderPidScene → createRestoreSnapshot，B2-09gd）不得再按订单 pid 反查场景，拼多多改用订单已落的判定（buy_type / scene_basis）。约 14 个冻结用例（link-code / bindings-pdd-* / catalog 取位）实现前探针定、台账补丁登 modify_existing。预计无迁移；若要，取主干下一个空号（0162 之后）。上线门槛（四推广位期间「分享单落 self」比例）登 followups，上线前须负责人定，不挡入账。补丁 1（D10-3615 取甲）：冻结块并入本单，test_paths 加冻结所在目录、登 127 条 modify_existing（含 [AC-B1-08zza#14]），Codex 写测 3 逐批改、逐批报编排核。
 refs: [BR-ATTR-08]
 refs_hash:
   BR-ATTR-08: dc141d8f939f
@@ -18,6 +18,773 @@ paths:
   - 'apps/api/src/app.module.ts'
 test_paths:
   - 'test/spec/linking/pdd-single-pid/**'
+  - 'test/spec/catalog/product-pool-admin/**'
+  - 'test/spec/linking/{auth-account-fallback,link-code,merge-pdd-open-tombstone,open-jdpdd,open-pdd-auth,open-pid-before-requote,pdd-auth-link,pdd-pid-filings,pdd-schema-url-step,shares,wiring}/**'
+  - 'test/spec/orders/{pdd-buy-type-by-link,source-backfill,source-wiring}/**'
+  - 'test/spec/union/{archive,pdd-query-identity,pdd-query-pid,pids-by-account}/**'
+modify_existing:
+  - file: 'test/spec/catalog/product-pool-admin/candidates.int.test.ts'
+    test: '[AC-B1-05q#89] 同键多计划只留一行：券后价低的优先，不看返利，item_ref 是留下那条的'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：夹具只造拼多多 pid_scene=query 的 active 位、没有 self_buy 共用位；查询改取共用位后搜索取不到位，回 50304（§9-4 查询共用）。'
+  - file: 'test/spec/catalog/product-pool-admin/candidates.int.test.ts'
+    test: '[AC-B1-05q#89] 同键多计划只留一行：同价取内部算出的返利高的，item_ref 是留下那条的'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：夹具只造拼多多 pid_scene=query 的 active 位、没有 self_buy 共用位；查询改取共用位后搜索取不到位，回 50304（§9-4 查询共用）。'
+  - file: 'test/spec/catalog/product-pool-admin/candidates.int.test.ts'
+    test: '[AC-B1-05q#89] 同键多计划只留一行：同价同返利取排序靠前的，item_ref 是留下那条的'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：夹具只造拼多多 pid_scene=query 的 active 位、没有 self_buy 共用位；查询改取共用位后搜索取不到位，回 50304（§9-4 查询共用）。'
+  - file: 'test/spec/linking/auth-account-fallback/open-pdd.int.test.ts'
+    test: '[B1-22l] 拼多多 open 无绑定、无 self_buy 位、三个账号更新先后与登记先后交错：最早登记的账号有效 → 用它的 agent 位查备案'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：用例前提是「无 self_buy 位、用 agent 位查备案」；单推广位下 agent 场景也取 self_buy 共用位，缺共用位即无可用推广位回 503，不再借 agent 行（§11）。'
+  - file: 'test/spec/linking/auth-account-fallback/open-pdd.int.test.ts'
+    test: '[B1-22l] 拼多多 open 无绑定、无 self_buy 位：最早登记的账号有效 → 用它的 agent 位查备案，较晚登记的账号 expired 不影响'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：用例前提是「无 self_buy 位、用 agent 位查备案」；单推广位下 agent 场景也取 self_buy 共用位，缺共用位即无可用推广位回 503，不再借 agent 行（§11）。'
+  - file: 'test/spec/linking/link-code/cache.int.test.ts'
+    test: '[AC-B1-08s#24] pdd 同用户同商品同 pid 两个 lk 分开缓存；未注入时不出现 linkCode 字段'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多开关关闭时缓存键无 linkCode；拼多多现一律带 lk（§9-3）。'
+  - file: 'test/spec/linking/link-code/disabled-paths.int.test.ts'
+    test: '[AC-B1-08s#31] pdd owner 新登记在字符串开关或缺失时保持 NULL，不抽号也不继承原码'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多开关非 JSON true 时新登记 lk 为 NULL、不抽号；拼多多现一律发号（§9-3）。'
+  - file: 'test/spec/linking/link-code/disabled-paths.int.test.ts'
+    test: '[AC-B1-08s#32] pdd convert 与 pending 新登记同样严格判断开关；不抽号'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多开关非 JSON true 时新登记 lk 为 NULL、不抽号；拼多多现一律发号（§9-3）。'
+  - file: 'test/spec/linking/link-code/paths.int.test.ts'
+    test: '[AC-B1-08s#21] pdd 改价 pending 新登记用新 lk、旧行 NULL 不补发；重放不再登记'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言开关关时改价新登记 lk 为 NULL；拼多多现一律发号（§9-3）。'
+  - file: 'test/spec/linking/link-code/registration.int.test.ts'
+    test: '[AC-B1-08s#5] pdd 登记从注入随机源发号、持久化；缺省发号也是六位 base36'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多登记先读 attr.click_code.pdd 开关；现拼多多不读开关、一律发号（§9-3）。'
+  - file: 'test/spec/linking/link-code/registration.int.test.ts'
+    test: '[AC-B1-08s#6] pdd 开关只认 JSON true，关闭时不抽号、不补发旧行'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多登记先读 attr.click_code.pdd 开关；现拼多多不读开关、一律发号（§9-3）。'
+  - file: 'test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts'
+    test: '[AC-B1-06zk#2] 拼多多分享创建：absent 绑定、查询答已备案，查询期间分享者成墓碑（deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不登记 link、不转链；对照：正常分享者照常置 active 并写分享位备案'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：对照组断言备案行写在 share 场景推广位上；分享现用 self_buy 共用位，备案行的 pid 是共用位（§9-1/§9-2）。'
+  - file: 'test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts'
+    test: '[AC-B1-06zk#2] 拼多多分享创建：invalid 绑定、查询答已备案，查询期间分享者成墓碑（deleted_reason=account_deleted）→ 10001，不写 active 绑定、不写备案、不登记 link、不转链；对照：正常分享者照常置 active 并写分享位备案'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：对照组断言备案行写在 share 场景推广位上；分享现用 self_buy 共用位，备案行的 pid 是共用位（§9-1/§9-2）。'
+  - file: 'test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts'
+    test: '[AC-B1-06zk#2] 拼多多分享创建：pending_auth 绑定、查询答已备案，查询期间分享者成墓碑（deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不登记 link、不转链；对照：正常分享者照常置 active 并写分享位备案'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：对照组断言备案行写在 share 场景推广位上；分享现用 self_buy 共用位，备案行的 pid 是共用位（§9-1/§9-2）。'
+  - file: 'test/spec/linking/merge-pdd-open-tombstone/share-create.int.test.ts'
+    test: '[AC-B1-06zk#2] 拼多多分享创建：unbound 绑定、查询答已备案，查询期间分享者成墓碑（deleted_reason=merged）→ 10001，不写 active 绑定、不写备案、不登记 link、不转链；对照：正常分享者照常置 active 并写分享位备案'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：对照组断言备案行写在 share 场景推广位上；分享现用 self_buy 共用位，备案行的 pid 是共用位（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-jdpdd/cache-expiry.int.test.ts'
+    test: '[AC-B1-06e#16] BR-PRICE-13：有效期前 1ms 可降级，推进到到期后即使 TTL 未到也拒绝'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：夹具按 cacheKey(row) 直接写入的拼多多缓存条目不带 linkCode；D10-3602 起拼多多的 lk 不进缓存键而记在条目上，条目所记 lk 须与本 link 的 lk 相同才可复用，条目缺 lk 即不复用（否则会答出不带 lk 的跳转），降级分支查不到缓存回 50303（§14 ①）。'
+  - file: 'test/spec/linking/open-jdpdd/open.int.test.ts'
+    test: '[AC-B1-06e#24] BR-ATTR-05：分享接线忽略打开者 0199a3b4-5c6d-7000-8000-000000000002 的 no_rebate，缓存与日志均保留分享归因'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多分享转链的 custom_parameters 只有 app/uid/sc；现多带 lk（§9-3）。'
+  - file: 'test/spec/linking/open-jdpdd/open.int.test.ts'
+    test: '[AC-B1-06e#24] BR-ATTR-05：分享接线忽略打开者 null 的 no_rebate，缓存与日志均保留分享归因'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多分享转链的 custom_parameters 只有 app/uid/sc；现多带 lk（§9-3）。'
+  - file: 'test/spec/linking/open-pdd-auth/activation.int.test.ts'
+    test: '[AC-B1-06v#1] 本人 active 直接 200，不查询或重写绑定'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：共享断言 assertions.ts:59 要求 custom_parameters 不含 lk（且 agent 用例要求用 agent 行的 pid）；现一律带 lk、各场景用共用位（§9-1/§9-3）。'
+  - file: 'test/spec/linking/open-pdd-auth/activation.int.test.ts'
+    test: '[AC-B1-06v#2] absent 查询已授权：插入或同 id CAS 置 active，以快照身份转链'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：共享断言 assertions.ts:59 要求 custom_parameters 不含 lk（且 agent 用例要求用 agent 行的 pid）；现一律带 lk、各场景用共用位（§9-1/§9-3）。'
+  - file: 'test/spec/linking/open-pdd-auth/activation.int.test.ts'
+    test: '[AC-B1-06v#2] invalid 查询已授权：插入或同 id CAS 置 active，以快照身份转链'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：共享断言 assertions.ts:59 要求 custom_parameters 不含 lk（且 agent 用例要求用 agent 行的 pid）；现一律带 lk、各场景用共用位（§9-1/§9-3）。'
+  - file: 'test/spec/linking/open-pdd-auth/activation.int.test.ts'
+    test: '[AC-B1-06v#2] pending_auth 查询已授权：插入或同 id CAS 置 active，以快照身份转链'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：共享断言 assertions.ts:59 要求 custom_parameters 不含 lk（且 agent 用例要求用 agent 行的 pid）；现一律带 lk、各场景用共用位（§9-1/§9-3）。'
+  - file: 'test/spec/linking/open-pdd-auth/activation.int.test.ts'
+    test: '[AC-B1-06v#2] unbound 查询已授权：插入或同 id CAS 置 active，以快照身份转链'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：共享断言 assertions.ts:59 要求 custom_parameters 不含 lk（且 agent 用例要求用 agent 行的 pid）；现一律带 lk、各场景用共用位（§9-1/§9-3）。'
+  - file: 'test/spec/linking/open-pdd-auth/activation.int.test.ts'
+    test: '[AC-B1-06v#30] agent 快照按 agent 当前位查询与转链，不误用 self_buy 位'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：共享断言 assertions.ts:59 要求 custom_parameters 不含 lk（且 agent 用例要求用 agent 行的 pid）；现一律带 lk、各场景用共用位（§9-1/§9-3）。'
+  - file: 'test/spec/linking/open-pdd-auth/ownership.int.test.ts'
+    test: '[AC-B1-06v#18] b 打开已 active 分享者 link，保留 A 身份与 share 位且忽略 no_rebate'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：同上：custom_parameters 多 lk，分享用例期望 share 行 pid，现用共用位（§9-1/§9-3）。'
+  - file: 'test/spec/linking/open-pdd-auth/ownership.int.test.ts'
+    test: '[AC-B1-06v#18] guest 打开已 active 分享者 link，保留 A 身份与 share 位且忽略 no_rebate'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：同上：custom_parameters 多 lk，分享用例期望 share 行 pid，现用共用位（§9-1/§9-3）。'
+  - file: 'test/spec/linking/open-pdd-auth/ownership.int.test.ts'
+    test: '[AC-B1-06v#20] B 打开 A 非分享 link：先新登记，查询 B，authorized=true'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：同上：custom_parameters 多 lk，分享用例期望 share 行 pid，现用共用位（§9-1/§9-3）。'
+  - file: 'test/spec/linking/open-pdd-auth/ownership.int.test.ts'
+    test: '[AC-B1-06v#21] A 打开自己的分享 link：改 self_buy 新 link，再判 A authorized=true'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：同上：custom_parameters 多 lk，分享用例期望 share 行 pid，现用共用位（§9-1/§9-3）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd-unfiled.int.test.ts'
+    test: '[AC-B1-22n#5] 拼多多 absent/agent 未备案且所用账号无该场景 active 推广位：不调用备案查询、回 50301 maintenance（D10-654）、不写授权会话，不复核、不调用任何联盟接口；有推广位时查一次备案、回 30111'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「所用账号无 agent 场景 active 位 → 50301」；单推广位下 agent 取 self_buy 共用位、有位即继续，回 422（30111 备案）而非 503（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd-unfiled.int.test.ts'
+    test: '[AC-B1-22n#5] 拼多多 invalid/agent 未备案且所用账号无该场景 active 推广位：不调用备案查询、回 50301 maintenance（D10-654）、不写授权会话，不复核、不调用任何联盟接口；有推广位时查一次备案、回 30111'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「所用账号无 agent 场景 active 位 → 50301」；单推广位下 agent 取 self_buy 共用位、有位即继续，回 422（30111 备案）而非 503（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd-unfiled.int.test.ts'
+    test: '[AC-B1-22n#5] 拼多多 pending_auth/agent 未备案且所用账号无该场景 active 推广位：不调用备案查询、回 50301 maintenance（D10-654）、不写授权会话，不复核、不调用任何联盟接口；有推广位时查一次备案、回 30111'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「所用账号无 agent 场景 active 位 → 50301」；单推广位下 agent 取 self_buy 共用位、有位即继续，回 422（30111 备案）而非 503（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#3] 拼多多 active agent/a 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 off_shelf）；有推广位时照旧复核得 30141'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#3] 拼多多 active agent/a 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 price_changed）；有推广位时照旧复核得 0'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#3] 拼多多 active agent/a 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 unavailable）；有推广位时照旧复核得 50303'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#3] 拼多多 active share/b 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 off_shelf）；有推广位时照旧复核得 30141'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#3] 拼多多 active share/b 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 price_changed）；有推广位时照旧复核得 0'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#3] 拼多多 active share/b 所用账号无该场景 active 推广位：先回 50301、不做价格复核（复核注入 unavailable）；有推广位时照旧复核得 50303'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#6] 拼多多 absent/agent 平台侧已备案但绑定非 active、所用账号无该场景 active 推广位：不查备案、回 50301 maintenance（D10-654）、不写授权会话、不复核、绑定不变（复核注入 off_shelf）；有推广位时照旧查一次备案、复核得 30141'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#6] 拼多多 absent/agent 平台侧已备案但绑定非 active、所用账号无该场景 active 推广位：不查备案、回 50301 maintenance（D10-654）、不写授权会话、不复核、绑定不变（复核注入 price_changed）；有推广位时照旧查一次备案、复核得 0'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#6] 拼多多 absent/agent 平台侧已备案但绑定非 active、所用账号无该场景 active 推广位：不查备案、回 50301 maintenance（D10-654）、不写授权会话、不复核、绑定不变（复核注入 unavailable）；有推广位时照旧查一次备案、复核得 50303'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#6] 拼多多 invalid/agent 平台侧已备案但绑定非 active、所用账号无该场景 active 推广位：不查备案、回 50301 maintenance（D10-654）、不写授权会话、不复核、绑定不变（复核注入 off_shelf）；有推广位时照旧查一次备案、复核得 30141'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#6] 拼多多 invalid/agent 平台侧已备案但绑定非 active、所用账号无该场景 active 推广位：不查备案、回 50301 maintenance（D10-654）、不写授权会话、不复核、绑定不变（复核注入 price_changed）；有推广位时照旧查一次备案、复核得 0'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#6] 拼多多 invalid/agent 平台侧已备案但绑定非 active、所用账号无该场景 active 推广位：不查备案、回 50301 maintenance（D10-654）、不写授权会话、不复核、绑定不变（复核注入 unavailable）；有推广位时照旧查一次备案、复核得 50303'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#6] 拼多多 pending_auth/agent 平台侧已备案但绑定非 active、所用账号无该场景 active 推广位：不查备案、回 50301 maintenance（D10-654）、不写授权会话、不复核、绑定不变（复核注入 off_shelf）；有推广位时照旧查一次备案、复核得 30141'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#6] 拼多多 pending_auth/agent 平台侧已备案但绑定非 active、所用账号无该场景 active 推广位：不查备案、回 50301 maintenance（D10-654）、不写授权会话、不复核、绑定不变（复核注入 price_changed）；有推广位时照旧查一次备案、复核得 0'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/open-pid-before-requote/pdd.int.test.ts'
+    test: '[AC-B1-22n#6] 拼多多 pending_auth/agent 平台侧已备案但绑定非 active、所用账号无该场景 active 推广位：不查备案、回 50301 maintenance（D10-654）、不写授权会话、不复核、绑定不变（复核注入 unavailable）；有推广位时照旧查一次备案、复核得 50303'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：前提「无 agent/share 场景位 → 先回 50301」；现 agent/share 取 self_buy 共用位、有位即进入复核（§9-1/§9-2）。'
+  - file: 'test/spec/linking/pdd-auth-link/open.int.test.ts'
+    test: '[AC-B1-06zf#23] 自己的 agent 场景 link 未备案（该场景有推广位）：pddAuthorityUrl 用 agent 推广位、sc=agent，与本次 open 的备案查询同一身份，不用 self_buy 位；session 绑这个 link'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：期望 agent 场景用 agent 位、custom_parameters 不含 lk、agent 位停用即 50301；现共用 self_buy 位且转链带 lk（§9-1/§9-2/§9-3）。'
+  - file: 'test/spec/linking/pdd-auth-link/open.int.test.ts'
+    test: '[AC-B1-06zf#26] D10-654：所用账户没有该场景 active 推广位（自己的 agent link，agent 位已停用）→ HTTP 503 / 50301 data.reason=maintenance，不回 30111 / auth_jump、不写 session、不调备案查询与 pddAuthorityUrl、不转链'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：期望 agent 场景用 agent 位、custom_parameters 不含 lk、agent 位停用即 50301；现共用 self_buy 位且转链带 lk（§9-1/§9-2/§9-3）。'
+  - file: 'test/spec/linking/pdd-auth-link/open.int.test.ts'
+    test: '[AC-B1-06zf#9] 拼多多 open 调 pddAuthorityUrl 的身份就是备案查询与转链用的：同一 App、同一账户的 self_buy 推广位、同一 custom_parameters，不含 user_id'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：期望 agent 场景用 agent 位、custom_parameters 不含 lk、agent 位停用即 50301；现共用 self_buy 位且转链带 lk（§9-1/§9-2/§9-3）。'
+  - file: 'test/spec/linking/pdd-pid-filings/open-active.int.test.ts'
+    test: '[AC-B1-06zi#1] active 绑定缺本场景当前推广位（agent）备案：查一次 authority，答已备案插一行后照常 200；再开同 pid 有备案行不再查'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：共享断言 assertions.ts:59 期望 custom_parameters 不含 lk（agent 用例另期望 agent 行 pid）；现带 lk、用共用位（§9-1/§9-3）。'
+  - file: 'test/spec/linking/pdd-pid-filings/open-active.int.test.ts'
+    test: '[AC-B1-06zi#1] active 绑定缺本场景当前推广位（self_buy）备案：查一次 authority，答已备案插一行后照常 200；再开同 pid 有备案行不再查'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：共享断言 assertions.ts:59 期望 custom_parameters 不含 lk（agent 用例另期望 agent 行 pid）；现带 lk、用共用位（§9-1/§9-3）。'
+  - file: 'test/spec/linking/pdd-pid-filings/share-create.int.test.ts'
+    test: '[AC-B1-06zi#11] 拼多多分享创建 absent 绑定查询答已备案：照现置 active 并出分享素材，且插分享位的备案行（本 App、本人、share pid、所用账户、注入时钟）；再分享同位不再多行'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言备案行插在 share pid 上；分享现用 self_buy 共用位，备案行是共用位（§9-1/§9-2）。'
+  - file: 'test/spec/linking/pdd-pid-filings/share-create.int.test.ts'
+    test: '[AC-B1-06zi#11] 拼多多分享创建 invalid 绑定查询答已备案：照现置 active 并出分享素材，且插分享位的备案行（本 App、本人、share pid、所用账户、注入时钟）；再分享同位不再多行'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言备案行插在 share pid 上；分享现用 self_buy 共用位，备案行是共用位（§9-1/§9-2）。'
+  - file: 'test/spec/linking/pdd-pid-filings/share-create.int.test.ts'
+    test: '[AC-B1-06zi#11] 拼多多分享创建 pending_auth 绑定查询答已备案：照现置 active 并出分享素材，且插分享位的备案行（本 App、本人、share pid、所用账户、注入时钟）；再分享同位不再多行'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言备案行插在 share pid 上；分享现用 self_buy 共用位，备案行是共用位（§9-1/§9-2）。'
+  - file: 'test/spec/linking/pdd-pid-filings/share-create.int.test.ts'
+    test: '[AC-B1-06zi#11] 拼多多分享创建 unbound 绑定查询答已备案：照现置 active 并出分享素材，且插分享位的备案行（本 App、本人、share pid、所用账户、注入时钟）；再分享同位不再多行'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言备案行插在 share pid 上；分享现用 self_buy 共用位，备案行是共用位（§9-1/§9-2）。'
+  - file: 'test/spec/linking/pdd-pid-filings/share.int.test.ts'
+    test: '[AC-B1-06zi#9] 分享者本人开自己的分享 link 补写自买位备案后，b 开其分享 link：只看分享者绑定，不查、不写备案'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：共享断言 assertions.ts:59 期望不含 lk；现一律带 lk（§9-3）。'
+  - file: 'test/spec/linking/pdd-pid-filings/share.int.test.ts'
+    test: '[AC-B1-06zi#9] 分享者本人开自己的分享 link 补写自买位备案后，guest 开其分享 link：只看分享者绑定，不查、不写备案'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：共享断言 assertions.ts:59 期望不含 lk；现一律带 lk（§9-3）。'
+  - file: 'test/spec/linking/shares/create.int.test.ts'
+    test: '[AC-B1-15w#2] pdd：以分享者身份登记一条新的 share link（pid_scene=share）并实时转链，share_materials 恰好一行（share_url 为转链结果、tpwd 为空、app_id 取自该 link），响应 link_id / share_url 与之一致、tpwd 与 poster_url 为 null；source_link_id 只记来源，原 link 不变'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多分享转链 claims 用 share 场景推广位；现用 self_buy 共用位，且 custom_parameters 带 lk（§9-1/§9-3）。'
+  - file: 'test/spec/linking/shares/create.int.test.ts'
+    test: '[AC-B1-15w#2] pdd：请求体只有 platform 与 product_key（收藏页打开，无 item_ref、无 source_link_id）也照样以分享者身份新登记 share link 并转链，share_materials 恰好一行，copy 按商品返回的字段渲染'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多分享转链 claims 用 share 场景推广位；现用 self_buy 共用位，且 custom_parameters 带 lk（§9-1/§9-3）。'
+  - file: 'test/spec/linking/wiring/app.int.test.ts'
+    test: '[AC-B1-06w#10] prod pdd 的 CAP 外跳路径全未验证时不能下发方案'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '夹具复制 link 行撞 (app_id, lk) 唯一键：只给夹具补独立 lk（补业务信息），断言不动（D10-3602 ③）'
+  - file: 'test/spec/linking/wiring/app.int.test.ts'
+    test: '[AC-B1-06w#11] prod pdd 只验证 H5 时主路径是 H5，fallback 也不能夹带未验证路径'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '夹具复制 link 行撞 (app_id, lk) 唯一键：只给夹具补独立 lk（补业务信息），断言不动（D10-3602 ③）'
+  - file: 'test/spec/linking/wiring/app.int.test.ts'
+    test: '[AC-B1-06w#13] 京东标记不能放行拼多多，候选 scheme 不能靠平台名称自动获准'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '夹具复制 link 行撞 (app_id, lk) 唯一键：只给夹具补独立 lk（补业务信息），断言不动（D10-3602 ③）'
+  - file: 'test/spec/linking/wiring/app.int.test.ts'
+    test: '[AC-B1-06w#14] 已验证拼多多 scheme synthetic-pdd-a 来自注入的 apps.json，不写死 pinduoduo'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '夹具复制 link 行撞 (app_id, lk) 唯一键：只给夹具补独立 lk（补业务信息），断言不动（D10-3602 ③）'
+  - file: 'test/spec/linking/wiring/app.int.test.ts'
+    test: '[AC-B1-06w#14] 已验证拼多多 scheme synthetic-pdd-b 来自注入的 apps.json，不写死 pinduoduo'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '夹具复制 link 行撞 (app_id, lk) 唯一键：只给夹具补独立 lk（补业务信息），断言不动（D10-3602 ③）'
+  - file: 'test/spec/linking/wiring/app.int.test.ts'
+    test: '[AC-B1-06w#15] apps.json 未给拼多多 scheme，即使标记为已验证也不能凭空补一个'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '夹具复制 link 行撞 (app_id, lk) 唯一键：只给夹具补独立 lk（补业务信息），断言不动（D10-3602 ③）'
+  - file: 'test/spec/linking/wiring/app.int.test.ts'
+    test: '[AC-B1-06w#16] prod pdd 的缓存主路径和 fallback 同样须验证'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '夹具复制 link 行撞 (app_id, lk) 唯一键：只给夹具补独立 lk（补业务信息），断言不动（D10-3602 ③）'
+  - file: 'test/spec/linking/wiring/app.int.test.ts'
+    test: '[AC-B1-06w#1] 真实应用 pdd open 经治理取价和转链、重算卡片、注册新 link 并把 jump 写进 Redis'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '夹具复制 link 行撞 (app_id, lk) 唯一键：只给夹具补独立 lk（补业务信息），断言不动（D10-3602 ③）'
+  - file: 'test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts'
+    test: '[AC-B1-08zza#14] 完全缺 lk 且规则默认 pid，沿用推广位及原本的 sc 回退'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: 'D10-3278 过渡口径「缺 lk 默认 pid」退场，期望改为缺 lk 判 self / fallback（BR-ATTR-08 正文，D10-3499 一）'
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#5] 生产配置按 App 和平台隔离，缺省 false/360，同一端口立即读到配置修改'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#6] 窗口非正安全整数 -1 回退 360h'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#6] 窗口非正安全整数 0 回退 360h'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#6] 窗口非正安全整数 1.5 回退 360h'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#6] 窗口非正安全整数 480 回退 360h'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#6] 窗口非正安全整数 9007199254740992 回退 360h'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#6] 窗口非正安全整数 null 回退 360h'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#6] 窗口非正安全整数 true 回退 360h'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#7] 开关只接受 JSON true，"true" 不能启用'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#7] 开关只接受 JSON true，1 不能启用'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#7] 开关只接受 JSON true，false 不能启用'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#7] 开关只接受 JSON true，null 不能启用'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#7] 开关只接受 JSON true，undefined 不能启用'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/orders/source-wiring/config.int.test.ts'
+    test: '[AC-B1-08q#7] 开关只接受 JSON true，{} 不能启用'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: "随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 sourceConfig(app,'pdd') 的 clickCodeEnabled 随 attr.click_code.pdd（缺省 / 非 JSON true 为 false）；现拼多多不读开关、恒为 true（§14 ②）。#6 的窗口用例同用 toEqual 整体比对 {clickCodeEnabled:false, backfillWindo"
+  - file: 'test/spec/union/archive/wiring.int.test.ts'
+    test: '[AC-B1-04p-WIRING#1] staging pdd live 的 HTTPS 装配在一次商品调用后提交一行；demo 装配无归档'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：夹具只造 pdd query 位；查询身份现读 self_buy 共用位，读不到即 upstream_rejected（§9-4）。'
+  - file: 'test/spec/union/pdd-query-pid/reader.int.test.ts'
+    test: '[B1-22r][D10-427 ③] updated_at 相同按 id 升序取（与插入顺序无关），每次调用结果相同、各写一条选取日志，无凭据'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：夹具造多条 query 位断言选取顺序与候选计数；现只读 self_buy 行，选到的是夹具里的 self_buy 行（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-pid/reader.int.test.ts'
+    test: '[B1-22r][D10-427 ③] 候选条数只数本 app 同场景 active 的查询位：两条 active 加退役、待启用、别的场景时记 2，所选账号写在日志里'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：夹具造多条 query 位断言选取顺序与候选计数；现只读 self_buy 行，选到的是夹具里的 self_buy 行（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-pid/reader.int.test.ts'
+    test: '[B1-22r][D10-427 ③] 多个账号各有 active 查询位：取 updated_at 最早的一条（与 id 顺序相反也一样），并写一条选取日志（app_id、所选 id 与账号、候选条数），无凭据'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：夹具造多条 query 位断言选取顺序与候选计数；现只读 self_buy 行，选到的是夹具里的 self_buy 行（§9-4/§11）。'
+  - file: 'test/spec/union/pids-by-account/pdd.int.test.ts'
+    test: '[AC-B1-19d#7] 拼多多 active/agent: 查询备案和转链均用绑定账号 A 的推广位'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多 agent 场景用账号 A 的 agent 位、无该场景位即停；现取账号 A 的 self_buy 共用位（§9-1，仍按账号过滤）。'
+  - file: 'test/spec/union/pids-by-account/pdd.int.test.ts'
+    test: '[AC-B1-19d#7] 拼多多 invalid/agent: 查询备案和转链均用绑定账号 A 的推广位'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多 agent 场景用账号 A 的 agent 位、无该场景位即停；现取账号 A 的 self_buy 共用位（§9-1，仍按账号过滤）。'
+  - file: 'test/spec/union/pids-by-account/pdd.int.test.ts'
+    test: '[AC-B1-19d#7] 拼多多 pending_auth/agent: 查询备案和转链均用绑定账号 A 的推广位'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多 agent 场景用账号 A 的 agent 位、无该场景位即停；现取账号 A 的 self_buy 共用位（§9-1，仍按账号过滤）。'
+  - file: 'test/spec/union/pids-by-account/pdd.int.test.ts'
+    test: '[AC-B1-19d#9] 拼多多指定账号没有该场景位时停止，不借用 B 或 self_buy'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多 agent 场景用账号 A 的 agent 位、无该场景位即停；现取账号 A 的 self_buy 共用位（§9-1，仍按账号过滤）。'
+  - file: 'test/spec/union/pids-by-account/queries.int.test.ts'
+    test: '[AC-B1-19d#1] pdd/agent: 同账号第二条 active 被拒；跨账号各一条时按账号取本账号那条，不带账号取最早启用'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 getActivePid(pdd, agent/query/share/taolijin) 返回该场景行；现拼多多只返回 self_buy 共用位，夹具无 self_buy 行即 null（§9-1/§11）。'
+  - file: 'test/spec/union/pids-by-account/queries.int.test.ts'
+    test: '[AC-B1-19d#1] pdd/query: 同账号第二条 active 被拒；跨账号各一条时按账号取本账号那条，不带账号取最早启用'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 getActivePid(pdd, agent/query/share/taolijin) 返回该场景行；现拼多多只返回 self_buy 共用位，夹具无 self_buy 行即 null（§9-1/§11）。'
+  - file: 'test/spec/union/pids-by-account/queries.int.test.ts'
+    test: '[AC-B1-19d#1] pdd/share: 同账号第二条 active 被拒；跨账号各一条时按账号取本账号那条，不带账号取最早启用'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 getActivePid(pdd, agent/query/share/taolijin) 返回该场景行；现拼多多只返回 self_buy 共用位，夹具无 self_buy 行即 null（§9-1/§11）。'
+  - file: 'test/spec/union/pids-by-account/queries.int.test.ts'
+    test: '[AC-B1-19d#1] pdd/taolijin: 同账号第二条 active 被拒；跨账号各一条时按账号取本账号那条，不带账号取最早启用'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言 getActivePid(pdd, agent/query/share/taolijin) 返回该场景行；现拼多多只返回 self_buy 共用位，夹具无 self_buy 行即 null（§9-1/§11）。'
+  - file: 'test/spec/linking/link-code/identity.test.ts'
+    test: '[AC-B1-08s#17] pdd 开关即时关闭或非 JSON true、或 lk NULL，逐字节保持旧身份'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多开关关闭时转链身份逐字节不含 lk；现一律带 lk（§9-3）。'
+  - file: 'test/spec/linking/open-jdpdd/conversion.test.ts'
+    test: '[AC-B1-06e#1] BR-ATTR-05/06 pdd：演示适配器收到服务端身份与 attr_code，不收到用户主键'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：拼多多 link 夹具没有 lk，期望照常转链或 50303；现缺 lk 不转链、回 50301（§9-3「取不到 lk 就不转链」）。'
+  - file: 'test/spec/linking/open-jdpdd/conversion.test.ts'
+    test: '[AC-B1-06e#2] BR-ATTR-05 pdd：伪造身份字段不能替换端口返回的身份'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：拼多多 link 夹具没有 lk，期望照常转链或 50303；现缺 lk 不转链、回 50301（§9-3「取不到 lk 就不转链」）。'
+  - file: 'test/spec/linking/open-jdpdd/conversion.test.ts'
+    test: '[AC-B1-06e#33] BR-PROD-10 pdd：关闭搜索不关闭转链'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：拼多多 link 夹具没有 lk，期望照常转链或 50303；现缺 lk 不转链、回 50301（§9-3「取不到 lk 就不转链」）。'
+  - file: 'test/spec/linking/open-jdpdd/conversion.test.ts'
+    test: '[AC-B1-06e#36] BR-PRICE-08/13 pdd：50303 内部失败结果同时给出商品键生成的无推广购买目标'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：拼多多 link 夹具没有 lk，期望照常转链或 50303；现缺 lk 不转链、回 50301（§9-3「取不到 lk 就不转链」）。'
+  - file: 'test/spec/linking/open-jdpdd/conversion.test.ts'
+    test: '[AC-B1-06e#4] BR-ATTR-05 pdd：匿名/他人打开分享 link，no_rebate 不能剥离分享者归因'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：拼多多 link 夹具没有 lk，期望照常转链或 50303；现缺 lk 不转链、回 50301（§9-3「取不到 lk 就不转链」）。'
+  - file: 'test/spec/linking/pdd-schema-url-step/conversion.test.ts'
+    test: '[AC-B1-06zp#1] android 已装状态 unknown 按回包原样给出 scheme → H5，同端未装只给出 H5'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：拼多多 link 夹具没有 lk，期望照常转链；现缺 lk 回 50301 link_code_unavailable（§9-3）。'
+  - file: 'test/spec/linking/pdd-schema-url-step/conversion.test.ts'
+    test: '[AC-B1-06zp#1] ios 已装状态 true 按回包原样给出 scheme → H5，同端未装只给出 H5'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：拼多多 link 夹具没有 lk，期望照常转链；现缺 lk 回 50301 link_code_unavailable（§9-3）。'
+  - file: 'test/spec/linking/pdd-schema-url-step/conversion.test.ts'
+    test: '[AC-B1-06zp#2] schema_url scheme 名只有相同开头 时，已装和 unknown 都只给出 mobile_url'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：拼多多 link 夹具没有 lk，期望照常转链；现缺 lk 回 50301 link_code_unavailable（§9-3）。'
+  - file: 'test/spec/linking/pdd-schema-url-step/conversion.test.ts'
+    test: '[AC-B1-06zp#2] schema_url 为空 时，已装和 unknown 都只给出 mobile_url'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：拼多多 link 夹具没有 lk，期望照常转链；现缺 lk 回 50301 link_code_unavailable（§9-3）。'
+  - file: 'test/spec/linking/pdd-schema-url-step/conversion.test.ts'
+    test: '[AC-B1-06zp#2] schema_url 是网页地址 时，已装和 unknown 都只给出 mobile_url'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：拼多多 link 夹具没有 lk，期望照常转链；现缺 lk 回 50301 link_code_unavailable（§9-3）。'
+  - file: 'test/spec/linking/pdd-schema-url-step/conversion.test.ts'
+    test: '[AC-B1-06zp#2] schema_url 缺失 时，已装和 unknown 都只给出 mobile_url'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：拼多多 link 夹具没有 lk，期望照常转链；现缺 lk 回 50301 link_code_unavailable（§9-3）。'
+  - file: 'test/spec/linking/pdd-schema-url-step/conversion.test.ts'
+    test: '[AC-B1-06zp#2] schema_url 缺少双斜杠 时，已装和 unknown 都只给出 mobile_url'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：拼多多 link 夹具没有 lk，期望照常转链；现缺 lk 回 50301 link_code_unavailable（§9-3）。'
+  - file: 'test/spec/orders/source-backfill/ports.test.ts'
+    test: '[AC-B1-08j#20] clickCode=false 时有 lk 也不查 exact；缺省窗口为 360h'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多来源回填先调 clickCode 端口、开关关（false / 缺省 / 他平台开）时不查 exact；现拼多多按 lk 匹配不看开关、不调开关口子（§14 ②）。'
+  - file: 'test/spec/orders/source-backfill/ports.test.ts'
+    test: '[AC-B1-08j#20] clickCode=undefined 时有 lk 也不查 exact；缺省窗口为 360h'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多来源回填先调 clickCode 端口、开关关（false / 缺省 / 他平台开）时不查 exact；现拼多多按 lk 匹配不看开关、不调开关口子（§14 ②）。'
+  - file: 'test/spec/orders/source-backfill/ports.test.ts'
+    test: '[AC-B1-08j#21] 开关按当前平台查询，exact 只使用本 app/platform/lk'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多来源回填先调 clickCode 端口、开关关（false / 缺省 / 他平台开）时不查 exact；现拼多多按 lk 匹配不看开关、不调开关口子（§14 ②）。'
+  - file: 'test/spec/orders/source-backfill/ports.test.ts'
+    test: '[AC-B1-08j#41] 其他平台开关开启不能让 pdd 走 exact'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言拼多多来源回填先调 clickCode 端口、开关关（false / 缺省 / 他平台开）时不查 exact；现拼多多按 lk 匹配不看开关、不调开关口子（§14 ②）。'
+  - file: 'test/spec/orders/source-wiring/config-routing.test.ts'
+    test: '[AC-B1-08q#2] 新异步配置端口按 App/平台调用并覆盖旧端口，exact 开关=false'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：断言注入 sourceConfig 给 false 时拼多多不走 exact；现拼多多不看开关一律按 lk 反查（§14 ②）。'
+  - file: 'test/spec/union/pdd-query-identity/reader.test.ts'
+    test: '[AC-B1-04x-READ#1] 只读入口按 app/pdd/query/active 查推广位，无超级账号或审计依赖'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：桩数据库断言查询读入口的 SQL 条件 pid_scene=query；现为 self_buy（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-identity/reader.test.ts'
+    test: '[AC-B1-04x-READ#2] 没有查询位时返回 null，不能回退到 {"app_id":"synthetic-app-b"}'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：桩数据库断言查询读入口的 SQL 条件 pid_scene=query；现为 self_buy（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-identity/reader.test.ts'
+    test: '[AC-B1-04x-READ#2] 没有查询位时返回 null，不能回退到 {"pid_scene":"agent"}'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：桩数据库断言查询读入口的 SQL 条件 pid_scene=query；现为 self_buy（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-identity/reader.test.ts'
+    test: '[AC-B1-04x-READ#2] 没有查询位时返回 null，不能回退到 {"pid_scene":"fallback"}'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：桩数据库断言查询读入口的 SQL 条件 pid_scene=query；现为 self_buy（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-identity/reader.test.ts'
+    test: '[AC-B1-04x-READ#2] 没有查询位时返回 null，不能回退到 {"pid_scene":"self_buy"}'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：桩数据库断言查询读入口的 SQL 条件 pid_scene=query；现为 self_buy（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-identity/reader.test.ts'
+    test: '[AC-B1-04x-READ#2] 没有查询位时返回 null，不能回退到 {"pid_scene":"share"}'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：桩数据库断言查询读入口的 SQL 条件 pid_scene=query；现为 self_buy（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-identity/reader.test.ts'
+    test: '[AC-B1-04x-READ#2] 没有查询位时返回 null，不能回退到 {"pid_scene":"taolijin"}'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：桩数据库断言查询读入口的 SQL 条件 pid_scene=query；现为 self_buy（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-identity/reader.test.ts'
+    test: '[AC-B1-04x-READ#2] 没有查询位时返回 null，不能回退到 {"platform":"jd"}'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：桩数据库断言查询读入口的 SQL 条件 pid_scene=query；现为 self_buy（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-identity/reader.test.ts'
+    test: '[AC-B1-04x-READ#2] 没有查询位时返回 null，不能回退到 {"platform":"taobao"}'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：桩数据库断言查询读入口的 SQL 条件 pid_scene=query；现为 self_buy（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-identity/reader.test.ts'
+    test: '[AC-B1-04x-READ#2] 没有查询位时返回 null，不能回退到 {"status":"pending"}'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：桩数据库断言查询读入口的 SQL 条件 pid_scene=query；现为 self_buy（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-identity/reader.test.ts'
+    test: '[AC-B1-04x-READ#2] 没有查询位时返回 null，不能回退到 {"status":"retired"}'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：桩数据库断言查询读入口的 SQL 条件 pid_scene=query；现为 self_buy（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-identity/reader.test.ts'
+    test: '[AC-B1-04x-READ#3] 每次重查 active 查询位，不缓存退役或其他 app 的结果'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：桩数据库断言查询读入口的 SQL 条件 pid_scene=query；现为 self_buy（§9-4/§11）。'
+  - file: 'test/spec/union/pdd-query-identity/wiring.test.ts'
+    test: '[AC-B1-04x-WIRING#1] Nest 装配真实适配器：按当前 app 读查询位、原样带配置、每次重新读取'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：同上，装配用例的桩库断言 pid_scene=query（§9-4）。'
+  - file: 'test/spec/union/pdd-query-identity/wiring.test.ts'
+    test: '[AC-B1-04x-WIRING#2] 缺少当前 app 的 active 查询位时 upstream_rejected，不能借用其他场景或 app'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：同上，装配用例的桩库断言 pid_scene=query（§9-4）。'
+  - file: 'test/spec/union/pdd-query-identity/wiring.test.ts'
+    test: '[AC-B1-04x-WIRING#3] 已装配的提供者只读取 ctx.appId，不读取 headers 或其他上下文字段'
+    reason: rule_change
+    br: [BR-ATTR-08]
+    ruling: D10-3615
+    note: '随规则变的期望 / 前提（拼多多单推广位、必带 lk、来源回填不看开关；D10-3475 / D10-3583 / D10-3602）：同上，装配用例的桩库断言 pid_scene=query（§9-4）。'
 impl: claude
 tester: codex
 accept:
