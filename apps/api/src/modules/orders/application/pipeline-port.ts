@@ -33,7 +33,7 @@ import type { DB } from '@couli/db';
 import type { Insertable, Transaction } from 'kysely';
 import { newUuidV7 } from '../../platform/index.ts';
 import type { RegisteredPlatform, UnionOrder, UnionOrderAttrParams } from '../../union/index.ts';
-import { classifyBuyType, isKnownPidScene } from '../domain/attribution.ts';
+import { isKnownPidScene } from '../domain/attribution.ts';
 import {
   isPaidOrLater,
   planCommissionSnapshot,
@@ -61,6 +61,7 @@ import {
 } from '../infra/pipeline-store.ts';
 import { publishBindingConflict, publishIllegalTransition } from './alert-events.ts';
 import { attributeOrderUser } from './attribute-user.ts';
+import { decideBuyType } from './buy-type-step.ts';
 import {
   applyOrderBlacklist,
   blacklistVoids,
@@ -308,7 +309,19 @@ export function createOrderPipeline(
         'pid_scene not in BR-ATTR-08; buy_type falls back to self',
       );
     }
-    const scene = classifyBuyType(platform, pidRow.pid_scene, params.custom_parameters);
+    // B1-08zza：拼多多带 lk 按本 App 登记的 link 判（同事务读一次，⑤ 复用）；其余照推广位判（buy-type-step.ts）。
+    const buyType = await decideBuyType(trx, deps, {
+      appId: ctx.app_id,
+      platform,
+      order,
+      params,
+      pidScene: pidRow.pid_scene,
+      userId: user.user_id,
+    });
+    const scene = buyType.decision;
+    // 按 link 判定时，快照的淘礼金判断取该 link 的场景（与 buy_type 同一依据）。
+    const snapshotPidScene =
+      scene.scene_basis === 'link' ? (buyType.link?.pid_scene ?? null) : pidRow.pid_scene;
     const itemId = rawItemId(order);
     if (itemId === '') {
       log?.warn({ platform, app_id: ctx.app_id, outcome: 'no_item_id' }, 'order without item id');
@@ -327,6 +340,9 @@ export function createOrderPipeline(
             pidScene: pidRow.pid_scene,
             order,
             shopId: shop ?? null,
+            ...(buyType.link === undefined
+              ? {}
+              : { exactLink: buyType.link?.platform === platform ? buyType.link : null }),
           })
         : null;
     const sourcePending =
@@ -371,7 +387,7 @@ export function createOrderPipeline(
         modified_at: order.modified_at ?? null,
         service_fee_fen: order.service_fee_fen ?? null,
       },
-      pidScene: pidRow.pid_scene,
+      pidScene: snapshotPidScene,
       movedToPaidNow: paidNow,
       firstPaidAt: paidNow ? now : null,
       now,

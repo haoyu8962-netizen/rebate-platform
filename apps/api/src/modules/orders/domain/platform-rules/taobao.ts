@@ -16,6 +16,7 @@ export const rules: PlatformRules = {
   // 拍板第二批 TRADE-09：绑定 active 且 relation_id 可用。
   claimAuth: 'relation_id',
   pushesProductKey: true,
+  missingLinkBuyTypeBasis: null,
   // 02 §7.1 / CAP-TB-07（D10-741 ②）：增量窗口上限 20 分钟（大促上限，日常 ≤3 小时亦满足）。
   syncWindowCapMs: 20 * 60_000,
   itemIdField: 'item_id',

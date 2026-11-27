@@ -5177,7 +5177,7 @@ CREATE TABLE app.orders (
     CONSTRAINT orders_platform_status_check CHECK ((platform_status = ANY (ARRAY['DEPOSIT_PAID'::text, 'PAID'::text, 'RECEIVED'::text, 'SETTLED'::text, 'INVALID'::text]))),
     CONSTRAINT orders_reason_check CHECK ((reason = ANY (ARRAY['REFUND'::text, 'RIGHTS'::text, 'PUNISH'::text, 'PRESALE_UNPAID'::text, 'COMMISSION_ZERO'::text, 'OTHER'::text, 'BLACKLIST'::text, 'PART_REFUND'::text, 'PRICE_COMPARE'::text, 'PRICE_PROTECT'::text, 'SETTLE_DIFF'::text]))),
     CONSTRAINT orders_rebate_status_check CHECK ((rebate_status = ANY (ARRAY['UNATTRIBUTED'::text, 'ESTIMATED'::text, 'WAITING'::text, 'CREDITED'::text, 'VOID'::text, 'CLAWED_BACK'::text]))),
-    CONSTRAINT orders_scene_basis_check CHECK ((scene_basis = ANY (ARRAY['pid'::text, 'param'::text, 'fallback'::text]))),
+    CONSTRAINT orders_scene_basis_check CHECK ((scene_basis = ANY (ARRAY['pid'::text, 'param'::text, 'link'::text, 'fallback'::text]))),
     CONSTRAINT orders_settle_period_check CHECK ((settle_period ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'::text)),
     CONSTRAINT orders_source_match_check CHECK ((source_match = ANY (ARRAY['exact'::text, 'product'::text, 'shop'::text, 'none'::text]))),
     CONSTRAINT orders_user_basis_check CHECK ((user_basis = ANY (ARRAY['param'::text, 'claim'::text, 'admin'::text])))
@@ -5270,7 +5270,7 @@ CREATE TABLE app.orders_default (
     CONSTRAINT orders_platform_status_check CHECK ((platform_status = ANY (ARRAY['DEPOSIT_PAID'::text, 'PAID'::text, 'RECEIVED'::text, 'SETTLED'::text, 'INVALID'::text]))),
     CONSTRAINT orders_reason_check CHECK ((reason = ANY (ARRAY['REFUND'::text, 'RIGHTS'::text, 'PUNISH'::text, 'PRESALE_UNPAID'::text, 'COMMISSION_ZERO'::text, 'OTHER'::text, 'BLACKLIST'::text, 'PART_REFUND'::text, 'PRICE_COMPARE'::text, 'PRICE_PROTECT'::text, 'SETTLE_DIFF'::text]))),
     CONSTRAINT orders_rebate_status_check CHECK ((rebate_status = ANY (ARRAY['UNATTRIBUTED'::text, 'ESTIMATED'::text, 'WAITING'::text, 'CREDITED'::text, 'VOID'::text, 'CLAWED_BACK'::text]))),
-    CONSTRAINT orders_scene_basis_check CHECK ((scene_basis = ANY (ARRAY['pid'::text, 'param'::text, 'fallback'::text]))),
+    CONSTRAINT orders_scene_basis_check CHECK ((scene_basis = ANY (ARRAY['pid'::text, 'param'::text, 'link'::text, 'fallback'::text]))),
     CONSTRAINT orders_settle_period_check CHECK ((settle_period ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'::text)),
     CONSTRAINT orders_source_match_check CHECK ((source_match = ANY (ARRAY['exact'::text, 'product'::text, 'shop'::text, 'none'::text]))),
     CONSTRAINT orders_user_basis_check CHECK ((user_basis = ANY (ARRAY['param'::text, 'claim'::text, 'admin'::text])))

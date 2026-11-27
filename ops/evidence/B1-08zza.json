@@ -1,0 +1,151 @@
+{
+  "risk_note": "B1-08zza (orders, RV2; BR-ATTR-08 / BR-ATTR-09; PDD A' implementation 1, owner agreed 2026-11-25, D10-2970 item 6; transitional rule D10-3278). A pdd order that carries lk is classified by the link the server registered (same app, same user, same item by goods_sign then product_key, link created_at <= paid_at in milliseconds) -> the link's pid_scene, scene_basis=link; otherwise self / fallback; an order without lk keeps the promotion-slot rule through the rule-table field missingLinkBuyTypeBasis (pdd 'pid', jd / taobao null). The order row and the first commission snapshot use the same decision; source backfill reuses the one link read. Migrations 0159 (orders_scene_basis_check rebuilt NOT VALID with link) / 0160 (VALIDATE), precedent 0081 / 0082; 0159 is pinned in APPROVED_GUARD_CHANGES by guard-change B1-08zzb, merged first. Snapshot regenerated on couli-ci (main copy byte-identical). Money r1 S0 (second-precision pay time) closed by orchestrator ruling D10-3384 (frozen [AC-B1-08zza#10], FU-PDD-PAY-TIME-SECOND).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27). r1 (full) fail: S0 second-precision pdd pay time vs millisecond link created_at -> closed by orchestrator ruling D10-3384 (rule §9 (c) in milliseconds, frozen [AC-B1-08zza#10], FU-PDD-PAY-TIME-SECOND); S1 wording of the review brief -> brief rewritten; S2 0159 / 0160 in one migration run (precedent 0081 / 0082). r2 (incremental, head unchanged 1d692ebfc) pass, 2 S2 (FU-PDD-LINK-PORT-OPTIONAL, FU-PDD-TAOLIJIN-LINK-RETRY)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (write-test 1 + 2; mechanical corrections f5902e8a2 / 09c2f46f0 per D10-3288 / D10-3303). Spec-test review by an independent Claude (approvals 36): r1 (full) fail 1 S1 + 1 S2 -> write-test 2; r2 (incremental) pass, no findings."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#1] 链接与付款同刻有效，链接场景 share 映射为 share，依据仍为 link",
+    "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#1] 链接与付款同刻有效，链接场景 self_buy 映射为 self，依据仍为 link",
+    "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#1] 链接与付款同刻有效，链接场景 agent 映射为 self，依据仍为 link",
+    "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#1] 链接与付款同刻有效，链接场景 taolijin 映射为 self，依据仍为 link",
+    "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#1] 链接与付款同刻有效，链接场景 fallback 映射为 self，依据仍为 link",
+    "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#2] uid 未归属时，无主链接不能凭两个 null 相等判为分享",
+    "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#3] 商品两侧都缺标识时不能凭两个 null 相等判为同商品",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#4] goods_sign 相同即认分享链接，以 uid 归属，推广位与 sc 均冲突",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#5] 自购链接仍记 self / link，回传 sc=share 不能改判",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#6] 链接用户与 uid 用户不一致时按兜底，订单仍归属 uid 用户",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#7] 平台不是拼多多的同码链接走 self / fallback",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#8] goods_sign 与 product_key 都不等走 self / fallback",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#9] goods_sign 不等但 product_key 相等仍按分享链接判",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#10] 链接创建晚于付款一毫秒走 self / fallback",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#11] 有 lk 但查无记录走 self / fallback",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#12] 按本 App 查 lk，忽略别处同码的链接",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#13] 回传 lk=null 是不能匹配的短码，走 self / fallback",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#13] 回传 lk=\"\" 是不能匹配的短码，走 self / fallback",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#13] 回传 lk=1234 是不能匹配的短码，走 self / fallback",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#14] 完全缺 lk 且规则默认 pid，沿用推广位及原本的 sc 回退",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#15] 仅将注入规则改为 self，完全缺 lk 时走 self / fallback",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#16] 已判为 share / pid 的老订单收到自购链接后仍沿用旧判定",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#17] worker 装配后按 links 判定，来源 exact 复用同一次查询",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#20] 预售比尾款时间，创建于定金与尾款之间的链接有效",
+    "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#21] 启用链接判定的拼多多走 link，京东与淘宝仍走 pid",
+    "test/spec/orders/pdd-buy-type-by-link/link-owner.test.ts > [AC-B1-08zza#24] 订单已按 uid 归属，无主分享链接仍走 self / fallback",
+    "test/spec/orders/pdd-buy-type-by-link/scene-basis.int.test.ts > [AC-B1-08zza#18] 订单约束接收 link、拒绝未知值，后台指派保留场景依据",
+    "test/spec/orders/pdd-buy-type-by-link/scene-basis.int.test.ts > [AC-B1-08zza#19] 找回通过只写用户依据 claim，保留订单的 link 与 buy_type",
+    "test/spec/orders/pdd-buy-type-by-link/snapshot.int.test.ts > [AC-B1-08zza#22] 自购推广位命中分享链接，订单和快照均按分享",
+    "test/spec/orders/pdd-buy-type-by-link/snapshot.int.test.ts > [AC-B1-08zza#23] 分享推广位的链接商品不符，订单和快照均按自购"
+  ],
+  "modify_existing": [
+    {
+      "file": "test/spec/orders/platform-rules/completeness.test.ts",
+      "test": "[AC-B1-08za#1] 每个已登记平台在 PLATFORM_RULES 里恰有一份、键齐全无多余；类型层缺平台或缺键即编译失败",
+      "reason": "rule_change",
+      "br": ["BR-ATTR-08"],
+      "before": "it('[AC-B1-08za#1] 每个已登记平台在 PLATFORM_RULES 里恰有一份、键齐全无多余；类型层缺平台或缺键即编译失败', () => {\n  for (const platform of REGISTERED_PLATFORMS) {\n    const rules = rulesOf(platform);\n    expect(Object.keys(rules).sort()).toEqual([...RULE_KEYS].sort());\n    for (const key of RULE_KEYS) expect(rules[key], `${platform}.${key}`).not.toBeUndefined();\n  }\n  expect(Object.keys(PLATFORM_RULES).sort()).toEqual([...REGISTERED_PLATFORMS].sort());\n  // Type layer: a registered platform without an entry, or an entry without a key, does not compile.\n  const table: Readonly<Record<RegisteredPlatform, PlatformRules>> = PLATFORM_RULES;\n  expect(table).toBe(PLATFORM_RULES);\n  expectTypeOf<keyof PlatformRules>().toEqualTypeOf<RuleKey>();\n  expectTypeOf<PlatformRules['attribution']['kind']>().toEqualTypeOf<'attr_code' | 'relation_id'>();\n  expectTypeOf<PlatformRules['parseLinkCode']>().toEqualTypeOf<\n    (params: UnionOrderAttrParams) => string | null\n  >();\n  expectTypeOf<PlatformRules['sceneParamFallback']>().toEqualTypeOf<boolean>();\n  expectTypeOf<PlatformRules['serviceFeeDeducted']>().toEqualTypeOf<boolean>();\n  expectTypeOf<PlatformRules['taolijinPidScene']>().toEqualTypeOf<boolean>();\n  expectTypeOf<PlatformRules['orderNoStripHyphens']>().toEqualTypeOf<boolean>();\n  expectTypeOf<PlatformRules['claimAuth']>().toEqualTypeOf<ClaimAuthRule>();\n  expectTypeOf<ClaimAuthRule>().toEqualTypeOf<'relation_id' | 'filing' | null>();\n  expectTypeOf<PlatformRules['pushesProductKey']>().toEqualTypeOf<boolean>();\n  expectTypeOf<PlatformRules['syncWindowCapMs']>().toEqualTypeOf<number | null>();\n  expectTypeOf<PlatformRules['itemIdField']>().toEqualTypeOf<ItemIdField>();\n  expectTypeOf<ItemIdField>().toEqualTypeOf<Exclude<keyof ItemRef, 'platform'>>();\n});",
+      "after": "it('[AC-B1-08za#1] 每个已登记平台在 PLATFORM_RULES 里恰有一份、键齐全无多余；类型层缺平台或缺键即编译失败', () => {\n  for (const platform of REGISTERED_PLATFORMS) {\n    const rules = rulesOf(platform);\n    expect(Object.keys(rules).sort()).toEqual([...RULE_KEYS, 'missingLinkBuyTypeBasis'].sort());\n    for (const key of [...RULE_KEYS, 'missingLinkBuyTypeBasis'] as const)\n      expect(rules[key], `${platform}.${key}`).not.toBeUndefined();\n  }\n  expect(Object.keys(PLATFORM_RULES).sort()).toEqual([...REGISTERED_PLATFORMS].sort());\n  // Type layer: a registered platform without an entry, or an entry without a key, does not compile.\n  const table: Readonly<Record<RegisteredPlatform, PlatformRules>> = PLATFORM_RULES;\n  expect(table).toBe(PLATFORM_RULES);\n  expectTypeOf<keyof PlatformRules>().toEqualTypeOf<RuleKey | 'missingLinkBuyTypeBasis'>();\n  expectTypeOf<PlatformRules['attribution']['kind']>().toEqualTypeOf<'attr_code' | 'relation_id'>();\n  expectTypeOf<PlatformRules['parseLinkCode']>().toEqualTypeOf<\n    (params: UnionOrderAttrParams) => string | null\n  >();\n  expectTypeOf<PlatformRules['sceneParamFallback']>().toEqualTypeOf<boolean>();\n  expectTypeOf<PlatformRules['serviceFeeDeducted']>().toEqualTypeOf<boolean>();\n  expectTypeOf<PlatformRules['taolijinPidScene']>().toEqualTypeOf<boolean>();\n  expectTypeOf<PlatformRules['orderNoStripHyphens']>().toEqualTypeOf<boolean>();\n  expectTypeOf<PlatformRules['claimAuth']>().toEqualTypeOf<ClaimAuthRule>();\n  expectTypeOf<ClaimAuthRule>().toEqualTypeOf<'relation_id' | 'filing' | null>();\n  expectTypeOf<PlatformRules['pushesProductKey']>().toEqualTypeOf<boolean>();\n  expectTypeOf<PlatformRules['syncWindowCapMs']>().toEqualTypeOf<number | null>();\n  expectTypeOf<PlatformRules['itemIdField']>().toEqualTypeOf<ItemIdField>();\n  expectTypeOf<ItemIdField>().toEqualTypeOf<Exclude<keyof ItemRef, 'platform'>>();\n});",
+      "mutation": [
+        {
+          "mutant": "reverse check: jd's rule table without the new key missingLinkBuyTypeBasis (the table back to the old key set on one platform), run on the test machine (couli-runs/B1-08zza/tests/7)",
+          "result": "killed"
+        }
+      ]
+    }
+  ],
+  "task": "B1-08zza",
+  "spec_commit": "080ee506406b31cc52ded65cd482473b27a944bc",
+  "spec_ref": "c10bd8a7893c7cffdc037549ea64750b641aa840",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "080ee506406b31cc52ded65cd482473b27a944bc",
+      "tree": "188633177129f0c2353b763242bff4db8731b6ef",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-27T04:55:50Z",
+      "finished_at": "2026-11-27T04:58:37Z",
+      "red_tests": [
+        "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#1] 链接与付款同刻有效，链接场景 share 映射为 share，依据仍为 link",
+        "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#1] 链接与付款同刻有效，链接场景 self_buy 映射为 self，依据仍为 link",
+        "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#1] 链接与付款同刻有效，链接场景 agent 映射为 self，依据仍为 link",
+        "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#1] 链接与付款同刻有效，链接场景 taolijin 映射为 self，依据仍为 link",
+        "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#1] 链接与付款同刻有效，链接场景 fallback 映射为 self，依据仍为 link",
+        "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#2] uid 未归属时，无主链接不能凭两个 null 相等判为分享",
+        "test/spec/orders/pdd-buy-type-by-link/decision.test.ts > [AC-B1-08zza#3] 商品两侧都缺标识时不能凭两个 null 相等判为同商品",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#4] goods_sign 相同即认分享链接，以 uid 归属，推广位与 sc 均冲突",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#5] 自购链接仍记 self / link，回传 sc=share 不能改判",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#6] 链接用户与 uid 用户不一致时按兜底，订单仍归属 uid 用户",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#7] 平台不是拼多多的同码链接走 self / fallback",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#8] goods_sign 与 product_key 都不等走 self / fallback",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#9] goods_sign 不等但 product_key 相等仍按分享链接判",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#10] 链接创建晚于付款一毫秒走 self / fallback",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#11] 有 lk 但查无记录走 self / fallback",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#12] 按本 App 查 lk，忽略别处同码的链接",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#13] 回传 lk=null 是不能匹配的短码，走 self / fallback",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#13] 回传 lk=\"\" 是不能匹配的短码，走 self / fallback",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#13] 回传 lk=1234 是不能匹配的短码，走 self / fallback",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#14] 完全缺 lk 且规则默认 pid，沿用推广位及原本的 sc 回退",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#15] 仅将注入规则改为 self，完全缺 lk 时走 self / fallback",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#16] 已判为 share / pid 的老订单收到自购链接后仍沿用旧判定",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#17] worker 装配后按 links 判定，来源 exact 复用同一次查询",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#20] 预售比尾款时间，创建于定金与尾款之间的链接有效",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts > [AC-B1-08zza#21] 启用链接判定的拼多多走 link，京东与淘宝仍走 pid",
+        "test/spec/orders/pdd-buy-type-by-link/link-owner.test.ts > [AC-B1-08zza#24] 订单已按 uid 归属，无主分享链接仍走 self / fallback",
+        "test/spec/orders/pdd-buy-type-by-link/scene-basis.int.test.ts > [AC-B1-08zza#18] 订单约束接收 link、拒绝未知值，后台指派保留场景依据",
+        "test/spec/orders/pdd-buy-type-by-link/scene-basis.int.test.ts > [AC-B1-08zza#19] 找回通过只写用户依据 claim，保留订单的 link 与 buy_type",
+        "test/spec/orders/pdd-buy-type-by-link/snapshot.int.test.ts > [AC-B1-08zza#22] 自购推广位命中分享链接，订单和快照均按分享",
+        "test/spec/orders/pdd-buy-type-by-link/snapshot.int.test.ts > [AC-B1-08zza#23] 分享推广位的链接商品不符，订单和快照均按自购"
+      ],
+      "expected": [
+        "test/spec/orders/pdd-buy-type-by-link/decision.test.ts",
+        "test/spec/orders/pdd-buy-type-by-link/flow.int.test.ts",
+        "test/spec/orders/pdd-buy-type-by-link/link-owner.test.ts",
+        "test/spec/orders/pdd-buy-type-by-link/scene-basis.int.test.ts",
+        "test/spec/orders/pdd-buy-type-by-link/snapshot.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "7da3fa120264d4e09db5f0d9c64c1e7976a458bdb0b9705f3b50ff476469f8d4"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "8e87e6af683fdd60e9a768dd21a58cc3664f3ad37e5cb3606261a468efb85fcf"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "458a28a7c48b38f9c00c102fbdf4290d0cd2aa13",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}

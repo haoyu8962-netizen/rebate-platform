@@ -9,7 +9,13 @@ import { rules as pdd } from './pdd.ts';
 import { rules as taobao } from './taobao.ts';
 import type { PlatformRules } from './types.ts';
 
-export type { AttributionRule, ClaimAuthRule, ItemIdField, PlatformRules } from './types.ts';
+export type {
+  AttributionRule,
+  ClaimAuthRule,
+  ItemIdField,
+  MissingLinkBuyTypeBasis,
+  PlatformRules,
+} from './types.ts';
 
 /**
  * The table, keyed by registered platform. The type makes a registered platform without an entry a

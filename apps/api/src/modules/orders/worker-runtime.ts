@@ -196,6 +196,12 @@ export interface OrderSyncReadPorts {
    */
   readonly sources?: (db: Kysely<DB>, clock: Clock, logger: RootLogger) => OrderSourcePorts;
   /**
+   * B1-08zza (BR-ATTR-08 pdd single slot): linking's read of the link an order's lk names, called by
+   * the pipeline inside its transaction. Absent (a runtime built without it) → buy_type of every
+   * platform is decided by the promotion slot as before.
+   */
+  readonly buyTypeLink?: OrderPipelineDeps['readBuyTypeLink'];
+  /**
    * B1-09b: risk's order-side blocklist ports (match / recordHit, B1-09a), called once at assembly
    * and reading nothing until used. Absent, or B1-09n undefined (no field keyring in local / test;
    * app.module refuses that elsewhere) → step ③ (BR-ATTR-26) is skipped.
@@ -412,6 +418,7 @@ export function createOrderSyncRuntime(deps: OrderSyncRuntimeDeps): OrderSyncRun
     events,
     logger,
     ...(sources === undefined ? {} : { sources }),
+    ...(deps.ports.buyTypeLink === undefined ? {} : { readBuyTypeLink: deps.ports.buyTypeLink }),
     ...(snapshots === undefined ? {} : { snapshots }),
     ...(blacklist === undefined ? {} : { blacklist }),
     ...(readSubsidyItemized === undefined
