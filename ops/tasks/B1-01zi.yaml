@@ -11,7 +11,7 @@ type: impl
 # 写入中途失败后输出路径不存在、目录里不留临时文件；输出已存在时拒绝且字节不变；生成文件权限 0600 并能被 openConfiguredFieldCrypto 打开。
 refs: [BR-ID-33]
 refs_hash:
-  BR-ID-33: 86d06b8e0154
+  BR-ID-33: a446ae3deba5
 deps: [B1-01zd]
 paths:
   - 'apps/api/scripts/keyring-init.ts'

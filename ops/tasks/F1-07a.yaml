@@ -9,7 +9,7 @@ type: impl
 # 与以后入账的 F1-07c（联盟授权）、F1-07d（封禁冻结）可能并行改 openapi.yaml、两份生成物、app.module.ts 与 identity/**：后合并者变基并重生成（台账评审 S2-7）。
 refs: [BR-ID-33]
 refs_hash:
-  BR-ID-33: 86d06b8e0154
+  BR-ID-33: a446ae3deba5
 deps: [CT-02j]
 paths:
   - 'apps/api/src/modules/identity/**'

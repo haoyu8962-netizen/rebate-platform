@@ -11,7 +11,7 @@ type: impl
 # （落点由编排会话定），不在本任务验收。
 refs: [BR-ID-33]
 refs_hash:
-  BR-ID-33: 86d06b8e0154
+  BR-ID-33: a446ae3deba5
 deps: []
 paths:
   - 'apps/api/src/modules/platform/masking/**'

@@ -8,7 +8,7 @@ type: impl
 refs: [BR-WDR-29, BR-ID-33]
 refs_hash:
   BR-WDR-29: 3f0cf42a584e
-  BR-ID-33: 86d06b8e0154
+  BR-ID-33: a446ae3deba5
 deps: [B2-05q]
 paths:
   - 'apps/api/src/modules/payout/application/auto-payout.ts'

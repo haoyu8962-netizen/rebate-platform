@@ -12,7 +12,7 @@ type: impl
 # 并新增：prod 仍拒绝 local、staging 用 local 能打开、keyring-init 生成的文件能被 openConfiguredFieldCrypto 打开、拒绝覆盖、不输出密钥。
 refs: [BR-ID-33]
 refs_hash:
-  BR-ID-33: 86d06b8e0154
+  BR-ID-33: a446ae3deba5
 deps: []
 paths:
   - 'apps/api/src/modules/platform/config/keyring.ts'
