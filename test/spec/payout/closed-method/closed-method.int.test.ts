@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Schema } from '@couli/contracts-ts';
+import type { Schema } from '../../../../packages/contracts-ts/src/index.ts';
 import { createDb, destroyDb } from '@couli/db';
 import {
   acquireTestRedis,
