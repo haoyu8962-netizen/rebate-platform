@@ -14,6 +14,35 @@ export const NUMBER = '231006-1234567891';
 export const PARENT = '231006-1234567890';
 export const DETAIL = `${LIST}/${OID}`;
 export const ROUTE = `/orders/${OID}`;
+/** The list page's sync status bar reads the latest record here (F1-07edb; CT-11bvc, D10-3642). */
+export const SYNCS_LATEST = '/admin/v1/order-syncs';
+
+/** One finished sync record (values as the admin-orders-sync samples), so the bar shows its normal state. */
+function latestSync(): Schema<'AdminOrderSyncPage'> {
+  return {
+    items: [
+      {
+        sync_id: '0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f6b03',
+        platform: 'pdd',
+        mode: 'order_nos',
+        from: null,
+        to: null,
+        status_filter: null,
+        order_nos: ['231012-4440000001'],
+        status: 'done',
+        requested_by: '0199a3b4-5c6d-7e8f-9a0b-1c2d3e4f5a0a',
+        requested_by_name: '运营甲',
+        fetched_count: 1,
+        stored_count: 1,
+        created_at: '2026-10-22T10:05:00+08:00',
+        finished_at: '2026-10-22T10:05:09+08:00',
+      },
+    ],
+    page: 1,
+    page_size: 1,
+    total: 1,
+  };
+}
 
 /** Synthetic contract fixtures, never a real union recording. Already in server payment order. */
 export function rows(): Row[] {
@@ -216,6 +245,7 @@ export function createServer(initial = rows(), initialDetail = detail()) {
       } satisfies Schema<'AdminOrderPage'>);
     }
     if (method === 'GET' && path === DETAIL) return ok(state.detail);
+    if (method === 'GET' && path === SYNCS_LATEST) return ok(latestSync());
     return failure(20001, { fields: [method === 'GET' ? 'order_id' : 'unexpected_write'] });
   }
   const fetch: typeof globalThis.fetch = async (input, init) => {
