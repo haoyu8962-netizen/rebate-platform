@@ -7,6 +7,8 @@
 // (B1-04zy) only on the api, filled by `collectTaobaoSearch` from union's in-process counter.
 // The agent trace missing gauge (B3-08za) only on the worker, filled by `collectAgentTraceMissing`.
 // The open post-credit diffs gauge (B2-02v) only on the worker, filled by `collectCreditPostcheck`.
+// The channel recon diff gauge and the two latest-bill gauges (B2-09zn) only on the worker, filled by
+// `collectChannelMismatch` and `collectSettleBillMismatch`.
 // The three payout failure gauges (B2-09zj) only on the worker, filled by `collectWithdrawalFail`.
 // The empty reply counter (B1-01zzv) only on the stream, filled by `collectAgentReplyEmpty` from
 // agent's in-process counter.
@@ -26,6 +28,12 @@ import { CREDIT_POSTCHECK_GAUGE, type CreditPostcheckSnapshot } from './credit-p
 import { DASHBOARD_DAY_LAG_GAUGE, type DashboardDayLagSnapshot } from './dashboard-day-lag.ts';
 import type { FundMetricsSnapshot } from './fund.ts';
 import { pddServiceFeeMissingTotal } from './pdd-service-fee.ts';
+import {
+  CHANNEL_MISMATCH_GAUGE,
+  SETTLE_BILL_MISMATCH_GAUGES,
+  type ChannelMismatchSnapshot,
+  type SettleBillMismatchSnapshot,
+} from './recon-mismatch.ts';
 import { serviceFeeMissingSamples } from './service-fee-missing.ts';
 import { REVIEW_OVERDUE_GAUGE, type ReviewOverdueSnapshot } from './review-overdue.ts';
 import { WATER_LOW_GAUGE, type WaterLowSnapshot } from './water-low.ts';
@@ -59,6 +67,10 @@ export interface MetricsRegistryOptions {
   readonly collectWaterStale?: () => Promise<WaterStaleSnapshot>;
   /** The open post-credit diffs gauge (B2-02v). Used only on 'worker'; called once per render(). */
   readonly collectCreditPostcheck?: () => Promise<CreditPostcheckSnapshot>;
+  /** The channel recon diff gauge (B2-09zn). Used only on 'worker'; called once per render(). */
+  readonly collectChannelMismatch?: () => Promise<ChannelMismatchSnapshot>;
+  /** The two latest-bill gauges (B2-09zn). Used only on 'worker'; called once per render(). */
+  readonly collectSettleBillMismatch?: () => Promise<SettleBillMismatchSnapshot>;
   /** The payout failure gauges (B2-09zj). Used only on 'worker'; called once per render(). */
   readonly collectWithdrawalFail?: () => Promise<WithdrawalFailSnapshot>;
   /** The workbench daily row lag gauge (B1-34q). Used only on 'worker'; called once per render(). */
@@ -415,6 +427,50 @@ function creditPostcheckFamilies(snapshot: CreditPostcheckSnapshot): Family[] {
   ];
 }
 
+/** The channel recon diff gauge (B2-09zn): only this snapshot's app_ids, an app without any has none. */
+function channelMismatchFamilies(snapshot: ChannelMismatchSnapshot): Family[] {
+  return [
+    {
+      name: CHANNEL_MISMATCH_GAUGE.name,
+      help: CHANNEL_MISMATCH_GAUGE.help,
+      type: 'gauge',
+      samples: Object.entries(snapshot.open).map(([appId, value]) => ({
+        labels: { [CHANNEL_MISMATCH_GAUGE.label]: appId },
+        value,
+      })),
+    },
+  ];
+}
+
+/**
+ * The two latest-bill gauges (B2-09zn): both from the same entry of the same snapshot, so an app has
+ * both samples or neither; 0 is kept, an app without a value has none.
+ */
+function settleBillMismatchFamilies(snapshot: SettleBillMismatchSnapshot): Family[] {
+  const bills = Object.entries(snapshot.bills);
+  const label = SETTLE_BILL_MISMATCH_GAUGES.label;
+  return [
+    {
+      name: SETTLE_BILL_MISMATCH_GAUGES.amountMismatch.name,
+      help: SETTLE_BILL_MISMATCH_GAUGES.amountMismatch.help,
+      type: 'gauge',
+      samples: bills.map(([appId, bill]) => ({
+        labels: { [label]: appId },
+        value: bill.amountMismatch,
+      })),
+    },
+    {
+      name: SETTLE_BILL_MISMATCH_GAUGES.generatedAt.name,
+      help: SETTLE_BILL_MISMATCH_GAUGES.generatedAt.help,
+      type: 'gauge',
+      samples: bills.map(([appId, bill]) => ({
+        labels: { [label]: appId },
+        value: bill.generatedAtSeconds,
+      })),
+    },
+  ];
+}
+
 const WITHDRAWAL_FAIL_KEYS = Object.keys(
   WITHDRAWAL_FAIL_GAUGES,
 ) as (keyof WithdrawalFailSnapshot)[];
@@ -494,6 +550,8 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
   const collectAgentTraceMissing = worker ? options.collectAgentTraceMissing : undefined;
   const collectWaterStale = worker ? options.collectWaterStale : undefined;
   const collectCreditPostcheck = worker ? options.collectCreditPostcheck : undefined;
+  const collectChannelMismatch = worker ? options.collectChannelMismatch : undefined;
+  const collectSettleBillMismatch = worker ? options.collectSettleBillMismatch : undefined;
   const collectWithdrawalFail = worker ? options.collectWithdrawalFail : undefined;
   const collectDashboardDayLag = worker ? options.collectDashboardDayLag : undefined;
   const collectTaobaoSearch = options.entry === 'api' ? options.collectTaobaoSearch : undefined;
@@ -514,6 +572,8 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         agentTraceMissing,
         waterStale,
         creditPostcheck,
+        channelMismatch,
+        settleBillMismatch,
         withdrawalFail,
         dashboardDayLag,
       ] = await Promise.all([
@@ -537,6 +597,12 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         collectCreditPostcheck === undefined
           ? []
           : Promise.resolve().then(collectCreditPostcheck).then(creditPostcheckFamilies),
+        collectChannelMismatch === undefined
+          ? []
+          : Promise.resolve().then(collectChannelMismatch).then(channelMismatchFamilies),
+        collectSettleBillMismatch === undefined
+          ? []
+          : Promise.resolve().then(collectSettleBillMismatch).then(settleBillMismatchFamilies),
         collectWithdrawalFail === undefined
           ? []
           : Promise.resolve().then(collectWithdrawalFail).then(withdrawalFailFamilies),
@@ -559,6 +625,8 @@ export function createMetricsRegistry(options: MetricsRegistryOptions): MetricsR
         ...agentTraceMissing,
         ...waterStale,
         ...creditPostcheck,
+        ...channelMismatch,
+        ...settleBillMismatch,
         ...withdrawalFail,
         ...dashboardDayLag,
         ...taobaoSearch,

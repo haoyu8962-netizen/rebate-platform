@@ -1,0 +1,134 @@
+{
+  "risk_note": "RV2 (B2-09zn; orchestrator D10-3308 / D10-3311, D10-3322, D10-3360). Read-only: three worker gauges and two alert rules; no reconciliation, settlement or ledger-writing code is touched, no migration, no contract. couli_payout_recon_diff_open{app_id} = the rows of app.recon_diffs with type channel_mismatch and status open or processing (ledger read port); couli_settle_bill_amount_mismatch{app_id} and couli_settle_bill_generated_timestamp_seconds{app_id} = amount_mismatch_count and the generation time (whole Unix seconds) of the latest generated monthly bill of the app, read in one SELECT (settlement read port); a bill whose count is NULL exports no sample, an app without rows exports no sample, a failed read fails the scrape (never a 0). Both ports only SELECT, by app_id, no transaction, no lock; the worker caches each read like the existing fund gauges (injected clock). couli-fund.yaml gets CouliPayoutReconDiffOpen (> 0, for 5m) and CouliSettleBillAmountMismatch (count > 0 and within 259200 s of the bill generation, for 5m: the count is written on the bill day only and does not drop once handled, D10-3360), both severity critical, fund \"true\" (BR-WDR-23, BR-FUND-04). The description of CouliPayoutReconDiffOpen says what the number is and that the handling depends on the case under BR-WDR-23; it prescribes no step (money review r2 / r3). No money moves and no state changes with this task. Frozen tests: one declared change (modify_existing, tighten_only, D10-3322 / D10-3360): the allow-list of [AC-B1-01zzi#6] gains the three metric names; test/spec/platform/alerting-eval/metrics.test.ts gains the two collectors in its registry fixture outside any test (ledger red_exempt_outside, the two [AC-B1-25b#8] bodies unchanged). Open follow-ups: FU-METRICS-READ-NULL-PROTO-MAP (the two S2 of money review r1), FU-SETTLE-SUPPLEMENT-MISMATCH-NO-SIGNAL, FU-B2-09ZN-SPEC-PAY-TYPES, FU-PAY-RECON-DIFF-ALERT. The sharded run was made on base a0afa37f413b; when this evidence was built main had gained 9 more commit(s): e20f8a45c B1-08zza：拼多多 buy_type 按我方登记的转链记录判（scene_basis=link）；orders.scene_basis 约束加 link（BR-ATTR-08 / BR-ATTR; 315f81f1f ops(tasks)：CT-06zzzzzzzn 置 done（#912）；CT-06zzzzzzzo 台账补丁 1——paths 加 tools/agent/README.md（D10-3437） ; 4e0e5dc18 chore(ops): ledger add CT-26zs（契约 C1 零破坏增量包：10 文案键与清单、JumpStep.mini_program、/v1/config.pdd_compare_r; 64974b082 chore(ops): SPEC_REF → f1d6a935d8d8 (planning #38: BR-ID-33 audit free-text email masked whole, BR-A; d32bc648d chore(ops): B3-06e 台账补丁 2——迁移成对（NOT VALID 换约束 + -validate），paths 的迁移通配放宽到两个文件名（先例 0115 / 0116） (#926; 2743bab4c chore(ops): B2-05u 台账补丁 1——paths 加 app.module.ts（解析函数由装配交给 payout，不让 payout 导入 identity；[AC-B2-08c#w; 7aab22541 chore(ops): ledger add CT-18d（契约 C2：media.saveImage 逐张状态摘要 + RA-03 三类场景 + H5 邀请页原子升级；执行归 fe；D10-3434; 823d69913 chore(ops): ledger add B1-08zzf（test-change：拼多多冻结夹具补 lk + links 行）与 B1-08zzg（拼多多单推广位 + 必带 lk + 缺 lk ; 41c10213d ops(tasks): B1-08zza done（#925）、B1-08zzb done（#910） (#928). They change code outside the ledger: apps/api/src/app.module.ts, apps/api/src/modules/linking/**, apps/api/src/modules/orders/**, db/migrations/**, db/schema.sql, test/spec/orders/** (28 file(s)); none of these files is changed by this task (no path in common, the rebase is conflict-free). The landed head is rebased over them and that combination was NOT re-run on the test machine (orchestrator D10-3480); the required CI checks, verify-int included, run on the PR head.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 4,
+      "note": "Codex via tools/agent/codex-run.sh; three regular rounds failed, the fourth is a one-off round approved by the owner (ops/approvals.yaml 234, orchestrator D10-3427 ③). Heads are those before the final rebase; the rebased commits are patch-identical (git range-diff: four \"=\"). r1 (full, head 82eecccbd466): fail — S1 1 (the bill alert carries fund \"true\", so the existing routing sends it to the finance group as well as to on-call), S2 2 (an app_id \"__proto__\" would be dropped by the plain objects of the two read ports). Dispositions by the orchestrator (D10-3420): the S1 is closed by ruling without a code change — BR-FUND-04 asks for an alert to engineering, on-call receives it day and night, and the double routing of every rule of couli-fund.yaml is the standing design pinned by [AC-B1-25a#6] and [AC-B1-01zzi#4]; the two S2 are follow-up FU-METRICS-READ-NULL-PROTO-MAP. r2 (same head, the rulings written into the brief): fail — S1 1, new: the description of CouliPayoutReconDiffOpen told the reader to handle each diff on the admin console, which for a diff \"recorded as paid, the channel paid nothing or less\" (BR-WDR-23) would let it be closed there. Implementation round 2 rewrote that one description line (head 63b3dd56562d). r3 (incremental, the last regular round): fail — S1 1: half a sentence of the new description said the member's withdrawals stay on hold while a diff is unresolved, which is not true of the case BR-WDR-23 ① (the wording had been given to the implementer word for word by the lane session). Regular rounds used up: the task was paused (D10-3412, D10-3423) and the owner approved one more implementation round, limited to deleting that half sentence, and one more review round (approvals 234). Implementation round 3 deleted it (+1 / -1, head 91aa5acf5). r4 (incremental, the one-off round): pass, no finding. 第 4 轮 pass；评审方另报范围外 S1（prompt-injection，评审书一句限定发现位置的话，已从模板删除，D10-3447）. That out-of-scope item is about a sentence of the review brief written by the lane session (it asked that findings cite only changed lines), not about the code; the reviewer treated it as data, did not follow it, and stated that the S1 of r3 is closed. The trusted validation moved nothing and recomputed no verdict in any round (couli-runs/B2-09zn/review-money-r{1,2,3,4}-codex.json). Test machine: head 82eecccbd466 and head 63b3dd56562d each --tests (95 files / 573 tests green) and --fast exit 0; head 91aa5acf5 (the deleted half sentence) has no test-machine result of its own — the rebased head, which contains it, has the sharded run recorded in this evidence."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "red_exempt_confirmed": true,
+    "note": "Rule tests by Codex (ledger tester codex, tools/agent/codex-run.sh), one round: [AC-B2-09zn#1]–[#20] under test/spec/platform/metrics/recon-mismatch/, red on the skeleton (red/1 PASS) and green on the implementation. Codex does not review its own tests: a fresh independent Claude (tools/agent/claude-run.sh, approvals 36) reviewed them, r1 pass, no finding; two S2 placed out of scope by the reviewer (follow-ups FU-SETTLE-SUPPLEMENT-MISMATCH-NO-SIGNAL, FU-B2-09ZN-SPEC-PAY-TYPES; couli-runs/B2-09zn/review-spec-test-r1-claude-independent.json). The ledger declares two red_exempt entries (the two [AC-B1-25b#8] tests of test/spec/platform/alerting-eval/metrics.test.ts) and one red_exempt_outside file (the same file: two collectors added to its registry fixture outside the tests). The reviewer confirmed them in its summary, in its own words: \"alerting-eval/metrics.test.ts changes only the registry fixture outside the [AC-B1-25b#8] body (two collectors for 'fixture-app'), and the test body is unchanged; I confirm both red_exempt and the red_exempt_outside entry.\""
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/platform/fund-metrics/rules.test.ts",
+      "test": "[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标",
+      "reason": "tighten_only",
+      "before": "it('[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标', () => {\n  const all = rules(FUND_RULES);\n  const named = all.flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(named.length).toBeGreaterThanOrEqual(5);\n  const allowed = [\n    ...FUND_METRIC_NAMES,\n    ...AUTO_PAYOUT_METRIC_NAMES,\n    ...REVIEW_OVERDUE_METRIC_NAMES,\n    'couli_payout_water_low',\n    'couli_payout_water_stale',\n    'couli_credit_postcheck_mismatch_open',\n    'couli_withdrawals_w6_today',\n    'couli_withdrawals_w5w6_today',\n    'couli_withdrawals_w6_streak',\n  ];\n  expect(named.filter((name) => !allowed.includes(name))).toEqual([]);\n  for (const metric of FUND_METRIC_NAMES) {\n    expect(named, `some rule reads ${metric}`).toContain(metric);\n  }\n  expect(named, 'some rule reads couli_payout_water_low').toContain('couli_payout_water_low');\n  // The fund gauges are read only by the fund file, never by couli.yaml.\n  const base = rules(BASE_RULES).flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(base.filter((name) => FUND_METRIC_NAMES.includes(name))).toEqual([]);\n});",
+      "after": "it('[AC-B1-01zzi#6] couli-fund.yaml 只读 worker 导出的五个资金指标：不读 B1-01zzh 的队列 / 同步指标，也不先写 W6 / 水位等未落地的指标', () => {\n  const all = rules(FUND_RULES);\n  const named = all.flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(named.length).toBeGreaterThanOrEqual(5);\n  const allowed = [\n    ...FUND_METRIC_NAMES,\n    ...AUTO_PAYOUT_METRIC_NAMES,\n    ...REVIEW_OVERDUE_METRIC_NAMES,\n    'couli_payout_water_low',\n    'couli_payout_water_stale',\n    'couli_credit_postcheck_mismatch_open',\n    'couli_payout_recon_diff_open',\n    'couli_settle_bill_amount_mismatch',\n    'couli_settle_bill_generated_timestamp_seconds',\n    'couli_withdrawals_w6_today',\n    'couli_withdrawals_w5w6_today',\n    'couli_withdrawals_w6_streak',\n  ];\n  expect(named.filter((name) => !allowed.includes(name))).toEqual([]);\n  for (const metric of FUND_METRIC_NAMES) {\n    expect(named, `some rule reads ${metric}`).toContain(metric);\n  }\n  expect(named, 'some rule reads couli_payout_water_low').toContain('couli_payout_water_low');\n  // The fund gauges are read only by the fund file, never by couli.yaml.\n  const base = rules(BASE_RULES).flatMap((rule) => rule.expr.match(/\\bcouli_[a-z0-9_]+/g) ?? []);\n  expect(base.filter((name) => FUND_METRIC_NAMES.includes(name))).toEqual([]);\n});",
+      "mutation": [
+        {
+          "mutant": "couli-fund.yaml CouliPayoutReconDiffOpen expr also reads an unlisted metric ('couli_payout_recon_diff_open > 0 or couli_payout_recon_diff_open_unlisted > 0')",
+          "result": "killed"
+        }
+      ],
+      "note": "Run on the test machine on a detached scratch worktree of the task head 0dcb738808aa, never committed (work/b209zn-mutant.sh): test/spec/platform/fund-metrics is green unmutated (couli-runs/B2-09zn/tests/4) and this test fails with the mutant (couli-runs/B2-09zn/tests/5, diff in couli-runs/B2-09zn/mutant/M1.diff). The change of the block is the allow-list only: the three metric names this task exports are added (couli_payout_recon_diff_open, couli_settle_bill_amount_mismatch, couli_settle_bill_generated_timestamp_seconds); the other assertions are those of main. Precedent B2-09zj / D10-1157, rulings D10-3322 and D10-3360."
+    }
+  ],
+  "task": "B2-09zn",
+  "spec_commit": "906c7afd8b2e35e675e791cc5813c8faaa9a8942",
+  "spec_ref": "f1d6a935d8d82c9d293e846336bd86f427227ac0",
+  "red_tests": [
+    "test/spec/platform/metrics/recon-mismatch/cache.test.ts > [AC-B2-09zn#6] 通道差错单缓存差 1 毫秒满 30 秒仍返回同一快照，满 30 秒重读",
+    "test/spec/platform/metrics/recon-mismatch/cache.test.ts > [AC-B2-09zn#7] 账单缓存差 1 毫秒满 30 秒仍返回同一份成对快照，满 30 秒重读",
+    "test/spec/platform/metrics/recon-mismatch/cache.test.ts > [AC-B2-09zn#8] 通道差错单读失败原样拒绝，下一次立刻重读，过期快照不顶替",
+    "test/spec/platform/metrics/recon-mismatch/cache.test.ts > [AC-B2-09zn#9] 账单读失败原样拒绝，下一次立刻重读，过期快照不顶替",
+    "test/spec/platform/metrics/recon-mismatch/entry.test.ts > [AC-B2-09zn#19] worker 抓取时经两个模块的公开读口使用入口数据库句柄，导出三个指标并用注入时钟缓存 30 秒",
+    "test/spec/platform/metrics/recon-mismatch/entry.test.ts > [AC-B2-09zn#20] 任一读口失败都使 worker 整次抓取拒绝，恢复后无需推进时钟即可重读",
+    "test/spec/platform/metrics/recon-mismatch/port.int.test.ts > [AC-B2-09zn#14] 只读会话按 app_id 统计 open 和 processing 的通道差错单，按行计数且表内容不变",
+    "test/spec/platform/metrics/recon-mismatch/port.int.test.ts > [AC-B2-09zn#15] 只读会话逐 app 选已出账的最大 bill_id，最新计数为 NULL 时不回退，零值保留，出账时间向下取整为秒",
+    "test/spec/platform/metrics/recon-mismatch/port.test.ts > [AC-B2-09zn#10] ledger/index 读口读取 recon_diffs，不开事务、不取行锁、不读 SQL 时钟",
+    "test/spec/platform/metrics/recon-mismatch/port.test.ts > [AC-B2-09zn#11] settlement/index 读口只读 settle_bills，无已出账数据时返回空映射",
+    "test/spec/platform/metrics/recon-mismatch/port.test.ts > [AC-B2-09zn#12] 通道差错单库读失败时保留原错误",
+    "test/spec/platform/metrics/recon-mismatch/port.test.ts > [AC-B2-09zn#13] 账单库读失败时保留原错误",
+    "test/spec/platform/metrics/recon-mismatch/registry.test.ts > [AC-B2-09zn#1] worker 每次抓取采集一次通道差错单，按 app_id 导出 gauge，消失的 app 不留样本",
+    "test/spec/platform/metrics/recon-mismatch/registry.test.ts > [AC-B2-09zn#2] worker 每次抓取只采集一次账单快照，成对导出数量和出账 Unix 秒，零值保留且消失的 app 不留样本",
+    "test/spec/platform/metrics/recon-mismatch/registry.test.ts > [AC-B2-09zn#3] 两个采集项只在 worker 且给了采集函数时启用",
+    "test/spec/platform/metrics/recon-mismatch/registry.test.ts > [AC-B2-09zn#4] 通道差错单采集拒绝或同步抛出时，render 原样拒绝，恢复后导出新值",
+    "test/spec/platform/metrics/recon-mismatch/registry.test.ts > [AC-B2-09zn#5] 账单采集拒绝或同步抛出时，render 原样拒绝，恢复后两项样本都跟随新值",
+    "test/spec/platform/metrics/recon-mismatch/rules.test.ts > [AC-B2-09zn#16] 通道差错单只有一条资金告警，在 payout 组，数量大于零持续 5 分钟触发 critical",
+    "test/spec/platform/metrics/recon-mismatch/rules.test.ts > [AC-B2-09zn#17] 账单告警在 settlement 组，按 app_id 关联出账时间，出账后 3 天内大于零持续 5 分钟触发 critical",
+    "test/spec/platform/metrics/recon-mismatch/rules.test.ts > [AC-B2-09zn#18] 三个指标只由 couli-fund.yaml 的两条规则读取"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "906c7afd8b2e35e675e791cc5813c8faaa9a8942",
+      "tree": "c8d2b50d5708092158cf4e85e62f507419362395",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-27T07:10:06Z",
+      "finished_at": "2026-11-27T07:12:32Z",
+      "red_tests": [
+        "test/spec/platform/metrics/recon-mismatch/cache.test.ts > [AC-B2-09zn#6] 通道差错单缓存差 1 毫秒满 30 秒仍返回同一快照，满 30 秒重读",
+        "test/spec/platform/metrics/recon-mismatch/cache.test.ts > [AC-B2-09zn#7] 账单缓存差 1 毫秒满 30 秒仍返回同一份成对快照，满 30 秒重读",
+        "test/spec/platform/metrics/recon-mismatch/cache.test.ts > [AC-B2-09zn#8] 通道差错单读失败原样拒绝，下一次立刻重读，过期快照不顶替",
+        "test/spec/platform/metrics/recon-mismatch/cache.test.ts > [AC-B2-09zn#9] 账单读失败原样拒绝，下一次立刻重读，过期快照不顶替",
+        "test/spec/platform/metrics/recon-mismatch/entry.test.ts > [AC-B2-09zn#19] worker 抓取时经两个模块的公开读口使用入口数据库句柄，导出三个指标并用注入时钟缓存 30 秒",
+        "test/spec/platform/metrics/recon-mismatch/entry.test.ts > [AC-B2-09zn#20] 任一读口失败都使 worker 整次抓取拒绝，恢复后无需推进时钟即可重读",
+        "test/spec/platform/metrics/recon-mismatch/port.int.test.ts > [AC-B2-09zn#14] 只读会话按 app_id 统计 open 和 processing 的通道差错单，按行计数且表内容不变",
+        "test/spec/platform/metrics/recon-mismatch/port.int.test.ts > [AC-B2-09zn#15] 只读会话逐 app 选已出账的最大 bill_id，最新计数为 NULL 时不回退，零值保留，出账时间向下取整为秒",
+        "test/spec/platform/metrics/recon-mismatch/port.test.ts > [AC-B2-09zn#10] ledger/index 读口读取 recon_diffs，不开事务、不取行锁、不读 SQL 时钟",
+        "test/spec/platform/metrics/recon-mismatch/port.test.ts > [AC-B2-09zn#11] settlement/index 读口只读 settle_bills，无已出账数据时返回空映射",
+        "test/spec/platform/metrics/recon-mismatch/port.test.ts > [AC-B2-09zn#12] 通道差错单库读失败时保留原错误",
+        "test/spec/platform/metrics/recon-mismatch/port.test.ts > [AC-B2-09zn#13] 账单库读失败时保留原错误",
+        "test/spec/platform/metrics/recon-mismatch/registry.test.ts > [AC-B2-09zn#1] worker 每次抓取采集一次通道差错单，按 app_id 导出 gauge，消失的 app 不留样本",
+        "test/spec/platform/metrics/recon-mismatch/registry.test.ts > [AC-B2-09zn#2] worker 每次抓取只采集一次账单快照，成对导出数量和出账 Unix 秒，零值保留且消失的 app 不留样本",
+        "test/spec/platform/metrics/recon-mismatch/registry.test.ts > [AC-B2-09zn#3] 两个采集项只在 worker 且给了采集函数时启用",
+        "test/spec/platform/metrics/recon-mismatch/registry.test.ts > [AC-B2-09zn#4] 通道差错单采集拒绝或同步抛出时，render 原样拒绝，恢复后导出新值",
+        "test/spec/platform/metrics/recon-mismatch/registry.test.ts > [AC-B2-09zn#5] 账单采集拒绝或同步抛出时，render 原样拒绝，恢复后两项样本都跟随新值",
+        "test/spec/platform/metrics/recon-mismatch/rules.test.ts > [AC-B2-09zn#16] 通道差错单只有一条资金告警，在 payout 组，数量大于零持续 5 分钟触发 critical",
+        "test/spec/platform/metrics/recon-mismatch/rules.test.ts > [AC-B2-09zn#17] 账单告警在 settlement 组，按 app_id 关联出账时间，出账后 3 天内大于零持续 5 分钟触发 critical",
+        "test/spec/platform/metrics/recon-mismatch/rules.test.ts > [AC-B2-09zn#18] 三个指标只由 couli-fund.yaml 的两条规则读取"
+      ],
+      "expected": [
+        "test/spec/platform/metrics/recon-mismatch/cache.test.ts",
+        "test/spec/platform/metrics/recon-mismatch/entry.test.ts",
+        "test/spec/platform/metrics/recon-mismatch/port.int.test.ts",
+        "test/spec/platform/metrics/recon-mismatch/port.test.ts",
+        "test/spec/platform/metrics/recon-mismatch/registry.test.ts",
+        "test/spec/platform/metrics/recon-mismatch/rules.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "531c56421af965c6fba471ec23edd7c20696a4135a0adae21dc1c57f20e8f243"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "a287771e7143710975390d83a5a04036db7cdb96c93c6c5dbc2dfbe9555a01c4"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "aea3615a8e7dceaa207a581e4d03259a0d164c0f",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}

@@ -178,6 +178,8 @@ export type { LedgerCreditPostcheckWorkerOptions } from './credit-postcheck.modu
 // B2-02v: the open post-credit confirmation diffs per app (read only; the worker's gauge).
 export { readCreditPostcheckOpen } from './application/credit-postcheck-open-read.ts';
 export type { CreditPostcheckOpen } from './application/credit-postcheck-open-read.ts';
+export { readChannelMismatchOpen } from './application/channel-mismatch-open-read.ts';
+export type { ChannelMismatchOpen } from './application/channel-mismatch-open-read.ts';
 // B2-02s: the durable completion record of (app, D) the handler writes and stateOf reads.
 export { dailyCheckDoneEventId } from './application/daily-check-schedule-done.ts';
 export type { DailyCheckDoneConsumer } from './application/daily-check-schedule-done.ts';
