@@ -149,6 +149,11 @@ export const APPROVED_GUARD_CHANGES: Readonly<Record<string, string>> = {
   // for rows older than its cutoff. Money full review r2 and a second independent review.
   '0145_link-logs-default-purge.sql':
     'f6fe95124dce56a65f95dddb43713feefa4351d85bbf6b09a531f8f9dbf533a6',
+  // B1-08zzb (guard-change, D10-3353 ② / D10-3384): B1-08zza rebuilds orders_scene_basis_check on the
+  // attribution table orders NOT VALID under the same name with the 0007 values plus link (BR-ATTR-09,
+  // pdd buy_type decided by the registered link); it only widens. Validated in 0160.
+  '0159_orders-scene-basis-link.sql':
+    'fe851a99a696feb43a3997f121db80d179d39bd5fb8fbefa72cff2c3d8e96f7b',
 };
 /** Extensions node-pg-migrate would run from db/migrations besides SQL. */
 const SCRIPT_MIGRATION = /\.(?:js|cjs|mjs|ts|cts|mts|jsx|tsx)$/;

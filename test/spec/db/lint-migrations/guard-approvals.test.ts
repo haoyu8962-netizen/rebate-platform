@@ -142,6 +142,10 @@ it(
     // link_logs_append_only to the dedicated app.reject_link_logs_update_delete(). Same pinning as 0057.
     const ct13l = '0145_link-logs-default-purge.sql';
     const ct13lHash = 'f6fe95124dce56a65f95dddb43713feefa4351d85bbf6b09a531f8f9dbf533a6';
+    // B1-08zzb (guard-change, D10-3353 ② / D10-3384): 0159 widens orders_scene_basis_check NOT VALID
+    // with link, validated in 0160. Same pinning as 0057.
+    const b108zza = '0159_orders-scene-basis-link.sql';
+    const b108zzaHash = 'fe851a99a696feb43a3997f121db80d179d39bd5fb8fbefa72cff2c3d8e96f7b';
     expect(module.APPROVED_GUARD_CHANGES).toEqual({
       [APPROVED_FILE]: createHash('sha256').update(bytes).digest('hex'),
       [ct25d]: ct25dHash,
@@ -153,6 +157,7 @@ it(
       [b104zv]: b104zvHash,
       [b204zzlt]: b204zzltHash,
       [ct13l]: ct13lHash,
+      [b108zza]: b108zzaHash,
     });
     const ct25dPath = join(ROOT, 'db/migrations', ct25d);
     if (existsSync(ct25dPath)) {
