@@ -82,6 +82,7 @@ async function fixtureHandles(): Promise<DbHandles> {
       ) as R[],
     };
   };
+  driver.acquireConnection = async () => connection;
   const db = new Kysely<DB>({
     dialect: {
       createAdapter: () => new PostgresAdapter(),
