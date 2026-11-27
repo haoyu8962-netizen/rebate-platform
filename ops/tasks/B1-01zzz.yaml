@@ -1,0 +1,25 @@
+id: B1-01zzz
+repo: rebate-platform
+title: App 内 H5 调 /v1 的跨域：服务端给 /v1 按当前环境可信 H5 来源（bridge_origins，没有时 h5_base_url 的 origin）精确匹配加 CORS，不带 credentials；不匹配的 Origin 不回 Allow-Origin、请求照常处理；后台 CORS 不变
+type: impl
+# 2026-11-27 be 入账（编排 D10-3534 取甲；排在 B2-02zg、B1-08zzf 之后做）。依据 规划/02 §3.4（CORS 与入口）、§12.6；现状：bootstrap.ts 只给 admin 入口挂 installAdminCors（platform/http/admin-cors.ts，精确 origin），/v1 没有 CORS，App 内 H5（WebView 跨域）调 /v1 被浏览器拦。
+# ① 允许的 Origin 只取当前环境可信 H5 来源，与 bridge_origins 同一份：config_items 的 bridge_origins 键（content 模块经 index.ts 出口读，不直读对方表）；没有时用 h5_base_url 的 origin；不另设配置键。精确匹配（scheme + host + 端口），不用通配、不反射任意 Origin。② 允许方法照 /v1 契约实际用到的；允许头至少 x-app-id、x-platform、x-app-version、x-build、x-trace-id、authorization、content-type、idempotency-key（以 contracts/openapi.yaml 的请求头为准）；不回 Access-Control-Allow-Credentials；Vary: Origin。③ 不匹配或没有 Origin：不回 Allow-Origin，实请求照常处理（不拒），预检按现状。④ 后台入口（/admin/v1）的 CORS 与现有行为一字不变。
+# 规则测试钉：匹配来源的预检（OPTIONS，含 Access-Control-Request-Headers）与实请求都回 Allow-Origin = 该来源；不匹配不回；来源取 bridge_origins、缺省退回 h5_base_url origin；不带 credentials；后台 CORS 不受影响。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/api/src/bootstrap.ts'
+  - 'apps/api/src/modules/platform/http/**'
+  - 'apps/api/src/modules/content/index.ts'
+  - 'apps/api/src/modules/content/application/**'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/platform/app-h5-cors/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/platform/app-h5-cors/**'
+status: todo
+pr: null
