@@ -66,11 +66,11 @@ it('[AC-B2-06j#8] prod + live 的 KMS 条目齐备但读取失败时拒绝启动
   expect(f.lines.join('\n')).not.toContain(SDK_MARKER);
 });
 
-it.each(SECRET_NAMES.filter((name) => name.endsWith('-cert')))(
+it.each(SECRET_NAMES)(
   '[AC-B2-06j#9] prod + live 的 %s 无法解析时拒绝启动，日志不带原文',
   async (name) => {
     const f = await kmsFixture({ env: LEGACY_ENV });
-    const malformed = 'test-payout-certificate-malformed';
+    const malformed = 'test-payout-credential-malformed';
     sdk.secrets.set(name, text(malformed));
     await f.run();
     expectKmsRefused(f);

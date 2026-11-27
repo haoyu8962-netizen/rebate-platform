@@ -1,3 +1,4 @@
+import { expect } from 'vitest';
 import {
   certSn,
   publicKeyFromCert,
@@ -14,7 +15,9 @@ export const ALIPAY_CERT = selfSignedCert(
   2n ** 70n + 13n,
   ALIPAY_PLATFORM,
 );
-export const ROOT_CERT = selfSignedCert([{ name: 'CN', value: 'test-payout-root' }], 19n, OTHER);
+export const ROOT_CERT = [19n, 20n]
+  .map((serial) => selfSignedCert([{ name: 'CN', value: 'test-payout-root' }], serial, OTHER))
+  .join('');
 export const ALIPAY_CERT_PRIVATE_KEY = ALIPAY_PLATFORM.privateKey;
 export const ALIPAY_CERT_PUBLIC_KEY = publicKeyFromCert(ALIPAY_CERT);
 export const CERT_SERIALS = {
@@ -22,3 +25,4 @@ export const CERT_SERIALS = {
   alipayRootCertSn: rootCertSn(ROOT_CERT),
   alipayCertSn: certSn(ALIPAY_CERT),
 };
+expect(CERT_SERIALS.alipayRootCertSn).not.toBe(certSn(ROOT_CERT));
