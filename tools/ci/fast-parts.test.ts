@@ -84,13 +84,15 @@ it('accepts the current .github/workflows/ci.yml as is, with the same parts (r5)
   const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
   const fast = readFileSync(join(ROOT, 'package.json'), 'utf8');
   const parts = readFastParts(ci, fast);
-  expect(parts.n).toBe(2);
-  expect(parts.parts.map((p) => p.id)).toEqual(['base', 'spec-1', 'spec-2']);
+  // D10-3546: three spec shards (verify-spec-1 / -2 / -3).
+  expect(parts.n).toBe(3);
+  expect(parts.parts.map((p) => p.id)).toEqual(['base', 'spec-1', 'spec-2', 'spec-3']);
   expect(parts.parts[0]?.commands).toEqual(
     verifyFastSteps(fast).map((s) => (s === 'pnpm run test' ? UNIT : s)),
   );
-  expect(parts.parts[1]?.commands).toEqual([spec(1, 2)]);
-  expect(parts.parts[2]?.commands).toEqual([spec(2, 2)]);
+  expect(parts.parts[1]?.commands).toEqual([spec(1, 3)]);
+  expect(parts.parts[2]?.commands).toEqual([spec(2, 3)]);
+  expect(parts.parts[3]?.commands).toEqual([spec(3, 3)]);
 });
 
 it(

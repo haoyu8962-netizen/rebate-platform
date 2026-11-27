@@ -52,6 +52,7 @@ const VERIFY_JOBS = [
   'verify-unit',
   'verify-spec-1',
   'verify-spec-2',
+  'verify-spec-3',
   'verify-props-1',
   'verify-props-2',
   'verify-props-3',
@@ -1730,7 +1731,7 @@ const FULL_RUN_CASES: Case[] = [
     ]),
   },
   {
-    name: 'g: fifteen jobs qualify, verify-static has no artifact',
+    name: 'g: sixteen jobs qualify, verify-static has no artifact',
     make: withRuns(() => [
       codeRun(5001, { artifacts: verified(undefined, { 'verify-static': { missing: true } }) }),
       labelRun(5002),
@@ -1779,6 +1780,7 @@ const GATE_VARS: [string, VerifyJob][] = [
   ['UNIT', 'verify-unit'],
   ['SPEC1', 'verify-spec-1'],
   ['SPEC2', 'verify-spec-2'],
+  ['SPEC3', 'verify-spec-3'],
   ['PROPS1', 'verify-props-1'],
   ['PROPS2', 'verify-props-2'],
   ['PROPS3', 'verify-props-3'],

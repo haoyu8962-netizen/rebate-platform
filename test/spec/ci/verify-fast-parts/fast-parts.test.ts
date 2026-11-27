@@ -87,12 +87,14 @@ it(
     const pkg = readFileSync(join(ROOT, 'package.json'), 'utf8');
     const manifest = JSON.parse(pkg) as { scripts: { 'verify:fast': string } };
     const steps = manifest.scripts['verify:fast'].split(' && ').map((step) => step.trim());
+    // D10-3546: the real ci.yml runs the spec tests in three shards (verify-spec-1 / -2 / -3).
     const expected = {
-      n: 2,
+      n: 3,
       parts: [
         { id: 'base', commands: steps.map((step) => (step === 'pnpm run test' ? UNIT : step)) },
-        { id: 'spec-1', commands: [FIRST] },
-        { id: 'spec-2', commands: [SECOND] },
+        { id: 'spec-1', commands: [specCommand(1, 3)] },
+        { id: 'spec-2', commands: [specCommand(2, 3)] },
+        { id: 'spec-3', commands: [specCommand(3, 3)] },
       ],
     };
     expect(verifyFastSteps(pkg)).toEqual(steps);

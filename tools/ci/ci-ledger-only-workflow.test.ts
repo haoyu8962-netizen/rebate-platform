@@ -1,6 +1,6 @@
 // CT-06zzzv (FU-CI-LEDGER-ONLY-FAST, D10-935): the structure of .github/workflows/ci.yml around
 // the ledger-only fast path, read from the real file. The job ledger-only-detect runs the BASE
-// copy of tools/ci/ledger-only.ts against the PR checkout; the fifteen heavy verify jobs are skipped
+// copy of tools/ci/ledger-only.ts against the PR checkout; the sixteen heavy verify jobs are skipped
 // when it says only=true; verify-static and guard-git always run; ci-gate accepts those skips only
 // when the detection itself succeeded and said only=true.
 //
@@ -23,6 +23,7 @@ const HEAVY = [
   'verify-unit',
   'verify-spec-1',
   'verify-spec-2',
+  'verify-spec-3',
   'verify-props-1',
   'verify-props-2',
   'verify-props-3',
@@ -550,7 +551,7 @@ it('[CT-06zzzze] no job decides docs/** by path in ci.yml; verify-static and gua
   }
 });
 
-// --- 2. the fifteen heavy jobs (verify-int-1 … -6 since CT-06zzzzq) -------------------------
+// --- 2. the sixteen heavy jobs (verify-int-1 … -6 since CT-06zzzzq) -------------------------
 
 it.each(HEAVY)('[CT-06zzzv] %s needs ledger-only-detect and is skipped when only=true', (id) => {
   const needs = jobNeeds(id);
@@ -662,7 +663,7 @@ const ONLY_OK = { result: 'success', output: 'true' } as const;
 const GATE_CASES: [string, Gate, number][] = [
   // The ledger-only fast path.
   [
-    'only=true, 15 heavy skipped, static and guard success',
+    'only=true, 16 heavy skipped, static and guard success',
     { detect: ONLY_OK, heavy: 'skipped' },
     0,
   ],

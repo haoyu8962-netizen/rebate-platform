@@ -41,6 +41,7 @@ const VERIFY_JOBS = [
   'verify-unit',
   'verify-spec-1',
   'verify-spec-2',
+  'verify-spec-3',
   'verify-props-1',
   'verify-props-2',
   'verify-props-3',
