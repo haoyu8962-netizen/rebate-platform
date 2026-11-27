@@ -1,0 +1,79 @@
+{
+  "risk_note": "RV2 by path (tools/ops, test/tsconfig.json). Gate tooling only, no money moves (FU-SPEC-HANDBACK-TSC + FU-RED-TYPECHECK-NEW-SPEC; orchestrator D10-3332 ⑥ / D10-3356 / D10-3380 / D10-3394). verify-container.sh --red now runs `tsc -b --pretty false test` after red-check (same snapshot, same offline container settings as the red groups); a non-zero compiler exit fails the red run (exit 1) whether or not located diagnostics were parsed (137 / 124 / global TS5083 included); result.json gets typecheck { exit_code, errors[] } listing every located diagnostic in order; a red-check failure or environment error keeps red-check's exit code and skips the type check; other modes are unchanged. test/tsconfig.json include gains \"**/*.tsx\" so .browser.test.tsx rule tests are type-checked (class 2 protected path, added by ledger patch 1 #903). Pre-entry check on the test machine (OPS-lane/TSC-RED-PROBE): on B1-18l's rule-test commit 5ee78d1f4 (skeleton, no implementation) the type check reported the same 17 TS errors as recorded in B1-18l/impl1-tsc-errors.txt; a clean tree type-checks 0. Note on fast1: the local log's last line is a lan-run.sh syntax error caused by the 08:03 in-place edit of lan-run.sh (D10-3392); the remote verify-fast/1 result.json is exit 0 on head 22a4cbe56b25, accepted by the orchestrator (D10-3394). Third-class protected paths: the task PR's owner-approved label is added by the owner (D10-3356).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Two Codex money rounds. r1 (full) fail, one S1: test/tsconfig.json includes only **/*.ts, so a .browser.test.tsx rule test with a type error passes the red run (verify-container.sh:2471); fixed in implementation r2 (75e00e6f90e9: include \"**/*.tsx\"; implementer unit test pins the coverage of *.browser.test.{ts,tsx}), orchestrator D10-3394 took option A and ledger patch 1 (#903) added the file to paths. r2 (incremental) pass, no findings. Implementation r1 46306e04c, then one mechanical correction 22a4cbe56 (implementer unit test only: the assertion that the type-check container has no database URL uses /^TEST_PG_[A-Z_]*=/ instead of the literal TEST_PG_ADMIN_URL that tripped test-guard admin-url-only-in-global-setup; stricter, not counted, orchestrator D10-3380). Validation ok both rounds, nothing moved out of scope (couli-runs/CT-06zzzzzzzn/review-codex.json, attempts/)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (two rounds, test/spec/ci/red-typecheck/). Independent Claude review r1 (full) fail: S1 a compiler that exits non-zero without located diagnostics (137 / 124 / TS5083) was not pinned; S2 only one diagnostic in the fixture. Write 2 added compiler-diagnostics.test.ts; r2 (incremental) pass. Validation ok both rounds."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/ci/red-typecheck/compiler-diagnostics.test.ts > [AC-CT-06zzzzzzzn#5] fails red when the compiler exits 137 without output",
+    "test/spec/ci/red-typecheck/compiler-diagnostics.test.ts > [AC-CT-06zzzzzzzn#6] fails red on a global compiler diagnostic without a file location",
+    "test/spec/ci/red-typecheck/compiler-diagnostics.test.ts > [AC-CT-06zzzzzzzn#7] records both file diagnostics in order across continuation lines",
+    "test/spec/ci/red-typecheck/verify-container.test.ts > [AC-CT-06zzzzzzzn#1] rejects a valid red run when the new rule test has a TypeScript error",
+    "test/spec/ci/red-typecheck/verify-container.test.ts > [AC-CT-06zzzzzzzn#2] passes valid red with clean types [AC-CT-06zzzzzzzn#3] skips compilation after red failures [AC-CT-06zzzzzzzn#4] keeps --tests and --fast unchanged"
+  ],
+  "task": "CT-06zzzzzzzn",
+  "spec_commit": "285ba7cf8b37c9062c9705a879fb5a1b1df0c769",
+  "spec_ref": "1025764be5afcff4a3fa5c07fdad83ce738c81c0",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "285ba7cf8b37c9062c9705a879fb5a1b1df0c769",
+      "tree": "239d3b2e8826666f4052f181601918b231963023",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-27T02:20:04Z",
+      "finished_at": "2026-11-27T02:20:10Z",
+      "red_tests": [
+        "test/spec/ci/red-typecheck/compiler-diagnostics.test.ts > [AC-CT-06zzzzzzzn#5] fails red when the compiler exits 137 without output",
+        "test/spec/ci/red-typecheck/compiler-diagnostics.test.ts > [AC-CT-06zzzzzzzn#6] fails red on a global compiler diagnostic without a file location",
+        "test/spec/ci/red-typecheck/compiler-diagnostics.test.ts > [AC-CT-06zzzzzzzn#7] records both file diagnostics in order across continuation lines",
+        "test/spec/ci/red-typecheck/verify-container.test.ts > [AC-CT-06zzzzzzzn#1] rejects a valid red run when the new rule test has a TypeScript error",
+        "test/spec/ci/red-typecheck/verify-container.test.ts > [AC-CT-06zzzzzzzn#2] passes valid red with clean types [AC-CT-06zzzzzzzn#3] skips compilation after red failures [AC-CT-06zzzzzzzn#4] keeps --tests and --fast unchanged"
+      ],
+      "expected": [
+        "test/spec/ci/red-typecheck/compiler-diagnostics.test.ts",
+        "test/spec/ci/red-typecheck/verify-container.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "c1ef22063556f0617817bb4d7d5eeca39ee1f9741a281b947eb140ac49a0cebd"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "d2559080d2f6f69e20b0a4976eaff41bf116b6f0",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
