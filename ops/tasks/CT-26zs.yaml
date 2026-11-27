@@ -4,7 +4,7 @@ title: '契约与规格（2026-11-26 同类实践对照补缺 C1，零破坏增�
 type: contract
 # 2026-11-27 be 入账（编排 D10-3434 / D10-3435；依据 couli docs/changes/20261126-同类实践对照补缺.md §2，范围 couli-runs/CT-26zs/scope.md）。只动契约、规格与生成物，不改服务端逻辑与三端；后端配置登记与 JumpPlan 过滤、后台配置管理排在合并后的下一波。
 # ① 文案：texts.default.json 加 share.save_images.partial / .failed、order_detail.price_compare.summary_title / .summary_body / .view_article、pdd.compare_reminder.btn / .scheduled / .no_perm / .notify_title / .notify_body，默认文案逐字照 08 BR-TEXT-14 表 C；fund-term-keys 资金术语 4 键、普通 6 键（照 BR-TEXT-12 细则清单）；banned-words「比价」allow_keys 增 4 键（BR-TEXT-13）；重生成 content/specs 两个 .gen.ts。
-# ② 外跳与配置：enums/trade.yaml jump_type 加 mini_program；openapi JumpStep type 加 mini_program 与可选 mini_program {user_name, path?, mini_program_type?}，value 重复 user_name，配对约束照 规划/04 §8.4；/v1/config 加可选 pdd_compare_reminder {delay_minutes}（int32 ≥ 1，04 §10.1）；说明登记开关 jump.mini_program.enabled.<platform>（04 §10.2，默认 off）；重生成 packages/contracts-ts 与路由 .gen.ts。 ③ specs/events.yaml：登记 规划/03 §590 的 5 个分享分步事件；sdui_card_error 补 reason=block_missing——须与冻结的 test/spec/contracts/sdui-card-error-page-version/** 兼容，写测前先探针。④ specs/client-security-baseline.yaml：CSB-11 之后登记 CSB-12（原文照 规划/03:633）。动 contracts/ 前登契约槽。补丁 1（D10-3434，brief.ts 把 04 §8.4 / §10.1 / §10.2 整节抄入任务书共 66KB 超 24KB 上限）：撤 contract_sections，所需 04 原文由 be 在任务书 §9 逐字摘录。C2（CT-18d，media.saveImage 结果升级 + H5 联动）另开，deps 本单。补丁 2（D10-3618）：link_jump.step 追加 mini_program 撞冻结 [AC-CT-13c#4]，整块登 modify_existing。
+# ② 外跳与配置：enums/trade.yaml jump_type 加 mini_program；openapi JumpStep type 加 mini_program 与可选 mini_program {user_name, path?, mini_program_type?}，value 重复 user_name，配对约束照 规划/04 §8.4；/v1/config 加可选 pdd_compare_reminder {delay_minutes}（int32 ≥ 1，04 §10.1）；说明登记开关 jump.mini_program.enabled.<platform>（04 §10.2，默认 off）；重生成 packages/contracts-ts 与路由 .gen.ts。 ③ specs/events.yaml：登记 规划/03 §590 的 5 个分享分步事件；sdui_card_error 补 reason=block_missing——须与冻结的 test/spec/contracts/sdui-card-error-page-version/** 兼容，写测前先探针。④ specs/client-security-baseline.yaml：CSB-11 之后登记 CSB-12（原文照 规划/03:633）。动 contracts/ 前登契约槽。补丁 1（D10-3434，brief.ts 把 04 §8.4 / §10.1 / §10.2 整节抄入任务书共 66KB 超 24KB 上限）：撤 contract_sections，所需 04 原文由 be 在任务书 §9 逐字摘录。C2（CT-18d，media.saveImage 结果升级 + H5 联动）另开，deps 本单。补丁 2（D10-3618）：link_jump.step 追加 mini_program 撞冻结 [AC-CT-13c#4]，整块登 modify_existing。补丁 3（D10-3624）：[AC-CT-13c#4] 标题是模板字符串、门禁不能登 modify_existing，S1-2 移后（FU-LINK-JUMP-STEP-MINI-PROGRAM），撤掉补丁 2 的登记与 test_paths。
 refs: [BR-ATTR-27, BR-TEXT-03, BR-TEXT-12, BR-TEXT-13, BR-TEXT-14]
 refs_hash:
   BR-ATTR-27: 0b0571f78586
@@ -30,14 +30,6 @@ paths:
   - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
 test_paths:
   - 'test/spec/contracts/rea-practices-c1/**'
-  - 'test/spec/contracts/card-bridge-diagnostic-fields/**'
-modify_existing:
-  - file: 'test/spec/contracts/card-bridge-diagnostic-fields/card-bridge-diagnostic-fields.test.ts'
-    test: '[AC-CT-13c#4] 其他事件不动（抽查四个 agent_stream_* 与 link_jump）、仍通过 contracts:check 的事件表校验，specs/events.yaml 的 version 递增（大于本任务前的 4）'
-    reason: rule_change
-    br: [BR-ATTR-27]
-    ruling: D10-3618
-    note: '外跳步骤预留 mini_program（04 §8.4 / BR-ATTR-27），link_jump.step 取值由原五值改为五值 + mini_program（契约评审 r1 S1-2，D10-3617 / D10-3618）；只在块内基于 untouchedEvents 造期望时给 link_jump.step 追加 mini_program，kit.ts 不动，其余抽查（四个 agent_stream_*、link_jump 其他字段、common_fields、contracts:check、version 递增）不变'
 impl: claude
 tester: codex
 accept:
