@@ -318,3 +318,43 @@ it('[AC-B2-02zg-REDACT#14] 归一按字素：基字符与后随组合符一起 N
   const kept = 'café 1234567890 ñ';
   expect(redactFreeText(kept)).toBe(kept);
 });
+
+// 中文本地部分。Wrong: the left side scanned only up to the first CJK character — it comes out empty,
+// the piece is skipped and 用户@example.com is written as is; or the whole text before the "@"
+// starred across white space (收款账号 lost); or a Latin local part starred whole too (al*** lost).
+it('[AC-B2-02zg-REDACT#17] 邮箱 @ 前紧贴 CJK、域名认得出：@ 前到空白或开头的非空白字符整段换成「***」，@ 与域名照常；拉丁本地部分仍按留位', () => {
+  expect(redactFreeText('收款账号 用户@example.com 待核')).toBe('收款账号 ***@example.com 待核');
+  expect(redactFreeText('账号用户@example.com')).toBe('***@example.com');
+  expect(redactFreeText('用户@example.com')).toBe('***@example.com');
+  expect(redactFreeText('备注　账号：张三@example.cn。')).toBe('备注　***@example.cn。');
+  expect(redactFreeText('账号 user用户@example.com，已核')).toBe('账号 ***@example.com，已核');
+  expect(redactFreeText('邮箱alice@example.com 与 邮箱 bob@example.org')).toBe(
+    '邮箱al***@example.com 与 邮箱 bo***@example.org',
+  );
+  expect(redactFreeText('a@x.com 用户@example.com')).toBe('***@x.com ***@example.com');
+});
+
+// 中文本地部分 反例。Wrong: the CJK branch taken for a right side that is no domain (内网 left as
+// before), or for an "@" with white space or the start right before it.
+it('[AC-B2-02zg-REDACT#18] 邮箱 @ 前紧贴 CJK 的反例：@ 后不像域名的、@ 前是空白或开头的照原规则', () => {
+  const kept = '请 @张三 处理，@example.com 单独出现，用户@ 空白';
+  expect(redactFreeText(kept)).toBe(kept);
+  expect(redactFreeText('联系 用户@内网 处理')).toBe('联系 用户@内网 处理');
+});
+
+// 18 位证件 + 分隔符 + 数字。Wrong: the separator joining the next digits into the run — 19 digits
+// fall back and 239<tab>2 shows (***************239\t2); or the next digits swallowed into the
+// identity mask; or the split made without a separator, so 19 digits written together or a card
+// grouped 4-4-4-4-3 is masked as an identity number (first digit shown).
+it('[AC-B2-02zg-REDACT#19] 去分隔 > 18 位：前 18 位校验通过且第 18 位后紧跟分隔符，只把前 18 位按证件首 1 末 1，其后另起一段；无分隔符的照原顺序', () => {
+  const id = `1${'*'.repeat(16)}9`;
+  expect(redactFreeText('证件 110105199003071239\t2')).toBe(`证件 ${id}\t2`);
+  expect(redactFreeText('证件 110105199003071239 2')).toBe(`证件 ${id} 2`);
+  expect(redactFreeText('证件 110105199003071239-13812345678')).toBe(`证件 ${id}-138****5678`);
+  expect(redactFreeText('证件 110105199003071239 12345678901234')).toBe(
+    `证件 ${id} ${'*'.repeat(10)}1234`,
+  );
+  expect(redactFreeText('证件 1101051990030712392')).toBe(`证件 ${'*'.repeat(15)}2392`);
+  expect(redactFreeText('卡 1101 0519 9003 0712 392')).toBe('卡 **** **** **** ***2 392');
+  expect(redactFreeText('证件 110105199003071238 2')).toBe(`证件 ${'*'.repeat(15)}238 2`);
+});

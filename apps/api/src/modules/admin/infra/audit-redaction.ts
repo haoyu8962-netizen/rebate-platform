@@ -36,11 +36,21 @@
 //        text) followed by 「***」: zhangsan@example.com → zh***@example.com.
 //        Any other right side: the whole piece but "@" is starred (alice@localhost →
 //        *****@*********).
+//        When the right side is shaped like a domain but the left side comes out empty because
+//        the character right before the "@" is a CJK character (用户@example.com), the left side
+//        is instead everything non-blank before the "@" up to white space or the start (CJK and
+//        punctuation included), written as 「***」 whole: 收款账号 用户@example.com →
+//        收款账号 ***@example.com.
 //     3. Digit runs (outside e-mail-shaped text): ASCII digits with any number of separators
 //        between two digits, maybe followed (after separators) by X / x (see below for when). On
 //        the digits (and the X), separators taken out, in this order:
 //          - 18 digits with a correct check digit → identity number; what follows (an X too,
 //            glued or after white space: 110105199003071239 X先生) is not part of it;
+//          - more than 18 digits whose first 18 have a correct check digit, and a separator
+//            right after the 18th digit in the text → the first 18 are an identity number, the
+//            separator stays as written and the digits after it are a run of their own
+//            (110105199003071239<tab>2 → 1****************9<tab>2); 19 digits written together,
+//            or a 4-4-4-4-3 card whose 18th digit sits inside a group, are not split;
 //          - else 17 digits followed directly, or after one separator, by X / x, with a correct
 //            GB 11643 check character → identity number with the X, whatever follows the X
 //            (证件11010519491231002X已核);
@@ -170,6 +180,11 @@ function endsSide(char: string): boolean {
   );
 }
 
+const CJK =
+  /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]$/u;
+const BLANK = /^\s$/u;
+const ID_LENGTH = 18;
+
 /** Rule 2: `char` is part of the left side of an e-mail-shaped piece. */
 function inLeftSide(char: string): boolean {
   if (char === '@' || LEFT_STOP.test(char)) return false;
@@ -249,9 +264,21 @@ function maskEmails(chars: readonly string[], masks: (string | undefined)[], tak
     while (right < chars.length && !endsSide(chars[right]!)) right += 1;
     // Dots at the end are sentence punctuation (alice@example.com. → the address ends at com).
     while (right > at + 1 && chars[right - 1] === '.') right -= 1;
-    if (left === at || right === at + 1) continue;
+    if (right === at + 1) continue;
+    const domain = DOMAIN.test(chars.slice(at + 1, right).join(''));
+    if (left === at && domain && left > floor && CJK.test(chars[at - 1]!)) {
+      // A CJK character glued to the "@": the whole non-blank text before it is starred.
+      while (left > floor && !BLANK.test(chars[left - 1]!)) left -= 1;
+      for (let p = left; p < right; p += 1) taken[p] = true;
+      masks[left] = '***';
+      for (let p = left + 1; p < at; p += 1) masks[p] = '';
+      floor = right;
+      at = right - 1;
+      continue;
+    }
+    if (left === at) continue;
     for (let p = left; p < right; p += 1) taken[p] = true;
-    if (DOMAIN.test(chars.slice(at + 1, right).join(''))) {
+    if (domain) {
       // Counted in user-perceived characters of the normalised text (b + U+0301 is one).
       const local = Array.from(GRAPHEMES.segment(chars.slice(left, at).join('')), (part) =>
         Array.from(part.segment),
@@ -312,8 +339,19 @@ function maskRuns(chars: readonly string[], masks: (string | undefined)[], taken
       if (DIGIT.test(chars[q]!)) positions.push(q);
       q += 1;
     }
-    const xAt = xAfter(chars, positions, free);
-    if (xAt !== undefined) positions.push(xAt);
+    const head = positions.slice(0, ID_LENGTH);
+    const afterHead = head[ID_LENGTH - 1]! + 1;
+    if (
+      positions.length > ID_LENGTH &&
+      SEPARATOR.test(chars[afterHead]!) &&
+      isIdentity18(head.map((at) => chars[at]!).join(''))
+    ) {
+      // An identity number, then a separator: the digits after it are scanned on their own.
+      positions.length = ID_LENGTH;
+    } else {
+      const xAt = xAfter(chars, positions, free);
+      if (xAt !== undefined) positions.push(xAt);
+    }
     const run = positions.map((at) => chars[at]!).join('');
     for (const index of hiddenOfRun(run)) masks[positions[index]!] = '*';
     p = positions[positions.length - 1]! + 1;
