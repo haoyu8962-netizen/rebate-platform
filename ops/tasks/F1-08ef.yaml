@@ -1,0 +1,30 @@
+id: F1-08ef
+repo: rebate-platform
+title: 'F1-08ef：差错单详情按方案 B 的处理入口——申诉恢复【确认恢复】【不恢复并关闭】、联盟对账不一致【去订单详情】【按单号手动同步】，任何类型不出【去调账】（取代 F1-08ee / F1-08eec，D10-3413 / D10-3415）'
+type: impl
+# 2026-11-27 fe 入账（编排 D10-3413 / D10-3415；范围稿 couli-runs/F1-08ee/planB/scope.md）。依据：规划 docs/changes/20261121-对外差错单方案B.md §2、design/specs/admin-recon.md §2 末行与 §7「对外差错单的处理入口」（D10-2317 ② / D10-2361）。取代作废的 F1-08ee / F1-08eec（旧分支不变基、原样留档，申诉恢复部分的旧实现只作参考）。
+# 只做（写死）：apps/admin/src/pages/recon/ 差错单详情抽屉——
+#   ① 申诉恢复：类型 appeal_restore / platform_restore、状态待处理 / 处理中、持 order.restore 时出【确认恢复】（restoreAdminReconDiff，POST /admin/v1/recon-diffs/{id}/restore，动态码档；Idempotency-Key 必填；请求体恰为 {} 或 {note}）与【不恢复并关闭】（现有 closeAdminReconDiff，原因必填，会解除冻结时动态码）；恢复范围与补发合计按规格 §2 只读展示（取详情 resolution），不在前端推算金额；成功以服务端返回为准刷新；20902（recon_diff / order）提示并重读；结果未知锁定、只许原键原体重试，拿到确定答复才解锁（D10-1731 / D10-1739）。
+#   ② 联盟对账不一致：类型 union_mismatch、状态待处理 / 处理中、持 order.view 时出【去订单详情】（跳订单列表，条件 q = 子订单号、platform = 平台，取自差错单 ref_type=order 的 ref_id；ref_id 的拆分规则写测前对 04 §3.2 order_key 原文核）与【按单号手动同步】（复用 pages/orders/sync.ts 的 useSyncRequest，只读引用、不改它；体 {platform, order_nos: [子订单号]}）；订单级处理完照旧用【已关闭（不处理）】结案。
+#   ③ 任何类型都不出【去调账】（服务端已拒绝人工关联联盟 / 通道对账差错单的调账，B2-17 ④）；ledger_mismatch 与其余类型不加入口；channel_mismatch 的【追回】不在本单（F1-08eg，等 B2-17a 契约）。④ DetailDrawer.tsx 文件头过时的 TODO（「申诉恢复、去调账、重算余额缓存 — blocked on 契约未出」）改成现状。
+# 不做：不改契约、pages/orders/**、pages/adjustments/**、components/**；不加依赖。
+# 资金单（编排 D10-3415：【确认恢复】会让钱重新入账）：规则测试 Codex 写、Codex 全量 spec-test（D10-2199）、Codex 资金评审（money 口径）。写操作的结果未知处理照 F1-08ce / D10-1731。写测时若列出现有 recon 冻结用例要改，先报编排再补 modify_existing。
+# 止损（D10-3412）：非 S0 的问题 3 轮内未收住即登 FU、证据照实写、放行；资金评审照 11-22 止损（退回已评过的写法或暂停，门禁不豁免）；只有属实 S0 才开一次性追加。
+refs: [BR-FUND-22, BR-FUND-09, BR-FUND-24, BR-ID-34]
+refs_hash:
+  BR-FUND-22: 71f9d1a05a10
+  BR-FUND-09: 891062fdd62b
+  BR-FUND-24: 7cca08c02491
+  BR-ID-34: 6ed9502449a2
+deps: [B2-17]
+paths:
+  - 'apps/admin/src/pages/recon/**'
+  - 'apps/admin/src/texts/recon.ts'
+test_paths:
+  - 'test/spec/frontend/admin-recon-planb/**' # 新目录
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/frontend/admin-recon-planb/**'
+status: todo

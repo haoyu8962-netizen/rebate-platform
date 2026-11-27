@@ -6,6 +6,7 @@ type: impl
 # 范围：apps/admin/src/pages/recon/DetailDrawer.tsx 操作区。【去调账】带上该差错单的用户、原因码 RECON_FIX 与关联单据（ref_type=recon_diff、差错单号）打开调账页的新建抽屉（复用 F1-08cb，一步提交，短信档，结果未知照 F1-08ce）；【申诉恢复】POST /admin/v1/recon-diffs/{id}/restore（权限与条件以契约为准）。【重算余额缓存】等 be ① 契约，不做；顺手把 DetailDrawer.tsx 头部 TODO 改成现状。
 # 资金页面（调账写入 RV2）：money 评审。
 # 写测与评审：Codex 额度用尽（D10-2003），规则测试与首轮评审由无上下文的独立 Claude（claude-run.sh），证据如实记 claude-independent。写测时发现冻结用例（入口清单、只读断言、TODO 对应的「不出现」断言）受影响，先报编排再补 modify_existing（D10-1712 / D10-1899）。写操作一律照 F1-08ce 结果未知处理（D10-1731）。
+# 2026-11-27 作废（编排 D10-3413 / D10-3415）：方案 B 取消差错单上的【去调账】（D10-2317 ② / D10-2361，规划 docs/changes/20261121-对外差错单方案B.md），本单主体随之作废；申诉恢复与联盟对账订单级入口改由 F1-08ef 重做。旧分支 task/F1-08ee（01edf40cc）不变基、原样留档。
 refs: [BR-FUND-24, BR-FUND-19, BR-ID-34]
 refs_hash:
   BR-FUND-24: 7cca08c02491
@@ -24,5 +25,5 @@ tester: claude-independent
 accept:
   - 'pnpm verify'
   - 'test/spec/frontend/admin-recon-adjust-restore/**'
-status: todo
+status: void
 pr: null
