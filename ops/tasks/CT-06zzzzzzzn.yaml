@@ -14,7 +14,8 @@ type: guard-change
 #   要能区分：result.json 加 typecheck { exit_code, errors: [{ file, line, col, code }] }，日志末尾一行摘要点名文件与 TS 编号）；
 #   red-check 本身失败或环境错误时照旧以 red-check 的退出码为准，不再跑类型检查。--tests / --fast / 其他模式不变。
 #   tools/ops/README（或 tools/agent/README 先红一节）补一句：先红含类型检查，写测交回后类型错误在先红就拦下。
-# 不在本单：verify:fast 的内容、tsconfig 与 vitest 配置（第二类）、codex-run / post-run（类型检查放在测试机的先红里，不在本机跑 tsc）。
+# 不在本单：verify:fast 的内容、vitest 配置（第二类）、codex-run / post-run（类型检查放在测试机的先红里，不在本机跑 tsc）。
+# 台账补丁 1（编排 D10-3394，码评审 r1 的 S1）：test/tsconfig.json 只收 **/*.ts，浏览器规则测试收 *.browser.test.{ts,tsx}，.tsx 不被类型检查——paths 加 test/tsconfig.json（第二类保护路径），实现 r2 只给 include 加 "**/*.tsx" 并补实现方单测（主干现有 0 个 .tsx，不会多报错）。
 # 规则测试至少钉：① 新规则测试文件有类型错误、用例本身照常红 → 先红失败，result.json typecheck.exit_code 非 0、errors 点名该文件与 TS 编号；
 #   ② 规则测试类型正确 → 先红照旧通过，typecheck.exit_code 0；③ red-check 失败时以 red-check 的退出码为准、不跑类型检查；
 #   ④ 其他模式（--tests、--fast）不跑这一步。用 verify-container 现有测试夹具的假 docker / 假命令，不真起容器。
@@ -23,6 +24,7 @@ refs_hash: {}
 deps: []
 paths:
   - 'tools/ops/verify-container.sh'
+  - 'test/tsconfig.json'
   - 'tools/ops/verify-container.test.ts'
   - 'tools/ops/README.md'
   - 'tools/agent/README.md'
