@@ -1,6 +1,9 @@
 // B2-05d / BR-WDR-07 ④: inside the locks (users row → balance row → payee advisory lock) only
-// steps ⑦ ⑧ ⑩ ⑪ ⑫ of BR-WDR-03 are judged again, in that order, over freshly read input; the
-// steps already passed outside the locks (① – ⑥a, ⑨, ⑬) are not repeated here.
+// steps ⑤ ⑥ ⑦ ⑧ ⑩ ⑪ ⑫ of BR-WDR-03 are judged again, in that order, over freshly read input; the
+// steps already passed outside the locks (① – ④, ⑥a, ⑨, ⑬) are not repeated here.
+// B2-05v (D10-3590 / D10-3594): ⑤ and ⑥ re-read the payee account and the real name under the
+// locks. ④ is not a step of its own here: ⑥ compares the payee name with the current real name,
+// so without a current real name it cannot pass and answers 30304; a mismatch is 30307.
 import { subFen } from '@couli/money';
 import type { WithdrawBlock, WithdrawRuleInput } from './withdraw-rules.ts';
 
@@ -21,12 +24,17 @@ function countExceeded(cap: number, used: number): boolean {
   return cap > 0 && used >= cap;
 }
 
-/** BR-WDR-07 ④: only BR-WDR-03 ⑦⑧⑩⑪⑫, in that order, using fresh locked reads. */
+/** BR-WDR-07 ④: only BR-WDR-03 ⑤⑥⑦⑧⑩⑪⑫, in that order, using fresh locked reads. */
 export function validateLockedWithdrawal(
   input: WithdrawRuleInput,
   amountFen: bigint,
 ): WithdrawBlock | null {
   const { limits, usage } = input;
+  // ⑤ payout account: none usable under the locks (unbound, or its method closed since)
+  if (input.payout_method === null) return { code: 30305, data: {} };
+  // ⑥ payee name = real name: no current real name to compare with → 30304, a mismatch → 30307
+  if (!input.realname_verified) return { code: 30304, data: {} };
+  if (!input.names_match) return { code: 30307, data: {} };
   // ⑦ frozen: risk state or an effective withdraw hold
   if (frozenEffect(input) || input.active_hold) return condition('account_frozen');
   // ⑧ negative balance

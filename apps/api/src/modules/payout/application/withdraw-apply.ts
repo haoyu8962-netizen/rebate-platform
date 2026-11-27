@@ -11,9 +11,14 @@
 //   locks        ① identity's users row lock → ② ledger.lockBalances (the member's balance row) →
 //                ③ pg_advisory_xact_lock(hashtext(app_id || ':' || payee_hmac)::bigint) on the
 //                payee HMAC of the snapshot (BR-WDR-07 ③);
-//   re-check     ④ BR-WDR-03 ⑦⑧⑩⑪⑫ again over reads made under the locks (validateLockedWithdrawal);
-//                B2-05u: before them ⑤ on the rule chain's payout method read under the locks — a
-//                method the app closed after the first pass refuses 30305 (BR-WDR-02 细则);
+//   re-check     ④ BR-WDR-03 ⑤⑥⑦⑧⑩⑪⑫ again over reads made under the locks
+//                (validateLockedWithdrawal; B2-05u's closed method and B2-05v's real name / payee
+//                name are its ⑤ and ⑥).
+// B2-05v (BR-WDR-07 ④, D10-3590): one pass is first pass → risk flags → locks → snapshot. When
+// the snapshot's account (payee_hmac and payout_method) is not the account the first pass judged
+// (the member rebound in between), the pass is rolled back to its savepoint — the risk rows and
+// every lock taken since — and the whole pass runs again, at most PASSES times in all; a last
+// pass still changed answers 50001 (no withdrawal, no freeze; a warn without payee data).
 //   amounts      ⑤ fee_fen / tax_fen from the FeeTaxCalculator (fee_rule_id / tax_rule_version
 //                fixed with them), net_fen = amount − fee − tax (@couli/money);
 //   insert       ⑥ PENDING_REVIEW with the payee snapshot, income_type SERVICE_FEE, out_biz_no
@@ -153,8 +158,33 @@ const OUT_BIZ_NO_KEY = 'withdrawals_out_biz_no_key';
 /** The initial candidate plus at most three regenerated ones (BR-WDR-07 out_biz_no). */
 const OUT_BIZ_NO_ATTEMPTS = 4;
 const SAVEPOINT = sql.raw('payout_withdrawal_insert');
-/** Before the risk-flag snapshot: a refusal under the locks takes back ③'s judgement rows. */
-const RISK_SAVEPOINT = sql.raw('payout_withdrawal_risk_flags');
+/**
+ * Taken once the first pass of a pass has passed, before the risk-flag snapshot and the locks: a
+ * refusal under the locks, or a payee account changed since the first pass, rolls back to it —
+ * ③'s judgement rows, and the row and advisory locks taken after it (PostgreSQL releases the locks
+ * a rolled-back subtransaction acquired).
+ */
+const PASS_SAVEPOINT = sql.raw('payout_withdrawal_pass');
+/** B2-05v (D10-3590): the first pass plus at most two re-runs after a changed payee account. */
+const PASSES = 3;
+/** The answer once every pass saw the payee account change (public code, not stored by idempotency). */
+const PAYEE_CHANGED_CODE = 50001;
+/** A pass whose snapshot account is not the first pass's: rolled back, to be run again. */
+const PAYEE_CHANGED: unique symbol = Symbol('payee_changed');
+
+type FirstPassPayee = Awaited<ReturnType<WithdrawRulesOptions['subject']['read']>>;
+
+/** BR-WDR-07 ④ (B2-05v): both the HMAC and the method must be the ones the first pass judged. */
+function samePayeeAccount(
+  first: FirstPassPayee,
+  snapshot: Pick<WithdrawPayeeSnapshot, 'payee_hmac' | 'payout_method'>,
+): boolean {
+  return (
+    first !== null &&
+    first.payee_hmac === snapshot.payee_hmac &&
+    first.payout_method === snapshot.payout_method
+  );
+}
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function isOutBizNoCollision(error: unknown): boolean {
@@ -315,6 +345,229 @@ export function createWithdrawApply(options: WithdrawApplyOptions): WithdrawAppl
     }
   }
 
+  /**
+   * One pass (B2-05v): first pass → risk flags → locks → snapshot → advisory lock → locked
+   * re-check → row and voucher. PAYEE_CHANGED when the snapshot's account is not the first pass's
+   * (the pass is already rolled back to its savepoint).
+   */
+  async function runPass(
+    trx: Transaction<DB>,
+    command: WithdrawApplyCommand,
+    actor: WithdrawActor,
+    t: Date,
+    id: string,
+  ): Promise<WithdrawApplyResult | typeof PAYEE_CHANGED> {
+    const amount = command.amountFen;
+    // First pass: the whole chain, no locks (a refusal here never touches a row). B2-05v: the
+    // account identity returned to it (the real one — the rule chain's method is null for a closed
+    // method) is kept, to be compared with the snapshot under the locks.
+    // A holder, not a `let`: an assignment made inside the reader is invisible to narrowing.
+    const seen: { payee: FirstPassPayee } = { payee: null };
+    const first = await readWithdrawInput(trx, actor, command.stepUpValid, {
+      ...rules,
+      subject: {
+        async read(handle, subject): ReturnType<WithdrawRulesOptions['subject']['read']> {
+          const row = await rules.subject.read(handle, subject);
+          seen.payee = row;
+          return row;
+        },
+      },
+    });
+    // B2-08c: the first-pass quote only serves this validation; the row stores the quote taken
+    // again under the member's locks (a cumulative tax depends on the in-flight withdrawals).
+    let quote = await rules.feeTax.calculate(trx, {
+      ...actor,
+      amountFen: amount,
+      now: t,
+    });
+    let fee = quote.fee_fen;
+    let tax = quote.tax_fen;
+    let net = subFen(subFen(amount, fee), tax);
+    const refused = validateWithdrawal(first, amount, net);
+    if (refused !== null) {
+      // ③a with a named hit (B2-05q): the record leaves with the answer, to be written by the
+      // caller once this transaction is over; ③a is judged in this pass only.
+      const hit = first.blocklist_hit ?? null;
+      const { blockedHits } = options;
+      if (refused.code !== 44001 || hit === null || blockedHits === undefined) return refused;
+      return {
+        ...refused,
+        recordBlocked: () =>
+          blockedHits.record({
+            appId: actor.appId,
+            userId: actor.userId,
+            amountFen: amount,
+            hit,
+          }),
+      };
+    }
+    // Everything of this pass from here on (③'s rows, every lock) can be taken back.
+    await sql`SAVEPOINT ${PASS_SAVEPOINT}`.execute(trx);
+    /** Rolls this pass back to its savepoint and drops it (the next pass takes its own). */
+    async function undoPass(): Promise<void> {
+      await sql`ROLLBACK TO SAVEPOINT ${PASS_SAVEPOINT}`.execute(trx);
+      await sql`RELEASE SAVEPOINT ${PASS_SAVEPOINT}`.execute(trx);
+    }
+    // BR-WDR-03 ⑭: the risk-flag snapshot, before the locks; ③ is judged under this id, on the
+    // account this pass's first pass judged (a changed account re-runs the pass, B2-05v).
+    const { payee } = seen;
+    let riskFlags: readonly WithdrawRiskFlag[] | null = null;
+    if (options.riskFlags !== undefined) {
+      riskFlags = await options.riskFlags.compute(trx, {
+        appId: actor.appId,
+        userId: actor.userId,
+        withdrawalId: id,
+        amountFen: amount,
+        // The first pass refused a member without a current account (BR-WDR-03 ⑤).
+        payeeHmac: payee === null ? '' : payee.payee_hmac,
+        now: t,
+      });
+    }
+    /** A refusal under the locks: no withdrawal, so nothing of the snapshot (③'s rows) stays. */
+    async function refuse(block: WithdrawBlock): Promise<WithdrawBlock> {
+      await undoPass();
+      return block;
+    }
+    // Locks in the fixed order (BR-WDR-07 ①②③), then the snapshot and the locked re-check ④.
+    await options.lockUsersForUpdate(trx, { appId: actor.appId, userIds: [actor.userId] });
+    const balances = await ledger.lockBalances(trx, {
+      appId: actor.appId,
+      userIds: [actor.userId],
+    });
+    const balance = balances.find((row) => row.user_id === actor.userId);
+    // No ledger account means no balance: the first pass already refused (available 0 < amount).
+    if (balance === undefined) return refuse({ code: 30301, data: {} });
+    const snapshot = await options.snapshot.read(trx, actor);
+    if (snapshot === null) return refuse({ code: 30305, data: {} });
+    // B2-05v (BR-WDR-07 ④): the account to be locked and stored is not the one the first pass
+    // judged (③a, ⑨'s method cap, the risk flags): take the whole pass back and run it again.
+    if (!samePayeeAccount(payee, snapshot)) {
+      await undoPass();
+      return PAYEE_CHANGED;
+    }
+    await sql`SELECT pg_advisory_xact_lock(hashtext(${`${actor.appId}:${snapshot.payee_hmac}`})::bigint)`.execute(
+      trx,
+    );
+    const locked = await readWithdrawInput(trx, actor, command.stepUpValid, rules);
+    // ④ re-runs ⑤ ⑥ before ⑦: ⑤ refuses an open-method set read under the locks that no longer
+    // holds the bound method (B2-05u, BR-WDR-02 细则); ⑥ the real name / payee name (B2-05v).
+    const again = validateLockedWithdrawal(locked, amount);
+    if (again !== null) return refuse(again);
+    // Build the row. One clock reading serves the locked quote and the row's created_at, so the
+    // tax year the quote used is the year the row is created in (money review r1 S0).
+    const now = clock.now();
+    // B2-08c (BR-WDR-20 累计方法, BR-WDR-07 lock order): the quote that the row stores is taken
+    // under the users row lock, so a concurrent application of the member that committed since
+    // the first pass counts as in flight.
+    quote = await rules.feeTax.calculate(trx, { ...actor, amountFen: amount, now });
+    fee = quote.fee_fen;
+    tax = quote.tax_fen;
+    net = subFen(subFen(amount, fee), tax);
+    const review = await reviewFields(trx, actor.appId, now);
+    await insertWithdrawal(trx, {
+      id,
+      app_id: actor.appId,
+      user_id: actor.userId,
+      amount_fen: amount,
+      fee_fen: fee,
+      tax_fen: tax,
+      net_fen: net,
+      income_type: 'SERVICE_FEE',
+      fee_rule_id: quote.fee_rule_id ?? null,
+      tax_rule_version: quote.tax_rule_version ?? null,
+      payout_method: snapshot.payout_method,
+      payee_name: snapshot.payee_name,
+      payee_account_cipher: snapshot.payee_account_cipher,
+      payee_hmac: snapshot.payee_hmac,
+      bank_name: snapshot.bank_name,
+      status: 'PENDING_REVIEW',
+      review_mode: review.review_mode,
+      review_deadline: review.review_deadline,
+      payout_channel: snapshot.payout_method,
+      risk_flags:
+        riskFlags === null
+          ? null
+          : sql<DB['withdrawals']['risk_flags']>`CAST(${JSON.stringify(riskFlags)} AS jsonb)`,
+      risk_flags_at: riskFlags === null ? null : t,
+      created_at: now,
+      updated_at: now,
+    });
+    // W1: the freeze voucher (BR-WDR-09), same transaction, under this transaction's balance lock.
+    const [voucher] = buildVouchers('WITHDRAW:FREEZE', {
+      withdrawal_id: id,
+      user_id: actor.userId,
+      withdraw_fen: amount,
+    });
+    if (voucher === undefined) throw new Error('payout: WITHDRAW:FREEZE built no voucher');
+    const entries: PostingEntry[] = voucher.entries.map((entry) => ({
+      account: { ownerType: 'user', accountId: balance.account_id },
+      sub_account: entry.sub_account === 'frozen' ? 'frozen' : 'available',
+      amount_fen: entry.amount_fen,
+      ledger_type: entry.ledger_type,
+      sub_type: entry.sub_type,
+      income_type: null,
+    }));
+    await ledger.post(trx, {
+      appId: actor.appId,
+      uniqKey: voucher.uniq_key,
+      bizType: 'withdrawal',
+      bizId: id,
+      operator: `user:${actor.userId}`,
+      memo: null,
+      orderKey: null,
+      beneficiaryUserId: null,
+      role: null,
+      voucherKind: null,
+      entries,
+    });
+    if (options.eventBus !== undefined) {
+      await options.eventBus.publish(trx, {
+        appId: actor.appId,
+        name: 'wallet.withdrawal_changed',
+        payload: { withdrawal_id: id, user_id: actor.userId, status: 'PENDING_REVIEW' },
+      });
+      await options.eventBus.publish(trx, {
+        appId: actor.appId,
+        name: 'withdrawal.created',
+        payload: {
+          withdrawal_id: id,
+          user_id: actor.userId,
+          amount_fen: fenToJsonNumber(amount),
+          review_mode: review.review_mode,
+        },
+      });
+    }
+    return {
+      code: 0,
+      data: {
+        withdrawal_id: id,
+        status: 'PENDING_REVIEW',
+        review_mode: review.review_mode,
+        amount_fen: fenToJsonNumber(amount),
+        fee_fen: fenToJsonNumber(fee),
+        tax_fen: fenToJsonNumber(tax),
+        net_fen: fenToJsonNumber(net),
+        payout_channel: snapshot.payout_method,
+        payout_channel_name: payoutChannelName(snapshot.payout_method),
+        masked_account: maskPayeeAccount(snapshot.payout_method, snapshot.account),
+        reason_code: null,
+        fail_action: null,
+        created_at: chinaIso(now),
+        // CT-20b (D10-207): a fresh PENDING_REVIEW has no time points yet; the automatic
+        // judgement (BR-WDR-30) has not run, so the BR-WDR-25 branch is「处理中」(processing).
+        review_deadline: review.review_deadline === null ? null : chinaIso(review.review_deadline),
+        executed_at: null,
+        first_attempt_at: null,
+        paid_at: null,
+        channel_state: null,
+        confirm_deadline: null,
+        sub_text_branch: 'processing',
+        hold_days: null,
+        channel_order_id: null,
+      },
+    };
+  }
+
   return {
     async apply(trx, command) {
       const actor: WithdrawActor = {
@@ -322,194 +575,22 @@ export function createWithdrawApply(options: WithdrawApplyOptions): WithdrawAppl
         userId: command.userId,
         deviceId: command.deviceId,
       };
-      const amount = command.amountFen;
-      // t of this application (BR-WDR-29 计算时点).
+      // t of this application (BR-WDR-29 计算时点), and the id the risk flags and the row use: one
+      // application, whichever pass creates it (a re-run pass's rows were rolled back).
       const t = clock.now();
-      // First pass: the whole chain, no locks (a refusal here never touches a row).
-      const first = await readWithdrawInput(trx, actor, command.stepUpValid, rules);
-      // B2-08c: the first-pass quote only serves this validation; the row stores the quote taken
-      // again under the member's locks (a cumulative tax depends on the in-flight withdrawals).
-      let quote = await rules.feeTax.calculate(trx, {
-        ...actor,
-        amountFen: amount,
-        now: t,
-      });
-      let fee = quote.fee_fen;
-      let tax = quote.tax_fen;
-      let net = subFen(subFen(amount, fee), tax);
-      const refused = validateWithdrawal(first, amount, net);
-      if (refused !== null) {
-        // ③a with a named hit (B2-05q): the record leaves with the answer, to be written by the
-        // caller once this transaction is over; ③a is judged in this pass only.
-        const hit = first.blocklist_hit ?? null;
-        const { blockedHits } = options;
-        if (refused.code !== 44001 || hit === null || blockedHits === undefined) return refused;
-        return {
-          ...refused,
-          recordBlocked: () =>
-            blockedHits.record({
-              appId: actor.appId,
-              userId: actor.userId,
-              amountFen: amount,
-              hit,
-            }),
-        };
-      }
-      // BR-WDR-03 ⑭: the risk-flag snapshot, before the locks; ③ is judged under this id.
       const id = newUuidV7(t);
-      let riskFlags: readonly WithdrawRiskFlag[] | null = null;
-      if (options.riskFlags !== undefined) {
-        await sql`SAVEPOINT ${RISK_SAVEPOINT}`.execute(trx);
-        const payee = await rules.subject.read(trx, { appId: actor.appId, userId: actor.userId });
-        riskFlags = await options.riskFlags.compute(trx, {
-          appId: actor.appId,
-          userId: actor.userId,
-          withdrawalId: id,
-          amountFen: amount,
-          // The first pass refused a member without a current account (BR-WDR-03 ⑤).
-          payeeHmac: payee === null ? '' : payee.payee_hmac,
-          now: t,
-        });
+      for (let pass = 1; ; pass += 1) {
+        const result = await runPass(trx, command, actor, t, id);
+        if (result !== PAYEE_CHANGED) return result;
+        if (pass >= PASSES) {
+          // No payee data (account, HMAC, name) in the log: the member and the passes only.
+          rules.logger.warn(
+            { user_id: actor.userId, passes: pass },
+            'withdraw_payee_changed_retry_exhausted',
+          );
+          return { code: PAYEE_CHANGED_CODE, data: {} };
+        }
       }
-      /** A refusal under the locks: no withdrawal, so nothing of the snapshot (③'s rows) stays. */
-      async function refuse(block: WithdrawBlock): Promise<WithdrawBlock> {
-        if (riskFlags !== null) await sql`ROLLBACK TO SAVEPOINT ${RISK_SAVEPOINT}`.execute(trx);
-        return block;
-      }
-      // Locks in the fixed order (BR-WDR-07 ①②③), then the snapshot and the locked re-check ④.
-      await options.lockUsersForUpdate(trx, { appId: actor.appId, userIds: [actor.userId] });
-      const balances = await ledger.lockBalances(trx, {
-        appId: actor.appId,
-        userIds: [actor.userId],
-      });
-      const balance = balances.find((row) => row.user_id === actor.userId);
-      // No ledger account means no balance: the first pass already refused (available 0 < amount).
-      if (balance === undefined) return refuse({ code: 30301, data: {} });
-      const snapshot = await options.snapshot.read(trx, actor);
-      if (snapshot === null) return refuse({ code: 30305, data: {} });
-      await sql`SELECT pg_advisory_xact_lock(hashtext(${`${actor.appId}:${snapshot.payee_hmac}`})::bigint)`.execute(
-        trx,
-      );
-      const locked = await readWithdrawInput(trx, actor, command.stepUpValid, rules);
-      // ④ re-runs ⑤ before ⑦ (B2-05u): the open-method set read under the locks no longer holds
-      // the bound method (closed since the first pass), so no usable account (BR-WDR-02 细则).
-      if (locked.payout_method === null) return refuse({ code: 30305, data: {} });
-      const again = validateLockedWithdrawal(locked, amount);
-      if (again !== null) return refuse(again);
-      // Build the row. One clock reading serves the locked quote and the row's created_at, so the
-      // tax year the quote used is the year the row is created in (money review r1 S0).
-      const now = clock.now();
-      // B2-08c (BR-WDR-20 累计方法, BR-WDR-07 lock order): the quote that the row stores is taken
-      // under the users row lock, so a concurrent application of the member that committed since
-      // the first pass counts as in flight.
-      quote = await rules.feeTax.calculate(trx, { ...actor, amountFen: amount, now });
-      fee = quote.fee_fen;
-      tax = quote.tax_fen;
-      net = subFen(subFen(amount, fee), tax);
-      const review = await reviewFields(trx, actor.appId, now);
-      await insertWithdrawal(trx, {
-        id,
-        app_id: actor.appId,
-        user_id: actor.userId,
-        amount_fen: amount,
-        fee_fen: fee,
-        tax_fen: tax,
-        net_fen: net,
-        income_type: 'SERVICE_FEE',
-        fee_rule_id: quote.fee_rule_id ?? null,
-        tax_rule_version: quote.tax_rule_version ?? null,
-        payout_method: snapshot.payout_method,
-        payee_name: snapshot.payee_name,
-        payee_account_cipher: snapshot.payee_account_cipher,
-        payee_hmac: snapshot.payee_hmac,
-        bank_name: snapshot.bank_name,
-        status: 'PENDING_REVIEW',
-        review_mode: review.review_mode,
-        review_deadline: review.review_deadline,
-        payout_channel: snapshot.payout_method,
-        risk_flags:
-          riskFlags === null
-            ? null
-            : sql<DB['withdrawals']['risk_flags']>`CAST(${JSON.stringify(riskFlags)} AS jsonb)`,
-        risk_flags_at: riskFlags === null ? null : t,
-        created_at: now,
-        updated_at: now,
-      });
-      // W1: the freeze voucher (BR-WDR-09), same transaction, under this transaction's balance lock.
-      const [voucher] = buildVouchers('WITHDRAW:FREEZE', {
-        withdrawal_id: id,
-        user_id: actor.userId,
-        withdraw_fen: amount,
-      });
-      if (voucher === undefined) throw new Error('payout: WITHDRAW:FREEZE built no voucher');
-      const entries: PostingEntry[] = voucher.entries.map((entry) => ({
-        account: { ownerType: 'user', accountId: balance.account_id },
-        sub_account: entry.sub_account === 'frozen' ? 'frozen' : 'available',
-        amount_fen: entry.amount_fen,
-        ledger_type: entry.ledger_type,
-        sub_type: entry.sub_type,
-        income_type: null,
-      }));
-      await ledger.post(trx, {
-        appId: actor.appId,
-        uniqKey: voucher.uniq_key,
-        bizType: 'withdrawal',
-        bizId: id,
-        operator: `user:${actor.userId}`,
-        memo: null,
-        orderKey: null,
-        beneficiaryUserId: null,
-        role: null,
-        voucherKind: null,
-        entries,
-      });
-      if (options.eventBus !== undefined) {
-        await options.eventBus.publish(trx, {
-          appId: actor.appId,
-          name: 'wallet.withdrawal_changed',
-          payload: { withdrawal_id: id, user_id: actor.userId, status: 'PENDING_REVIEW' },
-        });
-        await options.eventBus.publish(trx, {
-          appId: actor.appId,
-          name: 'withdrawal.created',
-          payload: {
-            withdrawal_id: id,
-            user_id: actor.userId,
-            amount_fen: fenToJsonNumber(amount),
-            review_mode: review.review_mode,
-          },
-        });
-      }
-      return {
-        code: 0,
-        data: {
-          withdrawal_id: id,
-          status: 'PENDING_REVIEW',
-          review_mode: review.review_mode,
-          amount_fen: fenToJsonNumber(amount),
-          fee_fen: fenToJsonNumber(fee),
-          tax_fen: fenToJsonNumber(tax),
-          net_fen: fenToJsonNumber(net),
-          payout_channel: snapshot.payout_method,
-          payout_channel_name: payoutChannelName(snapshot.payout_method),
-          masked_account: maskPayeeAccount(snapshot.payout_method, snapshot.account),
-          reason_code: null,
-          fail_action: null,
-          created_at: chinaIso(now),
-          // CT-20b (D10-207): a fresh PENDING_REVIEW has no time points yet; the automatic
-          // judgement (BR-WDR-30) has not run, so the BR-WDR-25 branch is「处理中」(processing).
-          review_deadline:
-            review.review_deadline === null ? null : chinaIso(review.review_deadline),
-          executed_at: null,
-          first_attempt_at: null,
-          paid_at: null,
-          channel_state: null,
-          confirm_deadline: null,
-          sub_text_branch: 'processing',
-          hold_days: null,
-          channel_order_id: null,
-        },
-      };
     },
   };
 }

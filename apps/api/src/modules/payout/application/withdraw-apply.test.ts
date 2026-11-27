@@ -200,11 +200,26 @@ type ConfigRead = (
   handle: Kysely<DB>,
 ) => Promise<{ value: unknown; version: number } | null>;
 
+/** A bound payee account of the scripted member (B2-05v). */
+interface BoundAccount {
+  method: 'alipay' | 'bank_card';
+  hmac: string;
+}
+
 /**
  * `methods[i]` is the open set the i-th read of withdraw.payout_methods returns (the last one
  * repeats): the first pass reads it once, the locked re-read once more.
+ * B2-05v: `rebinds[k]` becomes the member's current account just before the k-th users lock
+ * (0-based) is taken — a rebind committed between the first pass and the locks; identity's
+ * subject reader and the snapshot both read the current account. `config` adds values by key.
  */
-async function applyHarness(methods: readonly (readonly string[])[]) {
+async function applyHarness(
+  methods: readonly (readonly string[])[],
+  script: {
+    rebinds?: readonly (BoundAccount | undefined)[];
+    config?: Readonly<Record<string, unknown>>;
+  } = {},
+) {
   const statements: string[] = [];
   const driver = new DummyDriver();
   const connection = await driver.acquireConnection();
@@ -229,7 +244,10 @@ async function applyHarness(methods: readonly (readonly string[])[]) {
   let methodReads = 0;
   const configValue = vi.fn<ConfigRead>(
     (_appId, key): Promise<{ value: unknown; version: number } | null> => {
-      if (key !== METHODS_KEY) return Promise.resolve(null);
+      if (key !== METHODS_KEY) {
+        const extra = script.config ?? {};
+        return Promise.resolve(key in extra ? { value: extra[key], version: 1 } : null);
+      }
       const value = methods[Math.min(methodReads, methods.length - 1)];
       methodReads += 1;
       return Promise.resolve({ value, version: 1 });
@@ -241,9 +259,12 @@ async function applyHarness(methods: readonly (readonly string[])[]) {
     parse: (value: unknown): ReadonlySet<string> | null =>
       Array.isArray(value) ? new Set<string>(value as string[]) : null,
   };
+  let bound: BoundAccount = { method: 'alipay', hmac: PAYEE_HMAC };
+  // Untyped: pino's overloaded warn is what the port declares.
+  const warn = vi.fn();
   const rules: WithdrawRulesOptions = {
     clock,
-    logger: { warn: vi.fn() },
+    logger: { warn },
     config: { configValue },
     risk: {
       read: vi.fn(
@@ -272,10 +293,14 @@ async function applyHarness(methods: readonly (readonly string[])[]) {
     },
     subject: {
       read: vi.fn(
-        async (): Promise<{ payout_method: 'alipay'; payee_name: string; payee_hmac: string }> => ({
-          payout_method: 'alipay' as const,
+        async (): Promise<{
+          payout_method: 'alipay' | 'bank_card';
+          payee_name: string;
+          payee_hmac: string;
+        }> => ({
+          payout_method: bound.method,
           payee_name: '阿·甲',
-          payee_hmac: PAYEE_HMAC,
+          payee_hmac: bound.hmac,
         }),
       ),
     },
@@ -338,22 +363,26 @@ async function applyHarness(methods: readonly (readonly string[])[]) {
   );
   const post = vi.fn(async (): Promise<void> => undefined);
   const ledger = { lockBalances, post } as unknown as Ledger;
-  const lockUsersForUpdate = vi.fn(
-    async (): Promise<ReadonlySet<string>> => new Set([APPLY_ACTOR.userId]),
-  );
-  const snapshot: WithdrawPayeeSnapshot = {
-    payout_method: 'alipay',
+  let locks = 0;
+  const lockUsersForUpdate = vi.fn(async (): Promise<ReadonlySet<string>> => {
+    const rebind = script.rebinds?.[locks];
+    locks += 1;
+    if (rebind !== undefined) bound = rebind;
+    return new Set([APPLY_ACTOR.userId]);
+  });
+  const snapshot = (): WithdrawPayeeSnapshot => ({
+    payout_method: bound.method,
     payee_name: '阿·甲',
     payee_account_cipher: Buffer.from('cipher'),
-    payee_hmac: PAYEE_HMAC,
-    bank_name: null,
-    account: '13800138000',
-  };
+    payee_hmac: bound.hmac,
+    bank_name: bound.method === 'bank_card' ? '合成银行' : null,
+    account: bound.method === 'bank_card' ? '6222020000000001' : '13800138000',
+  });
   const service = createWithdrawApply({
     rules,
     ledger,
     lockUsersForUpdate,
-    snapshot: { read: vi.fn(async (): Promise<WithdrawPayeeSnapshot> => snapshot) },
+    snapshot: { read: vi.fn(async (): Promise<WithdrawPayeeSnapshot> => snapshot()) },
     outBizNo: (): string => `W${'A'.repeat(20)}`,
   });
   const apply = (): Promise<WithdrawApplyResult> =>
@@ -364,7 +393,7 @@ async function applyHarness(methods: readonly (readonly string[])[]) {
       );
   const methodReadCount = (): number =>
     configValue.mock.calls.filter(([, key]) => key === METHODS_KEY).length;
-  return { apply, statements, post, lockUsersForUpdate, methodReadCount };
+  return { apply, statements, post, lockUsersForUpdate, methodReadCount, warn };
 }
 
 const insertsWithdrawal = (statements: readonly string[]): boolean =>
@@ -394,4 +423,75 @@ it('[AC-B2-05u#2] 初判与锁内重读时支付宝都开放：照常建 PENDING
     expect.anything(),
     expect.objectContaining({ appId: APPLY_ACTOR.appId, bizType: 'withdrawal' }),
   );
+});
+
+// B2-05v (D10-3590; rule-test review r1 S2): the account compared with the snapshot is HMAC and
+// method together. Same HMAC, method rebound from alipay to bank_card before the users lock: the
+// pass is rolled back and run again, and the second first pass judges ⑨ with bank_card's cap.
+const PASS_ROLLBACK = 'ROLLBACK TO SAVEPOINT payout_withdrawal_pass';
+const BANK_SAME_HMAC: BoundAccount = { method: 'bank_card', hmac: PAYEE_HMAC };
+const rollbacks = (statements: readonly string[]): number =>
+  statements.filter((text): boolean => text === PASS_ROLLBACK).length;
+
+it('[AC-B2-05v#5] 同一 HMAC 换成银行卡且银行卡上限足够：整遍回滚重跑，users 锁拿两次，按银行卡建单', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], {
+    rebinds: [BANK_SAME_HMAC],
+    config: {
+      'withdraw.method_max_amount_fen.alipay': 2000,
+      'withdraw.method_max_amount_fen.bank_card': 2000,
+    },
+  });
+  const result = await h.apply();
+  expect(result).toMatchObject({
+    code: 0,
+    data: { status: 'PENDING_REVIEW', amount_fen: 1000, payout_channel: 'bank_card' },
+  });
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(2);
+  expect(rollbacks(h.statements)).toBe(1);
+  expect(
+    h.statements.filter((text): boolean => text.startsWith('insert into "app"."withdrawals"')),
+  ).toHaveLength(1);
+  expect(h.post).toHaveBeenCalledTimes(1);
+});
+
+it('[AC-B2-05v#5] 同一 HMAC 换成银行卡且银行卡上限低于申请额：第二遍初判按银行卡上限返回 30303，不建单不冻结', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], {
+    rebinds: [BANK_SAME_HMAC],
+    config: {
+      'withdraw.method_max_amount_fen.alipay': 2000,
+      'withdraw.method_max_amount_fen.bank_card': 500,
+    },
+  });
+  expect(await h.apply()).toStrictEqual({ code: 30303, data: { reason: 'above_method_max' } });
+  // Pass 1 took the users lock and was rolled back; pass 2 refused before any lock.
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(1);
+  expect(rollbacks(h.statements)).toBe(1);
+  expect(insertsWithdrawal(h.statements)).toBe(false);
+  expect(h.post).not.toHaveBeenCalled();
+});
+
+it('[AC-B2-05v#6] 三遍账号都变（只换方式）：返回 50001，不建单不冻结，只打一条不带账号的 warn', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], {
+    rebinds: [BANK_SAME_HMAC, { method: 'alipay', hmac: PAYEE_HMAC }, BANK_SAME_HMAC],
+  });
+  expect(await h.apply()).toStrictEqual({ code: 50001, data: {} });
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(3);
+  expect(rollbacks(h.statements)).toBe(3);
+  expect(insertsWithdrawal(h.statements)).toBe(false);
+  expect(h.post).not.toHaveBeenCalled();
+  expect(
+    h.warn.mock.calls.filter(
+      ([, message]): boolean => message === 'withdraw_payee_changed_retry_exhausted',
+    ),
+  ).toEqual([
+    [{ user_id: APPLY_ACTOR.userId, passes: 3 }, 'withdraw_payee_changed_retry_exhausted'],
+  ]);
+  expect(JSON.stringify(h.warn.mock.calls)).not.toContain(PAYEE_HMAC);
+});
+
+it('[AC-B2-05v#4] 账号未变：只走一遍，users 锁拿一次，不回滚', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']]);
+  expect((await h.apply()).code).toBe(0);
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(1);
+  expect(rollbacks(h.statements)).toBe(0);
 });
