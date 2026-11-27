@@ -19,6 +19,11 @@
 // (the member rebound in between), the pass is rolled back to its savepoint — the risk rows and
 // every lock taken since — and the whole pass runs again, at most PASSES times in all; a last
 // pass still changed answers 50001 (no withdrawal, no freeze; a warn without payee data).
+// B2-05v (D10-3619): with identity's bindingId wired, the id of the member's current binding row
+// is read after the first pass and before the risk flags; when the snapshot carries its row's id
+// too, the two must be equal as well (an account rebound away and back is a new row: the pass
+// re-runs and the risk flags follow the new binding). Either side without an id compares the
+// HMAC and the method only. The id is never stored, logged, published or returned.
 //   amounts      ⑤ fee_fen / tax_fen from the FeeTaxCalculator (fee_rule_id / tax_rule_version
 //                fixed with them), net_fen = amount − fee − tax (@couli/money);
 //   insert       ⑥ PENDING_REVIEW with the payee snapshot, income_type SERVICE_FEE, out_biz_no
@@ -80,6 +85,11 @@ export interface WithdrawPayeeSnapshot {
   bank_name: string | null;
   /** Transient cleartext for masking; never returned, logged or put in an event. */
   account: string;
+  /**
+   * B2-05v: the id of the binding row read (identity's reader carries it); compared with the
+   * first pass's binding id only, never stored, logged, published or returned.
+   */
+  binding_id?: string;
 }
 
 /**
@@ -173,17 +183,31 @@ const PAYEE_CHANGED_CODE = 50001;
 const PAYEE_CHANGED: unique symbol = Symbol('payee_changed');
 
 type FirstPassPayee = Awaited<ReturnType<WithdrawRulesOptions['subject']['read']>>;
+/**
+ * The binding row id read in a pass before its risk flags (D10-3619): `read` false when the
+ * subject reader has no bindingId (nothing to compare); `id` null when nothing was bound.
+ */
+type FirstPassBinding = { read: false } | { read: true; id: string | null };
 
-/** BR-WDR-07 ④ (B2-05v): both the HMAC and the method must be the ones the first pass judged. */
+/**
+ * BR-WDR-07 ④ (B2-05v): both the HMAC and the method must be the ones the first pass judged; when
+ * the first pass read a binding row id and the snapshot carries one, the row must be the same too
+ * (a null first-pass id never matches). Either side without an id: HMAC and method only.
+ */
 function samePayeeAccount(
   first: FirstPassPayee,
-  snapshot: Pick<WithdrawPayeeSnapshot, 'payee_hmac' | 'payout_method'>,
+  binding: FirstPassBinding,
+  snapshot: Pick<WithdrawPayeeSnapshot, 'payee_hmac' | 'payout_method' | 'binding_id'>,
 ): boolean {
-  return (
-    first !== null &&
-    first.payee_hmac === snapshot.payee_hmac &&
-    first.payout_method === snapshot.payout_method
-  );
+  if (
+    first === null ||
+    first.payee_hmac !== snapshot.payee_hmac ||
+    first.payout_method !== snapshot.payout_method
+  ) {
+    return false;
+  }
+  if (!binding.read || snapshot.binding_id === undefined) return true;
+  return binding.id === snapshot.binding_id;
 }
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -401,6 +425,20 @@ export function createWithdrawApply(options: WithdrawApplyOptions): WithdrawAppl
           }),
       };
     }
+    // B2-05v (D10-3619): the current binding row's id, read before the risk flags (their
+    // payee_prev_other_user anchors on the current binding): any rebind after this read — back to
+    // the same account included — leaves the snapshot under the locks with another row id.
+    const { bindingId } = rules.subject;
+    const binding: FirstPassBinding =
+      bindingId === undefined
+        ? { read: false }
+        : {
+            read: true,
+            id: await bindingId.call(rules.subject, trx, {
+              appId: actor.appId,
+              userId: actor.userId,
+            }),
+          };
     // Everything of this pass from here on (③'s rows, every lock) can be taken back.
     await sql`SAVEPOINT ${PASS_SAVEPOINT}`.execute(trx);
     /** Rolls this pass back to its savepoint and drops it (the next pass takes its own). */
@@ -441,7 +479,7 @@ export function createWithdrawApply(options: WithdrawApplyOptions): WithdrawAppl
     if (snapshot === null) return refuse({ code: 30305, data: {} });
     // B2-05v (BR-WDR-07 ④): the account to be locked and stored is not the one the first pass
     // judged (③a, ⑨'s method cap, the risk flags): take the whole pass back and run it again.
-    if (!samePayeeAccount(payee, snapshot)) {
+    if (!samePayeeAccount(payee, binding, snapshot)) {
       await undoPass();
       return PAYEE_CHANGED;
     }

@@ -132,6 +132,9 @@ const APPLY_ERRORS: Readonly<Record<number, { readonly status: number; readonly 
     30307: { status: 422, msg: '收款账号姓名与实名姓名不一致，请修改收款账号' },
     30309: { status: 422, msg: '未成年人提现受限' },
     44001: { status: 403, msg: '操作未通过安全校验' },
+    // B2-05v (D10-3619): the payee account kept changing over every pass (BR-WDR-07 ④); not
+    // stored with the key (the idempotency layer stores 0 and 3xxxx only).
+    50001: { status: 500, msg: '服务端错误' },
   });
 
 /** error.30303.<reason> texts of contracts/texts.default.json. */

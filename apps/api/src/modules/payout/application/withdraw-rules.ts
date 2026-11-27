@@ -122,6 +122,16 @@ export interface WithdrawRulesOptions {
       payee_name: string;
       payee_hmac: string;
     } | null>;
+    /**
+     * B2-05v (BR-WDR-07 ④, D10-3619): the id of the member's current binding row, or null when
+     * nothing is bound. Read by the application once per pass, before the risk flags; compared
+     * with the snapshot's binding_id under the locks, never stored, logged or published.
+     * Absent in hand-built assemblies: then only the HMAC and the method are compared.
+     */
+    bindingId?(
+      handle: Kysely<DB>,
+      subject: { appId: string; userId: string },
+    ): Promise<string | null>;
   };
   laborAgreementSigned(
     handle: Kysely<DB>,

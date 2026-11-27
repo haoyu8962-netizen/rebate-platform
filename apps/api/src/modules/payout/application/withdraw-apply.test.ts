@@ -12,6 +12,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { Ledger } from '../../ledger/index.ts';
 import { FixedClock } from '../../platform/index.ts';
 import { reviewDeadline } from '../domain/review-deadline.ts';
+import type { WithdrawRiskFlag } from '../domain/risk-flags.ts';
 import {
   CALENDAR_KEYS,
   createWithdrawApply,
@@ -204,6 +205,8 @@ type ConfigRead = (
 interface BoundAccount {
   method: 'alipay' | 'bank_card';
   hmac: string;
+  /** B2-05v (D10-3619): the binding row's id; a rebind back to the same account is a new row. */
+  id?: string;
 }
 
 /**
@@ -212,19 +215,30 @@ interface BoundAccount {
  * B2-05v: `rebinds[k]` becomes the member's current account just before the k-th users lock
  * (0-based) is taken — a rebind committed between the first pass and the locks; identity's
  * subject reader and the snapshot both read the current account. `config` adds values by key.
+ * B2-05v (D10-3619): `bindingIds.reader` gives the subject reader a bindingId method,
+ * `bindingIds.snapshot` makes the snapshot carry binding_id (both the current row's id);
+ * `riskFlags` wires a risk-flag port; `firstBindingIdNull` makes the first bindingId read answer
+ * null. `order` records the bindingId reads and risk-flag computes.
  */
 async function applyHarness(
   methods: readonly (readonly string[])[],
   script: {
     rebinds?: readonly (BoundAccount | undefined)[];
     config?: Readonly<Record<string, unknown>>;
+    bindingIds?: { reader: boolean; snapshot: boolean };
+    riskFlags?: boolean;
+    /** The first bindingId read answers null (a reader that saw no current row then). */
+    firstBindingIdNull?: boolean;
   } = {},
 ) {
   const statements: string[] = [];
+  const parameters: unknown[] = [];
+  const order: string[] = [];
   const driver = new DummyDriver();
   const connection = await driver.acquireConnection();
   connection.executeQuery = async <R>(query: CompiledQuery): Promise<QueryResult<R>> => {
     statements.push(query.sql);
+    parameters.push(...query.parameters);
     return {
       rows: [],
       numAffectedRows: query.sql.startsWith('insert') ? 1n : undefined,
@@ -259,7 +273,14 @@ async function applyHarness(
     parse: (value: unknown): ReadonlySet<string> | null =>
       Array.isArray(value) ? new Set<string>(value as string[]) : null,
   };
-  let bound: BoundAccount = { method: 'alipay', hmac: PAYEE_HMAC };
+  let bound: BoundAccount = { method: 'alipay', hmac: PAYEE_HMAC, id: 'binding-1' };
+  let bindingReads = 0;
+  const bindingId = vi.fn(async (): Promise<string | null> => {
+    const id = script.firstBindingIdNull === true && bindingReads === 0 ? null : (bound.id ?? null);
+    bindingReads += 1;
+    order.push(`bindingId:${String(id)}`);
+    return id;
+  });
   // Untyped: pino's overloaded warn is what the port declares.
   const warn = vi.fn();
   const rules: WithdrawRulesOptions = {
@@ -303,6 +324,7 @@ async function applyHarness(
           payee_hmac: bound.hmac,
         }),
       ),
+      ...(script.bindingIds?.reader === true ? { bindingId } : {}),
     },
     laborAgreementSigned: vi.fn(async (): Promise<boolean> => true),
     ledger: {
@@ -377,6 +399,13 @@ async function applyHarness(
     payee_hmac: bound.hmac,
     bank_name: bound.method === 'bank_card' ? '合成银行' : null,
     account: bound.method === 'bank_card' ? '6222020000000001' : '13800138000',
+    ...(script.bindingIds?.snapshot === true && bound.id !== undefined
+      ? { binding_id: bound.id }
+      : {}),
+  });
+  const compute = vi.fn(async (): Promise<readonly WithdrawRiskFlag[]> => {
+    order.push('riskFlags');
+    return [];
   });
   const service = createWithdrawApply({
     rules,
@@ -384,6 +413,7 @@ async function applyHarness(
     lockUsersForUpdate,
     snapshot: { read: vi.fn(async (): Promise<WithdrawPayeeSnapshot> => snapshot()) },
     outBizNo: (): string => `W${'A'.repeat(20)}`,
+    ...(script.riskFlags === true ? { riskFlags: { compute } } : {}),
   });
   const apply = (): Promise<WithdrawApplyResult> =>
     db
@@ -393,7 +423,18 @@ async function applyHarness(
       );
   const methodReadCount = (): number =>
     configValue.mock.calls.filter(([, key]) => key === METHODS_KEY).length;
-  return { apply, statements, post, lockUsersForUpdate, methodReadCount, warn };
+  return {
+    apply,
+    statements,
+    parameters,
+    order,
+    bindingId,
+    compute,
+    post,
+    lockUsersForUpdate,
+    methodReadCount,
+    warn,
+  };
 }
 
 const insertsWithdrawal = (statements: readonly string[]): boolean =>
@@ -494,4 +535,89 @@ it('[AC-B2-05v#4] 账号未变：只走一遍，users 锁拿一次，不回滚',
   expect((await h.apply()).code).toBe(0);
   expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(1);
   expect(rollbacks(h.statements)).toBe(0);
+});
+
+// B2-05v (Codex money review r1 S1-1, D10-3619): an account rebound away and back is a new binding
+// row with the same HMAC and method. The first pass's binding row id (read before the risk flags)
+// is compared with the snapshot's binding_id when both sides have one; either side without one
+// compares the HMAC and the method only.
+const SAME_ACCOUNT_NEW_ROW: BoundAccount = { method: 'alipay', hmac: PAYEE_HMAC, id: 'binding-2' };
+const BOTH_IDS = { reader: true, snapshot: true } as const;
+
+it('[AC-B2-05v#11-UNIT#1] 两边都带绑定行 id 且不同（HMAC 与方式相同）：整遍回滚重跑，users 锁拿两次，第二遍按新绑定建单', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], {
+    rebinds: [SAME_ACCOUNT_NEW_ROW],
+    bindingIds: BOTH_IDS,
+  });
+  const result = await h.apply();
+  expect(result).toMatchObject({
+    code: 0,
+    data: { status: 'PENDING_REVIEW', amount_fen: 1000, payout_channel: 'alipay' },
+  });
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(2);
+  expect(rollbacks(h.statements)).toBe(1);
+  // Pass 1 read the old row, pass 2 the new one it then created the withdrawal on.
+  expect(h.order).toEqual(['bindingId:binding-1', 'bindingId:binding-2']);
+  expect(
+    h.statements.filter((text): boolean => text.startsWith('insert into "app"."withdrawals"')),
+  ).toHaveLength(1);
+  expect(h.post).toHaveBeenCalledTimes(1);
+  // The binding row id is neither stored, nor returned, nor logged.
+  expect(h.parameters).not.toContain('binding-1');
+  expect(h.parameters).not.toContain('binding-2');
+  expect(JSON.stringify(result)).not.toContain('binding-');
+  expect(
+    JSON.stringify(h.post.mock.calls, (_key: string, value: unknown): unknown =>
+      typeof value === 'bigint' ? value.toString() : value,
+    ),
+  ).not.toContain('binding-');
+  expect(JSON.stringify(h.warn.mock.calls)).not.toContain('binding-');
+});
+
+it('[AC-B2-05v#11-UNIT#2] 两边都带绑定行 id 且相同：只走一遍，users 锁拿一次，不回滚', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], { bindingIds: BOTH_IDS });
+  expect((await h.apply()).code).toBe(0);
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(1);
+  expect(rollbacks(h.statements)).toBe(0);
+  expect(h.bindingId).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  ['读口有 bindingId、快照不带 binding_id', { reader: true, snapshot: false }],
+  ['读口没有 bindingId、快照带 binding_id', { reader: false, snapshot: true }],
+] as const)(
+  '[AC-B2-05v#11-UNIT#3] %s：只比 HMAC 与方式，换成同账号的新行也只走一遍',
+  async (_label: string, bindingIds: { reader: boolean; snapshot: boolean }): Promise<void> => {
+    const h = await applyHarness([['alipay', 'bank_card']], {
+      rebinds: [SAME_ACCOUNT_NEW_ROW],
+      bindingIds,
+    });
+    expect((await h.apply()).code).toBe(0);
+    expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(1);
+    expect(rollbacks(h.statements)).toBe(0);
+    expect(h.bindingId).toHaveBeenCalledTimes(bindingIds.reader ? 1 : 0);
+  },
+);
+
+it('[AC-B2-05v#11-UNIT#4] 每一遍的绑定行 id 都在算风险标签之前读', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], {
+    rebinds: [SAME_ACCOUNT_NEW_ROW],
+    bindingIds: BOTH_IDS,
+    riskFlags: true,
+  });
+  expect((await h.apply()).code).toBe(0);
+  expect(h.order).toEqual(['bindingId:binding-1', 'riskFlags', 'bindingId:binding-2', 'riskFlags']);
+  expect(h.compute).toHaveBeenCalledTimes(2);
+});
+
+it('[AC-B2-05v#11-UNIT#5] 第一轮读到的绑定行 id 为 null（当时没有当前行）而快照带 id：算作不同，整遍重跑', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], {
+    rebinds: [SAME_ACCOUNT_NEW_ROW],
+    bindingIds: BOTH_IDS,
+    firstBindingIdNull: true,
+  });
+  expect((await h.apply()).code).toBe(0);
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(2);
+  expect(rollbacks(h.statements)).toBe(1);
+  expect(h.order).toEqual(['bindingId:null', 'bindingId:binding-2']);
 });
