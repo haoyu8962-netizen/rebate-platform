@@ -1,0 +1,79 @@
+{
+  "task": "B1-08zze",
+  "spec_ref": "b3b8ff548af95078a744803e9d7461ee269ad448",
+  "spec_commit": "c859156422a5b4600d286da752d465666499285f",
+  "red_tests": [
+    "test/spec/orders/taobao-slot-match/pidscene-reuse/replay.int.test.ts > [AC-B1-08zze#1] 淘礼金登记行在重跑命中后改写 PID，未启用来源回填时首次快照仍记 none 和零用户份额",
+    "test/spec/orders/taobao-slot-match/pidscene-reuse/replay.int.test.ts > [AC-B1-08zze#2] 淘礼金登记行改写 PID 后，来源回填与首次快照都按重跑命中的淘礼金场景处理",
+    "test/spec/orders/taobao-slot-match/pidscene-reuse/replay.int.test.ts > [AC-B1-08zze#3] 重跑命中分享推广位时按分享场景回填来源，并生成普通分佣快照",
+    "test/spec/orders/taobao-slot-match/pidscene-reuse/replay.int.test.ts > [AC-B1-08zze#4] 同一登记行改为分享场景后，来源回填与首次快照仍使用重跑命中时的淘礼金场景"
+  ],
+  "risk_note": "Taobao unattributed re-sync: when matchOrderSlot hits, the hit row's pid_scene becomes the known scene of this sync; source backfill (BR-ATTR-15) and the first commission snapshot (BR-CALC-19) reuse it, with or without the sources port, and union_pids is not read again for the scene (FU-ORDER-PIDSCENE-REUSE-MATCH, D10-3485; follow-up of B1-08zzc money r3). Not hit, already attributed, JD / PDD: unchanged. Only orders/application/update-step(.test).ts. No money arithmetic, no migration, no contract. Recorded out of scope: FU-ORDER-SNAPSHOT-SCENE-PERSIST (money r1 S0: the B1-08t compensation retry in a later sync reads the scene by orders.pid; identical on main, untouched by this diff; fixing it needs a new column and migration; the rule for scene edits before the first snapshot is to be decided by the orchestrator, D10-3552).",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c859156422a5b4600d286da752d465666499285f",
+      "tree": "082930e3c2828b71618966650fdf92a1a02a2321",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-27T11:19:00Z",
+      "finished_at": "2026-11-27T11:23:06Z",
+      "red_tests": [
+        "test/spec/orders/taobao-slot-match/pidscene-reuse/replay.int.test.ts > [AC-B1-08zze#1] 淘礼金登记行在重跑命中后改写 PID，未启用来源回填时首次快照仍记 none 和零用户份额",
+        "test/spec/orders/taobao-slot-match/pidscene-reuse/replay.int.test.ts > [AC-B1-08zze#2] 淘礼金登记行改写 PID 后，来源回填与首次快照都按重跑命中的淘礼金场景处理",
+        "test/spec/orders/taobao-slot-match/pidscene-reuse/replay.int.test.ts > [AC-B1-08zze#3] 重跑命中分享推广位时按分享场景回填来源，并生成普通分佣快照",
+        "test/spec/orders/taobao-slot-match/pidscene-reuse/replay.int.test.ts > [AC-B1-08zze#4] 同一登记行改为分享场景后，来源回填与首次快照仍使用重跑命中时的淘礼金场景"
+      ],
+      "expected": ["test/spec/orders/taobao-slot-match/pidscene-reuse/replay.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "1ba77bcdfcf781f2a9181b14d83df8ebc295f6df6835f9d094d877be34a6d966"
+        }
+      ],
+      "typecheck": {
+        "exit_code": 0,
+        "errors": []
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27). r1 (full) fail: one S0 on the B1-08t compensation retry (later sync, order already attributed, scene read by orders.pid) — w1 checked it is identical on origin/main (update-step.ts:777) and untouched by this diff; D10-3552: recorded as FU-ORDER-SNAPSHOT-SCENE-PERSIST (new column + migration, outside paths), regular r2 with a facts-only brief. r1 reviewer out-of-scope S1 (entry.ts Alipay KMS) is base lag (branch lacked main d97e96fa7, B2-06j), gone after rebase. r2 (incremental) pass, no in-scope findings; validator moved 0 in both rounds. couli-runs/B1-08zze/review-money-codex-r{1,2}.json. Test machine on efb795127: --tests test/spec/orders test/spec/commission apps/api/src/modules/orders green (478 files / 4588 tests); verify:fast exit 0 on the implementation."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (ledger tester codex), reviewed by fresh independent Claude sessions (approvals 36). r1 fail (1 S1: an implementation re-reading the scene by adzone passed) -> test 2 (slotCandidates exactly once, find not called; #4 scene edited to share after the hit); r2 pass, one reviewer out-of-scope S2 (no-sources snapshot path) made an implementation must and checked by the money review. Test 3 (D10-3543) only added a links row per click inside addClick (orders_link_fkey), no expect changed; the orchestrator checked the diff instead of a review round. Validator moved 0. No modify_existing."
+  },
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "e37846291b24016cc84525faeef1deca5c61330e",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}
