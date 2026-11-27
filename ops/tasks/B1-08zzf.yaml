@@ -1,0 +1,21 @@
+id: B1-08zzf
+repo: rebate-platform
+title: 拼多多缺 lk 切 self 的前置 test-change：冻结规则测试里靠推广位判、没有 lk 的拼多多夹具补 lk 与 links 行（只补业务信息，断言与金额一字不动）
+type: test-change
+# 2026-11-27 be 入账（编排 D10-3475；FU-PDD-NO-LK-SELF-AT-IMPL2；先于 B1-08zzg）。B1-08zzg 把拼多多 missingLinkBuyTypeBasis 由 pid 切 self（BR-ATTR-08 正文「没有 lk 一律 self」，D10-3278 过渡口径退场）后，靠推广位判 share / agent 的拼多多夹具会变 self / fallback。
+# 本单只给这些夹具补上同一笔业务里本该有的 lk（custom_parameters）与对应 links 行（同 App、同用户、同商品、创建不晚于付款、pid_scene 与原推广位场景相同），让判定结果与今天一致；断言、期望值与金额一字不动。任何一块要动断言或期望值就停下单列报编排（D10-3475）。
+# 范围：旧主干探针（couli-runs/B1-08zza/tests/1，原型一律 self）红 122 块 / 41 文件（orders 18、settlement 22、commission 1）；实际清单在当前主干上以「pdd 规则表切 self」探针重定，modify_existing 以台账补丁逐块登记，逐块按「只补业务信息」报编排核放行（approvals #24 加标签）。支撑文件（kit）只许纯插入，改不了的落到块内。
+refs: [BR-ATTR-08]
+refs_hash:
+  BR-ATTR-08: dc141d8f939f
+deps: [B1-08zza]
+paths:
+  - 'test/spec/orders/**'
+  - 'test/spec/settlement/**'
+  - 'test/spec/commission/**'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null

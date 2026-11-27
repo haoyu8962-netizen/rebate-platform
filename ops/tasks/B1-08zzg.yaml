@@ -1,0 +1,27 @@
+id: B1-08zzg
+repo: rebate-platform
+title: 拼多多单推广位与必带 lk（PDD A′ 实现 ②）：各 scene 与商品查询共用一个 active 推广位、去掉拼多多的推广位场景核对、转链一律带 lk、缺 lk 的订单判 self / fallback、回溯快照不按订单 pid 反查场景
+type: impl
+# 2026-11-27 be 入账（编排 D10-3338 / D10-3472 / D10-3475；范围 couli-runs/PDD-lane/impl2-scope.md；方案页 A′ 定稿 ④ 第 5 步）。deps B1-08zzf（夹具补 lk 先落）。规则 BR-ATTR-08（拼多多只用一个推广位、按我方登记的链接判、没有 lk 一律 self）。
+# ① 取位：getActivePid 由平台规则表新字段决定，拼多多各转链 scene 与 query 共用同一 active 推广位，不按 pid_scene 过滤；京东、淘宝不变，不写平台字面量。② 拼多多去掉「推广位行 pid_scene = 请求 scene」核对（link-open-conversion、pdd-authority、link-registration、link-open-pdd-auth、link-open-requote 等），links.pid_scene 仍记请求的 scene。③ 拼多多转链不看 attr.click_code.pdd、一律发号带 lk，取不到 lk 不转链按 paused；no_rebate 照旧不带用户归因参数。④ catalog 查询与转链共用该推广位。⑤ orders 规则表拼多多 missingLinkBuyTypeBasis 切 self（D10-3278 过渡口径退场）。
+# ⑥ 必满足（D10-3475 ⒝，资金评审书点名）：回溯快照（app.module readOrderPidScene → createRestoreSnapshot，B2-09gd）不得再按订单 pid 反查场景，拼多多改用订单已落的判定（buy_type / scene_basis）。约 14 个冻结用例（link-code / bindings-pdd-* / catalog 取位）实现前探针定、台账补丁登 modify_existing。预计无迁移；若要，取主干下一个空号（0162 之后）。上线门槛（四推广位期间「分享单落 self」比例）登 followups，上线前须负责人定，不挡入账。
+refs: [BR-ATTR-08]
+refs_hash:
+  BR-ATTR-08: dc141d8f939f
+deps: [B1-08zzf]
+paths:
+  - 'apps/api/src/modules/union/pids/**'
+  - 'apps/api/src/modules/linking/**'
+  - 'apps/api/src/modules/catalog/**'
+  - 'apps/api/src/modules/orders/domain/platform-rules/**'
+  - 'apps/api/src/modules/orders/application/**'
+  - 'apps/api/src/app.module.ts'
+test_paths:
+  - 'test/spec/linking/pdd-single-pid/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/linking/pdd-single-pid/**'
+status: todo
+pr: null
