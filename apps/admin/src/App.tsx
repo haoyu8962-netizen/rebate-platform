@@ -11,7 +11,16 @@ import {
   type ResourceProps,
 } from '@refinedev/core';
 import routerProvider from '@refinedev/react-router';
-import { ConfigProvider, Layout, Typography, type ThemeConfig } from 'antd';
+import {
+  ConfigProvider,
+  Layout,
+  Typography,
+  type ConfigProviderProps,
+  type ThemeConfig,
+} from 'antd';
+import zhCNModule from 'antd/locale/zh_CN.js';
+import dayjs from 'dayjs';
+import 'dayjs/locale/zh-cn.js';
 import {
   useCallback,
   useEffect,
@@ -101,6 +110,15 @@ import { unionsTexts } from './texts/unions.ts';
 import { withdrawalsTexts } from './texts/withdrawals.ts';
 import { useReducedMotion } from './motion.ts';
 import { createAntdTheme, sameAntdTheme } from './theme.ts';
+
+// antd's date pickers (placeholders, month/week names) read dayjs's global locale rather than the
+// ConfigProvider locale, so the global locale is set once here, next to the antd zh_CN locale.
+dayjs.locale('zh-cn');
+
+// NodeNext types this CJS default import as the whole module object, while Vite unwraps the
+// __esModule default; take `.default` when it is there so both give antd's Locale.
+const zhCN: NonNullable<ConfigProviderProps['locale']> =
+  'default' in zhCNModule ? zhCNModule.default : zhCNModule;
 
 type PermissionState =
   | { readonly status: 'loading' }
@@ -440,7 +458,7 @@ function AdminApp({ options }: { readonly options: AdminAppOptions }) {
   );
 
   return (
-    <ConfigProvider theme={theme} button={{ autoInsertSpace: false }}>
+    <ConfigProvider locale={zhCN} theme={theme} button={{ autoInsertSpace: false }}>
       <ShellRouter kind={options.router ?? 'memory'} initialRoute={options.initialRoute}>
         <Refine
           routerProvider={routerProvider}
