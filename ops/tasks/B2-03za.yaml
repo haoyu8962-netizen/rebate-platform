@@ -1,0 +1,25 @@
+id: B2-03za
+repo: rebate-platform
+title: '种子 0008：couli 的 tech_fee_bp 写成淘宝、京东、拼多多各 0（负责人 2026-11-22 定报价技术服务费率统一为 0，BR-CALC-20；只 INSERT、已有行不覆盖），新库上三平台报价不再因缺键失败（FU-QUOTE-TECH-FEE-DEFAULT-ZERO，D10-3358 ①）'
+type: impl
+# 2026-11-28 funds 线入账（编排 D10-3358 ①、D10-3675、D10-3676；SPEC_REF 0dc7e7c 的 05_CALC :41 变更记录与 BR-CALC-20 已写「tech_fee_bp 各平台统一为 0」，负责人 11-22 拍板，D10-2592 ② / D10-2595）。
+# 起因：主干 db/seeds 七个文件都没有 tech_fee_bp；报价读口 commission/application/quote-config.ts 的 techFeeConfig 缺键或缺目标平台即抛错（模块规则「缺即报价失败、不按 0」），所以新库上三个平台的报价一律失败。
+# 只做（写死）：新增 db/seeds/0008_quote-tech-fee.sql 一行——('couli', 'tech_fee_bp', '{"taobao":0,"jd":0,"pdd":0}'::jsonb, 'seed') ON CONFLICT (app_id, key) DO NOTHING；写法同 0003–0007（只 INSERT、重跑不覆盖后台已改的值）。值形状照 techFeeConfig（按平台分项的对象，每项 0..10000 的安全整数）。
+# 不动：报价读口「缺即报价失败」、commission/AGENTS.md、冻结 [AC-B2-03c#19] / [#21]；后台保存不加「只收 0」的校验（负责人要后台可改，D10-3358 ①）；infra/staging/README.md 不改（[AC-B1-04zze#4] 要求它讲到 tech_fee_bp 的句子不说在种子里，不改即不红）。
+# 规则测试（独立 Claude，新目录，照 B1-22za）：① 新库跑完全部种子后 couli 的 tech_fee_bp 恰为 {taobao:0, jd:0, pdd:0}、updated_by = seed；② 预先写入的后台值（例如某平台非 0）跑两遍种子整行不变；③ 只靠种子（不另写这个键）时三平台报价不再因缺 tech_fee_bp 失败（走现有报价器）；另静态核 0008 只有 INSERT … ON CONFLICT DO NOTHING、只写 couli 的这一个键。读 db/seeds 的现有规则测试预计不受影响，以测试机为准。
+# 上线清单（D10-3676）：种子只在新库 / 迁移后由部署脚本的 seed 步骤执行；生产首部署后核 couli 的 tech_fee_bp 三平台都在。
+refs: [BR-CALC-20]
+refs_hash:
+  BR-CALC-20: 1fef916eff18
+deps: []
+paths:
+  - 'db/seeds/0008_quote-tech-fee.sql'
+test_paths:
+  - 'test/spec/commission/tech-fee-seed/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/commission/tech-fee-seed/**'
+status: todo
+pr: null
