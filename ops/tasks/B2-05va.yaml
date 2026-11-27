@@ -30,5 +30,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/locked-recheck/**'
-status: todo
-pr: null
+status: done
+pr: 1000
