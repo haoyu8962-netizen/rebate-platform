@@ -63,27 +63,34 @@ function mount(reply: Reply) {
 const SELF = earningsText('earnings.section.self');
 const pill = (name: string) => screen.getByRole('button', { name });
 
-it('[AC-F1-12a-UNIT#5] 切回取过的平台时重取返回 30701：整页换成看板关闭提示，不留旧数字', async () => {
-  mount((platform, count) =>
-    count === 3 ? Promise.reject(new ApiError(30701, '')) : Promise.resolve(summary),
-  );
-  await screen.findByText(SELF);
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: '淘宝' }));
-  await waitFor(() => expect(pill('淘宝').getAttribute('aria-pressed')).toBe('true'));
-  await screen.findByText(SELF);
-  await user.click(pill(earningsText('earnings.platform.all')));
-  expect((await screen.findByRole('alert')).textContent).toContain(t('error.30701'));
-  expect(screen.queryByText(SELF)).toBeNull();
-  expect(screen.queryByText(t('h5.load_failed'))).toBeNull();
-});
+// 负载下的单条超时（D10-3632）：CI 负载下 UNIT#5 曾 5282ms 撞 5000ms 默认超时（无断言失败），只放宽这一条。
+const UNIT5_TIMEOUT_MS = 15_000;
+
+it(
+  '[AC-F1-12a-UNIT#5] 切回取过的平台时重取返回 30701：整页换成看板关闭提示，不留旧数字',
+  async () => {
+    mount((platform, count) =>
+      count === 3 ? Promise.reject(new ApiError(30701, '')) : Promise.resolve(summary),
+    );
+    await screen.findByText(SELF);
+    const user = userEvent.setup({ delay: null });
+    await user.click(await screen.findByRole('button', { name: '淘宝' }));
+    await waitFor(() => expect(pill('淘宝').getAttribute('aria-pressed')).toBe('true'));
+    await screen.findByText(SELF);
+    await user.click(pill(earningsText('earnings.platform.all')));
+    expect((await screen.findByRole('alert')).textContent).toContain(t('error.30701'));
+    expect(screen.queryByText(SELF)).toBeNull();
+    expect(screen.queryByText(t('h5.load_failed'))).toBeNull();
+  },
+  UNIT5_TIMEOUT_MS,
+);
 
 it('[AC-F1-12a-UNIT#6] 「全部」已加载后切平台失败：胶囊与期间仍在，可切回「全部」', async () => {
   const request = mount((platform) =>
     platform === 'jd' ? Promise.reject(new ApiError(50001, '')) : Promise.resolve(summary),
   );
   await screen.findByText(SELF);
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await user.click(await screen.findByRole('button', { name: '京东' }));
   expect((await screen.findByRole('alert')).textContent).toContain(t('h5.load_failed'));
   expect(screen.getByRole('button', { name: t('h5.retry') })).not.toBeNull();

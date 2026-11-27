@@ -1,0 +1,39 @@
+{
+  "red_tests": [],
+  "risk_note": "F1-12aa. Only apps/h5/src/entries/app/pages/earnings/earnings-page.test.tsx: [AC-F1-12a-UNIT#5] and #6 use userEvent.setup({ delay: null }) (no timer between pointer actions); UNIT#5 alone gets its own 15 s timeout (named constant, D10-3632) after a 5282 ms CI timeout under load with no failed assertion. No wait removed (each checked against the page code), assertions, their order and titles unchanged; global testTimeout and vitest config untouched. No implementation, rule-test, contract, money or db change.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "general",
+      "round": 1,
+      "note": "Codex code review r1 (general, RV1, full scope) pass with no findings, out_of_scope 0. couli-runs/F1-12aa/review-r1.json. Test machine: the file three times green (tests runs 1-3) and verify:fast green."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-12aa",
+  "spec_ref": "b3b8ff548af95078a744803e9d7461ee269ad448",
+  "spec_commit": "dd72f4b4a8e431f9a3f1952b744d0d66897d848b",
+  "runs": [],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "4331b805a8b36183d2a4faa9499801e62db16a97",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
