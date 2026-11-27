@@ -11,6 +11,7 @@ export { PAY_REFUND_SUCCEEDED_EVENT } from './application/pay-refund-result.ts';
 export type { PayRefundSucceededPayload } from './application/pay-refund-result.ts';
 export type { NotifyAnswer } from './application/pay-notifications.ts';
 export { PayChannelSet, PayChannelUnavailable } from './application/pay-channel.ts';
+export { certSn, publicKeyFromCert, rootCertSn } from './infra/channels/alipay/cert-sn.ts';
 export { createBizRegistry, TEST_ITEM_BIZ_TYPE } from './application/biz-registry.ts';
 export type {
   AlipayLaunch,

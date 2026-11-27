@@ -25,6 +25,13 @@ export interface PayoutLiveCredentials {
   readonly privateKey: string;
   readonly alipayPublicKey: string;
   readonly gatewayUrl: string;
+  /**
+   * Certificate mode (B2-06j): the three serial numbers, all or none. resolvePayoutMode never sets
+   * them; the payout entry's prod + live decision (payout-mode-kms.ts) always does.
+   */
+  readonly appCertSn?: string;
+  readonly alipayRootCertSn?: string;
+  readonly alipayCertSn?: string;
 }
 
 export type PayoutModeDecision =
