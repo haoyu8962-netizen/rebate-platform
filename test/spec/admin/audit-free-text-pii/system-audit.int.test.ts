@@ -34,7 +34,7 @@ const RECON_DIFF_ID = 'deadbeef-face-4ace-acdc-0badc0ffee11';
  */
 const IDEMPOTENCY_KEY = '2026112109876549';
 
-it('[AC-B2-02ze#7] 系统审计 appendAction 的自由文本（before.reason、嵌套的 after.detail.note）里的邮箱（@ 前只留前 2 位、域名照常显示）、身份证（18 位末位 X、18 位校验位正确、15 位日期合法，只留首末各 1 位）、过 Luhn 的卡号（19 位、连字符分组、card: 前缀、13 位，只露末 4）、手机号都不以明文落库，说明文字保留；自由文本里的 16 位订单号、13 位参考号、不过 Luhn 的 19 位长号、校验位错的 18 位号、日期不合法的 15 位号、12 位数字、taobao: 与 W…ABC 里的 16 位数字段按兜底只留末四位（B2-02zg D10-3266），uuid、taobao:1234567、W20261121ABC 原样；结构化的订单号（16 位）、提现单号、差错单号、纯数字幂等键（16 位，过 Luhn）、13 位以上金额（数字与整数字符串、含负数）与 target 原样', async () => {
+it('[AC-B2-02ze#7] 系统审计 appendAction 的自由文本（before.reason、嵌套的 after.detail.note）里的邮箱（@ 前整段遮成「***」、域名照常显示）、身份证（18 位末位 X、18 位校验位正确、15 位日期合法，只留首末各 1 位）、过 Luhn 的卡号（19 位、连字符分组、card: 前缀、13 位，只露末 4）、手机号都不以明文落库，说明文字保留；自由文本里的 16 位订单号、13 位参考号、不过 Luhn 的 19 位长号、校验位错的 18 位号、日期不合法的 15 位号、12 位数字、taobao: 与 W…ABC 里的 16 位数字段按兜底只留末四位（B2-02zg D10-3266），uuid、taobao:1234567、W20261121ABC 原样；结构化的订单号（16 位）、提现单号、差错单号、纯数字幂等键（16 位，过 Luhn）、13 位以上金额（数字与整数字符串、含负数）与 target 原样', async () => {
   const db = s.db();
   const clock = new FixedClock('2026-11-21T02:00:00.000Z');
   const reason = sampleC('庚');

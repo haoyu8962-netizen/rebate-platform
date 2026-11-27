@@ -5,11 +5,12 @@
 //   1. Normalise: Unicode NFKC; every dash / minus (U+2212 included) and every white space (NBSP,
 //      U+202F, ideographic space, tab included) is one separator; `/ . , _` are no separators.
 //   2. Recognised types keep the BR-ID-33 default shapes: mobile 3 + 4 (138****5678, also written
-//      with +86 / 86), identity number first 1 + last 1 (18 with X / x, 15), card only its last four,
-//      e-mail-shaped text two characters of the local part (one when it has two, none when it has
-//      one) + 「***」, "@" and the domain as written (细则「收款账号的脱敏格式」).
-//   3. E-mail-shaped: "@" with non-blank text on both sides; when the right side is not like a
-//      domain the whole piece is masked.
+//      with +86 / 86), identity number first 1 + last 1 (18 with X / x, 15), card only its last four.
+//   3. E-mail-shaped: "@" with non-blank text on both sides (写测 4, 负责人 2026-11-27, 编排 D10-3427 ④ /
+//      D10-3428: no longer the 细则 two-character shape in free text): from the "@" leftwards up to
+//      white space or the start, everything becomes 「***」 whole; "@" and a recognised domain are
+//      shown as written, what follows the domain stays; when the right side is not like a domain
+//      the "@" and its right side up to white space or the end go too, only 「***」 is left.
 //   4. Anything else: separators taken out, a run of 11 or more digits (maybe a final X / x) shows
 //      only its last four — no Luhn, check character or boundary test. Fewer than 11 digits stay.
 //   5. Masks are decided on the normalised text and mapped back character by character: what is
@@ -87,7 +88,7 @@ it('[AC-B2-02zg#2] 只有空白与横线算分隔：「/ . , _」隔开的数字
   expectMasked('1234567890 1', '\\*+8901');
 });
 
-it('[AC-B2-02zg#3] 认得出类型的按 BR-ID-33 默认形状：手机号 3+4（含 +86 / 86 前缀与分组）、身份证首 1 末 1（18 位末位 X / x / 数字、15 位）、银行卡只留末 4、邮箱 @ 前留前 2 位 +「***」且 @ 与域名照常显示', () => {
+it('[AC-B2-02zg#3] 认得出类型的按 BR-ID-33 默认形状：手机号 3+4（含 +86 / 86 前缀与分组）、身份证首 1 末 1（18 位末位 X / x / 数字、15 位）、银行卡只留末 4；邮箱 @ 左到空白整段换成「***」、@ 与域名照常显示', () => {
   // What becomes of a +86 / 86 prefix is not fixed by BR-ID-33; the number itself is 3 + 4.
   const mobile = '\\+?(?:86)?138\\*{4}5678';
   for (const [written, shape] of [
@@ -109,19 +110,19 @@ it('[AC-B2-02zg#3] 认得出类型的按 BR-ID-33 默认形状：手机号 3+4�
     expect(out, written).not.toContain(written);
   }
   for (const [address, masked] of [
-    ['alice.w@example.com', 'al***@example.com'],
-    ['bob.lee+refund@mail.corp.example.cn', 'bo***@mail.corp.example.cn'],
-    ['zhangsan@example.com', 'zh***@example.com'],
+    ['alice.w@example.com', '***@example.com'],
+    ['bob.lee+refund@mail.corp.example.cn', '***@mail.corp.example.cn'],
+    ['zhangsan@example.com', '***@example.com'],
   ] as const) {
     expect(redactFreeText(`收款账号 ${address} 已核`), address).toBe(`收款账号 ${masked} 已核`);
   }
 });
 
-it('[AC-B2-02zg#4] 邮箱形：@ 前只有 2 位留第 1 位、只有 1 位不留；@ 后不像域名的整段打码；@ 一侧是空白的不是邮箱形，原样', () => {
+it('[AC-B2-02zg#4] 邮箱形：@ 前不论几位（2 位、1 位、大小写与下划线）都整段换成「***」，@ 与域名照常显示；@ 后不像域名的连 @ 与右侧一起换掉、整段只剩「***」；@ 一侧是空白的不是邮箱形，原样', () => {
   for (const [address, masked] of [
-    ['ab@x.com', 'a***@x.com'],
+    ['ab@x.com', '***@x.com'],
     ['a@x.com', '***@x.com'],
-    ['Carol_Z@Example.ORG', 'Ca***@Example.ORG'],
+    ['Carol_Z@Example.ORG', '***@Example.ORG'],
   ] as const) {
     expect(redactFreeText(`收款账号 ${address} 已核`), address).toBe(`收款账号 ${masked} 已核`);
   }
@@ -130,9 +131,7 @@ it('[AC-B2-02zg#4] 邮箱形：@ 前只有 2 位留第 1 位、只有 1 位不�
     ['bob.lee@内网', ['bob.lee', '内网']],
   ] as const) {
     const out = redactFreeText(`收款账号 ${written} 已核`);
-    expect(out.startsWith('收款账号 ') && out.endsWith(' 已核'), out).toBe(true);
-    const piece = out.slice('收款账号 '.length, out.length - ' 已核'.length);
-    expect(piece, written).toMatch(/^[*@]*\*[*@]*$/);
+    expect(out, written).toBe('收款账号 *** 已核');
     for (const plain of plains) expect(out, written).not.toContain(plain);
   }
   const kept = '请 @张三 处理，ops @ team，@ 符号单独出现';
@@ -146,8 +145,9 @@ it('[AC-B2-02zg#5] 归一 · 全角：全角数字的手机号、证件号（含
   expect(id.normalize('NFKC')).toBe(`证件 1${'*'.repeat(16)}X 已核`);
   expectMasked('２０２６１１２１１２３４５６７８', '\\*+5678');
   const email = redactFreeText('收款账号 ｚｈａｎｇｓａｎ＠ｅｘａｍｐｌｅ．ｃｏｍ 已核');
-  expect(email.normalize('NFKC')).toBe('收款账号 zh***@example.com 已核');
+  expect(email.normalize('NFKC')).toBe('收款账号 ***@example.com 已核');
   expect(email).not.toContain('ｈａｎｇｓａｎ');
+  expect(email).not.toContain('ｚｈ');
 });
 
 it('[AC-B2-02zg#6] 归一 · 横线：U+2212 减号与其他横线（‐ ‑ ‒ – — ― ﹣ －）当分隔，分组的长数字连成一串判；连续、混用的分隔同样', () => {
@@ -209,7 +209,7 @@ it('[AC-B2-02zg#10] 位置映射：NFKC 展开的兼容字符（㎡ ㎏ ① Ⅻ 
       '邮箱 zhangsan@example.com 已核，参考号 8427359012345。',
   );
   expect(out).toMatch(
-    /^规格 ㎡㎏①Ⅻ：证件 1\*{16}X，手机 138\*{4}5678，邮箱 zh\*{3}@example\.com 已核，参考号 \*+2345。$/u,
+    /^规格 ㎡㎏①Ⅻ：证件 1\*{16}X，手机 138\*{4}5678，邮箱 \*{3}@example\.com 已核，参考号 \*+2345。$/u,
   );
   expect(redactFreeText('（备注：面积120㎡，手机13812345678）')).toBe(
     '（备注：面积120㎡，手机138****5678）',

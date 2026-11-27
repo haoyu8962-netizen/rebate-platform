@@ -11,8 +11,13 @@
 // - Normalise: Unicode NFKC; every dash / minus (U+2212 included) and every white space (NBSP,
 //   U+202F, ideographic space, tab included) is one separator. `/ . , _` are no separators.
 // - Recognised types, BR-ID-33 default shapes: mobile 3 + 4 (138****5678), identity number first 1 +
-//   last 1 (1****************X), card only its last four, e-mail-shaped text two characters of the
-//   local part + 「***」 with "@" and the domain shown (zh***@example.com; 细则「收款账号的脱敏格式」).
+//   last 1 (1****************X), card only its last four.
+// - E-mail-shaped text in free text (写测 4, 负责人 2026-11-27, 编排 D10-3427 ④ / D10-3428; the 细则
+//   「收款账号的脱敏格式」 two-character shape stays for structured payout fields only): everything from
+//   the "@" leftwards up to white space or the start of the text becomes 「***」 whole; "@" and a
+//   recognised domain are shown, what follows the domain stays (zhangsan@example.com →
+//   ***@example.com); with no recognised domain the "@" and its right side up to white space or the
+//   end go too, only 「***」 is left.
 // - Anything else: separators taken out, a run of 11 or more digits (maybe a final X / x) shows only
 //   its last four — order numbers, references, numbers failing Luhn, identity numbers with a wrong
 //   check character or no date, long digit runs glued to letters. Fewer than 11 digits stay.
@@ -23,8 +28,8 @@
 //
 // No card or long number shares a run of 8 digits with any other number written into the same
 // record (fixed ids, no random ones), so the digits-only check cannot be tripped by the numbers kept
-// on purpose. Every e-mail is followed by white space, so where the e-mail-shaped text ends is not in
-// question. All samples are synthetic (documentation-style numbers, example.* domains).
+// on purpose. Every e-mail is preceded and followed by white space, so where the e-mail-shaped text
+// starts and ends is not in question. All samples are synthetic (documentation-style numbers, example.* domains).
 import { expect } from 'vitest';
 
 /** The opening of every free text sample; the tag after it tells the records apart. */
@@ -57,13 +62,13 @@ export const ID_OLD_MASKED = /旧证件 1\*+2，/;
 /** 15 digits, 7th–12th 871345 (month 13, no date): the fallback, only 5123 shows. */
 export const ID_OLD_BAD_DATE = '440301871345123';
 export const EMAIL = 'alice.w@example.com';
-/** Two characters of the local part, 「***」, "@" and the domain as written. */
-export const EMAIL_MASK = 'al***@example.com';
+/** The local part up to the white space before it as 「***」 whole, "@" and the domain as written. */
+export const EMAIL_MASK = '***@example.com';
 /** An address with a plus tag and a sub-domain. */
 export const EMAIL_PLUS = 'bob.lee+refund@mail.corp.example.cn';
-export const EMAIL_PLUS_MASK = 'bo***@mail.corp.example.cn';
+export const EMAIL_PLUS_MASK = '***@mail.corp.example.cn';
 export const EMAIL_C = 'carol.z@example.org';
-export const EMAIL_C_MASK = 'ca***@example.org';
+export const EMAIL_C_MASK = '***@example.org';
 
 /** 16-digit card grouped by spaces (Luhn total 60); its digits; its last four. */
 export const CARD_SPACED = '6222 0371 9584 7364';
@@ -353,7 +358,7 @@ export function sampleD(tag: string): Sample {
       /,证件1\*{16}X,手机/u,
       /,手机139\*{4}1111备注,面积/u,
       /,订单\*+5678,邮箱/u,
-      /,邮箱zh\*{3}@example\.com已核,路径/u,
+      /,邮箱\*{3}@example\.com已核,路径/u,
     ],
   };
 }
@@ -422,7 +427,7 @@ function runsOf8(digits: string): string[] {
  * taken out, a run of 8 or more digits of a card or long number (a regrouped number is still the
  * number); the free text is still there (at least one leaf with its opening) and each such leaf
  * holds none of the free-only plain values, keeps the non-personal words, the numbers too short to be
- * masked, the mobile, identity and e-mail masks, shows of each card or long number only its last
+ * masked, the mobile, identity and e-mail masks (an e-mail's local part 「***」 whole), shows of each card or long number only its last
  * four digits, and holds no identity number's last four characters. Returns those leaves.
  */
 export function expectRedacted(record: AuditRecord, sample: Sample): Leaf[] {

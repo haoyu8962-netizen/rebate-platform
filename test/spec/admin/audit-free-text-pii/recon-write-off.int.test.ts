@@ -17,7 +17,7 @@ import { expectRedacted, sampleB } from './kit.ts';
 
 const s = suite();
 
-it('[AC-B2-02ze#2] 差错核销的备注里写了带加号与子域的邮箱、校验位正确的 18 位纯数字身份证、日期合法的 15 位老身份证、连字符分组且过 Luhn 的卡号、手机号：核销照常成功，recon_diff_write_off 审计全文不含任何一项明文；备注仍在（说明文字保留，邮箱 bo***@mail.corp.example.cn、手机 139****1111、两种证件都只留首末各 1 位、卡号只露末 4 位；校验位错的 18 位号与日期不合法的 15 位号按兜底只留末四位，B2-02zg D10-3266）；结构化的提现单号与状态原样', async () => {
+it('[AC-B2-02ze#2] 差错核销的备注里写了带加号与子域的邮箱、校验位正确的 18 位纯数字身份证、日期合法的 15 位老身份证、连字符分组且过 Luhn 的卡号、手机号：核销照常成功，recon_diff_write_off 审计全文不含任何一项明文；备注仍在（说明文字保留，邮箱 @ 前整段遮成 ***@mail.corp.example.cn、手机 139****1111、两种证件都只留首末各 1 位、卡号只露末 4 位；校验位错的 18 位号与日期不合法的 15 位号按兜底只留末四位，B2-02zg D10-3266）；结构化的提现单号与状态原样', async () => {
   const f = fixture(s);
   const c = await seedCase(f);
   await withWriteOffAdmin(f, async (h) => {

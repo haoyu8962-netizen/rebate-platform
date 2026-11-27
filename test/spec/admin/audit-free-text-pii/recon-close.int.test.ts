@@ -16,7 +16,7 @@ import { expectRedacted, sampleA } from './kit.ts';
 
 const s = suite();
 
-it('[AC-B2-02ze#1] 关差错单的原因里写了邮箱、18 位身份证（末位 X）、空格分组且过 Luhn 的银行卡号、手机号：关闭照常成功，recon_diff_close 审计的 before / after 全文不含任何一项明文；原因仍在（说明文字保留，邮箱 al***@example.com、手机 138****5678、证件 1****************X、卡号只露末 4 位；同长同分组但不过 Luhn 的对照号按兜底也只留末四位，B2-02zg D10-3266）；差错单 id、状态与解冻数原样', async () => {
+it('[AC-B2-02ze#1] 关差错单的原因里写了邮箱、18 位身份证（末位 X）、空格分组且过 Luhn 的银行卡号、手机号：关闭照常成功，recon_diff_close 审计的 before / after 全文不含任何一项明文；原因仍在（说明文字保留，邮箱 @ 前整段遮成 ***@example.com、手机 138****5678、证件 1****************X、卡号只露末 4 位；同长同分组但不过 Luhn 的对照号按兜底也只留末四位，B2-02zg D10-3266）；差错单 id、状态与解冻数原样', async () => {
   const f = fixture(s);
   await withCloseAdmin(f, async (h) => {
     const diff = await seedDiff(f, {

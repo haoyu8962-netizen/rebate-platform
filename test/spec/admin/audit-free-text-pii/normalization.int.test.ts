@@ -31,7 +31,7 @@ const IDEMPOTENCY_KEY = '2026112109876549';
 /** A refund number with a 16-digit run: structured, kept. */
 const OUT_REFUND_NO = 'RF2026112187654322';
 
-it('[AC-B2-02zg#12] 系统审计 appendAction 的自由文本先归一再打码：全角数字手机号 3+4、U+2212 分组的卡号与 NBSP / U+202F / 全角空格分组的长数字只留末四位、末位 X 前带空格的证件首 1 末 1、紧跟「-备注」的手机号 3+4、全角订单号只留末四位、全角 ＠ 邮箱 zh***@example.com，都不以明文落库；兼容字符（㎡、①）与「/」分组的数字原样，说明文字保留；结构化的订单号、退款单号、纯数字幂等键、13 位金额、提现单号与 target 原样', async () => {
+it('[AC-B2-02zg#12] 系统审计 appendAction 的自由文本先归一再打码：全角数字手机号 3+4、U+2212 分组的卡号与 NBSP / U+202F / 全角空格分组的长数字只留末四位、末位 X 前带空格的证件首 1 末 1、紧跟「-备注」的手机号 3+4、全角订单号只留末四位、全角 ＠ 邮箱 @ 前整段遮成 ***@example.com，都不以明文落库；兼容字符（㎡、①）与「/」分组的数字原样，说明文字保留；结构化的订单号、退款单号、纯数字幂等键、13 位金额、提现单号与 target 原样', async () => {
   const db = s.db();
   const clock = new FixedClock('2026-11-26T02:00:00.000Z');
   const reason = sampleD('壬');

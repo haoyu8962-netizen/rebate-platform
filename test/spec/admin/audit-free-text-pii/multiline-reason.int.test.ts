@@ -5,7 +5,8 @@
 // rejection uses it. The reason carries a Luhn card wrapped by CR LF between its groups, a non-Luhn
 // number grouped by U+2028 / LF / CR, a mobile number and an identity number split over lines, an
 // identity number with a wrong check character whose lower-case x is on the next line (the fallback,
-// S1-③), an e-mail address inside full-width brackets (S1-②) and an order number split over two
+// S1-③), an e-mail address inside full-width brackets (S1-②; masked from its "@" leftwards up to
+// the line break, D10-3427 ④) and an order number split over two
 // lines. The same reason lands in before.reason and after.detail.note. Real pieces: the writer and
 // PostgreSQL through ../../payment/orders/kit.ts (couli_app, a fresh database per file). Every id is
 // fixed. Top-level it() only.
@@ -79,7 +80,9 @@ const MULTILINE: Sample = {
     ORDER16,
   ],
   idTails: [ID_X.slice(-4)],
-  kept: [OPENING_TAG, '多行原因，第一行说明\n卡号', `邮箱（${EMAIL_MASK}）已核；订单`, CLOSING],
+  // The e-mail (写测 4, D10-3427 ④): from its "@" leftwards up to the line break, 「邮箱（alice.w」
+  // becomes 「***」 whole; "@", the domain and 「）」 stay.
+  kept: [OPENING_TAG, '多行原因，第一行说明\n卡号', `，\n${EMAIL_MASK}）已核；订单`, CLOSING],
   shapes: [],
   // Squeezed: NFKC (，→ , （→ ( ）→ ) ；→ ;), then white space — line breaks included — and dashes out.
   squeezedShapes: [
@@ -87,12 +90,12 @@ const MULTILINE: Sample = {
     /,对照号\*+2196,手机/u,
     /,手机138\*{4}5678,证件/u,
     /,证件1\*{16}X,备查/u,
-    /,备查\*+003x,邮箱/u,
-    /,邮箱\(al\*{3}@example\.com\)已核;订单\*+5678,已当面核实/u,
+    /,备查\*+003x,\*{3}@/u,
+    /,\*{3}@example\.com\)已核;订单\*+5678,已当面核实/u,
   ],
 };
 
-it('[AC-B2-02zg#18] 多行原因落库：换行（LF、CR LF、CR、U+2028）当分隔——跨行的过 Luhn 卡号只留末 4、跨行的不过 Luhn 长号与订单号只留末四位、跨行的手机号 3+4、跨行的证件首 1 末 1、校验位错且小写 x 在下一行的证件号只留 003x、全角括号里的邮箱 al***@example.com 且括号原样，before.reason 与 after.detail.note 都不以明文落库；说明文字与换行外的行文保留，提现单号与 target 原样', async () => {
+it('[AC-B2-02zg#18] 多行原因落库：换行（LF、CR LF、CR、U+2028）当分隔——跨行的过 Luhn 卡号只留末 4、跨行的不过 Luhn 长号与订单号只留末四位、跨行的手机号 3+4、跨行的证件首 1 末 1、校验位错且小写 x 在下一行的证件号只留 003x、全角括号里的邮箱从 @ 左到换行整段换成「***」（「邮箱（」一起遮）、@ 与域名照常显示、右括号原样，before.reason 与 after.detail.note 都不以明文落库；说明文字与换行外的行文保留，提现单号与 target 原样', async () => {
   const db = s.db();
   const clock = new FixedClock('2026-11-26T02:00:00.000Z');
 
