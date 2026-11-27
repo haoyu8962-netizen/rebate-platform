@@ -1,0 +1,37 @@
+id: CT-11bvb
+repo: rebate-platform
+title: 截图基准重录（FU-CT11BV-REBASELINE）：17 张 H5 / 后台截图基准照主干新截图重录（令牌 v0.5.3 与 11-07 以来合并的页面改动），admin-orders-light 暂缓
+type: impl
+# 2026-11-27 入账（前端线 fe；编排 D10-3369 / D10-3562 甲 / D10-3564 甲，照 CT-11bv / D10-3145 走非 task 分支 chore/CT-11bvb-rebaseline、台账同 PR，编排按 approvals #24 核图后加 owner 标签）。
+# 来由：18 张基准都是 2026-11-07 DSX-50（#2595）入库，此后没重录；CT-11bv（#891）把令牌升到 v0.5.3（浅色底色、字号行高等）时没重录（D10-3369 取乙，测试机当时不导出比对报告）。CT-06zzzzzzzo（#940）加了导出后，主干 22ca1c123129 上 --browser（CT-11bv run 2）报 18 张全超 1% 阈值；稳定性两项重复差 0%、变异检查有效，渲染确定。清单与理由 couli-runs/FU-CT11BV-REBASELINE/over-threshold.md。
+# 只做（写死）：17 张基准换成该次运行导出的 images/<名>.actual.png（逐字节复制，文件名不变）；不改测试代码、阈值、夹具。截图所在主干到本分支基点之间没有改动 apps/h5、apps/admin、packages/ui-tokens、bridge-sdk、文案与令牌契约、visual-baseline 测试。
+# 暂缓：admin-orders-light.png 不录——新截图里同步状态行是「同步状态读取失败」（夹具没供该读接口），返利状态列 UNATTRIBUTED 标签被固定【操作】列遮住一截；登 FU-ADMIN-ORDERS-STATUS-TAG-CLIP（补夹具 + 查遮挡是否真版式问题，真问题修页面），修好后再录这一张（D10-3562）。
+# modify_existing 不适用：support 条目要 before / after sha256 与 reverse_red，截图比对只报告不挡、没有测试会因换图变红（D10-3564）；文件名逐个列在 paths（test_paths 只给目录，实际只许改 paths 里这 17 个）。提交前照 D10-3369 人工看了 H5 列表（消息）与订单（找回）页的新图，无遮挡、截断、错字。
+refs: []
+refs_hash: {}
+deps: [CT-11bv]
+paths:
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-rules-light.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-rules-dark.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-help-light.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-help-dark.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-notices-light.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-notices-dark.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-earnings-light.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-earnings-dark.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-find-order-light.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-find-order-dark.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-messages-light.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-messages-dark.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-invite-light.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/h5-invite-dark.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/admin-login-light.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/admin-dashboard-light.png'
+  - 'test/spec/frontend/visual-baseline/__baselines__/admin-withdrawals-light.png'
+test_paths:
+  - 'test/spec/frontend/visual-baseline/__baselines__/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+status: todo
