@@ -1,0 +1,28 @@
+id: CT-18d
+repo: rebate-platform
+title: '契约与 H5（2026-11-26 同类实践对照补缺 C2，破坏性升级）：media.saveImage 结果改为逐张状态摘要（规划/04 §9）、桥结算一致性 3 类场景（RA-03）、H5 邀请页与冻结测试同步原子升级'
+type: contract
+# 2026-11-27 be 起草入账（编排 D10-3434 / D10-3435；依据 couli docs/changes/20261126-同类实践对照补缺.md §2，范围 couli-runs/CT-26zs/scope.md 的 C2）；执行归 fe，排在 F1-08ef 之后；deps CT-26zs（C1 的 share.save_images.partial / .failed 文案键）。动 contracts/ 前登契约槽。
+# ① contracts/bridge.schema.json：media.saveImage 的 result 由 {saved} 直接替换为 {total, succeeded, failed, cancelled, items: [{index, status, reason?}]}，status 取 saved | failed | cancelled，没有 url（严格照规划/04 §9，拆单底稿第 93 行的 url 不采纳）；urls 上限仍 9 张；重生成 packages/contracts-ts/src/bridge.gen.ts。
+# ② apps/h5 邀请页 invite-page.tsx 按新形状判：succeeded = 0 或有 cancelled / failed 时不报成功，部分成功 / 全失败按 share.save_images.partial / .failed 提示，相册权限被拒仍按 BR-ID-13 提示；apps/h5/src/entries/conformance/cases.ts 补 RA-03 三类场景（响应计数、授权后与拒绝后、不同宿主）。
+# ③ 冻结测试须与 H5 原子升级：test/spec/frontend/h5-invite/**（[AC-F1-05a-POSTER#3] 钉 saved=false、invite-fixtures 默认应答 {saved: true}），以及底稿漏的 test/spec/frontend/h5-conformance/kit.ts、test/spec/frontend/h5-image/trunk/invite-page.tsx.txt（bundle.test 用的邀请页主干副本）——fe 写测前跑探针定冻结块清单，以台账补丁补登 modify_existing，按 approvals #24 编排核后加标签。
+refs: [BR-TEXT-14, BR-ID-13]
+refs_hash:
+  BR-TEXT-14: e029c2349c51
+  BR-ID-13: 543d698b66e7
+contract_sections: ['9']
+deps: [CT-26zs]
+paths:
+  - 'contracts/bridge.schema.json'
+  - 'packages/contracts-ts/**'
+  - 'apps/h5/src/entries/app/pages/invite/invite-page.tsx'
+  - 'apps/h5/src/entries/conformance/**'
+test_paths:
+  - 'test/spec/contracts/bridge-save-image-and-settlement/**'
+impl: claude
+tester: claude-independent
+accept:
+  - 'pnpm verify'
+  - 'test/spec/contracts/bridge-save-image-and-settlement/**'
+status: todo
+pr: null
