@@ -9,6 +9,7 @@ type: impl
 #   ⑦ 判分器 packages/evals/src/grade.ts 对应 ① ③ ⑤ 三处同口径；grade.ts 里 banned_word_in_text 的 TODO 注释改指 FU-EVALS-BANNED-WORD-STAT。
 # 不做：禁用词、filter_hits 取值、读配置键（B3-06e）；判分器的禁用词统计（FU-EVALS-BANNED-WORD-STAT）；模型给的检索词不加新检查项（q_short 仍走现有 filterSegment，新金额式随之生效）；三端客户端兜底、后台页面、契约、迁移。评审范围外的发现一律 out_of_scope（D10-2596）。
 # 冻结用例：入账前探针 couli-runs/B3-06d/probe/（基 2f3d8a9a3 + 原型四个文件）——evidence-check --early problems 0；测试机 --tests 487 个文件 5570 条全绿（test/spec/agent 全部、test/spec/evals* 七个目录、agent 模块单测；属性测试按默认次数），没有冻结用例块要改，本单不带 modify_existing。规则测试全部是新目录下的新文件（可先红；--red 读主干台账，入账前跑不了）。
+# 2026-11-27 置 void（agent，编排 D10-3414 丙 / D10-3419 / D10-3432）：并入 B3-06e——码评审（Codex general）三轮未收敛（fail / fail / fail），第 3 轮查出本单引入的退步（行末数字串把已完整的金额切开，如「只要29块9⏎包邮」漏出角位）；没有落地，分支没推过远端。规则测试四笔（247 条，头 28d96794c338）与实现三笔（头 192fc35be471）由 B3-06e 搬到新分支作起点；approvals 第 228、229 条已用完、随本单作废；计数留在本单名下（写测 3 / 3、规则测试评审 2 / 2 + 第 228 条、实现 3 / 3 + 第 229 条、码评审 3 / 3，Codex 调用 6 次），运行产物原样留在 couli-runs/B3-06d/。
 refs: [BR-AI-06]
 refs_hash:
   BR-AI-06: bf97647decbd
@@ -28,4 +29,4 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/agent/output-guard-addenda/**'
-status: todo
+status: void

@@ -1,0 +1,40 @@
+id: B3-06e
+repo: rebate-platform
+title: 'B3-06e（接手 B3-06d）：B5 出站过滤补条（BR-AI-06 细则补条 + BR-TEXT-13）——补条一全部（不带单位的价格、价格区间、换行与行末数字串、大写角位、复制 / 口令之后的裸串、缓冲上限与线性时间、判分器同口径）并修行末金额被切开的退步；禁用词丢句、命中类型 banned_word（迁移）、读 agent.guard.buffer_max_chars'
+type: impl
+# 2026-11-27 agent 线入账（编排 D10-3414 丙 / D10-3419 / D10-3432；范围 couli-runs/AGENT-lane/b5-merge-scope-1127.md；接手先例 B3-09m → B3-09o）。来由照实记：B3-06d（B5 补条一）的 Codex general 码评审三轮都 fail（第 1 轮 4 S1 → 第 2 轮 1 S1 + 1 S2 → 第 3 轮整份 2 S1），第 3 轮的一条是 B3-06d 自己引入的退步（行末数字串把已完整的金额切开）；照止损（D10-2592 / D10-3412：非 S0 不开追加条目续轮次）暂停、置 void 并入本单，原定 B3-06e 的内容（禁用词丢句、banned_word、读配置键）一并做。本单常规计数从头算（写测 3、规则测试评审 2、实现 3、资金评审 3）——不是为了重置次数：并单面明显大于原 B3-06d，编排向负责人照实报这一单三轮没收住、并进了下一张（D10-3419）；非 S0 不开追加，3 轮内没收住就登 FU 或暂停。
+# 带过来的与分支排法（D10-3432 (3)；与 B3-09o「原样带提交、在头上接着改」不同——red-check 要求基点上不存在的规则测试文件每条都红，旧实现不能排在规则测试前面）：task/B3-06e = 最新主干 + cherry-pick task/B3-06d 的规则测试四笔（test/spec/agent/output-guard-addenda/ 7 个文件 + kit.ts，247 条，原头 28d96794c338；B3-06d 名下过了三轮规则测试评审、末轮 pass；内容逐字节不变、哈希会变，旧 7 个文件与标题里的 AC-B3-06d 编号不改）+ 本单写测（新用例全放新文件、编号 AC-B3-06e）→ spec_commit → cherry-pick 旧实现三笔（690af1b48 / ade04827a / 192fc35be，原头 192fc35be471）作实现起点 → 本单实现轮在上面改。两次搬运由本线做、过提交钩子，不计写测 / 实现次数，证据里写明；旧 247 条在新基上重跑先红。
+# 已定口径（照用）：D10-3347（读法甲——只换数字、触发词保留；行末数字串留到下一段；上限只管 BR 点名的两种扣住；三种扣住都须线性时间；大写角位含「壹…玖」与「兩」；禁用词不管检索词）；D10-3352（金额式空白只指空格、制表符、全角空格）；D10-3368（到上限按一句处理、不计句；三种空白按 NFKC 折叠后的字符集）；D10-3374（行末数字后的水平空白视同没有）；D10-3349（属性测试超时写数字字面量 900_000）；D10-3432 (1)：触发词后跟中文数字不算命中，只认阿拉伯数字（含全角与小数），规则测试钉一条反例后关 FU-AGENT-BARE-PRICE-CN-NUMERAL。
+# 只做：① B3-06d「只做」七项原样（见 ops/tasks/B3-06d.yaml）。② 必修 FU-B3-06D-LINE-TAIL-CUTS-HIT：行末切点落在过滤器命中之内就退到命中起点，区间左端回溯用过滤器同一套数字边界（千分位）；主干已做对的输入在新边界上不回退——「只要29块9⏎包邮」「满100减20⏎包邮」「3块5⏎」「到手 29⏎」「约1,000 - 2,000⏎元」等期望取主干输出，写进规则测试层；另加属性测试：完整金额片段与不含数字的填充随机拼接、任意切一刀，输出不含阿拉伯数字（只读探针 couli-runs/AGENT-lane/b5-probe/probe11.mts：主干 4,000 例 0 例违反，B3-06d 头 330 例违反）。 ③ FU-AGENT-GUARD-BUFFER-NFKC-CLASS：缓冲判「水平空白」「区间连接符」改用 NFKC 折叠后的口径，与过滤器一致（四种形状写进规则测试）。④ 规则测试层补 B3-06d 登的缺口：FU-B3-06D-SPEC-LINEBREAK-INDENT、FU-B3-06D-SPEC-LINE-TAIL-TRAILING-SPACE、FU-B3-06D-SPEC-COPY-DIGITS-CAP、FU-B3-06D-SPECTEST-R3-S2。
+#   ⑤ 禁用词丢句（BR-AI-06 补条 + BR-TEXT-13）：模型说明文字按句判；命中句所在的那一段及这一句其后各段不下发；词被切点劈开的，用「已下发尾巴 + 本段」拼接判；丢掉的段不送内容审核；判定用过滤前原文；丢句里的「复制 / 口令」仍计入记忆；句数按丢句前计；不管模型给的检索词；不带白名单。判定经端口注入（guard 目录不依赖 content，[AC-B3-06a#24]），取 content/index.ts 现成的 findBannedWords / getBannedWords（不改 content）；端口在编排核心是可选的、只在生产流装配（stream/mount）接上，没接时行为与现在相同。 ⑥ 命中类型 banned_word 一路放开：guard/filter.ts 的 FilterHit → orchestrator/core/ports.ts → stream/mount/trace.ts（现写死三种，会把新值丢掉）→ store/results → 库约束 agent_runs_filter_hits_check（新迁移，只放宽取值）；契约已有该枚举值，不改契约。⑦ 读 agent.guard.buffer_max_chars（config-registry 已登记、无人读）：缺省或非法值用 2000，传给 createOutputGuard 的 bufferMaxChars。
+# 不做（评审范围外的发现一律 out_of_scope，D10-2596）：FU-AGENT-GUARD-DIGIT-PASSCODE-AT-CAP（数字口令前缀落在缓冲上限，D10-3432 (2) 继续挂 FU）；判分器的禁用词统计（FU-EVALS-BANNED-WORD-STAT）；禁用词表本身与 content 模块；app.module.ts；后台页面、契约、三端客户端兜底。
+# 冻结用例（入账前只读普查，没有做原型实跑——照实）：modify_existing 预计 0。库约束用例 [AC-B3-09a#11] 的拒收值是空串 / unknown / AMOUNT / URL / TPWD / null，不含 banned_word，放宽后不红。20 个禁用词在 test/spec/agent、test/replay、test/properties、packages/evals 里的出现逐行看过：核心级用例（createAgentRunBody 配合成端口，如 core-reply-templates-tighten 里期望下发的模型文本「…这笔订单已返利到账。」）不接禁用词端口、行为不变；走生产流装配的用例里，含禁用词的模型文本只有 [AC-B3-08m#6] 一处、本就期望不下发。接线都在 stream/mount/** 内（agent-body.ts 组 AgentRunBodyDeps，配置经现有 AgentContentReader.configValue），不动冻结夹具 stream-mount/kit.ts。写测或实现中若发现要改冻结块，停下报编排补登记，不自行改。
+# 验收：旧 247 条与本单新用例全绿；第 ② 项各形状与属性测试、③ 四形状、④ 四条缺口、⑤（BR-TEXT-13 归一化向量逐条；命中句不下发、其余句与卡片照常；跨切点；丢句不送审；标记仍计入记忆）、⑥（留痕与库里读到 banned_word；库仍拒未知值）、⑦（生效、缺省 2000、非法值回落）；中文数字反例一条。合并后线上行为不变（生产仍是无模型路径，过滤器只在模型路径创建）。 风险级 RV2（含 db/**）→ 评审 money（清单多数项不适用，照实填）；证据门禁按改动路径算（D10-3414）。迁移号取 land 时主干下一个空号（D10-2828；0159 / 0160 已被 B1-08zza 登记），生成物走 LAN-DB-SNAPSHOT，land 前测试机五段全量（D10-2398）。送码评审前本线先做主干对照（probe8–11 在主干与实现头各跑一遍），有「主干不漏、实现漏」的先打回实现。Codex 调用熔断按本单新计。
+refs: [BR-AI-06, BR-TEXT-13]
+refs_hash:
+  BR-AI-06: bf97647decbd
+  BR-TEXT-13: 225ce1a6f17e
+deps: [B3-06a, B3-06b, B3-06c, B3-05s, B3-01c, B3-08t, F1-02r]
+paths:
+  - 'apps/api/src/modules/agent/guard/{filter,buffer,output-guard,index}.ts'
+  - 'apps/api/src/modules/agent/guard/*.test.ts'
+  - 'apps/api/src/modules/agent/orchestrator/core/{ports,run}.ts'
+  - 'apps/api/src/modules/agent/orchestrator/core/*.test.ts'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/agent/store/results/**'
+  - 'packages/evals/src/grade.ts'
+  - 'db/migrations/*_agent-runs-filter-hits-banned-word.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/agent/output-guard-addenda/**'
+  - 'test/spec/agent/output-guard-banned-word/**'
+  - 'test/spec/db/agent/filter-hits-banned-word.int.test.ts'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/output-guard-addenda/**'
+  - 'test/spec/agent/output-guard-banned-word/**'
+  - 'test/spec/db/agent/filter-hits-banned-word.int.test.ts'
+status: todo
