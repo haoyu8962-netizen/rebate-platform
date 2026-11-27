@@ -84,18 +84,43 @@ it('[AC-B2-05v#11-UNIT#6] read 的返回值仍恰好是三个字段（假查询�
   await db.destroy();
 });
 
-it('[AC-B2-05v#11-UNIT#7] bindingId：一条 SELECT 只取当前行的 id，没有当前行返回 null', async (): Promise<void> => {
-  const bound = stubDb([{ id: ROW_ID }]);
-  expect(await createWithdrawSubjectReader().bindingId(bound.db, SUBJECT)).toBe(ROW_ID);
-  expect(bound.queries).toHaveLength(1);
-  const [query] = bound.queries;
+it('[AC-B2-05v#11-UNIT#7] bindingIdOf：同一条 SELECT 取 id，read 返回的那个对象给出该行 id，同内容副本给 undefined', async (): Promise<void> => {
+  const { db, queries } = stubDb([CURRENT_ROW]);
+  const reader = createWithdrawSubjectReader();
+  const answer = await reader.read(db, SUBJECT);
+  expect(queries).toHaveLength(1);
+  const [query] = queries;
   expect(query!.sql).toBe(
-    'select "id" from "app"."payout_accounts" where "app_id" = $1 and "user_id" = $2 and "is_current" = $3',
+    'select "id", "payout_method", "payee_name", "alipay_hmac", "bank_card_hmac" from "app"."payout_accounts" where "app_id" = $1 and "user_id" = $2 and "is_current" = $3',
   );
   expect(query!.parameters).toEqual([SUBJECT.appId, SUBJECT.userId, true]);
+  expect(answer).not.toBeNull();
+  expect(Object.keys(answer!).sort()).toEqual(['payee_hmac', 'payee_name', 'payout_method']);
+  expect(reader.bindingIdOf(answer!)).toBe(ROW_ID);
+  expect(reader.bindingIdOf({ ...answer! })).toBeUndefined();
+  expect(
+    reader.bindingIdOf({ payout_method: 'alipay', payee_name: '合成姓名', payee_hmac: HMAC }),
+  ).toBeUndefined();
+  // Another reader never knows this reader's objects; bindingIdOf itself runs no query.
+  expect(createWithdrawSubjectReader().bindingIdOf(answer!)).toBeUndefined();
+  expect(queries).toHaveLength(1);
+  await db.destroy();
+});
+
+it('[AC-B2-05v#11-UNIT#9] bindingIdOf：每次 read 返回新对象，各记各的行 id；没有当前行时 read 返回 null', async (): Promise<void> => {
+  const reader = createWithdrawSubjectReader();
+  const older = stubDb([CURRENT_ROW]);
+  const newer = stubDb([{ ...CURRENT_ROW, id: '019a0000-0000-7000-8000-0000000000bb' }]);
+  const first = await reader.read(older.db, SUBJECT);
+  const second = await reader.read(newer.db, SUBJECT);
+  expect(first).toStrictEqual(second);
+  expect(first).not.toBe(second);
+  expect(reader.bindingIdOf(first!)).toBe(ROW_ID);
+  expect(reader.bindingIdOf(second!)).toBe('019a0000-0000-7000-8000-0000000000bb');
   const unbound = stubDb([]);
-  expect(await createWithdrawSubjectReader().bindingId(unbound.db, SUBJECT)).toBeNull();
-  await bound.db.destroy();
+  expect(await reader.read(unbound.db, SUBJECT)).toBeNull();
+  await older.db.destroy();
+  await newer.db.destroy();
   await unbound.db.destroy();
 });
 

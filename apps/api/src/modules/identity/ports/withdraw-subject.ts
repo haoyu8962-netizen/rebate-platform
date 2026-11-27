@@ -4,11 +4,12 @@
 // snapshot and the payee counts use (alipay_hmac for alipay, bank_card_hmac for a bank card). On the
 // caller's handle (a transaction included, READ ONLY as well): one SELECT, no cipher is read, no
 // writes, no logging. Nothing bound (or another app) → null.
-// B2-05v (BR-WDR-07 ④, D10-3619): `bindingId` gives the id of that same current row (a rebind
-// retires the row and inserts a new one, so an account rebound away and back has another id),
-// and the payee snapshot carries the id of the row it read; payout compares the two so a rebind
-// back to the same account between its first pass and its locks still re-runs the pass. `read`'s
-// own answer is unchanged (three fields).
+// B2-05v (BR-WDR-07 ④, D10-3619): the same SELECT also reads the row's id (a rebind retires the
+// row and inserts a new one, so an account rebound away and back has another id). `read`'s answer
+// is still the three fields; the reader remembers, in a WeakMap keyed by that very object, which
+// row it came from, and `bindingIdOf` gives it back (synchronously, no query). The payee snapshot
+// carries the id of the row it read; payout compares the two, so the id and the account the first
+// pass judged come from one row of one SELECT.
 //
 // Also compiled by the `test` project (through ../index.ts): erasable syntax only, `import type`
 // for type-only imports, relative imports with `.ts`.
@@ -30,19 +31,21 @@ export interface WithdrawSubjectReader {
     subject: { appId: string; userId: string },
   ): Promise<WithdrawSubject | null>;
   /**
-   * B2-05v: the id of the member's current payout_accounts row (same condition as `read`), or
-   * null when nothing is bound. One SELECT on the caller's handle, no cipher, no writes, no logging.
+   * B2-05v: the id of the payout_accounts row a `read` of this reader returned `subject` from —
+   * that very object only; a copy, or an object built elsewhere, gives undefined. No query.
    */
-  bindingId(handle: Kysely<DB>, subject: { appId: string; userId: string }): Promise<string | null>;
+  bindingIdOf(subject: WithdrawSubject): string | undefined;
 }
 
 export function createWithdrawSubjectReader(): WithdrawSubjectReader {
+  /** Each object `read` returned → the id of its row (never on the object itself). */
+  const rowIds = new WeakMap<WithdrawSubject, string>();
   return {
     async read(handle, subject) {
       const row = await handle
         .withSchema('app')
         .selectFrom('payout_accounts')
-        .select(['payout_method', 'payee_name', 'alipay_hmac', 'bank_card_hmac'])
+        .select(['id', 'payout_method', 'payee_name', 'alipay_hmac', 'bank_card_hmac'])
         .where('app_id', '=', subject.appId)
         .where('user_id', '=', subject.userId)
         .where('is_current', '=', true)
@@ -55,18 +58,16 @@ export function createWithdrawSubjectReader(): WithdrawSubjectReader {
       const hmac = method === 'alipay' ? row.alipay_hmac : row.bank_card_hmac;
       // payout_accounts_details_check guarantees the HMAC of the row's own method.
       if (hmac === null) throw new Error('identity: payout account row without its account HMAC');
-      return { payout_method: method, payee_name: row.payee_name, payee_hmac: hmac };
+      const answer: WithdrawSubject = {
+        payout_method: method,
+        payee_name: row.payee_name,
+        payee_hmac: hmac,
+      };
+      rowIds.set(answer, row.id);
+      return answer;
     },
-    async bindingId(handle, subject) {
-      const row = await handle
-        .withSchema('app')
-        .selectFrom('payout_accounts')
-        .select('id')
-        .where('app_id', '=', subject.appId)
-        .where('user_id', '=', subject.userId)
-        .where('is_current', '=', true)
-        .executeTakeFirst();
-      return row === undefined ? null : row.id;
+    bindingIdOf(subject) {
+      return rowIds.get(subject);
     },
   };
 }

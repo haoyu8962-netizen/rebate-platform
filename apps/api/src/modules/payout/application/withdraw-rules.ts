@@ -123,15 +123,16 @@ export interface WithdrawRulesOptions {
       payee_hmac: string;
     } | null>;
     /**
-     * B2-05v (BR-WDR-07 ④, D10-3619): the id of the member's current binding row, or null when
-     * nothing is bound. Read by the application once per pass, before the risk flags; compared
-     * with the snapshot's binding_id under the locks, never stored, logged or published.
-     * Absent in hand-built assemblies: then only the HMAC and the method are compared.
+     * B2-05v (BR-WDR-07 ④, D10-3619): the id of the binding row that `read` returned `subject`
+     * from (the same SELECT) — for that very object only; anything else gives undefined. Compared
+     * by the application with the snapshot's binding_id under the locks, never stored, logged or
+     * published. Absent in hand-built assemblies: then only the HMAC and the method are compared.
      */
-    bindingId?(
-      handle: Kysely<DB>,
-      subject: { appId: string; userId: string },
-    ): Promise<string | null>;
+    bindingIdOf?(subject: {
+      payout_method: 'alipay' | 'bank_card' | 'wechat';
+      payee_name: string;
+      payee_hmac: string;
+    }): string | undefined;
   };
   laborAgreementSigned(
     handle: Kysely<DB>,
