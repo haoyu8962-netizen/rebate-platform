@@ -1,0 +1,34 @@
+id: B2-05va
+repo: rebate-platform
+title: 'test-change（B2-05v 伴随测试单）：提现建单锁内复核的三条实现必满足项补到规则测试层——锁内不重判方式单笔上限、比较收款账号时同时看收款方式、第一轮判的绑定行与锁内不是同一行时三遍用尽返回 50001'
+type: test-change
+# 2026-11-28 funds 线入账（编排 D10-3636、D10-3659；B2-05v 已合并 #992）。走 D10-2264：非 task 分支的 test-change PR + 探针清单。
+# 来由：B2-05v 有三条要求当时没有规则测试钉、只由实现方单元测试钉着，评审点名：
+#   ① 锁内复核（validateLockedWithdrawal）不重判 BR-WDR-03 ⑨ 的方式单笔上限（规则测试评审 r1 S2，FU-B2-05V-SPEC-LOCKED-METHOD-CAP）；
+#   ② 比较第一轮与锁内的收款账号时同时看 HMAC 与收款方式——同一 HMAC 换了方式也整遍重跑（同上）。两边都带绑定行 id 时「不是同一行」已先一步挡住，
+#     所以这一条要在一边不带 id 的装配上钉（收款人快照是手写的那种夹具），否则去掉方式比较的实现也过；
+#   ③ 第一轮判定用的账号行与锁内快照行是同一账号（HMAC、方式相同）的不同绑定行时也整遍重跑：前两遍换绑、第三遍第一轮之后换出再换回 → HTTP 500 / 50001、不建单不冻结，
+#     不是 200（资金评审 r2 S1，FU-B2-05V-SPEC-FIRST-PASS-ROW）。经真实 AppModule，用另一条数据库连接加锁做栅栏，写法可仿 production.int.test.ts 的 [AC-B2-05v#12]。
+# 做法：只新增 test/spec/payout/locked-recheck/companion/ 下的文件（locked-recheck/ 现有四个文件与 apply/kit.ts 等只读引用，不改任何冻结文件，不改实现）。金额写具体的整数分。
+# 实现已在主干（#992），新用例在主干上应为绿；有牙由探针清单证明，探针只在临时游离 worktree 上改实现、不提交，测试机 --tests 跑：
+#   P1 validateLockedWithdrawal 加上「申请额高于方式单笔上限 → 30303 above_method_max」→ 须杀 ①；
+#   P2 samePayeeAccount 去掉收款方式的比较（只比 HMAC，id 的比较保留）→ 须杀 ②；
+#   P3 runPass 里第一轮的绑定行 id 改为在算风险标签前另读一次当前账号再取（即资金评审 r2 指出的「两次查询」形态）→ 须杀 ③，且 [AC-B2-05v#11]、[#12] 仍绿（说明 ③ 钉的是它们钉不到的那一处）。
+#   每个探针杀到哪几条写进 PR 正文；杀不到的照实报。不登 red_exempt。
+# 规则测试由 Codex 写（照 risk-map）；规则测试评审由独立 Claude（claude-run.sh，第 36 条），按 review-spec-test.md「伴随测试单」一节评。本机不跑 vitest，走测试机 --tests（D10-2404）。
+refs: [BR-WDR-07, BR-WDR-03]
+refs_hash:
+  BR-WDR-07: 3eaedce150d8
+  BR-WDR-03: 15fa0e1361e5
+deps: [B2-05v]
+paths:
+  - 'test/spec/payout/locked-recheck/companion/**'
+test_paths:
+  - 'test/spec/payout/locked-recheck/companion/**' # 新目录
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/locked-recheck/**'
+status: todo
+pr: null
