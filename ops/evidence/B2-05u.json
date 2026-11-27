@@ -1,0 +1,95 @@
+{
+  "risk_note": "RV2 (B2-05u; orchestrator D10-3358 ②, D10-3401, D10-3458, D10-3490; BR-WDR-02 细则, BR-WDR-03, BR-WDR-07 ④). BR-WDR-02: once an app closes a payout method (withdraw.payout_methods), a member bound to that method gets 30305 on submitting a withdrawal (\"counts as no usable payout account\"); withdrawals already created are not affected. The binding half was on main; this task adds the withdrawal half. readWithdrawInput (payout/application/withdraw-rules.ts) reads the open set and, when the current account's method is not in it, hands the rule chain payout_method null: step ⑤ gives 30305 on both GET /v1/withdrawals/rules and POST /v1/withdrawals, the maximum is computed as unbound; the blocklist judgement, the payee's daily counts, the name comparison and the locks keep the real account, and the order of the checks is unchanged. Under the locks the submission refuses 30305 as well when the method was closed after the first pass (withdraw-apply.ts, before the locked re-check; BR-WDR-07 ④ re-runs ⑤ under the locks). The parser and the default set {alipay, bank_card} stay one copy in identity and are handed to payout by app.module as an optional structural port (payout imports nothing of identity, 规划/02 §4.1); without the port — hand-built test assemblies only — the switch is not read and the behaviour is main's; the rule tests run through the real AppModule. A missing config row is the default; an invalid value is the default with a warning. Review, batching, automatic payout, payout and retry code is untouched; the pure rule functions (payout/domain) are untouched. No migration. Contract: wording only — the meaning and sources of 30305 in error-codes.yaml and one sentence in each of the two withdrawal operations of openapi.yaml, generated files regenerated; no shape, code or enum changes (contract slot held by this task, released at merge). No amount is computed differently and no voucher is written by a new path: a refused submission creates no withdrawal and freezes nothing. Pinned by the implementer's unit tests only, to become rule tests after this PR (FU-B2-05U-SPEC-EXISTING-AND-MISSING-ROW): the missing config row, no other payout code path reading the switch, and the closed-after-the-first-pass refusal under the locks. Open follow-ups: FU-WDR-PAYOUT-METHODS-CONFIG-SERIALIZE (the S2 of money review r2), FU-WDR-LOCKED-RECHECK-56 (the other gaps of the locked re-check, orchestrator D10-3494, a task of its own), FU-WDR-CLOSED-METHOD-HINT (a dedicated message, after launch). The sharded run was made on base c962cbfe6d16; when this evidence was built main had gained 3 more commit(s): f4ee0b9fe test(spec): B1-08zzd 规则测试（Codex 写测 1） (#946); 22ca1c123 F1-01y：后台加 tiptap 3.31.4（core、pm、starter-kit、extension-image、react），供协议版本页正文编辑与只读显示 (#951); 439e3b9db test(spec): B1-08zzf 拼多多冻结夹具补 lk 与 links 行（74 块，块内补业务信息，断言与金额不动；新增 test/spec/orders/pdd-link-fixture. They change code outside the ledger: apps/admin/package.json, pnpm-lock.yaml, test/spec/commission/**, test/spec/orders/**, test/spec/settlement/** (29 file(s)); none of these files is changed by this task (no path in common, the rebase is conflict-free). The landed head is rebased over them and that combination was NOT re-run on the test machine (orchestrator D10-3563); the required CI checks, verify-int included, run on the PR head.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex via tools/agent/codex-run.sh, two regular rounds; heads are those before the final rebase (git range-diff: five commits \"=\"). r1 (full, head b7ee3aa2a = two rule-test commits plus implementation rounds 1 and 2): fail — S1 1: when the method is closed between the first pass and the locks, the read under the locks already has payout_method null but the locked re-check (⑦⑧⑩⑪⑫ only) did not look at it, so the withdrawal was created and the amount frozen. Implementation round 3 (4f783d091, ledger patch 2 for withdraw-apply*.ts, orchestrator D10-3490) refuses 30305 right after the locked read. r2 (incremental from b7ee3aa2a, head 4f783d091): pass — the reviewer states the S1 closed; S2 1: a config change committed after the locked read of the switch and before the insert is not serialised with the creation; the key is not an admin-writable config today, so only a direct database write can interleave there — follow-up FU-WDR-PAYOUT-METHODS-CONFIG-SERIALIZE. Nothing out of scope in either round; the trusted validation moved nothing and recomputed no verdict (couli-runs/B2-05u/review-money-r{1,2}-codex.json). Implementation history: round 1 (8123a1ba0) imported identity's index.ts in payout's withdraw-rules.ts as the lane session's brief had said, which the test machine caught on the frozen test [AC-B2-08c#wiring] (payout sources import nothing of identity); round 2 (b7ee3aa2a, ledger patch 1 for app.module.ts, orchestrator D10-3458) hands the parser in through app.module instead. Test machine before the rebase: head 8123a1ba0 --tests payout / identity / contracts 612 files / 6375 tests with that one failure; head b7ee3aa2a --tests payout / contracts 344 files / 3456 tests green and --fast exit 0; head 4f783d091 the same directories green and --fast exit 0."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (ledger tester codex, tools/agent/codex-run.sh), two counted rounds: [AC-B2-05u#1]–[#7] in test/spec/payout/closed-method/closed-method.int.test.ts (through the real AppModule) and [#8] in contract.test.ts; red on main (11 red, the second run with the type check of the test project). A first attempt was voided and redone (orchestrator D10-3433): the lane session's brief had said a refused submission leaves no idempotency record, against BR-WDR-07 (3xxxx results are stored); the second counted round only corrected one import path that failed the type check. Codex does not review its own tests: a fresh independent Claude (tools/agent/claude-run.sh, approvals 36) reviewed them, r1 pass, no finding; two S2 placed out of scope by the reviewer (already created withdrawals on the later payout paths; a deleted config row) — implementation must-haves pinned by unit tests, follow-up FU-B2-05U-SPEC-EXISTING-AND-MISSING-ROW. The ledger declares no red exemption and no frozen-test change (couli-runs/B2-05u/review-spec-test-r1-claude-independent.json)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-05u",
+  "spec_commit": "b540803791d70b45e7300c5ea6e048dac62dfc71",
+  "spec_ref": "b3b8ff548af95078a744803e9d7461ee269ad448",
+  "red_tests": [
+    "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#1][AC-B2-05u#3] alipay 关闭时两个提现接口都返回 30305，重新开放后都通过",
+    "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#1][AC-B2-05u#3] bank_card 关闭时两个提现接口都返回 30305，重新开放后都通过",
+    "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#2] 关闭后提交 30305 不建单不冻结，原键跨配置变化重放首次错误，新键受理",
+    "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#4] 方式关闭时两个接口仍优先判断总开关 30306、未实名 30304 和收款账号黑名单 44001",
+    "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#5] 已关闭方式的可提上限按未绑定计算，开放时单方式上限为 3000 分",
+    "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#6] 空数组 按默认开放支付宝和银行卡，有效配置关闭后返回 30305",
+    "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#6] 含未知方式 按默认开放支付宝和银行卡，有效配置关闭后返回 30305",
+    "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#6] 含重复项 按默认开放支付宝和银行卡，有效配置关闭后返回 30305",
+    "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#6] 非数组 按默认开放支付宝和银行卡，有效配置关闭后返回 30305",
+    "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#7] 关闭后新申请被拒，旧单各列保留且后台审核通过结果与关闭前相同",
+    "test/spec/payout/closed-method/contract.test.ts > [AC-B2-05u#8] 错误码 30305 的来源包含 BR-WDR-02"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "b540803791d70b45e7300c5ea6e048dac62dfc71",
+      "tree": "5bfd23155eccc0e6a9101d60b98c673ac29d038a",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-27T12:39:46Z",
+      "finished_at": "2026-11-27T12:42:37Z",
+      "red_tests": [
+        "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#1][AC-B2-05u#3] alipay 关闭时两个提现接口都返回 30305，重新开放后都通过",
+        "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#1][AC-B2-05u#3] bank_card 关闭时两个提现接口都返回 30305，重新开放后都通过",
+        "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#2] 关闭后提交 30305 不建单不冻结，原键跨配置变化重放首次错误，新键受理",
+        "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#4] 方式关闭时两个接口仍优先判断总开关 30306、未实名 30304 和收款账号黑名单 44001",
+        "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#5] 已关闭方式的可提上限按未绑定计算，开放时单方式上限为 3000 分",
+        "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#6] 空数组 按默认开放支付宝和银行卡，有效配置关闭后返回 30305",
+        "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#6] 含未知方式 按默认开放支付宝和银行卡，有效配置关闭后返回 30305",
+        "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#6] 含重复项 按默认开放支付宝和银行卡，有效配置关闭后返回 30305",
+        "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#6] 非数组 按默认开放支付宝和银行卡，有效配置关闭后返回 30305",
+        "test/spec/payout/closed-method/closed-method.int.test.ts > [AC-B2-05u#7] 关闭后新申请被拒，旧单各列保留且后台审核通过结果与关闭前相同",
+        "test/spec/payout/closed-method/contract.test.ts > [AC-B2-05u#8] 错误码 30305 的来源包含 BR-WDR-02"
+      ],
+      "expected": [
+        "test/spec/payout/closed-method/closed-method.int.test.ts",
+        "test/spec/payout/closed-method/contract.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "0a3c136f1ba48b038fe8827d9f2a07d7094c90f020bad0131583d596b83247fe"
+        },
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "50e4cf892d3da360c198e491a4c8d4775cf78bb1514880e63cba2f414281e10b"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "9e91817f5d2a00e8dbfba34e2d7866c2049a94b0",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
