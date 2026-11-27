@@ -9,6 +9,7 @@ type: impl
 # 做法：① 锁内按 ④ 的顺序在 ⑦ 之前显式重判 ⑤⑥（码值与锁外同：实名 30304、收款账号 30305、姓名不一致 30307），判定放在锁内复核的纯函数里；② 锁内的收款账号（HMAC 与方式）与第一轮所读不同 → 整笔回滚、从第一轮重跑，
 #   重跑后 ⑨ 与风险标签自然按当前账号算；重跑次数上限与用尽后的返回码写进任务书前先报编排定。不改锁顺序，不改 ③a 黑名单只在第一轮判的口径，不带迁移，不动契约。
 # 冻结用例：test/spec/payout/apply/** 里钉「锁内只判 ⑦⑧⑩⑪⑫」的用例若因规则已改（D10-192 加 ⑤⑥）而红，入账后先在临时工作树上探一遍，按清单报编排核后以台账补丁登 modify_existing（rule_change，BR-WDR-07）。
+# 2026-11-27 补丁 1（funds，编排 D10-3590）：已定口径——账号不同整笔回滚重跑最多 2 次（共 3 遍），第 3 遍仍不同返回 50001、不建单不冻结、打 warn 工程日志；⑥ 码值与锁外同（30304 / 30305 / 30307）。冻结用例一处：apply/locked.test.ts 的 [AC-B2-05d#30] 钉着「实名未验、姓名不一致时锁内判定仍通过」，与 BR-WDR-07 ④（D10-192 加 ⑤⑥）相反，登 modify_existing；其余待实现后的测试机结果按清单再报。
 refs: [BR-WDR-07, BR-WDR-03]
 refs_hash:
   BR-WDR-07: 3eaedce150d8
@@ -19,8 +20,17 @@ paths:
   - 'apps/api/src/modules/payout/domain/withdraw-locked*.ts'
 test_paths:
   - 'test/spec/payout/locked-recheck/**' # 新目录
+  - 'test/spec/payout/apply/locked.test.ts'
 impl: claude
 tester: codex
+modify_existing:
+  - file: 'test/spec/payout/apply/locked.test.ts'
+    test: '[AC-B2-05d#30] 锁内只复核 ⑦⑧⑩⑪⑫，不把步骤 ①–⑥/⑨/⑬ 重插到锁内链'
+    retitle_to: '[AC-B2-05d#30] 锁内复核 ⑤⑥（实名失效按 30304）与 ⑦⑧⑩⑪⑫，不把步骤 ①–③b/⑥a/⑨/⑬ 重插到锁内链'
+    reason: rule_change
+    br: [BR-WDR-07]
+    ruling: D10-3590
+    note: 'BR-WDR-07 ④（2026-10-23 D10-192 起）锁内重新执行 BR-WDR-03 的 ⑤⑥⑦⑧⑩⑪⑫。原用例把实名未验、姓名不一致也放进「锁内不重判」的一组并期望通过；改后锁内按 ④⑤⑥ 的顺序拒绝：实名失效 30304（D10-3590：⑥ 要比对实名姓名，实名没了按 30304）、收款方式为空 30305、姓名不一致 30307；①–③b、⑥a（劳务协议）、⑨、⑬ 仍不在锁内重判的断言保留。无金额断言改动。'
 accept:
   - 'pnpm verify'
   - 'test/spec/payout/locked-recheck/**'
