@@ -2090,7 +2090,7 @@ export type NoRebateReason = (typeof no_rebate_reason)[number];
 
 /**
  * 外跳方案 primary / fallbacks 每一项的类型
- * Source: 规划/03 §4.5；BR-ATTR-27 (contracts/enums/trade.yaml).
+ * Source: 规划/03 §4.5；04 §8.4；BR-ATTR-27 (contracts/enums/trade.yaml).
  */
 export const jump_type = [
   "sdk", // 联盟 SDK；淘宝为百川打开指令，参数见 contracts/openapi.yaml JumpStep.sdk
@@ -2098,6 +2098,7 @@ export const jump_type = [
   "universal_link", // Universal Link / App Link / App Linking
   "h5", // H5 页面
   "copy_tpwd", // 复制口令
+  "mini_program", // 微信小程序（预留，04 §8.4；参数见 contracts/openapi.yaml JumpStep.mini_program，按平台开关 jump.mini_program.enabled.<platform> 下发）
 ] as const;
 export type JumpType = (typeof jump_type)[number];
 

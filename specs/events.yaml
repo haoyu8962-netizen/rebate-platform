@@ -18,7 +18,7 @@
 #
 # TODO(规划/05 CT-13): app_launch、page_view、exposure、click、search、convert、h5_white_screen 与 funnel_first_order.*
 #   的事件字段 — blocked on 用到它们的任务（首页、搜索、漏斗）给出字段；现在只登记名字与出处。
-version: '6'
+version: '7'
 common_fields:
   event_id:
     type: string
@@ -226,8 +226,8 @@ events:
         required: true
         note: 诊断字段（03 §4.7）；原生页没有 H5 时填 "unknown"；H5 发出的事件由 H5 自己填
   sdui_card_error:
-    description: SDUI 卡片解码失败，只丢弃这一项（规划/03 §6 解码隔离）
-    source: 规划/03 §6、§7.2、§4.7「诊断字段」
+    description: SDUI 卡片解码失败，只丢弃这一项（规划/03 §6 解码隔离）；另记首页首屏核心运营块缺失（reason=block_missing）：配置下发了约定的核心运营块，但因解码失败或被全部过滤，首屏实际没有渲染（03 §4.7，2026-11-26 RA-06）
+    source: 规划/03 §6、§7.2、§4.7「诊断字段」「分享分步埋点与首屏核心块缺失诊断」
     fields:
       type:
         type: string
@@ -243,6 +243,7 @@ events:
       reason:
         type: string
         required: true
+        note: 失败原因，取值不封闭（字符串）；block_missing 表示首页首屏核心运营块缺失（下发了但因解码失败或被全部过滤而没有渲染），type 填缺失的那一块的卡片类型，照常带四项诊断字段（03 §4.7）
       schema_version:
         type: string
         required: true
@@ -388,6 +389,65 @@ events:
         type: string
         required: true
         note: 那一帧 event 行的类型名，超过 64 个字符只取前 64 个；不带 data；同一 run 里同一个 type 只记一条（03 §7.2）
+  share_generate:
+    description: 分享页生成分享内容这一步的结果（只记客户端观测到的动作，不推导对方已收到或已发送）；端别用公共字段 platform；不带完整推广 URL、口令、推广位或文案原文
+    source: 规划/03 §4.7「分享分步埋点与首屏核心块缺失诊断」（2026-11-26 RA-06）
+    fields:
+      result:
+        type: string
+        required: true
+        note: 生成结果；只记结果，不带生成出的文案、链接或口令
+  share_copy:
+    description: 分享页复制这一步（只记客户端观测到的动作）；端别用公共字段 platform；不带复制的文案、链接或口令原文
+    source: 规划/03 §4.7「分享分步埋点与首屏核心块缺失诊断」（2026-11-26 RA-06）
+    fields:
+      kind:
+        type: enum
+        required: true
+        values: [full_text, tpwd_only, link_only]
+        note: 复制的种类：完整文案、只复制口令、只复制链接；只记种类，不带内容
+  share_save_images:
+    description: 分享页保存图片这一步的结果计数（只记客户端观测到的动作）；不带图片地址或内容
+    source: 规划/03 §4.7「分享分步埋点与首屏核心块缺失诊断」（2026-11-26 RA-06）
+    fields:
+      total:
+        type: integer
+        required: true
+        note: 本次要保存的图片张数
+      succeeded:
+        type: integer
+        required: true
+        note: 保存成功的张数
+      failed:
+        type: integer
+        required: true
+        note: 保存失败的张数
+      cancelled:
+        type: integer
+        required: true
+        note: 因用户取消（如拒绝相册权限）没有保存的张数
+  share_handoff:
+    description: 分享页把内容交给系统分享面板或微信这一步的结果（只记客户端观测到的动作，不推导对方已收到或已发送；直连微信 SDK 时以 SDK 返回值判定，不以未抛异常判定）；不带完整推广 URL、口令、推广位或文案原文
+    source: 规划/03 §4.7「分享分步埋点与首屏核心块缺失诊断」（2026-11-26 RA-06）
+    fields:
+      handoff_channel:
+        type: enum
+        required: true
+        values: [system, wechat_session, wechat_timeline]
+        note: 交接渠道（03 §4.7 的 channel）：系统分享面板、微信会话、微信朋友圈；公共字段 channel 是安装渠道，不复用
+      result:
+        type: enum
+        required: true
+        values: [handed_off, failed, cancelled]
+        note: handed_off 已交给系统或微信；failed 明确失败；cancelled 用户取消
+  share_cancel:
+    description: 用户在分享流程中途取消（只记客户端观测到的动作）；不带完整推广 URL、口令、推广位或文案原文
+    source: 规划/03 §4.7「分享分步埋点与首屏核心块缺失诊断」（2026-11-26 RA-06）
+    fields:
+      stage:
+        type: string
+        required: true
+        note: 取消发生在哪一步（如生成、复制、保存图片、交接）；只记步骤名
   app_launch:
     description: App 启动（字段待定）
     source: 规划/03 §4.7
