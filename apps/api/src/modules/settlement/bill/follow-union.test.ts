@@ -1187,18 +1187,19 @@ it.each([
   },
 );
 
-it('[AC-B2-18d-UNIT#4] 缺省上限是 500 且与注入 500 逐句相同（月结与补充同一个缺省）：501 张都要重生成的单 → 只重生成来源顺序前 500 张，第 501 张不开保存点、不取锁（补充里它只在分块重读时短暂取过锁），事件 deferred_count 为 1；注入 501 时没有留下', async () => {
-  expect(REGENERATION_CAP).toBe(500);
-  const ids = Array.from({ length: 501 }, (_, i) => `o${String(i).padStart(3, '0')}`);
-  const orders: Many[] = ids.map((id) => ({ id, settle: 1100n, bases: { 1: 1234n, 2: 1100n } }));
-  const last = ids[500]!;
+const ids = Array.from({ length: 501 }, (_, i) => `o${String(i).padStart(3, '0')}`);
+const orders: Many[] = ids.map((id) => ({ id, settle: 1100n, bases: { 1: 1234n, 2: 1100n } }));
+const last = ids[500]!;
 
-  const bill = (cap?: number) => {
-    const { f, rows } = manyScene(orders);
-    const p = okPort(f.log);
-    const h = manyHarness(orders, rows, { port: p.port, ...(cap === undefined ? {} : { cap }) });
-    return { f, h, calls: p.calls };
-  };
+const bill = (cap?: number) => {
+  const { f, rows } = manyScene(orders);
+  const p = okPort(f.log);
+  const h = manyHarness(orders, rows, { port: p.port, ...(cap === undefined ? {} : { cap }) });
+  return { f, h, calls: p.calls };
+};
+
+it('[AC-B2-18d-UNIT#4] 月结：缺省上限是 500 且与注入 500 逐句相同：501 张都要重生成的单 → 只重生成来源顺序前 500 张，第 501 张不开保存点、不取锁，事件 deferred_count 为 1', async (): Promise<void> => {
+  expect(REGENERATION_CAP).toBe(500);
   const unset = bill();
   await runJob(unset.h.dependencies, unset.f.db);
   const injected = bill(500);
@@ -1220,12 +1221,16 @@ it('[AC-B2-18d-UNIT#4] 缺省上限是 500 且与注入 500 逐句相同（月�
   expect(unset.f.statements().map((s) => s.sql)).toEqual(injected.f.statements().map((s) => s.sql));
   expect(unset.f.trail()).toEqual(injected.f.trail());
   expect(deferredEvents(injected.h.logger)).toEqual(deferredEvents(unset.h.logger));
+});
 
+it('[AC-B2-18d-UNIT#4] 月结：注入 501 时 501 张都要重生成的单没有留下', async (): Promise<void> => {
   const roomy = bill(501);
   await runJob(roomy.h.dependencies, roomy.f.db);
   expect(roomy.calls).toHaveLength(501);
   expect(deferredEvents(roomy.h.logger)).toEqual([]);
+});
 
+it('[AC-B2-18d-UNIT#4] 补充入口与月结同一个缺省上限 500：501 张都要重生成的单 → 只重生成来源顺序前 500 张，第 501 张只在分块重读时短暂取过锁、之后不开保存点、不取锁，事件 deferred_count 为 1', async (): Promise<void> => {
   // 补充入口：同一个缺省。
   const { f, rows } = manyScene(orders, SUPPLEMENT_BILL);
   const sp = okPort(f.log);
