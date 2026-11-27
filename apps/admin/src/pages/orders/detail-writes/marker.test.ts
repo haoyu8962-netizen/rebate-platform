@@ -35,7 +35,8 @@ import { useOrderWrite } from './useOrderWrite.tsx';
 vi.setConfig({ testTimeout: 15_000 });
 
 const answers: (() => Promise<unknown>)[] = [];
-const custom = vi.fn<(request: { url: string; method: string }) => Promise<unknown>>(() => {
+const custom = vi.fn<(request: { url: string; method: string }) => Promise<unknown>>((request) => {
+  if (request.method === 'get') queueMicrotask(settleGetWaiters);
   const next = answers.shift();
   if (next === undefined) throw new Error('unexpected request');
   return next();
@@ -397,6 +398,24 @@ function entriesShown(): string[] {
 function gets(): number {
   return custom.mock.calls.filter(([request]) => request.method === 'get').length;
 }
+/** Who waits for the n-th GET to be sent (see getSent). */
+let getWaiters: { readonly n: number; readonly resolve: () => void }[] = [];
+function settleGetWaiters(): void {
+  const sent = gets();
+  const due = getWaiters.filter((waiter) => sent >= waiter.n);
+  getWaiters = getWaiters.filter((waiter) => sent < waiter.n);
+  for (const waiter of due) waiter.resolve();
+}
+/**
+ * Settles once the n-th GET has been sent: on the microtask after that call of custom (when the
+ * call is already recorded), or at once if it has been sent already. No timer, no polling.
+ */
+function getSent(n: number): Promise<void> {
+  return new Promise((resolve) => {
+    getWaiters.push({ n, resolve });
+    settleGetWaiters();
+  });
+}
 /** The detail of the page is shown (its sub-order id appears in the header and the body). */
 async function detailShown(): Promise<void> {
   expect((await screen.findAllByText('SUB-1')).length).toBeGreaterThan(0);
@@ -617,14 +636,16 @@ it('[AC-F1-07ee-UNIT#24] A8 标记消失时首次读取还在途：那次回答�
   const first = controlled();
   answers.push(first.answer);
   renderPage();
-  await waitFor(() => expect(gets()).toBe(1));
+  await act(() => getSent(1));
+  expect(gets()).toBe(1);
   const reread = controlled();
   answers.push(reread.answer);
   await act(async () => {
     post.resolve({ data: v8held });
     await Promise.resolve();
   });
-  await waitFor(() => expect(gets()).toBe(2));
+  await act(() => getSent(2));
+  expect(gets()).toBe(2);
   // The first read (sent before the write took effect) answers with version 7: dropped.
   await act(async () => {
     first.resolve({ data: v7 });
