@@ -1,0 +1,39 @@
+{
+  "red_tests": [],
+  "risk_note": "F1-01y (deps). Only apps/admin/package.json (dependencies @tiptap/core, @tiptap/extension-image, @tiptap/pm, @tiptap/react, @tiptap/starter-kit at exactly 3.31.4, same version as apps/h5) and pnpm-lock.yaml (+103 / -0, no existing version line removed or changed). No code, rule-test, contract, money or db change. Licenses of @couli/admin production deps: MIT 247, Apache-2.0 4, BSD-3-Clause 1, 0BSD 1 (couli-runs/F1-01y/licenses.json). 3.31.4 published 2026-09-30 (approvals id 3: at least 7 days, pnpm minimumReleaseAge). Lock file is a protected path of class 2: owner label needed (approvals id 24).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex review r1 (money: the task is RV2 because pnpm-lock.yaml is outside the risk map; full scope, round 1) pass with no findings; checklist all n/a (dependency-only change). Other-family review per approvals id 3. couli-runs/F1-01y/review-r1.json. Test machine: verify:fast green (couli-runs/F1-01y/pc-fast2.out)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "local",
+    "tests": 33,
+    "files": 7,
+    "note": "PROP_RUNS=1000000 PROP_SEED=20261001; packages/money and test/properties are unchanged from main",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "F1-01y",
+  "spec_ref": "b3b8ff548af95078a744803e9d7461ee269ad448",
+  "spec_commit": "c962cbfe6d1693a547f143d713536d5b0ffefdbc",
+  "runs": [],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "bd17225c8c8e09360ead518a2481260a5ef41bc5",
+    "specs": "74cb02bea78204cdd8d01d4842c352a2a90124c0"
+  }
+}
