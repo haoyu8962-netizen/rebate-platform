@@ -2,14 +2,12 @@ import { expect, it } from 'vitest';
 import { validateLockedWithdrawal } from '../../../../apps/api/src/modules/payout/domain/withdraw-locked.ts';
 import { input } from '../rules/fixtures.ts';
 
-it('[AC-B2-05d#30] 锁内只复核 ⑦⑧⑩⑪⑫，不把步骤 ①–⑥/⑨/⑬ 重插到锁内链', () => {
+it('[AC-B2-05d#30] 锁内复核 ⑤⑥（实名失效按 30304）与 ⑦⑧⑩⑪⑫，不把步骤 ①–③b/⑥a/⑨/⑬ 重插到锁内链', () => {
   const value = input();
   value.limits.enabled = false;
   value.step_up_valid = false;
   value.risk_state = 'banned';
   value.blocklist_risk_msg_code = 'SYNTHETIC';
-  value.realname_verified = false;
-  value.names_match = false;
   value.labor_agreement_signed = false;
   value.limits.min_amount_fen = 2000n;
   value.limits.self_purchase_enabled = true;
