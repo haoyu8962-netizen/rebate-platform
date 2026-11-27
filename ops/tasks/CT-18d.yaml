@@ -8,7 +8,7 @@ type: contract
 # ③ 冻结测试须与 H5 原子升级：test/spec/frontend/h5-invite/**（[AC-F1-05a-POSTER#3] 钉 saved=false、invite-fixtures 默认应答 {saved: true}），以及底稿漏的 test/spec/frontend/h5-conformance/kit.ts、test/spec/frontend/h5-image/trunk/invite-page.tsx.txt（bundle.test 用的邀请页主干副本）——fe 写测前跑探针定冻结块清单，以台账补丁补登 modify_existing，按 approvals #24 编排核后加标签。
 refs: [BR-TEXT-14, BR-ID-13]
 refs_hash:
-  BR-TEXT-14: e029c2349c51
+  BR-TEXT-14: ba6b92fa997e
   BR-ID-13: 543d698b66e7
 contract_sections: ['9']
 deps: [CT-26zs]

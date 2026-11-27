@@ -12,7 +12,7 @@ type: impl
 # 2026-11-27 置 void（agent，编排 D10-3414 丙 / D10-3419 / D10-3432）：并入 B3-06e——码评审（Codex general）三轮未收敛（fail / fail / fail），第 3 轮查出本单引入的退步（行末数字串把已完整的金额切开，如「只要29块9⏎包邮」漏出角位）；没有落地，分支没推过远端。规则测试四笔（247 条，头 28d96794c338）与实现三笔（头 192fc35be471）由 B3-06e 搬到新分支作起点；approvals 第 228、229 条已用完、随本单作废；计数留在本单名下（写测 3 / 3、规则测试评审 2 / 2 + 第 228 条、实现 3 / 3 + 第 229 条、码评审 3 / 3，Codex 调用 6 次），运行产物原样留在 couli-runs/B3-06d/。
 refs: [BR-AI-06]
 refs_hash:
-  BR-AI-06: 78bc68c7d6b9
+  BR-AI-06: 4f686c6447c7
 deps: [B3-06a, B3-06b, B3-05s, B3-01c]
 paths:
   - 'apps/api/src/modules/agent/guard/filter.ts'

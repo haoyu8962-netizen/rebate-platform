@@ -8,7 +8,7 @@ type: impl
 # 08 没写的取值按代理默认做成配置或开关：withdraw.enabled 缺失按开（30306 只在显式关闭时）；估算用 FeeTaxCalculator 端口，默认实现 fee 0 / tax 0（BR-WDR-19 MVP、BR-WDR-20 税率表到位前）；quick_amounts_fen 默认空数组。
 refs: [BR-WDR-03, BR-WDR-04, BR-WDR-05, BR-WDR-06, BR-WDR-31]
 refs_hash:
-  BR-WDR-03: c1b5f37a0dd1
+  BR-WDR-03: 15fa0e1361e5
   BR-WDR-04: 075bb257f3f6
   BR-WDR-05: 775e11ed8bd8
   BR-WDR-06: 2a30a20531c1

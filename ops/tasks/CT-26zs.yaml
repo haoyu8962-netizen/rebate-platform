@@ -9,9 +9,9 @@ refs: [BR-ATTR-27, BR-TEXT-03, BR-TEXT-12, BR-TEXT-13, BR-TEXT-14]
 refs_hash:
   BR-ATTR-27: 0b0571f78586
   BR-TEXT-03: 168b81b94a42
-  BR-TEXT-12: d27e4b39c11e
+  BR-TEXT-12: e664783657dd
   BR-TEXT-13: 0170cefbc162
-  BR-TEXT-14: e029c2349c51
+  BR-TEXT-14: ba6b92fa997e
 deps: []
 paths:
   - 'contracts/openapi.yaml'
