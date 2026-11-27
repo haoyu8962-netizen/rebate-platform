@@ -280,9 +280,9 @@ describe('resolvePayoutDecision', () => {
   const keyBody = (pem: string) => pem.split('\n').filter((line) => !line.startsWith('-----'));
 
   it.each([
-    ['a public key of another pair', () => OTHER_PUBLIC_KEY],
-    ['no key at all', () => 'test-unit-not-a-public-key'],
-    ['an empty answer', () => ''],
+    ['a public key of another pair', (): string => OTHER_PUBLIC_KEY],
+    ['no key at all', (): string => 'test-unit-not-a-public-key'],
+    ['an empty answer', (): string => ''],
   ] as const)(
     '[AC-B2-06j] application key and certificate not one pair (%s) → secret_invalid naming the two, no key text',
     async (_label, answer) => {
