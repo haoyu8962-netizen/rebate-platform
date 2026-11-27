@@ -14,7 +14,7 @@ type: contract
 # 补丁 1（2026-11-23，fe 自定）：export_resource 加 orders 后，后端 exports.controller.ts 的 commandOf 类型收窄不再成立（tsc 5 处，测试机 verify:fast run 1）。D2 落地前该控制器对 resource=orders 回 20001（data.fields=[resource]），只加这一处守卫与对应单测，不改别的导出行为；契约 adminCreateExport 说明同步写明。
 refs: [BR-ID-33]
 refs_hash:
-  BR-ID-33: ad5c7e1b8578
+  BR-ID-33: 86d06b8e0154
 deps: []
 paths:
   - 'contracts/openapi.yaml'

@@ -14,7 +14,7 @@ type: impl
 refs: [BR-AI-21, BR-AI-06, BR-AI-03]
 refs_hash:
   BR-AI-21: c569f8bb74db
-  BR-AI-06: bf97647decbd
+  BR-AI-06: 78bc68c7d6b9
   BR-AI-03: 2131432de5c6
 deps: [B3-01a, CT-08a]
 paths:

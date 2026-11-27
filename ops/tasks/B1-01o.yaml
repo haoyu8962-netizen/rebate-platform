@@ -9,7 +9,7 @@ type: impl
 # 契约补充写在新规则测试文件头，不改 B1-01c 已有规则测试与 masking 的函数。
 refs: [BR-ID-33]
 refs_hash:
-  BR-ID-33: ad5c7e1b8578
+  BR-ID-33: 86d06b8e0154
 deps: [B1-01c]
 paths:
   - 'apps/api/src/modules/platform/logging/**'
