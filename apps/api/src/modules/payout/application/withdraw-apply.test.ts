@@ -12,6 +12,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { Ledger } from '../../ledger/index.ts';
 import { FixedClock } from '../../platform/index.ts';
 import { reviewDeadline } from '../domain/review-deadline.ts';
+import type { WithdrawRiskFlag } from '../domain/risk-flags.ts';
 import {
   CALENDAR_KEYS,
   createWithdrawApply,
@@ -200,16 +201,46 @@ type ConfigRead = (
   handle: Kysely<DB>,
 ) => Promise<{ value: unknown; version: number } | null>;
 
+/** A bound payee account of the scripted member (B2-05v). */
+interface BoundAccount {
+  method: 'alipay' | 'bank_card';
+  hmac: string;
+  /** B2-05v (D10-3619): the binding row's id; a rebind back to the same account is a new row. */
+  id?: string;
+}
+
 /**
  * `methods[i]` is the open set the i-th read of withdraw.payout_methods returns (the last one
  * repeats): the first pass reads it once, the locked re-read once more.
+ * B2-05v: `rebinds[k]` becomes the member's current account just before the k-th users lock
+ * (0-based) is taken — a rebind committed between the first pass and the locks; identity's
+ * subject reader and the snapshot both read the current account. `config` adds values by key.
+ * B2-05v (D10-3619): `bindingIds.reader` gives the subject reader a bindingIdOf method (like
+ * identity's: it knows the row id of each object its `read` returned, that very object only),
+ * `bindingIds.snapshot` makes the snapshot carry binding_id (both the current row's id);
+ * `copyRead` makes the subject reader hand back a copy of what it read (bindingIdOf then knows
+ * nothing); `riskFlags` wires a risk-flag port. `order` records the subject reads (with the row
+ * id read), the bindingIdOf answers and the risk-flag computes; `subjectReads` keeps every object
+ * the subject reader returned.
  */
-async function applyHarness(methods: readonly (readonly string[])[]) {
+async function applyHarness(
+  methods: readonly (readonly string[])[],
+  script: {
+    rebinds?: readonly (BoundAccount | undefined)[];
+    config?: Readonly<Record<string, unknown>>;
+    bindingIds?: { reader: boolean; snapshot: boolean };
+    riskFlags?: boolean;
+    copyRead?: boolean;
+  } = {},
+) {
   const statements: string[] = [];
+  const parameters: unknown[] = [];
+  const order: string[] = [];
   const driver = new DummyDriver();
   const connection = await driver.acquireConnection();
   connection.executeQuery = async <R>(query: CompiledQuery): Promise<QueryResult<R>> => {
     statements.push(query.sql);
+    parameters.push(...query.parameters);
     return {
       rows: [],
       numAffectedRows: query.sql.startsWith('insert') ? 1n : undefined,
@@ -229,7 +260,10 @@ async function applyHarness(methods: readonly (readonly string[])[]) {
   let methodReads = 0;
   const configValue = vi.fn<ConfigRead>(
     (_appId, key): Promise<{ value: unknown; version: number } | null> => {
-      if (key !== METHODS_KEY) return Promise.resolve(null);
+      if (key !== METHODS_KEY) {
+        const extra = script.config ?? {};
+        return Promise.resolve(key in extra ? { value: extra[key], version: 1 } : null);
+      }
       const value = methods[Math.min(methodReads, methods.length - 1)];
       methodReads += 1;
       return Promise.resolve({ value, version: 1 });
@@ -241,9 +275,32 @@ async function applyHarness(methods: readonly (readonly string[])[]) {
     parse: (value: unknown): ReadonlySet<string> | null =>
       Array.isArray(value) ? new Set<string>(value as string[]) : null,
   };
+  let bound: BoundAccount = { method: 'alipay', hmac: PAYEE_HMAC, id: 'binding-1' };
+  type Subject = { payout_method: 'alipay' | 'bank_card'; payee_name: string; payee_hmac: string };
+  const rowIds = new WeakMap<object, string>();
+  const subjectReads: Subject[] = [];
+  const readSubject = vi.fn(async (): Promise<Subject> => {
+    const answer: Subject = {
+      payout_method: bound.method,
+      payee_name: '阿·甲',
+      payee_hmac: bound.hmac,
+    };
+    if (bound.id !== undefined) rowIds.set(answer, bound.id);
+    order.push(`read:${String(bound.id)}`);
+    const handed = script.copyRead === true ? { ...answer } : answer;
+    subjectReads.push(handed);
+    return handed;
+  });
+  const bindingIdOf = vi.fn((subject: object): string | undefined => {
+    const id = rowIds.get(subject);
+    order.push(`bindingIdOf:${String(id)}`);
+    return id;
+  });
+  // Untyped: pino's overloaded warn is what the port declares.
+  const warn = vi.fn();
   const rules: WithdrawRulesOptions = {
     clock,
-    logger: { warn: vi.fn() },
+    logger: { warn },
     config: { configValue },
     risk: {
       read: vi.fn(
@@ -271,13 +328,8 @@ async function applyHarness(methods: readonly (readonly string[])[]) {
       ),
     },
     subject: {
-      read: vi.fn(
-        async (): Promise<{ payout_method: 'alipay'; payee_name: string; payee_hmac: string }> => ({
-          payout_method: 'alipay' as const,
-          payee_name: '阿·甲',
-          payee_hmac: PAYEE_HMAC,
-        }),
-      ),
+      read: readSubject,
+      ...(script.bindingIds?.reader === true ? { bindingIdOf } : {}),
     },
     laborAgreementSigned: vi.fn(async (): Promise<boolean> => true),
     ledger: {
@@ -338,23 +390,35 @@ async function applyHarness(methods: readonly (readonly string[])[]) {
   );
   const post = vi.fn(async (): Promise<void> => undefined);
   const ledger = { lockBalances, post } as unknown as Ledger;
-  const lockUsersForUpdate = vi.fn(
-    async (): Promise<ReadonlySet<string>> => new Set([APPLY_ACTOR.userId]),
-  );
-  const snapshot: WithdrawPayeeSnapshot = {
-    payout_method: 'alipay',
+  let locks = 0;
+  const lockUsersForUpdate = vi.fn(async (): Promise<ReadonlySet<string>> => {
+    const rebind = script.rebinds?.[locks];
+    locks += 1;
+    if (rebind !== undefined) bound = rebind;
+    return new Set([APPLY_ACTOR.userId]);
+  });
+  const snapshot = (): WithdrawPayeeSnapshot => ({
+    payout_method: bound.method,
     payee_name: '阿·甲',
     payee_account_cipher: Buffer.from('cipher'),
-    payee_hmac: PAYEE_HMAC,
-    bank_name: null,
-    account: '13800138000',
-  };
+    payee_hmac: bound.hmac,
+    bank_name: bound.method === 'bank_card' ? '合成银行' : null,
+    account: bound.method === 'bank_card' ? '6222020000000001' : '13800138000',
+    ...(script.bindingIds?.snapshot === true && bound.id !== undefined
+      ? { binding_id: bound.id }
+      : {}),
+  });
+  const compute = vi.fn(async (): Promise<readonly WithdrawRiskFlag[]> => {
+    order.push('riskFlags');
+    return [];
+  });
   const service = createWithdrawApply({
     rules,
     ledger,
     lockUsersForUpdate,
-    snapshot: { read: vi.fn(async (): Promise<WithdrawPayeeSnapshot> => snapshot) },
+    snapshot: { read: vi.fn(async (): Promise<WithdrawPayeeSnapshot> => snapshot()) },
     outBizNo: (): string => `W${'A'.repeat(20)}`,
+    ...(script.riskFlags === true ? { riskFlags: { compute } } : {}),
   });
   const apply = (): Promise<WithdrawApplyResult> =>
     db
@@ -364,7 +428,20 @@ async function applyHarness(methods: readonly (readonly string[])[]) {
       );
   const methodReadCount = (): number =>
     configValue.mock.calls.filter(([, key]) => key === METHODS_KEY).length;
-  return { apply, statements, post, lockUsersForUpdate, methodReadCount };
+  return {
+    apply,
+    statements,
+    parameters,
+    order,
+    readSubject,
+    subjectReads,
+    bindingIdOf,
+    compute,
+    post,
+    lockUsersForUpdate,
+    methodReadCount,
+    warn,
+  };
 }
 
 const insertsWithdrawal = (statements: readonly string[]): boolean =>
@@ -394,4 +471,205 @@ it('[AC-B2-05u#2] 初判与锁内重读时支付宝都开放：照常建 PENDING
     expect.anything(),
     expect.objectContaining({ appId: APPLY_ACTOR.appId, bizType: 'withdrawal' }),
   );
+});
+
+// B2-05v (D10-3590; rule-test review r1 S2): the account compared with the snapshot is HMAC and
+// method together. Same HMAC, method rebound from alipay to bank_card before the users lock: the
+// pass is rolled back and run again, and the second first pass judges ⑨ with bank_card's cap.
+const PASS_ROLLBACK = 'ROLLBACK TO SAVEPOINT payout_withdrawal_pass';
+const BANK_SAME_HMAC: BoundAccount = { method: 'bank_card', hmac: PAYEE_HMAC };
+const rollbacks = (statements: readonly string[]): number =>
+  statements.filter((text): boolean => text === PASS_ROLLBACK).length;
+
+it('[AC-B2-05v#5] 同一 HMAC 换成银行卡且银行卡上限足够：整遍回滚重跑，users 锁拿两次，按银行卡建单', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], {
+    rebinds: [BANK_SAME_HMAC],
+    config: {
+      'withdraw.method_max_amount_fen.alipay': 2000,
+      'withdraw.method_max_amount_fen.bank_card': 2000,
+    },
+  });
+  const result = await h.apply();
+  expect(result).toMatchObject({
+    code: 0,
+    data: { status: 'PENDING_REVIEW', amount_fen: 1000, payout_channel: 'bank_card' },
+  });
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(2);
+  expect(rollbacks(h.statements)).toBe(1);
+  expect(
+    h.statements.filter((text): boolean => text.startsWith('insert into "app"."withdrawals"')),
+  ).toHaveLength(1);
+  expect(h.post).toHaveBeenCalledTimes(1);
+});
+
+it('[AC-B2-05v#5] 同一 HMAC 换成银行卡且银行卡上限低于申请额：第二遍初判按银行卡上限返回 30303，不建单不冻结', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], {
+    rebinds: [BANK_SAME_HMAC],
+    config: {
+      'withdraw.method_max_amount_fen.alipay': 2000,
+      'withdraw.method_max_amount_fen.bank_card': 500,
+    },
+  });
+  expect(await h.apply()).toStrictEqual({ code: 30303, data: { reason: 'above_method_max' } });
+  // Pass 1 took the users lock and was rolled back; pass 2 refused before any lock.
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(1);
+  expect(rollbacks(h.statements)).toBe(1);
+  expect(insertsWithdrawal(h.statements)).toBe(false);
+  expect(h.post).not.toHaveBeenCalled();
+});
+
+it('[AC-B2-05v#6] 三遍账号都变（只换方式）：返回 50001，不建单不冻结，只打一条不带账号的 warn', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], {
+    rebinds: [BANK_SAME_HMAC, { method: 'alipay', hmac: PAYEE_HMAC }, BANK_SAME_HMAC],
+  });
+  expect(await h.apply()).toStrictEqual({ code: 50001, data: {} });
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(3);
+  expect(rollbacks(h.statements)).toBe(3);
+  expect(insertsWithdrawal(h.statements)).toBe(false);
+  expect(h.post).not.toHaveBeenCalled();
+  expect(
+    h.warn.mock.calls.filter(
+      ([, message]): boolean => message === 'withdraw_payee_changed_retry_exhausted',
+    ),
+  ).toEqual([
+    [{ user_id: APPLY_ACTOR.userId, passes: 3 }, 'withdraw_payee_changed_retry_exhausted'],
+  ]);
+  expect(JSON.stringify(h.warn.mock.calls)).not.toContain(PAYEE_HMAC);
+});
+
+it('[AC-B2-05v#4] 账号未变：只走一遍，users 锁拿一次，不回滚', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']]);
+  expect((await h.apply()).code).toBe(0);
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(1);
+  expect(rollbacks(h.statements)).toBe(0);
+});
+
+// B2-05v (Codex money reviews r1 S1-1 and r2 S1, D10-3619): an account rebound away and back is a
+// new binding row with the same HMAC and method. The first pass's binding row id is the one the
+// subject reader gives (bindingIdOf) for the very object its `read` returned to the first pass —
+// the same SELECT as the account judged — and is compared with the snapshot's binding_id when both
+// sides have one; either side without one compares the HMAC and the method only.
+const SAME_ACCOUNT_NEW_ROW: BoundAccount = { method: 'alipay', hmac: PAYEE_HMAC, id: 'binding-2' };
+const BOTH_IDS = { reader: true, snapshot: true } as const;
+
+it('[AC-B2-05v#11-UNIT#1] 两边都带绑定行 id 且不同（HMAC 与方式相同）：整遍回滚重跑，users 锁拿两次，第二遍按新绑定建单', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], {
+    rebinds: [SAME_ACCOUNT_NEW_ROW],
+    bindingIds: BOTH_IDS,
+  });
+  const result = await h.apply();
+  expect(result).toMatchObject({
+    code: 0,
+    data: { status: 'PENDING_REVIEW', amount_fen: 1000, payout_channel: 'alipay' },
+  });
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(2);
+  expect(rollbacks(h.statements)).toBe(1);
+  // Pass 1's first pass read the old row, pass 2's the new one it then created the withdrawal on.
+  expect(h.order).toEqual([
+    'read:binding-1',
+    'bindingIdOf:binding-1',
+    'read:binding-2',
+    'bindingIdOf:binding-2',
+    'read:binding-2',
+  ]);
+  expect(
+    h.statements.filter((text): boolean => text.startsWith('insert into "app"."withdrawals"')),
+  ).toHaveLength(1);
+  expect(h.post).toHaveBeenCalledTimes(1);
+  // The binding row id is neither stored, nor returned, nor logged.
+  expect(h.parameters).not.toContain('binding-1');
+  expect(h.parameters).not.toContain('binding-2');
+  expect(JSON.stringify(result)).not.toContain('binding-');
+  expect(
+    JSON.stringify(h.post.mock.calls, (_key: string, value: unknown): unknown =>
+      typeof value === 'bigint' ? value.toString() : value,
+    ),
+  ).not.toContain('binding-');
+  expect(JSON.stringify(h.warn.mock.calls)).not.toContain('binding-');
+});
+
+it('[AC-B2-05v#11-UNIT#2] 两边都带绑定行 id 且相同：只走一遍，users 锁拿一次，不回滚', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], { bindingIds: BOTH_IDS });
+  expect((await h.apply()).code).toBe(0);
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(1);
+  expect(rollbacks(h.statements)).toBe(0);
+  expect(h.bindingIdOf).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  ['读口有 bindingIdOf、快照不带 binding_id', { reader: true, snapshot: false }, false, 1],
+  ['读口没有 bindingIdOf、快照带 binding_id', { reader: false, snapshot: true }, false, 0],
+  ['读口有 bindingIdOf 但 read 交回副本（认不出）、快照带 binding_id', BOTH_IDS, true, 1],
+] as const)(
+  '[AC-B2-05v#11-UNIT#3] %s：只比 HMAC 与方式，换成同账号的新行也只走一遍',
+  async (
+    _label: string,
+    bindingIds: { reader: boolean; snapshot: boolean },
+    copyRead: boolean,
+    asked: number,
+  ): Promise<void> => {
+    const h = await applyHarness([['alipay', 'bank_card']], {
+      rebinds: [SAME_ACCOUNT_NEW_ROW],
+      bindingIds,
+      copyRead,
+    });
+    expect((await h.apply()).code).toBe(0);
+    expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(1);
+    expect(rollbacks(h.statements)).toBe(0);
+    expect(h.bindingIdOf).toHaveBeenCalledTimes(asked);
+  },
+);
+
+it('[AC-B2-05v#11-UNIT#4] 第一轮没有额外的读：read 每遍只调用原来的次数（初判一次、通过比较后锁内一次），bindingIdOf 拿到的正是初判 read 返回的那个对象', async (): Promise<void> => {
+  const h = await applyHarness([['alipay', 'bank_card']], {
+    rebinds: [SAME_ACCOUNT_NEW_ROW],
+    bindingIds: BOTH_IDS,
+    riskFlags: true,
+  });
+  expect((await h.apply()).code).toBe(0);
+  // Pass 1: its first pass's read only (rolled back before the locked re-check); pass 2: its first
+  // pass's read and the locked re-check's read. No query for the id.
+  expect(h.readSubject).toHaveBeenCalledTimes(3);
+  expect(h.order).toEqual([
+    'read:binding-1',
+    'bindingIdOf:binding-1',
+    'riskFlags',
+    'read:binding-2',
+    'bindingIdOf:binding-2',
+    'riskFlags',
+    'read:binding-2',
+  ]);
+  expect(h.bindingIdOf).toHaveBeenCalledTimes(2);
+  // Passes 1 and 2: the very objects the first passes' reads returned (reads #1 and #2), uncopied.
+  expect(h.bindingIdOf.mock.calls[0]![0]).toBe(h.subjectReads[0]);
+  expect(h.bindingIdOf.mock.calls[1]![0]).toBe(h.subjectReads[1]);
+  expect(h.compute).toHaveBeenCalledTimes(2);
+});
+
+it('[AC-B2-05v#11-UNIT#5] 资金评审第 2 轮情形：前两遍换绑 A→B、B→C，第三遍初判读到旧 C 行、锁前换出再换回 C（同 HMAC 与方式的新行）：返回 50001，不建单不冻结', async (): Promise<void> => {
+  const hmacB = 'c'.repeat(64);
+  const hmacC = 'd'.repeat(64);
+  const h = await applyHarness([['alipay', 'bank_card']], {
+    rebinds: [
+      { method: 'alipay', hmac: hmacB, id: 'binding-b' },
+      { method: 'alipay', hmac: hmacC, id: 'binding-c-old' },
+      { method: 'alipay', hmac: hmacC, id: 'binding-c-new' },
+    ],
+    bindingIds: BOTH_IDS,
+  });
+  expect(await h.apply()).toStrictEqual({ code: 50001, data: {} });
+  expect(h.lockUsersForUpdate).toHaveBeenCalledTimes(3);
+  expect(rollbacks(h.statements)).toBe(3);
+  // Pass 3's first pass judged the old C row; the snapshot under the locks is the new C row.
+  expect(h.order).toEqual([
+    'read:binding-1',
+    'bindingIdOf:binding-1',
+    'read:binding-b',
+    'bindingIdOf:binding-b',
+    'read:binding-c-old',
+    'bindingIdOf:binding-c-old',
+  ]);
+  expect(insertsWithdrawal(h.statements)).toBe(false);
+  expect(h.post).not.toHaveBeenCalled();
+  expect(JSON.stringify(h.warn.mock.calls)).not.toContain('binding-');
 });

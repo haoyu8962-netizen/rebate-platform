@@ -4,6 +4,12 @@
 // snapshot and the payee counts use (alipay_hmac for alipay, bank_card_hmac for a bank card). On the
 // caller's handle (a transaction included, READ ONLY as well): one SELECT, no cipher is read, no
 // writes, no logging. Nothing bound (or another app) → null.
+// B2-05v (BR-WDR-07 ④, D10-3619): the same SELECT also reads the row's id (a rebind retires the
+// row and inserts a new one, so an account rebound away and back has another id). `read`'s answer
+// is still the three fields; the reader remembers, in a WeakMap keyed by that very object, which
+// row it came from, and `bindingIdOf` gives it back (synchronously, no query). The payee snapshot
+// carries the id of the row it read; payout compares the two, so the id and the account the first
+// pass judged come from one row of one SELECT.
 //
 // Also compiled by the `test` project (through ../index.ts): erasable syntax only, `import type`
 // for type-only imports, relative imports with `.ts`.
@@ -24,15 +30,22 @@ export interface WithdrawSubjectReader {
     handle: Kysely<DB>,
     subject: { appId: string; userId: string },
   ): Promise<WithdrawSubject | null>;
+  /**
+   * B2-05v: the id of the payout_accounts row a `read` of this reader returned `subject` from —
+   * that very object only; a copy, or an object built elsewhere, gives undefined. No query.
+   */
+  bindingIdOf(subject: WithdrawSubject): string | undefined;
 }
 
 export function createWithdrawSubjectReader(): WithdrawSubjectReader {
+  /** Each object `read` returned → the id of its row (never on the object itself). */
+  const rowIds = new WeakMap<WithdrawSubject, string>();
   return {
     async read(handle, subject) {
       const row = await handle
         .withSchema('app')
         .selectFrom('payout_accounts')
-        .select(['payout_method', 'payee_name', 'alipay_hmac', 'bank_card_hmac'])
+        .select(['id', 'payout_method', 'payee_name', 'alipay_hmac', 'bank_card_hmac'])
         .where('app_id', '=', subject.appId)
         .where('user_id', '=', subject.userId)
         .where('is_current', '=', true)
@@ -45,7 +58,16 @@ export function createWithdrawSubjectReader(): WithdrawSubjectReader {
       const hmac = method === 'alipay' ? row.alipay_hmac : row.bank_card_hmac;
       // payout_accounts_details_check guarantees the HMAC of the row's own method.
       if (hmac === null) throw new Error('identity: payout account row without its account HMAC');
-      return { payout_method: method, payee_name: row.payee_name, payee_hmac: hmac };
+      const answer: WithdrawSubject = {
+        payout_method: method,
+        payee_name: row.payee_name,
+        payee_hmac: hmac,
+      };
+      rowIds.set(answer, row.id);
+      return answer;
+    },
+    bindingIdOf(subject) {
+      return rowIds.get(subject);
     },
   };
 }
@@ -64,6 +86,8 @@ export interface WithdrawPayeeSnapshot {
   payee_hmac: string;
   bank_name: string | null;
   account: string;
+  /** B2-05v: the id of the payout_accounts row read; compared by payout, never stored or logged. */
+  binding_id: string;
 }
 
 export interface WithdrawPayeeSnapshotReader {
@@ -83,6 +107,7 @@ export function createWithdrawPayeeSnapshotReader(
         .withSchema('app')
         .selectFrom('payout_accounts')
         .select([
+          'id',
           'payout_method',
           'payee_name',
           'alipay_hmac',
@@ -108,6 +133,7 @@ export function createWithdrawPayeeSnapshotReader(
           payee_hmac: row.alipay_hmac,
           bank_name: null,
           account: crypto.decrypt(cipher.toString('utf8'), contexts.alipay),
+          binding_id: row.id,
         };
       }
       if (row.payout_method === 'bank_card') {
@@ -122,6 +148,7 @@ export function createWithdrawPayeeSnapshotReader(
           payee_hmac: row.bank_card_hmac,
           bank_name: row.bank_name,
           account: crypto.decrypt(cipher.toString('utf8'), contexts.bank_card),
+          binding_id: row.id,
         };
       }
       // TODO(规划/11 §2.3): 微信零钱收款账号快照 — blocked on B2-14 / CT-20 的微信收款表与密文列
