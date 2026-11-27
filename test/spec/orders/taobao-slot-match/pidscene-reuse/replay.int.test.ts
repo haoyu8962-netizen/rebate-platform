@@ -219,13 +219,27 @@ async function prepare(
   }
 
   function addClick(scene: 'taolijin' | 'share', later = false) {
-    return click(db, acc.app_id, owner.id, {
+    const fields = {
+      link_id: randomUUID(),
       platform: 'taobao',
       product_key: 'tb:uVwXyZ0123456789',
       pid_scene: scene,
       scene: scene === 'taolijin' ? 'agent' : 'share',
       created_at: at(later ? '2026-10-30T01:57:00.000Z' : '2026-10-30T01:56:00.000Z'),
-    });
+    } as const;
+    return db
+      .insertInto('links')
+      .values({
+        ...fields,
+        app_id: acc.app_id,
+        user_id: owner.id,
+        lk: scene === 'taolijin' ? '000001' : '000002',
+        raw_item_id: 'SynthAbCdEfGhIjKlMnOpQrSt-uVwXyZ0123456789',
+        updated_at: fields.created_at,
+        expire_at: at('2026-11-01T00:00:00.000Z'),
+      })
+      .execute()
+      .then(() => click(db, acc.app_id, owner.id, fields));
   }
 
   return { addClick, logger, readSplits, readTotals, rerun };
