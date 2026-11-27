@@ -1,0 +1,35 @@
+id: B2-05u
+repo: rebate-platform
+title: 'B2-05u：收款方式被关闭后，已绑定该方式的会员查提现规则与提交提现返回 30305（BR-WDR-02 细则；只在提现读入处按 withdraw.payout_methods 判，已创建的提现单不受影响）'
+type: impl
+# 2026-11-27 funds 线入账（编排 D10-3338 ② / D10-3358 ② / D10-3401；来由 Gemini T05 对账 4.1，上线前必做）。
+# 规则（07_WDR BR-WDR-02 细则）：关闭某方式后，已绑定该方式的会员提交提现返回 30305（视为未绑定可用收款账号），已创建的提现单不受影响。现状：绑定 / 换绑那一半已做（identity，20001）；
+#   查提现规则（GET /v1/withdrawals/rules 的 block_code）与提交提现（POST /v1/withdrawals，事务外初判与锁内复判）都走 payout/application/withdraw-rules.ts 的 readWithdrawInput，payout 侧不读 withdraw.payout_methods，方式关掉后已绑会员照样能提。
+# 做法（D10-3401）：只在 readWithdrawInput 里多读 withdraw.payout_methods；当前账号的方式不在开放集合里时，喂给规则判定的收款方式按「没有」算（规则第 ⑤ 项出 30305，两个接口同口径），可提上限照未绑定算；
+#   黑名单判定、按收款账号的日次数与并发锁仍用真实账号（所以不在 identity 的读口里返回空）。配置值的解析复用 identity 绑定侧现成的那一份（非空、取值合法、不重复，否则退回默认并告警），经 identity/index.ts 导出，不另写。
+#   已创建的提现单、审核、打款、重试都不看这个开关，不动；规则判定的纯函数（payout/domain）不动。不带迁移。
+# 契约只改说明文字（借契约槽，实现开工前登槽，与 CT-24zzw 错开）：error-codes.yaml 30305 的含义补「或已绑定的收款方式已被关闭」、来源加 BR-WDR-02；openapi 两个接口说明各补半句；形状、错误码、枚举不变，生成物重出。
+# 不加新文案（会员看到的仍是「请先绑定收款账号」）；单独的提示语登 FU-WDR-CLOSED-METHOD-HINT，上线后。现有规则测试若有因多读一个配置键或契约说明变化而变红的，停下按清单类报编排、台账补丁登记。
+refs: [BR-WDR-02, BR-WDR-03]
+refs_hash:
+  BR-WDR-02: b8ce66617ed9
+  BR-WDR-03: c1b5f37a0dd1
+deps: []
+paths:
+  - 'apps/api/src/modules/payout/application/withdraw-rules*.ts'
+  - 'apps/api/src/modules/identity/application/payout-account*.ts'
+  - 'apps/api/src/modules/identity/index.ts'
+  - 'contracts/error-codes.yaml'
+  - 'contracts/openapi.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/{validation/route-schemas,http/auth-routes,validation/signing-routes}.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/payout/closed-method/**' # 新目录
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/payout/closed-method/**'
+status: todo
+pr: null
