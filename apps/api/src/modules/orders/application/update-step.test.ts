@@ -855,6 +855,7 @@ it('[AC-B1-08zzc#u19] 淘宝未归因、adzone 未变而登记 pid 已改（mm_ 
     user_id: null,
     rebate_status: 'UNATTRIBUTED',
     pid: 'mm_1001_3001_2002',
+    buy_type: 'self',
   } as Row;
   const { db, calls } = scriptedDb(
     () => 1n,
