@@ -1,0 +1,19 @@
+id: F1-01y
+repo: rebate-platform
+title: 依赖：后台加 tiptap 3.31.4（@tiptap/core、@tiptap/pm、@tiptap/starter-kit、@tiptap/extension-image、@tiptap/react），供「协议版本」页正文的编辑与只读显示（与 apps/h5 同版本）
+type: deps
+# 2026-11-27 入账（前端线 f1-frontend-7；编排 D10-3513 ⑥ / D10-3516 / D10-3518）。依据规划 design/specs/admin-agreements.md（couli#40，754573d03945）§2、§7：协议正文用 Tiptap 编辑与只读渲染，扩展与服务端 article-body 白名单一致。
+# 选包：与 apps/h5 同版本 3.31.4（F1-01p 已过 approvals 第 3 条：2026-09-30 发布满 7 天）；编辑器在 React 里要 @tiptap/react（3.31.4，2026-09-30 发布，MIT；peer react / react-dom / @types/react / @types/react-dom ^19 与后台 19.3.0 一致，@tiptap/core / @tiptap/pm 同版本）；只读显示用同一编辑器 editable:false，不另引 @tiptap/static-renderer。
+# 传递依赖新增：fast-equals、use-sync-external-store、@types/use-sync-external-store（均 MIT）；其余 @tiptap/* 已随 apps/h5 在锁文件里。starter-kit 3.31.4 自带 link（白名单内），也带 code、strike、underline、codeBlock（白名单外）——由页面任务在扩展配置里关掉，本单不碰。
+# 只加 apps/admin dependencies 与锁文件（精确版本），不改 scripts、不改代码；锁文件属保护路径第二类，合并要负责人标签（approvals 第 24 条）；另一家评审照 approvals 第 3 条。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'apps/admin/package.json'
+  - 'pnpm-lock.yaml'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
