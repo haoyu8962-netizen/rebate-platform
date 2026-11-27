@@ -1,7 +1,7 @@
 // B2-06j implementer unit tests of resolvePayoutDecision (payout-mode-kms.ts): the three
 // implementation must-haves of 任务书 §12.3. A fake KmsAccess and fake AlipayCertTools only; the
 // application key is generated at run time, no key or certificate material is written here.
-import { generateKeyPairSync } from 'node:crypto';
+import { createPublicKey, generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it, vi, type Mock } from 'vitest';
 
 import {
@@ -21,11 +21,18 @@ import {
   type PayoutDecisionInput,
 } from './payout-mode-kms.ts';
 
-const APP_PRIVATE_KEY = generateKeyPairSync('rsa', {
-  modulusLength: 2048,
-  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-  publicKeyEncoding: { type: 'spki', format: 'pem' },
-}).privateKey.trimEnd();
+const rsaPair = () =>
+  generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+const APP_KEYS = rsaPair();
+const APP_PRIVATE_KEY = APP_KEYS.privateKey.trimEnd();
+/** The application key's public half (SPKI PEM), as publicKeyFromCert answers for the app cert. */
+const APP_PUBLIC_KEY = APP_KEYS.publicKey;
+/** A public key of another pair: an application certificate rotated without its key. */
+const OTHER_PUBLIC_KEY = rsaPair().publicKey;
 
 // Opaque texts: only the injected tools look at them (nothing here is a real certificate).
 const TEXTS: Readonly<Record<string, string>> = {
@@ -58,7 +65,10 @@ function fakeTools(): ToolMocks {
   return {
     certSn: vi.fn((text: string) => `sn-of:${text}`),
     rootCertSn: vi.fn((text: string) => `root-sn-of:${text}`),
-    publicKeyFromCert: vi.fn((text: string) => `public-key-of:${text}`),
+    // The opaque application certificate "holds" the application key's public half.
+    publicKeyFromCert: vi.fn((text: string) =>
+      text === TEXTS['payout/alipay/app-cert'] ? APP_PUBLIC_KEY : `public-key-of:${text}`,
+    ),
   };
 }
 
@@ -177,7 +187,12 @@ describe('resolvePayoutDecision', () => {
       ['test-opaque-public-cert-text'],
     ]);
     expect(f.certs.rootCertSn.mock.calls).toEqual([['test-opaque-root-bundle-text']]);
-    expect(f.certs.publicKeyFromCert.mock.calls).toEqual([['test-opaque-public-cert-text']]);
+    // The Alipay public key from the Alipay certificate; then the application certificate's key,
+    // only for the pairing check (it becomes no credential).
+    expect(f.certs.publicKeyFromCert.mock.calls).toEqual([
+      ['test-opaque-public-cert-text'],
+      ['test-opaque-app-cert-text'],
+    ]);
     // The texts are no certificates at all: nothing but the tools looked inside them.
     expect(decision.mode === 'live' && decision.credentials.alipayRootCertSn).toBe(
       'root-sn-of:test-opaque-root-bundle-text',
@@ -194,6 +209,9 @@ describe('resolvePayoutDecision', () => {
       const f = input();
       f.certs[tool].mockImplementation((text: string) => {
         if (text === TEXTS[secret]) throw new Error(`test-unit-parser-message ${text}`);
+        if (tool === 'publicKeyFromCert' && text === TEXTS['payout/alipay/app-cert']) {
+          return APP_PUBLIC_KEY;
+        }
         return `ok:${text}`;
       });
       const result = await settled(resolvePayoutDecision(f.value));
@@ -255,5 +273,74 @@ describe('resolvePayoutDecision', () => {
     expect(logged).toContain('ALIPAY_APP_PRIVATE_KEY');
     expect(logged).toContain('ALIPAY_PUBLIC_KEY');
     expect(logged).not.toContain('test-unit-legacy');
+  });
+
+  // Pairing check: the application private key and the application certificate must be one pair.
+  const PAIR_SECRETS = ['payout/alipay/app-private-key', 'payout/alipay/app-cert'];
+  const keyBody = (pem: string) => pem.split('\n').filter((line) => !line.startsWith('-----'));
+
+  it.each([
+    ['a public key of another pair', () => OTHER_PUBLIC_KEY],
+    ['no key at all', () => 'test-unit-not-a-public-key'],
+    ['an empty answer', () => ''],
+  ] as const)(
+    '[AC-B2-06j] application key and certificate not one pair (%s) → secret_invalid naming the two, no key text',
+    async (_label, answer) => {
+      const f = input();
+      f.certs.publicKeyFromCert.mockImplementation((text: string) =>
+        text === TEXTS['payout/alipay/app-cert'] ? answer() : `public-key-of:${text}`,
+      );
+      const result = await settled(resolvePayoutDecision(f.value));
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const error = result.error as PayoutCredentialsUnavailableError;
+        expect(error).toBeInstanceOf(PayoutCredentialsUnavailableError);
+        expect(error.reason).toBe('secret_invalid');
+        expect(error.secrets).toEqual(PAIR_SECRETS);
+        expect(error.message).toBe(
+          `payout credentials unavailable (secret_invalid): ${PAIR_SECRETS.join(', ')}`,
+        );
+        for (const line of [...keyBody(APP_PRIVATE_KEY), ...keyBody(OTHER_PUBLIC_KEY)]) {
+          if (line !== '') expect(error.message).not.toContain(line);
+        }
+        expect(error.message).not.toContain('test-opaque-app-cert-text');
+        expect('cause' in error).toBe(false);
+      }
+    },
+  );
+
+  it('[AC-B2-06j] one pair in another encoding of the public key (PKCS#1 PEM) → credentials returned', async () => {
+    const f = input();
+    const pkcs1 = createPublicKey(APP_PUBLIC_KEY)
+      .export({ type: 'pkcs1', format: 'pem' })
+      .toString();
+    expect(pkcs1).not.toBe(APP_PUBLIC_KEY);
+    f.certs.publicKeyFromCert.mockImplementation((text: string) =>
+      text === TEXTS['payout/alipay/app-cert'] ? pkcs1 : `public-key-of:${text}`,
+    );
+    const decision = await resolvePayoutDecision(f.value);
+    expect(decision.mode).toBe('live');
+    expect(decision.mode === 'live' && decision.credentials.privateKey).toBe(APP_PRIVATE_KEY);
+    expect(decision.mode === 'live' && decision.credentials.alipayPublicKey).toBe(
+      'public-key-of:test-opaque-public-cert-text',
+    );
+  });
+
+  it('[AC-B2-06j] a parse failure lists only the failing secret, even when the pair would not match', async () => {
+    const f = input();
+    f.certs.publicKeyFromCert.mockImplementation((text: string) =>
+      text === TEXTS['payout/alipay/app-cert'] ? OTHER_PUBLIC_KEY : `public-key-of:${text}`,
+    );
+    f.certs.rootCertSn.mockImplementation(() => {
+      throw new Error('test-unit-parser-message');
+    });
+    const result = await settled(resolvePayoutDecision(f.value));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const error = result.error as PayoutCredentialsUnavailableError;
+      expect(error.reason).toBe('secret_invalid');
+      expect(error.secrets).toEqual(['payout/alipay/root-cert']);
+    }
+    expect(f.certs.publicKeyFromCert.mock.calls).toEqual([['test-opaque-public-cert-text']]);
   });
 });

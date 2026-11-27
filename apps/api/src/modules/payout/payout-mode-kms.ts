@@ -11,11 +11,16 @@
 //     bundle; the three serial numbers and the Alipay public key are computed only by the injected
 //     AlipayCertTools (the entry hands in payment's certSn / rootCertSn / publicKeyFromCert, so the
 //     payout module neither imports payment nor parses certificates itself);
-//   - KMS not configured, a read failure, a missing secret or one that does not parse → startup is
-//     refused with PayoutCredentialsUnavailableError: a fixed text and logical secret names, never a
-//     secret, a certificate, an SDK or parser message, nor a `cause`.
+//   - once all four parse, the application private key and the application certificate must be one
+//     pair: the public key derived from the private key (node:crypto createPublicKey) and the one the
+//     injected publicKeyFromCert takes from the certificate are compared as SPKI DER bytes; a
+//     mismatch is secret_invalid naming those two secrets (the Alipay certificates take no part);
+//   - KMS not configured, a read failure, a missing secret, one that does not parse, or an
+//     application key and certificate that are not one pair → startup is refused with
+//     PayoutCredentialsUnavailableError: a fixed text and logical secret names, never a secret, a
+//     certificate, an SDK or parser message, nor a `cause`.
 // Only the payout entry may call this: any other entry is refused before anything is read.
-import { createPrivateKey } from 'node:crypto';
+import { createPrivateKey, createPublicKey } from 'node:crypto';
 import type { Logger } from 'pino';
 
 import {
@@ -94,6 +99,23 @@ function nonEmpty(value: unknown): string {
   return value;
 }
 
+/** SPKI DER of a key (or a key's public half): one encoding for both sides of the comparison. */
+const spkiDer = (key: string): Buffer =>
+  createPublicKey(key).export({ type: 'spki', format: 'der' });
+
+/**
+ * Whether the application private key and the application certificate are one pair. The
+ * certificate's public key comes only from the injected tool; anything that throws is "no pair".
+ */
+function isKeyPair(privateKey: string, appCertText: string, certs: AlipayCertTools): boolean {
+  try {
+    const fromCert = spkiDer(nonEmpty(certs.publicKeyFromCert(appCertText)));
+    return spkiDer(privateKey).equals(fromCert);
+  } catch {
+    return false;
+  }
+}
+
 /** prod + live: the certificate-mode credentials from KMS (see the file header). */
 async function liveFromKms(input: PayoutDecisionInput): Promise<PayoutModeDecision> {
   const { env } = input;
@@ -151,6 +173,14 @@ async function liveFromKms(input: PayoutDecisionInput): Promise<PayoutModeDecisi
     alipayRootCertSn === null
   ) {
     throw new PayoutCredentialsUnavailableError('secret_invalid', invalid);
+  }
+  // A rotated certificate with the old key (or the reverse) would sign with one key and announce
+  // the other's serial number: refuse to start rather than spend a withdrawal's one transfer try.
+  if (!isKeyPair(privateKey, texts.get(SECRETS.alipayAppCert) ?? '', certs)) {
+    throw new PayoutCredentialsUnavailableError('secret_invalid', [
+      SECRETS.alipayAppPrivateKey,
+      SECRETS.alipayAppCert,
+    ]);
   }
   const credentials: PayoutLiveCredentials = {
     appId: env['ALIPAY_APP_ID'] as string,
