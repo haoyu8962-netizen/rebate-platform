@@ -16,7 +16,7 @@
 # Ledger-only fast path (D10-935, CT-06zzzv; docs/** too since D10-1024 E, CT-06zzzze): on a pull
 # request whose base...head changes nothing but task ledgers (ops/tasks/<id>.yaml) or docs
 # (docs/**), as decided by ledger-only-detect from the base copy of tools/ci/ledger-only.ts, the
-# fifteen heavy verify jobs are skipped; verify-static (with the task ledger check) and guard-git
+# sixteen heavy verify jobs are skipped; verify-static (with the task ledger check) and guard-git
 # still run, and ci-gate accepts those skips only when the detection itself succeeded and said
 # only=true.
 #
@@ -64,7 +64,8 @@ jobs:
     # D10-242 (CT-06zm): an owner-approval label added or removed changes no code, so on a
     # labeled / unlabeled event the verify jobs reuse what already passed instead of running a
     # second time. Reuse holds only when, for EACH of verify-static, verify-unit, verify-spec-1,
-    # verify-spec-2 (the four jobs that replaced verify-fast, CT-06zx), verify-props-1,
+    # verify-spec-2, verify-spec-3 (the jobs that replaced verify-fast, CT-06zx; three spec shards since
+    # D10-3546), verify-props-1,
     # verify-props-2, verify-props-3, verify-props-sha-1, verify-props-sha-2, verify-props-sha-3
     # (the fixed-seed and commit-SHA-seed passes, three shards each, that replaced verify-props,
     # CT-06zxa, D10-902 / CT-06zzzr), and verify-int-1 … verify-int-6 (the shards that replaced
@@ -101,7 +102,7 @@ jobs:
     # wait, right after the run-list query: so once more when nothing is left unfinished (before
     # deciding) and before giving up at the limit. When it answers a head other than this event's
     # head.sha, the step logs "PR #<n> head moved from <old> to <new>", writes moved=true and
-    # exits 1 at once (no further sleep or query, never reuse=true). verify-static and the fifteen
+    # exits 1 at once (no further sleep or query, never reuse=true). verify-static and the sixteen
     # heavy jobs then skip by `needs.verify-reuse.outputs.moved != 'true'` in their `if` (GitHub
     # keeps the outputs a step wrote before it failed, and passes a failed job's outputs on), and
     # ci-gate is red, on the old head only; the new head has a run of its own. A failed query (gh
@@ -158,7 +159,7 @@ jobs:
               echo "reuse=false" >> "$GITHUB_OUTPUT"
               exit 0
             }
-            jobs='verify-static verify-unit verify-spec-1 verify-spec-2 verify-props-1 verify-props-2 verify-props-3 verify-props-sha-1 verify-props-sha-2 verify-props-sha-3 verify-int-1 verify-int-2 verify-int-3 verify-int-4 verify-int-5 verify-int-6'
+            jobs='verify-static verify-unit verify-spec-1 verify-spec-2 verify-spec-3 verify-props-1 verify-props-2 verify-props-3 verify-props-sha-1 verify-props-sha-2 verify-props-sha-3 verify-int-1 verify-int-2 verify-int-3 verify-int-4 verify-int-5 verify-int-6'
             # (1) exactly one merged pull request into main of this repository, from this repository.
             prs=$(gh api "repos/$REPO/commits/$PUSH_SHA/pulls?per_page=100" \
               --jq ".[] | select(.merged_at != null and .base.ref == \"main\" and .base.repo.full_name == \"$REPO\" and .head.repo != null and .head.repo.full_name == \"$REPO\") | \"\(.number) \(.head.sha)\"") ||
@@ -256,7 +257,7 @@ jobs:
           runs=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$HEAD_SHA&per_page=100" \
             --jq ".workflow_runs[] | select(.id != $RUN_ID) | .id")
           reuse=true
-          for job in verify-static verify-unit verify-spec-1 verify-spec-2 verify-props-1 verify-props-2 verify-props-3 verify-props-sha-1 verify-props-sha-2 verify-props-sha-3 verify-int-1 verify-int-2 verify-int-3 verify-int-4 verify-int-5 verify-int-6; do
+          for job in verify-static verify-unit verify-spec-1 verify-spec-2 verify-spec-3 verify-props-1 verify-props-2 verify-props-3 verify-props-sha-1 verify-props-sha-2 verify-props-sha-3 verify-int-1 verify-int-2 verify-int-3 verify-int-4 verify-int-5 verify-int-6; do
             found=''
             for run in $runs; do
               ok=$(gh api "repos/$REPO/actions/runs/$run/jobs?filter=latest&per_page=100" \
@@ -292,8 +293,8 @@ jobs:
     # but task ledgers, and twenty of them open at once queued behind the heavy jobs of each other
     # for one to two hours. This job decides whether base...head (the merge-base diff) changes only
     # ops/tasks/<id>.yaml, or since D10-1024 E (CT-06zzzze) also docs/** (only task ledgers or docs;
-    # both sides of a rename, deletions too, regular files only, at least one path); the fifteen
-    # heavy jobs (verify-unit, verify-spec-1 / -2, verify-props-1 / -2 / -3, verify-props-sha-1 /
+    # both sides of a rename, deletions too, regular files only, at least one path); the sixteen
+    # heavy jobs (verify-unit, verify-spec-1 / -2 / -3, verify-props-1 / -2 / -3, verify-props-sha-1 /
     # -2 / -3, verify-int-1 … -6) are then skipped, while verify-static (which runs
     # `node tools/ops/task.ts check`) and guard-git run as always. ops/evidence, any other ops/ file,
     # tools, test, apps, .github, a docs/ outside the top level, or a top-level file such as
@@ -351,8 +352,10 @@ jobs:
   #                  D10-935)
   #   verify-unit    `turbo run test` without @couli/spec-tests (so with @couli/tools), then
   #                  `pnpm --filter @couli/api run smoke:entries`
-  #   verify-spec-1  @couli/spec-tests `test` with --shard=1/2
-  #   verify-spec-2  @couli/spec-tests `test` with --shard=2/2
+  #   verify-spec-1  @couli/spec-tests `test` with --shard=1/3
+  #   verify-spec-2  @couli/spec-tests `test` with --shard=2/3
+  #   verify-spec-3  @couli/spec-tests `test` with --shard=3/3 (three shards since D10-3546: with two,
+  #                  a shard ran 18–22 minutes and hit the 30-minute limit on a slow runner)
   # Vitest shards by file: it sorts the test files by the SHA-1 of their path and cuts the list
   # into contiguous ranges, so the two shards are disjoint and their union is the whole set
   # (vitest BaseSequencer.shard). Each job installs from the setup-node pnpm store cache (keyed
@@ -363,7 +366,7 @@ jobs:
   # event, and any other failure of verify-reuse, runs it in full. timeout-minutes 30 each (D10-298); after a day of runs:
   # if the p90 is still above 20 minutes or verify-unit becomes the critical path, tools and the
   # spec tests are split further.
-  # D10-935 (CT-06zzzv): verify-unit, verify-spec-1 / -2 and the other heavy jobs below are also
+  # D10-935 (CT-06zzzv): verify-unit, verify-spec-1 / -2 / -3 and the other heavy jobs below are also
   # skipped when ledger-only-detect says only=true (the pull request changes nothing but
   # ops/tasks/<id>.yaml or docs/**, D10-1024 E); verify-static never is. On push ledger-only-detect is skipped, its output
   # is empty, and `!cancelled()` lets every job run as before.
@@ -478,7 +481,7 @@ jobs:
       # tests here run under the same precondition.
       - run: pnpm build
       # The verify:fast `pnpm run test` (turbo run test --env-mode=loose) minus @couli/spec-tests,
-      # which verify-spec-1 / verify-spec-2 run.
+      # which verify-spec-1 / -2 / -3 run.
       - run: pnpm exec turbo run test --env-mode=loose --filter='!@couli/spec-tests'
         env:
           COULI_SPEC_REPO: ${{ github.workspace }}/.tmp/spec-repo
@@ -521,7 +524,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # The package's own `test` script (vitest run), with the shard appended by pnpm.
-      - run: pnpm --filter @couli/spec-tests run test --shard=1/2
+      - run: pnpm --filter @couli/spec-tests run test --shard=1/3
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verified-verify-spec-1-${{ steps.tested.outputs.tree }}
@@ -555,10 +558,44 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # The package's own `test` script (vitest run), with the shard appended by pnpm.
-      - run: pnpm --filter @couli/spec-tests run test --shard=2/2
+      - run: pnpm --filter @couli/spec-tests run test --shard=2/3
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verified-verify-spec-2-${{ steps.tested.outputs.tree }}
+          # The artifact name is the record (job and tested tree); the file only holds the tree id,
+          # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
+          path: ${{ runner.temp }}/verified-tree.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  verify-spec-3:
+    # Same as verify-spec-1, other shard.
+    needs: [verify-reuse, ledger-only-detect]
+    if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tree this job tests (the PR merge commit, or the pushed commit): recorded before
+      # anything runs, uploaded under that name only when every step passed (D10-242).
+      - id: tested
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "$tree" > "$RUNNER_TEMP/verified-tree.txt"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The package's own `test` script (vitest run), with the shard appended by pnpm.
+      - run: pnpm --filter @couli/spec-tests run test --shard=3/3
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verified-verify-spec-3-${{ steps.tested.outputs.tree }}
           # The artifact name is the record (job and tested tree); the file only holds the tree id,
           # written by the `tested` step (upload-artifact skips dot-files such as .nvmrc by default).
           path: ${{ runner.temp }}/verified-tree.txt
@@ -1683,11 +1720,11 @@ jobs:
 
   ci-gate:
     # Summary job: the only required check of this workflow (ops/branch-protection.json).
-    # CT-06zx: verify-static, verify-unit, verify-spec-1 and verify-spec-2 replace verify-fast;
+    # CT-06zx: verify-static, verify-unit and verify-spec-1 / -2 (-3 since D10-3546) replace verify-fast;
     # each must pass (or be reused) on its own; so must verify-props-1 / -2 / -3 and
     # verify-props-sha-1 / -2 / -3 (CT-06zxa, split into one pass per job by D10-902 / CT-06zzzr),
     # and verify-int-1 … verify-int-6 (two shards since CT-06zzb, six since CT-06zzzzq / D10-1222).
-    # D10-935 (CT-06zzzv): a skipped heavy job (all fifteen but verify-static) also passes when
+    # D10-935 (CT-06zzzv): a skipped heavy job (all sixteen but verify-static) also passes when
     # ledger-only-detect itself succeeded on a pull_request event and said exactly only=true: the
     # pull request changes nothing but task ledgers or docs (docs/**, D10-1024 E). A failed, cancelled or skipped detection, or
     # any other output, never lets a skip pass; verify-static and guard-git are not covered by it.
@@ -1698,6 +1735,7 @@ jobs:
       - verify-unit
       - verify-spec-1
       - verify-spec-2
+      - verify-spec-3
       - verify-props-1
       - verify-props-2
       - verify-props-3
@@ -1718,7 +1756,7 @@ jobs:
     steps:
       - name: Summarise
         run: |
-          echo "verify-static=${STATIC} verify-unit=${UNIT} verify-spec-1=${SPEC1} verify-spec-2=${SPEC2} verify-props-1=${PROPS1} verify-props-2=${PROPS2} verify-props-3=${PROPS3} verify-props-sha-1=${PROPSSHA1} verify-props-sha-2=${PROPSSHA2} verify-props-sha-3=${PROPSSHA3} verify-int-1=${INT1} verify-int-2=${INT2} verify-int-3=${INT3} verify-int-4=${INT4} verify-int-5=${INT5} verify-int-6=${INT6} guard-git=${GUARD} event=${EVENT} reuse=${REUSE_RESULT}/${REUSE} ledger-only-detect=${LEDGER_RESULT}/${LEDGER_ONLY}"
+          echo "verify-static=${STATIC} verify-unit=${UNIT} verify-spec-1=${SPEC1} verify-spec-2=${SPEC2} verify-spec-3=${SPEC3} verify-props-1=${PROPS1} verify-props-2=${PROPS2} verify-props-3=${PROPS3} verify-props-sha-1=${PROPSSHA1} verify-props-sha-2=${PROPSSHA2} verify-props-sha-3=${PROPSSHA3} verify-int-1=${INT1} verify-int-2=${INT2} verify-int-3=${INT3} verify-int-4=${INT4} verify-int-5=${INT5} verify-int-6=${INT6} guard-git=${GUARD} event=${EVENT} reuse=${REUSE_RESULT}/${REUSE} ledger-only-detect=${LEDGER_RESULT}/${LEDGER_ONLY}"
           # A verify job passes when it succeeded, or (label event, D10-242; push to main,
           # D10-1024 B2) when verify-reuse itself succeeded and found its success on the same
           # tested tree, so it was skipped.
@@ -1734,6 +1772,7 @@ jobs:
           [ "$UNIT" = success ] || reused "$UNIT" || ledger_only "$UNIT" || exit 1
           [ "$SPEC1" = success ] || reused "$SPEC1" || ledger_only "$SPEC1" || exit 1
           [ "$SPEC2" = success ] || reused "$SPEC2" || ledger_only "$SPEC2" || exit 1
+          [ "$SPEC3" = success ] || reused "$SPEC3" || ledger_only "$SPEC3" || exit 1
           [ "$PROPS1" = success ] || reused "$PROPS1" || ledger_only "$PROPS1" || exit 1
           [ "$PROPS2" = success ] || reused "$PROPS2" || ledger_only "$PROPS2" || exit 1
           [ "$PROPS3" = success ] || reused "$PROPS3" || ledger_only "$PROPS3" || exit 1
@@ -1756,6 +1795,7 @@ jobs:
           UNIT: ${{ needs.verify-unit.result }}
           SPEC1: ${{ needs.verify-spec-1.result }}
           SPEC2: ${{ needs.verify-spec-2.result }}
+          SPEC3: ${{ needs.verify-spec-3.result }}
           PROPS1: ${{ needs.verify-props-1.result }}
           PROPS2: ${{ needs.verify-props-2.result }}
           PROPS3: ${{ needs.verify-props-3.result }}
