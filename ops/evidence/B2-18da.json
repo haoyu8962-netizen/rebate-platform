@@ -1,0 +1,37 @@
+{
+  "risk_note": "RV2 by path (apps/api/src/modules/settlement/**), test-only change (ledger type test-change, tester none; orchestrator D10-3632 / D10-3661, precedents B1-02zg / B1-04ca): the implementer unit test [AC-B2-18d-UNIT#4] of settlement/bill/follow-union.test.ts ran four bills of 501 orders in one `it` and took 5066 ms against the 5000 ms default on main 842f1d14bcdf's verify-unit. It is split into three top-level `it` (month-end default = injected 500 statement for statement; injected 501 leaves none; the supplement entry has the same default), all titled [AC-B2-18d-UNIT#4]. The 21 expect statements are byte-identical and in the same order (each moved into one of the three), the shared ids / orders / last / bill() factory moved to module level unchanged, no timeout added, no other test or production file touched. On the test machine the file alone ran three times: the heaviest of the three tests took 101 / 102 / 106 ms; --fast in its four parts exited 0 on the same head. No money, ledger, attribution, migration or contract path touched; tester none, so no red run.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "review_type": "money",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 (full, head f5f3870014ba on main ec90f785e89d): pass, 0 findings, nothing moved by the validator; checklist concurrency ok, the other six n/a (no amount, sign, idempotency, refund, clock or app_id logic touched). The review brief carried the expect-by-expect mapping (original text, old line -> new test and line, 21 -> 21)."
+    }
+  ],
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-18da",
+  "spec_commit": "a0e6488ccc2025d864d20a0c1cfb8fd616f425e8",
+  "spec_ref": "0dc7e7c5cb6ed1b6f1ef0fd73258469c4885935d",
+  "red_tests": [],
+  "runs": [],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "80e75c7a9de1ae4fce784948e1873cae69ff22a1",
+    "specs": "ccc7253fa17ee10e3629588abeb09e4afb62fa69"
+  }
+}
