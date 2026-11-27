@@ -1,0 +1,26 @@
+id: B2-18da
+repo: rebate-platform
+title: '月结「按联盟结算重生成」单测 [AC-B2-18d-UNIT#4] 负载下贴着 5 秒默认超时（FU-SETTLE-FOLLOW-UNION-UNIT4-TIMEOUT）——一条用例里的四遍 501 张单拆成三条，断言一条不少、不加超时'
+type: test-change
+# 类型取 test-change：只改一份实现方单元测试、不改实现（同 B1-02zg、B1-04ca 的登法；RV2 的 impl 类台账必须有规则测试作者，这张单没有规则测试可写）。
+# 2026-11-28 funds 线入账（编排 D10-3629 / D10-3632 / D10-3659）。主干 842f1d14bcdf 的 verify-unit 日志里 apps/api/src/modules/settlement/bill/follow-union.test.ts 的 [AC-B2-18d-UNIT#4] 跑了 5066ms（默认超时 5000ms，那次带 × 标记）。
+# 查因（只读）：这一条在同一个 it 里跑了四遍 501 张都要重生成的单——月结不注入上限、月结注入 500（两遍逐句比 SQL 文本与轨迹）、月结注入 501（没有留下）、补充入口不注入上限；按 5066ms 均摊每遍约 1.3 秒（估算，没有分遍的实测），四遍合起来在 CI 受挤时过线。
+# 只做（写死）：只改这一个测试文件；把这一条拆成三条顶层 it——① 月结：缺省与注入 500 逐句相同（两遍）；② 月结：注入 501 时没有留下（一遍）；③ 补充入口：同一个缺省（一遍）。
+#   公用的 501 张单与搭夹具的小函数提到三条之外共用。**原有的每一条 expect 原样保留、落到三条之一**（内容、期望值、先后都不变），不删、不放宽、不改 501 / 500 这些数；标题各带原编号 [AC-B2-18d-UNIT#4] 加说明。
+#   不设单条超时、不改全局 testTimeout、不改 vitest 配置；不改实现（settlement/bill 的任何非测试文件）与别的测试。
+# 判定：测试机单跑这个文件三次，三条各自耗时都记下来（期望每条都远低于 5 秒）；--fast 各段绿。改后若最重的一条在测试机上仍超过 3 秒，停下报编排再定是否加单条超时。
+# 评审：路径在 apps/api/src/modules/settlement/**（RV2），Codex 资金评审（money）；评审书写明这是只动实现方单测的结构调整、附「原 expect → 现在在哪一条」对照表。
+# refs 取 B2-18d 的两条（这条单测钉的就是 B2-18d 的重生成上限行为）；本单不改任何规则取值与实现。
+refs: [BR-FUND-04, BR-FUND-09]
+refs_hash:
+  BR-FUND-04: faf2ddd22d5b
+  BR-FUND-09: 891062fdd62b
+deps: [B2-18d]
+paths:
+  - 'apps/api/src/modules/settlement/bill/follow-union.test.ts'
+impl: claude
+tester: none
+accept:
+  - 'pnpm verify'
+status: todo
+pr: null
