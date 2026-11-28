@@ -18,7 +18,7 @@ type: impl
 # 2026-11-24 置 void（w1，编排 D10-2850 / D10-2851，approvals 169 止损条款）：Codex 资金评审 r3 仍 fail（S1 淘宝 save 成功后本地提交前重启则这条备案无法恢复；S1 就绪检查在消费 state 之后）；并入 B1-04zzzzn——带走本单规则测试 e8829b7d0..8cad0d05e 与实现 r1–r5（头 abbcb7461）。
 refs: [BR-ID-17, BR-ATTR-05]
 refs_hash:
-  BR-ID-17: ba4ebcc6279a
+  BR-ID-17: abf653e68588
   BR-ATTR-05: 655fe77b6d9b
 deps: []
 paths:
