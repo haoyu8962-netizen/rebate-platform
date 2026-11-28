@@ -1,0 +1,32 @@
+id: B1-04zzzzr
+repo: rebate-platform
+title: '淘宝 sdk_token 下发补 sdk_app_key（服务端）：auth-url 与 30101 / 30102（open、分享）下发 auth_methods 含 sdk_token 时，data 带 sdk_app_key = 本次 state 记录的 sdk_token 应用引用里的联盟应用 appKey；其余响应不带；顺手改 union-auth-url.ts 旧注释'
+type: impl
+# 2026-11-28 w1 入账（编排 D10-3797 ① / D10-3807；FU-TB-SDK-APP-KEY-SERVER，D10-3717 Q7；方案 couli-runs/TB-APP-AUTH/plan.md C2 第 5 条服务端那一半）。依据 SPEC_REF d840ba996561：04 §6.3:678、§7:768–769，08 BR-ID-17 细则「授权方式」（10_ID:966「取值取自 state 记录的该应用标识」）。用户授权边界，RV2，Codex 资金评审。
+# 不占契约槽：只往 CT-28 新增的可选字段里填值，不改 contracts/**、不改生成物、不改路由 .gen.ts；类型取 CT-28 重生成的 packages/contracts-ts。
+# 现状（主干 bdae11363）：下发 auth_methods 的出口三处——① union-auth-url.ts:357–360 GET auth-url 的 data；② link-open-taobao.ts:341–345 open 的 30101 / 30102 data；③ shares.ts:669–671 分享的 30101 从 auth-url 的 data 只挑 auth_url / state / auth_methods 三项转出（不改就会丢掉 sdk_app_key）。
+#   sdk_token 的应用引用在签发时由 authAppRefs（union-auth-state.ts:171–187）按方式解析、写进 state 的 auth_app_refs；真实引用格式 taobao-sdk-app/v1/…，parseTaobaoSdkAppRef（infra/auth-apps.ts:128）能取回 appKey；local / test 的演示解析器（auth-apps.ts:22–36）给的是 demo/<env>/taobao/<端>/<方式>，取不出 appKey。
+# 做法：① sdk_app_key 只取「本次写进 state 的那条 sdk_token 引用」解析出的 appKey（与兑换时 resolveIssuedTaobao… 取回的是同一个值），不读实例当前配置、不读客户端上报；auth_methods 不含 sdk_token 时不带该字段（含 web_code-only、pdd、auth_unavailable、sharer_auth_invalid、30153 等）。
+#   ② 取不出时降级（D10-3807，授权别把用户拦住）：sdk_token 的引用取不出 appKey（缺失或格式坏）→ 本次响应与 state 的 auth_methods / auth_app_refs 都去掉 sdk_token、只留 web_code，照常签发 state；记 error 级平铺日志（只含事件名、app_id、端、trace_id，不含引用原文）并计入告警（配置错误）。去掉后一种都不剩 → 照现有「无可签方式」路径答 auth_unavailable、不签 state。
+#   ③ 演示解析器的 sdk_token 引用改用 taobao-sdk-app/v1 格式、appKey 取固定演示值（明示为演示值，不臆造真实平台标识），使 local / test 下 sdk_token 也带 sdk_app_key；web_code 的演示引用不变。application 层取 appKey 经端口（如 authApps 返回值或注入的解析函数），不直接从 application 引 infra（守依赖方向）。
+#   ④ 三处出口（auth-url、open 的 30101 / 30102、分享 30101）都带；分享按 auth-url 的 data 原样转出 sdk_app_key。
+#   ⑤ FU-TB-AUTH-URL-STALE-COMMENT：union-auth-url.ts:269 注释「补丁 2: under the real user OAuth only web_code is handed out」改为现行口径（B1-04zzzzq 后真实 OAuth 下 sdk_token 也按配置签发，生产仍过滤）。
+# 规则测试钉（假传输 / 假解析器）：非生产配置 ["sdk_token","web_code"] 时 auth-url、open 30101、open 30102、分享 30101 的 data 都带 sdk_app_key 且等于 state 记录的 sdk_token 引用里的 appKey（与库里 auth_app_refs 解析结果一致）；配置 ["web_code"] 与 pdd、auth_unavailable 的响应都不带该键；生产照旧不下发 sdk_token、也不带 sdk_app_key；sdk_token 引用取不出 appKey 时 auth_methods 只剩 web_code、不带 sdk_app_key、state 照常签发且只记 web_code、打一条 error 告警；配置只有 sdk_token 时答 auth_unavailable。
+# 部署：本单与 B1-04zzzzq、CT-28 三单都部署到 staging 后，再提请 ops 改 staging union.taobao.auth_methods.android（D10-3782），本单不改配置。
+refs: [BR-ID-17]
+refs_hash:
+  BR-ID-17: abf653e68588
+deps: [CT-28]
+paths:
+  - 'apps/api/src/modules/linking/application/{union-auth-url,union-auth-url.test,union-auth-state,union-auth-state.test,link-open-taobao,link-open-taobao.test,shares,shares.test}.ts'
+  - 'apps/api/src/modules/linking/infra/{auth-apps,auth-apps.test}.ts'
+  - 'apps/api/src/modules/linking/{linking.module,linking.module.test}.ts'
+test_paths:
+  - 'test/spec/linking/taobao-sdk-app-key/**' # 新目录
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/linking/taobao-sdk-app-key/**'
+status: todo
+pr: null
