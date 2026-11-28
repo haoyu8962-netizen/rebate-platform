@@ -3,25 +3,21 @@ repo: rebate-platform
 title: CT-06zzzzzzzs：modify_existing 整块登记扩到嵌套的顶层 for…of 循环链（每层循环体只含下一层）里模板标题的 it / test，绑定允许只含标识符的解构；只扩识别，按模板原文、只许 rule_change、note 必填（B1-08zzg 门禁缺口 ①，D10-3814 / D10-3817）
 type: guard-change
 # 2026-11-28 ops 入账（编排 D10-3814 评估 couli-runs/B1-08zzg/gate-ext-estimate.md、D10-3817 准开、D10-3818 认草稿）。第三类门禁改动：入账 PR 由编排挂，任务 PR 的标签由负责人加。
-# 起因（B1-08zzg 先红，be gate-gap.md ①，57 条 + 同块无牙 32 条）：test-blocks.ts 的 forOfTemplateTests（主干 :2911–:2958）只认顶层单层
-#   `for (const <标识符> of <表达式>) { … }`，拒在三处：:2934 `parent[f] !== -1`（嵌套）、:2952 循环体里测试之外有循环、:2937 绑定不是单个标识符（`{ scene, opener }`）。
-#   具名表（顶层 const CASES / RECHECKS）本来就认（:2938 只要求表达式非空）。样本：test/spec/linking/open-pid-before-requote/pdd-unfiled.int.test.ts:45、pdd.int.test.ts:50 与 :128、
-#   test/spec/union/pids-by-account/pdd.int.test.ts:12、queries.int.test.ts:13（基线 ad7f06342 的行号）。
-# 做法（同 CT-06zzzzzzzj / CT-06zzzzzzzq 口径，只扩识别）：认「一串顶层 for…of」——最外层是顶层语句（照现有：前面是 `;`、`}` 或文件开头），每层是 `for (const <绑定> of <表达式>) {`，
-#   每层循环体**只含**下一层 for…of 一条语句（前后至多 `;`），最内层循环体照现有条件（恰一个无修饰、标题为带 `${…}` 模板、以 `;` 结尾的 it / test；没有 describe；测试之外没有别的循环）。
-#   绑定：单个标识符，或只含标识符的 `{ a, b }` / `[a, b]`；默认值、嵌套解构、计算键、重命名 `{ a: b }`、展开 `...` 一律不认。任一层不合就照旧不认（fail-closed，整文件照现有规则判）。
-#   照旧：按标题模板原文（反引号之间逐字，含 `${…}`）整块登记；只许 rule_change、note 必填（wholeBlockEntryProblem，不改）；同一原文命中多块（含 .each / .for、单层 for…of、模板标题普通块）照拒；
-#   差一个字符照拒；块外改动（含每一层循环头、具名表的声明、共用辅助）照旧整文件重判，不因本单放宽。
-#   嵌套循环链只走整块：forOfRows（CT-06zzzzzv 逐行比较，主干 :2620）对嵌套链必须返回 null，不得按行判。
-#   只改 test-blocks.ts（及其单测）；red-check.ts、tools/lib/task-file.ts、tools/ci/evidence-check.ts、tools/ops/task.ts 不动，经现有的 whole 与 wholeKindOf(...) === 'forOf' 自然生效；
-#   必须改别处才能生效就停下报编排。本单 paths 内不得 import typescript（test-blocks.ts 经 evidence-check.ts 与 tools/lib/task-file.ts 被 CI 的 evidence.yml 引用，那里不装依赖）。
-# 规则测试至少钉：① 两层嵌套、两张字面量表（pids-by-account/queries.int 形状），只改最内层 it 块体，按模板原文登记 → namesWholeBlock 为 true、整块定位、changed 判对，文件改动全在登记块内 →
-#   整个文件移出先红名单（modifiedLeftOut，同 [AC-CT-06zzzzzzzc#9]）；② 外层具名顶层 const 表 + 内层具名表、绑定为 `{ a, b }`（open-pid-before-requote/pdd.int 形状）同上；三层嵌套同上；
-#   ③ 任一层循环头或具名表的声明变一个字符（块外改动）→ 照旧整文件重判、登记无效；④ 外层循环体里除内层循环外还有别的语句、或某层里有 describe、或绑定是默认值 / 嵌套解构 / 重命名 / 展开 → 不认；
-#   ⑤ 同一原文命中两块（两个嵌套链；嵌套链与单层 for…of；嵌套链与 .each）、差一个字符 → 拒；⑥ 登记成 rule_change 以外的种类（tighten_only、ruling_correction、flake_fix）或缺 note / note 全空白 → 拒；
-#   ⑦ 嵌套链上 forOfRows 返回 null（不走逐行判）；⑧ 回归：单层 for…of（具名表 / 字面量表）、模板标题普通块（CT-06zzzzzzzq）、.each / .for 逐行与整块、静态标题，现有登记照旧；
+# 起因（B1-08zzg 先红，be gate-gap.md ①，57 条 + 同块无牙 32 条）：test-blocks.ts 的 forOfTemplateTests（主干 :2911–:2958）只认顶层单层 `for (const <标识符> of <表达式>) { … }`，拒在三处：:2934 `parent[f] !== -1`（嵌套）、:2952 循环体里测试之外有循环、:2937 绑定不是单个标识符（`{ scene, opener }`）。 具名表（顶层 const CASES / RECHECKS）本来就认（:2938 只要求表达式非空）。
+#   样本：test/spec/linking/open-pid-before-requote/pdd-unfiled.int.test.ts:45、pdd.int.test.ts:50 与 :128、 test/spec/union/pids-by-account/pdd.int.test.ts:12、queries.int.test.ts:13（基线 ad7f06342 的行号）。
+# 做法（同 CT-06zzzzzzzj / CT-06zzzzzzzq 口径，只扩识别）：认「一串顶层 for…of」——最外层是顶层语句（照现有：前面是 `;`、`}` 或文件开头），每层是 `for (const <绑定> of <表达式>) {`， 每层循环体**只含**下一层 for…of 一条语句（前后至多 `;`），最内层循环体照现有条件（恰一个无修饰、标题为带 `${…}` 模板、以 `;` 结尾的 it / test；没有 describe；测试之外没有别的循环）。 绑定：单个标识符，或只含标识符的 `{ a, b }` / `[a, b]`；默认值、嵌套解构、计算键、重命名 `{ a: b }`、展开 `...` 一律不认。
+#   任一层不合就照旧不认（fail-closed，整文件照现有规则判）。 照旧：按标题模板原文（反引号之间逐字，含 `${…}`）整块登记；只许 rule_change、note 必填（wholeBlockEntryProblem，不改）；同一原文命中多块（含 .each / .for、单层 for…of、模板标题普通块）照拒； 差一个字符照拒；块外改动（含每一层循环头、具名表的声明、共用辅助）照旧整文件重判，不因本单放宽。 嵌套循环链只走整块：forOfRows（CT-06zzzzzv 逐行比较，主干 :2620）对嵌套链必须返回 null，不得按行判。 嵌套 for…of 这一项只改 test-blocks.ts（及其单测）；
+#   red-check.ts 只为补丁 1 那一处取名改（见下）；tools/lib/task-file.ts、tools/ci/evidence-check.ts、tools/ops/task.ts 不动，经现有的 whole 与 wholeKindOf(...) === 'forOf' 自然生效； 必须改别处才能生效就停下报编排。本单 paths 内不得 import typescript（test-blocks.ts 经 evidence-check.ts 与 tools/lib/task-file.ts 被 CI 的 evidence.yml 引用，那里不装依赖）。
+# 规则测试至少钉：① 两层嵌套、两张字面量表（pids-by-account/queries.int 形状），只改最内层 it 块体，按模板原文登记 → namesWholeBlock 为 true、整块定位、changed 判对，文件改动全在登记块内 → 整个文件移出先红名单（modifiedLeftOut，同 [AC-CT-06zzzzzzzc#9]）；② 外层具名顶层 const 表 + 内层具名表、绑定为 `{ a, b }`（open-pid-before-requote/pdd.int 形状）同上；三层嵌套同上； ③ 任一层循环头或具名表的声明变一个字符（块外改动）→ 照旧整文件重判、登记无效；
+#   ④ 外层循环体里除内层循环外还有别的语句、或某层里有 describe、或绑定是默认值 / 嵌套解构 / 重命名 / 展开 → 不认； ⑤ 同一原文命中两块（两个嵌套链；嵌套链与单层 for…of；嵌套链与 .each）、差一个字符 → 拒；⑥ 登记成 rule_change 以外的种类（tighten_only、ruling_correction、flake_fix）或缺 note / note 全空白 → 拒； ⑦ 嵌套链上 forOfRows 返回 null（不走逐行判）；⑧ 回归：单层 for…of（具名表 / 字面量表）、模板标题普通块（CT-06zzzzzzzq）、.each / .for 逐行与整块、静态标题，现有登记照旧；
 #   ⑨ 登记无效时照现有冻结口径逐条判、未改用例照 CT-06p 豁免（[CT-06zzzg] red-check.test.ts、[CT-06zzzzzv#2]），不得要求「登记无效就整文件判」。
 # 停止条件（编排 D10-3817，写死）：写规则测试 3 次、实现 3 次、规则测试评审 2 轮、码评审 3 轮内过不了就停，报编排，不追加。实现中发现规则测试与现有冻结口径冲突，停下、不硬改。
+# 台账补丁 1（编排 D10-3820，B1-08zzg be 18:48，couli-runs/B1-08zzg/patch6v2-draft.yaml）：wiring/app.int 走混合路径（red-check.ts mixedOnlyFiles，主干 :851–:905）时， 未改的 it.each 块 [AC-B1-06w#10] / #11 / #12 的表是内联字面量 `[...] as const`，compareOutsideChanged（test-blocks.ts:2146）对它算出了 inlineEach（:2233–:2236），但 mixedOnlyFiles 只给**改过的**块用：主干 red-check.ts:887 `names: b.names ?? (b.changed ? (b.inlineEach ?? null) : null)`，未改块 names 为 null → :889 不移出，整文件留在名单里（剩 19 条）。
+#   做法：未改的块也用 inlineEach 给全名，与改过的块同口径展开（同一 EachExpansion，table '' 内联）；展不开的照旧 null（fail-closed，文件照旧留在名单里）。只改这一处取名； mixedOnlyFiles 其余条件一律不动：块外改动由指名本文件的 red_exempt_outside / scope: support 覆盖、每个改过的块是已登记且找到且改了的块、其余未改用例**逐条**登进 red_exempt、 没有新增 / 删除 / 挪动的用例、全名不重复。未改块有了全名后，它的每一行也须逐条登进 red_exempt 才能移出（不因有名自动豁免）。
+#   因此 red-check.ts 进 paths：取名在 red-check.ts:887，不改它就不生效（compareOutsideChanged 已算出 inlineEach，test-blocks.ts 这一项不用改）。 要改的实现方单测：tools/guard/lib/red-check.test.ts:4762–4774 原断言「An unchanged .each([…] as const) block stays without names: exempt rows do not leave it out」—— 那是 CT-06zzzzzr r2（D10-2125）只修改过块时为不放宽别处而钉的保守断言，不是规则测试，也没有裁定；
+#   本补丁改为「未改块各行都登 red_exempt 时移出，缺一行照旧留在名单里」，注释写明 D10-3820。 冻结规则测试 test/spec/ci/red-check-mixed-leave-out/** 不钉未改块无名（核过主干），不动。
+#   补钉规则测试（同一目录 test/spec/ci/modify-existing-nested-for-of/ 之外另开 test/spec/ci/mixed-inline-each-unchanged/）： ⑩ 混合文件：块外改动有 support / red_exempt_outside 覆盖、改过的块已登记，未改的 `it.each([...] as const)` 与不带 as const 的内联字面量 .each 各行都登 red_exempt → 整文件移出（mixed 含该文件）； ⑪ 同上但未改的 .each 少登一行 red_exempt → 照旧留在名单里；
+#   ⑫ 未改的 .each 表是具名常量、含标识符行、含 `${…}` 模板行、或标题用 %o / %j 等展不开 → names 照旧 null、文件照旧留在名单里； ⑬ 回归：现有混合路径（改过的 as const 块、kit 表、support 条目、red_exempt_outside）用例照旧，evidence-check 的 expectedRedFiles 与 red-check 同一份应跑清单。
 # deps：CT-06zzzzzzzq（同改 test-blocks.ts，不并行；本单在其合并后从主干起）。
 refs: []
 refs_hash: {}
@@ -29,12 +25,15 @@ deps:
   - CT-06zzzzzzzq
 paths:
   - 'tools/guard/lib/test-blocks{,.test}.ts'
+  - 'tools/guard/lib/red-check{,.test}.ts'
   - 'ops/tasks/CT-06zzzzzzzs.yaml'
 test_paths:
   - 'test/spec/ci/modify-existing-nested-for-of/**'
+  - 'test/spec/ci/mixed-inline-each-unchanged/**'
 impl: claude
 tester: codex
 accept:
   - 'pnpm verify:fast'
   - 'test/spec/ci/modify-existing-nested-for-of/**'
+  - 'test/spec/ci/mixed-inline-each-unchanged/**'
 status: todo
