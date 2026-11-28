@@ -29,4 +29,5 @@ tester: codex
 accept:
   - 'pnpm verify'
   - 'test/spec/linking/taobao-sdk-token/**'
-status: todo
+status: done
+pr: 1023
