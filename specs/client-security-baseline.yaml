@@ -166,7 +166,7 @@ exported_components_allowed:
     source: own
   - platform: android
     component: com.couli.app.clipboard.ShareReceiverActivity
-    purpose: 系统分享接收
+    purpose: 系统分享接收入口：只收 ACTION_SEND 的文本 / 图片，不做导航（不接受路由名、URL 或路由参数），内容按不可信输入只交 POST /v1/inputs/parse 识别（CSB-09，2026-11-28 负责人确认）
     source: own
   - platform: android
     component: com.couli.app.inbound.InboundSchemeActivity
