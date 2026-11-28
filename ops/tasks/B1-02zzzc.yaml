@@ -9,7 +9,7 @@ refs_hash:
   BR-ID-08: 771953f2804d
   BR-WDR-01: 3116933082da
   BR-WDR-03: 15fa0e1361e5
-  BR-WDR-07: 3eaedce150d8
+  BR-WDR-07: 84de08b4b1c7
 deps: [B1-02zzzb]
 paths:
   - 'contracts/openapi.yaml'

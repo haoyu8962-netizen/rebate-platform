@@ -19,7 +19,7 @@ type: impl
 #   另改正 modify_existing 说明里的一句：锁内只加 ⑤⑥、不加 ④（编排 D10-3594）——先 ⑤ 收款方式为空 30305，后 ⑥ 无当前实名 30304 / 姓名不一致 30307。
 refs: [BR-WDR-07, BR-WDR-03]
 refs_hash:
-  BR-WDR-07: 3eaedce150d8
+  BR-WDR-07: 84de08b4b1c7
   BR-WDR-03: 15fa0e1361e5
 deps: [B2-05u]
 paths:

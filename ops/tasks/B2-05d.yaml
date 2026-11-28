@@ -11,7 +11,7 @@ type: impl
 # 已知偏离（已报编排）：全局检查阶段把 step-up（10003）与实名（30304）排在处理器之前，与 BR-WDR-03 ①（30306 先于 ②）字面顺序不同；rules 接口内按原文顺序。
 refs: [BR-WDR-07, BR-WDR-09, BR-WDR-03]
 refs_hash:
-  BR-WDR-07: 3eaedce150d8
+  BR-WDR-07: 84de08b4b1c7
   BR-WDR-09: 68225c9af85f
   BR-WDR-03: 15fa0e1361e5
 deps: [B2-05c, B2-02f, B1-02y]
