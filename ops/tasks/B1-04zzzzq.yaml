@@ -1,0 +1,28 @@
+id: B1-04zzzzq
+repo: rebate-platform
+title: 淘宝跳淘宝 App 授权的服务端 sdk_token 分支——SDK 令牌直接当 session 调 publisher.info.save（重复备案经 publisher.info.get 只认库里对得上的历史）、appKey 取自 sdk_token 应用引用且必须是自己的、非生产按配置签发与放行、生产照旧过滤、TOP 鉴权类错误进 30104 并打只含 code / sub_code 的告警
+type: impl
+# 2026-11-28 w1 入账（编排 D10-3709 ①；负责人 11-28 定方向 D10-3704；方案 couli-runs/TB-APP-AUTH/plan.md C2 第 1–4、6–8 条，不含契约改动——sdk_app_key 下发由 be 的 CT-TBAPP 做）。用户授权边界，RV2，Codex 资金评审。
+# 现状四道挡：生产过滤 sdk_token（linking/application/union-auth-reads.ts:170–176）；真实 OAuth 下只签发 web_code（union-auth-state.ts:118–126 issuableTaobaoMethods）；应用解析器不给 sdk_token 引用（linking/infra/auth-apps.ts:44）；交换器有 resolveApp 时只放行 web_code（union-binding-exchanger.ts:13–14 TODO），适配器遇非授权码拒（union/infra/taobao/taobao-adapter.ts:594 sdk_token_unsupported）。
+# 做法：① 适配器 credentialType=sdk_token 时跳过 exchangeTaobaoUserCode（:635），把提交的 access_token 原样当 session 调 publisher.info.save；重复时 publisher.info.get 逻辑不变；邀请码与联盟账号归属校验、备案尝试先落单（filing.started / settled）、令牌不归档不进日志不进异常信息都照旧。
+#   ② sdk_token 应用引用新格式只含联盟应用 app_key（不含 redirect_uri）；适配器照现有规则核对 appKey 必须是自己的（:614–619），不一致即拒、不发请求。
+#   ③ issuableTaobaoMethods 放开 sdk_token；生产过滤保留（到 CAP-TB-05 (f) 通过且负责人确认）；非生产照 union.taobao.auth_methods.<端> 配置签发。④ 交换器有 resolveApp 时放行 sdk_token（解析出的应用只有 appKey），关掉 :13–14 的 TODO。
+#   ⑤ 淘宝回 session 无效 / 应用不匹配 / 权限不足一类 → invalid_identity → 30104 credential_invalid，并打一条平铺告警，只含 TOP code / sub_code 与授权方式（sdk_token / web_code），不含令牌、不含 relation_id。不需要迁移（约束已允许 sdk_token）。
+# 配置（C2 第 6 条，非代码）：落地并部署后由 ops 在 staging 设 union.taobao.auth_methods.android=["sdk_token","web_code"]；生产保持 ["web_code"]。
+# 规则测试钉（假传输）：sdk_token 原样当 session、不调换令牌接口；令牌不出现在日志 / 归档 / 异常信息；appKey 不符即拒且不发请求；重复备案查回只认库里对得上的历史；生产不签发也不接受 sdk_token；同一 state 并发提交只有一个进入备案；TOP 鉴权类错误 → 30104 且告警只含 code / sub_code。
+refs: [BR-ID-17, BR-ATTR-05]
+refs_hash:
+  BR-ID-17: ba4ebcc6279a
+  BR-ATTR-05: 655fe77b6d9b
+deps: []
+paths:
+  - 'apps/api/src/modules/linking/{application/{union-auth-state,union-auth-state.test,union-auth-reads,union-auth-reads.test,union-binding-exchanger,union-binding-exchanger.test}.ts,infra/{auth-apps,auth-apps.test}.ts}'
+  - 'apps/api/src/modules/union/infra/taobao/{taobao-adapter,taobao-adapter.test,publisher,publisher.test}.ts'
+test_paths:
+  - 'test/spec/linking/taobao-sdk-token/**' # 新目录
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/linking/taobao-sdk-token/**'
+status: todo
