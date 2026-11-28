@@ -8,6 +8,7 @@ type: impl
 #   ② sdk_token 应用引用新格式只含联盟应用 app_key（不含 redirect_uri）；适配器照现有规则核对 appKey 必须是自己的（:614–619），不一致即拒、不发请求。
 #   ③ issuableTaobaoMethods 放开 sdk_token；生产过滤保留（到 CAP-TB-05 (f) 通过且负责人确认）；非生产照 union.taobao.auth_methods.<端> 配置签发。④ 交换器有 resolveApp 时放行 sdk_token（解析出的应用只有 appKey），关掉 :13–14 的 TODO。
 #   ⑤ 淘宝回 session 无效 / 应用不匹配 / 权限不足一类 → invalid_identity → 30104 credential_invalid，并打一条平铺告警，只含 TOP code / sub_code 与授权方式（sdk_token / web_code），不含令牌、不含 relation_id。不需要迁移（约束已允许 sdk_token）。
+# 补丁 1（D10-3726，规则测试评审 r1 S1-1）：paths 加 union/union.module.ts（及单测）——logTaobaoWarning（:299–332）现在字段写死、只有 code 11 带 sub_code、不写授权方式；TOP 鉴权类告警改为平铺带 code、sub_code、授权方式，仍不含令牌与 relation_id。
 # 配置（C2 第 6 条，非代码）：落地并部署后由 ops 在 staging 设 union.taobao.auth_methods.android=["sdk_token","web_code"]；生产保持 ["web_code"]。
 # 规则测试钉（假传输）：sdk_token 原样当 session、不调换令牌接口；令牌不出现在日志 / 归档 / 异常信息；appKey 不符即拒且不发请求；重复备案查回只认库里对得上的历史；生产不签发也不接受 sdk_token；同一 state 并发提交只有一个进入备案；TOP 鉴权类错误 → 30104 且告警只含 code / sub_code。
 refs: [BR-ID-17, BR-ATTR-05]
@@ -18,6 +19,7 @@ deps: []
 paths:
   - 'apps/api/src/modules/linking/{application/{union-auth-state,union-auth-state.test,union-auth-reads,union-auth-reads.test,union-binding-exchanger,union-binding-exchanger.test}.ts,infra/{auth-apps,auth-apps.test}.ts}'
   - 'apps/api/src/modules/union/infra/taobao/{taobao-adapter,taobao-adapter.test,publisher,publisher.test}.ts'
+  - 'apps/api/src/modules/union/{union.module,union.module.test}.ts'
 test_paths:
   - 'test/spec/linking/taobao-sdk-token/**' # 新目录
 impl: claude
