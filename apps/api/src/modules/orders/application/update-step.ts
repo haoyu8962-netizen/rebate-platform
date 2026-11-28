@@ -505,6 +505,11 @@ export function createOrderUpdateStep(
     let pidUnmatched: 'not_ours' | 'site_mismatch' | null = null;
     /** 本次已知的订单推广位场景：淘宝未归因重跑命中行的，或来源回填查过的（undefined = 本次还没有）。 */
     let knownPidScene: string | null | undefined;
+    /**
+     * B1-08zzi（D10-3808，BR-CALC-19）：本次未归因重跑命中行的场景，只在 match.kind === 'hit' 时赋值。
+     * 与 knownPidScene 分开：后者还会被已归属待补店铺的来源重跑写入现查结果，不能盖过持久化的命中时场景。
+     */
+    let hitPidScene: string | undefined;
     // B1-08p 店铺：只空 → 非空（口径 2）。
     const shop = incomingShopId(incoming);
     const shopWrite = shopIdToWrite(current.shop_id, shop);
@@ -527,6 +532,10 @@ export function createOrderUpdateStep(
         else {
           // B1-08zze（D10-3485）：命中行的场景就是本次已知场景，回填与首次快照复用，不再二次查 union_pids。
           knownPidScene = match.row.pid_scene;
+          hitPidScene = match.row.pid_scene;
+          // B1-08zzi：命中时场景随同一条 CAS（WHERE user_id IS NULL）写入；不论本次是否归因成功，
+          // 未归因期间按最新一次命中更新。没命中不写，保留库内值。
+          Object.assign(set, { attr_pid_scene: match.row.pid_scene });
           if (match.row.pid !== current.pid) pidWrite = { pid: match.row.pid };
         }
       }
@@ -610,6 +619,21 @@ export function createOrderUpdateStep(
       backfilled = source.source_match;
     }
 
+    /**
+     * B1-08zzi（D10-3808）：首次快照与补偿重试判淘礼金用的场景，优先级写死：
+     * ① 本次未归因重跑命中的场景 → ② 库内 attr_pid_scene（命中时持久化）非空 → ③ 列为空（存量单）照旧：
+     * 本次已知（knownPidScene）或按订单推广位现查。
+     */
+    async function snapshotPidScene(orderPid: string | null): Promise<string | null> {
+      if (hitPidScene !== undefined) return hitPidScene;
+      // 用 ?? 而不是 !== null：不带这一列的行（如单测替身，值为 undefined）也按「列为空」处理。
+      const stored = current.attr_pid_scene ?? null;
+      if (stored !== null) return stored;
+      return knownPidScene !== undefined
+        ? knownPidScene
+        : await orderPidScene(current, orderPid, ctx, platform);
+    }
+
     // ③ 黑名单（BR-ATTR-26）：判定阶段只读查询；处置在 CAS 写入成功之后。
     const blacklist: OrderBlacklistCheck | null =
       blacklistStep === null
@@ -649,10 +673,7 @@ export function createOrderUpdateStep(
       crossesSnapshotEligibility(eligibilityBefore, eligibilityAfter)
     ) {
       const orderPid = set.pid !== undefined ? set.pid : current.pid;
-      const pidScene =
-        knownPidScene !== undefined
-          ? knownPidScene
-          : await orderPidScene(current, orderPid, ctx, platform);
+      const pidScene = await snapshotPidScene(orderPid);
       // 待编排裁定 7：推广位场景查不到 → 按非淘礼金处理，写后告警。
       snapshotSceneMissing = pidScene === null;
       // BR-CALC-11 细则 ②③：「迁到 PAID 的那次」以库内尚无已付历史、本次计划里有到 PAID+ 的步为准；
@@ -797,10 +818,7 @@ export function createOrderUpdateStep(
         } else {
           const ownerUserId = eligibilityAfter.user_id;
           const orderPid = set.pid !== undefined ? set.pid : current.pid;
-          const pidScene =
-            knownPidScene !== undefined
-              ? knownPidScene
-              : await orderPidScene(current, orderPid, ctx, platform);
+          const pidScene = await snapshotPidScene(orderPid);
           snapshotSceneMissing = pidScene === null;
           const source = current.paid_at_source;
           const firstPaidAt =

@@ -1104,3 +1104,298 @@ it('[AC-B1-08zzc#u17] 京东、拼多多不变：未归因写本次报文推广�
     expect(setValues(same.calls).get('pid')).toBe('slot-ours');
   }
 });
+
+// —— B1-08zzi（D10-3808，BR-CALC-19）：订单持久化命中时的推广位场景 attr_pid_scene ——
+
+const SCENE_OWNER = '019a0000-0000-7000-8000-000000000042';
+
+/**
+ * 同 scriptedDb，另让 order_sync_pending 的查询回 open 的快照类待处理行（触发 B1-08t 补偿重试）；
+ * 其余语句照旧（orders UPDATE 命中一行，orders 查询回 row）。
+ */
+function sceneDb(row: Row, openSnapshot: boolean) {
+  const calls: { sql: string; parameters: readonly unknown[] }[] = [];
+  const pending = openSnapshot
+    ? [
+        {
+          id: PENDING_ID,
+          reason: 'RULE_VERSION_PLATFORM_MISSING',
+          detected_at: at('2026-10-16T00:00:00.000Z'),
+          created_at: at('2026-10-16T00:00:00.000Z'),
+          resolution_note: null,
+        },
+      ]
+    : [];
+  class SceneDriver extends DummyDriver {
+    override acquireConnection(): Promise<DatabaseConnection> {
+      return Promise.resolve({
+        executeQuery<R>(compiled: {
+          sql: string;
+          parameters: readonly unknown[];
+        }): Promise<QueryResult<R>> {
+          calls.push({ sql: compiled.sql, parameters: compiled.parameters });
+          if (compiled.sql.startsWith('update "app"."orders"')) {
+            return Promise.resolve({ rows: [], numAffectedRows: 1n });
+          }
+          if (compiled.sql.startsWith('select') && compiled.sql.includes('"app"."orders"')) {
+            return Promise.resolve({ rows: [row] as R[] });
+          }
+          if (
+            compiled.sql.startsWith('select') &&
+            compiled.sql.includes('"app"."order_sync_pending"')
+          ) {
+            return Promise.resolve({ rows: pending as R[] });
+          }
+          if (compiled.sql.startsWith('insert into "app"."order_sync_pending"')) {
+            return Promise.resolve({ rows: [pendingRow({ inserted: true })] as R[] });
+          }
+          return Promise.resolve({ rows: [] });
+        },
+        streamQuery() {
+          throw new Error('not used');
+        },
+      });
+    }
+  }
+  const db = new Kysely<DB>({
+    dialect: {
+      createAdapter: () => new PostgresAdapter(),
+      createDriver: () => new SceneDriver(),
+      createIntrospector: (kysely) => new PostgresIntrospector(kysely),
+      createQueryCompiler: () => new PostgresQueryCompiler(),
+    },
+  });
+  return { db, calls };
+}
+
+/** 已归属的淘宝订单：库内推广位 mm_1001_3001_2002、无店铺、尚无来源；场景列与平台状态由用例给。 */
+function attributedTaobao(patch: Partial<Row>): Row {
+  return {
+    ...current,
+    platform: 'taobao',
+    user_id: SCENE_OWNER,
+    rebate_status: 'ESTIMATED',
+    pid: 'mm_1001_3001_2002',
+    buy_type: 'self',
+    activity_type: null,
+    source_match: null,
+    shop_id: null,
+    paid_at_source: 'platform',
+    is_presale: false,
+    ...patch,
+  } as Row;
+}
+
+/**
+ * 跑一次已归属淘宝订单的更新：pids.find（现查登记行）给 liveScene；sources 注入时本次报文带店铺，
+ * 走「已归属待补店铺」的来源重跑（update-step 的 shouldRetryOrderSource 分支）。
+ */
+async function runAttributedTaobao(input: {
+  readonly row: Row;
+  readonly openSnapshot: boolean;
+  readonly raw: string;
+  readonly liveScene: string;
+  readonly withSources: boolean;
+  readonly patch?: Partial<UnionOrder>;
+}) {
+  const { db, calls } = sceneDb(input.row, input.openSnapshot);
+  const find = vi.fn<OrderPipelineDeps['pids']['find']>(() =>
+    Promise.resolve([{ pid_scene: input.liveScene, status: 'active', site_id: '3001' }]),
+  );
+  const slotCandidates = vi.fn<NonNullable<OrderPipelineDeps['pids']['slotCandidates']>>(() =>
+    Promise.resolve([]),
+  );
+  const create = vi.fn<CommissionSnapshotPort['create']>(() =>
+    Promise.resolve({ kind: 'created' as const }),
+  );
+  const linkLogs = vi.fn<OrderSourcePorts['linkLogs']>(() => Promise.resolve([]));
+  const productKey = vi.fn<OrderSourcePorts['productKey']>(() =>
+    Promise.resolve('taobao:unit-item'),
+  );
+  const { d } = withBus([], {
+    pids: { find, slotCandidates, slotKey: () => tbSlotKey },
+    snapshots: { create },
+    ...(input.withSources ? { sources: { linkLogs, productKey } } : {}),
+  });
+  const changed = incoming({
+    platform: 'taobao',
+    raw_status: input.raw,
+    promotion_slot: '2002',
+    site_id: '3001',
+    ...(input.withSources ? { shop_id: 'unit-shop' } : {}),
+    ...input.patch,
+  });
+  const { outcome } = await run(db, d, input.row, changed, { ...ctx, platform: 'taobao' });
+  expect(outcome).toEqual({ kind: 'updated', order_id: current.order_id });
+  return { set: setValues(calls), find, slotCandidates, create, linkLogs };
+}
+
+it.each([
+  {
+    label: 'B1-08t 补偿重试',
+    row: attributedTaobao({ platform_status: 'RECEIVED', attr_pid_scene: 'taolijin' }),
+    openSnapshot: true,
+    raw: 'received',
+    patch: {},
+  },
+  {
+    label: '首次跨入快照（定金单付尾款）',
+    row: attributedTaobao({
+      platform_status: 'DEPOSIT_PAID',
+      received_at: null,
+      is_presale: true,
+      deposit_paid_at: at('2026-10-14T00:00:00.000Z'),
+      paid_at: null,
+      paid_at_source: null,
+      attr_pid_scene: 'taolijin',
+    }),
+    openSnapshot: false,
+    raw: 'paid',
+    patch: { deposit_paid_at: at('2026-10-14T00:00:00.000Z') },
+  },
+])(
+  '[AC-B1-08zzi#u1] 已归属、注入 sources 且本次走待补店铺的来源重跑（现查给分享）：$label 仍按库内场景列判淘礼金，不写场景列',
+  async ({ row, openSnapshot, raw, patch }) => {
+    const t = await runAttributedTaobao({
+      row,
+      openSnapshot,
+      raw,
+      liveScene: 'share',
+      withSources: true,
+      patch,
+    });
+    // 来源重跑确实走了（现查登记行一次、读点击一次），它的现查结果不盖过列。
+    expect(t.find).toHaveBeenCalledTimes(1);
+    expect(t.linkLogs).toHaveBeenCalledTimes(1);
+    expect(t.set.get('source_match')).toBe('none');
+    expect(t.slotCandidates).not.toHaveBeenCalled();
+    expect(t.create.mock.calls).toHaveLength(1);
+    expect(t.create.mock.calls[0]?.[1]).toMatchObject({
+      ownerUserId: SCENE_OWNER,
+      rebateMode: 'none',
+      tljRedpacketFen: null,
+    });
+    // 已归因订单的任何路径都不写场景列（[AC-B1-08zzi#9] 同口径）。
+    expect(t.set.has('attr_pid_scene')).toBe(false);
+  },
+);
+
+it.each([
+  { label: '补偿重试', platform_status: 'RECEIVED', openSnapshot: true, raw: 'received' },
+  { label: '首次跨入', platform_status: 'DEPOSIT_PAID', openSnapshot: false, raw: 'paid' },
+])(
+  '[AC-B1-08zzi#u2] 已归属、场景列为空（存量单）：$label 照旧按订单推广位现查登记行',
+  async ({ platform_status, openSnapshot, raw }) => {
+    const deposit = at('2026-10-14T00:00:00.000Z');
+    const row = attributedTaobao({
+      platform_status,
+      attr_pid_scene: null,
+      ...(platform_status === 'DEPOSIT_PAID'
+        ? {
+            received_at: null,
+            is_presale: true,
+            deposit_paid_at: deposit,
+            paid_at: null,
+            paid_at_source: null,
+          }
+        : {}),
+    });
+    const t = await runAttributedTaobao({
+      row,
+      openSnapshot,
+      raw,
+      liveScene: 'taolijin',
+      withSources: false,
+      patch: platform_status === 'DEPOSIT_PAID' ? { deposit_paid_at: deposit } : {},
+    });
+    expect(t.find.mock.calls).toEqual([
+      [
+        {
+          appId: current.app_id,
+          platform: 'taobao',
+          unionAccountId: 'unit-account',
+          pid: 'mm_1001_3001_2002',
+        },
+      ],
+    ]);
+    expect(t.create.mock.calls).toHaveLength(1);
+    expect(t.create.mock.calls[0]?.[1]).toMatchObject({ rebateMode: 'none' });
+    expect(t.set.has('attr_pid_scene')).toBe(false);
+  },
+);
+
+it('[AC-B1-08zzi#u3] 未归因重跑命中分享行、库内场景列为淘礼金：首次快照按命中场景，命中场景随同一条 CAS 写入场景列', async () => {
+  const row = {
+    ...current,
+    platform: 'taobao',
+    user_id: null,
+    rebate_status: 'UNATTRIBUTED',
+    pid: 'mm_1001_3001_2002',
+    buy_type: 'self',
+    attr_pid_scene: 'taolijin',
+  } as Row;
+  const { db, calls } = sceneDb(row, false);
+  const hit: SlotPidRow = {
+    pid: 'mm_1001_3001_2002',
+    pid_scene: 'share',
+    status: 'active',
+    site_id: '3001',
+  };
+  const slotCandidates = vi.fn<NonNullable<OrderPipelineDeps['pids']['slotCandidates']>>(() =>
+    Promise.resolve([hit]),
+  );
+  const find = vi.fn<OrderPipelineDeps['pids']['find']>(() =>
+    Promise.resolve([{ pid_scene: 'taolijin', status: 'active', site_id: '3001' }]),
+  );
+  const create = vi.fn<CommissionSnapshotPort['create']>(() =>
+    Promise.resolve({ kind: 'created' as const }),
+  );
+  const { d } = withBus([], {
+    pids: { find, slotCandidates, slotKey: () => tbSlotKey },
+    bindings: {
+      findByRelation: () =>
+        Promise.resolve([
+          {
+            user_id: SCENE_OWNER,
+            bound_at: at('2026-10-01T00:00:00.000Z'),
+            released_at: null,
+            cooldown_until: null,
+          },
+        ]),
+    },
+    snapshots: { create },
+  });
+  const changed = incoming({
+    platform: 'taobao',
+    raw_status: 'received',
+    promotion_slot: '2002',
+    site_id: '3001',
+    attr_params: { relation_id: 'unit-relation', sub_union_id: null, custom_parameters: null },
+  });
+  const { outcome } = await run(db, d, row, changed, { ...ctx, platform: 'taobao' });
+  expect(outcome).toEqual({ kind: 'updated', order_id: current.order_id });
+  const set = setValues(calls);
+  expect(set.get('user_id')).toBe(SCENE_OWNER);
+  expect(set.get('attr_pid_scene')).toBe('share');
+  const update = calls.find((call) => call.sql.startsWith('update "app"."orders"'));
+  expect(update?.sql).toContain('"user_id" is null');
+  expect(find).not.toHaveBeenCalled();
+  expect(create.mock.calls).toHaveLength(1);
+  expect(create.mock.calls[0]?.[1]).toMatchObject({
+    ownerUserId: SCENE_OWNER,
+    rebateMode: null,
+    tljRedpacketFen: 0n,
+  });
+});
+
+it('[AC-B1-08zzi#u4] 未归因重跑命中但仍未归因：照写命中场景；没命中不写场景列', async () => {
+  const hit: SlotPidRow[] = [
+    { pid: 'mm_1001_3001_2002', pid_scene: 'share', status: 'active', site_id: '3001' },
+  ];
+  const matched = await taobaoUnattributed('mm_1001_3001_2002', '2002', hit);
+  expect(matched.set.has('user_id')).toBe(false);
+  expect(matched.set.get('attr_pid_scene')).toBe('share');
+
+  const missed = await taobaoUnattributed('mm_1001_3001_2002', '2002', []);
+  expect(missed.set.has('attr_pid_scene')).toBe(false);
+});

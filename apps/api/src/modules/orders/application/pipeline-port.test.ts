@@ -724,3 +724,32 @@ it('[AC-B1-08zzc#u12] SITE_MISMATCH：提交失败不发 P1；提交成功后才
   expect(marks.indexOf('P1 alert')).toBeGreaterThan(marks.indexOf('commit'));
   expect(marks.indexOf('commit')).toBeGreaterThan(-1);
 });
+
+// —— B1-08zzi（D10-3808，BR-CALC-19）：首次入库把命中时的推广位场景写进 orders.attr_pid_scene ——
+
+/** orders INSERT 里某列的值；没有这一列为 undefined。 */
+const insertedColumn = (statements: Statement[], column: string): unknown => {
+  const insert = ordersInsert(statements);
+  const columns = /\(([^)]*)\) values/.exec(insert?.sql ?? '')?.[1]?.split(', ') ?? [];
+  const index = columns.indexOf(`"${column}"`);
+  return index === -1 ? undefined : insert?.parameters[index];
+};
+
+it.each([{ scene: 'taolijin' }, { scene: 'share' }])(
+  '[AC-B1-08zzi#u5] 淘宝首次入库、未归因（命中 $scene）：orders INSERT 仍带 attr_pid_scene = 命中行场景',
+  async ({ scene }) => {
+    // slotSetup 的绑定读口回空：淘宝按 relation_id 归因不到，未归因入库。
+    const t = slotSetup([tbRow('3001', scene)]);
+    await expect(t.pipeline.process(taobaoOrder(), TB_CTX)).resolves.toMatchObject({
+      kind: 'inserted',
+    });
+    expect(insertedColumn(t.statements, 'user_id')).toBeNull();
+    expect(insertedColumn(t.statements, 'attr_pid_scene')).toBe(scene);
+  },
+);
+
+it('[AC-B1-08zzi#u6] 拼多多按推广位等值命中：orders INSERT 带命中行的 attr_pid_scene', async () => {
+  const t = setup();
+  await expect(t.pipeline.process(order(), ctx)).resolves.toMatchObject({ kind: 'inserted' });
+  expect(insertedColumn(t.statements, 'attr_pid_scene')).toBe('self_buy');
+});

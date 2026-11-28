@@ -302,8 +302,12 @@ async function attribute(
   const readScene = deps.pidSceneOn?.(trx) ?? deps.pidScene;
   const sources = deps.sourcesOn?.(trx) ?? deps.sources;
   let scene: { value: string | null } | undefined;
+  // B1-08zzi（D10-3808，BR-CALC-19）：先用入库 / 未归因重跑命中时持久化的场景（attr_pid_scene），非空即用，
+  // 后台改登记行场景不改变本单判定；为空（存量单）才现查登记行。来源回填与快照共用这一个值。
   const pidScene = async (): Promise<string | null> => {
-    scene ??= { value: readScene === undefined ? null : await readScene(before) };
+    scene ??= {
+      value: before.attr_pid_scene ?? (readScene === undefined ? null : await readScene(before)),
+    };
     return scene.value;
   };
   const write: { -readonly [K in keyof OrderAttributionWrite]: OrderAttributionWrite[K] } = {

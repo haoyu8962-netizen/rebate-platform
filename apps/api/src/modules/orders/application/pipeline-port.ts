@@ -482,6 +482,9 @@ export function createOrderPipeline(
       user_basis: attributed ? 'param' : null,
       buy_type: scene.buy_type,
       scene_basis: scene.scene_basis,
+      // B1-08zzi（D10-3808，BR-CALC-19）：命中时的推广位场景，与快照同一依据（淘宝即命中行；拼多多按 link 判时取
+      // link 的场景）；未归因订单也写。之后首份快照、补偿重试、找回审核与指定归属优先读它。
+      attr_pid_scene: snapshotPidScene,
       platform_status: plan.platform_status,
       is_presale: order.deposit_paid_at != null,
       deposit_paid_at: order.deposit_paid_at ?? null,
