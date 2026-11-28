@@ -1,0 +1,76 @@
+{
+  "risk_note": "RV2 by path (db/**). Seed only (BR-CALC-20: 负责人 2026-11-22 定报价技术服务费率 tech_fee_bp 各平台统一为 0, D10-2592 ② / D10-2595; FU-QUOTE-TECH-FEE-DEFAULT-ZERO, D10-3358 ① / D10-3676; precedent B1-22za). New db/seeds/0008_quote-tech-fee.sql: one INSERT INTO app.config_items (app_id, key, value, updated_by) VALUES ('couli', 'tech_fee_bp', '{\"taobao\":0,\"jd\":0,\"pdd\":0}'::jsonb, 'seed') ON CONFLICT (app_id, key) DO NOTHING; version / row_version keep their column defaults; the order-sync fallback keys union.*.service_fee_bp are not written (BR-CALC-03 旁注). Why: no seed had tech_fee_bp and the quote read side (quote-config.ts techFeeConfig) refuses a missing key, so a fresh database could not quote taobao, jd or pdd. Not touched: the read side, commission/AGENTS.md, frozen [AC-B2-03c#19] / [#21], infra/staging/README.md; no admin-side 'only 0' check. No migration, no contract. Test machine on the implementation head: 15 rule-test directories (this task, commission/quoter and every directory that reads db/seeds) 79 files / 936 tests green; --fast in its four parts exit 0. Launch checklist (D10-3676): check after the first production deploy that couli's tech_fee_bp has the three platforms.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "review_type": "money",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 (full, implementation head 7bdcf9639087 on main c5553471dc10): pass, 0 findings, nothing moved by the validator; checklist rounding / idempotency / concurrency / app_id ok, sign / partial_refund / clock n/a."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "codex",
+    "engine": "codex",
+    "model": "gpt-6.2-sol",
+    "rounds": 2,
+    "last_verdict": "fail",
+    "note": "Rule tests by an independent Claude (ledger tester claude-independent, tools/agent/claude-run.sh), three counted rounds; reviewed by Codex in the two regular rounds. r1 (round 1, 385a8b3149ef): fail S1 1 - [AC-B2-03za#4]'s VALUES-tuple regex missed a second tuple whose first field is written 'couli'::text (an extra config row, e.g. union.pdd.service_fee_bp, passed all four tests); out-of-scope S2: a block comment would wrongly reject a correct seed (taken), #3 compares against the same quoter (not taken: quote arithmetic is outside the task's paths). Round 2 (5d3dd2376081) added [AC-B2-03za#5] (whole config_items before / after running 0008 alone) and made #4 strip block comments and reduce the statement to one tuple. r2 (full, round 2): fail S1 1 - a seed writing version or row_version = 2147483647 passed all five tests. Regular rounds used up; the orchestrator chose (D10-3677, precedent D10-3228 / D10-3300) one last write round adding only two assertions without another review round: round 3 (db5b65201d28, +8 / -0) checks the INSERT column set is exactly app_id, key, value, updated_by and the new row has version 1 / row_version 0; the orchestrator read the diff and released it (D10-3678). Red: red/1, red/2, red/3 all PASS (every test red on the 0008-exists assertion, rule-test typecheck clean)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "task": "B2-03za",
+  "spec_commit": "c01d59ea858840bcf599b38be8587b290dde43ba",
+  "spec_ref": "0dc7e7c5cb6ed1b6f1ef0fd73258469c4885935d",
+  "red_tests": [
+    "test/spec/commission/tech-fee-seed/seed.int.test.ts > [AC-B2-03za#1][BR-CALC-20] 新建库跑完全部种子后 couli 的 tech_fee_bp 恰为 jsonb 对象 {\"taobao\":0,\"jd\":0,\"pdd\":0}（三键都在、都为 0、无别的键），updated_by = seed",
+    "test/spec/commission/tech-fee-seed/seed.int.test.ts > [AC-B2-03za#2][BR-CALC-20] 后台先写 couli 的 tech_fee_bp = {\"taobao\":120,\"jd\":0,\"pdd\":0} 再跑两遍全部种子 → 整行（值、version、updated_by）不变",
+    "test/spec/commission/tech-fee-seed/seed.int.test.ts > [AC-B2-03za#3][BR-CALC-20] 只靠种子：跑完全部种子后从库里读出 couli 的 tech_fee_bp 放进报价器，淘宝、京东、拼多多 NORMAL 报价都不拒绝，且与费率 0 的报价相同",
+    "test/spec/commission/tech-fee-seed/seed.int.test.ts > [AC-B2-03za#4][BR-CALC-20] 静态检查 0008：去掉注释后只有一条 INSERT INTO app.config_items … ON CONFLICT (app_id, key) DO NOTHING，无 UPDATE / DELETE / TRUNCATE，只写 app_id = couli 的 tech_fee_bp",
+    "test/spec/commission/tech-fee-seed/seed.int.test.ts > [AC-B2-03za#5][BR-CALC-20][BR-CALC-03] 新库先跑完 0008 以外的全部种子、再单独执行 0008：config_items 恰多出 couli 的 tech_fee_bp 一行（{\"taobao\":0,\"jd\":0,\"pdd\":0}，updated_by = seed），原有行原样不变，union.taobao / union.pdd.service_fee_bp 兜底键不受影响"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c01d59ea858840bcf599b38be8587b290dde43ba",
+      "tree": "d7565b8f6a44be97f93d394374e552b3e913d952",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-28T00:50:59Z",
+      "finished_at": "2026-11-28T00:52:31Z",
+      "red_tests": [
+        "test/spec/commission/tech-fee-seed/seed.int.test.ts > [AC-B2-03za#1][BR-CALC-20] 新建库跑完全部种子后 couli 的 tech_fee_bp 恰为 jsonb 对象 {\"taobao\":0,\"jd\":0,\"pdd\":0}（三键都在、都为 0、无别的键），updated_by = seed",
+        "test/spec/commission/tech-fee-seed/seed.int.test.ts > [AC-B2-03za#2][BR-CALC-20] 后台先写 couli 的 tech_fee_bp = {\"taobao\":120,\"jd\":0,\"pdd\":0} 再跑两遍全部种子 → 整行（值、version、updated_by）不变",
+        "test/spec/commission/tech-fee-seed/seed.int.test.ts > [AC-B2-03za#3][BR-CALC-20] 只靠种子：跑完全部种子后从库里读出 couli 的 tech_fee_bp 放进报价器，淘宝、京东、拼多多 NORMAL 报价都不拒绝，且与费率 0 的报价相同",
+        "test/spec/commission/tech-fee-seed/seed.int.test.ts > [AC-B2-03za#4][BR-CALC-20] 静态检查 0008：去掉注释后只有一条 INSERT INTO app.config_items … ON CONFLICT (app_id, key) DO NOTHING，无 UPDATE / DELETE / TRUNCATE，只写 app_id = couli 的 tech_fee_bp",
+        "test/spec/commission/tech-fee-seed/seed.int.test.ts > [AC-B2-03za#5][BR-CALC-20][BR-CALC-03] 新库先跑完 0008 以外的全部种子、再单独执行 0008：config_items 恰多出 couli 的 tech_fee_bp 一行（{\"taobao\":0,\"jd\":0,\"pdd\":0}，updated_by = seed），原有行原样不变，union.taobao / union.pdd.service_fee_bp 兜底键不受影响"
+      ],
+      "expected": ["test/spec/commission/tech-fee-seed/seed.int.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "c15d9630fe4763b536318c79370c46fe16af2c628de0094f6914486b34892321"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "abb9e7c3d40505946b6c8d10fe16ac1074a6f0ca",
+    "specs": "ccc7253fa17ee10e3629588abeb09e4afb62fa69"
+  }
+}
