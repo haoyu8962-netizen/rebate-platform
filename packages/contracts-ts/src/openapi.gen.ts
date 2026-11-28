@@ -529,6 +529,7 @@ export interface paths {
          * Get the authorization link of a platform
          * @description Returns auth_url, state and the ordered auth_methods (Taobao: configured per platform of
          *     the device record; the client uses the first one it can run, BR-ID-17 细则「授权方式」).
+         *     sdk_app_key comes with auth_methods containing sdk_token and is absent otherwise.
          *     For platform=pdd the response carries auth_jump instead of auth_methods (executed like a
          *     purchase jump plan, h5 steps in the system browser, no link_jump report). No self-service
          *     rebinding or unbinding. A blocked binding of a user who is not banned is 30153 and no
@@ -2765,8 +2766,8 @@ export interface paths {
          *     even with price_changed=false (BR-PRICE-13).
          *     A request stopped by 30101, 30102 or 30111 and sent again after the user authorized is a
          *     new request with a new Idempotency-Key; the original key is only for retrying the same
-         *     request (BR-ID-10 细则). 30101 / 30102 carry auth_url, state and auth_methods; 30111
-         *     carries auth_jump.
+         *     request (BR-ID-10 细则). 30101 / 30102 carry auth_url, state and auth_methods (plus
+         *     sdk_app_key when auth_methods contains sdk_token); 30111 carries auth_jump.
          *     A share link opened by anyone but the sharer while the sharer's own authorization is no
          *     longer valid (Taobao binding not active, or Pinduoduo filing invalid) gets 30102 (Taobao)
          *     or 30111 (Pinduoduo) with data.reason=sharer_auth_invalid and no auth_url, state or
@@ -2802,8 +2803,8 @@ export interface paths {
          *     is 20001 (BR-ATTR-08). Writes a link_log `convert` row (BR-ATTR-14).
          *     A request stopped by 30101, 30102 or 30111 and sent again after the user authorized is a
          *     new request with a new Idempotency-Key; the original key is only for retrying the same
-         *     request (BR-ID-10 细则). 30101 / 30102 carry auth_url, state and auth_methods; 30111
-         *     carries auth_jump.
+         *     request (BR-ID-10 细则). 30101 / 30102 carry auth_url, state and auth_methods (plus
+         *     sdk_app_key when auth_methods contains sdk_token); 30111 carries auth_jump.
          */
         post: operations["convertLink"];
         delete?: never;
@@ -2930,7 +2931,8 @@ export interface paths {
          *     (Taobao needs an active binding → otherwise 30101; Pinduoduo needs the filing → otherwise
          *     30111; BR-ATTR-10). A request stopped by 30101 or 30111 and sent again after the user
          *     authorized is a new request with a new Idempotency-Key (BR-ID-10 细则). 30101 carries
-         *     auth_url, state and auth_methods; 30111 carries auth_jump. The sharer's binding on that
+         *     auth_url, state and auth_methods (plus sdk_app_key when auth_methods contains sdk_token);
+         *     30111 carries auth_jump. The sharer's binding on that
          *     platform blocked (union_bindings status=blocked) → 30153 (as links/convert and open), not
          *     the 30101 / 30111 of a missing authorization. An unsupported platform (body.platform not
          *     taobao / jd / pdd, or a product_key whose prefix belongs to an unsupported platform) → 30131
@@ -12701,6 +12703,8 @@ export interface components {
         /**
          * @description Exactly one of auth_methods (Taobao, ordered) and auth_jump (Pinduoduo); the oneOf branches
          *     declare the property they require (strict Ajv2020).
+         *     sdk_app_key must be present when auth_methods contains sdk_token; all other responses omit
+         *     it. It is a public identifier: the Taobao union app key recorded with the server-side state.
          */
         UnionAuthUrlData: {
             /** Format: uri */
@@ -12708,6 +12712,11 @@ export interface components {
             state: string;
             auth_methods?: components["schemas"]["AuthMethod"][];
             auth_jump?: components["schemas"]["AuthJumpPlan"];
+            /**
+             * @description Public identifier (Taobao union app key of the state). Present when auth_methods
+             *     contains sdk_token; all other responses omit it.
+             */
+            sdk_app_key?: string;
         } & ({
             auth_methods: unknown[];
         } | {
