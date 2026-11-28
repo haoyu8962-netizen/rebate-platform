@@ -5,7 +5,14 @@ import {
   namesWholeBlock,
 } from '../../../../tools/guard/lib/test-blocks.ts';
 import { type ModifyExistingBlockDeclaration } from '../../../../tools/lib/task-file.ts';
-import { type Outcome, judge, ledger, reader } from '../red-check-mixed-leave-out/kit.ts';
+import {
+  type Outcome,
+  expectedRedFiles,
+  judge,
+  ledger,
+  reader,
+  ruleTestsLeftOut,
+} from '../red-check-mixed-leave-out/kit.ts';
 
 // ops 机械改动（编排 D10-3783）：夹具源码里的分组调用名经拼接写出，避开 test-guard 对规则测试分组调用的字面扫描；拼出的源码不变。
 const DESCRIBE = 'desc' + 'ribe';
@@ -183,6 +190,7 @@ it('[AC-CT-06zzzzzzzq#6] 模板整块登记只接受 rule_change 和非空 note'
     br: ['BR-ID-08'],
   };
   const invalid = [
+    [{ ...entryLocation, note: ENTRY.note, reason: 'flake_fix' }, /rule_change/],
     [{ ...entryLocation, note: ENTRY.note, reason: 'tighten_only' }, /rule_change/],
     [
       {
@@ -270,19 +278,25 @@ it('[AC-CT-06zzzzzzzq#8] 新整块登记可与静态标题、表格逐行、for�
   });
 });
 
-it('[AC-CT-06zzzzzzzq#9] 先红只要求第 4 个模板标题用例有效红，其余五个绿灯豁免', () => {
-  const red = redRun(head, 'failed');
-  expect(red.expected).toEqual([FILE]);
-  expect(red.result.ok).toBe(true);
-  expect(red.result.problems).toEqual([]);
-  expect(red.result.red).toEqual([`${FILE} > ${REPORT_TITLE}`]);
-  const exempt = SIBLINGS.map((test) => ({ file: FILE, test, status: 'passed' }));
-  expect(red.result.exempt).toEqual(exempt);
-
-  const green = redRun(head, 'passed');
-  expect(green.expected).toEqual([FILE]);
-  expect(green.result.ok).toBe(false);
-  expect(green.result.problems).toEqual([
-    { file: FILE, test: REPORT_TITLE, reason: expect.stringMatching(/green on the skeleton/) },
-  ]);
+it('[AC-CT-06zzzzzzzq#9] 先红与证据检查对模板标题整块登记使用同一份应跑清单', () => {
+  const task = ledger({ modify_existing: [ENTRY] });
+  const read = reader({ [FILE]: base }, { [FILE]: head });
+  const mixed = reader(
+    { [FILE]: base },
+    { [FILE]: head.replace('baselineVersion = 2', 'baselineVersion = 3') },
+  );
+  const red = ruleTestsLeftOut([FILE], read, task);
+  expect({
+    red: red.expected,
+    modifiedLeftOut: red.modifiedLeftOut,
+    evidence: expectedRedFiles([FILE], read, task, task.modify_existing),
+    mixedRed: ruleTestsLeftOut([FILE], mixed, task).expected,
+    mixedEvidence: expectedRedFiles([FILE], mixed, task, task.modify_existing),
+  }).toEqual({
+    red: [],
+    modifiedLeftOut: [FILE],
+    evidence: [],
+    mixedRed: [FILE],
+    mixedEvidence: [FILE],
+  });
 });
