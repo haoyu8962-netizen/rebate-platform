@@ -8,7 +8,7 @@ type: impl
 refs: [BR-ID-22, BR-ID-17]
 refs_hash:
   BR-ID-22: d56b046f5b7c
-  BR-ID-17: ba4ebcc6279a
+  BR-ID-17: abf653e68588
 deps: []
 paths:
   - 'apps/api/src/modules/linking/linking.module.ts'

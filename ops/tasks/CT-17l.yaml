@@ -7,7 +7,7 @@ type: contract
 # ③ contracts/texts.default.json 新键 auth.confirming「正在确认授权结果」（原文 08 BR-ID-17 细则）与晚到 / 冷启动回跳绑定成功但不重放 open 的提示（键名与措辞按 BR-TEXT 规则起草、走 Jev 判断，编排回写 08 BR-TEXT-14 表后再进契约，逐字照 08）；fund-term-keys 归 ordinary；重生成 content 与 contracts-ts 生成物。
 refs: [BR-ID-17, BR-TEXT-12, BR-TEXT-14]
 refs_hash:
-  BR-ID-17: ba4ebcc6279a
+  BR-ID-17: abf653e68588
   BR-TEXT-12: e664783657dd
   BR-TEXT-14: ba6b92fa997e
 deps: []

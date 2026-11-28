@@ -14,7 +14,7 @@ type: impl
 # 不在本单：长期未完成尝试的巡检（FU-FILING-ATTEMPT-PATROL）；换应用旧 state（FU-TAOBAO-OAUTH-APP-ROTATION）；淘宝接口实测（FU-TB-05-DUP-LOOKUP）；尝试表 state 外键约束 app / user（已登 FU）。
 refs: [BR-ID-17, BR-ATTR-05]
 refs_hash:
-  BR-ID-17: ba4ebcc6279a
+  BR-ID-17: abf653e68588
   BR-ATTR-05: 655fe77b6d9b
 deps: []
 paths:

@@ -8,7 +8,7 @@ type: impl
 # 冻结 [AC-F1-11d#8] 断言 body 文本恰为提示，加链接后必变——按 D10-3567 改为「提示 + 有目标时恰为【返回凑狸】」，三行逐行登 modify_existing（rule_change，BR-ID-17「三端授权回跳」；D10-3567 更正 D10-2716 ② 的「拉不起 App 时只提示回到 App」）。
 refs: [BR-ID-17]
 refs_hash:
-  BR-ID-17: ba4ebcc6279a
+  BR-ID-17: abf653e68588
 deps: [F1-11d]
 paths:
   - 'apps/h5/src/entries/auth-callback/**'

@@ -13,7 +13,7 @@ type: impl
 # 规则测试钉（假传输）：sdk_token 原样当 session、不调换令牌接口；令牌不出现在日志 / 归档 / 异常信息；appKey 不符即拒且不发请求；重复备案查回只认库里对得上的历史；生产不签发也不接受 sdk_token；同一 state 并发提交只有一个进入备案；TOP 鉴权类错误 → 30104 且告警只含 code / sub_code。
 refs: [BR-ID-17, BR-ATTR-05]
 refs_hash:
-  BR-ID-17: ba4ebcc6279a
+  BR-ID-17: abf653e68588
   BR-ATTR-05: 655fe77b6d9b
 deps: []
 paths:
