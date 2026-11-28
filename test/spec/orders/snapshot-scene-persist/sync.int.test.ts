@@ -212,3 +212,23 @@ it('[AC-B1-08zzi#12] 已归因的定金单场景列为空时，付尾款现查�
   expect(await f.readOrder()).toMatchObject({ platform_status: 'PAID', user_id: f.ownerId });
   expect(await f.readSnapshot()).toEqual(TAOLIJIN_SNAPSHOT);
 });
+
+it('[AC-B1-08zzi#13] 登记行已换推广位时，补偿按已存淘礼金场景出快照且不告警', async (): Promise<void> => {
+  await requireAttrPidScene(db);
+  const f = await prepareOrder(db, '4920000000000000113', { attributed: true });
+  expect(f.initial).toMatchObject({ platform_status: 'PAID', user_id: f.ownerId, pid: FULL_PID });
+  expect(await f.readScene()).toBe('taolijin');
+  const pending = await pendingWithoutRule(f);
+
+  await f.updateRegistrationPid('mm_1001_3001_2999');
+  await f.publishRules();
+  f.logger.warn.mockClear();
+  await f.update(CONTENT_UPDATE);
+
+  expect(await f.readSnapshot()).toEqual(TAOLIJIN_SNAPSHOT);
+  await expectResolved(f, pending);
+  expect(f.logger.warn).not.toHaveBeenCalledWith(
+    expect.objectContaining({ reason: 'PID_SCENE_NOT_FOUND', outcome: 'snapshot_scene_unknown' }),
+    expect.any(String),
+  );
+});

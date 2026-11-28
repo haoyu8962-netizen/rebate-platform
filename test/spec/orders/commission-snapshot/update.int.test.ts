@@ -162,6 +162,11 @@ it('[AC-B1-08k#26] update 已有 paid_at_source 不覆盖；pid 查不到告警�
   f.findUser.mockResolvedValue(f.userId);
   f.findPid.mockResolvedValue([]);
   const port = fakePort();
+  await db
+    .updateTable('orders')
+    .set({ attr_pid_scene: null } as never)
+    .where('app_id', '=', f.ctx.app_id)
+    .execute();
   expect(await runUpdate(f, port)).toMatchObject({ ok: true });
   expect(port.create).toHaveBeenCalledTimes(1);
   expect((await f.read()).orders[0]?.paid_at_source).toBe('observed');

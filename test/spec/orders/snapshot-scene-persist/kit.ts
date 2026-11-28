@@ -168,15 +168,27 @@ export async function prepareOrder(
       .executeTakeFirstOrThrow();
   }
 
+  async function updateRegistrationPid(registeredPid: string): Promise<void> {
+    await db
+      .updateTable('union_pids')
+      .set({ pid: registeredPid })
+      .where('app_id', '=', acc.app_id)
+      .where('id', '=', registration.id)
+      .returning('id')
+      .executeTakeFirstOrThrow();
+  }
+
   return {
     ownerId: owner.id,
     initial,
     clock,
     publish,
+    logger: deps.logger,
     readOrder,
     updateRegistration,
+    updateRegistrationPid,
     addSlot: (registeredPid: string) =>
-      pid(db, acc, { pid: registeredPid, site_id: SITE, pid_scene: 'share' }),
+      pid(db, acc, { pid: registeredPid, site_id: SITE, pid_scene: 'share', status: 'pending' }),
     changeRegistrationAfterMatch() {
       slotCandidates.mockClear();
       slotCandidates.mockImplementationOnce(async (input) => {
