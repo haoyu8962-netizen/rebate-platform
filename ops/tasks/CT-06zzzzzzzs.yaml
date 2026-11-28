@@ -1,6 +1,6 @@
 id: CT-06zzzzzzzs
 repo: rebate-platform
-title: CT-06zzzzzzzs：modify_existing 整块登记扩到嵌套的顶层 for…of 循环链（每层循环体只含下一层）里模板标题的 it / test，绑定允许只含标识符的解构；只扩识别，按模板原文、只许 rule_change、note 必填；另：混合路径里未改的内联字面量 .each（含尾部 as const）块给出全名（B1-08zzg 门禁缺口 ① 与 wiring/app.int，D10-3814 / D10-3817 / D10-3820）
+title: CT-06zzzzzzzs：modify_existing 整块登记扩到嵌套的顶层 for…of 循环链（每层循环体只含下一层）里模板标题的 it / test，绑定允许只含标识符的解构；只扩识别，按模板原文、只许 rule_change、note 必填（B1-08zzg 门禁缺口 ①，D10-3814 / D10-3817）
 type: guard-change
 # 2026-11-28 ops 入账（编排 D10-3814 评估 couli-runs/B1-08zzg/gate-ext-estimate.md、D10-3817 准开、D10-3818 认草稿）。第三类门禁改动：入账 PR 由编排挂，任务 PR 的标签由负责人加。
 # 起因（B1-08zzg 先红，be gate-gap.md ①，57 条 + 同块无牙 32 条）：test-blocks.ts 的 forOfTemplateTests（主干 :2911–:2958）只认顶层单层 `for (const <标识符> of <表达式>) { … }`，拒在三处：:2934 `parent[f] !== -1`（嵌套）、:2952 循环体里测试之外有循环、:2937 绑定不是单个标识符（`{ scene, opener }`）。 具名表（顶层 const CASES / RECHECKS）本来就认（:2938 只要求表达式非空）。
