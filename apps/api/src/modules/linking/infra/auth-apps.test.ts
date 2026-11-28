@@ -32,7 +32,10 @@ describe('createTaobaoUnionAuthApps', () => {
       redirectUri: 'https://other.example.test/cb',
     });
     expect(later.taobaoUserOAuth?.redirectUri).not.toBe(APP.redirectUri);
-    expect(resolveIssuedTaobaoOAuthApp(ref, 'web_code')?.redirectUri).toBe(APP.redirectUri);
+    const issued = resolveIssuedTaobaoOAuthApp(ref, 'web_code');
+    expect(issued !== null && 'redirectUri' in issued ? issued.redirectUri : undefined).toBe(
+      APP.redirectUri,
+    );
   });
 
   it('[AC-B1-04zzzzq-UNIT#8] sdk_token 的引用只含签发时的 appKey，与 web_code 引用互不通用', async () => {
