@@ -2835,6 +2835,16 @@ export function forOfRowBlocks(
 //   of their own, so any change of them is a difference besides (`outside`). The base's block
 //   and the head's must be of one kind (.each / .for table, or for…of plain call); a block whose
 //   for…of rows changed (CT-06zzzzzv) is declared row by row, never by its template.
+// - CT-06zzzzzzzq (D10-3624 / D10-3769, after CT-26zs): a plain it / test (no modifier, no type
+//   arguments) whose title is one template literal with `${…}`, written as a statement of its own
+//   ended by `;` at the top level or right inside the callback body (`() => { … }` or
+//   `function () { … }`, the last argument) of a plain describe / suite whose title is a static
+//   literal and that is itself such a statement of such a place, is named whole by the same
+//   verbatim template text (plainTemplateTests). Recognised by the tokens alone; a modifier, a
+//   describe with a modifier or a template title, a call in a function, branch or any loop, a
+//   title that is a name, a call or a concatenation is no such block (the file is judged as
+//   before). One text names one block of any of the three kinds; the head's block must be of the
+//   base's kind; declarations referenced by `${…}` are in the shared rest (a change: `outside`).
 
 /** One declared name and its block at the base and the head (compareModifiedBlocks). */
 export type ModifiedBlock =
@@ -2851,9 +2861,10 @@ export type ModifiedBlock =
       changed: boolean;
       /**
        * CT-06zzzzzzzc (D10-2559): set only on a whole-block entry (`test` the title template of
-       * an .each / .for table the base cannot expand, or CT-06zzzzzzzj of a plain it / test of a
-       * top-level for…of loop): whether a full name of the head's report is one this block
-       * produces and no other block of the head may produce (red-check).
+       * an .each / .for table the base cannot expand, CT-06zzzzzzzj of a plain it / test of a
+       * top-level for…of loop, or CT-06zzzzzzzq of a plain it / test with a template title at the
+       * top level or in a static describe): whether a full name of the head's report is one this
+       * block produces and no other block of the head may produce (red-check).
        */
       whole?: {
         produces: (name: string) => boolean;
@@ -2898,6 +2909,11 @@ type BlockView = {
    * template with `${…}` (forOfTemplateTests); `template` is then its verbatim text.
    */
   forOfTemplate: boolean;
+  /**
+   * CT-06zzzzzzzq (D10-3769): a plain it / test of the top level or of a static describe whose
+   * title is a template with `${…}` (plainTemplateTests); `template` is then its verbatim text.
+   */
+  plainTemplate: boolean;
 };
 
 /** Keywords of a loop statement (forOfTemplateTests: none in the loop body outside a test). */
@@ -2908,18 +2924,21 @@ const LOOP_KEYWORDS = new Set(['for', 'while', 'do']);
  * calls that may be named whole by their title template inside a for…of loop (see the comment
  * above ModifiedBlock). Fail-closed: a shape not recognised here is not one.
  */
+/** parent[k]: the innermost open bracket around token k (-1: the top level). */
+function bracketParents(tokens: readonly Token[]): number[] {
+  const parent = new Array<number>(tokens.length).fill(-1);
+  const stack: number[] = [];
+  tokens.forEach((t, k) => {
+    if (t.kind === 'punct' && (t.text === ')' || t.text === ']' || t.text === '}')) stack.pop();
+    parent[k] = stack[stack.length - 1] ?? -1;
+    if (t.kind === 'punct' && (t.text === '(' || t.text === '[' || t.text === '{')) stack.push(k);
+  });
+  return parent;
+}
+
 function forOfTemplateTests(scanned: Scanned): Set<number> {
   const { tokens, match, suites, tests } = scanned;
-  // parent[k]: the innermost open bracket around token k (-1: the top level).
-  const parent = new Array<number>(tokens.length).fill(-1);
-  {
-    const stack: number[] = [];
-    tokens.forEach((t, k) => {
-      if (t.kind === 'punct' && (t.text === ')' || t.text === ']' || t.text === '}')) stack.pop();
-      parent[k] = stack[stack.length - 1] ?? -1;
-      if (t.kind === 'punct' && (t.text === '(' || t.text === '[' || t.text === '{')) stack.push(k);
-    });
-  }
+  const parent = bracketParents(tokens);
   const inTest = new Array<boolean>(tokens.length).fill(false);
   for (const c of tests) for (let k = c.start; k <= c.end; k += 1) inTest[k] = true;
   const is = (k: number, text: string, kind: Token['kind']): boolean =>
@@ -2957,6 +2976,71 @@ function forOfTemplateTests(scanned: Scanned): Set<number> {
   return out;
 }
 
+/**
+ * CT-06zzzzzzzq (D10-3624 / D10-3769): the indexes, among the outermost test calls, of the plain
+ * it / test calls that may be named whole by their title template outside any loop (see the
+ * comment above ModifiedBlock). Fail-closed: a shape not recognised here is not one.
+ */
+function plainTemplateTests(scanned: Scanned): Set<number> {
+  const { tokens, match, suites, tests } = scanned;
+  const parent = bracketParents(tokens);
+  const is = (k: number, text: string, kind: Token['kind']): boolean =>
+    tokens[k]?.text === text && tokens[k]?.kind === kind;
+  // A statement of its own right inside `body` (-1: the top level): the first token of the file
+  // or of the body, or right after a `;` or `}` of the same level (not `if (…) it(…)`, `else`, a
+  // label, `do`, an operand …).
+  const statementAt = (start: number, body: number): boolean =>
+    parent[start] === body &&
+    (start === 0 ||
+      start - 1 === body ||
+      is(start - 1, ';', 'punct') ||
+      (is(start - 1, '}', 'punct') && parent[start - 1] === body));
+  const memo = new Map<number, boolean>();
+  // A place a block may be in: the top level, or the body of a plain describe / suite with a
+  // static title — `describe('…', () => { … });` or `describe('…', function () { … });`, its title
+  // the first argument and the callback the last, itself a statement of its own of such a place.
+  const placeOk = (body: number): boolean => {
+    if (body === -1) return true;
+    const known = memo.get(body);
+    if (known !== undefined) return known;
+    let ok = false;
+    const s = suites.find((x) => x.open === parent[body]);
+    if (s !== undefined && is(body, '{', 'punct') && s.open === s.start + 1) {
+      const arrow =
+        is(body - 1, '=>', 'punct') && is(body - 2, ')', 'punct') && is(body - 3, '(', 'punct');
+      const fn =
+        is(body - 1, ')', 'punct') && is(body - 2, '(', 'punct') && is(body - 3, 'function', 'id');
+      const title = tokens[s.open + 1];
+      ok =
+        (arrow || fn) &&
+        body - 4 === s.open + 2 &&
+        is(s.open + 2, ',', 'punct') &&
+        (title?.kind === 'str' || title?.kind === 'tpl') &&
+        !s.title.includes(null) &&
+        match[body] === s.close - 1 &&
+        is(s.close + 1, ';', 'punct') &&
+        statementAt(s.start, parent[s.start] as number) &&
+        placeOk(parent[s.start] as number);
+    }
+    memo.set(body, ok);
+    return ok;
+  };
+  const out = new Set<number>();
+  tests.forEach((c, ti) => {
+    // A plain call (no modifier, no type arguments), a statement of its own ended by `;`.
+    if (c.open !== c.start + 1) return;
+    if (c.end === c.close || !is(c.end, ';', 'punct')) return;
+    // Its title one template literal with `${…}`, the first argument.
+    const title = tokens[c.open + 1];
+    if (title?.kind !== 'tpl' || title.parts === undefined || title.parts.length < 2) return;
+    if (title.parts.includes(null) || !is(c.open + 2, ',', 'punct')) return;
+    const body = parent[c.start] as number;
+    if (!statementAt(c.start, body) || !placeOk(body)) return;
+    out.add(ti);
+  });
+  return out;
+}
+
 function blockViews(
   source: string,
   kit?: KitReader,
@@ -2969,6 +3053,7 @@ function blockViews(
   const scanned = scanTests(source);
   const { tokens, suites, tests } = scanned;
   const forOfTpl = forOfTemplateTests(scanned);
+  const plainTpl = plainTemplateTests(scanned);
   const parsed = parseTestFile(source);
   // CT-06zzzzzr (D10-2125 (B)): with a kit reader, an `.each` / `.for` table imported from a
   // same-directory kit is expanded from that side's kit (EachShape.expand).
@@ -3004,7 +3089,9 @@ function blockViews(
               : null;
     // CT-06zzzzzzzj (D10-3107): verbatim, as an .each / .for call's (forOfTemplateTests).
     const forOfTemplate = forOfTpl.has(i);
-    const forOfText = forOfTemplate ? (lit as Token).text.slice(1, -1) : null;
+    // CT-06zzzzzzzq (D10-3769): likewise for a plain call outside loops (plainTemplateTests).
+    const plainTemplate = plainTpl.has(i);
+    const forOfText = forOfTemplate || plainTemplate ? (lit as Token).text.slice(1, -1) : null;
     return {
       pattern: b.pattern,
       title: b.title,
@@ -3015,6 +3102,7 @@ function blockViews(
       raw: source.slice(from, to),
       template: forOfText ?? template,
       forOfTemplate,
+      plainTemplate,
     };
   });
   const each = view.blocks.map((b) => b.each?.expand ?? null);
@@ -3027,29 +3115,33 @@ function blockViews(
  * CT-06zzzzzzzc (D10-2559 A): the blocks whose title is the literal `name` as written (not
  * expanded) and that are .each / .for tables with placeholders (a block whose title is static
  * is named as before); CT-06zzzzzzzj (D10-3107): or plain calls of a for…of loop whose title
- * template is `name` (forOfTemplateTests). Both kinds count together: one text names one block.
+ * template is `name` (forOfTemplateTests); CT-06zzzzzzzq (D10-3769): or plain calls outside loops
+ * (plainTemplateTests). All kinds count together: one text names one block.
  */
 function templateBlocks(side: ReturnType<typeof blockViews>, name: string): number[] {
   const out: number[] = [];
   side.blocks.forEach((b, i) => {
     if (b.static || b.template !== name) return;
-    if (b.forOfTemplate || (b.eachCall && side.each[i] != null)) out.push(i);
+    if (b.forOfTemplate || b.plainTemplate || (b.eachCall && side.each[i] != null)) out.push(i);
   });
   return out;
 }
 
-/** The kind of a block templateBlocks gives (CT-06zzzzzzzj). */
-type WholeKind = 'each' | 'forOf';
+/** The kind of a block templateBlocks gives (CT-06zzzzzzzj; `plain`: CT-06zzzzzzzq). */
+type WholeKind = 'each' | 'forOf' | 'plain';
 
-const wholeKindOf = (side: ReturnType<typeof blockViews>, i: number): WholeKind =>
-  (side.blocks[i] as BlockView).forOfTemplate ? 'forOf' : 'each';
+const wholeKindOf = (side: ReturnType<typeof blockViews>, i: number): WholeKind => {
+  const b = side.blocks[i] as BlockView;
+  return b.forOfTemplate ? 'forOf' : b.plainTemplate ? 'plain' : 'each';
+};
 
 /**
  * CT-06zzzzzzzc (D10-2559 A / B): whether a modify_existing block entry's `test` names a whole
  * block of `source` (the base): the title template, character for character, of exactly one
  * .each / .for block whose table cannot be expanded, or (CT-06zzzzzzzj, D10-3107) of exactly one
- * plain it / test of a top-level for…of loop (forOfTemplateTests), and of no other block of
- * either kind. Throws TestParseError as blockViews.
+ * plain it / test of a top-level for…of loop (forOfTemplateTests), or (CT-06zzzzzzzq, D10-3769)
+ * of exactly one plain it / test at the top level or in a static describe (plainTemplateTests),
+ * and of no other block of any of these kinds. Throws TestParseError as blockViews.
  */
 export function namesWholeBlock(
   source: string,
@@ -3060,7 +3152,7 @@ export function namesWholeBlock(
   const tpl = templateBlocks(side, name);
   if (tpl.length !== 1) return false;
   const i = tpl[0] as number;
-  return wholeKindOf(side, i) === 'forOf' || (side.each[i] as EachExpansion).ok === false;
+  return wholeKindOf(side, i) !== 'each' || (side.each[i] as EachExpansion).ok === false;
 }
 
 /**
@@ -3129,7 +3221,11 @@ export function compareModifiedBlocks(
     reason: `its block at the ${where} is in a for…of loop whose table rows changed: declare each changed row by its full name (逐行按全名登记), not by the title template`,
   });
   const kindText = (k: WholeKind): string =>
-    k === 'forOf' ? 'a plain it / test of a for…of loop' : 'an .each / .for table';
+    k === 'forOf'
+      ? 'a plain it / test of a for…of loop'
+      : k === 'plain'
+        ? 'a plain it / test outside loops'
+        : 'an .each / .for table';
   const locate = (
     side: ReturnType<typeof blockViews>,
     name: string,
@@ -3157,14 +3253,16 @@ export function compareModifiedBlocks(
     }
     if (tpl.length > 1) {
       return {
-        reason: `${tpl.length} test blocks of the ${where} (.each / .for tables or plain calls of for…of loops) have this title template: a whole-block entry names one block`,
+        reason: `${tpl.length} test blocks of the ${where} (.each / .for tables, plain calls of for…of loops or plain calls with a template title) have this title template: a whole-block entry names one block`,
       };
     }
     if (tpl.length === 1) {
       const i = tpl[0] as number;
-      if (wholeKindOf(side, i) === 'forOf') {
+      const kind = wholeKindOf(side, i);
+      if (kind === 'forOf') {
         return maskedLoop(where, i) ? rowsChanged(where) : { index: i, row: null, whole: 'forOf' };
       }
+      if (kind === 'plain') return { index: i, row: null, whole: 'plain' };
       if ((side.each[i] as EachExpansion).ok) {
         return {
           reason: `its block at the ${where} is an .each / .for table that can be expanded: declare each changed row by its full name as Vitest reports it (逐行按 Vitest 展开全名登记), not by the title template`,

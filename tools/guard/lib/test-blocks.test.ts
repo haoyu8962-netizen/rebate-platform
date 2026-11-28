@@ -4939,8 +4939,9 @@ it('[CT-06zzzzzzzd] two blocks of one template text are refused on either side, 
     ok: true,
     blocks: [{ found: false }],
   });
-  // A plain it with the same interpolated title outside a top-level for…of loop is no whole
-  // block; inside one it is since CT-06zzzzzzzj (D10-3107, tested below).
+  // A plain it with the same interpolated title in a bare block is no whole block; inside a
+  // top-level for…of loop it is since CT-06zzzzzzzj (D10-3107), and in a static describe since
+  // CT-06zzzzzzzq (D10-3769; both tested below).
   const plain = (open: string, close: string): string =>
     [
       "import { describe, expect, it } from 'vitest';",
@@ -4953,7 +4954,7 @@ it('[CT-06zzzzzzzd] two blocks of one template text are refused on either side, 
       '',
     ].join('\n');
   expect(namesWholeBlock(plain('{', '}'), title)).toBe(false);
-  expect(namesWholeBlock(plain("describe('d', () => {", '});'), title)).toBe(false);
+  expect(namesWholeBlock(plain("describe('d', () => {", '});'), title)).toBe(true);
   expect(namesWholeBlock(plain('for (const source of sources) {', '}'), title)).toBe(true);
 });
 
@@ -5384,4 +5385,197 @@ it('[CT-06zzzzzzzj] merge base → head: a declared row that did not change is f
   expect(
     forOfRows(mBase, rowHead, ['[AC-S1-64#8] timeout 30 分钟后重试一次，仍失败只后台告警']),
   ).toBeNull();
+});
+
+// CT-06zzzzzzzq (D10-3624 / D10-3769, after CT-26zs's card-bridge-diagnostic-fields:98): a plain
+// it / test whose title is one template with `${…}`, a statement of its own at the top level or
+// in a static describe, is named whole by its verbatim template text.
+const PT = '[AC-Q#4] ${ path } 的版本大于 ${String(version)}';
+const PT_NAME = '[AC-Q#4] specs/e.yaml 的版本大于 2';
+const ptCall = (n: number, callee = 'it', title = `\`${PT}\``): string =>
+  `${callee}(${title}, () => {\n  expect(version).toBeGreaterThan(${n});\n});`;
+const ptFile = (...statements: string[]): string =>
+  [
+    "import { describe, expect, it, test } from 'vitest';",
+    "const path = 'specs/e.yaml';",
+    'const version = 2;',
+    'const on = true;',
+    "it('[AC-Q#1] 静态', () => {\n  expect(1).toBe(1);\n});",
+    ...statements,
+    "test('[AC-Q#5] 静态', () => {\n  expect(5).toBe(5);\n});",
+    '',
+  ].join('\n');
+
+// Wrong implementation: a template title of a plain call kept null as before → namesWholeBlock
+// false and the block not found; the expanded or cooked text accepted → found where it must not.
+it('[CT-06zzzzzzzq] a top-level plain it / test with a template title is named whole by its verbatim text: found, changed, its siblings unchanged', () => {
+  for (const callee of ['it', 'test']) {
+    const base = ptFile(ptCall(0, callee));
+    const head = ptFile(ptCall(1, callee));
+    expect(namesWholeBlock(base, PT), callee).toBe(true);
+    const got = compareModifiedBlocks(base, head, [PT]);
+    expect(got, callee).toMatchObject({
+      ok: true,
+      outside: null,
+      blocks: [{ test: PT, found: true, changed: true, whole: { head: 1 } }],
+    });
+    const whole = got.ok && got.blocks[0]?.found === true ? got.blocks[0].whole : undefined;
+    expect(whole?.produces(PT_NAME), callee).toBe(true);
+    expect(whole?.produces('[AC-Q#1] 静态'), callee).toBe(false);
+    expect(compareModifiedBlocks(base, base, [PT]), callee).toMatchObject({
+      ok: true,
+      outside: null,
+      blocks: [{ found: true, changed: false }],
+    });
+    expect(compareTestFileRows(base, head, [PT]), callee).toMatchObject({
+      whole: false,
+      blocks: [{ changed: false }, { changed: true }, { changed: false }],
+    });
+    // Not the template text: the expanded name, a blank or escape spelt otherwise.
+    for (const wrong of [PT_NAME, PT.replace('${ path }', '${path}'), `${PT} `]) {
+      expect(namesWholeBlock(base, wrong), wrong).toBe(false);
+      const miss = compareModifiedBlocks(base, head, [wrong]);
+      expect(miss.ok && miss.blocks[0]?.found, wrong).toBe(false);
+    }
+    // A merge-base ruling (wholeAt) locates it the same way.
+    expect(compareModifiedBlocks(base, head, [PT], undefined, undefined, [true])).toMatchObject({
+      ok: true,
+      blocks: [{ found: true, changed: true }],
+    });
+  }
+});
+
+// Wrong implementation: only the top level accepted → a block in a static describe refused; the
+// describe titles left out of `produces` → a name of the same title outside the describe taken.
+it('[CT-06zzzzzzzq] in a static describe (arrow or function callback, nested) the block is whole, produced under its describes only', () => {
+  const shapes: [string, (b: string) => string, string][] = [
+    ['arrow', (b) => `describe('组', () => {\n${b}\n});`, '组 > '],
+    ['function', (b) => `describe('组', function () {\n${b}\n});`, '组 > '],
+    ['template without ${}', (b) => `describe(\`组\`, () => {\n${b}\n});`, '组 > '],
+    [
+      'nested',
+      (b) => `describe('外', () => {\n  describe('内', () => {\n${b}\n  });\n});`,
+      '外 > 内 > ',
+    ],
+    [
+      'after a sibling',
+      (b) => `describe('组', () => {\n  it('[AC-Q#2] 同组', () => {});\n${b}\n});`,
+      '组 > ',
+    ],
+  ];
+  for (const [name, wrap, prefix] of shapes) {
+    const base = ptFile(wrap(ptCall(0)));
+    expect(namesWholeBlock(base, PT), name).toBe(true);
+    const got = compareModifiedBlocks(base, ptFile(wrap(ptCall(1))), [PT]);
+    expect(got, name).toMatchObject({
+      ok: true,
+      outside: null,
+      blocks: [{ found: true, changed: true }],
+    });
+    const whole = got.ok && got.blocks[0]?.found === true ? got.blocks[0].whole : undefined;
+    expect(whole?.produces(`${prefix}${PT_NAME}`), name).toBe(true);
+    expect(whole?.produces(PT_NAME), name).toBe(false);
+  }
+});
+
+// Wrong implementation: any call with a template title accepted wherever it is → the shapes
+// below would name a block; each is outside this task and must stay as before.
+it('[CT-06zzzzzzzq] shapes not recognised name no whole block (the file is judged as before)', () => {
+  const refused: [string, (b: string) => string][] = [
+    ...['skip', 'only', 'concurrent', 'todo', 'fails'].map((m): [string, (b: string) => string] => [
+      m,
+      (b) => b.replace(/^it\(/, `it.${m}(`),
+    ]),
+    ['type arguments', (b) => b.replace(/^it\(/, 'it<object>(')],
+    ['template describe', (b) => `describe(\`组 \${version}\`, () => {\n${b}\n});`],
+    ['describe with a modifier', (b) => `describe.${'sk' + 'ip'}('组', () => {\n${b}\n});`],
+    ['describe with options', (b) => `describe('组', { retry: 0 }, () => {\n${b}\n});`],
+    ['describe title by name', (b) => `describe(path, () => {\n${b}\n});`],
+    ['describe under if', (b) => `if (on) describe('组', () => {\n${b}\n});`],
+    ['describe in a function', (b) => `function f() {\n  describe('组', () => {\n${b}\n  });\n}`],
+    ['describe without its ;', (b) => `describe('组', () => {\n${b}\n})\nvoid 0;`],
+    ['describe callback with a parameter', (b) => `describe('组', (x) => {\n${b}\n});`],
+    [
+      'a statement before the call in a describe',
+      (b) => `describe('组', () => {\n  if (on) ${b}\n});`,
+    ],
+    ['in a function', (b) => `function register() {\n${b}\n}\nregister();`],
+    ['in an arrow', (b) => `const register = () => {\n${b}\n};`],
+    ['under if', (b) => `if (on) ${b}`],
+    ['under else', (b) => `if (on) {} else ${b}`],
+    ['in a bare block', (b) => `{\n${b}\n}`],
+    ['in a classic for', (b) => `for (let n = 0; n < 1; n++) {\n${b}\n}`],
+    ['in a for…of with let', (b) => `for (let row of [1]) {\n${b}\n}`],
+    ['in a while', (b) => `while (!on) {\n${b}\n}`],
+    ['labelled', (b) => `label: ${b}`],
+    ['in an expression', (b) => `void ${b}`],
+    ['assigned', (b) => `const t = ${b}`],
+    ['without its ;', (b) => `${b.slice(0, -1)}\nvoid 0;`],
+    ['title by name', (b) => `const title = \`${PT}\`;\n${b.replace(`\`${PT}\``, 'title')}`],
+    ['title by a call', (b) => b.replace(`\`${PT}\``, `String(\`${PT}\`)`)],
+    ['title concatenated', (b) => b.replace(`\`${PT}\``, `\`${PT}\` + ''`)],
+  ];
+  for (const [name, wrap] of refused) {
+    const base = ptFile(wrap(ptCall(0)));
+    expect(namesWholeBlock(base, PT), name).toBe(false);
+    const got = compareModifiedBlocks(base, ptFile(wrap(ptCall(1))), [PT]);
+    expect(got.ok && got.blocks[0]?.found, name).not.toBe(true);
+  }
+});
+
+// Wrong implementation: the new kind counted apart from the others, or the head located by any
+// kind → two blocks of one text, or a block that became another kind, would be taken.
+it('[CT-06zzzzzzzq] one text names one block of any kind, the head keeps the base kind, a whole block is not renamed, a change besides is outside', () => {
+  const base = ptFile(ptCall(0));
+  const head = ptFile(ptCall(1));
+  const others = [
+    ptCall(1, 'test'),
+    ptCall(1, 'it.each([1, 2])'),
+    ptCall(1, 'test.for([1, 2])'),
+    `for (const row of [1, 2]) {\n${ptCall(1)}\n}`,
+    `describe('组', () => {\n${ptCall(1)}\n});`,
+  ];
+  for (const other of others) {
+    const twiceBase = ptFile(ptCall(0), other);
+    expect(namesWholeBlock(twiceBase, PT), other).toBe(false);
+    expect(compareModifiedBlocks(twiceBase, head, [PT]), other).toMatchObject({
+      ok: true,
+      blocks: [{ found: false }],
+    });
+    expect(compareModifiedBlocks(base, ptFile(ptCall(1), other), [PT]), other).toMatchObject({
+      ok: true,
+      blocks: [{ found: false }],
+    });
+  }
+  // The block turned into a for…of plain call or an .each table at the head: not the same block.
+  for (const moved of [
+    `for (const row of [1, 2]) {\n${ptCall(1)}\n}`,
+    ptCall(1, 'it.each([1, 2])'),
+  ]) {
+    const got = compareModifiedBlocks(base, ptFile(moved), [PT]);
+    expect(got.ok && got.blocks[0]?.found, moved).toBe(false);
+  }
+  // Renamed (retitle_to): refused as any whole block.
+  const renamed = ptFile(ptCall(1, 'it', `\`[AC-Q#9] \${path}\``));
+  const got = compareModifiedBlocks(base, renamed, [PT], ['[AC-Q#9] ${path}']);
+  expect(got.ok && got.blocks[0]?.found).toBe(false);
+  // A declaration `${…}` reads changed (outside the blocks), or a sibling changed: outside.
+  const setup = compareModifiedBlocks(base, head.replace('version = 2', 'version = 3'), [PT]);
+  expect(setup).toMatchObject({ ok: true, blocks: [{ found: true, changed: true }] });
+  expect(setup.ok && setup.outside).toEqual(expect.stringContaining('code outside the tests'));
+  const sibling = compareModifiedBlocks(base, head.replace('toBe(5)', 'toBe(6)'), [PT]);
+  expect(sibling.ok && sibling.outside).toEqual(expect.stringContaining('is not declared'));
+  // Next to a static entry: both found.
+  const both = compareModifiedBlocks(base, head.replace('toBe(5)', 'toBe(6)'), [
+    PT,
+    '[AC-Q#5] 静态',
+  ]);
+  expect(both).toMatchObject({
+    ok: true,
+    outside: null,
+    blocks: [
+      { found: true, changed: true },
+      { found: true, changed: true },
+    ],
+  });
 });
