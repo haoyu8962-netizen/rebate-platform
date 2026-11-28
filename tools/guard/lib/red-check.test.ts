@@ -5467,7 +5467,7 @@ it('[CT-06zzzzzzzq] a file kept expected: only the declared template block is ju
     expect(bad.exempt?.filter((e) => e.modified) ?? [], d.reason).toEqual([]);
     // The unchanged siblings stay exempt as unchanged: only the template block is changed.
     expect(
-      bad.problems.filter((p) => PQ_SIBLINGS.includes(p.test)),
+      bad.problems.filter((p) => p.test !== null && PQ_SIBLINGS.includes(p.test)),
       d.reason,
     ).toEqual([]);
   }
