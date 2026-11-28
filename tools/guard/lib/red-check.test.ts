@@ -5372,3 +5372,103 @@ it('[CT-06zzzzzzzj] a declared for…of row that is the merge base’s keeps the
     ),
   ).toEqual([]);
 });
+
+// CT-06zzzzzzzq (D10-3624 / D10-3769 / D10-3790): a plain it / test whose title is a template with
+// `${…}`, at the top level or in a static describe, declared whole by its verbatim template text
+// (test-blocks.ts plainTemplateTests). After CT-26zs's card-bridge-diagnostic-fields: six tests,
+// only #4 (the template title) changed.
+const PQ = 'test/spec/demo/zzq/card-bridge.test.ts';
+const PQ_TPL = '[AC-Q#4] ${ eventsPath } 的版本大于 ${String(version)}';
+const PQ_NAME = '[AC-Q#4] specs/events.yaml 的版本大于 2';
+const PQ_SIBLINGS = ['[AC-Q#1] a', '[AC-Q#2] b', '[AC-Q#3] c', '[AC-Q#5] e', '[AC-Q#6] f'];
+const pqFile = (n: number, version = 2): string =>
+  [
+    "import { expect, it } from 'vitest';",
+    "const eventsPath = 'specs/events.yaml';",
+    `const version = ${version};`,
+    ...PQ_SIBLINGS.slice(0, 3).map((t) => `it('${t}', () => {\n  expect(1).toBe(1);\n});`),
+    `it(\`${PQ_TPL}\`, () => {\n  expect(version).toBeGreaterThan(${n});\n});`,
+    ...PQ_SIBLINGS.slice(3).map((t) => `it('${t}', () => {\n  expect(1).toBe(1);\n});`),
+    '',
+  ].join('\n');
+const pqTask = (entry: ModifyExistingDeclaration) => ({
+  renames: [],
+  expected_values: [],
+  red_exempt_outside: [],
+  red_exempt: [],
+  modify_existing: [entry],
+});
+const PQ_VALID = mxModify(PQ, PQ_TPL);
+const PQ_BAD: ModifyExistingDeclaration[] = [
+  { file: PQ, test: PQ_TPL, reason: 'tighten_only', ruling: 'D10-3769', note: MOD_NOTE },
+  { file: PQ, test: PQ_TPL, reason: 'flake_fix', ruling: 'D10-3769', note: MOD_NOTE },
+  { ...PQ_VALID, note: '   ' },
+];
+
+// Wrong implementation: the template-title block not located → the file judged as a whole (the
+// five unchanged siblings green on the skeleton refused); an invalid entry taken → the file left
+// out with a tighten_only / note-less whole-block entry.
+it('[CT-06zzzzzzzq] a valid template-title whole-block entry whose block is all that changed leaves the file out (modifiedLeftOut); an invalid one keeps it expected', () => {
+  const read = reader({ [PQ]: pqFile(0) }, { [PQ]: pqFile(1) });
+  expect(modifiedOnlyFiles([PQ], read, [PQ_VALID])).toEqual([{ file: PQ, tests: [PQ_TPL] }]);
+  const left = ruleTestsLeftOut([PQ], read, pqTask(PQ_VALID));
+  expect(left.expected).toEqual([]);
+  expect(left.modifiedLeftOut).toEqual([PQ]);
+  for (const d of PQ_BAD) {
+    expect(modifiedOnlyFiles([PQ], read, [d]), d.reason).toEqual([]);
+    expect(ruleTestsLeftOut([PQ], read, pqTask(d)).expected, d.reason).toEqual([PQ]);
+  }
+  // A change of the declaration `${…}` reads (outside the block): the file stays expected.
+  const setup = reader({ [PQ]: pqFile(0) }, { [PQ]: pqFile(1, 3) });
+  expect(modifiedOnlyFiles([PQ], setup, [PQ_VALID])).toEqual([]);
+  expect(ruleTestsLeftOut([PQ], setup, pqTask(PQ_VALID)).expected).toEqual([PQ]);
+});
+
+/** The red run of PQ with the head `head` (statuses by name; the siblings green). */
+function pqJudge(head: string, entry: ModifyExistingDeclaration, tests: RedTest[]) {
+  const read = reader({ [PQ]: pqFile(0) }, { [PQ]: head });
+  const baselines = ruleTestBaselines(
+    [PQ],
+    [{ path: PQ, status: 'M' }],
+    ['test/spec/demo/zzq/**'],
+    read,
+    [],
+    [],
+    [],
+    [],
+    [entry],
+  );
+  return checkRedReports([redReport(PQ, tests)], [PQ], ROOT, baselines, [], [], [entry]);
+}
+
+// Wrong implementation: the whole-block entry exempting its green block whatever its reason →
+// a tighten_only / flake_fix / note-less entry let through; the siblings judged as changed →
+// the valid entry refused.
+it('[CT-06zzzzzzzq] a file kept expected: only the declared template block is judged as changed; an invalid entry is named and exempts nothing', () => {
+  const NEW = '[AC-Q#7] new';
+  const head = `${pqFile(1)}it('${NEW}', () => {\n  expect(2).toBe(3);\n});\n`;
+  const tests: RedTest[] = [
+    ...PQ_SIBLINGS.map((t): RedTest => [t, 'passed']),
+    [PQ_NAME, 'passed'],
+    [NEW, 'failed', 'AssertionError: expected 2 to be 3'],
+  ];
+  const valid = pqJudge(head, PQ_VALID, tests);
+  expect(valid.problems).toEqual([]);
+  expect(valid.ok).toBe(true);
+  expect(valid.exempt?.filter((e) => e.modified).map((e) => e.test)).toEqual([PQ_NAME]);
+  for (const d of PQ_BAD) {
+    const bad = pqJudge(head, d, tests);
+    expect(bad.ok, d.reason).toBe(false);
+    expect(bad.problems, d.reason).toContainEqual({
+      file: PQ,
+      test: PQ_TPL,
+      reason: expect.stringMatching(d.reason === 'rule_change' ? /note/ : /rule_change only/),
+    });
+    expect(bad.exempt?.filter((e) => e.modified) ?? [], d.reason).toEqual([]);
+    // The unchanged siblings stay exempt as unchanged: only the template block is changed.
+    expect(
+      bad.problems.filter((p) => PQ_SIBLINGS.includes(p.test)),
+      d.reason,
+    ).toEqual([]);
+  }
+});
