@@ -575,6 +575,155 @@ it('still rejects ubuntu-slim and other runners on routed and unrouted jobs', ()
   expect(codes(twice)).toContain('runs-on');
 });
 
+// A minimal evaluator for the GitHub Actions expression subset SELF_HOSTED_ROUTE uses: string
+// literals, context paths, fromJSON, ==, &&, || and parentheses. It follows the documented
+// GitHub rules: == ignores case when comparing two strings, mismatched types are coerced to
+// numbers (null → 0, a non-numeric string → NaN), && / || return one of their operands, and
+// false, 0, NaN, '' and null are falsy. Anything outside the subset throws, so a change to the
+// route that the evaluator does not understand fails the test instead of passing silently.
+type Value = string | number | boolean | null | readonly unknown[] | Record<string, unknown>;
+
+function evaluateRoute(expression: string, context: Record<string, unknown>): Value {
+  const inner = /^\$\{\{ (.*) \}\}$/.exec(expression)?.[1];
+  if (inner === undefined) throw new Error('not a ${{ }} expression');
+  const tokens = inner.match(/\s+|\(|\)|&&|\|\||==|'(?:[^']|'')*'|[A-Za-z_][\w.-]*|[\s\S]/g) ?? [];
+  const list = tokens.filter((t) => !/^\s+$/.test(t));
+  let at = 0;
+  const peek = () => list[at];
+  const take = (want?: string) => {
+    const token = list[at++];
+    if (token === undefined || (want !== undefined && token !== want)) {
+      throw new Error(`expected ${want ?? 'a token'} at ${at - 1}, got ${token}`);
+    }
+    return token;
+  };
+  const truthy = (v: Value) =>
+    !(v === false || v === 0 || v === '' || v === null || Number.isNaN(v));
+  const toNumber = (v: Value): number => {
+    if (v === null) return 0;
+    if (typeof v === 'boolean') return v ? 1 : 0;
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') return v.trim() === '' ? 0 : Number(v);
+    return Number.NaN;
+  };
+  const equals = (a: Value, b: Value) =>
+    typeof a === 'string' && typeof b === 'string'
+      ? a.toLowerCase() === b.toLowerCase()
+      : typeof a === typeof b && typeof a === 'object' && a !== null
+        ? a === b
+        : toNumber(a) === toNumber(b);
+  const primary = (): Value => {
+    const token = take();
+    if (token === '(') {
+      const v = or();
+      take(')');
+      return v;
+    }
+    if (token.startsWith("'")) return token.slice(1, -1).replaceAll("''", "'");
+    if (token === 'fromJSON') {
+      take('(');
+      const arg = or();
+      take(')');
+      if (typeof arg !== 'string') throw new Error('fromJSON needs a string');
+      return JSON.parse(arg) as Value;
+    }
+    if (/^[A-Za-z_]/.test(token)) {
+      let v: unknown = context;
+      for (const key of token.split('.')) {
+        v = v !== null && typeof v === 'object' ? (v as Record<string, unknown>)[key] : undefined;
+      }
+      return (v ?? null) as Value;
+    }
+    throw new Error(`unexpected token ${token}`);
+  };
+  const comparison = (): Value => {
+    const left = primary();
+    if (peek() !== '==') return left;
+    take('==');
+    return equals(left, primary());
+  };
+  const and = (): Value => {
+    let v = comparison();
+    while (peek() === '&&') {
+      take('&&');
+      const right = comparison();
+      v = truthy(v) ? right : v;
+    }
+    return v;
+  };
+  const or = (): Value => {
+    let v = and();
+    while (peek() === '||') {
+      take('||');
+      const right = and();
+      v = truthy(v) ? v : right;
+    }
+    return v;
+  };
+  const result = or();
+  if (at !== list.length) throw new Error(`trailing tokens from ${at}`);
+  return result;
+}
+
+it('routing switches follow GitHub: string comparison ignores case, so ON / On also switch on', () => {
+  const repo = 'haoyu8962-netizen/rebate-platform';
+  const LAN = ['self-hosted', 'couli-ci'];
+  const events = {
+    push: { event_name: 'push', repository: repo, event: {} },
+    samePr: {
+      event_name: 'pull_request',
+      repository: repo,
+      event: { pull_request: { head: { repo: { full_name: repo } } } },
+    },
+    forkPr: {
+      event_name: 'pull_request',
+      repository: repo,
+      event: { pull_request: { head: { repo: { full_name: 'someone/rebate-platform' } } } },
+    },
+    dispatch: { event_name: 'workflow_dispatch', repository: repo, event: {} },
+  };
+  type Event = keyof typeof events;
+  const route = (ci: string | undefined, idle: string | undefined, event: Event) => {
+    const vars: Record<string, string> = {};
+    if (ci !== undefined) vars.SELF_HOSTED_CI = ci;
+    if (idle !== undefined) vars.SELF_HOSTED_CI_IDLE = idle;
+    return evaluateRoute(SELF_HOSTED_ROUTE, { vars, github: events[event] });
+  };
+  const on = ['on', 'ON', 'On'];
+  const off = [' on', 'off', '', undefined];
+  const all = [...on, ...off];
+
+  // Both switches equal 'on' ignoring case, on a push or a same-repo PR: the LAN runner.
+  for (const ci of on) {
+    for (const idle of on) {
+      expect([route(ci, idle, 'push'), route(ci, idle, 'samePr')]).toEqual([LAN, LAN]);
+    }
+  }
+  // Either switch anything else (leading space, off, empty, unset): ubuntu-latest.
+  for (const value of off) {
+    for (const other of all) {
+      for (const event of ['push', 'samePr'] as const) {
+        expect(route(value, other, event)).toBe('ubuntu-latest');
+        expect(route(other, value, event)).toBe('ubuntu-latest');
+      }
+    }
+  }
+  // A fork PR, or any other event, stays on ubuntu-latest whatever the switches say.
+  for (const ci of all) {
+    for (const idle of all) {
+      expect([route(ci, idle, 'forkPr'), route(ci, idle, 'dispatch')]).toEqual([
+        'ubuntu-latest',
+        'ubuntu-latest',
+      ]);
+    }
+  }
+  // The evaluator itself: case-insensitive only between strings, and it rejects what it does
+  // not understand.
+  expect(evaluateRoute("${{ 'ON' == 'on' }}", {})).toBe(true);
+  expect(evaluateRoute("${{ x == 'on' }}", {})).toBe(false);
+  expect(() => evaluateRoute("${{ startsWith('on', 'o') }}", {})).toThrow();
+});
+
 it('CLI exit codes: 0 for the real repo, 1 for a broken copy, 2 for bad usage', () => {
   const broken = fixture((edit) =>
     edit('.github/workflows/ci.yml', (t) => t.replace(PINNED_CHECKOUT, 'actions/checkout@main')),

@@ -1,7 +1,8 @@
 // Static checks for .github/workflows/*.yml and ops/branch-protection.json
 // (规划/11 §3.2, §4.4, §9.3 #10; ADR-0001 §2 last row; ADR-0004 §2 for the LAN runner route,
 // batch 2 D10-3705: the jobs in SELF_HOSTED_JOBS may use SELF_HOSTED_ROUTE, which goes to the LAN
-// runner only when the repository variables SELF_HOSTED_CI and SELF_HOSTED_CI_IDLE are both 'on').
+// runner only when the repository variables SELF_HOSTED_CI and SELF_HOSTED_CI_IDLE both equal
+// 'on', compared case-insensitively by GitHub Actions, so 'ON' / 'On' also switch it on).
 //
 // Usage: node tools/ci/check-workflows.ts [--root <repo dir>] [--json]
 // Exit codes: 0 ok, 1 violations, 2 usage or internal error.
@@ -53,10 +54,14 @@ const PINNED_USES = /^[\w.-]+\/[\w.-]+(\/[^@\s]+)?@[0-9a-f]{40}$/;
 // CT-06zzzzp; batch 2 D10-3705, CT-06zzzzzzzp). The only `runs-on` besides `ubuntu-latest`,
 // compared character for character (no normalisation). Two repository variables, both off when
 // they do not exist: SELF_HOSTED_CI (master switch) and SELF_HOSTED_CI_IDLE (runner idle switch).
-// Only when both are exactly 'on' AND the event is a push or a PR whose head repo is this repo
-// does the job get the LAN runner labels; anything else (either variable unset or not 'on', fork
-// PRs, workflow_dispatch, schedule, merge_group) stays on ubuntu-latest, so the default is
-// unchanged (§2.1, §2.2).
+// GitHub Actions compares strings case-insensitively, so a variable is "on" when its value equals
+// 'on' ignoring case ('on', 'ON', 'On', 'oN'); anything else (unset, 'off', '', ' on' with a
+// space, ...) is off. Only when both are on AND the event is a push or a PR whose head repo is
+// this repo does the job get the LAN runner labels; anything else (either variable off, fork PRs,
+// workflow_dispatch, schedule, merge_group) stays on ubuntu-latest, so the default is unchanged
+// (§2.1, §2.2). Roll back with `gh variable set SELF_HOSTED_CI --body off` or
+// `gh variable delete SELF_HOSTED_CI`; the controller and the watchdog always write lowercase
+// on / off to both variables.
 export const SELF_HOSTED_ROUTE =
   "${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && " +
   "(github.event_name == 'push' || " +
@@ -67,9 +72,10 @@ export const SELF_HOSTED_ROUTE =
 // only, enabled in batches). Batch 1 (D10-1206) was the commit-SHA-seed property tests, back on
 // ubuntu-latest since batch 2; batch 2 (D10-3705, CT-06zzzzzzzp) is the spec shards
 // verify-spec-1/2/3 and the integration shards verify-int-1…6. A later batch changes this
-// constant, nothing else. Every routed job carries its own job-level `timeout-minutes`. Gate
-// checks, summary jobs, jobs with write permissions or secrets and pull_request_target /
-// workflow_run workflows never qualify.
+// constant, nothing else. The two switches (SELF_HOSTED_CI, SELF_HOSTED_CI_IDLE; case-insensitive
+// 'on', see SELF_HOSTED_ROUTE) apply to every job listed here alike. Every routed job carries its
+// own job-level `timeout-minutes`. Gate checks, summary jobs, jobs with write permissions or
+// secrets and pull_request_target / workflow_run workflows never qualify.
 export const SELF_HOSTED_JOBS: Readonly<Record<string, readonly string[]>> = {
   'ci.yml': [
     'verify-spec-1',
