@@ -12,6 +12,7 @@ type: impl
 #   ④ 三处出口（auth-url、open 的 30101 / 30102、分享 30101）都带；分享按 auth-url 的 data 原样转出 sdk_app_key。
 #   ⑤ FU-TB-AUTH-URL-STALE-COMMENT：union-auth-url.ts:269 注释「补丁 2: under the real user OAuth only web_code is handed out」改为现行口径（B1-04zzzzq 后真实 OAuth 下 sdk_token 也按配置签发，生产仍过滤）。
 # 规则测试钉（假传输 / 假解析器）：非生产配置 ["sdk_token","web_code"] 时 auth-url、open 30101、open 30102、分享 30101 的 data 都带 sdk_app_key 且等于 state 记录的 sdk_token 引用里的 appKey（与库里 auth_app_refs 解析结果一致）；配置 ["web_code"] 与 pdd、auth_unavailable 的响应都不带该键；生产照旧不下发 sdk_token、也不带 sdk_app_key；sdk_token 引用取不出 appKey 时 auth_methods 只剩 web_code、不带 sdk_app_key、state 照常签发且只记 web_code、打一条 error 告警；配置只有 sdk_token 时答 auth_unavailable。
+# 补丁 3（D10-3861，实现 r1 tests1）：paths 加 linking/http/public/auth-url.controller.test.ts 与 linking/application/{shop-open,shop-open.test}.ts——① 第 4 个出口：店铺打开的 30101 / 30102（shop-open.ts:382，同用 issueTaobaoAuthState）要接 logger，让 D10-3807 的降级告警在这条路径也打，并补带 sdk_app_key 与降级告警的单测；② 演示解析器 sdk 引用改用 taobao-sdk-app/v1 格式后，[AC-B1-06g#9]（auth-url.controller.test.ts:96）实现方单测跟着改。
 # 部署：本单与 B1-04zzzzq、CT-28 三单都部署到 staging 后，再提请 ops 改 staging union.taobao.auth_methods.android（D10-3782），本单不改配置。
 refs: [BR-ID-17]
 refs_hash:
@@ -21,6 +22,8 @@ paths:
   - 'apps/api/src/modules/linking/application/{union-auth-url,union-auth-url.test,union-auth-state,union-auth-state.test,link-open-taobao,link-open-taobao.test,shares,shares.test}.ts'
   - 'apps/api/src/modules/linking/infra/{auth-apps,auth-apps.test}.ts'
   - 'apps/api/src/modules/linking/{linking.module,linking.module.test}.ts'
+  - 'apps/api/src/modules/linking/application/{shop-open,shop-open.test}.ts'
+  - 'apps/api/src/modules/linking/http/public/auth-url.controller.test.ts'
 test_paths:
   - 'test/spec/linking/taobao-sdk-app-key/**' # 新目录
 impl: claude
