@@ -1,0 +1,47 @@
+id: B1-08zzi
+repo: rebate-platform
+title: 'FU-ORDER-SNAPSHOT-SCENE-PERSIST：订单持久化推广位命中时的场景（orders.attr_pid_scene，迁移成对）——首次分佣快照、补偿重试、找回审核与指定归属优先读它，后台改登记行场景不再改变未出快照订单的淘礼金判定'
+type: impl
+# 2026-11-28 funds 入账（D10-3797 / D10-3808：原属 w1 的 FU 改由 funds 做；来源 D10-3552 / B1-08zze Codex 资金评审 r1 S0，主干原有、B1-08zze 未放大）。归属 / 金额类，RV2，Codex 资金评审。
+# 现状（主干 bdae11363）：update-step.ts 首次快照（:652）与 B1-08t 补偿（:800）在 knownPidScene 未知时按 orders.pid 现查 union_pids 的 pid_scene（knownPidScene 只活在一次同步里）。首次快照因无已发布
+#   规则版本进待处理、之后后台把同一登记行由 taolijin 改 share → 下一次同步的补偿出普通分佣（净佣 1000 分、5000 基点时用户 500 分，应 0，BR-CALC-19）。首次入库即归因（pipeline-port.ts :374）同形； claim-review.ts / admin-assign.ts 的首次快照按审批时现查（app.module pidSceneOn）。
+# 口径：按命中时（改前）的场景（D10-3808，Jev 1.0：jev-1.14.0 选 at_hit，见 couli-runs/B1-08zzi/jev-1128.md）；08 BR-CALC-19 / BR-CALC-10 由编排排进规划回写批。
+# 做法：① 迁移两条（照 0159 / 0160 成对，D10-3808 ④）：app.orders 加 attr_pid_scene text NULL 无默认 + 具名 CHECK orders_attr_pid_scene_check（NULL 或与 union_pids_pid_scene_check 同一组值）NOT VALID；
+#   第二条 VALIDATE。不回填（存量 NULL）。授权沿用表级 UPDATE。lint:migrations 测试机实跑确认（入账前探针 0161 / 0162 已过，couli-runs/B1-08zzi/fast-part/2）。 ② 写：首次入库写首次快照判定用的场景（pipeline-port snapshotPidScene，含未归因单）；未归因重跑命中时写命中行场景（update-step 同一条 CAS，WHERE user_id IS NULL 已在）；订单已归因后任何路径不再写。
+#   ③ 读：update-step 首次快照与补偿、claim-review、admin-assign 取场景先读 orders.attr_pid_scene，非空即用，为空才走现查（存量行为不变）；本次命中的 knownPidScene 仍最优先。
+#   ④ 生成物：db/schema.sql、packages/db/src/db.gen.ts 沙箱外 db:snapshot 重出（outside_needed），不手改；不占契约槽（D10-3808 ④），与 B3-06f 共用，后落地者变基后重出。
+# 不做（范围外一律 out_of_scope）：R12 补快照（commission-snapshot-step-restore.ts、app.module.ts readOrderPidScene；B1-08zzg 在改）登 FU-RESTORE-SNAPSHOT-SCENE-PERSIST，排在 B1-08zzg 落地后（D10-3808 ③）； 扫描路径 snapshot-retry-input.ts 淘宝照旧 skip；已归属待补店铺的来源重跑（update-step :597）照现查；存量回补（未上线，D10-3808 ⑥；scope.md §7 两条只读 SQL 留作上线后核对）；契约、linking、union。
+# 规则测试钉（新目录）：① D10-3552 原场景：未归因淘宝单重跑命中 taolijin、无已发布版本进待处理 → 后台改同一登记行为 share → 发布版本 → 下一条报文补偿 → none、用户份额 0；② 入库即归因同样待处理后改场景 →
+#   补偿仍按入库时 taolijin；③ 已归因未付款（DEPOSIT_PAID）期间改场景 → 跨入 PAID 的首次快照按入库时场景；④ 未归因期间改场景后重跑命中 → 按新命中场景（D10-3454 不变），列随之更新；
+#   ⑤ 找回审核 / 指定归属在改场景后按持久化场景；⑥ 列为空的存量单照现查；⑦ 已归因后的同步不改列；⑧ 列形状：可空 text、无默认、CHECK 拒表外值、couli_app 可写；
+#   ⑨ rights-port/kit.ts 的 order() 键集合等于库里 orders 的列集合（读 information_schema；给下面 modify_existing 的 reverse_red 一条真会红的用例，D10-1962）。
+# 冻结用例：modify_existing 只 rights-port/kit.ts 一处（入账前测试机 fast-part base 实跑：tsc 只红 kit.ts:29 TS2719，补行后十步全过，couli-runs/B1-08zzi/fast-part/1、2，D10-3808 ⑦）；行为类已核不受影响：
+#   [AC-B1-08zzd#2]、[AC-B1-08zze#1]–[#4]、[AC-B1-10m#31]、[AC-B1-08n#15]；test/spec/db/orders 的列断言只核存在 / 子集。资金类支撑文件，落地照例要负责人标签。 迁移号：现按 0163 / 0164 写（主干到 0160，B3-06f 分支占 0161 / 0162）；land 时照 D10-2828 取主干下一个空号，后落地的变基改号并重出生成物。认领若被 B1-08zzg 的 glob 拒，停下报编排（D10-3808 ⑤）。
+refs: [BR-CALC-19, BR-CALC-10]
+refs_hash:
+  BR-CALC-19: dc5707a12393
+  BR-CALC-10: 93337079f138
+deps: [B1-08zze]
+paths:
+  - 'apps/api/src/modules/orders/application/{update-step,update-step.test,pipeline-port,pipeline-port.test,claim-review,claim-review.test,admin-assign,admin-assign.test}.ts'
+  - 'db/migrations/*_orders-attr-pid-scene*.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/orders/snapshot-scene-persist/**' # 新目录
+  - 'test/spec/db/orders/attr-pid-scene/**' # 新目录
+  - 'test/spec/orders/rights-port/kit.ts' # modify_existing：order() 字面量末尾补一行 attr_pid_scene: null
+modify_existing:
+  - file: 'test/spec/orders/rights-port/kit.ts'
+    scope: support
+    reason: rule_change
+    br: [BR-CALC-19]
+    ruling: D10-3808
+    note: 'orders 新增可空列 attr_pid_scene 后 order() 的完整 Selectable 字面量 tsc 必红（TS2719）；只在对象字面量末尾（...patch 之后）按 token 纯插入一行 attr_pid_scene: null，不动任何断言与原有 token（同 D10-839 / B2-04zzf 补列先例）。'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/orders/**'
+  - 'test/spec/db/orders/**'
+status: todo
