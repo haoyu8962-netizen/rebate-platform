@@ -232,11 +232,18 @@ function jobBlock(text: string, id: string): string {
   return next < 0 ? text.slice(start) : text.slice(start, start + 1 + next + 1);
 }
 
-/** Replaces `from` with `to` inside the job block `id` only (exactly once). */
+/**
+ * Replaces `from` with `to` inside the job block `id` only (exactly once). Spliced by position,
+ * not with String#replace: the int job bodies contain `$'` (`"${pong%$'\r'}"`), which a
+ * replacement string would expand into the rest of the file.
+ */
 function inJob(text: string, id: string, from: string, to: string): string {
   const block = jobBlock(text, id);
   if (block.split(from).length !== 2) throw new Error(`${from} is not unique in ${id}`);
-  return text.replace(block, block.replace(from, to));
+  const start = text.indexOf(block);
+  const at = block.indexOf(from);
+  const edited = block.slice(0, at) + to + block.slice(at + from.length);
+  return text.slice(0, start) + edited + text.slice(start + block.length);
 }
 
 it('the real ci.yml routes exactly the allowlisted jobs, every other job is ubuntu-latest', () => {
