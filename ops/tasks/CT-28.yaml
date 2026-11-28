@@ -1,0 +1,29 @@
+id: CT-28
+repo: rebate-platform
+title: '契约小单 CT-TBAPP（TB-APP-AUTH）：auth-url 的 UnionAuthUrlData 与 30101 / 30102 的 data 加可选公开字段 sdk_app_key（auth_methods 含 sdk_token 时必带，其余不带）；apps.json 不改'
+type: contract
+# 2026-11-28 be 入账（编排 D10-3709 ② / D10-3711 / D10-3747；依据规划 couli#44 回写的 04 §6.3 auth-url 与 §7 30101 / 30102 data 的 sdk_app_key，SPEC_REF d840ba996561；方案 couli-runs/TB-APP-AUTH/plan.md C2 第 5 条）。05 任务号 CT-28。契约槽排在 CT-18d 之后（D10-3744）；写测不占槽。
+# ① openapi UnionAuthUrlData 加可选 sdk_app_key（string，minLength 1；公开标识，取值为 state 记录的那条 sdk_token 应用引用里的联盟应用 AppKey）；auth_methods 含 sdk_token 时必带、其余响应不带（04 §6.3:678、§7:768–769 原文）——照 sdk / mini_program 的配对写法用契约说明 + contracts-ts 一致性测试约束，不加顶层 oneOf。error-codes.yaml 30101 / 30102 的 data 加 sdk_app_key（同上条件），meaning 写明；两处 ErrorEnvelope 示例（ClientError / NoStoreClientError 的 unionAuthRequired）与 auth-url 示例带上。零破坏增量：只加可选响应字段（oasdiff 视为非破坏）。重生成 packages/contracts-ts/**。
+# 服务端何时、用哪个 appKey 填这个字段属 w1 的 sdk_token 分支单（D10-3709 ①），本单不改服务端逻辑；本单落地后服务端在填之前一律不带。
+# ② apps.json 百川安卓入口 tbopen://linkpartner/entrance：编排 D10-3711 定二取甲——不登、不改 CSB-11 与 04 §9 形状；由 native-android 在 TB-APP-AUTH-AND 用清单合并 tools:node="remove" 去掉，实验 (f) 核装淘宝时授权后能否自动回凑狸，回不来或 SDK 报缺入口才走乙。本单不碰 apps.json。
+# ③ iOS / 鸿蒙 tbopen<AppKey> / taobaooauth<AppKey>：负责人给 AppKey 后另开小单（D10-3709 ②）。
+refs: [BR-ID-17]
+refs_hash:
+  BR-ID-17: abf653e68588
+deps: []
+paths:
+  - 'contracts/openapi.yaml'
+  - 'contracts/error-codes.yaml'
+  - 'packages/contracts-ts/**'
+  - 'apps/api/src/modules/platform/http/auth-routes.gen.ts'
+  - 'apps/api/src/modules/platform/validation/signing-routes.gen.ts'
+  - 'apps/api/src/modules/risk/application/min-version-routes.gen.ts'
+test_paths:
+  - 'test/spec/contracts/tbapp-sdk-app-key/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/contracts/tbapp-sdk-app-key/**'
+status: todo
+pr: null
