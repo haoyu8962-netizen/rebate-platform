@@ -14,9 +14,10 @@ type: guard-change
 # red-check / evidence-check / task.ts 经 test-blocks 自然生效；必须改别处才能生效就停下报编排。
 # 规则测试至少钉：① CT-26zs 形状（顶层 6 个 it、#4 为模板标题，只改 #4 块体）按模板原文登记 → 整块定位、changed 判对，#1/#2/#3/#5/#6 须不变且不被整文件判；
 #   ② 静态 describe 里的模板标题 it 同上；③ 原文差一个字符 / 同一原文命中两块（两个普通块，或普通块与 .each 表 / for…of 循环体各一）→ 拒；
-#   ④ ${…} 引用的顶层 const 变了（块外改动）→ 照旧整文件重判、登记无效；⑤ 登记成 rule_change 以外的种类、或缺 note → 拒；
+#   ④ ${…} 引用的顶层 const 变了（块外改动）→ 照旧整文件重判、登记无效；⑤ 登记成 rule_change 以外的种类（tighten_only、ruling_correction、flake_fix 等）、或缺 note / note 全空白 → 拒；
 #   ⑥ 带修饰的模板标题 it、模板标题 describe 里的 it、函数里的模板标题 it → 照旧拒；⑦ 静态字面量标题、.each / .for 逐行、for…of 模板原文三种现有登记照旧（回归）；
-#   ⑧ red-check：①的形状只把 #4 当被改块要先红，其余列 exempt。
+#   ⑧ red-check 与其他整块登记同口径（D10-701；台账补丁 1，D10-3790 取甲）：①的形状（改动全在有效登记块内）整个文件移出先红名单（modifiedLeftOut），
+#   先红与证据检查用同一份应跑清单（照冻结的 [AC-CT-06zzzzzzzc#9] 的写法）；有块外改动时照现有规则（mixed 留在名单里）；不给新这一种单开「永不移出、绿即拒」的特例。
 refs: []
 refs_hash: {}
 deps: []
