@@ -241,15 +241,18 @@ it('[AC-CT-06zzzzzzzq#7] 拒绝带修饰、动态 describe、控制流与非字�
     });
   }
 
-  const concurrent = (block: string) => block.replace(/^it\(/, 'it.concurrent(');
+  const modifier = 'concurrent';
+  const concurrent = (block: string) => block.replace(/^it\(/, `it.${modifier}(`);
   const { expected, result } = redRun(sixTests(concurrent(after)), 'failed', {
     baseSource: sixTests(concurrent(before)),
   });
   expect(expected).toEqual([FILE]);
   expect(result.ok).toBe(false);
-  expect(result.exempt ?? []).toEqual([]);
-  const failed = result.problems.map((problem) => problem.test);
-  expect(failed).toEqual(expect.arrayContaining([...SIBLINGS]));
+  expect(result.problems).toEqual([
+    { file: FILE, test: TITLE, reason: expect.stringMatching(/does not apply/) },
+  ]);
+  expect((result.exempt ?? []).map((entry) => entry.test).sort()).toEqual([...SIBLINGS].sort());
+  expect(result.red).toEqual([`${FILE} > ${REPORT_TITLE}`]);
 });
 
 it('[AC-CT-06zzzzzzzq#8] 新整块登记可与静态标题、表格逐行、for…of 整块登记同时使用', () => {
