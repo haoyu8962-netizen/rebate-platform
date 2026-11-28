@@ -9,9 +9,12 @@
 #     equals the job id;
 #   - every action is pinned to a full commit SHA with a version comment.
 #   - every job runs on ubuntu-latest, except the jobs listed in SELF_HOSTED_JOBS of
-#     check-workflows.ts (ADR-0004, today verify-props-sha-1 / -2 / -3), which use the one fixed
-#     routing expression: LAN runner only when the repository variable SELF_HOSTED_CI is 'on',
-#     ubuntu-latest otherwise; such jobs stay read-only and use no secrets.
+#     check-workflows.ts (ADR-0004 batch 2, D10-3705: verify-spec-1 / -2 / -3 and verify-int-1
+#     to -6), which use the one fixed routing expression: LAN runner only when the repository
+#     variables SELF_HOSTED_CI (master switch) and SELF_HOSTED_CI_IDLE (runner idle switch) are
+#     both 'on' and the event is a push or a same-repository PR, ubuntu-latest otherwise (either
+#     variable unset = off); such jobs keep a job-level timeout-minutes, stay read-only and use
+#     no secrets.
 #
 # Ledger-only fast path (D10-935, CT-06zzzv; docs/** too since D10-1024 E, CT-06zzzze): on a pull
 # request whose base...head changes nothing but task ledgers (ops/tasks/<id>.yaml) or docs
@@ -504,7 +507,11 @@ jobs:
     # verify:fast.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
-    runs-on: ubuntu-latest
+    # ADR-0004 batch 2 (D10-3705, CT-06zzzzzzzp): the LAN one-shot VM runner only when the
+    # repository variables SELF_HOSTED_CI and SELF_HOSTED_CI_IDLE are both 'on' and this is a push
+    # or a same-repository PR; otherwise, and by default (either variable unset), ubuntu-latest.
+    # The expression is fixed by tools/ci/check-workflows.ts.
+    runs-on: ${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -538,7 +545,11 @@ jobs:
     # Same as verify-spec-1, other shard.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
-    runs-on: ubuntu-latest
+    # ADR-0004 batch 2 (D10-3705, CT-06zzzzzzzp): the LAN one-shot VM runner only when the
+    # repository variables SELF_HOSTED_CI and SELF_HOSTED_CI_IDLE are both 'on' and this is a push
+    # or a same-repository PR; otherwise, and by default (either variable unset), ubuntu-latest.
+    # The expression is fixed by tools/ci/check-workflows.ts.
+    runs-on: ${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -572,7 +583,11 @@ jobs:
     # Same as verify-spec-1, other shard.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
-    runs-on: ubuntu-latest
+    # ADR-0004 batch 2 (D10-3705, CT-06zzzzzzzp): the LAN one-shot VM runner only when the
+    # repository variables SELF_HOSTED_CI and SELF_HOSTED_CI_IDLE are both 'on' and this is a push
+    # or a same-repository PR; otherwise, and by default (either variable unset), ubuntu-latest.
+    # The expression is fixed by tools/ci/check-workflows.ts.
+    runs-on: ${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -734,10 +749,9 @@ jobs:
     # The commit-SHA-seed pass of verify-props-1 (D10-902, CT-06zzzr), shard 1/3.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
-    # ADR-0004 batch 1 (D10-1206, CT-06zzzzp): the LAN one-shot VM runner only when the repository
-    # variable SELF_HOSTED_CI is 'on' and this is a push or a same-repository PR; otherwise, and by
-    # default (variable unset), ubuntu-latest. The expression is fixed by tools/ci/check-workflows.ts.
-    runs-on: ${{ (vars.SELF_HOSTED_CI == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
+    # ubuntu-latest again since ADR-0004 batch 2 (D10-3705, CT-06zzzzzzzp); batch 1 (D10-1206,
+    # CT-06zzzzp) had routed this job to the LAN runner.
+    runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -778,10 +792,9 @@ jobs:
     # The commit-SHA-seed pass of verify-props-2 (D10-902, CT-06zzzr), shard 2/3.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
-    # ADR-0004 batch 1 (D10-1206, CT-06zzzzp): the LAN one-shot VM runner only when the repository
-    # variable SELF_HOSTED_CI is 'on' and this is a push or a same-repository PR; otherwise, and by
-    # default (variable unset), ubuntu-latest. The expression is fixed by tools/ci/check-workflows.ts.
-    runs-on: ${{ (vars.SELF_HOSTED_CI == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
+    # ubuntu-latest again since ADR-0004 batch 2 (D10-3705, CT-06zzzzzzzp); batch 1 (D10-1206,
+    # CT-06zzzzp) had routed this job to the LAN runner.
+    runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -822,10 +835,9 @@ jobs:
     # The commit-SHA-seed pass of verify-props-3 (D10-902, CT-06zzzr), shard 3/3.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
-    # ADR-0004 batch 1 (D10-1206, CT-06zzzzp): the LAN one-shot VM runner only when the repository
-    # variable SELF_HOSTED_CI is 'on' and this is a push or a same-repository PR; otherwise, and by
-    # default (variable unset), ubuntu-latest. The expression is fixed by tools/ci/check-workflows.ts.
-    runs-on: ${{ (vars.SELF_HOSTED_CI == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
+    # ubuntu-latest again since ADR-0004 batch 2 (D10-3705, CT-06zzzzzzzp); batch 1 (D10-1206,
+    # CT-06zzzzp) had routed this job to the LAN runner.
+    runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -886,7 +898,7 @@ jobs:
   # (tools/ops/verify-container.sh) still runs the whole root test:int once, unsharded.
   # Balancing the shards by test time is FU-CI-SHARD-BALANCE, not done here.
   verify-int-1:
-    # Needs Docker (Testcontainers starts the one-shot PostgreSQL): ubuntu-latest, never ubuntu-slim.
+    # Needs Docker (Testcontainers starts the one-shot PostgreSQL): never ubuntu-slim.
     # The one-shot Redis of the integration tests (TEST_REDIS_URL) is a service container with
     # the image of infra/local/compose.yaml and tools/ops/verify-container.sh, data on tmpfs only.
     # D10-242 (CT-06zm): skipped only when verify-reuse found a success of this very job on the
@@ -894,7 +906,11 @@ jobs:
     # every other event, and any other failure of verify-reuse, runs it in full.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
-    runs-on: ubuntu-latest
+    # ADR-0004 batch 2 (D10-3705, CT-06zzzzzzzp): the LAN one-shot VM runner only when the
+    # repository variables SELF_HOSTED_CI and SELF_HOSTED_CI_IDLE are both 'on' and this is a push
+    # or a same-repository PR; otherwise, and by default (either variable unset), ubuntu-latest.
+    # The expression is fixed by tools/ci/check-workflows.ts.
+    runs-on: ${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
     # 30 → 45 (2026-10-19, CT-06z): green in the 30 latest ci runs 17m05s–29m16s, p90 29m05s
     # (97% of the cap); 45 is the maximum with a 1.5× margin, rounded up to a multiple of 5.
     # 45 → 60 (2026-10-22, CT-06ze): #1173, #1190 and #1167 hit 45 minutes in the browser install
@@ -994,7 +1010,11 @@ jobs:
     # (D10-242), when the PR head moved, or on a ledger-only pull request.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
-    runs-on: ubuntu-latest
+    # ADR-0004 batch 2 (D10-3705, CT-06zzzzzzzp): the LAN one-shot VM runner only when the
+    # repository variables SELF_HOSTED_CI and SELF_HOSTED_CI_IDLE are both 'on' and this is a push
+    # or a same-repository PR; otherwise, and by default (either variable unset), ubuntu-latest.
+    # The expression is fixed by tools/ci/check-workflows.ts.
+    runs-on: ${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
     # As verify-int-1 (CT-06zzzzq).
     timeout-minutes: 40
     services:
@@ -1070,7 +1090,11 @@ jobs:
     # (D10-242), when the PR head moved, or on a ledger-only pull request.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
-    runs-on: ubuntu-latest
+    # ADR-0004 batch 2 (D10-3705, CT-06zzzzzzzp): the LAN one-shot VM runner only when the
+    # repository variables SELF_HOSTED_CI and SELF_HOSTED_CI_IDLE are both 'on' and this is a push
+    # or a same-repository PR; otherwise, and by default (either variable unset), ubuntu-latest.
+    # The expression is fixed by tools/ci/check-workflows.ts.
+    runs-on: ${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
     # As verify-int-1 (CT-06zzzzq).
     timeout-minutes: 40
     services:
@@ -1147,7 +1171,11 @@ jobs:
     # the same tested tree (D10-242), when the PR head moved, or on a ledger-only pull request.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
-    runs-on: ubuntu-latest
+    # ADR-0004 batch 2 (D10-3705, CT-06zzzzzzzp): the LAN one-shot VM runner only when the
+    # repository variables SELF_HOSTED_CI and SELF_HOSTED_CI_IDLE are both 'on' and this is a push
+    # or a same-repository PR; otherwise, and by default (either variable unset), ubuntu-latest.
+    # The expression is fixed by tools/ci/check-workflows.ts.
+    runs-on: ${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
     # As verify-int-1 (CT-06zzzzq; the history of this limit is there): 40 minutes, about 17–18
     # expected here with the tail and the other packages.
     timeout-minutes: 40
@@ -1429,7 +1457,11 @@ jobs:
     # (D10-242), when the PR head moved, or on a ledger-only pull request.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
-    runs-on: ubuntu-latest
+    # ADR-0004 batch 2 (D10-3705, CT-06zzzzzzzp): the LAN one-shot VM runner only when the
+    # repository variables SELF_HOSTED_CI and SELF_HOSTED_CI_IDLE are both 'on' and this is a push
+    # or a same-repository PR; otherwise, and by default (either variable unset), ubuntu-latest.
+    # The expression is fixed by tools/ci/check-workflows.ts.
+    runs-on: ${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
     # As verify-int-1 (CT-06zzzzq).
     timeout-minutes: 40
     services:
@@ -1505,7 +1537,11 @@ jobs:
     # (D10-242), when the PR head moved, or on a ledger-only pull request.
     needs: [verify-reuse, ledger-only-detect]
     if: ${{ !cancelled() && needs.verify-reuse.outputs.reuse != 'true' && needs.verify-reuse.outputs.moved != 'true' && needs.ledger-only-detect.outputs.only != 'true' }}
-    runs-on: ubuntu-latest
+    # ADR-0004 batch 2 (D10-3705, CT-06zzzzzzzp): the LAN one-shot VM runner only when the
+    # repository variables SELF_HOSTED_CI and SELF_HOSTED_CI_IDLE are both 'on' and this is a push
+    # or a same-repository PR; otherwise, and by default (either variable unset), ubuntu-latest.
+    # The expression is fixed by tools/ci/check-workflows.ts.
+    runs-on: ${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
     # As verify-int-1 (CT-06zzzzq).
     timeout-minutes: 40
     services:

@@ -210,8 +210,19 @@ it('rejects write permissions and permission shorthands', () => {
   ]);
 });
 
-// ADR-0004 §2.6 (CT-06zzzzp): the self-hosted route.
+// ADR-0004 §2.6 (CT-06zzzzp; batch 2 D10-3705, CT-06zzzzzzzp): the self-hosted route.
 const ROUTE_LINE = `    runs-on: ${SELF_HOSTED_ROUTE}\n`;
+const ROUTED_JOBS = [
+  'verify-spec-1',
+  'verify-spec-2',
+  'verify-spec-3',
+  'verify-int-1',
+  'verify-int-2',
+  'verify-int-3',
+  'verify-int-4',
+  'verify-int-5',
+  'verify-int-6',
+];
 
 /** Text of the job block `id` (from its id line to the next job id line). */
 function jobBlock(text: string, id: string): string {
@@ -229,11 +240,9 @@ function inJob(text: string, id: string, from: string, to: string): string {
 }
 
 it('the real ci.yml routes exactly the allowlisted jobs, every other job is ubuntu-latest', () => {
-  expect(SELF_HOSTED_JOBS).toEqual({
-    'ci.yml': ['verify-props-sha-1', 'verify-props-sha-2', 'verify-props-sha-3'],
-  });
+  expect(SELF_HOSTED_JOBS).toEqual({ 'ci.yml': ROUTED_JOBS });
   expect(SELF_HOSTED_ROUTE).toBe(
-    "${{ (vars.SELF_HOSTED_CI == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('[\"self-hosted\",\"couli-ci\"]') || 'ubuntu-latest' }}",
+    "${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('[\"self-hosted\",\"couli-ci\"]') || 'ubuntu-latest' }}",
   );
   const text = readFileSync(join(REPO, '.github/workflows/ci.yml'), 'utf8');
   const routed = text
@@ -247,7 +256,7 @@ it('the real ci.yml routes exactly the allowlisted jobs, every other job is ubun
       }
       return null;
     });
-  expect(routed).toEqual(['verify-props-sha-1', 'verify-props-sha-2', 'verify-props-sha-3']);
+  expect(routed).toEqual(ROUTED_JOBS);
   expect(checkWorkflows(REPO)).toEqual([]);
 });
 
@@ -267,12 +276,14 @@ it('rejects the routing expression with one character changed', () => {
     SELF_HOSTED_ROUTE.replace(' || ', ' ||  '),
     SELF_HOSTED_ROUTE.replace('couli-ci', 'couli_ci'),
     SELF_HOSTED_ROUTE.replace("'push'", "'pusH'"),
+    // The batch 1 expression, without the idle switch (D10-3705).
+    SELF_HOSTED_ROUTE.replace("vars.SELF_HOSTED_CI_IDLE == 'on' && ", ''),
   ];
   const results = variants.map((variant) => {
     if (variant === SELF_HOSTED_ROUTE) throw new Error('variant equals the route');
     const root = fixture((edit) =>
       edit('.github/workflows/ci.yml', (t) =>
-        inJob(t, 'verify-props-sha-2', ROUTE_LINE, `    runs-on: ${variant}\n`),
+        inJob(t, 'verify-spec-2', ROUTE_LINE, `    runs-on: ${variant}\n`),
       ),
     );
     return codes(root);
@@ -293,7 +304,17 @@ it('rejects the routing expression on a job that is not allowlisted', () => {
       t.replace('    runs-on: ubuntu-latest\n', ROUTE_LINE),
     ),
   );
-  expect([codes(ciJob), codes(otherFile)]).toEqual([['self-hosted-job'], ['self-hosted-job']]);
+  // Batch 1 jobs are no longer allowlisted (D10-3705).
+  const batchOne = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) =>
+      inJob(t, 'verify-props-sha-1', '    runs-on: ubuntu-latest\n', ROUTE_LINE),
+    ),
+  );
+  expect([codes(ciJob), codes(otherFile), codes(batchOne)]).toEqual([
+    ['self-hosted-job'],
+    ['self-hosted-job'],
+    ['self-hosted-job'],
+  ]);
 });
 
 it('rejects self-hosted anywhere outside the routing expression', () => {
@@ -312,17 +333,12 @@ it('rejects self-hosted anywhere outside the routing expression', () => {
   );
   const comment = fixture((edit) =>
     edit('.github/workflows/ci.yml', (t) =>
-      inJob(t, 'verify-props-sha-1', ROUTE_LINE, `    # runs on the self-hosted VM\n${ROUTE_LINE}`),
+      inJob(t, 'verify-spec-1', ROUTE_LINE, `    # runs on the self-hosted VM\n${ROUTE_LINE}`),
     ),
   );
   const trailing = fixture((edit) =>
     edit('.github/workflows/ci.yml', (t) =>
-      inJob(
-        t,
-        'verify-props-sha-1',
-        ROUTE_LINE,
-        `    runs-on: ${SELF_HOSTED_ROUTE} # self-hosted\n`,
-      ),
+      inJob(t, 'verify-int-1', ROUTE_LINE, `    runs-on: ${SELF_HOSTED_ROUTE} # self-hosted\n`),
     ),
   );
   const step = fixture((edit) =>
@@ -351,9 +367,9 @@ it('rejects write permissions on a routed job, at job level or workflow level', 
     edit('.github/workflows/ci.yml', (t) =>
       inJob(
         t,
-        'verify-props-sha-3',
-        '    timeout-minutes: 40\n',
-        '    timeout-minutes: 40\n    permissions:\n      contents: write\n',
+        'verify-spec-3',
+        '    timeout-minutes: 30\n',
+        '    timeout-minutes: 30\n    permissions:\n      contents: write\n',
       ),
     ),
   );
@@ -373,7 +389,7 @@ it('rejects write permissions on a routed job, at job level or workflow level', 
   const routedLines = checkWorkflows(workflowLevel)
     .filter((p) => p.code === 'self-hosted-permissions')
     .map((p) => p.message);
-  expect(routedLines.length).toBe(3);
+  expect(routedLines.length).toBe(ROUTED_JOBS.length);
 });
 
 it('rejects a routed job that references secrets', () => {
@@ -381,9 +397,9 @@ it('rejects a routed job that references secrets', () => {
     edit('.github/workflows/ci.yml', (t) =>
       inJob(
         t,
-        'verify-props-sha-1',
-        "          PROP_RUNS: '100000'\n",
-        "          PROP_RUNS: '100000'\n          TOKEN: ${{ secrets.NPM_TOKEN }}\n",
+        'verify-int-1',
+        "          PROP_RUNS: '2000'\n",
+        "          PROP_RUNS: '2000'\n          TOKEN: ${{ secrets.NPM_TOKEN }}\n",
       ),
     ),
   );
@@ -391,9 +407,9 @@ it('rejects a routed job that references secrets', () => {
     edit('.github/workflows/ci.yml', (t) =>
       inJob(
         t,
-        'verify-props-sha-2',
-        "          PROP_RUNS: '100000'\n",
-        "          PROP_RUNS: '100000'\n          TOKEN: ${{ SECRETS['NPM_TOKEN'] }}\n",
+        'verify-int-2',
+        "          PROP_RUNS: '2000'\n",
+        "          PROP_RUNS: '2000'\n          TOKEN: ${{ SECRETS['NPM_TOKEN'] }}\n",
       ),
     ),
   );
@@ -433,6 +449,87 @@ it('rejects a routed job that references secrets', () => {
   ]);
 });
 
+// D10-3705: every routed job carries its own job-level timeout. The leading newline keeps the
+// 4-space job key apart from 8-space step keys of the same name.
+const JOB_TIMEOUT_40 = '\n    timeout-minutes: 40\n';
+
+function timeoutProblems(root: string): string[] {
+  return checkWorkflows(root)
+    .filter((p) => p.code === 'self-hosted-timeout')
+    .map((p) => p.message);
+}
+
+it('rejects a routed job without a job-level timeout-minutes', () => {
+  // Every other job of the real ci.yml keeps its timeout, before and after this one.
+  const missing = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) => inJob(t, 'verify-int-3', JOB_TIMEOUT_40, '\n')),
+  );
+  // The last routed job: the next job (verify-replay) has a timeout of its own.
+  const lastRouted = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) => inJob(t, 'verify-int-6', JOB_TIMEOUT_40, '\n')),
+  );
+  expect([codes(missing), codes(lastRouted)]).toEqual([
+    ['self-hosted-timeout'],
+    ['self-hosted-timeout'],
+  ]);
+  const [only, last] = [timeoutProblems(missing), timeoutProblems(lastRouted)];
+  expect(only).toHaveLength(1);
+  expect(only[0]).toContain('`verify-int-3`');
+  expect(last).toHaveLength(1);
+  expect(last[0]).toContain('`verify-int-6`');
+});
+
+it('a step-level timeout-minutes does not stand in for the job-level one', () => {
+  // verify-int-4 has step-level timeouts (10 and 5) in the real file.
+  const stepOnly = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) => inJob(t, 'verify-int-4', JOB_TIMEOUT_40, '\n')),
+  );
+  const addedStep = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) => {
+      const shard = '      - run: pnpm --filter @couli/spec-tests run test --shard=2/3\n';
+      const noJobTimeout = inJob(t, 'verify-spec-2', '    timeout-minutes: 30\n', '');
+      return inJob(noJobTimeout, 'verify-spec-2', shard, `${shard}        timeout-minutes: 30\n`);
+    }),
+  );
+  expect([codes(stepOnly), codes(addedStep)]).toEqual([
+    ['self-hosted-timeout'],
+    ['self-hosted-timeout'],
+  ]);
+  expect(timeoutProblems(stepOnly)[0]).toContain('`verify-int-4`');
+  expect(timeoutProblems(addedStep)[0]).toContain('`verify-spec-2`');
+});
+
+it('rejects a routed job timeout that is not one positive integer', () => {
+  const variants = ['0', '${{ vars.TIMEOUT }}', ''];
+  const results = variants.map((value) => {
+    const root = fixture((edit) =>
+      edit('.github/workflows/ci.yml', (t) =>
+        inJob(t, 'verify-spec-1', '    timeout-minutes: 30\n', `    timeout-minutes: ${value}\n`),
+      ),
+    );
+    return codes(root);
+  });
+  const twice = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) =>
+      inJob(
+        t,
+        'verify-spec-1',
+        '    timeout-minutes: 30\n',
+        '    timeout-minutes: 30\n    timeout-minutes: 30\n',
+      ),
+    ),
+  );
+  expect(results).toEqual(variants.map(() => ['self-hosted-timeout']));
+  expect(codes(twice)).toEqual(['self-hosted-timeout']);
+});
+
+it('does not require a timeout on a job that is not routed', () => {
+  const root = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) => inJob(t, 'verify-props-sha-1', JOB_TIMEOUT_40, '\n')),
+  );
+  expect(checkWorkflows(root)).toEqual([]);
+});
+
 it('rejects the routing expression in a pull_request_target or workflow_run workflow', () => {
   const prt = fixture((edit) =>
     edit('.github/workflows/protected-paths.yml', (t) =>
@@ -454,17 +551,17 @@ it('rejects the routing expression in a pull_request_target or workflow_run work
 it('still rejects ubuntu-slim and other runners on routed and unrouted jobs', () => {
   const routedJob = fixture((edit) =>
     edit('.github/workflows/ci.yml', (t) =>
-      inJob(t, 'verify-props-sha-1', ROUTE_LINE, '    runs-on: ubuntu-slim\n'),
+      inJob(t, 'verify-spec-1', ROUTE_LINE, '    runs-on: ubuntu-slim\n'),
     ),
   );
   const variable = fixture((edit) =>
     edit('.github/workflows/ci.yml', (t) =>
-      inJob(t, 'verify-props-sha-1', ROUTE_LINE, '    runs-on: ${{ vars.RUNNER }}\n'),
+      inJob(t, 'verify-spec-1', ROUTE_LINE, '    runs-on: ${{ vars.RUNNER }}\n'),
     ),
   );
   const twice = fixture((edit) =>
     edit('.github/workflows/ci.yml', (t) =>
-      inJob(t, 'verify-props-sha-1', ROUTE_LINE, `${ROUTE_LINE}    runs-on: ubuntu-latest\n`),
+      inJob(t, 'verify-spec-1', ROUTE_LINE, `${ROUTE_LINE}    runs-on: ubuntu-latest\n`),
     ),
   );
   expect([codes(routedJob), codes(variable)]).toEqual([['runs-on'], ['runs-on']]);
