@@ -122,7 +122,12 @@ export async function fixture(db: Kysely<DB>) {
 
   async function issue(appEnv: Environment = 'staging', appKey = APP_KEY) {
     const authApps = createTaobaoUnionAuthApps({ appKey, redirectUri: USER_REDIRECT });
-    const issued = await createUnionAuthUrl({ ...options, appEnv, authApps }).get({
+    const issued = await createUnionAuthUrl({
+      ...options,
+      appEnv,
+      authApps,
+      logger: { warn: linkingWarn },
+    }).get({
       platform: 'taobao',
       reportedClient: 'android',
       traceId: randomUUID(),
