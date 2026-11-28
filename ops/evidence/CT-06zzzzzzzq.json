@@ -1,0 +1,84 @@
+{
+  "risk_note": "RV2 by path (tools/guard). Gate tooling only, no money moves (FU-GUARD-MODIFY-EXISTING-TEMPLATE-TITLE; orchestrator D10-3624 / D10-3769 / D10-3790 / D10-3804 / D10-3836). test-blocks.ts recognises one more whole-block kind for modify_existing: a plain it / test (no modifier) whose title is a template literal with ${…}, at the top level or inside a static-titled describe, declared by its title template text character for character (same as CT-06zzzzzzzd .each templates and CT-06zzzzzzzj for…of templates); rule_change only, note required (wholeBlockEntryProblem, unchanged). The same text naming more than one block, a one-character difference, modifiers, template describes, functions / branches / non-for…of loops and non-literal titles are refused or judged as before (fail-closed). Changes outside the block (including top-level declarations a ${…} refers to) still rejudge the whole file. red-check / evidence-check / task.ts pick it up through the existing whole-block path; red-check.ts itself is unchanged: a file whose every change lies in valid declared blocks is left out of the expected list as for the other whole-block kinds (D10-701, ledger patch 1 #1027); an invalid registration is judged test by test as before, unchanged siblings exempt (CT-06p; frozen [CT-06zzzg], [CT-06zzzk], [CT-06zzzzzv#2]). Third-class protected paths: the task PR's owner-approved label is decided by the owner.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 1,
+      "note": "Codex code review r1 (full, base 52dc69271cea) pass, two S2 (both fail-closed, recorded as follow-ups): a static describe whose call keeps a trailing comma before ')' is not recognised (registration refused, file stays expected); a top-level static title that spells another block's ${…} template text could be routed to the template block (the changed static test is then judged undeclared). The review brief named the ops mechanical corrections (not counted, D10-3796: test-blocks.test.ts:5491 fixture `describe.${'sk' + 'ip'}(`; D10-3849: red-check.test.ts:5470 `p.test !== null &&` type narrowing) and the implementer unit-test change at test-blocks.test.ts:4956 (a template-title plain it in a static describe is now a whole block, the point of this task). Implementation: Opus r1 04a528b9b (re-applied unchanged as da2a640d5 after rule-test write 3), r2 stopped on its stop condition (no change), mechanical fix 06db07b38. Test machine on the head 06db07b381c2: --tests (test/spec/ci, tools/guard, tools/lib, tools/ci: 117 files, 2244 tests) exit 0; verify:fast exit 0."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 3,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex in three writes (test/spec/ci/modify-existing-template-title/whole-block.test.ts, [AC-CT-06zzzzzzzq#1]-[#9]); ops mechanical correction D10-3783 (fixture describe name via a DESCRIBE constant, not counted). Independent Claude review r1 (full) pass with two S2: point 8 of the ledger contradicted D10-701 (orchestrator D10-3790 took A: ledger patch 1 #1027; write 2 rewrote #9 as [AC-CT-06zzzzzzzc#9] and added flake_fix to #6); r2 (incremental) pass, no findings. Implementation r2 (stop condition) showed the end of #7 contradicted the frozen rule (invalid registration: unchanged siblings exempt, main red-check.ts:1957-2059); D10-3804 took A; write 3 changed only those 11 lines. r3 (incremental, the 11 lines only) by the owner's one-off approval ops/approvals.yaml id 243 (2026-11-28, orchestrator D10-3812 / D10-3836; rule-test reviews are capped at 2 by approvals 13): pass, no findings. Red runs red/1, red/2, red/3 passed (9 / 9 red on main, type check 0)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#1] 六个顶层用例只改第 4 个模板标题块时可按原文登记",
+    "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#2] 静态 describe 内的普通 test 按自身模板原文登记并匹配运行全名",
+    "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#3] 原文差一个字符、转义或插值展开均不能登记",
+    "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#4] 普通块与任何可登记块同模板时拒绝基线或头提交的重复命中",
+    "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#5] 插值引用的顶层 const 有改动时整文件重判",
+    "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#6] 模板整块登记只接受 rule_change 和非空 note",
+    "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#7] 拒绝带修饰、动态 describe、控制流与非字面量标题",
+    "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#8] 新整块登记可与静态标题、表格逐行、for…of 整块登记同时使用",
+    "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#9] 先红与证据检查对模板标题整块登记使用同一份应跑清单"
+  ],
+  "task": "CT-06zzzzzzzq",
+  "spec_commit": "67b60e5c0d2efe2c5f7ec70181ed444187b4fa41",
+  "spec_ref": "d840ba99656122129cc90a54e608def93d444a69",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "67b60e5c0d2efe2c5f7ec70181ed444187b4fa41",
+      "tree": "404d270e05146a3b29cc1d63c318bd5a95c46894",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-28T13:26:05Z",
+      "finished_at": "2026-11-28T13:27:52Z",
+      "red_tests": [
+        "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#1] 六个顶层用例只改第 4 个模板标题块时可按原文登记",
+        "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#2] 静态 describe 内的普通 test 按自身模板原文登记并匹配运行全名",
+        "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#3] 原文差一个字符、转义或插值展开均不能登记",
+        "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#4] 普通块与任何可登记块同模板时拒绝基线或头提交的重复命中",
+        "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#5] 插值引用的顶层 const 有改动时整文件重判",
+        "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#6] 模板整块登记只接受 rule_change 和非空 note",
+        "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#7] 拒绝带修饰、动态 describe、控制流与非字面量标题",
+        "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#8] 新整块登记可与静态标题、表格逐行、for…of 整块登记同时使用",
+        "test/spec/ci/modify-existing-template-title/whole-block.test.ts > [AC-CT-06zzzzzzzq#9] 先红与证据检查对模板标题整块登记使用同一份应跑清单"
+      ],
+      "expected": ["test/spec/ci/modify-existing-template-title/whole-block.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "f6fe9dc2d83ca9b52ce9cec7ed919550a02234cf55470a55c6b21eacbbaa5d34"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "a5f4db98c0e28584eb572eb3029684aa8530595e",
+    "specs": "abdf240228855d53675eb0bbb81fea885eb897e9"
+  }
+}
