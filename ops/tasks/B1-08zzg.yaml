@@ -7,7 +7,7 @@ type: impl
 # ⑥ 必满足（D10-3475 ⒝，资金评审书点名）：回溯快照（app.module readOrderPidScene → createRestoreSnapshot，B2-09gd）不得再按订单 pid 反查场景，拼多多改用订单已落的判定（buy_type / scene_basis）。约 14 个冻结用例（link-code / bindings-pdd-* / catalog 取位）实现前探针定、台账补丁登 modify_existing。预计无迁移；若要，取主干下一个空号（0162 之后）。上线门槛（四推广位期间「分享单落 self」比例）登 followups，上线前须负责人定，不挡入账。补丁 1（D10-3615 取甲）：冻结块并入本单，test_paths 加冻结所在目录、登 127 条 modify_existing（含 [AC-B1-08zza#14]），Codex 写测 3 逐批改、逐批报编排核。
 refs: [BR-ATTR-08]
 refs_hash:
-  BR-ATTR-08: dc141d8f939f
+  BR-ATTR-08: 6ec3fe019a3d
 deps: [B1-08zzf]
 paths:
   - 'apps/api/src/modules/union/pids/**'

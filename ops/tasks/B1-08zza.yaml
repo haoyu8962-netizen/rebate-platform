@@ -10,7 +10,7 @@ type: impl
 # 补丁 1（2026-11-26，编排 D10-3278，四推广位期间的过渡口径，到实现 ② 为止）：拼多多回传**带 lk** → 按链接判（用户 / 商品 / 时序都对得上 → 该链接 pid_scene、scene_basis=link；对不上或 lk 查不到 → self / fallback）；回传**完全没带 lk** → 仍按推广位判（现行 classifyBuyType，scene_basis=pid，与今天一致）。做成规则表字段「缺 lk 时的依据」pid | self（拼多多默认 pid），实现 ② 落地时切 self；不许写平台字面量分支；classifyBuyType 三参签名与行为不动，按链接判另做纯函数。规则测试须钉：带 lk 对得上 / 用户不符 / 商品不符 / 时序不符 / lk 查不到各一条；缺 lk 时该字段 = pid 与今天一致、= self 时为 self（两个取值都钉）。探针（couli-runs/B1-08zza/tests/1，原型一律 self 红 124 / 43 文件）显示严格口径撞大量资金夹具（拼多多无 lk），故分步；「lk 缺失 → self」的夹具补 lk + links 行登 FU-PDD-NO-LK-SELF-AT-IMPL2（实现 ② 前置）。带 lk 的 source-backfill/fresh.int.test.ts [AC-B1-08j#29]/#30 夹具有 links 行，是否撞实现时实测、撞了按 rule_change 补登。 补丁 3（D10-3288）：补丁 2 的两条 red_exempt 撤掉——豁免对新文件不适用（tools/guard/lib/red-check.ts 只给被整文件判定的既有文件），[AC-B1-08zza#18] / #19 改为写库结果先收成值再断言的写法（机械更正 f5902e8a2，不计写测次数），先红红在断言。 补丁 4（D10-3302 ②）：迁移拆 0158（DROP + ADD CONSTRAINT … NOT VALID）/ 0159（VALIDATE），照先例 0081/0082；orders 是归属表、同名约束换定义，paths 加 tools/ci/lint-migrations.ts，只为在 APPROVED_GUARD_CHANGES 登记 0158 的文件名 + sha256 一行（第三类保护路径，合并时负责人标签）；迁移号落地前再核空号。 补丁 5（D10-3303）：冻结 [AC-B1-08za#1]（completeness.test.ts）登 modify_existing、test_paths 加该文件——规则表多一个键 missingLinkBuyTypeBasis，块内期望键集合与类型断言各加这一个键名（机械更正 09c2f46f0，不计写测次数）；kit.ts 不动。
 refs: [BR-ATTR-08, BR-ATTR-09]
 refs_hash:
-  BR-ATTR-08: dc141d8f939f
+  BR-ATTR-08: 6ec3fe019a3d
   BR-ATTR-09: 6f3cf4fa26ba
 deps: [CT-01f]
 paths:

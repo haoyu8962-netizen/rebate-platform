@@ -18,7 +18,7 @@ type: test-change
 # 规则测试由 Codex 写（照 risk-map）；规则测试评审由独立 Claude（claude-run.sh，第 36 条），按 review-spec-test.md「伴随测试单」一节评。本机不跑 vitest，走测试机 --tests（D10-2404）。
 refs: [BR-WDR-07, BR-WDR-03]
 refs_hash:
-  BR-WDR-07: 3eaedce150d8
+  BR-WDR-07: 84de08b4b1c7
   BR-WDR-03: 15fa0e1361e5
 deps: [B2-05v]
 paths:

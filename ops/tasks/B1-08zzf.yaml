@@ -7,7 +7,7 @@ type: test-change
 # 范围：旧主干探针（couli-runs/B1-08zza/tests/1，原型一律 self）红 122 块 / 41 文件（orders 18、settlement 22、commission 1）；实际清单在当前主干上以「pdd 规则表切 self」探针重定，modify_existing 以台账补丁逐块登记，逐块按「只补业务信息」报编排核放行（approvals #24 加标签）。支撑文件（kit）只许纯插入，改不了的落到块内。
 refs: [BR-ATTR-08]
 refs_hash:
-  BR-ATTR-08: dc141d8f939f
+  BR-ATTR-08: 6ec3fe019a3d
 deps: [B1-08zza]
 paths:
   - 'test/spec/orders/**'
