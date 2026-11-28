@@ -36,7 +36,7 @@ const REQUIRED_HOSTED_JOBS = [
   'ci-gate',
 ];
 
-it('[CT-06zzzzzzzp#1] ci.yml fixes runner placement and preserves timeouts', () => {
+it('[AC-CT-06zzzzzzzp#1] ci.yml fixes runner placement and preserves timeouts', () => {
   const workflow = readFileSync(join(ROOT, CI_FILE), 'utf8');
   const jobsText = (workflow.split('\njobs:\n')[1] ?? '').split(/^[\w-]+:/m)[0] ?? '';
   const jobs = new Map(
@@ -86,7 +86,7 @@ function evaluateRoute(
   });
 }
 
-it('[CT-06zzzzzzzp#2] LAN routing requires both switches and an eligible event', () => {
+it('[AC-CT-06zzzzzzzp#2] LAN routing requires both switches and an eligible event', () => {
   const eligible = [
     ['push', undefined],
     ['pull_request', REPOSITORY],
@@ -151,27 +151,41 @@ function checkFixture(ci: string) {
   }
 }
 
-it('[CT-06zzzzzzzp#3] the guard requires a timeout on the routed job itself', () => {
+it('[AC-CT-06zzzzzzzp#3] the guard requires a timeout on the routed job itself', () => {
   expect.soft(checkFixture(FIXTURE_CI), 'routed job with a timeout').toEqual([]);
   const missing = FIXTURE_CI.replace('    timeout-minutes: 30\n', '');
   const stepOnly = missing.replace(
     '      - run: echo spec\n',
     '      - run: echo spec\n        timeout-minutes: 5\n',
   );
+  const nearbyJobTimeouts = missing
+    .replace(
+      '  verify-spec-1:',
+      [
+        '  verify-static:',
+        `    runs-on: ${HOSTED}`,
+        '    timeout-minutes: 5',
+        '    steps:',
+        '      - run: echo static',
+        '  verify-spec-1:',
+      ].join('\n'),
+    )
+    .replace('    if: always()\n', '    if: always()\n    timeout-minutes: 5\n');
   const cases = [
     ['missing timeout', missing],
     ['step timeout only', stepOnly],
+    ['job timeouts before and after the routed job', nearbyJobTimeouts],
   ] as const;
   const problem = expect.objectContaining({
     file: CI_FILE,
-    message: expect.stringMatching(/timeout/i),
+    message: expect.stringMatching(/\bverify-spec-1\b.*timeout|timeout.*\bverify-spec-1\b/i),
   });
   for (const [name, ci] of cases) {
     expect.soft(checkFixture(ci), name).toContainEqual(problem);
   }
 });
 
-it('[CT-06zzzzzzzp#4] the guard confines the exact route to allowlisted jobs', () => {
+it('[AC-CT-06zzzzzzzp#4] the guard confines the exact route to allowlisted jobs', () => {
   const cases = [
     [FIXTURE_CI.replace(ROUTE, OLD_ROUTE), 'runs-on'],
     [FIXTURE_CI.replace(ROUTE, ROUTE.replace(' || ', ' ||  ')), 'runs-on'],
@@ -187,7 +201,7 @@ it('[CT-06zzzzzzzp#4] the guard confines the exact route to allowlisted jobs', (
   }
 });
 
-it('[CT-06zzzzzzzp#5] routed jobs reject privileged triggers, writes and secrets', () => {
+it('[AC-CT-06zzzzzzzp#5] routed jobs reject privileged triggers, writes and secrets', () => {
   const cases = [
     [FIXTURE_CI.replace('  pull_request:', '  pull_request_target:'), 'self-hosted-trigger'],
     [
