@@ -20,6 +20,14 @@ afterAll(async () => {
   }
 }, 30_000);
 
+function listedScenes(definition: string): Set<string> {
+  return new Set(
+    Array.from(definition.matchAll(/'((?:[^']|'')*)'/g), (match): string =>
+      match[1]!.replaceAll("''", "'"),
+    ),
+  );
+}
+
 it('[AC-B1-08zzi#10] 场景列是无默认值的可空 text，应用角色可更新且已校验的 CHECK 限制取值', async () => {
   expect(await requireAttrPidScene(db)).toEqual({
     data_type: 'text',
@@ -27,13 +35,27 @@ it('[AC-B1-08zzi#10] 场景列是无默认值的可空 text，应用角色可更
     column_default: null,
   });
 
-  const { rows: constraints } = await sql<{ convalidated: boolean }>`
-    SELECT convalidated
-    FROM pg_catalog.pg_constraint
-    WHERE conrelid = 'app.orders'::regclass
-      AND contype = 'c' AND conname = 'orders_attr_pid_scene_check'
+  const { rows: constraints } = await sql<{
+    convalidated: boolean;
+    order_scene_check: string;
+    union_scene_check: string;
+  }>`
+    SELECT orders_check.convalidated,
+           pg_catalog.pg_get_constraintdef(orders_check.oid) AS order_scene_check,
+           pg_catalog.pg_get_constraintdef(union_check.oid) AS union_scene_check
+    FROM pg_catalog.pg_constraint AS orders_check
+    CROSS JOIN pg_catalog.pg_constraint AS union_check
+    WHERE orders_check.conrelid = 'app.orders'::regclass
+      AND orders_check.contype = 'c' AND orders_check.conname = 'orders_attr_pid_scene_check'
+      AND union_check.conrelid = 'app.union_pids'::regclass
+      AND union_check.contype = 'c' AND union_check.conname = 'union_pids_pid_scene_check'
   `.execute(db);
-  expect(constraints).toEqual([{ convalidated: true }]);
+  expect(constraints).toHaveLength(1);
+  const constraint = constraints[0]!;
+  expect(constraint.convalidated).toBe(true);
+  expect(listedScenes(constraint.order_scene_check)).toEqual(
+    listedScenes(constraint.union_scene_check),
+  );
 
   const key = await newOrder();
   async function writeScene(scene: string | null) {

@@ -137,17 +137,16 @@ it('[AC-B1-08zzi#5] 命中分享后登记改回淘礼金，重跑仍用命中的
   expect(await f.readSnapshot()).toEqual(ORDINARY_SNAPSHOT);
 });
 
-it('[AC-B1-08zzi#8] 存量已归因订单的场景列为空，补偿按登记行的分享场景分佣', async () => {
+it('[AC-B1-08zzi#8] 已归因订单的场景列为空时，补偿现查登记行并按淘礼金生成快照', async () => {
   await requireAttrPidScene(db);
   const f = await prepareOrder(db, '4920000000000000108', { attributed: true });
   expect(f.initial).toMatchObject({ platform_status: 'PAID', user_id: f.ownerId, pid: FULL_PID });
   const pending = await pendingWithoutRule(f);
 
   await f.clearScene();
-  await f.updateRegistration('share');
   await f.publishRules();
   await f.update(CONTENT_UPDATE);
-  expect(await f.readSnapshot()).toEqual(ORDINARY_SNAPSHOT);
+  expect(await f.readSnapshot()).toEqual(TAOLIJIN_SNAPSHOT);
   await expectResolved(f, pending);
 });
 
@@ -195,4 +194,21 @@ it('[AC-B1-08zzi#11] 权利流水测试的 order() 夹具键与实际订单表�
   const keys = Object.keys(order()).sort();
   expect(keys).toContain('attr_pid_scene');
   expect(keys).toEqual(rows.map(({ column_name }) => column_name).sort());
+});
+
+it('[AC-B1-08zzi#12] 已归因的定金单场景列为空时，付尾款现查登记行并按淘礼金生成首次快照', async (): Promise<void> => {
+  await requireAttrPidScene(db);
+  const f = await prepareOrder(db, '4920000000000000112', { attributed: true, deposit: true });
+  expect(f.initial).toMatchObject({
+    platform_status: 'DEPOSIT_PAID',
+    user_id: f.ownerId,
+    is_presale: true,
+  });
+  expect(await f.readSnapshot()).toEqual(NO_SNAPSHOT);
+
+  await f.clearScene();
+  await f.publishRules();
+  await f.update({ ...RERUN, tk_deposit_time: '2026-10-29 20:00:00' });
+  expect(await f.readOrder()).toMatchObject({ platform_status: 'PAID', user_id: f.ownerId });
+  expect(await f.readSnapshot()).toEqual(TAOLIJIN_SNAPSHOT);
 });
