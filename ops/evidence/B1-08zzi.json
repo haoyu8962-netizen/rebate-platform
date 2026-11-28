@@ -1,0 +1,125 @@
+{
+  "risk_note": "RV2 (orders / db). FU-ORDER-SNAPSHOT-SCENE-PERSIST (S0 of the B1-08zze Codex money review r1, D10-3552; main had it already): an order whose first commission snapshot went pending (no published rule version) took the slot's scene again from union_pids at the compensation retry, so a registration changed from taolijin to share after the hit gave an ordinary split (user 500 of N 1000 instead of 0, BR-CALC-19). Rule D10-3808 (Jev 1.0): the first snapshot uses the scene at hit time. Change: migrations 0161 / 0162 add app.orders.attr_pid_scene (nullable text, no default, named CHECK orders_attr_pid_scene_check with the values of union_pids_pid_scene_check, NOT VALID then VALIDATE; no backfill, stored orders stay NULL); the pipeline insert writes the scene of the first snapshot; an unattributed re-run hit writes the hit row's scene in the same CAS (WHERE user_id IS NULL); attributed orders are never written. The first crossing snapshot and the B1-08t retry take hit scene → stored column → (empty) knownPidScene / live lookup; the source re-run of an attributed order cannot override a stored scene; claim review and admin assignment read the column first. Generated files from the LAN snapshot (main control byte-identical). Not in scope: the R12 restore (FU-RESTORE-SNAPSHOT-SCENE-PERSIST, before launch, after B1-08zzg; the money review's out-of-scope S0, main's behaviour, not widened — D10-3857), the snapshot scan (Taobao still skipped). Frozen tests: two modify_existing entries (rights-port/kit.ts support line; [AC-B1-08k#26] one statement setting the column NULL), the orchestrator checked both diffs (D10-3846 / D10-3851). Test machine on the head before the rebase: test/spec/orders, test/spec/db/orders, test/spec/commission, test/spec/settlement/attribution and the orders module 491 files / 4719 tests green; verify:fast in its four parts exit 0. Not launched: no stored production snapshot to backfill (D10-3808 ⑥).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "review_type": "money",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "round": 1,
+      "note": "Codex via tools/agent/codex-run.sh, round 1 (full, head 10b9bde2813c on base 4b64d84bd): pass, 0 findings in scope, nothing moved by the validator; checklist rounding / idempotency / concurrency / clock / app_id ok, sign / partial_refund n/a. Out of scope S0 1: the R12 restore (commission-snapshot-step-restore.ts :98) still looks the scene up — excluded by D10-3808 ③, registered FU-RESTORE-SNAPSHOT-SCENE-PERSIST (before launch), the orchestrator let the task land with it (D10-3857)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (ledger tester codex), three rounds. r1 (independent Claude, full): fail S1 1 — [AC-B1-08zzi#8] could not tell the column-NULL fallback from 'no lookup' (a share registration gives the same ordinary snapshot as a null scene); round 2 kept the registration taolijin, added [#12] (crossing with the column NULL) and compared the CHECK value sets in [#10]. r2 (incremental): pass, 0 findings. Round 3 (no review round, the orchestrator read the diff and released it, D10-3847 / D10-3851): [#9]'s fixture addSlot inserts a pending row (it hit union_pids_active_account_scene_key — the test's own mistake), the frozen [AC-B1-08k#26] got one statement setting the column NULL, new [#13] (stored scene, the lookup finds nothing → stored scene, no warning). Red: red/1, red/2, red/3 PASS (every new test red on the column-exists assertion; rule-test typecheck clean)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "modify_existing": [
+    {
+      "file": "test/spec/orders/rights-port/kit.ts",
+      "scope": "support",
+      "reason": "rule_change",
+      "br": ["BR-CALC-19"],
+      "before_sha256": "12df8fb38c2939558d1de17f65ccdb545d003774584fc1b4f601afe44fe12157",
+      "after_sha256": "90771823074305705f3c3fec8272f9b633a2d5ffd8e3d52d5717a6090defd133",
+      "reverse_red": [
+        "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#11] 权利流水测试的 order() 夹具键与实际订单表列一致"
+      ],
+      "note": "One token-only insertion at the tail of order()'s object literal, after ...patch: attr_pid_scene: null (orders gained the nullable column; the full Selectable<DB['orders']> literal would not type-check, TS2719). No assertion and no existing token changed (D10-3824 / D10-3832 / D10-3846). Reverse check run on the test machine: the file put back to the merge base on a detached scratch worktree of the task head 10b9bde2813c, never committed (work/b108zzi-revkit.sh) — test/spec/orders/snapshot-scene-persist: [AC-B1-08zzi#11] fails (AssertionError, the fixture's keys lack attr_pid_scene), every other test of the directory green (couli-runs/B1-08zzi/tests/3). The entry follows the changed rule BR-CALC-19 (D10-3808: the scene at hit time is persisted on orders)."
+    },
+    {
+      "file": "test/spec/orders/commission-snapshot/update.int.test.ts",
+      "test": "[AC-B1-08k#26] update 已有 paid_at_source 不覆盖；pid 查不到告警并按非淘礼金处理",
+      "reason": "rule_change",
+      "before": "it('[AC-B1-08k#26] update 已有 paid_at_source 不覆盖；pid 查不到告警并按非淘礼金处理', async () => {\n  const f = await scenario(db, { service_fee_fen: 31n }, { unattributed: true });\n  await db\n    .updateTable('orders')\n    .set({ paid_at_source: 'observed' })\n    .where('app_id', '=', f.ctx.app_id)\n    .execute();\n  f.findUser.mockResolvedValue(f.userId);\n  f.findPid.mockResolvedValue([]);\n  const port = fakePort();\n  expect(await runUpdate(f, port)).toMatchObject({ ok: true });\n  expect(port.create).toHaveBeenCalledTimes(1);\n  expect((await f.read()).orders[0]?.paid_at_source).toBe('observed');\n  expect(f.logger.warn).toHaveBeenCalled();\n});",
+      "after": "it('[AC-B1-08k#26] update 已有 paid_at_source 不覆盖；pid 查不到告警并按非淘礼金处理', async () => {\n  const f = await scenario(db, { service_fee_fen: 31n }, { unattributed: true });\n  await db\n    .updateTable('orders')\n    .set({ paid_at_source: 'observed' })\n    .where('app_id', '=', f.ctx.app_id)\n    .execute();\n  f.findUser.mockResolvedValue(f.userId);\n  f.findPid.mockResolvedValue([]);\n  const port = fakePort();\n  await db\n    .updateTable('orders')\n    .set({ attr_pid_scene: null } as never)\n    .where('app_id', '=', f.ctx.app_id)\n    .execute();\n  expect(await runUpdate(f, port)).toMatchObject({ ok: true });\n  expect(port.create).toHaveBeenCalledTimes(1);\n  expect((await f.read()).orders[0]?.paid_at_source).toBe('observed');\n  expect(f.logger.warn).toHaveBeenCalled();\n});",
+      "br": ["BR-CALC-19"],
+      "mutation": [
+        {
+          "mutant": "Not an old-rule replay: under the old rule the rewritten block is green as well (red-check's ATTENTION case, D10-1356 ④; D10-3857) — the old update step always looks the slot's scene up, and the block now pins exactly that stored-NULL path. Real mutant M26 of the task's implementation instead (the fallback branch of the new rule): apps/api/src/modules/orders/application/update-step.ts, snapshotPidScene() answers 'self_buy' when attr_pid_scene is empty instead of falling back to knownPidScene / the live lookup, so a missing slot is no longer reported. Run on the test machine on a detached scratch worktree of the task head 10b9bde2813c, never committed (work/b108zzi-mut26.sh, diff couli-runs/B1-08zzi/mut26.diff): test/spec/orders/commission-snapshot with M26 — [AC-B1-08k#26] fails on expect(f.logger.warn).toHaveBeenCalled() (couli-runs/B1-08zzi/tests/4); unmutated the directory is green in the task's verification runs.",
+          "result": "killed"
+        }
+      ],
+      "note": "Rule change (BR-CALC-19 with D10-3808: the first snapshot takes the scene persisted at hit time; orchestrator D10-3847): the order of this block is ingested through the real pipeline, so attr_pid_scene is set and the update step no longer looks the slot up — the block's case (lookup finds nothing → warning, non-taolijin) now holds only for a stored order without the column. One statement inside the block, before runUpdate, sets the App's orders attr_pid_scene to NULL (a stored order); every other statement, the assertions, the expectations and the title are main's. No amount assertion changed."
+    }
+  ],
+  "task": "B1-08zzi",
+  "spec_commit": "687c64b267f6961d0e4e05542faa5e32d2a55087",
+  "spec_ref": "d840ba99656122129cc90a54e608def93d444a69",
+  "red_tests": [
+    "test/spec/db/orders/attr-pid-scene/column.int.test.ts > [AC-B1-08zzi#10] 场景列是无默认值的可空 text，应用角色可更新且已校验的 CHECK 限制取值",
+    "test/spec/orders/snapshot-scene-persist/admin.int.test.ts > [AC-B1-08zzi#6] 淘礼金登记改为分享后，找回审核仍按入库场景生成快照",
+    "test/spec/orders/snapshot-scene-persist/admin.int.test.ts > [AC-B1-08zzi#7] 淘礼金登记改为分享后，指定归属仍按入库场景生成快照",
+    "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#1] 重跑命中淘礼金并归因后，改登记为分享也不改变补偿快照",
+    "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#2] 入库即归因且已付的淘礼金单，补偿沿用入库时的场景",
+    "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#3] 已归因的定金单改登记为分享后付尾款，首次快照仍按淘礼金",
+    "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#4] 未归因期间改登记为分享，重跑命中分享后持久化并按普通分佣",
+    "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#5] 命中分享后登记改回淘礼金，重跑仍用命中的分享场景",
+    "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#8] 已归因订单的场景列为空时，补偿现查登记行并按淘礼金生成快照",
+    "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#9] 归因后的内容和推广位变化不改已存场景",
+    "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#11] 权利流水测试的 order() 夹具键与实际订单表列一致",
+    "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#12] 已归因的定金单场景列为空时，付尾款现查登记行并按淘礼金生成首次快照",
+    "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#13] 登记行已换推广位时，补偿按已存淘礼金场景出快照且不告警"
+  ],
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "687c64b267f6961d0e4e05542faa5e32d2a55087",
+      "tree": "7e44440714cd0f7bff24d2649cddefa4c00fc111",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-28T13:23:29Z",
+      "finished_at": "2026-11-28T13:25:22Z",
+      "red_tests": [
+        "test/spec/db/orders/attr-pid-scene/column.int.test.ts > [AC-B1-08zzi#10] 场景列是无默认值的可空 text，应用角色可更新且已校验的 CHECK 限制取值",
+        "test/spec/orders/snapshot-scene-persist/admin.int.test.ts > [AC-B1-08zzi#6] 淘礼金登记改为分享后，找回审核仍按入库场景生成快照",
+        "test/spec/orders/snapshot-scene-persist/admin.int.test.ts > [AC-B1-08zzi#7] 淘礼金登记改为分享后，指定归属仍按入库场景生成快照",
+        "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#1] 重跑命中淘礼金并归因后，改登记为分享也不改变补偿快照",
+        "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#2] 入库即归因且已付的淘礼金单，补偿沿用入库时的场景",
+        "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#3] 已归因的定金单改登记为分享后付尾款，首次快照仍按淘礼金",
+        "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#4] 未归因期间改登记为分享，重跑命中分享后持久化并按普通分佣",
+        "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#5] 命中分享后登记改回淘礼金，重跑仍用命中的分享场景",
+        "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#8] 已归因订单的场景列为空时，补偿现查登记行并按淘礼金生成快照",
+        "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#9] 归因后的内容和推广位变化不改已存场景",
+        "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#11] 权利流水测试的 order() 夹具键与实际订单表列一致",
+        "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#12] 已归因的定金单场景列为空时，付尾款现查登记行并按淘礼金生成首次快照",
+        "test/spec/orders/snapshot-scene-persist/sync.int.test.ts > [AC-B1-08zzi#13] 登记行已换推广位时，补偿按已存淘礼金场景出快照且不告警"
+      ],
+      "expected": [
+        "test/spec/db/orders/attr-pid-scene/column.int.test.ts",
+        "test/spec/orders/snapshot-scene-persist/admin.int.test.ts",
+        "test/spec/orders/snapshot-scene-persist/sync.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "346335c120981bcced04f042cb37eada770ae5ad9dbdec5447c1b5636d02b481"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "f6090f2375b118b7acb0b875d7d914b7a082ee51",
+    "specs": "abdf240228855d53675eb0bbb81fea885eb897e9"
+  }
+}

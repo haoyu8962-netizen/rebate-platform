@@ -102,6 +102,7 @@ export function order(patch: Partial<Selectable<DB['orders']>> = {}): Selectable
     union_settled_at: null,
     user_basis: 'param',
     ...patch,
+    attr_pid_scene: null,
   };
 }
 
