@@ -1,0 +1,36 @@
+id: CT-06zzzzzzzr
+repo: rebate-platform
+title: CT-06zzzzzzzr：证据 modify_existing 的 rule_change 记录加「只删不增」的记法 removal_check（块内只删语句、不增不改断言时，以「合并基原块 × 头提交实现为红」的对照代替 mutation；只删由门禁机读判定，有新增或改写的块照旧必须 mutation killed；D10-3780 / D10-3781）
+type: guard-change
+# 2026-11-28 二次验证线入账（编排 D10-3780 取乙、D10-3781 核草稿并定判据；来由 B1-18lb，D10-3743）。第三类门禁改动（tools/**）：任务 PR 的批准标签由编排转负责人。
+# 起因：B1-18lb 台账 203 条 rule_change 里，一批块的改动只是拿掉「无令牌 / 别人的令牌 / 已用令牌 / 过期令牌 → 10003」那几步（approvals 211：拿掉、不改成成功）。测试机实测（couli-runs/B1-18lb/，红因全是 AssertionError）：
+#   实现变异 m1（实现退回主干）杀 147 块、m2（清单外操作重新要 strict 凭证）再杀 3 块、m4（sudo 窗口外带有效凭证仍拒）再杀 5 块；余 48 块里已不再断言该行为，不存在能把它打红的实现变异；
+#   对照 m3（这些文件还原成合并基原文 × 头提交实现）原块全部变红。现门禁（evidence-check.ts modifyRecordProblems）对 rule_change 只认 mutation killed（实现退回旧规则、被改用例变红），这些记录写不出诚实的 killed（D10-3743）。
+# 做法 ①：证据的 rule_change 记录可用 removal_check 代替 mutation，二者恰有其一（都有、都缺 → 拒）：removal_check: { control: <非空说明>, run: <测试机运行号，如 "tests/39">, tree: <40 位十六进制被测树哈希>, result: "red" }。
+#   含义写死：把本块还原成合并基原文（before）、实现保持头提交，本块为红——被拿掉的断言在新规则下不成立。result 只认 "red"；run / tree 缺或格式不对、多余字段 → 拒。tighten_only / ruling_correction / flake_fix 的记录不许带。
+# 做法 ②：removal_check 只许用于「只删不增」的块，门禁机读判定（新文件 tools/guard/lib/removal-only.ts，只读引用 test-blocks.ts 已有的 tokenize，不改 test-blocks.ts；ops 的 CT-06zzzzzzzq 若先落地改了 tokenize 的签名，变基时跟上）。
+#   判据（D10-3781，(a) 的最小放宽）：before / after 去掉注释、`void <标识符>;` 语句与测试回调的参数表后，按语句匹配——after 的每条语句须是某条未用过的 before 语句的记号子序列（一对一）；
+#   含断言的语句（expect / assert 一类）相对次序须保持，换序只放给布置语句。不满足即拒并报出对不上的语句；这样的块照旧必须 mutation killed。br、before、after 等其余检查不变。
+# 做法 ③：ops/evidence/README.md 与 tools/README.md 的字段说明各补一段。不改 red-check、test-blocks.ts、task-file.ts 与台账 schema（记法只在证据里）。本单 paths 内不得 import typescript（evidence.yml 不装依赖）。
+# 已知边界（照实写，评审书同样写明）：记号子序列挡不住「删掉一条断言内部的记号」（例如删 `.not`）；兜底是 removal_check 本身要求原块在头提交实现下为红、modify_existing 仍须负责人标签、规则测试评审照旧逐块看。
+# 规则测试至少钉：① 只删块（删去若干断言语句、加 `void x;` 与注释）用 removal_check、result "red"、run / tree 齐 → 过；② 加了断言、或改写了既有断言实参的块用 removal_check → 拒并报位置；
+#   ③ rule_change 记录 removal_check 与 mutation 都缺 → 拒，都有 → 拒；④ result 不是 "red"（"killed"、"green"、缺）→ 拒；⑤ run 或 tree 缺、tree 不是 40 位十六进制 → 拒；⑥ 别的 reason 的记录带 removal_check → 拒；
+#   ⑦ 两处放宽的边界：只改了回调参数表 → 过；布置语句换序 → 过；断言语句换了相对次序 → 拒；一条 before 语句被两条 after 语句复用 → 拒；参数表之外改了实参 → 拒；⑧ 回归：rule_change 记录照旧用 mutation killed → 过。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - 'tools/ci/evidence-check{,.test}.ts'
+  - 'tools/guard/lib/removal-only{,.test}.ts'
+  - 'ops/evidence/README.md'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzzzzr.yaml'
+test_paths:
+  - 'test/spec/ci/evidence-removal-check/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/evidence-removal-check/**'
+status: todo
+pr: null
