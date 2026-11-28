@@ -227,6 +227,8 @@
     "appeal.result.upheld": "维持原处理结果",
     "appeal.submit_entry": "提交申诉",
     "appeal.view_progress": "查看申诉进度",
+    "auth.confirming": "正在确认授权结果",
+    "auth.taobao.completed_tap_again": "淘宝授权已完成，请再点一次购买",
     "auth_manage.action.authorize": "去授权",
     "auth_manage.rebind_note": "暂不支持自助更换授权的淘宝账号，需要时请联系客服",
     "auth_manage.status.authorized": "已授权",

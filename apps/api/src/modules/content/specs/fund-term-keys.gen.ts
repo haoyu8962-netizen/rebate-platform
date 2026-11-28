@@ -397,6 +397,8 @@ export const FUND_TERM_KEYS = {
       "appeal.result.upheld",
       "appeal.submit_entry",
       "appeal.view_progress",
+      "auth.confirming",
+      "auth.taobao.completed_tap_again",
       "basic.search.placeholder",
       "bind_phone.bound_toast",
       "bind_phone.merge.target",

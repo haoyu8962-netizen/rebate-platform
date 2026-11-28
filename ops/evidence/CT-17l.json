@@ -1,0 +1,79 @@
+{
+  "risk_note": "CT-17l (contract slice 0a of TB-WEBCODE-AUTH; D10-3567). specs/client-security-baseline.yaml exported_components_allowed goes from empty to four own entries (android MainActivity, clipboard.ShareReceiverActivity, inbound.InboundSchemeActivity; harmony EntryAbility), version 2 -> 3; ShareReceiverActivity is the system-share receiver entry that 03 §4.8 CSB-09 allows since planning couli#42 (owner 2026-11-28, D10-3700 ④ / D10-3719; SPEC_REF fe14d98fefe1) and its purpose states the limits (ACTION_SEND text / image only, no navigation, content only to POST /v1/inputs/parse). New specs/webcode-callback-vectors.json (25 vectors shared by the three clients for the couli://auth/taobao callback). contracts/texts.default.json gains auth.confirming and auth.taobao.completed_tap_again verbatim from 08 BR-TEXT-14, both ordinary in fund-term-keys; generated files regenerated. openapi and error codes unchanged.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 2,
+      "note": "Codex contract review via tools/agent/codex-run.sh. r1 (full) fail: S1 ShareReceiverActivity outside CSB-09 -> owner changed the rule (planning couli#42, CSB-09 system-share receiver entry), purpose rewritten in implementation r3; S2 baseline version not bumped -> 2 -> 3 in implementation r2; S2 non-ok vectors lack a reason -> accepted unchanged by ruling D10-3666 (frozen readVectors pins the vector fields; FU-WEBCODE-VECTOR-REASON). r2 (incremental) pass, 1 S2: the CSB-09 summary text inside the baseline file still lists two kinds of entries; no build check reads that summary (FU-CSB09-BASELINE-SUMMARY)."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (write-test 1). Spec-test review by an independent Claude (approvals 19 / 36): r1 (full) pass."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/contracts/webcode-auth-0a/callback-vectors.test.ts > [AC-CT-17l#4] 回跳向量结构合法，每条预期结果与 URL 相符",
+    "test/spec/contracts/webcode-auth-0a/callback-vectors.test.ts > [AC-CT-17l#5] 回跳向量覆盖各结果、边界与拒绝原因",
+    "test/spec/contracts/webcode-auth-0a/exported-components.test.ts > [AC-CT-17l#1] CSB-09 白名单恰好包含四个自有组件并移除待登记 TODO",
+    "test/spec/contracts/webcode-auth-0a/texts.test.ts > [AC-CT-17l#2] 两个授权键的定稿文案与禁用词",
+    "test/spec/contracts/webcode-auth-0a/texts.test.ts > [AC-CT-17l#3] 两个授权键逐键归 ordinary，content 生成物与源一致"
+  ],
+  "task": "CT-17l",
+  "spec_commit": "6752bee0f5d64c67987b0df2a8f91ca20c1d85f8",
+  "spec_ref": "fe14d98fefe188e0e48103a4efd8383471a5f3a9",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "6752bee0f5d64c67987b0df2a8f91ca20c1d85f8",
+      "tree": "178067a878f4ad49bc5cb888de8d1bc68d549951",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-28T06:34:12Z",
+      "finished_at": "2026-11-28T06:36:48Z",
+      "red_tests": [
+        "test/spec/contracts/webcode-auth-0a/callback-vectors.test.ts > [AC-CT-17l#4] 回跳向量结构合法，每条预期结果与 URL 相符",
+        "test/spec/contracts/webcode-auth-0a/callback-vectors.test.ts > [AC-CT-17l#5] 回跳向量覆盖各结果、边界与拒绝原因",
+        "test/spec/contracts/webcode-auth-0a/exported-components.test.ts > [AC-CT-17l#1] CSB-09 白名单恰好包含四个自有组件并移除待登记 TODO",
+        "test/spec/contracts/webcode-auth-0a/texts.test.ts > [AC-CT-17l#2] 两个授权键的定稿文案与禁用词",
+        "test/spec/contracts/webcode-auth-0a/texts.test.ts > [AC-CT-17l#3] 两个授权键逐键归 ordinary，content 生成物与源一致"
+      ],
+      "expected": [
+        "test/spec/contracts/webcode-auth-0a/callback-vectors.test.ts",
+        "test/spec/contracts/webcode-auth-0a/exported-components.test.ts",
+        "test/spec/contracts/webcode-auth-0a/texts.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "18e6e1011019b65f8aaf8f6c658ba1e2a61ee6fe84dc2aa8e573203e808be922"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "8f55c9412bd90f2ffff81951616f298f5af6110e",
+    "specs": "abdf240228855d53675eb0bbb81fea885eb897e9"
+  }
+}

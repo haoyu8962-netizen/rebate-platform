@@ -23,9 +23,7 @@
 #
 # TODO(规划/06 Q-A5): own_link_hosts 的具体域名 — blocked on 负责人提供正式域名（先空，空时任何 https 入站声明
 #   都不通过 CSB-11）。
-# TODO(规划/03 §4.8 CSB-09): exported_components_allowed 的具体组件名 — blocked on 三端工程建立（APP-02、
-#   HM-02）；SDK 带进来的导出组件接入时逐个登记用途，用不到的移除。
-version: '2'
+version: '3'
 rules:
   - id: CSB-01
     title: 证书与主机名校验只用系统默认实现，不得被开关、远程配置或构建类型降级
@@ -160,5 +158,22 @@ forbidden_schemes:
   - app-prefs
   - prefs
   - settings
-exported_components_allowed: []
+# 自有组件（CT-17l，D10-3567）；SDK 带进来的导出组件接入时逐个登记用途（source: sdk:<SDK 名>），用不到的移除。
+exported_components_allowed:
+  - platform: android
+    component: com.couli.app.MainActivity
+    purpose: 启动入口
+    source: own
+  - platform: android
+    component: com.couli.app.clipboard.ShareReceiverActivity
+    purpose: 系统分享接收入口：只收 ACTION_SEND 的文本 / 图片，不做导航（不接受路由名、URL 或路由参数），内容按不可信输入只交 POST /v1/inputs/parse 识别（CSB-09，2026-11-28 负责人确认）
+    source: own
+  - platform: android
+    component: com.couli.app.inbound.InboundSchemeActivity
+    purpose: couli:// 入站中转，接淘宝 web_code 授权回跳 couli://auth/taobao
+    source: own
+  - platform: harmony
+    component: EntryAbility
+    purpose: 启动入口
+    source: own
 own_link_hosts: []

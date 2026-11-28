@@ -64,6 +64,8 @@
 # CT-26zs：08 BR-TEXT-12 细则「资金术语键」（2026-11-26 同类实践对照补缺）写明：order_detail.price_compare.summary_title /
 # .summary_body、pdd.compare_reminder.scheduled / .notify_body 单列归 fund_terms；share.save_images.partial / .failed、
 # order_detail.price_compare.view_article、pdd.compare_reminder.btn / .no_perm / .notify_title 逐键归 ordinary，不加前缀。
+# CT-17l：BR-TEXT-14 表新增的淘宝 web_code 授权两键 auth.confirming、auth.taobao.completed_tap_again 逐键归 ordinary，
+# 不加 auth. 前缀（D10-3577）。
 fund_terms:
   prefixes:
     - order_status.
@@ -468,6 +470,8 @@ ordinary:
     - appeal.result.upheld
     - appeal.submit_entry
     - appeal.view_progress
+    - auth.confirming
+    - auth.taobao.completed_tap_again
     - basic.search.placeholder
     - bind_phone.bound_toast
     - bind_phone.merge.target
