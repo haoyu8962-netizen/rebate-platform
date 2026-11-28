@@ -7,6 +7,7 @@ type: contract
 # ② apps/h5 邀请页 invite-page.tsx 按新形状判：succeeded = 0 或有 cancelled / failed 时不报成功，部分成功 / 全失败按 share.save_images.partial / .failed 提示，相册权限被拒仍按 BR-ID-13 提示；apps/h5/src/entries/conformance/cases.ts 补 RA-03 三类场景（响应计数、授权后与拒绝后、不同宿主）。
 # ③ 冻结测试须与 H5 原子升级：test/spec/frontend/h5-invite/**（[AC-F1-05a-POSTER#3] 钉 saved=false、invite-fixtures 默认应答 {saved: true}），以及底稿漏的 test/spec/frontend/h5-conformance/kit.ts、test/spec/frontend/h5-image/trunk/invite-page.tsx.txt（bundle.test 用的邀请页主干副本）——fe 写测前跑探针定冻结块清单，以台账补丁补登 modify_existing，按 approvals #24 编排核后加标签。
 # 台账补丁 1（2026-11-28 fe，D10-3744；台账 ③ 写测前探针 couli-runs/CT-18d/probe.txt）：探针在任务头上只做契约改形 + 邀请页最小改，h5-invite / h5-conformance / h5-image 三处非浏览器 205 条只红 [AC-F1-05a-POSTER#3] 一条，--browser 全绿；h5-conformance/kit.ts 只按方法名列 media.saveImage、h5-image 的 trunk/invite-page.tsx.txt 只供 bundle 体积对照（构建不做类型检查），两处都不用改，不登。invite-fixtures.ts 缺省应答 {saved: true} 现在不让任何用例变红，是否改形等实现后按实际红点再定（若改则补 support 条目、reverse_red 取那时变红的用例）。
+# 台账补丁 2（2026-11-28 fe，编排 D10-3853，approvals 245 常设授权下 Jev 定的追加写测 1 次）：契约评审 r3 S1-1 要给一致性页 media.saveImage/normal 行加新形状结果校验，被冻结 h5-conformance/page.test.ts 的 [AC-F1-01d-PAGE#1] 挡住（.each 对每个 normal 方法回同一份通用假回包 {token, user, nested}，断言该行 ok、pass true；实现 4 交回 couli-runs/CT-18d/impl-r4.json）。该表行名由 kit.ts 的 normalMethods 算出、展不开，按模板原文整块登（CT-06zzzzzzzc）；写测只把 media.saveImage 那一行的回包换成与发出张数一致的逐张摘要，其余行与全部断言一字不动。
 refs: [BR-TEXT-14, BR-ID-13]
 refs_hash:
   BR-TEXT-14: ba6b92fa997e
@@ -21,6 +22,7 @@ paths:
 test_paths:
   - 'test/spec/contracts/bridge-save-image-and-settlement/**'
   - 'test/spec/frontend/h5-invite/invite-actions.test.ts'
+  - 'test/spec/frontend/h5-conformance/page.test.ts'
 impl: claude
 tester: claude-independent
 accept:
@@ -36,3 +38,9 @@ modify_existing:
     br: [BR-ID-13]
     ruling: D10-3744
     note: 'media.saveImage 结果由单布尔 saved 改为逐张状态摘要（规划/04 §9，RA-05，首发前直接替换、不保留 saved）：本块的原生应答由 {saved: false} 改为新形状里表示相册权限被拒的逐张结果，期望不变（仍显示相册权限被拒提示、页面不崩、可继续操作）；标题去掉已不存在的字段名。'
+  - file: 'test/spec/frontend/h5-conformance/page.test.ts'
+    test: '[AC-F1-01d-PAGE#1] %s 正常调用经真实 SDK；tap 在点击前零调用、完成后不泄露回包'
+    reason: rule_change
+    br: [BR-ID-13]
+    ruling: D10-3853
+    note: 'media.saveImage 改为逐张结果摘要后（规划/04 §9，RA-05，D10-3748），本块给它的通用假回包须换成新契约形状（与本行发出的张数一致的逐张摘要）；其余方法的回包与全部断言不变（整块登记：表行由 kit.ts 的 normalMethods 算出、展不开）。'
