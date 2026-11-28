@@ -298,6 +298,10 @@ it('[AC-B2-03za#4][BR-CALC-20] 静态检查 0008：去掉注释后只有一条 I
   const fields = splitTopLevel(tuple, ',');
   expect(fields).toHaveLength(columns.length);
   expect(columns.slice(0, 2)).toEqual(['app_id', 'key']);
+  // The column list is exactly app_id, key, value, updated_by (any order): version and row_version
+  // keep their column defaults (1 and 0), so the admin's normal save path can still increment them.
+  const columnSet = [...columns].sort();
+  expect(columnSet, 'INSERT column set').toEqual(['app_id', 'key', 'updated_by', 'value']);
   expect(isTextLiteral(fields[0], 'couli'), `app_id field ${fields[0] ?? ''}`).toBe(true);
   expect(isTextLiteral(fields[1], KEY), `key field ${fields[1] ?? ''}`).toBe(true);
 });
@@ -321,6 +325,10 @@ it('[AC-B2-03za#5][BR-CALC-20][BR-CALC-03] 新库先跑完 0008 以外的全部�
   expect(added).toHaveLength(1);
   expect(added[0]).toMatchObject({ app_id: 'couli', key: KEY, updated_by: 'seed' });
   expect(added[0]?.value).toStrictEqual(SEEDED_VALUE);
+  // version / row_version are PostgreSQL integer (int4), which node-postgres returns as a number
+  // (@couli/db only overrides int8): a fresh row starts at version 1, row_version 0.
+  expect(added[0]?.version, 'version of the seeded row').toBe(1);
+  expect(added[0]?.row_version, 'row_version of the seeded row').toBe(0);
   // Every row present before 0008 is still there with the same value, version and updated_by,
   // and nothing else was added.
   const kept = after.filter((row): boolean => !isTechFee(row));
