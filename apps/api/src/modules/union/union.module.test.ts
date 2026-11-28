@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { APP_CONFIG, type AppConfig, type RootLogger } from '../platform/index.ts';
 import { UnionError, type UnionEndpoint } from './domain/types.ts';
+import type { TaobaoWarning } from './infra/taobao/response.ts';
 import {
   logTaobaoPriceWarning,
   logTaobaoWarning,
@@ -114,6 +115,29 @@ it('[AC-B1-04zzzzg-UNIT#4] logTaobaoWarning 按码分事件：code 11 记权限�
   const imageHost = { method, code: 'dataoke_image_host_dropped', host: 'img.unit', count: 3 };
   expect(warnFields((logger) => logTaobaoWarning(logger, imageHost))).toEqual([
     { event: 'DATAOKE_IMAGE_HOST_DROPPED', method, host: 'img.unit', count: 3 },
+  ]);
+});
+
+it('[AC-B1-04zzzzq-UNIT#10] logTaobaoWarning 把备案鉴权拒绝记成一条平铺告警：只有 event / code / sub_code / auth_method', () => {
+  const method = 'taobao.tbk.sc.publisher.info.save';
+  expect(
+    warnFields((logger) => {
+      logTaobaoWarning(logger, {
+        method,
+        code: '27',
+        sub_code: 'isv.invalid-session',
+        auth_method: 'sdk_token',
+      } as TaobaoWarning);
+      logTaobaoWarning(logger, { method, code: '11', auth_method: 'web_code' } as TaobaoWarning);
+    }),
+  ).toEqual([
+    {
+      event: 'TAOBAO_PUBLISHER_AUTH_REJECTED',
+      code: '27',
+      sub_code: 'isv.invalid-session',
+      auth_method: 'sdk_token',
+    },
+    { event: 'TAOBAO_PUBLISHER_AUTH_REJECTED', code: '11', auth_method: 'web_code' },
   ]);
 });
 

@@ -233,6 +233,7 @@ import {
 import { parseTaobaoItemLink } from './resolve-link.ts';
 import {
   isGatewaySystemError,
+  publisherAuthRefusal,
   queriedRelationId,
   savedRelationId,
   saveIsDuplicate,
@@ -243,6 +244,7 @@ import {
   TAOBAO_PUBLISHER_RELATION_APP,
   TAOBAO_PUBLISHER_SAVE,
   TAOBAO_PUBLISHER_SAVE_ENVELOPE,
+  type TaobaoPublisherAuthWarning,
 } from './publisher.ts';
 import { unwrapTaobaoResponse, type TaobaoSubCodeMap, type TaobaoWarning } from './response.ts';
 import type { TaobaoSearchCounter, TaobaoSearchMetricSource } from './search-counter.ts';
@@ -588,11 +590,10 @@ export class TaobaoUnionAdapter implements UnionAdapter {
   }
 
   async #bindPublisher(req: BindReq, ctx: CallCtx): Promise<BindResult> {
-    // 补丁 2 (D10-2755): an SDK access token is never exchanged as an authorization code; the live
-    // adapter has no SDK path yet (TODO in union-binding-exchanger.ts), so it is refused unsent.
-    if (req.credentialType !== undefined && req.credentialType !== 'authorization_code') {
-      throw this.#bindRefused('adapter_unimplemented', 'sdk_token_unsupported');
-    }
+    // 补丁 2 (D10-2755): an SDK access token is never exchanged as an authorization code.
+    // B1-04zzzzq (D10-3709 ①): it is the user's session itself — used as is for the filing, with
+    // every check below (inviter code, its account, the issued app key) unchanged.
+    const authMethod = req.credentialType === 'sdk_token' ? 'sdk_token' : 'web_code';
     const app = await this.#credentials();
     const inviterCode = app.userOAuth?.inviterCode?.trim() ?? '';
     if (inviterCode === '') {
@@ -613,34 +614,17 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     }
     // 补丁 2: the OAuth application the state was issued with, when the caller resolved one; its
     // app key must be this adapter's (the secret is only known for it), its redirect URI is used as
-    // issued instead of the instance's current setting.
+    // issued instead of the instance's current setting. B1-04zzzzq: an sdk_token state names the
+    // app key only, checked the same way (the SDK token was issued for that app); no redirect URI.
     const issued = req.oauthApp;
     if (issued !== undefined && issued.appKey !== app.appKey) {
       throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'oauth_app_mismatch');
     }
-    const redirectUri = issued?.redirectUri ?? app.userOAuth?.redirectUri ?? '';
-    if (redirectUri === '') {
-      throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'user_oauth_redirect_uri_missing');
-    }
-    const code = req.authorizationCode;
-    if (typeof code !== 'string' || code === '') {
-      throw new UnionError(
-        'invalid_identity',
-        'taobao bindPublisher: no authorization code',
-        'taobao',
-      );
-    }
     const signal = ctx.signal;
-    // B1-04zzzzn r2 (money review S0): the token exchange runs under the same signal as the save.
-    const session = await exchangeTaobaoUserCode({
-      appKey: app.appKey,
-      appSecret: app.appSecret,
-      redirectUri,
-      code,
-      transport: this.#transport,
-      clock: this.#clock,
-      ...(signal === undefined ? {} : { signal }),
-    });
+    const session =
+      authMethod === 'sdk_token'
+        ? this.#sdkSession(req.authorizationCode)
+        : await this.#webCodeSession(app, issued?.redirectUri, req.authorizationCode, signal);
     // B1-04zzzzn (D10-2850): the caller records the attempt (committed on its own) before the save
     // is sent; nothing is sent unless that resolves. A definite refusal and an answer without an id
     // are reported back; a transport failure or a gateway system error reports nothing (unknown).
@@ -660,9 +644,12 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       TAOBAO_PUBLISHER_SAVE,
       TAOBAO_PUBLISHER_SAVE_ENVELOPE,
       { session, inviter_code: inviterCode, info_type: TAOBAO_PUBLISHER_INFO_TYPE },
-      signal,
-      filing === undefined ? undefined : () => filing.settled('rejected'),
-      unsent,
+      {
+        signal,
+        authMethod,
+        ...(filing === undefined ? {} : { refused: () => filing.settled('rejected') }),
+        unsent,
+      },
     );
     const savedId = savedRelationId(saved.body);
     // B1-04zzzzp (D10-3196; BR-ATTR-05): an answer flagged duplicate is a duplicate even when it
@@ -680,10 +667,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
         info_type: TAOBAO_PUBLISHER_INFO_TYPE,
         relation_app: TAOBAO_PUBLISHER_RELATION_APP,
       },
-      signal,
-      undefined,
-      undefined,
-      true,
+      { signal, authMethod, afterDuplicate: true },
     );
     const found = queriedRelationId(queried.body);
     // 补丁 3 (D10-2826 ①): whose filing the read-back id is cannot be told from the answer; it is
@@ -693,6 +677,50 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       TAOBAO_PUBLISHER_GET,
       found.kind === 'ambiguous' ? 'relation_id_ambiguous' : 'relation_id_missing',
     );
+  }
+
+  /**
+   * B1-04zzzzq: the SDK access token as the filing session, as submitted (never exchanged, never
+   * trimmed or re-encoded); an empty one is refused unsent.
+   */
+  #sdkSession(token: string): string {
+    if (typeof token !== 'string' || token === '') {
+      throw new UnionError('invalid_identity', 'taobao bindPublisher: no sdk token', 'taobao');
+    }
+    return token;
+  }
+
+  /**
+   * web_code: the authorization code exchanged for the user's access token (user-oauth.ts; refused
+   * → invalid_identity) under the issued redirect URI (or the instance's when none was issued).
+   */
+  async #webCodeSession(
+    app: TaobaoCredentials,
+    issuedRedirectUri: string | undefined,
+    code: string,
+    signal: AbortSignal | undefined,
+  ): Promise<string> {
+    const redirectUri = issuedRedirectUri ?? app.userOAuth?.redirectUri ?? '';
+    if (redirectUri === '') {
+      throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'user_oauth_redirect_uri_missing');
+    }
+    if (typeof code !== 'string' || code === '') {
+      throw new UnionError(
+        'invalid_identity',
+        'taobao bindPublisher: no authorization code',
+        'taobao',
+      );
+    }
+    // B1-04zzzzn r2 (money review S0): the token exchange runs under the same signal as the save.
+    return exchangeTaobaoUserCode({
+      appKey: app.appKey,
+      appSecret: app.appSecret,
+      redirectUri,
+      code,
+      transport: this.#transport,
+      clock: this.#clock,
+      ...(signal === undefined ? {} : { signal }),
+    });
   }
 
   /** One flat warning (method + fixed code only) and the refusal of a filing that cannot finish. */
@@ -710,12 +738,6 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     );
   }
 
-  /** A filing refused before anything is sent: one flat warning and the given refusal code. */
-  #bindRefused(errorCode: 'adapter_unimplemented', code: string): UnionError {
-    this.#warn?.({ method: TAOBAO_PUBLISHER_SAVE, code });
-    return new UnionError(errorCode, `taobao bindPublisher: ${code}`, 'taobao');
-  }
-
   /**
    * A publisher request carrying the user's session: never archived (no archive context), errors
    * classified by unwrapTaobaoResponse; the raw answer is returned for the lossless relation_id.
@@ -723,16 +745,26 @@ export class TaobaoUnionAdapter implements UnionAdapter {
    * (the save), the signal is checked once more right before the request is handed to the
    * transport; aborted by then → `unsent` (nothing was sent). r5 (D10-2972): `afterDuplicate` (the
    * read-back after a save answered "duplicate") marks a transport failure duplicateConfirmed.
+   * B1-04zzzzq (D10-3709 ⑤ / D10-3726): an answer refusing the authorization itself (session, app
+   * key or permission, publisher.ts publisherAuthRefusal) goes up as invalid_identity (the bindings
+   * answer 30104 credential_invalid) with exactly one flat warning: the TOP code / sub_code and
+   * `authMethod` only. The shared code-11 warning of response.ts is not sent for these two calls,
+   * so a refusal is never logged twice.
    */
   async #publisherCall(
     method: string,
     envelope: string,
     parameters: TaobaoParameters,
-    signal: AbortSignal | undefined,
-    refused?: () => Promise<void>,
-    unsent?: () => Promise<never>,
-    afterDuplicate = false,
+    options: {
+      readonly signal: AbortSignal | undefined;
+      readonly authMethod: TaobaoPublisherAuthWarning['auth_method'];
+      readonly refused?: () => Promise<void>;
+      readonly unsent?: () => Promise<never>;
+      readonly afterDuplicate?: boolean;
+    },
   ): Promise<UnionTransportResponse> {
+    const { signal, authMethod, refused, unsent } = options;
+    const afterDuplicate = options.afterDuplicate === true;
     let response: UnionTransportResponse;
     try {
       response = await this.#send(
@@ -756,7 +788,7 @@ export class TaobaoUnionAdapter implements UnionAdapter {
       });
     }
     try {
-      unwrapTaobaoResponse(method, envelope, response, this.#warn);
+      unwrapTaobaoResponse(method, envelope, response);
     } catch (error) {
       // B1-04zzzzn: a definite refusal is reported before the error goes up.
       if (refused !== undefined && saveRefusalIsDefinite(response.status, response.body)) {
@@ -776,6 +808,23 @@ export class TaobaoUnionAdapter implements UnionAdapter {
           `taobao ${method}: gateway system error`,
           'taobao',
           { duplicateConfirmed: afterDuplicate },
+        );
+      }
+      const authRefusal = publisherAuthRefusal(response.body);
+      if (error instanceof UnionError && error.code !== 'rate_limited' && authRefusal !== null) {
+        const warning: TaobaoPublisherAuthWarning = {
+          method,
+          ...authRefusal,
+          auth_method: authMethod,
+        };
+        this.#warn?.(warning);
+        const detail = `code=${authRefusal.code}${
+          authRefusal.sub_code === undefined ? '' : ` sub_code=${authRefusal.sub_code}`
+        }`;
+        throw new UnionError(
+          'invalid_identity',
+          `taobao ${method}: authorization refused (${detail})`,
+          'taobao',
         );
       }
       throw error;

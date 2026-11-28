@@ -1,14 +1,16 @@
 // Unit tests of the staging / prod Taobao auth apps resolver (B1-04zzzzm 补丁 2): the state records
-// the issuing OAuth application (app key + redirect URI) for web_code only, and the exchange side
-// resolves exactly what was recorded, nothing else. No database, no network; synthetic values.
+// the issuing OAuth application (web_code: app key + redirect URI; B1-04zzzzq sdk_token: app key
+// only), and the exchange side resolves exactly what was recorded for that method, nothing else. No database, no network; synthetic values.
 import { describe, expect, it } from 'vitest';
 import {
   createDemoUnionAuthApps,
   createTaobaoUnionAuthApps,
+  parseTaobaoSdkAppRef,
   parseTaobaoUserOAuthRef,
   resolveIssuedTaobaoOAuthApp,
   taobaoFilingConfigured,
   taobaoLiveFilingReady,
+  taobaoSdkAppRef,
   taobaoUserOAuthRef,
 } from './auth-apps.ts';
 
@@ -33,10 +35,50 @@ describe('createTaobaoUnionAuthApps', () => {
     expect(resolveIssuedTaobaoOAuthApp(ref, 'web_code')?.redirectUri).toBe(APP.redirectUri);
   });
 
-  it('[AC-B1-04zzzzm#7] sdk_token 与配置不全时不给引用', async () => {
+  it('[AC-B1-04zzzzq-UNIT#8] sdk_token 的引用只含签发时的 appKey，与 web_code 引用互不通用', async () => {
+    const { ref } = await createTaobaoUnionAuthApps(APP).resolve(
+      'synthetic_app',
+      'staging',
+      'android',
+      'sdk_token',
+    );
+    expect(ref).toBe(taobaoSdkAppRef({ appKey: APP.appKey }));
+    expect(ref).not.toContain('secret');
+    expect(parseTaobaoSdkAppRef(ref)).toEqual({ appKey: APP.appKey });
+    expect(resolveIssuedTaobaoOAuthApp(ref, 'sdk_token')).toEqual({ appKey: APP.appKey });
+    expect(resolveIssuedTaobaoOAuthApp(ref, 'web_code')).toBeNull();
+    // Only the app key is needed: no redirect URI configured still records the SDK reference.
+    const sdkOnly = createTaobaoUnionAuthApps({ appKey: APP.appKey, redirectUri: null });
     await expect(
-      createTaobaoUnionAuthApps(APP).resolve('synthetic_app', 'staging', 'android', 'sdk_token'),
-    ).rejects.toThrow(Error);
+      sdkOnly.resolve('synthetic_app', 'staging', 'android', 'sdk_token'),
+    ).resolves.toEqual({ ref });
+    for (const appKey of [null, '']) {
+      await expect(
+        createTaobaoUnionAuthApps({ appKey, redirectUri: APP.redirectUri }).resolve(
+          'synthetic_app',
+          'staging',
+          'android',
+          'sdk_token',
+        ),
+      ).rejects.toThrow(Error);
+    }
+    const encode = (value: unknown) =>
+      `taobao-sdk-app/v1/${Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')}`;
+    for (const damaged of [
+      'taobao-sdk-app/v1/',
+      'taobao-sdk-app/v1/!!!',
+      encode(['x']),
+      encode({ app_key: '' }),
+      encode({ app_key: ' padded ' }),
+      encode({ app_key: APP.appKey, redirect_uri: APP.redirectUri }),
+      taobaoUserOAuthRef(APP),
+    ]) {
+      expect(parseTaobaoSdkAppRef(damaged)).toBeNull();
+      expect(resolveIssuedTaobaoOAuthApp(damaged, 'sdk_token')).toBeNull();
+    }
+  });
+
+  it('[AC-B1-04zzzzm#7] 配置不全时 web_code 不给引用', async () => {
     for (const partial of [
       { appKey: null, redirectUri: APP.redirectUri },
       { appKey: APP.appKey, redirectUri: null },

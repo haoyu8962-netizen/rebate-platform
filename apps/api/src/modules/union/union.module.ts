@@ -63,6 +63,7 @@ import {
 } from './infra/taobao/search-counter.ts';
 import type { DataokeImageHostWarning } from './infra/taobao/dataoke-search.ts';
 import type { TaobaoSearchFallbackWarning } from './infra/taobao/search-fallback.ts';
+import { isTaobaoPublisherAuthWarning } from './infra/taobao/publisher.ts';
 import type { TaobaoWarning } from './infra/taobao/response.ts';
 import { readActivePddQueryPid } from './pids/query-reader.ts';
 import { readTaobaoOrderSlots } from './pids/taobao-order-slots.ts';
@@ -250,15 +251,14 @@ const TAOBAO_ROW_CODES: ReadonlySet<string> = new Set(['invalid_item', 'invalid_
 /**
  * B1-04zzzzm: the channel filing refusals of TaobaoUnionAdapter.bindPublisher (missing inviter code
  * or user OAuth redirect URI, the inviter code's account missing or not the binding's (补丁 2), the
- * state's OAuth app not this adapter's, an SDK token, no or no single relation_id); logged with
- * method and code only.
+ * state's OAuth app not this adapter's, no or no single relation_id); logged with method and code
+ * only.
  */
 const TAOBAO_PUBLISHER_CODES: ReadonlySet<string> = new Set([
   'inviter_code_missing',
   'inviter_account_missing',
   'inviter_account_mismatch',
   'oauth_app_mismatch',
-  'sdk_token_unsupported',
   'user_oauth_redirect_uri_missing',
   'relation_id_missing',
   'relation_id_ambiguous',
@@ -295,8 +295,23 @@ export function logTaobaoPriceWarning(logger: RootLogger, warning: TaobaoPriceWa
  * - B1-04zzzzg: the 大淘客 search's price codes → TAOBAO_PRICE_WARNING, its row validation codes →
  *   TAOBAO_SEARCH_ROW_INVALID, any other code → TAOBAO_WARNING_UNKNOWN; each only event / method /
  *   code.
+ * - B1-04zzzzq (D10-3709 ⑤ / D10-3726): a channel filing whose authorization TOP refused (session,
+ *   app key or permission) → TAOBAO_PUBLISHER_AUTH_REJECTED with only the TOP code / sub_code and
+ *   the auth method (sdk_token / web_code); no method name, token, relation id or upstream text.
  */
 export function logTaobaoWarning(logger: RootLogger, warning: TaobaoWarning): void {
+  if (isTaobaoPublisherAuthWarning(warning)) {
+    logger.warn(
+      {
+        event: 'TAOBAO_PUBLISHER_AUTH_REJECTED',
+        code: warning.code,
+        ...(warning.sub_code === undefined ? {} : { sub_code: warning.sub_code }),
+        auth_method: warning.auth_method,
+      },
+      'taobao channel filing authorization refused',
+    );
+    return;
+  }
   if (isImageHostWarning(warning)) {
     logger.warn(
       {

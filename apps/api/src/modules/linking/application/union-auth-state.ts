@@ -114,15 +114,18 @@ export function taobaoAuthUrl(
 
 /**
  * B1-04zzzzm 补丁 2 (D10-2755; BR-ID-17 细则「授权方式」): the configured methods a Taobao state may
- * carry under this plan. The real user OAuth ('oauth') only completes web_code: the live adapter
- * cannot file with an SDK access token yet, so sdk_token is never handed out with it (the configured
- * order of what remains is kept). Empty → the caller answers auth_unavailable and issues no state.
+ * carry under this plan, in the configured order. B1-04zzzzq (D10-3709 ③): the live adapter now
+ * files with an SDK access token as well, so under the real user OAuth ('oauth') sdk_token is issued
+ * like web_code, per union.taobao.auth_methods.<client>. Production still never issues nor accepts
+ * sdk_token: configuredMethods (union-auth-reads.ts) filters it out there before this runs. Empty →
+ * the caller answers auth_unavailable and issues no state.
  */
 export function issuableTaobaoMethods(
   plan: TaobaoAuthUrlPlan,
   methods: readonly UnionAuthMethod[],
 ): readonly UnionAuthMethod[] {
-  return plan.kind === 'oauth' ? methods.filter((method) => method === 'web_code') : methods;
+  void plan;
+  return methods;
 }
 
 /**

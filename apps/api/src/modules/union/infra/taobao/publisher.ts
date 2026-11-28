@@ -142,3 +142,68 @@ export function isGatewaySystemError(body: string): boolean {
   const parsed = parseLossless(body);
   return isRecord(parsed) && isSystemSubCode(parsed['error_response']);
 }
+
+/** TOP's call limit (never an authorization refusal). */
+const TOP_CALL_LIMIT_CODE = '7';
+/**
+ * TOP platform codes refusing the authorization: 11 / 12 / 13 insufficient ISV / user / partner
+ * permissions, 26 / 27 missing / invalid session, 28 / 29 missing / invalid app key.
+ */
+const TOP_AUTH_CODES: ReadonlySet<string> = new Set(['11', '12', '13', '26', '27', '28', '29']);
+/** isv.* sub_codes of the same families (e.g. isv.invalid-session, isv.permission-api-package-limit). */
+const TOP_AUTH_SUB_CODE = /^isv\.[a-z0-9._:-]*(?:session|app-?key|permission)/i;
+/** Codes echoed into errors and warnings: short and plain, never free upstream text. */
+const PLAIN_CODE = /^[A-Za-z0-9._:-]{1,64}$/;
+
+function plainCode(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isInteger(value)) return String(value);
+  if (typeof value === 'string' && PLAIN_CODE.test(value.trim())) return value.trim();
+  return undefined;
+}
+
+/**
+ * B1-04zzzzq (D10-3709 ⑤ / D10-3726; BR-ID-17): the TOP code / sub_code of a filing answer that
+ * refuses the user's authorization itself — the session (missing, invalid, expired), the app key it
+ * was issued for (missing, invalid, not this app's) or the permissions behind it (ISV, user,
+ * partner, API package). Judged by category: the TOP codes of those three families, and any isv.*
+ * sub_code naming a session, an app key or a permission (whatever its code). The call limit and
+ * gateway system errors (isp.*) never count: neither says anything about the credential. Only short
+ * plain codes are returned (never msg, sub_msg or any other upstream text); null otherwise.
+ */
+export function publisherAuthRefusal(
+  body: string,
+): { readonly code: string; readonly sub_code?: string } | null {
+  const parsed = parseLossless(body);
+  if (!isRecord(parsed) || !isRecord(parsed['error_response'])) return null;
+  const error = parsed['error_response'];
+  const code = plainCode(error['code']);
+  const subCode = plainCode(error['sub_code']);
+  if (code === undefined) return null;
+  if (code === TOP_CALL_LIMIT_CODE || subCode?.startsWith('isp.') === true) return null;
+  const refused =
+    TOP_AUTH_CODES.has(code) || (subCode !== undefined && TOP_AUTH_SUB_CODE.test(subCode));
+  if (!refused) return null;
+  return subCode === undefined ? { code } : { code, sub_code: subCode };
+}
+
+/**
+ * B1-04zzzzq: the one flat warning of a filing whose authorization TOP refused — the TOP code /
+ * sub_code and how the user authorized; never the token, the relation id or any upstream text.
+ * `method` (the TOP method) is for the warn hook's shape only and is not logged with it.
+ */
+export interface TaobaoPublisherAuthWarning {
+  readonly method: string;
+  readonly code: string;
+  readonly sub_code?: string;
+  readonly auth_method: 'sdk_token' | 'web_code';
+}
+
+export function isTaobaoPublisherAuthWarning(
+  warning: object,
+): warning is TaobaoPublisherAuthWarning {
+  const fields = warning as Partial<TaobaoPublisherAuthWarning>;
+  return (
+    (fields.auth_method === 'sdk_token' || fields.auth_method === 'web_code') &&
+    typeof fields.code === 'string'
+  );
+}

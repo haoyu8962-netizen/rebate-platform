@@ -5,6 +5,8 @@ import { UnionError } from '../../domain/types.ts';
 import type { UnionTransportRequest, UnionTransportResponse } from '../replay.ts';
 import {
   isGatewaySystemError,
+  isTaobaoPublisherAuthWarning,
+  publisherAuthRefusal,
   queriedRelationId,
   savedRelationId,
   saveIsDuplicate,
@@ -228,4 +230,58 @@ it('[AC-B1-04zzzzp#2] 限流与业务拒绝不算网关系统错误', () => {
   expect(isGatewaySystemError(refusal('isv.invalid-parameter'))).toBe(false);
   expect(isGatewaySystemError('{"error_response":{"code":15}}')).toBe(false);
   expect(isGatewaySystemError('not json')).toBe(false);
+});
+
+it('[AC-B1-04zzzzq-UNIT#1] 鉴权类按类别判：会话 / 应用标识 / 权限的主码与 isv 子码家族，限流与网关系统错误不算', () => {
+  const answer = (error: unknown) => JSON.stringify({ error_response: error });
+  for (const code of [11, 12, 13, 26, 27, 28, 29, '27']) {
+    expect(publisherAuthRefusal(answer({ code, sub_code: 'isv.unit-detail' }))).toEqual({
+      code: String(code),
+      sub_code: 'isv.unit-detail',
+    });
+  }
+  for (const subCode of [
+    'isv.invalid-session',
+    'isv.session-expired',
+    'isv.invalid-app-key',
+    'isv.appkey-not-exists',
+    'isv.permission-api-package-limit',
+    'isv.user-permission-denied',
+  ]) {
+    expect(publisherAuthRefusal(answer({ code: 15, sub_code: subCode }))).toEqual({
+      code: '15',
+      sub_code: subCode,
+    });
+  }
+  expect(publisherAuthRefusal(answer({ code: 27 }))).toEqual({ code: '27' });
+  for (const error of [
+    { code: 15, sub_code: 'isv.invalid-parameter' },
+    { code: 15 },
+    { code: 7, sub_code: 'isv.permission-unit' },
+    { code: 11, sub_code: 'isp.call-limited' },
+    { code: 27, sub_code: 'isp.unknown-error' },
+    { code: 25, sub_code: 'isv.invalid-signature' },
+    { sub_code: 'isv.invalid-session' },
+  ]) {
+    expect(publisherAuthRefusal(answer(error)), JSON.stringify(error)).toBeNull();
+  }
+  expect(publisherAuthRefusal('not json')).toBeNull();
+  expect(publisherAuthRefusal('{"tbk_sc_publisher_info_save_response":{}}')).toBeNull();
+  // Free upstream text never comes back as a code.
+  expect(
+    publisherAuthRefusal(answer({ code: 27, sub_code: 'isv.invalid-session unit secret text' })),
+  ).toEqual({ code: '27' });
+});
+
+it('[AC-B1-04zzzzq-UNIT#2] 鉴权告警只认带授权方式的平铺字段', () => {
+  expect(isTaobaoPublisherAuthWarning({ method: 'm', code: '27', auth_method: 'sdk_token' })).toBe(
+    true,
+  );
+  expect(isTaobaoPublisherAuthWarning({ method: 'm', code: '11', auth_method: 'web_code' })).toBe(
+    true,
+  );
+  expect(isTaobaoPublisherAuthWarning({ method: 'm', code: '11' })).toBe(false);
+  expect(isTaobaoPublisherAuthWarning({ method: 'm', code: '11', auth_method: 'other' })).toBe(
+    false,
+  );
 });
