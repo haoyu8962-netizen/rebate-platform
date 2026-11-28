@@ -55,12 +55,14 @@ it('data shapes of the link and search path match 04 §7', () => {
     auth_url: null,
     state: null,
     auth_methods: ['web_code', 'sdk_token'],
+    sdk_app_key: null,
     reason: ['auth_unavailable'],
   });
   expect(errorCodes[30102].data).toEqual({
     auth_url: null,
     state: null,
     auth_methods: ['web_code', 'sdk_token'],
+    sdk_app_key: null,
     reason: ['auth_unavailable', 'sharer_auth_invalid'],
   });
   expect(errorCodes[30104].data).toEqual({ reason: ['credential_invalid', 'method_not_allowed'] });
