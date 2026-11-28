@@ -1172,6 +1172,7 @@ export interface Orders {
   agent_session_id: string | null;
   app_id: string;
   attr_at: Timestamp;
+  attr_pid_scene: string | null;
   base_fen: ColumnType<bigint, bigint, bigint> | null;
   booked_base_fen: ColumnType<bigint, bigint, bigint> | null;
   booked_n_fen: ColumnType<bigint, bigint, bigint> | null;
