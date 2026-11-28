@@ -12,6 +12,8 @@ type: guard-change
 # ③ check-workflows.test.ts 与 tools/README.md 跟着改（README 写两个开关、默认不存在即关、一键回退 gh variable set SELF_HOSTED_CI --body off）。
 # 规则测试（Codex 写，新目录 test/spec/ci/self-hosted-route/）至少钉：两个变量任一不是 'on'、fork PR、workflow_dispatch、schedule、merge_group（D10-3705 ②，ci.yml 现无此触发也要钉）都算出 ubuntu-latest；
 #   只有这 9 个作业带表达式且逐字相同、props-sha 与门禁 / 汇总作业不带；带表达式的作业缺 timeout-minutes 即拒；表达式出现在 pull_request_target / workflow_run 工作流即拒；权限超只读或引用 secrets 即拒。
+# 台账补丁 1（2026-11-28 ops）：paths 加 tools/ci/ci-int-shards-workflow.test.ts（钉死 verify-int-1…6 runs-on 为 ubuntu-latest）与 tools/ci/ci-replay-workflow.test.ts
+#   （要求 verify-replay 与 int 作业同 runs-on）——两者读真实 ci.yml，实现 r1 测试机 --tests 红在这 7 条；只改这两处断言跟上路由，verify-replay 仍 ubuntu-latest、不分流。
 # PR-1 之外（不进仓库，启用前各报编排）：控制器写 SELF_HOSTED_CI_IDLE、看门狗排队超 3 分钟且全忙即取消改托管机、ci2 lan-run 槽位调整；负责人三步做完前 SELF_HOSTED_CI 不设 on。
 refs: []
 refs_hash: {}
@@ -21,6 +23,8 @@ paths:
   - 'tools/ci/check-workflows.ts'
   - 'tools/ci/check-workflows.test.ts'
   - 'tools/README.md'
+  - 'tools/ci/ci-int-shards-workflow.test.ts'
+  - 'tools/ci/ci-replay-workflow.test.ts'
   - 'ops/tasks/CT-06zzzzzzzp.yaml'
 test_paths:
   - 'test/spec/ci/self-hosted-route/**'
