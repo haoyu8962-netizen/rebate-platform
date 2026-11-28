@@ -1,0 +1,76 @@
+{
+  "risk_note": "RV2 by path (.github/workflows/ci.yml, tools/ci). Gate tooling only, no money moves (ADR-0004 batch 2; orchestrator D10-3703 / D10-3705 / D10-3737). verify-spec-1/2/3 and verify-int-1…6 use the fixed SELF_HOSTED_ROUTE: they run on [self-hosted, couli-ci] only when the repository variables SELF_HOSTED_CI and SELF_HOSTED_CI_IDLE both equal 'on' (GitHub expression comparison, case-insensitive) and the event is a push or a same-repository PR; otherwise, and by default (neither variable exists), ubuntu-latest, so merging changes nothing until the orchestrator sets SELF_HOSTED_CI. Fork PRs, workflow_dispatch, schedule and merge_group always get ubuntu-latest. verify-props-sha-1/2/3 go back to ubuntu-latest. check-workflows.ts: SELF_HOSTED_JOBS is these nine jobs; a routed job without a job-level timeout-minutes is refused (step-level ones do not count, another job's timeout does not mask it); the other constraints (self-hosted only inside the expression, read-only permissions, no secrets, no pull_request_target / workflow_run routing) are unchanged. ci-gate (the only required check) and every check name are unchanged. Ledger patch 1 (#1009) added tools/ci/ci-int-shards-workflow.test.ts and ci-replay-workflow.test.ts to paths (they read the real ci.yml); verify-replay stays on ubuntu-latest. Rollback: gh variable set SELF_HOSTED_CI --body off (or delete it). Pre-checks on couli-ci2: isolation probe 18/18, canary verify-spec-1 (847 files / 11034 tests) and verify-int-1 (383 / 3596) identical to main CI (couli-runs/OPS-lane/LAN-CI-1127/). Third-class protected paths: the task PR's owner-approved label is decided by the owner.",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money r1 (full) fail, one S1: GitHub expression string comparison is case-insensitive, so 'ON' also enables the route while the contract said lowercase only. Orchestrator D10-3737 chose option A: the contract follows GitHub semantics (case-insensitively equal to on enables; anything else, including ' on', off, empty or unset, does not); implementation r3 only documents it (check-workflows.ts comments, tools/README.md) and adds an implementer unit test (ON / On enable, fork PRs always hosted); expression, ci.yml and rule tests unchanged. r2 (incremental) pass, no findings. Implementation r1 41bbbbcd8, r2 1defbbaf1 (unit-test expectations; the two ci-*-workflow tests follow the route after ledger patch 1 #1009), r3 ed65bf637. Validation ok both rounds (couli-runs/CT-06zzzzzzzp/review-codex.json, attempts/). Test machine on the head: --tests (self-hosted-route, verify-fast-parts, verify-int-shard, tools/ci, tools/guard: 54 files, 1711 tests) exit 0; verify:fast exit 0."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (two writes, test/spec/ci/self-hosted-route/routing.test.ts, [AC-CT-06zzzzzzzp#1]-[#5]). Independent Claude review r1 (full) fail: S1 the routed-job timeout check (#3) could not tell a file-wide timeout scan from a per-job one (the only other job in its fixtures had no timeout); write 2 added a fixture with job-level timeouts before and after the routed job and changed the titles to [AC-CT-06zzzzzzzp#n]. r2 (incremental) pass. Red runs on both rule-test commits passed with type check 0."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/ci/self-hosted-route/routing.test.ts > [AC-CT-06zzzzzzzp#1] ci.yml fixes runner placement and preserves timeouts",
+    "test/spec/ci/self-hosted-route/routing.test.ts > [AC-CT-06zzzzzzzp#2] LAN routing requires both switches and an eligible event",
+    "test/spec/ci/self-hosted-route/routing.test.ts > [AC-CT-06zzzzzzzp#3] the guard requires a timeout on the routed job itself",
+    "test/spec/ci/self-hosted-route/routing.test.ts > [AC-CT-06zzzzzzzp#4] the guard confines the exact route to allowlisted jobs",
+    "test/spec/ci/self-hosted-route/routing.test.ts > [AC-CT-06zzzzzzzp#5] routed jobs reject privileged triggers, writes and secrets"
+  ],
+  "task": "CT-06zzzzzzzp",
+  "spec_commit": "c2e673ae8ac7808b3d870d4fe08f5a76dfcc1400",
+  "spec_ref": "fe14d98fefe188e0e48103a4efd8383471a5f3a9",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "c2e673ae8ac7808b3d870d4fe08f5a76dfcc1400",
+      "tree": "5d2e40e1f6ed0002bd167980cf71cf3b19f51702",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-28T07:30:33Z",
+      "finished_at": "2026-11-28T07:32:23Z",
+      "red_tests": [
+        "test/spec/ci/self-hosted-route/routing.test.ts > [AC-CT-06zzzzzzzp#1] ci.yml fixes runner placement and preserves timeouts",
+        "test/spec/ci/self-hosted-route/routing.test.ts > [AC-CT-06zzzzzzzp#2] LAN routing requires both switches and an eligible event",
+        "test/spec/ci/self-hosted-route/routing.test.ts > [AC-CT-06zzzzzzzp#3] the guard requires a timeout on the routed job itself",
+        "test/spec/ci/self-hosted-route/routing.test.ts > [AC-CT-06zzzzzzzp#4] the guard confines the exact route to allowlisted jobs",
+        "test/spec/ci/self-hosted-route/routing.test.ts > [AC-CT-06zzzzzzzp#5] routed jobs reject privileged triggers, writes and secrets"
+      ],
+      "expected": ["test/spec/ci/self-hosted-route/routing.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "b6894b0dfd2f5dfef52cef08cc793a1999f84310adf0fb92343b4f82584392ee"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "fc6ec98efc00ac7746f67233ed081a73c6381a87",
+    "specs": "abdf240228855d53675eb0bbb81fea885eb897e9"
+  }
+}
