@@ -1,0 +1,40 @@
+id: B3-06f
+repo: rebate-platform
+title: 'B3-06f（接手 B3-06e）：B5 出站过滤补条与禁用词丢句——丢句的句数与句界测试先行重做（被丢的句子按原文句界、与按句缓冲同一套判断，段内遇句界只丢到句界为止；没被丢的句子仍按下发文字计句；下发文字不超过 2 句）；B3-06e 的范围（补条一、banned_word 迁移、读 agent.guard.buffer_max_chars）原样带入'
+type: impl
+# 2026-11-28 agent 线入账（编排 D10-3731 / D10-3732 / D10-3733；接手先例 B3-06d → B3-06e、B3-09m → B3-09o）。来由照实记：B3-06e 实现 5 次（常规 3 + approvals 237、241 各 1）、Codex 资金评审 4 轮（常规 3 + 第 241 条 1 轮）都 fail，后三次都是「修一处、换一处」——r2 禁用句在 60 字切分处结束 + 单独换行段；r3 被滤空的禁用句 + 换行；r4 被丢句里的链接带 ?!（实现 5 按原文逐字符计句数引入）。根子是「丢句后的句数 / 句界」没被规则测试钉住。照第 241 条与 11-22 止损停下，B3-06e 置 void 并入本单；本单常规计数从头算（写测 3、规则测试评审 2、实现 3、资金评审 3），非 S0 不开追加。
+# 带过来的与分支排法（同 D10-3432 (3)）：task/B3-06f = 最新主干 + B3-06e 的规则测试六笔（test/spec 下 18 个文件 345 条 + 骨架，B3-06e 名下规则测试评审末轮 pass；内容逐字节不变，标题里的 AC-B3-06d / AC-B3-06e 编号不改）+ 本单写测（新用例全放新目录 test/spec/agent/output-guard-sentence-props/，编号 AC-B3-06f）→ spec_commit → 搬 B3-06e 的实现各笔（到实现 5 的头 590746ef2 为止，含迁移 0161 / 0162 与生成物；迁移号 land 时若被占再改）作实现起点 → 本单实现轮在上面改。搬运由本线做、过提交钩子，不计次，证据里写明。B3-06e 两个头留档：实现 4 = 066f9971d，实现 5 = 590746ef2（分支 task/B3-06e 原样保留到本单落地）。
+# 已定口径（照用）：B3-06e 台账列的各条（D10-3347 / 3352 / 3368 / 3374 / 3349 / 3432 (1)）与 D10-3503（①② 句点句界与滤空的禁用句照计；③ 缓冲上限低于 60 按 60，已进 08 细则；④ 并进 FU-AGENT-GUARD-DIGIT-PASSCODE-AT-CAP）；D10-3730（被丢的句子以原文句界为准，截断标记跟着走）；D10-3731 / D10-3733（判据：① 没被丢的句子照现状按下发（过滤后）文字计句，不接禁用词端口时行为不变；② 被丢的句子按原文句界、与按句缓冲同一套判断——链接内部标点、数字后的半角句点不算句界，一段里遇句界只丢到句界为止；③ 任意输入、接不接端口，下发文字按 BR 句末规则数都不超过 2 句，与判分器 packages/evals/src/grade.ts 的 countSentences 同口径）；D10-3732（并单接手；基于实现 5 的头；资金评审第 1 轮全量、第 2、3 轮可增量）。句界的规则原文：BR-AI-06 细则「按句缓冲」（句末定界符 。！？；!? 与换行；ASCII . 后面是空白或文本末尾且前一字符不是数字才算句末）与「禁用词」（≤2 句按丢句之前的句子计）。
+# 只做：① B3-06e「只做」七项原样（见 ops/tasks/B3-06e.yaml）。② 测试先行：规则测试把禁用词丢句的对拍性质钉住——由「句子体 × 句末符」拼出原文，每句标明禁用 / 合规与过滤后的写法，期望由构造直接算（不拿不接端口的守卫当参照）：被丢的句子按原文句界各占一句，合规句按它下发的文字计句，前两句里的合规句下发、其后截断；整段给、逐字符给、随机分块结果相同。另加不依赖构造的性质：任意输入、接不接端口，下发文字按 BR 句末规则数不超过 2 句（测试自带计数函数）。原子至少含：带 ? / ! 的链接、以数字或被过滤金额结尾的句子、行末数字并入下一行、半角句点后接空格（数字后 / 非数字后 / 空格被链接过滤一并删掉）、被过滤滤空的禁用句后接换行、60 字强制切分处结束的禁用句；另列 B3-06e 四轮评审各条 S1 的原例与 A、B 两族的已知形状（couli-runs/AGENT-lane/b5-probe/probe21–24）。新用例在 spec_commit、B3-06e 实现 4 的头、实现 5 的头上都应红（三处都跑、各记红的条目；哪个头上全绿就退回写测）。③ 实现：重做 output-guard 的丢句路径，使被丢句的句数 / 句界与按句缓冲同一套判断；一段里含句界时只丢到句界为止，其后的文字照新句处理（A 族）。不接禁用词端口时行为不变。实现任务书只给判据与规则测试，不给原型。
+# 不做（评审范围外的发现一律 out_of_scope）：没被丢的句子的计句方式不改（D10-3733 ①）；FU-AGENT-GUARD-RANGE-CHAIN-WITH-TRIGGER（S2）；FU-AGENT-GUARD-DIGIT-PASSCODE-AT-CAP；FU-AGENT-GUARD-BUFFER-MIN-60；判分器的禁用词统计；content 模块、契约、app.module.ts、三端客户端。
+# 验收：B3-06e 的 345 条与本单新用例全绿；合并后线上行为不变（生产仍是无模型路径）。风险级 RV2（含 db/**）→ 评审 money；迁移成对与生成物照 B3-06e（LAN-DB-SNAPSHOT；land 前测试机五段全量）。送码评审前本线的探针只作辅助，以规则测试为准。Codex 调用熔断按本单新计。 冻结用例：modify_existing 预计 0（B3-06e 的 345 条在实现 5 的头上全绿，本单不改它们）；写测或实现中若发现新判据与某条冻结用例冲突，停下报编排补登记，不自行改。
+refs: [BR-AI-06, BR-TEXT-13]
+refs_hash:
+  BR-AI-06: 4f686c6447c7
+  BR-TEXT-13: 0170cefbc162
+deps: [B3-06a, B3-06b, B3-06c, B3-05s, B3-01c, B3-08t, F1-02r]
+paths:
+  - 'apps/api/src/modules/agent/guard/{filter,buffer,output-guard,index}.ts'
+  - 'apps/api/src/modules/agent/guard/*.test.ts'
+  - 'apps/api/src/modules/agent/orchestrator/core/{ports,run}.ts'
+  - 'apps/api/src/modules/agent/orchestrator/core/*.test.ts'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/agent/store/results/**'
+  - 'packages/evals/src/grade.ts'
+  - 'db/migrations/*_agent-runs-filter-hits-banned-word*.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/agent/output-guard-addenda/**'
+  - 'test/spec/agent/output-guard-banned-word/**'
+  - 'test/spec/agent/output-guard-sentence-props/**'
+  - 'test/spec/db/agent/filter-hits-banned-word.int.test.ts'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/output-guard-addenda/**'
+  - 'test/spec/agent/output-guard-banned-word/**'
+  - 'test/spec/agent/output-guard-sentence-props/**'
+  - 'test/spec/db/agent/filter-hits-banned-word.int.test.ts'
+status: todo
