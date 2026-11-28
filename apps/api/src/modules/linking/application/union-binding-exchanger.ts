@@ -10,15 +10,16 @@
 // the live TaobaoUnionAdapter (B1-04zzzzm) exchanges the web_code for the user's token and files the
 // channel (publisher.info.save, duplicate → publisher.info.get). A refused code comes back as
 // invalid_identity → credential_invalid.
-// TODO(规划/11 §4.5): the live adapter's sdk_token path (an SDK access token used as the session
-// directly) — blocked on 淘宝客户端 SDK 接入（本单不动 sdk_token 路径）.
+// B1-04zzzzq (D10-3709 ④): the live adapter's sdk_token path uses the SDK access token as the
+// filing session directly (never exchanged as a code); its state reference names the union app key
+// only, which the adapter checks is its own before anything is sent.
 // B1-04zzzzm 补丁 2 (D10-2755): the bindings use case also passes the server-selected union account
 // (the adapter files only when its inviter code belongs to it, BR-ATTR-05) and the request then
 // keeps the credential's kind (credentialType: an SDK token is never sent as an authorization code).
 // With `resolveApp` (the staging / prod wiring) the state's recorded reference is resolved to the
 // OAuth application it was issued with, which the adapter uses instead of its current setting; a
-// reference that does not resolve, or a method the live path cannot complete (sdk_token), is
-// refused here before anything is exchanged (UnionBindingExchangeRefusal).
+// reference that does not resolve for the submitted method is refused here before anything is
+// exchanged (UnionBindingExchangeRefusal). B1-04zzzzq: sdk_token resolves to the app key alone.
 // r4b (D10-2779): the exchange port's input stays the five fields the B1-06h rule tests pin. The
 // account is the bindings use case's own choice (reads.authAccountId, the account the binding is
 // written under), scoped around the call with withBindingUnionAccount and read here; without it
@@ -67,10 +68,13 @@ export function withBindingUnionAccount<T>(
   return bindingUnionAccount.run({ accountId, filing }, run);
 }
 
-/** The OAuth application a state's reference names (app key + redirect URI, no secret). */
+/**
+ * The application a state's reference names (no secret): web_code — app key + redirect URI;
+ * B1-04zzzzq sdk_token — the app key only (the SDK authorization has no callback).
+ */
 export interface UnionBindingOAuthApp {
   readonly appKey: string;
-  readonly redirectUri: string;
+  readonly redirectUri?: string;
 }
 
 /** Resolves a state's recorded reference for its method; null when it does not resolve. */
@@ -150,13 +154,20 @@ export class UnionBindingExchanger {
     if (bind === null) {
       throw new Error('linking: no union channel filing for the credential exchange');
     }
-    let oauthApp: UnionBindingOAuthApp | undefined;
+    let oauthApp: BindReq['oauthApp'];
     if (this.#resolveApp !== undefined) {
-      // The live path completes web_code only (an SDK token is never exchanged as a code).
-      if (input.method !== 'web_code') throw new UnionBindingExchangeRefusal('method_unsupported');
       const resolved = this.#resolveApp(input.appRef, input.method);
       if (resolved === null) throw new UnionBindingExchangeRefusal('oauth_app_unresolved');
-      oauthApp = { appKey: resolved.appKey, redirectUri: resolved.redirectUri };
+      if (input.method === 'web_code') {
+        // A web_code reference always names the redirect URI the code was issued for.
+        const redirectUri = resolved.redirectUri ?? '';
+        if (redirectUri === '') throw new UnionBindingExchangeRefusal('oauth_app_unresolved');
+        oauthApp = { appKey: resolved.appKey, redirectUri };
+      } else {
+        // B1-04zzzzq: only the app key (BindReq's redirect URI is left empty: the adapter's
+        // sdk_token path never reads it; the token is the session, nothing is exchanged).
+        oauthApp = { appKey: resolved.appKey, redirectUri: '' };
+      }
     }
     const authorizationCode =
       'code' in input.credential ? input.credential.code : input.credential.access_token;

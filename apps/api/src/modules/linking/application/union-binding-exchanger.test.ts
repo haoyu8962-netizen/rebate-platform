@@ -3,7 +3,11 @@
 // credential_invalid and fails closed without an adapter. No database, no network.
 import { describe, expect, it, vi } from 'vitest';
 import { UnionError } from '../../union/index.ts';
-import { UnionBindingExchanger, type UnionBindPublisher } from './union-binding-exchanger.ts';
+import {
+  UnionBindingExchanger,
+  UnionBindingExchangeRefusal,
+  type UnionBindPublisher,
+} from './union-binding-exchanger.ts';
 
 const TRACE = '0199a3b4-5c6d-7000-8000-0000000000bb';
 
@@ -55,6 +59,51 @@ describe('UnionBindingExchanger (default)', () => {
     const outage = new UnionError('upstream_unavailable', 'synthetic outage', 'taobao');
     const down = new UnionBindingExchanger(() => () => Promise.reject(outage));
     await expect(down.exchange(input)).rejects.toBe(outage);
+  });
+
+  it('[AC-B1-04zzzzq-UNIT#9] 有 resolveApp 时放行 sdk_token：只带解析出的 appKey 与令牌类型，解析不了即拒且不调适配器', async () => {
+    const bind = vi.fn<UnionBindPublisher>().mockResolvedValue({ relationId: 'synthetic-r' });
+    const resolveApp = vi.fn((ref: string, method: 'web_code' | 'sdk_token') =>
+      ref === 'synthetic/sdk' && method === 'sdk_token' ? { appKey: 'synthetic-key' } : null,
+    );
+    const exchanger = new UnionBindingExchanger(() => bind, { resolveApp });
+    const input = {
+      appId: 'synthetic_app',
+      method: 'sdk_token' as const,
+      credential: { access_token: 'synthetic-sdk-credential', expires_in: 60 },
+      appRef: 'synthetic/sdk',
+      traceId: TRACE,
+    };
+    await expect(exchanger.exchange(input)).resolves.toEqual({
+      kind: 'bound',
+      relationId: 'synthetic-r',
+    });
+    expect(bind.mock.calls[0]?.[0]).toEqual({
+      authorizationCode: 'synthetic-sdk-credential',
+      credentialType: 'sdk_token',
+      oauthApp: { appKey: 'synthetic-key', redirectUri: '' },
+    });
+    await expect(exchanger.exchange({ ...input, appRef: 'synthetic/other' })).rejects.toThrow(
+      UnionBindingExchangeRefusal,
+    );
+    // A web_code reference that names no redirect URI is refused as unresolved.
+    const webNoRedirect = new UnionBindingExchanger(() => bind, {
+      resolveApp: () => ({ appKey: 'synthetic-key' }),
+    });
+    await expect(
+      webNoRedirect.exchange({
+        ...input,
+        method: 'web_code',
+        credential: { code: 'synthetic-code' },
+      }),
+    ).rejects.toMatchObject({ reason: 'oauth_app_unresolved' });
+    expect(bind).toHaveBeenCalledTimes(1);
+    // TOP refusing the authorization (invalid_identity) answers credential_invalid.
+    const refused = new UnionBindingExchanger(
+      () => () => Promise.reject(new UnionError('invalid_identity', 'synthetic', 'taobao')),
+      { resolveApp },
+    );
+    await expect(refused.exchange(input)).resolves.toEqual({ kind: 'credential_invalid' });
   });
 
   it('[AC-B1-06h#3] 没有联盟适配器时拒绝，不合成 relation_id', async () => {

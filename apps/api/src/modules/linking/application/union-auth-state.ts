@@ -67,27 +67,31 @@ const TAOBAO_AUTHORIZE_URL = 'https://oauth.taobao.com/authorize';
  * - the port with both a non-empty app key and redirect URI → 'oauth';
  * - the port missing either → 'unavailable' in staging / prod (the caller answers auth_unavailable
  *   and issues no state; never a synthetic address there), 'synthetic' in local / test.
+ * B1-04zzzzq r2 (money review S1; BR-ID-17 细则「授权方式」): the web page callback
+ * (TAOBAO_USER_OAUTH_REDIRECT_URI) is web_code's alone. In staging / prod a port with the app key
+ * but no redirect URI → 'sdk_only': only sdk_token is issuable under it (issuableTaobaoMethods), so
+ * a client configured ["sdk_token"] still gets its state, one configured ["web_code"] alone is
+ * left with nothing (auth_unavailable, as before). No app key → 'unavailable' (every method needs
+ * it).
  */
 export type TaobaoAuthUrlPlan =
   | { readonly kind: 'synthetic' }
   | { readonly kind: 'unavailable' }
-  | { readonly kind: 'oauth'; readonly appKey: string; readonly redirectUri: string };
+  | { readonly kind: 'oauth'; readonly appKey: string; readonly redirectUri: string }
+  | { readonly kind: 'sdk_only'; readonly appKey: string };
 
 export function taobaoAuthUrlPlan(authApps: UnionAuthAppsPort, appEnv: AppEnv): TaobaoAuthUrlPlan {
   const oauth = authApps.taobaoUserOAuth;
   if (oauth === undefined) return { kind: 'synthetic' };
   const { appKey, redirectUri } = oauth;
-  if (
-    typeof appKey === 'string' &&
-    appKey !== '' &&
-    typeof redirectUri === 'string' &&
-    redirectUri !== ''
-  ) {
+  const live = appEnv === 'staging' || appEnv === 'prod';
+  if (typeof appKey !== 'string' || appKey === '') {
+    return live ? { kind: 'unavailable' } : { kind: 'synthetic' };
+  }
+  if (typeof redirectUri === 'string' && redirectUri !== '') {
     return { kind: 'oauth', appKey, redirectUri };
   }
-  return appEnv === 'staging' || appEnv === 'prod'
-    ? { kind: 'unavailable' }
-    : { kind: 'synthetic' };
+  return live ? { kind: 'sdk_only', appKey } : { kind: 'synthetic' };
 }
 
 /**
@@ -95,34 +99,50 @@ export function taobaoAuthUrlPlan(authApps: UnionAuthAppsPort, appEnv: AppEnv): 
  * client_id, redirect_uri as configured, the issued state as is, view=wap for the mobile page;
  * docs-mirror taobao/guides/105590) or the synthetic one. Shared by GET auth-url and the open's
  * 30101 / 30102 so both hand out the same address.
+ * B1-04zzzzq r2: under 'sdk_only' the state carries sdk_token alone and the client runs the Taobao
+ * SDK, never this address; it is still the real authorize address (the auth_url field is required
+ * and a uri), naming the union app and the state only — no response_type / redirect_uri, so it is
+ * no web_code flow (that method is not issued under this plan).
  */
 export function taobaoAuthUrl(
   plan: Exclude<TaobaoAuthUrlPlan, { readonly kind: 'unavailable' }>,
   state: string,
 ): string {
   if (plan.kind === 'synthetic') return syntheticAuthUrl('taobao', state);
-  const params: readonly (readonly [string, string])[] = [
-    ['response_type', 'code'],
-    ['client_id', plan.appKey],
-    ['redirect_uri', plan.redirectUri],
-    ['state', state],
-    ['view', 'wap'],
-  ];
+  const params: readonly (readonly [string, string])[] =
+    plan.kind === 'sdk_only'
+      ? [
+          ['client_id', plan.appKey],
+          ['state', state],
+          ['view', 'wap'],
+        ]
+      : [
+          ['response_type', 'code'],
+          ['client_id', plan.appKey],
+          ['redirect_uri', plan.redirectUri],
+          ['state', state],
+          ['view', 'wap'],
+        ];
   const query = params.map(([name, value]) => `${name}=${encodeURIComponent(value)}`).join('&');
   return `${TAOBAO_AUTHORIZE_URL}?${query}`;
 }
 
 /**
  * B1-04zzzzm 补丁 2 (D10-2755; BR-ID-17 细则「授权方式」): the configured methods a Taobao state may
- * carry under this plan. The real user OAuth ('oauth') only completes web_code: the live adapter
- * cannot file with an SDK access token yet, so sdk_token is never handed out with it (the configured
- * order of what remains is kept). Empty → the caller answers auth_unavailable and issues no state.
+ * carry under this plan, in the configured order. B1-04zzzzq (D10-3709 ③): the live adapter now
+ * files with an SDK access token as well, so under the real user OAuth ('oauth') sdk_token is issued
+ * like web_code, per union.taobao.auth_methods.<client>. Production still never issues nor accepts
+ * sdk_token: configuredMethods (union-auth-reads.ts) filters it out there before this runs. Empty →
+ * the caller answers auth_unavailable and issues no state.
+ * r2 (money review S1): under 'sdk_only' (no web page callback configured) web_code is dropped;
+ * sdk_token, which needs no callback, stays.
  */
 export function issuableTaobaoMethods(
   plan: TaobaoAuthUrlPlan,
   methods: readonly UnionAuthMethod[],
 ): readonly UnionAuthMethod[] {
-  return plan.kind === 'oauth' ? methods.filter((method) => method === 'web_code') : methods;
+  if (plan.kind === 'sdk_only') return methods.filter((method) => method !== 'web_code');
+  return methods;
 }
 
 /**

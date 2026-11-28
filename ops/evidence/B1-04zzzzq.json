@@ -1,0 +1,119 @@
+{
+  "task": "B1-04zzzzq",
+  "spec_ref": "d840ba99656122129cc90a54e608def93d444a69",
+  "spec_commit": "39b322cabc41422cb63efbadf47cd676cdecb559",
+  "red_tests": [
+    "test/spec/linking/taobao-sdk-token/authorization.int.test.ts > [AC-B1-04zzzzq#3] SDK 引用只含签发时的 appKey，拒绝其他应用且零请求",
+    "test/spec/linking/taobao-sdk-token/authorization.int.test.ts > [AC-B1-04zzzzq#5] 生产过滤实验方式且拒绝 SDK 提交，非生产按当前配置签发和放行",
+    "test/spec/linking/taobao-sdk-token/authorization.int.test.ts > [AC-B1-04zzzzq#6] 两个不同幂等键并发提交同一个 SDK state，只有一次进入备案",
+    "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#8] sdk_token 收到 TOP 27（会话已失效）返回 30104 并写一条平铺告警",
+    "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#8] sdk_token 收到 TOP 29（应用标识无效）返回 30104 并写一条平铺告警",
+    "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#8] sdk_token 收到 TOP 12（用户权限不足）返回 30104 并写一条平铺告警",
+    "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#8] web_code 收到 TOP 27（会话已失效）返回 30104 并写一条平铺告警",
+    "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#8] web_code 收到 TOP 29（应用标识无效）返回 30104 并写一条平铺告警",
+    "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#8] web_code 收到 TOP 12（用户权限不足）返回 30104 并写一条平铺告警",
+    "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#9] SDK 备案遇到undefined，零请求、零尝试记录且绑定原样保留",
+    "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#9] SDK 备案遇到undefined，零请求、零尝试记录且绑定原样保留",
+    "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#1] 备案先落单，SDK 令牌原样进入 save 的 session，换令牌端点零请求",
+    "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#2] 上游传输异常引述 SDK 令牌时，异常、响应、日志与归档隐藏令牌",
+    "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#4] SDK 重复备案用同一 session 查回编号，历史为无历史时按归属决定是否激活",
+    "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#4] SDK 重复备案用同一 session 查回编号，历史为其他用户时按归属决定是否激活",
+    "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#4] SDK 重复备案用同一 session 查回编号，历史为其他联盟账号时按归属决定是否激活",
+    "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#4] SDK 重复备案用同一 session 查回编号，历史为编号不同时按归属决定是否激活",
+    "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#4] SDK 重复备案用同一 session 查回编号，历史为同归属同编号时按归属决定是否激活",
+    "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#7] SDK session 无效 返回 30104，实际日志中只有一条平铺 TOP 告警",
+    "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#7] SDK 应用不匹配 返回 30104，实际日志中只有一条平铺 TOP 告警",
+    "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#7] SDK 权限不足 返回 30104，实际日志中只有一条平铺 TOP 告警",
+    "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#7] 网页授权权限不足 返回 30104，实际日志中只有一条平铺 TOP 告警"
+  ],
+  "risk_note": "Taobao jump-to-app authorization, server sdk_token branch (D10-3704 / D10-3709 ①; plan TB-APP-AUTH C2 items 1-4, 6-8; no contract change, sdk_app_key is FU-TB-SDK-APP-KEY-SERVER after CT-TBAPP). The adapter uses a submitted SDK access token as the session for publisher.info.save (no token exchange), a duplicate filing reads back with publisher.info.get and is accepted only against the matching stored history; inviter code and inviter-account-equals-union-account checks, the filing attempt recorded first, and no token in logs / archives / errors all as before. The sdk_token app reference carries only the union app key and must be our own, else refused before any request; an sdk_token submission without an issued reference is refused before the attempt row and any request. Issuance allows sdk_token outside prod per union.taobao.auth_methods.<client>; prod still filters sdk_token (until CAP-TB-05 (f) passes and the owner confirms). Filing readiness is per method: only web_code needs the user OAuth redirect URI (an issued web_code state keeps the redirect recorded in it). TOP auth-class refusals (11/12/13/26/27/28/29 and session / app-key / permission isv.* sub codes, HTTP < 500 only) map to invalid_identity -> 30104 credential_invalid with exactly one flat TAOBAO_PUBLISHER_AUTH_REJECTED warning carrying code, sub_code and auth method only; HTTP >= 500 stays upstream_unavailable with the attempt left unknown. No migration, no money arithmetic. Recorded out of scope: FU-TB-SDK-APP-KEY-SERVER, FU-TB-AUTH-URL-STALE-COMMENT; staging config union.taobao.auth_methods.android is an ops step after deploy.",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "39b322cabc41422cb63efbadf47cd676cdecb559",
+      "tree": "505ecf0de8251b0d8df1fa3ebbf7724999f4a922",
+      "prop_seed": 20261001,
+      "prop_runs": null,
+      "started_at": "2026-11-28T08:51:05Z",
+      "finished_at": "2026-11-28T08:52:57Z",
+      "red_tests": [
+        "test/spec/linking/taobao-sdk-token/authorization.int.test.ts > [AC-B1-04zzzzq#3] SDK 引用只含签发时的 appKey，拒绝其他应用且零请求",
+        "test/spec/linking/taobao-sdk-token/authorization.int.test.ts > [AC-B1-04zzzzq#5] 生产过滤实验方式且拒绝 SDK 提交，非生产按当前配置签发和放行",
+        "test/spec/linking/taobao-sdk-token/authorization.int.test.ts > [AC-B1-04zzzzq#6] 两个不同幂等键并发提交同一个 SDK state，只有一次进入备案",
+        "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#8] sdk_token 收到 TOP 27（会话已失效）返回 30104 并写一条平铺告警",
+        "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#8] sdk_token 收到 TOP 29（应用标识无效）返回 30104 并写一条平铺告警",
+        "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#8] sdk_token 收到 TOP 12（用户权限不足）返回 30104 并写一条平铺告警",
+        "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#8] web_code 收到 TOP 27（会话已失效）返回 30104 并写一条平铺告警",
+        "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#8] web_code 收到 TOP 29（应用标识无效）返回 30104 并写一条平铺告警",
+        "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#8] web_code 收到 TOP 12（用户权限不足）返回 30104 并写一条平铺告警",
+        "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#9] SDK 备案遇到undefined，零请求、零尝试记录且绑定原样保留",
+        "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts > [AC-B1-04zzzzq#9] SDK 备案遇到undefined，零请求、零尝试记录且绑定原样保留",
+        "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#1] 备案先落单，SDK 令牌原样进入 save 的 session，换令牌端点零请求",
+        "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#2] 上游传输异常引述 SDK 令牌时，异常、响应、日志与归档隐藏令牌",
+        "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#4] SDK 重复备案用同一 session 查回编号，历史为无历史时按归属决定是否激活",
+        "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#4] SDK 重复备案用同一 session 查回编号，历史为其他用户时按归属决定是否激活",
+        "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#4] SDK 重复备案用同一 session 查回编号，历史为其他联盟账号时按归属决定是否激活",
+        "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#4] SDK 重复备案用同一 session 查回编号，历史为编号不同时按归属决定是否激活",
+        "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#4] SDK 重复备案用同一 session 查回编号，历史为同归属同编号时按归属决定是否激活",
+        "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#7] SDK session 无效 返回 30104，实际日志中只有一条平铺 TOP 告警",
+        "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#7] SDK 应用不匹配 返回 30104，实际日志中只有一条平铺 TOP 告警",
+        "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#7] SDK 权限不足 返回 30104，实际日志中只有一条平铺 TOP 告警",
+        "test/spec/linking/taobao-sdk-token/publisher.int.test.ts > [AC-B1-04zzzzq#7] 网页授权权限不足 返回 30104，实际日志中只有一条平铺 TOP 告警"
+      ],
+      "expected": [
+        "test/spec/linking/taobao-sdk-token/authorization.int.test.ts",
+        "test/spec/linking/taobao-sdk-token/publisher-regressions.int.test.ts",
+        "test/spec/linking/taobao-sdk-token/publisher.int.test.ts"
+      ],
+      "reports": [
+        {
+          "path": "out/spec-int.json",
+          "sha256": "59f8000fa7545a69047348ef9352279ea7d0f12b390fbb1942ecb74a4ed21e37"
+        }
+      ],
+      "typecheck": {
+        "exit_code": 0,
+        "errors": []
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "money",
+      "round": 2,
+      "note": "Codex money review via tools/agent/codex-run.sh (implementation by Opus, approvals 27; user-authorization boundary reviewed as money / authorization, D10-3709 ①). r1 (full) fail: S1 readiness required the web redirect URI for sdk_token too (issuance and exchange share taobaoFilingConfigured in linking.module.ts, outside the paths -> ledger patch 2 #1017, D10-3750); S2 HTTP 5xx with a TOP auth code re-classified to invalid_identity while the attempt stayed unknown; S2 sdk_token without an issued app reference skipped the app check. Implementation r2 fixed all three. r2 (incremental, base 8669ee975 an ancestor) pass, no findings; validator moved 0 in both rounds. The exchanger passes oauthApp {appKey, redirectUri: ''} on the sdk path (BindReq outside the paths; the sdk path does not read it) and an issued web_code state now exchanges with its recorded redirect even if the setting was removed -- both written in the brief for the reviewer. couli-runs/B1-04zzzzq/review-money-codex-r{1,2}.json. Test machine on 16978370d: --tests test/spec/linking test/spec/union apps/api/src/modules/linking apps/api/src/modules/union green."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "model": "claude-opus-5-5",
+    "rounds": 2,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (ledger tester codex), reviewed by fresh independent Claude sessions (approvals 36). Test 1 [#1]-[#7] plus an uncounted mechanical correction 6f93d73dd (D10-3723 / D10-3724: the auth-url logger stub made LogFn-compatible for tsc -b test; no expect changed). r1 fail (3 S1: the flat warning needed sub_code / auth method in the real log -> ledger patch 1 #1012 adds union.module.ts; codes 27 / 29 / 12 not pinned; inviter account mismatch / missing inviter code not pinned) -> test 2 added [#8] / [#9]; r2 pass; validator moved 0. Implementer unit-test mechanical correction 8669ee975 (D10-3735 / D10-3736). No modify_existing."
+  },
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "1a2341a1135b2e022b2d5c77d4a413969bc4a2a6",
+    "specs": "abdf240228855d53675eb0bbb81fea885eb897e9"
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing; the required longrun-props check runs on the PR head",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  }
+}

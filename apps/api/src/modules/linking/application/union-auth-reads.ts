@@ -168,7 +168,9 @@ export function createUnionAuthReads(options: UnionAuthReadsOptions): UnionAuthR
       const item = await config.configValue(appId, `union.taobao.auth_methods.${client}`);
       let methods = item === null ? DEFAULT_METHODS : parseMethods(item.value);
       // sdk_token waits for CAP-TB-05 (f) and the owner's confirmation: in prod it is filtered
-      // out, never issued nor accepted (B1-04k 口径). Nothing left → the default.
+      // out, never issued nor accepted (B1-04k 口径; kept by B1-04zzzzq although the live adapter
+      // now files SDK tokens — staging and the other non-prod environments follow the
+      // configuration). Nothing left → the default.
       if (appEnv === 'prod') {
         methods = methods.filter((method) => method !== 'sdk_token');
         if (methods.length === 0) methods = DEFAULT_METHODS;
