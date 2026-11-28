@@ -22,6 +22,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { afterAll, expect, it } from 'vitest';
+import { SELF_HOSTED_ROUTE } from './check-workflows.ts';
 
 const REPO = resolve(import.meta.dirname, '../..');
 const CI = readFileSync(join(REPO, '.github/workflows/ci.yml'), 'utf8');
@@ -294,7 +295,11 @@ it('[CT-06zzzzza] verify-replay runs test:replay through pnpm exactly once, and 
 it('[CT-06zzzzza] verify-replay runs on a Docker runner as the int jobs: ubuntu-latest, never ubuntu-slim, with a time limit', () => {
   const body = requireJob(JOB);
   const runsOn = entry(body, 'runs-on', 4)?.inline;
-  expect(runsOn).toBe(entry(requireJob(REF), 'runs-on', 4)?.inline);
+  // The int jobs use the fixed ADR-0004 routing expression (batch 2, D10-3705), whose fallback is
+  // ubuntu-latest; verify-replay is not routed and stays on ubuntu-latest itself.
+  const intRunsOn = entry(requireJob(REF), 'runs-on', 4)?.inline;
+  expect(intRunsOn).toBe(SELF_HOSTED_ROUTE);
+  expect(intRunsOn?.endsWith("|| 'ubuntu-latest' }}")).toBe(true);
   expect(runsOn).toBe('ubuntu-latest');
   expect(Number(entry(body, 'timeout-minutes', 4)?.inline)).toBeGreaterThan(0);
   expect(entry(body, 'strategy', 4), 'no matrix').toBeNull();

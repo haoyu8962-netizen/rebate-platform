@@ -210,8 +210,19 @@ it('rejects write permissions and permission shorthands', () => {
   ]);
 });
 
-// ADR-0004 §2.6 (CT-06zzzzp): the self-hosted route.
+// ADR-0004 §2.6 (CT-06zzzzp; batch 2 D10-3705, CT-06zzzzzzzp): the self-hosted route.
 const ROUTE_LINE = `    runs-on: ${SELF_HOSTED_ROUTE}\n`;
+const ROUTED_JOBS = [
+  'verify-spec-1',
+  'verify-spec-2',
+  'verify-spec-3',
+  'verify-int-1',
+  'verify-int-2',
+  'verify-int-3',
+  'verify-int-4',
+  'verify-int-5',
+  'verify-int-6',
+];
 
 /** Text of the job block `id` (from its id line to the next job id line). */
 function jobBlock(text: string, id: string): string {
@@ -221,19 +232,24 @@ function jobBlock(text: string, id: string): string {
   return next < 0 ? text.slice(start) : text.slice(start, start + 1 + next + 1);
 }
 
-/** Replaces `from` with `to` inside the job block `id` only (exactly once). */
+/**
+ * Replaces `from` with `to` inside the job block `id` only (exactly once). Spliced by position,
+ * not with String#replace: the int job bodies contain `$'` (`"${pong%$'\r'}"`), which a
+ * replacement string would expand into the rest of the file.
+ */
 function inJob(text: string, id: string, from: string, to: string): string {
   const block = jobBlock(text, id);
   if (block.split(from).length !== 2) throw new Error(`${from} is not unique in ${id}`);
-  return text.replace(block, block.replace(from, to));
+  const start = text.indexOf(block);
+  const at = block.indexOf(from);
+  const edited = block.slice(0, at) + to + block.slice(at + from.length);
+  return text.slice(0, start) + edited + text.slice(start + block.length);
 }
 
 it('the real ci.yml routes exactly the allowlisted jobs, every other job is ubuntu-latest', () => {
-  expect(SELF_HOSTED_JOBS).toEqual({
-    'ci.yml': ['verify-props-sha-1', 'verify-props-sha-2', 'verify-props-sha-3'],
-  });
+  expect(SELF_HOSTED_JOBS).toEqual({ 'ci.yml': ROUTED_JOBS });
   expect(SELF_HOSTED_ROUTE).toBe(
-    "${{ (vars.SELF_HOSTED_CI == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('[\"self-hosted\",\"couli-ci\"]') || 'ubuntu-latest' }}",
+    "${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('[\"self-hosted\",\"couli-ci\"]') || 'ubuntu-latest' }}",
   );
   const text = readFileSync(join(REPO, '.github/workflows/ci.yml'), 'utf8');
   const routed = text
@@ -247,7 +263,7 @@ it('the real ci.yml routes exactly the allowlisted jobs, every other job is ubun
       }
       return null;
     });
-  expect(routed).toEqual(['verify-props-sha-1', 'verify-props-sha-2', 'verify-props-sha-3']);
+  expect(routed).toEqual(ROUTED_JOBS);
   expect(checkWorkflows(REPO)).toEqual([]);
 });
 
@@ -267,12 +283,14 @@ it('rejects the routing expression with one character changed', () => {
     SELF_HOSTED_ROUTE.replace(' || ', ' ||  '),
     SELF_HOSTED_ROUTE.replace('couli-ci', 'couli_ci'),
     SELF_HOSTED_ROUTE.replace("'push'", "'pusH'"),
+    // The batch 1 expression, without the idle switch (D10-3705).
+    SELF_HOSTED_ROUTE.replace("vars.SELF_HOSTED_CI_IDLE == 'on' && ", ''),
   ];
   const results = variants.map((variant) => {
     if (variant === SELF_HOSTED_ROUTE) throw new Error('variant equals the route');
     const root = fixture((edit) =>
       edit('.github/workflows/ci.yml', (t) =>
-        inJob(t, 'verify-props-sha-2', ROUTE_LINE, `    runs-on: ${variant}\n`),
+        inJob(t, 'verify-spec-2', ROUTE_LINE, `    runs-on: ${variant}\n`),
       ),
     );
     return codes(root);
@@ -293,7 +311,17 @@ it('rejects the routing expression on a job that is not allowlisted', () => {
       t.replace('    runs-on: ubuntu-latest\n', ROUTE_LINE),
     ),
   );
-  expect([codes(ciJob), codes(otherFile)]).toEqual([['self-hosted-job'], ['self-hosted-job']]);
+  // Batch 1 jobs are no longer allowlisted (D10-3705).
+  const batchOne = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) =>
+      inJob(t, 'verify-props-sha-1', '    runs-on: ubuntu-latest\n', ROUTE_LINE),
+    ),
+  );
+  expect([codes(ciJob), codes(otherFile), codes(batchOne)]).toEqual([
+    ['self-hosted-job'],
+    ['self-hosted-job'],
+    ['self-hosted-job'],
+  ]);
 });
 
 it('rejects self-hosted anywhere outside the routing expression', () => {
@@ -312,17 +340,12 @@ it('rejects self-hosted anywhere outside the routing expression', () => {
   );
   const comment = fixture((edit) =>
     edit('.github/workflows/ci.yml', (t) =>
-      inJob(t, 'verify-props-sha-1', ROUTE_LINE, `    # runs on the self-hosted VM\n${ROUTE_LINE}`),
+      inJob(t, 'verify-spec-1', ROUTE_LINE, `    # runs on the self-hosted VM\n${ROUTE_LINE}`),
     ),
   );
   const trailing = fixture((edit) =>
     edit('.github/workflows/ci.yml', (t) =>
-      inJob(
-        t,
-        'verify-props-sha-1',
-        ROUTE_LINE,
-        `    runs-on: ${SELF_HOSTED_ROUTE} # self-hosted\n`,
-      ),
+      inJob(t, 'verify-int-1', ROUTE_LINE, `    runs-on: ${SELF_HOSTED_ROUTE} # self-hosted\n`),
     ),
   );
   const step = fixture((edit) =>
@@ -351,9 +374,9 @@ it('rejects write permissions on a routed job, at job level or workflow level', 
     edit('.github/workflows/ci.yml', (t) =>
       inJob(
         t,
-        'verify-props-sha-3',
-        '    timeout-minutes: 40\n',
-        '    timeout-minutes: 40\n    permissions:\n      contents: write\n',
+        'verify-spec-3',
+        '    timeout-minutes: 30\n',
+        '    timeout-minutes: 30\n    permissions:\n      contents: write\n',
       ),
     ),
   );
@@ -373,7 +396,7 @@ it('rejects write permissions on a routed job, at job level or workflow level', 
   const routedLines = checkWorkflows(workflowLevel)
     .filter((p) => p.code === 'self-hosted-permissions')
     .map((p) => p.message);
-  expect(routedLines.length).toBe(3);
+  expect(routedLines.length).toBe(ROUTED_JOBS.length);
 });
 
 it('rejects a routed job that references secrets', () => {
@@ -381,9 +404,9 @@ it('rejects a routed job that references secrets', () => {
     edit('.github/workflows/ci.yml', (t) =>
       inJob(
         t,
-        'verify-props-sha-1',
-        "          PROP_RUNS: '100000'\n",
-        "          PROP_RUNS: '100000'\n          TOKEN: ${{ secrets.NPM_TOKEN }}\n",
+        'verify-int-1',
+        "          PROP_RUNS: '2000'\n",
+        "          PROP_RUNS: '2000'\n          TOKEN: ${{ secrets.NPM_TOKEN }}\n",
       ),
     ),
   );
@@ -391,9 +414,9 @@ it('rejects a routed job that references secrets', () => {
     edit('.github/workflows/ci.yml', (t) =>
       inJob(
         t,
-        'verify-props-sha-2',
-        "          PROP_RUNS: '100000'\n",
-        "          PROP_RUNS: '100000'\n          TOKEN: ${{ SECRETS['NPM_TOKEN'] }}\n",
+        'verify-int-2',
+        "          PROP_RUNS: '2000'\n",
+        "          PROP_RUNS: '2000'\n          TOKEN: ${{ SECRETS['NPM_TOKEN'] }}\n",
       ),
     ),
   );
@@ -433,6 +456,87 @@ it('rejects a routed job that references secrets', () => {
   ]);
 });
 
+// D10-3705: every routed job carries its own job-level timeout. The leading newline keeps the
+// 4-space job key apart from 8-space step keys of the same name.
+const JOB_TIMEOUT_40 = '\n    timeout-minutes: 40\n';
+
+function timeoutProblems(root: string): string[] {
+  return checkWorkflows(root)
+    .filter((p) => p.code === 'self-hosted-timeout')
+    .map((p) => p.message);
+}
+
+it('rejects a routed job without a job-level timeout-minutes', () => {
+  // Every other job of the real ci.yml keeps its timeout, before and after this one.
+  const missing = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) => inJob(t, 'verify-int-3', JOB_TIMEOUT_40, '\n')),
+  );
+  // The last routed job: the next job (verify-replay) has a timeout of its own.
+  const lastRouted = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) => inJob(t, 'verify-int-6', JOB_TIMEOUT_40, '\n')),
+  );
+  expect([codes(missing), codes(lastRouted)]).toEqual([
+    ['self-hosted-timeout'],
+    ['self-hosted-timeout'],
+  ]);
+  const [only, last] = [timeoutProblems(missing), timeoutProblems(lastRouted)];
+  expect(only).toHaveLength(1);
+  expect(only[0]).toContain('`verify-int-3`');
+  expect(last).toHaveLength(1);
+  expect(last[0]).toContain('`verify-int-6`');
+});
+
+it('a step-level timeout-minutes does not stand in for the job-level one', () => {
+  // verify-int-4 has step-level timeouts (10 and 5) in the real file.
+  const stepOnly = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) => inJob(t, 'verify-int-4', JOB_TIMEOUT_40, '\n')),
+  );
+  const addedStep = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) => {
+      const shard = '      - run: pnpm --filter @couli/spec-tests run test --shard=2/3\n';
+      const noJobTimeout = inJob(t, 'verify-spec-2', '    timeout-minutes: 30\n', '');
+      return inJob(noJobTimeout, 'verify-spec-2', shard, `${shard}        timeout-minutes: 30\n`);
+    }),
+  );
+  expect([codes(stepOnly), codes(addedStep)]).toEqual([
+    ['self-hosted-timeout'],
+    ['self-hosted-timeout'],
+  ]);
+  expect(timeoutProblems(stepOnly)[0]).toContain('`verify-int-4`');
+  expect(timeoutProblems(addedStep)[0]).toContain('`verify-spec-2`');
+});
+
+it('rejects a routed job timeout that is not one positive integer', () => {
+  const variants = ['0', '${{ vars.TIMEOUT }}', ''];
+  const results = variants.map((value) => {
+    const root = fixture((edit) =>
+      edit('.github/workflows/ci.yml', (t) =>
+        inJob(t, 'verify-spec-1', '    timeout-minutes: 30\n', `    timeout-minutes: ${value}\n`),
+      ),
+    );
+    return codes(root);
+  });
+  const twice = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) =>
+      inJob(
+        t,
+        'verify-spec-1',
+        '    timeout-minutes: 30\n',
+        '    timeout-minutes: 30\n    timeout-minutes: 30\n',
+      ),
+    ),
+  );
+  expect(results).toEqual(variants.map(() => ['self-hosted-timeout']));
+  expect(codes(twice)).toEqual(['self-hosted-timeout']);
+});
+
+it('does not require a timeout on a job that is not routed', () => {
+  const root = fixture((edit) =>
+    edit('.github/workflows/ci.yml', (t) => inJob(t, 'verify-props-sha-1', JOB_TIMEOUT_40, '\n')),
+  );
+  expect(checkWorkflows(root)).toEqual([]);
+});
+
 it('rejects the routing expression in a pull_request_target or workflow_run workflow', () => {
   const prt = fixture((edit) =>
     edit('.github/workflows/protected-paths.yml', (t) =>
@@ -454,21 +558,170 @@ it('rejects the routing expression in a pull_request_target or workflow_run work
 it('still rejects ubuntu-slim and other runners on routed and unrouted jobs', () => {
   const routedJob = fixture((edit) =>
     edit('.github/workflows/ci.yml', (t) =>
-      inJob(t, 'verify-props-sha-1', ROUTE_LINE, '    runs-on: ubuntu-slim\n'),
+      inJob(t, 'verify-spec-1', ROUTE_LINE, '    runs-on: ubuntu-slim\n'),
     ),
   );
   const variable = fixture((edit) =>
     edit('.github/workflows/ci.yml', (t) =>
-      inJob(t, 'verify-props-sha-1', ROUTE_LINE, '    runs-on: ${{ vars.RUNNER }}\n'),
+      inJob(t, 'verify-spec-1', ROUTE_LINE, '    runs-on: ${{ vars.RUNNER }}\n'),
     ),
   );
   const twice = fixture((edit) =>
     edit('.github/workflows/ci.yml', (t) =>
-      inJob(t, 'verify-props-sha-1', ROUTE_LINE, `${ROUTE_LINE}    runs-on: ubuntu-latest\n`),
+      inJob(t, 'verify-spec-1', ROUTE_LINE, `${ROUTE_LINE}    runs-on: ubuntu-latest\n`),
     ),
   );
   expect([codes(routedJob), codes(variable)]).toEqual([['runs-on'], ['runs-on']]);
   expect(codes(twice)).toContain('runs-on');
+});
+
+// A minimal evaluator for the GitHub Actions expression subset SELF_HOSTED_ROUTE uses: string
+// literals, context paths, fromJSON, ==, &&, || and parentheses. It follows the documented
+// GitHub rules: == ignores case when comparing two strings, mismatched types are coerced to
+// numbers (null → 0, a non-numeric string → NaN), && / || return one of their operands, and
+// false, 0, NaN, '' and null are falsy. Anything outside the subset throws, so a change to the
+// route that the evaluator does not understand fails the test instead of passing silently.
+type Value = string | number | boolean | null | readonly unknown[] | Record<string, unknown>;
+
+function evaluateRoute(expression: string, context: Record<string, unknown>): Value {
+  const inner = /^\$\{\{ (.*) \}\}$/.exec(expression)?.[1];
+  if (inner === undefined) throw new Error('not a ${{ }} expression');
+  const tokens = inner.match(/\s+|\(|\)|&&|\|\||==|'(?:[^']|'')*'|[A-Za-z_][\w.-]*|[\s\S]/g) ?? [];
+  const list = tokens.filter((t) => !/^\s+$/.test(t));
+  let at = 0;
+  const peek = () => list[at];
+  const take = (want?: string) => {
+    const token = list[at++];
+    if (token === undefined || (want !== undefined && token !== want)) {
+      throw new Error(`expected ${want ?? 'a token'} at ${at - 1}, got ${token}`);
+    }
+    return token;
+  };
+  const truthy = (v: Value) =>
+    !(v === false || v === 0 || v === '' || v === null || Number.isNaN(v));
+  const toNumber = (v: Value): number => {
+    if (v === null) return 0;
+    if (typeof v === 'boolean') return v ? 1 : 0;
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') return v.trim() === '' ? 0 : Number(v);
+    return Number.NaN;
+  };
+  const equals = (a: Value, b: Value) =>
+    typeof a === 'string' && typeof b === 'string'
+      ? a.toLowerCase() === b.toLowerCase()
+      : typeof a === typeof b && typeof a === 'object' && a !== null
+        ? a === b
+        : toNumber(a) === toNumber(b);
+  const primary = (): Value => {
+    const token = take();
+    if (token === '(') {
+      const v = or();
+      take(')');
+      return v;
+    }
+    if (token.startsWith("'")) return token.slice(1, -1).replaceAll("''", "'");
+    if (token === 'fromJSON') {
+      take('(');
+      const arg = or();
+      take(')');
+      if (typeof arg !== 'string') throw new Error('fromJSON needs a string');
+      return JSON.parse(arg) as Value;
+    }
+    if (/^[A-Za-z_]/.test(token)) {
+      let v: unknown = context;
+      for (const key of token.split('.')) {
+        v = v !== null && typeof v === 'object' ? (v as Record<string, unknown>)[key] : undefined;
+      }
+      return (v ?? null) as Value;
+    }
+    throw new Error(`unexpected token ${token}`);
+  };
+  const comparison = (): Value => {
+    const left = primary();
+    if (peek() !== '==') return left;
+    take('==');
+    return equals(left, primary());
+  };
+  const and = (): Value => {
+    let v = comparison();
+    while (peek() === '&&') {
+      take('&&');
+      const right = comparison();
+      v = truthy(v) ? right : v;
+    }
+    return v;
+  };
+  const or = (): Value => {
+    let v = and();
+    while (peek() === '||') {
+      take('||');
+      const right = and();
+      v = truthy(v) ? v : right;
+    }
+    return v;
+  };
+  const result = or();
+  if (at !== list.length) throw new Error(`trailing tokens from ${at}`);
+  return result;
+}
+
+it('routing switches follow GitHub: string comparison ignores case, so ON / On also switch on', () => {
+  const repo = 'haoyu8962-netizen/rebate-platform';
+  const LAN = ['self-hosted', 'couli-ci'];
+  const events = {
+    push: { event_name: 'push', repository: repo, event: {} },
+    samePr: {
+      event_name: 'pull_request',
+      repository: repo,
+      event: { pull_request: { head: { repo: { full_name: repo } } } },
+    },
+    forkPr: {
+      event_name: 'pull_request',
+      repository: repo,
+      event: { pull_request: { head: { repo: { full_name: 'someone/rebate-platform' } } } },
+    },
+    dispatch: { event_name: 'workflow_dispatch', repository: repo, event: {} },
+  };
+  type Event = keyof typeof events;
+  const route = (ci: string | undefined, idle: string | undefined, event: Event) => {
+    const vars: Record<string, string> = {};
+    if (ci !== undefined) vars.SELF_HOSTED_CI = ci;
+    if (idle !== undefined) vars.SELF_HOSTED_CI_IDLE = idle;
+    return evaluateRoute(SELF_HOSTED_ROUTE, { vars, github: events[event] });
+  };
+  const on = ['on', 'ON', 'On'];
+  const off = [' on', 'off', '', undefined];
+  const all = [...on, ...off];
+
+  // Both switches equal 'on' ignoring case, on a push or a same-repo PR: the LAN runner.
+  for (const ci of on) {
+    for (const idle of on) {
+      expect([route(ci, idle, 'push'), route(ci, idle, 'samePr')]).toEqual([LAN, LAN]);
+    }
+  }
+  // Either switch anything else (leading space, off, empty, unset): ubuntu-latest.
+  for (const value of off) {
+    for (const other of all) {
+      for (const event of ['push', 'samePr'] as const) {
+        expect(route(value, other, event)).toBe('ubuntu-latest');
+        expect(route(other, value, event)).toBe('ubuntu-latest');
+      }
+    }
+  }
+  // A fork PR, or any other event, stays on ubuntu-latest whatever the switches say.
+  for (const ci of all) {
+    for (const idle of all) {
+      expect([route(ci, idle, 'forkPr'), route(ci, idle, 'dispatch')]).toEqual([
+        'ubuntu-latest',
+        'ubuntu-latest',
+      ]);
+    }
+  }
+  // The evaluator itself: case-insensitive only between strings, and it rejects what it does
+  // not understand.
+  expect(evaluateRoute("${{ 'ON' == 'on' }}", {})).toBe(true);
+  expect(evaluateRoute("${{ x == 'on' }}", {})).toBe(false);
+  expect(() => evaluateRoute("${{ startsWith('on', 'o') }}", {})).toThrow();
 });
 
 it('CLI exit codes: 0 for the real repo, 1 for a broken copy, 2 for bad usage', () => {

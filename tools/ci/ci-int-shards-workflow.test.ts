@@ -31,7 +31,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
-import { checkWorkflows } from './check-workflows.ts';
+import { checkWorkflows, SELF_HOSTED_ROUTE } from './check-workflows.ts';
 
 const REPO = resolve(import.meta.dirname, '../..');
 const CI = readFileSync(join(REPO, '.github/workflows/ci.yml'), 'utf8');
@@ -407,7 +407,8 @@ it.each(INT_JOBS.map((job) => ({ job })))(
     expect(cond).toContain("needs.verify-reuse.outputs.moved != 'true'");
     expect(cond).toContain(`needs.ledger-only-detect.${['outputs', 'only'].join('.')} != 'true'`);
     expect(cond, 'the same if as verify-int-1').toBe(jobIf('verify-int-1'));
-    expect(entry(body, 'runs-on', 4)?.inline).toBe('ubuntu-latest');
+    // ADR-0004 batch 2 (D10-3705): every int shard uses the fixed LAN routing expression.
+    expect(entry(body, 'runs-on', 4)?.inline).toBe(SELF_HOSTED_ROUTE);
     expect(Number(entry(body, 'timeout-minutes', 4)?.inline)).toBeGreaterThan(0);
     expect(body.join('\n')).toContain('        image: redis:7.4.11-alpine\n');
     expect(body.join('\n')).toContain('          - 127.0.0.1:6379:6379\n');
