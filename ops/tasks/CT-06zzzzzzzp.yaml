@@ -1,0 +1,32 @@
+id: CT-06zzzzzzzp
+repo: rebate-platform
+title: 'CT-06zzzzzzzp：CI 分流第二批（ADR-0004）——verify-spec-1/2/3 与 verify-int-1…6 用固定路由表达式（SELF_HOSTED_CI 且 SELF_HOSTED_CI_IDLE 都为 on 才上局域网，只 push 与同仓 PR），props-sha-1/2/3 回托管机；开关默认不存在即关（D10-3705）'
+type: guard-change
+# 2026-11-28 ops 入账（编排 D10-3508 / D10-3522 / D10-3683 / D10-3699 / D10-3703 / D10-3705）。第三类保护路径：任务 PR 标签由负责人加。
+# 依据：ADR-0004；couli-ci2 隔离自测 18 / 18、金丝雀 spec 1/3（847 文件 / 11034 条，322 秒）与 int 1/6（383 / 3596，450 秒）与主干 CI 逐条一致（OPS-lane/LAN-CI-1127/）。
+# 做法：① ci.yml 9 个作业（verify-spec-1/2/3、verify-int-1…6）的 runs-on 换成 check-workflows.ts 的 SELF_HOSTED_ROUTE；verify-props-sha-1/2/3 改回 ubuntu-latest；
+#   其余作业、needs、合并门槛（只 ci-gate 必需）与必需检查名不变。9 个作业的 timeout-minutes 保留现值（spec 30、int 40），一个都不能缺。
+# ② check-workflows.ts：SELF_HOSTED_JOBS['ci.yml'] 改为这 9 个；SELF_HOSTED_ROUTE 逐字改为
+#   ${{ (vars.SELF_HOSTED_CI == 'on' && vars.SELF_HOSTED_CI_IDLE == 'on' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","couli-ci"]') || 'ubuntu-latest' }}
+#   新增：带该表达式的作业缺 timeout-minutes 即拒（D10-3705 ①）；其余约束不变（self-hosted 字样只许在表达式里、作业权限不超只读、不引用 secrets、pull_request_target / workflow_run 工作流不得分流）。
+# ③ check-workflows.test.ts 与 tools/README.md 跟着改（README 写两个开关、默认不存在即关、一键回退 gh variable set SELF_HOSTED_CI --body off）。
+# 规则测试（Codex 写，新目录 test/spec/ci/self-hosted-route/）至少钉：两个变量任一不是 'on'、fork PR、workflow_dispatch、schedule、merge_group（D10-3705 ②，ci.yml 现无此触发也要钉）都算出 ubuntu-latest；
+#   只有这 9 个作业带表达式且逐字相同、props-sha 与门禁 / 汇总作业不带；带表达式的作业缺 timeout-minutes 即拒；表达式出现在 pull_request_target / workflow_run 工作流即拒；权限超只读或引用 secrets 即拒。
+# PR-1 之外（不进仓库，启用前各报编排）：控制器写 SELF_HOSTED_CI_IDLE、看门狗排队超 3 分钟且全忙即取消改托管机、ci2 lan-run 槽位调整；负责人三步做完前 SELF_HOSTED_CI 不设 on。
+refs: []
+refs_hash: {}
+deps: []
+paths:
+  - '.github/workflows/ci.yml'
+  - 'tools/ci/check-workflows.ts'
+  - 'tools/ci/check-workflows.test.ts'
+  - 'tools/README.md'
+  - 'ops/tasks/CT-06zzzzzzzp.yaml'
+test_paths:
+  - 'test/spec/ci/self-hosted-route/**'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify:fast'
+  - 'test/spec/ci/self-hosted-route/**'
+status: todo
