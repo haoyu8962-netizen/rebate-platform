@@ -206,3 +206,61 @@ it('[AC-B1-04zzzzq-UNIT#7] 非鉴权类拒绝与网关系统错误照旧：不�
     expect(warnings).toEqual([]);
   }
 });
+
+it('[AC-B1-04zzzzq-UNIT#10] HTTP ≥ 500 带 TOP 鉴权类码：照旧 upstream_unavailable，不告警、尝试不记拒绝（未知）', async () => {
+  for (const status of [500, 503]) {
+    for (const authMethod of ['sdk_token', 'web_code'] as const) {
+      const { adapter, warnings } = setup({
+        [TAOBAO_PUBLISHER_SAVE]: () => ({
+          status,
+          headers: {},
+          body: JSON.stringify({ error_response: { code: 27, sub_code: 'isv.invalid-session' } }),
+        }),
+      });
+      const { events, filing } = recorder();
+      const req = authMethod === 'sdk_token' ? sdkReq({ filing }) : webReq({ filing });
+      await expect(adapter.bindPublisher(req, CTX)).rejects.toMatchObject({
+        code: 'upstream_unavailable',
+      });
+      expect(events).toEqual(['started', 'done']);
+      expect(warnings).toEqual([]);
+    }
+  }
+  // Below 500 the same answer is still an authorization refusal.
+  const { adapter } = setup({
+    [TAOBAO_PUBLISHER_SAVE]: () => ({
+      status: 400,
+      headers: {},
+      body: JSON.stringify({ error_response: { code: 27, sub_code: 'isv.invalid-session' } }),
+    }),
+  });
+  await expect(adapter.bindPublisher(sdkReq(), CTX)).rejects.toMatchObject({
+    code: 'invalid_identity',
+  });
+});
+
+it('[AC-B1-04zzzzq-UNIT#11] sdk_token 缺已签发的应用引用 → 落单前拒绝、零请求；web_code 缺引用照旧走实例配置', async () => {
+  const { adapter, transport, warnings } = setup();
+  const { events, filing } = recorder();
+  const { oauthApp: _dropped, ...withoutApp } = sdkReq({ filing });
+  void _dropped;
+  await expect(adapter.bindPublisher(withoutApp, CTX)).rejects.toMatchObject({
+    code: 'upstream_misconfigured',
+  });
+  expect(transport).not.toHaveBeenCalled();
+  expect(events).toEqual(['done']);
+  expect(warnings).toEqual([{ method: TAOBAO_PUBLISHER_SAVE, code: 'oauth_app_missing' }]);
+  expect(JSON.stringify(warnings)).not.toContain(SDK_TOKEN);
+
+  // web_code without a reference keeps its legacy path: the instance's callback (none here → the
+  // existing flat refusal, not the new one).
+  const web = setup();
+  const { oauthApp: _web, ...webWithoutApp } = webReq();
+  void _web;
+  await expect(web.adapter.bindPublisher(webWithoutApp, CTX)).rejects.toMatchObject({
+    code: 'upstream_misconfigured',
+  });
+  expect(web.warnings).toEqual([
+    { method: TAOBAO_PUBLISHER_SAVE, code: 'user_oauth_redirect_uri_missing' },
+  ]);
+});

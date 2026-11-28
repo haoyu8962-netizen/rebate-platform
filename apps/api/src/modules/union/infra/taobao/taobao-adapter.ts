@@ -617,6 +617,12 @@ export class TaobaoUnionAdapter implements UnionAdapter {
     // issued instead of the instance's current setting. B1-04zzzzq: an sdk_token state names the
     // app key only, checked the same way (the SDK token was issued for that app); no redirect URI.
     const issued = req.oauthApp;
+    // B1-04zzzzq r2 (money review S2): an SDK token is accepted only with the union application its
+    // state was issued with (the exchanger always resolves one); without it → refused before the
+    // attempt is recorded or anything is sent. web_code keeps its legacy path (the instance's own).
+    if (authMethod === 'sdk_token' && issued === undefined) {
+      throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'oauth_app_missing');
+    }
     if (issued !== undefined && issued.appKey !== app.appKey) {
       throw this.#bindMisconfigured(TAOBAO_PUBLISHER_SAVE, 'oauth_app_mismatch');
     }
@@ -810,7 +816,10 @@ export class TaobaoUnionAdapter implements UnionAdapter {
           { duplicateConfirmed: afterDuplicate },
         );
       }
-      const authRefusal = publisherAuthRefusal(response.body);
+      // B1-04zzzzq r2 (money review S2): only an answer below HTTP 500 is read as an authorization
+      // refusal; a 5xx keeps its dependency classification (upstream_unavailable), so the answer
+      // and the filing attempt (unknown: not a definite refusal above) tell the same story.
+      const authRefusal = response.status < 500 ? publisherAuthRefusal(response.body) : null;
       if (error instanceof UnionError && error.code !== 'rate_limited' && authRefusal !== null) {
         const warning: TaobaoPublisherAuthWarning = {
           method,

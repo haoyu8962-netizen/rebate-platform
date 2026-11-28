@@ -163,12 +163,30 @@ describe('taobaoFilingConfigured', () => {
     inviterAccountId: '0199a3b4-5c6d-7000-8000-0000000000a1',
   };
 
-  it('[AC-B1-04zzzzn#11] staging / prod 缺用户 OAuth、邀请码或其所属联盟账号任一项即不就绪', () => {
+  it('[AC-B1-04zzzzn#11] staging / prod 的 web_code 缺用户 OAuth、邀请码或其所属联盟账号任一项即不就绪', () => {
     for (const env of ['staging', 'prod'] as const) {
-      expect(taobaoFilingConfigured(env, complete)).toBe(true);
+      expect(taobaoFilingConfigured(env, complete, 'web_code')).toBe(true);
       for (const name of Object.keys(complete) as (keyof typeof complete)[]) {
         for (const missing of [undefined, null, '', '  ']) {
-          expect(taobaoFilingConfigured(env, { ...complete, [name]: missing }), name).toBe(false);
+          const settings = { ...complete, [name]: missing };
+          expect(taobaoFilingConfigured(env, settings, 'web_code'), name).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('[AC-B1-04zzzzq-UNIT#9] sdk_token 与不分方式的共用门槛不要网页回调地址，其余三项任缺一项仍不就绪', () => {
+    for (const env of ['staging', 'prod'] as const) {
+      for (const method of ['sdk_token', undefined] as const) {
+        for (const missing of [undefined, null, '', '  ']) {
+          const noCallback = { ...complete, userRedirectUri: missing };
+          expect(taobaoFilingConfigured(env, noCallback, method)).toBe(true);
+        }
+        for (const name of ['appKey', 'inviterCode', 'inviterAccountId'] as const) {
+          for (const missing of [undefined, null, '', '  ']) {
+            const settings = { ...complete, [name]: missing };
+            expect(taobaoFilingConfigured(env, settings, method), name).toBe(false);
+          }
         }
       }
     }

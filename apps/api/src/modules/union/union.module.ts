@@ -251,14 +251,15 @@ const TAOBAO_ROW_CODES: ReadonlySet<string> = new Set(['invalid_item', 'invalid_
 /**
  * B1-04zzzzm: the channel filing refusals of TaobaoUnionAdapter.bindPublisher (missing inviter code
  * or user OAuth redirect URI, the inviter code's account missing or not the binding's (补丁 2), the
- * state's OAuth app not this adapter's, no or no single relation_id); logged with method and code
- * only.
+ * state's OAuth app not this adapter's, no or no single relation_id; B1-04zzzzq r2: an sdk_token
+ * filing without the state's union app); logged with method and code only.
  */
 const TAOBAO_PUBLISHER_CODES: ReadonlySet<string> = new Set([
   'inviter_code_missing',
   'inviter_account_missing',
   'inviter_account_mismatch',
   'oauth_app_mismatch',
+  'oauth_app_missing',
   'user_oauth_redirect_uri_missing',
   'relation_id_missing',
   'relation_id_ambiguous',
