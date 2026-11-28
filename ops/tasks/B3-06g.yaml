@@ -1,0 +1,40 @@
+id: B3-06g
+repo: rebate-platform
+title: 'B3-06g（接手 B3-06f）：B5 出站过滤补条与禁用词丢句——缓冲的金额扣留改为只认过滤器一处口径（只扣末尾的金额字母表连续串，字母表由过滤器拼金额式的同一批常量导出；切点不切开链接、口令与任何命中）；B3-06f 的范围（补条一、禁用词丢句的句数与句界、banned_word 迁移、读 agent.guard.buffer_max_chars）原样带入'
+type: impl
+# 2026-11-28 agent 线入账（编排 D10-3822 / D10-3827；接手先例 B3-06e → B3-06f）。来由照实记：B3-06f 的 Codex 资金评审三轮都 fail（r1 4 S1 → r2 3 S1 → r3 2 S1），连同 B3-06e 四轮共七轮，每轮新出的都是同一类——缓冲用手写的尾部回扫猜「末尾会不会并进一个金额」，过滤器另用金额式判，两套口径每多一种写法就各错一次（r3：带千分位的金额 + 两处换行漏数字片段；为判小数点加的逐字符回扫成平方）。照 规划/11 §3.3 止损停下，B3-06f 置 void 并入本单，换方案重做。**停止条件写死**：本单常规计数从头算，写测 3、规则测试评审 2、实现 3、资金评审 3，用完即停，非 S0 不开追加。
+# 带过来的与分支排法（同 D10-3432 (3)）：task/B3-06g = 最新主干 + B3-06f 的规则测试九笔（test/spec 下 23 个文件 426 条，头 c12d89de653a；内容逐字节不变，标题里的 AC-B3-06d / 06e / 06f 编号不改）+ 本单写测（新用例全放新目录 test/spec/agent/output-guard-hold/，编号 AC-B3-06g）→ spec_commit → 搬 B3-06f 的实现各笔（到实现第 3 次的头 62331d630 为止，含迁移 0161 / 0162 与生成物；迁移号 land 时若被占再改）作实现起点 → 本单实现轮在上面改。搬运由本线做、过提交钩子，不计次，证据里写明。分支 task/B3-06f（头 62331d630）原样保留到本单落地。已定口径照 B3-06f、B3-06e 台账所列各条与 D10-3760（行末保留串含中文数字；并入后把换行当作不存在来判）、D10-3786（连续换行连同两侧水平空白当一个换行块并入）。
+# 判据（D10-3827）：① 金额是什么、命中从哪到哪只由过滤器判；缓冲不再有自己的金额字符表、触发词表、区间回扫。② 缓冲只扣末尾的「金额字母表」连续串——字母表 = 金额命中里可能出现的全部字符（各宽度数字、中文数字、货币符、小数点、千分位逗号、单位、区间连接符、触发词用字、水平空白、换行），由过滤器用拼金额式的同一批常量导出，不逐个另列；并入的换行处与 60 字强制下发处用同一个切点：连续串的起点，再退到不切开 ASCII 串（链接、口令）与任何命中的位置。③ 换行算不算并入、句点前是不是数字，只读过滤器的判断，逐字符 O(1)，不回扫。④ 字符集比 08 细则原文列的多，属收紧（宁多扣不漏），08 回写一句排规划回写批，本单照此口径写不等回写。⑤ FU-AGENT-GUARD-LINE-JOIN-MORE ① 并入：行末「中文数字 + 水平空白」再换行，照同行「叁 元」的现行判法并入后判金额，只补规则测试；② 不并。
+# 只做：(a) 测试先行（Codex 写、先红）：任意分块下缓冲各段逐段过滤的拼接等于整段过滤（没到缓冲上限时；原子从 08 补条的枚举逐项抄，含千分位 7 种写法、中文数字区间、多处换行块、行末数字属于链接 / 口令）；过滤器层任意文本的金额命中都由字母表字符组成；长空白、长数字行、长换行串长度翻倍耗时不超过约 2 倍；B3-06f 资金评审 r3 两条 S1 的原例；上面 ⑤ 的口径。(b) 实现：apps/api/src/modules/agent/guard/filter.ts 加导出（不改过滤结果）、buffer.ts 的金额扣留重做。实现任务书只给判据与规则测试，不给原型。不做（评审范围外的发现一律 out_of_scope）：过滤结果本身、禁用词丢句与计句、判分器、链接范围（FU-AGENT-GUARD-NONASCII-LINK）、换行落在千分位逗号后（上面 ② 另留 FU）、缓冲上限处的切分（FU-AGENT-GUARD-DIGIT-PASSCODE-AT-CAP）、content 模块、契约、三端客户端。验收：426 条与本单新用例全绿；合并后线上行为不变（生产仍是无模型路径）。风险级 RV2（含 db/**）→ 评审 money，第 1 轮全量；迁移成对与生成物照 B3-06e。冻结用例 modify_existing 预计 0；写测或实现中发现冲突就停下报编排，不自行改。
+refs: [BR-AI-06, BR-TEXT-13]
+refs_hash:
+  BR-AI-06: 4f686c6447c7
+  BR-TEXT-13: 0170cefbc162
+deps: [B3-06a, B3-06b, B3-06c, B3-05s, B3-01c, B3-08t, F1-02r]
+paths:
+  - 'apps/api/src/modules/agent/guard/{filter,buffer,output-guard,index}.ts'
+  - 'apps/api/src/modules/agent/guard/*.test.ts'
+  - 'apps/api/src/modules/agent/orchestrator/core/{ports,run}.ts'
+  - 'apps/api/src/modules/agent/orchestrator/core/*.test.ts'
+  - 'apps/api/src/modules/agent/stream/mount/**'
+  - 'apps/api/src/modules/agent/store/results/**'
+  - 'packages/evals/src/grade.ts'
+  - 'db/migrations/*_agent-runs-filter-hits-banned-word*.sql'
+  - 'db/schema.sql'
+  - 'packages/db/src/db.gen.ts'
+test_paths:
+  - 'test/spec/agent/output-guard-addenda/**'
+  - 'test/spec/agent/output-guard-banned-word/**'
+  - 'test/spec/agent/output-guard-sentence-props/**'
+  - 'test/spec/agent/output-guard-hold/**'
+  - 'test/spec/db/agent/filter-hits-banned-word.int.test.ts'
+impl: claude
+tester: codex
+accept:
+  - 'pnpm verify'
+  - 'test/spec/agent/output-guard-addenda/**'
+  - 'test/spec/agent/output-guard-banned-word/**'
+  - 'test/spec/agent/output-guard-sentence-props/**'
+  - 'test/spec/agent/output-guard-hold/**'
+  - 'test/spec/db/agent/filter-hits-banned-word.int.test.ts'
+status: todo
