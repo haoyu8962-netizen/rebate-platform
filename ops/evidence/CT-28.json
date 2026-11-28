@@ -1,0 +1,75 @@
+{
+  "risk_note": "CT-28 (CT-TBAPP, TB-APP-AUTH; planning couli#44 04 §6.3:678 and §7:768-769, SPEC_REF d840ba996561; rulings D10-3709 ② / D10-3711 / D10-3747 / D10-3811). Additive only: openapi UnionAuthUrlData gains optional sdk_app_key (string, minLength 1, not required; a public identifier), present when auth_methods contains sdk_token and absent otherwise, constrained by the description as JumpStep pairs sdk / mini_program (no top-level oneOf); every example carrying auth_methods is paired accordingly (sdk_token examples carry demo-union-app-key); contracts/error-codes.yaml 30101 / 30102 data list sdk_app_key with the same condition in meaning, other codes unchanged; generated contracts-ts regenerated. No server logic, clients, bindings or apps.json changed (the server fills the field in B1-04zzzzr; the Baichuan Android tbopen entry is removed client-side, D10-3711).",
+  "reviews": [
+    {
+      "reviewer": "codex",
+      "engine": "codex",
+      "model": "gpt-6.2-sol",
+      "verdict": "pass",
+      "open_s0_s1": 0,
+      "checklist_complete": true,
+      "review_type": "contract",
+      "round": 1,
+      "note": "Codex contract review r1 (full) via tools/agent/codex-run.sh: pass, no findings."
+    }
+  ],
+  "spec_test_review": {
+    "reviewer": "claude-independent",
+    "engine": "claude-independent",
+    "rounds": 1,
+    "last_verdict": "pass",
+    "note": "Rule tests by Codex (write-test 1). Spec-test review by an independent Claude (approvals 19 / 36): r1 (full) pass with 1 S2 (the pairing-prose check would not catch an inverted sentence; the implementation states the condition positively and the contract review read it)."
+  },
+  "longrun": {
+    "runs": 1000000,
+    "seed": 20261001,
+    "passed": true,
+    "mode": "ci",
+    "note": "no change under test/properties, packages/money, packages/domain or packages/testing",
+    "tree": "1ad666da72dd1b44a16bac9710d60068c9f8d794"
+  },
+  "red_tests": [
+    "test/spec/contracts/tbapp-sdk-app-key/contract.test.ts > [AC-CT-28#1] auth-url 只增加可选非空字符串及配对说明，保留原有契约",
+    "test/spec/contracts/tbapp-sdk-app-key/contract.test.ts > [AC-CT-28#2] 全部 OpenAPI 示例按授权方式配对，既有淘宝和拼多多示例保留原值",
+    "test/spec/contracts/tbapp-sdk-app-key/contract.test.ts > [AC-CT-28#3] 30101 的 data 登记公开标识和有条件下发规则",
+    "test/spec/contracts/tbapp-sdk-app-key/contract.test.ts > [AC-CT-28#3] 30102 的 data 登记公开标识和有条件下发规则",
+    "test/spec/contracts/tbapp-sdk-app-key/contract.test.ts > [AC-CT-28#4] 生成类型同步可选字符串，bindings 请求与响应维持独立"
+  ],
+  "task": "CT-28",
+  "spec_commit": "e18349f96f757883e13b4af2f2a2f9f50f5ad34a",
+  "spec_ref": "d840ba99656122129cc90a54e608def93d444a69",
+  "runs": [
+    {
+      "mode": "container",
+      "script": "red",
+      "exit_code": 0,
+      "commit": "e18349f96f757883e13b4af2f2a2f9f50f5ad34a",
+      "tree": "934b69917dc17765d12bcab426b3ddbe62b8f539",
+      "prop_seed": 20261001,
+      "started_at": "2026-11-28T12:08:22Z",
+      "finished_at": "2026-11-28T12:10:04Z",
+      "red_tests": [
+        "test/spec/contracts/tbapp-sdk-app-key/contract.test.ts > [AC-CT-28#1] auth-url 只增加可选非空字符串及配对说明，保留原有契约",
+        "test/spec/contracts/tbapp-sdk-app-key/contract.test.ts > [AC-CT-28#2] 全部 OpenAPI 示例按授权方式配对，既有淘宝和拼多多示例保留原值",
+        "test/spec/contracts/tbapp-sdk-app-key/contract.test.ts > [AC-CT-28#3] 30101 的 data 登记公开标识和有条件下发规则",
+        "test/spec/contracts/tbapp-sdk-app-key/contract.test.ts > [AC-CT-28#3] 30102 的 data 登记公开标识和有条件下发规则",
+        "test/spec/contracts/tbapp-sdk-app-key/contract.test.ts > [AC-CT-28#4] 生成类型同步可选字符串，bindings 请求与响应维持独立"
+      ],
+      "expected": ["test/spec/contracts/tbapp-sdk-app-key/contract.test.ts"],
+      "reports": [
+        {
+          "path": "out/spec-unit.json",
+          "sha256": "b0161d56a653d9f2ec155af7fd18024b421397ac2e0d04e07e84c87c8c9eaa9f"
+        }
+      ]
+    }
+  ],
+  "trees": {
+    "packages/money": "9a26998f5eaab2e97825473bbe644a2a367f81a8",
+    "packages/domain": "f7b6756cf698e52c7dc4393c4964d954a952230a",
+    "packages/testing": "a6df4094106120352a912260383f3bfbccdf4f4f",
+    "test/properties": "1ad666da72dd1b44a16bac9710d60068c9f8d794",
+    "test/spec": "5ab7fd927a239571bf71df43a9141418eff5de5c",
+    "specs": "abdf240228855d53675eb0bbb81fea885eb897e9"
+  }
+}
